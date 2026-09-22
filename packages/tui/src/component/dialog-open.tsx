@@ -213,10 +213,11 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
           project,
         })),
       ),
-      ...sessions().map((session) => ({
-        directory: session.location.directory,
-        project: data.project.get(session.projectID),
-      })),
+      ...sessions().flatMap((session) => {
+        const project = data.project.get(session.projectID)
+        if (project && project.canonical !== "/") return []
+        return [{ directory: session.location.directory, project }]
+      }),
     ]
       .filter((item) => {
         const key = locationKey(item)
