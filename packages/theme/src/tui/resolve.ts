@@ -23,6 +23,8 @@ import type {
 } from "./index.js"
 import { selectThemeMode, themeModes } from "./select.js"
 
+type ResolvedHue = ResolvedThemeTokens["hue"] & Readonly<Record<string, HueScale>>
+
 const decodeThemeDefinitionSchema = Schema.decodeUnknownSync(ThemeDefinition, { reportInput: true })
 const decodeThemeDocumentSchema = Schema.decodeUnknownSync(ThemeDocument, { reportInput: true })
 
@@ -168,10 +170,10 @@ function statefulColor(color: StatefulColor): StatefulColor {
 }
 
 function compileHueSteps(
-  hue: ResolvedThemeTokens["hue"],
+  hue: ResolvedHue,
 ): Pick<ResolvedThemeTokens, "source" | "increase" | "decrease"> {
-  const index = new WeakMap<RGBA, { hue: keyof typeof hue; step: HueStep; position: number }>()
-  for (const [name, scale] of Object.entries(hue) as [keyof typeof hue, HueScale][]) {
+  const index = new WeakMap<RGBA, { hue: string; step: HueStep; position: number }>()
+  for (const [name, scale] of Object.entries(hue)) {
     HueStep.literals.forEach((step, position) => index.set(scale[step], { hue: name, step, position }))
   }
   const shift = (color: RGBA, amount: number) => {
@@ -225,7 +227,7 @@ function resolveHue(definition: ThemeDefinition["hue"]) {
     return result
   }
 
-  return Object.fromEntries(Object.keys(source).map((name) => [name, resolve(name, [])])) as ResolvedThemeTokens["hue"]
+  return Object.fromEntries(Object.keys(source).map((name) => [name, resolve(name, [])])) as ResolvedHue
 }
 
 function createResolver(source: Record<string, unknown>) {

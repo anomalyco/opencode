@@ -1,5 +1,12 @@
 import { expect, test } from "bun:test"
-import { migrateV1, resolveThemeDocument, selectThemeMode, themeModes } from "@opencode/theme/tui"
+import {
+  migrateV1,
+  resolveThemeDocument,
+  selectThemeMode,
+  themeModes,
+  type HueScale,
+  type ResolvedTheme,
+} from "@opencode/theme/tui"
 import { DEFAULT_THEMES, getOpenCodeTheme, resolveTheme as resolveV1 } from "../../../src/theme"
 import opencodeSource from "../../../src/theme/assets/opencode.json" with { type: "json" }
 import type { ThemeV1Json } from "@opencode/theme/tui/v1"
@@ -7,6 +14,7 @@ import type { ThemeV1Json } from "@opencode/theme/tui/v1"
 const opencodeV1 = opencodeSource as ThemeV1Json
 const opencodeLight = resolveThemeDocument(getOpenCodeTheme(), "light")
 const opencodeDark = resolveThemeDocument(getOpenCodeTheme(), "dark")
+const opencodeLightHues = allHues(opencodeLight)
 
 test("migrates resolved V1 modes into V2 tokens", () => {
   const migrated = migrateV1(opencodeV1)
@@ -140,10 +148,10 @@ test("orders categorical hues by V1 semantic color mapping", () => {
 
 test("gives accent and primary ownership of their inferred hues", () => {
   const source = structuredClone(opencodeV1)
-  source.theme.success = hex(opencodeLight.hue.orange[700])
-  source.theme.accent = hex(opencodeLight.hue.orange[600])
-  source.theme.info = hex(opencodeLight.hue.blue[700])
-  source.theme.primary = hex(opencodeLight.hue.blue[600])
+  source.theme.success = hex(opencodeLightHues.orange[700])
+  source.theme.accent = hex(opencodeLightHues.orange[600])
+  source.theme.info = hex(opencodeLightHues.blue[700])
+  source.theme.primary = hex(opencodeLightHues.blue[600])
 
   const migrated = migrateV1(source)
   if (!migrated.light) throw new Error("Expected light mode")
@@ -156,7 +164,7 @@ test("gives accent and primary ownership of their inferred hues", () => {
   expect(migrated.light.hue?.accent).toBe("$hue.orange")
   expect(migrated.light.hue?.interactive).toBe("$hue.blue")
 
-  source.theme.primary = hex(opencodeLight.hue.orange[500])
+  source.theme.primary = hex(opencodeLightHues.orange[500])
   const collisionMode = migrateV1(source).light
   const collision = collisionMode?.hue?.orange
   if (typeof collision !== "object") throw new Error("Expected concrete orange scale")
@@ -275,6 +283,10 @@ test("keeps both modes when a shared background has different contrast", () => {
 
   expect(themeModes(migrated)).toEqual(["light", "dark"])
 })
+
+function allHues(theme: ResolvedTheme) {
+  return theme.hue as typeof theme.hue & Readonly<Record<string, HueScale>>
+}
 
 function hex(color: { toInts(): [number, number, number, number] }) {
   const [r, g, b, a] = color.toInts()
