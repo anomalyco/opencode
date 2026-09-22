@@ -1,7 +1,6 @@
 import "./index.css"
-import { createAsync, query } from "@solidjs/router"
 import { Title, Meta } from "@solidjs/meta"
-import { For, createMemo } from "solid-js"
+import { For } from "solid-js"
 //import { HttpHeader } from "@solidjs/start"
 import goLogoLight from "../../asset/go-ornate-light.svg"
 import goLogoDark from "../../asset/go-ornate-dark.svg"
@@ -12,17 +11,11 @@ import { Footer } from "~/component/footer"
 import { Header } from "~/component/header"
 import { LimitsGraph } from "~/component/limits-graph"
 import { config } from "~/config"
-import { getLastSeenWorkspaceID } from "../workspace/common"
 import { IconMiniMax, IconMiMo, IconZai, IconAlibaba, IconDeepSeek } from "~/component/icon"
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { LocaleLinks } from "~/component/locale-links"
 import { goUsageLimits } from "~/lib/language"
-
-const checkLoggedIn = query(async () => {
-  "use server"
-  return await getLastSeenWorkspaceID().catch(() => undefined)
-}, "checkLoggedIn.get")
 
 const models = [
   { name: "Grok 4.7", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
@@ -58,8 +51,7 @@ const models = [
 ] as const
 
 export default function Home() {
-  const workspaceID = createAsync(() => checkLoggedIn())
-  const subscribeUrl = createMemo(() => (workspaceID() ? `/workspace/${workspaceID()}/go` : "/auth"))
+  const subscribeUrl = "/console/go"
   const i18n = useI18n()
   const language = useLanguage()
   return (
@@ -77,7 +69,6 @@ export default function Home() {
       <Meta name="twitter:title" content={i18n.t("go.title")} />
       <Meta name="twitter:description" content={i18n.t("go.meta.description")} />
       <Meta name="twitter:image" content="/social-share-black.png" />
-      <Meta name="opencode:auth" content={workspaceID() ? "true" : "false"} />
 
       <div data-component="container">
         <Header go hideGetStarted />
@@ -179,7 +170,7 @@ export default function Home() {
                 </div>
                 */}
               </div>
-              <a href={subscribeUrl()}>
+              <a href={subscribeUrl}>
                 <span>
                   <For
                     each={i18n
@@ -296,7 +287,7 @@ export default function Home() {
                   {i18n.t("go.faq.a4.p1.beforePricing")}{" "}
                   <a href={language.route("/docs/go/#pricing")}>{i18n.t("go.faq.a4.p1.pricingLink")}</a>{" "}
                   {i18n.t("go.faq.a4.p1.afterPricing")} {i18n.t("go.faq.a4.p2.beforeAccount")}{" "}
-                  <a href={subscribeUrl()}>{i18n.t("go.faq.a4.p2.accountLink")}</a>. {i18n.t("go.faq.a4.p3")}
+                  <a href={subscribeUrl}>{i18n.t("go.faq.a4.p2.accountLink")}</a>. {i18n.t("go.faq.a4.p3")}
                 </Faq>
               </li>
               <li>
