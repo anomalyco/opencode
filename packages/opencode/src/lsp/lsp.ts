@@ -14,6 +14,7 @@ import { containsPath } from "@/project/instance-context"
 import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { LspEvent } from "@opencode-ai/schema/lsp-event"
+import type { WorkspaceEdit } from "vscode-languageserver-types"
 
 export const Event = LspEvent
 
@@ -31,6 +32,7 @@ export type Range = typeof Range.Type
 export const Symbol = Schema.Struct({
   name: Schema.String,
   kind: NonNegativeInt,
+  containerName: Schema.optional(Schema.String),
   location: Schema.Struct({
     uri: Schema.String,
     range: Range,
@@ -44,6 +46,7 @@ export const DocumentSymbol = Schema.Struct({
   kind: NonNegativeInt,
   range: Range,
   selectionRange: Range,
+  children: Schema.optional(Schema.Array(Schema.Any)),
 }).annotate({ identifier: "DocumentSymbol" })
 export type DocumentSymbol = typeof DocumentSymbol.Type
 
@@ -128,6 +131,8 @@ export interface Interface {
   readonly implementation: (input: LocInput) => Effect.Effect<any[]>
   readonly documentSymbol: (uri: string) => Effect.Effect<(DocumentSymbol | Symbol)[]>
   readonly workspaceSymbol: (query: string) => Effect.Effect<Symbol[]>
+  readonly searchSymbols: (query: string) => Effect.Effect<Symbol[]>
+  readonly rename: (input: LocInput & { newName: string }) => Effect.Effect<WorkspaceEdit | null>
   readonly prepareCallHierarchy: (input: LocInput) => Effect.Effect<any[]>
   readonly incomingCalls: (input: LocInput) => Effect.Effect<any[]>
   readonly outgoingCalls: (input: LocInput) => Effect.Effect<any[]>
@@ -440,6 +445,30 @@ const layer = Layer.effect(
       return results.flat()
     })
 
+    // Like workspaceSymbol but without the display kind filter / slice, so callers
+    // can resolve a full symbol name (including properties, fields, namespaces).
+    const searchSymbols = Effect.fn("LSP.searchSymbols")(function* (query: string) {
+      const results = yield* runAll((client) =>
+        client.connection
+          .sendRequest<Symbol[]>("workspace/symbol", { query })
+          .catch(() => [] as Symbol[]),
+      )
+      return results.flat().filter((x) => x?.name && x?.location?.uri)
+    })
+
+    const rename = Effect.fn("LSP.rename")(function* (input: LocInput & { newName: string }) {
+      const results = yield* run(input.file, (client) =>
+        client.connection
+          .sendRequest<WorkspaceEdit | null>("textDocument/rename", {
+            textDocument: { uri: pathToFileURL(input.file).href },
+            position: { line: input.line, character: input.character },
+            newName: input.newName,
+          })
+          .catch(() => null),
+      )
+      return results.find((x) => x) ?? null
+    })
+
     const prepareCallHierarchy = Effect.fn("LSP.prepareCallHierarchy")(function* (input: LocInput) {
       const results = yield* run(input.file, (client) =>
         client.connection
@@ -489,6 +518,8 @@ const layer = Layer.effect(
       implementation,
       documentSymbol,
       workspaceSymbol,
+      searchSymbols,
+      rename,
       prepareCallHierarchy,
       incomingCalls,
       outgoingCalls,

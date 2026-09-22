@@ -74,6 +74,8 @@ const lsp = Layer.succeed(
     prepareCallHierarchy: () => Effect.succeed([]),
     incomingCalls: () => Effect.succeed([]),
     outgoingCalls: () => Effect.succeed([]),
+    searchSymbols: () => Effect.succeed([]),
+    rename: () => Effect.succeed(null),
   }),
 )
 

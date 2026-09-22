@@ -239,6 +239,9 @@ export async function create(input: {
             didOpen: true,
             didChange: true,
           },
+          documentSymbol: {
+            hierarchicalDocumentSymbolSupport: true,
+          },
           diagnostic: {
             dynamicRegistration: true,
             relatedDocumentSupport: true,

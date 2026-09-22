@@ -1,6 +1,8 @@
 Interact with Language Server Protocol (LSP) servers to get code intelligence features.
 
-Supported operations:
+Two families of operations are supported.
+
+Position-based operations (require `filePath`, `line` and `character`, all 1-based):
 - goToDefinition: Find where a symbol is defined
 - findReferences: Find all references to a symbol
 - hover: Get hover information (documentation, type info) for a symbol
@@ -11,14 +13,20 @@ Supported operations:
 - incomingCalls: Find all functions/methods that call the function at a position
 - outgoingCalls: Find all functions/methods called by the function at a position
 
-All operations require:
-- filePath: The file to operate on
-- line: The line number (1-based, as shown in editors)
-- character: The character offset (1-based, as shown in editors)
+Symbol-based operations (require `symbol`, a full or simple symbol name; no position needed):
+- symbols: Resolve a symbol by name and show its definition location(s)
+- members: List the members of a type by name
+- refs: Find all references to a symbol by name
+- callers: Find all call sites of a method/property by name
+- implementations: Find implementations of an interface/abstract member by name
+- rename: Rename a symbol by name; dry-run unless `apply=true`
+- types: List types whose name matches `query` (or `symbol`)
+- structure: List the solution projects (`dotnet sln list`) plus symbol containers
 
-workspaceSymbol also accepts:
-- query: A query string to filter symbols by. Empty string requests all symbols.
+Symbol-based operations reuse the already-running language server for the file type,
+so no extra background process is started.
 
-For workspaceSymbol, filePath is not sent in the LSP workspace/symbol request. It is used by opencode to select and start the matching LSP server.
-
-Note: LSP servers must be configured for the file type. If no server is available, an error will be returned.
+Notes:
+- workspaceSymbol also accepts `query`; an empty string requests all symbols.
+- For rename, inspect the dry-run output before calling again with apply=true.
+- LSP servers must be configured for the file type. If no server is available, an error is returned.
