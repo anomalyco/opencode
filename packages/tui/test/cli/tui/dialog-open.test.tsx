@@ -135,7 +135,7 @@ test("shows the current project and opens its root", async () => {
   }
 })
 
-test("includes unique sandbox and recent session directories, including global projects", async () => {
+test("shows only canonical projects while retaining sessions from other directories", async () => {
   const fixture = await renderOpen((url) => {
     if (url.pathname === "/api/project")
       return json([
@@ -185,13 +185,15 @@ test("includes unique sandbox and recent session directories, including global p
     )
     expect(frame).toContain("standalone-notes")
     expect(frame).toContain("OpenCode · feature-branch")
-    expect(frame.match(/\/tmp\/opencode\/feature-branch/g)).toHaveLength(1)
+    expect(frame).toContain("/tmp/opencode/project")
+    expect(frame).not.toContain("/tmp/opencode/feature-branch")
+    expect(frame).not.toContain("/tmp/standalone-notes")
 
     await fixture.app.mockInput.typeText("standalone-notes")
     await fixture.app.waitForFrame((value) => value.includes("standalone-notes"))
     fixture.app.mockInput.pressEnter()
-    await fixture.app.waitFor(() => fixture.route.data.type === "home")
-    expect(fixture.route.data).toEqual({ type: "home", location: { directory: "/tmp/standalone-notes" } })
+    await fixture.app.waitFor(() => fixture.route.data.type === "session")
+    expect(fixture.route.data).toEqual({ type: "session", sessionID: "ses_global" })
   } finally {
     await fixture.dispose()
   }
@@ -233,13 +235,14 @@ test("keeps nested Git session directories out of projects and in their session 
     )
     expect(frame).toContain("OpenCode · dashboard")
     expect(frame).not.toContain("browse directories")
+    expect(frame).toContain("/tmp/opencode/project")
     expect(frame).not.toContain("/tmp/opencode/project/packages/dashboard")
   } finally {
     await fixture.dispose()
   }
 })
 
-test("loads Git worktrees only when drilling into a project or its associated directory", async () => {
+test("loads Git worktrees only when drilling into the canonical project", async () => {
   const root = path.resolve("/tmp/opencode/project")
   const current = path.resolve("/tmp/opencode/current-branch")
   const other = path.resolve("/tmp/opencode/other-branch")
@@ -276,9 +279,10 @@ test("loads Git worktrees only when drilling into a project or its associated di
 
   try {
     const projects = await fixture.app.waitForFrame(
-      (frame) => frame.includes("OpenCode") && frame.includes("current-branch") && frame.includes("→"),
+      (frame) => frame.includes("OpenCode") && frame.includes(root) && frame.includes("→"),
     )
     expect(projects).not.toContain("Browse directories")
+    expect(projects).not.toContain(current)
     expect(requests).toBe(0)
 
     fixture.app.mockInput.pressArrow("right")
@@ -290,22 +294,6 @@ test("loads Git worktrees only when drilling into a project or its associated di
     expect(worktrees).toContain("●")
     expect(worktrees.indexOf("OpenCode")).toBeLessThan(worktrees.indexOf("current-branch"))
     expect(worktrees.indexOf("current-branch")).toBeLessThan(worktrees.indexOf("other-branch"))
-
-    fixture.app.mockInput.pressArrow("left")
-    await fixture.app.waitForFrame((frame) => frame.includes("Search sessions and projects"))
-    await fixture.app.mockInput.typeText("current-branch")
-    await fixture.app.waitForFrame((frame) => frame.includes("current-branch") && !frame.includes("OpenCode"))
-    fixture.app.mockInput.pressArrow("right")
-    await fixture.app.waitForFrame((frame) => frame.includes("other-branch") && frame.includes("ctrl+n"))
-    expect(requests).toBe(2)
-    fixture.app.mockInput.pressEscape()
-    const restored = await fixture.app.waitForFrame(
-      (frame) => frame.includes("current-branch") && !frame.includes("Worktrees"),
-    )
-    expect(restored).toContain("current-branch")
-    expect(restored).not.toContain("OpenCode")
-    fixture.app.mockInput.pressArrow("right")
-    await fixture.app.waitForFrame((frame) => frame.includes("other-branch") && frame.includes("ctrl+n"))
 
     await fixture.app.mockInput.typeText("other-branch")
     fixture.app.mockInput.pressEnter()
