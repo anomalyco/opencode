@@ -178,9 +178,7 @@ const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* (
           .messages({ sessionID: session.id })
           .pipe(Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed([])))
 
-        const sessionCost = session.cost ?? 0
-        const sessionTokens = session.tokens ?? { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
-        let sessionToolUsage: Record<string, number> = {}
+        const sessionToolUsage: Record<string, number> = {}
         let sessionModelUsage: Record<
           string,
           {
