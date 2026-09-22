@@ -239,8 +239,10 @@ const layer = () =>
           if (page.output.endsWith("\n")) lines.pop()
           const truncated = latest.size > maxBytes || lines.length > maxLines
           const text = lines.length > maxLines ? lines.slice(-maxLines).join("\n") : page.output
-          const notice = truncated ? `\n\n[output truncated; full output saved to: ${info.file}]` : ""
-          return { output: `${text || "(no output)"}${notice}`, truncated }
+          const notice = truncated
+            ? `${text ? "\n\n" : ""}[full output saved to ${info.file}]`
+            : ""
+          return { output: `${text}${notice}`, truncated }
         }).pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(undefined)))
         return { info, capture }
       })
