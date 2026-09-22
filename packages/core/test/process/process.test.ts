@@ -151,6 +151,44 @@ describe("AppProcess", () => {
       }),
     )
 
+    it.live(
+      "returns when a descendant inherits stdio after the parent exits",
+      Effect.gen(function* () {
+        const svc = yield* AppProcess.Service
+        const script = [
+          'const { spawn } = require("node:child_process")',
+          'const child = spawn(process.execPath, ["-e", "setTimeout(() => {}, 1500)"], { stdio: ["ignore", "inherit", "inherit"], detached: true })',
+          "child.unref()",
+          'process.stdout.write("done\\n")',
+        ].join(";")
+        const started = Date.now()
+        const result = yield* svc.run(cmd("-e", script))
+        expect(result.exitCode).toBe(0)
+        expect(result.stdout.toString("utf8")).toBe("done\n")
+        expect(Date.now() - started).toBeLessThan(500)
+      }),
+      3_000,
+    )
+
+    it.live(
+      "returns combined output when a descendant inherits stdio after the parent exits",
+      Effect.gen(function* () {
+        const svc = yield* AppProcess.Service
+        const script = [
+          'const { spawn } = require("node:child_process")',
+          'const child = spawn(process.execPath, ["-e", "setTimeout(() => {}, 1500)"], { stdio: ["ignore", "inherit", "inherit"], detached: true })',
+          "child.unref()",
+          'process.stdout.write("done\\n")',
+          'process.stderr.write("warning\\n")',
+        ].join(";")
+        const result = yield* svc.run(cmd("-e", script), { combineOutput: true })
+        expect(result.exitCode).toBe(0)
+        expect(result.output?.toString("utf8")).toContain("done\n")
+        expect(result.output?.toString("utf8")).toContain("warning\n")
+      }),
+      3_000,
+    )
+
     if (process.platform !== "win32") {
       it.live(
         "timeout cleans up the scoped child process",
@@ -334,6 +372,22 @@ describe("AppProcess", () => {
         const result = yield* svc.runStream(cmd("-e", "console.log('only'); process.exit(7)")).pipe(Stream.runCollect)
         expect(Array.from(result)).toEqual(["only"])
       }),
+    )
+
+    it.live(
+      "ends when a runStream descendant inherits stdio after the parent exits",
+      Effect.gen(function* () {
+        const svc = yield* AppProcess.Service
+        const script = [
+          'const { spawn } = require("node:child_process")',
+          'const child = spawn(process.execPath, ["-e", "setTimeout(() => {}, 1500)"], { stdio: ["ignore", "inherit", "inherit"], detached: true })',
+          "child.unref()",
+          'process.stdout.write("done\\n")',
+        ].join(";")
+        const result = yield* svc.runStream(cmd("-e", script)).pipe(Stream.runCollect)
+        expect(Array.from(result)).toEqual(["done"])
+      }),
+      3_000,
     )
 
     it.live(
