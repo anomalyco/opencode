@@ -41,7 +41,7 @@ export function ExecutionStatusBadge(props: { model: ExecutionModel; onOpen: () 
     const progress = props.model.progress()
     if (progress) return language.t("execution.status.verified", { verified: progress.verified, total: progress.total })
     if (activeAgents() > 0) return language.plural("execution.status.activeAgents", activeAgents())
-    return language.t("execution.status.normal")
+    return undefined
   }
   const liveMessage = () => {
     const current = state()
@@ -93,9 +93,13 @@ export function ExecutionStatusBadge(props: { model: ExecutionModel; onOpen: () 
           <span data-testid="execution-status-icon" class="shrink-0">
             <Icon name={STATE_ICONS[state()]} size="small" />
           </span>
-          <span data-testid="execution-status-label" class="max-md:hidden">
-            {summary()}
-          </span>
+          <Show when={summary()}>
+            {(label) => (
+              <span data-testid="execution-status-label" class="max-md:hidden">
+                {label()}
+              </span>
+            )}
+          </Show>
         </button>
       </Tooltip>
       <Show when={state() === "needs_input"}>

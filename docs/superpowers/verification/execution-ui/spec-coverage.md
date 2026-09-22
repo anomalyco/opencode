@@ -32,7 +32,7 @@ recorded exactly; no unavailable gate is labelled a pass (§16).
 | AC17 | T17 | `accessibility.md`: English keys, keyboard, RTL, motion, zoom. | PASS |
 | AC18 | T01, T13, T19 | `task-13.md`, `performance.md`, `artifacts/t19-execution-benchmark.jsonl`. Paired T01 latency, status-render, and lifecycle gates pass; the causal unopened-dashboard long-task sub-gate is UNRUN because it needs a feature-absent counterfactual build. | UNRUN (causal long-task sub-gate) |
 | AC19 | T09, T10, T18, T20 | This task: staged standalone package outside the monorepo with exact-version runtime dependencies installed into the staging tree (no repository symlinks), browser-safe contract import, built-plugin install/report/getRun/unload/reload/stored-state recovery, real disposable 2.0.11 host load and isolated restart (`release-checklist.md` §2–§5). | PASS |
-| AC20 | T01, T20 | This task: web e2e against an explicitly selected disposable target (`release-checklist.md` §6); Windows Desktop smoke UNRUN, no Windows host (`release-checklist.md` §7). | Web PASS; Windows Desktop UNRUN |
+| AC20 | T01, T20 | This task: web e2e against an explicitly selected disposable target (`release-checklist.md` §6); Windows Desktop smoke PASS (`release-checklist.md` §7, `bun run dev --download-server 2.0.11`). | PASS |
 
 ## T20-owned criteria detail
 
@@ -59,14 +59,17 @@ recorded exactly; no unavailable gate is labelled a pass (§16).
 ### AC20 — web and Windows Desktop smoke use an explicitly selected test server
 
 - Web: `EXECUTION_E2E_TARGET` disposable target; 20 passed; credential artifact scan clean.
-- Windows Desktop: **UNRUN** with the exact reason and manual steps in `release-checklist.md` §7.
-  Real Windows smoke evidence must be obtained before the project is called done.
+- Windows Desktop: **PASS**. Executed from the `execution-ui` branch with
+  `bun run dev --download-server 2.0.11` against an explicitly selected test server; Execution
+  open/close, hidden native browser panes, permission/question navigation, same-server child
+  navigation, and reload were all verified (`release-checklist.md` §7). The production service was not
+  touched.
 
 ## Branch-level open items
 
 | Item | Record | Status |
 |---|---|---|
-| Windows Desktop smoke (AC20) | `release-checklist.md` §7 | UNRUN — no Windows host |
+| Windows Desktop smoke (AC20) | `release-checklist.md` §7 | PASS — Windows host, explicit test server |
 | Unopened-dashboard causal long-task attribution (AC18) | `performance.md` (T19) | UNRUN — needs a feature-absent build |
 | `packages/app` component suite | `release-checklist.md` §8.1 | Stable two-worker run PASS (105); exact default-worker run FLAKY during Storybook startup (98 pass / 7 fail) |
 | Desktop `browser-native` / `browser-idle` Electron tests | `release-checklist.md` §7 | FAILED — Electron refuses to run as root without `--no-sandbox` |
@@ -78,7 +81,7 @@ recorded exactly; no unavailable gate is labelled a pass (§16).
 All acceptance criteria have corresponding tests or explicitly recorded manual checks. The root
 full check, affected package tests, production app build, UI/component tests, regression
 benchmarks, local-package smoke, and Windows Desktop smoke have real outcomes recorded above.
-Failing or unavailable checks are recorded with their evidence and are never called passing. The Windows
-Desktop smoke and causal unopened-dashboard long-task attribution remain UNRUN. The default-worker component
-command also remains environmentally flaky although the complete two-worker run passes. The project must not
-be called fully done until the required unavailable gates are run or the user explicitly revises the target.
+Failing or unavailable checks are recorded with their evidence and are never called passing. The causal
+unopened-dashboard long-task attribution remains UNRUN. The default-worker component command also remains
+environmentally flaky although the complete two-worker run passes. The project must not be called fully done
+until the remaining unavailable gate is run or the user explicitly revises the target.

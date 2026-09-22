@@ -207,12 +207,12 @@ requires the active Session owner and visible document plus either the open desk
 tab active, expanded presentation, or the mobile Execution view. Detailed activity loads only for virtualized
 visible agent rows with at most four concurrent requests. No threshold was raised.
 
-## Unrun gates
+## Gate status
 
 | Gate | Exact command / reason | Outcome |
 |---|---|---|
 | Feature-attributable long task (closed dashboard) | Chromium reports only self/window attribution; asynchronous RPC-window overlap attributes unrelated render tasks; no feature-absent build available for a causal difference | UNRUN (raw profiles preserved); see above |
-| Windows Desktop smoke (AC20) | Windows host required | UNRUN; T20 owns it. |
+| Windows Desktop smoke (AC20) | Windows host, explicit test server (`bun run dev --download-server 2.0.11`) | PASS (`release-checklist.md` §7). |
 | Root canonical check | `bun run check` (repo root) | Pre-existing `@opencode/posts#typecheck` / `@opencode/www#typecheck` failures (recorded by T13/T17); `packages/app` typecheck exits 0. |
 
 ## Files changed

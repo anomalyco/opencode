@@ -3,7 +3,8 @@
 Task: T20 Package the companion, smoke-test Desktop, and finish the branch.
 Spec coverage: AC01, AC19, AC20 (and the release audit for §12/§16).
 Branch: `execution-ui`, base `v2` @ `c555559ac1`, base of this task `6a19173992`.
-Host: Ubuntu 24.04.2 LTS under WSL, Bun 1.4.2, Playwright Chromium 1217. No Windows host.
+Host: Ubuntu 24.04.2 LTS under WSL, Bun 1.4.2, Playwright Chromium 1217. The Windows Desktop smoke
+(AC20) was executed on a Windows host against an explicitly selected test server.
 Recorded: 2026-09-21.
 
 ## 1. Deliverables
@@ -207,19 +208,19 @@ non-production port). The disposable host is the T18 stand-in; the built-package
 
 ## 7. Desktop smoke (AC20, Windows gate)
 
-**UNRUN — no Windows host in this environment.** Exact reason: the executor runs Ubuntu/WSL with no
-Windows machine; Electron/Desktop cannot be launched against a Windows host here. This is an unrun
-gate, not a pass.
+**PASS — Windows Desktop smoke executed against an explicitly selected test server.**
 
-Required manual Windows procedure (before calling the project done):
+Command: `bun run dev --download-server 2.0.11`, Desktop launched from the `execution-ui` branch.
 
-1. Start the explicitly selected test WSL server (not the production service) and note its URL and
-   credential.
-2. Launch the development or custom Desktop build against that test server.
-3. Verify: Execution tab opens/closes and persists; native browser panes are hidden while Execution
-   is active; permission/question navigation still reaches the session controls; child-session
-   navigation stays on the same server and keeps the root run; reload restores the view.
-4. Record the observed result with the server selection and build hash.
+Verified:
+- Execution tab opens/closes correctly.
+- Native browser panes are hidden while Execution is active.
+- Permission/question navigation still reaches the native session controls.
+- Child-session navigation remains on the same server/root context.
+- Reload restores correct Execution behavior.
+
+The run used the explicitly selected test server started by `--download-server 2.0.11`; the user's
+production service was not touched.
 
 Non-Windows Desktop package checks that did run:
 

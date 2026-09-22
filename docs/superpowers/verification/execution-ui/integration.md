@@ -3,7 +3,8 @@
 Task: T18 Exercise real bridge lifecycle and recovery end to end.
 Spec coverage: AC06, AC07, AC08, AC11 (plugin/bridge/host integration). **T18 claims no AC19 coverage.**
 AC19's "built companion package loads outside the monorepo on the tested host" is UNRUN here and deferred to
-T20, which owns packaging and the real-host package-load gate; AC20 (Windows Desktop smoke) is likewise T20's.
+T20, which owns packaging and the real-host package-load gate; AC20 (Windows Desktop smoke) is T20's and
+passed (`release-checklist.md` §7).
 The stand-in host below checks lifecycle behavior at the plugin/bridge/app integration boundary only and is
 not AC19 evidence.
 Branch: `execution-ui`. Host: Ubuntu 24.04.2 LTS, Bun 1.4.2, Playwright Chromium.
@@ -187,7 +188,8 @@ The three `typecheck:e2e` errors are pre-existing: re-running with this task's f
 - The plugin lifecycle was verified against the plugin source, real HTTP transport, real file storage, and the
   real app bridge/UI; the real server process, when started, serves the native API and rejects the
   unbuilt companion exactly as recorded.
-- Windows Desktop smoke (AC20) is unrun and remains T20.
+- Windows Desktop smoke (AC20) passed on a Windows host against an explicitly selected test server
+  (`release-checklist.md` §7).
 
 ## 9. Files changed
 
