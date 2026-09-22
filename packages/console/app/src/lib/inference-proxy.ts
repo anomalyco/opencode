@@ -8,11 +8,11 @@ const paths: Record<string, string | undefined> = {
   "POST /zen/v1/chat/completions": "/openai/v1/chat/completions",
   "POST /zen/v1/responses": "/openai/v1/responses",
   "POST /zen/v1/messages": "/anthropic/v1/messages",
-  "POST /zen/systemone/v1/systemone": "/systemone/v1/systemone",
+  "POST /zen/v1/systemone": "/systemone/v1/systemone",
   "POST /zen/go/v1/chat/completions": "/go/openai/v1/chat/completions",
   "POST /zen/go/v1/responses": "/go/openai/v1/responses",
   "POST /zen/go/v1/messages": "/go/anthropic/v1/messages",
-  "POST /zen/go/systemone/v1/systemone": "/go/systemone/v1/systemone",
+  "POST /zen/go/v1/systemone": "/go/systemone/v1/systemone",
   "GET /zen/v1/models": "/v1/models",
   "GET /zen/go/v1/models": "/go/v1/models",
   "GET /zen/go/v1/usage": "/go/v1/usage",
@@ -81,8 +81,9 @@ export async function proxyInference(
   ])
     forwarded.headers.delete(name)
   forwarded.headers.set("authorization", `Bearer ${key}`)
+  forwarded.headers.set("CF-Access-Client-Id", Resource.CLOUDFLARE_ACCESS_CLIENT_ID.value)
   const ip = request.headers.get("cf-connecting-ip")
-  if (ip) forwarded.headers.set("x-real-ip", ip)
+  if (ip) forwarded.headers.set("x-zen-ip", ip)
   const requestID = request.headers.get("x-opencode-request-id") ?? request.headers.get("x-opencode-request")
   if (requestID) forwarded.headers.set("x-opencode-request-id", requestID)
 
