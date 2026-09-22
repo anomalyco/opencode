@@ -1659,14 +1659,14 @@ class Frame<R> {
       const depth = Math.max(self.depth, site.depth) + 1
       if (depth > MAX_CALL_DEPTH) throw rangeError("Maximum call stack size exceeded", node)
       const invocation = new Frame(this.ctx, new ScopeStack([...fn.capturedScopes, new Map()]), depth)
-      const run = Effect.gen(function* () {
-        // Seed all parameters first so defaults cannot fall through to same-named outer bindings.
-        const paramScope = invocation.scopes.current()
-        for (const parameter of fn.parameters) {
-          for (const name of collectPatternNames(parameter)) {
-            paramScope.set(name, { mutable: true, value: undefined, initialized: false })
-          }
+      // Seed all parameters first so defaults cannot fall through to same-named outer bindings.
+      const paramScope = invocation.scopes.current()
+      for (const parameter of fn.parameters) {
+        for (const name of collectPatternNames(parameter)) {
+          paramScope.set(name, { mutable: true, value: undefined, initialized: false })
         }
+      }
+      const bind = Effect.gen(function* () {
         for (const [index, parameter] of fn.parameters.entries()) {
           if (parameter.type === "RestElement") {
             yield* invocation.declarePattern(
@@ -1680,7 +1680,8 @@ class Frame<R> {
           }
           yield* invocation.declarePattern(parameter, args[index], true, parameter, true)
         }
-
+      })
+      const body = Effect.gen(function* () {
         if (fn.body.type === "BlockStatement") {
           invocation.scopes.push()
           invocation.hoistVars(fn.body.body, paramScope)
@@ -1690,7 +1691,9 @@ class Frame<R> {
 
         return yield* invocation.evaluateExpression(fn.body)
       })
-      if (fn.generator) return Effect.succeed(this.createGenerator(invocation, run, fn))
+      // Generators bind parameters at the call and defer only the body to the first `next()`, as in JS.
+      if (fn.generator) return Effect.map(bind, () => this.createGenerator(invocation, body, fn))
+      const run = Effect.andThen(bind, body)
       if (!fn.async) return run
       return this.ctx.pending.createWithSelf((self) =>
         Effect.flatMap(run, (value) => resolvePromiseValue(invocation.ctx, value, self)),

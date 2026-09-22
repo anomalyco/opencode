@@ -150,8 +150,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Redeclaring a function in the same scope, or alongside a `var`, is allowed: the last declaration wins.
 - [x] Generator functions have their own `prototype` (inheriting the shared generator prototype), so
       `g() instanceof g` holds. Plain functions have none, since they cannot construct.
-- [ ] Generator and async generator functions evaluate parameter defaults and destructuring at the first `next()`
-      rather than at the call, so their errors are not thrown synchronously.
+- [x] Generator and async generator functions bind parameters (defaults, destructuring) at the call and defer only the
+      body to the first `next()`, so a bad argument throws synchronously from the call site, as in JS.
 - [x] Synchronous and async generator declarations/expressions, `yield`, and `yield*`, including lazy bodies,
       `next(value)`, `return(value)`, `throw(value)`, exhaustion, promise adoption, async request ordering,
       `try`/`catch`/`finally`, and sync/async iterator symbols. Async `yield*` awaits values while adapting a sync
