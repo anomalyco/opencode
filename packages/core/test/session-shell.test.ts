@@ -12,6 +12,7 @@ import { SessionEvent } from "@opencode/core/session/event"
 import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionRunCoordinator } from "@opencode/core/session/run-coordinator"
 import { Shell } from "@opencode/core/shell"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { location } from "./fixture/location"
 import { offlineModels } from "./fixture/models"
@@ -106,6 +107,56 @@ const launch = Effect.fn(function* (fixture: Effect.Success<typeof setup>, name:
 })
 
 describe("Session.shell", () => {
+  it.live("exposes native session identity to preparation for direct user shells", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup
+      const locations = yield* LocationServiceMap.Service
+      const hooks = yield* PluginHooks.Service.pipe(Effect.provide(locations.get(fixture.created.location)))
+      let observed: string | undefined
+      yield* hooks.register("shell", "create.before", (event) =>
+        Effect.sync(() => {
+          observed = event.sessionID
+          expect(event.signal?.aborted).toBe(false)
+          event.env = { ...event.env, SHELL_HOOK_TEST: "invocation-local" }
+        }),
+      )
+      yield* fixture.session.shell({ sessionID: fixture.created.id, command: "echo hook" }).pipe(Effect.scoped)
+      expect(observed).toBe(fixture.created.id)
+      const started = yield* fixture.shell.create({
+        command: process.platform === "win32" ? "Write-Output $env:SHELL_HOOK_TEST" : 'printf "%s" "$SHELL_HOOK_TEST"',
+        metadata: { sessionID: fixture.created.id },
+      })
+      yield* fixture.shell.wait(started.id)
+      const output = yield* fixture.shell.output(started.id)
+      expect(output.output.trim()).toBe("invocation-local")
+      expect(process.env.SHELL_HOOK_TEST).toBeUndefined()
+    }),
+  )
+
+  it.live("interrupting preparation aborts its signal before any child starts", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup
+      const locations = yield* LocationServiceMap.Service
+      const hooks = yield* PluginHooks.Service.pipe(Effect.provide(locations.get(fixture.created.location)))
+      const entered = yield* Deferred.make<void>()
+      let signal: AbortSignal | undefined
+      yield* hooks.register("shell", "create.before", (event) =>
+        Effect.gen(function* () {
+          signal = event.signal
+          yield* Deferred.succeed(entered, undefined)
+          yield* Effect.never
+        }),
+      )
+      const creating = yield* fixture.shell
+        .create({ command: "echo should-not-run", metadata: { sessionID: fixture.created.id } })
+        .pipe(Effect.forkScoped)
+      yield* Deferred.await(entered).pipe(Effect.timeout("5 seconds"))
+      yield* Fiber.interrupt(creating)
+      expect(signal?.aborted).toBe(true)
+      expect(yield* fixture.shell.list()).toEqual([])
+    }),
+  )
+
   it.live("runs shells concurrently with an active model and waits for each shell's own completion", () =>
     Effect.gen(function* () {
       const fixture = yield* setup

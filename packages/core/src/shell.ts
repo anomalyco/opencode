@@ -255,6 +255,7 @@ const layer = () =>
             ? yield* environments.get(sessionID)
             : undefined
         const invocation: ShellCreateBefore = {
+          sessionID: Schema.is(SessionSchema.ID)(sessionID) ? sessionID : undefined,
           command: input.command,
           cwd: input.cwd ?? location.directory,
           timeout: input.timeout ?? 0,
@@ -265,7 +266,22 @@ const layer = () =>
             OPENCODE_TERMINAL: "1",
           },
         }
-        yield* hooks.trigger("shell", "create.before", invocation)
+        yield* Effect.acquireUseRelease(
+          Effect.sync(() => new AbortController()),
+          (controller) =>
+            hooks.trigger("shell", "create.before", { ...invocation, signal: controller.signal }).pipe(
+              Effect.tap((prepared) =>
+                Effect.sync(() => {
+                  invocation.command = prepared.command
+                  invocation.cwd = prepared.cwd
+                  invocation.timeout = prepared.timeout
+                  invocation.shell = prepared.shell
+                  invocation.env = prepared.env
+                }),
+              ),
+            ),
+          (controller) => Effect.sync(() => controller.abort()),
+        )
         if (before) yield* before(invocation)
 
         const id = Shell.ID.ascending()
