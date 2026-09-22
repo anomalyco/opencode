@@ -27,6 +27,7 @@ import {
   UnknownProviderError,
   type ContentPart,
   type LLMRequest,
+  type Media,
   type ToolDefinition,
   type UsageInput,
 } from "@opencode/ai"
@@ -551,7 +552,12 @@ function toolMessage(input: LLMRequest["messages"][number]) {
     const value = part.result.value.filter((item) => {
       if (item.type !== "file") return true
       if (!item.mime.startsWith("image/") && item.mime !== "application/pdf") return true
-      media.push({ type: "file", mediaType: item.mime, data: fileData(item.uri), filename: item.name })
+      media.push({
+        type: "file",
+        mediaType: item.mime,
+        data: fileData(ProviderShared.toolFileMedia(item).media),
+        filename: item.name,
+      })
       return false
     })
     return toolResultPart({
@@ -575,7 +581,7 @@ function text(part: ContentPart) {
 function userPart(part: ContentPart): UserContent {
   if (part.type === "text") return [{ type: "text", text: part.text }]
   if (part.type === "media")
-    return [{ type: "file", mediaType: part.mediaType, data: fileData(part.data), filename: part.filename }]
+    return [{ type: "file", mediaType: part.media.mediaType, data: fileData(part.media), filename: part.filename }]
   return []
 }
 
@@ -590,7 +596,7 @@ function assistantPart(part: ContentPart): AssistantContent {
     case "text":
       return [{ type: "text", text: part.text, providerOptions: metadataProviderOptions(part.providerMetadata) }]
     case "media":
-      return [{ type: "file", mediaType: part.mediaType, data: fileData(part.data), filename: part.filename }]
+      return [{ type: "file", mediaType: part.media.mediaType, data: fileData(part.media), filename: part.filename }]
     case "reasoning":
       return [{ type: "reasoning", text: part.text, providerOptions: metadataProviderOptions(part.providerMetadata) }]
     case "tool-call":
@@ -617,13 +623,15 @@ function assistantPart(part: ContentPart): AssistantContent {
   }
 }
 
-function fileData(data: Extract<ContentPart, { type: "media" }>["data"]) {
-  if (typeof data !== "string") return data
-  const base64 = /^data:[^;,]+(?:;[^,]*)*;base64,(.*)$/s.exec(data)?.[1]
-  if (base64 !== undefined) return base64
-  if (!URL.canParse(data)) return data
-  const url = new URL(data)
-  return url.protocol === "http:" || url.protocol === "https:" ? url : data
+function fileData(media: Media.Asset) {
+  const source = media.source
+  if (source.type === "bytes" || source.type === "base64") return source.data
+  if (source.type === "url") return new URL(source.url)
+  throw ProviderShared.unsupportedOperation({
+    operation: "media-ref",
+    provider: source.provider,
+    message: "AI SDK routes cannot forward provider media references",
+  })
 }
 
 function toolResultPart(part: ContentPart): ToolResultContent[] {

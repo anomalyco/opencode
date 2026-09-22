@@ -8,10 +8,10 @@ import { LLM, LLMClient } from "@opencode/ai"
 import { RequestExecutor } from "@opencode/ai/route"
 import { OpenAI } from "@opencode/ai/providers"
 
-const model = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY }).responses("gpt-4o-mini")
+const openai = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY })
 
 const request = LLM.request({
-  model,
+  model: openai.responses("gpt-4o-mini"), // `.chat(...)` selects the Chat Completions API instead
   system: "You are concise.",
   prompt: "Say hello in one short sentence.",
   generation: { maxTokens: 40 },
@@ -29,6 +29,43 @@ await Effect.runPromise(program.pipe(Effect.provide(llmLayer)))
 
 Run `LLMClient.stream(request)` instead of `generate` when you want incremental `LLMEvent`s. The event stream is provider-neutral — same shape across OpenAI Chat, OpenAI Responses, Anthropic Messages, Gemini, Bedrock Converse, and any OpenAI-compatible deployment.
 
+The same configured facade names image models. `Image.request` resolves the provider's image route from the ref and
+returns `Media.Asset`s with lazily decoded bytes:
+
+```ts
+import { NodeFileSystem } from "@effect/platform-node"
+import { Image, ImageClient, Media } from "@opencode/ai"
+
+const image = Effect.gen(function* () {
+  const response = yield* Image.generate({
+    model: openai.image("gpt-image-2"),
+    prompt: "A robot tending a rooftop garden",
+    size: "1024x1024",
+    providerOptions: { quality: "high" }, // typed per image model
+  })
+  yield* Media.write(response.image, "./garden.png")
+})
+
+// `asset.bytes()` / `Media.write` also need the executor, so merge it into the environment instead of hiding it.
+const imageLayer = ImageClient.layer.pipe(Layer.provideMerge(RequestExecutor.fetchLayer))
+
+await Effect.runPromise(image.pipe(Effect.provide(imageLayer), Effect.provide(NodeFileSystem.layer)))
+```
+
+Prefer promises? `@opencode/ai/promise` exposes the same LLM and image APIs over one managed runtime:
+
+```ts
+import { AI } from "@opencode/ai/promise"
+
+const ai = AI.make()
+const text = await ai.llm.generate({ model: openai.responses("gpt-4o-mini"), prompt: "Say hello." })
+const generated = await ai.image.generate({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" })
+for await (const event of ai.llm.stream({ model: openai.responses("gpt-4o-mini"), prompt: "Stream hello." })) {
+  // LLMEvent
+}
+await ai.dispose()
+```
+
 ## Experimental evaluation
 
 Evaluation models compare shared state with typed choice, score, and boolean questions. The API is
@@ -41,7 +78,7 @@ import { TypeSafeAI } from "@opencode/ai/providers"
 
 const model = TypeSafeAI.configure().experimental.evaluation("jev-latest")
 
-const program = Evaluation.evaluate({
+const program = Evaluation.run({
   model,
   state: "I was charged twice. Please refund the duplicate payment.",
   questions: {
@@ -66,7 +103,17 @@ console.log(response.answers.refund.probability)
 ```
 
 `TypeSafeAI` reads `TYPESAFE_API_KEY`. `OpenCodeZen` exposes the same selector and reads
-`OPENCODE_API_KEY`. The common API uses `boolean`; System One routes lower it to native `noul`.
+`OPENCODE_API_KEY`. OpenRouter and Vercel AI Gateway use the same provider shape:
+
+```ts
+import { OpenRouter, VercelAIGateway } from "@opencode/ai/providers"
+
+OpenRouter.configure().experimental.evaluation("typesafe/jev-1.13")
+VercelAIGateway.configure().experimental.evaluation("typesafe-ai/jev")
+```
+
+OpenRouter reads `OPENROUTER_API_KEY`. Vercel reads `AI_GATEWAY_API_KEY`, then `VERCEL_OIDC_TOKEN`.
+The common API uses `boolean`; System One routes lower it to native `noul`.
 Choice and score confidence plus score legends remain available in provider metadata, and the
 provider's rounded probabilities are returned unchanged.
 
@@ -355,23 +402,25 @@ citations or separate result blocks. Retain `response.message` for either API's 
 Use `Image.generate` for one-off generation or editing:
 
 ```ts
-import { Image, ImageInput } from "@opencode/ai"
+import { Image, Media } from "@opencode/ai"
 
 const generation = Image.generate({
-  model: meta.image("muse-image-1.0"),
+  model: meta("muse-image-1.0"),
   prompt: "A flat black square on a white background.",
-  options: { n: 1, reasoningStrength: "low" },
+  n: 1,
+  providerOptions: { reasoningStrength: "low" },
 })
 
 const edit = Image.generate({
-  model: meta.image("muse-image-1.0"),
+  model: meta("muse-image-1.0"),
   prompt: "Make the square purple.",
-  images: [ImageInput.bytes(imageBytes, "image/webp")],
-  options: { outputFormat: "png", reasoningStrength: "low" },
+  images: [Media.bytes(imageBytes, "image/webp")],
+  format: "png",
+  providerOptions: { reasoningStrength: "low" },
 })
 ```
 
-The default image format is WEBP; `outputFormat` also accepts PNG/JPEG and `responseFormat: "url"`
+The default image format is WEBP; `format` also accepts PNG/JPEG and `responseFormat: "url"`
 returns a signed URL. `size` is an aspect-ratio hint. For conversational images, select
 `meta.responses("muse-image-1.0")` with `tools: [Meta.imageGeneration({ reasoningStrength: "low" })]`.
 Generated images are provider-executed tool results with file content. Retain `response.message` to
@@ -382,28 +431,39 @@ Meta Responses is explicitly HTTP/SSE-only and does not use WebSockets, even whe
 
 ## Image generation
 
-Use `Image.generate` with an image model for direct asset generation:
+Use `Image.generate` with an image model for direct asset generation. `Image.request` mirrors `LLM.request`: the
+model comes from the facade's `.image(...)` selector (mirroring `.responses(...)`), common fields
+(`images`, `mask`, `n`, `size`, `aspectRatio`, `seed`, `format`) lower natively or fail typed, and
+`providerOptions` is inferred from the selected model:
 
 ```ts
-import { Image, ImageInput } from "@opencode/ai"
+import { Image, Media } from "@opencode/ai"
 import { OpenAI } from "@opencode/ai/providers"
+
+const openai = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY })
 
 const program = Effect.gen(function* () {
   const response = yield* Image.generate({
-    model: OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY }).image("gpt-image-2"),
+    model: openai.image("gpt-image-2"),
     prompt: "A robot tending a rooftop garden",
-    options: {
-      n: 2,
-      size: "1024x1024",
+    n: 2,
+    size: "1024x1024",
+    format: "webp",
+    providerOptions: {
       quality: "high", // inferred from the OpenAI image model
-      outputFormat: "webp",
       future_option: true, // unknown native options pass through unchanged
     },
   })
 
-  return response.images // GeneratedImage[] with owned bytes or a provider URL
+  return response.images // Media.Asset[] with owned bytes or a provider URL
 })
 ```
+
+`Media.Asset` is the one asset type shared by image requests, image responses, LLM messages, and tool results.
+`asset.source` is the serializable `Media.Source` (`bytes`, `base64`, `url`, or `ref`); `asset.bytes()`,
+`asset.base64()`, and `asset.dataUrl()` decode or download lazily and cache; `asset.materialize()` pulls a `url`
+asset into owned bytes before the provider URL expires. Construct assets with `Media.bytes`, `Media.base64`,
+`Media.url`, `Media.ref(provider, id)`, `Media.fromDataUrl`, or `Media.file(path)`.
 
 Pass ordered image inputs to the same method for editing, composition, or image-conditioned generation:
 
@@ -414,49 +474,45 @@ const response =
     model,
     prompt: "Combine these product photos into one studio scene",
     images: [
-      ImageInput.bytes(firstBytes, "image/png"),
-      ImageInput.url("https://example.com/second.webp"),
-      ImageInput.file("file_123"),
+      Media.bytes(firstBytes, "image/png"),
+      Media.url("https://example.com/second.webp"),
+      Media.ref("openai", "file_123"),
     ],
-    options,
+    providerOptions,
     http,
   })
 ```
 
-`ImageInput.fileUri(uri, mediaType)` represents provider file URIs such as Gemini Files. Raw strings are not
-accepted as image inputs, avoiding ambiguity between base64, URLs, and provider IDs. Empty or omitted `images`
-uses text-to-image generation; a non-empty array selects the provider's edit behavior without enforcing provider
-image-count limits locally. `images` is the only common image-editing field. OpenAI uses multipart for byte/data-URL
-edits and its JSON reference body for URL or file-ID edits. Its provider-specific `options.mask` accepts an
-`ImageInput` for inpainting:
+`Media.ref(provider, id)` represents provider file handles such as OpenAI file IDs or Gemini Files URIs; routes
+only forward refs that belong to their own provider. Raw strings are not accepted as image inputs, avoiding
+ambiguity between base64, URLs, and provider IDs. Empty or omitted `images` uses text-to-image generation; a
+non-empty array selects the provider's edit behavior without enforcing provider image-count limits locally. OpenAI
+uses multipart for byte/data-URL edits and its JSON reference body for URL or file-ID edits. The common `mask`
+field selects inpainting; routes that cannot honor it fail with `UnsupportedOperation`:
 
 ```ts
 yield *
   Image.generate({
-    model: OpenAI.configure({ apiKey }).image("gpt-image-2"),
+    model: openai.image("gpt-image-2"),
     prompt,
-    images: [ImageInput.bytes(sourceBytes, "image/png")],
-    options: { mask: ImageInput.bytes(maskBytes, "image/png") },
+    images: [Media.bytes(sourceBytes, "image/png")],
+    mask: Media.bytes(maskBytes, "image/png"),
   })
 ```
 
-The OpenAI adapter extracts this helper value into the edit request's native `mask` field rather than passing the
-tagged `ImageInput` object through as an ordinary option. On multipart requests, `http.body` can override option
-fields but not structural `model`, `prompt`, `image[]`, or `mask` fields, and the transport owns the multipart
-`Content-Type` boundary. For JSON requests, `http.body` remains the final raw-native overlay. Gemini does not fetch
-public HTTP URLs, and hosted Z.ai image generation does not accept image inputs. These cases fail with
-`InvalidRequest` before network I/O.
+On multipart requests, `http.body` can override option fields but not structural `model`, `prompt`, `image[]`,
+or `mask` fields, and the transport owns the multipart `Content-Type` boundary. For JSON requests, `http.body`
+remains the final raw-native overlay. Gemini does not fetch public HTTP URLs, and hosted Z.ai image generation does
+not accept image inputs. These cases fail with a typed `AIError` before network I/O.
 
 Provider-native image options belong to each request. Raw `http.body` fields have final precedence over them:
 
 ```ts
-const model = OpenAI.configure({ apiKey }).image("gpt-image-2")
-
 yield *
   Image.generate({
-    model,
+    model: openai.image("gpt-image-2"),
     prompt,
-    options: { quality: "medium" },
+    providerOptions: { quality: "medium" },
     http,
   })
 ```
@@ -466,11 +522,11 @@ xAI image models use the same request API with xAI-native controls:
 ```ts
 yield *
   Image.generate({
-    model: XAI.configure({ apiKey }).image("any-model-id"),
+    model: XAI.configure({ apiKey })("any-model-id"),
     prompt,
-    options: {
-      n: 2,
-      aspectRatio: "16:9",
+    n: 2,
+    aspectRatio: "16:9",
+    providerOptions: {
       resolution: "1k",
       responseFormat: "b64_json",
       future_option: true,
@@ -486,12 +542,12 @@ import { Google } from "@opencode/ai/providers"
 
 const googleProgram = Effect.gen(function* () {
   const response = yield* Image.generate({
-    model: Google.configure({ apiKey }).image("any-model-id"),
+    model: Google.configure({ apiKey })("any-model-id"),
     prompt: "A robot tending a rooftop garden",
-    options: {
-      aspectRatio: "16:9",
+    aspectRatio: "16:9",
+    seed: 42,
+    providerOptions: {
       imageSize: "2K",
-      seed: 42,
       thinkingLevel: "HIGH",
       includeThoughts: true,
       futureOption: true,
@@ -513,9 +569,9 @@ Z.ai image models infer open Z.ai-native options from the selected model:
 ```ts
 yield *
   Image.generate({
-    model: ZAI.configure({ apiKey }).image("any-model-id"),
+    model: ZAI.configure({ apiKey })("any-model-id"),
     prompt,
-    options: {
+    providerOptions: {
       quality: "hd",
       userID: "user-123",
       future_option: true,
@@ -525,8 +581,8 @@ yield *
 ```
 
 Z.ai does not include trustworthy MIME metadata for output URLs, so generated images use
-`application/octet-stream`. Output URLs expire after 30 days; download and persist them promptly if they must
-remain available.
+`application/octet-stream` until materialized. Output URLs expire after 30 days; call `asset.materialize()` and
+persist the bytes promptly if they must remain available.
 
 Conversational image generation remains part of the LLM interaction. OpenAI Responses exposes it through its hosted image tool:
 
@@ -544,7 +600,7 @@ const program = Effect.gen(function* () {
 })
 ```
 
-The hosted result is represented as a provider-executed tool call and tool result. Its image is a `file` content item with a data URI, so retaining `response.message` preserves the generated image for continuation.
+The hosted result is represented as a provider-executed tool call and tool result, and the generated image is also emitted as a first-class `media` `LLMEvent` (`response.message` then carries a `media` part). Gemini image-capable models emit the same `media` event for inline image output. Retaining `response.message` preserves the generated image for continuation on both routes.
 
 ## Public API
 
@@ -553,8 +609,11 @@ The hosted result is represented as a provider-executed tool call and tool resul
 - **`Message.user(...)` / `Message.assistant(...)` / `Message.tool(...)`** — message constructors from the canonical schema model.
 - **`LanguageModel.make(...)` / `ToolCallPart.make(...)` / `ToolResultPart.make(...)` / `ToolDefinition.make(...)`** — model and tool-related constructors from the canonical schema model.
 - **`LLMEvent.is.*`** — typed guards (`is.textDelta`, `is.toolCall`, `is.finish`, …) for filtering streams.
-- **`Image.generate({...})`** — generate images through a provider-neutral image request and response model.
+- **`Image.request` / `Image.generate` / `Image.stream`** — generate images through a provider-neutral image request and response model.
 - **`ImageClient`** — Effect service and layer for image execution, parallel to `LLMClient`.
+- **`Media`** — the shared asset type (`Media.Asset`, `Media.Source`) and constructors used by messages, tool results, and media requests.
+- **`Generation`** — provider-neutral handle for an in-flight media generation (`await`, `refresh`, `cancel`, `events`) used by queued media routes.
+- **`@opencode/ai/promise`** — `AI.make({ layer? })` and a default `ai` client exposing `llm` and `image` as Promise / `AsyncIterable` APIs.
 
 ## Testing
 

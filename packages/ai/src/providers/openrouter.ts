@@ -3,8 +3,9 @@ import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
-import { ProviderID, type CacheHint, type ModelID } from "../schema/index.js"
+import { HttpOptions, ProviderID, type CacheHint, type ModelID } from "../schema/index.js"
 import type { ProviderPackage } from "../provider-package.js"
+import { SystemOne } from "../experimental/system-one.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { newBreakpoints, ttlBucket } from "../protocols/utils/cache.js"
 import { isRecord } from "../protocols/shared.js"
@@ -70,6 +71,14 @@ export interface OpenRouterOptions {
 }
 
 export type OpenRouterProviderOptionsInput = OpenRouterOptions
+
+export interface OpenRouterEvaluationOptions {
+  readonly [key: string]: unknown
+  readonly provider?: OpenRouterProviderRouting
+  readonly session_id?: string
+  readonly trace?: Readonly<Record<string, unknown>>
+  readonly user?: string
+}
 
 export type LanguageModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
@@ -181,15 +190,27 @@ const configuredRoute = (input: LanguageModelOptions) => {
 
 export const configure = (input: LanguageModelOptions = {}) => {
   const route = configuredRoute(input)
+  const evaluation = (modelID: string | ModelID) =>
+    SystemOne.model<OpenRouterEvaluationOptions>({
+      id: modelID,
+      provider: id,
+      providerMetadataKey: "openrouter",
+      auth: AuthOptions.bearer(input, "OPENROUTER_API_KEY"),
+      baseURL: input.baseURL ?? baseURL,
+      headers: input.headers,
+      http: input.http === undefined ? undefined : HttpOptions.make(input.http),
+    })
   return {
     id,
     model: (modelID: string | ModelID) =>
       route.model<OpenRouterProviderOptionsInput>({ id: modelID, compatibility: { supportsPromptCacheKey: true } }),
+    experimental: { evaluation },
     configure,
   }
 }
 
 export const provider = configure()
+export const experimental = provider.experimental
 export const model: ProviderPackage.Definition<Settings, OpenRouterProviderOptionsInput>["model"] = (
   modelID,
   { apiKey, baseURL, body, headers, ...providerOptions },

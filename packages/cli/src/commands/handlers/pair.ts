@@ -2,6 +2,7 @@ import { EOL } from "os"
 import { Effect, Option } from "effect"
 import { Service } from "@opencode/client/effect/service"
 import { OpenCode } from "@opencode/client/promise"
+import { base64Encode } from "@opencode/util/encode"
 import { renderUnicodeCompact } from "uqr"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
@@ -18,6 +19,9 @@ export default Runtime.handler(
           OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) }).server.info(),
         )).urls
     const info = { urls, username: "opencode", password }
+    const link = info.urls[0]
+      ? `${new URL("/connect", info.urls[0])}#${base64Encode(JSON.stringify({ username: info.username, password }))}`
+      : undefined
     process.stdout.write(
       [
         "",
@@ -25,13 +29,19 @@ export default Runtime.handler(
         ...info.urls.slice(1).map((url) => `            ${url}`),
         `  Username  ${info.username}`,
         `  Password  ${info.password}`,
-        "",
-        "  Scan to pair",
-        "",
-        renderUnicodeCompact(JSON.stringify(info), { border: 2 })
-          .split(EOL)
-          .map((line) => "  " + line)
-          .join(EOL),
+        ...(link
+          ? [
+              "",
+              "  Scan to pair",
+              "",
+              renderUnicodeCompact(link, { border: 2 })
+                .split(EOL)
+                .map((line) => "  " + line)
+                .join(EOL),
+              "",
+              `  Link      ${link}`,
+            ]
+          : []),
         "",
       ].join(EOL) + EOL,
     )
