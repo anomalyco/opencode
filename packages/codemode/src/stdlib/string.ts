@@ -93,15 +93,7 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
   const codeUnits = (name: string, op: (...codes: Array<number>) => string): Method => [
     name,
     1,
-    (_, args) =>
-      op(
-        ...args.map((arg) => {
-          if (typeof arg !== "number") {
-            throw typeError(`String.${name} expects number arguments.`)
-          }
-          return arg
-        }),
-      ),
+    (_, args) => op(...args.map(coerceToNumber)),
   ]
   methods(builtins, string, [
     codeUnits("fromCharCode", String.fromCharCode),

@@ -23,6 +23,27 @@ const value = async (code: string) => {
 }
 
 describe("confined generators", () => {
+  test("parameters are bound at the call; only the body waits for next()", async () => {
+    expect(
+      await value(`
+        const log = []
+        function* g(a = log.push("param")) { log.push("body"); yield a }
+        const it = g()
+        log.push("created")
+        it.next()
+        function* bad({ x } = null) { yield x }
+        async function* asyncBad({ x } = null) { yield x }
+        let failures = []
+        try { bad() } catch (error) { failures.push(error.constructor.name) }
+        try { asyncBad() } catch (error) { failures.push(error.constructor.name) }
+        return [log, failures]
+      `),
+    ).toEqual([
+      ["param", "created", "body"],
+      ["TypeError", "TypeError"],
+    ])
+  })
+
   // test/built-ins/GeneratorPrototype/next/return-yield-expr.js
   test("is lazy and preserves next(value), nested suspension, return, and exhaustion", async () => {
     expect(

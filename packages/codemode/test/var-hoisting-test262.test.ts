@@ -234,6 +234,44 @@ describe("var semantics beyond Test262", () => {
   })
 })
 
+describe("function declarations and expressions", () => {
+  test("the last of repeated function declarations wins, and a var may share the name", async () => {
+    expect(
+      await value(`
+        function f() { return 1 }
+        const first = f()
+        function f() { return 2 }
+        var g = 1
+        function g() { return 3 }
+        return [first, f(), typeof g]
+      `),
+    ).toEqual([2, 2, "number"])
+  })
+
+  test("a named function expression sees its own name inside its body, read-only", async () => {
+    expect(
+      await value(`
+        const fact = function inner(n) { return n <= 1 ? 1 : n * inner(n - 1) }
+        const reassign = function inner() { inner = 5 }
+        let failure
+        try { reassign() } catch (error) { failure = error.constructor.name }
+        return [fact(4), typeof inner, failure]
+      `),
+    ).toEqual([24, "undefined", "TypeError"])
+  })
+
+  test("generator functions have their own prototype", async () => {
+    expect(
+      await value(`
+        function* g() {}
+        async function* ag() {}
+        function f() {}
+        return [g() instanceof g, ag() instanceof ag, g.prototype === ag.prototype, typeof g.prototype, typeof f.prototype]
+      `),
+    ).toEqual([true, true, false, "object", "undefined"])
+  })
+})
+
 describe("switch case function hoisting", () => {
   test("function declarations are visible across all cases before their statement runs", async () => {
     expect(await value(`switch (1) { case 1: return foo(); function foo() { return "hoisted" } }`)).toBe("hoisted")

@@ -211,6 +211,32 @@ const termForms = (term: string): Array<string> => {
   return forms
 }
 
+const rank = (entries: ReadonlyArray<SearchEntry>, query: string): Array<SearchEntry> => {
+  const terms = tokenize(query).map(termForms)
+  return entries
+    .map((entry) => {
+      const path = entry.description.path.toLowerCase()
+      const description = entry.description.description.toLowerCase()
+      const score = terms.reduce(
+        (total, forms) =>
+          total +
+          (forms.some((form) => path === form || path.endsWith(`.${form}`)) ? 20 : 0) +
+          (forms.some((form) => entry.pathWords.includes(form)) ? 12 : 0) +
+          (forms.some((form) => path.includes(form)) ? 8 : 0) +
+          (forms.some((form) => description.includes(form)) ? 4 : 0) +
+          (forms.some((form) => entry.searchText.includes(form)) ? 2 : 0),
+        0,
+      )
+      return { entry, score }
+    })
+    .filter(({ score }) => terms.length === 0 || score > 0)
+    .sort(
+      (left, right) =>
+        right.score - left.score || compareText(left.entry.description.path, right.entry.description.path),
+    )
+    .map(({ entry }) => entry)
+}
+
 const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>): Tool => ({
   _tag: "CodeModeTool",
   description: "Search available tools",
@@ -238,32 +264,7 @@ const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>): Tool => ({
           : scoped.find(
               (entry) => entry.description.path === pathQuery || toolExpression(entry.description.path) === trimmed,
             )
-      const terms = tokenize(query).map(termForms)
-      const ranked =
-        exact !== undefined
-          ? [exact]
-          : scoped
-              .map((entry) => {
-                const path = entry.description.path.toLowerCase()
-                const description = entry.description.description.toLowerCase()
-                const score = terms.reduce(
-                  (total, forms) =>
-                    total +
-                    (forms.some((form) => path === form || path.endsWith(`.${form}`)) ? 20 : 0) +
-                    (forms.some((form) => entry.pathWords.includes(form)) ? 12 : 0) +
-                    (forms.some((form) => path.includes(form)) ? 8 : 0) +
-                    (forms.some((form) => description.includes(form)) ? 4 : 0) +
-                    (forms.some((form) => entry.searchText.includes(form)) ? 2 : 0),
-                  0,
-                )
-                return { entry, score }
-              })
-              .filter(({ score }) => terms.length === 0 || score > 0)
-              .sort(
-                (left, right) =>
-                  right.score - left.score || compareText(left.entry.description.path, right.entry.description.path),
-              )
-              .map(({ entry }) => entry)
+      const ranked = exact !== undefined ? [exact] : rank(scoped, query)
       const items = ranked.slice(offset, offset + (request.limit ?? defaultSearchLimit)).map(({ description }) => ({
         ...description,
         path: toolExpression(description.path),
@@ -329,13 +330,23 @@ const namespaceKeys = <R>(root: ToolNode<R>, path: ReadonlyArray<string>): Reado
   return Array.from(node.children.keys())
 }
 
-const resolve = <R>(root: ToolNode<R>, path: ReadonlyArray<string>): Tool<R> => {
+const resolve = <R>(root: ToolNode<R>, path: ReadonlyArray<string>, index: ReadonlyArray<SearchEntry>): Tool<R> => {
   const segments = canonicalSegments(path)
   const node = lookup(root, segments)
   if (node === undefined) {
-    throw new ToolRuntimeError("UnknownTool", `Unknown tool '${segments.join(".")}'.`, [
-      "The tool may have been removed or renamed. Use search to find available tools.",
-    ])
+    const name = segments.join(".")
+    const ns = segments.length > 1 && root.children.has(segments[0]) ? segments[0] : undefined
+    const closest = rank(
+      ns ? index.filter((entry) => entry.description.path.startsWith(`${ns}.`)) : index,
+      ns ? segments.slice(1).join(" ") : name,
+    )[0]
+    throw new ToolRuntimeError(
+      "UnknownTool",
+      closest
+        ? `Unknown tool '${name}'. Did you mean ${toolExpression(closest.description.path)}?`
+        : `Unknown tool '${name}'.`,
+      ["Use search to find available tools."],
+    )
   }
   if (node.tool === undefined) {
     throw new ToolRuntimeError("UnknownTool", `Tool '${segments.join(".")}' is not callable.`)
@@ -440,7 +451,7 @@ export const make = <R>(
         // Models often write `tools.search(...)` for the bare `search(...)`; honor it unless a tool owns that path.
         if (segments.length === 1 && segments[0] === "search" && lookup(root, segments) === undefined)
           return executeTool("search", makeSearchTool(prepared.searchIndex), args)
-        return executeTool(segments.join("."), resolve(root, path), args)
+        return executeTool(segments.join("."), resolve(root, path, prepared.searchIndex), args)
       }),
   }
 }

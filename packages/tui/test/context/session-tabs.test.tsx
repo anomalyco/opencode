@@ -135,7 +135,7 @@ async function renderSessionTabs(
   let storage!: ReturnType<typeof useStorage>
   let config!: ReturnType<typeof useConfig>
   let configuration = {
-    tabs: { enabled: options?.tabsEnabled ?? true },
+    tabs: { mode: options?.tabsEnabled === false ? ("off" as const) : ("on" as const) },
     experimental: options?.experimental,
     session: { new_location: options?.newLocation ?? "launch" },
   }
@@ -205,7 +205,7 @@ async function renderSessionTabs(
     setTabsEnabled: (enabled: boolean) =>
       config.update((draft) => {
         draft.tabs ??= {}
-        draft.tabs.enabled = enabled
+        draft.tabs.mode = enabled ? "on" : "off"
       }),
     async destroy() {
       app.renderer.destroy()

@@ -10,18 +10,16 @@ export const handler = Effect.fn("cli.web-ui.handler")(function* (options?: { re
     ? Effect.succeed(options.assets)
     : yield* Effect.cached(load().pipe(Effect.provideService(FileSystem.FileSystem, fileSystem)))
   return <E, R>(api: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>) =>
-    api.pipe(
-      Effect.catchIf(isRouteNotFound, () =>
-        HttpServerRequest.HttpServerRequest.pipe(
-          Effect.flatMap((request) => {
-            const url = new URL(request.url, "http://localhost")
-            if (url.pathname === "/api" || url.pathname.startsWith("/api/"))
-              return Effect.succeed(HttpServerResponse.empty({ status: 404 }))
-            return assets.pipe(Effect.flatMap((files) => serveUI(request, url, files)))
-          }),
-        ),
-      ),
-    )
+    Effect.gen(function* () {
+      const request = yield* HttpServerRequest.HttpServerRequest
+      const url = new URL(request.url, "http://localhost")
+      // Serve the web shell before API authentication so /connect can load credentials in JavaScript.
+      if (url.pathname === "/api" || url.pathname.startsWith("/api/") || url.pathname === "/openapi.json")
+        return yield* api.pipe(
+          Effect.catchIf(isRouteNotFound, () => Effect.succeed(HttpServerResponse.empty({ status: 404 }))),
+        )
+      return yield* assets.pipe(Effect.flatMap((files) => serveUI(request, url, files)))
+    })
 })
 
 function serveUI(request: HttpServerRequest.HttpServerRequest, url: URL, assets: AssetMap) {

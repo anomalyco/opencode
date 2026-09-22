@@ -258,7 +258,6 @@ export const GithubCopilotPlugin = define({
         evt.sdk = mod.createOpenaiCompatible(evt.options)
       }),
     )
-    // Runs for every route, unlike http.request, which the AI SDK route bypasses.
     yield* ctx.session.hook(
       "model.request",
       (evt) =>

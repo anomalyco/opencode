@@ -947,6 +947,19 @@ describe("Map", () => {
 })
 
 describe("Set", () => {
+  test("forEach is live on Map and Set: deleted entries are skipped and added ones visited", async () => {
+    expect(
+      await value(`
+        const m = new Map([[1, "a"], [2, "b"]])
+        const s = new Set([1, 2])
+        const seen = []
+        m.forEach((v, k) => { seen.push(k); if (k === 1) { m.delete(2); m.set(3, "c") } })
+        s.forEach((v) => { seen.push(v); if (v === 1) { s.delete(2); s.add(3) } })
+        return seen
+      `),
+    ).toEqual([1, 3, 1, 3])
+  })
+
   test("add/has/delete/size with chaining", async () => {
     expect(
       await value(`

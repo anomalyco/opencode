@@ -22,6 +22,12 @@ type SaveFilePickerOptions = { title?: string; defaultPath?: string }
 type PlatformName = "web" | "desktop"
 type DesktopOS = "macos" | "windows" | "linux"
 
+export type PairingInfo = {
+  readonly urls: readonly string[]
+  readonly username: "opencode"
+  readonly password: string
+}
+
 export type FatalRendererErrorLog = {
   error: string
   url: string
@@ -101,6 +107,10 @@ type PlatformBase = {
   /** Allow native pinch/Ctrl-scroll zoom gestures (desktop only) */
   setPinchZoomEnabled?(enabled: boolean): Promise<void> | void
 
+  /** Prevent the local display from sleeping while the desktop app is running. */
+  getKeepScreenActive?(): Promise<boolean>
+  setKeepScreenActive?(enabled: boolean): Promise<void>
+
   /** Run a desktop-only menu action from the app chrome */
   runDesktopMenuAction?(action: DesktopMenuAction): Promise<void> | void
 
@@ -124,6 +134,11 @@ type PlatformBase = {
 
   /** Native browser pane hosted by the platform (desktop only). */
   browserPane?: BrowserPanePlatform
+
+  /** Pair another device with the local desktop server. */
+  pair?: {
+    info(): Promise<PairingInfo>
+  }
 }
 
 export type Platform = PlatformBase &

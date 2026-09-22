@@ -188,7 +188,7 @@ export const mapGlobal = <R>(ctx: Interpreter<R>) => {
         const target = self(thisValue, "forEach")
         const apply = applyCollectionCallback(ctx, args[0], "Map.forEach")
         return Effect.gen(function* () {
-          for (const [key, item] of Array.from(target.map.entries())) yield* apply([item, key, target])
+          for (const [key, item] of target.map.entries()) yield* apply([item, key, target])
           return undefined
         })
       },
@@ -386,7 +386,7 @@ export const setGlobal = <R>(ctx: Interpreter<R>) => {
         const target = self(thisValue, "forEach")
         const apply = applyCollectionCallback(ctx, args[0], "Set.forEach")
         return Effect.gen(function* () {
-          for (const item of Array.from(target.set.values())) yield* apply([item, item, target])
+          for (const item of target.set.values()) yield* apply([item, item, target])
           return undefined
         })
       },

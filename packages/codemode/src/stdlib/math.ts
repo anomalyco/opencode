@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { constants, type Method, methods } from "../interpreter/native.js"
 import { typeError } from "../interpreter/model.js"
-import { Obj, type Value } from "../interpreter/objects.js"
+import { Obj, coerceToNumber } from "../interpreter/objects.js"
 import { preserveConsumerError } from "../interpreter/callback.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
 
@@ -14,31 +14,18 @@ declare global {
 
 // Validate only the arguments a method consumes; like JS, extras are ignored
 // (so built-ins work as callbacks receiving (element, index, array)).
-const number = (name: string, args: Array<Value>, index: number): number => {
-  if (index >= args.length) return Number.NaN
-  const arg = args[index]
-  if (typeof arg !== "number") throw typeError(`Math.${name} expects number arguments.`)
-  return arg
-}
-
-const unary = (name: string, op: (a: number) => number): Method => [name, 1, (_, args) => op(number(name, args, 0))]
+const unary = (name: string, op: (a: number) => number): Method => [name, 1, (_, args) => op(coerceToNumber(args[0]))]
 
 const binary = (name: string, op: (a: number, b: number) => number): Method => [
   name,
   2,
-  (_, args) => op(number(name, args, 0), number(name, args, 1)),
+  (_, args) => op(coerceToNumber(args[0]), coerceToNumber(args[1])),
 ]
 
 const variadic = (name: string, op: (...values: Array<number>) => number): Method => [
   name,
   2,
-  (_, args) =>
-    op(
-      ...args.map((arg) => {
-        if (typeof arg !== "number") throw typeError(`Math.${name} expects number arguments.`)
-        return arg
-      }),
-    ),
+  (_, args) => op(...args.map(coerceToNumber)),
 ]
 
 export const mathGlobal = <R>(ctx: Interpreter<R>) => {

@@ -74,6 +74,7 @@ import {
   IteratorObj,
   type Cursor,
   has,
+  hidden,
   hasPrototype,
   keys,
   Native,
@@ -454,8 +455,9 @@ class Frame<R> {
     node: FunctionDeclaration | FunctionExpression | ArrowFunctionExpression,
     name = node.type === "ArrowFunctionExpression" ? "" : (node.id?.name ?? ""),
   ): Fn {
-    return new Fn(
-      this.ctx.builtins.Function,
+    const builtins = this.ctx.builtins
+    const fn = new Fn(
+      builtins.Function,
       name,
       node.params,
       node.body,
@@ -463,6 +465,14 @@ class Frame<R> {
       node.async,
       node.generator,
     )
+    // Each generator function gets its own prototype, so `g() instanceof g` holds as in JS.
+    if (node.generator)
+      define(fn, "prototype", new Obj(node.async ? builtins.AsyncGenerator : builtins.Generator), hidden)
+    // The body of a named function expression sees its own name, read-only.
+    if (node.type === "FunctionExpression" && node.id) {
+      fn.capturedScopes.push(new Map([[node.id.name, { mutable: false, value: fn, initialized: true }]]))
+    }
+    return fn
   }
 
   // NamedEvaluation: an anonymous function definition takes the name of what it is assigned to.
@@ -473,10 +483,11 @@ class Frame<R> {
     return this.evaluateExpression(node)
   }
 
+  // Repeated `function` declarations and `var` clashes are legal: the last declaration wins.
   private hoistFunctions(statements: ReadonlyArray<Statement | ModuleDeclaration>): void {
     for (const node of statements) {
       if (node.type !== "FunctionDeclaration") continue
-      this.scopes.declare(node.id.name, this.createFunction(node), true, node)
+      this.scopes.current().set(node.id.name, { mutable: true, value: this.createFunction(node), initialized: true })
     }
   }
 
@@ -1233,7 +1244,7 @@ class Frame<R> {
     }
     const keyNode = property.key
     if (property.computed) {
-      return Effect.map(this.evaluateExpression(keyNode), (value) => this.toPropertyKey(value, keyNode))
+      return Effect.map(this.evaluateExpression(keyNode), (value) => this.toPropertyKey(value))
     }
     if (keyNode.type === "Identifier") return Effect.succeed(keyNode.name)
     if (keyNode.type === "Literal") return Effect.succeed(String(keyNode.value))
@@ -1648,14 +1659,14 @@ class Frame<R> {
       const depth = Math.max(self.depth, site.depth) + 1
       if (depth > MAX_CALL_DEPTH) throw rangeError("Maximum call stack size exceeded", node)
       const invocation = new Frame(this.ctx, new ScopeStack([...fn.capturedScopes, new Map()]), depth)
-      const run = Effect.gen(function* () {
-        // Seed all parameters first so defaults cannot fall through to same-named outer bindings.
-        const paramScope = invocation.scopes.current()
-        for (const parameter of fn.parameters) {
-          for (const name of collectPatternNames(parameter)) {
-            paramScope.set(name, { mutable: true, value: undefined, initialized: false })
-          }
+      // Seed all parameters first so defaults cannot fall through to same-named outer bindings.
+      const paramScope = invocation.scopes.current()
+      for (const parameter of fn.parameters) {
+        for (const name of collectPatternNames(parameter)) {
+          paramScope.set(name, { mutable: true, value: undefined, initialized: false })
         }
+      }
+      const bind = Effect.gen(function* () {
         for (const [index, parameter] of fn.parameters.entries()) {
           if (parameter.type === "RestElement") {
             yield* invocation.declarePattern(
@@ -1669,7 +1680,8 @@ class Frame<R> {
           }
           yield* invocation.declarePattern(parameter, args[index], true, parameter, true)
         }
-
+      })
+      const body = Effect.gen(function* () {
         if (fn.body.type === "BlockStatement") {
           invocation.scopes.push()
           invocation.hoistVars(fn.body.body, paramScope)
@@ -1679,7 +1691,9 @@ class Frame<R> {
 
         return yield* invocation.evaluateExpression(fn.body)
       })
-      if (fn.generator) return Effect.succeed(this.createGenerator(invocation, run, fn.async))
+      // Generators bind parameters at the call and defer only the body to the first `next()`, as in JS.
+      if (fn.generator) return Effect.map(bind, () => this.createGenerator(invocation, body, fn))
+      const run = Effect.andThen(bind, body)
       if (!fn.async) return run
       return this.ctx.pending.createWithSelf((self) =>
         Effect.flatMap(run, (value) => resolvePromiseValue(invocation.ctx, value, self)),
@@ -1687,11 +1701,8 @@ class Frame<R> {
     })
   }
 
-  private createGenerator(
-    invocation: Frame<R>,
-    run: Effect.Effect<Value, unknown, R>,
-    asynchronous: boolean,
-  ): GeneratorObj {
+  private createGenerator(invocation: Frame<R>, run: Effect.Effect<Value, unknown, R>, fn: Fn): GeneratorObj {
+    const asynchronous = fn.async
     const state: GeneratorState = { started: false, completed: false, draining: false, pending: [], pendingIndex: 0 }
     invocation.generatorState = state
     invocation.generatorAsync = asynchronous
@@ -1759,12 +1770,8 @@ class Frame<R> {
       }
       return Deferred.await(request.response)
     }
-    const generator = new GeneratorObj(
-      asynchronous ? builtins.AsyncGenerator : builtins.Generator,
-      asynchronous,
-      request,
-    )
-    return generator
+    const proto = get(fn, "prototype")
+    return new GeneratorObj(proto instanceof Obj ? proto : builtins.Generator, asynchronous, request)
   }
 
   private completeGeneratorRequests(state: GeneratorState, asynchronous: boolean): Effect.Effect<void, never, R> {
@@ -1939,11 +1946,11 @@ class Frame<R> {
         let key: PropertyKey
 
         if (property.computed) {
-          key = self.toPropertyKey(yield* self.evaluateExpression(keyNode), keyNode)
+          key = self.toPropertyKey(yield* self.evaluateExpression(keyNode))
         } else if (keyNode.type === "Identifier") {
           key = keyNode.name
         } else if (keyNode.type === "Literal") {
-          key = self.toPropertyKey(literal(keyNode), keyNode)
+          key = self.toPropertyKey(literal(keyNode))
         } else {
           throw typeError("Unsupported object property key shape.", keyNode)
         }
@@ -2044,10 +2051,10 @@ class Frame<R> {
       if ((objectValue === null || objectValue === undefined) && node.optional) return OptionalShortCircuit
 
       const key = node.computed
-        ? self.toPropertyKey(yield* self.evaluateExpression(propertyNode), propertyNode)
+        ? self.toPropertyKey(yield* self.evaluateExpression(propertyNode))
         : propertyNode.type === "Identifier"
           ? propertyNode.name
-          : self.toPropertyKey(yield* self.evaluateExpression(propertyNode), propertyNode)
+          : self.toPropertyKey(yield* self.evaluateExpression(propertyNode))
 
       if (objectValue instanceof ToolReference) {
         if (typeof key !== "string") {
@@ -2109,9 +2116,9 @@ class Frame<R> {
 
   private evaluateDeleteExpression(argument: Expression): Effect.Effect<boolean, unknown, R> {
     const target = argument.type === "ChainExpression" ? argument.expression : argument
-    if (target.type !== "MemberExpression") {
-      throw typeError("Only data fields may be deleted.", argument)
-    }
+    if (target.type === "Identifier") throw typeError("Only data fields may be deleted.", argument)
+    // `delete <non-reference>` evaluates the operand and is true, as in JS.
+    if (target.type !== "MemberExpression") return Effect.map(this.evaluateExpression(target), () => true)
     return Effect.map(this.getMemberReference(target), (reference) => {
       if (reference === OptionalShortCircuit) return true
       if (reference instanceof ToolReference || "value" in reference || reference.receiver !== reference.target) {
@@ -2164,12 +2171,9 @@ class Frame<R> {
     throw typeError(`Cannot assign to read only property '${String(key)}'.`, node)
   }
 
-  private toPropertyKey(value: Value, node: AstNode): PropertyKey {
-    if (typeof value === "string" || typeof value === "number") {
-      return value
-    }
-    if (value === AsyncIteratorSymbol || value === IteratorSymbol) return value
-
-    throw typeError("Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.", node)
+  // ToPropertyKey: anything else becomes its string form, so `counts[row.category]` works when the field is null.
+  private toPropertyKey(value: Value): PropertyKey {
+    if (typeof value === "string" || typeof value === "number" || typeof value === "symbol") return value
+    return coerceToString(value)
   }
 }

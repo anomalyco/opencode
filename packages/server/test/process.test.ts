@@ -1,10 +1,10 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { HttpServer, HttpServerError, HttpServerResponse } from "effect/unstable/http"
+import { HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { it } from "../../core/test/lib/effect"
 import { ServerProcess } from "../src/process"
 
-it.live("authenticates API and frontend requests while allowing browser preflight", () =>
+it.live("authenticates API requests behind the frontend transform while allowing browser preflight", () =>
   Effect.gen(function* () {
     const fallback = "fallback".repeat(256)
     const server = yield* ServerProcess.start<never, never>(
@@ -18,12 +18,13 @@ it.live("authenticates API and frontend requests while allowing browser prefligh
       },
       undefined,
       (api) =>
-        api.pipe(
-          Effect.catchIf(
-            (error) => error instanceof HttpServerError.HttpServerError && error.reason._tag === "RouteNotFound",
-            () => Effect.succeed(HttpServerResponse.raw(fallback, { contentType: "text/plain" })),
-          ),
-        ),
+        Effect.gen(function* () {
+          const request = yield* HttpServerRequest.HttpServerRequest
+          const url = new URL(request.url, "http://localhost")
+          if (url.pathname === "/api" || url.pathname.startsWith("/api/") || url.pathname === "/openapi.json")
+            return yield* api
+          return HttpServerResponse.raw(fallback, { contentType: "text/plain" })
+        }),
     )
     const response = yield* Effect.promise(() =>
       fetch(new URL("/api/info", HttpServer.formatAddress(server.address)), {
@@ -143,9 +144,9 @@ it.live("authenticates API and frontend requests while allowing browser prefligh
                     headers: authorization ? { authorization } : undefined,
                   }),
                 )
-                expect(response.status).toBe(401)
-                expect(response.headers.get("www-authenticate")).toBe('Basic realm="Secure Area"')
-                expect(yield* Effect.promise(() => response.text())).toBe("")
+                expect(response.status).toBe(200)
+                expect(response.headers.get("www-authenticate")).toBeNull()
+                expect(yield* Effect.promise(() => response.text())).toBe(method === "HEAD" ? "" : fallback)
               }),
             )
             const response = yield* Effect.promise(() =>

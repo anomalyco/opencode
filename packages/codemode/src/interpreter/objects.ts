@@ -159,7 +159,7 @@ export class Fn extends Callable {
     name: string,
     readonly parameters: ReadonlyArray<Pattern>,
     readonly body: BlockStatement | Expression,
-    readonly capturedScopes: ReadonlyArray<Map<string, Binding>>,
+    readonly capturedScopes: Array<Map<string, Binding>>,
     readonly async: boolean,
     readonly generator: boolean,
   ) {
@@ -420,6 +420,12 @@ export const coerceToString = (value: Value): string => (value instanceof Obj ? 
 export const coerceToNumber = (value: Value): number => {
   if (value instanceof Obj) return value.toNumber()
   return value instanceof ToolReference ? Number.NaN : Number(value)
+}
+
+/** ToIntegerOrInfinity: NaN is 0, fractions truncate. */
+export const coerceToInteger = (value: Value): number => {
+  const number = coerceToNumber(value)
+  return Number.isNaN(number) ? 0 : Math.trunc(number)
 }
 
 /** Values that cannot cross the data boundary: opaque machinery and host-backed wrappers. */

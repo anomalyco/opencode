@@ -161,4 +161,7 @@ export const api: ElectronAPI = {
   setForceFocus: (enabled) => invoke("AppSetForceFocus", { enabled }),
   recordFatalRendererError: (error) => invoke("AppRecordFatalRendererError", { error }),
   setNativeTranslations: (bundle) => invoke("AppSetNativeTranslations", { value: bundle }),
+  pairInfo: () => invoke("AppPairInfo").then(mutable),
+  getKeepScreenActive: () => invoke("AppGetKeepScreenActive"),
+  setKeepScreenActive: (enabled) => invoke("AppSetKeepScreenActive", { enabled }),
 }

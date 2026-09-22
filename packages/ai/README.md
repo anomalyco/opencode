@@ -29,6 +29,47 @@ await Effect.runPromise(program.pipe(Effect.provide(llmLayer)))
 
 Run `LLMClient.stream(request)` instead of `generate` when you want incremental `LLMEvent`s. The event stream is provider-neutral — same shape across OpenAI Chat, OpenAI Responses, Anthropic Messages, Gemini, Bedrock Converse, and any OpenAI-compatible deployment.
 
+## Experimental evaluation
+
+Evaluation models compare shared state with typed choice, score, and boolean questions. The API is
+isolated under an experimental entrypoint and provider namespace while the contract evolves:
+
+```ts
+import { Effect } from "effect"
+import { Evaluation, EvaluationClient } from "@opencode/ai/experimental"
+import { TypeSafeAI } from "@opencode/ai/providers"
+
+const model = TypeSafeAI.configure().experimental.evaluation("jev-latest")
+
+const program = Evaluation.evaluate({
+  model,
+  state: "I was charged twice. Please refund the duplicate payment.",
+  questions: {
+    department: {
+      type: "choice",
+      instructions: "Which team should handle this?",
+      criteria: { billing: "Payments and refunds", technical: "Bugs and outages" },
+    },
+    urgency: {
+      type: "score",
+      instructions: "How urgent is this?",
+      criteria: ["Can wait", "Needs prompt attention", "Blocking revenue"],
+    },
+    refund: { type: "boolean", instructions: "Is the customer asking for a refund?" },
+  },
+})
+
+const response = await Effect.runPromise(program.pipe(Effect.provide(EvaluationClient.fetchLayer)))
+
+console.log(response.answers.department.choice)
+console.log(response.answers.refund.probability)
+```
+
+`TypeSafeAI` reads `TYPESAFE_API_KEY`. `OpenCodeZen` exposes the same selector and reads
+`OPENCODE_API_KEY`. The common API uses `boolean`; System One routes lower it to native `noul`.
+Choice and score confidence plus score legends remain available in provider metadata, and the
+provider's rounded probabilities are returned unchanged.
+
 ## Alibaba Cloud Model Studio
 
 `Alibaba` provides standard Model Studio inference. Configure a region explicitly, then select

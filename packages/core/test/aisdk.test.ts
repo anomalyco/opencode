@@ -23,6 +23,7 @@ import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { compileRequest } from "@opencode/ai/route/client"
 import { expect } from "bun:test"
 import { Effect, Layer } from "effect"
+import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(AISDK.locationLayer)
@@ -593,6 +594,100 @@ it.effect("does not treat SSE comment heartbeats as model progress", () =>
       _tag: "Failure",
       failure: { message: expect.stringContaining("SSE read timed out") },
     })
+  }),
+)
+
+const chatChunk = (text: string) =>
+  `data: ${JSON.stringify({
+    id: "response-1",
+    object: "chat.completion.chunk",
+    created: 0,
+    model: "api-model",
+    choices: [{ index: 0, delta: { content: text }, finish_reason: "stop" }],
+  })}\n\ndata: [DONE]\n\n`
+
+const compatibleModel = Effect.fn(function* (customFetch: typeof fetch) {
+  const aisdk = yield* AISDK.Service
+  yield* aisdk.hook.sdk((event) => {
+    event.sdk = createOpenAICompatible({
+      ...event.options,
+      name: String(event.options.name),
+      baseURL: String(event.options.baseURL),
+    })
+  })
+  return yield* aisdk.model(
+    model("@ai-sdk/openai-compatible", { apiKey: "test", baseURL: "https://example.test/v1", fetch: customFetch }),
+  )
+})
+
+it.effect("routes AI SDK requests and responses through HTTP hook middleware", () =>
+  Effect.gen(function* () {
+    const sent: Array<{ url: string; headers: Headers; body: string }> = []
+    const resolved = yield* compatibleModel(
+      Object.assign(
+        async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+          sent.push({
+            url: String(input),
+            headers: new Headers(init?.headers),
+            body: new TextDecoder().decode(init?.body as ArrayBuffer),
+          })
+          return new Response(chatChunk("upstream"), { headers: { "content-type": "text/event-stream" } })
+        },
+        { preconnect: fetch.preconnect },
+      ),
+    )
+    const seen: string[] = []
+    const response = yield* LLMClient.generate(LLM.request({ model: resolved, prompt: "Hello" }), {
+      http: (request, handler) =>
+        Effect.gen(function* () {
+          // Read the body twice the way session hooks do, to prove it is not a single-use stream.
+          const first = yield* HttpClientRequest.toWeb(request)
+          const second = yield* HttpClientRequest.toWeb(request)
+          seen.push(`${request.method} ${request.url}`)
+          seen.push(yield* Effect.promise(() => first.text()))
+          seen.push(yield* Effect.promise(() => second.text()))
+          const upstream = yield* handler(HttpClientRequest.setHeader(request, "x-hook", "applied"))
+          seen.push(`status ${upstream.status}`)
+          return HttpClientResponse.fromWeb(
+            upstream.request,
+            new Response(chatChunk("rewritten"), { headers: { "content-type": "text/event-stream" } }),
+          )
+        }),
+    }).pipe(Effect.provide(client))
+
+    expect(sent).toHaveLength(1)
+    expect(sent[0]?.url).toBe("https://example.test/v1/chat/completions")
+    expect(sent[0]?.headers.get("x-hook")).toBe("applied")
+    expect(sent[0]?.headers.get("authorization")).toBe("Bearer test")
+    expect(JSON.parse(sent[0]?.body ?? "")).toMatchObject({ model: "api-model" })
+    expect(seen).toEqual([
+      "POST https://example.test/v1/chat/completions",
+      sent[0]?.body,
+      sent[0]?.body,
+      "status 200",
+    ])
+    expect(response.events.filter(LLMEvent.is.textDelta).map((event) => event.text)).toEqual(["rewritten"])
+  }),
+)
+
+it.effect("sends AI SDK requests directly when no HTTP hook middleware is attached", () =>
+  Effect.gen(function* () {
+    const bodies: unknown[] = []
+    const resolved = yield* compatibleModel(
+      Object.assign(
+        async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+          bodies.push(init?.body)
+          return new Response(chatChunk("upstream"), { headers: { "content-type": "text/event-stream" } })
+        },
+        { preconnect: fetch.preconnect },
+      ),
+    )
+    const response = yield* LLMClient.generate(LLM.request({ model: resolved, prompt: "Hello" })).pipe(
+      Effect.provide(client),
+    )
+    expect(bodies).toHaveLength(1)
+    expect(typeof bodies[0]).toBe("string")
+    expect(response.events.filter(LLMEvent.is.textDelta).map((event) => event.text)).toEqual(["upstream"])
   }),
 )
 

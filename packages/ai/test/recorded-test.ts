@@ -6,6 +6,8 @@ import * as path from "node:path"
 import { fileURLToPath } from "node:url"
 import { LLMClient, RequestExecutor } from "../src/route.js"
 import { ImageClient } from "../src/image-client.js"
+import { EvaluationClient } from "../src/experimental/evaluation-client.js"
+import type { Service as EvaluationClientService } from "../src/experimental/evaluation-client.js"
 import type { Service as ImageClientService } from "../src/image-client.js"
 import type { Service as LLMClientService } from "../src/route/client.js"
 import type { Service as RequestExecutorService } from "../src/route/executor.js"
@@ -18,7 +20,12 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const FIXTURES_DIR = path.resolve(__dirname, "fixtures", "recordings")
 
-type RecordedEnv = RequestExecutorService | LLMClientService | ImageClientService | Socket.WebSocketConstructor
+type RecordedEnv =
+  | RequestExecutorService
+  | LLMClientService
+  | ImageClientService
+  | EvaluationClientService
+  | Socket.WebSocketConstructor
 
 type RecordedTestsOptions = RecordedGroupOptions & {
   readonly options?: HttpRecorder.RecorderOptions
@@ -92,6 +99,7 @@ export const recordedTests = (options: RecordedTestsOptions) =>
         requestExecutor,
         LLMClient.layer.pipe(Layer.provide(requestExecutor)),
         ImageClient.layer.pipe(Layer.provide(requestExecutor)),
+        EvaluationClient.layer.pipe(Layer.provide(requestExecutor)),
         webSocket,
       )
     },
