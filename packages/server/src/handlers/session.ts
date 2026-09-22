@@ -105,6 +105,23 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         }),
       )
       .handle(
+        "session.cost",
+        Effect.fn(function* (ctx) {
+          return {
+            data: yield* session.cost(ctx.params.sessionID).pipe(
+              Effect.catchTag(
+                "Session.NotFoundError",
+                (error) =>
+                  new SessionNotFoundError({
+                    sessionID: error.sessionID,
+                    message: `Session not found: ${error.sessionID}`,
+                  }),
+              ),
+            ),
+          }
+        }),
+      )
+      .handle(
         "session.switchAgent",
         Effect.fn(function* (ctx) {
           yield* session.switchAgent({ sessionID: ctx.params.sessionID, agent: ctx.payload.agent }).pipe(

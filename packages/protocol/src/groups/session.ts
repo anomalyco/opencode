@@ -170,6 +170,22 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
         ),
     )
     .add(
+      HttpApiEndpoint.get("session.cost", "/api/session/:sessionID/cost", {
+        params: { sessionID: Session.ID },
+        success: Schema.Struct({ data: Session.Rollup }),
+        error: SessionNotFoundError,
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.cost",
+            summary: "Get session cost",
+            description:
+              "Retrieve the session's own cost/tokens plus the subagent rollup across all descendant sessions.",
+          }),
+        ),
+    )
+    .add(
       HttpApiEndpoint.post("session.switchAgent", "/api/session/:sessionID/agent", {
         params: { sessionID: Session.ID },
         payload: Schema.Struct({ agent: Agent.ID }),

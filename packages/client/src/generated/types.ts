@@ -365,6 +365,29 @@ export type SessionsGetOutput = {
   }
 }["data"]
 
+export type SessionsCostInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+
+export type SessionsCostOutput = {
+  readonly data: {
+    readonly cost: number
+    readonly tokens: {
+      readonly input: number
+      readonly output: number
+      readonly reasoning: number
+      readonly cache: { readonly read: number; readonly write: number }
+    }
+    readonly subagents: {
+      readonly cost: number
+      readonly tokens: {
+        readonly input: number
+        readonly output: number
+        readonly reasoning: number
+        readonly cache: { readonly read: number; readonly write: number }
+      }
+    }
+  }
+}["data"]
+
 export type SessionsSwitchAgentInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
   readonly agent: { readonly agent: string }["agent"]

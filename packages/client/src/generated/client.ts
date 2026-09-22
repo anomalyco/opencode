@@ -11,6 +11,8 @@ import type {
   SessionsActiveOutput,
   SessionsGetInput,
   SessionsGetOutput,
+  SessionsCostInput,
+  SessionsCostOutput,
   SessionsSwitchAgentInput,
   SessionsSwitchAgentOutput,
   SessionsSwitchModelInput,
@@ -337,6 +339,17 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/api/session/${encodeURIComponent(input.sessionID)}`,
+            successStatus: 200,
+            declaredStatuses: [404, 400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      cost: (input: SessionsCostInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionsCostOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/cost`,
             successStatus: 200,
             declaredStatuses: [404, 400, 401],
             empty: false,
