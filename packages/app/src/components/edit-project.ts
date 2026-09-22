@@ -101,6 +101,7 @@ export function createEditProjectModel(props: { project: LocalProject; server: S
         icon: { color: store.color || undefined, override: store.iconOverride || undefined },
         commands: { start: start || undefined },
       })
+      serverCtx().sync.project.icon(props.project.worktree, store.iconOverride || undefined)
       dialog.close()
     },
   }))
