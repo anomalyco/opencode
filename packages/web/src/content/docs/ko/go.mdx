@@ -60,6 +60,8 @@ workspace당 한 명의 멤버만 OpenCode Go를 구독할 수 있습니다.
 - **Kimi K2.7 Code**
 - **Kimi K2.6**
 - **LongCat-2.0**
+- **MiMo-V2.6-Flash**
+- **MiMo-V2.6-Pro**
 - **MiMo-V2.5**
 - **MiMo-V2.5-Pro**
 - **MiniMax M3**
@@ -144,8 +146,10 @@ OpenCode 외에도 다음 클라이언트가 OpenCode Go에서 올바르게 작�
 | Kimi K2.7 Code                          | $0.95  | $4.00  | $0.19       | -            | **$60**                                                |
 | Kimi K2.6                               | $0.95  | $4.00  | $0.16       | -            | **$60**                                                |
 | LongCat-2.0                             | $0.30  | $1.20  | $0.006      | -            | **$60**                                                |
-| MiMo V2.5                               | $0.14  | $0.28  | $0.0028     | -            | **$60**                                                |
-| MiMo V2.5 Pro                           | $0.435 | $0.87  | $0.003625   | -            | **$15**                                                |
+| MiMo-V2.6-Flash                         | $0.14  | $0.28  | $0.0028     | -            | **$60**                                                |
+| MiMo-V2.6-Pro                           | $0.435 | $0.87  | $0.003625   | -            | **$15**                                                |
+| MiMo-V2.5                               | $0.14  | $0.28  | $0.0028     | -            | **$60**                                                |
+| MiMo-V2.5-Pro                           | $0.435 | $0.87  | $0.003625   | -            | **$15**                                                |
 | MiniMax M3                              | $0.30  | $1.20  | $0.06       | -            | **$60**                                                |
 | MiniMax M2.7                            | $0.30  | $1.20  | $0.06       | $0.375       | **$60**                                                |
 | MiniMax M2.5                            | $0.30  | $1.20  | $0.06       | $0.375       | **$60**                                                |
@@ -193,6 +197,8 @@ OpenCode 외에도 다음 클라이언트가 OpenCode Go에서 올바르게 작�
 | Kimi K2.7 Code                                             | 1,350                     | 3,380                      | 6,750                       |
 | Kimi K2.6                                                  | 1,150                     | 2,880                      | 5,750                       |
 | LongCat-2.0                                                | 11,400                    | 28,600                     | 57,200                      |
+| MiMo-V2.6-Flash                                            | 30,100                    | 75,200                     | 150,400                     |
+| MiMo-V2.6-Pro                                              | 3,250                     | 8,150                      | 16,300                      |
 | MiMo-V2.5                                                  | 30,100                    | 75,200                     | 150,400                     |
 | MiMo-V2.5-Pro                                              | 3,250                     | 8,150                      | 16,300                      |
 | MiniMax M3                                                 | 3,200                     | 8,000                      | 16,000                      |
@@ -238,6 +244,8 @@ OpenCode 외에도 다음 클라이언트가 OpenCode Go에서 올바르게 작�
 - Qwen3.6 Plus — 요청당 입력 500, 캐시 57,000, 출력 토큰 190
 - Hy4 preview — 요청당 입력 830, 캐시 71,500, 출력 토큰 295
 - Hy3 — 요청당 입력 830, 캐시 71,500, 출력 토큰 295
+- MiMo-V2.6-Flash — 요청당 입력 830, 캐시 71,500, 출력 토큰 295
+- MiMo-V2.6-Pro — 요청당 입력 790, 캐시 86,000, 출력 토큰 305
 - MiMo-V2.5 — 요청당 입력 830, 캐시 71,500, 출력 토큰 295
 - MiMo-V2.5-Pro — 요청당 입력 790, 캐시 86,000, 출력 토큰 305
 
@@ -290,6 +298,8 @@ Go에서는 월 $10를 지불하며, 포함된 월간 사용량은 모델마다 
 | DeepSeek V4 Pro              | deepseek-v4-pro              | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash            | deepseek-v4-flash            | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash Vision Exp | deepseek-v4-flash-vision-exp | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2.6-Flash              | mimo-v2.6-flash              | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2.6-Pro                | mimo-v2.6-pro                | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5                    | mimo-v2.5                    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5-Pro                | mimo-v2.5-pro                | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiniMax M3                   | minimax-m3                   | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
@@ -334,6 +344,8 @@ https://opencode.ai/zen/go/v1/models
 | Kimi K2.7 Code               | 사용되지 않음 | 0일         |
 | Kimi K2.6                    | 사용되지 않음 | 0일         |
 | LongCat-2.0                  | 사용되지 않음 | 0일         |
+| MiMo-V2.6-Pro                | 사용되지 않음 | 0일         |
+| MiMo-V2.6-Flash              | 사용되지 않음 | 0일         |
 | MiMo-V2.5-Pro                | 사용되지 않음 | 0일         |
 | MiMo-V2.5                    | 사용되지 않음 | 0일         |
 | Qwen3.8 Max                  | 사용되지 않음 | 0일         |

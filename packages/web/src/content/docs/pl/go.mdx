@@ -64,6 +64,8 @@ Obecna lista modeli obejmuje:
 - **Kimi K2.7 Code**
 - **Kimi K2.6**
 - **LongCat-2.0**
+- **MiMo-V2.6-Flash**
+- **MiMo-V2.6-Pro**
 - **MiMo-V2.5**
 - **MiMo-V2.5-Pro**
 - **MiniMax M3**
@@ -151,8 +153,10 @@ Ceny tokenów podano za 1M tokenów.
 | Kimi K2.7 Code                          | $0.95   | $4.00   | $0.19          | -              | **$60**                                                 |
 | Kimi K2.6                               | $0.95   | $4.00   | $0.16          | -              | **$60**                                                 |
 | LongCat-2.0                             | $0.30   | $1.20   | $0.006         | -              | **$60**                                                 |
-| MiMo V2.5                               | $0.14   | $0.28   | $0.0028        | -              | **$60**                                                 |
-| MiMo V2.5 Pro                           | $0.435  | $0.87   | $0.003625      | -              | **$15**                                                 |
+| MiMo-V2.6-Flash                         | $0.14   | $0.28   | $0.0028        | -              | **$60**                                                 |
+| MiMo-V2.6-Pro                           | $0.435  | $0.87   | $0.003625      | -              | **$15**                                                 |
+| MiMo-V2.5                               | $0.14   | $0.28   | $0.0028        | -              | **$60**                                                 |
+| MiMo-V2.5-Pro                           | $0.435  | $0.87   | $0.003625      | -              | **$15**                                                 |
 | MiniMax M3                              | $0.30   | $1.20   | $0.06          | -              | **$60**                                                 |
 | MiniMax M2.7                            | $0.30   | $1.20   | $0.06          | $0.375         | **$60**                                                 |
 | MiniMax M2.5                            | $0.30   | $1.20   | $0.06          | $0.375         | **$60**                                                 |
@@ -200,6 +204,8 @@ Poniższa tabela przedstawia szacunkową liczbę żądań na podstawie typowych 
 | Kimi K2.7 Code                                              | 1,350                     | 3,380                      | 6,750                       |
 | Kimi K2.6                                                   | 1,150                     | 2,880                      | 5,750                       |
 | LongCat-2.0                                                 | 11,400                    | 28,600                     | 57,200                      |
+| MiMo-V2.6-Flash                                             | 30,100                    | 75,200                     | 150,400                     |
+| MiMo-V2.6-Pro                                               | 3,250                     | 8,150                      | 16,300                      |
 | MiMo-V2.5                                                   | 30,100                    | 75,200                     | 150,400                     |
 | MiMo-V2.5-Pro                                               | 3,250                     | 8,150                      | 16,300                      |
 | MiniMax M3                                                  | 3,200                     | 8,000                      | 16,000                      |
@@ -245,6 +251,8 @@ Szacunki wykorzystują następującą liczbę tokenów na żądanie; rzeczywiste
 - Qwen3.6 Plus — 500 tokenów wejściowych, 57 000 w pamięci podręcznej, 190 tokenów wyjściowych na żądanie
 - Hy4 preview — 830 tokenów wejściowych, 71 500 w pamięci podręcznej, 295 tokenów wyjściowych na żądanie
 - Hy3 — 830 tokenów wejściowych, 71 500 w pamięci podręcznej, 295 tokenów wyjściowych na żądanie
+- MiMo-V2.6-Flash — 830 tokenów wejściowych, 71 500 w pamięci podręcznej, 295 tokenów wyjściowych na żądanie
+- MiMo-V2.6-Pro — 790 tokenów wejściowych, 86 000 w pamięci podręcznej, 305 tokenów wyjściowych na żądanie
 - MiMo-V2.5 — 830 tokenów wejściowych, 71 500 w pamięci podręcznej, 295 tokenów wyjściowych na żądanie
 - MiMo-V2.5-Pro — 790 tokenów wejściowych, 86 000 w pamięci podręcznej, 305 tokenów wyjściowych na żądanie
 
@@ -297,6 +305,8 @@ Możesz również uzyskać dostęp do modeli Go za pośrednictwem następującyc
 | DeepSeek V4 Pro              | deepseek-v4-pro              | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash            | deepseek-v4-flash            | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash Vision Exp | deepseek-v4-flash-vision-exp | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2.6-Flash              | mimo-v2.6-flash              | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2.6-Pro                | mimo-v2.6-pro                | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5                    | mimo-v2.5                    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5-Pro                | mimo-v2.5-pro                | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiniMax M3                   | minimax-m3                   | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
@@ -343,6 +353,8 @@ https://opencode.ai/zen/go/v1/models
 | Kimi K2.7 Code               | Niewykorzystywane | 0 dni           |
 | Kimi K2.6                    | Niewykorzystywane | 0 dni           |
 | LongCat-2.0                  | Niewykorzystywane | 0 dni           |
+| MiMo-V2.6-Pro                | Niewykorzystywane | 0 dni           |
+| MiMo-V2.6-Flash              | Niewykorzystywane | 0 dni           |
 | MiMo-V2.5-Pro                | Niewykorzystywane | 0 dni           |
 | MiMo-V2.5                    | Niewykorzystywane | 0 dni           |
 | Qwen3.8 Max                  | Niewykorzystywane | 0 dni           |

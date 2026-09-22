@@ -16,7 +16,7 @@ export function LimitsGraph(props: { href: string }) {
   const id = createUniqueId()
   const [expanded, setExpanded] = createSignal(false)
   const [visible, setVisible] = createSignal(false)
-  const models = createMemo(() => goModels.filter((model) => expanded() || model.featured || model.fresh))
+  const models = createMemo(() => goModels.filter((model) => expanded() || model.featured))
   const format = createMemo(() => new Intl.NumberFormat(language.tag(language.locale())))
   const compact = createMemo(
     () => new Intl.NumberFormat(language.tag(language.locale()), { notation: "compact", maximumFractionDigits: 1 }),

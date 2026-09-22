@@ -70,6 +70,8 @@ The current list of models includes:
 - **Kimi K2.7 Code**
 - **Kimi K2.6**
 - **LongCat-2.0**
+- **MiMo-V2.6-Flash**
+- **MiMo-V2.6-Pro**
 - **MiMo-V2.5**
 - **MiMo-V2.5-Pro**
 - **MiniMax M3**
@@ -159,8 +161,10 @@ Token prices are per 1M tokens.
 | Kimi K2.7 Code                          | $0.95  | $4.00  | $0.19       | -            | **$60**                                              |
 | Kimi K2.6                               | $0.95  | $4.00  | $0.16       | -            | **$60**                                              |
 | LongCat-2.0                             | $0.30  | $1.20  | $0.006      | -            | **$60**                                              |
-| MiMo V2.5                               | $0.14  | $0.28  | $0.0028     | -            | **$60**                                              |
-| MiMo V2.5 Pro                           | $0.435 | $0.87  | $0.003625   | -            | **$15**                                              |
+| MiMo-V2.6-Flash                         | $0.14  | $0.28  | $0.0028     | -            | **$60**                                              |
+| MiMo-V2.6-Pro                           | $0.435 | $0.87  | $0.003625   | -            | **$15**                                              |
+| MiMo-V2.5                               | $0.14  | $0.28  | $0.0028     | -            | **$60**                                              |
+| MiMo-V2.5-Pro                           | $0.435 | $0.87  | $0.003625   | -            | **$15**                                              |
 | MiniMax M3                              | $0.30  | $1.20  | $0.06       | -            | **$60**                                              |
 | MiniMax M2.7                            | $0.30  | $1.20  | $0.06       | $0.375       | **$60**                                              |
 | MiniMax M2.5                            | $0.30  | $1.20  | $0.06       | $0.375       | **$60**                                              |
@@ -208,6 +212,8 @@ The table below provides an estimated request count based on typical Go usage pa
 | Kimi K2.7 Code                                           | 1,350                     | 3,380                      | 6,750                       |
 | Kimi K2.6                                                | 1,150                     | 2,880                      | 5,750                       |
 | LongCat-2.0                                              | 11,400                    | 28,600                     | 57,200                      |
+| MiMo-V2.6-Flash                                          | 30,100                    | 75,200                     | 150,400                     |
+| MiMo-V2.6-Pro                                            | 3,250                     | 8,150                      | 16,300                      |
 | MiMo-V2.5                                                | 30,100                    | 75,200                     | 150,400                     |
 | MiMo-V2.5-Pro                                            | 3,250                     | 8,150                      | 16,300                      |
 | MiniMax M3                                               | 3,200                     | 8,000                      | 16,000                      |
@@ -246,6 +252,8 @@ The estimates use the following token counts per request; actual usage varies.
 - MiniMax M2.7 — 300 input, 55,000 cached, 125 output tokens per request
 - Muse Spark 1.3 Contributor — 620 input, 71,400 cached, 300 output tokens per request
 - Muse Spark 1.2 Contributor — 620 input, 71,400 cached, 300 output tokens per request
+- MiMo-V2.6-Flash — 830 input, 71,500 cached, 295 output tokens per request
+- MiMo-V2.6-Pro — 790 input, 86,000 cached, 305 output tokens per request
 - MiMo-V2.5 — 830 input, 71,500 cached, 295 output tokens per request
 - MiMo-V2.5-Pro — 790 input, 86,000 cached, 305 output tokens per request
 - Qwen3.8 Max — 420 input, 66,000 cached, 200 output tokens per request
@@ -307,6 +315,8 @@ You can also access Go models through the following API endpoints.
 | DeepSeek V4 Pro              | deepseek-v4-pro              | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash            | deepseek-v4-flash            | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | DeepSeek V4 Flash Vision Exp | deepseek-v4-flash-vision-exp | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2.6-Flash              | mimo-v2.6-flash              | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| MiMo-V2.6-Pro                | mimo-v2.6-pro                | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5                    | mimo-v2.5                    | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5-Pro                | mimo-v2.5-pro                | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | MiniMax M3                   | minimax-m3                   | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
@@ -353,6 +363,8 @@ https://opencode.ai/zen/go/v1/models
 | Kimi K2.7 Code               | Not used       | 0 days         |
 | Kimi K2.6                    | Not used       | 0 days         |
 | LongCat-2.0                  | Not used       | 0 days         |
+| MiMo-V2.6-Pro                | Not used       | 0 days         |
+| MiMo-V2.6-Flash              | Not used       | 0 days         |
 | MiMo-V2.5-Pro                | Not used       | 0 days         |
 | MiMo-V2.5                    | Not used       | 0 days         |
 | Qwen3.8 Max                  | Not used       | 0 days         |
