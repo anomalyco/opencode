@@ -229,7 +229,7 @@ export const layer = Layer.effect(
       const entries = Object.entries(shaped.options)
       const generation = Object.fromEntries(entries.filter(([k]) => GENERATION_KEYS.has(k))) as GenerationOptionsFields
       const providerOptions = Object.fromEntries(entries.filter(([k]) => !GENERATION_KEYS.has(k)))
-      const root = session.fork?.sessionID ?? session.id
+      const affinity = session.parentID ?? session.fork?.sessionID ?? session.id
       const base = LLM.request({
         model: model.model,
         http: {
@@ -244,7 +244,7 @@ export const layer = Layer.effect(
           },
         },
         // TODO: Persist cache lineage so nested forks reuse the root session's cache key.
-        promptCacheKey: /^ses_[0-9a-f]{64}$/.test(root) ? root.slice(4) : root,
+        promptCacheKey: /^ses_[0-9a-f]{64}$/.test(affinity) ? affinity.slice(4) : affinity,
         system: shaped.system,
         messages: boundImages(unsupportedParts(shaped.messages, model.capabilities)),
         tools: Array.from(hooked, ([name, t]) => ({ ...t, name })),
