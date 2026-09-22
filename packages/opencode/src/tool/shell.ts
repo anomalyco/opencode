@@ -1,4 +1,4 @@
-import { Effect, Stream } from "effect"
+import { Effect, Latch, Stream } from "effect"
 import os from "os"
 import { createWriteStream } from "node:fs"
 import * as Tool from "./tool"
@@ -483,6 +483,7 @@ export const ShellTool = Tool.define(
           yield* Effect.addFinalizer(closeSink)
           const handle = yield* spawner.spawn(cmd(input.shell, input.command, input.cwd, input.env))
 
+          const outputDone = Latch.makeUnsafe()
           yield* Effect.forkScoped(
             Stream.runForEach(Stream.decodeText(handle.all), (chunk) => {
               const size = Buffer.byteLength(chunk, "utf-8")
@@ -527,7 +528,7 @@ export const ShellTool = Tool.define(
                   output: last,
                 },
               })
-            }),
+            }          ).pipe(Effect.catch(() => Effect.void), Effect.andThen(outputDone.open)),
           )
 
           const abort = Effect.callback<void>((resume) => {
@@ -548,10 +549,13 @@ export const ShellTool = Tool.define(
           if (exit.kind === "abort") {
             aborted = true
             yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
-          }
-          if (exit.kind === "timeout") {
+            outputDone.open
+          } else if (exit.kind === "timeout") {
             expired = true
             yield* handle.kill({ forceKillAfter: "3 seconds" }).pipe(Effect.orDie)
+            outputDone.open
+          } else {
+            yield* outputDone.await
           }
 
           return exit.kind === "exit" ? exit.code : null
