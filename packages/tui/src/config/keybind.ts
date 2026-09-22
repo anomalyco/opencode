@@ -99,7 +99,7 @@ export const Definitions = {
   "terminal.toggle": keybind("<leader>t", "Toggle terminal pane"),
   "terminal.close": keybind("<leader>up", "Close terminal pane"),
   "session.toggle.scrollbar": keybind("none", "Toggle session scrollbar"),
-  "opencode.status": keybind("<leader>s", "View status"),
+  "opencode.status": keybind("<leader>s", "View MCP status"),
   "opencode.debug": keybind("none", "View debug info"),
 
   "session.export": keybind("<leader>x", "Export session to editor"),

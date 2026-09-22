@@ -984,7 +984,7 @@ function App(props: { pair?: DialogPairCredentials }) {
       },
       {
         name: "opencode.status",
-        title: "View status",
+        title: "View MCP status",
         slash: { name: "status" },
         run: () => {
           dialog.replace(() => <DialogStatus />)

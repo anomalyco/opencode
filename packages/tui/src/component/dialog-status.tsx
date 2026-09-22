@@ -20,7 +20,7 @@ export function DialogStatus() {
     <box paddingLeft={2} paddingRight={2} gap={1} paddingBottom={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text fg={theme.text.base} attributes={TextAttributes.BOLD}>
-          Status
+          MCP status
         </text>
         <text fg={theme.text.muted} onMouseUp={() => dialog.clear()}>
           esc
