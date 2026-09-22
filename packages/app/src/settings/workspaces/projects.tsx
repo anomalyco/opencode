@@ -1,10 +1,8 @@
-import { Show, createEffect, createMemo, on, type Component } from "solid-js"
+import { Show, createEffect, createMemo, type Component } from "solid-js"
 import { Key } from "@solid-primitives/keyed"
 import { createStore } from "solid-js/store"
-import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Button } from "@opencode/ui/button"
 import { Icon } from "@opencode/ui/icon"
-import { TextInput } from "@opencode/ui/text-input"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection } from "@/runtime/server/registry"
@@ -14,31 +12,20 @@ import { useDirectoryPicker } from "@/workspaces/selection/picker"
 import { addProjects } from "@/home/projects/add"
 import { settingsProjects } from "../servers/inventory"
 import { SettingsSearchEmpty } from "../search-empty"
+import { SettingsSearchField } from "../search-field"
 import { SettingsProjectRow } from "./project-row"
 import "@/settings/search.css"
 import "@/settings/settings.css"
 
 export const SettingsProjects: Component<{
   server: ServerConnection.Any
+  active: boolean
   onOpenProject: (project: LocalProject) => void
 }> = (props) => {
   const language = useLanguage()
   const global = useGlobal()
   const pickDirectory = useDirectoryPicker()
-  const [store, setStore] = createStore({
-    filter: "",
-    overflow: { start: false, end: false },
-  })
-  let search: HTMLInputElement | undefined
-  const updateOverflow = () => {
-    if (!search) return
-    const offset = Math.abs(search.scrollLeft)
-    setStore("overflow", {
-      start: offset > 1,
-      end: search.scrollWidth - search.clientWidth - offset > 1,
-    })
-  }
-  createEffect(on(() => store.filter, updateOverflow))
+  const [store, setStore] = createStore({ filter: "" })
   const context = createMemo(() => global.ensureServerCtx(props.server))
   const projects = createMemo(() => settingsProjects(context()))
   const searchable = createMemo(() => projects().length > 7)
@@ -82,34 +69,12 @@ export const SettingsProjects: Component<{
           </Show>
         </div>
         <Show when={searchable()}>
-          <div class="settings-tab-search settings-projects-search">
-            <TextInput
-              ref={(element) => {
-                search = element
-                createResizeObserver(element, updateOverflow)
-              }}
-              type="search"
-              appearance="base"
-              leadingIcon={<Icon name="magnifying-glass" size="small" />}
-              value={store.filter}
-              data-overflow-start={store.overflow.start}
-              data-overflow-end={store.overflow.end}
-              onScroll={updateOverflow}
-              onInput={(event) => setStore("filter", event.currentTarget.value)}
-              placeholder={language.t("settings.projects.search.placeholder")}
-              aria-label={language.t("settings.projects.search.placeholder")}
-              showClearButton={!!store.filter}
-              clearIcon="circle-xmark"
-              onClearClick={() => {
-                setStore("filter", "")
-                search?.focus({ preventScroll: true })
-              }}
-              spellcheck={false}
-              autocorrect="off"
-              autocomplete="off"
-              autocapitalize="off"
-            />
-          </div>
+          <SettingsSearchField
+            value={store.filter}
+            active={props.active}
+            onInput={(value) => setStore("filter", value)}
+            placeholder={language.t("settings.projects.search.placeholder")}
+          />
         </Show>
       </div>
 
@@ -128,7 +93,7 @@ export const SettingsProjects: Component<{
                     </div>
                   }
                 >
-                  <div class="settings-projects-empty">
+                  <div class="settings-tab-search-empty">
                     <SettingsSearchEmpty query={store.filter} />
                   </div>
                 </Show>

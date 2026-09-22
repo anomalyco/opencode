@@ -290,7 +290,7 @@ function RootSettings() {
         <SettingsNotifications />
       </Tabs.Content>
       <Tabs.Content value="shortcuts" class="settings-panel">
-        <SettingsKeybinds active={surface.view().tab === "shortcuts"} autofocus={!surface.search.state.selected} />
+        <SettingsKeybinds active={surface.view().tab === "shortcuts"} />
       </Tabs.Content>
       <Tabs.Content value="pairing" class="settings-panel">
         <SettingsPairing />
@@ -307,6 +307,7 @@ function RootSettings() {
             <Tabs.Content value="projects" class="settings-panel">
               <SettingsProjects
                 server={server}
+                active={surface.view().tab === "projects"}
                 onOpenProject={(project) =>
                   surface.openProject({
                     server: ServerConnection.key(server),
@@ -333,7 +334,6 @@ function RootSettings() {
             <Tabs.Content value="models" class="settings-panel">
               <SettingsModels
                 active={surface.view().tab === "models"}
-                autofocus={!surface.search.state.selected}
                 provider={state.modelProvider}
                 onReveal={() => setState("modelProvider", undefined)}
               />
@@ -403,6 +403,7 @@ function ServerSettings(props: { entry: SettingsServer }) {
             <Tabs.Content value="projects" class="settings-panel">
               <SettingsProjects
                 server={server}
+                active={surface.view().tab === "projects"}
                 onOpenProject={(project) =>
                   surface.openProject({
                     server: props.entry.key,

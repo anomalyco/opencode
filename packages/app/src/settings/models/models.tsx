@@ -1,9 +1,7 @@
 import { useFilteredList } from "@opencode/ui/hooks"
 import { Switch } from "@opencode/ui/switch"
-import { Icon } from "@opencode/ui/icon"
-import { IconButton } from "@opencode/ui/icon-button"
-import { TextInput } from "@opencode/ui/text-input"
-import { type Component, createEffect, createMemo, For, on, onCleanup, Show } from "solid-js"
+import { type Component, createEffect, createMemo, For, Show } from "solid-js"
+
 import { Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -14,6 +12,9 @@ import { Persist, persisted } from "@/runtime/persistence/storage"
 import { SettingsList } from "@/settings/list"
 import { SettingsRow } from "@/settings/row"
 import { CONSOLE_GROUP_KEY, consoleModelGroup, ProviderModelSections } from "@/providers/models/provider-group"
+import { SettingsSearchEmpty } from "@/settings/search-empty"
+import { SettingsSearchField } from "@/settings/search-field"
+
 import "@/settings/settings.css"
 
 type ModelItem = ReturnType<ReturnType<typeof useModels>["list"]>[number]
@@ -24,27 +25,13 @@ export const ModelProvidersSchema = Schema.Struct({
 
 export const SettingsModels: Component<{
   active?: boolean
-  autofocus?: boolean
   provider?: string
   onReveal?: () => void
 }> = (props) => {
+
   const language = useLanguage()
   const models = useModels()
   const serverSdk = useServerSDK()
-  let search: HTMLInputElement | undefined
-  createEffect(
-    on(
-      () => props.active ?? true,
-      (active) => {
-        if (!active) return
-        const frame = requestAnimationFrame(() => {
-          if (props.active !== false && props.autofocus !== false && search?.isConnected)
-            search.focus({ preventScroll: true })
-        })
-        onCleanup(() => cancelAnimationFrame(frame))
-      },
-    ),
-  )
   const [store, setStore] = persisted(
     Persist.serverGlobal(serverSdk.scope, "settings-v2.models.providers"),
     ModelProvidersSchema,
@@ -146,32 +133,12 @@ export const SettingsModels: Component<{
             <span class="text-11-regular text-v2-text-text-muted">{language.t("settings.models.description")}</span>
           </div>
         </div>
-        <div class="settings-tab-search">
-          <TextInput
-            ref={search}
-            type="search"
-            appearance="base"
-            value={list.filter()}
-            onInput={(event) => list.onInput(event.currentTarget.value)}
-            placeholder={language.t("dialog.model.search.placeholder")}
-            spellcheck={false}
-            autocorrect="off"
-            autocomplete="off"
-            autocapitalize="off"
-            aria-label={language.t("dialog.model.search.placeholder")}
-          />
-          <Show when={list.filter()}>
-            <IconButton
-              type="button"
-              variant="ghost-muted"
-              size="small"
-              class="settings-tab-search-clear"
-              icon={<Icon name="close" size="large" class="text-v2-icon-icon-muted" />}
-              onClick={() => list.clear()}
-              aria-label={language.t("common.clear")}
-            />
-          </Show>
-        </div>
+        <SettingsSearchField
+          value={list.filter()}
+          active={props.active ?? true}
+          onInput={list.onInput}
+          placeholder={language.t("dialog.model.search.placeholder")}
+        />
       </div>
 
       <div class="settings-tab-body settings-models">
@@ -187,12 +154,14 @@ export const SettingsModels: Component<{
           <Show
             when={list.flat().length > 0}
             fallback={
-              <div class="settings-models-status">
-                <span>{language.t("dialog.model.empty")}</span>
-                <Show when={list.filter()}>
-                  <span class="settings-models-status-filter">&quot;{list.filter()}&quot;</span>
-                </Show>
-              </div>
+              <Show
+                when={list.filter()}
+                fallback={<div class="settings-models-status">{language.t("dialog.model.empty")}</div>}
+              >
+                <div class="settings-tab-search-empty">
+                  <SettingsSearchEmpty query={list.filter()} />
+                </div>
+              </Show>
             }
           >
             <ProviderModelSections

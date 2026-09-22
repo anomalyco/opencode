@@ -931,43 +931,43 @@
   padding-inline-end: 28px;
 }
 
-.settings-projects-search [data-component="text-input-v2"] {
+.settings-filter-search [data-component="text-input-v2"] {
   height: 36px;
   background: color-mix(in oklab, var(--v2-background-bg-layer-02) 60%, transparent);
   box-shadow: none;
 }
 
-.settings-projects-search [data-component="text-input-v2"]:is(:hover, :focus-within):not([data-disabled]) {
+.settings-filter-search [data-component="text-input-v2"]:is(:hover, :focus-within):not([data-disabled]) {
   background: var(--v2-background-bg-layer-02);
 }
 
-.settings-projects-search [data-slot="text-input-v2-input"] {
+.settings-filter-search [data-slot="text-input-v2-input"] {
   padding-inline-end: 0;
 }
 
-.settings-projects-search [data-slot="text-input-v2-leading-icon"] {
+.settings-filter-search [data-slot="text-input-v2-leading-icon"] {
   padding-inline-start: 16px;
 }
 
-.settings-projects-search [data-slot="text-input-v2-value"] {
+.settings-filter-search [data-slot="text-input-v2-value"] {
   gap: 8px;
 }
 
-.settings-projects-search [data-slot="text-input-v2-icon-button"][data-variant="clear"] {
+.settings-filter-search [data-slot="text-input-v2-icon-button"][data-variant="clear"] {
   margin-inline-end: -4px;
 }
 
-.settings-projects-empty {
+.settings-tab-search-empty {
   width: 60%;
   margin-inline: auto;
 }
 
-.settings-projects-empty .settings-search-empty {
+.settings-tab-search-empty .settings-search-empty {
   justify-content: center;
   padding-inline: 0;
 }
 
-.settings-projects-empty .settings-search-empty-quoted {
+.settings-tab-search-empty .settings-search-empty-quoted {
   flex: 0 1 auto;
 }
 
@@ -1345,24 +1345,6 @@
   letter-spacing: -0.04px;
   color: var(--v2-text-text-base);
   font-variation-settings: "slnt" 0;
-}
-
-.settings-shortcuts-status {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 4px;
-  padding-block: 48px;
-  font-size: 13px;
-  font-weight: 440;
-  line-height: var(--line-height-compact);
-  color: var(--v2-text-text-muted);
-  text-align: center;
-}
-
-.settings-shortcuts-status-filter {
-  color: var(--v2-text-text-base);
 }
 
 .settings-servers-row {

@@ -177,7 +177,7 @@ test("empty queries keep the closing quote beside the ellipsis while typing and 
   await expect(status).toHaveText('No results for "zzzzzzzzzzx"')
 })
 
-test("Models and Shortcuts autofocus their filters on normal navigation", async ({ page }) => {
+test("Models and Shortcuts leave focus on navigation", async ({ page }) => {
   const view = ui(page)
   for (const entry of [
     { tab: "Models", search: "Search models" },
@@ -185,7 +185,7 @@ test("Models and Shortcuts autofocus their filters on normal navigation", async 
     { tab: "Models", search: "Search models" },
   ]) {
     await view.settings.getByRole("tab", { name: entry.tab, exact: true }).click()
-    await expect(view.settings.getByRole("searchbox", { name: entry.search, exact: true })).toBeFocused()
+    await expect(view.settings.getByRole("searchbox", { name: entry.search, exact: true })).not.toBeFocused()
   }
   await view.search.fill("shortcuts")
   const result = view.results.getByRole("option", { name: "Keyboard shortcuts", exact: true })
@@ -202,6 +202,61 @@ test("Shortcuts search keeps focus while filtering", async ({ page }) => {
   await page.keyboard.type("alette")
   await expect(search).toHaveValue("palette")
   await expect(view.settings.getByText("Command palette", { exact: true })).toBeVisible()
+})
+
+test("section searches share controls and hierarchical Escape behavior", async ({ page }) => {
+  const projects = projectList(8)
+  await page.route("**/api/project", (route) => route.fulfill({ json: projects }))
+  await persistProjects(page, projects)
+  await page.reload()
+  const view = ui(page)
+
+  for (const [index, entry] of [
+    { tab: "Projects", label: "Search projects", query: "missing-project" },
+    { tab: "Shortcuts", label: "Search shortcuts", query: "missing-shortcut" },
+    { tab: "Models", label: "Search models", query: "missing-model" },
+  ].entries()) {
+    if (index > 0) {
+      await page.getByRole("button", { name: "Settings", exact: true }).click()
+      await expect(view.settings).toBeVisible()
+    }
+    await view.settings.getByRole("tab", { name: entry.tab, exact: true }).click()
+    const field = view.settings.locator('[data-component="settings-filter-search"]')
+    const search = field.getByRole("searchbox", { name: entry.label, exact: true })
+    await expect(field).toHaveCount(1)
+    await expect(field.locator('[data-slot="text-input-v2-leading-icon"]')).toBeVisible()
+    await expect(search).not.toBeFocused()
+
+    await page.keyboard.type(entry.query)
+    await expect(search).toBeFocused()
+    await expect(search).toHaveValue(entry.query)
+    await expect(view.settings.getByText(`No results for "${entry.query}"`, { exact: true })).toBeVisible()
+    const clear = field.getByRole("button", { name: "Clear", exact: true })
+    await expect(clear).toHaveAttribute("data-variant", "clear")
+    await clear.click()
+    await expect(search).toHaveValue("")
+    await expect(search).toBeFocused()
+
+    await search.fill(`${entry.query} `.repeat(20))
+    await search.press("End")
+    await expect(search).toHaveAttribute("data-overflow-start", "true")
+    await search.press("Home")
+    await expect(search).toHaveAttribute("data-overflow-start", "false")
+    await expect(search).toHaveAttribute("data-overflow-end", "true")
+    await search.press("Escape")
+    await expect(search).toHaveValue("")
+    await expect(search).toBeFocused()
+    await expect(view.settings).toBeVisible()
+
+    await search.press("Escape")
+    await expect(search).not.toBeFocused()
+    await expect(view.settings).toBeFocused()
+    await expect(view.settings).toBeVisible()
+
+    await page.keyboard.press("Escape")
+    await expect(view.settings).toBeHidden()
+    await expect(page).toHaveURL("/")
+  }
 })
 
 for (const count of [7, 8]) {
