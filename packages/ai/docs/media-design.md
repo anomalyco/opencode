@@ -6,7 +6,7 @@ Status: proposal. Branch `media-support`.
 
 `@opencode/ai` becomes the one package you reach for to generate anything: text, images, video, speech, transcripts, and later music and realtime. The LLM surface already exists and is shaped by three constraints: Effect-first, used by OpenCode Core, usable externally. Media has a different priority order: **external DX first**, Effect and Promise as peers, Core as one consumer among many.
 
-The design below is derived from a survey of the raw provider APIs (OpenAI, Gemini/Veo/Imagen, xAI, Stability, BFL, fal, Replicate, Runway, Luma, Kling, MiniMax, ElevenLabs, Deepgram, Cartesia, AssemblyAI, Lyria) and from the Vercel AI SDK v7 (`generateImage`, `generateSpeech`, `transcribe`, `experimental_generateVideo`, `ImageModelV4`/`SpeechModelV4`/`TranscriptionModelV4`/`Experimental_VideoModelV4`).
+The design below is derived from a survey of the raw provider APIs (OpenAI, Gemini/Veo/Imagen, xAI, Stability, BFL, fal, Replicate, Runway, Luma, Kling, MiniMax, ElevenLabs, Deepgram, Cartesia, AssemblyAI, Lyria) and of existing multi-provider SDKs.
 
 ## What the survey forces
 
@@ -17,12 +17,12 @@ The design below is derived from a survey of the raw provider APIs (OpenAI, Gemi
 5. **Usage is a union**: tokens, seconds, characters (often only in headers), credits, compute time.
 6. **Moderation can be partial success** (Veo strips audio but returns video). Deprecations are constant (Sora API shuts down 2026-09-24, Imagen on Gemini API 2026-08-17).
 
-## Where Vercel is weak and we should not be
+## Where existing SDKs are weak and we should not be
 
-- No streaming TTS at all.
-- Video job handle is experimental and only `start`/`getStatus`; polling loop is inside `generateVideo` with an injectable `delay`.
-- Unsupported inputs become silent `warnings` arrays, so a request can succeed while dropping your mask.
-- `n` is fanned out into hidden parallel calls (`maxImagesPerCall`), which obscures cost and idempotency.
+- No streaming TTS.
+- Video handles are experimental start/status pairs; the polling loop lives inside the generate call.
+- Unsupported inputs become silent warnings arrays, so a request can succeed while dropping your mask.
+- `n` is fanned out into hidden parallel calls, which obscures cost and idempotency.
 - Each modality has its own bespoke result type; the file abstraction is a lazy base64/bytes pair with no URL, expiry, or provider ref.
 - Effect's own `unstable/ai` has no media generation. Nothing in the Effect ecosystem owns this.
 
@@ -122,7 +122,7 @@ response.usage                                    // Usage union (see below)
 response.notices                                  // moderation / partial-result notices
 
 yield* Image.stream(request)                      // Stream<ImageEvent>
-// ImageEvent: job-queued | job-progress | image-partial { index, image } | image { index, image } | finish { usage }
+// ImageEvent: generation-queued | generation-progress | image-partial { index, image } | image { index, image } | finish { usage }
 ```
 
 Editing is not a separate function; `images`/`mask` on the request select the edit path in the route (OpenAI `/images/edits`, Gemini multimodal parts, xAI `/images/edits`). Routes that cannot honor `mask` fail with `Unsupported`.
@@ -149,20 +149,20 @@ const response = yield* Video.generate(request, { poll: { interval: "10 seconds"
 response.video                                     // Media.Asset (url with expiresAt, or bytes when the route downloads)
 yield* response.video.materialize()                // pull bytes before the URL expires
 
-// Explicit job control.
-const job = yield* Video.start(request)            // Job<VideoResponse>
-job.id; job.status; job.progress; job.token        // token is serializable JSON
-yield* job.await({ poll })                         // VideoResponse
-yield* job.cancel()
+// Explicit generation control.
+const generation = yield* Video.start(request)     // Generation<VideoResponse>
+generation.id; generation.status; generation.progress; generation.token   // token is serializable JSON
+yield* generation.await({ poll })                  // VideoResponse
+yield* generation.cancel()
 
 // Resume from another process.
-const resumed = yield* Video.resume(model, token)  // Job<VideoResponse>
+const resumed = yield* Video.resume(model, token)  // Generation<VideoResponse>
 
 // Progress as a stream.
-yield* Video.stream(request)                       // Stream<VideoEvent>: job-queued { position } | job-progress { progress, logs } | video { index, video } | finish
+yield* Video.stream(request)                       // Stream<VideoEvent>: generation-queued { position } | generation-progress { progress, logs } | video { index, video } | finish
 ```
 
-Webhooks: `Video.complete(model, token, webhook)` finishes a job from a webhook payload without polling. Token shape is route-owned and opaque (Veo operation name, fal `response_url`, Runway task id).
+Webhooks: `Video.complete(model, token, webhook)` finishes a generation from a webhook payload without polling. Token shape is route-owned and opaque (Veo operation name, fal `response_url`, Runway task id).
 
 #### Speech (TTS)
 
@@ -204,10 +204,10 @@ yield* Transcription.stream(request)               // Stream<TranscriptionEvent>
 
 Realtime STT over WebSocket is the same future `session` shape as input-streaming TTS.
 
-### `Job` — shared async execution
+### `Generation` — shared async execution
 
 ```ts
-class Job<Response> {
+class Generation<Response> {
   readonly id: string
   readonly model: MediaModel
   readonly token: unknown                          // route-owned serializable JSON
@@ -215,16 +215,16 @@ class Job<Response> {
   readonly progress?: number                       // 0..1, normalized
   readonly position?: number
   readonly expiresAt?: number
-  refresh(): Effect<Job<Response>, AIError>
+  refresh(): Effect<Generation<Response>, AIError>
   await(options?: { poll?: Poll }): Effect<Response, AIError>
   cancel(): Effect<void, AIError>
-  events(options?): Stream<JobEvent, AIError>
+  events(options?): Stream<GenerationEvent, AIError>
 }
 
 Poll = { interval?: Duration; timeout?: Duration; schedule?: Schedule }   // route may override from provider hints (`openai-poll-after-ms`)
 ```
 
-`Job` is not video-specific. Image routes on BFL, fal, and Replicate are jobs; `Image.start` exists for them. A route declares itself `inline` or `job`; `generate` on a job route is `start` then `await`.
+`Generation` is not video-specific. Image routes on BFL, fal, and Replicate are queued; `Image.start` exists for them. A route declares itself `inline` or `queued`; `generate` on a queued route is `start` then `await`.
 
 ### Usage
 
@@ -254,8 +254,8 @@ await image.image.bytes()
 
 for await (const event of ai.speech.stream({ model, text, voice })) { … }
 
-const job = await ai.video.start({ model, prompt })
-const video = await job.await({ poll: { interval: 10_000 }, signal })
+const generation = await ai.video.start({ model, prompt })
+const video = await generation.await({ poll: { interval: 10_000 }, signal })
 const resumed = ai.video.resume(model, JSON.parse(saved))
 
 const text = await ai.llm.generate({ model, prompt })   // closes today's gap: LLM has no promise API either
@@ -281,14 +281,14 @@ Existing facades gain per-modality selectors; the modality routes each facade pr
 
 New facades follow the existing one-file-per-provider rule. Package entrypoints are modality-specific, such as `@opencode/ai/providers/openai/images`, and return the concrete model.
 
-`ImageModel<Options>` already gives typed `providerOptions` per model; `VideoModel`, `SpeechModel`, `TranscriptionModel` follow the same generic. A shared `MediaModel` union is what `Job` and the promise client key on.
+`ImageModel<Options>` already gives typed `providerOptions` per model; `VideoModel`, `SpeechModel`, `TranscriptionModel` follow the same generic. A shared `MediaModel` union is what `Generation` and the promise client key on.
 
 ### Routes and protocols
 
 Media does not fit the LLM four-axis route (SSE frames → event state machine) except for streaming TTS/STT. Reuse `Endpoint`, `Auth`, `Framing`, `RequestExecutor`, and add media protocol kinds:
 
 - `MediaProtocol.inline` — `body.from(request)` (JSON, multipart, or query), `response.decode(response)` (JSON, or binary body → `Media.Asset`).
-- `MediaProtocol.job` — `start`, `status`, `result`, `cancel`, optional `download`, `pollHint`, `token` schema.
+- `MediaProtocol.queued` — `start`, `status`, `result`, `cancel`, optional `download`, `pollHint`, `token` schema.
 - `MediaProtocol.stream` — framing + `step` state machine emitting modality events, same discipline as LLM protocols.
 
 `Route.make` for media composes one protocol kind with endpoint/auth. The existing `ImageRoute { generate(request, execute) }` is the ad-hoc version of `inline` and gets folded in.
@@ -315,14 +315,14 @@ All settled:
 
 ## Build order
 
-Foundation + Image ship together as the reference implementation, serially. Video, Speech, and Transcription then proceed in parallel on separate branches. Image jobs and partial streaming come last, after Video has hardened `Job`.
+Foundation + Image ship together as the reference implementation, serially. Video, Speech, and Transcription then proceed in parallel on separate branches. Image jobs and partial streaming come last, after Video has hardened `Generation`.
 
 ## Phasing
 
-1. **Foundation** — per-modality selectors, `Media`, `Job`, `Poll`, `Usage` union, `MediaProtocol` kinds, `@opencode/ai/promise` with `llm` + `image`. Port the five existing image protocols onto it. Unify `MediaPart` and add the `media` LLM event (fixes Gemini image output being dropped).
+1. **Foundation** — per-modality selectors, `Media`, `Generation`, `Poll`, `Usage` union, `MediaProtocol` kinds, `@opencode/ai/promise` with `llm` + `image`. Port the five existing image protocols onto it. Unify `MediaPart` and add the `media` LLM event (fixes Gemini image output being dropped).
 2. **Video** — Veo, xAI, fal, Runway first. Then Luma, Kling, MiniMax, Replicate.
 3. **Speech + Transcription** — OpenAI, ElevenLabs, Gemini TTS, Deepgram, Cartesia, AssemblyAI. Streaming TTS from the start.
-4. **Image jobs and partials** — BFL, fal, Replicate, Stability; OpenAI `partial_images` streaming.
+4. **Image queued routes and partials** — BFL, fal, Replicate, Stability; OpenAI `partial_images` streaming.
 5. **Later** — ElevenLabs music/SFX, Lyria, `Speech.session` / `Transcription.session`, realtime.
 
 Core adoption (session attachments beyond png/jpeg/gif/webp/pdf, image-generation tool, TUI rendering) comes after phase 1 and is a Core concern.

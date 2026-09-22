@@ -4,7 +4,7 @@ import { AIError, TimeoutError } from "./schema/errors.js"
 export const Status = Schema.Literals(["queued", "running", "completed", "failed", "cancelled", "expired"])
 export type Status = Schema.Schema.Type<typeof Status>
 
-/** Provider-neutral view of one job observation. */
+/** Provider-neutral view of one generation observation. */
 export interface Snapshot {
   readonly id: string
   readonly status: Status
@@ -15,8 +15,8 @@ export interface Snapshot {
 }
 
 /**
- * Route-owned job operations. `token` is the route's serializable handle (operation name, task id, response URL)
- * so a job can be resumed from another process; its shape is opaque to `Job`.
+ * Route-owned generation operations. `token` is the route's serializable handle (operation name, task id, response URL)
+ * so a generation can be resumed from another process; its shape is opaque to `Generation`.
  */
 export interface Route<Response> {
   readonly status: (token: unknown) => Effect.Effect<Snapshot, AIError>
@@ -37,13 +37,13 @@ export const DEFAULT_POLL_INTERVAL = Duration.seconds(5)
 export const DEFAULT_POLL_TIMEOUT = Duration.minutes(10)
 
 export type Event =
-  | { readonly type: "job-queued"; readonly id: string; readonly position?: number }
-  | { readonly type: "job-progress"; readonly id: string; readonly progress?: number }
-  | { readonly type: "job-finished"; readonly id: string; readonly status: Status }
+  | { readonly type: "generation-queued"; readonly id: string; readonly position?: number }
+  | { readonly type: "generation-progress"; readonly id: string; readonly progress?: number }
+  | { readonly type: "generation-finished"; readonly id: string; readonly status: Status }
 
 const TERMINAL: ReadonlySet<Status> = new Set(["completed", "failed", "cancelled", "expired"])
 
-export class Job<Response> {
+export class Generation<Response> {
   readonly id: string
   readonly status: Status
   readonly progress?: number
@@ -76,23 +76,23 @@ export class Job<Response> {
     return TERMINAL.has(this.status)
   }
 
-  refresh(): Effect.Effect<Job<Response>, AIError> {
-    return this.route.status(this.token).pipe(Effect.map((snapshot) => new Job(this.route, this.token, snapshot)))
+  refresh(): Effect.Effect<Generation<Response>, AIError> {
+    return this.route.status(this.token).pipe(Effect.map((snapshot) => new Generation(this.route, this.token, snapshot)))
   }
 
-  /** Poll until the job reaches a terminal status, then fetch the result. Fails with a `Timeout` reason on deadline. */
+  /** Poll until the generation reaches a terminal status, then fetch the result. Fails with a `Timeout` reason on deadline. */
   await(options?: { readonly poll?: Poll }): Effect.Effect<Response, AIError> {
     const timeout = Duration.fromInputUnsafe(options?.poll?.timeout ?? DEFAULT_POLL_TIMEOUT)
     const settled = this.terminal ? Effect.succeed(this) : this.poll(options?.poll)
     return settled.pipe(
       // Non-completed terminal states also go through `result` so the route can surface its provider failure body.
-      Effect.flatMap((job) => job.route.result(job.token)),
+      Effect.flatMap((generation) => generation.route.result(generation.token)),
       Effect.timeoutOrElse({
         duration: timeout,
         orElse: () =>
           new AIError({
             reason: new TimeoutError({
-              message: `Job ${this.id} did not finish within ${Duration.format(timeout)}`,
+              message: `Generation ${this.id} did not finish within ${Duration.format(timeout)}`,
               timeoutMs: Duration.toMillis(timeout),
             }),
           }),
@@ -109,26 +109,26 @@ export class Job<Response> {
     const observations = this.terminal
       ? Stream.make(this)
       : Stream.fromEffectSchedule(this.refresh(), this.schedule(options?.poll)).pipe(
-          Stream.takeUntil((job) => job.terminal),
+          Stream.takeUntil((generation) => generation.terminal),
         )
     return observations.pipe(
-      Stream.map((job): Event => {
-        if (job.terminal) return { type: "job-finished", id: job.id, status: job.status }
-        if (job.status === "queued") return { type: "job-queued", id: job.id, position: job.position }
-        return { type: "job-progress", id: job.id, progress: job.progress }
+      Stream.map((generation): Event => {
+        if (generation.terminal) return { type: "generation-finished", id: generation.id, status: generation.status }
+        if (generation.status === "queued") return { type: "generation-queued", id: generation.id, position: generation.position }
+        return { type: "generation-progress", id: generation.id, progress: generation.progress }
       }),
     )
   }
 
   private poll(poll: Poll | undefined) {
-    return this.refresh().pipe(Effect.repeat({ schedule: this.schedule(poll), until: (job) => job.terminal }))
+    return this.refresh().pipe(Effect.repeat({ schedule: this.schedule(poll), until: (generation) => generation.terminal }))
   }
 
-  private schedule(poll: Poll | undefined): Schedule.Schedule<unknown, Job<Response>> {
-    if (poll?.schedule) return poll.schedule.pipe(Schedule.setInputType<Job<Response>>())
+  private schedule(poll: Poll | undefined): Schedule.Schedule<unknown, Generation<Response>> {
+    if (poll?.schedule) return poll.schedule.pipe(Schedule.setInputType<Generation<Response>>())
     const interval = poll?.interval ?? DEFAULT_POLL_INTERVAL
     const pollHint = this.route.pollHint
-    const spaced = Schedule.spaced(interval).pipe(Schedule.setInputType<Job<Response>>())
+    const spaced = Schedule.spaced(interval).pipe(Schedule.setInputType<Generation<Response>>())
     if (!pollHint) return spaced
     return spaced.pipe(
       Schedule.modifyDelay((metadata) => Effect.succeed(pollHint(metadata.input.snapshot) ?? interval)),

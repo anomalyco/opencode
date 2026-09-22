@@ -2,35 +2,17 @@
 
 ## Why the change
 
-`@opencode/ai` had no shared way to represent, generate, or consume non-text media, so this lays the foundation (asset type, model selection, job handle, promise API) and rewrites Image on it as the reference for Video, Speech, and Transcription to follow.
+`@opencode/ai` had no shared way to represent, generate, or consume non-text media, so this lays the foundation (asset type, media route, job handle, promise API) and rewrites Image on it as the reference for Video, Speech, and Transcription to follow.
 
 ## Special things to note
 
-- **Public API changes in `@opencode/ai`:** `ImageRequest.options` is now `providerOptions`; `ImageInput` and `GeneratedImage` are replaced by `Media.Asset`; `MediaPart` is now `{ type: "media", media: Media.Asset }` instead of `{ mediaType, data }`. Core call sites were updated mechanically.
-- **OpenAI Responses `image_generation_call` keeps the hosted tool-result carrier** because Core's `publish-llm-event.ts` consumes it and has no `media` event handling yet. Gemini inline image output, which was previously dropped on the floor, now surfaces as the new `media` LLMEvent.
-- `schema/messages.ts → media.ts → route/executor-service.ts` is an accepted runtime dependency on the executor's service tag (a leaf); the split exists to break an ESM cycle. Documented in `packages/ai/AGENTS.md`.
+- **Public API changes in `@opencode/ai`:** `ImageRequest.options` is now `providerOptions`; `ImageInput` and `GeneratedImage` are replaced by `Media.Asset`; `MediaPart` is now `{ type: "media", media: Media.Asset }` instead of `{ mediaType, data }`. Core call sites were updated mechanically. Model selection is unchanged: `openai.responses(id)` for LLM, `openai.image(id)` for images (a callable-facade `ModelRef` was tried and removed in the last commit as a second construction path).
+- **OpenAI Responses `image_generation_call` keeps the hosted tool-result carrier** because Core's `publish-llm-event.ts` consumes it and has no `media` event handling yet. Gemini inline image output, which was previously dropped, now surfaces as the new `media` LLMEvent.
+- `schema/messages.ts → media.ts → route/executor-service.ts` is an accepted runtime dependency on the executor's service tag (a leaf); the split breaks an ESM cycle. Documented in `packages/ai/AGENTS.md`.
 
 ## Change outline
 
-Naming a model no longer repeats the modality. Configured facades are callable and return a `ModelRef`; each request namespace picks its own selector. Named selectors (`.responses`, `.chat`, `.image`, …) still work.
-
-```diff
--const model = OpenAI.configure({ apiKey }).image("gpt-image-2")
--Image.request({ model, prompt, options: { quality: "high" } })
-+const openai = OpenAI.configure({ apiKey })
-+Image.request({ model: openai("gpt-image-2"), prompt, providerOptions: { quality: "high" } })
-+LLM.request({ model: openai("gpt-5"), prompt })          // default route: responses
-+LLM.request({ model: openai.chat("gpt-4o"), prompt })    // explicit selector still available
-```
-
-```typescript
-class ModelRef<S extends Selectors> { id: ModelID; facade: S; get provider() }
-interface Selectors { id: ProviderID; model: (id) => LanguageModel; image?: (id) => ImageModel }
-ModelRef.facade(selectors)   // Object.assign(callable, selectors) — used by every provider file
-// Image.request rejects a ref with no `image` selector at compile time (test/model-ref.types.ts)
-```
-
-One asset type in and out. `Source` is the serializable Schema; `Asset` is the runtime class with lazy decoding and a JSON codec (`AssetSchema`) so Core can persist it.
+One asset type in and out. `Source` is the serializable Schema; `Asset` is the runtime class with lazy decoding and a JSON codec (`AssetSchema`) so Core can persist it in messages.
 
 ```typescript
 Media.Source =
@@ -42,12 +24,29 @@ Media.Source =
 class Media.Asset {
   source; mediaType; kind: "image" | "video" | "audio" | "document" | "other"; info?; expiresAt?
   inline(): { mime, base64, dataUrl } | undefined     // sync, for protocol lowering
-  bytes() / base64() / materialize()                  // Effect, downloads url sources via RequestExecutor
+  bytes() / base64() / materialize()                  // Effect; url sources download via RequestExecutor
 }
 Media.bytes | base64 | url | ref | from | parseDataUrl | file | write | detectMediaType
 ```
 
-Image runs on a new media route that reuses `Endpoint` and `Auth` but skips the LLM streaming machinery. The route, not each protocol, rejects unsupported common fields.
+The Image request surface, and how it changed for callers:
+
+```diff
+ const openai = OpenAI.configure({ apiKey })
+ Image.generate({
+   model: openai.image("gpt-image-2"),
+   prompt: "A robot tending a rooftop garden",
++  images: [asset], mask: asset,            // edit inputs, Media.Asset
++  n, size, aspectRatio, seed, format,       // common fields; unsupported ones fail typed per route
+-  options: { quality: "high" },
++  providerOptions: { quality: "high" },     // typed per image model
+ })
+-response.images[0].data                     // string | Uint8Array
++response.image.bytes()                      // Media.Asset
++response.notices                            // Google safety filter → "filtered", Z.ai content_filter → "moderated"
+```
+
+Image runs on a new media route that reuses `Endpoint` and `Auth` but skips the LLM streaming machinery. The route, not each protocol, rejects unsupported common fields and owns HTTP option merging.
 
 ```text
 Image.generate(request)
@@ -60,9 +59,16 @@ Image.generate(request)
       protocol.response.decode                     → ImageResponse { images: Asset[], usage?, notices? }
 ```
 
-```text
-Image.request({ model, prompt, images?, mask?, n?, size?, aspectRatio?, seed?, format?, providerOptions?, http? })
-ImageResponse.notices: Google promptFeedback / non-STOP finish → "filtered"; Z.ai content_filter → "moderated"
+`MediaPart` now carries an `Asset`, so protocols branch on `kind`/`source` instead of sniffing mime prefixes, and Gemini image output becomes a first-class event.
+
+```diff
+ LLMEvent =
+   | text-* | reasoning-* | tool-* | step-* | finish | provider-error
++  | media { media: Media.Asset }        // Gemini inlineData (was silently dropped)
+
+ MediaPart
+-  { type: "media"; mediaType; data: string | Uint8Array }
++  { type: "media"; media: Media.Asset; filename? }
 ```
 
 Job handle and promise runtime are in place for the next phases; no provider uses `Job` yet.
@@ -73,7 +79,7 @@ Job.Route<Response> = { status(token); result(token); cancel?(token); pollHint?(
 
 import { ai, AI } from "@opencode/ai/promise"
 const client = AI.make({ layer? })                  // ManagedRuntime over LLMClient + ImageClient
-await client.image.generate({ model, prompt })
+await client.image.generate({ model: openai.image("gpt-image-2"), prompt })
 for await (const event of client.llm.stream(request, { signal })) …
 ```
 
@@ -81,14 +87,13 @@ Where things live:
 
 ```diff
  packages/ai/src/
-+├── model-ref.ts               # ModelRef + ModelRef.facade
 +├── media.ts                   # Media.Source, Media.Asset, constructors
 +├── job.ts                     # Job, Job.Route, Poll
 +├── promise.ts                 # @opencode/ai/promise
- ├── image.ts                   # rewritten: ImageRequest/Response/Event, Image.request/generate/stream
+ ├── image.ts                   # rewritten: ImageRequest/Response/Event, ImageModel.fromRoute
  ├── image-client.ts            # pass-through to MediaRoute
  ├── route/
-+│   ├── media.ts               # MediaRoute.make / generate, ImageModel.fromRoute input
++│   ├── media.ts               # MediaRoute.make / generate
 +│   ├── media-protocol.ts      # MediaProtocol.inline, json/multipart bodies, decodeJson
 +│   └── executor-service.ts    # RequestExecutor service tag (leaf, breaks cycle)
  ├── protocols/
@@ -97,7 +102,6 @@ Where things live:
  │   ├── open-responses.ts      # assistant media → input_image / input_file
 -│   └── utils/image-input.ts
 +│   └── utils/media-input.ts   # decodedAsset, inlineBytes, multipart helpers
- ├── providers/*.ts             # each configure() now returns ModelRef.facade({...})
  └── schema/
      ├── messages.ts            # MediaPart carries Media.Asset; Message.media()
      ├── events.ts              # + media LLMEvent, MediaUsage union

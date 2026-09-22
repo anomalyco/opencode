@@ -602,7 +602,7 @@ The hosted result is represented as a provider-executed tool call and tool resul
 - **`Image.request` / `Image.generate` / `Image.stream`** — generate images through a provider-neutral image request and response model.
 - **`ImageClient`** — Effect service and layer for image execution, parallel to `LLMClient`.
 - **`Media`** — the shared asset type (`Media.Asset`, `Media.Source`) and constructors used by messages, tool results, and media requests.
-- **`Job`** — provider-neutral async job handle (`await`, `refresh`, `cancel`, `events`) used by queued media routes.
+- **`Generation`** — provider-neutral handle for an in-flight media generation (`await`, `refresh`, `cancel`, `events`) used by queued media routes.
 - **`@opencode/ai/promise`** — `AI.make({ layer? })` and a default `ai` client exposing `llm` and `image` as Promise / `AsyncIterable` APIs.
 
 ## Testing

@@ -133,7 +133,7 @@ export class UnknownProviderError extends Schema.TaggedError<UnknownProviderErro
   ReasonFields,
 ) {}
 
-/** A caller-supplied deadline elapsed, such as `Job.await` polling past its `Poll.timeout`. */
+/** A caller-supplied deadline elapsed, such as `Generation.await` polling past its `Poll.timeout`. */
 export class TimeoutError extends Schema.TaggedError<TimeoutError>("AI.Error.Timeout")("Timeout", {
   ...ReasonFields,
   timeoutMs: Schema.optional(Schema.Number),
