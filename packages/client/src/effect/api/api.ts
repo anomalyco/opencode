@@ -97,10 +97,17 @@ export type PluginUpdateInput = {
 export type PluginUpdateOutput = void
 export type PluginUpdateOperation<E = never> = (input: PluginUpdateInput) => Effect.Effect<PluginUpdateOutput, E>
 
+export type PluginAwaitActivationInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
+export type PluginAwaitActivationOutput = void
+export type PluginAwaitActivationOperation<E = never> = (
+  input?: PluginAwaitActivationInput,
+) => Effect.Effect<PluginAwaitActivationOutput, E>
+
 export interface PluginApi<E = never> {
   readonly list: PluginListOperation<E>
   readonly check: PluginCheckOperation<E>
   readonly update: PluginUpdateOperation<E>
+  readonly awaitActivation: PluginAwaitActivationOperation<E>
 }
 
 export type SessionListInput = {

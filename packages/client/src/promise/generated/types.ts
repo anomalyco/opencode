@@ -2725,6 +2725,12 @@ export type PluginUpdateInput = {
 
 export type PluginUpdateOutput = void
 
+export type PluginAwaitActivationInput = {
+  readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]
+}
+
+export type PluginAwaitActivationOutput = void
+
 export type SessionListInput = {
   readonly limit?: {
     readonly limit?: number | undefined
