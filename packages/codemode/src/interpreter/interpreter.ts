@@ -1244,7 +1244,7 @@ class Frame<R> {
     }
     const keyNode = property.key
     if (property.computed) {
-      return Effect.map(this.evaluateExpression(keyNode), (value) => this.toPropertyKey(value, keyNode))
+      return Effect.map(this.evaluateExpression(keyNode), (value) => this.toPropertyKey(value))
     }
     if (keyNode.type === "Identifier") return Effect.succeed(keyNode.name)
     if (keyNode.type === "Literal") return Effect.succeed(String(keyNode.value))
@@ -1943,11 +1943,11 @@ class Frame<R> {
         let key: PropertyKey
 
         if (property.computed) {
-          key = self.toPropertyKey(yield* self.evaluateExpression(keyNode), keyNode)
+          key = self.toPropertyKey(yield* self.evaluateExpression(keyNode))
         } else if (keyNode.type === "Identifier") {
           key = keyNode.name
         } else if (keyNode.type === "Literal") {
-          key = self.toPropertyKey(literal(keyNode), keyNode)
+          key = self.toPropertyKey(literal(keyNode))
         } else {
           throw typeError("Unsupported object property key shape.", keyNode)
         }
@@ -2048,10 +2048,10 @@ class Frame<R> {
       if ((objectValue === null || objectValue === undefined) && node.optional) return OptionalShortCircuit
 
       const key = node.computed
-        ? self.toPropertyKey(yield* self.evaluateExpression(propertyNode), propertyNode)
+        ? self.toPropertyKey(yield* self.evaluateExpression(propertyNode))
         : propertyNode.type === "Identifier"
           ? propertyNode.name
-          : self.toPropertyKey(yield* self.evaluateExpression(propertyNode), propertyNode)
+          : self.toPropertyKey(yield* self.evaluateExpression(propertyNode))
 
       if (objectValue instanceof ToolReference) {
         if (typeof key !== "string") {
@@ -2168,12 +2168,9 @@ class Frame<R> {
     throw typeError(`Cannot assign to read only property '${String(key)}'.`, node)
   }
 
-  private toPropertyKey(value: Value, node: AstNode): PropertyKey {
-    if (typeof value === "string" || typeof value === "number") {
-      return value
-    }
-    if (value === AsyncIteratorSymbol || value === IteratorSymbol) return value
-
-    throw typeError("Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.", node)
+  // ToPropertyKey: anything else becomes its string form, so `counts[row.category]` works when the field is null.
+  private toPropertyKey(value: Value): PropertyKey {
+    if (typeof value === "string" || typeof value === "number" || typeof value === "symbol") return value
+    return coerceToString(value)
   }
 }

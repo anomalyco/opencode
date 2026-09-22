@@ -243,7 +243,7 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       accepted, including `.then`/`.catch` handlers and collection callbacks, and vanish at the data boundary like
       any function.
 - [x] `Promise.withResolvers()`: the same promise and resolver callables as the constructor, as a `{ promise, resolve,
-  reject }` object.
+reject }` object.
 - [x] `Promise.try(fn, ...args)`: calls `fn` synchronously; a throw rejects, a return fulfils, and a returned promise or
       thenable is adopted.
 - [x] Recursive assimilation of objects with an own callable `then` field across `Promise.resolve`, combinators,
@@ -266,7 +266,9 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       not construct.
 - [x] `Object()` and `new Object()` return `{}` for nullish arguments and pass objects through unchanged;
       primitive wrapper objects (`Object(1)`) are rejected explicitly.
-- [x] Computed property names and object spread.
+- [x] Computed property names and object spread. Any value works as a key (ToPropertyKey): strings, numbers, and the
+      two confined symbols as themselves, everything else as its string form (`o[null]` is `o["null"]`, `o[{}]` is
+      `o["[object Object]"]`), in reads, writes, literals, `in`, and destructuring.
 - [x] `Object.keys`, `Object.values`, `Object.entries`, `Object.hasOwn`, `Object.assign`, and `Object.fromEntries`, with
       synchronous iterator support for `fromEntries`. Sources follow ToObject: strings enumerate by index, other
       primitives and wrappers contribute nothing, and `null`/`undefined` throw. `Object.assign` accepts array
