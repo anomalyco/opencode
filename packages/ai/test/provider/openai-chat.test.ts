@@ -2,6 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Ref, Schema, Stream } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import {
+  Media,
   HttpOptions,
   LLM,
   AIError,
@@ -686,7 +687,7 @@ describe("OpenAI Chat route", () => {
         LLM.request({
           model,
           messages: [
-            Message.user({ type: "media", mediaType: "image/png", data: "AAEC" }),
+            Message.user({ type: "media", media: Media.base64("AAEC", "image/png") }),
             Message.system("Keep the image."),
           ],
         }),
@@ -710,9 +711,9 @@ describe("OpenAI Chat route", () => {
           model,
           messages: [
             Message.user([
-              { type: "media", mediaType: "image/png", data: "not-base64" },
-              { type: "media", mediaType: "image/png", data: "data:image/jpeg;base64,/9j/" },
-              { type: "media", mediaType: "image/svg+xml", data: "PHN2Zz4=" },
+              { type: "media", media: Media.base64("not-base64", "image/png") },
+              { type: "media", media: Media.fromDataUrl("data:image/jpeg;base64,/9j/") },
+              { type: "media", media: Media.base64("PHN2Zz4=", "image/svg+xml") },
             ]),
           ],
         }),
@@ -736,7 +737,7 @@ describe("OpenAI Chat route", () => {
       const prepared = yield* compileRequest(
         LLM.request({
           model,
-          prompt: urls.map((data) => ({ type: "media" as const, mediaType: "image/png", data })),
+          prompt: urls.map((url) => Message.media(Media.url(url, { mediaType: "image/png" }))),
         }),
       )
       expect(prepared.body.messages).toEqual([
@@ -783,7 +784,7 @@ describe("OpenAI Chat route", () => {
       const error = yield* compileRequest(
         LLM.request({
           model,
-          messages: [Message.user({ type: "media", mediaType: "audio/mpeg", data: "AAECAw==" })],
+          messages: [Message.user({ type: "media", media: Media.base64("AAECAw==", "audio/mpeg") })],
         }),
       ).pipe(Effect.flip)
       expect(error.message).toContain("OpenAI Chat does not support media type audio/mpeg")
@@ -798,8 +799,8 @@ describe("OpenAI Chat route", () => {
           model,
           messages: [
             Message.user([
-              { type: "media", mediaType: "image/png", data: "AAECAw==" },
-              { type: "media", mediaType: "image/jpeg", data: "data:image/jpeg;base64,/9j/" },
+              { type: "media", media: Media.base64("AAECAw==", "image/png") },
+              { type: "media", media: Media.fromDataUrl("data:image/jpeg;base64,/9j/") },
             ]),
           ],
         }),

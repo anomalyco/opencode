@@ -320,13 +320,10 @@ const lowerToolCall = (part: ToolCallPart, options: LoweringOptions): OpenAIChat
 })
 
 const lowerMedia = Effect.fn("OpenAIChat.lowerMedia")(function* (part: MediaPart) {
-  const media = ProviderShared.normalizeMedia(part)
-  if (!media.mime.startsWith("image/"))
-    return yield* ProviderShared.invalidRequest(`OpenAI Chat does not support media type ${part.mediaType}`)
+  if (part.media.kind !== "image")
+    return yield* ProviderShared.invalidRequest(`OpenAI Chat does not support media type ${part.media.mediaType}`)
   const url =
-    typeof part.data === "string" && (part.data.startsWith("https://") || part.data.startsWith("http://"))
-      ? part.data
-      : media.dataUrl
+    ProviderShared.mediaUrl(part.media) ?? (yield* ProviderShared.requireInlineMedia("OpenAI Chat", part.media)).dataUrl
   return { type: "image_url" as const, image_url: { url } }
 })
 
@@ -460,11 +457,7 @@ const lowerToolMessages = Effect.fn("OpenAIChat.lowerToolMessages")(function* (
       cache_control: options.cacheControl?.(part.cache),
     })
     const files = content.filter((item) => item.type === "file")
-    images.push(
-      ...(yield* Effect.forEach(files, (item) =>
-        lowerMedia({ type: "media", mediaType: item.mime, data: item.uri, filename: item.name }),
-      )),
-    )
+    images.push(...(yield* Effect.forEach(files, (item) => lowerMedia(ProviderShared.toolFileMedia(item)))))
   }
   return { messages, images }
 })
@@ -718,7 +711,8 @@ const lowerOptions = (request: LLMRequest, supportsStore: boolean) => {
   // Default off: strict providers 400 on unknown body fields, so only send
   // the key where compatibility explicitly allows it. Header-based affinity
   // (x-session-affinity, x-grok-conv-id, ...) is unaffected.
-  const cacheKey = (request.model.compatibility?.supportsPromptCacheKey ?? false) ? ProviderShared.promptCacheKey(request) : undefined
+  const cacheKey =
+    (request.model.compatibility?.supportsPromptCacheKey ?? false) ? ProviderShared.promptCacheKey(request) : undefined
   return {
     ...(supportsStore && options.store !== undefined ? { store: options.store } : {}),
     // For providers that support `store`, ensure stateless `store:false` is sent

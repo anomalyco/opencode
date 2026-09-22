@@ -1,21 +1,29 @@
-import { Effect, Schema } from "effect"
+import { Effect, Schema, Stream } from "effect"
+import { Media } from "./media.js"
+import { Endpoint } from "./route/endpoint.js"
+import { MediaRoute } from "./route/media.js"
+import type { MediaProtocol } from "./route/media-protocol.js"
 import {
+  AIError,
   HttpOptions,
   InvalidRequestError,
-  AIError,
+  MediaUsage,
   ModelID,
   ProviderID,
   ProviderMetadata,
-  Usage,
 } from "./schema/index.js"
-import { ImageClient, Service, type Execute as ImageExecute } from "./image-client.js"
+import { ImageClient, Service } from "./image-client.js"
 
-export interface ImageRoute<Options extends ImageOptions = ImageOptions> {
-  readonly id: string
-  readonly generate: (request: ImageRequestFor<Options>, execute: ImageExecute) => Effect.Effect<ImageResponse, AIError>
-}
+// ---------------------------------------------------------------------------
+// Model
+// ---------------------------------------------------------------------------
 
 export type ImageOptions = Record<string, unknown>
+
+export type ImageRoute<Options extends ImageOptions = ImageOptions> = MediaRoute.Route<
+  ImageRequestFor<Options>,
+  ImageResponse
+>
 
 export class ImageModel<Options extends ImageOptions = ImageOptions> {
   declare protected readonly _Options: (options: Options) => Options
@@ -39,6 +47,26 @@ export class ImageModel<Options extends ImageOptions = ImageOptions> {
       http: input.http,
     })
   }
+
+  /** Compose an inline image protocol with its canonical path into a model for one deployment. */
+  static fromRoute<Options extends ImageOptions = ImageOptions>(
+    route: ImageModel.RouteInput<Options>,
+    input: MediaRoute.ModelInput,
+  ) {
+    return ImageModel.make<Options>({
+      id: input.id,
+      provider: route.provider,
+      http: input.http,
+      route: MediaRoute.make({
+        id: route.id,
+        provider: route.provider,
+        protocol: route.protocol,
+        endpoint: Endpoint.path(route.path, { baseURL: input.baseURL ?? route.baseURL }),
+        auth: input.auth,
+        headers: input.headers,
+      }),
+    })
+  }
 }
 
 export namespace ImageModel {
@@ -54,81 +82,85 @@ export namespace ImageModel {
     readonly id: string | ModelID
     readonly provider: string | ProviderID
   }
+
+  export interface RouteInput<Options extends ImageOptions = ImageOptions> {
+    readonly id: string
+    readonly provider: string | ProviderID
+    readonly protocol: MediaProtocol.Inline<ImageRequestFor<Options>, ImageResponse>
+    readonly path: Endpoint.EndpointPart<MediaProtocol.Body, ImageRequestFor<Options>>
+    /** Canonical base URL; `ModelInput.baseURL` overrides it per deployment. */
+    readonly baseURL?: string
+  }
 }
 
 export const ImageModelSchema = Schema.declare((value): value is ImageModel => value instanceof ImageModel, {
   expected: "Image.Model",
 })
 
-const ImageBytesInput = Schema.Struct({
-  type: Schema.Literal("bytes"),
-  data: Schema.Uint8Array,
-  mediaType: Schema.String,
-})
-const ImageUrlInput = Schema.Struct({
-  type: Schema.Literal("url"),
-  url: Schema.String,
-})
-const ImageFileIDInput = Schema.Struct({
-  type: Schema.Literal("file-id"),
-  id: Schema.String,
-})
-const ImageFileURIInput = Schema.Struct({
-  type: Schema.Literal("file-uri"),
-  uri: Schema.String,
-  mediaType: Schema.String,
-})
+// ---------------------------------------------------------------------------
+// Request
+// ---------------------------------------------------------------------------
 
-export const ImageInputSchema = Schema.Union([
-  ImageBytesInput,
-  ImageUrlInput,
-  ImageFileIDInput,
-  ImageFileURIInput,
-]).pipe(Schema.toTaggedUnion("type"))
-export type ImageInput = Schema.Schema.Type<typeof ImageInputSchema>
+export type ImageSize = `${number}x${number}`
+export const ImageSize = Schema.declare<ImageSize>(
+  (value): value is ImageSize => typeof value === "string" && /^\d+x\d+$/.test(value),
+  { title: "ImageSize" },
+)
 
-export const ImageInput = {
-  bytes: (data: Uint8Array, mediaType: string): ImageInput => ({ type: "bytes", data, mediaType }),
-  url: (url: string): ImageInput => ({ type: "url", url }),
-  file: (id: string): ImageInput => ({ type: "file-id", id }),
-  fileUri: (uri: string, mediaType: string): ImageInput => ({ type: "file-uri", uri, mediaType }),
-} as const
+export type ImageAspectRatio = `${number}:${number}`
+export const ImageAspectRatio = Schema.declare<ImageAspectRatio>(
+  (value): value is ImageAspectRatio => typeof value === "string" && /^\d+(?:\.\d+)?:\d+(?:\.\d+)?$/.test(value),
+  { title: "ImageAspectRatio" },
+)
+
+export type ImageFormat = "png" | "jpeg" | "webp" | (string & {})
 
 export class ImageRequest extends Schema.Class<ImageRequest>("Image.Request")({
   model: ImageModelSchema,
   prompt: Schema.String,
-  images: Schema.optional(Schema.Array(ImageInputSchema)),
-  options: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  /** Edit sources or style/subject references, in order. */
+  images: Schema.optional(Schema.Array(Media.AssetSchema)),
+  /** Inpainting mask; routes that cannot honor it fail with `UnsupportedOperation`. */
+  mask: Schema.optional(Media.AssetSchema),
+  n: Schema.optional(Schema.Int),
+  size: Schema.optional(ImageSize),
+  aspectRatio: Schema.optional(ImageAspectRatio),
+  seed: Schema.optional(Schema.Number),
+  format: Schema.optional(Schema.String),
+  providerOptions: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   http: Schema.optional(HttpOptions),
 }) {
   declare protected readonly _ImageRequest: void
 }
 
-export type ImageRequestFor<Options extends ImageOptions = ImageOptions> = Omit<ImageRequest, "model" | "options"> & {
+export type ImageRequestFor<Options extends ImageOptions = ImageOptions> = Omit<
+  ImageRequest,
+  "model" | "providerOptions"
+> & {
   readonly model: ImageModel<Options>
-  readonly options?: Options
+  readonly providerOptions?: Options
 }
 
 export type ImageModelOptions<Model> = Model extends ImageModel<infer Options> ? Options : never
 
-export type ImageRequestInput<Model extends object = ImageModel> = Omit<
+export type ImageRequestInput<Model extends ImageModel = ImageModel> = Omit<
   ConstructorParameters<typeof ImageRequest>[0],
-  "model" | "options" | "http"
+  "model" | "providerOptions" | "http"
 > & {
   readonly model: Model
-  readonly options?: NoInfer<ImageModelOptions<Model>>
+  readonly format?: ImageFormat
+  readonly providerOptions?: NoInfer<ImageModelOptions<Model>>
   readonly http?: HttpOptions.Input
-} & (Model extends ImageModel<ImageModelOptions<Model>> ? unknown : never)
+}
 
-export class GeneratedImage extends Schema.Class<GeneratedImage>("Image.Generated")({
-  mediaType: Schema.String,
-  data: Schema.Union([Schema.String, Schema.Uint8Array]),
-  providerMetadata: Schema.optional(ProviderMetadata),
-}) {}
+// ---------------------------------------------------------------------------
+// Response and events
+// ---------------------------------------------------------------------------
 
 export class ImageResponse extends Schema.Class<ImageResponse>("Image.Response")({
-  images: Schema.Array(GeneratedImage),
-  usage: Schema.optional(Usage),
+  images: Schema.Array(Media.AssetSchema),
+  usage: Schema.optional(MediaUsage),
+  notices: Schema.optional(Schema.Array(Media.Notice)),
   providerMetadata: Schema.optional(ProviderMetadata),
 }) {
   get image() {
@@ -136,7 +168,43 @@ export class ImageResponse extends Schema.Class<ImageResponse>("Image.Response")
   }
 }
 
-export function request<const Model extends object>(
+export const ImageOutputEvent = Schema.Struct({
+  type: Schema.tag("image"),
+  index: Schema.Number,
+  image: Media.AssetSchema,
+}).annotate({ identifier: "Image.Event.Image" })
+
+export const ImageFinishEvent = Schema.Struct({
+  type: Schema.tag("finish"),
+  usage: Schema.optional(MediaUsage),
+  notices: Schema.optional(Schema.Array(Media.Notice)),
+  providerMetadata: Schema.optional(ProviderMetadata),
+}).annotate({ identifier: "Image.Event.Finish" })
+
+const imageEventTagged = Schema.Union([ImageOutputEvent, ImageFinishEvent]).pipe(Schema.toTaggedUnion("type"))
+export const ImageEvent = Object.assign(imageEventTagged, {
+  is: {
+    image: imageEventTagged.guards.image,
+    finish: imageEventTagged.guards.finish,
+  },
+})
+export type ImageEvent = Schema.Schema.Type<typeof imageEventTagged>
+
+/** Inline routes produce every image at once; expand the response into the streaming event shape. */
+export const responseEvents = (response: ImageResponse): ReadonlyArray<ImageEvent> => [
+  ...response.images.map((image, index) => ImageOutputEvent.make({ index, image })),
+  ImageFinishEvent.make({
+    usage: response.usage,
+    notices: response.notices,
+    providerMetadata: response.providerMetadata,
+  }),
+]
+
+// ---------------------------------------------------------------------------
+// Request-shaped call API
+// ---------------------------------------------------------------------------
+
+export function request<const Model extends ImageModel>(
   input: ImageRequestInput<Model>,
 ): ImageRequestFor<ImageModelOptions<Model>>
 export function request(input: ImageRequest): ImageRequest
@@ -144,18 +212,13 @@ export function request(input: ImageRequest | ImageRequestInput) {
   if (input instanceof ImageRequest) return input
   return new ImageRequest({
     ...input,
-    model: input.model as unknown as ImageModel,
     http: input.http === undefined ? undefined : HttpOptions.make(input.http),
   })
 }
 
-export function generate<const Model extends object>(
-  input: ImageRequestInput<Model>,
-): Effect.Effect<ImageResponse, AIError, Service>
-export function generate(input: ImageRequest): Effect.Effect<ImageResponse, AIError, Service>
-export function generate(input: ImageRequest | ImageRequestInput) {
-  return Effect.try({
-    try: () => (input instanceof ImageRequest ? input : request(input)),
+const requestEffect = (input: ImageRequest | ImageRequestInput) =>
+  Effect.try({
+    try: () => request(input),
     catch: (error) =>
       new AIError({
         reason: new InvalidRequestError({
@@ -163,10 +226,26 @@ export function generate(input: ImageRequest | ImageRequestInput) {
           cause: error,
         }),
       }),
-  }).pipe(Effect.flatMap((request) => ImageClient.generate(request as unknown as ImageRequestFor<ImageOptions>)))
+  })
+
+export function generate<const Model extends ImageModel>(
+  input: ImageRequestInput<Model>,
+): Effect.Effect<ImageResponse, AIError, Service>
+export function generate(input: ImageRequest): Effect.Effect<ImageResponse, AIError, Service>
+export function generate(input: ImageRequest | ImageRequestInput) {
+  return requestEffect(input).pipe(Effect.flatMap((request) => ImageClient.generate(request)))
+}
+
+export function stream<const Model extends ImageModel>(
+  input: ImageRequestInput<Model>,
+): Stream.Stream<ImageEvent, AIError, Service>
+export function stream(input: ImageRequest): Stream.Stream<ImageEvent, AIError, Service>
+export function stream(input: ImageRequest | ImageRequestInput) {
+  return Stream.unwrap(requestEffect(input).pipe(Effect.map((request) => ImageClient.stream(request))))
 }
 
 export const Image = {
   request,
   generate,
+  stream,
 } as const

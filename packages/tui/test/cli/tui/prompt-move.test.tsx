@@ -92,6 +92,7 @@ test.each([false, true])("selecting a workspace opens Home without moving a sess
   try {
     await fixture.move.open()
     await fixture.app.waitForFrame((frame) => frame.includes("Worktrees") && frame.includes(linked))
+    await fixture.app.waitFor(() => fixture.app.renderer.currentFocusedEditor instanceof InputRenderable)
     await fixture.app.mockInput.typeText("linked")
     await fixture.app.waitForFrame((frame) => frame.includes(linked) && !frame.includes(clone))
     fixture.app.mockInput.pressEnter()
@@ -113,6 +114,7 @@ test("removal sends project ownership and the destination without a configuratio
   try {
     await fixture.move.open()
     await fixture.app.waitForFrame((frame) => frame.includes("Worktrees") && frame.includes(linked))
+    await fixture.app.waitFor(() => fixture.app.renderer.currentFocusedEditor instanceof InputRenderable)
     await fixture.app.mockInput.typeText("linked")
     await fixture.app.waitForFrame((frame) => frame.includes(linked) && !frame.includes(clone))
     fixture.app.mockInput.pressKey("d", { ctrl: true })
@@ -153,6 +155,7 @@ test.each([false, true])("Ctrl+M moves only an existing session (home=%s)", asyn
     const frame = await fixture.app.waitForFrame((frame) => frame.includes("Worktrees") && frame.includes(linked))
     expect(frame).toContain("new ctrl+a")
     expect(frame.includes("move ctrl+m")).toBe(!home)
+    await fixture.app.waitFor(() => fixture.app.renderer.currentFocusedEditor instanceof InputRenderable)
     await fixture.app.mockInput.typeText("linked")
     await fixture.app.waitForFrame((frame) => frame.includes(linked) && !frame.includes(clone))
     fixture.app.mockInput.pressKey("m", { ctrl: true })

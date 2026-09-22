@@ -885,7 +885,7 @@ describe("HttpApiCodegen.generate", () => {
     await using emitted = await emittedModule(output)
     let request: Request | undefined
     const client = emitted.module.OpenCode.make({
-      baseUrl: "https://example.com",
+      baseUrl: "https://example.com/base?tenant=one#fragment",
       fetch: async (input: RequestInfo | URL) => {
         request = input instanceof Request ? input : new Request(input)
         return Response.json({ data: "hello" })
@@ -894,7 +894,7 @@ describe("HttpApiCodegen.generate", () => {
 
     expect(await client.session.get({ sessionID: "a/b" })).toBe("hello")
     expect(request?.method).toBe("GET")
-    expect(request?.url).toBe("https://example.com/session/a%2Fb")
+    expect(request?.url).toBe("https://example.com/base/session/a%2Fb")
   })
 
   test("maps an emitted no-content response to undefined", async () => {

@@ -34,6 +34,13 @@ export function pairingUrl(value: { username: "opencode"; password: string }, ho
   return `${new URL("/connect", host)}#${base64Encode(JSON.stringify(value))}`
 }
 
+// Scanned codes are either the raw pairing JSON or a full /connect URL from `opencode pair` or desktop.
+export function decodePairingScan(value: string) {
+  const url = URL.parse(value.trim())
+  if (!url || (url.protocol !== "http:" && url.protocol !== "https:")) return decodePairingCode(value)
+  return decodePairingUrl(url.search, url.origin) ?? decodePairingUrl(url.hash, url.origin)
+}
+
 export function decodePairingUrl(value: string, origin?: string) {
   if (value.startsWith("?")) {
     const data = new URLSearchParams(value).get("data")

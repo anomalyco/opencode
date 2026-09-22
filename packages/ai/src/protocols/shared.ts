@@ -1,14 +1,13 @@
-import { Buffer } from "node:buffer"
 import { Tool } from "@opencode/schema/tool"
 import { Effect, Option, Schema, Stream } from "effect"
 import * as Sse from "effect/unstable/encoding/Sse"
-import { Headers, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { Headers, HttpClientRequest } from "effect/unstable/http"
+import { Media } from "../media.js"
 import {
   InvalidProviderOutputError,
   InvalidRequestError,
   UnsupportedOperationError,
   AIError,
-  HttpContext,
   LLMRequest,
   Message,
   ToolDefinition,
@@ -179,24 +178,33 @@ export const wrappedSystemUpdate = Effect.fn("ProviderShared.wrappedSystemUpdate
 export const parseToolInput = (route: string, name: string, raw: string) =>
   parseJson(route, raw || "{}", `Invalid JSON input for ${route} tool call ${name}`)
 
-export interface NormalizedMedia {
-  readonly mime: string
-  readonly base64: string
-  readonly dataUrl: string
+/** Inline view or a typed `InvalidRequest` for routes that cannot fetch URLs or dereference provider refs. */
+export const requireInlineMedia = (route: string, asset: Media.Asset): Effect.Effect<Media.Inline, AIError> => {
+  const inline = asset.inline()
+  return inline ? Effect.succeed(inline) : Effect.fail(inlineRequired(route, asset))
 }
 
-export const normalizeMedia = (part: MediaPart): NormalizedMedia => {
-  const mime = part.mediaType.toLowerCase()
-  if (typeof part.data !== "string") {
-    const base64 = Buffer.from(part.data).toString("base64")
-    return { mime, base64, dataUrl: `data:${mime};base64,${base64}` }
-  }
-  if (!part.data.startsWith("data:")) return { mime, base64: part.data, dataUrl: `data:${mime};base64,${part.data}` }
-  return { mime, base64: part.data.slice(part.data.indexOf(",") + 1), dataUrl: part.data }
-}
+export const inlineRequired = (route: string, asset: Media.Asset) =>
+  invalidRequest(
+    `${route} requires inline media (bytes or base64); ${asset.source.type} sources must be materialized first`,
+  )
 
-export const normalizeToolFile = (part: Tool.FileContent) =>
-  normalizeMedia({ type: "media", mediaType: part.mime, data: part.uri, filename: part.name })
+/** The remote URL of a `url` asset, for protocols that accept `http(s)` references natively. */
+export const mediaUrl = (asset: Media.Asset) => (asset.source.type === "url" ? asset.source.url : undefined)
+
+/**
+ * Lift a tool-result file into a `MediaPart`. Tool files carry either a data URL, an `http(s)` URL, or raw base64 in
+ * `uri`; the declared `mime` wins over any data-URL prefix so tool authors control the type the model sees.
+ */
+export const toolFileMedia = (item: Tool.FileContent): MediaPart => {
+  const parsed = Media.parseDataUrl(item.uri)
+  const asset = parsed
+    ? Media.from({ ...parsed.source, mediaType: item.mime })
+    : /^https?:\/\//.test(item.uri)
+      ? Media.url(item.uri, { mediaType: item.mime })
+      : Media.base64(item.uri, item.mime)
+  return Message.media(asset, { filename: item.name })
+}
 
 export const trimBaseUrl = (value: string) => value.replace(/\/+$/, "")
 
@@ -324,34 +332,6 @@ export const flattenToolRequest = (request: LLMRequest) => {
       : LLMRequest.update(request, { messages }),
   }
 }
-
-export const imageResponse = Effect.fn("ProviderShared.imageResponse")(function* (
-  route: string,
-  name: string,
-  response: HttpClientResponse.HttpClientResponse,
-) {
-  const http = new HttpContext({ url: response.request.url, status: response.status, headers: response.headers })
-  const body = yield* response.text.pipe(
-    Effect.mapError(
-      (cause) =>
-        new AIError({
-          reason: new InvalidProviderOutputError({
-            route,
-            message: `Failed to read the ${name} response`,
-            http,
-            cause,
-          }),
-        }),
-    ),
-  )
-  return {
-    body,
-    invalid: (message: string, cause?: unknown) =>
-      new AIError({
-        reason: new InvalidProviderOutputError({ route, message, body, http, cause }),
-      }),
-  }
-})
 
 export const matchToolChoice = <Auto, None, Required, Tool>(
   route: string,
