@@ -3,7 +3,6 @@ import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Button } from "@opencode/ui/button"
 import { FileIcon } from "@opencode/ui/file-icon"
-import { SegmentedControl, SegmentedControlItem } from "@opencode/ui/segmented-control"
 import { ScrollView } from "@opencode/ui/scroll-view"
 import { Markdown } from "@opencode/session-ui/markdown"
 import { MarkdownProvider, useMarkdown } from "@opencode/session-ui/context/markdown"
@@ -102,15 +101,14 @@ export function ArtifactView(props: { path: string; content: FileContent; cacheK
         }
       >
         <Show when={previewable()}>
-          <SegmentedControl
-            value={state.mode}
-            onChange={(value) => {
-              if (value === "preview" || value === "source") setState("mode", value)
-            }}
+          <Button
+            size="small"
+            variant="neutral"
+            class="min-w-[112px]"
+            onClick={() => setState("mode", state.mode === "preview" ? "source" : "preview")}
           >
-            <SegmentedControlItem value="preview">{language.t("file.view.preview")}</SegmentedControlItem>
-            <SegmentedControlItem value="source">{language.t("file.view.source")}</SegmentedControlItem>
-          </SegmentedControl>
+            {language.t(state.mode === "preview" ? "file.view.showSource" : "file.view.showRendered")}
+          </Button>
         </Show>
       </FileToolbar>
       <Show when={!previewable() || state.mode === "preview"} fallback={props.source}>

@@ -627,6 +627,8 @@ export const dict = {
   "toast.file.listFailed.title": "Failed to list files",
   "file.view.preview": "Preview",
   "file.view.source": "Source",
+  "file.view.showSource": "View Source",
+  "file.view.showRendered": "View Rendered",
   "file.view.openInBrowser": "Open in browser",
   "file.view.binary": "Binary file · {{size}}",
   "file.view.table.rows.one": "{{count}} row",
@@ -808,7 +810,6 @@ export const dict = {
   "session.review.noChanges": "No changes",
   "session.review.noUncommittedChanges": "No uncommitted changes yet",
   "session.review.noBranchChanges": "No branch changes yet",
-
   "session.files.selectToOpen": "Select a file to open",
   "session.files.all": "All files",
   "session.files.empty": "No files",
