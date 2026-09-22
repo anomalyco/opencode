@@ -13,6 +13,7 @@ import {
   OpenAICompatible,
   OpenRouter,
   TypeSafeAI,
+  VercelAIGateway,
   XAI,
 } from "@opencode/ai/providers"
 import {
@@ -72,8 +73,10 @@ describe("public exports", () => {
     expect(CloudflareWorkersAI.configure).toBeFunction()
     expect(CloudflareWorkersAI.configure({ accountId: "fixture", apiKey: "fixture" }).model).toBeFunction()
     expect(OpenRouter.model).toBeFunction()
+    expect(OpenRouter.experimental.evaluation).toBeFunction()
     expect(TypeSafeAI.experimental.evaluation).toBeFunction()
     expect(OpenCodeZen.experimental.evaluation).toBeFunction()
+    expect(VercelAIGateway.experimental.evaluation).toBeFunction()
     expect(XAI.model).toBeFunction()
     expect(XAI.provider.responses).toBe(XAI.responses)
     expect(XAI.provider.chat).toBe(XAI.chat)

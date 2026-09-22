@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import { Evaluation, EvaluationClient } from "../src/experimental.js"
-import { OpenCodeZen, TypeSafeAI } from "../src/providers.js"
+import { OpenCodeZen, OpenRouter, TypeSafeAI, VercelAIGateway } from "../src/providers.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse } from "./lib/http.js"
 
@@ -148,6 +148,135 @@ describe("experimental Evaluation", () => {
                 ),
               )
             }),
+          ),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("evaluates through OpenRouter System One", () =>
+    Evaluation.run({
+      model: OpenRouter.configure({
+        apiKey: "openrouter-key",
+        baseURL: "https://openrouter.test/api/v1",
+      }).experimental.evaluation("typesafe/jev-1.13"),
+      state: "refund",
+      questions: { refund: { type: "boolean", instructions: "Is a refund requested?" } },
+      options: { user: "user-1", session_id: "session-1" },
+    }).pipe(
+      Effect.tap((response) =>
+        Effect.sync(() => {
+          expect(response.answers.refund.probability).toBe(0.98)
+          expect(response.providerMetadata?.openrouter).toMatchObject({ responseId: "gen-1", provider: "TypeSafe" })
+          expect(response.usage?.providerMetadata?.openrouter).toEqual({
+            input_tokens: 10,
+            output_tokens: 2,
+            cost: 0.0001,
+          })
+        }),
+      ),
+      Effect.provide(
+        EvaluationClient.layer.pipe(
+          Layer.provide(
+            dynamicResponse((input) => {
+              expect(input.request.url).toBe("https://openrouter.test/api/v1/systemone")
+              expect(input.request.headers.authorization).toBe("Bearer openrouter-key")
+              expect(JSON.parse(input.text)).toMatchObject({
+                model: "typesafe/jev-1.13",
+                user: "user-1",
+                session_id: "session-1",
+                questions: { refund: { type: "noul" } },
+              })
+              return Effect.succeed(
+                input.respond(
+                  JSON.stringify({
+                    id: "gen-1",
+                    model: "typesafe/jev-1.13-20260917",
+                    provider: "TypeSafe",
+                    answers: { refund: { type: "noul", noul: 0.98 } },
+                    usage: { input_tokens: 10, output_tokens: 2, cost: 0.0001 },
+                  }),
+                  { headers: { "content-type": "application/json" } },
+                ),
+              )
+            }),
+          ),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("evaluates through Vercel AI Gateway", () =>
+    Evaluation.run({
+      model: VercelAIGateway.configure({
+        apiKey: "gateway-key",
+        baseURL: "https://gateway.test/v1/",
+      }).experimental.evaluation("typesafe-ai/jev"),
+      state: "refund",
+      questions: { refund: { type: "boolean", instructions: "Is a refund requested?" } },
+      options: { gateway: { zeroDataRetention: true, only: ["typesafe-ai"] } },
+    }).pipe(
+      Effect.tap((response) =>
+        Effect.sync(() => {
+          expect(response.answers.refund.probability).toBe(0.98)
+          expect(response.usage?.totalTokens).toBe(12)
+          expect(response.providerMetadata?.gateway).toMatchObject({ generationId: "gen-1", cost: "0.0001" })
+        }),
+      ),
+      Effect.provide(
+        EvaluationClient.layer.pipe(
+          Layer.provide(
+            dynamicResponse((input) => {
+              expect(input.request.url).toBe("https://gateway.test/v1/evaluate")
+              expect(input.request.headers.authorization).toBe("Bearer gateway-key")
+              expect(JSON.parse(input.text)).toEqual({
+                model: "typesafe-ai/jev",
+                state: "refund",
+                questions: { refund: { type: "boolean", instructions: "Is a refund requested?" } },
+                providerOptions: { gateway: { zeroDataRetention: true, only: ["typesafe-ai"] } },
+              })
+              return Effect.succeed(
+                input.respond(
+                  JSON.stringify({
+                    model: "typesafe-ai/jev",
+                    answers: { refund: { type: "boolean", probability: 0.98 } },
+                    usage: { inputTokens: 10, outputTokens: 2 },
+                    providerMetadata: { gateway: { generationId: "gen-1", cost: "0.0001" } },
+                  }),
+                  { headers: { "content-type": "application/json" } },
+                ),
+              )
+            }),
+          ),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("rejects answers that do not match their questions", () =>
+    Evaluation.run({
+      model: VercelAIGateway.configure({
+        apiKey: "gateway-key",
+        baseURL: "https://gateway.test/v1",
+      }).experimental.evaluation("typesafe-ai/jev"),
+      state: "refund",
+      questions: { refund: { type: "boolean", instructions: "Is a refund requested?" } },
+    }).pipe(
+      Effect.flip,
+      Effect.tap((error) => Effect.sync(() => expect(error.reason._tag).toBe("InvalidProviderOutput"))),
+      Effect.provide(
+        EvaluationClient.layer.pipe(
+          Layer.provide(
+            dynamicResponse((input) =>
+              Effect.succeed(
+                input.respond(
+                  JSON.stringify({
+                    answers: { refund: { type: "choice", choice: "yes", probabilities: { yes: 1 } } },
+                  }),
+                  { headers: { "content-type": "application/json" } },
+                ),
+              ),
+            ),
           ),
         ),
       ),

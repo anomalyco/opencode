@@ -66,7 +66,17 @@ console.log(response.answers.refund.probability)
 ```
 
 `TypeSafeAI` reads `TYPESAFE_API_KEY`. `OpenCodeZen` exposes the same selector and reads
-`OPENCODE_API_KEY`. The common API uses `boolean`; System One routes lower it to native `noul`.
+`OPENCODE_API_KEY`. OpenRouter and Vercel AI Gateway use the same provider shape:
+
+```ts
+import { OpenRouter, VercelAIGateway } from "@opencode/ai/providers"
+
+OpenRouter.configure().experimental.evaluation("typesafe/jev-1.13")
+VercelAIGateway.configure().experimental.evaluation("typesafe-ai/jev")
+```
+
+OpenRouter reads `OPENROUTER_API_KEY`. Vercel reads `AI_GATEWAY_API_KEY`, then `VERCEL_OIDC_TOKEN`.
+The common API uses `boolean`; System One routes lower it to native `noul`.
 Choice and score confidence plus score legends remain available in provider metadata, and the
 provider's rounded probabilities are returned unchanged.
 

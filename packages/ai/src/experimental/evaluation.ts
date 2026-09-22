@@ -105,10 +105,10 @@ export type EvaluationOptions = Record<string, unknown>
 
 export interface EvaluationRoute<Options extends EvaluationOptions = EvaluationOptions> {
   readonly id: string
-  readonly evaluate: <const Questions extends EvaluationQuestions>(
-    request: EvaluationRequestFor<Options, Questions>,
+  readonly evaluate: (
+    request: EvaluationRequestFor<Options>,
     execute: Execute,
-  ) => Effect.Effect<EvaluationResponseFor<Questions>, AIError>
+  ) => Effect.Effect<EvaluationResponse, AIError>
 }
 
 export class EvaluationModel<Options extends EvaluationOptions = EvaluationOptions> {
