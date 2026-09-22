@@ -123,8 +123,25 @@ const parseProgram = (code: string): ProgramNode => {
   const diagnostic = transpiled.diagnostics?.find((item) => item.category === DiagnosticCategory.Error)
 
   if (diagnostic) {
+    const messageText = flattenDiagnosticMessageText(diagnostic.messageText, "\n")
+    let location = ""
+    let sourceLine: string | undefined
+    if (diagnostic.file && diagnostic.start !== undefined) {
+      const position = diagnostic.file.getLineAndCharacterOfPosition(diagnostic.start)
+      const sourceLines = diagnostic.file.text.split("\n")
+      // User code is embedded one line below the generated async wrapper.
+      const line = position.line > 0 ? position.line - 1 : position.line
+      location = ` (line ${line + 1}, column ${position.character + 1})`
+      sourceLine = sourceLines[position.line]?.trim()
+    }
     throw new InterpreterRuntimeError(
-      `Failed to parse TypeScript: ${flattenDiagnosticMessageText(diagnostic.messageText, "\n")}`,
+      [
+        `Failed to parse code: ${messageText}${location}`,
+        sourceLine ? `Offending line: ${sourceLine}` : undefined,
+        "Code Mode accepts JavaScript statements and expressions only; import/export and TypeScript-only syntax are unavailable.",
+      ]
+        .filter(Boolean)
+        .join("\n"),
       undefined,
       "ParseError",
     )
@@ -133,13 +150,33 @@ const parseProgram = (code: string): ProgramNode => {
   const bodyStart = transpiled.outputText.indexOf("{") + 1
   const bodyEnd = transpiled.outputText.lastIndexOf("}")
   const executableCode = transpiled.outputText.slice(bodyStart, bodyEnd)
-  const parsed = parse(executableCode, {
-    ecmaVersion: "latest",
-    sourceType: "script",
-    allowReturnOutsideFunction: true,
-    allowAwaitOutsideFunction: true,
-    locations: true,
-  }) as unknown
+  let parsed: unknown
+  try {
+    parsed = parse(executableCode, {
+      ecmaVersion: "latest",
+      sourceType: "script",
+      allowReturnOutsideFunction: true,
+      allowAwaitOutsideFunction: true,
+      locations: true,
+    })
+  } catch (error) {
+    if (error instanceof SyntaxError && error.loc) {
+      const sourceLine = executableCode.split("\n")[error.loc.line - 1]?.trim()
+      const location = `line ${error.loc.line}, column ${error.loc.column + 1}`
+      throw new InterpreterRuntimeError(
+        [
+          `Failed to parse code: ${error.message} (${location})`,
+          sourceLine ? `Offending line: ${sourceLine}` : undefined,
+          "Code Mode accepts JavaScript statements and expressions only; import/export and TypeScript-only syntax are unavailable.",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        undefined,
+        "ParseError",
+      )
+    }
+    throw error
+  }
 
   if (!isRecord(parsed) || parsed.type !== "Program" || !Array.isArray(parsed.body)) {
     throw new InterpreterRuntimeError("Failed to parse script as a Program node.")
