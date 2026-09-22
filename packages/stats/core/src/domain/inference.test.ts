@@ -221,7 +221,7 @@ describe("inference stat normalization", () => {
     expect(queries[0]).toContain("OR lower(raw_model) IN ('gpt-5-nano', 'grok-code', 'big-pickle')")
     expect(queries[0]).toContain("OR lower(raw_model) LIKE '%-free'")
     expect(queries[0]).toContain("THEN 'Free'")
-    expect(queries[0]).toContain("LIMIT 10000")
+    expect(queries[0]).not.toContain("LIMIT")
     expect(queries[0]).toContain("approx_distinct(session) AS sessions")
     expect(queries[1]).toContain("'geo_model' ELSE 'geo'")
     expect(queries[1]).toContain("0 AS sessions")
