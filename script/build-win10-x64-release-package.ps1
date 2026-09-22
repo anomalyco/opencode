@@ -266,12 +266,12 @@ if (Test-Path $ArtifactDirAttached) {
     Write-Info "Copied attached files"
 }
 
-$OtelPluginPath = Join-Path $OutputDir "config\plugins\opencode-plugin-otel.js"
-if (-not (Test-Path $OtelPluginPath)) {
-    Write-Fail "OpenTelemetry plugin not found: $OtelPluginPath"
+$ObserverPluginPath = Join-Path $OutputDir "config\plugins\opencode-observer.js"
+if (-not (Test-Path $ObserverPluginPath)) {
+    Write-Fail "Observer plugin not found: $ObserverPluginPath"
     exit 1
 }
-Write-FileEntry "config/plugins/opencode-plugin-otel.js" (Get-Item $OtelPluginPath).Length
+Write-FileEntry "config/plugins/opencode-observer.js" (Get-Item $ObserverPluginPath).Length
 
 $DiffDetailPluginPath = Join-Path $OutputDir "config\plugins\opencode-diff-detail.js"
 if (-not (Test-Path $DiffDetailPluginPath)) {
