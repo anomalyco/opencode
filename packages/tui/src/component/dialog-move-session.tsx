@@ -25,6 +25,7 @@ type ProjectDirectory = ProjectDirectories[number]
 const RECENT_DIRECTORY_LIMIT = 5
 
 type RecentDirectorySession = {
+  parentID?: string
   projectID: string
   directory: string
   time: {
@@ -44,7 +45,7 @@ export function deriveRecentDirectories(
   const skip = new Set(excluded)
   const seen = new Set<string>()
   return sessions
-    .filter((session) => session.projectID === projectID && session.time.archived === undefined)
+    .filter((session) => !session.parentID && session.projectID === projectID && session.time.archived === undefined)
     .toSorted((a, b) => b.time.updated - a.time.updated)
     .flatMap((session) => {
       const directory = session.directory
@@ -53,6 +54,19 @@ export function deriveRecentDirectories(
       return [directory]
     })
     .slice(0, limit)
+}
+
+export function moveDirectoryCategory(
+  location: string,
+  root: string,
+  currentDirectory: string | undefined,
+  currentRoot: string | undefined,
+  recent: boolean,
+): "Current" | "Recent" | "Other" {
+  if (location === currentDirectory) return "Current"
+  if (recent) return "Recent"
+  if (root === currentRoot) return "Current"
+  return "Other"
 }
 
 type DialogMoveSessionProps = {
@@ -188,12 +202,14 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
       list.map((item) => item.location),
     )
     const recentOrder = new Map(recent.map((directory, index) => [directory, index]))
-    const category = (item: (typeof list)[number]) => {
-      if (item.location === currentDirectory()) return "Current"
-      if (recentOrder.has(item.location)) return "Recent"
-      if (item.root.directory === current) return "Current"
-      return "Other"
-    }
+    const category = (item: (typeof list)[number]) =>
+      moveDirectoryCategory(
+        item.location,
+        item.root.directory,
+        currentDirectory(),
+        current,
+        recentOrder.has(item.location),
+      )
     const ordered = list.toSorted((a, b) => {
       const rank = { Current: 0, Recent: 1, Other: 2 }
       const aCategory = category(a)

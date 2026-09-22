@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { deriveRecentDirectories } from "../../src/component/dialog-move-session"
+import { deriveRecentDirectories, moveDirectoryCategory } from "../../src/component/dialog-move-session"
 
 describe("move recent directories", () => {
   test("sorts by recency and deduplicates directories", () => {
@@ -48,5 +48,35 @@ describe("move recent directories", () => {
     const candidates = sessions.map((session) => session.directory)
 
     expect(deriveRecentDirectories(sessions, "project-a", [], candidates)).toEqual(candidates.slice(0, 5))
+  })
+
+  test("ignores child sessions when ranking recent directories", () => {
+    const sessions = [
+      { projectID: "project-a", directory: "C:/repo/backend", time: { updated: 100 } },
+      {
+        parentID: "session-root",
+        projectID: "project-a",
+        directory: "C:/repo/docs",
+        time: { updated: 999 },
+      },
+      { projectID: "project-a", directory: "C:/repo/agent-runtime", time: { updated: 200 } },
+    ]
+
+    expect(
+      deriveRecentDirectories(sessions, "project-a", [], [
+        "C:/repo/backend",
+        "C:/repo/docs",
+        "C:/repo/agent-runtime",
+      ]),
+    ).toEqual(["C:/repo/agent-runtime", "C:/repo/backend"])
+  })
+})
+
+describe("move directory category", () => {
+  test("keeps Current and Recent precedence stable", () => {
+    expect(moveDirectoryCategory("C:/repo", "C:/repo", "C:/repo", "C:/repo", true)).toBe("Current")
+    expect(moveDirectoryCategory("C:/repo/backend", "C:/repo", "C:/repo", "C:/repo", true)).toBe("Recent")
+    expect(moveDirectoryCategory("C:/repo/docs", "C:/repo", "C:/repo", "C:/repo", false)).toBe("Current")
+    expect(moveDirectoryCategory("C:/other", "C:/other", "C:/repo", "C:/repo", false)).toBe("Other")
   })
 })
