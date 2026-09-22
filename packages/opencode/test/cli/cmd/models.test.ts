@@ -61,6 +61,22 @@ describe("cli.models", () => {
     expect(lines[3]).toBe("─".repeat(header.length))
   })
 
+  test("extends the rules to rows whose last column is wider than its header", () => {
+    const table = formatProviderTable("acme", "Acme", [
+      [
+        "capable",
+        model({ capabilities: { ...model().capabilities, reasoning: true, attachment: true, toolcall: true } }),
+      ],
+    ])
+    const lines = table.split(EOL)
+    const widest = Math.max(...lines.slice(2).map((line) => line.length))
+
+    // "reasoning, tools, attachments" is longer than "Capabilities".
+    expect(widest).toBeGreaterThan(lines[2].length)
+    expect(lines[1]).toBe("─".repeat(widest))
+    expect(lines[3]).toBe("─".repeat(widest))
+  })
+
   test("prefixes model ids with the provider id", () => {
     const table = formatProviderTable("acme", "Acme", [["gpt-9", model()]])
     expect(table).toContain("acme/gpt-9")

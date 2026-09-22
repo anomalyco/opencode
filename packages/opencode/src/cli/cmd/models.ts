@@ -98,8 +98,10 @@ export function formatProviderTable(
       .join("  ")
 
   const header = row(HEADERS)
-  const rule = "─".repeat(Bun.stringWidth(header))
-  return [singleLine(providerName), rule, header, rule, ...cells.map(row)].join(EOL)
+  const lines = cells.map(row)
+  // The rules span the widest line, which can be a row whose last column outgrows its header.
+  const rule = "─".repeat(Math.max(...[header, ...lines].map((line) => Bun.stringWidth(line))))
+  return [singleLine(providerName), rule, header, rule, ...lines].join(EOL)
 }
 
 // Catalogue names can carry tabs or newlines (some models.dev names end in a tab),
