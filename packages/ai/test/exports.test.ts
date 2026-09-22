@@ -8,9 +8,11 @@ import {
   CloudflareWorkersAI,
   DeepSeek,
   Fireworks,
+  OpenCodeZen,
   OpenAI,
   OpenAICompatible,
   OpenRouter,
+  TypeSafeAI,
   XAI,
 } from "@opencode/ai/providers"
 import {
@@ -23,6 +25,7 @@ import {
 } from "@opencode/ai/protocols"
 import * as AnthropicMessages from "@opencode/ai/protocols/anthropic-messages"
 import { TestLLM } from "@opencode/ai/testing"
+import { Evaluation, EvaluationClient } from "@opencode/ai/experimental"
 
 describe("public exports", () => {
   test("root exposes app-facing runtime APIs", () => {
@@ -37,6 +40,9 @@ describe("public exports", () => {
     expect(TestLLM.layer).toBeFunction()
     expect(TestLLM.testLayer).toBeFunction()
     expect(TestLLM.Test.of).toBeFunction()
+    expect(Evaluation.evaluate).toBeFunction()
+    expect(EvaluationClient.layer).toBeDefined()
+    expect(EvaluationClient.fetchLayer).toBeDefined()
   })
 
   test("route barrel exposes route-authoring APIs", () => {
@@ -66,6 +72,8 @@ describe("public exports", () => {
     expect(CloudflareWorkersAI.configure).toBeFunction()
     expect(CloudflareWorkersAI.configure({ accountId: "fixture", apiKey: "fixture" }).model).toBeFunction()
     expect(OpenRouter.model).toBeFunction()
+    expect(TypeSafeAI.experimental.evaluation).toBeFunction()
+    expect(OpenCodeZen.experimental.evaluation).toBeFunction()
     expect(XAI.model).toBeFunction()
     expect(XAI.provider.responses).toBe(XAI.responses)
     expect(XAI.provider.chat).toBe(XAI.chat)
