@@ -52,5 +52,15 @@ export const VcsHandler = HttpApiBuilder.group(Api, "server.vcs", (handlers) =>
           }),
         ),
       )
+      .handle("vcs.graph", (ctx) =>
+        response(
+          Effect.gen(function* () {
+            const vcs = yield* Vcs.Service
+            return yield* vcs
+              .graph({ skip: ctx.query.skip, limit: Math.min(ctx.query.limit ?? 50, 100) })
+              .pipe(Effect.mapError((error) => new ServiceUnavailableError({ service: "vcs", message: error.message })))
+          }),
+        ),
+      )
   }),
 )

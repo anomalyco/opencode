@@ -55,6 +55,7 @@ export const StreamingReasoningAndText = {
 }
 
 function AgentReasoningStory(props: { mode: ReasoningMode; reasoning: string; tool: boolean; text: string }) {
+  const completed = Boolean(props.tool || props.text)
   const content = [
     ...(props.reasoning === "none"
       ? []
@@ -65,7 +66,10 @@ function AgentReasoningStory(props: { mode: ReasoningMode; reasoning: string; to
               props.reasoning === "blank"
                 ? "   "
                 : "## Inspecting stability\n\nI will inspect the timeline before changing its state.",
-            time: { created: STORY_TIME + 100, ...(props.tool || props.text ? { completed: STORY_TIME + 7100 } : {}) },
+            time: {
+              created: completed ? STORY_TIME + 100 : Date.now() - 2_400,
+              ...(completed ? { completed: STORY_TIME + 7100 } : {}),
+            },
           },
         ]),
     ...(props.tool

@@ -75,6 +75,7 @@ export function SessionMobileViewTabs(props: {
       >
         <Menu.Trigger
           as={IconButton}
+          data-action="session-mobile-summary-trigger"
           ref={(element: HTMLButtonElement) => {
             trigger = element
           }}

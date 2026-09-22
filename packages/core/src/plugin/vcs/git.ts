@@ -4,11 +4,11 @@ import { define } from "@opencode/plugin/effect/plugin"
 import { Effect } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { FileDiff } from "@opencode/schema/file-diff"
-import { Base, BranchList, FileStatus, Info, Mode } from "@opencode/schema/vcs"
+import { Base, BranchList, FileStatus, GraphCommit, GraphPage, GraphRef, Info, Mode } from "@opencode/schema/vcs"
 import { AppProcess } from "@opencode/util/process"
 import { Location } from "../../location.js"
-import type { Adapter, BranchOptions, DiffOptions } from "../../vcs.js"
-import { DiffError } from "../../vcs.js"
+import type { Adapter, BranchOptions, DiffOptions, GraphOptions } from "../../vcs.js"
+import { DiffError, GraphError } from "../../vcs.js"
 import { gitExecutable } from "../../util/git-executable.js"
 import {
   chunksByFile,
@@ -40,6 +40,7 @@ export const Plugin = define({
         branches: (input) => adapter.branches({ search: input.search, limit: input.limit }),
         status: () => adapter.status(),
         diff: (input) => adapter.diff(input.mode, { context: input.context, base: input.base }),
+        graph: (input) => adapter.graph({ skip: input.skip, limit: input.limit }),
       })
     })
   }),
@@ -65,6 +66,9 @@ function make(proc: AppProcess.Interface, input: { directory: string; worktree: 
     base: () => ctx.git.base(ctx.directory),
     branches: Effect.fn("VcsGit.branches")(function* (options?: BranchOptions) {
       return yield* ctx.git.branches(ctx.directory, options)
+    }),
+    graph: Effect.fn("VcsGit.graph")(function* (options?: GraphOptions) {
+      return yield* ctx.git.graph(ctx.worktree, options?.skip ?? 0, options?.limit ?? 50)
     }),
     status: Effect.fn("VcsGit.status")(function* () {
       const git = ctx.git
@@ -164,6 +168,57 @@ const kind = (code: string): Kind => {
 }
 
 const nuls = (text: string) => text.split("\0").filter(Boolean)
+
+// Only these namespaces may contribute graph roots or badges; internal refs such
+// as refs/opencode or refs/stash stay out of the visible history.
+const visibleRefs = ["refs/heads", "refs/tags", "refs/remotes"]
+const MAX_GRAPH_BYTES = 4_000_000
+
+const refNames = (value: string): GraphRef[] => {
+  // A checked-out branch prints as "HEAD -> refs/heads/main": the commit is both
+  // the HEAD target and that branch, so it carries both badges.
+  if (value.startsWith("HEAD -> ")) {
+    const name = value.slice(8).replace(/^refs\/heads\//, "")
+    return [
+      { name: "HEAD", kind: "head" },
+      { name, kind: "branch" },
+    ]
+  }
+  if (value === "HEAD") return [{ name: "HEAD", kind: "head" }]
+  if (value.startsWith("tag: ")) return [{ name: value.slice(5).replace(/^refs\/tags\//, ""), kind: "tag" }]
+  const remote = /^refs\/remotes\/(.+?)(\/HEAD)?$/.exec(value)
+  if (remote) return remote[2] ? [] : [{ name: remote[1], kind: "remote" }]
+  if (value.startsWith("refs/heads/")) return [{ name: value.slice(11), kind: "branch" }]
+  return []
+}
+
+// %D decorates commits with comma-separated ref names; the name alone cannot
+// distinguish a local branch from a remote one, so the full ref path decides.
+const commitRefs = (decorations: string) => decorations.split(",").flatMap((entry) => refNames(entry.trim()))
+
+const parseGraph = (text: string, limit: number) => {
+  const commits = text
+    .split("\x1e")
+    .map((record) => record.replace(/^\r?\n/, ""))
+    .filter(Boolean)
+    .flatMap((record) => {
+      const [hash, parents, authorName, authoredAt, subject, decorations] = record.split("\0")
+      if (!hash) return []
+      const authoredAtMs = Number.parseInt(authoredAt ?? "", 10)
+      return [
+        {
+          hash,
+          parents: (parents ?? "").split(" ").filter(Boolean),
+          refs: commitRefs(decorations ?? ""),
+          subject: subject ?? "",
+          authorName: authorName || null,
+          // %at is a Unix timestamp in seconds; the contract carries milliseconds.
+          authoredAtMs: Number.isFinite(authoredAtMs) ? authoredAtMs * 1000 : null,
+        } satisfies GraphCommit,
+      ]
+    })
+  return { commits: commits.slice(0, limit), hasMore: commits.length > limit } satisfies GraphPage
+}
 
 function makeGit(proc: AppProcess.Interface) {
   const run = Effect.fnUntraced(
@@ -314,6 +369,36 @@ function makeGit(proc: AppProcess.Interface) {
     return result.exitCode === 0
   })
 
+  const graph = Effect.fn("VcsGit.graph")(function* (cwd: string, skip: number, limit: number) {
+    // An unborn HEAD makes `git log HEAD` fail, but the repository may still hold
+    // visible refs worth showing. Probe first and only fall back to HEAD-relative
+    // history when a HEAD commit exists.
+    const start = (yield* hasHead(cwd)) ? ["HEAD"] : []
+    const visible = yield* lines(["for-each-ref", "--count=1", "--format=%(refname)", ...visibleRefs], { cwd })
+    if (!start.length && !visible.length) return { commits: [], hasMore: false } satisfies GraphPage
+
+    // One extra commit decides hasMore without a second history walk.
+    const result = yield* run(
+      [
+        "log",
+        ...start,
+        "--branches",
+        "--tags",
+        "--remotes",
+        "--date-order",
+        "--topo-order",
+        "--decorate=full",
+        `--skip=${skip}`,
+        `--max-count=${limit + 1}`,
+        "--format=%H%x00%P%x00%an%x00%at%x00%s%x00%D%x1e",
+      ],
+      { cwd, maxOutputBytes: MAX_GRAPH_BYTES },
+    )
+    if (result.exitCode !== 0) return yield* new GraphError({ message: "Unable to read Git history" })
+    if (result.truncated) return yield* new GraphError({ message: "Git history exceeded the readable output budget" })
+    return parseGraph(result.text(), limit)
+  })
+
   const mergeBase = Effect.fn("VcsGit.mergeBase")(function* (cwd: string, base: string) {
     const ref = yield* resolve(cwd, base)
     if (!ref) return
@@ -457,6 +542,7 @@ function makeGit(proc: AppProcess.Interface) {
     base,
     defaultBranch,
     hasHead,
+    graph,
     mergeBase,
     status,
     diff,

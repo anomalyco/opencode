@@ -35,3 +35,25 @@ export const FileStatus = Schema.Struct({
   status: Schema.Literals(["added", "deleted", "modified"]),
 }).annotate({ identifier: "Vcs.FileStatus" })
 export interface FileStatus extends Schema.Schema.Type<typeof FileStatus> {}
+
+export const GraphRef = Schema.Struct({
+  name: Schema.String,
+  kind: Schema.Literals(["branch", "remote", "tag", "head"]),
+}).annotate({ identifier: "Vcs.GraphRef" })
+export interface GraphRef extends Schema.Schema.Type<typeof GraphRef> {}
+
+export const GraphCommit = Schema.Struct({
+  hash: Schema.String,
+  parents: Schema.Array(Schema.String),
+  refs: Schema.Array(GraphRef),
+  subject: Schema.String,
+  authorName: Schema.NullOr(Schema.String),
+  authoredAtMs: Schema.NullOr(Schema.Finite),
+}).annotate({ identifier: "Vcs.GraphCommit" })
+export interface GraphCommit extends Schema.Schema.Type<typeof GraphCommit> {}
+
+export const GraphPage = Schema.Struct({
+  commits: Schema.Array(GraphCommit),
+  hasMore: Schema.Boolean,
+}).annotate({ identifier: "Vcs.GraphPage" })
+export interface GraphPage extends Schema.Schema.Type<typeof GraphPage> {}

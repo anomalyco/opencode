@@ -5,6 +5,12 @@ import { HttpRouter, HttpServer, HttpServerResponse } from "effect/unstable/http
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { MockApi, MockBadRequest, MockNotFound } from "./mock-api"
 
+export type VcsGraphQuery = { skip?: number; limit?: number; directory?: string }
+
+export type GraphPageFixture = { commits: unknown[]; hasMore: boolean }
+
+export type GraphFixture = GraphPageFixture | null | ((query: VcsGraphQuery) => GraphPageFixture | null)
+
 export interface MockServerConfig {
   server?: string
   provider: unknown | (() => unknown)
@@ -26,6 +32,7 @@ export interface MockServerConfig {
   }
   vcsDiff?: unknown[]
   vcsBranches?: string[]
+  vcsGraph?: GraphFixture
   messageDelay?: number
   beforeMessagesResponse?: (input: { sessionID: string; before?: string }) => Promise<void>
   onMessages?: (input: { sessionID: string; before?: string; phase: "start" | "end" }) => void
@@ -331,6 +338,19 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
         vcsStatus: () => Effect.succeed({ location: location(config), data: [] }),
         vcsBranches: () => Effect.succeed({ location: location(config), data: config.vcsBranches ?? ["main"] }),
         vcsDiff: () => Effect.succeed({ location: location(config), data: config.vcsDiff ?? [] }),
+        vcsGraph: (ctx) =>
+          Effect.sync(() => {
+            const query = new URL(ctx.request.url, "http://localhost").searchParams
+            const value =
+              typeof config.vcsGraph === "function"
+                ? config.vcsGraph({
+                    skip: Number(query.get("skip") ?? 0),
+                    limit: Number(query.get("limit") ?? 50),
+                    directory: query.get("location[directory]") ?? undefined,
+                  })
+                : (config.vcsGraph ?? null)
+            return { location: location(config), data: value }
+          }),
         fsList: (ctx) =>
           Effect.promise(() => Promise.resolve(config.fileList?.(ctx.query.path ?? ""))).pipe(
             Effect.map((data) => ({ location: location(config), data })),

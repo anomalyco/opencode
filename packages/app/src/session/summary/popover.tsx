@@ -45,6 +45,7 @@ export function SummaryPopover(
       >
         <Popover.Trigger
           as={IconButton}
+          data-action="session-summary-trigger"
           icon={<Icon name="window-analytics" />}
           variant="ghost-muted"
           size="large"

@@ -42,6 +42,7 @@ export interface BasicToolProps {
   hasContent?: boolean
   status?: string
   hideDetails?: boolean
+  hideTrigger?: boolean
   defaultOpen?: boolean
   open?: boolean
   onOpenChange?: (open: boolean) => void
@@ -284,6 +285,7 @@ export function BasicTool(props: BasicToolProps) {
       data-compact={props.compact ? "true" : undefined}
       data-rail={props.rail === false ? "false" : undefined}
     >
+      <Show when={!props.hideTrigger}>
       <Show
         when={!props.locked && (props.triggerAsLink || props.triggerHref)}
         fallback={
@@ -319,6 +321,7 @@ export function BasicTool(props: BasicToolProps) {
         >
           {trigger()}
         </Collapsible.Trigger>
+      </Show>
       </Show>
       <Show when={props.animated && hasChildren() && !props.hideDetails}>
         <div

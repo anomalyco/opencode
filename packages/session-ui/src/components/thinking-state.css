@@ -1,0 +1,388 @@
+[data-component="collapsible"].thinking-state-collapsible {
+  gap: 4px;
+  width: 100%;
+}
+
+[data-component="collapsible"].thinking-state-collapsible [data-component="thinking-state-trigger"] {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+  border-radius: var(--radius-md);
+  padding: 2px 4px 2px 2px;
+  margin: -2px -4px -2px -2px;
+  transition: background-color 0.1s ease;
+}
+
+[data-component="collapsible"].thinking-state-collapsible
+  [data-slot="collapsible-trigger"]:hover
+  [data-component="thinking-state-trigger"],
+[data-component="collapsible"].thinking-state-collapsible
+  [data-slot="collapsible-trigger"]:focus-visible
+  [data-component="thinking-state-trigger"] {
+  background-color: var(--surface-raised-base-hover);
+}
+
+[data-component="collapsible"].thinking-state-collapsible [data-slot="collapsible-trigger"] {
+  width: fit-content;
+  max-width: 100%;
+  height: auto;
+  min-height: 24px;
+  color: var(--v2-text-text-muted);
+  cursor: pointer;
+}
+
+[data-component="collapsible"].thinking-state-collapsible
+  [data-slot="collapsible-trigger"][data-hide-details="true"] {
+  cursor: default;
+}
+
+[data-component="collapsible"].thinking-state-collapsible [data-slot="collapsible-arrow"] {
+  opacity: 1;
+  width: 16px;
+  height: 16px;
+}
+
+[data-component="collapsible"].thinking-state-collapsible [data-slot="collapsible-arrow-icon"] {
+  color: var(--v2-icon-icon-muted);
+}
+
+[data-slot="thinking-state-trigger-main"] {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+[data-slot="thinking-state-sparkle"] {
+  display: inline-flex;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  color: var(--v2-icon-icon-muted);
+}
+
+[data-component="collapsible"].thinking-state-collapsible[data-streaming="true"] [data-slot="thinking-state-sparkle"] {
+  color: var(--v2-icon-icon-base);
+}
+
+[data-component="collapsible"].thinking-state-collapsible [data-slot="basic-tool-tool-info-structured"] {
+  min-width: 0;
+  /* Keep the measured header box as wide as its text: the steps subtitle opts out of truncation
+     (see below), so a shrinking box lets that text overlap the disclosure arrow. */
+  flex-shrink: 0;
+}
+
+[data-component="collapsible"].thinking-state-collapsible [data-slot="basic-tool-tool-info-main"] {
+  flex-shrink: 0;
+}
+
+[data-component="collapsible"].thinking-state-collapsible [data-slot="thinking-state-trigger-main"] {
+  flex-shrink: 0;
+}
+
+[data-component="collapsible"].thinking-state-collapsible [data-slot="basic-tool-tool-info-main"] {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+}
+
+[data-component="collapsible"].thinking-state-collapsible [data-slot="basic-tool-tool-title"] {
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-family: var(--font-family-sans);
+  font-size: 13px;
+  font-weight: var(--font-weight-medium);
+  line-height: var(--line-height-compact);
+  letter-spacing: var(--letter-spacing-normal);
+  color: var(--v2-text-text-muted);
+}
+
+[data-component="collapsible"].thinking-state-collapsible [data-slot="basic-tool-tool-subtitle"] {
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-family-sans);
+  font-variant-numeric: tabular-nums;
+  font-size: 13px;
+  font-weight: var(--font-weight-regular);
+  line-height: var(--line-height-compact);
+  color: var(--v2-text-text-faint);
+}
+
+[data-component="collapsible"].thinking-state-collapsible
+  [data-slot="basic-tool-tool-subtitle"][data-kind="duration"] {
+  flex-shrink: 0;
+  overflow: visible;
+  text-overflow: unset;
+}
+
+[data-component="collapsible"].thinking-state-collapsible
+  [data-slot="basic-tool-tool-subtitle"][data-kind="duration"]::before,
+[data-component="collapsible"].thinking-state-collapsible
+  [data-slot="basic-tool-tool-subtitle"][data-kind="steps"]::before {
+  content: "·";
+  margin-right: 6px;
+}
+
+[data-component="collapsible"].thinking-state-collapsible
+  [data-slot="basic-tool-tool-subtitle"][data-kind="steps"] {
+  flex-shrink: 0;
+  overflow: visible;
+  text-overflow: unset;
+}
+
+[data-slot="thinking-state-content"] {
+  padding-left: 22px;
+  color: var(--v2-text-text-muted);
+}
+
+[data-component="collapsible"].thinking-state-collapsible [data-slot="collapsible-content"] {
+  width: 100%;
+}
+
+[data-component="reasoning-part"][data-embedded] {
+  max-height: 12rem;
+  overflow: auto;
+  color: var(--v2-text-text-muted);
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+}
+
+[data-slot="thinking-item-status"] {
+  display: none;
+}
+
+[data-component="collapsed-tool-group"][data-thinking="true"] [data-slot="thinking-item-status"] {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  color: var(--v2-icon-icon-muted);
+}
+
+/* Zero-width text so the marker keeps a real baseline for the row to align against. */
+[data-slot="thinking-item-status-anchor"] {
+  width: 0;
+  overflow: hidden;
+  font-size: 13px;
+  line-height: 16px;
+  visibility: hidden;
+}
+
+[data-component="collapsed-tool-group"][data-thinking="true"]
+  [data-slot="thinking-item-status"][data-status="completed"] {
+  color: var(--v2-state-fg-success);
+}
+
+[data-component="collapsed-tool-group"][data-thinking="true"]
+  [data-slot="thinking-item-status"][data-status="error"] {
+  color: var(--v2-state-fg-danger);
+}
+
+[data-component="collapsed-tool-group"][data-thinking="true"]
+  [data-slot="thinking-item-status"][data-status="running"] {
+  color: var(--v2-icon-icon-base);
+}
+
+/* Pending and running share one drawn dot so the glyph column keeps a constant ink width. */
+[data-slot="thinking-item-dot"] {
+  display: block;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  border: 1px solid currentColor;
+}
+
+[data-component="collapsed-tool-group"][data-thinking="true"]
+  [data-slot="thinking-item-status"][data-status="running"]
+  [data-slot="thinking-item-dot"] {
+  background: currentColor;
+  animation: thinking-item-running 1.2s ease-in-out infinite;
+}
+
+@keyframes thinking-item-running {
+  50% {
+    opacity: 0.3;
+  }
+}
+
+[data-component="collapsed-tool-group"][data-thinking="true"] [data-slot="context-tool-group-item"] {
+  flex-direction: row;
+  /* Baseline keeps the marker on the first text line of every row kind: prose, task rows, and
+     chip rows have different heights, so a fixed offset only ever lined up with one of them. */
+  align-items: baseline;
+  gap: 6px;
+}
+
+[data-component="collapsed-tool-group"][data-thinking="true"]
+  [data-slot="context-tool-group-item"]
+  > :not([data-slot="thinking-item-status"]) {
+  min-width: 0;
+  flex: 1;
+}
+
+/* Tool cards centre their own leading icon, so baseline alignment leaves the row marker visibly
+   low. Centre only cards; prose, task rows, and chip rows keep their text baseline. */
+[data-component="collapsed-tool-group"][data-thinking="true"]
+  [data-slot="context-tool-group-item"]:has(> [data-component="tool-part-wrapper"]) {
+  align-items: center;
+}
+
+/* Error cards already render their own status icon, so the row marker would double it. Hide the
+   gutter mark and let the card icon sit in the gutter instead. */
+[data-component="collapsed-tool-group"][data-thinking="true"]
+  [data-slot="context-tool-group-item"]:has(
+    > [data-component="tool-part-wrapper"] [data-slot="basic-tool-tool-indicator"]
+  )
+  > [data-slot="thinking-item-status"] {
+  display: none;
+}
+
+[data-component="thinking-tool-chips"] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  width: 100%;
+}
+
+[data-slot="thinking-tool-chip-row"] {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+[data-component="thinking-tool-chip"] {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  min-height: 22px;
+  /* The pill aligns to the marker gutter on its own; its glyph is inset by this padding, which is
+     how a pill is meant to read. */
+  padding: 2px 8px 2px 4px;
+  border: 0.5px solid var(--v2-border-border-base);
+  border-radius: var(--radius-md);
+  background: var(--v2-background-bg-layer-02);
+  color: var(--v2-text-text-muted);
+  font-family: var(--v2-font-family-sans);
+  font-size: 12px;
+  font-weight: 440;
+  line-height: var(--line-height-compact);
+  cursor: pointer;
+}
+
+[data-component="thinking-tool-chip"]:hover,
+[data-component="thinking-tool-chip"]:focus-visible {
+  background: var(--surface-raised-base-hover);
+}
+
+[data-component="thinking-tool-chip"][data-open="true"] {
+  background: var(--surface-raised-base-hover);
+}
+
+[data-component="thinking-tool-chip"] [data-slot="thinking-item-status"] {
+  display: inline-flex;
+  width: 12px;
+  height: 12px;
+}
+
+[data-component="thinking-tool-chip"] [data-slot="thinking-item-status"] [data-slot="icon-svg"] {
+  width: 12px;
+  height: 12px;
+}
+
+[data-slot="thinking-tool-chip-title"] {
+  flex-shrink: 0;
+  font-weight: 530;
+}
+
+[data-slot="thinking-tool-chip-target"] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--v2-text-text-faint);
+}
+
+[data-component="thinking-tool-chip"]:not([data-expandable="true"]) {
+  cursor: default;
+}
+
+[data-component="thinking-task-row"] {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  width: 100%;
+}
+
+[data-slot="thinking-task-row-trigger"] {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  width: 100%;
+  min-height: 22px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--v2-text-text-muted);
+  font-family: var(--v2-font-family-sans);
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+  text-align: left;
+  cursor: default;
+}
+
+button[data-slot="thinking-task-row-trigger"] {
+  cursor: pointer;
+}
+
+button[data-slot="thinking-task-row-trigger"]:hover,
+button[data-slot="thinking-task-row-trigger"]:focus-visible {
+  color: var(--v2-text-text-base);
+}
+
+[data-slot="thinking-task-row-trigger"] [data-slot="thinking-item-status"] {
+  display: inline-flex;
+  margin-top: 0;
+  width: 16px;
+  height: 16px;
+  font-size: 11px;
+  line-height: 16px;
+}
+
+[data-slot="thinking-task-title"] {
+  flex-shrink: 0;
+  font-weight: 530;
+}
+
+[data-slot="thinking-task-target"] {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--v2-text-text-faint);
+  font-weight: 440;
+}
+
+[data-slot="thinking-detail"] {
+  min-width: 0;
+  width: 100%;
+  padding-left: 22px;
+}
+
+[data-slot="thinking-detail"]
+  > [data-component="tool-part-wrapper"]
+  > [data-component="collapsible"]
+  > [data-slot="collapsible-trigger"] {
+  display: none;
+}

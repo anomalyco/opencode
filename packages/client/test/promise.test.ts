@@ -151,6 +151,58 @@ test("vcs.diff exposes unavailable comparisons as errors, not empty diffs", asyn
   })
 })
 
+test("vcs.graph sends pagination and preserves nullable capability on the wire", async () => {
+  const requests: Request[] = []
+  const location = { directory: "/repo", project: { id: "global", directory: "/repo", canonical: "/repo" } }
+  const page = {
+    commits: [
+      {
+        hash: "a".repeat(40),
+        parents: ["b".repeat(40)],
+        refs: [{ name: "HEAD", kind: "head" }],
+        subject: "initial",
+        authorName: "Test",
+        authoredAtMs: 1_789_991_180_000,
+      },
+    ],
+    hasMore: true,
+  }
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      requests.push(request)
+      const skip = new URL(request.url).searchParams.get("skip")
+      return Response.json({ location, data: skip === "50" ? null : page })
+    },
+  })
+  expect(await client.vcs.graph({ location: { directory: "/repo" }, skip: 0, limit: 50 })).toEqual({
+    location,
+    data: page,
+  })
+  expect(await client.vcs.graph({ location: { directory: "/repo" }, skip: 50 })).toEqual({ location, data: null })
+  expect(new URL(requests[0].url).pathname).toBe("/api/vcs/graph")
+  const query = new URL(requests[0].url).searchParams
+  expect(query.get("location[directory]")).toBe("/repo")
+  expect(query.get("skip")).toBe("0")
+  expect(query.get("limit")).toBe("50")
+})
+
+test("vcs.graph surfaces graph failures instead of an empty page", async () => {
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () =>
+      Response.json(
+        { _tag: "ServiceUnavailableError", service: "vcs", message: "Unable to read Git history" },
+        { status: 503 },
+      ),
+  })
+  await expect(client.vcs.graph({ location: { directory: "/repo" } })).rejects.toMatchObject({
+    _tag: "ServiceUnavailableError",
+    service: "vcs",
+  })
+})
+
 test("project.update uses the global project contract", async () => {
   let request: Request | undefined
   const project = {

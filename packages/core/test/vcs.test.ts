@@ -1138,4 +1138,129 @@ describe("Vcs", () => {
       }),
     ),
   )
+
+  it.live("returns a null graph when the provider has no graph capability", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const vcs = yield* Vcs.Service
+        expect(yield* vcs.graph()).toBeNull()
+        yield* vcs.transform((editor) => {
+          editor.add(provider())
+          editor.default.set("custom")
+        })
+        expect(yield* vcs.graph()).toBeNull()
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("reports failing and invalid graph results instead of an empty page", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const vcs = yield* Vcs.Service
+        yield* vcs.transform((editor) => {
+          editor.add(provider({ graph: () => Effect.fail(new Error("graph failed")) }))
+          editor.default.set("custom")
+        })
+        expect(yield* vcs.graph().pipe(Effect.flip)).toMatchObject({ _tag: "Vcs.GraphError" })
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("rejects graph payloads that do not match the contract", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const vcs = yield* Vcs.Service
+        yield* vcs.transform((editor) => {
+          editor.add(
+            provider({
+              graph: () => Effect.succeed({ commits: [], hasMore: "no" } as unknown as Vcs.GraphPage),
+            }),
+          )
+          editor.default.set("custom")
+        })
+        expect(yield* vcs.graph().pipe(Effect.flip)).toMatchObject({ _tag: "Vcs.GraphError" })
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("pages visible history from a subdirectory with parents and namespaced refs", () =>
+    withGit(
+      (directory) =>
+        Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.writeFile(path.join(directory, "base.txt"), "base\n")
+            await commitAll(directory, "initial")
+            await $`git tag v1.0`.cwd(directory).quiet()
+            await $`git branch feature/nested`.cwd(directory).quiet()
+            await $`git remote add origin https://example.com/team/repo.git`.cwd(directory).quiet()
+            await $`git update-ref refs/remotes/origin/main HEAD`.cwd(directory).quiet()
+            await $`git symbolic-ref refs/remotes/origin/HEAD refs/remotes/origin/main`.cwd(directory).quiet()
+            await fs.writeFile(path.join(directory, "base.txt"), "second\n")
+            await commitAll(directory, "second")
+            await $`git checkout -b side`.cwd(directory).quiet()
+            const author = Bun.spawn(["git", "config", "user.name", "测试用户"], { cwd: directory })
+            if ((await author.exited) !== 0) throw new Error("Could not configure Unicode Git author")
+            await fs.writeFile(path.join(directory, "side.txt"), "side\n")
+            await commitAll(directory, "中文提交")
+            await $`git config user.name Test`.cwd(directory).quiet()
+            await $`git checkout main`.cwd(directory).quiet()
+            await $`git merge --no-ff side -m merge-side`.cwd(directory).quiet()
+          })
+          const vcs = yield* Vcs.Service
+          const page = yield* vcs.graph()
+          expect(page?.commits.map((commit) => commit.subject)).toEqual(["merge-side", "中文提交", "second", "initial"])
+          expect(page?.hasMore).toBe(false)
+          const merge = page?.commits[0]
+          expect(merge?.parents).toHaveLength(2)
+          expect(merge?.refs).toEqual([
+            { name: "HEAD", kind: "head" },
+            { name: "main", kind: "branch" },
+          ])
+          expect(page?.commits[1]?.refs).toEqual([{ name: "side", kind: "branch" }])
+          expect(page?.commits[1]?.authorName).toBe("测试用户")
+          expect(page?.commits[2]?.refs).toEqual([])
+          const initial = page?.commits[3]
+          expect(initial?.parents).toEqual([])
+          expect(initial?.authorName).toBe("Test")
+          expect(initial?.authoredAtMs).toBeGreaterThan(Date.now() - 60_000)
+          expect(initial?.refs).toEqual(
+            expect.arrayContaining([
+              { name: "v1.0", kind: "tag" },
+              { name: "feature/nested", kind: "branch" },
+              { name: "origin/main", kind: "remote" },
+            ]),
+          )
+          // A symbolic remote HEAD is not a commit of its own.
+          expect(initial?.refs).not.toContainEqual({ name: "origin/HEAD", kind: "remote" })
+          const first = yield* vcs.graph({ limit: 2 })
+          expect(first?.commits.map((commit) => commit.subject)).toEqual(["merge-side", "中文提交"])
+          expect(first?.hasMore).toBe(true)
+          const empty = yield* vcs.graph({ skip: 4 })
+          expect(empty?.commits).toEqual([])
+          expect(empty?.hasMore).toBe(false)
+        }),
+      { scope: "sub" },
+    ),
+  )
+
+  it.live("reads visible refs while HEAD is unborn and stays empty without visible history", () =>
+    withGit((directory) =>
+      Effect.gen(function* () {
+        const vcs = yield* Vcs.Service
+        expect(yield* vcs.graph()).toEqual({ commits: [], hasMore: false })
+        yield* Effect.promise(async () => {
+          await fs.writeFile(path.join(directory, "file.txt"), "content\n")
+          await $`git add file.txt`.cwd(directory).quiet()
+          const tree = (await $`git write-tree`.cwd(directory).text()).trim()
+          const commit = (await $`git commit-tree ${tree} -m orphan`.cwd(directory).text()).trim()
+          await $`git update-ref refs/heads/other ${commit}`.cwd(directory).quiet()
+        })
+        const page = yield* vcs.graph()
+        expect(page?.commits.map((commit) => commit.subject)).toEqual(["orphan"])
+        expect(page?.commits[0]?.refs).toEqual([{ name: "other", kind: "branch" }])
+        yield* Effect.promise(() => $`git update-ref -d refs/heads/other`.cwd(directory).quiet())
+        expect(yield* vcs.graph()).toEqual({ commits: [], hasMore: false })
+      }),
+    ),
+  )
 })

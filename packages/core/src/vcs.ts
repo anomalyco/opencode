@@ -5,7 +5,7 @@ import { Cause, Context, Effect, FiberSet, Layer, Schema, Semaphore, Stream } fr
 import type { VcsDefinition, VcsEditor } from "@opencode/plugin/effect/vcs"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { FileSystem } from "@opencode/schema/filesystem"
-import { Base, BranchList, FileStatus, Info, Mode } from "@opencode/schema/vcs"
+import { Base, BranchList, FileStatus, GraphPage, Info, Mode } from "@opencode/schema/vcs"
 import { VcsEvent } from "@opencode/schema/vcs-event"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -14,9 +14,13 @@ import { Bus } from "./bus.js"
 import { State } from "./state.js"
 import { emptyPatch, MAX_TOTAL_PATCH_BYTES, PATCH_CONTEXT_LINES } from "./vcs/patch.js"
 
-export { Base, BranchList, FileStatus, Info, Mode }
+export { Base, BranchList, FileStatus, GraphPage, Info, Mode }
 
 export class DiffError extends Schema.TaggedError<DiffError>()("Vcs.DiffError", {
+  message: Schema.String,
+}) {}
+
+export class GraphError extends Schema.TaggedError<GraphError>()("Vcs.GraphError", {
   message: Schema.String,
 }) {}
 
@@ -30,16 +34,23 @@ export interface BranchOptions {
   readonly limit?: number
 }
 
+export interface GraphOptions {
+  readonly skip?: number
+  readonly limit?: number
+}
+
 export interface Adapter {
   readonly info: () => Effect.Effect<Info>
   readonly base?: () => Effect.Effect<Base | null, DiffError>
   readonly branches: (options?: BranchOptions) => Effect.Effect<BranchList>
   readonly status: () => Effect.Effect<FileStatus[]>
   readonly diff: (mode: Mode, options?: DiffOptions) => Effect.Effect<FileDiff.Info[], DiffError>
+  readonly graph?: (options?: GraphOptions) => Effect.Effect<GraphPage | null, GraphError>
 }
 
 export interface Interface extends Adapter, State.Transformable<VcsEditor> {
   readonly base: () => Effect.Effect<Base | null, DiffError>
+  readonly graph: (options?: GraphOptions) => Effect.Effect<GraphPage | null, GraphError>
 }
 
 interface Data {
@@ -71,6 +82,7 @@ const layer = Layer.effect(
     const decodeBranches = Schema.decodeUnknownEffect(BranchList)
     const decodeStatus = Schema.decodeUnknownEffect(Schema.Array(FileStatus))
     const decodeDiff = Schema.decodeUnknownEffect(Schema.Array(FileDiff.Info))
+    const decodeGraph = Schema.decodeUnknownEffect(GraphPage)
     const state: State.Interface<Data, VcsEditor> = State.create<Data, VcsEditor>({
       name: "vcs",
       initial: () => ({ providers: new Map() }),
@@ -98,33 +110,29 @@ const layer = Layer.effect(
               ),
         ),
       )
-    const review = <A>(provider: VcsDefinition, operation: "base" | "diff", effect: Effect.Effect<A, unknown>) =>
-      effect.pipe(
+    const review = <A, E>(
+      provider: VcsDefinition,
+      operation: "base" | "diff" | "graph",
+      effect: Effect.Effect<A, unknown>,
+      failure: (error: unknown) => E,
+    ) => {
+      return effect.pipe(
         Effect.catchCause((cause) => {
           if (Cause.hasInterrupts(cause)) return Effect.failCause(cause).pipe(Effect.orDie)
-          const error = Cause.squash(cause)
           return Effect.logWarning("vcs provider failed", { provider: provider.id, operation, cause }).pipe(
-            Effect.andThen(
-              Effect.fail(
-                error instanceof DiffError
-                  ? error
-                  : new DiffError({
-                      message:
-                        operation === "base"
-                          ? "VCS provider could not resolve a review base"
-                          : "VCS provider could not produce a diff",
-                    }),
-              ),
-            ),
+            Effect.andThen(Effect.fail(failure(Cause.squash(cause)))),
           )
         }),
       )
+    }
     const refresh = Effect.fn("Vcs.refresh")(function* () {
       const changed = yield* Effect.gen(function* () {
         const provider = selected()
         const next: Info = provider
           ? {
-              ...(yield* protect(provider, "info", provider.info(scope).pipe(Effect.flatMap(decodeInfo)), { branch: {} })),
+              ...(yield* protect(provider, "info", provider.info(scope).pipe(Effect.flatMap(decodeInfo)), {
+                branch: {},
+              })),
               provider: provider.id,
             }
           : { branch: {} }
@@ -172,7 +180,30 @@ const layer = Layer.effect(
       base: Effect.fn("Vcs.base")(function* () {
         const provider = selected()
         if (!provider?.base) return null
-        return yield* review(provider, "base", provider.base(scope).pipe(Effect.flatMap(decodeBase)))
+        return yield* review(provider, "base", provider.base(scope).pipe(Effect.flatMap(decodeBase)), (error) =>
+          error instanceof DiffError
+            ? error
+            : new DiffError({ message: "VCS provider could not resolve a review base" }),
+        )
+      }),
+      graph: Effect.fn("Vcs.graph")(function* (options?: GraphOptions) {
+        const provider = selected()
+        if (!provider?.graph) return null
+        return yield* review(
+          provider,
+          "graph",
+          provider
+            .graph({
+              ...scope,
+              skip: options?.skip ?? 0,
+              limit: options?.limit ?? 50,
+            })
+            .pipe(Effect.flatMap(decodeGraph)),
+          (error) =>
+            error instanceof GraphError
+              ? error
+              : new GraphError({ message: "VCS provider could not produce a commit graph" }),
+        )
       }),
       branches: Effect.fn("Vcs.branches")(function* (options?: BranchOptions) {
         const provider = selected()
@@ -214,6 +245,8 @@ const layer = Layer.effect(
               maxOutputBytes: MAX_TOTAL_PATCH_BYTES,
             })
             .pipe(Effect.flatMap(decodeDiff)),
+          (error) =>
+            error instanceof DiffError ? error : new DiffError({ message: "VCS provider could not produce a diff" }),
         )
         let total = 0
         return rows.map((row) => {

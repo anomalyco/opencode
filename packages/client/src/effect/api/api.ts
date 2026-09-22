@@ -2228,12 +2228,21 @@ export type VcsDiffInput = {
 export type VcsDiffOutput = { readonly location: Location.PublicRef; readonly data: ReadonlyArray<FileDiff.Info> }
 export type VcsDiffOperation<E = never> = (input: VcsDiffInput) => Effect.Effect<VcsDiffOutput, E>
 
+export type VcsGraphInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly skip?: number | undefined
+  readonly limit?: number | undefined
+}
+export type VcsGraphOutput = { readonly location: Location.PublicRef; readonly data: Vcs.GraphPage | null }
+export type VcsGraphOperation<E = never> = (input?: VcsGraphInput) => Effect.Effect<VcsGraphOutput, E>
+
 export interface VcsApi<E = never> {
   readonly get: VcsGetOperation<E>
   readonly base: VcsBaseOperation<E>
   readonly status: VcsStatusOperation<E>
   readonly branch: { readonly list: VcsBranchListOperation<E> }
   readonly diff: VcsDiffOperation<E>
+  readonly graph: VcsGraphOperation<E>
 }
 
 export type DebugLocationListOutput = ReadonlyArray<Location.PublicRef>

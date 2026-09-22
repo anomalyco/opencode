@@ -21,6 +21,7 @@ for (const mode of ["hidden", "compact", "full"] as const) {
       const body = part.getByText("I will inspect the timeline before changing its state.", { exact: true })
       await expect(trigger).toHaveAttribute("aria-expanded", String(mode === "full"))
       await expect(part.locator('[data-component="text-shimmer"]')).toHaveAttribute("data-active", "true")
+      await expect(trigger.locator('[data-slot="basic-tool-tool-subtitle"][data-kind="duration"]')).toBeVisible()
       if (mode === "compact") {
         await expect(trigger).toContainText("Inspecting stability")
         await expect(body).toBeHidden()
@@ -50,28 +51,38 @@ for (const mode of ["hidden", "compact", "full"] as const) {
       if (following === "tool") {
         const group = timeline.locator('[data-component="collapsed-tool-group"]')
         const trigger = group.locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
-        await expect(trigger).toHaveText(/^Used\s*1\s*Skill$/)
-        await expect(trigger).toHaveAttribute("aria-expanded", "false")
-        await expect(
-          group.locator('[data-component="context-tool-group-trigger"] [data-slot="basic-tool-tool-title"]'),
-        ).toHaveText("Skill")
-        await expect(timeline.getByText("Inspecting stability", { exact: true })).toBeHidden()
-        await trigger.click()
-        await expect(trigger).toHaveAttribute("aria-expanded", "true")
+        if (mode === "hidden") {
+          await expect(trigger).toHaveText(/^Used\s*1\s*Skill$/)
+          await expect(trigger).toHaveAttribute("aria-expanded", "false")
+          await expect(
+            group.locator('[data-component="context-tool-group-trigger"] [data-slot="basic-tool-tool-title"]'),
+          ).toHaveText("Skill")
+          await expect(timeline.getByText("Inspecting stability", { exact: true })).toBeHidden()
+          await trigger.click()
+          await expect(trigger).toHaveAttribute("aria-expanded", "true")
+        } else {
+          await expect(group).toHaveAttribute("data-thinking", "true")
+          await expect(trigger.locator('[data-component="text-shimmer"]')).toHaveAttribute("aria-label", "Thinking")
+          await expect(trigger.locator('[data-slot="basic-tool-tool-subtitle"][data-kind="steps"]')).toHaveText("1 step")
+          await expect(trigger).toHaveAttribute("aria-expanded", "true")
+          await expect(part).toHaveAttribute("data-embedded", "true")
+          await expect(part.locator('[data-slot="collapsible-trigger"]')).toHaveCount(0)
+        }
         await expect(group.locator('[data-timeline-part-id="tool_reasoning_projection_skill"]')).toBeVisible()
         await expect(group.locator('[data-component="reasoning-part"]')).toHaveCount(mode === "hidden" ? 0 : 1)
+        await expect(timeline.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
+        return
       }
-      if (following === "text")
-        await expect(timeline.getByText("The timeline is stable", { exact: true })).toBeVisible()
+      await expect(timeline.getByText("The timeline is stable", { exact: true })).toBeVisible()
       await expect(timeline.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
       await expect(part).toHaveCount(mode === "hidden" ? 0 : 1)
       if (mode === "hidden") return
       const thought = part.locator('[data-slot="collapsible-trigger"]')
       const thoughtTitle = thought.locator('[data-slot="basic-tool-tool-title"]')
-      await expect(thoughtTitle).toContainText("Thought")
+      await expect(thoughtTitle).toContainText("Thought for 7s")
       await expect(thoughtTitle).toHaveCSS("font-size", "13px")
       await expect(thoughtTitle).toHaveCSS("line-height", "16px")
-      await expect(thought.locator('[data-slot="basic-tool-tool-subtitle"]')).toHaveText("7s")
+      await expect(thought.locator('[data-slot="basic-tool-tool-subtitle"]')).toHaveCount(0)
       await expect(thought).toHaveAttribute("aria-expanded", String(mode === "full"))
       await expect(thought).not.toContainText("Inspecting stability")
       await expect(part.locator('[data-component="text-shimmer"]')).toHaveAttribute("data-active", "false")

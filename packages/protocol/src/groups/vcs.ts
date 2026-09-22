@@ -20,6 +20,12 @@ const DiffQuery = Schema.Struct({
   context: Schema.NumberFromString.pipe(Schema.decodeTo(NonNegativeInt), Schema.optional),
 })
 
+const GraphQuery = Schema.Struct({
+  ...LocationQuery.fields,
+  skip: Schema.NumberFromString.pipe(Schema.decodeTo(NonNegativeInt), Schema.optional),
+  limit: Schema.NumberFromString.pipe(Schema.decodeTo(PositiveInt), Schema.optional),
+})
+
 export const VcsGroup = HttpApiGroup.make("server.vcs")
   .add(
     HttpApiEndpoint.get("vcs.get", "/api/vcs", {
@@ -92,6 +98,22 @@ export const VcsGroup = HttpApiGroup.make("server.vcs")
           summary: "VCS diff",
           description:
             "Diff HEAD to the working copy (working), the base merge-base to the working copy (branch), or the base merge-base to HEAD (committed). Omitting base preserves repository-default comparison; supplying it overrides the comparison without saving it.",
+        }),
+      ),
+  )
+  .add(
+    HttpApiEndpoint.get("vcs.graph", "/api/vcs/graph", {
+      query: GraphQuery,
+      success: Location.response(Schema.NullOr(Vcs.GraphPage)),
+      error: ServiceUnavailableError,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "vcs.graph",
+          summary: "VCS commit graph",
+          description:
+            "Page through visible commit history for the requested location, newest first, with parent hashes and ref badges. Returns null when the current provider has no graph capability.",
         }),
       ),
   )

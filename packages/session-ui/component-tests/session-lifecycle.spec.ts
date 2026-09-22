@@ -132,29 +132,23 @@ for (const open of [false, true]) {
       await expect(thought).not.toContainText("Inspecting stability")
       await expect(thought).toHaveAttribute("aria-expanded", String(open))
       await timeline.getByRole("button", { name: "Finish session" }).click()
-      const used = group.getByRole("button", { name: "Used 1 Shell", exact: true })
+      const used = group.locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
+      await expect(group).toHaveAttribute("data-thinking", "true")
+      await expect(used.locator('[data-slot="basic-tool-tool-title"]')).toContainText("Thought")
+      await expect(used.locator('[data-slot="basic-tool-tool-subtitle"][data-kind="steps"]')).toHaveText("1 step")
       await expect(used).toHaveAttribute("aria-expanded", "false")
       await used.click()
       await expect(used).toHaveAttribute("aria-expanded", "true")
       await expect(group.locator('[data-timeline-part-id="tool_hidden_reasoning_shell"]')).toBeVisible()
-      await expect(group.getByRole("button", { name: "Thought", exact: true })).toHaveAttribute(
-        "aria-expanded",
-        String(open),
-      )
-      await expect(
-        group.locator('[data-component="context-tool-group-trigger"] [data-slot="basic-tool-tool-title"]'),
-      ).toHaveText("Shell")
+      await expect(reasoning).toHaveAttribute("data-embedded", "true")
+      await expect(reasoning.locator('[data-slot="collapsible-trigger"]')).toHaveCount(0)
       await expect(timeline.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
       await expect(used).toHaveAttribute("aria-expanded", "true")
-      if (!open) await thought.click()
       await expect(reasoning.getByRole("heading", { name: "Inspecting stability", exact: true })).toBeVisible()
       await used.click()
       await expect(used).toHaveAttribute("aria-expanded", "false")
+      await expect(reasoning.getByRole("heading", { name: "Inspecting stability", exact: true })).toBeHidden()
       await used.click()
-      await expect(reasoning.getByRole("button", { name: "Thought", exact: true })).toHaveAttribute(
-        "aria-expanded",
-        "true",
-      )
       await expect(reasoning.getByRole("heading", { name: "Inspecting stability", exact: true })).toBeVisible()
     },
   )

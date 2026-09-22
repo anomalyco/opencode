@@ -62,6 +62,34 @@ test("vcs.base decodes nullable review-base metadata", async () => {
   }
 })
 
+test("vcs.graph decodes the nullable commit page", async () => {
+  const location = { directory: "/repo", project: { id: "global", directory: "/repo", canonical: "/repo" } }
+  const page = {
+    commits: [
+      {
+        hash: "a".repeat(40),
+        parents: [] as string[],
+        refs: [{ name: "v1.0", kind: "tag" }],
+        subject: "initial",
+        authorName: null,
+        authoredAtMs: 1_789_991_180_000,
+      },
+    ],
+    hasMore: false,
+  }
+  for (const data of [page, null]) {
+    const httpClient = HttpClient.make((request) =>
+      Effect.succeed(HttpClientResponse.fromWeb(request, Response.json({ location, data }))),
+    )
+    const result = await Effect.gen(function* () {
+      const client = yield* OpenCode.make({ baseUrl: "http://localhost:3000" })
+      return yield* client.vcs.graph({ location: { directory: AbsolutePath.make("/repo") }, skip: 50, limit: 50 })
+    }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
+    expect(result.data).toEqual(data)
+    expect(result.location.directory).toBe("/repo")
+  }
+})
+
 test("session.get returns the decoded Effect projection", async () => {
   const httpClient = HttpClient.make((request) =>
     Effect.succeed(HttpClientResponse.fromWeb(request, Response.json(session))),

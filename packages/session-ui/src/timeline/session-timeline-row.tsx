@@ -166,7 +166,19 @@ export function createSessionTimelineRowRenderer(input: {
           const message = input.projection.messageByID().get(ref.messageID)
           if (ref.messageID !== ref.partID || !message) return []
           if (message.type === "shell")
-            return [{ type: "shell", id: ref.partID, render: () => <Shell messageID={ref.messageID} grouped /> }]
+            return [
+              {
+                type: "shell",
+                id: ref.partID,
+                status:
+                  message.status === "running"
+                    ? ("running" as const)
+                    : message.status === "timeout" || (message.status === "exited" && message.exit !== undefined && message.exit !== 0)
+                      ? ("error" as const)
+                      : ("completed" as const),
+                render: () => <Shell messageID={ref.messageID} grouped />,
+              },
+            ]
           if (message.type !== "assistant" && message.type !== "user")
             return [{ type: "notice", id: ref.partID, render: () => <Notice messageID={ref.messageID} grouped /> }]
           return []
@@ -200,7 +212,7 @@ export function createSessionTimelineRowRenderer(input: {
             input.disclosure.value(`patch:${path}`) ?? input.timelineDetail?.().edit.details === "expanded"
           }
           onFileOpenChange={(path, open) => input.disclosure.set(`patch:${path}`, open)}
-          open={input.disclosure.value(key()) === true}
+          open={input.disclosure.value(key())}
           busy={
             workingTurn(row().userMessageID) &&
             input.projection.lastAssistantGroupKey().get(row().userMessageID) === row().group.key
@@ -663,7 +675,18 @@ export function createSessionTimelineRowRenderer(input: {
       return (
         <Frame row={current()}>
           <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
-            <div data-slot="session-turn-assistant-content" aria-hidden={workingTurn(current().userMessageID)}>
+            <div
+              data-slot="session-turn-assistant-content"
+              aria-hidden={
+                workingTurn(current().userMessageID) &&
+                !(
+                  current().group.type === "context" &&
+                  input.projection.lastAssistantGroupKey().get(current().userMessageID) === current().group.key
+                )
+                  ? true
+                  : undefined
+              }
+            >
               {content}
             </div>
           </div>
