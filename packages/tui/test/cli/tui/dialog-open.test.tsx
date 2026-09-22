@@ -197,7 +197,7 @@ test("includes unique sandbox and recent session directories, including global p
   }
 })
 
-test("shows nested Git session directories as projects and in their session footer", async () => {
+test("keeps nested Git session directories out of projects and in their session footer", async () => {
   const fixture = await renderOpen((url) => {
     if (url.pathname === "/api/project")
       return json([
@@ -205,6 +205,7 @@ test("shows nested Git session directories as projects and in their session foot
           id: "proj_current",
           canonical: "/tmp/opencode/project",
           name: "OpenCode",
+          vcs: "git",
           time: { created: 1, updated: 2 },
           sandboxes: [],
         },
@@ -232,7 +233,7 @@ test("shows nested Git session directories as projects and in their session foot
     )
     expect(frame).toContain("OpenCode · dashboard")
     expect(frame).not.toContain("browse directories")
-    expect(frame).toContain("/tmp/opencode/project/packages/dashboard")
+    expect(frame).not.toContain("/tmp/opencode/project/packages/dashboard")
   } finally {
     await fixture.dispose()
   }
