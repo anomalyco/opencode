@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, AIError, LLMRequest, Message, ToolCallPart, ToolDefinition, Usage } from "../../src/index.js"
+import { LLM, AIError, LLMRequest, Message, ToolCallPart, ToolDefinition, Usage, Media } from "../../src/index.js"
 import { Auth, LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as Gemini from "../../src/protocols/gemini.js"
@@ -340,8 +340,8 @@ describe("Gemini route", () => {
           messages: [
             Message.user([
               { type: "text", text: "What is in this image?" },
-              { type: "media", mediaType: "image/png", data: "AAECAw==" },
-              { type: "media", mediaType: "application/pdf", data: "JVBERi0xLjQ=" },
+              { type: "media", media: Media.base64("AAECAw==", "image/png") },
+              { type: "media", media: Media.base64("JVBERi0xLjQ=", "application/pdf") },
             ]),
             Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: { query: "weather" } })]),
             Message.tool({ id: "call_1", name: "lookup", result: { forecast: "sunny" } }),
@@ -446,7 +446,7 @@ describe("Gemini route", () => {
         LLM.request({
           model,
           messages: [
-            Message.user({ type: "media", mediaType: "image/png", data: "data:image/png;base64,AAEC" }),
+            Message.user({ type: "media", media: Media.fromDataUrl("data:image/png;base64,AAEC") }),
             Message.tool({
               id: "call_image",
               name: "read",
@@ -636,9 +636,9 @@ describe("Gemini route", () => {
           model,
           messages: [
             Message.user([
-              { type: "media", mediaType: "image/png", data: "%%%=" },
-              { type: "media", mediaType: "image/png", data: "data:image/jpeg;base64,/9j/" },
-              { type: "media", mediaType: "image/svg+xml", data: "PHN2Zz4=" },
+              { type: "media", media: Media.base64("%%%=", "image/png") },
+              { type: "media", media: Media.fromDataUrl("data:image/jpeg;base64,/9j/") },
+              { type: "media", media: Media.base64("PHN2Zz4=", "image/svg+xml") },
             ]),
           ],
         }),
@@ -648,7 +648,7 @@ describe("Gemini route", () => {
           role: "user",
           parts: [
             { inlineData: { mimeType: "image/png", data: "%%%=" } },
-            { inlineData: { mimeType: "image/png", data: "/9j/" } },
+            { inlineData: { mimeType: "image/jpeg", data: "/9j/" } },
             { inlineData: { mimeType: "image/svg+xml", data: "PHN2Zz4=" } },
           ],
         },
@@ -1773,19 +1773,34 @@ describe("Gemini route", () => {
     }),
   )
 
-  it.effect("rejects unsupported assistant media content", () =>
+  it.effect("replays generated assistant media as model inline data", () =>
     Effect.gen(function* () {
-      const error = yield* compileRequest(
+      const prepared = yield* compileRequest(
         LLM.request({
           id: "req_media",
           model,
-          messages: [Message.assistant({ type: "media", mediaType: "image/png", data: "AAECAw==" })],
+          messages: [
+            Message.user("Draw a cat"),
+            Message.assistant([
+              { type: "text", text: "Here you go." },
+              {
+                type: "media",
+                media: Media.base64("AAECAw==", "image/png"),
+                providerMetadata: { google: { thoughtSignature: "sig_1" } },
+              },
+            ]),
+            Message.user("Now make it orange"),
+          ],
         }),
-      ).pipe(Effect.flip)
-
-      expect(error.message).toContain(
-        "Gemini assistant messages only support text, reasoning, and tool-call content for now",
       )
+
+      expect(prepared.body.contents[1]).toEqual({
+        role: "model",
+        parts: [
+          { text: "Here you go." },
+          { inlineData: { mimeType: "image/png", data: "AAECAw==" }, thoughtSignature: "sig_1" },
+        ],
+      })
     }),
   )
 })
