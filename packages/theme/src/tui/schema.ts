@@ -2,6 +2,7 @@ import { Schema } from "effect"
 
 export const HueStep = Schema.Literals([100, 200, 300, 400, 500, 600, 700, 800, 900])
 export type HueStep = Schema.Schema.Type<typeof HueStep>
+export type SemanticHue = "accent" | "interactive" | "neutral"
 
 export const ActionVariant = Schema.Literals(["primary", "secondary", "destructive"])
 export type ActionVariant = Schema.Schema.Type<typeof ActionVariant>
@@ -45,14 +46,18 @@ const HueValueDefinition = Schema.Union([
   Schema.String.check(Schema.isPattern(/^\$hue\..+$/)),
   HueScaleDefinition,
 ])
+type HueValueDefinition = Schema.Schema.Type<typeof HueValueDefinition>
 const HueRecord = Schema.Record(HueName, HueValueDefinition)
 const HueDefinition = HueRecord.check(
   Schema.makeFilter<Schema.Schema.Type<typeof HueRecord>>((hues) => {
-    const missing = ["accent", "interactive", "neutral"].filter((name) => hues[name] === undefined)
+    const missing = (["accent", "interactive", "neutral"] satisfies readonly SemanticHue[]).filter(
+      (name) => hues[name] === undefined,
+    )
     return missing.length ? `Missing required semantic hues: ${missing.join(", ")}` : undefined
   }),
 )
-export type HueDefinition = Schema.Schema.Type<typeof HueDefinition>
+export type HueDefinition = Schema.Schema.Type<typeof HueDefinition> &
+  Readonly<Record<SemanticHue, HueValueDefinition>>
 
 const StatefulColorDefinition = Schema.Struct({
   base: Schema.optional(ColorValue),

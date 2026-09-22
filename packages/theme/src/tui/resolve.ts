@@ -12,7 +12,6 @@ import {
 import type {
   ActionStateKey,
   ActionStates,
-  HueDefinition,
   HueScale,
   Mode,
   ResolvedActionState,
@@ -22,9 +21,10 @@ import type {
   StatefulColorDefinition,
   ThemeTokensDefinition,
 } from "./index.js"
-import { selectThemeMode } from "./select.js"
+import { selectThemeMode, themeModes } from "./select.js"
 
 const decodeThemeDefinitionSchema = Schema.decodeUnknownSync(ThemeDefinition, { reportInput: true })
+const decodeThemeDocumentSchema = Schema.decodeUnknownSync(ThemeDocument, { reportInput: true })
 
 function decodeThemeDefinition(input: unknown) {
   try {
@@ -38,6 +38,16 @@ export function themeDecodeError(error: unknown, name: string) {
   const message = Schema.isSchemaError(error) ? error.message : String(error)
   const value = /got ("[^"]*"|\S+)/.exec(message)?.[1] ?? "value"
   return new Error(`Invalid theme: ${name} ${value} is an invalid value`, { cause: error })
+}
+
+export function parseThemeDocument(input: unknown, name = "theme") {
+  try {
+    const document = decodeThemeDocumentSchema(input)
+    themeModes(document).forEach((mode) => resolveThemeDocument(document, mode))
+    return document
+  } catch (error) {
+    throw themeDecodeError(error, name)
+  }
 }
 
 export function resolveThemeDocument(document: ThemeDocument, mode?: Mode) {
@@ -181,7 +191,7 @@ function compileHueSteps(
   }
 }
 
-function resolveHue(definition: HueDefinition) {
+function resolveHue(definition: ThemeDefinition["hue"]) {
   const source = definition as Record<string, unknown>
   const cache = new Map<string, HueScale>()
 

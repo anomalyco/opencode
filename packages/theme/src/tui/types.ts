@@ -5,6 +5,7 @@ import type {
   FeedbackKind,
   HueStep,
   MarkdownToken,
+  SemanticHue,
   SurfaceName,
   SyntaxToken,
 } from "./schema.js"
@@ -12,7 +13,7 @@ import type {
 export type ResolvedActionState = "base" | ActionState
 export type ResolvedFormfieldState = ResolvedActionState
 export type HueScale = Readonly<Record<HueStep, RGBA>>
-export type Hue = Readonly<Record<string, HueScale>>
+export type Hue = Readonly<Record<string, HueScale> & Record<SemanticHue, HueScale>>
 export type HueSource = Readonly<{ hue: string; step: HueStep }>
 export type Categorical = readonly HueScale[]
 export type ActionStates = Readonly<Partial<Record<ActionState, boolean>>>
