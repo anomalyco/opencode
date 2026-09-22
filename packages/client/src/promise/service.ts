@@ -35,6 +35,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   const deadline = Date.now() + timing.promiseTimeout
   const contenders = new Set<ServiceContender>()
   let timeouts: { readonly info: Info; readonly count: number } | undefined
+  let failure: Error | undefined
   let announced = false
   let lastSpawn = 0
   let spawnDelay = timing.spawnDelay
@@ -56,7 +57,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
 
   try {
     while (true) {
-      if (Date.now() >= deadline) throw new Error("Timed out waiting for the background service to start")
+      if (Date.now() >= deadline) throw failure ?? new Error("Timed out waiting for the background service to start")
       const registration = await registered(options.file, timing.requestTimeout)
       if (registration.timedOut && registration.info !== undefined) {
         timeouts = {
@@ -95,14 +96,15 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
       } else {
         if (lastSpawn === 0 && registration.info !== undefined) lastSpawn = Date.now()
         const finished = [...contenders].filter(contenderFinished)
-        const failure = finished.map(contenderFailure).find((error) => error !== undefined)
+        failure ??= finished.map(contenderFailure).find((error) => error !== undefined)
         if (finished.some((item) => item.child.exitCode === 0)) {
           spawnDelay = Math.min(spawnDelay * 2, timing.maxSpawnDelay)
         }
         finished.forEach((item) => contenders.delete(item))
         if (failure !== undefined && contenders.size === 0) throw failure
         // Keep one candidate plus one lock probe so a pre-lock stall cannot block recovery.
-        if (contenders.size < 2 && Date.now() - lastSpawn >= spawnDelay) {
+        // After a failure, let live contenders finish without replacing failed ones.
+        if (failure === undefined && contenders.size < 2 && Date.now() - lastSpawn >= spawnDelay) {
           announce("missing")
           contenders.add(await spawnContender())
           lastSpawn = Date.now()

@@ -1,6 +1,6 @@
 import { appendFile, rename, writeFile } from "node:fs/promises"
 
-const [registration, mode, delay] = process.argv.slice(2)
+const [registration, mode, delay, wait] = process.argv.slice(2)
 if (registration === undefined || mode === undefined) throw new Error("Missing service fixture arguments")
 if (mode === "failed") process.exit(1)
 if (mode === "stderr-failed") {
@@ -28,6 +28,24 @@ if (mode === "delayed" || mode === "delayed-failed" || mode === "coordinated" ||
     if (mode === "coordinated-failed-loser") await Bun.sleep(Number(delay ?? 1_500))
   } else await Bun.sleep(Number(delay))
   if (mode === "delayed-failed") process.exit(1)
+}
+
+if (mode === "port-conflict") {
+  await appendFile(registration + ".starts", process.pid + "\n")
+  const owner = await writeFile(registration + ".owner", String(process.pid), { flag: "wx" })
+    .then(() => true)
+    .catch(() => false)
+  if (owner) {
+    while ((await Bun.file(registration + ".starts").text()).trim().split("\n").length < 2) await Bun.sleep(10)
+  } else await Bun.sleep(Number(wait ?? 500))
+  try {
+    const listener = Bun.serve({ hostname: "127.0.0.1", port: Number(delay), fetch: () => new Response() })
+    listener.stop(true)
+    process.exit(0)
+  } catch {
+    process.stderr.write(`Managed service port ${delay} on 127.0.0.1 is already in use by another process.\n`)
+    process.exit(1)
+  }
 }
 
 let requests = 0

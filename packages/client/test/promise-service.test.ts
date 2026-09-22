@@ -158,3 +158,25 @@ test("signals the registered service process", async () => {
   expect(await Bun.file(registration + ".signal").text()).toBe("SIGTERM")
   expect(await Bun.file(registration).exists()).toBe(false)
 })
+
+test.each([500, 5_000])("preserves the port conflict with an overlapping contender delayed %d ms", async (wait) => {
+  await using fixture = await serviceFixture()
+  const listener = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() })
+  try {
+    const error = await ensure({
+      file: fixture.registration,
+      command: fixture.command("port-conflict", String(listener.port), String(wait)),
+    }).catch((error: unknown) => error)
+    expect(error).toBeInstanceOf(Error)
+    if (!(error instanceof Error)) throw error
+    expect(error.message).toContain(`Managed service port ${listener.port} on 127.0.0.1 is already in use`)
+    expect((await Bun.file(fixture.registration + ".starts").text()).trim().split("\n")).toHaveLength(2)
+  } finally {
+    listener.stop(true)
+    if (await Bun.file(fixture.registration + ".starts").exists()) {
+      for (const pid of (await Bun.file(fixture.registration + ".starts").text()).trim().split("\n")) {
+        fixture.track(Number(pid))
+      }
+    }
+  }
+})
