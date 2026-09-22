@@ -8,6 +8,7 @@ export const ServerInfo = Schema.Struct({
   urls: Schema.Array(Schema.String),
   paths: Schema.Struct({
     tmp: Schema.String,
+    home: Schema.optionalKey(Schema.String),
   }),
 }).annotate({ identifier: "ServerInfo" })
 export type ServerInfo = typeof ServerInfo.Type

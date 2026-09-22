@@ -101,7 +101,7 @@ export function encodeFilePath(filepath: string): string {
     .join("/")
 }
 
-export function createPathHelpers(scope: () => string) {
+export function createPathHelpers(scope: () => string, home?: () => string | undefined) {
   const normalize = (input: string) => {
     const root = scope()
 
@@ -110,6 +110,11 @@ export function createPathHelpers(scope: () => string) {
       /^[/\\]([A-Za-z]:)/,
       "$1",
     )
+
+    if (/^~($|[/\\])/.test(path)) {
+      const value = home?.()
+      if (value) path = path === "~" ? value : value.replace(/[/\\]+$/, "") + path.slice(1)
+    }
 
     // Separator-agnostic prefix stripping for Cygwin/native Windows compatibility
     // Only case-insensitive on Windows (drive letter or UNC paths)

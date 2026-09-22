@@ -112,6 +112,10 @@ describe("resolveArtifactPath", () => {
     ["docs", "../../etc/passwd"],
     ["", "../x"],
     ["docs", "/abs/path"],
+    ["docs", "~/notes.md"],
+    ["/repo/docs", "~/../shared/notes.md"],
+    ["docs", "~\\notes.md"],
+    ["docs", "~"],
   ])("rejects %s + %s", (base, href) => {
     expect(resolveArtifactPath(base, href)).toBeUndefined()
   })
