@@ -65,6 +65,7 @@ const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.Agen
             update: (id, update) => {
               if (id === plan) update(planAgent)
             },
+            add: () => {},
             remove: () => {},
           })
           return Effect.succeed({ dispose: Effect.void })
