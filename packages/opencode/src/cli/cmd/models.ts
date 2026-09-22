@@ -77,7 +77,7 @@ export function formatProviderTable(
   const cells = models.map(([modelID, model]) => [
     `${providerID}/${modelID}`,
     model.name,
-    formatCost(model.cost),
+    formatCost(providerID, model.cost),
     formatTokens(model.limit.context),
     formatTokens(model.limit.output),
     formatCapabilities(model.capabilities),
@@ -93,17 +93,22 @@ export function formatProviderTable(
 }
 
 // A model prices a base rate plus optional context tiers; the table shows the base rate.
-function formatCost(cost: Provider.Model["cost"]): string {
-  if (!cost) return "-"
-  if (cost.input === 0 && cost.output === 0) return "free"
+// A model whose config declares no cost is stored as 0, so a zero cost only means free
+// for opencode's own models, matching the "Free" label in the TUI model picker.
+function formatCost(providerID: string, cost: Provider.Model["cost"]): string {
+  if (cost.input === 0 && cost.output === 0) return providerID === "opencode" ? "free" : "-"
   return `${cost.input} / ${cost.output}`
 }
 
 function formatTokens(count: number): string {
   if (!count) return "-"
-  if (count >= 1_000_000) return `${Math.round(count / 1_000_000)}M`
+  if (count >= 999_500) return `${trimDecimal(count / 1_000_000)}M`
   if (count >= 1_000) return `${Math.round(count / 1_000)}K`
   return String(count)
+}
+
+function trimDecimal(value: number): string {
+  return value.toFixed(1).replace(/\.0$/, "")
 }
 
 function formatCapabilities(capabilities: Provider.Model["capabilities"]): string {

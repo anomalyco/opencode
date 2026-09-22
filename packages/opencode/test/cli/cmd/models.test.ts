@@ -32,6 +32,14 @@ function model(overrides: Partial<Provider.Model> = {}): Provider.Model {
   }
 }
 
+// Returns the cells of the row for a model ID. Columns are separated by at least
+// two spaces, and no fixture value contains two consecutive spaces.
+function cells(table: string, id: string): string[] {
+  const line = table.split(EOL).find((row) => row.startsWith(id + " "))
+  if (!line) throw new Error(`no row for ${id}`)
+  return line.split(/ {2,}/)
+}
+
 describe("cli.models", () => {
   test("aligns every column and leaves no trailing whitespace", () => {
     const table = formatProviderTable("acme", "Acme", [
@@ -61,33 +69,39 @@ describe("cli.models", () => {
   test("formats cost, limits and capabilities", () => {
     const table = formatProviderTable("acme", "Acme", [
       ["priced", model({ cost: { input: 3, output: 15, cache: { read: 0, write: 0 } } })],
-      ["free", model({ cost: { input: 0, output: 0, cache: { read: 0, write: 0 } } })],
-      ["big", model({ limit: { context: 1_000_000, output: 900 } })],
+      ["large", model({ limit: { context: 1_048_576, output: 900 } })],
       [
         "capable",
-        model({
-          capabilities: {
-            temperature: true,
-            reasoning: true,
-            attachment: true,
-            toolcall: true,
-            input: MODALITIES,
-            output: MODALITIES,
-            interleaved: false,
-          },
-        }),
+        model({ capabilities: { ...model().capabilities, reasoning: true, attachment: true, toolcall: true } }),
       ],
+      ["plain", model()],
     ])
 
-    expect(table).toContain("3 / 15")
-    expect(table).toContain("free")
-    expect(table).toContain("200K")
-    expect(table).toContain("64K")
-    expect(table).toContain("1M")
-    expect(table).toContain("900")
-    expect(table).toContain("reasoning, tools, attachments")
-    // A model with no capability flags renders a placeholder rather than an empty cell.
-    expect(table).toContain("-")
+    expect(cells(table, "acme/priced")).toEqual(["acme/priced", "Model", "3 / 15", "200K", "64K", "-"])
+    expect(cells(table, "acme/large").slice(3, 5)).toEqual(["1M", "900"])
+    expect(cells(table, "acme/capable")[5]).toBe("reasoning, tools, attachments")
+    expect(cells(table, "acme/plain")[5]).toBe("-")
+  })
+
+  test("only calls a zero cost free for opencode's own models", () => {
+    // A config model that declares no cost is stored as 0, which means unknown, not free.
+    const zero = model({ cost: { input: 0, output: 0, cache: { read: 0, write: 0 } } })
+
+    expect(cells(formatProviderTable("opencode", "OpenCode Zen", [["zen", zero]]), "opencode/zen")[2]).toBe("free")
+    expect(cells(formatProviderTable("acme", "Acme", [["custom", zero]]), "acme/custom")[2]).toBe("-")
+  })
+
+  test("rounds token limits without overstating them", () => {
+    const limits = (context: number) =>
+      cells(formatProviderTable("acme", "Acme", [["m", model({ limit: { context, output: 0 } })]]), "acme/m")[3]
+
+    expect(limits(1_500_000)).toBe("1.5M")
+    expect(limits(2_000_000)).toBe("2M")
+    // Rounds up into the next unit rather than printing "1000K".
+    expect(limits(999_600)).toBe("1M")
+    expect(limits(131_072)).toBe("131K")
+    expect(limits(512)).toBe("512")
+    expect(limits(0)).toBe("-")
   })
 
   test("renders a header-only table for a provider with no models", () => {

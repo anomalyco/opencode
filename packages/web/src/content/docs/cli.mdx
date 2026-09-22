@@ -349,7 +349,7 @@ anthropic/claude-opus-4-5    Claude Opus 4.5    5 / 25              200K     64K
 anthropic/claude-sonnet-4-5  Claude Sonnet 4.5  3 / 15              200K     64K     reasoning, tools, attachments
 ```
 
-Costs are the base rate per 1M tokens, before any context-tier pricing. The default output stays one plain `provider/model` per line, so it can still be piped into other commands.
+Costs are the base rate per 1M tokens, before any context-tier pricing. A `-` means the value is not known — for example, a custom provider's model whose config declares no cost. The default output stays one plain `provider/model` per line, so it can still be piped into other commands.
 
 ---
 
