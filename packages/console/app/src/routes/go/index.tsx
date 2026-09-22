@@ -17,6 +17,7 @@ import { IconMiniMax, IconMiMo, IconZai, IconAlibaba, IconDeepSeek } from "~/com
 import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { LocaleLinks } from "~/component/locale-links"
+import { goUsageLimits } from "~/lib/language"
 
 const checkLoggedIn = query(async () => {
   "use server"
@@ -24,6 +25,7 @@ const checkLoggedIn = query(async () => {
 }, "checkLoggedIn.get")
 
 const models = [
+  { name: "Grok 4.7", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "Grok 4.6", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "GPT 5.6 Luna", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "GLM-5.3-Flash", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
@@ -34,6 +36,8 @@ const models = [
   { name: "Kimi K2.7 Code", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Kimi K2.6", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "LongCat-2.0", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
+  { name: "MiMo-V2.6-Pro", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
+  { name: "MiMo-V2.6-Flash", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "MiMo-V2.5-Pro", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "MiMo-V2.5", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Qwen3.8 Max", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
@@ -45,11 +49,12 @@ const models = [
   { name: "MiniMax M2.7", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Muse Spark 1.3 Contributor", training: "go.faq.a5.used", retention: "go.faq.a5.notZdr" },
   { name: "Muse Spark 1.2 Contributor", training: "go.faq.a5.used", retention: "go.faq.a5.notZdr" },
+  { name: "DeepSeek V4.1 Flash", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "DeepSeek V4 Pro", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "DeepSeek V4 Flash", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
+  { name: "DeepSeek V4 Flash Vision Exp", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Hy4 preview", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Hy3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
-  { name: "Omen Alpha", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
 ] as const
 
 export default function Home() {
@@ -82,7 +87,7 @@ export default function Home() {
             <div data-component="desktop-app-banner">
               <span data-slot="badge">{i18n.t("home.banner.badge")}</span>
               <div data-slot="content">
-                <span data-slot="text">{i18n.t("go.banner.text")}</span>
+                <span data-slot="text">{i18n.t("go.promo.deepseek")}</span>
               </div>
             </div>
             <div data-slot="hero-copy">
@@ -207,7 +212,7 @@ export default function Home() {
           </section>
 
           <section data-component="comparison">
-            <LimitsGraph href={language.route("/docs/go/#usage-limits")} />
+            <LimitsGraph href={goUsageLimits(language.locale())} />
           </section>
 
           <section data-component="problem">
@@ -320,7 +325,7 @@ export default function Home() {
                   </div>
                   <div data-slot="faq-retention-notes">
                     <p>
-                      <strong>Grok 4.6:</strong> {i18n.t("go.faq.a5.grokRetention")}{" "}
+                      <strong>Grok 4.7/4.6:</strong> {i18n.t("go.faq.a5.grokRetention")}{" "}
                       <a href="https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr">
                         {i18n.t("go.faq.a5.learnMore")}
                       </a>
@@ -361,6 +366,15 @@ export default function Home() {
               </li>
               <li>
                 <Faq question={i18n.t("go.faq.q8")}>{i18n.t("go.faq.a8")}</Faq>
+              </li>
+              <li>
+                <Faq question={i18n.t("go.faq.q10")}>
+                  <For each={i18n.t("go.faq.a10").split(/(\{\{contact\}\})/g)}>
+                    {(part) =>
+                      part === "{{contact}}" ? <a href="mailto:help@anoma.ly">{i18n.t("common.contactUs")}</a> : part
+                    }
+                  </For>
+                </Faq>
               </li>
             </ul>
           </section>
