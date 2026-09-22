@@ -167,7 +167,7 @@ export namespace Jev {
   export interface RoutingPolicy {
     /** Confidence required before we route DOWN to a cheaper tier. */
     minConfidenceToDegrade: number
-    /** Complexity score at or below which degrading is allowed. */
+    /** Complexity score (normalized 0..1; the raw wire score is a weighted level index) at or below which degrading is allowed. */
     maxComplexityForDegrade: number
     /** If we can't trust the complexity score, treat the task as hard. */
     minComplexityConfidence: number
@@ -207,7 +207,18 @@ export namespace Jev {
   // "who"; the score independently says "how hard". Requiring both to agree
   // (each with its own confidence gate) is what keeps Jev's error rate from
   // turning into a quality regression.
-  // ---------------------------------------------------------------------------
+  // Complexity levels for the score question. The decision API answers with a
+  // weighted level index over these — raw 0..n-1 (routing-spec v1.1: measured
+  // 0..2 on the wire).
+  const COMPLEXITY_CRITERIA = [
+    "Mechanical: single location, known pattern, no design decision",
+    "Moderate: several locations, or requires some judgment",
+    "Hard: architectural, ambiguous, or getting it wrong is expensive",
+  ]
+
+  // Policy thresholds and the decision's `complexity` metadata speak 0..1;
+  // normalize the raw level index before either.
+  const normalizeComplexity = (raw: number): number => raw / (COMPLEXITY_CRITERIA.length - 1)
 
   export function routingQuestions(tiers: TierSpec[]): Questions {
     const criteria: Record<string, string> = {}
@@ -222,11 +233,7 @@ export namespace Jev {
       complexity: {
         type: "score",
         instructions: "How demanding is this request to carry out correctly?",
-        criteria: [
-          "Mechanical: single location, known pattern, no design decision",
-          "Moderate: several locations, or requires some judgment",
-          "Hard: architectural, ambiguous, or getting it wrong is expensive",
-        ],
+        criteria: COMPLEXITY_CRITERIA,
       },
     }
   }
@@ -244,8 +251,10 @@ export namespace Jev {
     if (!choice?.choice) return { tier: fallback, reason: "engine-unavailable" }
 
     const confidence = choice.confidence ?? 0
-    // Unknown complexity defaults to HARD, not easy. Fail expensive.
-    const score = complexity?.score ?? 1
+    // Unknown complexity defaults to HARD, not easy. Fail expensive. The wire
+    // score is a raw weighted level index (0..n-1); gates and policy speak 0..1.
+    const rawScore = complexity?.score
+    const score = rawScore === undefined ? 1 : normalizeComplexity(rawScore)
     const complexityConfidence = complexity?.confidence ?? 0
 
     const meta = { intent: choice.choice, complexity: score, confidence }

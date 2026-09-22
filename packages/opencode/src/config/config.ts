@@ -742,7 +742,7 @@ export namespace Config {
           .min(0)
           .max(1)
           .optional()
-          .describe("Complexity score at or below which degrading is allowed (default: 0.5)"),
+          .describe("Complexity score, normalized 0..1, at or below which degrading is allowed (default: 0.5; decision scores arrive as weighted level indices and are normalized first)"),
         minComplexityConfidence: z
           .number()
           .min(0)

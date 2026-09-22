@@ -214,7 +214,7 @@ describe("routeWith", () => {
     const result = await Jev.routeWith(config(), input(), engine)
     expect(engine.calls()).toBe(1)
     expect(result?.model).toEqual(cheap.model)
-    expect(result?.decision).toMatchObject({ tier: "cheap", reason: "jev-confident", complexity: 0.1 })
+    expect(result?.decision).toMatchObject({ tier: "cheap", reason: "jev-confident", complexity: 0.05 }) // raw 0.1 → normalized 0.05
     // only AVAILABLE tiers are offered as criteria
     const question = engine.lastQuestions()!.tier
     if (question.type !== "choice") throw new Error("expected a choice question")
@@ -229,7 +229,7 @@ describe("routeWith", () => {
   })
 
   test("gate 2: high complexity keeps the default model", async () => {
-    const engine = mockEngine(tierAnswer("cheap", 0.9, 0.8, 0.9))
+    const engine = mockEngine(tierAnswer("cheap", 0.9, 1.6, 0.9)) // raw wire scale 0..2 → normalized 0.8 > 0.5
     const result = await Jev.routeWith(config(), input(), engine)
     expect(result?.model).toEqual(top.model)
     expect(result?.decision.reason).toBe("high-complexity")
