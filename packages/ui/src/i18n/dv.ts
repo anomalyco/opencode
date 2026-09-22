@@ -70,7 +70,7 @@ export const dict: Record<string, string> = {
   "ui.sessionTurn.error.addCredits": "ކްރެޑިޓްތައް އިތުރުކުރުން",
   "dialog.usageExceeded.freeTier.title": "ހިލޭ ލިމިޓަށް އާދެވިއްޖެއެވެ",
   "dialog.usageExceeded.freeTier.description":
-    "އެންމެ ރަނގަޅު އޮޕަން ސޯސް މޮޑެލްތަކަށް އިތުބާރުހުރި ގޮތެއްގައި އެކްސެސް ހޯދުމަށް OpenCode Go އަށް ސަބްސްކްރައިބް ކޮށްލައްވާ، މަހަކު 5 ޑޮލަރުން ފެށިގެންނެވެ.",
+    "އެންމެ ރަނގަޅު އޮޕަން ސޯސް މޮޑެލްތަކަށް އިތުބާރުހުރި ގޮތެއްގައި އެކްސެސް ހޯދުމަށް މަހަކު 10 ޑޮލަރަށް OpenCode Go އަށް ސަބްސްކްރައިބް ކޮށްލައްވާ.",
   "dialog.usageExceeded.freeTier.actionLabel": "ސަބްސްކްރައިބް ކޮށްލައްވާ",
   "dialog.usageExceeded.accountRateLimit.title": "ގޯ ލިމިޓް އާދެވުނެވެ",
   "dialog.usageExceeded.accountRateLimit.description":
