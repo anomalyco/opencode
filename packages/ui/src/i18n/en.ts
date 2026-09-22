@@ -191,6 +191,7 @@ const source = {
   "ui.tool.websearch": "Web Search",
   "ui.tool.websearch.provider": "{{provider}} Web Search",
   "ui.tool.devsearch": "Developer Search",
+  "ui.tool.alexandria": "Alexandria",
   "ui.tool.shell": "Shell",
   "ui.tool.shell.writingCommand": "Writing command…",
   "ui.tool.shell.exit": "Command exited with code {{code}}",
