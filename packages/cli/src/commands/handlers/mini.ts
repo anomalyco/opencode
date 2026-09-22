@@ -30,6 +30,7 @@ export default Runtime.handler(Commands.commands.mini, (input) =>
         },
         continue: input.continue,
         session: Option.getOrUndefined(input.session),
+        createSessionID: Option.getOrUndefined(input.sessionID),
         fork: input.fork,
         model: Option.getOrUndefined(input.model),
         agent: Option.getOrUndefined(input.agent),

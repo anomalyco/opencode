@@ -11,9 +11,16 @@ import { UpdatePreflight } from "../../services/update-preflight"
 import { Npm } from "@opencode/util/npm"
 import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_VERSION } from "../../version"
 import { Env } from "../../env"
+import { validateSessionCreateInput } from "../../session-target"
 
 export default Runtime.handler(Commands, (input) =>
   Effect.gen(function* () {
+    const invalid = validateSessionCreateInput({
+      createSessionID: Option.getOrUndefined(input.sessionID),
+      session: Option.getOrUndefined(input.session),
+      continue: input.continue,
+    })
+    if (invalid) return yield* Effect.fail(new Error(invalid))
     const requestedDirectory = Option.getOrUndefined(input.directory)
     const requestedServer = Option.getOrUndefined(input.server)
     if (requestedDirectory !== undefined) process.chdir(requestedDirectory)
@@ -82,6 +89,8 @@ export default Runtime.handler(Commands, (input) =>
       args: {
         continue: input.continue,
         sessionID: Option.getOrUndefined(input.session),
+        // Deliberate name split: resume uses sessionID, create-only uses createSessionID.
+        createSessionID: Option.getOrUndefined(input.sessionID),
         prompt: Option.getOrUndefined(input.prompt),
         auto: input.auto || input.yolo || input.dangerouslySkipPermissions,
       },

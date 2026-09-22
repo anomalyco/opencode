@@ -5,7 +5,7 @@ import { open } from "node:fs/promises"
 import path from "node:path"
 import { readStdin } from "../util/io"
 import { ServerConnection } from "../services/server-connection"
-import { parseSessionTargetModel, resolveSessionTarget } from "../session-target"
+import { parseSessionTargetModel, resolveSessionTarget, validateSessionCreateInput } from "../session-target"
 import { toolInlineInfo } from "@opencode/tui/mini/tool"
 import { runNonInteractivePrompt } from "./noninteractive"
 import { UI } from "./ui"
@@ -17,6 +17,7 @@ export type RunCommandInput = {
   message: string[]
   continue?: boolean
   session?: string
+  createSessionID?: string
   fork?: boolean
   model?: string
   agent?: string
@@ -69,6 +70,8 @@ export function runNonInteractiveWithOptions(input: RunCommandInput, options: Ex
 }
 
 async function run(input: RunCommandInput, options: ExecutionOptions) {
+  const invalid = validateSessionCreateInput(input)
+  if (invalid) fail(invalid)
   if (input.fork && !input.continue && !input.session) fail("--fork requires --continue or --session")
   const root = options.root ?? process.env.PWD ?? process.cwd()
   const local = localDirectory(root)
@@ -94,6 +97,7 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
     location: prepared.directory ? { directory: prepared.directory } : undefined,
     continue: input.continue,
     session: input.session,
+    createSessionID: input.createSessionID,
     fork: input.fork,
     model: explicit
       ? { providerID: explicit.model.providerID, id: explicit.model.modelID, variant: explicit.variant }

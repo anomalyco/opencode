@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { OpenCode, type LocationGetOutput, type ModelRef, type SessionInfo } from "@opencode/client/promise"
-import { resolveSessionTarget, SessionTargetMutationError } from "../src/session-target"
+import { resolveSessionTarget, SessionTargetMutationError, validateSessionCreateInput } from "../src/session-target"
 
 function location(directory: string): LocationGetOutput {
   return { directory, project: { id: "project", directory, canonical: directory } }
@@ -112,5 +112,34 @@ describe("session target resolver", () => {
     spyOn(client.location, "get").mockResolvedValue(location("/project"))
     spyOn(client.session, "create").mockRejectedValue(new Error("connection closed after create"))
     await expect(resolveSessionTarget({ client, prepare })).rejects.toBeInstanceOf(SessionTargetMutationError)
+  })
+
+  test("creates a fresh Session with the requested id", async () => {
+    const client = OpenCode.make({ baseUrl: "https://opencode.test" })
+    spyOn(client.location, "get").mockResolvedValue(location("/project"))
+    const create = spyOn(client.session, "create").mockImplementation(async (input) =>
+      session(input?.id ?? "ses_fresh", "/project"),
+    )
+
+    const target = await resolveSessionTarget({ client, createSessionID: "ses_chosen", prepare })
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(create.mock.calls[0]?.[0]).toMatchObject({ id: "ses_chosen" })
+    expect(target.session.id).toBe("ses_chosen")
+  })
+})
+
+describe("session create input validation", () => {
+  test("accepts a bare create id", () => {
+    expect(validateSessionCreateInput({ createSessionID: "ses_chosen" })).toBeUndefined()
+  })
+
+  test("rejects resume flag combinations", () => {
+    expect(validateSessionCreateInput({ createSessionID: "ses_chosen", session: "ses_resume" })).toContain("--session")
+    expect(validateSessionCreateInput({ createSessionID: "ses_chosen", continue: true })).toContain("--continue")
+    expect(validateSessionCreateInput({ createSessionID: "ses_chosen", fork: true })).toContain("--fork")
+  })
+
+  test("rejects an id without the ses prefix", () => {
+    expect(validateSessionCreateInput({ createSessionID: "custom" })).toContain("ses")
   })
 })

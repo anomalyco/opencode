@@ -53,6 +53,7 @@ import { usePromptMove } from "./move"
 import { resolvePastedAttachments } from "./local-attachment"
 import { locationKey, useData } from "../../context/data"
 import { useLocation } from "../../context/location"
+import { takeCreateSessionID } from "../../context/args"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { useInteractivity } from "../../context/interactivity"
 import { abbreviateHome } from "../../runtime"
@@ -1229,7 +1230,9 @@ export function Prompt(props: PromptProps) {
       // a local session record synchronously, so the navigation below happens
       // immediately — enter feels sent even while the create round-trip is in
       // flight. Sends against the new session gate on the request.
+      const createID = takeCreateSessionID()
       const created = data.session.create({
+        id: createID,
         location: directory ? { directory } : location,
         agent: agent.id,
         model: {
