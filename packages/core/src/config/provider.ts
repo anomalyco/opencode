@@ -30,6 +30,12 @@ class Limit extends Schema.Class<Limit>("ConfigV2.Model.Limit")({
   output: Schema.Int.pipe(Schema.optional),
 }) {}
 
+const Capabilities = Schema.Struct({
+  tools: Schema.Boolean.pipe(Schema.optional),
+  input: Schema.Array(Schema.String),
+  output: Schema.Array(Schema.String),
+})
+
 const ModelApi = Schema.Union([
   Schema.Struct({
     id: ModelV2.ID.pipe(Schema.optional),
@@ -48,7 +54,7 @@ class Model extends Schema.Class<Model>("ConfigV2.Model")({
   family: ModelV2.Family.pipe(Schema.optional),
   name: Schema.String.pipe(Schema.optional),
   api: ModelApi.pipe(Schema.optional),
-  capabilities: ModelV2.Capabilities.pipe(Schema.optional),
+  capabilities: Capabilities.pipe(Schema.optional),
   request: Schema.Struct({
     ...Request.fields,
     variant: Schema.String.pipe(Schema.optional),

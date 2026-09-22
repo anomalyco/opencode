@@ -55,6 +55,41 @@ function request(headers: Record<string, string>, variant?: string) {
 const decode = Schema.decodeUnknownSync(Config.Info)
 
 describe("ConfigProviderPlugin.Plugin", () => {
+  it.effect("defaults configured model tool capability to false when omitted", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const providerID = ProviderV2.ID.make("custom")
+      const modelID = ModelV2.ID.make("chat")
+      const config = Config.Service.of({
+        entries: () =>
+          Effect.succeed([
+            new Config.Document({
+              type: "document",
+              info: decode({
+                providers: {
+                  custom: {
+                    api: { type: "native", settings: {} },
+                    models: {
+                      chat: {
+                        capabilities: { input: ["text"], output: ["text"] },
+                      },
+                    },
+                  },
+                },
+              }),
+            }),
+          ]),
+      })
+
+      yield* addPlugin(config)
+
+      const model = required(yield* catalog.model.get(providerID, modelID))
+      expect(model.capabilities.tools).toBe(false)
+      expect(model.capabilities.input).toEqual(["text"])
+      expect(model.capabilities.output).toEqual(["text"])
+    }),
+  )
+
   it.effect("keeps configured model variant bodies unchanged", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service
