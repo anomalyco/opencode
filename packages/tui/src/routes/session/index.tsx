@@ -2436,6 +2436,9 @@ function ToolPart(props: { part: SessionMessageAssistantTool; images?: boolean }
       <Match when={display() === "devsearch"}>
         <DevSearch {...toolprops} />
       </Match>
+      <Match when={display() === "alexandria"}>
+        <Alexandria {...toolprops} />
+      </Match>
       <Match when={display() === "write"}>
         <Write {...toolprops} />
       </Match>
@@ -3115,6 +3118,22 @@ function DevSearch(props: ToolProps) {
       part={props.part}
     >
       Developer Search "{stringValue(props.input.query)}"
+    </InlineTool>
+  )
+}
+
+function Alexandria(props: ToolProps) {
+  const query = createMemo(() => stringValue(props.input.query))
+  const target = createMemo(() => {
+    const provider = stringValue(props.input.provider)
+    const capability = stringValue(props.input.capability)
+    return provider && capability ? `${provider}/${capability}` : undefined
+  })
+  return (
+    <InlineTool icon="◈" pending="Querying Alexandria…" complete={query() ?? target()} part={props.part}>
+      <Show when={query()} fallback={<>Alexandria {target()}</>}>
+        Alexandria "{query()}"
+      </Show>
     </InlineTool>
   )
 }

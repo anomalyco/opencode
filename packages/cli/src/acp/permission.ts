@@ -158,6 +158,8 @@ function permissionTitle(toolName: string, input: ToolInput, previews: ReadonlyA
     case "websearch":
     case "devsearch":
       return stringValue(input.query)
+    case "alexandria":
+      return alexandriaTitle(input)
     case "grep":
     case "glob":
       return stringValue(input.pattern)
@@ -170,6 +172,14 @@ function permissionTitle(toolName: string, input: ToolInput, previews: ReadonlyA
     default:
       return undefined
   }
+}
+
+function alexandriaTitle(input: ToolInput) {
+  const query = stringValue(input.query)
+  if (query) return query
+  const provider = stringValue(input.provider)
+  const capability = stringValue(input.capability)
+  return provider && capability ? `${provider}/${capability}` : undefined
 }
 
 function permissionLocations(

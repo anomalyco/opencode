@@ -28,6 +28,7 @@ const InputObject = Schema.StructWithRest(
     webfetch: Schema.optional(Rule),
     websearch: Schema.optional(Action),
     devsearch: Schema.optional(Action),
+    alexandria: Schema.optional(Action),
     lsp: Schema.optional(Rule),
     doom_loop: Schema.optional(Action),
     skill: Schema.optional(Rule),

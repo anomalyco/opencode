@@ -26,4 +26,20 @@ test("preserves permission roots and self-contained metadata", () => {
     title: 'Developer Search "effect retry"',
     lines: ["Query: effect retry"],
   })
+  expect(
+    permissionPresentation({ action: "alexandria", resources: [], metadata: { query: "us inflation" } }),
+  ).toMatchObject({
+    title: 'Alexandria "us inflation"',
+    lines: ["Query: us inflation"],
+  })
+  expect(
+    permissionPresentation({
+      action: "alexandria",
+      resources: [],
+      metadata: { provider: "fred", capability: "series/observations" },
+    }),
+  ).toMatchObject({
+    title: "Alexandria fred/series/observations",
+    lines: ["Capability: fred/series/observations"],
+  })
 })

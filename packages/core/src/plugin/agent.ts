@@ -120,6 +120,7 @@ export const Plugin = define({
               { action: "webfetch", resource: "*", effect: "allow" },
               { action: "websearch", resource: "*", effect: "allow" },
               { action: "devsearch", resource: "*", effect: "allow" },
+              { action: "alexandria", resource: "*", effect: "ask" },
               { action: "read", resource: "*", effect: "allow" },
               { action: "read", resource: "*.env", effect: "ask" },
               { action: "read", resource: "*.env.*", effect: "ask" },

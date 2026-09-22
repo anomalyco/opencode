@@ -110,6 +110,21 @@ export function permissionPresentation(
     }
   }
 
+  if (action === "alexandria") {
+    const query = text(input.query) || text(metadata.query)
+    const provider = text(input.provider) || text(metadata.provider)
+    const capability = text(input.capability) || text(metadata.capability)
+    const target = provider && capability ? `${provider}/${capability}` : ""
+    if (query) {
+      return { icon: "◈", title: `Alexandria "${query}"`, lines: [`Query: ${query}`] }
+    }
+    return {
+      icon: "◈",
+      title: target ? `Alexandria ${target}` : "Alexandria",
+      lines: target ? [`Capability: ${target}`] : [],
+    }
+  }
+
   if (action === "lsp") {
     const file = text(input.path)
     const operation = text(input.operation) || "request"

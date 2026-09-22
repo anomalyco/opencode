@@ -69,6 +69,7 @@ import { SkillDiscovery } from "../skill/discovery.js"
 import { Watcher } from "../filesystem/watcher.js"
 import { PatchTool } from "../tool/plugin/patch.js"
 import { DevSearchTool } from "../tool/plugin/devsearch.js"
+import { AlexandriaTool } from "../tool/plugin/alexandria.js"
 import { EditTool } from "../tool/plugin/edit.js"
 import { GlobTool } from "../tool/plugin/glob.js"
 import { GrepTool } from "../tool/plugin/grep.js"
@@ -233,6 +234,7 @@ const pre = [
   VerbosityPlugin.Plugin,
   IdentityPlugin.Plugin,
   DevSearchTool.Plugin,
+  AlexandriaTool.Plugin,
   EditTool.Plugin,
   GlobTool.Plugin,
   GrepTool.Plugin,
