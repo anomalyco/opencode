@@ -69,7 +69,11 @@ export const ModelsCommand = effectCmd({
 const HEADERS = ["Model", "Name", "Cost ($/1M in/out)", "Context", "Output", "Capabilities"]
 
 // One table per provider, so a single long model ID cannot widen every other provider's columns.
-function formatProviderTable(providerID: string, providerName: string, models: [string, Provider.Model][]): string {
+export function formatProviderTable(
+  providerID: string,
+  providerName: string,
+  models: [string, Provider.Model][],
+): string {
   const cells = models.map(([modelID, model]) => [
     `${providerID}/${modelID}`,
     model.name,
