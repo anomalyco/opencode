@@ -74,22 +74,38 @@ export function formatProviderTable(
   providerName: string,
   models: [string, Provider.Model][],
 ): string {
-  const cells = models.map(([modelID, model]) => [
-    `${providerID}/${modelID}`,
-    model.name,
-    formatCost(providerID, model.cost),
-    formatTokens(model.limit.context),
-    formatTokens(model.limit.output),
-    formatCapabilities(model.capabilities),
-  ])
+  const cells = models.map(([modelID, model]) =>
+    [
+      `${providerID}/${modelID}`,
+      model.name,
+      formatCost(providerID, model.cost),
+      formatTokens(model.limit.context),
+      formatTokens(model.limit.output),
+      formatCapabilities(model.capabilities),
+    ].map(singleLine),
+  )
 
-  const widths = HEADERS.map((header, column) => Math.max(header.length, ...cells.map((cell) => cell[column].length)))
+  // Widths are measured in terminal columns, so wide characters such as CJK still line up.
+  const widths = HEADERS.map((header, column) =>
+    Math.max(Bun.stringWidth(header), ...cells.map((cell) => Bun.stringWidth(cell[column]))),
+  )
   // The last column is left unpadded so no line carries trailing whitespace.
   const row = (cell: string[]) =>
-    cell.map((value, column) => (column === cell.length - 1 ? value : value.padEnd(widths[column]))).join("  ")
+    cell
+      .map((value, column) =>
+        column === cell.length - 1 ? value : value + " ".repeat(widths[column] - Bun.stringWidth(value)),
+      )
+      .join("  ")
 
   const header = row(HEADERS)
-  return [providerName, "─".repeat(header.length), header, "─".repeat(header.length), ...cells.map(row)].join(EOL)
+  const rule = "─".repeat(Bun.stringWidth(header))
+  return [singleLine(providerName), rule, header, rule, ...cells.map(row)].join(EOL)
+}
+
+// Catalogue names can carry tabs or newlines (some models.dev names end in a tab),
+// which would shift a row or split it in two.
+function singleLine(value: string): string {
+  return value.replace(/\s+/g, " ").trim()
 }
 
 // A model prices a base rate plus optional context tiers; the table shows the base rate.

@@ -104,6 +104,30 @@ describe("cli.models", () => {
     expect(limits(0)).toBe("-")
   })
 
+  test("keeps rows aligned when names carry tabs, newlines or wide characters", () => {
+    const table = formatProviderTable("acme", "Acme", [
+      // Verbatim from models.dev: this name ends in a tab.
+      ["tabbed", model({ name: "DeepSeek V3 (Turbo)\t" })],
+      ["split", model({ name: "two\nlines" })],
+      ["wide", model({ name: "通义千问" })],
+      ["plain", model({ name: "Plain" })],
+    ])
+    const lines = table.split(EOL)
+
+    expect(table).not.toMatch(/\t/)
+    // Two header rules, the header, the provider name, and one line per model.
+    expect(lines).toHaveLength(8)
+    expect(cells(table, "acme/tabbed")[1]).toBe("DeepSeek V3 (Turbo)")
+    expect(cells(table, "acme/split")[1]).toBe("two lines")
+
+    // The cost column starts at the same terminal column on every row, CJK included.
+    const costColumn = (id: string) => {
+      const line = lines.find((row) => row.startsWith(id + " "))!
+      return Bun.stringWidth(line.slice(0, line.indexOf("3 / 15")))
+    }
+    expect(new Set(["acme/tabbed", "acme/split", "acme/wide", "acme/plain"].map(costColumn)).size).toBe(1)
+  })
+
   test("renders a header-only table for a provider with no models", () => {
     const table = formatProviderTable("acme", "Acme", [])
     const lines = table.split(EOL)
