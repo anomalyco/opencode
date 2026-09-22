@@ -422,6 +422,15 @@ describe("MCP OAuth", () => {
     expect(tokenRequests[0]?.get("grant_type")).toBe("refresh_token")
   })
 
+  test("requests offline_access without forcing a consent prompt", async () => {
+    const { server } = authorizationServer({ scopes_supported: ["read", "offline_access"] })
+    const { url } = await Effect.runPromise(
+      Effect.scoped(start(server, { client_id: "client", scope: "read" })),
+    ).finally(() => server.stop(true))
+    expect(url.searchParams.get("scope")).toBe("read offline_access")
+    expect(url.searchParams.has("prompt")).toBe(false)
+  })
+
   test("forwards iss from the redirect so issuer-advertising servers can complete", async () => {
     const { server } = authorizationServer({ authorization_response_iss_parameter_supported: true })
     const result = await Effect.runPromise(
