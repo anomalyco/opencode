@@ -98,8 +98,8 @@ export const dict: Record<string, string> = {
   "ui.sessionTurn.status.consideringNextSteps": "Розгляд наступних кроків",
 
   "ui.messagePart.diagnostic.error": "Помилка",
-  "ui.messagePart.title.edit": "Редагувати",
-  "ui.messagePart.title.write": "Написати",
+  "ui.messagePart.title.edit": "Редагування",
+  "ui.messagePart.title.write": "Написання",
   "ui.messagePart.option.typeOwnAnswer": "Введіть власну відповідь",
   "ui.messagePart.review.title": "Перевірте свої відповіді",
   "ui.messagePart.questions.dismissed": "Запитання відхилено",
