@@ -1,9 +1,11 @@
 import { Effect } from "effect"
+import { and, eq } from "drizzle-orm"
 import { effectCmd } from "../effect-cmd"
 import { Session } from "@/session/session"
 import { NotFoundError } from "@/storage/storage"
 import { Database } from "@opencode-ai/core/database/database"
-import { SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { SessionRollup } from "@opencode-ai/core/session/rollup"
 import { Project } from "@/project/project"
 import { InstanceRef } from "@/effect/instance-ref"
 
@@ -91,6 +93,7 @@ const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* (
   currentProject?: Project.Info,
 ) {
   const svc = yield* Session.Service
+  const { db } = yield* Database.Service
   const sessions = yield* getAllSessions()
   const MS_IN_DAY = 24 * 60 * 60 * 1000
 
@@ -121,8 +124,15 @@ const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* (
     }
   }
 
+  // Sessions whose parent is outside the window report their own subtree, so
+  // every filtered session is attributed to exactly one top-level row.
+  const filteredIDs = new Set(filteredSessions.map((session) => session.id))
+  const reportingRoots = filteredSessions.filter(
+    (session) => !session.parentID || !filteredIDs.has(session.parentID),
+  )
+
   const stats: SessionStats = {
-    totalSessions: filteredSessions.length,
+    totalSessions: reportingRoots.length,
     totalMessages: 0,
     totalCost: 0,
     totalTokens: {
@@ -209,16 +219,44 @@ const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* (
           }
         }
 
+        // V2 runner sessions have no V1 message rows; their assistant messages
+        // live in SessionMessageTable and carry the model/cost the step was
+        // billed with.
+        const v2AssistantRows = yield* db
+          .select()
+          .from(SessionMessageTable)
+          .where(and(eq(SessionMessageTable.session_id, session.id), eq(SessionMessageTable.type, "assistant")))
+          .all()
+          .pipe(Effect.orDie)
+        for (const row of v2AssistantRows) {
+          const data = row.data as {
+            model?: { providerID?: string; id?: string }
+            cost?: number
+            tokens?: { input?: number; output?: number; reasoning?: number; cache?: { read?: number; write?: number } }
+          }
+          const providerID = data.model?.providerID
+          const modelID = data.model?.id
+          if (!providerID || !modelID) continue
+          const modelKey = `${providerID}/${modelID}`
+          if (!sessionModelUsage[modelKey]) {
+            sessionModelUsage[modelKey] = {
+              messages: 0,
+              tokens: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+              cost: 0,
+            }
+          }
+          sessionModelUsage[modelKey].messages++
+          sessionModelUsage[modelKey].cost += data.cost ?? 0
+          sessionModelUsage[modelKey].tokens.input += data.tokens?.input ?? 0
+          sessionModelUsage[modelKey].tokens.output += (data.tokens?.output ?? 0) + (data.tokens?.reasoning ?? 0)
+          sessionModelUsage[modelKey].tokens.cache.read += data.tokens?.cache?.read ?? 0
+          sessionModelUsage[modelKey].tokens.cache.write += data.tokens?.cache?.write ?? 0
+        }
+
         return {
+          sessionID: session.id,
+          isRoot: reportingRoots.some((root) => root.id === session.id),
           messageCount: messages.length,
-          sessionCost,
-          sessionTokens,
-          sessionTotalTokens:
-            sessionTokens.input +
-            sessionTokens.output +
-            sessionTokens.reasoning +
-            sessionTokens.cache.read +
-            sessionTokens.cache.write,
           sessionToolUsage,
           sessionModelUsage,
           earliestTime: cutoffTime > 0 ? session.time.updated : session.time.created,
@@ -231,15 +269,26 @@ const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* (
   for (const result of results) {
     earliestTime = Math.min(earliestTime, result.earliestTime)
     latestTime = Math.max(latestTime, result.latestTime)
-    sessionTotalTokens.push(result.sessionTotalTokens)
 
     stats.totalMessages += result.messageCount
-    stats.totalCost += result.sessionCost
-    stats.totalTokens.input += result.sessionTokens.input
-    stats.totalTokens.output += result.sessionTokens.output
-    stats.totalTokens.reasoning += result.sessionTokens.reasoning
-    stats.totalTokens.cache.read += result.sessionTokens.cache.read
-    stats.totalTokens.cache.write += result.sessionTokens.cache.write
+    if (result.isRoot) {
+      // Top-level rows report the subtree rollup so subagent spend and tokens
+      // attribute to the session that spawned them.
+      const rolled = SessionRollup.rollup(filteredSessions, result.sessionID)
+      sessionTotalTokens.push(
+        rolled.tokens.input +
+          rolled.tokens.output +
+          rolled.tokens.reasoning +
+          rolled.tokens.cache.read +
+          rolled.tokens.cache.write,
+      )
+      stats.totalCost += rolled.cost
+      stats.totalTokens.input += rolled.tokens.input
+      stats.totalTokens.output += rolled.tokens.output
+      stats.totalTokens.reasoning += rolled.tokens.reasoning
+      stats.totalTokens.cache.read += rolled.tokens.cache.read
+      stats.totalTokens.cache.write += rolled.tokens.cache.write
+    }
 
     for (const [tool, count] of Object.entries(result.sessionToolUsage)) {
       stats.toolUsage[tool] = (stats.toolUsage[tool] || 0) + count
@@ -276,7 +325,7 @@ const aggregateSessionStats = Effect.fn("Cli.stats.aggregate")(function* (
     stats.totalTokens.reasoning +
     stats.totalTokens.cache.read +
     stats.totalTokens.cache.write
-  stats.tokensPerSession = filteredSessions.length > 0 ? totalTokens / filteredSessions.length : 0
+  stats.tokensPerSession = reportingRoots.length > 0 ? totalTokens / reportingRoots.length : 0
   sessionTotalTokens.sort((a, b) => a - b)
   const mid = Math.floor(sessionTotalTokens.length / 2)
   stats.medianTokensPerSession =
