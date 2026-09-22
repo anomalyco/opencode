@@ -8,7 +8,8 @@ describe("acp retry subprocess", () => {
       respond: () =>
         Response.json(
           { error: { message: "rate-limited upstream", type: "rate_limit_error" } },
-          { status: 429, headers: { "retry-after": "1" } },
+          // A long backoff keeps the retry pending until the cancel lands.
+          { status: 429, headers: { "retry-after": "30" } },
         ),
     })
     const acp = fixture.spawn()
