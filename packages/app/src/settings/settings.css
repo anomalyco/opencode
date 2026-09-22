@@ -887,6 +887,37 @@
   opacity: 1;
 }
 
+.settings-provider-account-trigger {
+  min-width: 0;
+  max-width: min(240px, 45%);
+}
+
+.settings-provider-account-trigger > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-provider-account-menu[data-component="menu-v2-content"] {
+  width: min(260px, calc(100vw - 32px));
+  max-height: min(360px, var(--kb-popper-content-available-height));
+  overflow-y: auto;
+}
+
+.settings-provider-account-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@container settings-panel (max-width: 520px) {
+  .settings-provider-account-trigger {
+    max-width: 100%;
+  }
+}
+
 .settings-providers-view-all {
   margin-top: 20px;
   padding: 0;
