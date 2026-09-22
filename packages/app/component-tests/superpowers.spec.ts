@@ -271,6 +271,21 @@ story("execution shortcut keeps an accessible name when narrow", async ({ page }
   await expect(page.getByRole("button", { name: "Open execution overview", exact: true })).toBeVisible()
 })
 
+story("execution header keeps the summary button clear of its shortcut", async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 800 })
+  await openExecutionFixture(page, "session-screen-header")
+  const group = page.locator('[data-slot="session-review-toggle"]')
+  const summary = page.getByRole("button", { name: "Session details", exact: true })
+  await expect(group).toBeVisible()
+  await expect(summary).toBeVisible()
+  await expect.poll(async () => {
+    const actions = await group.boundingBox()
+    const button = await summary.boundingBox()
+    if (!actions || !button) return Number.POSITIVE_INFINITY
+    return Math.min(actions.x + actions.width, button.x + button.width) - Math.max(actions.x, button.x)
+  }).toBeLessThanOrEqual(0)
+})
+
 story("execution shortcut mirrors the icon before the label in rtl", async ({ page }) => {
   await openExecutionFixture(page, "rtl")
   const badge = page.getByTestId("execution-status-badge")

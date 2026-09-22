@@ -14,6 +14,7 @@ import {
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { debounce } from "@solid-primitives/scheduled"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
 import { MessageTimeline } from "@/session/timeline/message-timeline"
@@ -98,12 +99,15 @@ export function SessionScreen(props: { session: SessionModel }) {
     mobileTerminalCached: false,
     mobileMoveDismissed: false,
     summaryResizeTranslate: undefined as string | undefined,
+    headerActionWidth: 28,
   })
   const [elements, setElements] = createStore<{
     chat?: HTMLDivElement
     side?: HTMLDivElement
     bottomTerminal?: HTMLDivElement
+    headerActions?: HTMLDivElement
   }>({})
+  createResizeObserver(() => elements.headerActions, ({ width }) => setStore("headerActionWidth", Math.max(28, width)))
   const finishWindowResize = debounce(() => setStore("summaryResizeTranslate", undefined), 150)
   onMount(() => {
     makeEventListener(window, "resize", () => {
@@ -452,10 +456,17 @@ export function SessionScreen(props: { session: SessionModel }) {
             </Suspense>
           )}
         </Show>
-        <div ref={screen.panel.ref} class="relative flex-1 min-h-0 flex flex-col md:flex-row gap-2">
+        <div
+          ref={screen.panel.ref}
+          class="relative flex-1 min-h-0 flex flex-col md:flex-row gap-2"
+          style={{ "--session-header-action-width": `${store.headerActionWidth}px` }}
+        >
           {/* Keep the control outside panel animations; the terminal's 52px header includes a 1px divider. */}
           <Show when={isDesktop() && messagesReady() && session.identity.params.id}>
             <div
+              ref={(element) => {
+                setElements("headerActions", element)
+              }}
               class="absolute end-3 top-0 z-30 flex items-center"
               classList={{ "h-[51px]": sideTerminalVisible(), "h-12": !sideTerminalVisible() }}
               data-slot="session-review-toggle"

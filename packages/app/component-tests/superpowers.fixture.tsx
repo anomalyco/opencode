@@ -464,6 +464,7 @@ function ProductionMobileSession(props: { state: LiveExecutionState }) {
 function mountLiveSessionHeader(mode: string) {
   const activity = mode === "session-execution-activity"
   const productionMobile = mode === "session-screen-mobile-pending"
+  const productionScreen = productionMobile || mode === "session-screen-header"
   const uncachedDescendant = mode === "session-execution-uncached-descendant"
   const unloadedRequest = mode === "session-execution-unloaded-request"
   const [state, setState] = createStore<LiveExecutionState>({
@@ -505,57 +506,64 @@ function mountLiveSessionHeader(mode: string) {
               <QueryClientProvider client={desktopQueryClient}>
                 <SettingsProvider>
                   <ServersProvider servers={[desktopServer]}>
-                    <TabsProvider>
-                      <GlobalProvider>
-                        <ServerProvider conn={desktopServer}>
-                          <Switch>
-                            <Match when={productionMobile}>
-                              <MemoryRouter history={history}>
-                                <Route
-                                  path="/server/:serverKey/session/:id"
-                                  component={() => (
-                                    <BrowserAttachmentsProvider>
-                                      <TerminalProvider>
-                                        <ComposerPersistenceProvider>
-                                          <ProductionMobileSession state={state} />
-                                        </ComposerPersistenceProvider>
-                                      </TerminalProvider>
-                                    </BrowserAttachmentsProvider>
-                                  )}
-                                />
-                              </MemoryRouter>
-                            </Match>
-                            <Match when={mode === "evidence-production"}>
-                              <LiveEvidenceComposition session={session} />
-                            </Match>
-                            <Match when={mode.startsWith("session-execution-") && mode !== "session-execution-live"}>
-                              <LiveAgentsComposition
-                                session={session}
-                                state={state}
-                                setRunning={() => setState("running", false)}
-                                showRequest={() => setState("needsInput", true)}
-                                loadEmptyRequests={() => {
-                                  setState("needsInput", false)
-                                  setState("requestsLoaded", true)
-                                }}
-                                addDescendant={() => {
-                                  setState("descendantIDs", (ids) => [...ids, "new-descendant"])
-                                  setState("sharedDescendantIDs", (ids) => [...ids, "new-descendant"])
-                                }}
-                                reconnect={() => setState("connected", true)}
-                                recover={() => setState("resolutionAvailable", true)}
-                                hide={() => setState("visible", false)}
-                                dispose={() => setState("ownerMounted", false)}
-                                releaseMessages={transport.releaseMessages}
-                              />
-                            </Match>
-                            <Match when={true}>
-                              <LiveExecutionHeader session={session} />
-                            </Match>
-                          </Switch>
-                        </ServerProvider>
-                      </GlobalProvider>
-                    </TabsProvider>
+                    <WslServersProvider>
+                      <SshProvider>
+                        <TabsProvider>
+                          <GlobalProvider>
+                             <ServerProvider conn={desktopServer}>
+                               <Switch>
+                                 <Match when={productionScreen}>
+                                   <MemoryRouter history={history}>
+                                     <Route
+                                       path="/server/:serverKey/session/:id"
+                                       component={() => (
+                                         <SettingsSurfaceProvider>
+                                           <SeedProject />
+                                           <BrowserAttachmentsProvider>
+                                             <TerminalProvider>
+                                               <ComposerPersistenceProvider>
+                                                 <ProductionMobileSession state={state} />
+                                               </ComposerPersistenceProvider>
+                                             </TerminalProvider>
+                                           </BrowserAttachmentsProvider>
+                                         </SettingsSurfaceProvider>
+                                       )}
+                                     />
+                                   </MemoryRouter>
+                                 </Match>
+                                 <Match when={mode === "evidence-production"}>
+                                   <LiveEvidenceComposition session={session} />
+                                 </Match>
+                                 <Match when={mode.startsWith("session-execution-") && mode !== "session-execution-live"}>
+                                   <LiveAgentsComposition
+                                     session={session}
+                                     state={state}
+                                     setRunning={() => setState("running", false)}
+                                     showRequest={() => setState("needsInput", true)}
+                                     loadEmptyRequests={() => {
+                                       setState("needsInput", false)
+                                       setState("requestsLoaded", true)
+                                     }}
+                                     addDescendant={() => {
+                                       setState("descendantIDs", (ids) => [...ids, "new-descendant"])
+                                       setState("sharedDescendantIDs", (ids) => [...ids, "new-descendant"])
+                                     }}
+                                     reconnect={() => setState("connected", true)}
+                                     recover={() => setState("resolutionAvailable", true)}
+                                     hide={() => setState("visible", false)}
+                                     dispose={() => setState("ownerMounted", false)}
+                                     releaseMessages={transport.releaseMessages}
+                                   />
+                                 </Match>
+                                 <Match when={true}>
+                                   <LiveExecutionHeader session={session} />
+                                 </Match>
+                               </Switch>
+                            </ServerProvider>
+                          </GlobalProvider>
+                        </TabsProvider>
+                      </SshProvider>
+                    </WslServersProvider>
                   </ServersProvider>
                 </SettingsProvider>
               </QueryClientProvider>
@@ -1101,6 +1109,7 @@ export async function mountExecutionFixture(input: {
   if (
     scenario === "session-execution-live" ||
     scenario === "evidence-production" ||
+    scenario === "session-screen-header" ||
     scenario === "session-screen-mobile-pending" ||
     scenario.startsWith("session-execution-")
   ) {
