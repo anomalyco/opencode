@@ -75,7 +75,7 @@ import { TerminalProvider } from "../src/session/terminal/context"
 type PendingRequest = { type: "permission" | "question"; owner: string }
 
 function pendingRequest(scenario: string): PendingRequest | undefined {
-  if (scenario === "permission-pending" || scenario === "nested-permission") {
+  if (scenario === "permission-pending" || scenario === "permission-compact" || scenario === "nested-permission") {
     return { type: "permission", owner: "grandchild" }
   }
   if (scenario === "question-pending") return { type: "question", owner: "child" }
@@ -435,7 +435,7 @@ function LiveAgentsComposition(props: {
   )
 }
 
-function ProductionMobileSession(props: { state: LiveExecutionState }) {
+function ProductionMobileSession(props: { state: LiveExecutionState; mode: string }) {
   const server = useServer()
   server.ctx.data.session.remember({
     id: "root",
@@ -450,6 +450,22 @@ function ProductionMobileSession(props: { state: LiveExecutionState }) {
   return (
     <>
       <div data-testid="production-native-replies">{props.state.nativeReplies}</div>
+      <Show when={props.mode === "session-screen-header-terminal"}>
+        <button type="button" onClick={() => session.layout.view().terminal.open()}>
+          Open fixture terminal
+        </button>
+      </Show>
+      <Show when={props.mode === "session-screen-header-compact"}>
+        <button
+          type="button"
+          onClick={(event) => {
+            const host = event.currentTarget.closest('[data-testid="execution-fixture"]') as HTMLElement
+            host.style.width = host.style.width === "520px" ? "1100px" : "520px"
+          }}
+        >
+          Resize fixture panel
+        </button>
+      </Show>
       <DataProvider
         data={{ session: [], session_status: {}, session_diff: {} }}
         directory="/root/git/demo"
@@ -464,7 +480,7 @@ function ProductionMobileSession(props: { state: LiveExecutionState }) {
 function mountLiveSessionHeader(mode: string) {
   const activity = mode === "session-execution-activity"
   const productionMobile = mode === "session-screen-mobile-pending"
-  const productionScreen = productionMobile || mode === "session-screen-header"
+  const productionScreen = productionMobile || mode.startsWith("session-screen-header")
   const uncachedDescendant = mode === "session-execution-uncached-descendant"
   const unloadedRequest = mode === "session-execution-unloaded-request"
   const [state, setState] = createStore<LiveExecutionState>({
@@ -495,7 +511,8 @@ function mountLiveSessionHeader(mode: string) {
   )
   const host = document.createElement("main")
   host.dataset.testid = "execution-fixture"
-  host.style.cssText = "position:fixed;inset:0;background:#181818;color:#eee;padding:24px"
+  host.dir = mode.endsWith("-rtl") ? "rtl" : "ltr"
+  host.style.cssText = `position:fixed;inset:0;background:#181818;color:#eee;padding:24px;${mode.endsWith("-compact") ? "width:520px;right:auto" : ""}`
   document.body.appendChild(host)
   const dispose = render(
     () => (
@@ -519,12 +536,12 @@ function mountLiveSessionHeader(mode: string) {
                                        component={() => (
                                          <SettingsSurfaceProvider>
                                            <SeedProject />
-                                           <BrowserAttachmentsProvider>
-                                             <TerminalProvider>
-                                               <ComposerPersistenceProvider>
-                                                 <ProductionMobileSession state={state} />
-                                               </ComposerPersistenceProvider>
-                                             </TerminalProvider>
+                                          <BrowserAttachmentsProvider>
+                                            <TerminalProvider>
+                                              <ComposerPersistenceProvider>
+                                                <ProductionMobileSession state={state} mode={mode} />
+                                              </ComposerPersistenceProvider>
+                                            </TerminalProvider>
                                            </BrowserAttachmentsProvider>
                                          </SettingsSurfaceProvider>
                                        )}
@@ -1109,7 +1126,7 @@ export async function mountExecutionFixture(input: {
   if (
     scenario === "session-execution-live" ||
     scenario === "evidence-production" ||
-    scenario === "session-screen-header" ||
+    scenario.startsWith("session-screen-header") ||
     scenario === "session-screen-mobile-pending" ||
     scenario.startsWith("session-execution-")
   ) {
@@ -1265,7 +1282,7 @@ export async function mountExecutionFixture(input: {
           data-testid="execution-header"
           style={{ position: "relative", height: "48px", display: "flex", "align-items": "center", gap: "8px" }}
         >
-          <ExecutionStatusBadge model={model} onOpen={openExecution} />
+          <ExecutionStatusBadge model={model} onOpen={openExecution} compact={scenario === "permission-compact"} />
           <SessionTabAddControl
             browserAvailable={state.browserAvailable}
             executionOpen={tabs.executionOpen()}

@@ -52,6 +52,12 @@ const view = {
     open() {
       setReviewOpen(true)
     },
+    close() {
+      setReviewOpen(false)
+    },
+    toggle() {
+      setReviewOpen((value) => !value)
+    },
     width: reviewWidth,
     resize: setReviewWidth,
   },
@@ -59,6 +65,7 @@ const view = {
     opened: terminalOpen,
     open: () => setTerminalOpen(true),
     close: () => setTerminalOpen(false),
+    toggle: () => setTerminalOpen((value) => !value),
     height: terminalHeight,
     resize: setTerminalHeight,
   },

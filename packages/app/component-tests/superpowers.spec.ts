@@ -271,20 +271,78 @@ story("execution shortcut keeps an accessible name when narrow", async ({ page }
   await expect(page.getByRole("button", { name: "Open execution overview", exact: true })).toBeVisible()
 })
 
-story("execution header keeps the summary button clear of its shortcut", async ({ page }) => {
+for (const scenario of ["session-screen-header", "session-screen-header-rtl"]) {
+  story(`execution header keeps the summary button clear in ${scenario}`, async ({ page }) => {
+    await page.setViewportSize({ width: 1100, height: 800 })
+    await openExecutionFixture(page, scenario)
+    const group = page.locator('[data-slot="session-review-toggle"]')
+    const summary = page.getByRole("button", { name: "Session details", exact: true })
+    await expect(group).toBeVisible()
+    await expect(summary).toBeVisible()
+    await expect.poll(async () => {
+      const actions = await group.boundingBox()
+      const button = await summary.boundingBox()
+      if (!actions || !button) return Number.POSITIVE_INFINITY
+      return Math.min(actions.x + actions.width, button.x + button.width) - Math.max(actions.x, button.x)
+    }).toBeLessThanOrEqual(0)
+  })
+}
+
+story("execution header compacts within a narrow desktop panel", async ({ page }) => {
   await page.setViewportSize({ width: 1100, height: 800 })
-  await openExecutionFixture(page, "session-screen-header")
+  await openExecutionFixture(page, "session-screen-header-compact")
+  await expect(page.getByTestId("execution-status-label")).toBeHidden()
   const group = page.locator('[data-slot="session-review-toggle"]')
   const summary = page.getByRole("button", { name: "Session details", exact: true })
-  await expect(group).toBeVisible()
-  await expect(summary).toBeVisible()
   await expect.poll(async () => {
-    const actions = await group.boundingBox()
+    const controls = await group.boundingBox()
     const button = await summary.boundingBox()
-    if (!actions || !button) return Number.POSITIVE_INFINITY
-    return Math.min(actions.x + actions.width, button.x + button.width) - Math.max(actions.x, button.x)
+    if (!controls || !button) return Number.POSITIVE_INFINITY
+    return Math.min(controls.x + controls.width, button.x + button.width) - Math.max(controls.x, button.x)
   }).toBeLessThanOrEqual(0)
+  await page.getByRole("button", { name: "Resize fixture panel" }).click()
+  await expect(page.getByTestId("execution-status-label")).toBeVisible()
+  await page.getByRole("button", { name: "Resize fixture panel" }).click()
+  await expect(page.getByTestId("execution-status-label")).toBeHidden()
 })
+
+story("compact execution shortcut retains the pending request action", async ({ page }) => {
+  await openExecutionFixture(page, "permission-compact")
+  await expect(page.getByTestId("execution-status-label")).toBeHidden()
+  await page.getByRole("button", { name: "Review pending request", exact: true }).click()
+  await expect(page.getByTestId("native-request-region")).toBeFocused()
+})
+
+story("execution header reserves the badge width in an open side panel", async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 800 })
+  await openExecutionFixture(page, "session-screen-header")
+  await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+  const group = page.locator('[data-slot="session-review-toggle"]')
+  const spacer = page.locator('[data-slot="session-side-panel-actions"] [aria-hidden]')
+  await expect(spacer).toBeVisible()
+  await expect.poll(async () => {
+    const controls = await group.boundingBox()
+    const reserved = await spacer.boundingBox()
+    if (!controls || !reserved) return Number.NEGATIVE_INFINITY
+    return reserved.width - controls.width
+  }).toBeGreaterThanOrEqual(0)
+})
+
+story("execution header reserves room above the side terminal", async ({ page }) => {
+  await page.setViewportSize({ width: 1100, height: 800 })
+  await openExecutionFixture(page, "session-screen-header-terminal")
+  await page.getByRole("button", { name: "Open fixture terminal" }).click()
+  const group = page.locator('[data-slot="session-review-toggle"]')
+  const reservation = page.locator('[data-slot="session-terminal-header-reservation"]')
+  await expect(reservation).toBeVisible()
+  await expect.poll(async () => {
+    const controls = await group.boundingBox()
+    const reserved = await reservation.boundingBox()
+    if (!controls || !reserved) return Number.NEGATIVE_INFINITY
+    return reserved.width - controls.width
+  }).toBeGreaterThanOrEqual(20)
+})
+
 
 story("execution shortcut mirrors the icon before the label in rtl", async ({ page }) => {
   await openExecutionFixture(page, "rtl")

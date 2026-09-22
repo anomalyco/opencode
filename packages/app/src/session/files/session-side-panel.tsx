@@ -617,7 +617,11 @@ export function SessionSidePanel(props: {
                         >
                           <OpenInAppButton directory={projectDirectory} />
                           <Show when={reviewVisible()}>
-                            <div class="size-7 shrink-0" aria-hidden />
+                            <div
+                              class="shrink-0"
+                              style={{ width: "var(--session-header-action-width, 28px)", height: "28px" }}
+                              aria-hidden
+                            />
                           </Show>
                         </div>
                       </div>

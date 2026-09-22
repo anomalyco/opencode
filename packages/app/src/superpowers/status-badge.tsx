@@ -27,7 +27,7 @@ const STATE_ICONS: Record<ExecutionAttentionState, string> = {
   normal: "status-active",
 }
 
-export function ExecutionStatusBadge(props: { model: ExecutionModel; onOpen: () => void }) {
+export function ExecutionStatusBadge(props: { model: ExecutionModel; onOpen: () => void; compact?: boolean }) {
   const language = useLanguage()
   const attention = () => props.model.attention()
   const state = () => attentionState(attention())
@@ -95,7 +95,7 @@ export function ExecutionStatusBadge(props: { model: ExecutionModel; onOpen: () 
           </span>
           <Show when={summary()}>
             {(label) => (
-              <span data-testid="execution-status-label" class="max-md:hidden">
+              <span data-testid="execution-status-label" classList={{ "max-md:hidden": true, hidden: props.compact }}>
                 {label()}
               </span>
             )}
@@ -103,13 +103,18 @@ export function ExecutionStatusBadge(props: { model: ExecutionModel; onOpen: () 
         </button>
       </Tooltip>
       <Show when={state() === "needs_input"}>
-        <button
-          type="button"
-          class="shrink-0 whitespace-nowrap rounded-md px-2 text-13-regular text-v2-text-text-muted hover:text-v2-text-text-base"
-          onClick={() => props.model.reviewRequest()}
-        >
-          {language.t("execution.status.reviewRequest")}
-        </button>
+        <Tooltip placement="bottom" value={language.t("execution.status.reviewRequest")}>
+          <button
+            type="button"
+            class="flex h-8 shrink-0 items-center whitespace-nowrap rounded-md px-2 text-13-regular text-v2-text-text-muted hover:text-v2-text-text-base"
+            onClick={() => props.model.reviewRequest()}
+            aria-label={language.t("execution.status.reviewRequest")}
+          >
+            <Show when={props.compact} fallback={language.t("execution.status.reviewRequest")}>
+              <Icon name="arrow-up-right" size="small" />
+            </Show>
+          </button>
+        </Tooltip>
       </Show>
       <span role="status" data-testid="execution-status-live" class="sr-only">
         {liveMessage()}

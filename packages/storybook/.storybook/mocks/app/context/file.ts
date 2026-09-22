@@ -24,6 +24,11 @@ const pool = ["src/session/timeline.tsx", "src/session/composer.tsx", "src/compo
 
 export function useFile() {
   return {
+    ready: () => false,
+    tree: {
+      state: (_path: string) => undefined,
+      children: (_path: string) => [],
+    },
     tab(path: string) {
       return `file:${path}`
     },

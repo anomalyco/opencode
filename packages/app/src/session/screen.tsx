@@ -100,6 +100,7 @@ export function SessionScreen(props: { session: SessionModel }) {
     mobileMoveDismissed: false,
     summaryResizeTranslate: undefined as string | undefined,
     headerActionWidth: 28,
+    headerCompact: false,
   })
   const [elements, setElements] = createStore<{
     chat?: HTMLDivElement
@@ -121,6 +122,13 @@ export function SessionScreen(props: { session: SessionModel }) {
   })
   const sideVisible = createMemo(() => isDesktop() && screen.side.layout().visible)
   const sideTerminalVisible = createMemo(() => isDesktop() && screen.terminal.side() && screen.terminal.open())
+  const measureActiveHeader = () => {
+    const width = (sideVisible() ? elements.side : elements.chat)?.getBoundingClientRect().width
+    if (width !== undefined) setStore("headerCompact", width < 560)
+  }
+  createResizeObserver(() => elements.chat, measureActiveHeader)
+  createResizeObserver(() => elements.side, measureActiveHeader)
+  createEffect(measureActiveHeader)
   const bottomTerminalVisible = createMemo(() => isDesktop() && screen.terminal.open() && screen.terminal.bottom())
   const sidePresence = createAnimatedPresence(
     () => sideVisible() || undefined,
@@ -473,7 +481,7 @@ export function SessionScreen(props: { session: SessionModel }) {
               onPointerDown={hideTimelineScrollbar}
               onClick={hideTimelineScrollbar}
             >
-              <SessionReviewToggle execution={execution()} />
+              <SessionReviewToggle execution={execution()} compact={store.headerCompact} />
             </div>
           </Show>
           <div

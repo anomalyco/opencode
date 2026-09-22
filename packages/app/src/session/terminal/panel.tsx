@@ -252,7 +252,7 @@ export function TerminalPanel(
           <div class="flex flex-col h-full pointer-events-none">
             <div
               class="h-10 flex items-center gap-2 px-2 border-b border-border-weaker-base bg-v2-background-bg-base overflow-hidden"
-              classList={{ "pe-12": props.reserveReviewToggle }}
+              style={{ "padding-inline-end": props.reserveReviewToggle ? "calc(var(--session-header-action-width, 28px) + 20px)" : undefined }}
             >
               <For each={handoff()}>
                 {(title) => (
@@ -339,7 +339,12 @@ export function TerminalPanel(
               </Tabs>
               {/* Reserve outside the scroll viewport so overflowing tabs cannot cover the toggle. */}
               <Show when={props.reserveReviewToggle}>
-                <div class="w-12 shrink-0" aria-hidden />
+                <div
+                  data-slot="session-terminal-header-reservation"
+                  class="shrink-0"
+                  style={{ width: "calc(var(--session-header-action-width, 28px) + 20px)" }}
+                  aria-hidden
+                />
               </Show>
             </div>
             <div class="flex-1 min-h-0 relative">

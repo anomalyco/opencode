@@ -11,7 +11,7 @@ import { useSessionLayout } from "@/session/session-layout"
 import { ExecutionStatusBadge } from "@/superpowers/status-badge"
 import type { ExecutionModel } from "@/superpowers/model"
 
-export function SessionReviewToggle(props: { execution?: ExecutionModel }) {
+export function SessionReviewToggle(props: { execution?: ExecutionModel; compact?: boolean }) {
   const command = useCommand()
   const language = useLanguage()
   const { view, tabs } = useSessionLayout()
@@ -30,6 +30,7 @@ export function SessionReviewToggle(props: { execution?: ExecutionModel }) {
         onReviewToggle: () => view().reviewPanel.toggle(),
       }}
       execution={props.execution ? { model: props.execution, onOpen: openExecution } : undefined}
+      compact={props.compact}
     />
   )
 }
@@ -45,11 +46,12 @@ export type SessionHeaderActionsState = {
 export function SessionHeaderActions(props: {
   state: SessionHeaderActionsState
   execution?: { model: ExecutionModel; onOpen: () => void }
+  compact?: boolean
 }) {
   return (
     <div class="flex items-center gap-2">
       <Show when={props.execution}>
-        {(execution) => <ExecutionStatusBadge model={execution().model} onOpen={execution().onOpen} />}
+        {(execution) => <ExecutionStatusBadge model={execution().model} onOpen={execution().onOpen} compact={props.compact} />}
       </Show>
       <Show when={props.state.reviewVisible}>
         <Tooltip
