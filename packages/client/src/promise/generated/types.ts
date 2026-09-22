@@ -230,7 +230,7 @@ export type IntegrationCommandMethod = { id: string; type: "command"; label: str
 
 export type IntegrationEnvMethod = { type: "env"; names: Array<string> }
 
-export type ConnectionCredentialInfo = { type: "credential"; id: string; label: string }
+export type ConnectionCredentialInfo = { type: "credential"; id: string; label: string; method: "key" | "oauth" }
 
 export type ConnectionEnvInfo = { type: "env"; name: string }
 

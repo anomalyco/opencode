@@ -320,7 +320,12 @@ describe("OpencodePlugin", () => {
               expect(config).toEqual([{ authorization: "Bearer access", orgID: scenario.orgID ?? "org-a" }])
               const integrations = yield* Integration.Service
               expect(
-                yield* integrations.connection.resolve({ type: "credential", id: initial.id, label: initial.label }),
+                yield* integrations.connection.resolve({
+                  type: "credential",
+                  method: "oauth",
+                  id: initial.id,
+                  label: initial.label,
+                }),
               ).toEqual(stored.value)
               expect(requests).toEqual(["/auth/device/token", "/api/v2/config"])
             }),

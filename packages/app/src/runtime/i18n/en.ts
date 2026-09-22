@@ -87,6 +87,7 @@ export const dict = {
   "command.project.index": "Switch to project {{index}}",
   "command.project.copyID": "Copy Project ID",
   "command.provider.connect": "Connect provider",
+  "command.provider.connect.description": "Sign in to OpenCode Go, OpenCode Console, or another model provider",
   "command.server.switch": "Switch server",
   "command.settings.open": "Open settings",
   "command.session.previous": "Previous session",
@@ -227,6 +228,22 @@ export const dict = {
   "provider.connect.oauth.auto.visit.suffix":
     " and enter the code below to connect your account and use {{provider}} models in OpenCode.",
   "provider.connect.oauth.auto.confirmationCode": "Confirmation code",
+  "provider.connect.oauth.auto.confirmationCode.description":
+    "Check that your browser shows the same code before you authorize.",
+  "provider.connect.oauth.auto.description":
+    "Your browser opens so you can sign in to {{provider}}. Come back here when you are done.",
+  "provider.connect.oauth.code.description":
+    "Your browser opens so you can sign in to {{provider}}. Paste the authorization code it gives you below.",
+  "provider.connect.oauth.openBrowser": "Open browser",
+  "provider.connect.oauth.expired": "Authorization expired",
+  "provider.connect.console.description":
+    "Sign in with your OpenCode Console account. Your browser opens to the Console, where you pick a workspace and select Authorize.",
+  "provider.connect.console.opening": "Opening your browser…",
+  "provider.connect.console.code.placeholder": "Requesting a code…",
+  "provider.connect.console.apiKey.switch": "Connect with an API key or service account instead",
+  "provider.connect.console.apiKey.description":
+    "Paste an API key for a service account. You create service accounts in the OpenCode Console under Keys.",
+  "provider.connect.console.apiKey.link": "Open the Console",
   "provider.connect.toast.connected.title": "{{provider}} connected",
   "provider.connect.toast.connected.description": "{{provider}} models are now available to use.",
 
@@ -304,6 +321,7 @@ export const dict = {
   "common.connect": "Connect",
   "common.disconnect": "Disconnect",
   "common.continue": "Continue",
+  "common.retry": "Try again",
   "common.submit": "Submit",
   "common.save": "Save",
   "common.saving": "Saving…",
@@ -1369,6 +1387,7 @@ export const dict = {
   "settings.providers.tag.environment": "Environment",
   "settings.providers.tag.config": "Config",
   "settings.providers.tag.custom": "Custom",
+  "settings.providers.tag.account": "Account",
   "settings.providers.tag.other": "Other",
   "settings.models.title": "Models",
   "settings.models.description": "Choose which models appear in model picker",

@@ -13602,9 +13602,13 @@
           },
           "label": {
             "type": "string"
+          },
+          "method": {
+            "type": "string",
+            "enum": ["key", "oauth"]
           }
         },
-        "required": ["type", "id", "label"],
+        "required": ["type", "id", "label", "method"],
         "additionalProperties": false
       },
       "Connection.EnvInfo": {

@@ -1826,7 +1826,7 @@ test("refreshes integrations after integration updates", async () => {
                 id: "openai",
                 name: "OpenAI",
                 methods: [{ type: "key" }],
-                connections: [{ type: "credential", id: "cred_openai", label: "OpenAI" }],
+                connections: [{ type: "credential", method: "key", id: "cred_openai", label: "OpenAI" }],
               },
             ],
     })
@@ -2176,9 +2176,7 @@ test("keeps shell state scoped to location", async () => {
         },
       },
     })
-    await wait(() =>
-      data.shell.list({ directory: other }).some((shell) => shell.id === "sh_live_other"),
-    )
+    await wait(() => data.shell.list({ directory: other }).some((shell) => shell.id === "sh_live_other"))
     expect(data.shell.list().map((shell) => shell.id)).toEqual(["sh_default"])
     expect(
       data.shell.listBySession("ses_shared").find((shell) => shell.id === "sh_live_other")?.location.directory,
@@ -2638,9 +2636,7 @@ test("resyncs global forms only for the active location after reconnect", async 
     await wait(() => data.session.form.list("global", home)?.[0]?.id === "frm_default_2", 4000)
     expect(data.session.form.list("global", other)?.[0]?.id).toBe("frm_other_1")
     expect(requests).toHaveLength(1)
-    expect(requests.map((url) => url.searchParams.get("location[directory]") ?? directory)).toEqual([
-      home.directory,
-    ])
+    expect(requests.map((url) => url.searchParams.get("location[directory]") ?? directory)).toEqual([home.directory])
   } finally {
     app.renderer.destroy()
   }
