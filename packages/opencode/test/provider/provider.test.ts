@@ -681,6 +681,14 @@ it.instance(
     expect(model.cost.output).toBe(15)
     expect(model.cost.cache.read).toBe(2.5)
     expect(model.cost.cache.write).toBe(7.5)
+    expect(model.cost.tiers).toEqual([
+      {
+        tier: { type: "context", size: 272_000 },
+        input: 10,
+        output: 22.5,
+        cache: { read: 1, write: 12.5 },
+      },
+    ])
   }),
   {
     config: {
@@ -694,7 +702,21 @@ it.instance(
               name: "Test Model",
               tool_call: true,
               limit: { context: 8000, output: 2000 },
-              cost: { input: 5, output: 15, cache_read: 2.5, cache_write: 7.5 },
+              cost: {
+                input: 5,
+                output: 15,
+                cache_read: 2.5,
+                cache_write: 7.5,
+                tiers: [
+                  {
+                    tier: { type: "context", size: 272_000 },
+                    input: 10,
+                    output: 22.5,
+                    cache_read: 1,
+                    cache_write: 12.5,
+                  },
+                ],
+              },
             },
           },
           options: { apiKey: "test" },

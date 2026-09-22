@@ -1507,6 +1507,28 @@ const layer = Layer.effect(
               if (model.id && model.id !== modelID) return modelID
               return existingModel?.name ?? modelID
             })
+            const tiers = [
+              ...(existingModel?.cost.tiers ?? []),
+              ...(model.cost?.context_over_200k
+                ? [
+                    {
+                      tier: { type: "context" as const, size: 200_000 },
+                      input: model.cost.context_over_200k.input,
+                      output: model.cost.context_over_200k.output,
+                      cache: {
+                        read: model.cost.context_over_200k.cache_read ?? 0,
+                        write: model.cost.context_over_200k.cache_write ?? 0,
+                      },
+                    },
+                  ]
+                : []),
+              ...(model.cost?.tiers?.map((tier) => ({
+                tier: tier.tier,
+                input: tier.input,
+                output: tier.output,
+                cache: { read: tier.cache_read ?? 0, write: tier.cache_write ?? 0 },
+              })) ?? []),
+            ]
             const parsedModel: Model = {
               id: ModelV2.ID.make(modelID),
               api: {
@@ -1553,6 +1575,7 @@ const layer = Layer.effect(
                   read: model?.cost?.cache_read ?? existingModel?.cost?.cache.read ?? 0,
                   write: model?.cost?.cache_write ?? existingModel?.cost?.cache.write ?? 0,
                 },
+                tiers: Array.from(new Map(tiers.map((tier) => [`${tier.tier.type}:${tier.tier.size}`, tier])).values()),
               },
               options: mergeDeep(existingModel?.options ?? {}, model.options ?? {}),
               limit: {

@@ -177,7 +177,10 @@ describe("ConfigProviderPlugin.Plugin", () => {
                           capabilities: { tools: true, input: ["text"], output: ["text"] },
                           disabled: true,
                           limit: { context: 100, output: 50 },
-                          cost: { input: 1, output: 2 },
+                          cost: [
+                            { input: 1, output: 2 },
+                            { tier: { type: "context", size: 200_000 }, input: 3, output: 4 },
+                          ],
                           request: request({ first: "first", shared: "first" }, "retained"),
                           variants: [
                             {
@@ -207,6 +210,11 @@ describe("ConfigProviderPlugin.Plugin", () => {
                           api: { id: "api-chat" },
                           name: "Last",
                           limit: { output: 75 },
+                          cost: [
+                            { input: 5, output: 6 },
+                            { tier: { type: "context", size: 200_000 }, input: 30, output: 40 },
+                            { tier: { type: "context", size: 272_000 }, input: 7, output: 8 },
+                          ],
                           request: request({ last: "last", shared: "last" }),
                           variants: [
                             {
@@ -254,7 +262,11 @@ describe("ConfigProviderPlugin.Plugin", () => {
         expect(model.capabilities).toEqual({ tools: true, input: ["text"], output: ["text"] })
         expect(model.enabled).toBe(false)
         expect(model.limit).toEqual({ context: 100, output: 75 })
-        expect(model.cost).toEqual([{ input: 1, output: 2, cache: { read: 0, write: 0 }, tier: undefined }])
+        expect(model.cost).toEqual([
+          { input: 5, output: 6, cache: { read: 0, write: 0 }, tier: undefined },
+          { input: 30, output: 40, cache: { read: 0, write: 0 }, tier: { type: "context", size: 200_000 } },
+          { input: 7, output: 8, cache: { read: 0, write: 0 }, tier: { type: "context", size: 272_000 } },
+        ])
         expect(model.request.headers).toEqual({ first: "first", shared: "last", last: "last" })
         expect(model.request.variant).toBe("retained")
         expect(model.variants.map((variant) => variant.id)).toEqual([
