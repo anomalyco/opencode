@@ -1051,7 +1051,8 @@ describe("HttpApiCodegen.generate", () => {
     })
 
     const error = await client.session.get({ sessionID: "missing" }).catch((cause: unknown) => cause)
-    expect(error).toEqual({ _tag: "Missing", message: "gone" })
+    expect(error).toBeInstanceOf(Error)
+    expect(error).toMatchObject({ name: "Missing", message: "gone", _tag: "Missing" })
     expect(emitted.module.isMissing(error)).toBeTrue()
   })
 
