@@ -3,7 +3,7 @@ import { Service, type Info } from "@opencode/client/effect/service"
 import { Global } from "@opencode/util/global"
 import { OPENCODE_VERSION } from "../src/version"
 import { expect, test } from "bun:test"
-import { Effect, Schema } from "effect"
+import { Effect, Schedule, Schema } from "effect"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -76,6 +76,73 @@ test("service config manages environment variables", async () => {
     await fs.rm(root, { recursive: true, force: true })
   }
 })
+
+test.each([undefined, "inherited"])(
+  "managed service loads configured environment for local MCP servers (%s)",
+  async (inherited) => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-mcp-env-"))
+    const config = path.join(root, "config", ServiceConfig.filename())
+    const registration = path.join(root, "state", "opencode", ServiceConfig.filename())
+    const output = path.join(root, "mcp-env.json")
+    await fs.mkdir(path.dirname(config), { recursive: true })
+    await fs.writeFile(
+      config,
+      JSON.stringify({ env: { OPENCODE_SERVICE_ENV_TEST: "configured", OPENCODE_SERVICE_ENV_EMPTY_TEST: "" } }),
+    )
+    await fs.writeFile(
+      path.join(root, "config", "opencode.json"),
+      JSON.stringify({
+        mcp: {
+          servers: {
+            env: {
+              type: "local",
+              command: [process.execPath, path.join(import.meta.dir, "fixture", "mcp-env.cjs"), output],
+              environment: { SUBSTITUTED_SERVICE_ENV: "{env:OPENCODE_SERVICE_ENV_TEST}" },
+            },
+          },
+        },
+      }),
+    )
+    const owner = Bun.spawn(
+      [process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service", "--port", "0"],
+      {
+        env: isolatedEnv(root, {
+          OPENCODE_SERVICE_ENV_TEST: inherited,
+          OPENCODE_SERVICE_ENV_EMPTY_TEST: "inherited",
+          OPENCODE_SERVICE_ENV_INHERITED_TEST: "inherited",
+        }),
+        stderr: "pipe",
+        stdout: "ignore",
+      },
+    )
+    try {
+      const info = await waitForInfo(registration)
+      const url = new URL("/api/mcp", info.url)
+      url.searchParams.set("location[directory]", root)
+      const response = await fetch(url, {
+        headers: { authorization: "Basic " + btoa(`opencode:${info.password}`) },
+      })
+      expect(response.status).toBe(200)
+      await Effect.runPromise(
+        Effect.promise(() => Bun.file(output).exists()).pipe(
+          Effect.repeat({ while: (exists) => !exists, schedule: Schedule.spaced("25 millis") }),
+          Effect.timeout("5 seconds"),
+        ),
+      )
+      expect(await Bun.file(output).json()).toEqual({
+        configured: "configured",
+        substituted: "configured",
+        empty: "",
+        inherited: "inherited",
+      })
+    } finally {
+      owner.kill("SIGTERM")
+      await owner.exited
+      await fs.rm(root, { recursive: true, force: true })
+    }
+  },
+  30_000,
+)
 
 test("service filenames share release channels and identify preview channels", () => {
   expect(ServiceConfig.filename("latest")).toBe("service.json")
