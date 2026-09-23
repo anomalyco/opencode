@@ -61,6 +61,33 @@ export const Parameters = Schema.Struct({
   }),
 })
 
+export type ForegroundOutcome =
+  | { type: "background" }
+  | { type: "fail"; error: Error }
+  | { type: "completed"; text: string }
+
+/**
+ * Pure mapping of the foreground `raceFirst(wait, waitForPromotion)` result.
+ * Single choke point so future callers cannot reintroduce the false-success
+ * fall-through. Invariants relied upon:
+ * - `waitForPromotion` resolves only with a real `Info` (or hangs as
+ *   `Effect.never`), so `undefined` can only come from `wait` on a missing
+ *   registry entry — and unknown is never completed.
+ * - `Info` objects are always truthy with a `status`; only `undefined`
+ *   (never `null`) marks unknown, hence the strict check.
+ */
+export function resolveForegroundResult(result: BackgroundJob.Info | undefined, jobID: string): ForegroundOutcome {
+  if (result?.metadata?.background === true) return { type: "background" }
+  if (result === undefined)
+    return {
+      type: "fail",
+      error: new Error(`Task failed: background job ${jobID} not found (the server may have restarted). Retry the task.`),
+    }
+  if (result.status === "error") return { type: "fail", error: new Error(result.error ?? "Task failed") }
+  if (result.status === "cancelled") return { type: "fail", error: new Error("Task cancelled") }
+  return { type: "completed", text: result.output ?? "" }
+}
+
 function renderOutput(input: {
   sessionID: SessionID
   state: "running" | "completed" | "error"
@@ -258,6 +285,9 @@ export const TaskTool = Tool.define(
           Effect.flatMap((result) => {
             if (result.info?.status === "completed") return inject("completed", result.info.output ?? "")
             if (result.info?.status === "error") return inject("error", result.info.error ?? "")
+            // Missing entry (e.g. registry lost on restart): nothing to
+            // inject, but log so background tasks do not die silently.
+            if (!result.info) return Effect.logWarning("Background task result lost: job not found", { jobID })
             return Effect.void
           }),
           Effect.forkIn(scope, { startImmediately: true }),
@@ -335,13 +365,13 @@ export const TaskTool = Tool.define(
               background.wait({ id: nextSession.id }).pipe(Effect.map((waited) => waited.info)),
               background.waitForPromotion(nextSession.id),
             )
-            if (result?.metadata?.background === true) return backgroundResult()
-            if (result?.status === "error") return yield* Effect.fail(new Error(result.error ?? "Task failed"))
-            if (result?.status === "cancelled") return yield* Effect.fail(new Error("Task cancelled"))
+            const outcome = resolveForegroundResult(result, nextSession.id)
+            if (outcome.type === "background") return backgroundResult()
+            if (outcome.type === "fail") return yield* Effect.fail(outcome.error)
             return {
               title: params.description,
               metadata,
-              output: renderOutput({ sessionID: nextSession.id, state: "completed", text: result?.output ?? "" }),
+              output: renderOutput({ sessionID: nextSession.id, state: "completed", text: outcome.text }),
             }
           }),
         (_, exit) =>

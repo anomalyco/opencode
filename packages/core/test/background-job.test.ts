@@ -103,4 +103,17 @@ describe("BackgroundJob", () => {
       expect((yield* jobs.get(job.id))?.status).toBe("running")
     }),
   )
+
+  it.live("reports unknown ids without info so callers never mistake them for success", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      // Never-started id: resolves immediately, timedOut false, and crucially
+      // no info — TaskTool's foreground race must fail on this, not render
+      // a false "completed" with empty text.
+      const missing = yield* jobs.wait({ id: "job_never_started" })
+      expect(missing.timedOut).toBe(false)
+      expect(missing.info).toBeUndefined()
+      expect(yield* jobs.get("job_never_started")).toBeUndefined()
+    }).pipe(Effect.provide(jobsLayer)),
+  )
 })

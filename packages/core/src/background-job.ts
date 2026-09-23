@@ -81,6 +81,11 @@ export type WaitInput = {
 }
 
 export type WaitResult = {
+  /**
+   * Absent when the id is unknown to this process-local registry (never
+   * started here, or lost on restart/scope close). Unknown is NOT a terminal
+   * state: callers must not render it as success — fail or retry instead.
+   */
   info?: Info
   timedOut: boolean
 }

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect } from "bun:test"
+import { afterEach, describe, expect, it as unitIt } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -16,7 +16,7 @@ import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
 
-import { TaskTool, type TaskPromptOps } from "../../src/tool/task"
+import { TaskTool, resolveForegroundResult, type TaskPromptOps } from "../../src/tool/task"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -168,6 +168,48 @@ function reply(
 }
 
 describe("tool.task", () => {
+  describe("resolveForegroundResult", () => {
+    const base = {
+      id: "job_1",
+      type: "task",
+      started_at: Date.now(),
+    } as const
+
+    unitIt("fails loudly on a missing job instead of a false completed", () => {
+      const outcome = resolveForegroundResult(undefined, "job_1")
+      expect(outcome.type).toBe("fail")
+      if (outcome.type !== "fail") throw new Error("expected fail outcome")
+      expect(outcome.error.message).toContain("job_1")
+    })
+
+    unitIt("passes background promotions through", () => {
+      const outcome = resolveForegroundResult(
+        { ...base, status: "running", metadata: { background: true } },
+        "job_1",
+      )
+      expect(outcome).toEqual({ type: "background" })
+    })
+
+    unitIt("maps error, cancelled, and completed infos", () => {
+      expect(resolveForegroundResult({ ...base, status: "error", error: "boom" }, "job_1")).toEqual({
+        type: "fail",
+        error: new Error("boom"),
+      })
+      expect(resolveForegroundResult({ ...base, status: "cancelled" }, "job_1")).toEqual({
+        type: "fail",
+        error: new Error("Task cancelled"),
+      })
+      expect(resolveForegroundResult({ ...base, status: "completed", output: "did it" }, "job_1")).toEqual({
+        type: "completed",
+        text: "did it",
+      })
+      expect(resolveForegroundResult({ ...base, status: "completed" }, "job_1")).toEqual({
+        type: "completed",
+        text: "",
+      })
+    })
+  })
+
   it.instance(
     "description sorts subagents by name and is stable across calls",
     () =>
