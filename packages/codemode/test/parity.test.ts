@@ -1156,3 +1156,25 @@ describe("String.raw", () => {
     expect(failure.message).toContain("String.raw expects a template object with a raw array")
   })
 })
+
+describe("sloppy duplicate parameters and for...in targets", () => {
+  test("a repeated parameter name binds the last argument", async () => {
+    expect(await value(`function f(a, b, a) { return [a, b] } return [f(1, 2, 3), f(1)]`)).toEqual([
+      [3, 2],
+      [null, null],
+    ])
+  })
+
+  test("for...in assigns to any target: members, computed members, and patterns", async () => {
+    expect(
+      await value(`
+        const x = {}, seen = [], a = []
+        let i = 0, first
+        for (x.y in { p: 1, q: 2 }) seen.push(x.y)
+        for (a[i++] in { p: 1, q: 2 });
+        for ([first] in { ab: 1 });
+        return [seen, x.y, a, first]
+      `),
+    ).toEqual([["p", "q"], "q", ["p", "q"], "a"])
+  })
+})

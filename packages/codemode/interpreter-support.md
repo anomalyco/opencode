@@ -41,8 +41,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] A trailing comma after a rest parameter is a syntax error, with or without `"use strict"`.
 - [x] A program that begins with `"use strict"` rejects `yield` as an identifier and duplicate parameter names at
       parse time. Without it, `yield` is an ordinary binding.
-- [ ] Duplicate parameter names in non-strict code throw when the function is called, instead of binding the last
-      parameter as JavaScript does.
+- [x] Duplicate parameter names in non-strict code bind the last parameter, as in JS (`function f(a, a)` called
+      with `(1, 2)` sees `a === 2`).
 
 ## Values and literals
 
@@ -89,7 +89,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       sources are rejected.
 - [x] Destructuring reads through the prototype chain like member access: `const { constructor } = error` and
       `const { slice } = values` find the inherited built-in.
-- [ ] Member expressions as `for...in` targets (`for (x.y in obj)`).
+- [x] Any assignment target as a `for...in` head, like `for...of`: `for (x.y in obj)`, `for (a[i++] in obj)`, and
+      destructuring patterns.
 
 ## Statements and control flow
 
@@ -354,11 +355,12 @@ reject }` object.
       native JS, `split(undefined)` returns the whole string, and `includes`/`startsWith`/`endsWith` reject regular
       expressions with a native-style `TypeError`. Opaque runtime references still reject as data errors, and
       `repeat` still requires a finite non-negative count.
-- [x] Native no-argument parity for `match()`, `matchAll()`, and `search()`; all behave as an empty pattern. Present
-      arguments must still be a regular expression or string pattern.
+- [x] Native no-argument parity for `match()`, `matchAll()`, and `search()`; all behave as an empty pattern.
 - [x] `String.raw`, on a template object or any `{ raw }` object; raw strings and substitutions coerce through their own
       `toString`.
-- [ ] `match`, `search`, and `split` accept any value and coerce it (objects via `toString`), like JavaScript.
+- [x] `match`, `matchAll`, `search`, and `split` read any non-RegExp argument as a pattern string, as `new RegExp(arg)`
+      would: `"a1b".match(1)` matches `/1/`, `search(null)` looks for `"null"`, and `undefined` is the empty pattern.
+      Objects use their built-in string form until ToPrimitive lands.
 
 ## Numbers and Math
 

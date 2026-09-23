@@ -937,10 +937,10 @@ class Frame<R> {
 
       const keys = self.enumerableKeys(right, node.right)
 
-      if (left.type !== "Identifier" && left.type !== "VariableDeclaration") {
+      if (left.type === "RestElement" || left.type === "AssignmentPattern") {
         throw typeError("Unsupported for...in binding.", left)
       }
-      const assignmentName = left.type === "Identifier" ? left.name : undefined
+      const assignment = left.type === "VariableDeclaration" ? undefined : left
 
       for (const key of keys) {
         const result = yield* Effect.gen(function* () {
@@ -950,8 +950,8 @@ class Frame<R> {
             yield* self.declarePattern(declared.pattern, key, declared.mutable, left, true)
           } else if (declared) {
             yield* self.assignPattern(declared.pattern, key, left)
-          } else if (assignmentName) {
-            self.scopes.set(assignmentName, key, left)
+          } else if (assignment) {
+            yield* self.assignPattern(assignment, key, left)
           }
           return yield* self.evaluateStatement(node.body)
         }).pipe(
@@ -1672,6 +1672,9 @@ class Frame<R> {
           paramScope.set(name, { mutable: true, value: undefined, initialized: false })
         }
       }
+      const parameters = fn.parameters.map((parameter) =>
+        parameter.type === "Identifier" ? parameter.name : undefined,
+      )
       const bind = Effect.gen(function* () {
         for (const [index, parameter] of fn.parameters.entries()) {
           if (parameter.type === "RestElement") {
@@ -1684,6 +1687,8 @@ class Frame<R> {
             )
             break
           }
+          // A sloppy simple parameter list may repeat a name; the last occurrence wins, as in JS.
+          if (parameter.type === "Identifier" && parameters.lastIndexOf(parameter.name) !== index) continue
           yield* invocation.declarePattern(parameter, args[index], true, parameter, true)
         }
       })
