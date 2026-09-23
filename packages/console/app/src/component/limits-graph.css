@@ -144,6 +144,11 @@
     }
   }
 
+  [data-slot="model-row"][data-infinite] :is([data-slot="requests"], [data-slot="allowance"]) {
+    font-size: 1.125rem;
+    line-height: 1;
+  }
+
   [data-slot="currency"] {
     color: var(--color-text-weak);
   }

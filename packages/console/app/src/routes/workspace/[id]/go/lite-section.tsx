@@ -640,6 +640,7 @@ export function LiteSection(props: { lite: LiteSubscription | undefined }) {
           </p>
           <h3 data-slot="promo-models-title">{i18n.t("workspace.lite.promo.modelsTitle")}</h3>
           <ul data-slot="promo-models">
+            <li>Space Bunny Free</li>
             <li>Grok 4.7</li>
             <li>Grok 4.6</li>
             <li>GPT 5.6 Luna</li>
@@ -671,7 +672,7 @@ export function LiteSection(props: { lite: LiteSubscription | undefined }) {
             <li>Hy4 preview</li>
             <li>Hy3</li>
           </ul>
-          <p data-slot="promo-description">{i18n.t("go.promo.deepseek")}</p>
+          <p data-slot="promo-description">{i18n.t("go.promo.spaceBunny")}</p>
           <p data-slot="promo-description">{i18n.t("workspace.lite.promo.footer")}</p>
           <div data-slot="subscribe-actions">
             <button
