@@ -85,15 +85,18 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
     }
     if (submitting.has(input.adapter.state)) return
     // Images restored from a draft or history carry ids only; the optimistic message shows their URLs.
-    const value = {
-      ...read,
-      images: await Promise.all(
-        read.images.map(async (image) => ({
-          ...image,
-          blob: { ...image.blob, url: (await resolveBlobUrl(image.blob)) ?? image.blob.url },
-        })),
-      ),
-    }
+    const value =
+      read.images.length === 0
+        ? read
+        : {
+            ...read,
+            images: await Promise.all(
+              read.images.map(async (image) => ({
+                ...image,
+                blob: { ...image.blob, url: (await resolveBlobUrl(image.blob)) ?? image.blob.url },
+              })),
+            ),
+          }
     submitting.add(input.adapter.state)
     const comments = input.comments.capture()
     // Capture command intent before starting a session in a worktree whose catalog has not loaded.
@@ -116,6 +119,7 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
         const optimisticBusy = !input.adapter.working()
         if (optimisticBusy && input.adapter.kind === "new-session")
           session.data.session.setStatus(session.id, "running")
+        // Reserve before any await so a later revert or prompt cannot overtake this admission.
         const sending = sendPrompt(session, value, input.adapter.controls().model.selection.trackSessionCommit, () => {
           if (optimisticBusy && input.adapter.kind === "active-session")
             session.data.session.setStatus(session.id, "running")
@@ -374,44 +378,46 @@ async function applySelection(
   }
 }
 
-async function sendPrompt(
+function sendPrompt(
   session: ComposerSession,
   value: ComposerSubmission,
   track: ModelSelection["trackSessionCommit"] | undefined,
   onAdmit: () => void,
 ) {
-  const request = await buildSubmissionRequest(session, value)
-  // Switching agent or model reconfigures the session immediately, and with it
-  // the remainder of a running turn. A steer targets that turn, so its
-  // selection applies now; a queued follow-up must not reconfigure the turn it
-  // waits behind, so it runs with the session selection at delivery time (the
-  // intended selection stays recorded in its metadata).
-  if (value.delivery === "steer") {
-    await applySelection(session, value.selection, track)
-  }
+  return session.data.session.mutate(session.id, async (mutation) => {
+    const request = await buildSubmissionRequest(session, value)
+    // Switching agent or model reconfigures the session immediately, and with it
+    // the remainder of a running turn. A steer targets that turn, so its
+    // selection applies now; a queued follow-up must not reconfigure the turn it
+    // waits behind, so it runs with the session selection at delivery time (the
+    // intended selection stays recorded in its metadata).
+    if (value.delivery === "steer") {
+      await applySelection(session, value.selection, track)
+    }
 
-  const admission = {
-    id: value.id,
-    sessionID: session.id,
-    delivery: value.delivery,
-    text: request.text,
-    files: request.files.map((file) => ({ uri: file.uri, name: file.name, mention: file.mention })),
-    agents: request.agents,
-    skills: request.skills,
-    metadata: {
-      displayText: request.displayText,
-      comments: request.comments,
-      attachments: request.attachments,
-      agent: value.selection.agent,
-      model: {
-        ...value.selection.model,
-        ...(value.selection.variant ? { variant: value.selection.variant } : {}),
+    const admission = {
+      id: value.id,
+      sessionID: session.id,
+      delivery: value.delivery,
+      text: request.text,
+      files: request.files.map((file) => ({ uri: file.uri, name: file.name, mention: file.mention })),
+      agents: request.agents,
+      skills: request.skills,
+      metadata: {
+        displayText: request.displayText,
+        comments: request.comments,
+        attachments: request.attachments,
+        agent: value.selection.agent,
+        model: {
+          ...value.selection.model,
+          ...(value.selection.variant ? { variant: value.selection.variant } : {}),
+        },
       },
-    },
-  }
-  const sending = session.data.session.prompt(admission).catch(() => session.data.session.prompt(admission))
-  onAdmit()
-  await sending
+    }
+    const sending = mutation.prompt(admission)
+    onAdmit()
+    await sending
+  })
 }
 
 async function buildSubmissionRequest(session: ComposerSession, value: ComposerSubmission) {

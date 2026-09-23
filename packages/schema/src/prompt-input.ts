@@ -3,6 +3,8 @@ export * as PromptInput from "./prompt-input.js"
 import { Schema } from "effect"
 import { AgentAttachment, PromptMention } from "./prompt.js"
 import { optional, statics } from "./schema.js"
+import { SessionInbox } from "./session-inbox.js"
+import { SessionMessage } from "./session-message.js"
 import { Skill } from "./skill.js"
 
 export interface FileAttachment extends Schema.Schema.Type<typeof FileAttachment> {}
@@ -32,3 +34,9 @@ export const Prompt = Schema.Struct({
   agents: Schema.Array(AgentAttachment).pipe(optional),
   skills: Schema.Array(SkillAttachment).pipe(optional),
 }).annotate({ identifier: "PromptInput" })
+
+export interface Context extends Schema.Schema.Type<typeof Context> {}
+export const Context = Schema.Struct({
+  id: SessionMessage.ID,
+  ...SessionInbox.SyntheticPayload.fields,
+}).annotate({ identifier: "PromptInput.Context" })

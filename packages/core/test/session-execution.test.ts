@@ -123,6 +123,72 @@ describe("SessionExecution lifecycle", () => {
     }),
   )
 
+  for (const operation of ["resume", "wake"] as const) {
+    it.effect(`parks ${operation} while a revert is staged and runs after it clears`, () =>
+      Effect.gen(function* () {
+        const database = yield* Database.Service
+        const bus = yield* Bus.Service
+        const store = yield* SessionStore.Service
+        const sessionID = Session.ID.make("ses_staged_revert")
+        const revert = { messageID: SessionMessage.ID.make("msg_boundary"), files: [] }
+        yield* seedSessions(database, [sessionID])
+        yield* bus.publish(SessionEvent.RevertEvent.Staged, { sessionID, revert })
+        const drained: Session.ID[] = []
+        const scope = yield* Scope.make()
+        yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+        const context = yield* buildExecution(scope, (input) =>
+          Effect.sync(() => {
+            drained.push(input.sessionID)
+          }),
+        )
+        const execution = Context.get(context, SessionExecution.Service)
+
+        yield* execution[operation](sessionID)
+        yield* execution.awaitIdle(sessionID)
+        expect(drained).toEqual([])
+        expect((yield* store.get(sessionID))?.revert).toEqual(revert)
+        expect((yield* claims(database))[sessionID]).toBe(false)
+
+        yield* bus.publish(SessionEvent.RevertEvent.Cleared, { sessionID })
+        yield* execution[operation](sessionID)
+        yield* execution.awaitIdle(sessionID)
+        expect(drained).toEqual([sessionID])
+      }),
+    )
+  }
+
+  it.effect("reads the revert boundary after an in-flight stage releases the inbox lock", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const sessionID = Session.ID.make("ses_staging_revert")
+      yield* seedSessions(database, [sessionID])
+      const drained: Session.ID[] = []
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, (input) =>
+        Effect.sync(() => {
+          drained.push(input.sessionID)
+        }),
+      )
+      const execution = Context.get(context, SessionExecution.Service)
+
+      yield* SessionInbox.serialized(
+        sessionID,
+        Effect.gen(function* () {
+          yield* execution.wake(sessionID)
+          expect(yield* execution.isActive(sessionID)).toBe(true)
+          yield* bus.publish(SessionEvent.RevertEvent.Staged, {
+            sessionID,
+            revert: { messageID: SessionMessage.ID.make("msg_boundary"), files: [] },
+          })
+        }),
+      )
+      yield* execution.awaitIdle(sessionID)
+      expect(drained).toEqual([])
+    }),
+  )
+
   it.effect("a user interrupt releases the claim so the turn never resurrects", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
