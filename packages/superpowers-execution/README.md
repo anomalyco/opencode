@@ -82,9 +82,9 @@ in observer mode.
 
 After the companion is built, deployed, and verified, add this rule to your installation-wide
 OpenCode controller instructions (`~/.config/opencode/AGENTS.md`). Keep unrelated instructions;
-do not edit cached Superpowers skill files. Install the policy only when the reporting tools are
-available in the controller's location. It governs subsequent approved-plan executions, not the
-bootstrap development of the companion itself.
+do not edit cached Superpowers skill files. The rule applies even when reporting tools are missing:
+subsequent approved-plan executions pause until reporting can register a run. It does not govern
+the bootstrap development of the companion itself.
 
 ```text
 Before implementation or implementer dispatch for an approved Superpowers plan, the root controller must read the approved plan, compute its plan hash, load superpowers-execution-reporting, call execution_read, then reconcile a matching plan run or persist execution_report run.start with the complete graph, gates, and final review. A run for a different plan is not a match. Do not begin plan work until registration succeeds. If the reporting skill, tools, or storage are unavailable, pause implementation and new dispatch, state the blocker, and allow only read-only diagnosis. If workers are already running, request a cooperative safe stop; do not claim they were automatically paused. After recovery, execution_read and reconcile before resuming. Never substitute a local ledger, badge, or capabilities response for persisted registration.

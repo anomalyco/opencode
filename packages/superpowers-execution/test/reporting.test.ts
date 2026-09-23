@@ -42,6 +42,38 @@ test("the companion registers one uniquely named skill whose content is the pack
   expect(String(skill.path)).toContain("skills/superpowers-execution-reporting/SKILL.md")
   expect(skill.description).toContain("root controller")
   expect(skill.content).toBe(await Bun.file(reportingSkillFile()).text())
+  for (const obligation of [
+    "Before implementation or implementer dispatch",
+    "compute its SHA-256",
+    "call `execution_read`",
+    "matching plan path and hash",
+    "`execution_report`",
+    "persisted response",
+    "pause implementation",
+    "cooperative safe stop",
+    "UNRUN",
+  ]) expect(skill.content).toContain(obligation)
+  expect(skill.content).not.toContain("keep executing the plan")
+  expect(skill.content).not.toContain("Continue the underlying Superpowers work")
+})
+
+test("the distributable controller rule pauses an unregistered plan", async () => {
+  const readme = await Bun.file(new URL("../README.md", import.meta.url)).text()
+  expect(readme).toContain("The rule applies even when reporting tools are missing")
+  const policy = readme.split("### Required global controller policy\n")[1]?.split("```text\n")[1]?.split("\n```")[0]
+  expect(policy).toBeDefined()
+  for (const obligation of [
+    "approved Superpowers plan",
+    "plan hash",
+    "execution_read",
+    "execution_report run.start",
+    "complete graph, gates, and final review",
+    "different plan",
+    "until registration succeeds",
+    "pause implementation",
+    "cooperative safe stop",
+    "After recovery",
+  ]) expect(policy).toContain(obligation)
 })
 
 test("a read-only lookup reports no active run and never creates one", async () => {

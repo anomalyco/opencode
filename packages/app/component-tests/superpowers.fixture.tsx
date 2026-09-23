@@ -13,7 +13,7 @@ import { focusComposerEditor } from "../src/session/composer/dock-focus"
 import { ServerConnection, ServersProvider } from "../src/runtime/server/registry"
 import { GlobalProvider } from "../src/runtime/server/runtime"
 import { ServerProvider, useServer } from "../src/runtime/server/current"
-import { SettingsProvider } from "../src/settings/model"
+import { SettingsProvider, useSettings } from "../src/settings/model"
 import { SettingsSurfaceProvider } from "../src/settings/surface"
 import { WslServersProvider } from "../src/servers/wsl/context"
 import { SshProvider } from "../src/servers/ssh/context"
@@ -71,6 +71,7 @@ import { useSessionModel } from "../src/session/model"
 import { BrowserAttachmentsProvider } from "../src/session/browser/attachments"
 import { ComposerPersistenceProvider } from "../src/composer/persistence"
 import { TerminalProvider } from "../src/session/terminal/context"
+import { useLayout } from "@/shell/state/layout"
 
 type PendingRequest = { type: "permission" | "question"; owner: string }
 
@@ -437,6 +438,8 @@ function LiveAgentsComposition(props: {
 
 function ProductionMobileSession(props: { state: LiveExecutionState; mode: string }) {
   const server = useServer()
+  const layout = useLayout()
+  const settings = useSettings()
   server.ctx.data.session.remember({
     id: "root",
     projectID: "demo",
@@ -453,6 +456,17 @@ function ProductionMobileSession(props: { state: LiveExecutionState; mode: strin
       <Show when={props.mode === "session-screen-header-terminal"}>
         <button type="button" onClick={() => session.layout.view().terminal.open()}>
           Open fixture terminal
+        </button>
+      </Show>
+      <Show when={props.mode.startsWith("session-screen-header-files")}>
+        <button
+          type="button"
+          onClick={() => {
+            settings.general.setShowFileTree(true)
+            layout.fileTree.open()
+          }}
+        >
+          Open fixture file tree
         </button>
       </Show>
       <Show when={props.mode === "session-screen-header-compact"}>

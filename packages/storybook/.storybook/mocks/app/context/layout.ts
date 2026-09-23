@@ -25,6 +25,7 @@ const [all, setAll] = createSignal<string[]>([])
 const [active, setActive] = createSignal<string | undefined>(undefined)
 const [reviewOpen, setReviewOpen] = createSignal(false)
 const [terminalOpen, setTerminalOpen] = createSignal(false)
+const [fileTreeOpen, setFileTreeOpen] = createSignal(false)
 const [reviewWidth, setReviewWidth] = createSignal(600)
 const [terminalHeight, setTerminalHeight] = createSignal(280)
 
@@ -85,10 +86,13 @@ export function useLayout() {
     tabs: () => tabs,
     view: () => view,
     fileTree: {
-      opened: () => false,
+      opened: fileTreeOpen,
       width: () => 200,
       tab: () => "all" as const,
       setTab() {},
+      open: () => setFileTreeOpen(true),
+      close: () => setFileTreeOpen(false),
+      toggle: () => setFileTreeOpen((value) => !value),
     },
     review: {
       diffStyle: () => "unified" as const,

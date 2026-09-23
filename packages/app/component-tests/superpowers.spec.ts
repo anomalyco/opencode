@@ -326,6 +326,14 @@ story("execution header reserves the badge width in an open side panel", async (
     if (!controls || !reserved) return Number.NEGATIVE_INFINITY
     return reserved.width - controls.width
   }).toBeGreaterThanOrEqual(0)
+  const addTab = page.getByRole("button", { name: "Add tab", exact: true })
+  await expect(addTab).toBeVisible()
+  await expect.poll(async () => {
+    const controls = await group.boundingBox()
+    const button = await addTab.boundingBox()
+    if (!controls || !button) return Number.POSITIVE_INFINITY
+    return Math.min(controls.x + controls.width, button.x + button.width) - Math.max(controls.x, button.x)
+  }).toBeLessThanOrEqual(0)
 })
 
 story("execution header reserves room above the side terminal", async ({ page }) => {
@@ -341,7 +349,36 @@ story("execution header reserves room above the side terminal", async ({ page })
     if (!controls || !reserved) return Number.NEGATIVE_INFINITY
     return reserved.width - controls.width
   }).toBeGreaterThanOrEqual(20)
+  const newTerminal = page.getByRole("button", { name: "New terminal", exact: true })
+  await expect(newTerminal).toBeVisible()
+  await expect.poll(async () => {
+    const controls = await group.boundingBox()
+    const button = await newTerminal.boundingBox()
+    if (!controls || !button) return Number.POSITIVE_INFINITY
+    return Math.min(controls.x + controls.width, button.x + button.width) - Math.max(controls.x, button.x)
+  }).toBeLessThanOrEqual(0)
 })
+
+for (const scenario of ["session-screen-header-files", "session-screen-header-files-rtl"]) {
+  story(`execution header clears file-tree tabs in ${scenario}`, async ({ page }) => {
+    await page.setViewportSize({ width: 1100, height: 800 })
+    await openExecutionFixture(page, scenario)
+    await page.getByRole("button", { name: "Open fixture file tree" }).click()
+    const group = page.locator('[data-slot="session-review-toggle"]')
+    const tabs = page.locator('[data-scope="filetree"] [data-slot="tabs-list"]')
+    await expect(tabs).toBeVisible()
+    for (const name of ["Files Changed 0", "All files"]) {
+      await expect.poll(async () => {
+        const controls = await group.boundingBox()
+        const tab = await tabs.getByRole("tab", { name, exact: true }).boundingBox()
+        if (!controls || !tab) return Number.POSITIVE_INFINITY
+        return Math.min(controls.x + controls.width, tab.x + tab.width) - Math.max(controls.x, tab.x)
+      }).toBeLessThanOrEqual(0)
+    }
+    await tabs.getByRole("tab", { name: "All files", exact: true }).click()
+    await expect(tabs.getByRole("tab", { name: "All files", exact: true })).toHaveAttribute("aria-selected", "true")
+  })
+}
 
 
 story("execution shortcut mirrors the icon before the label in rtl", async ({ page }) => {

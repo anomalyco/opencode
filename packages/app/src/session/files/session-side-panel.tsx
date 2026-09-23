@@ -49,6 +49,7 @@ import {
 } from "@/session/helpers"
 import { setSessionHandoff } from "@/session/handoff"
 import { useSessionLayout } from "@/session/session-layout"
+import { FILE_TREE_WIDTH_MIN } from "@/session/session-panel-width"
 import { SessionFileBrowserTab, type SessionFileBrowserState } from "@/session/files/session-file-browser-tab"
 import { SessionBrowserPane } from "@/session/browser/pane"
 import type { createSessionBrowser } from "@/session/browser/model"
@@ -168,7 +169,6 @@ export function SessionTabAddControl(props: {
 
 type ReviewDiff = FileDiffInfo
 type RenderDiff = FileDiffInfo
-const FILE_TREE_WIDTH_MIN = 240
 
 function renderDiff(value: ReviewDiff): value is RenderDiff {
   return typeof value.file === "string"
@@ -759,12 +759,17 @@ export function SessionSidePanel(props: {
                     data-scope="filetree"
                   >
                     <Tabs.List>
-                      <Tabs.Trigger value="changes" class="flex-1" classes={{ button: "w-full" }}>
+                      <Tabs.Trigger value="changes" class="min-w-0 flex-1" classes={{ button: "w-full truncate" }}>
                         {language.t("session.review.filesChanged", { count: props.reviewCount })}
                       </Tabs.Trigger>
-                      <Tabs.Trigger value="all" class="flex-1" classes={{ button: "w-full" }}>
+                      <Tabs.Trigger value="all" class="min-w-0 flex-1" classes={{ button: "w-full truncate" }}>
                         {language.t("session.files.all")}
                       </Tabs.Trigger>
+                      <div
+                        class="h-7 shrink-0"
+                        style={{ width: "var(--session-header-action-width, 28px)" }}
+                        aria-hidden
+                      />
                     </Tabs.List>
                     <Show when={fileTreeTab() === "changes"}>
                       <Tabs.Content value="changes" class="bg-background-stronger px-3 py-0">

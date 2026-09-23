@@ -3,6 +3,7 @@
 // (which forces the review pane to grow with the monitor), reserve a fixed
 // minimum for the review pane and let the chat panel take everything else.
 export const SESSION_PANEL_WIDTH_MIN = 450
+export const FILE_TREE_WIDTH_MIN = 240
 export const REVIEW_PANE_WIDTH_MIN = 480
 export const REVIEW_PANE_WIDTH_MIN_SPLIT = 800
 

@@ -6,7 +6,7 @@ import { useSettings } from "@/settings/model"
 import { createSizing, shouldShowFileTree } from "./helpers"
 import type { SessionModel } from "./model"
 import { sessionPanelLayout } from "./session-panel-layout"
-import { clampSessionPanelWidth, sessionPanelWidthMax } from "./session-panel-width"
+import { FILE_TREE_WIDTH_MIN, clampSessionPanelWidth, sessionPanelWidthMax } from "./session-panel-width"
 
 export function createSessionScreenLayout(session: SessionModel) {
   const layout = useLayout()
@@ -51,7 +51,7 @@ export function createSessionScreenLayout(session: SessionModel) {
   const panelWidth = createMemo(() => {
     if (!sidePanelOpen()) return "100%"
     if (resizable()) return `${resizedWidth()}px`
-    return `calc(100% - ${layout.fileTree.width()}px)`
+    return `calc(100% - ${Math.max(FILE_TREE_WIDTH_MIN, layout.fileTree.width())}px)`
   })
   const panelMax = createMemo(() => {
     const width = available()
@@ -86,7 +86,7 @@ export function createSessionScreenLayout(session: SessionModel) {
   const sideContentWidth = createMemo<string>((previous) => {
     const width = available()
     if (resizable() && width !== undefined) return `${Math.max(0, width - resizedWidth())}px`
-    if (fileTreeOpen()) return `${layout.fileTree.width()}px`
+    if (fileTreeOpen()) return `${Math.max(FILE_TREE_WIDTH_MIN, layout.fileTree.width())}px`
     return previous
   }, "100%")
   return {
