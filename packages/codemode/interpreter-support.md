@@ -201,10 +201,18 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       creates a hole without changing its length. Deleting a non-configurable property (`length`) or
       assigning a read-only one (`Math.PI`, `fn.name`) throws a `TypeError`, as in strict mode. `delete` of a
       non-reference (`delete 0`, `delete f()`) evaluates the operand and is `true`; `delete x` on a variable throws.
-- [ ] Operators, `switch` discriminants, template interpolation, and coercion helpers such as `String` and `isNaN`
-      applied to functions and namespaces; JavaScript coerces them, the interpreter rejects non-data operands.
-- [ ] ToPrimitive on object operands: operators, `Error(message)`, `Date` arguments, and `parseInt` radix should call
-      `valueOf`/`toString` in spec order and surface their throws.
+- [x] Coercion helpers and template interpolation accept functions and namespaces: `String(fn)` and `${fn}` give
+      `"[object Function]"` rather than the source text, `isNaN(fn)` is `true`.
+- [ ] Operators other than `===`/`!==`, `switch` discriminants and cases, and `Object.is` applied to a function,
+      promise, generator, tool reference, or any object holding one anywhere inside; JavaScript compares by identity or
+      coerces (`fn == null` is `false`, `fn + ""` is its source text), the interpreter throws
+      `TypeError: Binary operators require data values.` The check walks both operands' whole object graphs, so
+      `rows == null` on a large array is slow where `rows === null` is not.
+- [ ] ToPrimitive on program objects: operators, `Number`/`String`, `Error(message)`, `parseInt` radix, multi-argument
+      `Date` construction and `Date.UTC`, and numeric built-in arguments (`Math.max`, `at`, `indexOf` start) should call
+      the object's own `valueOf`/`toString` in spec order and surface their throws. Today they use the built-in form
+      (`NaN`, `"[object Object]"`) and ignore own methods. Date setters and one-argument `Date` construction already
+      follow ToPrimitive.
 - [x] Property keys follow ToPropertyKey: `x[null]`, `x[true]`, and objects (via their built-in string form) become
       string keys.
 
@@ -346,7 +354,8 @@ reject }` object.
 - [x] Native no-argument parity for `match()`, `matchAll()`, and `search()`; all behave as an empty pattern. Present
       arguments must still be a regular expression or string pattern.
 - [ ] `String.raw`.
-- [ ] `match`, `search`, and `split` accept any value and coerce it (objects via `toString`), like JavaScript.
+- [ ] `match` and `search` accept any value and coerce it to a pattern (`"a1b".match(1)`), like JavaScript; `split`
+      already does.
 
 ## Numbers and Math
 
@@ -406,8 +415,9 @@ reject }` object.
 - [x] `toLocaleString`, `toLocaleDateString`, and `toLocaleTimeString` always format as `en-US` in UTC
       (`"1/1/1970, 12:00:00 AM"`) so output does not depend on the host.
 - [x] Native one-argument Date coercion for supported values, including booleans, null, arrays, and plain objects.
-- [ ] Date setters and multi-argument construction coerce object arguments through `valueOf`/`toString` and surface
-      their throws.
+- [x] Date setters and one-argument construction coerce object arguments through their own `valueOf`/`toString` and
+      surface their throws.
+- [ ] Multi-argument construction and `Date.UTC` coerce object arguments the same way (see ToPrimitive above).
 - [x] Native Date loose-equality and default primitive-coercion semantics, using CodeMode's deterministic ISO string
       representation for the string primitive.
 - [x] Native `RangeError` branding for invalid `toISOString()` calls.
