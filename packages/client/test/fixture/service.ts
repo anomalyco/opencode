@@ -17,6 +17,18 @@ if (mode === "environment") {
 }
 if (mode === "signal") process.kill(process.pid, process.platform === "win32" ? "SIGTERM" : "SIGKILL")
 
+let controlled = ""
+if (mode === "controlled") {
+  await appendFile(registration + ".starts", process.pid + "\n")
+  const release = registration + `.release-${process.pid}`
+  while (!(await Bun.file(release).exists())) await Bun.sleep(5)
+  controlled = await Bun.file(release).text()
+  if (controlled === "fail") {
+    process.stderr.write("actionable startup failure: storage initialization denied\n")
+    process.exit(23)
+  }
+}
+
 if (mode === "delayed" || mode === "delayed-failed" || mode === "coordinated" || mode === "coordinated-failed-loser") {
   await appendFile(registration + ".starts", process.pid + "\n")
   const owner = await writeFile(registration + ".owner", String(process.pid), { flag: "wx" })
@@ -63,7 +75,7 @@ const server = Bun.serve({
       return new Response(null, { status: 404 })
     requests += 1
     if (mode === "starting") await writeFile(registration + ".status-request", "")
-    if (mode === "hanging") {
+    if (mode === "hanging" || controlled === "hang") {
       await appendFile(registration + ".requests", process.pid + "\n")
       return new Promise<Response>(() => {})
     }
@@ -92,8 +104,10 @@ const server = Bun.serve({
 })
 
 // Install handlers before publishing: a test may signal as soon as the registration appears.
-process.on("SIGTERM", () => void shutdown("SIGTERM"))
-process.on("SIGINT", () => void shutdown("SIGINT"))
+if (controlled !== "hang") {
+  process.on("SIGTERM", () => void shutdown("SIGTERM"))
+  process.on("SIGINT", () => void shutdown("SIGINT"))
+}
 
 await writeFile(
   registration + ".tmp",

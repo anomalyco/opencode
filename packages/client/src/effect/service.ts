@@ -58,6 +58,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
   let announced = false
   let lastSpawn = 0
   let spawnDelay = timing.spawnDelay
+  let failure: Error | undefined
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) =>
     Effect.sync(() => {
       if (announced) return
@@ -89,6 +90,13 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
         yield* Effect.logWarning("Background service is unresponsive; recovery cannot preserve persistent terminals")
         yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback()))
         yield* terminate(info, options, timing)
+        for (const item of contenders) {
+          if (item.child.pid === info.pid || contenderFinished(item)) {
+            item.release()
+            contenders.delete(item)
+          }
+        }
+        failure = undefined
         timeouts = undefined
         lastSpawn = Date.now() - spawnDelay
       }
@@ -117,19 +125,27 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
         file: options.file,
         pty: service.state === "ready" ? "handoff" : "clear",
       }).pipe(Effect.ignore)
+      for (const item of contenders) {
+        if (item.child.pid === service.info.pid || contenderFinished(item)) {
+          item.release()
+          contenders.delete(item)
+        }
+      }
+      failure = undefined
       lastSpawn = 0
       return Option.none<LocalService>()
     } else if (lastSpawn === 0 && info !== undefined) lastSpawn = Date.now()
 
     const finished = [...contenders].filter(contenderFinished)
-    const failure = finished.map(contenderFailure).find((error): error is Error => error !== undefined)
+    failure ??= finished.map(contenderFailure).find((error): error is Error => error !== undefined)
     if (finished.some((item) => item.child.exitCode === 0)) {
       spawnDelay = Math.min(spawnDelay * 2, timing.maxSpawnDelay)
     }
     finished.forEach((item) => contenders.delete(item))
     if (failure !== undefined && contenders.size === 0) return yield* Effect.fail(failure)
-    // Keep one candidate plus one lock probe so a pre-lock stall cannot block recovery.
-    if (contenders.size < 2 && Date.now() - lastSpawn >= spawnDelay) {
+    // Keep one candidate plus one lock probe for pre-lock stalls. After a failure, let the
+    // survivors finish without recruiting replacements that could hide the error indefinitely.
+    if (failure === undefined && contenders.size < 2 && Date.now() - lastSpawn >= spawnDelay) {
       yield* announce("missing")
       contenders.add(yield* spawnContender)
       lastSpawn = Date.now()
@@ -145,7 +161,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     Effect.ensuring(Effect.sync(() => contenders.forEach((contender) => contender.release()))),
   )
   if (Option.isNone(found))
-    return yield* Effect.fail(new Error("Timed out waiting for the background service to start"))
+    return yield* Effect.fail(failure ?? new Error("Timed out waiting for the background service to start"))
   return found.value.endpoint
 })
 
