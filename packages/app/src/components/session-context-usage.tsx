@@ -131,7 +131,7 @@ export function SessionContextUsage(props: SessionContextUsageProps) {
       <ContextTooltipRow name={language.t("context.usage.usage")} value={`${context()?.usage ?? 0}%`} />
       <ContextTooltipRow
         name={language.t("context.usage.tokens")}
-        value={context()?.total.toLocaleString(language.intl()) ?? "0"}
+        value={context()?.ctxTotal.toLocaleString(language.intl()) ?? "0"}
       />
     </div>
   )
