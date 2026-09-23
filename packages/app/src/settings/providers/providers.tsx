@@ -31,14 +31,13 @@ const PROVIDER_ICON_SIZE = 16
 
 export const SettingsProviders: Component<{
   directory: string | undefined
-  onBack?: () => void
 }> = (props) => {
   const dialog = useDialog()
   const language = useLanguage()
   const serverSdk = useServerSDK()
   const providers = useProviders(() => props.directory)
   const integrations = useIntegrations(() => props.directory)
-  const providerConnect = useProviderConnectController({ onBack: props.onBack })
+  const providerConnect = useProviderConnectController()
   // Console-managed providers (`opencode-go`, `console-*`) connect through the `opencode`
   // integration, so the lookup must follow `integrationID` rather than the provider id.
   const integration = (item: ProviderItem) => {

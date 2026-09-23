@@ -320,7 +320,7 @@ function RootSettings() {
               />
             </Tabs.Content>
             <Tabs.Content value="providers" class="settings-panel">
-              <SettingsProviders directory={undefined} onBack={() => surface.select("providers")} />
+              <SettingsProviders directory={undefined} />
             </Tabs.Content>
             <Tabs.Content value="models" class="settings-panel">
               <SettingsModels active={surface.view().tab === "models"} autofocus={!surface.search.state.selected} />
@@ -402,7 +402,7 @@ function ServerSettings(props: { entry: SettingsServer }) {
               />
             </Tabs.Content>
             <Tabs.Content value="providers" class="settings-panel">
-              <SettingsProviders directory={undefined} onBack={() => surface.select("providers")} />
+              <SettingsProviders directory={undefined} />
             </Tabs.Content>
             <Tabs.Content value="models" class="settings-panel">
               <SettingsModels active={surface.view().tab === "models"} />

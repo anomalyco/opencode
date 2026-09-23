@@ -30,14 +30,14 @@ const CUSTOM_ID = "_custom"
 type IntegrationForm = NonNullable<ProviderConnectMethod["form"]>[number]
 type StringForm = Extract<IntegrationForm, { type: "string" }>
 
-export function useProviderConnectController(options: { onBack?: () => void } = {}) {
+export function useProviderConnectController() {
   const [store, setStore] = createStore({ selected: undefined as string | undefined })
   const reset = () => setStore("selected", undefined)
 
   return {
     selected: () => store.selected,
     select: (provider?: string) => setStore("selected", provider),
-    back: options.onBack ?? reset,
+    back: reset,
   }
 }
 
