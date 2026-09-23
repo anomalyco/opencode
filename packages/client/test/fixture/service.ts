@@ -101,6 +101,7 @@ async function shutdown(signal?: NodeJS.Signals) {
   // A lingering server removes its registration first and keeps its port while it winds down.
   if (mode === "lingering") {
     await rm(registration, { force: true })
+    await writeFile(registration + ".unregistered", "")
     await Bun.sleep(Number(delay))
   }
   server.stop(true)
