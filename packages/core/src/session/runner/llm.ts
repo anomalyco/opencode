@@ -5,6 +5,7 @@ import {
   LLMEvent,
   Message,
   SystemPart,
+  applySecretShield,
   isContextOverflowFailure,
   type ProviderErrorEvent,
 } from "@opencode-ai/llm"
@@ -107,6 +108,7 @@ const layer = Layer.effect(
     const snapshots = yield* Snapshot.Service
     const db = (yield* Database.Service).db
     const compaction = SessionCompaction.make({ events, llm, config: yield* config.entries() })
+    const shieldMode = Config.latest(yield* config.entries(), "secret_shield")
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
@@ -233,10 +235,21 @@ const layer = Layer.effect(
         snapshot: startSnapshot,
       })
       const withPublication = Semaphore.makeUnsafe(1).withPermit
+      const shield = applySecretShield(request, shieldMode)
+      if (shield._tag === "blocked") {
+        const msg = shield.report.error ?? `detected ${shield.report.detected} credential(s), delivery blocked`
+        yield* withPublication(publisher.failAssistant(`Secret Shield [block]: ${msg}`))
+        return { needsContinuation: false, step: currentStep }
+      }
+      if (shield.report.detected > 0)
+        yield* Effect.logWarning(
+          `Secret Shield [${shield.report.mode}]: ${shield.report.detected} credential(s) detected`,
+        )
+      const shielded = shield.request
       const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
         withPublication(publisher.publish(event, outputPaths))
       let overflowFailure: ProviderErrorEvent | undefined
-      const providerStream = llm.stream(request).pipe(
+      const providerStream = llm.stream(shielded).pipe(
         Stream.runForEach((event) =>
           Effect.gen(function* () {
             if (overflowFailure || publisher.hasProviderError()) return
