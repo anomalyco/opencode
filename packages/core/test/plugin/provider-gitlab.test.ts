@@ -1,6 +1,7 @@
 import { AISDK } from "@opencode/core/aisdk"
 import { beforeEach, describe, expect, mock } from "bun:test"
 import { Effect } from "effect"
+import { TestClock } from "effect/testing"
 import type { WorkflowDiscoveryConfig, WorkflowDiscoveryOptions, WorkflowDiscoveryResult } from "gitlab-ai-provider"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
@@ -100,14 +101,14 @@ describe("GitLabPlugin", () => {
             provider.settings = { instanceUrl: "https://configured.gitlab.example" }
           })
         })
-        yield* fixture.credentials.create({ integrationID, value: { type: "key", key: "pat-token" } })
+        const saved = yield* fixture.credentials.create({ integrationID, value: { type: "key", key: "pat-token" } })
         discoverWorkflowModels.mockResolvedValue(discovered)
         yield* addPlugin()
         yield* drain
 
         expect(discoverWorkflowModels).toHaveBeenCalledTimes(1)
         const [config, options] = discoverWorkflowModels.mock.calls[0]!
-        expect(options).toEqual({ workingDirectory: location.directory })
+        expect(options).toEqual({ workingDirectory: location.directory, cacheKey: saved.id })
         expect(config.instanceUrl).toBe("https://configured.gitlab.example")
         expect(config.getHeaders()).toEqual({ "PRIVATE-TOKEN": "pat-token" })
         expect((yield* fixture.models.available()).map((model) => model.id).sort()).toEqual([
@@ -155,8 +156,26 @@ describe("GitLabPlugin", () => {
     ),
   )
 
-  it.effect("discovers with environment credentials without replacing configured model definitions", () =>
-    withEnv({ GITLAB_TOKEN: "env-token", GITLAB_INSTANCE_URL: "https://env.gitlab.example" }, () =>
+  it.effect("does not discover with only an ambient GITLAB_TOKEN or configured apiKey", () =>
+    withEnv({ GITLAB_TOKEN: "env-token" }, () =>
+      Effect.gen(function* () {
+        const fixture = yield* discoveryFixture
+        yield* fixture.providers.transform((editor) => {
+          editor.update(providerID, (provider) => {
+            provider.settings = { apiKey: "configured-token" }
+          })
+        })
+        discoverWorkflowModels.mockResolvedValue(discovered)
+        yield* addPlugin()
+        yield* drain
+        expect(discoverWorkflowModels).not.toHaveBeenCalled()
+        expect(yield* fixture.models.get(providerID, Model.ID.make("duo-workflow-default"))).toBeUndefined()
+      }),
+    ),
+  )
+
+  it.effect("discovers with a stored login without replacing configured model definitions", () =>
+    withEnv({ GITLAB_TOKEN: undefined, GITLAB_INSTANCE_URL: "https://env.gitlab.example" }, () =>
       Effect.gen(function* () {
         const fixture = yield* discoveryFixture
         yield* fixture.providers.transform((editor) => {
@@ -165,16 +184,52 @@ describe("GitLabPlugin", () => {
             model.limit.output = 42
           })
         })
+        yield* fixture.credentials.create({ integrationID, value: { type: "key", key: "stored-token" } })
         discoverWorkflowModels.mockResolvedValue(discovered)
         yield* addPlugin()
         yield* drain
         expect(discoverWorkflowModels.mock.calls[0]![0].instanceUrl).toBe("https://env.gitlab.example")
-        expect(discoverWorkflowModels.mock.calls[0]![0].getHeaders()).toEqual({ "PRIVATE-TOKEN": "env-token" })
+        expect(discoverWorkflowModels.mock.calls[0]![0].getHeaders()).toEqual({ "PRIVATE-TOKEN": "stored-token" })
         expect(yield* fixture.models.get(providerID, Model.ID.make("duo-workflow-new-model"))).toMatchObject({
           name: "Configured model",
           limit: { output: 42 },
         })
         expect(yield* fixture.models.get(providerID, Model.ID.make("duo-workflow-default"))).toBeDefined()
+      }),
+    ),
+  )
+
+  it.effect("scopes the SDK discovery cache to the active account", () =>
+    withEnv({ GITLAB_TOKEN: undefined }, () =>
+      Effect.gen(function* () {
+        const fixture = yield* discoveryFixture
+        const first = yield* fixture.credentials.create({ integrationID, value: { type: "key", key: "first" } })
+        yield* addPlugin()
+        yield* drain
+        const second = yield* fixture.credentials.create({ integrationID, value: { type: "key", key: "second" } })
+        yield* drain
+        expect(discoverWorkflowModels.mock.calls.map(([, options]) => options.cacheKey)).toEqual([first.id, second.id])
+      }),
+    ),
+  )
+
+  it.effect("gives up on unresponsive discovery so later account switches still load", () =>
+    withEnv({ GITLAB_TOKEN: undefined }, () =>
+      Effect.gen(function* () {
+        const fixture = yield* discoveryFixture
+        discoverWorkflowModels.mockImplementation(() => new Promise(() => {}))
+        yield* fixture.credentials.create({ integrationID, value: { type: "key", key: "hanging" } })
+        yield* addPlugin()
+        yield* drain
+        expect(discoverWorkflowModels).toHaveBeenCalledTimes(1)
+        yield* TestClock.adjust("10 seconds")
+        yield* drain
+
+        discoverWorkflowModels.mockResolvedValue(discovered)
+        yield* fixture.credentials.create({ integrationID, value: { type: "key", key: "responsive" } })
+        yield* drain
+        expect(discoverWorkflowModels).toHaveBeenCalledTimes(2)
+        expect(yield* fixture.models.get(providerID, Model.ID.make("duo-workflow-new-model"))).toBeDefined()
       }),
     ),
   )

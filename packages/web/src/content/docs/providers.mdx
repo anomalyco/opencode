@@ -1051,6 +1051,12 @@ When a `duo-workflow-*` model is selected, OpenCode will:
 Available DAP workflow models follow the `duo-workflow-*` naming convention and
 are dynamically discovered from your GitLab instance.
 
+:::note
+Workflow model discovery only runs for a login stored with `/connect` (OAuth or
+a personal access token). A `GITLAB_TOKEN` environment variable on its own does
+not trigger discovery.
+:::
+
 ##### GitLab API Tools (Optional, but highly recommended)
 
 To access GitLab tools (merge requests, issues, pipelines, CI/CD, etc.):
