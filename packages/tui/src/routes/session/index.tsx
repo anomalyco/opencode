@@ -90,6 +90,7 @@ import { Slot } from "../../plugin/render"
 import { usePlugin } from "../../plugin/context"
 import {
   cacheReuseDrop,
+  completeGroupBoundary,
   createSessionRows,
   legacyTurns,
   messageBoundaryIDs,
@@ -395,7 +396,16 @@ export function Session(props: {
   const prependHistory = createHistoryPrepend({
     sessionID: () => route.sessionID,
     more: (id) => data.session.message.more(id),
-    loadMore: (id) => data.session.message.loadMore(id),
+    loadMore: async (id) => {
+      await data.session.message.loadMore(id)
+      await completeGroupBoundary({
+        rows,
+        messages: () => data.session.message.list(id).length,
+        more: () => data.session.message.more(id),
+        loadMore: () => data.session.message.loadMore(id),
+        active: () => route.sessionID === id,
+      })
+    },
     height: () => scroll.scrollHeight,
     afterLayout,
     active: (id) => route.sessionID === id && Boolean(scroll && !scroll.isDestroyed),
