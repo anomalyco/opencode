@@ -25,6 +25,7 @@ const checkLoggedIn = query(async () => {
 }, "checkLoggedIn.get")
 
 const models = [
+  { name: "Grok 4.7", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "Grok 4.6", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "GPT 5.6 Luna", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "GLM-5.3-Flash", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
@@ -35,6 +36,8 @@ const models = [
   { name: "Kimi K2.7 Code", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Kimi K2.6", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "LongCat-2.0", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
+  { name: "MiMo-V2.6-Pro", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
+  { name: "MiMo-V2.6-Flash", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "MiMo-V2.5-Pro", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "MiMo-V2.5", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Qwen3.8 Max", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
@@ -56,7 +59,7 @@ const models = [
 
 export default function Home() {
   const workspaceID = createAsync(() => checkLoggedIn())
-  const subscribeUrl = createMemo(() => (workspaceID() ? `/workspace/${workspaceID()}/go` : "/auth"))
+  const subscribeUrl = createMemo(() => "/console/go")
   const i18n = useI18n()
   const language = useLanguage()
   return (
@@ -322,7 +325,7 @@ export default function Home() {
                   </div>
                   <div data-slot="faq-retention-notes">
                     <p>
-                      <strong>Grok 4.6:</strong> {i18n.t("go.faq.a5.grokRetention")}{" "}
+                      <strong>Grok 4.7/4.6:</strong> {i18n.t("go.faq.a5.grokRetention")}{" "}
                       <a href="https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr">
                         {i18n.t("go.faq.a5.learnMore")}
                       </a>

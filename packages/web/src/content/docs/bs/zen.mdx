@@ -61,6 +61,8 @@ Našim modelima možete pristupiti i preko sljedećih API endpointa.
 | Model                           | Model ID                        | Endpoint                                                  | AI SDK Package              |
 | ------------------------------- | ------------------------------- | --------------------------------------------------------- | --------------------------- |
 | GPT 6 Astra                     | gpt-6-astra                     | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 6 Sol                       | gpt-6-sol                       | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| GPT 6 Luna                      | gpt-6-luna                      | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 | GPT 5.6 Sol                     | gpt-5.6-sol                     | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 | GPT 5.6 Terra                   | gpt-5.6-terra                   | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 | GPT 5.6 Luna                    | gpt-5.6-luna                    | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
@@ -83,6 +85,7 @@ Našim modelima možete pristupiti i preko sljedećih API endpointa.
 | GPT 5 Nano                      | gpt-5-nano                      | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 | Claude Fable 5.1                | claude-fable-5-1                | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Claude Fable 5                  | claude-fable-5                  | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
+| Claude Opus 5.5                 | claude-opus-5-5                 | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Claude Opus 5                   | claude-opus-5                   | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Claude Opus 4.8                 | claude-opus-4-8                 | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Claude Opus 4.7                 | claude-opus-4-7                 | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
@@ -99,6 +102,7 @@ Našim modelima možete pristupiti i preko sljedećih API endpointa.
 | Gemini 3.5 Flash Lite           | gemini-3.5-flash-lite           | `https://opencode.ai/zen/v1/models/gemini-3.5-flash-lite` | `@ai-sdk/google`            |
 | Gemini 3.1 Pro                  | gemini-3.1-pro                  | `https://opencode.ai/zen/v1/models/gemini-3.1-pro`        | `@ai-sdk/google`            |
 | Gemini 3 Flash                  | gemini-3-flash                  | `https://opencode.ai/zen/v1/models/gemini-3-flash`        | `@ai-sdk/google`            |
+| Grok 4.7                        | grok-4.7                        | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 | Grok 4.6                        | grok-4.6                        | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 | Grok 4.5                        | grok-4.5                        | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 | Grok Build 0.1                  | grok-build-0.1                  | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
@@ -128,6 +132,7 @@ Našim modelima možete pristupiti i preko sljedećih API endpointa.
 | Jev 1.13                        | jev-1.13                        | `https://opencode.ai/zen/v1/systemone`                    | -                           |
 | Jev 1.13 Free                   | jev-1.13-free                   | `https://opencode.ai/zen/v1/systemone`                    | -                           |
 | Big Pickle                      | big-pickle                      | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| MiMo-V2.6-Flash Free            | mimo-v2.6-flash-free            | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5 Free                  | mimo-v2.5-free                  | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Ling 3.0 Flash Fin Free         | ling-3.0-flash-fin-free         | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Nemotron 3 Ultra Free           | nemotron-3-ultra-free           | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
@@ -150,6 +155,60 @@ https://opencode.ai/zen/v1/models
 
 ---
 
+### Jev
+
+Jev je System One model kompanije TypeSafe AI za brzo donošenje strukturiranih odluka. Umjesto generisanja teksta, procjenjuje `state` prema tipiziranim pitanjima i vraća vrijednosti i vjerovatnoće koje vaš kod može direktno koristiti. Podržava da/ne (`noul`), pitanja s višestrukim izborom (`choice`) i pitanja zasnovana na kriterijima ocjenjivanja (`score`).
+
+Koristite svoj OpenCode Zen API ključ s endpointom `https://opencode.ai/zen/v1/systemone`. Ovaj primjer provjerava da li je zahtjev za podršku hitan:
+
+```bash
+curl https://opencode.ai/zen/v1/systemone \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.13",
+    "state": "My payments have failed for three days and I am losing sales. Please help now.",
+    "questions": {
+      "is_urgent": {
+        "type": "noul",
+        "instructions": "Does this request require urgent attention?"
+      }
+    }
+  }'
+```
+
+Možete postaviti više pitanja u jednom zahtjevu. Jev ih procjenjuje paralelno i vraća svaki odgovor pod odgovarajućim ID-om pitanja:
+
+```bash
+curl https://opencode.ai/zen/v1/systemone \
+  -H "Authorization: Bearer $OPENCODE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "jev-1.13",
+    "state": "My order arrived late and the item is damaged. I want a refund.",
+    "questions": {
+      "department": {
+        "type": "choice",
+        "instructions": "Which team should handle this request?",
+        "criteria": {
+          "returns": "Refunds, exchanges, or damaged items",
+          "shipping": "Delivery delays or lost packages",
+          "billing": "Charges, invoices, or payment problems"
+        }
+      },
+      "frustration": {
+        "type": "score",
+        "instructions": "How frustrated is the customer?",
+        "criteria": ["Calm", "Frustrated", "Very angry"]
+      }
+    }
+  }'
+```
+
+Koristite `jev-1.13-free` umjesto `jev-1.13` za korištenje besplatnog modela dostupnog ograničeno vrijeme. Pogledajte [TypeSafe AI dokumentaciju](https://docs.typesafe.ai/) za detalje o tipovima pitanja i poljima odgovora.
+
+---
+
 ## Cijene
 
 Podržavamo pay-as-you-go model. Ispod su cijene **po 1M tokena**.
@@ -157,6 +216,7 @@ Podržavamo pay-as-you-go model. Ispod su cijene **po 1M tokena**.
 | Model                             | Input     | Output    | Cached Read | Cached Write |
 | --------------------------------- | --------- | --------- | ----------- | ------------ |
 | Big Pickle                        | Free      | Free      | Free        | -            |
+| MiMo-V2.6-Flash Free              | Free      | Free      | Free        | -            |
 | MiMo-V2.5 Free                    | Free      | Free      | Free        | -            |
 | Ling 3.0 Flash Fin Free           | Free      | Free      | Free        | -            |
 | Nemotron 3 Ultra Free             | Free      | Free      | Free        | -            |
@@ -187,6 +247,7 @@ Podržavamo pay-as-you-go model. Ispod su cijene **po 1M tokena**.
 | DeepSeek V4 Flash Vision Exp      | $0.14     | $0.28     | $0.028      | -            |
 | Claude Fable 5.1                  | $10.00    | $50.00    | $0.25       | $12.50       |
 | Claude Fable 5                    | $10.00    | $50.00    | $1.00       | $12.50       |
+| Claude Opus 5.5                   | $4.00     | $20.00    | $0.20       | $5.00        |
 | Claude Opus 5                     | $5.00     | $25.00    | $0.50       | $6.25        |
 | Claude Opus 4.8                   | $5.00     | $25.00    | $0.50       | $6.25        |
 | Claude Opus 4.7                   | $5.00     | $25.00    | $0.50       | $6.25        |
@@ -205,6 +266,8 @@ Podržavamo pay-as-you-go model. Ispod su cijene **po 1M tokena**.
 | Gemini 3.1 Pro (≤ 200K tokens)    | $2.00     | $12.00    | $0.20       | -            |
 | Gemini 3.1 Pro (> 200K tokens)    | $4.00     | $18.00    | $0.40       | -            |
 | Gemini 3 Flash                    | $0.50     | $3.00     | $0.05       | -            |
+| Grok 4.7 (≤ 200K tokens)          | $2.00     | $6.00     | $0.50       | -            |
+| Grok 4.7 (> 200K tokens)          | $4.00     | $12.00    | $1.00       | -            |
 | Grok 4.6 (≤ 200K tokens)          | $2.00     | $6.00     | $0.50       | -            |
 | Grok 4.6 (> 200K tokens)          | $4.00     | $12.00    | $1.00       | -            |
 | Grok 4.5 (≤ 200K tokens)          | $2.00     | $6.00     | $0.30       | -            |
@@ -214,6 +277,10 @@ Podržavamo pay-as-you-go model. Ispod su cijene **po 1M tokena**.
 | Muse Spark 1.2                    | $1.25     | $4.25     | $0.15       | -            |
 | GPT 6 Astra (≤ 272K tokens)       | $10.00    | $50.00    | $1.00       | $12.50       |
 | GPT 6 Astra (> 272K tokens)       | $20.00    | $75.00    | $2.00       | $25.00       |
+| GPT 6 Sol (≤ 272K tokens)         | $2.00     | $10.00    | $0.20       | $2.50        |
+| GPT 6 Sol (> 272K tokens)         | $4.00     | $15.00    | $0.40       | $5.00        |
+| GPT 6 Luna (≤ 272K tokens)        | $0.10     | $0.50     | $0.01       | $0.125       |
+| GPT 6 Luna (> 272K tokens)        | $0.20     | $0.75     | $0.02       | $0.25        |
 | GPT 5.6 Sol (≤ 272K tokens)       | $4.00     | $20.00    | $0.40       | $5.00        |
 | GPT 5.6 Sol (> 272K tokens)       | $8.00     | $30.00    | $0.80       | $10.00       |
 | GPT 5.6 Terra (≤ 272K tokens)     | $2.00     | $12.00    | $0.20       | $2.50        |
@@ -250,6 +317,7 @@ Naknade za kreditne kartice prosljeđujemo po stvarnom trošku (4.4% + $0.30 po 
 
 Besplatni modeli:
 
+- MiMo-V2.6-Flash Free je dostupan na OpenCode ograničeno vrijeme. Tim koristi ovo vrijeme da prikupi povratne informacije i poboljša model.
 - MiMo-V2.5 Free je dostupan na OpenCode ograničeno vrijeme. Tim koristi ovo vrijeme da prikupi povratne informacije i poboljša model.
 - Ling 3.0 Flash Fin Free je dostupan na OpenCode ograničeno vrijeme. Tim koristi ovo vrijeme da prikupi povratne informacije i poboljša model.
 - Nemotron 3 Ultra Free je dostupan na OpenCode ograničeno vrijeme. Tim koristi ovo vrijeme da prikupi povratne informacije i poboljša model.
@@ -313,6 +381,7 @@ Svi naši modeli su hostovani u US. Naši provajderi prate zero-retention politi
 i ne koriste vaše podatke za treniranje modela, uz sljedeće izuzetke:
 
 - Big Pickle: Tokom besplatnog perioda, prikupljeni podaci mogu se koristiti za poboljšanje modela.
+- MiMo-V2.6-Flash Free: Tokom besplatnog perioda, prikupljeni podaci mogu se koristiti za poboljšanje modela.
 - MiMo-V2.5 Free: Tokom besplatnog perioda, prikupljeni podaci mogu se koristiti za poboljšanje modela.
 - Ling 3.0 Flash Fin Free: Tokom besplatnog perioda, prikupljeni podaci mogu se koristiti za poboljšanje modela.
 - Nemotron 3 Ultra Free (besplatni NVIDIA endpointi): Samo za probnu upotrebu — nemojte slati lične ili povjerljive podatke. Vaše korištenje se bilježi radi sigurnosti i poboljšanja NVIDIA proizvoda i usluga. Zabilježeni podaci sesije koji se koriste u svrhu poboljšanja nisu povezani s vašim identitetom niti bilo kojim trajnim identifikatorom. Za više informacija o našim praksama obrade podataka pogledajte našu [Politiku privatnosti](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf). Interakcijom s ovim endpointom pristajete na naše prikupljanje, bilježenje i korištenje takvih informacija te na [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf).
