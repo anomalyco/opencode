@@ -640,6 +640,7 @@ export function LiteSection(props: { lite: LiteSubscription | undefined }) {
           </p>
           <h3 data-slot="promo-models-title">{i18n.t("workspace.lite.promo.modelsTitle")}</h3>
           <ul data-slot="promo-models">
+            <li>Grok 4.7</li>
             <li>Grok 4.6</li>
             <li>GPT 5.6 Luna</li>
             <li>GLM-5.3-Flash</li>
@@ -663,6 +664,8 @@ export function LiteSection(props: { lite: LiteSubscription | undefined }) {
             <li>DeepSeek V4 Pro</li>
             <li>DeepSeek V4 Flash</li>
             <li>DeepSeek V4 Flash Vision Exp</li>
+            <li>MiMo-V2.6-Flash</li>
+            <li>MiMo-V2.6-Pro</li>
             <li>MiMo-V2.5</li>
             <li>MiMo-V2.5-Pro</li>
             <li>Hy4 preview</li>

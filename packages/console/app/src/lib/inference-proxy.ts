@@ -81,8 +81,9 @@ export async function proxyInference(
   ])
     forwarded.headers.delete(name)
   forwarded.headers.set("authorization", `Bearer ${key}`)
+  forwarded.headers.set("CF-Access-Client-Id", Resource.CLOUDFLARE_ACCESS_CLIENT_ID.value)
   const ip = request.headers.get("cf-connecting-ip")
-  if (ip) forwarded.headers.set("x-real-ip", ip)
+  if (ip) forwarded.headers.set("x-zen-ip", ip)
   const requestID = request.headers.get("x-opencode-request-id") ?? request.headers.get("x-opencode-request")
   if (requestID) forwarded.headers.set("x-opencode-request-id", requestID)
 
