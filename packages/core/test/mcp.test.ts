@@ -90,6 +90,8 @@ function resourceServer(
     modern?: boolean
     resources?: boolean
     listChanged?: boolean
+    /** Advertise prompts listChanged, which is what makes the client listen for a prompts refresh. */
+    promptListChanged?: boolean
     emptyElicitation?: boolean
     urlElicitation?: boolean
     respond?: (request: Request) => Response | undefined | Promise<Response | undefined>
@@ -130,7 +132,7 @@ function resourceServer(
           {
             capabilities: {
               tools: {},
-              prompts: {},
+              prompts: input.promptListChanged ? { listChanged: true } : {},
               ...(input.resources === false ? {} : { resources: { listChanged: input.listChanged } }),
             },
             instructions: "Use the resources tools.",
@@ -248,6 +250,7 @@ function resourceServer(
         clientVersion: () => current.protocol.getClientVersion(),
         sendResourceListChanged: () =>
           modern ? Promise.resolve(modern.notify.resourcesChanged()) : current.protocol.sendResourceListChanged(),
+        sendPromptListChanged: () => current.protocol.sendPromptListChanged(),
         completeElicitation: () => current.protocol.createElicitationCompletionNotifier("elicitation-test")(),
         restart: async () => {
           await current.protocol.close().catch(() => {})
@@ -1554,6 +1557,73 @@ it.live("discovers and reads MCP resources through Code Mode", () =>
     }).pipe(Effect.provide(resourceMcpLayer(server.url)))
   }),
 )
+
+/**
+ * Answers one server method with a JSON-RPC error once armed, and counts the requests it saw. Everything
+ * else still reaches the server, so only the listing under test fails.
+ */
+function failingMethod(method: string, message: string) {
+  const state = { armed: false, requests: 0 }
+  return {
+    arm: () => {
+      state.armed = true
+    },
+    requests: () => state.requests,
+    respond: async (request: Request) => {
+      if (request.method !== "POST") return undefined
+      const body = (await request.clone().json()) as { method?: string; id?: number }
+      if (body.method !== method) return undefined
+      state.requests += 1
+      if (!state.armed) return undefined
+      return new Response(JSON.stringify({ jsonrpc: "2.0", id: body.id ?? 0, error: { code: -32603, message } }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })
+    },
+  }
+}
+
+test("keeps cached MCP prompts when a prompts refresh fails", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const broken = failingMethod("prompts/list", "prompt registry unavailable")
+        const server = yield* resourceServer({ promptListChanged: true, respond: broken.respond })
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          yield* settled(service)
+          // Prompts load in the background once the connection settles, so wait for the first list.
+          const greeted = service.prompts().pipe(
+            Effect.map((prompts) => prompts.map((prompt) => prompt.name)),
+            Effect.filterOrFail(
+              (names) => names.join() === "greet",
+              (names) => new Error(`prompts were ${JSON.stringify(names)}`),
+            ),
+            Effect.retry({ times: 100, schedule: Schedule.spaced("10 millis") }),
+          )
+          yield* greeted
+
+          broken.arm()
+          yield* Effect.promise(server.sendPromptListChanged)
+          yield* Effect.sync(() => broken.requests()).pipe(
+            Effect.filterOrFail(
+              (count) => count >= 2,
+              () => new Error("the announced prompts refresh never reached the server"),
+            ),
+            Effect.retry({ times: 100, schedule: Schedule.spaced("10 millis") }),
+          )
+          // Let the failed response settle: the refresh runs in the background either way.
+          yield* Effect.promise(() => Bun.sleep(50))
+
+          yield* greeted
+          expect((yield* service.servers()).find((server) => server.name === "resources")?.status).toEqual({
+            status: "connected",
+          })
+        }).pipe(Effect.provide(resourceMcpLayer(server.url)))
+      }),
+    ),
+  )
+})
 
 test("adds, disconnects, and reconnects MCP servers at runtime", async () => {
   const published: string[] = []

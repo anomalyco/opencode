@@ -303,9 +303,10 @@ export const layer = (options?: Options) =>
           }),
         )
 
+      // A failed listing is not an empty one: like refreshTools, a refresh that errors keeps the prompts it
+      // already had, so a transient server error cannot publish an empty command list.
       const refreshPrompts = (name: ServerName, entry: ServerEntry, connection: McpClient.Connection) =>
         connection.prompts().pipe(
-          Effect.orElseSucceed(() => []),
           Effect.map((prompts) => {
             entry.prompts = prompts.map((prompt): Prompt => ({ ...prompt, server: name }))
           }),
