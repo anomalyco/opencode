@@ -11,11 +11,11 @@ The design below is derived from a survey of the raw provider APIs (OpenAI, Gemi
 ## What the survey forces
 
 1. **Three execution shapes, everywhere.** Inline sync (OpenAI images, all TTS, Gemini), async job with polling or webhook (every video provider, BFL, fal, Replicate, AssemblyAI), and bidirectional streams (ElevenLabs/Cartesia/Deepgram WS, realtime). Video has no sync provider at all.
-2. **Output is never just bytes.** base64, signed URLs with TTLs from 10 minutes (BFL) to 2 days (Veo), URLs that need auth plus redirect (Veo), separate download endpoints (Sora `/content?variant=`), raw bodies (Stability, TTS). Multi-output is the norm.
+2. **Output is never just bytes.** base64, signed URLs with TTLs from 10 minutes (BFL, so its route downloads before returning via `PollContext.materialize`) to 2 days (Veo), URLs that need auth plus redirect (Veo), separate download endpoints (Sora `/content?variant=`), raw bodies (Stability, TTS). Multi-output is the norm.
 3. **Inputs have roles.** First/last frame, mask, style/subject reference, source video for edit/extend, reference audio, prior generation id, provider-side file handles (`file_id`, `gs://`, `runway://`, `mm_file://`).
 4. **Partial streaming is modality-specific.** Images: a few whole partial frames. Audio: ordered chunks plus timestamp events. Jobs: status/progress/logs. Video: none.
 5. **Usage is a union**: tokens, seconds, characters (often only in headers), credits, compute time.
-6. **Moderation can be partial success** (Veo strips audio but returns video). Deprecations are constant (Sora API shuts down 2026-09-24, Imagen on Gemini API 2026-08-17).
+6. **Moderation can be partial success** (Veo strips audio but returns video). Deprecations are constant (Sora API shuts down 2026-09-24; Imagen is shut down on the Gemini API and past its 2026-06-30 discontinuation date on Vertex).
 
 ## Where existing SDKs are weak and we should not be
 
@@ -54,7 +54,7 @@ Speech.request({ model: openai.speech("gpt-4o-mini-tts"), text })
 Transcription.request({ model: openai.transcription("gpt-4o-transcribe"), audio })
 ```
 
-The request namespace and the selector share one word (`Image.request` + `.image(...)`). That redundancy is accepted: a callable facade returning a lazily resolved ref would be a second way to construct the same model, and the type machinery to infer `providerOptions` through it is not worth one word. Where a provider has two APIs for one modality, the selectors stay explicit (`openai.chat`, a future `google.imagen`), and one default per modality per provider is part of the facade definition (OpenAI image → Images API, Google image → Gemini-native since Imagen on the Gemini API shuts down 2026-08-17). Provider package entrypoints keep `model(modelID, settings)` per modality-specific path, e.g. `@opencode/ai/providers/openai/responses`.
+The request namespace and the selector share one word (`Image.request` + `.image(...)`). That redundancy is accepted: a callable facade returning a lazily resolved ref would be a second way to construct the same model, and the type machinery to infer `providerOptions` through it is not worth one word. Where a provider has two routes for one modality, the selectors stay explicit (`openai.chat`, `stability.image` inline vs `stability.upscale()` queued), and one default per modality per provider is part of the facade definition (OpenAI image → Images API, Google image → Gemini-native; Imagen is shut down, so there is no `google.imagen`). Provider package entrypoints keep `model(modelID, settings)` per modality-specific path, e.g. `@opencode/ai/providers/openai/responses`.
 
 ### `Media` — the asset type
 
@@ -127,6 +127,8 @@ yield* Image.stream(request)                      // Stream<ImageEvent>
 ```
 
 Editing is not a separate function; `images`/`mask` on the request select the edit path in the route (OpenAI `/images/edits`, Gemini multimodal parts, xAI `/images/edits`). Routes that cannot honor `mask` fail with `Unsupported`.
+
+`ImageRoute` is the inline | stream | queued union, dispatched on `route.kind`. `Image.stream` on a streaming route emits `image-partial` previews before each `image`; on a queued route it emits `generation-queued` / `generation-progress` observations, then the result's `image` and `finish` events.
 
 #### Video
 
@@ -385,15 +387,19 @@ Existing facades gain per-modality selectors; the modality routes each facade pr
 
 | Facade | llm | image | video | speech | transcription | other |
 |---|---|---|---|---|---|---|
-| `OpenAI` | responses (default), chat | Images API | Sora (deprecated 2026-09-24) | ✓ | ✓ | |
-| `Google` | Gemini | Gemini-native (default), `imagen` | Veo | Gemini TTS | `gemini-3.5-transcribe` | |
+| `OpenAI` | responses (default), chat | Images API (stream) | Sora (deprecated 2026-09-24) | ✓ | ✓ | |
+| `Google` | Gemini | Gemini-native | Veo | Gemini TTS | `gemini-3.5-transcribe` | |
 | `XAI` | ✓ | ✓ | ✓ | | | |
 | `ElevenLabs` | | | | ✓ | Scribe | soundEffect, music |
 | `Cartesia` | | | | ✓ | | |
 | `Deepgram` | | | | Aura | ✓ | |
-| `Fal` | | ✓ | ✓ | | | |
+| `Fal` | | ✓ (queued) | ✓ | | | |
 | `AssemblyAI` | | | | | ✓ (queued) | |
-| `Replicate`, `Runway`, `Luma`, `Kling`, `MiniMax`, `BlackForestLabs`, `Stability` | | per provider | | | | |
+| `BlackForestLabs` | | ✓ (queued) | | | | |
+| `Replicate` | | ✓ (queued) | | | | |
+| `Stability` | | `image` (inline), `upscale()` (queued) | | | | |
+| `Runway` | | | ✓ | | | |
+| `Luma`, `Kling`, `MiniMax` | | per provider | | | | |
 
 New facades follow the existing one-file-per-provider rule. Package entrypoints are modality-specific, such as `@opencode/ai/providers/openai/images`, and return the concrete model.
 
@@ -438,7 +444,7 @@ Foundation + Image ship together as the reference implementation, serially. Vide
 1. **Foundation** — per-modality selectors, `Media`, `Generation`, `Poll`, `Usage` union, `MediaProtocol` kinds, `@opencode/ai/promise` with `llm` + `image`. Port the five existing image protocols onto it. Unify `MediaPart` and add the `media` LLM event (fixes Gemini image output being dropped).
 2. **Video** — ✅ Veo, xAI, fal, Runway shipped (`MediaProtocol.queued`, `Video.start/generate/resume/stream`, promise `ai.video`). Deferred: `Video.complete` (webhooks), Luma, Kling, MiniMax, Replicate.
 3. **Speech + Transcription** — ✅ Speech: OpenAI, Gemini TTS, ElevenLabs, Cartesia, Deepgram shipped (`MediaProtocol.stream`, `Speech.generate/stream`, promise `ai.speech`). ✅ Transcription: OpenAI, Gemini, Deepgram, AssemblyAI shipped across all three route kinds (`Transcription.generate/stream/start/resume`, promise `ai.transcription`). Pending: ElevenLabs Scribe. Deferred: `Speech.session` and `Transcription.session` (WebSocket streaming).
-4. **Image queued routes and partials** — BFL, fal, Replicate, Stability; OpenAI `partial_images` streaming.
+4. **Image queued routes and partials** — ✅ BFL, fal, Replicate, and Stability creative upscale queued; Stability generate inline; OpenAI `partial_images` streaming (`image-partial` restored). Imagen dropped: shut down on the Gemini API and discontinued on Vertex (2026-06-30). Deferred: Stability's synchronous edit and fast/conservative upscale endpoints.
 5. **Later** — ElevenLabs music/SFX, Lyria, `Speech.session` / `Transcription.session`, realtime.
 
 Core adoption (session attachments beyond png/jpeg/gif/webp/pdf, image-generation tool, TUI rendering) comes after phase 1 and is a Core concern.

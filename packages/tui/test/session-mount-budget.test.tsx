@@ -89,7 +89,7 @@ test("an expanded group spends the mounting budget that older rows used", async 
       ? node
       : node.getChildren().map(find).find(Boolean)
   try {
-    await setup.waitForFrame((frame) => frame.includes("Explored — 100 reads"))
+    await setup.waitForFrame((frame) => frame.includes("Explored: 100 reads"))
     await setup.waitForVisualIdle({ quietFrames: 3 })
     const scroll = find(setup.renderer.root)
     if (!scroll) throw new Error("Missing transcript scrollbox")
@@ -102,7 +102,7 @@ test("an expanded group spends the mounting budget that older rows used", async 
     const header = setup
       .captureCharFrame()
       .split("\n")
-      .findIndex((line) => line.includes("Explored — 100 reads"))
+      .findIndex((line) => line.includes("Explored: 100 reads"))
     await setup.mockMouse.click(6, header)
     await setup.waitForFrame((frame) => frame.includes("Read 99.ts"))
     await setup.waitForVisualIdle({ quietFrames: 3 })
@@ -112,18 +112,18 @@ test("an expanded group spends the mounting budget that older rows used", async 
 
     // Navigate back to the header (the view stayed pinned to the bottom), collapse, return.
     setup.mockInput.pressKey("u", { ctrl: true, shift: true })
-    await setup.waitForFrame((frame) => frame.includes("Explored — 100 reads"))
+    await setup.waitForFrame((frame) => frame.includes("Explored: 100 reads"))
     await setup.waitForVisualIdle({ quietFrames: 3 })
     await setup.mockMouse.click(
       6,
       setup
         .captureCharFrame()
         .split("\n")
-        .findIndex((line) => line.includes("Explored — 100 reads")),
+        .findIndex((line) => line.includes("Explored: 100 reads")),
     )
     await setup.waitForVisualIdle({ quietFrames: 3 })
     setup.mockInput.pressKey("l", { ctrl: true, shift: true })
-    await setup.waitForFrame((frame) => !frame.includes("Read 99.ts") && frame.includes("Explored — 100 reads"))
+    await setup.waitForFrame((frame) => !frame.includes("Read 99.ts") && frame.includes("Explored: 100 reads"))
     await setup.waitForVisualIdle({ quietFrames: 3 })
     expect(mounted("user-18")).toBe(true)
     expect(mounted("user-17")).toBe(false)

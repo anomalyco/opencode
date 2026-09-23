@@ -1,15 +1,16 @@
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
+import type { JSX } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { addDefaultParsers, type TextRenderable } from "@opentui/core"
 import parsers from "../../../src/parsers-config"
-import type { SessionMessageAssistant } from "@opencode/client"
+import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client"
 import { ConfigProvider } from "../../../src/config"
 import { ThemeProvider } from "../../../src/context/theme"
 import { SessionGroupView } from "../../../src/routes/session/group-view"
 import { createTimelineAnchors, groupID, type AnchorTarget } from "../../../src/routes/session/anchors"
 import { context } from "../../../src/routes/session/render-context"
-import type { SessionGroup } from "../../../src/routes/session/grouping/session"
+import type { SessionEntry, SessionGroup } from "../../../src/routes/session/grouping/session"
 import { emptyThemeSource } from "../../fixture/fixture"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
@@ -60,52 +61,20 @@ test("retains nested expansion state and registers exact headers and parts", asy
     ],
   })
   let target: TextRenderable | undefined
-  const app = await testRender(
-    () => (
-      <TestTuiContexts>
-        <ConfigProvider config={config}>
-          <ThemeProvider mode="dark" source={emptyThemeSource}>
-            <context.Provider
-              value={{
-                width: 40,
-                terminal: { width: 40, height: 24 },
-                sessionID: "fixture",
-                anchors,
-                groupExpanded: (id) => expanded[id],
-                setGroupExpanded: (id, value) => setExpanded(id, value),
-                thinkingMode: () => "hide",
-                markdownMode: () => "rendered",
-                groupExploration: () => true,
-                legacyTurns: () => false,
-                diffWrapMode: () => "word",
-                models: () => [],
-                messageIndex: () => undefined,
-                config,
-                mutatePending: async () => true,
-                pendingDelivery: () => undefined,
-              }}
-            >
-              <box paddingTop={2}>
-                <SessionGroupView
-                  row={row}
-                  message={(id) => messages.get(id)}
-                  images={() => <text>Image previews</text>}
-                  entry={(entry) =>
-                    entry.type === "part" && entry.ref.messageID === "b" ? (
-                      <text ref={(node) => (target = node)}>Target B</text>
-                    ) : (
-                      <text>A wrapped entry with enough text to occupy more than one terminal line</text>
-                    )
-                  }
-                />
-              </box>
-            </context.Provider>
-          </ThemeProvider>
-        </ConfigProvider>
-      </TestTuiContexts>
-    ),
-    { width: 40, height: 24 },
-  )
+  const app = await mount({
+    row,
+    anchors,
+    config,
+    expanded: (id) => expanded[id],
+    setExpanded: (id, value) => setExpanded(id, value),
+    message: (id) => messages.get(id),
+    entry: (entry) =>
+      entry.type === "part" && entry.ref.messageID === "b" ? (
+        <text ref={(node) => (target = node)}>Target B</text>
+      ) : (
+        <text>A wrapped entry with enough text to occupy more than one terminal line</text>
+      ),
+  })
   app.renderer.start()
   const outerID = groupID(row, 0)
   const inner = row.children[0]
@@ -183,3 +152,103 @@ test("retains nested expansion state and registers exact headers and parts", asy
   }
   expect(anchors.list()).toEqual([])
 })
+
+test("a low activity group with nothing finished spaces its live items", async () => {
+  const config = createTuiResolvedConfig({ animations: false })
+  const shell = (id: string) => ({
+    type: "tool" as const,
+    id,
+    name: "shell",
+    time: { created: 0 },
+    state: { status: "running" as const, input: {}, metadata: {} },
+  })
+  const message: SessionMessageAssistant = {
+    id: "a",
+    type: "assistant",
+    agent: "build",
+    model: { providerID: "fixture", id: "fixture" },
+    time: { created: 0 },
+    content: [shell("one"), shell("two")],
+  }
+  const app = await mount({
+    row: {
+      type: "group",
+      kind: "activity",
+      size: 2,
+      completed: false,
+      pending: [],
+      children: ["one", "two"].map((partID) => ({
+        type: "entry" as const,
+        size: 1,
+        entry: { type: "part" as const, ref: { messageID: "a", partID } },
+      })),
+    },
+    anchors: createTimelineAnchors(),
+    config,
+    expanded: () => false,
+    setExpanded: () => {},
+    message: () => message,
+    entry: (entry) => <text>{entry.type === "part" ? `Shell ${entry.ref.partID}` : ""}</text>,
+  })
+  try {
+    app.renderer.start()
+    await app.waitForFrame((frame) => frame.includes("Shell two"))
+    const lines = app.captureCharFrame().split("\n")
+    const one = lines.findIndex((line) => line.includes("Shell one"))
+    const two = lines.findIndex((line) => line.includes("Shell two"))
+    expect(two - one).toBe(2)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+function mount(input: {
+  row: SessionGroup
+  anchors: ReturnType<typeof createTimelineAnchors>
+  config: ReturnType<typeof createTuiResolvedConfig>
+  expanded: (id: string) => boolean
+  setExpanded: (id: string, value: boolean) => void
+  message: (id: string) => SessionMessageInfo | undefined
+  entry: (entry: SessionEntry) => JSX.Element
+}) {
+  return testRender(
+    () => (
+      <TestTuiContexts>
+        <ConfigProvider config={input.config}>
+          <ThemeProvider mode="dark" source={emptyThemeSource}>
+            <context.Provider
+              value={{
+                width: 40,
+                terminal: { width: 40, height: 24 },
+                sessionID: "fixture",
+                anchors: input.anchors,
+                groupExpanded: input.expanded,
+                setGroupExpanded: input.setExpanded,
+                thinkingMode: () => "hide",
+                markdownMode: () => "rendered",
+                groupExploration: () => true,
+                legacyTurns: () => false,
+                diffWrapMode: () => "word",
+                models: () => [],
+                messageIndex: () => undefined,
+                config: input.config,
+                mutatePending: async () => true,
+                pendingDelivery: () => undefined,
+              }}
+            >
+              <box paddingTop={2}>
+                <SessionGroupView
+                  row={input.row}
+                  message={input.message}
+                  images={() => <text>Image previews</text>}
+                  entry={input.entry}
+                />
+              </box>
+            </context.Provider>
+          </ThemeProvider>
+        </ConfigProvider>
+      </TestTuiContexts>
+    ),
+    { width: 40, height: 24 },
+  )
+}

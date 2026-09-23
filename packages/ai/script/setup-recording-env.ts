@@ -108,7 +108,7 @@ const PROVIDERS: ReadonlyArray<Provider> = [
     id: "fal",
     label: "fal",
     tier: "canary",
-    note: "fal queue video recorded tests",
+    note: "fal queue image and video recorded tests",
     vars: [{ name: "FAL_KEY" }],
     // fal has no free authenticated list endpoint; a 404 for an unknown request id proves the key was accepted.
     validate: (env) =>
@@ -122,6 +122,34 @@ const PROVIDERS: ReadonlyArray<Provider> = [
         if (response.status === 404) return undefined
         return yield* responseError(response)
       }),
+  },
+  {
+    id: "black-forest-labs",
+    label: "Black Forest Labs",
+    tier: "canary",
+    note: "BFL FLUX queued image recorded tests",
+    vars: [{ name: "BFL_API_KEY" }],
+    validate: (env) =>
+      HttpClientRequest.get("https://api.bfl.ai/v1/credits").pipe(
+        HttpClientRequest.setHeader("x-key", Redacted.value(Redacted.make(env.BFL_API_KEY))),
+        executeRequest,
+      ),
+  },
+  {
+    id: "replicate",
+    label: "Replicate",
+    tier: "canary",
+    note: "Replicate prediction image recorded tests",
+    vars: [{ name: "REPLICATE_API_TOKEN" }],
+    validate: (env) => validateBearer("https://api.replicate.com/v1/account", Redacted.make(env.REPLICATE_API_TOKEN)),
+  },
+  {
+    id: "stability",
+    label: "Stability AI",
+    tier: "canary",
+    note: "Stability inline generate and queued upscale recorded tests",
+    vars: [{ name: "STABILITY_API_KEY" }],
+    validate: (env) => validateBearer("https://api.stability.ai/v1/user/balance", Redacted.make(env.STABILITY_API_KEY)),
   },
   {
     id: "runway",

@@ -8,7 +8,8 @@ import { SplitBorder } from "../../ui/border"
 import { Locale } from "../../util/locale"
 import { EntryAnchor, GroupAnchor, visitEntries } from "./anchor-view"
 import { groupID } from "./anchors"
-import type { PartRef, SessionEntry, SessionGroup, SessionNode } from "./grouping/session"
+import { instructionPaths, type PartRef, type SessionEntry, type SessionGroup, type SessionNode } from "./grouping/session"
+import { summarizeActivity } from "./activity-summary"
 import { InlineToolRow, reasoningContent, toolDisplay } from "./message-parts"
 import { use } from "./render-context"
 import { resolvePart } from "./rows"
@@ -36,7 +37,7 @@ export function SessionGroupView(props: Renderers & { row: SessionGroup }) {
       node={props.row}
       level={0}
       completed={props.row.completed}
-      pending={props.row.kind === "exploration" ? props.row.pending : []}
+      pending={props.row.kind === "exploration" || props.row.kind === "activity" ? props.row.pending : []}
     />
   )
 }
@@ -45,7 +46,16 @@ function Group(props: GroupProps) {
   // Keep kind-specific hover/title state isolated during reconciliation.
   return (
     <Show when={props.node.kind} keyed>
-      {(_kind) => <GroupContent {...props} />}
+      {(kind) => (
+        <Switch fallback={<GroupContent {...props} />}>
+          <Match when={kind === "activity"}>
+            <ActivityGroup {...props} />
+          </Match>
+          <Match when={kind === "instructions"}>
+            <InstructionsGroup {...props} />
+          </Match>
+        </Switch>
+      )}
     </Show>
   )
 }
@@ -54,17 +64,11 @@ function GroupContent(props: GroupProps) {
   const ctx = use()
   const theme = useTheme()
   const renderer = useRenderer()
-  const id = createMemo(() => groupID(props.node, props.level))
-  const expanded = () => {
-    const key = id()
-    return key ? (ctx.groupExpanded(key) ?? false) : false
-  }
+  const disclosure = useDisclosure(props)
+  const id = disclosure.id
+  const expanded = disclosure.expanded
   const [hover, setHover] = createSignal(false)
-  const entries = createMemo(() => {
-    const result: SessionEntry[] = []
-    visitEntries(props.node.children, (entry) => result.push(entry))
-    return result
-  })
+  const entries = createMemo(() => descendants(props.node))
   const refs = createMemo(() =>
     entries().flatMap((entry) => (entry.type === "part" && !isPending(entry, props.pending) ? [entry.ref] : [])),
   )
@@ -112,20 +116,18 @@ function GroupContent(props: GroupProps) {
   const label = createMemo(() => {
     const counts = tools().reduce<Record<string, number>>((result, part) => {
       const tool = toolDisplay(part.name)
-      const name = tool === "grep" || tool === "glob" ? "search" : tool
+      const name =
+        tool === "grep" || tool === "glob" || tool === "websearch" ? "search" : tool === "webfetch" ? "fetch" : tool
       result[name] = (result[name] ?? 0) + 1
       return result
     }, {})
     const names = Object.entries(counts).map(
-      ([name, count]) => `${count} ${count === 1 ? name : name === "search" ? "searches" : `${name}s`}`,
+      ([name, count]) =>
+        `${count} ${count === 1 ? name : name === "search" || name === "fetch" ? `${name}es` : `${name}s`}`,
     )
-    return `${completed() ? "Explored" : "Exploring"} — ${names.join(", ")}`
+    return `${completed() ? "Explored" : "Exploring"}: ${names.join(", ")}`
   })
-  const toggle = () => {
-    if (renderer.getSelection()?.getSelectedText()) return
-    const key = id()
-    if (key) ctx.setGroupExpanded(key, !expanded())
-  }
+  const toggle = disclosure.toggle
   const children = (mode: "normal" | "thought" | "tool") => (
     <Children {...props} nodes={props.node.children} mode={mode} />
   )
@@ -192,22 +194,129 @@ function GroupContent(props: GroupProps) {
           </Show>
         </Show>
       </Show>
-      <Show when={!props.pendingOutside}>
-        <For each={props.pending}>
-          {(ref) => {
-            const leaf = createMemo(() => {
-              return entries().find(
-                (entry) =>
-                  entry.type === "part" && entry.ref.messageID === ref.messageID && entry.ref.partID === ref.partID,
-              )
-            })
-            return (
-              <Show when={leaf()}>{(item) => <EntryAnchor entry={item()}>{props.entry(item())}</EntryAnchor>}</Show>
-            )
-          }}
-        </For>
+      <PendingEntries {...props} entries={entries()} />
+    </GroupAnchor>
+  )
+}
+
+/** Low verbosity: one summary for a run of tools, thoughts and instruction loads. */
+function ActivityGroup(props: GroupProps) {
+  const theme = useTheme()
+  const disclosure = useDisclosure(props)
+  const [hover, setHover] = createSignal(false)
+  const entries = createMemo(() => descendants(props.node))
+  const summary = createMemo(() => summarizeActivity(props.node, props.message, props.pending))
+  return (
+    <GroupAnchor groupID={disclosure.id()} active={summary().label !== ""}>
+      {/* Until something finishes there is nothing to summarize; show the live items, spaced like Medium. */}
+      <Show
+        when={summary().label}
+        fallback={
+          <box flexDirection="column" gap={1}>
+            <Children {...props} nodes={props.node.children} mode="normal" />
+          </box>
+        }
+      >
+        <InlineToolRow
+          icon={summary().failed ? "✗" : disclosure.expanded() ? "−" : "+"}
+          iconColor={summary().failed ? theme.text.feedback.error.base : undefined}
+          color={hover() ? theme.text.base : theme.text.muted}
+          complete={true}
+          pending={summary().label}
+          spinner={!disclosure.expanded() && summary().active}
+          onMouseOver={() => setHover(true)}
+          onMouseOut={() => setHover(false)}
+          onMouseUp={disclosure.toggle}
+        >
+          {summary().label}
+        </InlineToolRow>
+        <Show when={disclosure.expanded()}>
+          <box flexDirection="column" gap={1} marginTop={1}>
+            <Children {...props} nodes={props.node.children} mode="normal" />
+          </box>
+        </Show>
+      </Show>
+      <PendingEntries {...props} entries={entries()} />
+    </GroupAnchor>
+  )
+}
+
+/** Consecutive instruction loads, summarized by the number of distinct files. */
+function InstructionsGroup(props: GroupProps) {
+  const theme = useTheme()
+  const disclosure = useDisclosure(props)
+  const [hover, setHover] = createSignal(false)
+  const files = createMemo(
+    () =>
+      new Set(
+        descendants(props.node).flatMap((entry) =>
+          entry.type === "message" ? instructionPaths(props.message(entry.messageID)) : [],
+        ),
+      ).size,
+  )
+  return (
+    <GroupAnchor groupID={disclosure.id()} active={files() > 0}>
+      <InlineToolRow
+        icon="◈"
+        color={hover() ? theme.text.base : theme.text.muted}
+        complete={true}
+        pending=""
+        onMouseOver={() => setHover(true)}
+        onMouseOut={() => setHover(false)}
+        onMouseUp={disclosure.toggle}
+      >
+        Instructions: {files()} {files() === 1 ? "file" : "files"}
+      </InlineToolRow>
+      <Show when={disclosure.expanded()}>
+        <box flexDirection="column" gap={1} marginTop={1}>
+          <Children {...props} nodes={props.node.children} mode="normal" />
+        </box>
       </Show>
     </GroupAnchor>
+  )
+}
+
+function useDisclosure(props: GroupProps) {
+  const ctx = use()
+  const renderer = useRenderer()
+  const id = createMemo(() => groupID(props.node, props.level))
+  const expanded = () => {
+    const key = id()
+    return key ? ctx.groupExpanded(key, props.node.kind) : false
+  }
+  return {
+    id,
+    expanded,
+    toggle() {
+      if (renderer.getSelection()?.getSelectedText()) return
+      const key = id()
+      if (key) ctx.setGroupExpanded(key, !expanded())
+    },
+  }
+}
+
+function descendants(node: Extract<SessionNode, { type: "group" }>) {
+  const result: SessionEntry[] = []
+  visitEntries(node.children, (entry) => result.push(entry))
+  return result
+}
+
+/** Permission-blocked tools stay visible below the root group, even when collapsed. */
+function PendingEntries(props: GroupProps & { entries: readonly SessionEntry[] }) {
+  return (
+    <Show when={!props.pendingOutside}>
+      <For each={props.pending}>
+        {(ref) => {
+          const leaf = createMemo(() =>
+            props.entries.find(
+              (entry) =>
+                entry.type === "part" && entry.ref.messageID === ref.messageID && entry.ref.partID === ref.partID,
+            ),
+          )
+          return <Show when={leaf()}>{(item) => <EntryAnchor entry={item()}>{props.entry(item())}</EntryAnchor>}</Show>
+        }}
+      </For>
+    </Show>
   )
 }
 

@@ -116,11 +116,12 @@ import { isRecord } from "../../util/record"
 import { createHistoryPrepend } from "./history"
 import { context, use, type PendingAction } from "./render-context"
 import { INLINE_TOOL_ICON_WIDTH, InlineToolRow, ReasoningPart, TextPart, toolDisplay } from "./message-parts"
-import type { SessionEntry } from "./grouping/session"
+import { defaultVerbosity, type GroupKind, type SessionEntry } from "./grouping/session"
 import { SessionGroupView } from "./group-view"
 import { useEntryAnchor } from "./anchor-view"
 import { containsAnchor, createTimelineAnchors } from "./anchors"
 import { rowsAfter, rowsBefore, rowWeight } from "./mount-budget"
+import { summarizeActivity } from "./activity-summary"
 export { InlineToolRow } from "./message-parts"
 export { toolDisplay } from "./message-parts"
 
@@ -234,6 +235,13 @@ export function Session(props: {
   const markdownMode = createMemo(() => config.session?.markdown ?? "rendered")
   const diffWrapMode = createMemo(() => config.diffs?.wrap ?? "word")
   const groupExploration = createMemo(() => config.session?.grouping !== "none")
+  const verbosity = createMemo(() => config.session?.verbosity ?? defaultVerbosity)
+  // High opens exploration and instruction summaries by default; everything else starts collapsed.
+  const groupExpanded = (groupID: string, kind: GroupKind) =>
+    sessionTabs.groupExpanded(sessionID, groupID) ??
+    (verbosity() === "high" && (kind === "exploration" || kind === "instructions"))
+  const groupedKind = (kind: GroupKind) =>
+    kind === "reasoning" ? thinkingMode() === "hide" : kind === "exploration" ? groupExploration() : true
 
   Keymap.createLayer(() => ({
     priority: 10,
@@ -395,8 +403,11 @@ export function Session(props: {
   const weights = createMemo(() =>
     rows.map((row) =>
       rowWeight(row, {
-        expanded: (groupID) => sessionTabs.groupExpanded(sessionID, groupID) ?? false,
-        grouped: (kind) => (kind === "reasoning" ? thinkingMode() === "hide" : groupExploration()),
+        expanded: groupExpanded,
+        grouped: groupedKind,
+        summarized: (node) =>
+          node.kind !== "activity" ||
+          summarizeActivity(node, (messageID) => data.session.message.get(route.sessionID, messageID)).label !== "",
       }),
     ),
   )
@@ -1046,6 +1057,21 @@ export function Session(props: {
       },
     },
     {
+      title: `Transcript verbosity: ${Locale.titlecase(verbosity())}`,
+      id: "session.verbosity.cycle",
+      group: "Session",
+      run: () => {
+        const levels = ["low", "medium", "high"] as const
+        const next = levels[(levels.indexOf(verbosity()) + 1) % levels.length]
+        void configState
+          .update((draft) => {
+            draft.session = { ...draft.session, verbosity: next }
+          })
+          .catch(toast.error)
+        dialog.clear()
+      },
+    },
+    {
       title: "Jump to last user message",
       id: "session.messages_last_user",
       group: "Session",
@@ -1302,7 +1328,7 @@ export function Session(props: {
     <context.Provider
       value={{
         anchors,
-        groupExpanded: (groupID) => sessionTabs.groupExpanded(sessionID, groupID),
+        groupExpanded,
         setGroupExpanded: (groupID, expanded) => {
           sessionTabs.setGroupExpanded(sessionID, groupID, expanded)
           afterLayout(saveScrollAnchor)

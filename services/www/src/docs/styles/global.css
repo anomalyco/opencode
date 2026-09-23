@@ -40,8 +40,8 @@
   --surface-hover: #181818;
   --link: #4d8eff;
   --header-height: 3.875rem;
-  --frame-width: 76rem;
-  --content-width: 44rem;
+  --frame-width: 96rem;
+  --content-width: 60rem;
   --gutter: 1.5rem;
 }
 
@@ -199,12 +199,16 @@ a:hover {
   width: min(100%, var(--frame-width));
   min-height: calc(100vh - var(--header-height));
   margin-inline: auto;
-  grid-template-columns: 15rem minmax(0, var(--content-width)) minmax(12rem, 1fr);
+  grid-template-columns: 15rem minmax(0, 1fr) 16rem;
 }
 
 .sidebar-column {
+  position: sticky;
+  top: var(--header-height);
+  height: calc(100vh - var(--header-height));
   padding: 2.25rem 2rem 3rem var(--gutter);
   border-right: 1px solid var(--border);
+  overflow-y: auto;
 }
 
 .docs-sidebar section + section {

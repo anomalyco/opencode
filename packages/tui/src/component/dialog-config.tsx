@@ -85,6 +85,14 @@ export const settings: Setting[] = [
     keywords: ["transcript", "messages", "reads", "searches"],
   },
   {
+    title: "Transcript verbosity",
+    category: "Session",
+    path: ["session", "verbosity"],
+    default: "medium",
+    values: ["low", "medium", "high"],
+    keywords: ["detail", "activity", "summary", "transcript"],
+  },
+  {
     title: "Transcript images",
     category: "Session",
     path: ["session", "image_preview"],
