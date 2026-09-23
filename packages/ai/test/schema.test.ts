@@ -192,6 +192,20 @@ describe("AI.Usage", () => {
     }),
   )
 
+  it.effect("sseFraming drops keepalive comments sent as data and keeps other payloads", () =>
+    Effect.gen(function* () {
+      const frames = yield* ProviderShared.sseFraming(
+        Stream.make(
+          new TextEncoder().encode(
+            'data: {"first":true}\n\ndata: : keepalive\n\n: keepalive\n\ndata: : ping\n\ndata: {"second":true}\n\n',
+          ),
+        ),
+      ).pipe(Stream.runCollect)
+
+      expect(Array.from(frames)).toEqual(['{"first":true}', ": ping", '{"second":true}'])
+    }),
+  )
+
   test("visibleOutputTokens clamps reasoning > output to zero", () => {
     expect(new Usage({ outputTokens: 10, reasoningTokens: 4 }).visibleOutputTokens).toBe(6)
     expect(new Usage({ outputTokens: 10 }).visibleOutputTokens).toBe(10)
