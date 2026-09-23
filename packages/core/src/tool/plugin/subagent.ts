@@ -272,11 +272,10 @@ export const Plugin = {
       Effect.sync(() => {
         if (event.tool !== name || !Predicate.isObject(event.input)) return
         if (event.input.model !== "" && event.input.sessionID !== "") return
-        event.input = Object.fromEntries(
-          Object.entries(event.input).filter(
-            ([key, value]) => value !== "" || (key !== "model" && key !== "sessionID"),
-          ),
-        )
+        const input = { ...event.input }
+        if (input.model === "") delete input.model
+        if (input.sessionID === "") delete input.sessionID
+        event.input = input
       }),
     )
 

@@ -31,7 +31,6 @@ import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { SessionStore } from "@opencode/core/session/store"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
-import { ToolInputRepairPlugin } from "@opencode/core/plugin/tool-input-repair"
 import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
 import { Permission } from "@opencode/core/permission"
 import { SubagentTool } from "@opencode/core/tool/plugin/subagent"
@@ -117,9 +116,7 @@ const subagentPluginSupervisor = makeLocationNode({
   layer: Layer.effectDiscard(
     Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service
-      const hook: Parameters<typeof registerToolPlugin>[2] = (name, callback) => hooks.register("tool", name, callback)
-      yield* registerToolPlugin(ToolInputRepairPlugin.Plugin, {}, hook)
-      yield* registerToolPlugin(SubagentTool.Plugin, {}, hook)
+      yield* registerToolPlugin(SubagentTool.Plugin, {}, (name, callback) => hooks.register("tool", name, callback))
     }),
   ),
   deps: [Agent.node, Config.node, Model.node, Permission.node, Session.node, Job.node, Tool.node, PluginHooks.node],
@@ -416,7 +413,7 @@ describe("SubagentTool", () => {
               type: "tool-call",
               id: "call-subagent",
               name: SubagentTool.name,
-              input: { agent: "reviewer", description: "review", prompt: "review this" },
+              input: { agent: "reviewer", description: "review", prompt: "review this", model: "", sessionID: "" },
             },
           })
 
@@ -451,55 +448,6 @@ describe("SubagentTool", () => {
           })
           const fallbackChild = yield* sessions.get(outputSessionID(fallback.metadata))
           expect(fallbackChild).toMatchObject({ parentID: parent.id, model: parentModel })
-        }),
-      ),
-    ),
-  )
-
-  it.live("treats blank optional model and session IDs as omitted, but rejects a parent ID", () =>
-    Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    ).pipe(
-      Effect.flatMap((dir) =>
-        Effect.gen(function* () {
-          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
-          const sessions = yield* Session.Service
-          const parent = yield* sessions.create({ location, model: parentModel })
-          yield* withSubagent(parent.location)
-          const locations = yield* LocationServiceMap.Service
-          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
-
-          const result = yield* executeTool(registry, {
-            sessionID: parent.id,
-            ...toolIdentity,
-            call: {
-              type: "tool-call",
-              id: "call-empty-subagent-options",
-              name: SubagentTool.name,
-              input: { agent: "fallback", description: "new child", prompt: "review this", model: "", sessionID: "" },
-            },
-          })
-          expect(result.status).toBe("completed")
-          const child = yield* sessions.get(outputSessionID(result.metadata))
-          expect(child).toMatchObject({ parentID: parent.id, model: parentModel })
-
-          expect(
-            yield* executeTool(registry, {
-              sessionID: parent.id,
-              ...toolIdentity,
-              call: {
-                type: "tool-call",
-                id: "call-parent-as-child",
-                name: SubagentTool.name,
-                input: { agent: "fallback", description: "invalid child", prompt: "review this", sessionID: parent.id },
-              },
-            }),
-          ).toEqual({
-            status: "error",
-            error: { type: "tool.execution", message: `Session ${parent.id} is not a child of the current session` },
-          })
-          expect((yield* sessions.list({ parentID: parent.id })).data).toHaveLength(1)
         }),
       ),
     ),
@@ -657,6 +605,28 @@ describe("SubagentTool", () => {
             error: {
               type: "tool.execution",
               message: `Subagent session not found: ${missing}`,
+            },
+          })
+          expect(
+            yield* executeTool(registry, {
+              sessionID: parent.id,
+              ...toolIdentity,
+              call: {
+                type: "tool-call",
+                id: "call-malformed-child-id",
+                name: SubagentTool.name,
+                input: { agent: "reviewer", description: "follow up", prompt: "continue", sessionID: "placeholder" },
+              },
+            }),
+          ).toMatchObject({
+            status: "error",
+            error: { message: expect.stringContaining('sessionID: Expected a string starting with "ses"') },
+          })
+          expect(yield* call(parent.id, "call-parent-id")).toEqual({
+            status: "error",
+            error: {
+              type: "tool.execution",
+              message: `Session ${parent.id} is not a child of the current session`,
             },
           })
           expect(yield* call(unrelated.id, "call-unrelated-child")).toEqual({
