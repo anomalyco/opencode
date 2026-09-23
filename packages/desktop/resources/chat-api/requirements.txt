@@ -1,0 +1,3 @@
+requests>=2.31,<3
+wasmtime==49.0.0
+ccl_chromium_reader @ git+https://github.com/cclgroupltd/ccl_chromium_reader.git@ef840de30221c4d65bc96d2f4d9057e9ef2f526d

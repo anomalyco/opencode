@@ -29,6 +29,7 @@ import * as OtelTracer from "@effect/opentelemetry/Tracer"
 import { LLMAISDK } from "./llm/ai-sdk"
 import { LLMNativeRuntime } from "./llm/native-runtime"
 import { LLMRequestPrep } from "./llm/request"
+import { WebService } from "@/provider/web-service"
 
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
 
@@ -45,6 +46,7 @@ export type StreamInput = {
   tools: Record<string, Tool>
   retries?: number
   toolChoice?: "auto" | "required" | "none"
+  webSessionReset?: boolean
 }
 
 export type StreamRequest = StreamInput & {
@@ -83,6 +85,7 @@ const live: Layer.Layer<
     const flags = yield* RuntimeFlags.Service
 
     const run = Effect.fn("LLM.run")(function* (input: StreamRequest) {
+      const isWebService = WebService.isProvider(input.model.providerID)
       yield* Effect.logInfo("stream", {
         providerID: input.model.providerID,
         modelID: input.model.id,
@@ -111,6 +114,15 @@ const live: Layer.Layer<
         flags,
         isWorkflow,
       })
+      const tools = isWebService
+        ? Object.fromEntries(
+            Object.entries(prepared.tools).filter(([name]) => WebService.isLocalTool(name) || name === "StructuredOutput"),
+          )
+        : prepared.tools
+      const headers = {
+        ...prepared.headers,
+        ...(isWebService ? { "X-OpenCode-Web-Reset": input.webSessionReset ? "true" : "false" } : {}),
+      }
 
       // Wire up toolExecutor for DWS workflow models so that tool calls
       // from the workflow service are executed via opencode's tool system
@@ -223,7 +235,7 @@ const live: Layer.Layer<
 
       // Runtime seam: native is an opt-in adapter over @opencode-ai/llm. It
       // either returns a ready LLMEvent stream or a concrete fallback reason.
-      if (flags.experimentalNativeLlm) {
+      if (flags.experimentalNativeLlm && !isWebService) {
         const native = LLMNativeRuntime.stream({
           model: input.model,
           provider: item,
@@ -294,6 +306,7 @@ const live: Layer.Layer<
           // Copilot returns the authoritative billed amount only in provider-specific response fields.
           includeRawChunks: input.model.providerID.includes("github-copilot"),
           async experimental_repairToolCall(failed) {
+            if (isWebService) return null
             const lower = failed.toolCall.toolName.toLowerCase()
             if (lower !== failed.toolCall.toolName && prepared.tools[lower]) {
               return {
@@ -314,12 +327,12 @@ const live: Layer.Layer<
           topP: prepared.params.topP,
           topK: prepared.params.topK,
           providerOptions: ProviderTransform.providerOptions(input.model, prepared.params.options),
-          activeTools: Object.keys(prepared.tools).filter((x) => x !== "invalid"),
-          tools: prepared.tools,
-          toolChoice: input.toolChoice,
+          activeTools: Object.keys(tools).filter((x) => x !== "invalid"),
+          tools,
+          toolChoice: isWebService && Object.keys(tools).length === 0 ? "none" : input.toolChoice,
           maxOutputTokens: prepared.params.maxOutputTokens,
           abortSignal: input.abort,
-          headers: prepared.headers,
+          headers,
           maxRetries: input.retries ?? 0,
           messages: prepared.messages,
           model: wrapLanguageModel({
@@ -328,7 +341,7 @@ const live: Layer.Layer<
               {
                 specificationVersion: "v3" as const,
                 async transformParams(args) {
-                  if (args.type === "stream") {
+                  if (args.type === "stream" && !isWebService) {
                     // @ts-expect-error
                     args.params.prompt = ProviderTransform.message(
                       args.params.prompt,

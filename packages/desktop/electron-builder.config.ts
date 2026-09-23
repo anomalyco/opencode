@@ -55,8 +55,13 @@ const getBase = (appId: string): Configuration => ({
   extraMetadata: {
     desktopName: `${appId}.desktop`,
   },
-  files: ["out/**/*", "resources/**/*", "!resources/opencode-cli*"],
+  files: ["out/**/*", "resources/**/*", "!resources/opencode-cli*", "!resources/chat-api/**/*"],
   extraResources: [
+    {
+      from: "resources/chat-api",
+      to: "chat-api",
+      filter: ["**/*"],
+    },
     ...(channel === "dev"
       ? [
           {

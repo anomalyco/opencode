@@ -31,6 +31,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
+import { WebService } from "./web-service"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 300_000
 
@@ -1644,6 +1645,13 @@ const layer = Layer.effect(
           }
         }
 
+        if (runtimeFlags.client === "desktop" && process.env.OPENCODE_CHAT_API_PATH) {
+          WebService.providers().forEach((item) => {
+            database[item.id] = item
+            providers[item.id] = item
+          })
+        }
+
         // load config - re-apply with updated data
         for (const [id, provider] of configProviders) {
           const providerID = ProviderV2.ID.make(id)
@@ -1902,6 +1910,11 @@ const layer = Layer.effect(
       const provider = s.providers[model.providerID]
       return yield* EffectPromise.refineRejection(
         async () => {
+          if (WebService.isProvider(model.providerID)) {
+            const language = WebService.model(model)
+            s.models.set(key, language)
+            return language
+          }
           const sdk = await resolveSDK(model, s, envs)
           const language = s.modelLoaders[model.providerID]
             ? await s.modelLoaders[model.providerID](

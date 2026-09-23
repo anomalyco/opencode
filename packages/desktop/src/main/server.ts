@@ -49,6 +49,10 @@ export function preferAppEnv(userDataPath: string) {
     OPENCODE_EXPERIMENTAL_ICON_DISCOVERY: "true",
     OPENCODE_EXPERIMENTAL_FILEWATCHER: "true",
     OPENCODE_CLIENT: "desktop",
+    OPENCODE_CHAT_API_PATH: app.isPackaged
+      ? join(process.resourcesPath, "chat-api")
+      : join(app.getAppPath(), "resources", "chat-api"),
+    OPENCODE_WEB_SERVICE_STATE_DIR: join(userDataPath, "web-service"),
     XDG_STATE_HOME: process.env.XDG_STATE_HOME ?? userDataPath,
   })
   return shellEnv

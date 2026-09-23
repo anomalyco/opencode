@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Local Chat API Bridge",
+  "version": "0.2.4",
+  "description": "Connect the local chat client to a dedicated ChatGPT page via visible DOM controls.",
+  "permissions": ["storage", "alarms", "tabs"],
+  "host_permissions": ["http://127.0.0.1/*", "https://chatgpt.com/*"],
+  "background": {"service_worker": "background.js"},
+  "options_page": "options.html",
+  "action": {"default_title": "Configure local Chat API bridge"},
+  "content_scripts": [
+    {"matches": ["https://chatgpt.com/*"], "js": ["selectors.js", "chatgpt_dom_adapter.js", "content.js"], "run_at": "document_idle"}
+  ]
+}

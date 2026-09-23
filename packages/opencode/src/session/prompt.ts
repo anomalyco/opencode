@@ -56,6 +56,7 @@ import { SessionTable } from "@opencode-ai/core/session/sql"
 import { SessionReminders } from "./reminders"
 import { SessionTools } from "./tools"
 import { LLMEvent } from "@opencode-ai/llm"
+import { WebService } from "@/provider/web-service"
 
 // @ts-ignore
 globalThis.AI_SDK_LOG_WARNINGS = false
@@ -222,6 +223,20 @@ const layer = Layer.effect(
       const msgs = onlySubtasks
         ? [{ role: "user" as const, content: subtasks.map((p) => p.prompt).join("\n") }]
         : yield* MessageV2.toModelMessagesEffect(context, mdl)
+      if (WebService.isProvider(mdl.providerID)) {
+        const text = firstUser.parts
+          .filter((part): part is SessionV1.TextPart => part.type === "text")
+          .map((part) => part.text)
+          .join(" ")
+          .replace(/\s+/g, " ")
+          .trim()
+        if (!text) return
+        const value = text.length > 100 ? `${text.slice(0, 97)}...` : text
+        yield* sessions
+          .setTitle({ sessionID: input.session.id, title: value })
+          .pipe(Effect.catchCause((cause) => Effect.logError("failed to generate title", { error: Cause.squash(cause) })))
+        return
+      }
       const text = yield* llm
         .stream({
           agent: ag,
@@ -1283,6 +1298,9 @@ const layer = Layer.effect(
               tools,
               model,
               toolChoice: format.type === "json_schema" ? "required" : undefined,
+              webSessionReset:
+                WebService.isProvider(model.providerID) &&
+                (lastAssistant?.providerID !== model.providerID || lastAssistant?.summary === true),
             })
 
             if (structured !== undefined) {
