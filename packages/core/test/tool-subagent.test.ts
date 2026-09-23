@@ -30,6 +30,8 @@ import { SessionMessage } from "@opencode/core/session/message"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { SessionStore } from "@opencode/core/session/store"
 import { Plugin } from "@opencode/core/plugin"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
+import { ToolInputRepairPlugin } from "@opencode/core/plugin/tool-input-repair"
 import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
 import { Permission } from "@opencode/core/permission"
 import { SubagentTool } from "@opencode/core/tool/plugin/subagent"
@@ -112,8 +114,15 @@ const executionNode = makeGlobalNode({
 
 const subagentPluginSupervisor = makeLocationNode({
   name: "test/subagent-plugins",
-  layer: Layer.effectDiscard(registerToolPlugin(SubagentTool.Plugin)),
-  deps: [Agent.node, Config.node, Model.node, Permission.node, Session.node, Job.node, Tool.node],
+  layer: Layer.effectDiscard(
+    Effect.gen(function* () {
+      const hooks = yield* PluginHooks.Service
+      const hook: Parameters<typeof registerToolPlugin>[2] = (name, callback) => hooks.register("tool", name, callback)
+      yield* registerToolPlugin(ToolInputRepairPlugin.Plugin, {}, hook)
+      yield* registerToolPlugin(SubagentTool.Plugin, {}, hook)
+    }),
+  ),
+  deps: [Agent.node, Config.node, Model.node, Permission.node, Session.node, Job.node, Tool.node, PluginHooks.node],
 })
 
 const nodes = LayerNode.group([
@@ -447,6 +456,55 @@ describe("SubagentTool", () => {
     ),
   )
 
+  it.live("treats blank optional model and session IDs as omitted, but rejects a parent ID", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({ location, model: parentModel })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+
+          const result = yield* executeTool(registry, {
+            sessionID: parent.id,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call-empty-subagent-options",
+              name: SubagentTool.name,
+              input: { agent: "fallback", description: "new child", prompt: "review this", model: "", sessionID: "" },
+            },
+          })
+          expect(result.status).toBe("completed")
+          const child = yield* sessions.get(outputSessionID(result.metadata))
+          expect(child).toMatchObject({ parentID: parent.id, model: parentModel })
+
+          expect(
+            yield* executeTool(registry, {
+              sessionID: parent.id,
+              ...toolIdentity,
+              call: {
+                type: "tool-call",
+                id: "call-parent-as-child",
+                name: SubagentTool.name,
+                input: { agent: "fallback", description: "invalid child", prompt: "review this", sessionID: parent.id },
+              },
+            }),
+          ).toEqual({
+            status: "error",
+            error: { type: "tool.execution", message: `Session ${parent.id} is not a child of the current session` },
+          })
+          expect((yield* sessions.list({ parentID: parent.id })).data).toHaveLength(1)
+        }),
+      ),
+    ),
+  )
+
   it.live("continues an existing child session", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
@@ -484,6 +542,7 @@ describe("SubagentTool", () => {
                 description: "follow up",
                 prompt: "continue this",
                 sessionID: childID,
+                model: "",
               },
             },
           })
@@ -655,7 +714,7 @@ describe("SubagentTool", () => {
             })
 
           // The requested model beats the agent's configured model.
-          const spawned = yield* call("call-override", { model: "test/override#fast" })
+          const spawned = yield* call("call-override", { model: "test/override#fast", sessionID: "" })
           expect(spawned).toMatchObject({ status: "completed", metadata: { status: "completed" } })
           const child = yield* sessions.get(outputSessionID(spawned.metadata))
           expect(child).toMatchObject({ agent: "reviewer", model: overrideModel })
