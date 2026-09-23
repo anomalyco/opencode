@@ -1,4 +1,4 @@
-import { Clock, Duration, Effect, Schema } from "effect"
+import { Clock, Duration, Effect, Schema, type Stream } from "effect"
 import { HttpClientResponse } from "effect/unstable/http"
 import type { Snapshot, Status } from "../generation.js"
 import { Media } from "../media.js"
@@ -16,11 +16,19 @@ import {
 // Bodies
 // ---------------------------------------------------------------------------
 
+/**
+ * What a protocol sends. JSON `query` holds request-derived URL parameters (ElevenLabs `output_format`, Deepgram
+ * `encoding`); the route appends them to the endpoint URL before the route and caller `http.query` overlays.
+ */
 export type Body =
-  | { readonly type: "json"; readonly value: Record<string, unknown> }
+  | { readonly type: "json"; readonly value: Record<string, unknown>; readonly query?: Record<string, string> }
   | { readonly type: "multipart"; readonly value: FormData }
 
-export const json = (value: Record<string, unknown>): Body => ({ type: "json", value })
+export const json = (value: Record<string, unknown>, query?: Record<string, string>): Body => ({
+  type: "json",
+  value,
+  query,
+})
 export const multipart = (value: FormData): Body => ({ type: "multipart", value })
 
 // ---------------------------------------------------------------------------
@@ -119,6 +127,49 @@ export const queued = <Request, Response, Token>(
   ...input,
 })
 
+/** Whether the caller wants incremental events (`stream`) or one collected response (`generate`). */
+export type Mode = "generate" | "stream"
+
+/** The request a stream route submits: the caller's request plus its mode, so body, path, and framing can differ. */
+export type Addressed<Request> = Request & { readonly mode: Mode }
+
+/** What was sent plus the observed response, whose headers carry header-only usage (ElevenLabs, Deepgram). */
+export interface ResponseContext<Request> extends DecodeContext<Addressed<Request>> {
+  readonly http: HttpContext
+}
+
+/**
+ * One request whose response body is parsed incrementally into modality events, with the same discipline as LLM
+ * protocols: `frames` cuts the body, `step` folds each frame into parser state and emits events, and `finish` runs
+ * once after the last frame to emit the terminal event. `generate` and `stream` share this state machine;
+ * `request.mode` lets one protocol pick a different body, path, or framing per call, and single-document responses
+ * are one frame shaped like a streamed record. The route fills `reason.http` on stream errors that lack it.
+ */
+export interface Streamed<Request, Event, Frame, State> {
+  readonly kind: "stream"
+  readonly id: string
+  readonly name: string
+  /** Common request fields this protocol cannot lower; the route rejects them before `body.from` runs. */
+  readonly unsupported?: ReadonlyArray<keyof Request & string>
+  readonly body: { readonly from: (request: Addressed<Request>) => Effect.Effect<Body, AIError> }
+  readonly frames: (
+    bytes: Stream.Stream<Uint8Array, AIError>,
+    context: DecodeContext<Addressed<Request>>,
+  ) => Stream.Stream<Frame, AIError>
+  /** Fresh parser state for one response. */
+  readonly initial: () => State
+  readonly step: (state: State, frame: Frame) => Effect.Effect<readonly [State, ReadonlyArray<Event>], AIError>
+  /** Emit exactly one terminal event, or fail when the provider stopped before completing. */
+  readonly finish: (state: State, context: ResponseContext<Request>) => Effect.Effect<ReadonlyArray<Event>, AIError>
+}
+
+export const stream = <Request, Event, Frame, State>(
+  input: Omit<Streamed<Request, Event, Frame, State>, "kind">,
+): Streamed<Request, Event, Frame, State> => ({
+  kind: "stream",
+  ...input,
+})
+
 // ---------------------------------------------------------------------------
 // Response helpers
 // ---------------------------------------------------------------------------
@@ -201,6 +252,29 @@ export const status = <Table extends Record<string, Status>>(
   const normalized: Status | undefined = table[raw]
   if (normalized === undefined) return Effect.fail(output.invalid(`Unknown generation status "${raw}"`))
   return Effect.succeed(normalized)
+}
+
+/** A stream-time provider output error that keeps the offending frame as `reason.body`. */
+export const frameError = (route: string, message: string, body?: string, cause?: unknown) =>
+  new AIError({ reason: new InvalidProviderOutputError({ route, message, body, cause }) })
+
+/** The provider closed the body before its completion event. */
+export const incomplete = (route: string) =>
+  new AIError({
+    reason: new InvalidProviderOutputError({
+      route,
+      message: "The provider response ended unexpectedly.",
+      classification: "incomplete-stream",
+    }),
+  })
+
+/** Schema-decode one JSON stream frame. Decode failures keep the frame as `reason.body`. */
+export const decodeFrame = <A>(route: string, name: string, schema: Schema.Codec<A, unknown>) => {
+  const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(schema))
+  return (frame: string) =>
+    decode(frame).pipe(
+      Effect.mapError((cause) => frameError(route, `${name} sent an invalid stream event`, frame, cause)),
+    )
 }
 
 /** A `url` asset whose provider-declared retention window starts now. */

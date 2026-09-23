@@ -682,6 +682,90 @@ const generation = await ai.video.start({ model, prompt })
 const video = await generation.await({ poll: { interval: 10_000 }, signal })
 ```
 
+## Speech generation
+
+Speech (text-to-speech) is one request whose response is parsed incrementally, so every route supports both
+`Speech.generate` (the whole file) and `Speech.stream` (audio chunks as they arrive). Models come from `.speech(...)`
+selectors on the `OpenAI`, `Google` (Gemini TTS), `ElevenLabs`, `Cartesia`, and `Deepgram` facades. Common fields
+(`voice`, `format`, `speed`, `language`, `instructions`, `timestamps`) lower natively or fail with a typed `AIError`
+before any network call; provider-native controls live under `providerOptions`, inferred from the selected model.
+
+```ts
+import { Media, Speech, SpeechClient, SpeechEvent } from "@opencode/ai"
+import { ElevenLabs, OpenAI } from "@opencode/ai/providers"
+
+const openai = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY })
+
+// The whole file, written to disk.
+const program = Effect.gen(function* () {
+  const response = yield* Speech.generate({
+    model: openai.speech("gpt-4o-mini-tts"),
+    text: "Hello from OpenCode.",
+    voice: "coral",
+    format: "mp3",
+    instructions: "Warm and unhurried.",
+  })
+  response.audio // Media.Asset with bytes; headerless PCM carries info.encoding / sampleRate / channels
+  response.usage // undefined: OpenAI reports tokens only on SSE streams (Gemini: tokens; ElevenLabs: credits; Deepgram: characters)
+  yield* Media.write(response.audio, "hello.mp3")
+})
+
+// Chunks as they arrive: audio-delta* (interleaved with timestamps) then one finish carrying the assembled asset.
+const events = Speech.stream({
+  model: ElevenLabs.configure({ apiKey }).speech("eleven_flash_v2_5"),
+  text: "Hello from OpenCode.",
+  voice: "JBFqnCBsd6RMkjVDRZzb",
+  format: "pcm",
+  timestamps: true,
+}).pipe(
+  Stream.tap((event) => {
+    if (SpeechEvent.is.audioDelta(event)) return play(event.chunk)
+    if (SpeechEvent.is.timestamps(event)) return highlight(event.items) // { text, startSeconds, endSeconds }[]
+    return Effect.void
+  }),
+)
+```
+
+`voice` is the provider's own identifier — a name on OpenAI and Gemini (`"coral"`, `"Kore"`), a voice id on
+ElevenLabs and Cartesia. `{ id }` selects an OpenAI custom voice (`{ id: "voice_1234" }`) and means the same as the
+plain string elsewhere. There is no cross-provider voice catalog. `format` is the container-level word (`mp3`, `wav`,
+`pcm`, `opus`, `aac`, `flac`); sample rates and bitrates live under `providerOptions`, and a value the route cannot
+produce fails as `UnsupportedOperation`. Streams buffer every chunk so `finish` can carry the whole clip.
+`SpeechClient.layer` needs `RequestExecutor.Service`.
+
+Provider notes:
+
+- **OpenAI** streams over SSE (`stream_format: "sse"`), which is also the only place it reports token usage; `tts-1`
+  and `tts-1-hd` do not support SSE and stream the raw audio body instead. `pcm` is 24 kHz 16-bit mono. `language`
+  and `timestamps` are not supported.
+- **Gemini TTS** returns raw 16-bit PCM only (`audio/L16;codec=pcm;rate=24000`), so any `format` other than `pcm`
+  fails typed; wrap the samples yourself. Style is directed in the text, so `instructions` and `speed` fail typed.
+  Only `gemini-3.1-flash-tts-preview` and later support streaming. Two-speaker audio goes through
+  `providerOptions.speechConfig.multiSpeakerVoiceConfig`.
+- **ElevenLabs** requires `voice` (the path voice id) and authenticates with `xi-api-key`. `format` maps to the
+  `output_format` query parameter (`mp3_44100_128`, `pcm_24000`, `wav_24000`, `opus_48000_64`);
+  `providerOptions.outputFormat` sets the exact string. WAV is only available from `generate`. `timestamps: true`
+  selects the `with-timestamps` endpoints and yields character-level alignment. `instructions` is not supported.
+- **Cartesia** requires `voice` and pins `Cartesia-Version`. `generate` defaults to MP3 from `/tts/bytes`; streams
+  and `timestamps: true` (word-level) use `/tts/sse`, which only serves raw PCM. `providerOptions.sampleRate`,
+  `bitRate`, and `encoding` complete `output_format`. No usage is reported.
+- **Deepgram** Aura's voice is the model id (`aura-2-thalia-en`), so `voice` and `language` fail typed. `format`
+  and `providerOptions` lower to query parameters (`encoding`, `container`, `sample_rate`, `bit_rate`); `pcm` is
+  `linear16` without a container. Auth is `Authorization: Token <DEEPGRAM_API_KEY>`.
+
+The promise client mirrors the Effect API; `ai.speech.stream` is an `AsyncIterable`.
+
+```ts
+import { ai } from "@opencode/ai/promise"
+
+const response = await ai.speech.generate({ model, text: "Hello from OpenCode.", voice: "coral" })
+await Bun.write("hello.mp3", await ai.run(response.audio.bytes()))
+
+for await (const event of ai.speech.stream({ model, text: "Hello from OpenCode.", voice: "coral" })) {
+  if (event.type === "audio-delta") player.write(event.chunk)
+}
+```
+
 ## Public API
 
 - **`LLM.request({...})`** — build a provider-neutral `LLMRequest`. Accepts ergonomic inputs (`system: string`, `prompt: string`) that normalize into the canonical Schema classes.
@@ -693,7 +777,8 @@ const video = await generation.await({ poll: { interval: 10_000 }, signal })
 - **`ImageClient`** — Effect service and layer for image execution, parallel to `LLMClient`.
 - **`Media`** — the shared asset type (`Media.Asset`, `Media.Source`) and constructors used by messages, tool results, and media requests.
 - **`Generation`** — provider-neutral handle for an in-flight media generation (`await`, `refresh`, `cancel`, `events`) used by queued media routes.
-- **`@opencode/ai/promise`** — `AI.make({ layer? })` and a default `ai` client exposing `llm` and `image` as Promise / `AsyncIterable` APIs.
+- **`Speech.request` / `Speech.generate` / `Speech.stream`** — text-to-speech through a provider-neutral request; `SpeechClient` is its Effect service and layer.
+- **`@opencode/ai/promise`** — `AI.make({ layer? })` and a default `ai` client exposing `llm`, `image`, `video`, and `speech` as Promise / `AsyncIterable` APIs.
 
 ## Testing
 

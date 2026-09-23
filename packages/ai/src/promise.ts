@@ -7,12 +7,14 @@ import { LLMClient } from "./route/client.js"
 import { RequestExecutor } from "./route/executor.js"
 import { LanguageModel, LLMRequest } from "./schema/index.js"
 import type { RequestInput } from "./llm.js"
+import { Speech, SpeechModel, SpeechRequest, type SpeechRequestInput } from "./speech.js"
+import { SpeechClient } from "./speech-client.js"
 import { Video, VideoModel, VideoRequest, type VideoOptions, type VideoRequestInput } from "./video.js"
 import { VideoClient } from "./video-client.js"
 
 /**
- * Promise-first entrypoint for scripts and non-Effect callers. One `ManagedRuntime` hosts the LLM, image, and video
- * clients over a request executor; every method runs the corresponding Effect API and rethrows `AIError` unchanged.
+ * Promise-first entrypoint for scripts and non-Effect callers. One `ManagedRuntime` hosts the LLM, image, video, and
+ * speech clients over a request executor; every method runs the corresponding Effect API and rethrows `AIError` unchanged.
  */
 export interface Options {
   /** Executor layer; defaults to `RequestExecutor.fetchLayer`. Inject a recorder or middleware here. */
@@ -27,6 +29,7 @@ export type Services =
   | Layer.Success<typeof LLMClient.layer>
   | Layer.Success<typeof ImageClient.layer>
   | Layer.Success<typeof VideoClient.layer>
+  | Layer.Success<typeof SpeechClient.layer>
   | RequestExecutor.Service
 
 /** Promise view of a `Generation`: its snapshot plus `await`, `refresh`, and `cancel` returning promises. */
@@ -53,7 +56,7 @@ const abortEffect = (signal: AbortSignal | undefined) =>
 
 export const make = (options: Options = {}) => {
   const runtime = ManagedRuntime.make(
-    Layer.mergeAll(LLMClient.layer, ImageClient.layer, VideoClient.layer).pipe(
+    Layer.mergeAll(LLMClient.layer, ImageClient.layer, VideoClient.layer, SpeechClient.layer).pipe(
       Layer.provideMerge(options.layer ?? RequestExecutor.fetchLayer),
     ),
   )
@@ -88,6 +91,8 @@ export const make = (options: Options = {}) => {
     input instanceof ImageRequest ? input : Image.request(input)
   const videoRequest = (input: VideoRequestInput | VideoRequest) =>
     input instanceof VideoRequest ? input : Video.request(input)
+  const speechRequest = (input: SpeechRequestInput | SpeechRequest) =>
+    input instanceof SpeechRequest ? input : Speech.request(input)
 
   return {
     run,
@@ -121,6 +126,17 @@ export const make = (options: Options = {}) => {
         input: VideoRequestInput<Model> | VideoRequest,
         options?: AwaitOptions & RunOptions,
       ) => iterate(Video.stream(videoRequest(input), { poll: options?.poll }), options),
+    },
+    speech: {
+      request: Speech.request,
+      generate: <const Model extends SpeechModel>(
+        input: SpeechRequestInput<Model> | SpeechRequest,
+        options?: RunOptions,
+      ) => run(Speech.generate(speechRequest(input)), options),
+      stream: <const Model extends SpeechModel>(
+        input: SpeechRequestInput<Model> | SpeechRequest,
+        options?: RunOptions,
+      ) => iterate(Speech.stream(speechRequest(input)), options),
     },
     dispose: () => runtime.dispose(),
   }

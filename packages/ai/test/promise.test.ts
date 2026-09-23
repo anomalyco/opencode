@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Layer } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { AIError, LLMEvent, Media } from "../src/index.js"
+import { AIError, LLMEvent, Media, SpeechEvent } from "../src/index.js"
 import { RequestExecutor } from "../src/route.js"
 import { AI } from "../src/promise.js"
 import { OpenAI, Runway } from "../src/providers.js"
@@ -17,8 +17,8 @@ const chatBody = sseEvents(
 )
 
 /**
- * Executor layer that answers chat completions with SSE text, image generations with one base64 PNG, and Runway video
- * tasks with a queued submission that succeeds on the second poll.
+ * Executor layer that answers chat completions with SSE text, image generations with one base64 PNG, Runway video
+ * tasks with a queued submission that succeeds on the second poll, and speech with raw audio or SSE audio deltas.
  */
 const executor = (seen: Array<string>) =>
   RequestExecutor.layer.pipe(
@@ -33,6 +33,17 @@ const executor = (seen: Array<string>) =>
             })
           if (web.url.endsWith("/chat/completions"))
             return input.respond(chatBody, { headers: { "content-type": "text/event-stream" } })
+          if (web.url.endsWith("/audio/speech"))
+            return JSON.parse(input.text).stream_format === "sse"
+              ? input.respond(
+                  sseEvents(
+                    { type: "speech.audio.delta", audio: "AQI=" },
+                    { type: "speech.audio.delta", audio: "Aw==" },
+                    { type: "speech.audio.done", usage: { input_tokens: 4, output_tokens: 8, total_tokens: 12 } },
+                  ),
+                  { headers: { "content-type": "text/event-stream" } },
+                )
+              : input.respond(Uint8Array.from([1, 2, 3]), { headers: { "content-type": "audio/pcm" } })
           if (web.url.endsWith("/text_to_video"))
             return input.respond(JSON.stringify({ id: "task_1" }), { headers: { "content-type": "application/json" } })
           if (web.url.endsWith("/tasks/task_1")) {
@@ -123,6 +134,21 @@ describe("AI promise client", () => {
     await ai.dispose()
   })
 
+  test("generates and streams speech over the same runtime", async () => {
+    const ai = AI.make({ layer: executor([]) })
+    const model = openai.speech("gpt-4o-mini-tts")
+
+    const response = await ai.speech.generate({ model, text: "Hello", voice: "coral", format: "pcm" })
+    expect(await ai.run(response.audio.bytes())).toEqual(Uint8Array.from([1, 2, 3]))
+
+    const events: Array<SpeechEvent> = []
+    for await (const event of ai.speech.stream({ model, text: "Hello", voice: "coral" })) events.push(event)
+    expect(events.map((event) => event.type)).toEqual(["audio-delta", "audio-delta", "finish"])
+    const finish = events.find(SpeechEvent.is.finish)
+    expect(await ai.run(finish!.audio.bytes())).toEqual(Uint8Array.from([1, 2, 3]))
+    await ai.dispose()
+  })
+
   test("rethrows AIError unchanged and honors abort signals", async () => {
     const ai = AI.make({ layer: executor([]) })
 
@@ -148,6 +174,7 @@ describe("AI promise client", () => {
     expect(typeof AI.ai.llm.generate).toBe("function")
     expect(typeof AI.ai.image.generate).toBe("function")
     expect(typeof AI.ai.video.start).toBe("function")
+    expect(typeof AI.ai.speech.generate).toBe("function")
     await AI.ai.dispose()
   })
 })

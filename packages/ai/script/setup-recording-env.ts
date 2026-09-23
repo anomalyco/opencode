@@ -135,6 +135,41 @@ const PROVIDERS: ReadonlyArray<Provider> = [
       }),
   },
   {
+    id: "elevenlabs",
+    label: "ElevenLabs",
+    tier: "canary",
+    note: "ElevenLabs text-to-speech recorded tests",
+    vars: [{ name: "ELEVENLABS_API_KEY" }],
+    validate: (env) =>
+      HttpClientRequest.get("https://api.elevenlabs.io/v1/models").pipe(
+        HttpClientRequest.setHeader("xi-api-key", Redacted.value(Redacted.make(env.ELEVENLABS_API_KEY))),
+        executeRequest,
+      ),
+  },
+  {
+    id: "cartesia",
+    label: "Cartesia",
+    tier: "canary",
+    note: "Cartesia text-to-speech recorded tests",
+    vars: [{ name: "CARTESIA_API_KEY" }],
+    validate: (env) =>
+      validateBearer("https://api.cartesia.ai/voices?limit=1", Redacted.make(env.CARTESIA_API_KEY), {
+        "Cartesia-Version": "2026-08-14",
+      }),
+  },
+  {
+    id: "deepgram",
+    label: "Deepgram",
+    tier: "canary",
+    note: "Deepgram Aura text-to-speech recorded tests",
+    vars: [{ name: "DEEPGRAM_API_KEY" }],
+    validate: (env) =>
+      HttpClientRequest.get("https://api.deepgram.com/v1/projects").pipe(
+        HttpClientRequest.setHeader("authorization", `Token ${Redacted.value(Redacted.make(env.DEEPGRAM_API_KEY))}`),
+        executeRequest,
+      ),
+  },
+  {
     id: "cloudflare-ai-gateway",
     label: "Cloudflare AI Gateway",
     tier: "canary",

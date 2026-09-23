@@ -1,12 +1,20 @@
-import { Effect, Schema } from "effect"
+import { Effect, Schema, Stream } from "effect"
 import { Headers, HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
 import { Auth, type AuthInput } from "./auth.js"
 import { Endpoint } from "./endpoint.js"
 import type { Interface } from "./executor-service.js"
+import { RequestExecutor } from "./executor.js"
 import { MediaProtocol } from "./media-protocol.js"
 import { Generation, type Route as GenerationRoute } from "../generation.js"
 import { ProviderShared } from "../protocols/shared.js"
-import { AIError, HttpOptions, InvalidRequestError, ProviderID, mergeHttpOptions } from "../schema/index.js"
+import {
+  AIError,
+  AIErrorReason,
+  HttpOptions,
+  InvalidRequestError,
+  ProviderID,
+  mergeHttpOptions,
+} from "../schema/index.js"
 import { sanitizeSurrogates } from "../utils/sanitize.js"
 
 export type Execute = Interface["execute"]
@@ -52,6 +60,15 @@ export interface QueuedRoute<Request extends MediaRequest, Response> {
   ) => Effect.Effect<Generation<Response>, AIError>
 }
 
+/** One request whose response parses into events; `generate` runs the same stream and collects it. */
+export interface StreamRoute<Request extends MediaRequest, Event, Response> {
+  readonly id: string
+  readonly provider: ProviderID
+  readonly protocol: string
+  readonly stream: (request: Request, execute: Execute) => Stream.Stream<Event, AIError>
+  readonly generate: (request: Request, execute: Execute) => Effect.Effect<Response, AIError>
+}
+
 export interface Composition<Request extends MediaRequest> {
   readonly id: string
   readonly provider: string | ProviderID
@@ -67,6 +84,13 @@ export interface InlineInput<Request extends MediaRequest, Response> extends Com
 
 export interface QueuedInput<Request extends MediaRequest, Response, Token> extends Composition<Request> {
   readonly protocol: MediaProtocol.Queued<Request, Response, Token>
+}
+
+export interface StreamInput<Request extends MediaRequest, Event, Response, Frame, State>
+  extends Composition<MediaProtocol.Addressed<Request>> {
+  readonly protocol: MediaProtocol.Streamed<Request, Event, Frame, State>
+  /** Fold a completed event stream into the modality response; owned by the modality, not the protocol. */
+  readonly collect: (events: ReadonlyArray<Event>) => Effect.Effect<Response, AIError>
 }
 
 /**
@@ -165,16 +189,78 @@ export const queued = <Request extends MediaRequest, Response, Token>(
   return { id: input.id, provider: transport.provider, protocol: protocol.id, start, resume }
 }
 
+/**
+ * Compose a streaming media protocol. `stream` submits the request in `stream` mode and runs the protocol state machine
+ * over the framed response; `generate` submits it in `generate` mode through the same state machine and folds the
+ * events with `collect`, so single-document responses and chunked ones share one parser. Stream errors without HTTP
+ * context get the observed response's.
+ */
+export const stream = <Request extends MediaRequest, Event, Response, Frame, State>(
+  input: StreamInput<Request, Event, Response, Frame, State>,
+): StreamRoute<Request, Event, Response> => {
+  const transport = makeTransport(input)
+  const protocol = input.protocol
+  const events = (request: Request, execute: Execute, mode: MediaProtocol.Mode) =>
+    Stream.unwrap(
+      Effect.gen(function* () {
+        const submitted = yield* transport.submit(
+          { ...request, mode },
+          { unsupported: protocol.unsupported, from: protocol.body.from },
+          execute,
+        )
+        const http = RequestExecutor.responseHttp(submitted.response)
+        return Stream.suspend(() => {
+          // Parser state is local to one response, exactly like `Route.make`'s LLM stream loop.
+          let state = protocol.initial()
+          return protocol.frames(RequestExecutor.responseStream(submitted.response), submitted.context).pipe(
+            Stream.mapEffect((frame) =>
+              protocol.step(state, frame).pipe(
+                Effect.map(([next, output]) => {
+                  state = next
+                  return output
+                }),
+              ),
+            ),
+            Stream.flattenIterable,
+            Stream.concat(
+              Stream.suspend(() => Stream.fromIterableEffect(protocol.finish(state, { ...submitted.context, http }))),
+            ),
+            Stream.mapError((error) =>
+              error.reason.http !== undefined
+                ? error
+                : new AIError({
+                    reason: AIErrorReason.make({
+                      ...error.reason,
+                      message: error.reason.message,
+                      cause: error.reason.cause,
+                      http,
+                    }),
+                  }),
+            ),
+          )
+        })
+      }),
+    )
+  return {
+    id: input.id,
+    provider: transport.provider,
+    protocol: protocol.id,
+    stream: (request, execute) => events(request, execute, "stream"),
+    generate: (request, execute) =>
+      events(request, execute, "generate").pipe(Stream.runCollect, Effect.flatMap(input.collect)),
+  }
+}
+
 // ---------------------------------------------------------------------------
-// Transport plumbing shared by both kinds
+// Transport plumbing shared by every kind
 // ---------------------------------------------------------------------------
 
 const makeTransport = <Request extends MediaRequest>(input: Composition<Request>) => {
   const provider = ProviderID.make(input.provider)
   const routeHttp = input.headers === undefined ? undefined : new HttpOptions({ headers: input.headers })
   const authorize = Auth.toEffect(input.auth)
-  const withQuery = (url: URL, http: HttpOptions | undefined) => {
-    for (const [key, value] of Object.entries(http?.query ?? {})) url.searchParams.set(key, value)
+  const withQuery = (url: URL, query: Record<string, string> | undefined) => {
+    for (const [key, value] of Object.entries(query ?? {})) url.searchParams.set(key, value)
     return url
   }
   return {
@@ -195,7 +281,13 @@ const makeTransport = <Request extends MediaRequest>(input: Composition<Request>
       // Sanitize after merging so model-level overlays are covered; the model value is restored, not sanitized.
       const resolved: Request = { ...sanitizeSurrogates({ ...request, http }), model: request.model }
       const body = yield* protocol.from(resolved)
-      const url = withQuery(Endpoint.render(input.endpoint, { request: resolved, body }), http)
+      const url = withQuery(
+        withQuery(
+          Endpoint.render(input.endpoint, { request: resolved, body }),
+          body.type === "json" ? body.query : undefined,
+        ),
+        http?.query,
+      )
       const encoded = body.type === "json" ? ProviderShared.encodeJson(body.value) : "[multipart/form-data]"
       const baseHeaders = Headers.fromInput(http?.headers)
       const headers = yield* authorize({
@@ -230,7 +322,7 @@ const makeTransport = <Request extends MediaRequest>(input: Composition<Request>
         /^https?:\/\//.test(path)
           ? new URL(path)
           : new URL(`${ProviderShared.trimBaseUrl(input.endpoint.baseURL ?? "")}${path}`),
-        http,
+        http?.query,
       )
       for (const [key, value] of Object.entries(input.endpoint.query ?? {})) url.searchParams.set(key, value)
       const base = Headers.fromInput(http?.headers)

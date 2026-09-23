@@ -8,6 +8,9 @@ import {
   LLMClient,
   Media,
   Provider,
+  Speech,
+  SpeechClient,
+  SpeechEvent,
   Video,
   VideoClient,
 } from "@opencode/ai"
@@ -15,11 +18,15 @@ import { Route, Protocol, WebSocketTransport } from "@opencode/ai/route"
 import { Provider as ProviderSubpath } from "@opencode/ai/provider"
 import {
   Baseten,
+  Cartesia,
   CloudflareAIGateway,
   CloudflareWorkersAI,
+  Deepgram,
   DeepSeek,
+  ElevenLabs,
   Fal,
   Fireworks,
+  Google,
   OpenCodeZen,
   OpenAI,
   OpenAICompatible,
@@ -53,6 +60,10 @@ describe("public exports", () => {
     expect(Video.start).toBeFunction()
     expect(Video.resume).toBeFunction()
     expect(VideoClient.layer).toBeDefined()
+    expect(Speech.generate).toBeFunction()
+    expect(Speech.stream).toBeFunction()
+    expect(SpeechClient.layer).toBeDefined()
+    expect(SpeechEvent.is.audioDelta).toBeFunction()
     expect(Generation).toBeFunction()
     expect(Provider.make).toBeFunction()
     expect(ProviderSubpath.make).toBe(Provider.make)
@@ -104,6 +115,13 @@ describe("public exports", () => {
     expect(Fal.configure({ apiKey: "fixture" }).video("fal-ai/veo3.1").route.id).toBe("fal-video")
     expect(Runway.configure({ apiKey: "fixture" }).video("gen4.5").route.id).toBe("runway-video")
     expect(Runway.provider.video).toBe(Runway.video)
+    expect(OpenAI.configure({ apiKey: "fixture" }).speech("gpt-4o-mini-tts").route.id).toBe("openai-speech")
+    expect(Google.configure({ apiKey: "fixture" }).speech("gemini-2.5-flash-preview-tts").route.id).toBe(
+      "google-speech",
+    )
+    expect(ElevenLabs.configure({ apiKey: "fixture" }).speech("eleven_flash_v2_5").route.id).toBe("elevenlabs-speech")
+    expect(Cartesia.configure({ apiKey: "fixture" }).speech("sonic-3").route.id).toBe("cartesia-speech")
+    expect(Deepgram.configure({ apiKey: "fixture" }).speech("aura-2-thalia-en").route.id).toBe("deepgram-speech")
   })
 
   test("protocol barrels expose supported low-level routes", () => {

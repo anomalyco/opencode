@@ -48,6 +48,25 @@ export type {
   VideoRoute,
 } from "./video.js"
 export { Video } from "./video.js"
+export { SpeechClient } from "./speech-client.js"
+export {
+  SpeechEvent,
+  SpeechModel,
+  SpeechModelSchema,
+  SpeechRequest,
+  SpeechResponse,
+  SpeechTimestamp,
+  SpeechVoice,
+} from "./speech.js"
+export type {
+  SpeechFormat,
+  SpeechModelOptions,
+  SpeechOptions,
+  SpeechRequestFor,
+  SpeechRequestInput,
+  SpeechRoute,
+} from "./speech.js"
+export { Speech } from "./speech.js"
 export { Media } from "./media.js"
 export { Generation } from "./generation.js"
 export type {

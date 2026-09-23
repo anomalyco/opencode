@@ -6,8 +6,8 @@ import { AIError, HttpOptions, InvalidRequestError, ModelID, ProviderID } from "
 
 /**
  * What every media model carries: ids, the configured route, and deployment `http` overlays. Modality classes
- * (`ImageModel`, `VideoModel`) extend it with their route type and a nominal marker so one cannot stand in for the
- * other in requests.
+ * (`ImageModel`, `VideoModel`, `SpeechModel`) extend it with their route type and a nominal marker so one cannot stand
+ * in for the other in requests.
  */
 export class MediaModel<Route, Options> {
   declare protected readonly _Options: (options: Options) => Options
@@ -44,7 +44,7 @@ export namespace MediaModel {
   }
 }
 
-/** Compose a protocol route input with one deployment through `MediaRoute.inline` or `MediaRoute.queued`. */
+/** Compose a protocol route input with one deployment through `MediaRoute.inline`, `queued`, or `stream`. */
 export const composeRoute = <Request extends MediaRoute.MediaRequest, Protocol, Route>(
   compose: (input: MediaRoute.Composition<Request> & { readonly protocol: Protocol }) => Route,
   route: MediaModel.RouteInput<Request, Protocol>,

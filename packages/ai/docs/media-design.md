@@ -1,6 +1,6 @@
 # Media generation in `@opencode/ai` — public API direction
 
-Status: phases 1–2 implemented; phases 3–5 proposal.
+Status: phases 1–2 implemented; phase 3 Speech implemented, Transcription pending; phases 4–5 proposal.
 
 ## Goal
 
@@ -181,23 +181,71 @@ hints (none of the four providers emit one). Later providers: Luma, Kling, MiniM
 
 #### Speech (TTS)
 
+Shipped in phase 3 (`src/speech.ts`, `src/speech-client.ts`, protocols `openai-speech`, `google-speech`,
+`elevenlabs-speech`, `cartesia-speech`, `deepgram-speech`; new `ElevenLabs`, `Cartesia`, and `Deepgram` facades).
+
 ```ts
 const request = Speech.request({
-  model: elevenlabs.speech("eleven_v3"),
+  model: elevenlabs.speech("eleven_flash_v2_5"),
   text: "Hello from OpenCode.",
-  voice: "JBFqnCBsd6RMkjVDRZzb",                  // name, uuid, or { id } — provider-normalized
+  voice: "JBFqnCBsd6RMkjVDRZzb",                  // provider-native identifier, or { id }
   format: "mp3",                                   // mp3 | wav | pcm | opus | aac | flac | (string & {})
   speed: 1.0,
   language: "en",
-  instructions: "Warm, unhurried.",
-  providerOptions: { stability: 0.5 },
+  instructions: "Warm, unhurried.",                // only OpenAI; elsewhere fails typed
+  timestamps: true,                                // request alignment; routes without it fail typed
+  providerOptions: { voice_settings: { stability: 0.5 } },
 })
 
-const response = yield* Speech.generate(request)   // SpeechResponse: audio: Media.Asset, timestamps?, usage
-yield* Speech.stream(request)                      // Stream<SpeechEvent>: audio-delta { chunk } | timestamps { words } | finish
+const response = yield* Speech.generate(request)   // SpeechResponse: audio: Media.Asset, timestamps?, usage?, providerMetadata?
+yield* Speech.stream(request)                      // Stream<SpeechEvent>: audio-delta { chunk } | timestamps { items } | finish { audio, usage? }
 ```
 
-Streaming TTS is first-class on day one: OpenAI `stream_format: sse`, ElevenLabs `/stream`, Cartesia SSE, Deepgram chunked. Input-streaming TTS (WS, text arrives incrementally) is a later `Speech.session(...)` scoped resource, not part of `generate`.
+Execution is `MediaProtocol.stream` for every provider: one request whose body is framed and folded by a `step`
+state machine, with `generate` running the same stream and collecting it. The route submits the request with its
+`mode` (`"generate" | "stream"`), which lets one provider stay one protocol — OpenAI adds `stream_format: "sse"` (except `tts-1`/`tts-1-hd`, which stream raw bytes), ElevenLabs appends
+`/stream`, Cartesia switches `/tts/bytes` to `/tts/sse`, Gemini switches `generateContent` to
+`streamGenerateContent`. The terminal `finish` event carries the assembled asset (every provider's stream is
+concatenable chunks), so stream consumers also get the whole file and `generate` is just "take `finish`, gather
+`timestamps`". The cost is memory: a stream holds every chunk until `finish`, so even a consumer that only plays deltas
+keeps the whole clip in memory. That is bounded by the providers' input text limits (a few minutes of audio); a
+long-form or session API would need an opt-out.
+
+**Voice.** `voice?: string | { id: string }`. A string is passed through as the provider's native identifier — a
+name on OpenAI and Gemini, a voice id on ElevenLabs (path segment) and Cartesia. `{ id }` selects an OpenAI custom
+voice and is treated as the plain string on routes that do not distinguish custom from built-in. Deepgram's voice is
+the model id (`aura-2-thalia-en`), so `voice` is `unsupported` there. There is no cross-provider voice catalog or
+name→id resolution. Multi-speaker (Gemini `speechConfig.multiSpeakerVoiceConfig`) and per-voice settings
+(ElevenLabs `voice_settings`) go through `providerOptions`.
+
+**Format and PCM.** `format` is container-level; provider sample rates and bitrates live under `providerOptions`
+(ElevenLabs `outputFormat`, Cartesia `sampleRate`/`bitRate`/`encoding`, Deepgram `encoding`/`container`/`sampleRate`/
+`bitRate`). Each protocol maps `format` to its native value (ElevenLabs `mp3_44100_128`/`pcm_24000`/`wav_24000`/
+`opus_48000_64`, Cartesia `{ container, encoding, sample_rate }`, Deepgram `encoding`+`container`) and declares the
+asset's media type rather than sniffing, because headerless PCM can look like an MPEG frame sync. Headerless PCM
+always carries `info.encoding`, `info.sampleRate`, and `info.channels`; its media type is the provider's declaration
+(Gemini `audio/L16;codec=pcm;rate=24000`, Deepgram's `content-type`) or `audio/pcm`. Gemini returns PCM only, so any
+other `format` is rejected rather than wrapped as WAV by the route. Every `format` value a route cannot produce (unknown
+to it, a container on Cartesia SSE, WAV on an ElevenLabs stream, anything but PCM on Gemini) fails the same way as an
+unsupported field: `UnsupportedOperation` with `operation: "media.format"`.
+
+**Timestamps.** `timestamps: true` on the request asks for alignment. ElevenLabs selects the `with-timestamps`
+endpoints (character-level, NDJSON when streaming); Cartesia sets `add_timestamps` on `/tts/sse` (word-level; a
+`generate` with timestamps collects the SSE stream). OpenAI, Gemini, and Deepgram reject it.
+
+Common-field lowering per provider:
+
+| Provider | `voice` | `speed` | `language` | `instructions` | `timestamps` | Usage |
+|---|---|---|---|---|---|---|
+| OpenAI | `voice` (name or `{ id }`) | `speed` | unsupported | `instructions` | unsupported | `tokens` from SSE `speech.audio.done` only |
+| Gemini | `prebuiltVoiceConfig.voiceName` | unsupported | `speechConfig.languageCode` | unsupported (direct in text) | unsupported | `tokens` from `usageMetadata` |
+| ElevenLabs | path voice id (required) | `voice_settings.speed` | `language_code` | unsupported | `with-timestamps` | `credits` from `character-cost` header |
+| Cartesia | `voice` (required) | `generation_config.speed` | `language` | unsupported | `add_timestamps` | none |
+| Deepgram | unsupported (voice is the model) | `speed` query | unsupported | unsupported | unsupported | `characters` from `dg-char-count` header |
+
+Deferred: `Speech.session(...)` — input-streaming TTS where text arrives incrementally over a WebSocket (ElevenLabs
+`stream-input`, Cartesia WebSocket contexts, Deepgram WebSocket speak) — is a separate scoped resource, not part of
+`generate`/`stream`, and ships with the realtime work in phase 5.
 
 #### Transcription (STT)
 
@@ -293,8 +341,10 @@ Existing facades gain per-modality selectors; the modality routes each facade pr
 | `Google` | Gemini | Gemini-native (default), `imagen` | Veo | Gemini TTS | Gemini transcribe | |
 | `XAI` | ✓ | ✓ | ✓ | | | |
 | `ElevenLabs` | | | | ✓ | Scribe | soundEffect, music |
+| `Cartesia` | | | | ✓ | | |
+| `Deepgram` | | | | Aura | ✓ | |
 | `Fal` | | ✓ | ✓ | | | |
-| `Replicate`, `Runway`, `Luma`, `Kling`, `MiniMax`, `Deepgram`, `Cartesia`, `AssemblyAI`, `BlackForestLabs`, `Stability` | | per provider | | | | |
+| `Replicate`, `Runway`, `Luma`, `Kling`, `MiniMax`, `AssemblyAI`, `BlackForestLabs`, `Stability` | | per provider | | | | |
 
 New facades follow the existing one-file-per-provider rule. Package entrypoints are modality-specific, such as `@opencode/ai/providers/openai/images`, and return the concrete model.
 
@@ -306,9 +356,9 @@ Media does not fit the LLM four-axis route (SSE frames → event state machine) 
 
 - `MediaProtocol.inline` — `body.from(request)` (JSON, multipart, or query), `response.decode(response)` (JSON, or binary body → `Media.Asset`).
 - `MediaProtocol.queued` — `start` (body + decode to `{ token, snapshot }`), `status`, `result`, optional `cancel`, `pollHint`, and a `token` codec. `result` is always a separate GET (against the status document for Veo/xAI/Runway, fal's `response_url` otherwise) so `await` after `start` and after `resume` share one path. `PollContext.auth` hands the auth headers the route sent to the protocol for output URLs that need them (Veo downloads); they become transient `Media.Asset.headers`, never part of `source`. There is no separate `download` step: `Media.Asset.bytes()` downloads through the executor with those headers. `MediaRoute.inline(...)` / `MediaRoute.queued(...)` compose each kind with endpoint and auth; the queued route decodes the token once and hands `Generation` a token-free `{ status, result, cancel? }`.
-- `MediaProtocol.stream` — framing + `step` state machine emitting modality events, same discipline as LLM protocols.
+- `MediaProtocol.stream` — `body.from(request)` over the request plus its `mode`, `frames` (a function that picks the framing for the call: `Framing.sse`, `lines`, `document`, or the raw bytes), fresh per-response `initial()` state, `step` emitting modality events, and `finish(state, context)` — with the observed response for header-only usage — emitting exactly one terminal event or failing as an incomplete stream. The route fills `reason.http` on stream errors. `MediaRoute.stream(...)` exposes `stream` and `generate` (the same stream folded by the modality's `collect`).
 
-`MediaRoute.inline` / `MediaRoute.queued` compose one protocol kind with endpoint/auth; `ImageModel`/`VideoModel` share the `MediaModel` base (`src/media-model.ts`).
+`MediaRoute.inline` / `MediaRoute.queued` / `MediaRoute.stream` compose one protocol kind with endpoint/auth; `ImageModel`/`VideoModel`/`SpeechModel` share the `MediaModel` base (`src/media-model.ts`).
 
 ### LLM integration
 
@@ -338,7 +388,7 @@ Foundation + Image ship together as the reference implementation, serially. Vide
 
 1. **Foundation** — per-modality selectors, `Media`, `Generation`, `Poll`, `Usage` union, `MediaProtocol` kinds, `@opencode/ai/promise` with `llm` + `image`. Port the five existing image protocols onto it. Unify `MediaPart` and add the `media` LLM event (fixes Gemini image output being dropped).
 2. **Video** — ✅ Veo, xAI, fal, Runway shipped (`MediaProtocol.queued`, `Video.start/generate/resume/stream`, promise `ai.video`). Deferred: `Video.complete` (webhooks), Luma, Kling, MiniMax, Replicate.
-3. **Speech + Transcription** — OpenAI, ElevenLabs, Gemini TTS, Deepgram, Cartesia, AssemblyAI. Streaming TTS from the start.
+3. **Speech + Transcription** — ✅ Speech: OpenAI, Gemini TTS, ElevenLabs, Cartesia, Deepgram shipped (`MediaProtocol.stream`, `Speech.generate/stream`, promise `ai.speech`). Pending: Transcription (OpenAI, ElevenLabs Scribe, Gemini, Deepgram, AssemblyAI). Deferred: `Speech.session` (WebSocket input streaming).
 4. **Image queued routes and partials** — BFL, fal, Replicate, Stability; OpenAI `partial_images` streaming.
 5. **Later** — ElevenLabs music/SFX, Lyria, `Speech.session` / `Transcription.session`, realtime.
 

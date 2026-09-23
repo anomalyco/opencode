@@ -5,9 +5,11 @@ import type { ProviderPackage } from "../provider-package.js"
 import { HttpOptions, ProviderID, mergeHttpOptions, type ModelID } from "../schema/index.js"
 import { Gemini } from "../protocols/gemini.js"
 import { GoogleImages } from "../protocols/google-images.js"
+import { GoogleSpeech } from "../protocols/google-speech.js"
 import { GoogleVideo } from "../protocols/google-video.js"
 
 export type { GoogleImageOptions } from "../protocols/google-images.js"
+export type { GoogleSpeechOptions } from "../protocols/google-speech.js"
 export type { GoogleVideoOptions } from "../protocols/google-video.js"
 export type GeminiOptionsInput = Gemini.OptionsInput
 export type GeminiProviderOptionsInput = Gemini.ProviderOptionsInput
@@ -54,6 +56,7 @@ export const configure = (input: Config = {}) => {
     model: (modelID: string | ModelID) => route.model<Gemini.ProviderOptionsInput>({ id: modelID }),
     image: (modelID: string | ModelID) => GoogleImages.model(media(modelID)),
     video: (modelID: string | ModelID) => GoogleVideo.model(media(modelID)),
+    speech: (modelID: string | ModelID) => GoogleSpeech.model(media(modelID)),
     configure,
   }
 }
@@ -73,3 +76,4 @@ export const model: ProviderPackage.Definition<Settings, Gemini.ProviderOptionsI
 
 export const image = provider.image
 export const video = provider.video
+export const speech = provider.speech
