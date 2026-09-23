@@ -17,6 +17,7 @@ import { dict as no } from "~/i18n/no"
 import { dict as br } from "~/i18n/br"
 import { dict as th } from "~/i18n/th"
 import { dict as tr } from "~/i18n/tr"
+import { dict as ca } from "~/i18n/ca"
 
 export type Key = keyof typeof en
 export type Dict = Record<Key, string>
@@ -40,6 +41,7 @@ export function i18n(locale: Locale): Dict {
   if (locale === "ar") return { ...base, ...ar }
   if (locale === "no") return { ...base, ...no }
   if (locale === "br") return { ...base, ...br }
+  if (locale === "ca") return { ...base, ...ca }
   if (locale === "th") return { ...base, ...th }
   return { ...base, ...tr }
 }

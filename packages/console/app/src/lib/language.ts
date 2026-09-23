@@ -17,6 +17,7 @@ export const LOCALES = [
   "br",
   "th",
   "tr",
+  "ca",
 ] as const
 
 export type Locale = (typeof LOCALES)[number]
@@ -48,6 +49,7 @@ const LABEL = {
   br: "Português (Brasil)",
   th: "ไทย",
   tr: "Türkçe",
+  ca: "Català",
 } satisfies Record<Locale, string>
 
 const TAG = {
@@ -69,6 +71,7 @@ const TAG = {
   br: "pt-BR",
   th: "th",
   tr: "tr",
+  ca: "ca",
 } satisfies Record<Locale, string>
 
 const DOCS = {
@@ -90,6 +93,7 @@ const DOCS = {
   br: "pt-br",
   th: "th",
   tr: "tr",
+  ca: "root",
 } satisfies Record<Locale, string>
 
 const DOCS_SEGMENT = new Set([
