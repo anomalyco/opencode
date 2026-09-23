@@ -125,6 +125,24 @@ describe("ConfigV2Compat.lower", () => {
     expect(JSON.stringify(result.diagnostics)).not.toContain(secret)
   })
 
+  test("retains numeric and request-shaped MCP timeouts for local and remote servers", () => {
+    const config = lower({
+      mcp: {
+        timeout: 60000,
+        servers: {
+          local: { type: "local", command: ["local-mcp"], timeout: 12000 },
+          remote: { type: "remote", url: "https://example.com/mcp", timeout: { request: 18000 } },
+        },
+      },
+    })
+
+    expect(config.mcp).toEqual({
+      local: { type: "local", command: ["local-mcp"], enabled: true, timeout: 12000 },
+      remote: { type: "remote", url: "https://example.com/mcp", enabled: true, timeout: 18000 },
+    })
+    expect(config.experimental?.mcp_timeout).toBe(60000)
+  })
+
   test("reports conflicting forms while retaining the V1 value", () => {
     const result = ConfigV2Compat.lower({
       snapshot: false,

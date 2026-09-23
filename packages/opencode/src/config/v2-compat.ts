@@ -20,11 +20,15 @@ export interface Result {
 
 const decodeOptions = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
 const Record = Schema.Record(Schema.String, Schema.Unknown)
-const Timeout = Schema.Struct({
-  startup: Schema.optional(PositiveInt),
-  catalog: Schema.optional(PositiveInt),
-  execution: Schema.optional(PositiveInt),
-})
+const Timeout = Schema.Union([
+  PositiveInt,
+  Schema.Struct({
+    startup: Schema.optional(PositiveInt),
+    request: Schema.optional(PositiveInt),
+    catalog: Schema.optional(PositiveInt),
+    execution: Schema.optional(PositiveInt),
+  }),
+])
 const OAuth = Schema.Struct({
   client_id: Schema.optional(Schema.String),
   client_secret: Schema.optional(Schema.String),
@@ -251,10 +255,11 @@ function normalizeMcp(input: Record<string, unknown>, result: Record<string, unk
   const timeout = Schema.decodeUnknownOption(Timeout, decodeOptions)(mcp.value.timeout)
   const globalTimeout =
     Option.isSome(timeout) &&
-    Option.isSome(timeoutRecord) &&
-    !isDirectServer(timeoutRecord.value) &&
-    (Object.keys(timeoutRecord.value).length === 0 ||
-      ["startup", "catalog", "execution"].some((key) => Object.hasOwn(timeoutRecord.value, key)))
+    (Option.isNone(timeoutRecord) ||
+      (Option.isSome(timeoutRecord) &&
+        !isDirectServer(timeoutRecord.value) &&
+        (Object.keys(timeoutRecord.value).length === 0 ||
+          ["startup", "request", "catalog", "execution"].some((key) => Object.hasOwn(timeoutRecord.value, key)))))
 
   for (const [name, value] of Object.entries(mcp.value)) {
     if (name === "servers" && envelope) continue
@@ -300,7 +305,8 @@ function normalizeMcp(input: Record<string, unknown>, result: Record<string, unk
   if (!globalTimeout || Option.isNone(timeout)) return
   const value = lowerTimeout(timeout.value)
   if (value === undefined) {
-    if (Object.keys(timeout.value).length) unsupported(["mcp", "timeout"], diagnostics)
+    if (typeof timeout.value === "object" && Object.keys(timeout.value).length)
+      unsupported(["mcp", "timeout"], diagnostics)
     return
   }
   const existing = decodeRecord(result.experimental)
@@ -360,7 +366,9 @@ function lowerSelection(input: Schema.Schema.Type<typeof Selection>) {
 }
 
 function lowerTimeout(input: Schema.Schema.Type<typeof Timeout>) {
+  if (typeof input === "number") return input
   if (input.startup !== undefined) return undefined
+  if (input.request !== undefined) return input.request
   if (input.catalog === undefined || input.execution === undefined) return undefined
   if (input.catalog !== input.execution) return undefined
   return input.catalog
