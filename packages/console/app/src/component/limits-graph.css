@@ -144,8 +144,8 @@
     }
   }
 
-  [data-slot="model-row"][data-unlimited] :is([data-slot="requests"], [data-slot="allowance"]) bdi {
-    font-size: 1.5rem;
+  [data-slot="model-row"][data-infinite] :is([data-slot="requests"], [data-slot="allowance"]) {
+    font-size: 1.125rem;
     line-height: 1;
   }
 
