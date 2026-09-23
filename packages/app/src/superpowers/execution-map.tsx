@@ -1,4 +1,4 @@
-import { For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import { For, Show, createMemo, createSignal, createUniqueId, onCleanup, onMount } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { Task } from "@bearmanser/opencode-superpowers-execution/contract"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -9,6 +9,7 @@ import {
   GRAPH_NODE_HEIGHT,
   GRAPH_NODE_WIDTH,
   cachedLayout,
+  edgePath,
   clampZoom,
   graphDimensionKey,
   groupTasksByPhase,
@@ -28,6 +29,7 @@ const DEFAULT_MAP_METRICS: MapMetrics = {
 }
 
 export function ExecutionMap(props: { model: ExecutionModel }) {
+  const arrowID = createUniqueId()
   const language = useLanguage()
   const [view, setView] = createStore({ zoom: 1, x: 0, y: 0, phase: "all" })
   const [metrics, setMetrics] = createSignal(DEFAULT_MAP_METRICS)
@@ -75,7 +77,11 @@ export function ExecutionMap(props: { model: ExecutionModel }) {
   const visibleNodeIDs = createMemo(() => new Set(visibleTasks().map((task) => task.id)))
   const visibleNodes = createMemo(() => layout().nodes.filter((node) => visibleNodeIDs().has(node.id)))
   const visibleEdges = createMemo(() =>
-    layout().edges.filter((edge) => visibleNodeIDs().has(edge.from) && visibleNodeIDs().has(edge.to)),
+    visibleNodes().slice(1).map((node, index) => ({
+      from: visibleNodes()[index]!.id,
+      to: node.id,
+      path: edgePath(visibleNodes()[index]!, node),
+    })),
   )
   const phaseGroups = createMemo(() => groupTasksByPhase(visibleTasks()))
 
@@ -229,6 +235,11 @@ export function ExecutionMap(props: { model: ExecutionModel }) {
                 }}
               >
                 <svg class="execution-map__edges" width={layout().width} height={layout().height} aria-hidden="true">
+                  <defs>
+                    <marker id={arrowID} viewBox="0 0 10 10" refX="10" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+                      <path d="M 0 0 L 10 5 L 0 10 Z" class="execution-map__arrow" />
+                    </marker>
+                  </defs>
                   <For each={visibleEdges()}>
                     {(edge) => (
                       <path
@@ -237,6 +248,7 @@ export function ExecutionMap(props: { model: ExecutionModel }) {
                         data-from={edge.from}
                         data-to={edge.to}
                         d={edge.path}
+                        marker-end={`url(#${arrowID})`}
                       />
                     )}
                   </For>

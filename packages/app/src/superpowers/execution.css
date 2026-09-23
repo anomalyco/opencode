@@ -608,8 +608,12 @@
 
 .execution-map__edge {
   fill: none;
-  stroke: var(--v2-border-border-base);
+  stroke: var(--v2-text-text-muted);
   stroke-width: 2;
+}
+
+.execution-map__arrow {
+  fill: var(--v2-text-text-muted);
 }
 
 .execution-map__nodes {

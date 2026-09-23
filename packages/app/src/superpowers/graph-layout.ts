@@ -2,7 +2,6 @@ import type { Task } from "@bearmanser/opencode-superpowers-execution/contract"
 
 export const GRAPH_NODE_WIDTH = 220
 export const GRAPH_NODE_HEIGHT = 88
-export const GRAPH_HORIZONTAL_GAP = 24
 export const GRAPH_VERTICAL_GAP = 72
 export const GRAPH_GROUPING_THRESHOLD = 200
 export const GRAPH_MIN_ZOOM = 0.25
@@ -46,35 +45,23 @@ export function graphSignature(tasks: Task[]) {
 
 export function layoutTaskGraph(tasks: Task[], measure: GraphMeasurer = defaultMeasure): GraphLayout {
   const byID = indexTasks(tasks)
-  const layers = assignLayers(tasks, byID)
-  const nodes: GraphNode[] = []
-  const rows = [...new Set(layers.values())].sort((left, right) => left - right)
-  const placed = new Map<string, GraphNode>()
-
+  assignLayers(tasks, byID)
+  const ordered = [...tasks].sort(compareByOrderID)
+  const sizes = ordered.map((task) => nodeSize(task, measure))
+  const width = Math.max(0, ...sizes.map((size) => size.width))
   let y = 0
-  for (const layer of rows) {
-    const rowTasks = tasks.filter((task) => layers.get(task.id) === layer).sort(compareByOrderID)
-    const sizes = rowTasks.map((task) => nodeSize(task, measure))
-    const rowHeight = Math.max(GRAPH_NODE_HEIGHT, ...sizes.map((size) => size.height))
-    let x = 0
-    rowTasks.forEach((task, index) => {
-      const size = sizes[index] ?? defaultMeasure()
-      const node = { id: task.id, x, y, width: size.width, height: size.height }
-      nodes.push(node)
-      placed.set(task.id, node)
-      x += size.width + GRAPH_HORIZONTAL_GAP
-    })
-    y += rowHeight + GRAPH_VERTICAL_GAP
-  }
-
-  const edges: GraphEdge[] = []
-  for (const task of [...tasks].sort(compareByOrderID)) {
-    for (const dependency of [...task.dependsOn].sort()) {
-      const from = placed.get(dependency)
-      const to = placed.get(task.id)
-      if (from && to) edges.push({ from: dependency, to: task.id, path: edgePath(from, to) })
-    }
-  }
+  const nodes = ordered.map((task, index) => {
+    const size = sizes[index]!
+    const node = { id: task.id, x: (width - size.width) / 2, y, ...size }
+    y += size.height + GRAPH_VERTICAL_GAP
+    return node
+  })
+  // Links express declared execution order, not dependency fan-in.
+  const edges = nodes.slice(1).map((node, index) => ({
+    from: nodes[index]!.id,
+    to: node.id,
+    path: edgePath(nodes[index]!, node),
+  }))
 
   return {
     nodes,

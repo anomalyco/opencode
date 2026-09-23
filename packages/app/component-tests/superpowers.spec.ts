@@ -754,6 +754,15 @@ story("map renders dependency nodes, edges, and task facts", async ({ page }) =>
   const edge = page.locator('[data-testid="execution-map-edge"][data-from="schema"][data-to="api"]')
   await expect(edge).toHaveCount(1)
   await expect(edge).toHaveAttribute("d", /^M /)
+  await expect(edge).toHaveAttribute("marker-end", /^url\(#.+\)$/)
+  const sequence = await page.getByTestId("execution-map-node").evaluateAll((nodes) =>
+    nodes.map((node) => ({ id: node.getAttribute("data-task-id"), x: node.getBoundingClientRect().x, y: node.getBoundingClientRect().y })),
+  )
+  expect(sequence.map((node) => node.id)).toEqual(["schema", "api", "cli", "tests", "final-review"])
+  expect(new Set(sequence.map((node) => node.x)).size).toBe(1)
+  expect(sequence.every((node, index) => index === 0 || node.y > sequence[index - 1]!.y)).toBe(true)
+  await expect(page.getByTestId("execution-map-edge")).toHaveCount(4)
+  await expect(page.locator('[data-testid="execution-map-edge"][data-from="api"][data-to="cli"]')).toHaveCount(1)
   const parent = await schema.boundingBox()
   const child = await api.boundingBox()
   expect(child!.y).toBeGreaterThan(parent!.y + parent!.height)
