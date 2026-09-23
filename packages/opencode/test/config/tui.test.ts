@@ -5,6 +5,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer } from "effect"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
 import { Config } from "@/config/config"
 import { ConfigPlugin } from "@/config/plugin"
@@ -49,6 +50,20 @@ const withEnv = <A, E, R>(name: string, value: string | undefined, self: Effect.
       Effect.sync(() => {
         if (previous === undefined) delete process.env[name]
         else process.env[name] = previous
+      }),
+  )
+
+const withOpencodeConfig = <A, E, R>(value: string, self: Effect.Effect<A, E, R>) =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const previous = Flag.OPENCODE_CONFIG
+      Flag.OPENCODE_CONFIG = value
+      return previous
+    }),
+    () => self,
+    (previous) =>
+      Effect.sync(() => {
+        Flag.OPENCODE_CONFIG = previous
       }),
   )
 
@@ -675,6 +690,39 @@ it.instance("does not derive tui path from OPENCODE_CONFIG", () =>
         Effect.gen(function* () {
           const config = yield* getTuiConfig(test.directory)
           expect(config.theme).toBeUndefined()
+        }),
+      )
+    }),
+  ),
+)
+
+it.instance("does not migrate tui settings from OPENCODE_CONFIG", () =>
+  withCleanState(
+    Effect.gen(function* () {
+      const fs = yield* FSUtil.Service
+      const test = yield* TestInstance
+      const customDir = path.join(test.directory, "custom")
+      const project = path.join(test.directory, "project")
+      yield* fs.makeDirectory(customDir, { recursive: true })
+      yield* fs.makeDirectory(project, { recursive: true })
+      const custom = path.join(customDir, "opencode.json")
+      yield* fs.writeJson(custom, {
+        model: "test/model",
+        theme: "should-remain",
+        keybinds: { app_exit: "ctrl+x" },
+      })
+
+      yield* withOpencodeConfig(
+        custom,
+        Effect.gen(function* () {
+          const config = yield* getTuiConfig(project)
+          expect(config.theme).toBeUndefined()
+          expect(JSON.parse(yield* fs.readFileString(custom))).toMatchObject({
+            theme: "should-remain",
+            keybinds: { app_exit: "ctrl+x" },
+          })
+          expect(yield* fs.existsSafe(path.join(customDir, "tui.json"))).toBe(false)
+          expect(yield* fs.existsSafe(custom + ".tui-migration.bak")).toBe(false)
         }),
       )
     }),
