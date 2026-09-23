@@ -118,15 +118,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
       description: "Debugging and troubleshooting tools",
       commands: [
         Spec.make("agents", { description: "List all agents" }),
-        Spec.make("config", {
-          description: "List configuration sources",
-          params: {
-            revealSecrets: Flag.boolean("reveal-secrets").pipe(
-              Flag.withDescription("Show unredacted credentials in the output (unsafe to share)"),
-              Flag.withDefault(false),
-            ),
-          },
-        }),
+        Spec.make("config", { description: "List configuration sources" }),
         Spec.make("paths", {
           description: "Show global paths (data, config, cache, state)",
           params: {

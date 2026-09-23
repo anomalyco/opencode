@@ -15,7 +15,7 @@ describe("debug config command", () => {
     expect(config.exitCode).toBe(0)
     expect(config.stdout).toContain("opencode debug config [flags]")
     expect(config.stdout).toContain("List configuration sources")
-    expect(config.stdout).toContain("--reveal-secrets")
+    expect(config.stdout).not.toContain("--reveal-secrets")
   })
 
   test("prints config entries from the invoking directory without reordering permissions", async () => {
@@ -89,13 +89,6 @@ describe("debug config command", () => {
       expect(requested?.searchParams.get("location[directory]")).toBe(project)
       expect(authorization).toEqual([`Basic ${btoa("opencode:secret")}`])
       expect(healthProbes).toBe(1)
-
-      const revealed = await cli(["debug", "config", "--reveal-secrets"], project, {
-        XDG_STATE_HOME: path.join(root, "state"),
-      })
-      expect(revealed.exitCode).toBe(0)
-      expect(JSON.parse(revealed.stdout)).toEqual(entries)
-      expect(authorization).toEqual([`Basic ${btoa("opencode:secret")}`, `Basic ${btoa("opencode:secret")}`])
     } finally {
       server.stop(true)
       await fs.rm(root, { recursive: true, force: true })

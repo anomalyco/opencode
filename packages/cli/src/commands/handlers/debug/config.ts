@@ -9,10 +9,10 @@ import { redactConfig } from "./redact"
 
 export default Runtime.handler(
   Commands.commands.debug.commands.config,
-  Effect.fn("cli.debug.config")(function* (args) {
+  Effect.fn("cli.debug.config")(function* () {
     const endpoint = yield* Service.ensure(yield* ServiceConfig.options())
     const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
     const entries = yield* Effect.promise(() => client.config.get({ location: { directory: process.cwd() } }))
-    process.stdout.write(JSON.stringify(args.revealSecrets ? entries : redactConfig(entries), null, 2) + EOL)
+    process.stdout.write(JSON.stringify(redactConfig(entries), null, 2) + EOL)
   }),
 )
