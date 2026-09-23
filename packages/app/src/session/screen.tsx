@@ -33,6 +33,7 @@ import { createSessionTimelineInteraction } from "./timeline/interaction"
 import { createTimelineSearchController } from "./timeline/search-controller"
 import { TimelineSearchBar } from "./timeline/search-bar"
 import { ActiveSessionComposerRegion, createActiveSessionRegion } from "./composer/region"
+import { SessionWorkspaceFooter } from "./composer/workspace-footer"
 import { SessionIdentityHeader } from "./session-identity-header"
 import { SessionReviewToggle } from "./header/session-header-actions"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
@@ -197,6 +198,12 @@ function SessionScreenContent(props: { session: SessionModel; browser: ReturnTyp
     visible: conversationVisible,
   })
   useUsageExceededDialogs()
+  const workspaceMove = createMemo(() => {
+    const project = detailsProject()
+    const sessionID = session.identity.sessionID()
+    if (!project || !sessionID) return
+    return { project, sessionID, eligible: composer.workspaceMoveEligible() }
+  })
 
   const sessionErrorFallback = (error: unknown, reset: () => void) => {
     createEffect(on(session.identity.sessionKey, reset, { defer: true }))
@@ -340,7 +347,19 @@ function SessionScreenContent(props: { session: SessionModel; browser: ReturnTyp
       </div>
 
       <Show when={composer.active()} keyed>
-        {(model) => <ActiveSessionComposerRegion model={model} />}
+        {(model) => (
+          <ActiveSessionComposerRegion
+            model={model}
+            footer={
+              <SessionWorkspaceFooter
+                move={workspaceMove()}
+                directory={session.workspace.directory()}
+                local={!session.workspace.current()}
+                branch={session.shared.data.location.vcs.info({ directory: session.workspace.directory() })?.branch.current}
+              />
+            }
+          />
+        )}
       </Show>
     </>
   )
