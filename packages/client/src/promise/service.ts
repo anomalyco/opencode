@@ -76,7 +76,12 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
       if (registration.service !== undefined) {
         spawnDelay = timing.spawnDelay
         const service = registration.service
-        const compatible = service.compatible && matchesVersion(service.version, options)
+        const versionMatches = matchesVersion(service.version, options)
+        const compatible = service.compatible && versionMatches
+        if (!service.compatible && versionMatches)
+          throw new Error(
+            "Background service uses an incompatible health protocol. Update this client or explicitly restart the service.",
+          )
         if (compatible && service.state === "ready") {
           await PtyHandoff.complete(options.file ?? fallback(), service.info)
           return service.endpoint
@@ -174,8 +179,8 @@ async function probeResult(info: Info, timeout = defaultEnsureTiming.requestTime
     )
   if ("cause" in result) return { service: undefined, timedOut: signal.aborted }
   const response = result.value.response
-  // The previous V2 service exposes /api/status instead. Its authenticated 404 is enough
-  // to recognize the registered daemon as incompatible and route it through replacement.
+  // A missing health endpoint identifies protocol incompatibility, not an older
+  // version. Only an unmet version requirement lets ensure replace this owner.
   if (response.status === 404)
     return {
       service: {
