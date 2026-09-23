@@ -1,4 +1,5 @@
 import { Option, Schema } from "effect"
+import { OpenCode } from "@opencode/client/promise"
 import { base64Encode } from "@opencode/util/encode"
 import { normalizeServerUrl } from "@/runtime/server/registry"
 
@@ -58,4 +59,23 @@ export function decodePairingUrl(value: string, origin?: string) {
       .padEnd(Math.ceil(encoded.length / 4) * 4, "="),
   )
   return decodePairingCode(new TextDecoder().decode(Uint8Array.from(binary, (char) => char.charCodeAt(0))), origin)
+}
+
+// Links printed by `opencode pair` carry a single-use code that the server exchanges for a session token.
+export function pairingLink(value: string) {
+  const url = URL.parse(value.trim())
+  if (!url || (url.protocol !== "http:" && url.protocol !== "https:")) return
+  const code = /^\/auth\/connect\/([A-Za-z0-9_-]+)$/.exec(url.pathname)?.[1]
+  const address = serverAddress(url.origin)
+  if (!code || !address) return
+  return { url: address, code }
+}
+
+export function redeemPairingLink(link: { url: string; code: string }) {
+  return OpenCode.make({ baseUrl: link.url })
+    .server.connect({ code: link.code })
+    .then(
+      (session) => ({ urls: [link.url], password: session.token }),
+      () => undefined,
+    )
 }

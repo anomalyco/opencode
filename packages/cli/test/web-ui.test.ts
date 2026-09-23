@@ -68,6 +68,24 @@ describe("web UI", () => {
       )
       expect(response.status).toBe(200)
       expect(yield* Effect.promise(() => response.json())).toHaveProperty("pid")
+
+      const pairing = yield* Effect.promise(() =>
+        fetch(new URL("/api/pair", origin), {
+          method: "POST",
+          headers: { authorization: `Basic ${btoa("opencode:secret")}` },
+        }).then((response) => response.json() as Promise<{ code: string }>),
+      )
+      const redirect = yield* Effect.promise(() =>
+        fetch(new URL(`/auth/connect/${pairing.code}`, origin), {
+          redirect: "manual",
+          headers: { accept: "text/html" },
+        }),
+      )
+      expect(redirect.status).toBe(302)
+      const cookie = (redirect.headers.get("set-cookie") ?? "").split(";")[0]
+      const authorized = yield* Effect.promise(() => fetch(new URL("/api/info", origin), { headers: { cookie } }))
+      expect(authorized.status).toBe(200)
+      yield* Effect.promise(() => authorized.arrayBuffer())
     }).pipe(Effect.provide(NodeFileSystem.layer)),
   )
 

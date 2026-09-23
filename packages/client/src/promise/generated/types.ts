@@ -2,6 +2,10 @@ export type JsonValue = null | boolean | number | string | Array<JsonValue> | { 
 
 export type ServerInfo = { version: string; pid: number; urls: Array<string>; paths: { tmp: string } }
 
+export type PairingCode = { code: string; expires_in: number }
+
+export type PairingSession = { token: string }
+
 export type LocationPublicInfo = { directory: string; project: { id: string; directory: string; canonical: string } }
 
 export type LocationPublicRef = { directory: string }
@@ -2695,6 +2699,12 @@ export const isWorktreeError = (value: unknown): value is WorktreeError =>
   typeof value === "object" && value !== null && "name" in value && value["name"] === "WorktreeError"
 
 export type ServerInfoOutput = ServerInfo
+
+export type ServerPairOutput = PairingCode
+
+export type ServerConnectInput = { readonly code: { readonly code: string }["code"] }
+
+export type ServerConnectOutput = PairingSession
 
 export type LocationGetInput = {
   readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]
