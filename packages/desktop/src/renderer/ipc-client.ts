@@ -120,11 +120,21 @@ function receive(p: MessagePort, message: RpcMessage.FromServerEncoded) {
 }
 
 // The RPC failure a caller sees is the encoded error the handler failed with, as before; defects
-// and interrupts surface as errors.
+// and interrupts surface as errors. Prefer the real message over a generic label so a broken
+// handler stays debuggable from the UI.
 function failure(cause: ReadonlyArray<{ readonly _tag: string; readonly error?: unknown; readonly defect?: unknown }>) {
   const failed = cause.find((item) => item._tag === "Fail")
   if (failed) return failed.error
   const died = cause.find((item) => item._tag === "Die")
-  if (died) return new Error("Desktop IPC handler failed", { cause: died.defect })
+  if (died) {
+    const detail = describe(died.defect)
+    return new Error(detail ?? "Desktop IPC handler failed", { cause: died.defect })
+  }
   return new Error("Desktop IPC request interrupted")
+}
+
+function describe(value: unknown) {
+  if (typeof value === "string" && value) return value
+  if (value instanceof Error && value.message) return value.message
+  return undefined
 }
