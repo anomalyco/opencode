@@ -30,11 +30,19 @@ export type MutableInfo = Omit<Types.DeepMutable<Info>, "api"> & {
   api: ProviderV2.MutableApi<Api>
 }
 
-export function parse(input: string): { providerID: ProviderV2.ID; modelID: ID } {
-  const [providerID, ...modelID] = input.split("/")
+export function parse(input: string): { providerID: ProviderV2.ID; modelID: ID; variant?: VariantID } {
+  // Accept the documented "provider/model#variant" form. An embedded variant
+  // wins over a separate variant field at each call site.
+  const hash = input.indexOf("#")
+  const model = hash === -1 ? input : input.slice(0, hash)
+  const embedded = hash === -1 ? undefined : input.slice(hash + 1)
+  const [providerID, ...modelID] = model.split("/")
   return {
     providerID: ProviderV2.ID.make(providerID),
     modelID: ID.make(modelID.join("/")),
+    ...(embedded !== undefined && embedded.length > 0 && !embedded.includes("#")
+      ? { variant: VariantID.make(embedded) }
+      : {}),
   }
 }
 

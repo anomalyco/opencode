@@ -35,9 +35,15 @@ export const Plugin = define({
               if (command.agent !== undefined) item.agent = command.agent
               if (command.model !== undefined) {
                 const model = ModelV2.parse(command.model)
-                item.model = { id: model.modelID, providerID: model.providerID, variant: item.model?.variant }
-              }
-              if (command.variant !== undefined && item.model !== undefined) {
+                item.model = {
+                  id: model.modelID,
+                  providerID: model.providerID,
+                  variant: model.variant ?? item.model?.variant,
+                }
+                if (command.variant !== undefined && model.variant === undefined) {
+                  item.model.variant = ModelV2.VariantID.make(command.variant)
+                }
+              } else if (command.variant !== undefined && item.model !== undefined) {
                 item.model.variant = ModelV2.VariantID.make(command.variant)
               }
               if (command.subtask !== undefined) item.subtask = command.subtask

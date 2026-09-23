@@ -199,6 +199,56 @@ describe("ConfigAgentPlugin.Plugin", () => {
     }),
   )
 
+  it.effect("parses an embedded model variant and lets it win over a separate variant", () =>
+    Effect.gen(function* () {
+      const agents = yield* AgentV2.Service
+      const config = Config.Service.of({
+        entries: () =>
+          Effect.succeed([
+            new Config.Document({
+              type: "document",
+              info: decode({
+                agents: {
+                  reviewer: {
+                    model: "openrouter/openai/gpt-5#high",
+                    variant: "low",
+                    description: "Review changes",
+                    mode: "subagent",
+                  },
+                  legacy: {
+                    model: "anthropic/claude-sonnet",
+                    variant: "high",
+                    description: "Legacy reviewer",
+                    mode: "subagent",
+                  },
+                },
+              }),
+            }),
+          ]),
+      })
+
+      yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
+        Effect.provideService(Config.Service, config),
+      )
+
+      const reviewer = yield* agents.get(AgentV2.ID.make("reviewer"))
+      if (!reviewer) throw new Error("expected configured reviewer agent")
+      expect(reviewer.model).toMatchObject({
+        providerID: "openrouter",
+        id: "openai/gpt-5",
+        variant: "high",
+      })
+
+      const legacy = yield* agents.get(AgentV2.ID.make("legacy"))
+      if (!legacy) throw new Error("expected configured legacy agent")
+      expect(legacy.model).toMatchObject({
+        providerID: "anthropic",
+        id: "claude-sonnet",
+        variant: "high",
+      })
+    }),
+  )
+
   it.effect("removes a built-in agent disabled by configuration", () =>
     Effect.gen(function* () {
       const agents = yield* AgentV2.Service

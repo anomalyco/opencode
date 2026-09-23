@@ -21,3 +21,46 @@ describe("ModelV2.Ref", () => {
     })
   })
 })
+
+describe("ModelV2.parse", () => {
+  test("splits a plain provider/model reference", () => {
+    expect(ModelV2.parse("anthropic/claude-sonnet")).toEqual({
+      providerID: ProviderV2.ID.make("anthropic"),
+      modelID: ModelV2.ID.make("claude-sonnet"),
+    })
+  })
+
+  test("keeps slashes inside the model id", () => {
+    expect(ModelV2.parse("qnaigc/openai/gpt-6-astra")).toEqual({
+      providerID: ProviderV2.ID.make("qnaigc"),
+      modelID: ModelV2.ID.make("openai/gpt-6-astra"),
+    })
+  })
+
+  test("extracts an embedded variant", () => {
+    expect(ModelV2.parse("anthropic/claude-sonnet#high")).toEqual({
+      providerID: ProviderV2.ID.make("anthropic"),
+      modelID: ModelV2.ID.make("claude-sonnet"),
+      variant: ModelV2.VariantID.make("high"),
+    })
+  })
+
+  test("extracts an embedded variant behind a slashed model id", () => {
+    expect(ModelV2.parse("qnaigc/openai/gpt-6-astra#high")).toEqual({
+      providerID: ProviderV2.ID.make("qnaigc"),
+      modelID: ModelV2.ID.make("openai/gpt-6-astra"),
+      variant: ModelV2.VariantID.make("high"),
+    })
+  })
+
+  test("drops malformed embedded variants", () => {
+    expect(ModelV2.parse("anthropic/claude-sonnet#")).toEqual({
+      providerID: ProviderV2.ID.make("anthropic"),
+      modelID: ModelV2.ID.make("claude-sonnet"),
+    })
+    expect(ModelV2.parse("anthropic/claude-sonnet#high#low")).toEqual({
+      providerID: ProviderV2.ID.make("anthropic"),
+      modelID: ModelV2.ID.make("claude-sonnet"),
+    })
+  })
+})
