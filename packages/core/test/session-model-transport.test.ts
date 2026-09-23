@@ -27,6 +27,7 @@ const exchange = (
     readonly headers?: Record<string, string>
     readonly fallback?: () => Stream.Stream<string, AIError>
     readonly rotateAfterMs?: number
+    readonly idleTimeoutMs?: number
   } = {},
 ): WebSocketChannelExchange => ({
   id,
@@ -34,6 +35,7 @@ const exchange = (
     url: "wss://provider.test/responses",
     headers: Headers.fromInput(input.headers),
     rotateAfterMs: input.rotateAfterMs,
+    idleTimeoutMs: input.idleTimeoutMs,
   },
   fallback: input.fallback ?? (() => Stream.make(`fallback:${id}`)),
   driver: {
@@ -616,13 +618,13 @@ describe("SessionModelTransport", () => {
       connector,
       Effect.gen(function* () {
         const transport = yield* SessionModelTransport.Service
-        const running = yield* collect(transport.bind(session), exchange("idle")).pipe(
+        const running = yield* collect(transport.bind(session), exchange("idle", { idleTimeoutMs: 1000 })).pipe(
           Effect.forkChild({ startImmediately: true }),
         )
         yield* Deferred.await(started)
         yield* Effect.yieldNow
 
-        yield* TestClock.adjust("5 minutes")
+        yield* TestClock.adjust("1 second")
         const result = yield* Effect.result(Fiber.join(running))
 
         expect(result).toMatchObject({
