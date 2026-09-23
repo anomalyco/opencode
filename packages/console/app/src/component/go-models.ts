@@ -2,6 +2,7 @@
 export const goModels = [
   { id: "kimi-k3", name: "Kimi K3", requests: 110, allowance: 15, featured: true },
   { id: "qwen3.8-max", name: "Qwen3.8 Max", requests: 160, allowance: 15 },
+  { id: "grok-4.7", name: "Grok 4.7", requests: 169, allowance: 15 },
   { id: "grok-4.6", name: "Grok 4.6", requests: 169, allowance: 15 },
   { id: "qwen3.7-max", name: "Qwen3.7 Max", requests: 170, allowance: 30 },
   { id: "glm-5.3", name: "GLM-5.3", requests: 220, allowance: 15 },
@@ -13,6 +14,7 @@ export const goModels = [
   { id: "hy4-preview", name: "Hy4 preview", requests: 1350, allowance: 30 },
   { id: "gpt-5.6-luna", name: "GPT 5.6 Luna", requests: 2050, allowance: 15, featured: true },
   { id: "minimax-m3", name: "MiniMax M3", requests: 3200, allowance: 60, featured: true },
+  { id: "mimo-v2.6-pro", name: "MiMo-V2.6-Pro", requests: 3250, allowance: 15, fresh: true },
   { id: "mimo-v2.5-pro", name: "MiMo-V2.5-Pro", requests: 3250, allowance: 15 },
   { id: "qwen3.6-plus", name: "Qwen3.6 Plus", requests: 3300, allowance: 60 },
   { id: "minimax-m2.7", name: "MiniMax M2.7", requests: 3400, allowance: 60 },
@@ -21,7 +23,6 @@ export const goModels = [
   { id: "hy3", name: "Hy3", requests: 4300, allowance: 60 },
   { id: "qwen3.8-flash", name: "Qwen3.8 Flash", requests: 5400, allowance: 30 },
   { id: "glm-5.3-flash", name: "GLM-5.3-Flash", requests: 6320, allowance: 60, featured: true },
-  { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", requests: 13000, allowance: 30, featured: true },
   {
     id: "deepseek-flash",
     name: "DeepSeek V4.1 Flash",
@@ -34,7 +35,15 @@ export const goModels = [
     fresh: true,
   },
   { id: "longcat-2.0", name: "LongCat-2.0", requests: 11400, allowance: 60 },
-  { id: "mimo-v2.5", name: "MiMo-V2.5", requests: 30100, allowance: 60, featured: true },
+  {
+    id: "mimo-v2.6-flash",
+    name: "MiMo-V2.6-Flash",
+    requests: 30100,
+    allowance: 60,
+    featured: true,
+    fresh: true,
+  },
+  { id: "mimo-v2.5", name: "MiMo-V2.5", requests: 30100, allowance: 60 },
   {
     id: "muse-spark-1.3-contributor",
     name: "Muse Spark 1.3 Contributor",
@@ -51,12 +60,12 @@ export const goModels = [
     regions: true,
   },
   {
-    id: "union-alpha",
-    name: "Union Alpha Free",
+    id: "space-bunny-free",
+    name: "Space Bunny Free",
     requests: Infinity,
     allowance: Infinity,
     featured: true,
     fresh: true,
-    unlimited: true,
+    limitedTime: true,
   },
 ].sort((a, b) => a.requests - b.requests)

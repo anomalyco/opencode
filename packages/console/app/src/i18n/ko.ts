@@ -3,7 +3,7 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
-  "go.promo.unionAlpha": "Union Alpha는 한정 기간 동안 무료로 이용할 수 있습니다",
+  "go.promo.spaceBunny": "새로운 익명 모델 Space Bunny Free를 한정된 기간 동안 사용할 수 있습니다",
   "go.graph.bonus": "사용량 {{count}}배",
   "nav.github": "GitHub",
   "nav.docs": "문서",
@@ -281,7 +281,6 @@ export const dict = {
   "go.graph.showLess": "접기",
   "go.graph.limitedRegions": "일부 지역에서만 제공",
   "go.graph.limitedTime": "한정된 기간",
-  "go.graph.unlimited": "무제한",
   "go.graph.usageLimits": "사용 한도",
   "go.graph.aria": "5시간당 요청 수: {{free}} 대 {{go}}",
 
