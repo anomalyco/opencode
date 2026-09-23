@@ -152,6 +152,8 @@ type CustomLoader = (provider: Info) => Effect.Effect<{
 
 type CustomDep = {
   auth: (id: string) => Effect.Effect<Auth.Info | undefined>
+
+  setAuth: (id: string, info: Auth.Info) => Effect.Effect<void>
   config: () => Effect.Effect<ConfigV1.Info>
   env: () => Effect.Effect<Record<string, string | undefined>>
   get: (key: string) => Effect.Effect<string | undefined>
@@ -616,17 +618,68 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
         VERSION: GITLAB_PROVIDER_VERSION,
         isWorkflowModel,
         discoverWorkflowModels,
+        GitLabOAuthManager,
       } = yield* Effect.promise(() => import("gitlab-ai-provider"))
 
       const instanceUrl = (yield* dep.get("GITLAB_INSTANCE_URL")) || "https://gitlab.com"
 
-      const auth = yield* dep.auth(input.id)
+      let auth = yield* dep.auth(input.id)
+
+      if (auth?.type === "oauth") {
+        const oauth = auth
+        const oauthManager = new GitLabOAuthManager()
+
+        if (oauthManager.needsRefresh(oauth.expires)) {
+          const refreshed = yield* Effect.promise(async () => {
+            try {
+              const result = await oauthManager.refreshIfNeeded(
+                {
+                  accessToken: oauth.access,
+                  refreshToken: oauth.refresh,
+                  expiresAt: oauth.expires,
+                  instanceUrl,
+                },
+                process.env.GITLAB_OAUTH_CLIENT_ID,
+              )
+
+              return { ok: true as const, result }
+            } catch (error) {
+              return { ok: false as const, error }
+            }
+          })
+
+          if (refreshed.ok) {
+            auth = {
+              ...oauth,
+              access: refreshed.result.accessToken,
+              refresh: refreshed.result.refreshToken,
+              expires: refreshed.result.expiresAt,
+            }
+
+            yield* dep.setAuth(input.id, auth)
+          } else {
+            yield* Effect.logWarning(
+              "GitLab OAuth refresh failed; disabling GitLab provider for this session",
+              { error: refreshed.error },
+            )
+
+            auth = undefined
+          }
+        }
+      }
+
       const apiKey = auth?.type === "oauth" ? auth.access : auth?.type === "api" ? auth.key : undefined
       const token = apiKey ?? (yield* dep.get("GITLAB_TOKEN"))
 
       const providerConfig = (yield* dep.config()).provider?.["gitlab"]
       const directory = yield* InstanceState.directory
 
+      const getGitLabHeaders = (): Record<string, string> => {
+        if (!apiKey) return {}
+        return auth?.type === "api"
+          ? { "PRIVATE-TOKEN": apiKey }
+          : { Authorization: `Bearer ${apiKey}` }
+      }
       const aiGatewayHeaders = {
         "User-Agent": `opencode/${InstallationVersion} gitlab-ai-provider/${GITLAB_PROVIDER_VERSION} (${os.platform()} ${os.release()}; ${os.arch()})`,
         "anthropic-beta": "context-1m-2025-08-07",
@@ -648,7 +701,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           featureFlags,
         },
         async getModel(sdk: any, modelID: string, options?: Record<string, any>) {
-          if (modelID.startsWith("duo-workflow-")) {
+          if (modelID === "duo-workflow" || modelID.startsWith("duo-workflow-")) {
             const workflowRef = typeof options?.workflowRef === "string" ? options.workflowRef : undefined
             // Use the static mapping if it exists, otherwise use duo-workflow with selectedModelRef
             const sdkModelID = isWorkflowModel(modelID) ? modelID : "duo-workflow"
@@ -657,6 +710,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
             const model = sdk.workflowChat(sdkModelID, {
               featureFlags,
               workflowDefinition,
+              workingDirectory: directory,
             })
             if (workflowRef) {
               model.selectedModelRef = workflowRef
@@ -674,11 +728,10 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           }
 
           try {
-            const token = apiKey
-            const getHeaders = (): Record<string, string> =>
-              auth?.type === "api" ? { "PRIVATE-TOKEN": token } : { Authorization: `Bearer ${token}` }
-
-            const result = await discoverWorkflowModels({ instanceUrl, getHeaders }, { workingDirectory: directory })
+            const result = await discoverWorkflowModels(
+              { instanceUrl, getHeaders: getGitLabHeaders },
+              { workingDirectory: directory },
+            )
 
             if (!result.models.length) {
               return {}
@@ -1419,6 +1472,7 @@ const layer = Layer.effect(
         } = {}
         const dep = {
           auth: (id: string) => auth.get(id).pipe(Effect.orDie),
+          setAuth: (id: string, info: Auth.Info) => auth.set(id, info).pipe(Effect.orDie),
           config: () => config.get(),
           env: () => env.all(),
           get: (key: string) => env.get(key),
