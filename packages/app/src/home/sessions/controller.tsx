@@ -24,6 +24,7 @@ import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "@/
 import { usePlatform } from "@/runtime/platform/platform"
 import { sessionLabel, sessionTitle } from "@/session/title"
 import { showToast } from "@/shell/notifications/toast"
+import { copySessionID as copySessionIDToClipboard } from "@/shell/clipboard"
 import { archiveHomeSession } from "./archive"
 import type { HomeController } from "../model"
 import { buildHomeSessionRecords, homeProjectForSession, type HomeSessionRecord } from "./records"
@@ -305,6 +306,7 @@ export function createHomeSessionsController(home: HomeController) {
         })
       },
       rename,
+      copyID: (session: SessionInfo) => copySessionIDToClipboard({ sessionID: session.id, platform, language }),
       export: exportSession,
       showDelete: (server: ServerConnection.Key, session: SessionInfo) =>
         dialog.show(() => <DeleteDialog server={server} session={session} />),

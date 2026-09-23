@@ -9,6 +9,7 @@ import { useServerSDK } from "@/runtime/server/client"
 import { useSettings } from "@/settings/model"
 import { useTerminal } from "@/session/terminal/context"
 import { showToast } from "@/shell/notifications/toast"
+import { copySessionID as copySessionIDToClipboard } from "@/shell/clipboard"
 import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "@/session/commands/export"
 import { usePlatform } from "@/runtime/platform/platform"
 import type { SessionModel } from "@/session/model"
@@ -120,25 +121,12 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     }
   }
 
-  const copySessionID = async () => {
-    const sessionID = actions.session.identity.params.id
-    if (!sessionID) return
-    try {
-      await (platform.writeClipboardText?.(sessionID) ?? navigator.clipboard.writeText(sessionID))
-      showToast({
-        variant: "success",
-        icon: "circle-check",
-        title: language.t("common.copied"),
-        description: sessionID,
-      })
-    } catch (err) {
-      showToast({
-        variant: "error",
-        title: language.t("toast.session.copyID.failed.title"),
-        description: err instanceof Error ? err.message : language.t("toast.session.copyID.failed.description"),
-      })
-    }
-  }
+  const copySessionID = () =>
+    copySessionIDToClipboard({
+      sessionID: actions.session.identity.params.id,
+      platform,
+      language,
+    })
 
   const copyProjectID = async () => {
     const projectID = actions.session.data.info()?.projectID

@@ -62,6 +62,7 @@ export type HomeSessionsViewProps = {
   onOpenSession: (session: SessionInfo, options?: OpenSessionOptions) => void
   onArchiveSession: (session: SessionInfo) => Promise<void>
   onRenameSession: (server: ServerConnection.Key, session: SessionInfo, title: string) => Promise<boolean>
+  onCopySessionID: (session: SessionInfo) => void
   onExportSession: (server: ServerConnection.Key, session: SessionInfo) => Promise<void>
   onDeleteSession: (server: ServerConnection.Key, session: SessionInfo) => void
   onSetHoverTarget: (element: HTMLElement) => void
@@ -692,6 +693,9 @@ function HomeSessionRow(
             }}
           >
             <Menu.Item onSelect={openEditor}>{props.language.t("common.rename")}</Menu.Item>
+            <Menu.Item onSelect={() => props.onCopySessionID(props.record.session)}>
+              {props.language.t("command.session.copyID")}
+            </Menu.Item>
             <Menu.Item onSelect={() => void props.onExportSession(props.server, props.record.session)}>
               {props.language.t("common.export")}…
             </Menu.Item>
