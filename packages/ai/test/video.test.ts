@@ -533,6 +533,7 @@ describe("Video / fal", () => {
         "InvalidRequest",
       ])
       expect(errors[1].message).toContain("end_image_url")
+      expect(errors[4].message).toContain("; got fal:handle")
     }).pipe(Effect.provide(layer(() => Effect.die("unsupported input reached the network")))),
   )
 })

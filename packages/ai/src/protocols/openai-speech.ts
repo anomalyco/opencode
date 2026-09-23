@@ -18,7 +18,11 @@ const PCM_SAMPLE_RATE = 24000
 // 1. Public model input
 // ---------------------------------------------------------------------------
 
-export type OpenAISpeechOptions = Record<string, unknown>
+/** `voice`, `instructions`, `speed`, and `format` are common request fields; other native body fields pass through. */
+export type OpenAISpeechOptions = {
+  /** Defaults to `"sse"` in `stream` mode on models that support it; the merged value selects the response framing. */
+  readonly stream_format?: "sse" | "audio"
+} & Record<string, unknown>
 
 export type Request = SpeechRequestFor<OpenAISpeechOptions>
 

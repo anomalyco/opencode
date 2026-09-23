@@ -39,6 +39,9 @@ LLM.request({
   providerOptions: { mode: "slow" },
 })
 
+// @ts-expect-error Request input to generate keeps provider option types.
+LLM.generate({ model, prompt: "Hello", providerOptions: { mode: "slow" } })
+
 const generatedObject = LLM.generateObject({
   model,
   prompt: "Hello",

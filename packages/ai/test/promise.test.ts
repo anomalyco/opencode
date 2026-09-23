@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test"
+import { mkdtemp, rm } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
 import { Effect, Layer } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import { AIError, LLMEvent, Media, SpeechEvent, TranscriptionEvent } from "../src/index.js"
@@ -180,6 +183,36 @@ describe("AI promise client", () => {
     expect(seen[0]).toBe("https://runway.test/v1/text_to_video")
     expect(seen.filter((url) => url.endsWith("/tasks/task_1")).length).toBeGreaterThanOrEqual(5)
     await ai.dispose()
+  })
+
+  test("observes a started generation's events and fetches its result", async () => {
+    const ai = AI.make({ layer: executor([]) })
+    const model = Runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5")
+    const generation = await ai.video.start({ model, prompt: "A kite" })
+
+    const events: Array<string> = []
+    for await (const event of generation.events({ poll: { interval: 10 } })) events.push(event.type)
+    expect(events).toEqual(["generation-progress", "generation-finished"])
+    expect(generation.status).toBe("queued")
+    expect((await generation.result()).video.source).toMatchObject({ url: "https://runway.test/out.mp4" })
+    await ai.dispose()
+  })
+
+  test("reads, writes, and decodes assets without leaving promises", async () => {
+    const ai = AI.make({ layer: executor([]) })
+    const dir = await mkdtemp(join(tmpdir(), "ai-promise-"))
+    try {
+      const png = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3])
+      await Bun.write(join(dir, "source.bin"), png)
+
+      const asset = await ai.file(join(dir, "source.bin"))
+      expect(asset.mediaType).toBe("image/png")
+      await ai.write(asset, join(dir, "copy.png"))
+      expect(await ai.bytes(await ai.file(join(dir, "copy.png")))).toEqual(png)
+    } finally {
+      await rm(dir, { recursive: true })
+      await ai.dispose()
+    }
   })
 
   test("generates, streams, and starts transcriptions over the same runtime", async () => {

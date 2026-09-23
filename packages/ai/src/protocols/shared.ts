@@ -211,7 +211,8 @@ export const mediaReference = (
   if (provider !== undefined && asset.source.type === "ref" && asset.source.provider === provider)
     return Effect.succeed({ type: "ref", value: asset.source.id })
   const accepted = provider === undefined ? "" : `, and ${provider} references`
-  return Effect.fail(invalidRequest(`${label} accepts inline bytes, data URLs, http(s) URLs${accepted}`))
+  const got = asset.source.type === "ref" ? `; got ${asset.source.provider}:${asset.source.id}` : ""
+  return Effect.fail(invalidRequest(`${label} accepts inline bytes, data URLs, http(s) URLs${accepted}${got}`))
 }
 
 /**

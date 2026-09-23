@@ -30,7 +30,11 @@ export interface Interface {
   ) => Effect.Effect<Generation<TranscriptionResponse>, AIError>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/TranscriptionClient") {}
+export class TranscriptionClientService extends Context.Service<TranscriptionClientService, Interface>()(
+  "@opencode/TranscriptionClient",
+) {}
+export const Service = TranscriptionClientService
+export type Service = TranscriptionClientService
 
 export const generate = <Options extends TranscriptionOptions>(
   request: TranscriptionRequestFor<Options>,

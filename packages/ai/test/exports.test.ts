@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test"
+import { Effect, Layer } from "effect"
 import {
+  AIClient,
   AIError,
   Generation,
   Image,
+  ImageClient,
   LanguageModel,
   LLM,
   LLMClient,
@@ -11,10 +14,11 @@ import {
   Speech,
   SpeechClient,
   SpeechEvent,
+  TranscriptionClient,
   Video,
   VideoClient,
 } from "@opencode/ai"
-import { Route, Protocol, WebSocketTransport } from "@opencode/ai/route"
+import { Route, Protocol, RequestExecutor, WebSocketTransport } from "@opencode/ai/route"
 import { Provider as ProviderSubpath } from "@opencode/ai/provider"
 import {
   AssemblyAI,
@@ -74,6 +78,28 @@ describe("public exports", () => {
     expect(Evaluation.run).toBeFunction()
     expect(EvaluationClient.layer).toBeDefined()
     expect(EvaluationClient.fetchLayer).toBeDefined()
+  })
+
+  test("AIClient.layerWith shares one executor across every client", async () => {
+    let built = 0
+    const counting = Layer.effect(
+      RequestExecutor.Service,
+      Effect.sync(() => {
+        built++
+        return RequestExecutor.Service.of({ execute: () => Effect.die("unexpected request") })
+      }),
+    )
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        yield* LLMClient.Service
+        yield* ImageClient.Service
+        yield* VideoClient.Service
+        yield* SpeechClient.Service
+        yield* TranscriptionClient.Service
+        yield* RequestExecutor.Service
+      }).pipe(Effect.provide(AIClient.layerWith(counting))),
+    )
+    expect(built).toBe(1)
   })
 
   test("route barrel exposes route-authoring APIs", () => {

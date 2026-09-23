@@ -30,7 +30,9 @@ export interface Interface {
   ) => Effect.Effect<Generation<ImageResponse>, AIError>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/ImageClient") {}
+export class ImageClientService extends Context.Service<ImageClientService, Interface>()("@opencode/ImageClient") {}
+export const Service = ImageClientService
+export type Service = ImageClientService
 
 export const generate = <Options extends ImageOptions>(
   request: ImageRequestFor<Options>,

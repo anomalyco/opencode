@@ -1,14 +1,13 @@
 import { Effect, Layer, ManagedRuntime, Stream } from "effect"
-import type { AwaitOptions, Generation, Snapshot } from "./generation.js"
+import { AIClient } from "./ai-client.js"
+import type { AwaitOptions, Event, Generation, Snapshot } from "./generation.js"
 import { Image, ImageModel, ImageRequest, type ImageOptions, type ImageRequestInput } from "./image.js"
-import { ImageClient } from "./image-client.js"
 import { LLM } from "./index.js"
-import { LLMClient } from "./route/client.js"
+import { Media } from "./media.js"
 import { RequestExecutor } from "./route/executor.js"
-import { LanguageModel, LLMRequest } from "./schema/index.js"
+import { AIError, InvalidRequestError, LanguageModel, LLMRequest } from "./schema/index.js"
 import type { RequestInput } from "./llm.js"
 import { Speech, SpeechModel, SpeechRequest, type SpeechRequestInput } from "./speech.js"
-import { SpeechClient } from "./speech-client.js"
 import {
   Transcription,
   TranscriptionModel,
@@ -16,17 +15,16 @@ import {
   type TranscriptionOptions,
   type TranscriptionRequestInput,
 } from "./transcription.js"
-import { TranscriptionClient } from "./transcription-client.js"
+import { fileMediaType } from "./utils/media-type.js"
 import { Video, VideoModel, VideoRequest, type VideoOptions, type VideoRequestInput } from "./video.js"
-import { VideoClient } from "./video-client.js"
 
 /**
  * Promise-first entrypoint for scripts and non-Effect callers. One `ManagedRuntime` hosts the LLM, image, video, speech,
  * and transcription clients over a request executor; every method runs the corresponding Effect API and rethrows
- * `AIError` unchanged.
+ * `AIError` unchanged. `file` and `write` load `node:fs/promises` on first use, so importing this module does not.
  */
 export interface Options {
-  /** Executor layer; defaults to `RequestExecutor.fetchLayer`. Inject a recorder or middleware here. */
+  /** Executor layer; defaults to `RequestExecutor.fetchLayer`. Inject a recorder or `RequestExecutor.middleware(fn)` here. */
   readonly layer?: Layer.Layer<RequestExecutor.Service>
 }
 
@@ -34,19 +32,20 @@ export interface RunOptions {
   readonly signal?: AbortSignal
 }
 
-export type Services =
-  | Layer.Success<typeof LLMClient.layer>
-  | Layer.Success<typeof ImageClient.layer>
-  | Layer.Success<typeof VideoClient.layer>
-  | Layer.Success<typeof SpeechClient.layer>
-  | Layer.Success<typeof TranscriptionClient.layer>
-  | RequestExecutor.Service
+export type Services = AIClient.Services
 
-/** Promise view of a `Generation`: its snapshot plus `await`, `refresh`, and `cancel` returning promises. */
+/**
+ * Promise view of a `Generation`. Its fields are a snapshot taken when the handle was created; `refresh()` resolves to a
+ * new handle rather than updating this one.
+ */
 export type GenerationHandle<Response> = Snapshot & {
   /** Serializable JSON; pass it back to `resume` from another process. */
   readonly token: unknown
   readonly await: (options?: AwaitOptions & RunOptions) => Promise<Response>
+  /** Status observations until the first terminal one, polling like `await`; abort ends iteration without throwing. */
+  readonly events: (options?: AwaitOptions & RunOptions) => AsyncIterable<Event>
+  /** The result without polling; fails when the generation has not completed. */
+  readonly result: (options?: RunOptions) => Promise<Response>
   readonly refresh: (options?: RunOptions) => Promise<GenerationHandle<Response>>
   readonly cancel: (options?: RunOptions) => Promise<void>
 }
@@ -65,17 +64,9 @@ const abortEffect = (signal: AbortSignal | undefined) =>
       })
 
 export const make = (options: Options = {}) => {
-  const runtime = ManagedRuntime.make(
-    Layer.mergeAll(
-      LLMClient.layer,
-      ImageClient.layer,
-      VideoClient.layer,
-      SpeechClient.layer,
-      TranscriptionClient.layer,
-    ).pipe(Layer.provideMerge(options.layer ?? RequestExecutor.fetchLayer)),
-  )
+  const runtime = ManagedRuntime.make(AIClient.layerWith(options.layer ?? RequestExecutor.fetchLayer))
 
-  /** Run any package Effect (for example `asset.bytes()`) inside this runtime. */
+  /** Run any package Effect (for example `LLMClient.compact(...)`) inside this runtime. */
   const run = <A, E>(effect: Effect.Effect<A, E, Services>, options?: RunOptions) =>
     runtime.runPromise(effect, { signal: options?.signal })
 
@@ -95,12 +86,13 @@ export const make = (options: Options = {}) => {
     ...generation.snapshot,
     token: generation.token,
     await: (options) => run(generation.await({ poll: options?.poll }), options),
+    events: (options) => iterate(generation.events({ poll: options?.poll }), options),
+    result: (options) => run(generation.result(), options),
     refresh: (options) => run(generation.refresh(), options).then(handle),
     cancel: (options) => run(generation.cancel(), options),
   })
 
   // The typed `generate`/`stream` overloads take a concrete input or a request, not the union; normalize once here.
-  const llmRequest = (input: RequestInput | LLMRequest) => (input instanceof LLMRequest ? input : LLM.request(input))
   const imageRequest = (input: ImageRequestInput | ImageRequest) =>
     input instanceof ImageRequest ? input : Image.request(input)
   const videoRequest = (input: VideoRequestInput | VideoRequest) =>
@@ -112,12 +104,48 @@ export const make = (options: Options = {}) => {
 
   return {
     run,
+    /** Decoded asset bytes, downloading `url` sources through the executor. */
+    bytes: (asset: Media.Asset, options?: RunOptions) => run(asset.bytes(), options),
+    base64: (asset: Media.Asset, options?: RunOptions) => run(asset.base64(), options),
+    /** Pull a `url` asset into owned bytes before the provider URL expires. */
+    materialize: (asset: Media.Asset, options?: RunOptions) => run(asset.materialize(), options),
+    /** Read a file into an asset like `Media.file`: sniffed media type, then the extension's. */
+    file: async (path: string, options?: Media.AssetOptions & RunOptions) => {
+      const { readFile } = await import("node:fs/promises")
+      return run(
+        Effect.tryPromise({
+          try: (signal) => readFile(path, { signal }),
+          catch: (cause) => fileError(`Failed to read media file ${path}`, cause),
+        }).pipe(
+          Effect.map((buffer) => {
+            const data = new Uint8Array(buffer)
+            return Media.bytes(data, fileMediaType(data, path), options)
+          }),
+        ),
+        options,
+      )
+    },
+    /** Write an asset's bytes like `Media.write`, downloading `url` sources through the executor. */
+    write: async (asset: Media.Asset, path: string, options?: RunOptions) => {
+      const { writeFile } = await import("node:fs/promises")
+      return run(
+        asset.bytes().pipe(
+          Effect.flatMap((data) =>
+            Effect.tryPromise({
+              try: (signal) => writeFile(path, data, { signal }),
+              catch: (cause) => fileError(`Failed to write media file ${path}`, cause),
+            }),
+          ),
+        ),
+        options,
+      )
+    },
     llm: {
       request: LLM.request,
       generate: <const Model extends LanguageModel>(input: RequestInput<Model> | LLMRequest, options?: RunOptions) =>
-        run(LLM.generate(llmRequest(input)), options),
+        run(LLM.generate(input), options),
       stream: <const Model extends LanguageModel>(input: RequestInput<Model> | LLMRequest, options?: RunOptions) =>
-        iterate(LLM.stream(llmRequest(input)), options),
+        iterate(LLM.stream(input), options),
     },
     image: {
       request: Image.request,
@@ -185,6 +213,9 @@ export const make = (options: Options = {}) => {
 }
 
 export type Client = ReturnType<typeof make>
+
+const fileError = (message: string, cause: unknown) =>
+  new AIError({ reason: new InvalidRequestError({ message, cause }) })
 
 /** Default client over `RequestExecutor.fetchLayer` for scripts; the runtime builds its layer on first use. */
 export const ai = make()
