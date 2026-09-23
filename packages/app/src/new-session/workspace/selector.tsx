@@ -14,10 +14,11 @@ export function PromptWorkspaceSelector(props: {
   workspaces: string[]
   branches: string[]
   branch?: string
+  createBranch?: string
   onboarding?: boolean
   variant?: "inline" | "summary"
   onChange: (value: string) => void
-  onCreate: (branch: string) => void
+  onCreate: (branch?: string) => void
   onSearch: (search: string) => void
   onDone?: () => void
   onViewAll: () => void
@@ -34,7 +35,7 @@ export function PromptWorkspaceSelector(props: {
   const branchTruncation = createTruncatedText()
   const focusWorktreeSearch = () =>
     requestAnimationFrame(() => requestAnimationFrame(() => searchInput?.focus({ preventScroll: true })))
-  let pending: { type: "select"; value: string } | { type: "create"; branch: string } | { type: "viewAll" } | undefined
+  let pending: { type: "select"; value: string } | { type: "create"; branch?: string } | { type: "viewAll" } | undefined
   const selected = () => (sameDirectory(props.value, props.projectRoot) ? "main" : props.value)
   const workspaces = createMemo(() => {
     const query = search.workspaces.trim().toLowerCase()
@@ -254,7 +255,7 @@ export function PromptWorkspaceSelector(props: {
         </Menu>
       </Tooltip>
       <Show
-        when={selected() === "create" && props.branch}
+        when={selected() === "create"}
         fallback={
           summary() ? (
             <Show when={props.branch}>
@@ -272,7 +273,11 @@ export function PromptWorkspaceSelector(props: {
       >
         <Tooltip
           placement="top"
-          value={language.t("session.new.workspace.fromBranch", { branch: props.branch! })}
+          value={
+            props.createBranch
+              ? language.t("session.new.workspace.fromBranch", { branch: props.createBranch })
+              : language.t("session.new.workspace.fromCurrent")
+          }
           disabled={!branchTruncation.truncated()}
           class={summary() ? "min-w-0 w-full" : "ms-1 min-w-0 max-w-[220px]"}
           contentClass="max-w-[calc(100vw-32px)] break-all"
@@ -287,9 +292,11 @@ export function PromptWorkspaceSelector(props: {
             >
               <Icon name="branch-out" size={summary() ? "normal" : "small"} class="shrink-0 text-v2-icon-icon-muted" />
               <span ref={branchTruncation.observe} class={summary() ? "session-summary-label" : "min-w-0 truncate"}>
-                {language.t(summary() ? "session.summary.basedOn" : "session.new.workspace.fromBranch", {
-                  branch: props.branch!,
-                })}
+                {props.createBranch
+                  ? language.t(summary() ? "session.summary.basedOn" : "session.new.workspace.fromBranch", {
+                      branch: props.createBranch,
+                    })
+                  : language.t("session.new.workspace.fromCurrent")}
               </span>
               <Icon
                 name={summary() ? "fill-triangle-down" : "chevron-down"}
@@ -306,6 +313,16 @@ export function PromptWorkspaceSelector(props: {
                   setTimeout(() => requestAnimationFrame(() => branchSearchInput?.focus({ preventScroll: true })))
                 }}
               >
+                <Menu.Item
+                  class="h-7 gap-2 rounded-sm px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:var(--v2-font-family-sans)] data-[highlighted]:!bg-v2-overlay-simple-overlay-hover"
+                  onSelect={() => (pending = { type: "create" })}
+                >
+                  <span class="min-w-0 flex-1 truncate">{language.t("session.new.workspace.fromCurrent")}</span>
+                  <Show when={!props.createBranch}>
+                    <Icon name="check" size="small" class="shrink-0" />
+                  </Show>
+                </Menu.Item>
+                <Menu.Separator class="h-[0.5px]" />
                 <div class="flex h-7 shrink-0 items-center gap-2 rounded-sm pl-3 pr-2.5 text-v2-icon-icon-muted">
                   <Icon name="magnifying-glass" size="small" class="shrink-0" />
                   <input
@@ -347,7 +364,7 @@ export function PromptWorkspaceSelector(props: {
                   </Show>
                 </div>
                 <div class="max-h-[224px] overflow-y-auto">
-                  <Menu.RadioGroup value={props.branch}>
+                  <Menu.RadioGroup value={props.createBranch ?? ""}>
                     <For each={props.branches}>
                       {(branch) => (
                         <Menu.RadioItem

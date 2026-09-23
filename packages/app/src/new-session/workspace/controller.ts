@@ -220,7 +220,7 @@ export function createNewSessionWorkspaceController(input: {
       remember,
       set: select,
       cycle: () => select(cycleNewSessionWorktree({ current: value(), existing: existing() })),
-      create: (branch: string) => {
+      create: (branch?: string) => {
         input.setSelectedBranch(branch)
         input.setSelectedWorktree("create")
         remember("create")
@@ -248,6 +248,7 @@ export function createNewSessionWorkspaceController(input: {
     bar: {
       visible,
       branch,
+      createBranch: input.selectedBranch,
     },
   }
 }

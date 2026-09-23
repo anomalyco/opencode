@@ -1446,6 +1446,7 @@ export const dict = {
   "session.new.workspace.local.tooltip": "Uses project’s current checkout",
   "session.new.workspace.new.tooltip": "Creates isolated copy from current checkout",
   "session.new.workspace.fromBranch": "from {{branch}}",
+  "session.new.workspace.fromCurrent": "from current workspace",
   "session.new.workspace.createFrom": "Create from branch",
   "session.new.workspace.branch.search.placeholder": "Search branches",
   "session.new.workspace.trigger.tooltip": "Select where to run session",

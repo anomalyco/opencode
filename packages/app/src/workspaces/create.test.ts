@@ -80,6 +80,44 @@ describe("worktree creation", () => {
     })
   })
 
+  test("creates from the selected checkout without a starting ref", async () => {
+    const requests: Request[] = []
+    const api = OpenCode.make({
+      baseUrl: "http://localhost:3000",
+      fetch: Object.assign(
+        async (input: RequestInfo | URL, init?: RequestInit) => {
+          const request = new Request(input, init)
+          requests.push(request)
+          if (request.method === "POST") return Response.json({ directory: "/created" })
+          return Response.json({ directory: "/created", project: { id: "project", canonical: "/repo" } })
+        },
+        { preconnect() {} },
+      ),
+    })
+    await createRoot(async (dispose) => {
+      const data = createData({
+        api: () => api,
+        directory: "/repo",
+        event: { on: () => () => {}, listen: () => () => {} },
+      })
+      try {
+        await createWorktree({
+          api,
+          data,
+          directory: "/repo",
+          project: { id: "project", canonical: "/repo", directory: "/repo" },
+          from: "/repo/current",
+        })
+        expect(await requests.find((request) => request.method === "POST")?.json()).toEqual({
+          projectID: "project",
+          from: "/repo/current",
+        })
+      } finally {
+        dispose()
+      }
+    })
+  })
+
   test("does not fall back to a shared project when location lookup fails", async () => {
     const requests: Request[] = []
     const api = OpenCode.make({
