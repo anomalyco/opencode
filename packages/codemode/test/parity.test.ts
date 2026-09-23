@@ -1231,3 +1231,233 @@ describe("loose equality and operator gates on opaque references", () => {
     ).toEqual(["1,2", null, "[object Function]", true, true, "function", false])
   })
 })
+
+describe("Object.freeze, seal, and preventExtensions", () => {
+  test("a frozen object rejects writes, additions, and deletes with TypeErrors", async () => {
+    expect(
+      await value(`
+        const o = Object.freeze({ a: 1 })
+        const errors = []
+        try { o.a = 2 } catch (e) { errors.push(e.name + ": " + e.message) }
+        try { o.b = 2 } catch (e) { errors.push(e.name + ": " + e.message) }
+        try { delete o.a } catch (e) { errors.push(e.name + ": " + e.message) }
+        return [errors, o.a, Object.isFrozen(o), Object.isSealed(o), Object.isExtensible(o)]
+      `),
+    ).toEqual([
+      [
+        "TypeError: Cannot assign to read only property 'a'.",
+        "TypeError: Cannot add property b, object is not extensible.",
+        "TypeError: Cannot delete property 'a'.",
+      ],
+      1,
+      true,
+      true,
+      false,
+    ])
+  })
+
+  test("seal keeps writes, preventExtensions keeps deletes, and each returns its argument", async () => {
+    expect(
+      await value(`
+        const s = { a: 1 }, p = { a: 1 }
+        const errors = []
+        Object.seal(s).a = 2
+        try { delete s.a } catch (e) { errors.push(e.name) }
+        delete Object.preventExtensions(p).a
+        try { p.b = 1 } catch (e) { errors.push(e.name) }
+        return [errors, s.a, Object.keys(p), Object.isSealed(s), Object.isFrozen(s), Object.isSealed(p), Object.isFrozen(p)]
+      `),
+    ).toEqual([["TypeError", "TypeError"], 2, [], true, false, true, true])
+  })
+
+  test("primitives pass through, and Object.assign honors the flags", async () => {
+    expect(
+      await value(`
+        return [Object.freeze(1) === 1, Object.isFrozen(1), Object.isSealed("a"), Object.isExtensible(null), Object.isFrozen({}), Object.isExtensible({})]
+      `),
+    ).toEqual([true, true, true, false, false, true])
+    const failure = await error(`Object.assign(Object.freeze({ a: 1 }), { b: 1 })`)
+    expect(failure.message).toContain("Cannot add property b, object is not extensible")
+  })
+
+  test("frozen arrays reject element, length, and mutating-method writes like JS", async () => {
+    expect(
+      await value(`
+        const a = Object.freeze([1, 2])
+        const attempt = (f) => { try { f(); return "ok" } catch (e) { return e.name + ": " + e.message } }
+        return [
+          attempt(() => a.push(3)),
+          attempt(() => { a[0] = 9 }),
+          attempt(() => { a[5] = 9 }),
+          attempt(() => { a.length = 0 }),
+          attempt(() => a.pop()),
+          attempt(() => a.sort()),
+          attempt(() => a.reverse()),
+          attempt(() => a.fill(0)),
+          attempt(() => a.copyWithin(0, 1)),
+          attempt(() => a.splice(0, 1)),
+          attempt(() => a.unshift(0)),
+          a, a.map((x) => x * 2), Object.isFrozen(a), Object.isFrozen(Object.freeze([])),
+        ]
+      `),
+    ).toEqual([
+      "TypeError: Cannot add property 2, object is not extensible.",
+      "TypeError: Cannot assign to read only property '0'.",
+      "TypeError: Cannot add property 5, object is not extensible.",
+      "TypeError: Cannot assign to read only property 'length'.",
+      "TypeError: Cannot delete property '1'.",
+      "TypeError: Cannot assign to read only property '0'.",
+      "TypeError: Cannot assign to read only property '0'.",
+      "TypeError: Cannot assign to read only property '0'.",
+      "TypeError: Cannot assign to read only property '0'.",
+      "TypeError: Cannot delete property '1'.",
+      "TypeError: Cannot add property 2, object is not extensible.",
+      [1, 2],
+      [2, 4],
+      true,
+      true,
+    ])
+  })
+
+  test("sealed and non-extensible arrays allow exactly the writes JS does", async () => {
+    expect(
+      await value(`
+        const s = Object.seal([1, 2]), p = Object.preventExtensions([1, 2, 3])
+        const attempt = (f) => { try { f(); return "ok" } catch (e) { return e.name } }
+        const results = [attempt(() => { s[0] = 5 }), attempt(() => s.pop()), attempt(() => { s.length = 0 }), attempt(() => s.push(1))]
+        p.pop(); p.sort(); p.reverse(); p.fill(0, 1); p.copyWithin(0, 1); p.length = 5
+        results.push(attempt(() => p.push(1)), attempt(() => p.splice(0, 1, 7, 8)), p.splice(0, 1, 7), attempt(() => { p[9] = 1 }))
+        return [results, s, p, Object.isSealed(p), Object.isFrozen(p), Object.isSealed(Object.preventExtensions([])), Object.isFrozen(Object.preventExtensions([]))]
+      `),
+    ).toEqual([
+      ["ok", "TypeError", "TypeError", "TypeError", "TypeError", "TypeError", [0], "TypeError"],
+      [5, 2],
+      [7, 0, null, null, null],
+      false,
+      false,
+      true,
+      false,
+    ])
+  })
+
+  test("typed arrays with elements cannot be frozen; wrappers freeze their properties only", async () => {
+    const failure = await error(`Object.freeze(new Uint8Array([1]))`)
+    expect(failure.message).toContain("Cannot freeze array buffer views with elements")
+    expect(
+      await value(`
+        const empty = Object.freeze(new Uint8Array(0))
+        const bytes = Object.preventExtensions(new Uint8Array([1]))
+        const m = Object.freeze(new Map()); m.set(1, 2)
+        const f = Object.freeze(() => 1)
+        let named = "ok"
+        try { f.x = 1 } catch (e) { named = e.name }
+        return [Object.isFrozen(empty), Object.isFrozen(bytes), Object.isExtensible(bytes), m.size, Object.isFrozen(f), named, f()]
+      `),
+    ).toEqual([true, false, false, 1, true, "TypeError", 1])
+  })
+})
+
+describe("Object.getPrototypeOf and Object.create", () => {
+  test("getPrototypeOf returns the built-in prototypes for objects and primitives", async () => {
+    expect(
+      await value(`
+        return [
+          Object.getPrototypeOf([]) === Array.prototype,
+          Object.getPrototypeOf({}) === Object.prototype,
+          Object.getPrototypeOf(Object.prototype),
+          Object.getPrototypeOf("a") === String.prototype,
+          Object.getPrototypeOf(1) === Number.prototype,
+          Object.getPrototypeOf(true) === Boolean.prototype,
+          Object.getPrototypeOf(new TypeError("x")) === TypeError.prototype,
+          Object.getPrototypeOf(TypeError.prototype) === Error.prototype,
+          Object.getPrototypeOf(() => 1) === Function.prototype,
+        ]
+      `),
+    ).toEqual([true, true, null, true, true, true, true, true, true])
+  })
+
+  test("getPrototypeOf rejects null, undefined, and symbols", async () => {
+    expect((await error(`Object.getPrototypeOf(null)`)).message).toContain("cannot convert null to an object")
+    expect((await error(`Object.getPrototypeOf(undefined)`)).message).toContain("cannot convert undefined to an object")
+    expect((await error(`Object.getPrototypeOf(Symbol.iterator)`)).message).toContain("cannot convert a symbol")
+  })
+
+  test("Object.create links the prototype: inherited reads, in, and own-only keys", async () => {
+    expect(
+      await value(`
+        const p = { greet(name) { return "hi " + name }, a: 1 }
+        const c = Object.create(p)
+        c.name = "x"
+        const seen = []
+        for (const key in c) seen.push(key)
+        return ["greet" in c, Object.keys(c), c.hasOwnProperty("a"), c.a, c.greet(c.name), Object.getPrototypeOf(c) === p, Object.getPrototypeOf(Object.create(null)), seen]
+      `),
+    ).toEqual([true, ["name"], false, 1, "hi x", true, null, ["name"]])
+  })
+
+  test("Object.create rejects non-object prototypes and property descriptors", async () => {
+    expect((await error(`Object.create(1)`)).message).toContain("Object prototype may only be an Object or null")
+    expect((await error(`Object.create()`)).message).toContain("Object prototype may only be an Object or null")
+    expect((await error(`Object.create(null, { a: { value: 1 } })`)).message).toContain(
+      "Object.create property descriptors are not supported",
+    )
+    expect(await value(`return Object.keys(Object.create({}, undefined))`)).toEqual([])
+  })
+})
+
+describe("structuredClone", () => {
+  test("deep-copies data values and keeps shared references shared", async () => {
+    expect(
+      await value(`
+        const shared = { n: 1 }
+        const source = { a: shared, b: shared, list: [1, , shared], map: new Map([[1, { a: [1, 2] }]]), set: new Set([shared]), when: new Date(5), bytes: new Uint8Array([1, 2]) }
+        const c = structuredClone(source)
+        c.a.n = 2
+        return [
+          c !== source, c.a === c.b, c.a !== shared, shared.n, c.list[2] === c.a, 1 in c.list, c.list.length,
+          c.map.get(1).a, c.map !== source.map, c.set.has(c.a), c.when.getTime(), c.when instanceof Date,
+          c.bytes instanceof Uint8Array, c.bytes[1], Array.isArray(c.list),
+        ]
+      `),
+    ).toEqual([true, true, true, 1, true, false, 3, [1, 2], true, true, 5, true, true, 2, true])
+  })
+
+  test("regexps reset lastIndex, errors keep name, message, and cause, and extras are dropped", async () => {
+    expect(
+      await value(`
+        const r = /a/g
+        r.lastIndex = 3
+        const e = new TypeError("boom", { cause: { code: 1 } })
+        e.extra = 1
+        const custom = new Error("x")
+        custom.name = "Custom"
+        const [cr, ce, cc] = [structuredClone(r), structuredClone(e), structuredClone(custom)]
+        return [cr.source, cr.flags, cr.lastIndex, ce instanceof TypeError, ce.name, ce.message, ce.cause, ce.cause !== e.cause, ce.extra, Object.keys(ce), cc.name]
+      `),
+    ).toEqual(["a", "g", 0, true, "TypeError", "boom", { code: 1 }, true, null, [], "Error"])
+  })
+
+  test("the clone is a plain extensible object: prototypes, symbols, undefined fields, and frozen state drop", async () => {
+    expect(
+      await value(`
+        const c = structuredClone(Object.freeze(Object.assign(Object.create({ inherited: 1 }), { a: undefined, [Symbol.iterator]: 1, b: 2 })))
+        return [Object.isFrozen(c), Object.getPrototypeOf(c) === Object.prototype, "a" in c, Symbol.iterator in c, c.b, c.inherited]
+      `),
+    ).toEqual([false, true, true, false, 2, null])
+  })
+
+  test("functions, symbols, promises, wrappers, and tool references throw a DataCloneError TypeError", async () => {
+    for (const code of [
+      `structuredClone(() => 1)`,
+      `structuredClone({ deep: [Symbol.iterator] })`,
+      `structuredClone(Promise.resolve(1))`,
+      `structuredClone(new URL("http://x"))`,
+      `structuredClone(tools)`,
+    ]) {
+      const failure = await error(code)
+      expect(failure.message).toMatch(/^TypeError: DataCloneError: .* could not be cloned\./)
+    }
+    expect(await value(`try { structuredClone(() => 1) } catch (e) { return e.name }`)).toBe("TypeError")
+    expect((await error(`structuredClone()`)).message).toContain("structuredClone requires 1 argument")
+  })
+})

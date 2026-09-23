@@ -2218,7 +2218,6 @@ class Frame<R> {
       }
     })()
     if (written) return
-    if (target instanceof Arr && key === "length") throw rangeError("Invalid array length", node)
     throw typeError(`Cannot assign to read only property '${String(key)}'.`, node)
   }
 
