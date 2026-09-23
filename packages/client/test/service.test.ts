@@ -178,6 +178,35 @@ test("stop outlives a server that unregisters before releasing its port", async 
   await existing.exited
 }, 15_000)
 
+test("stop waits for the original process while preserving a newly registered successor", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+  const existing = fixture.spawn("lingering", "15000")
+  await fixture.waitForFile()
+  const original = await Bun.file(registration).json()
+  const stopping = run(Service.stop({ file: registration }))
+
+  try {
+    await fixture.waitForFile(registration + ".unregistered")
+    const successor = fixture.spawn("graceful")
+    await fixture.waitForFile()
+    const replacement = await Bun.file(registration).json()
+    expect(existing.exitCode).toBe(null)
+    expect(replacement.pid).toBe(successor.pid)
+
+    await stopping
+
+    expect(() => process.kill(original.pid, 0)).toThrow()
+    await expectPortAvailable(Number(new URL(original.url).port))
+    expect(await Bun.file(registration).json()).toEqual(replacement)
+    expect(await status(replacement.url)).toMatchObject({ pid: successor.pid })
+    expect(successor.exitCode).toBe(null)
+  } finally {
+    existing.kill("SIGKILL")
+    await stopping
+  }
+}, 20_000)
+
 test("signals an incompatible service before starting its replacement", async () => {
   await using fixture = await serviceFixture()
   const registration = fixture.registration
