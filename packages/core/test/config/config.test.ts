@@ -1022,7 +1022,10 @@ describe("Config", () => {
                     path.join(tmp.path, "opencode.jsonc"),
                     `{
                       // Ignored reference: {file:missing.txt}
-                      "username": "user-{env:OPENCODE_TEST_MISSING}",
+                      "username": "user-{env:OPENCODE_TEST_MISSING}", // Ignored inline reference: {file:missing-inline.txt}
+                      /* Ignored block reference:
+                         {file:missing-block.txt}
+                      */
                       "mcp": {
                         "servers": {
                           "remote": {
