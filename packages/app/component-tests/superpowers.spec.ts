@@ -754,6 +754,12 @@ story("map renders dependency nodes, edges, and task facts", async ({ page }) =>
   const edge = page.locator('[data-testid="execution-map-edge"][data-from="schema"][data-to="api"]')
   await expect(edge).toHaveCount(1)
   await expect(edge).toHaveAttribute("d", /^M /)
+  const parent = await schema.boundingBox()
+  const child = await api.boundingBox()
+  expect(child!.y).toBeGreaterThan(parent!.y + parent!.height)
+  expect(await schema.evaluate((element) => getComputedStyle(element).backgroundColor)).not.toBe(
+    await api.evaluate((element) => getComputedStyle(element).backgroundColor),
+  )
 })
 
 story("map selects a node with the keyboard", async ({ page }) => {
@@ -785,15 +791,15 @@ story("map keeps zoom within the supported bounds", async ({ page }) => {
 story("map pans without activating a node", async ({ page }) => {
   await openExecutionFixture(page, "map")
   const viewport = page.getByTestId("execution-map-viewport")
-  const api = page.locator('[data-testid="execution-map-node"][data-task-id="api"]')
+  const schema = page.locator('[data-testid="execution-map-node"][data-task-id="schema"]')
   await expect(viewport).toHaveAttribute("data-pan-x", "0")
-  const box = await api.boundingBox()
+  const box = await schema.boundingBox()
   await page.mouse.move(box!.x + box!.width / 2, box!.y + box!.height / 2)
   await page.mouse.down()
   await page.mouse.move(box!.x + box!.width / 2 + 60, box!.y + box!.height / 2 + 40, { steps: 5 })
   await page.mouse.up()
   await expect(viewport).toHaveAttribute("data-pan-x", "60")
-  await expect(api).toHaveAttribute("aria-pressed", "false")
+  await expect(schema).toHaveAttribute("aria-pressed", "false")
 })
 
 story("map keeps the selected task when a filter hides it", async ({ page }) => {
@@ -817,6 +823,8 @@ story("map does not recenter or relayout when a task status changes", async ({ p
   const panX = await viewport.getAttribute("data-pan-x")
   const panY = await viewport.getAttribute("data-pan-y")
   const position = await api.boundingBox()
+  const schema = page.locator('[data-testid="execution-map-node"][data-task-id="schema"]')
+  const color = await schema.evaluate((element) => getComputedStyle(element).backgroundColor)
   await page.getByRole("button", { name: "Advance task status", exact: true }).click()
   await expect(page.locator('[data-testid="execution-map-node"][data-task-id="schema"]')).toHaveAttribute(
     "data-state",
@@ -825,6 +833,7 @@ story("map does not recenter or relayout when a task status changes", async ({ p
   await expect(viewport).toHaveAttribute("data-pan-x", panX ?? "")
   await expect(viewport).toHaveAttribute("data-pan-y", panY ?? "")
   await expect(viewport).toHaveAttribute("data-zoom", "1")
+  expect(await schema.evaluate((element) => getComputedStyle(element).backgroundColor)).not.toBe(color)
   const movedBox = await api.boundingBox()
   expect(movedBox!.x).toBe(position!.x)
   expect(movedBox!.y).toBe(position!.y)

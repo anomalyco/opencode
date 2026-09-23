@@ -2,8 +2,8 @@ import type { Task } from "@bearmanser/opencode-superpowers-execution/contract"
 
 export const GRAPH_NODE_WIDTH = 220
 export const GRAPH_NODE_HEIGHT = 88
-export const GRAPH_HORIZONTAL_GAP = 72
-export const GRAPH_VERTICAL_GAP = 24
+export const GRAPH_HORIZONTAL_GAP = 24
+export const GRAPH_VERTICAL_GAP = 72
 export const GRAPH_GROUPING_THRESHOLD = 200
 export const GRAPH_MIN_ZOOM = 0.25
 export const GRAPH_MAX_ZOOM = 2
@@ -48,23 +48,23 @@ export function layoutTaskGraph(tasks: Task[], measure: GraphMeasurer = defaultM
   const byID = indexTasks(tasks)
   const layers = assignLayers(tasks, byID)
   const nodes: GraphNode[] = []
-  const columns = [...new Set(layers.values())].sort((left, right) => left - right)
+  const rows = [...new Set(layers.values())].sort((left, right) => left - right)
   const placed = new Map<string, GraphNode>()
 
-  let x = 0
-  for (const layer of columns) {
-    const columnTasks = tasks.filter((task) => layers.get(task.id) === layer).sort(compareByOrderID)
-    const sizes = columnTasks.map((task) => nodeSize(task, measure))
-    const columnWidth = Math.max(GRAPH_NODE_WIDTH, ...sizes.map((size) => size.width))
-    let y = 0
-    columnTasks.forEach((task, index) => {
+  let y = 0
+  for (const layer of rows) {
+    const rowTasks = tasks.filter((task) => layers.get(task.id) === layer).sort(compareByOrderID)
+    const sizes = rowTasks.map((task) => nodeSize(task, measure))
+    const rowHeight = Math.max(GRAPH_NODE_HEIGHT, ...sizes.map((size) => size.height))
+    let x = 0
+    rowTasks.forEach((task, index) => {
       const size = sizes[index] ?? defaultMeasure()
-      const node = { id: task.id, x, y, width: columnWidth, height: size.height }
+      const node = { id: task.id, x, y, width: size.width, height: size.height }
       nodes.push(node)
       placed.set(task.id, node)
-      y += size.height + GRAPH_VERTICAL_GAP
+      x += size.width + GRAPH_HORIZONTAL_GAP
     })
-    x += columnWidth + GRAPH_HORIZONTAL_GAP
+    y += rowHeight + GRAPH_VERTICAL_GAP
   }
 
   const edges: GraphEdge[] = []
@@ -122,12 +122,12 @@ export function groupTasksByPhase(tasks: Task[]): GraphPhaseGroup[] {
 }
 
 export function edgePath(from: GraphNode, to: GraphNode) {
-  const startX = from.x + from.width
-  const startY = from.y + from.height / 2
-  const endX = to.x
-  const endY = to.y + to.height / 2
-  const midX = (startX + endX) / 2
-  return `M ${startX} ${startY} C ${midX} ${startY}, ${midX} ${endY}, ${endX} ${endY}`
+  const startX = from.x + from.width / 2
+  const startY = from.y + from.height
+  const endX = to.x + to.width / 2
+  const endY = to.y
+  const midY = (startY + endY) / 2
+  return `M ${startX} ${startY} C ${startX} ${midY}, ${endX} ${midY}, ${endX} ${endY}`
 }
 
 function defaultMeasure(): GraphNodeSize {

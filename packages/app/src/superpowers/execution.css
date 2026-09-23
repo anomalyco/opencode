@@ -628,6 +628,9 @@
 
 .execution-map__node-button,
 .execution-map__group-node {
+  --node-bg: var(--v2-background-bg-deep);
+  --node-border: var(--v2-border-border-base);
+  --node-state: var(--v2-text-text-muted);
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -635,9 +638,9 @@
   width: 100%;
   height: 100%;
   padding: 8px;
-  border: 1px solid var(--v2-border-border-base);
+  border: 1px solid var(--node-border);
   border-radius: 8px;
-  background: var(--v2-background-bg-deep);
+  background: var(--node-bg);
   color: var(--v2-text-text-base);
   text-align: start;
   overflow: hidden;
@@ -647,6 +650,34 @@
 .execution-map__group-node[aria-pressed="true"] {
   outline: 2px solid var(--v2-text-text-base);
   outline-offset: -2px;
+}
+
+:is(.execution-map__node-button, .execution-map__group-node)[data-state="running"] {
+  --node-bg: var(--v2-state-bg-info);
+  --node-border: var(--v2-state-border-info);
+  --node-state: var(--v2-state-fg-info);
+}
+
+:is(.execution-map__node-button, .execution-map__group-node):is([data-state="blocked"], [data-state="awaiting_review"]) {
+  --node-bg: var(--v2-state-bg-warning);
+  --node-border: var(--v2-state-border-warning);
+  --node-state: var(--v2-state-fg-warning);
+}
+
+:is(.execution-map__node-button, .execution-map__group-node)[data-state="failed"] {
+  --node-bg: var(--v2-state-bg-danger);
+  --node-border: var(--v2-state-border-danger);
+  --node-state: var(--v2-state-fg-danger);
+}
+
+:is(.execution-map__node-button, .execution-map__group-node)[data-state="verified"] {
+  --node-bg: var(--v2-state-bg-success);
+  --node-border: var(--v2-state-border-success);
+  --node-state: var(--v2-state-fg-success);
+}
+
+:is(.execution-map__node-button, .execution-map__group-node)[data-state="skipped"] {
+  border-style: dashed;
 }
 
 .execution-map__node-title {
@@ -668,6 +699,10 @@
   color: var(--v2-text-text-muted);
   font-size: inherit;
   line-height: inherit;
+}
+
+.execution-map__node-state {
+  color: var(--node-state);
 }
 
 .execution-map__empty,

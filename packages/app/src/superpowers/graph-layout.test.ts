@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test } from "bun:test"
 import { summarizeProgress, type Task } from "@bearmanser/opencode-superpowers-execution/contract"
 import {
   GRAPH_GROUPING_THRESHOLD,
+  GRAPH_HORIZONTAL_GAP,
   GRAPH_MAX_ZOOM,
   GRAPH_MIN_ZOOM,
   GRAPH_NODE_HEIGHT,
@@ -22,8 +23,8 @@ import { taskFixture, taskGraphFixture } from "./fixtures"
 
 beforeEach(() => resetLayoutCache())
 
-function nodesByY(layout: GraphLayout) {
-  return [...layout.nodes].sort((left, right) => left.y - right.y).map((node) => node.id)
+function nodesByX(layout: GraphLayout) {
+  return [...layout.nodes].sort((left, right) => left.x - right.x).map((node) => node.id)
 }
 
 function nodeByID(layout: GraphLayout, id: string) {
@@ -49,20 +50,20 @@ describe("layoutTaskGraph", () => {
     const tests = nodeByID(layout, "tests")
     const finalReview = nodeByID(layout, "final-review")
 
-    expect(schema.x).toBe(0)
-    expect(api.x).toBe(GRAPH_NODE_WIDTH + 72)
-    expect(cli.x).toBe(api.x)
-    expect(tests.x).toBe(api.x * 2)
-    expect(finalReview.x).toBe(api.x * 3)
-    expect(api.y).toBeLessThan(cli.y)
-    expect(layout.width).toBe(finalReview.x + GRAPH_NODE_WIDTH)
+    expect(schema.y).toBe(0)
+    expect(api.y).toBe(GRAPH_NODE_HEIGHT + GRAPH_VERTICAL_GAP)
+    expect(cli.y).toBe(api.y)
+    expect(tests.y).toBe(api.y * 2)
+    expect(finalReview.y).toBe(api.y * 3)
+    expect(api.x).toBeLessThan(cli.x)
+    expect(layout.height).toBe(finalReview.y + GRAPH_NODE_HEIGHT)
 
     const edges: string[] = layout.edges.map((edge) => `${edge.from}->${edge.to}`)
     expect(edges).toEqual(["schema->api", "schema->cli", "api->tests", "cli->tests", "tests->final-review"])
 
     const schemaEdge = layout.edges.find((edge) => edge.from === "schema" && edge.to === "api")
-    expect(schemaEdge?.path).toContain(`M ${schema.x + schema.width} ${schema.y + schema.height / 2}`)
-    expect(schemaEdge?.path).toContain(String(api.x))
+    expect(schemaEdge?.path).toStartWith(`M ${schema.x + schema.width / 2} ${schema.y + schema.height}`)
+    expect(schemaEdge?.path).toEndWith(`${api.x + api.width / 2} ${api.y}`)
   })
 
   test("orders each layer by declared order and then id", () => {
@@ -72,7 +73,7 @@ describe("layoutTaskGraph", () => {
       taskFixture({ id: "b2", order: 1 }),
       taskFixture({ id: "a", order: 0 }),
     ])
-    expect(nodesByY(layout)).toEqual(["a", "b", "b2", "c"])
+    expect(nodesByX(layout)).toEqual(["a", "b", "b2", "c"])
     expect(layout.edges).toEqual([])
   })
 
@@ -83,10 +84,10 @@ describe("layoutTaskGraph", () => {
       taskFixture({ id: "three", order: 2 }),
     ])
     expect(layout.nodes).toHaveLength(3)
-    expect(layout.nodes.every((node) => node.x === 0 && node.width === GRAPH_NODE_WIDTH)).toBe(true)
-    expect(nodesByY(layout)).toEqual(["two", "three", "one"])
+    expect(layout.nodes.every((node) => node.y === 0 && node.width === GRAPH_NODE_WIDTH)).toBe(true)
+    expect(nodesByX(layout)).toEqual(["two", "three", "one"])
     expect(layout.edges).toEqual([])
-    expect(layout.height).toBe(3 * GRAPH_NODE_HEIGHT + 2 * GRAPH_VERTICAL_GAP)
+    expect(layout.width).toBe(3 * GRAPH_NODE_WIDTH + 2 * GRAPH_HORIZONTAL_GAP)
   })
 
   test("breaks equal-order ties deterministically by id", () => {
@@ -96,8 +97,8 @@ describe("layoutTaskGraph", () => {
       taskFixture({ id: "charlie", order: 4 }),
       taskFixture({ id: "bravo", order: 4 }),
     ]
-    expect(nodesByY(layoutTaskGraph(tasks))).toEqual(["alpha", "bravo", "charlie", "delta"])
-    expect(nodesByY(layoutTaskGraph([...tasks].reverse()))).toEqual(["alpha", "bravo", "charlie", "delta"])
+    expect(nodesByX(layoutTaskGraph(tasks))).toEqual(["alpha", "bravo", "charlie", "delta"])
+    expect(nodesByX(layoutTaskGraph([...tasks].reverse()))).toEqual(["alpha", "bravo", "charlie", "delta"])
   })
 
   test("lays out the accepted 500-task graph without duplicate positions", () => {
@@ -107,7 +108,7 @@ describe("layoutTaskGraph", () => {
     const layout = layoutTaskGraph(tasks)
     expect(layout.nodes).toHaveLength(500)
     expect(new Set(layout.nodes.map((node) => `${node.x}:${node.y}`)).size).toBe(500)
-    expect(layout.width).toBe(GRAPH_NODE_WIDTH)
+    expect(layout.height).toBe(GRAPH_NODE_HEIGHT)
   })
 
   test("records the 500-task layout and status-update budgets", () => {
@@ -177,7 +178,9 @@ describe("layoutTaskGraph", () => {
     const cli = nodeByID(layout, "cli")
     expect(api.height).toBe(140)
     expect(api.width).toBe(GRAPH_NODE_WIDTH)
-    expect(cli.y).toBe(api.y + 140 + GRAPH_VERTICAL_GAP)
+    expect(cli.y).toBe(api.y)
+    expect(cli.x).toBe(api.x + api.width + GRAPH_HORIZONTAL_GAP)
+    expect(nodeByID(layout, "tests").y).toBe(api.y + 140 + GRAPH_VERTICAL_GAP)
     expect(layout.height).toBeGreaterThan(140)
   })
 
