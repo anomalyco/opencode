@@ -1,8 +1,8 @@
 import { constructor, constants, methods } from "../interpreter/native.js"
-import { coerceToNumber, coerceToString, type Value } from "../interpreter/objects.js"
+import { coerceToNumber, type Value } from "../interpreter/objects.js"
 import { rangeError, typeError } from "../interpreter/model.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
-import { coercion } from "./value.js"
+import { coerce, coercion } from "./value.js"
 
 export const numberGlobal = <R>(ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
@@ -26,14 +26,8 @@ export const numberGlobal = <R>(ctx: Interpreter<R>) => {
     ["isFinite", 1, (_, args) => Number.isFinite(args[0])],
     ["isNaN", 1, (_, args) => Number.isNaN(args[0])],
     ["isSafeInteger", 1, (_, args) => Number.isSafeInteger(args[0])],
-    [
-      "parseInt",
-      2,
-      (_, args) => {
-        return parseInt(coerceToString(args[0]), coerceToNumber(args[1]))
-      },
-    ],
-    ["parseFloat", 1, (_, args) => parseFloat(coerceToString(args[0]))],
+    ["parseInt", 2, (_, args) => coerce(ctx, "parseInt", args)],
+    ["parseFloat", 1, (_, args) => coerce(ctx, "parseFloat", args)],
   ])
 
   const self = (thisValue: Value, name: string): number => {

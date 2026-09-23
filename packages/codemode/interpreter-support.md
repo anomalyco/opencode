@@ -224,8 +224,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Coercion helpers and template interpolation accept functions and namespaces: `String(fn)` and `${fn}` give
       `"[object Function]"` rather than the source text, `isNaN(fn)` is `true`.
 - [x] `==` and `!=` follow IsLooselyEqual: objects (including functions and tool references) compare by identity, a
-      nullish operand never coerces the other side, and a data object facing a primitive coerces through its built-in
-      primitive form (`fn == null` is `false`, `fn == fn` is `true`, `[1] == 1` and `[1, 2] == "1,2"` are `true`).
+      nullish operand never coerces the other side, and a data object facing a primitive converts through its own
+      `valueOf`/`toString` (default hint) (`fn == null` is `false`, `fn == fn` is `true`, `[1] == 1` and `[1, 2] == "1,2"` are `true`).
       `switch` matches cases with `===`, so `switch (fn) { case fn: }` selects, and `Object.is` compares any two
       values. Operators inspect only their direct operands, so `rows == null` on a large array costs the same as
       `rows === null`, and an object merely holding a function inside (`[fn] + ""`, `-[fn]`) coerces like any other
@@ -233,11 +233,16 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [ ] Coercing a function, promise, generator, or tool reference itself: `fn + ""`, `-fn`, `fn++`, and `fn == 1`
       throw `TypeError: Binary operators require data values.` (or the unary/update form) where JavaScript would use
       the source text or `NaN`.
-- [ ] ToPrimitive on program objects: operators, `Number`/`String`, `Error(message)`, `parseInt` radix, multi-argument
-      `Date` construction and `Date.UTC`, and numeric built-in arguments (`Math.max`, `at`, `indexOf` start) should call
-      the object's own `valueOf`/`toString` in spec order and surface their throws. Today they use the built-in form
-      (`NaN`, `"[object Object]"`) and ignore own methods. Date setters and one-argument `Date` construction already
-      follow ToPrimitive.
+- [x] ToPrimitive on program objects: `+ - * / % **`, the relational and bitwise operators, unary `+ - ~`, `++`/`--`,
+      compound assignment, `${x}`, `Number`/`String`/`isNaN`/`isFinite`, `parseInt`/`parseFloat` (text and radix),
+      `Math.*` arguments, `Error(message)`, and `Array.prototype.join`/`toString` elements call the object's own
+      `valueOf`/`toString` in spec order (both operands left then right, `+` with the default hint) and surface their
+      throws: `{ valueOf() { return 7 } } * 2` is `14`, `` `${{ toString() { return "x" } }}` `` is `"x"`, and
+      `[1, 2]` with `arr.toString = () => "x"` makes `arr + ""` `"x"`. Dates keep their `Symbol.toPrimitive`
+      behavior (`date + 1` concatenates, `date - date` subtracts).
+- [ ] ToPrimitive elsewhere: multi-argument `Date` construction, `Date.UTC`, `Error.prototype.toString` on an object
+      `message`, and numeric built-in arguments outside `Math` (`at`, `indexOf` start, `toFixed` digits) still use the
+      built-in form (`NaN`, `"[object Object]"`) and ignore own methods.
 - [x] Property keys follow ToPropertyKey: `x[null]`, `x[true]`, and objects (via their built-in string form) become
       string keys.
 
@@ -375,8 +380,9 @@ reject }` object.
       `flat(1.9)`, `with(1.5, v)`, `Math.max("3", "2")`, `parseInt("11", "2")`, `(1.5).toFixed("2")`,
       `String.fromCharCode("65")`, and the Uint8Array equivalents. `join(sep)` and `JSON.parse(text)` apply ToString
       (`join(null)` is `"1null2"`, `JSON.parse(123)` is `123`). `Array.from({ length: "2" })` applies ToLength; a
-      promise source still throws with an `await` hint rather than JS's silent `[]`. A program object's own
-      `valueOf`/`toString` is not consulted yet (see ToPrimitive above).
+      promise source still throws with an `await` hint rather than JS's silent `[]`. `join`, `Math.*`, and
+      `parseInt` consult a program object's own `valueOf`/`toString`; the array and number methods do not yet (see
+      ToPrimitive above).
 
 ## Strings
 

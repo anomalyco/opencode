@@ -31,15 +31,13 @@ export const preserveConsumerError = <A, R>(
     })
   })
 
+export type Hint = "number" | "string" | "default"
+
 /**
  * ToPrimitive: calls `valueOf`/`toString` in hint order and returns the first primitive result. Dates treat the
  * default hint as "string", like their `Symbol.toPrimitive`.
  */
-export const toPrimitive = <R>(
-  ctx: Interpreter<R>,
-  value: Value,
-  hint: "number" | "string" | "default",
-): Effect.Effect<Value, unknown, R> => {
+export const toPrimitive = <R>(ctx: Interpreter<R>, value: Value, hint: Hint): Effect.Effect<Value, unknown, R> => {
   if (!(value instanceof Obj)) return Effect.succeed(value)
   const asString = hint === "string" || (hint === "default" && value instanceof DateObj)
   const order = asString ? ["toString", "valueOf"] : ["valueOf", "toString"]
@@ -66,6 +64,25 @@ export const toPrimitiveString = <R>(ctx: Interpreter<R>, value: Value) =>
 
 export const toPrimitiveNumber = <R>(ctx: Interpreter<R>, value: Value) =>
   Effect.map(toPrimitive(ctx, value, "number"), coerceToNumber)
+
+/**
+ * Runs a synchronous native body on its arguments after ToPrimitive, in order, with one hint for all positions or
+ * one per position. Primitive arguments skip the Effect entirely.
+ */
+export const withPrimitives = <R>(
+  ctx: Interpreter<R>,
+  hints: Hint | ReadonlyArray<Hint>,
+  values: Array<Value>,
+  body: (primitives: Array<Value>) => Value,
+): Value | Effect.Effect<Value, unknown, R> => {
+  if (!values.some((value) => value instanceof Obj)) return body(values)
+  return Effect.map(
+    Effect.forEach(values, (value, index) =>
+      toPrimitive(ctx, value, typeof hints === "string" ? hints : hints[index]!),
+    ),
+    body,
+  )
+}
 
 // The single acceptance list for callbacks: collections, sort, string replacers,
 // Array.from mappers, and promise reactions all admit exactly these callables.

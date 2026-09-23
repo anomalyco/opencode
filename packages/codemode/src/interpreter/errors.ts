@@ -20,6 +20,7 @@ import {
   type Value,
 } from "./objects.js"
 import type { Interpreter } from "./interpreter.js"
+import { toPrimitiveString } from "./callback.js"
 import { formatValue } from "../stdlib/console.js"
 
 export const normalizeError = (error: unknown): Diagnostic => {
@@ -139,14 +140,13 @@ const constructAggregateErrorValue = <R>(
   proto: Obj,
 ): Effect.Effect<ErrorObj, unknown, R> =>
   Effect.gen(function* () {
+    const message = args[1] === undefined ? "" : yield* toPrimitiveString(ctx, args[1])
     const cursor = yield* ctx.iterate(args[0])
     if (cursor === undefined) throw typeError("new AggregateError(...) expects a synchronous iterable of errors.")
     const errors: Array<Value> = []
     while (true) {
       const step = yield* cursor.next
-      if (step.done) {
-        return createAggregateErrorValue(ctx, errors, args[1] === undefined ? "" : coerceToString(args[1]), proto)
-      }
+      if (step.done) return createAggregateErrorValue(ctx, errors, message, proto)
       errors.push(step.value)
     }
   })
@@ -160,7 +160,9 @@ export const errorGlobal = <R>(type: ErrorType, ctx: Interpreter<R>) => {
     const created =
       type === "AggregateError"
         ? constructAggregateErrorValue(ctx, args, proto)
-        : Effect.sync(() => createErrorValue(proto, args[0] === undefined ? undefined : coerceToString(args[0])))
+        : Effect.map(args[0] === undefined ? Effect.undefined : toPrimitiveString(ctx, args[0]), (message) =>
+            createErrorValue(proto, message),
+          )
     // ES2022 `new Error(message, { cause })`: installed only when the options object has the property at all.
     const options = args[type === "AggregateError" ? 2 : 1]
     if (!(options instanceof Obj) || !has(options, "cause")) return created

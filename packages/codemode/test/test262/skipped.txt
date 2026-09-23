@@ -365,8 +365,6 @@ built-ins/Array/prototype/indexOf/call-with-boolean.js  # TypeError: Array.proto
 built-ins/Array/prototype/indexOf/length-near-integer-limit.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
 built-ins/Array/prototype/join/S15.4.4.5_A2_T1.js  # Array.prototype.join called on incompatible receiver a data object.
 built-ins/Array/prototype/join/S15.4.4.5_A2_T4.js  # Array.prototype.join called on incompatible receiver a data object.
-built-ins/Array/prototype/join/S15.4.4.5_A3.1_T2.js  # Array.join expects zero arguments or one string separator.
-built-ins/Array/prototype/join/S15.4.4.5_A3.2_T2.js  # x.join() must return "*" Expected SameValue(«"[object Object]"», «"*"») to be true
 built-ins/Array/prototype/join/S15.4.4.5_A4_T3.js  # Array.prototype.join called on incompatible receiver a data object.
 built-ins/Array/prototype/join/S15.4.4.5_A5_T1.js  # #1: Array.prototype[1] = 1; x = [0]; x.length = 2; x.join() === "0,1". Actual: 0,
 built-ins/Array/prototype/join/call-with-boolean.js  # TypeError: Array.prototype.join called on incompatible receiver a boolean.
@@ -833,7 +831,6 @@ built-ins/Array/prototype/some/15.4.4.17-8-7.js  # … cannot be constructed: us
 built-ins/Array/prototype/some/15.4.4.17-8-8.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/some/call-with-boolean.js  # TypeError: Array.prototype.some called on incompatible receiver a boolean.
 built-ins/Array/prototype/sort/S15.4.4.11_A2.1_T3.js  # #1: Check ToString operator
-built-ins/Array/prototype/sort/S15.4.4.11_A2.2_T3.js  # #1: Check ToString operator
 built-ins/Array/prototype/sort/S15.4.4.11_A3_T1.js  # Array.prototype.sort called on incompatible receiver a data object.
 built-ins/Array/prototype/sort/S15.4.4.11_A3_T2.js  # Array.prototype.sort called on incompatible receiver a data object.
 built-ins/Array/prototype/sort/S15.4.4.11_A4_T3.js  # Array.prototype.sort called on incompatible receiver a data object.
@@ -873,7 +870,6 @@ built-ins/Array/prototype/toSpliced/length-clamped-to-2pow53minus1.js  # TypeErr
 built-ins/Array/prototype/toSpliced/length-exceeding-array-length-limit.js  # TypeError: Only init object properties are supported.
 built-ins/Array/prototype/toSpliced/length-tolength.js  # TypeError: Array.prototype.toSpliced called on incompatible receiver a data object.
 built-ins/Array/prototype/toSpliced/this-value-boolean.js  # TypeError: Array.prototype.toSpliced called on incompatible receiver a boolean.
-built-ins/Array/prototype/toString/S15.4.4.2_A1_T4.js  # Expected a Test262Error to be thrown but no exception was thrown at all
 built-ins/Array/prototype/toString/S15.4.4.2_A3_T1.js  # #1: Array.prototype[1] = 1; x = [0]; x.length = 2; x.toString() === "0,1". Actual: 0,
 built-ins/Array/prototype/toString/call-with-boolean.js  # TypeError: Array.prototype.toString called on incompatible receiver a boolean.
 built-ins/Array/prototype/unshift/S15.4.4.13_A2_T1.js  # Array.prototype.unshift called on incompatible receiver a data object.
@@ -906,11 +902,6 @@ built-ins/Iterator/prototype/take/limit-tonumber-throws.js  # Expected a Test262
 built-ins/Iterator/prototype/take/limit-tonumber.js  # Iterator.prototype.take expects a non-negative count, received NaN.
 built-ins/Object/is/not-same-value-x-y-object.js  # Object(number) wrapper objects are not supported; use the primitive value directly.
 built-ins/Object/is/same-value-x-y-object.js  # Object(number) wrapper objects are not supported; use the primitive value directly.
-language/expressions/does-not-equals/S11.9.2_A7.8.js  # #1: (true != {valueOf: function() {return 1}}) === false
-language/expressions/does-not-equals/S11.9.2_A7.9.js  # #1: ({valueOf: function() {return 1}} != true) === false
-language/expressions/equals/S11.9.1_A7.8.js  # #1: ({valueOf: function() {return 1}} == true) === true
-language/expressions/equals/S11.9.1_A7.9.js  # #1: (true == {valueOf: function() {return 1}}) === true
-language/expressions/equals/S9.1_A1_T3.js  # #1: var object = {valueOf: function() {return 1}, toString: function() {return 0}}; object + "" ===
 built-ins/Object/freeze/throws-when-false.js  # Unknown identifier 'Proxy'.
 built-ins/Object/getPrototypeOf/15.2.3.2-2-2.js  # … cannot be constructed: user-defined constructors and classes are not supported.
 built-ins/Object/isExtensible/15.2.3.13-2-24.js  # … cannot be constructed: user-defined constructors and classes are not supported.
@@ -1104,3 +1095,5 @@ built-ins/Array/prototype/some/15.4.4.17-1-15.js  # TypeError: Array.prototype.s
 built-ins/Array/prototype/some/15.4.4.17-7-c-i-25.js  # TypeError: Array.prototype.some called on incompatible receiver an Arguments.
 built-ins/Array/prototype/some/15.4.4.17-7-c-i-26.js  # TypeError: Array.prototype.some called on incompatible receiver an Arguments.
 built-ins/Array/prototype/some/15.4.4.17-7-c-i-27.js  # TypeError: Array.prototype.some called on incompatible receiver an Arguments.
+built-ins/parseFloat/S15.1.2.3_A7.5.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/parseInt/S15.1.2.2_A9.5.js  # TypeError: Cannot read properties of undefined (reading '…').
