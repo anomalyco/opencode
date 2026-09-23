@@ -88,11 +88,13 @@ export interface Started<Token> {
 
 /**
  * A follow-up call's inputs: the decoded token and the auth headers the route sent, so a protocol can attach them
- * to output URLs that require the same credentials to download (Veo).
+ * to output URLs that require the same credentials to download (Veo). `materialize` downloads an output through the
+ * route's executor, for URLs that expire too soon to hand back (BFL).
  */
 export interface PollContext<Token> {
   readonly token: Token
   readonly auth: Record<string, string>
+  readonly materialize: (asset: Media.Asset) => Effect.Effect<Media.Asset, AIError>
 }
 
 /**

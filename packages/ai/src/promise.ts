@@ -1,6 +1,6 @@
 import { Effect, Layer, ManagedRuntime, Stream } from "effect"
 import type { AwaitOptions, Generation, Snapshot } from "./generation.js"
-import { Image, ImageModel, ImageRequest, type ImageRequestInput } from "./image.js"
+import { Image, ImageModel, ImageRequest, type ImageOptions, type ImageRequestInput } from "./image.js"
 import { ImageClient } from "./image-client.js"
 import { LLM } from "./index.js"
 import { LLMClient } from "./route/client.js"
@@ -123,10 +123,16 @@ export const make = (options: Options = {}) => {
       request: Image.request,
       generate: <const Model extends ImageModel>(
         input: ImageRequestInput<Model> | ImageRequest,
-        options?: RunOptions,
-      ) => run(Image.generate(imageRequest(input)), options),
-      stream: <const Model extends ImageModel>(input: ImageRequestInput<Model> | ImageRequest, options?: RunOptions) =>
-        iterate(Image.stream(imageRequest(input)), options),
+        options?: AwaitOptions & RunOptions,
+      ) => run(Image.generate(imageRequest(input), { poll: options?.poll }), options),
+      stream: <const Model extends ImageModel>(
+        input: ImageRequestInput<Model> | ImageRequest,
+        options?: AwaitOptions & RunOptions,
+      ) => iterate(Image.stream(imageRequest(input), { poll: options?.poll }), options),
+      start: <const Model extends ImageModel>(input: ImageRequestInput<Model> | ImageRequest, options?: RunOptions) =>
+        run(Image.start(imageRequest(input)), options).then(handle),
+      resume: <Options extends ImageOptions>(model: ImageModel<Options>, token: unknown, options?: RunOptions) =>
+        run(Image.resume(model, token), options).then(handle),
     },
     video: {
       request: Video.request,

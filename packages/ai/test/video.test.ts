@@ -1,41 +1,12 @@
 import { describe, expect } from "bun:test"
-import { Effect, Fiber, Layer, Stream } from "effect"
-import * as TestClock from "effect/testing/TestClock"
-import { HttpClientRequest } from "effect/unstable/http"
+import { Effect, Layer, Stream } from "effect"
 import { Media, Video, VideoClient, type GenerationEvent } from "../src/index.js"
 import { Fal, Google, Runway, XAI } from "../src/providers.js"
 import { it } from "./lib/effect.js"
-import { dynamicResponse, type HandlerInput } from "./lib/http.js"
-
-interface Call {
-  readonly method: string
-  readonly url: string
-  readonly headers: Headers
-  readonly body: string
-}
-
-/** Record every request and tell the handler how many times this exact method+URL has been seen (1-based). */
-const observe = (calls: Array<Call>, input: HandlerInput) =>
-  Effect.gen(function* () {
-    const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
-    const call = { method: web.method, url: web.url, headers: web.headers, body: input.text }
-    calls.push(call)
-    return { call, nth: calls.filter((seen) => seen.method === call.method && seen.url === call.url).length }
-  })
-
-const json = (input: HandlerInput, value: unknown, init?: ResponseInit) =>
-  input.respond(JSON.stringify(value), { ...init, headers: { "content-type": "application/json", ...init?.headers } })
+import { dynamicResponse, json, observe, settle, type Call } from "./lib/http.js"
 
 const layer = (handler: Parameters<typeof dynamicResponse>[0]) =>
   VideoClient.layer.pipe(Layer.provideMerge(dynamicResponse(handler)))
-
-/** Fork the polling program, let the test clock cover `seconds` of polling, and join. */
-const settle = <A, E, R>(program: Effect.Effect<A, E, R>, seconds: number) =>
-  Effect.gen(function* () {
-    const fiber = yield* Effect.forkChild(program)
-    yield* TestClock.adjust(`${seconds} seconds`)
-    return yield* Fiber.join(fiber)
-  })
 
 const DAY = 24 * 60 * 60 * 1000
 
