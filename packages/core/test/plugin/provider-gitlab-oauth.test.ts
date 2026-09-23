@@ -209,7 +209,7 @@ describe("GitLabPlugin OAuth", () => {
       const renewal = () =>
         Response.json({ access_token: "renewed-access", refresh_token: "renewed-refresh", expires_in: 3600 })
       test.replies.push(renewal(), renewal(), renewal())
-      const connection = { type: "credential" as const, id: saved.id, label: saved.label }
+      const connection = { type: "credential" as const, id: saved.id, label: saved.label, method: "oauth" as const }
       const now = yield* Clock.currentTimeMillis
       const resolved = yield* test.integrations.connection.resolve(connection)
       if (resolved?.type !== "oauth") throw new Error("Expected OAuth credential")
