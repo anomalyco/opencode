@@ -75,6 +75,17 @@ export function usePluginHost() {
   }
 }
 
+export function usePluginDataSelection() {
+  const local = useLocal()
+  return {
+    model: () => local.model.current(),
+    agent: () => {
+      const current = local.agent.current()
+      return current ? { id: current.id } : undefined
+    },
+  }
+}
+
 // Build the API surface handed to one plugin activation: host services
 // adapted to the plugin contract, with everything registered through it
 // unwinding via `owned` when the activation is disposed.
@@ -141,7 +152,16 @@ export function createPluginContext(input: {
     app: { version: host.app.version, channel: host.app.channel },
     renderer: host.renderer,
     client: host.client.api,
-    data: host.data,
+    data: {
+      ...host.data,
+      selection: {
+        model: () => host.local.model.current(),
+        agent: () => {
+          const current = host.local.agent.current()
+          return current ? { id: current.id } : undefined
+        },
+      },
+    },
     attention: host.attention,
     get theme() {
       return host.themes.currentTokens()
