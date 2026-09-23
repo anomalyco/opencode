@@ -12,7 +12,6 @@ import {
 import { concatBytes } from "../../utils/bytes.js"
 import { ProviderShared } from "../shared.js"
 
-/** Every speech protocol's parser state collects the chunks it has emitted; `finish` concatenates them. */
 export interface Audio {
   /** Appended in place: the route creates fresh state for each response through `initial`. */
   readonly chunks: Array<Uint8Array>
@@ -27,13 +26,11 @@ export const delta = <State extends Audio>(state: State, chunk: Uint8Array): Ste
   return [state, [SpeechAudioDeltaEvent.make({ chunk })]]
 }
 
-/** Text frames (SSE events, JSON records) go to the protocol's record handler; raw body chunks are audio. */
 export const step =
   <State extends Audio>(onRecord: (state: State, frame: string) => Effect.Effect<StepResult<State>, AIError>) =>
   (state: State, frame: string | Uint8Array) =>
     typeof frame === "string" ? onRecord(state, frame) : Effect.succeed(delta(state, frame))
 
-/** Parallel text, start, and end arrays (ElevenLabs characters, Cartesia words) as at most one `timestamps` event. */
 export const timestamps = (
   texts: ReadonlyArray<string>,
   starts: ReadonlyArray<number>,
@@ -47,7 +44,6 @@ export const timestamps = (
         }),
       ]
 
-/** The provider-native identifier of a voice; `{ id }` and a plain string are the same outside OpenAI. */
 export const voiceID = (voice: SpeechVoice | undefined) => (typeof voice === "object" ? voice.id : voice)
 
 const CONTAINER_MEDIA_TYPES: Readonly<Record<string, string>> = {
@@ -58,7 +54,6 @@ const CONTAINER_MEDIA_TYPES: Readonly<Record<string, string>> = {
   flac: "audio/flac",
 }
 
-/** A container format's declared media type; unknown formats fall back to sniffing. */
 export const container = (format: string, sampleRate?: number) => ({
   mediaType: CONTAINER_MEDIA_TYPES[format],
   info: { format, sampleRate },
@@ -73,26 +68,20 @@ const PCM_MEDIA_TYPES = {
 
 export type PcmEncoding = keyof typeof PCM_MEDIA_TYPES
 
-/** Headerless mono PCM: the provider's declared media type when it has one, plus the facts a player needs. */
 export const pcm = (encoding: PcmEncoding, sampleRate: number | undefined, mediaType?: string) => ({
   mediaType: mediaType ?? PCM_MEDIA_TYPES[encoding],
   info: { format: "pcm", encoding, sampleRate, channels: 1 },
 })
 
-/** The `rate` parameter of a PCM media type such as `audio/L16;codec=pcm;rate=24000`. */
 export const sampleRate = (mediaType: string | undefined) => {
   const rate = /rate=(\d+)/i.exec(mediaType ?? "")?.[1]
   return rate === undefined ? undefined : Number(rate)
 }
 
-/** A common `format` value this route cannot produce. */
 export const unsupportedFormat = (provider: ProviderID, route: string, message: string) =>
   ProviderShared.unsupportedOperation({ operation: "media.format", provider, route, message })
 
-/**
- * Concatenate every emitted chunk into the terminal event's asset. A declared `mediaType` wins over sniffing because
- * headerless PCM can start with bytes that look like an MPEG frame sync. `detail` explains an empty response.
- */
+/** A declared `mediaType` wins over sniffing: headerless PCM can start with bytes that look like an MPEG frame sync. */
 export const finish = (
   route: string,
   state: Audio,
@@ -120,7 +109,6 @@ export const finish = (
   ])
 }
 
-/** A numeric header such as ElevenLabs `character-cost` (credits) or Deepgram `dg-char-count`, lifted into usage. */
 export const headerUsage = (type: "characters" | "credits", value: string | undefined): MediaUsage | undefined => {
   const amount = Number(value)
   if (!Number.isFinite(amount)) return undefined

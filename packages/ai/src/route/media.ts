@@ -89,7 +89,6 @@ export interface QueuedInput<Request extends MediaRequest, Response, Token> exte
 export interface StreamInput<Request extends MediaRequest, Event, Response, Frame, State>
   extends Composition<MediaProtocol.Addressed<Request>> {
   readonly protocol: MediaProtocol.Streamed<Request, Event, Frame, State>
-  /** Fold a completed event stream into the modality response; owned by the modality, not the protocol. */
   readonly collect: (events: ReadonlyArray<Event>) => Effect.Effect<Response, AIError>
 }
 
@@ -189,12 +188,7 @@ export const queued = <Request extends MediaRequest, Response, Token>(
   return { id: input.id, provider: transport.provider, protocol: protocol.id, start, resume }
 }
 
-/**
- * Compose a streaming media protocol. `stream` submits the request in `stream` mode and runs the protocol state machine
- * over the framed response; `generate` submits it in `generate` mode through the same state machine and folds the
- * events with `collect`, so single-document responses and chunked ones share one parser. Stream errors without HTTP
- * context get the observed response's.
- */
+/** Compose a streaming media protocol; `generate` runs the same stream in `generate` mode and folds it with `collect`. */
 export const stream = <Request extends MediaRequest, Event, Response, Frame, State>(
   input: StreamInput<Request, Event, Response, Frame, State>,
 ): StreamRoute<Request, Event, Response> => {

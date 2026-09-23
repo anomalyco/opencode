@@ -16,10 +16,7 @@ import {
 // Bodies
 // ---------------------------------------------------------------------------
 
-/**
- * What a protocol sends. JSON `query` holds request-derived URL parameters (ElevenLabs `output_format`, Deepgram
- * `encoding`); the route appends them to the endpoint URL before the route and caller `http.query` overlays.
- */
+/** JSON `query` is appended to the endpoint URL before the route and caller `http.query` overlays. */
 export type Body =
   | { readonly type: "json"; readonly value: Record<string, unknown>; readonly query?: Record<string, string> }
   | { readonly type: "multipart"; readonly value: FormData }
@@ -127,23 +124,17 @@ export const queued = <Request, Response, Token>(
   ...input,
 })
 
-/** Whether the caller wants incremental events (`stream`) or one collected response (`generate`). */
 export type Mode = "generate" | "stream"
 
-/** The request a stream route submits: the caller's request plus its mode, so body, path, and framing can differ. */
 export type Addressed<Request> = Request & { readonly mode: Mode }
 
-/** What was sent plus the observed response, whose headers carry header-only usage (ElevenLabs, Deepgram). */
 export interface ResponseContext<Request> extends DecodeContext<Addressed<Request>> {
   readonly http: HttpContext
 }
 
 /**
- * One request whose response body is parsed incrementally into modality events, with the same discipline as LLM
- * protocols: `frames` cuts the body, `step` folds each frame into parser state and emits events, and `finish` runs
- * once after the last frame to emit the terminal event. `generate` and `stream` share this state machine;
- * `request.mode` lets one protocol pick a different body, path, or framing per call, and single-document responses
- * are one frame shaped like a streamed record. The route fills `reason.http` on stream errors that lack it.
+ * One request whose body is parsed incrementally, like LLM protocols: `frames` → `step`* → `finish`. `generate` and
+ * `stream` share this state machine; `request.mode` lets a protocol pick a different body, path, or framing.
  */
 export interface Streamed<Request, Event, Frame, State> {
   readonly kind: "stream"
@@ -156,7 +147,6 @@ export interface Streamed<Request, Event, Frame, State> {
     bytes: Stream.Stream<Uint8Array, AIError>,
     context: DecodeContext<Addressed<Request>>,
   ) => Stream.Stream<Frame, AIError>
-  /** Fresh parser state for one response. */
   readonly initial: () => State
   readonly step: (state: State, frame: Frame) => Effect.Effect<readonly [State, ReadonlyArray<Event>], AIError>
   /** Emit exactly one terminal event, or fail when the provider stopped before completing. */
@@ -254,11 +244,9 @@ export const status = <Table extends Record<string, Status>>(
   return Effect.succeed(normalized)
 }
 
-/** A stream-time provider output error that keeps the offending frame as `reason.body`. */
 export const frameError = (route: string, message: string, body?: string, cause?: unknown) =>
   new AIError({ reason: new InvalidProviderOutputError({ route, message, body, cause }) })
 
-/** The provider closed the body before its completion event. */
 export const incomplete = (route: string) =>
   new AIError({
     reason: new InvalidProviderOutputError({

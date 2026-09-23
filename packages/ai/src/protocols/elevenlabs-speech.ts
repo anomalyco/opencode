@@ -50,11 +50,6 @@ export type ElevenLabsOutputFormat = ElevenLabsSpeechString<
   | "opus_48000_192"
 >
 
-/**
- * Provider-native options. Common fields lower to ElevenLabs names: `voice` → the path voice id, `language` →
- * `language_code`, `speed` → `voice_settings.speed`, `format` → the `output_format` query parameter (overridden by
- * `outputFormat`, the exact `codec_sampleRate_bitrate` string), and `timestamps` → the `with-timestamps` endpoints.
- */
 export type ElevenLabsSpeechOptions = {
   readonly outputFormat?: ElevenLabsOutputFormat
   readonly voice_settings?: {
@@ -79,7 +74,6 @@ const Alignment = Schema.Struct({
   character_end_times_seconds: Schema.Array(Schema.Number),
 })
 
-/** One `with-timestamps` document, and one record of the `stream/with-timestamps` NDJSON stream. */
 const TimestampedAudio = Schema.Struct({
   audio_base64: Schema.Uint8ArrayFromBase64,
   alignment: optionalNull(Alignment),
@@ -97,7 +91,6 @@ type State = SpeechStream.Audio
 // 5. Request body construction
 // ---------------------------------------------------------------------------
 
-/** Default `output_format` per common `format`; WAV is served only by the non-streaming endpoints. */
 const OUTPUT_FORMATS: Readonly<Record<string, string>> = {
   mp3: "mp3_44100_128",
   pcm: "pcm_24000",
@@ -105,7 +98,7 @@ const OUTPUT_FORMATS: Readonly<Record<string, string>> = {
   opus: "opus_48000_64",
 }
 
-/** The `output_format` query value; WAV is served only by the non-streaming endpoints. */
+/** WAV is served only by the non-streaming endpoints. */
 const outputFormat = Effect.fn("ElevenLabsSpeech.outputFormat")(function* (request: MediaProtocol.Addressed<Request>) {
   const format = request.providerOptions?.outputFormat ?? OUTPUT_FORMATS[request.format ?? "mp3"]
   if (format === undefined)
@@ -142,7 +135,6 @@ const fromRequest = Effect.fn("ElevenLabsSpeech.fromRequest")(function* (request
   )
 })
 
-// `/stream` answers with chunked audio; `with-timestamps` answers with JSON carrying base64 audio and alignment.
 const path = (request: MediaProtocol.Addressed<Request>) =>
   `${PATH}/${encodeURIComponent(SpeechStream.voiceID(request.voice) ?? "")}${request.mode === "stream" ? "/stream" : ""}${
     request.timestamps === true ? "/with-timestamps" : ""
@@ -176,7 +168,6 @@ const PCM_CODECS: Readonly<Record<string, SpeechStream.PcmEncoding>> = {
   alaw: "pcm_alaw",
 }
 
-/** `codec_sampleRate[_bitrate]` → declared media type and, for headerless codecs, the PCM facts. */
 const describeOutput = (format: string) => {
   const [codec = format, rate] = format.split("_")
   const sampleRate = rate === undefined ? undefined : Number(rate)

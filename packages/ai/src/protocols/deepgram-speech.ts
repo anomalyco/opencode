@@ -19,11 +19,6 @@ export type DeepgramSpeechString<Known extends string> = Known | (string & {})
 
 export type DeepgramEncoding = DeepgramSpeechString<"linear16" | "mulaw" | "alaw" | "mp3" | "opus" | "flac" | "aac">
 
-/**
- * Provider-native options, sent as query parameters. The voice is the model id (`aura-2-thalia-en`), so `voice` and
- * `language` are rejected. `format` selects `encoding`/`container`; `encoding`, `container`, `sampleRate`, and
- * `bitRate` override it, and other primitive entries (`mip_opt_out`, `tag`) pass through as query parameters.
- */
 export type DeepgramSpeechOptions = {
   readonly encoding?: DeepgramEncoding
   readonly container?: DeepgramSpeechString<"wav" | "ogg" | "none">
@@ -103,7 +98,6 @@ const HEADERLESS_ENCODINGS: Readonly<Record<string, SpeechStream.PcmEncoding>> =
   alaw: "pcm_alaw",
 }
 
-// Deepgram declares every output's content type, including headerless PCM (`audio/l16;rate=24000`).
 const finish = (state: State, context: MediaProtocol.ResponseContext<Request>) => {
   const headers = context.http.headers
   const mediaType = headers["content-type"]

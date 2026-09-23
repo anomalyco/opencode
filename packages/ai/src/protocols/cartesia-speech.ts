@@ -26,11 +26,6 @@ export type CartesiaSpeechString<Known extends string> = Known | (string & {})
 
 export type CartesiaEncoding = SpeechStream.PcmEncoding
 
-/**
- * Provider-native options. Common fields lower to Cartesia names: `voice` → `voice`, `language` → `language`,
- * `speed` → `generation_config.speed`, `format` → `output_format.container`, and `timestamps` → `add_timestamps`
- * on the SSE endpoint. `sampleRate`, `bitRate` (MP3), and `encoding` (raw and WAV) complete `output_format`.
- */
 export type CartesiaSpeechOptions = {
   readonly sampleRate?: 8000 | 16000 | 22050 | 24000 | 44100 | 48000
   readonly bitRate?: 32000 | 64000 | 96000 | 128000 | 192000
@@ -48,7 +43,7 @@ export type Request = SpeechRequestFor<CartesiaSpeechOptions>
 // 3. Streaming event schema
 // ---------------------------------------------------------------------------
 
-/** `chunk`, `timestamps`, `done`, and `error` records; `phoneme_timestamps` and future types are ignored. */
+/** `phoneme_timestamps` and future record types are ignored. */
 const SseEvent = Schema.Struct({
   type: Schema.String,
   data: Schema.optional(Schema.Uint8ArrayFromBase64),
@@ -72,7 +67,6 @@ const decodeEvent = MediaProtocol.decodeFrame(ADAPTER, NAME, SseEvent)
 // ---------------------------------------------------------------------------
 
 interface State extends SpeechStream.Audio {
-  /** SSE responses end with a `done` record; `/tts/bytes` ends when the body does. */
   readonly done: boolean
 }
 
@@ -142,7 +136,6 @@ const onEvent = Effect.fn("CartesiaSpeech.onEvent")(function* (state: State, fra
   }
   if (event.type === "done") return [{ ...state, done: true }, []] as const
   if (event.type === "error")
-    // `status_code` classifies the failure; the route attaches the observed HTTP response (200).
     return yield* new AIError({
       reason: classifyProviderFailure({
         message: `${NAME} stream failed${event.title === undefined ? "" : ` (${event.title})`}: ${event.message ?? "unknown error"}`,

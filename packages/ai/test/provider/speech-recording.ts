@@ -4,7 +4,6 @@ import { SpeechEvent } from "../../src/index.js"
 
 export const TEXT = "Hello from OpenCode."
 
-/** Collect a live speech stream and check the shared contract: audio deltas, then exactly one terminal `finish`. */
 export const collectSpeech = <E, R>(stream: Stream.Stream<SpeechEvent, E, R>) =>
   Effect.gen(function* () {
     const events = Array.from(yield* Stream.runCollect(stream))

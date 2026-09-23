@@ -18,7 +18,6 @@ const PCM_SAMPLE_RATE = 24000
 // 1. Public model input
 // ---------------------------------------------------------------------------
 
-/** Provider-native options. Common fields (`voice`, `format`, `speed`, `instructions`) live on the request. */
 export type OpenAISpeechOptions = Record<string, unknown>
 
 export type Request = SpeechRequestFor<OpenAISpeechOptions>
@@ -48,7 +47,6 @@ const decodeEvent = MediaProtocol.decodeFrame(ADAPTER, NAME, SpeechStreamEvent)
 // ---------------------------------------------------------------------------
 
 interface State extends SpeechStream.Audio {
-  /** SSE responses end with `speech.audio.done`; raw audio responses end when the body does. */
   readonly done: boolean
   readonly usage?: MediaUsage
 }

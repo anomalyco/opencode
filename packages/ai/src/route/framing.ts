@@ -40,7 +40,6 @@ export const sseEvents = (events: ReadonlySet<string>): Definition<string> => ({
   frame: (bytes) => ProviderShared.sseFraming(bytes, events),
 })
 
-/** Newline-delimited JSON records (ElevenLabs `stream/with-timestamps`); blank lines are dropped. */
 export const lines: Definition<string> = {
   id: "lines",
   frame: (bytes) =>
@@ -51,7 +50,6 @@ export const lines: Definition<string> = {
     ),
 }
 
-/** The whole body as one frame, for single-document responses shaped like one streamed record. */
 export const document: Definition<string> = {
   id: "document",
   frame: (bytes) => Stream.fromEffect(Stream.mkString(bytes.pipe(Stream.decodeText()))),

@@ -6,8 +6,7 @@ import { it } from "./lib/effect.js"
 import { dynamicResponse } from "./lib/http.js"
 import { sseEvents } from "./lib/sse.js"
 
-// Request lowering and response decoding per provider are covered by the recorded tests in test/provider; these
-// cover what live recordings cannot: rejections before the network, failure classification, and framing edges.
+// Recorded tests in test/provider cover lowering and decoding; these cover what recordings cannot.
 
 const layer = (handler: Parameters<typeof dynamicResponse>[0]) =>
   SpeechClient.layer.pipe(Layer.provideMerge(dynamicResponse(handler)))

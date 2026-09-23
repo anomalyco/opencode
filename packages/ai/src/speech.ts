@@ -65,20 +65,15 @@ export const SpeechModelSchema = Schema.declare((value): value is SpeechModel =>
 // Request
 // ---------------------------------------------------------------------------
 
-/**
- * A provider-native voice identifier: a name for OpenAI and Gemini, a voice id for ElevenLabs and Cartesia. `{ id }`
- * selects a custom voice on providers that distinguish it from built-in names (OpenAI); elsewhere it is the same as
- * the plain string. There is no cross-provider voice catalog.
- */
+/** Provider-native: a name on OpenAI and Gemini, a voice id on ElevenLabs and Cartesia; `{ id }` is an OpenAI custom voice. */
 export const SpeechVoice = Schema.Union([Schema.String, Schema.Struct({ id: Schema.String })]).annotate({
   identifier: "Speech.Voice",
 })
 export type SpeechVoice = Schema.Schema.Type<typeof SpeechVoice>
 
-/** Container-level output format; provider sample rates and bitrates live under `providerOptions`. */
 export type SpeechFormat = "mp3" | "wav" | "pcm" | "opus" | "aac" | "flac" | (string & {})
 
-/** One aligned span of the spoken text. Granularity is provider-native: characters on ElevenLabs, words on Cartesia. */
+/** Granularity is provider-native: characters on ElevenLabs, words on Cartesia. */
 export const SpeechTimestamp = Schema.Struct({
   text: Schema.String,
   startSeconds: Schema.Number,
@@ -91,12 +86,9 @@ export class SpeechRequest extends Schema.Class<SpeechRequest>("Speech.Request")
   text: Schema.String,
   voice: Schema.optional(SpeechVoice),
   format: Schema.optional(Schema.String),
-  /** Playback-rate multiplier; `1` is the provider default. */
   speed: Schema.optional(Schema.Number),
   language: Schema.optional(Schema.String),
-  /** Delivery direction such as "Warm, unhurried."; only routes with a separate instruction field accept it. */
   instructions: Schema.optional(Schema.String),
-  /** Request aligned timestamps; routes without alignment output fail typed instead of returning none. */
   timestamps: Schema.optional(Schema.Boolean),
   providerOptions: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   http: Schema.optional(HttpOptions),
@@ -147,10 +139,7 @@ export const SpeechTimestampsEvent = Schema.Struct({
   items: Schema.Array(SpeechTimestamp),
 }).annotate({ identifier: "Speech.Event.Timestamps" })
 
-/**
- * Terminal event. `audio` is every `audio-delta` chunk concatenated, so stream consumers also get the whole file; the
- * route holds the full audio in memory until `finish`, bounded by the provider's input text limit.
- */
+/** `audio` is every `audio-delta` chunk concatenated, so the route holds the whole clip in memory until `finish`. */
 export const SpeechFinishEvent = Schema.Struct({
   type: Schema.tag("finish"),
   audio: Media.AssetSchema,
@@ -171,7 +160,6 @@ export const SpeechEvent = Object.assign(speechEventTagged, {
 })
 export type SpeechEvent = Schema.Schema.Type<typeof speechEventTagged>
 
-/** Fold a completed event stream into a response: the finish event's assembled audio plus every timestamp batch. */
 const collectResponse = (events: ReadonlyArray<SpeechEvent>): Effect.Effect<SpeechResponse> => {
   const finish = events.find(SpeechEvent.is.finish)
   // Every speech protocol's `finish` emits the terminal event or fails, so a completed stream always has one.

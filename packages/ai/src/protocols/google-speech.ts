@@ -11,18 +11,13 @@ const ADAPTER = "google-speech"
 const NAME = "Google Speech"
 const PROVIDER = ProviderID.make("google")
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
-/** Gemini TTS answers with 16-bit mono PCM declared as `audio/L16;codec=pcm;rate=24000`. */
 const DEFAULT_SAMPLE_RATE = 24000
 
 // ---------------------------------------------------------------------------
 // 1. Public model input
 // ---------------------------------------------------------------------------
 
-/**
- * Provider-native options, merged into `generationConfig`. `speechConfig.multiSpeakerVoiceConfig` selects two named
- * speakers (mutually exclusive with `voice`). Style, accent, and pace are directed in the text itself, so there is no
- * `instructions` field; output is always PCM, so `format` accepts only `pcm`.
- */
+/** Style is directed in the text itself, and `speechConfig.multiSpeakerVoiceConfig` excludes `voice`. */
 export type GoogleSpeechOptions = {
   readonly temperature?: number
   readonly seed?: number
@@ -42,7 +37,6 @@ export type Request = SpeechRequestFor<GoogleSpeechOptions>
 // 3. Streaming event schema
 // ---------------------------------------------------------------------------
 
-/** The `generateContent` document and every `streamGenerateContent` chunk share this shape. */
 const GenerateContentChunk = Schema.Struct({
   candidates: Schema.optional(
     Schema.Array(
@@ -87,7 +81,6 @@ const decodeChunk = MediaProtocol.decodeFrame(ADAPTER, NAME, GenerateContentChun
 // ---------------------------------------------------------------------------
 
 interface State extends SpeechStream.Audio {
-  /** The first declared `inlineData.mimeType`; its `rate` parameter is the PCM sample rate. */
   readonly mimeType?: string
   readonly usage?: GenerateContentChunk["usageMetadata"]
   readonly finishReason?: string
