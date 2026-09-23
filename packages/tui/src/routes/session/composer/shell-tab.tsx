@@ -5,7 +5,7 @@ import { useData } from "../../../context/data"
 import { useClient } from "../../../context/client"
 import { useTheme } from "../../../context/theme"
 import { Keymap } from "../../../context/keymap"
-import { useComposerTab } from "./index"
+import { useComposerTab } from "./context"
 import { useDialog } from "../../../ui/dialog"
 import { DialogShellOutput } from "../../../component/dialog-shell-output"
 
@@ -113,7 +113,7 @@ export function ShellTab(props: { sessionID: string }) {
   return (
     <Show when={composer.active("shell")}>
       <scrollbox scrollbarOptions={{ visible: false }} maxHeight={5} ref={(r: ScrollBoxRenderable) => (scroll = r)}>
-        <Show when={entries().length > 0} fallback={<text fg={theme.text.subdued}> No shell commands</text>}>
+        <Show when={entries().length > 0} fallback={<text fg={theme.text.muted}> No shell commands</text>}>
           <For each={entries()}>
             {(shell, index) => {
               const active = createMemo(() => index() === store.selected)
@@ -123,7 +123,7 @@ export function ShellTab(props: { sessionID: string }) {
                   paddingLeft={1}
                   paddingRight={1}
                   backgroundColor={
-                    active() ? theme.background.action.primary.focused : theme.background.action.primary.default
+                    active() ? theme.background.action.primary.focused : theme.background.action.primary.base
                   }
                   onMouseMove={() => setStore("selected", index())}
                   onMouseUp={() => {
@@ -132,7 +132,7 @@ export function ShellTab(props: { sessionID: string }) {
                   }}
                 >
                   <text
-                    fg={active() ? theme.text.action.primary.focused : theme.text.action.primary.default}
+                    fg={active() ? theme.text.action.primary.focused : theme.text.action.primary.base}
                     attributes={active() ? TextAttributes.BOLD : undefined}
                     wrapMode="none"
                   >

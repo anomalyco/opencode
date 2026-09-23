@@ -7,6 +7,7 @@ import {
   LanguageModel,
   LLM,
   LLMRequest,
+  type Media,
   Message,
   SystemPart,
 } from "@opencode/ai"
@@ -114,7 +115,7 @@ export const unsupportedParts = (messages: LLMRequest["messages"], capabilities:
       ...message,
       content: message.content.map((part) => {
         if (part.type === "media") {
-          return unsupportedMedia(part.mediaType, part.filename, capabilities) ?? part
+          return unsupportedMedia(part.media.mediaType, part.filename, capabilities) ?? part
         }
         if (part.type !== "tool-result" || part.result.type !== "content") return part
         return {
@@ -133,13 +134,17 @@ export const unsupportedParts = (messages: LLMRequest["messages"], capabilities:
 
 export const boundImages = (messages: LLMRequest["messages"]) => {
   const isImage = (mime: string) => mime.toLowerCase().startsWith("image/")
-  const size = (data: string | Uint8Array) =>
-    typeof data === "string" ? Buffer.byteLength(data) : Math.ceil(data.byteLength / 3) * 4
+  // Remote and provider-referenced media carry no local payload and never count toward the inline budget.
+  const size = (media: Media.Asset) => {
+    if (media.source.type === "base64") return Buffer.byteLength(media.source.data)
+    if (media.source.type === "bytes") return Math.ceil(media.source.data.byteLength / 3) * 4
+    return 0
+  }
   const imageBytes = messages.reduce(
     (total, message) =>
       total +
       message.content.reduce((sum, part) => {
-        if (part.type === "media" && isImage(part.mediaType)) return sum + size(part.data)
+        if (part.type === "media" && isImage(part.media.mediaType)) return sum + size(part.media)
         if (part.type !== "tool-result" || part.result.type !== "content") return sum
         return (
           sum +
@@ -159,8 +164,8 @@ export const boundImages = (messages: LLMRequest["messages"]) => {
     Message.make({
       ...message,
       content: message.content.map((part) => {
-        if (part.type === "media" && isImage(part.mediaType) && imageBytes - removed > IMAGE_BYTES_TARGET) {
-          removed += size(part.data)
+        if (part.type === "media" && isImage(part.media.mediaType) && imageBytes - removed > IMAGE_BYTES_TARGET) {
+          removed += size(part.media)
           return Message.text(IMAGE_REMOVED)
         }
         if (part.type !== "tool-result" || part.result.type !== "content") return part
@@ -229,7 +234,7 @@ export const layer = Layer.effect(
       const entries = Object.entries(shaped.options)
       const generation = Object.fromEntries(entries.filter(([k]) => GENERATION_KEYS.has(k))) as GenerationOptionsFields
       const providerOptions = Object.fromEntries(entries.filter(([k]) => !GENERATION_KEYS.has(k)))
-      const root = session.fork?.sessionID ?? session.id
+      const affinity = session.parentID ?? session.fork?.sessionID ?? session.id
       const base = LLM.request({
         model: model.model,
         http: {
@@ -244,7 +249,7 @@ export const layer = Layer.effect(
           },
         },
         // TODO: Persist cache lineage so nested forks reuse the root session's cache key.
-        promptCacheKey: /^ses_[0-9a-f]{64}$/.test(root) ? root.slice(4) : root,
+        promptCacheKey: /^ses_[0-9a-f]{64}$/.test(affinity) ? affinity.slice(4) : affinity,
         system: shaped.system,
         messages: boundImages(unsupportedParts(shaped.messages, model.capabilities)),
         tools: Array.from(hooked, ([name, t]) => ({ ...t, name })),
@@ -320,24 +325,28 @@ export const layer = Layer.effect(
       // which transport actually carries the request, so both hook families are always offered.
       const webSocket =
         input.webSocket === "session" && model.transport === "websocket"
-          ? transport.bind(session.id, {
-              handshake: (connect) =>
-                hooks
-                  .trigger("session", "experimental.ws.handshake", {
-                    ...scope,
-                    url: connect.url,
-                    headers: connect.headers,
-                  })
-                  .pipe(Effect.map((event) => ({ url: event.url, headers: event.headers }))),
-              send: (frame) =>
-                hooks
-                  .trigger("session", "experimental.ws.send", { ...scope, frame })
-                  .pipe(Effect.map((event) => event.frame)),
-              receive: (frame) =>
-                hooks
-                  .trigger("session", "experimental.ws.receive", { ...scope, frame })
-                  .pipe(Effect.map((event) => event.frame)),
-            })
+          ? transport.bind(
+              session.id,
+              {
+                handshake: (connect) =>
+                  hooks
+                    .trigger("session", "experimental.ws.handshake", {
+                      ...scope,
+                      url: connect.url,
+                      headers: connect.headers,
+                    })
+                    .pipe(Effect.map((event) => ({ url: event.url, headers: event.headers }))),
+                send: (frame) =>
+                  hooks
+                    .trigger("session", "experimental.ws.send", { ...scope, frame })
+                    .pipe(Effect.map((event) => event.frame)),
+                receive: (frame) =>
+                  hooks
+                    .trigger("session", "experimental.ws.receive", { ...scope, frame })
+                    .pipe(Effect.map((event) => event.frame)),
+              },
+              model.chunkTimeout,
+            )
           : undefined
 
       return {

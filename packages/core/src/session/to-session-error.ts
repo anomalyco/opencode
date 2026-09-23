@@ -31,6 +31,8 @@ export function toSessionError(cause: unknown): SessionError.Error {
         return providerError("provider.no-route", cause.reason)
       case "UnknownProvider":
         return providerError("provider.unknown", cause.reason)
+      case "Timeout":
+        return providerError("provider.timeout", cause.reason)
       default: {
         const exhaustive: never = cause.reason
         return exhaustive

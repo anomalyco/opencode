@@ -290,6 +290,37 @@ describe("ModelsDevPlugin", () => {
     }),
   )
 
+  isolated.effect("adopts a refresh that completes between its initial read and its subscription", () =>
+    Effect.gen(function* () {
+      const bundled = richSnapshot("Acme Bundled")
+      const fresh = richSnapshot("Acme Fresh")
+      const current = { snapshot: bundled.snapshot }
+      const location = yield* owner
+      // Cold cache: the first read serves the bundled snapshot, and the boot-time
+      // ModelsDev.refresh() lands right after it, before the plugin subscribes.
+      const source = ModelsDev.Service.of({
+        get: () =>
+          Effect.gen(function* () {
+            const data = current.snapshot
+            if (data !== bundled.snapshot) return data
+            current.snapshot = fresh.snapshot
+            yield* location.bus.publish(ModelsDev.Event.Refreshed, {})
+            return data
+          }),
+        refresh: () => Effect.void,
+      })
+      yield* ModelsDevPlugin.effect(location.host).pipe(
+        Effect.provideService(ModelsDev.Service, source),
+        Effect.provideContext(location.context),
+      )
+      yield* TestClock.adjust("500 millis")
+      yield* TestClock.adjust("500 millis")
+      yield* TestClock.adjust("500 millis")
+
+      expect(required(yield* location.providers.get(bundled.providerID)).name).toBe("Acme Fresh")
+    }),
+  )
+
   real.effect("keeps the retained definition unchanged across model replay", () =>
     Effect.gen(function* () {
       const providers = yield* Provider.Service
@@ -987,11 +1018,11 @@ describe("ModelsDevPlugin", () => {
       const budgetModel = yield* modelState.get(Provider.ID.anthropic, Model.ID.make("claude-budget"))
       expect(budgetModel?.variants).toContainEqual({
         id: Model.VariantID.make("high"),
-        settings: { thinking: { type: "enabled", budgetTokens: 32000 } },
+        settings: { thinking: { type: "enabled", budgetTokens: 16000 } },
       })
       expect(budgetModel?.variants).toContainEqual({
         id: Model.VariantID.make("max"),
-        settings: { thinking: { type: "enabled", budgetTokens: 63999 } },
+        settings: { thinking: { type: "enabled", budgetTokens: 31999 } },
       })
 
       const anthropicEffortModel = yield* modelState.get(Provider.ID.anthropic, Model.ID.make("claude-opus-4.7"))

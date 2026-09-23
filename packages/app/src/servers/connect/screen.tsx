@@ -1,4 +1,4 @@
-import { createResource, lazy, Show, Suspense } from "solid-js"
+import { lazy, Show, Suspense } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useMutation } from "@tanstack/solid-query"
 import { Button } from "@opencode/ui/button"
@@ -9,34 +9,28 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { useCheckServerHealth } from "@/runtime/server/health"
 import { useServers } from "@/runtime/server/registry"
 import { serverAddress } from "./pairing"
+import type { decodePairingCode } from "./pairing"
 import { isMixedContent } from "./browser"
+import { createCameraAvailability } from "./camera"
 import "./screen.css"
 
 const PairingScanner = lazy(() => import("./scanner").then((module) => ({ default: module.PairingScanner })))
 
-export function ConnectServerScreen() {
+export function ConnectServerScreen(
+  props: { pairing?: NonNullable<ReturnType<typeof decodePairingCode>>; onConnect?: () => void } = {},
+) {
   const language = useLanguage()
   const platform = usePlatform()
   const servers = useServers()
   const check = useCheckServerHealth()
-  const cameraSupported =
-    platform.platform === "web" && window.isSecureContext && !!navigator.mediaDevices?.getUserMedia
-  const [camera, cameraActions] = createResource(
-    async () => {
-      if (!cameraSupported || !navigator.mediaDevices.enumerateDevices) return false
-      const denied = await navigator.permissions?.query({ name: "camera" }).then(
-        (permission) => permission.state === "denied",
-        () => false,
-      )
-      if (denied) return false
-      return navigator.mediaDevices.enumerateDevices().then(
-        (devices) => devices.some((device) => device.kind === "videoinput"),
-        () => false,
-      )
-    },
-    { initialValue: false },
-  )
-  const [state, setState] = createStore({ url: "", password: "", urls: [] as string[], error: "", scanning: false })
+  const camera = createCameraAvailability()
+  const [state, setState] = createStore({
+    url: props.pairing?.urls[0] ?? "",
+    password: props.pairing?.password ?? "",
+    urls: props.pairing?.urls ?? ([] as string[]),
+    error: "",
+    scanning: false,
+  })
   const connectionError = () =>
     language.t(
       platform.platform === "web" && isMixedContent(location.href, state.url)
@@ -57,6 +51,7 @@ export function ConnectServerScreen() {
         return
       }
       servers.add({ type: "http", http })
+      props.onConnect?.()
     },
     onError: () => setState("error", connectionError()),
   }))
@@ -78,7 +73,7 @@ export function ConnectServerScreen() {
               <PairingScanner
                 onCancel={() => {
                   setState("scanning", false)
-                  void cameraActions.refetch()
+                  void camera.refetch()
                 }}
                 onScan={(pairing) => {
                   setState({
@@ -154,13 +149,15 @@ export function ConnectServerScreen() {
             <Button
               variant="neutral"
               size="large"
-              disabled={request.isPending || !camera.latest}
-              aria-describedby={!camera.latest && !camera.loading ? "server-connect-camera-unavailable" : undefined}
+              disabled={request.isPending || !camera.available.latest}
+              aria-describedby={
+                !camera.available.latest && !camera.available.loading ? "server-connect-camera-unavailable" : undefined
+              }
               onClick={() => setState("scanning", true)}
             >
               {language.t("server.connect.scan")}
             </Button>
-            <Show when={!camera.latest && !camera.loading}>
+            <Show when={!camera.available.latest && !camera.available.loading}>
               <p id="server-connect-camera-unavailable">
                 {language.t(
                   window.isSecureContext ? "server.connect.camera.unavailable" : "server.connect.camera.insecure",

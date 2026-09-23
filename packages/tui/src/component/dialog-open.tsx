@@ -7,11 +7,11 @@ import { dialogWidth, useDialog } from "../ui/dialog"
 import { DialogSelect, dialogSelectContentWidth, type DialogSelectRef } from "../ui/dialog-select"
 import { DialogPrompt } from "../ui/dialog-prompt"
 import { useRoute } from "../context/route"
-import { locationKey, useData } from "../context/data"
+import { useData } from "../context/data"
 import { useClient } from "../context/client"
 import { useLocation } from "../context/location"
 import { useSessionTabs } from "../context/session-tabs"
-import { useTheme, useThemes } from "../context/theme"
+import { useTheme } from "../context/theme"
 import { Keymap } from "../context/keymap"
 import { Locale } from "../util/locale"
 import { abbreviateHome } from "../runtime"
@@ -43,9 +43,7 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
   const location = useLocation()
   const sessionTabs = useSessionTabs()
   const toast = useToast()
-  const themes = useThemes()
-  const theme = useTheme("elevated")
-  const mode = themes.mode
+  const theme = useTheme().surface("dialog")
   const paths = useTuiPaths()
   const dimensions = useTerminalDimensions()
   const shortcuts = Keymap.useShortcuts()
@@ -201,31 +199,16 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
         gutter: running
           ? (color: RGBA) => <Spinner color={color} />
           : tabs.has(session.id)
-            ? () => <text fg={theme.hue.accent[mode() === "light" ? 800 : 200]}>▪</text>
+            ? () => <text fg={theme.hue.accent[200]}>▪</text>
             : undefined,
       }
     })
 
     const current = location.ref ?? data.location.default()
-    const seen = new Set<string>()
-    const projectOptions = [
-      ...data.project.list().flatMap((project) =>
-        [project.canonical, ...project.sandboxes].map((directory) => ({
-          directory,
-          project,
-        })),
-      ),
-      ...sessions().map((session) => ({
-        directory: session.location.directory,
-        project: data.project.get(session.projectID),
-      })),
-    ]
-      .filter((item) => {
-        const key = locationKey(item)
-        if (item.directory === "/" || seen.has(key)) return false
-        seen.add(key)
-        return true
-      })
+    const projectOptions = data.project
+      .list()
+      .filter((project) => project.canonical !== "/")
+      .map((project) => ({ directory: project.canonical, project }))
       .map((item) => {
         const title =
           item.directory === item.project?.canonical
@@ -249,7 +232,7 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
           category: "Projects",
           gutter:
             item.directory === current.directory ||
-            (item.directory === location.current?.project.canonical && !seen.has(locationKey(current)))
+            item.directory === location.current?.project.canonical
               ? () => <text fg={theme.text.formfield.selected}>●</text>
               : undefined,
         }
@@ -338,7 +321,7 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
             emptyView={
               <Show when={!recent.loading && !projects.loading}>
                 <box paddingLeft={4} paddingRight={4}>
-                  <text fg={theme.text.subdued}>No recent sessions or projects</text>
+                  <text fg={theme.text.muted}>No recent sessions or projects</text>
                 </box>
               </Show>
             }
@@ -352,13 +335,13 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
               >
                 <box>
                   <Show when={projectID() && worktrees.loading}>
-                    <Spinner color={theme.text.subdued}>Loading worktrees…</Spinner>
+                    <Spinner color={theme.text.muted}>Loading worktrees…</Spinner>
                   </Show>
                   <Show when={!projectID() && (recent.loading || projects.loading)}>
-                    <Spinner color={theme.text.subdued}>Refreshing sessions and projects…</Spinner>
+                    <Spinner color={theme.text.muted}>Refreshing sessions and projects…</Spinner>
                   </Show>
                   <Show when={!projectID() && (recent() === false || projects() === false)}>
-                    <text fg={theme.text.feedback.error.default}>
+                    <text fg={theme.text.feedback.error.base}>
                       Could not refresh{" "}
                       {recent() === false ? (projects() === false ? "sessions and projects" : "sessions") : "projects"}.
                     </text>
@@ -404,7 +387,7 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
             footerHints={[...(projectID() ? [{ title: "new worktree", label: "ctrl+n" }] : [])]}
             noMatchView={
               <box paddingLeft={4} paddingRight={4}>
-                <text fg={theme.text.subdued}>
+                <text fg={theme.text.muted}>
                   {projectID()
                     ? worktrees.loading
                       ? "Loading worktrees…"
@@ -436,7 +419,7 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
           size="large"
           title={`${projectName(data.project.get(projectID()!)) ?? "Project"} / New worktree`}
           placeholder="Worktree name (optional)"
-          description={() => <text fg={theme.text.subdued}>Leave blank for a random name.</text>}
+          description={() => <text fg={theme.text.muted}>Leave blank for a random name.</text>}
           busy={creating()}
           busyText="Creating worktree…"
           onCancel={cancelCreation}

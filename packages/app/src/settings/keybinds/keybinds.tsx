@@ -1,7 +1,8 @@
-import { For, Show, createEffect, createMemo, lazy, on, onCleanup } from "solid-js"
+import { For, Show, createEffect, createMemo, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { Button } from "@opencode/ui/button"
+import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { TextInput } from "@opencode/ui/text-input"
 import { showToast } from "@/shell/notifications/toast"
@@ -16,8 +17,6 @@ import {
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
 import { SettingsList } from "@/settings/list"
-
-const Icon = lazy(() => import("@opencode/ui/icon").then((module) => ({ default: module.Icon })))
 
 const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 const PALETTE_ID = "command.palette"

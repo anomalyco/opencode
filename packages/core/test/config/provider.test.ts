@@ -34,9 +34,10 @@ function required<T>(value: T | undefined): T {
 const decode = Schema.decodeUnknownSync(Info)
 
 describe("ConfigProviderPlugin.Plugin", () => {
-  it.effect("inherits provider compaction policy with model overrides and rejects unsupported routes", () =>
+  it.effect("inherits the provider compaction setting with model overrides and rejects unsupported routes", () =>
     Effect.gen(function* () {
       const models = yield* Model.Service
+      const providers = yield* Provider.Service
       yield* addPlugin([
         new Document({
           type: "document",
@@ -44,12 +45,10 @@ describe("ConfigProviderPlugin.Plugin", () => {
             providers: {
               custom: {
                 package: "@opencode/ai/providers/openai/responses",
-                compaction: { mode: "provider", threshold: 120_000 },
+                settings: { compaction: { type: "native" } },
                 models: {
                   native: {},
-                  reset: { compaction: { mode: "provider" } },
-                  threshold: { compaction: { mode: "provider", threshold: 90_000 } },
-                  local: { compaction: { mode: "local" }, package: "@opencode/ai/providers/openai/chat" },
+                  local: { settings: { compaction: { type: "summary" } }, package: "@opencode/ai/providers/openai/chat" },
                   unsupported: { package: "@opencode/ai/providers/openai/chat" },
                 },
               },
@@ -62,16 +61,10 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const local = required(yield* models.get(Provider.ID.make("custom"), Model.ID.make("local")))
       const unsupported = required(yield* models.get(Provider.ID.make("custom"), Model.ID.make("unsupported")))
       const defaultModel = required(yield* models.get(Provider.ID.make("default"), Model.ID.make("chat")))
-      expect(native.compaction).toEqual({ mode: "provider", threshold: 120_000 })
-      expect((yield* models.get(Provider.ID.make("custom"), Model.ID.make("reset")))?.compaction).toEqual({
-        mode: "provider",
-      })
-      expect((yield* models.get(Provider.ID.make("custom"), Model.ID.make("threshold")))?.compaction).toEqual({
-        mode: "provider",
-        threshold: 90_000,
-      })
-      expect(local.compaction).toEqual({ mode: "local" })
-      expect(defaultModel.compaction).toBeUndefined()
+      expect(native.settings?.compaction).toEqual({ type: "native" })
+      expect(local.settings?.compaction).toEqual({ type: "summary" })
+      expect(defaultModel.settings?.compaction).toBeUndefined()
+      expect((yield* providers.get(Provider.ID.make("custom")))?.settings?.compaction).toEqual({ type: "native" })
       yield* ModelResolver.fromCatalogModel(native)
       yield* ModelResolver.fromCatalogModel(local)
       yield* ModelResolver.fromCatalogModel(defaultModel)
@@ -82,8 +75,9 @@ describe("ConfigProviderPlugin.Plugin", () => {
     }),
   )
 
-  it.effect("inherits the provider websocket policy with model overrides", () =>
+  it.effect("keeps the provider websocket policy out of model settings", () =>
     Effect.gen(function* () {
+      const providers = yield* Provider.Service
       const models = yield* Model.Service
       yield* addPlugin([
         new Document({
@@ -92,8 +86,12 @@ describe("ConfigProviderPlugin.Plugin", () => {
             providers: {
               custom: {
                 package: "@opencode/ai/providers/openai/responses",
-                transport: "http",
-                models: { inherited: {}, override: { transport: "websocket" } },
+                settings: { transport: "http", timeout: 100, chunkTimeout: 200, shared: "provider" },
+                models: {
+                  inherited: {
+                    settings: { transport: "websocket", timeout: 1, chunkTimeout: 2, model: true },
+                  },
+                },
               },
               default: { package: "@opencode/ai/providers/openai/responses", models: { untouched: {} } },
             },
@@ -101,11 +99,10 @@ describe("ConfigProviderPlugin.Plugin", () => {
         }),
       ])
       const inherited = required(yield* models.get(Provider.ID.make("custom"), Model.ID.make("inherited")))
-      const override = required(yield* models.get(Provider.ID.make("custom"), Model.ID.make("override")))
       const untouched = required(yield* models.get(Provider.ID.make("default"), Model.ID.make("untouched")))
-      expect(inherited.transport).toBe("http")
-      expect(override.transport).toBe("websocket")
-      expect(untouched.transport).toBeUndefined()
+      expect((yield* providers.get(Provider.ID.make("custom")))?.settings?.transport).toBe("http")
+      expect(inherited.settings).toEqual({ shared: "provider", model: true })
+      expect(untouched.settings?.transport).toBeUndefined()
     }),
   )
 
@@ -115,7 +112,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
     { id: "azure", model: "gpt-5.6-sol", package: "@opencode/ai/providers/azure/responses", plugin: AzurePlugin },
     { id: "custom-azure", model: "deployment", package: "@opencode/ai/providers/azure/responses", plugin: AzurePlugin },
   ]) {
-    it.live(`provider transport overrides ${builtin.id} defaults while model overrides still win`, () =>
+    it.live(`configured provider transport overrides ${builtin.id} defaults`, () =>
       Effect.gen(function* () {
         const providers = yield* Provider.Service
         const models = yield* Model.Service
@@ -131,7 +128,8 @@ describe("ConfigProviderPlugin.Plugin", () => {
           editor.models.update(providerID, modelID, () => {})
         })
         yield* builtin.plugin.effect(host)
-        expect((yield* models.get(providerID, modelID))?.transport).toBe("websocket")
+        expect((yield* providers.get(providerID))?.settings?.transport).toBe("websocket")
+        expect((yield* models.get(providerID, modelID))?.settings?.transport).toBeUndefined()
 
         yield* addPlugin([
           new Document({
@@ -139,16 +137,17 @@ describe("ConfigProviderPlugin.Plugin", () => {
             info: decode({
               providers: {
                 [builtin.id]: {
-                  transport: "http",
-                  models: { override: { modelID: builtin.model, transport: "websocket" } },
+                  settings: { transport: "http" },
+                  models: { override: { modelID: builtin.model } },
                 },
               },
             }),
           }),
         ])
 
-        expect((yield* models.get(providerID, modelID))?.transport).toBe("http")
-        expect((yield* models.get(providerID, Model.ID.make("override")))?.transport).toBe("websocket")
+        expect((yield* providers.get(providerID))?.settings?.transport).toBe("http")
+        expect((yield* models.get(providerID, modelID))?.settings?.transport).toBeUndefined()
+        expect((yield* models.get(providerID, Model.ID.make("override")))?.settings?.transport).toBeUndefined()
       }),
     )
   }

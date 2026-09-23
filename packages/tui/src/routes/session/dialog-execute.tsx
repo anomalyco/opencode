@@ -21,7 +21,7 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
   const dialog = useDialog()
   const clipboard = useClipboard()
   const toast = useToast()
-  const theme = useTheme("elevated")
+  const theme = useTheme().surface("dialog")
   const dimensions = useTerminalDimensions()
   const config = useConfig().data
   const [copied, setCopied] = createSignal<"code" | "output">()
@@ -102,11 +102,11 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
   return (
     <box paddingLeft={2} paddingRight={2} paddingBottom={1} gap={1}>
       <box flexDirection="row" gap={2}>
-        <text fg={theme.text.default} attributes={TextAttributes.BOLD} flexGrow={1}>
+        <text fg={theme.text.base} attributes={TextAttributes.BOLD} flexGrow={1}>
           execute
         </text>
-        <text fg={failed() ? theme.text.feedback.error.default : theme.text.subdued}>{status()}</text>
-        <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
+        <text fg={failed() ? theme.text.feedback.error.base : theme.text.muted}>{status()}</text>
+        <text fg={theme.text.muted} onMouseUp={() => dialog.clear()}>
           esc
         </text>
       </box>
@@ -119,22 +119,22 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
       >
         <box gap={1}>
           <box>
-            <text fg={theme.text.subdued} attributes={TextAttributes.BOLD}>
+            <text fg={theme.text.muted} attributes={TextAttributes.BOLD}>
               Code
             </text>
-            <Show when={code()} fallback={<text fg={theme.text.subdued}>Waiting for code…</text>}>
+            <Show when={code()} fallback={<text fg={theme.text.muted}>Waiting for code…</text>}>
               {(value) => <GutteredCode content={value()} filetype="typescript" digits={digits()} blocks={blocks} />}
             </Show>
           </box>
           <box>
-            <text fg={theme.text.subdued} attributes={TextAttributes.BOLD}>
+            <text fg={theme.text.muted} attributes={TextAttributes.BOLD}>
               Output
             </text>
             <Show
               when={highlighted()}
               fallback={
                 <text
-                  fg={text() ? (failed() ? theme.text.feedback.error.default : theme.text.default) : theme.text.subdued}
+                  fg={text() ? (failed() ? theme.text.feedback.error.base : theme.text.base) : theme.text.muted}
                   wrapMode="word"
                 >
                   {text() ?? (props.part.state.status === "completed" ? "No output" : "Waiting for output…")}
@@ -147,7 +147,7 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
                   <Show when={body().rest}>
                     {(rest) => (
                       <box paddingLeft={digits() + 1}>
-                        <text fg={failed() ? theme.text.feedback.error.default : theme.text.default} wrapMode="word">
+                        <text fg={failed() ? theme.text.feedback.error.base : theme.text.base} wrapMode="word">
                           {rest()}
                         </text>
                       </box>
@@ -160,20 +160,20 @@ export function DialogExecute(props: { part: SessionMessageAssistantTool }) {
         </box>
       </scrollbox>
       <box flexDirection="row" gap={3} flexWrap="wrap">
-        <text fg={theme.text.subdued}>↑/↓ ←/→ scroll</text>
+        <text fg={theme.text.muted}>↑/↓ ←/→ scroll</text>
         <text onMouseUp={() => copy("code")}>
-          <span style={{ fg: copied() === "code" ? theme.text.feedback.success.default : theme.text.default }}>
+          <span style={{ fg: copied() === "code" ? theme.text.feedback.success.base : theme.text.base }}>
             <b>{copied() === "code" ? "✓ copied" : "c"}</b>
           </span>
-          <span style={{ fg: theme.text.subdued }}>{copied() === "code" ? "" : " copy code"}</span>
+          <span style={{ fg: theme.text.muted }}>{copied() === "code" ? "" : " copy code"}</span>
         </text>
         <text onMouseUp={() => copy("output")}>
-          <span style={{ fg: copied() === "output" ? theme.text.feedback.success.default : theme.text.default }}>
+          <span style={{ fg: copied() === "output" ? theme.text.feedback.success.base : theme.text.base }}>
             <b>{copied() === "output" ? "✓ copied" : "o"}</b>
           </span>
-          <span style={{ fg: theme.text.subdued }}>{copied() === "output" ? "" : " copy output"}</span>
+          <span style={{ fg: theme.text.muted }}>{copied() === "output" ? "" : " copy output"}</span>
         </text>
-        <text fg={theme.text.subdued}>esc back</text>
+        <text fg={theme.text.muted}>esc back</text>
       </box>
     </box>
   )
@@ -224,7 +224,7 @@ function GutteredCode(props: {
   digits: number
   blocks: Set<CodeRenderable>
 }) {
-  const theme = useTheme("elevated")
+  const theme = useTheme().surface("dialog")
   const syntax = useThemes().currentSyntax
   const gutter = createMemo(() =>
     props.content
@@ -235,7 +235,7 @@ function GutteredCode(props: {
 
   return (
     <box flexDirection="row" gap={1} width="100%">
-      <text fg={theme.text.subdued} flexShrink={0} width={props.digits}>
+      <text fg={theme.text.muted} flexShrink={0} width={props.digits}>
         {gutter()}
       </text>
       <box flexGrow={1} flexShrink={1} minWidth={0}>
@@ -244,7 +244,7 @@ function GutteredCode(props: {
           width="100%"
           conceal={false}
           wrapMode="none"
-          fg={theme.text.default}
+          fg={theme.text.base}
           filetype={props.filetype}
           syntaxStyle={syntax()}
           content={props.content}

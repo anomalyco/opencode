@@ -22,6 +22,9 @@ const updaterHandler = (state: UpdaterState) => {
   updaterCallbacks.forEach((callback) => callback(state))
 }
 
+// One renderer-side copy: the bridge clones on every crossing, so consumption is tracked here.
+const seeded = window.electron.storageSnapshot.then((snapshot) => new Map(Object.entries(snapshot)))
+
 export const api: ElectronAPI = {
   awaitInitialization: () => invoke("AppAwaitInitialization"),
   reconnectService: () => invoke("AppReconnectService"),
@@ -99,7 +102,15 @@ export const api: ElectronAPI = {
     invoke("AppFinishFirstLaunchOnboarding", { createDefaultProject }),
   checkAppExists: (appName) => invoke("AppCheckAppExists", { appName }),
   resolveAppPath: (appName) => invoke("AppResolveAppPath", { appName }),
-  storeItems: (name) => invoke("StorageItems", { name }).then(mutable),
+  // The first read of a namespace the preload already fetched is served from that snapshot; later
+  // reads (a window re-opening a namespace) go to the main process as usual.
+  storeItems: (name) =>
+    seeded.then((snapshot) => {
+      const item = snapshot.get(name)
+      if (!item) return invoke("StorageItems", { name }).then(mutable)
+      snapshot.delete(name)
+      return item
+    }),
   storeUpdate: (name, insert, remove) => invoke("StorageUpdate", { name, insert, remove }),
   storeClear: (name) => invoke("StorageClear", { name }),
   onStoreChanged: (cb) =>
@@ -111,6 +122,7 @@ export const api: ElectronAPI = {
   draftBlobGet: (id) => invoke("DraftsGetBlob", { id }).then((data) => (data ? toArrayBuffer(data) : null)),
 
   getWindowID: () => window.electron.windowID,
+  getWindowBootstrap: () => window.electron.bootstrap,
   themeReady: () => invoke("WindowThemeReady"),
   onMenuCommand: (cb) => listen("MenuCommandTriggered", (event) => cb(event.id)),
   onDeepLink: (cb) => listen("DeepLinksOpened", (event) => cb(mutable(event.urls))),
@@ -149,4 +161,7 @@ export const api: ElectronAPI = {
   setForceFocus: (enabled) => invoke("AppSetForceFocus", { enabled }),
   recordFatalRendererError: (error) => invoke("AppRecordFatalRendererError", { error }),
   setNativeTranslations: (bundle) => invoke("AppSetNativeTranslations", { value: bundle }),
+  pairInfo: () => invoke("AppPairInfo").then(mutable),
+  getKeepScreenActive: () => invoke("AppGetKeepScreenActive"),
+  setKeepScreenActive: (enabled) => invoke("AppSetKeepScreenActive", { enabled }),
 }

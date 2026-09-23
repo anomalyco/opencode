@@ -14,7 +14,7 @@ registerOpencodeSpinner()
 export function Spinner(props: { children?: JSX.Element; color?: RGBA; shimmer?: RGBA }) {
   const theme = useTheme()
   const config = useConfig().data
-  const color = () => props.color ?? theme.text.subdued
+  const color = () => props.color ?? theme.text.muted
   const [frame, setFrame] = createSignal(0)
   createEffect(() => {
     if (!(config.animations ?? true) || !props.shimmer) return

@@ -1,5 +1,5 @@
-import { Route, useParams } from "@solidjs/router"
-import { createMemo, lazy, Show, Suspense, type ParentProps } from "solid-js"
+import { Route, useNavigate, useParams } from "@solidjs/router"
+import { createMemo, lazy, onMount, Show, Suspense, type ParentProps } from "solid-js"
 import { Home } from "@/home/route"
 import { ServerProvider } from "@/runtime/server/current"
 import { useGlobal } from "@/runtime/server/runtime"
@@ -10,6 +10,8 @@ import { LayoutProvider } from "@/shell/state/layout"
 import { SettingsSurfaceProvider } from "@/settings/surface"
 import Shell from "@/shell/shell"
 import { requireServerKey } from "./session"
+import { decodePairingUrl } from "@/servers/connect/pairing"
+import { DesktopPairingCommand } from "@/shell/commands/desktop"
 
 export const File = lazy(() => import("@opencode/session-ui/file").then((module) => ({ default: module.File })))
 const loadSessionRoute = () => Promise.all([import("@/session/route"), File.preload()]).then(([module]) => module)
@@ -26,6 +28,7 @@ export function preloadRoute(url: string) {
   const pathname = url.split(/[?#]/, 1)[0]
   if (pathname === "/new-session") return DraftRoute.preload().then(() => undefined)
   if (pathname === "/settings") return SettingsScreen.preload().then(() => undefined)
+  if (pathname === "/connect") return ConnectServerScreen.preload().then(() => undefined)
   if (/^\/server\/[^/]+\/session\/[^/]+$/.test(pathname))
     return TargetSessionRouteContent.preload().then(() => undefined)
   return Promise.resolve()
@@ -33,29 +36,48 @@ export function preloadRoute(url: string) {
 
 export function AppRoutes() {
   return (
-    <Route component={AppLayout}>
-      <Route path="/" component={Home} />
-      <Route path="/settings" component={SettingsScreen} />
-      <Route
-        path="/server/:serverKey/session/:id"
-        component={() => (
-          <SessionRouteFrame>
-            <Suspense
-              fallback={
-                <div class="flex min-h-0 flex-1 px-2 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
-                  <SessionPanelFrame raised />
-                </div>
-              }
-            >
-              <TargetServerRoute>
-                <TargetSessionRouteContent />
-              </TargetServerRoute>
-            </Suspense>
-          </SessionRouteFrame>
-        )}
-      />
-      <Route path="/new-session" component={DraftRoute} />
-    </Route>
+    <>
+      <Route path="/connect" component={ConnectRoute} />
+      <Route component={AppLayout}>
+        <Route path="/" component={Home} />
+        <Route path="/settings" component={SettingsScreen} />
+        <Route
+          path="/server/:serverKey/session/:id"
+          component={() => (
+            <SessionRouteFrame>
+              <Suspense
+                fallback={
+                  <div class="flex min-h-0 flex-1 px-2 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
+                    <SessionPanelFrame raised />
+                  </div>
+                }
+              >
+                <TargetServerRoute>
+                  <TargetSessionRouteContent />
+                </TargetServerRoute>
+              </Suspense>
+            </SessionRouteFrame>
+          )}
+        />
+        <Route path="/new-session" component={DraftRoute} />
+      </Route>
+    </>
+  )
+}
+
+function ConnectRoute() {
+  const navigate = useNavigate()
+  const servers = useServers()
+  const pairing = decodePairingUrl(location.search, location.origin) ?? decodePairingUrl(location.hash, location.origin)
+  onMount(() => {
+    if (!pairing) return
+    servers.add({ type: "http", http: { url: pairing.urls[0], password: pairing.password } })
+    navigate("/", { replace: true })
+  })
+  return (
+    <Show when={!pairing}>
+      <ConnectServerScreen onConnect={() => navigate("/", { replace: true })} />
+    </Show>
   )
 }
 
@@ -79,6 +101,7 @@ function AppLayout(props: ParentProps) {
     <Show when={servers.list.length > 0} fallback={<ConnectServerScreen />}>
       <LayoutProvider>
         <SettingsSurfaceProvider>
+          <DesktopPairingCommand />
           <BrowserAttachmentsProvider>
             <Shell>{props.children}</Shell>
           </BrowserAttachmentsProvider>

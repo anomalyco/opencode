@@ -2,6 +2,7 @@ import { describe, expect } from "bun:test"
 import { ConfigProvider, Effect, Layer, Logger, Ref, Schema, Stream } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
 import {
+  Media,
   LLM,
   AIError,
   HttpContext,
@@ -1942,6 +1943,30 @@ describe("OpenAI Responses route", () => {
       })
       expect(prepared.body.max_tool_calls).toBe(4)
       expect(prepared.body.parallel_tool_calls).toBe(false)
+    }),
+  )
+
+  it.effect("drops a malformed provider option without discarding its siblings", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          prompt: "hi",
+          providerOptions: {
+            topLogprobs: 25,
+            metadata: { tenant: 7 },
+            reasoningEffort: "high",
+            serviceTier: "priority",
+            maxToolCalls: 4,
+          },
+        }),
+      )
+
+      expect(prepared.body.top_logprobs).toBeUndefined()
+      expect(prepared.body.metadata).toBeUndefined()
+      expect(prepared.body.reasoning).toEqual({ effort: "high" })
+      expect(prepared.body.service_tier).toBe("priority")
+      expect(prepared.body.max_tool_calls).toBe(4)
     }),
   )
 
@@ -4592,6 +4617,30 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("replays assistant media parts as portable user image input", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user("Draw a cat"),
+            Message.assistant([
+              { type: "text", text: "Here it is." },
+              { type: "media", media: Media.base64("AQID", "image/png") },
+            ]),
+            Message.user("Make it orange"),
+          ],
+        }),
+      )
+      expect(prepared.body.input).toMatchObject([
+        { type: "message", role: "user" },
+        { type: "message", role: "assistant", content: [{ type: "output_text", text: "Here it is." }] },
+        { type: "message", role: "user", content: [{ type: "input_image", image_url: "data:image/png;base64,AQID" }] },
+        { type: "message", role: "user" },
+      ])
+    }),
+  )
+
   it.effect("replays hosted image results as portable content regardless of storage", () =>
     Effect.gen(function* () {
       const item = {
@@ -4753,8 +4802,8 @@ describe("OpenAI Responses route", () => {
           model,
           messages: [
             Message.user([
-              { type: "media", mediaType: "image/png", data: "AAECAw==" },
-              { type: "media", mediaType: "application/pdf", data: "JVBERi0xLjQ=", filename: "report.pdf" },
+              { type: "media", media: Media.base64("AAECAw==", "image/png") },
+              { type: "media", media: Media.base64("JVBERi0xLjQ=", "application/pdf"), filename: "report.pdf" },
             ]),
           ],
         }),
@@ -4785,8 +4834,7 @@ describe("OpenAI Responses route", () => {
           messages: [
             Message.user({
               type: "media",
-              mediaType: "application/pdf",
-              data: "data:application/pdf;base64,JVBERi0xLjQ=",
+              media: Media.fromDataUrl("data:application/pdf;base64,JVBERi0xLjQ="),
               filename: "report.pdf",
             }),
           ],
@@ -4815,7 +4863,7 @@ describe("OpenAI Responses route", () => {
         LLM.request({
           id: "req_media",
           model,
-          messages: [Message.user({ type: "media", mediaType: "application/x-tar", data: "AAECAw==" })],
+          messages: [Message.user({ type: "media", media: Media.base64("AAECAw==", "application/x-tar") })],
         }),
       )
 
@@ -4842,11 +4890,10 @@ describe("OpenAI Responses route", () => {
           model,
           messages: [
             Message.user([
-              { type: "media", mediaType: "image/png", data: "https://example.com/image.png" },
+              { type: "media", media: Media.url("https://example.com/image.png", { mediaType: "image/png" }) },
               {
                 type: "media",
-                mediaType: "application/pdf",
-                data: "https://example.com/report.pdf",
+                media: Media.url("https://example.com/report.pdf", { mediaType: "application/pdf" }),
                 filename: "report.pdf",
               },
             ]),

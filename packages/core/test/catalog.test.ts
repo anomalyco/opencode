@@ -511,7 +511,7 @@ describe("Provider and Model", () => {
     }),
   )
 
-  it.effect("resolves provider and model overlay merges", () =>
+  it.effect("keeps settings scoped while resolving request overlay merges", () =>
     Effect.gen(function* () {
       const providers = yield* Provider.Service
       const models = yield* Model.Service
@@ -533,6 +533,7 @@ describe("Provider and Model", () => {
       })
 
       const model = required(yield* models.get(providerID, modelID))
+      expect((yield* providers.get(providerID))?.settings).toEqual({ provider: true, shared: "provider" })
       expect(model.settings).toEqual({ provider: true, shared: "model", model: true })
       expect(model.headers).toEqual({ provider: "provider", shared: "model", model: "model" })
       expect(model.body).toEqual({ provider: true, shared: "model", model: true })

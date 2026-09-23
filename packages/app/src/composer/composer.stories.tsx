@@ -167,7 +167,7 @@ function ComposerStory(props: {
             ? buildPromptRequest({
                 prompt: draft.prompt,
                 context: draft.context.items,
-                attachments: [],
+                images: [],
                 text: value,
                 sessionDirectory: "C:/repo",
               })

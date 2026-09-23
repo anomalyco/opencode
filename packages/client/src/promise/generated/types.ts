@@ -8,7 +8,9 @@ export type LocationPublicRef = { directory: string }
 
 export type ModelRef = { id: string; providerID: string; variant?: string }
 
-export type ProviderSettings = { [x: string]: any }
+export type ProviderCompaction = { type: "summary" } | { type: "native" }
+
+export type ProviderTransport = "http" | "websocket"
 
 export type AgentColor = string
 
@@ -218,18 +220,7 @@ export type ModelReasoningField = "reasoning" | "reasoning_content" | "reasoning
 
 export type ModelMaxTokensField = "max_completion_tokens" | "max_tokens"
 
-export type ProviderCompaction = { mode: "local" } | { mode: "provider"; threshold?: number }
-
-export type ProviderTransport = "http" | "websocket"
-
 export type ModelCapabilities = { tools: boolean; input: Array<string>; output: Array<string> }
-
-export type ModelVariant = {
-  id: string
-  settings?: { [x: string]: any }
-  headers?: { [x: string]: string }
-  body?: { [x: string]: any }
-}
 
 export type MoneyUSDPerMillionTokens = number
 
@@ -239,7 +230,7 @@ export type IntegrationCommandMethod = { id: string; type: "command"; label: str
 
 export type IntegrationEnvMethod = { type: "env"; names: Array<string> }
 
-export type ConnectionCredentialInfo = { type: "credential"; id: string; label: string }
+export type ConnectionCredentialInfo = { type: "credential"; id: string; label: string; method: "key" | "oauth" }
 
 export type ConnectionEnvInfo = { type: "env"; name: string }
 
@@ -305,7 +296,7 @@ export type ProjectIcon = { url?: string; override?: string; color?: string }
 
 export type ProjectCommands = { start?: string }
 
-export type ProjectTime = { created: number; updated: number }
+export type ProjectTime = { created: number; updated: number; active: number }
 
 export type PermissionSource = { type: "tool"; messageID: string; id: string }
 
@@ -465,11 +456,23 @@ export type V2EventServerConnected = {
   data: {}
 }
 
-export type ProviderRequest = {
-  settings: ProviderSettings
-  headers: { [x: string]: string }
-  body: { [x: string]: any }
-}
+export type ModelSettings = { compaction?: ProviderCompaction } & { [x: string]: any }
+
+export type ConfigModelSettings = { compaction?: ProviderCompaction } & { [x: string]: JsonValue | null }
+
+export type ProviderSettings = {
+  timeout?: number | false
+  chunkTimeout?: number
+  compaction?: ProviderCompaction
+  transport?: ProviderTransport
+} & { [x: string]: any }
+
+export type ConfigProviderSettings = {
+  timeout?: number | false
+  chunkTimeout?: number
+  compaction?: ProviderCompaction
+  transport?: ProviderTransport
+} & { [x: string]: JsonValue | null }
 
 export type PermissionRule = { action: string; resource: string; effect: PermissionEffect }
 
@@ -1218,6 +1221,16 @@ export type SessionMoved = {
 
 export type SessionInboxMovePayload1 = { location: LocationRef; projectID: string; subpath?: string }
 
+export type SessionMetadataUpdated = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.metadata.updated"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: { sessionID: string; metadata: SessionMetadata }
+}
+
 export type SessionShellStarted = {
   id: string
   created: number
@@ -1443,20 +1456,6 @@ export type ModelCompatibility = {
   supportsPromptCacheKey?: boolean
 }
 
-export type ProviderInfo = {
-  id: string
-  canonical?: string
-  integrationID?: string
-  name: string
-  activation: "auto" | "enabled" | "disabled"
-  package: string
-  compaction?: ProviderCompaction
-  transport?: ProviderTransport
-  settings?: { [x: string]: any }
-  headers?: { [x: string]: string }
-  body?: { [x: string]: any }
-}
-
 export type ModelCost = {
   tier?: { type: "context"; size: number }
   input: MoneyUSDPerMillionTokens
@@ -1671,6 +1670,31 @@ export type SessionInboxMove = {
   payload: SessionInboxMovePayload
 }
 
+export type ModelVariant = {
+  id: string
+  settings?: ModelSettings
+  headers?: { [x: string]: string }
+  body?: { [x: string]: any }
+}
+
+export type ProviderRequest = {
+  settings: ProviderSettings
+  headers: { [x: string]: string }
+  body: { [x: string]: any }
+}
+
+export type ProviderInfo = {
+  id: string
+  canonical?: string
+  integrationID?: string
+  name: string
+  activation: "auto" | "enabled" | "disabled"
+  package: string
+  settings?: ProviderSettings
+  headers?: { [x: string]: string }
+  body?: { [x: string]: any }
+}
+
 export type PermissionRuleset = Array<PermissionRule>
 
 export type SessionRevertStaged = {
@@ -1854,29 +1878,6 @@ export type FormField =
 
 export type FormState = { status: "pending" } | { status: "answered"; answer: FormAnswer } | { status: "cancelled" }
 
-export type ModelInfo = {
-  id: string
-  modelID: string
-  providerID: string
-  canonical?: string
-  family?: string
-  name: string
-  compatibility?: ModelCompatibility
-  package?: string
-  compaction?: ProviderCompaction
-  transport?: ProviderTransport
-  settings?: { [x: string]: any }
-  headers?: { [x: string]: string }
-  body?: { [x: string]: any }
-  capabilities: ModelCapabilities
-  variants: Array<ModelVariant>
-  time: { released: number }
-  cost: Array<ModelCost>
-  status: "alpha" | "beta" | "deprecated" | "active"
-  enabled: boolean
-  limit: { context: number; input?: number; output: number }
-}
-
 export type FormField1 =
   | FormStringField1
   | FormNumberField1
@@ -1900,6 +1901,27 @@ export type ReferenceInfo = {
   description?: string
   hidden?: boolean
   source: ReferenceSource
+}
+
+export type ModelInfo = {
+  id: string
+  modelID: string
+  providerID: string
+  canonical?: string
+  family?: string
+  name: string
+  compatibility?: ModelCompatibility
+  package?: string
+  settings?: ModelSettings
+  headers?: { [x: string]: string }
+  body?: { [x: string]: any }
+  capabilities: ModelCapabilities
+  variants: Array<ModelVariant>
+  time: { released: number }
+  cost: Array<ModelCost>
+  status: "alpha" | "beta" | "deprecated" | "active"
+  enabled: boolean
+  limit: { context: number; input?: number; output: number }
 }
 
 export type AgentInfo = {
@@ -2085,31 +2107,27 @@ export type ConfigEntry =
         warming?: boolean | { prompt?: string; interval?: string; duration?: string }
         providers?: {
           [x: string]: {
-            compaction?: ProviderCompaction
-            transport?: ProviderTransport
             canonical?: string
             name?: string
             env?: Array<string>
             package?: string
-            settings?: { [x: string]: JsonValue }
+            settings?: ConfigProviderSettings
             headers?: { [x: string]: string }
             body?: { [x: string]: JsonValue }
             models?: {
               [x: string]: {
-                compaction?: ProviderCompaction
-                transport?: ProviderTransport
                 modelID?: string
                 family?: string
                 name?: string
                 compatibility?: ModelCompatibility
                 package?: string
-                settings?: { [x: string]: JsonValue }
+                settings?: ConfigModelSettings
                 headers?: { [x: string]: string }
                 body?: { [x: string]: JsonValue }
                 capabilities?: ModelCapabilities
                 variants?: Array<{
                   id: string
-                  settings?: { [x: string]: JsonValue }
+                  settings?: ConfigModelSettings
                   headers?: { [x: string]: string }
                   body?: { [x: string]: JsonValue }
                 }>
@@ -2135,7 +2153,7 @@ export type ConfigEntry =
         experimental?: {
           portable_shell_scanner?: boolean
           subagent_depth?: number
-          policies?: Array<{ action: "provider.use"; resource: string; effect: "allow" | "deny" }>
+          policies?: Array<{ action: "provider.use" | "permission"; resource: string; effect: "allow" | "deny" }>
         }
       }
     }
@@ -2300,6 +2318,7 @@ export type SessionEventDurable =
   | SessionModelSelected
   | SessionMoved
   | SessionRenamed
+  | SessionMetadataUpdated
   | SessionPermissions
   | SessionViewed
   | SessionDeleted
@@ -2362,6 +2381,7 @@ export type V2Event =
   | SessionModelSelected
   | SessionMoved
   | SessionRenamed
+  | SessionMetadataUpdated
   | SessionPermissions
   | SessionViewed
   | SessionUsageUpdated
@@ -3938,12 +3958,21 @@ export type SessionUpdateInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
   readonly title?: {
     readonly title?: string | undefined
+    readonly metadata?: { readonly [x: string]: JsonValue } | undefined
     readonly permissions?:
       | ReadonlyArray<{ readonly action: string; readonly resource: string; readonly effect: "allow" | "deny" | "ask" }>
       | undefined
   }["title"]
+  readonly metadata?: {
+    readonly title?: string | undefined
+    readonly metadata?: { readonly [x: string]: JsonValue } | undefined
+    readonly permissions?:
+      | ReadonlyArray<{ readonly action: string; readonly resource: string; readonly effect: "allow" | "deny" | "ask" }>
+      | undefined
+  }["metadata"]
   readonly permissions?: {
     readonly title?: string | undefined
+    readonly metadata?: { readonly [x: string]: JsonValue } | undefined
     readonly permissions?:
       | ReadonlyArray<{ readonly action: string; readonly resource: string; readonly effect: "allow" | "deny" | "ask" }>
       | undefined

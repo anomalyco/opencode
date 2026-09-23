@@ -77,7 +77,7 @@ const source = {
 
   "dialog.usageExceeded.freeTier.title": "Free limit reached",
   "dialog.usageExceeded.freeTier.description":
-    "Subscribe to OpenCode Go for reliable access to the best open-source models, starting at $5/month.",
+    "Subscribe to OpenCode Go for reliable access to the best open-source models for $10/month.",
   "dialog.usageExceeded.freeTier.actionLabel": "Subscribe",
   "dialog.usageExceeded.accountRateLimit.title": "Go limit reached",
   "dialog.usageExceeded.accountRateLimit.description":
@@ -147,6 +147,8 @@ const source = {
   "ui.promptInput.dropFiles.pdf": "Drop PDFs or files to add",
   "ui.promptInput.dropFiles.imagePdf": "Drop images, PDFs, or files to add",
   "ui.promptInput.removeAttachment": "Remove attachment",
+  "ui.promptInput.cancelUpload": "Cancel upload",
+  "ui.promptInput.uploading": "{{percent}}%",
   "ui.promptInput.label": "Prompt",
   "ui.promptInput.placeholder.shell": "Enter shell command…",
   "ui.promptInput.placeholder.normal": "Ask anything, {{slash}} for commands, {{at}} for context…",

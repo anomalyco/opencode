@@ -10,7 +10,9 @@ import {
   LLMRequest,
   Message,
   type ContentPart,
+  type Usage,
 } from "@opencode/ai"
+import type { StreamOptions } from "@opencode/ai/route"
 import type { SessionCompactionResult } from "@opencode/plugin/effect/session"
 import { SessionError } from "@opencode/schema/session-error"
 import { Context, Effect, Layer, Stream } from "effect"
@@ -91,8 +93,25 @@ export type Settings = {
   tokens: number
 }
 
+export type NativeInput = {
+  readonly request: LLMRequest
+  readonly options: StreamOptions
+  /** Whole, real user messages within the retained-token allowance, for checkpoint-only mechanisms. */
+  readonly retained: Effect.Effect<ReadonlyArray<Message>>
+}
+
+export type NativeResult = {
+  readonly replacement: ReadonlyArray<Message>
+  readonly usage?: Usage
+}
+
+/** Returns the provider's replacement window, or `undefined` when this strategy has no mechanism for the route. */
+export type NativeStrategy = (input: NativeInput) => Effect.Effect<NativeResult, AIError> | undefined
+
 export type Editor = {
   configure: (settings: Partial<Settings>) => void
+  /** Later registrations take precedence. */
+  native: (strategy: NativeStrategy) => void
 }
 
 export type AutoInput = {
@@ -198,7 +217,7 @@ const estimatePart = (part: ContentPart): number => {
   if (part.type === "compaction") return Token.estimate(part.text ?? "")
   if (part.type === "effort") return 0
   if (part.type === "text" || part.type === "reasoning") return Token.estimate(part.text)
-  if (part.type === "media") return estimateMedia(part.mediaType)
+  if (part.type === "media") return estimateMedia(part.media.mediaType)
   if (part.type === "tool-call") return Token.estimate(part.name + (JSON.stringify(part.input) ?? ""))
   if (part.result.type === "content")
     return part.result.value.reduce(
@@ -380,14 +399,17 @@ export const layer = Layer.effect(
     const llm = yield* LLMClient.Service
     const db = (yield* Database.Service).db
 
-    const state = State.create<Settings, Editor>({
+    const state = State.create<Settings & { readonly native: NativeStrategy[] }, Editor>({
       name: "session-compaction",
-      initial: () => ({ auto: true, buffer: DEFAULT_BUFFER, tokens: DEFAULT_KEEP_TOKENS }),
+      initial: () => ({ auto: true, buffer: DEFAULT_BUFFER, tokens: DEFAULT_KEEP_TOKENS, native: [] }),
       editor: (editor) => ({
         configure: (settings) => {
           if (settings.auto !== undefined) editor.auto = settings.auto
           if (settings.buffer !== undefined) editor.buffer = settings.buffer
           if (settings.tokens !== undefined) editor.tokens = settings.tokens
+        },
+        native: (strategy) => {
+          editor.native.push(strategy)
         },
       }),
     })
@@ -504,6 +526,23 @@ export const layer = Layer.effect(
         return yield* reject(
           "Provider compaction requires the endpoint in provider/model settings, not a model.request rewrite",
         )
+      const native = state
+        .get()
+        .native.toReversed()
+        .map((strategy) =>
+          strategy({
+            request,
+            options: prepared.options,
+            retained: original(context.session.id).pipe(
+              Effect.map((messages) => retainUsers(messages, context.model, state.get().tokens)),
+            ),
+          }),
+        )
+        .find((effect) => effect !== undefined)
+      if (!native)
+        return yield* reject(
+          `No plugin provides native compaction for ${request.model.provider}/${request.model.route.id}`,
+        )
       const transient = SessionRunnerRetry.transient(yield* SessionRunnerRetry.policy(context.session.id), {
         agent: context.agent.id,
         model: context.model.ref,
@@ -514,25 +553,7 @@ export const layer = Layer.effect(
         Effect.gen(function* () {
           // Transient provider failures retry like any other request; only a known automatic overflow permits
           // local recovery, and nothing is installed until the provider returns a checkpoint.
-          const result = yield* restore(
-            Effect.gen(function* () {
-              if (LLMClient.canCompact(request, { mechanism: "trigger" })) {
-                const retained = retainUsers(yield* original(context.session.id), context.model, state.get().tokens)
-                const result = yield* llm
-                  .compact(request, { ...prepared.options, mechanism: "trigger" })
-                  .pipe(transient)
-                return { replacement: [...retained, Message.assistant(result.checkpoint)], usage: result.usage }
-              }
-              if (LLMClient.canCompact(request))
-                return yield* llm
-                  .compact(request, { mechanism: "endpoint", http: prepared.options.http })
-                  .pipe(transient)
-              // Model resolution admits provider policies only for routes with a compaction operation.
-              return yield* Effect.die(
-                new Error(`${request.model.provider}/${request.model.route.id} has no compaction operation`),
-              )
-            }),
-          )
+          const result = yield* restore(native.pipe(transient))
           const usage = result.usage ? SessionUsage.record(result.usage, context.model.cost) : undefined
           if (usage)
             yield* bus.publish(SessionEvent.UsageRecorded, {
@@ -715,7 +736,7 @@ export const layer = Layer.effect(
     const compact = Effect.fn("SessionCompaction.compact")(function* (input: AutoInput): Effect.fn.Return<Outcome> {
       const request = { ...input, reason: "auto" as const }
       if (input.overflow) return yield* recoverLocally(request)
-      if (input.context.model.compaction?.mode !== "provider") return yield* execute(request)
+      if (input.context.model.compaction?.type !== "native") return yield* execute(request)
       return yield* executeProvider(request)
     })
     const required = (input: RequiredInput) => {
@@ -738,12 +759,7 @@ export const layer = Layer.effect(
         limit.input === undefined ? Number.POSITIVE_INFINITY : limit.input - config.buffer,
         context - Math.max(output, config.buffer),
       )
-      const policy = input.resolved.compaction
-      const threshold =
-        policy?.mode === "provider" && policy.threshold !== undefined
-          ? Math.min(policy.threshold, promptCeiling)
-          : promptCeiling
-      return estimateTokens(input) >= threshold
+      return estimateTokens(input) >= promptCeiling
     }
     const compactManual = Effect.fn("SessionCompaction.compactManual")(function* (input: ManualInput) {
       if (findTailStart(input.messages, state.get().tokens) === undefined)
@@ -771,7 +787,7 @@ export const layer = Layer.effect(
               inputID: input.inputID,
               started: input.started,
             }
-            return context.model.compaction?.mode === "provider" ? executeProvider(request) : execute(request)
+            return context.model.compaction?.type === "native" ? executeProvider(request) : execute(request)
           },
         }),
       )

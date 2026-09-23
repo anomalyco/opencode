@@ -39,7 +39,7 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
     if (operation.type === "remove") {
       if (operation.target === "*") failures.clear()
       plugins()
-        .filter((plugin) => matches(operation.target, plugin.id))
+        .filter((plugin) => matches(operation.target, plugin.id) && !PluginInternal.guarded.has(plugin.id))
         .forEach((plugin) => enabled.delete(plugin.id))
       continue
     }

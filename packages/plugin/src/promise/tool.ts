@@ -9,6 +9,7 @@ import type { Types } from "effect"
 import type { Hooks, Transform } from "./registration.js"
 
 export interface ToolContext extends Omit<Tool.Context, "progress"> {
+  readonly signal: AbortSignal
   readonly progress: (update: Tool.Metadata) => Promise<void>
 }
 
@@ -65,5 +66,7 @@ interface ToolHooks {
 export interface ToolDomain {
   readonly transform: Transform<ToolEditor>
   readonly reload: () => Promise<void>
+  /** Currently registered tools, after every transform, keyed by effective name. */
+  readonly list: () => Promise<readonly (Info & { readonly id: string })[]>
   readonly hook: Hooks<ToolHooks>
 }

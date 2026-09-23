@@ -56,6 +56,7 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { OptimizePlugin } from "@opencode/core/plugin/optimize"
 import { IdentityPlugin } from "@opencode/core/plugin/identity"
+import { NativeCompactionPlugin } from "@opencode/core/plugin/compaction"
 import { QuestionTool } from "@opencode/core/tool/plugin/question"
 import { Agent } from "@opencode/core/agent"
 import { Config } from "@opencode/core/config"
@@ -76,7 +77,7 @@ import { SessionSystemPrompt } from "@opencode/core/session/system-prompt"
 import { ID, Model } from "@opencode/core/model"
 import { Location } from "@opencode/core/location"
 import { Provider } from "@opencode/core/provider"
-import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Queue, Schema, Scope, Stream } from "effect"
+import { Cause, Context, DateTime, Deferred, Effect, Exit, Fiber, Layer, Queue, Schema, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { asc, desc, eq, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -361,21 +362,27 @@ const layer = Layer.unwrap(
       load: () => Effect.succeed(Instructions.empty),
     })
     const skillInstructions = Layer.mock(SkillInstructions.Service, {
-      load: (agent) =>
-        Effect.succeed(
-          state.skillBaselines.has(agent.id)
-            ? Instructions.make({
+      load: (permissions) => {
+        // `setup` tags each agent's ruleset with a `skill` rule naming that agent.
+        const baseline = permissions
+          .filter((rule) => rule.action === "skill")
+          .map((rule) => state.skillBaselines.get(Agent.ID.make(rule.resource)))
+          .findLast((text) => text !== undefined)
+        return Effect.succeed(
+          baseline === undefined
+            ? Instructions.empty
+            : Instructions.make({
                 key: Instructions.Key.make("test/skill-guidance"),
                 codec: Schema.toCodecJson(Schema.String),
-                read: Effect.succeed(state.skillBaselines.get(agent.id)!),
+                read: Effect.succeed(baseline),
                 render: {
                   initial: String,
                   changed: (_previous, current) => current,
                   removed: () => "Skill guidance removed",
                 },
-              })
-            : Instructions.empty,
-        ),
+              }),
+        )
+      },
     })
     const referenceInstructions = Layer.mock(ReferenceInstructions.Service, {
       load: () => Effect.succeed(Instructions.empty),
@@ -470,6 +477,7 @@ const layer = Layer.unwrap(
         Config.node,
         Snapshot.node,
         SessionCompaction.node,
+        LayerNodePlatform.llmClient,
         SessionRunnerLLM.node,
         SessionExecution.node,
         Session.node,
@@ -523,11 +531,18 @@ const setup = Effect.gen(function* () {
     discard: true,
   })
   yield* IdentityPlugin.Plugin.effect(pluginHost)
-  yield* agents.transform((editor) =>
+  yield* NativeCompactionPlugin.Plugin.effect(pluginHost)
+  yield* agents.transform((editor) => {
     editor.update(Agent.ID.make("build"), (agent) => {
       agent.mode = "primary"
-    }),
-  )
+    })
+    // Skill instructions receive only a ruleset, so tag each agent with a rule naming itself for the mock.
+    for (const id of ["build", "reviewer"]) {
+      editor.update(Agent.ID.make(id), (agent) => {
+        agent.permissions.push({ action: "skill", resource: id, effect: "allow" })
+      })
+    }
+  })
   yield* db
     .insert(ProjectTable)
     .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
@@ -2860,7 +2875,8 @@ describe("SessionRunnerLLM", () => {
 
   scenario("automatically persists native windows, retains earlier users, and waits for fresh usage", function* (s) {
     s.currentModel = LanguageModel.make({ id: "native", provider: "openai", route: OpenAIResponses.route })
-    s.compaction = { mode: "provider", threshold: 10_000 }
+    modelLimits.set("native", { context: 42_000, output: 32_000 })
+    s.compaction = { type: "native" }
     const agents = yield* Agent.Service
     yield* agents.transform((editor) =>
       editor.update(Agent.defaultID, (agent) => {
@@ -2911,7 +2927,8 @@ describe("SessionRunnerLLM", () => {
 
   scenario("recovers an overflowing native window locally from original durable history", function* (s) {
     s.currentModel = LanguageModel.make({ id: "native", provider: "openai", route: OpenAIResponses.route })
-    s.compaction = { mode: "provider", threshold: 10_000 }
+    modelLimits.set("native", { context: 42_000, output: 32_000 })
+    s.compaction = { type: "native" }
     yield* s.llm.push(TestLLM.textWithUsage("Earlier answer", "before-native", 10_000))
     yield* s.runPrompt("Original durable request")
     yield* s.llm.push(
@@ -3391,11 +3408,17 @@ describe("SessionRunnerLLM", () => {
 
   scenario("consumes the full provider stream before recording its boundary and settling local tools", function* (s) {
     yield* s.admit("Echo this")
+    const request = yield* s.llm.gate
     const tail = yield* Deferred.make<void>()
     const complete = yield* Deferred.make<void>()
     const finished = yield* Deferred.make<void>()
     yield* s.llm.push(
-      Stream.fromIterable(TestLLM.tool("call-streamed", "echo", { text: "hello" })).pipe(
+      Stream.fromIterable(
+        TestLLM.complete(
+          { reason: { normalized: "tool-calls" }, usage: { outputTokens: 100, reasoningTokens: 80 } },
+          LLMEvent.toolCall({ id: "call-streamed", name: "echo", input: { text: "hello" } }),
+        ),
+      ).pipe(
         Stream.concat(
           Stream.fromEffect(Deferred.succeed(tail, undefined).pipe(Effect.andThen(Deferred.await(complete)))).pipe(
             Stream.drain,
@@ -3413,25 +3436,39 @@ describe("SessionRunnerLLM", () => {
     )
     const run = yield* Effect.forkChild(s.resume)
 
+    yield* request.started
+    yield* TestClock.adjust("2 seconds")
+    yield* request.release
     yield* tools.started
     yield* Deferred.await(tail)
     expect(s.requests).toHaveLength(1)
     expect(yield* recordedEventTypes(sessionID)).not.toContain("session.step.streamed.1")
     expect(requireAssistant(yield* s.context).time.completed).toBeUndefined()
+    yield* TestClock.adjust("3 seconds")
     yield* Deferred.succeed(complete, undefined)
     yield* Fiber.join(streamed)
     expect(yield* Deferred.isDone(finished)).toBe(true)
     const assistant = requireAssistant(yield* s.context)
     expect(assistant.time.streamed).toBeDefined()
+    expect(DateTime.toEpochMillis(assistant.time.streamed!) - DateTime.toEpochMillis(assistant.time.created)).toBe(
+      5_000,
+    )
     expect(assistant.time.completed).toBeUndefined()
     expect(assistant.content).toMatchObject([{ type: "tool", state: { status: "running" } }])
 
+    yield* TestClock.adjust("10 seconds")
     yield* tools.release
     yield* Fiber.join(run)
     const events = yield* recordedEventTypes(sessionID)
     expect(events.indexOf("session.step.streamed.1")).toBeLessThan(events.indexOf("session.tool.success.2"))
     expect(events.indexOf("session.tool.success.2")).toBeLessThan(events.indexOf("session.step.ended.1"))
     expect(events.filter((type) => type === "session.step.streamed.1")).toHaveLength(2)
+    yield* replaySessionProjection(sessionID)
+    const replayed = (yield* s.context).find((message) => message.id === assistant.id)
+    expect(replayed).toMatchObject({
+      time: { created: assistant.time.created, streamed: assistant.time.streamed },
+      tokens: { output: 20, reasoning: 80 },
+    })
   })
 
   scenario("restores durable reasoning provider metadata in the next request", function* (s) {
@@ -4374,7 +4411,7 @@ describe("SessionRunnerLLM", () => {
     })
   })
 
-  scenario("adds the parent session header to child model requests", function* (s) {
+  scenario("uses parent cache affinity for child model requests", function* (s) {
     const parentID = Session.ID.make("ses_runner_parent")
 
     yield* s.db
@@ -4386,6 +4423,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.runPrompt("Run child request")
 
     expect(s.requests[0]?.http?.headers?.["x-parent-session-id"]).toBe(parentID)
+    expect(s.requests[0]?.promptCacheKey).toBe(parentID)
   })
 
   scenario("runs different sessions concurrently", function* (s) {
@@ -5037,14 +5075,18 @@ describe("SessionRunnerLLM", () => {
     scenario(`bounds jittered exponential backoff before output for ${failure.name}`, function* (s) {
       yield* s.admit("Retry transport")
       yield* s.llm.push(TestLLM.failAfter(failure(), LLMEvent.stepStart({ index: 0 })))
-      yield* s.llm.push(TestLLM.text("Recovered", "retry-success"))
+      yield* s.llm.push(
+        Stream.fromEffect(Effect.sleep(400)).pipe(
+          Stream.flatMap(() => Stream.fromIterable(TestLLM.text("Recovered", "retry-success"))),
+        ),
+      )
 
       const scheduled = yield* subscribeRetries(s)
       const run = yield* s.resume.pipe(Effect.forkChild)
       yield* Queue.take(scheduled)
       yield* TestClock.adjust("1599 millis")
       expect(s.requests).toHaveLength(1)
-      yield* TestClock.adjust("801 millis")
+      yield* TestClock.adjust("1201 millis")
       yield* Fiber.join(run)
 
       expect(s.requests).toHaveLength(2)
@@ -5058,6 +5100,10 @@ describe("SessionRunnerLLM", () => {
       ])
       yield* replaySessionProjection(sessionID)
       expect((yield* s.context).filter((message) => message.type === "assistant")).toHaveLength(1)
+      const assistant = requireAssistant(yield* s.context)
+      expect(DateTime.toEpochMillis(assistant.time.streamed!) - DateTime.toEpochMillis(assistant.time.created)).toBe(
+        400,
+      )
     })
   }
 

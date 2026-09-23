@@ -14,12 +14,15 @@ import {
   type LLMRequest,
   type MediaPart,
   type ProviderMetadata,
+  type ProviderOptions,
   type TextPart,
   type ToolCallPart,
   type ToolDefinition,
 } from "../schema/index.js"
 import { classifyProviderFailure } from "../provider-error.js"
-import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
+import { Media } from "../media.js"
+import { JsonObject, knownString, lenient, optionalArray, optionalNull, ProviderShared } from "./shared.js"
+import { GeminiGenerateContent } from "./utils/gemini-generate-content.js"
 import { GeminiToolSchema } from "./utils/gemini-tool-schema.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolSchemaProjection } from "./utils/tool-schema.js"
@@ -50,35 +53,8 @@ const omitsFunctionCallIds = (modelID: string) => {
   return match !== null && Number(match[1]) < 3
 }
 
-export interface OptionsInput {
-  readonly [key: string]: unknown
-  readonly cachedContent?: string
-  readonly safetySettings?: ReadonlyArray<{
-    readonly category:
-      | "HARM_CATEGORY_UNSPECIFIED"
-      | "HARM_CATEGORY_HATE_SPEECH"
-      | "HARM_CATEGORY_DANGEROUS_CONTENT"
-      | "HARM_CATEGORY_HARASSMENT"
-      | "HARM_CATEGORY_SEXUALLY_EXPLICIT"
-      | "HARM_CATEGORY_CIVIC_INTEGRITY"
-      | (string & {})
-    readonly threshold:
-      | "HARM_BLOCK_THRESHOLD_UNSPECIFIED"
-      | "BLOCK_LOW_AND_ABOVE"
-      | "BLOCK_MEDIUM_AND_ABOVE"
-      | "BLOCK_ONLY_HIGH"
-      | "BLOCK_NONE"
-      | "OFF"
-      | (string & {})
-  }>
-  readonly serviceTier?: "standard" | "flex" | "priority" | (string & {})
-  readonly thinkingConfig?: {
-    readonly thinkingBudget?: number
-    readonly includeThoughts?: boolean
-    readonly thinkingLevel?: "minimal" | "low" | "medium" | "high" | (string & {})
-  }
-}
-
+/** Caller-facing provider options; unknown keys are accepted and ignored. */
+export type OptionsInput = ProviderOptions & typeof Options.Encoded
 export type ProviderOptionsInput = OptionsInput
 
 // =============================================================================
@@ -100,8 +76,17 @@ const GeminiInlineDataPart = Schema.Struct({
     mimeType: Schema.String,
     data: Schema.String,
   }),
+  thoughtSignature: optionalNull(Schema.String),
 })
 type GeminiInlineDataPart = Schema.Schema.Type<typeof GeminiInlineDataPart>
+
+/** Gemini Files API reference; the only remote input Gemini accepts. */
+const GeminiFileDataPart = Schema.Struct({
+  fileData: Schema.Struct({
+    mimeType: Schema.String,
+    fileUri: Schema.String,
+  }),
+})
 
 const GeminiFunctionCallPart = Schema.Struct({
   functionCall: Schema.Struct({
@@ -124,6 +109,7 @@ const GeminiFunctionResponsePart = Schema.Struct({
 const GeminiContentPart = Schema.Union([
   GeminiTextPart,
   GeminiInlineDataPart,
+  GeminiFileDataPart,
   GeminiFunctionCallPart,
   GeminiFunctionResponsePart,
 ])
@@ -161,16 +147,49 @@ const GeminiToolConfig = Schema.Struct({
   }),
 })
 
+const GeminiThinkingLevel = knownString<"minimal" | "low" | "medium" | "high">()
 const GeminiThinkingConfig = Schema.Struct({
   thinkingBudget: Schema.optional(Schema.Number),
   includeThoughts: Schema.optional(Schema.Boolean),
-  thinkingLevel: Schema.optional(Schema.String),
+  thinkingLevel: Schema.optional(GeminiThinkingLevel),
 })
 
 const GeminiSafetySetting = Schema.Struct({
-  category: Schema.String,
-  threshold: Schema.String,
+  category: knownString<
+    | "HARM_CATEGORY_UNSPECIFIED"
+    | "HARM_CATEGORY_HATE_SPEECH"
+    | "HARM_CATEGORY_DANGEROUS_CONTENT"
+    | "HARM_CATEGORY_HARASSMENT"
+    | "HARM_CATEGORY_SEXUALLY_EXPLICIT"
+    | "HARM_CATEGORY_CIVIC_INTEGRITY"
+  >(),
+  threshold: knownString<
+    | "HARM_BLOCK_THRESHOLD_UNSPECIFIED"
+    | "BLOCK_LOW_AND_ABOVE"
+    | "BLOCK_MEDIUM_AND_ABOVE"
+    | "BLOCK_ONLY_HIGH"
+    | "BLOCK_NONE"
+    | "OFF"
+  >(),
 })
+
+// =============================================================================
+// Provider Options
+// =============================================================================
+// Malformed fields are dropped rather than failing the request; a `thinkingConfig`
+// object that omits `includeThoughts` asks for thoughts.
+const GeminiThinkingConfigInput = Schema.Struct({
+  thinkingBudget: lenient(Schema.Number),
+  includeThoughts: lenient(Schema.Boolean),
+  thinkingLevel: lenient(GeminiThinkingLevel),
+})
+const Options = Schema.Struct({
+  cachedContent: lenient(Schema.String),
+  safetySettings: lenient(Schema.Array(GeminiSafetySetting)),
+  serviceTier: lenient(knownString<"standard" | "flex" | "priority">()),
+  thinkingConfig: lenient(GeminiThinkingConfigInput),
+})
+const decodeOptions = ProviderShared.validateWith(Schema.decodeUnknownEffect(Options))
 
 const GeminiGenerationConfig = Schema.Struct({
   maxOutputTokens: Schema.optional(Schema.Number),
@@ -287,10 +306,9 @@ const lowerToolConfig = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
     tool: (name) => ({ functionCallingConfig: { mode: "ANY" as const, allowedFunctionNames: [name] } }),
   })
 
-const lowerUserPart = Effect.fn("Gemini.lowerUserPart")(function* (part: TextPart | MediaPart) {
+const lowerContentPart = Effect.fn("Gemini.lowerContentPart")(function* (part: TextPart | MediaPart) {
   if (part.type === "text") return { text: part.text }
-  const media = ProviderShared.normalizeMedia(part)
-  return { inlineData: { mimeType: media.mime, data: media.base64 } }
+  return yield* GeminiGenerateContent.mediaPart("Gemini", part.media)
 })
 
 const providerMetadata = (key: string, metadata: Record<string, unknown>): ProviderMetadata => ({ [key]: metadata })
@@ -337,7 +355,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
       for (const part of message.content) {
         if (!ProviderShared.supportsContent(part, ["text", "media"]))
           return yield* ProviderShared.unsupportedContent("Gemini", "user", ["text", "media"])
-        parts.push(yield* lowerUserPart(part))
+        parts.push(yield* lowerContentPart(part))
       }
       contents.push({ role: "user", parts })
       continue
@@ -348,10 +366,21 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
       // Parallel Gemini 3 calls may carry one signature on the first call; unsigned sibling calls are valid.
       let hasSignedToolCall = false
       for (const part of message.content) {
-        if (!ProviderShared.supportsContent(part, ["text", "reasoning", "tool-call"]))
-          return yield* ProviderShared.unsupportedContent("Gemini", "assistant", ["text", "reasoning", "tool-call"])
+        if (!ProviderShared.supportsContent(part, ["text", "reasoning", "tool-call", "media"]))
+          return yield* ProviderShared.unsupportedContent("Gemini", "assistant", [
+            "text",
+            "reasoning",
+            "tool-call",
+            "media",
+          ])
         if (part.type === "text") {
           parts.push({ text: part.text, thoughtSignature: thoughtSignature(part.providerMetadata, metadataKey) })
+          continue
+        }
+        // Generated images replay as model-role inline data so multi-turn image editing keeps the prior output.
+        if (part.type === "media") {
+          const lowered = yield* lowerContentPart(part)
+          parts.push({ ...lowered, thoughtSignature: thoughtSignature(part.providerMetadata, metadataKey) })
           continue
         }
         if (part.type === "reasoning") {
@@ -403,7 +432,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
       const media: GeminiInlineDataPart[] = []
       for (const item of content) {
         if (item.type === "text") continue
-        const value = ProviderShared.normalizeToolFile(item)
+        const value = yield* ProviderShared.requireInlineMedia("Gemini", ProviderShared.toolFileMedia(item).media)
         media.push({ inlineData: { mimeType: value.mime, data: value.base64 } })
       }
       if (legacyToolMedia && media.length > 0) (pendingMedia ??= []).push(...media)
@@ -431,44 +460,11 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
   return contents
 })
 
-const resolveOptions = (request: LLMRequest) => {
-  const input = request.providerOptions
-  const value = input?.thinkingConfig
-  const thinkingConfig = {
-    thinkingBudget:
-      ProviderShared.isRecord(value) && typeof value.thinkingBudget === "number" ? value.thinkingBudget : undefined,
-    includeThoughts:
-      ProviderShared.isRecord(value) && typeof value.includeThoughts === "boolean"
-        ? value.includeThoughts
-        : ProviderShared.isRecord(value)
-          ? true
-          : undefined,
-    thinkingLevel:
-      ProviderShared.isRecord(value) && typeof value.thinkingLevel === "string" ? value.thinkingLevel : undefined,
-  }
-  return {
-    cachedContent: typeof input?.cachedContent === "string" ? input.cachedContent : undefined,
-    safetySettings: mapSafetySettings(input?.safetySettings),
-    serviceTier: typeof input?.serviceTier === "string" ? input.serviceTier : undefined,
-    thinkingConfig: Object.values(thinkingConfig).some((item) => item !== undefined) ? thinkingConfig : undefined,
-  }
-}
-
-function mapSafetySettings(value: unknown) {
-  if (!Array.isArray(value)) return undefined
-  const settings = value.flatMap((item) =>
-    ProviderShared.isRecord(item) && typeof item.category === "string" && typeof item.threshold === "string"
-      ? [{ category: item.category, threshold: item.threshold }]
-      : [],
-  )
-  return settings
-}
-
 const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMRequest) {
   const flattened = ProviderShared.flattenToolRequest(request)
   const hasTools = flattened.tools.length > 0
   const generation = request.generation
-  const options = resolveOptions(request)
+  const options = yield* decodeOptions(request.providerOptions ?? {})
   const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   const generationConfig = {
     maxOutputTokens: generation?.maxTokens,
@@ -479,7 +475,10 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
     presencePenalty: generation?.presencePenalty,
     seed: generation?.seed,
     stopSequences: generation?.stop,
-    thinkingConfig: options.thinkingConfig,
+    thinkingConfig:
+      options.thinkingConfig === undefined
+        ? undefined
+        : { ...options.thinkingConfig, includeThoughts: options.thinkingConfig.includeThoughts ?? true },
   }
 
   return {
@@ -685,6 +684,19 @@ const step = (state: ParserState, event: GeminiEvent) => {
     // each block kind must retain the signature attached to its own parts.
     if (signature !== undefined && "thought" in part && part.thought) reasoningSignature = signature
     else if (signature !== undefined && "text" in part) textSignature = signature
+    // Image-capable Gemini models return generated images as inline data parts; surface them as first-class output.
+    if ("inlineData" in part) {
+      lifecycle = Lifecycle.stepStart(lifecycle, events)
+      events.push(
+        LLMEvent.media({
+          media: Media.base64(part.inlineData.data, part.inlineData.mimeType),
+          providerMetadata: signature
+            ? providerMetadata(state.providerMetadataKey, { thoughtSignature: signature })
+            : undefined,
+        }),
+      )
+      continue
+    }
     if ("text" in part && part.text.length > 0) {
       if (part.thought) {
         if (textId !== undefined) {

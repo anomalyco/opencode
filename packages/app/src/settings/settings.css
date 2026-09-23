@@ -1102,10 +1102,6 @@
   padding-block: 20px;
 }
 
-.settings-server-connection .settings-servers-lead {
-  gap: 4px;
-}
-
 .settings-servers-row:not(:last-child) {
   padding-bottom: 16px;
   margin-bottom: 16px;
@@ -1515,6 +1511,12 @@
   font-weight: 440;
   line-height: 1;
   color: var(--v2-state-fg-danger);
+}
+
+.settings-server-dialog-hint {
+  font-size: 13px;
+  line-height: var(--line-height-base);
+  color: var(--v2-text-text-muted);
 }
 
 .settings-extensions-tabs[data-component="tabs-v2"][data-variant="pill"] > [data-slot="tabs-v2-list"] {

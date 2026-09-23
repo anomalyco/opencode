@@ -8,7 +8,7 @@ import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 export type ReasoningEffort = OpenResponsesOptions.ReasoningEffort
 
 const Options = Schema.Struct({
-  reasoningEffort: OpenResponsesOptions.Options.fields.reasoningEffort,
+  reasoningEffort: Schema.optional(OpenResponsesOptions.ReasoningEffort),
   enableThinking: Schema.optional(Schema.Boolean),
   thinkingBudget: Schema.optional(Schema.Int),
   preserveThinking: Schema.optional(Schema.Boolean),
@@ -19,7 +19,7 @@ const Options = Schema.Struct({
     }),
   ),
   toolStream: Schema.optional(Schema.Boolean),
-  parallelToolCalls: OpenResponsesOptions.Options.fields.parallelToolCalls,
+  parallelToolCalls: Schema.optional(Schema.Boolean),
   repetitionPenalty: Schema.optional(Schema.Number),
   responseFormat: Schema.optional(
     Schema.Struct({

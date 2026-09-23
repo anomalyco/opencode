@@ -73,6 +73,7 @@ const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.Agen
       tool: {
         transform: () => Effect.die("unused tool.transform"),
         reload: () => Effect.die("unused tool.reload"),
+        list: () => Effect.die("unused tool.list"),
         hook: (name, callback) => {
           if (name === "execute.after") {
             // Hook names and callbacks are correlated, but TypeScript does not narrow this generic registration API.

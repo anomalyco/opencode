@@ -1,9 +1,21 @@
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  createResource,
+  createSignal,
+  For,
+  onCleanup,
+  onMount,
+  Show,
+  Suspense,
+  type JSX,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
+import { resolveBlobUrl } from "@/runtime/persistence/drafts"
 import { ProviderIcon } from "@opencode/ui/provider-icon"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { Button } from "@opencode/ui/button"
@@ -12,6 +24,8 @@ import { Menu } from "@opencode/ui/menu"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { ScrollView } from "@opencode/ui/scroll-view"
 import { AttachmentCard } from "@opencode/session-ui/attachment-card"
+import { ProgressCircle } from "@opencode/ui/progress-circle"
+import type { Upload } from "../attachments/uploads"
 import { CommentCard } from "@opencode/session-ui/comment-card"
 import { typeLabel } from "@opencode/session-ui/message-file"
 import { Skill } from "@opencode/schema/skill"
@@ -24,6 +38,7 @@ import type {
   ComposerSuggestion,
 } from "../types"
 import type { ComposerEditorModel, ComposerSelectControl } from "./interaction"
+import { isAttachment } from "../prompt-parts"
 import "../attachments/attachments.css"
 import "./editor.css"
 
@@ -148,11 +163,13 @@ export function ComposerEditor(props: ComposerEditorProps) {
         <Show when={state.mode === "normal"}>
           <ComposerAttachments
             attachments={props.controller.attachments()}
+            uploads={props.controller.uploads()}
             comments={props.controller.comments()}
             activeCommentID={state.activeContextID}
             removeLabel={i18n.t("ui.promptInput.removeAttachment")}
             onAttachmentClick={props.controller.openAttachment}
             onAttachmentRemove={(attachment) => props.controller.removeAttachment(attachment.id)}
+            onUploadCancel={(upload) => props.controller.cancelUpload(upload.id)}
             onCommentClick={(comment) => props.controller.toggleContext(comment.key)}
             onCommentRemove={(comment) => props.controller.removeContext(comment.key)}
           />
@@ -191,9 +208,9 @@ export function ComposerEditor(props: ComposerEditorProps) {
             onInput={(event) => {
               const cursor = composerCursor(event.currentTarget)
               const prompt = parseComposerEditor(event.currentTarget)
-              const images = props.controller.parts().filter((part) => part.type === "image")
+              const attachments = props.controller.parts().filter(isAttachment)
               localInput = true
-              props.controller.onInput(prompt.map((part) => part.content).join(""), [...prompt, ...images], cursor)
+              props.controller.onInput(prompt.map((part) => part.content).join(""), [...prompt, ...attachments], cursor)
             }}
             onKeyDown={(event) => {
               if (!view.draftOnly && props.controller.onKeyDown(event)) return
@@ -348,7 +365,7 @@ function renderComposerEditor(editor: HTMLDivElement, prompt: ComposerPrompt) {
   const active = document.activeElement === editor
   editor.replaceChildren(
     ...prompt.flatMap<Node>((part) => {
-      if (part.type === "image") return []
+      if (isAttachment(part)) return []
       if (part.type === "text") return [document.createTextNode(part.content)]
       const mention = document.createElement("span")
       mentionParts.set(mention, part)
@@ -475,17 +492,22 @@ function composerCursor(editor: HTMLDivElement) {
 
 export function ComposerAttachments(props: {
   attachments: ComposerAttachment[]
+  uploads?: Upload[]
   comments?: ComposerComment[]
   activeCommentID?: string
   removeLabel: string
   onAttachmentClick?: (attachment: ComposerAttachment) => void
   onAttachmentRemove: (attachment: ComposerAttachment) => void
+  onUploadCancel?: (upload: Upload) => void
   onCommentClick?: (comment: ComposerComment) => void
   onCommentRemove?: (comment: ComposerComment) => void
 }) {
   const i18n = useI18n()
+  const percent = (upload: Upload) => (upload.size === 0 ? 100 : Math.floor((upload.loaded / upload.size) * 100))
   return (
-    <Show when={props.attachments.length > 0 || (props.comments?.length ?? 0) > 0}>
+    <Show
+      when={props.attachments.length > 0 || (props.uploads?.length ?? 0) > 0 || (props.comments?.length ?? 0) > 0}
+    >
       <div data-component="composer-attachments" data-slot="composer-attachments" class="relative">
         <div
           data-slot="composer-attachments-scroll"
@@ -522,22 +544,37 @@ export function ComposerAttachments(props: {
           <For each={props.attachments}>
             {(attachment) => (
               <div class="relative group shrink-0">
-                <Tooltip value={attachment.filename} placement="top" contentClass="break-all">
+                <Tooltip
+                  value={attachment.type === "path" ? attachment.path : attachment.filename}
+                  placement="top"
+                  contentClass="break-all"
+                >
                   <Show
-                    when={attachment.mime.startsWith("image/")}
+                    when={attachment.type === "image" && attachment.mime.startsWith("image/") ? attachment : undefined}
                     fallback={
                       <AttachmentCard title={attachment.filename}>
                         {typeLabel(attachment.filename, attachment.mime, i18n.t("ui.common.file"))}
                       </AttachmentCard>
                     }
                   >
-                    <img
-                      src={attachment.blob.url}
-                      alt={attachment.filename}
-                      class="w-[58px] h-[46px] rounded-[6px] object-cover"
-                      onClick={() => props.onAttachmentClick?.(attachment)}
-                    />
-                    <div class="absolute inset-0 rounded-[6px] shadow-[inset_0_0_0_0.5px_var(--v2-border-border-base)] pointer-events-none" />
+                    {(image) => {
+                      // Restored drafts and history carry image ids only; bytes load when shown.
+                      const [url] = createResource(() => image().blob, resolveBlobUrl)
+                      return (
+                        <>
+                          {/* Keep loading local; the route boundary would detach the screen and drop editor focus. */}
+                          <Suspense fallback={<div class="w-[58px] h-[46px]" />}>
+                            <img
+                              src={url() ?? ""}
+                              alt={attachment.filename}
+                              class="w-[58px] h-[46px] rounded-[6px] object-cover"
+                              onClick={() => props.onAttachmentClick?.(attachment)}
+                            />
+                          </Suspense>
+                          <div class="absolute inset-0 rounded-[6px] shadow-[inset_0_0_0_0.5px_var(--v2-border-border-base)] pointer-events-none" />
+                        </>
+                      )
+                    }}
                   </Show>
                 </Tooltip>
                 <button
@@ -545,6 +582,28 @@ export function ComposerAttachments(props: {
                   onClick={() => props.onAttachmentRemove(attachment)}
                   class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                   aria-label={props.removeLabel}
+                >
+                  <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
+                </button>
+              </div>
+            )}
+          </For>
+          <For each={props.uploads ?? []}>
+            {(upload) => (
+              <div class="relative group shrink-0" data-slot="composer-upload">
+                <Tooltip value={upload.filename} placement="top" contentClass="break-all">
+                  <AttachmentCard title={upload.filename}>
+                    <span class="inline-flex items-center gap-1">
+                      <ProgressCircle percentage={percent(upload)} />
+                      {i18n.t("ui.promptInput.uploading", { percent: percent(upload) })}
+                    </span>
+                  </AttachmentCard>
+                </Tooltip>
+                <button
+                  type="button"
+                  onClick={() => props.onUploadCancel?.(upload)}
+                  class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  aria-label={i18n.t("ui.promptInput.cancelUpload")}
                 >
                   <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
                 </button>

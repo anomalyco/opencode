@@ -9,7 +9,8 @@
   justify-content: center;
 }
 
-[data-titlebar-tab] {
+[data-titlebar-tab],
+[data-titlebar-tab-action] {
   --tab-base: var(--v2-background-bg-deep);
   --tab-overlay: transparent;
   background: linear-gradient(var(--tab-overlay), var(--tab-overlay)), var(--tab-base);
@@ -65,6 +66,14 @@
 }
 
 [data-titlebar-tab]:is([data-state="pressed"], [data-dragging="true"], [data-editing="true"]) {
+  --tab-overlay: var(--v2-overlay-simple-overlay-pressed);
+}
+
+[data-titlebar-tab-action]:is(:hover, :focus-visible) {
+  --tab-overlay: var(--v2-overlay-simple-overlay-hover);
+}
+
+[data-titlebar-tab-action]:is(:active, [data-state="pressed"]) {
   --tab-overlay: var(--v2-overlay-simple-overlay-pressed);
 }
 

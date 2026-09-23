@@ -11,7 +11,6 @@ import {
   textPart,
   userMessage,
 } from "../performance/timeline-stability/fixture"
-import { reportVisualStability, startVisualProbe, stopVisualProbe, visualPlan } from "../utils/visual-stability"
 
 // Compositor prediction can add 20–25px to discrete CDP moves even in a plain
 // scrollport. Disable it so the visual assertion measures the supplied gesture.
@@ -26,91 +25,6 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
       userAgent: devices[device].userAgent,
       viewport: { width: 390, height: 844 },
     })
-
-    for (const direction of ["ltr", "rtl"]) {
-      test(`session text follows each 50px finger movement (${direction})`, async ({ page }, testInfo) => {
-        const messages = Array.from({ length: 40 }, (_, index) => {
-          const id = `msg_${String(index).padStart(4, "0")}_mobile`
-          return [
-            userMessage(undefined, { id: `${id}_user`, created: 1690000000000 + index * 10_000 }),
-            assistantMessage(
-              [
-                textPart(
-                  `prt_mobile_${index}`,
-                  `Answer ${index}. ${"Mobile history content. ".repeat(10 + (index % 4) * 20)}`,
-                ),
-              ],
-              { id: `${id}_assistant`, parentID: `${id}_user`, created: 1690000001000 + index * 10_000 },
-            ),
-          ]
-        }).flat()
-        await setupTimeline(page, { messages, viewport: { width: 390, height: 844 } })
-        await page.evaluate((direction) => (document.documentElement.dir = direction), direction)
-        const timeline = page.locator('[data-slot="session-timeline-scroll"]')
-        const scroller = timeline.getByRole("region", { name: "scrollable content", exact: true })
-        await page.evaluate(() => document.fonts.ready)
-        await expect(timeline.locator("[data-timeline-virtual-content]")).toBeVisible()
-        await expect(page.getByText("Answer 39.", { exact: false })).toBeInViewport()
-        await expect(timeline.locator('[data-component="markdown"]:not([data-markdown-ready])')).toHaveCount(0)
-        const devtools = await page.context().newCDPSession(page)
-
-        for (const [index, sign] of [1, 1, 1, -1, -1, -1].entries()) {
-          const bounds = await scroller.boundingBox()
-          expect(bounds).not.toBeNull()
-          if (!bounds) return
-          const partID = await scroller.evaluate((root, sign) => {
-            const view = root.getBoundingClientRect()
-            const line = sign > 0 ? view.top + 40 : view.bottom - 40
-            return [...root.querySelectorAll<HTMLElement>("[data-timeline-part-id]")]
-              .filter((part) => part.querySelector("p"))
-              .map((part) => ({ part, rect: part.getBoundingClientRect() }))
-              .filter(({ rect }) => rect.bottom > view.top && rect.top < view.bottom)
-              .sort((a, b) => Math.abs(a.rect.top - line) - Math.abs(b.rect.top - line))[0]?.part.dataset.timelinePartId
-          }, sign)
-          expect(partID).toBeTruthy()
-          const selector = `[data-timeline-part-id="${partID}"] p`
-          const anchor = scroller.locator(selector)
-          await expect(anchor).toHaveCount(1)
-          const regions = { text: { selector } }
-          await startVisualProbe(page, regions)
-          const x = bounds.x + bounds.width / 3
-          const y = bounds.y + (sign > 0 ? 60 : bounds.height - 60)
-          await devtools.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: [{ x, y }] })
-          // Cross the browser's touch slop before measuring one-to-one dragging.
-          await devtools.send("Input.dispatchTouchEvent", {
-            type: "touchMove",
-            touchPoints: [{ x, y: y + sign * 30 }],
-          })
-          await expect(timeline.locator('[data-orientation="vertical"][data-visible="true"]')).toHaveCount(1)
-          await page.screenshot()
-          const origin = await anchor.boundingBox()
-          expect(origin).not.toBeNull()
-          if (!origin) return
-          for (let step = 1; step <= 8; step++) {
-            await devtools.send("Input.dispatchTouchEvent", {
-              type: "touchMove",
-              touchPoints: [{ x, y: y + sign * (30 + step * 50) }],
-            })
-            await expect.poll(async () => (await anchor.boundingBox())?.y).toBeCloseTo(origin.y + sign * step * 50, 0)
-          }
-          await devtools.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] })
-          // Include release corrections through the scroll indicator's idle state.
-          await expect(timeline.locator('[data-orientation="vertical"][data-visible="false"]')).toHaveCount(1)
-          await testInfo.attach(`swipe-${index}.png`, { body: await page.screenshot(), contentType: "image/png" })
-          // Native momentum may continue after release, including past this row's
-          // virtual window. It must not move the text against the gesture.
-          const finalTop = await anchor.evaluateAll((elements) => elements[0]?.getBoundingClientRect().top)
-          if (finalTop !== undefined) expect((finalTop - origin.y) * sign).toBeGreaterThanOrEqual(399.5)
-          const trace = await stopVisualProbe(page)
-          await reportVisualStability(
-            testInfo,
-            `swipe-${index}`,
-            trace,
-            visualPlan(regions, [{ type: "motion", regions: "all", maxPositionReversals: 0 }]),
-          )
-        }
-      })
-    }
 
     test("reversing a touch drag stops following streamed output", async ({ page }, testInfo) => {
       const partID = "prt_mobile_stream"

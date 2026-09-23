@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { fn, type Method, methods, receiver } from "./native.js"
 import { AsyncIteratorSymbol, type GeneratorRequestKind, IteratorSymbol } from "./model.js"
-import { define, hidden, GeneratorObj } from "./objects.js"
+import { define, hidden, GeneratorObj, type Value } from "./objects.js"
 import type { Interpreter } from "./interpreter.js"
 
 /** `next`/`return`/`throw` on the generator prototypes; async generators answer with promises. */
@@ -13,9 +13,9 @@ export const generatorGlobals = <R>(ctx: Interpreter<R>): void => {
     const request = (kind: GeneratorRequestKind): Method => [
       kind,
       1,
-      (thisValue: unknown, args: Array<unknown>) => {
+      (thisValue: Value, args: Array<Value>) => {
         const generator = receiver(GeneratorObj, thisValue, `${label}.prototype.${kind}`)
-        const requested = generator.request(kind, args[0]) as Effect.Effect<unknown, unknown, R>
+        const requested = generator.request(kind, args[0]) as Effect.Effect<Value, unknown, R>
         return generator.asynchronous ? ctx.pending.create(requested) : requested
       },
     ]

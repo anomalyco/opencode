@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "2.0.6",
+  "version": "2.0.15",
   "name": "@opencode/ai",
   "type": "module",
   "license": "MIT",
@@ -15,6 +15,7 @@
   ],
   "exports": {
     ".": "./src/index.ts",
+    "./promise": "./src/promise.ts",
     "./testing": "./src/testing.ts",
     "./*": "./src/*.ts"
   },

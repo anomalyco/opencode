@@ -39,7 +39,7 @@ export function DevToolsBar() {
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
   const { current: theme, mode, supports, setMode } = themes
-  const elevatedTheme = useTheme("elevated")
+  const elevatedTheme = useTheme()
   const [panel, setPanel] = createSignal<Panel>()
   const [dumping, setDumping] = createSignal(false)
   const [dumpPath, setDumpPath] = createSignal<string>()
@@ -229,7 +229,7 @@ export function DevToolsBar() {
   }
 
   return (
-    <box height={1} flexShrink={0} flexDirection="row" backgroundColor={theme.raise(theme.background.default)}>
+    <box height={1} flexShrink={0} flexDirection="row" backgroundColor={theme.decrease(theme.background.base)}>
       <Show when={panel()}>
         <box
           position="absolute"
@@ -248,10 +248,10 @@ export function DevToolsBar() {
             panel() === "server"
               ? theme.text.action.primary.focused
               : serverIndicator().state === "connected"
-                ? theme.text.feedback.success.default
+                ? theme.text.feedback.success.base
                 : serverIndicator().state === "disconnected"
-                  ? theme.text.feedback.error.default
-                  : theme.text.default
+                  ? theme.text.feedback.error.base
+                  : theme.text.base
           }
         >
           {serverIndicator().icon}
@@ -261,8 +261,8 @@ export function DevToolsBar() {
             panel() === "server"
               ? theme.text.action.primary.focused
               : serverIndicator().state === "disconnected"
-                ? theme.text.feedback.error.default
-                : theme.text.subdued
+                ? theme.text.feedback.error.base
+                : theme.text.muted
           }
         >
           {" "}
@@ -286,7 +286,7 @@ export function DevToolsBar() {
               )}
             </Show>
             <Show when={server.error}>
-              <text fg={elevatedTheme.text.feedback.error.default}>Server details unavailable</text>
+              <text fg={elevatedTheme.text.feedback.error.base}>Server details unavailable</text>
             </Show>
           </PanelBox>
         </Show>
@@ -297,8 +297,8 @@ export function DevToolsBar() {
             panel() === "ui"
               ? theme.text.action.primary.focused
               : runtime() === "high"
-                ? theme.text.feedback.error.default
-                : theme.text.subdued
+                ? theme.text.feedback.error.base
+                : theme.text.muted
           }
         >
           {statusIcon(runtime())}
@@ -308,8 +308,8 @@ export function DevToolsBar() {
             panel() === "ui"
               ? theme.text.action.primary.focused
               : runtime() === "high"
-                ? theme.text.feedback.error.default
-                : theme.text.subdued
+                ? theme.text.feedback.error.base
+                : theme.text.muted
           }
         >
           {" "}
@@ -339,7 +339,7 @@ export function DevToolsBar() {
         </Show>
       </BarItem>
       <BarItem active={panel() === "theme"} onClick={() => toggle("theme")}>
-        <text fg={panel() === "theme" ? theme.text.action.primary.focused : theme.text.subdued}>Theme</text>
+        <text fg={panel() === "theme" ? theme.text.action.primary.focused : theme.text.muted}>Theme</text>
         <Show when={panel() === "theme"}>
           <PanelBox>
             <PanelTitle>Theme</PanelTitle>
@@ -355,7 +355,7 @@ export function DevToolsBar() {
         </Show>
       </BarItem>
       <BarItem active={panel() === "tools"} onClick={() => toggle("tools")}>
-        <text fg={panel() === "tools" ? theme.text.action.primary.focused : theme.text.subdued}>Tools</text>
+        <text fg={panel() === "tools" ? theme.text.action.primary.focused : theme.text.muted}>Tools</text>
         <Show when={panel() === "tools"}>
           <PanelBox>
             <PanelTitle>Tools</PanelTitle>
@@ -364,20 +364,20 @@ export function DevToolsBar() {
             </Action>
             <Show when={dumpPath()}>
               {(file) => (
-                <text fg={elevatedTheme.text.subdued} wrapMode="word">
+                <text fg={elevatedTheme.text.muted} wrapMode="word">
                   {file()}
                 </text>
               )}
             </Show>
             <Show when={dumpError()}>
               {(error) => (
-                <text fg={elevatedTheme.text.feedback.error.default} wrapMode="word">
+                <text fg={elevatedTheme.text.feedback.error.base} wrapMode="word">
                   {error()}
                 </text>
               )}
             </Show>
             <box marginTop={1}>
-              <text fg={elevatedTheme.text.default} attributes={TextAttributes.BOLD}>
+              <text fg={elevatedTheme.text.base} attributes={TextAttributes.BOLD}>
                 Render
               </text>
               <Action
@@ -416,7 +416,7 @@ export function DevToolsBar() {
             <For each={groups()}>
               {(group) => (
                 <box marginTop={1}>
-                  <text fg={elevatedTheme.text.default} attributes={TextAttributes.BOLD}>
+                  <text fg={elevatedTheme.text.base} attributes={TextAttributes.BOLD}>
                     {group.title}
                   </text>
                   <For each={group.entries}>{(entry) => <Row label={entry.key} value={String(entry.value)} />}</For>
@@ -433,10 +433,10 @@ export function DevToolsBar() {
           dialog.replace(() => <DialogExperiments />)
         }}
       >
-        <text fg={theme.text.subdued}>Experiments</text>
+        <text fg={theme.text.muted}>Experiments</text>
       </BarItem>
       <box flexGrow={1} minWidth={0}>
-        <TimeToFirstDraw visible={timing()} width="100%" fg={theme.text.subdued} label="Time to first draw" />
+        <TimeToFirstDraw visible={timing()} width="100%" fg={theme.text.muted} label="Time to first draw" />
       </box>
     </box>
   )
@@ -474,7 +474,7 @@ function BarItem(props: ParentProps<{ active: boolean; onClick: () => void }>) {
 }
 
 function PanelBox(props: ParentProps) {
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   const renderer = useRenderer()
   return (
     <box
@@ -487,7 +487,7 @@ function PanelBox(props: ParentProps) {
       paddingRight={2}
       paddingTop={1}
       paddingBottom={1}
-      backgroundColor={theme.background.default}
+      backgroundColor={theme.background.raised.base}
       flexDirection="column"
       onMouseUp={(event) => {
         if (renderer.getSelection()?.getSelectedText()) return
@@ -500,32 +500,32 @@ function PanelBox(props: ParentProps) {
 }
 
 function PanelTitle(props: ParentProps) {
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   return (
-    <text fg={theme.text.default} attributes={TextAttributes.BOLD} marginBottom={1}>
+    <text fg={theme.text.base} attributes={TextAttributes.BOLD} marginBottom={1}>
       {props.children}
     </text>
   )
 }
 
 function Row(props: { label: string; value: string }) {
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   return (
     <box flexDirection="row">
-      <text fg={theme.text.subdued}>{props.label}</text>
+      <text fg={theme.text.muted}>{props.label}</text>
       <box flexGrow={1} />
-      <text fg={theme.text.default}>{props.value}</text>
+      <text fg={theme.text.base}>{props.value}</text>
     </box>
   )
 }
 
 function Action(props: ParentProps<{ onClick: () => void; disabled?: boolean; hoverBackground?: boolean }>) {
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   const [hovered, setHovered] = createSignal(false)
   return (
     <box
       backgroundColor={
-        props.hoverBackground && hovered() && !props.disabled ? theme.background.action.primary.hovered : undefined
+        props.hoverBackground && hovered() && !props.disabled ? theme.background.raised.high : undefined
       }
       onMouseOver={() => setHovered(true)}
       onMouseOut={() => setHovered(false)}
@@ -534,7 +534,7 @@ function Action(props: ParentProps<{ onClick: () => void; disabled?: boolean; ho
         if (!props.disabled) props.onClick()
       }}
     >
-      <text fg={props.disabled ? theme.text.subdued : theme.text.action.primary.default}>{props.children}</text>
+      <text fg={props.disabled ? theme.text.muted : theme.text.action.primary.base}>{props.children}</text>
     </box>
   )
 }
@@ -545,7 +545,7 @@ function cpuPercent(microseconds: number, milliseconds: number) {
 }
 
 function ProcessStat(props: { label: string; values: readonly number[]; unit: string; decimals?: number }) {
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   const value = () => {
     const value = props.values.at(-1)
     if (value === undefined) return "--"
@@ -554,13 +554,13 @@ function ProcessStat(props: { label: string; values: readonly number[]; unit: st
   return (
     <box flexDirection="row">
       <box width={7}>
-        <text fg={theme.text.subdued}>{props.label}</text>
+        <text fg={theme.text.muted}>{props.label}</text>
       </box>
       <box flexGrow={1}>
-        <text fg={props.values.length ? theme.text.default : theme.text.subdued}>{brailleGraph(props.values)}</text>
+        <text fg={props.values.length ? theme.text.base : theme.text.muted}>{brailleGraph(props.values)}</text>
       </box>
       <box width={8} alignItems="flex-end">
-        <text fg={props.values.length ? theme.text.default : theme.text.subdued}>{value()}</text>
+        <text fg={props.values.length ? theme.text.base : theme.text.muted}>{value()}</text>
       </box>
     </box>
   )

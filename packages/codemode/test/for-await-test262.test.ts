@@ -529,6 +529,6 @@ describe("Test262 for-await-of adaptations", () => {
     const result = await execute(`for await (const item of { values: [1, 2] }) {}`)
     expect(result.ok).toBe(false)
     if (result.ok) return
-    expect(result.error.message).toContain("or custom iterator value")
+    expect(result.error.message).toContain("requires an iterable value, received a data object")
   })
 })

@@ -1,6 +1,5 @@
 import { Effect } from "effect"
 import type { Extension } from "../extension.js"
-import { coerceToString } from "../stdlib/value.js"
 import { type ExtensionInvocation, hooked } from "../tool-runtime.js"
 import type { Interpreter } from "./interpreter.js"
 import { createErrorValue, isErrorType } from "./intrinsics.js"
@@ -8,9 +7,7 @@ import { MAX_VALUE_DEPTH } from "./limits.js"
 import { PendingThrow, Throw, typeError } from "./model.js"
 import { fn } from "./native.js"
 import {
-  Callable,
   define,
-  entries,
   get,
   has,
   hidden,
@@ -19,16 +16,17 @@ import {
   Bytes,
   DateObj,
   ErrorObj,
-  GeneratorObj,
+  HeadersObj,
   MapObj,
   Obj,
-  PromiseObj,
   RegExpObj,
   SetObj,
   URLObj,
   URLSearchParamsObj,
+  coerceToString,
+  type Value,
 } from "./objects.js"
-import { describeValue } from "./references.js"
+import { describeValue, isOpaque } from "./references.js"
 
 /**
  * The global bindings of one run's extensions. Everything crossing the boundary is converted: plain data and
@@ -38,33 +36,18 @@ import { describeValue } from "./references.js"
 export const extensionGlobals = <R>(
   ctx: Interpreter<R>,
   extensions: ReadonlyArray<Extension>,
-): ReadonlyArray<readonly [string, unknown]> => {
+): ReadonlyArray<readonly [string, Value]> => {
   const builtins = ctx.builtins
 
-  const toHost = (value: unknown, label: string, depth = 0, seen = new Set<object>()): unknown => {
+  const toHost = (value: Value, label: string, depth = 0, seen = new Set<object>()): unknown => {
     if (depth > MAX_VALUE_DEPTH) throw typeError(`${label} exceeds the maximum value depth of ${MAX_VALUE_DEPTH}.`)
-    if (value === null || typeof value !== "object") {
-      if (isPrimitive(value)) return value
-      throw typeError(`${label} contains ${describeValue(value)}, which cannot be passed to an extension.`)
-    }
-    if (value instanceof Bytes) return new Uint8Array(value.bytes)
-    if (value instanceof DateObj) return new Date(value.time)
-    if (value instanceof RegExpObj) return new RegExp(value.regex.source, value.regex.flags)
-    if (value instanceof URLObj) return new URL(value.url.href)
-    if (value instanceof URLSearchParamsObj) return new URLSearchParams(value.params)
-    const next = (item: unknown) => toHost(item, label, depth + 1, seen)
-    if (value instanceof MapObj) return new Map([...value.map].map(([key, item]) => [next(key), next(item)]))
-    if (value instanceof SetObj) return new Set([...value.set].map(next))
-    if (
-      !(value instanceof Obj) ||
-      value instanceof Callable ||
-      value instanceof GeneratorObj ||
-      value instanceof PromiseObj
-    ) {
+    if (isPrimitive(value)) return value
+    if (!(value instanceof Obj) || isOpaque(value)) {
       throw typeError(`${label} contains ${describeValue(value)}, which cannot be passed to an extension.`)
     }
     if (seen.has(value)) throw typeError(`${label} contains a circular value.`)
     seen.add(value)
+    const next = (item: Value) => toHost(item, label, depth + 1, seen)
     if (value instanceof ErrorObj) {
       const name = coerceToString(get(value, "name"))
       const message = get(value, "message")
@@ -85,19 +68,12 @@ export const extensionGlobals = <R>(
       seen.delete(value)
       return copied
     }
-    const copied =
-      value instanceof Arr
-        ? value.items.map(next)
-        : Object.fromEntries(
-            entries(value)
-              .filter(([key]) => key !== "__proto__")
-              .map(([key, item]) => [key, next(item)]),
-          )
+    const copied = value.toHost(next)
     seen.delete(value)
     return copied
   }
 
-  const fromHost = (value: unknown, label: string, depth = 0, seen = new Set<object>()): unknown => {
+  const fromHost = (value: unknown, label: string, depth = 0, seen = new Set<object>()): Value => {
     if (depth > MAX_VALUE_DEPTH) throw typeError(`${label} exceeds the maximum value depth of ${MAX_VALUE_DEPTH}.`)
     if (isPrimitive(value)) return value
     if (typeof value === "function") return wrap(value, label)
@@ -125,6 +101,7 @@ export const extensionGlobals = <R>(
       if (value instanceof URLSearchParams) {
         return new URLSearchParamsObj(builtins.URLSearchParams, new URLSearchParams(value))
       }
+      if (value instanceof Headers) return new HeadersObj(builtins.Headers, new Headers(value))
       if (value instanceof Map) {
         const wrapped = new MapObj(builtins.Map)
         for (const [key, item] of value) wrapped.map.set(next(key, label), next(item, label))
@@ -195,7 +172,7 @@ export const extensionGlobals = <R>(
  */
 const uncrossed = new Set(["stack", "constructor", "toString", "__proto__"])
 const left = Symbol("left behind")
-const crossing = (convert: () => unknown): unknown => {
+const crossing = <T>(convert: () => T): T | typeof left => {
   try {
     return convert()
   } catch (reason) {
@@ -214,7 +191,7 @@ const hostErrors = new Map<string, ErrorConstructor>([
 ])
 
 // The primitives the interpreter operates on; symbols and BigInts are not among them.
-const isPrimitive = (value: unknown): boolean =>
+const isPrimitive = (value: unknown): value is string | number | boolean | null | undefined =>
   value === null ||
   value === undefined ||
   typeof value === "string" ||

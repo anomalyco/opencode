@@ -599,16 +599,19 @@ describe("Integration", () => {
           expect((yield* integrations.get(integrationID))?.connections).toEqual([
             {
               type: "credential",
+              method: "key",
               id: personal.id,
               label: "Personal",
             },
             {
               type: "credential",
+              method: "key",
               id: work.id,
               label: "Work",
             },
             {
               type: "credential",
+              method: "key",
               id: archived.id,
               label: "Archived",
             },
@@ -616,6 +619,7 @@ describe("Integration", () => {
           ])
           expect(yield* integrations.connection.active(integrationID)).toEqual({
             type: "credential",
+            method: "key",
             id: personal.id,
             label: "Personal",
           })
@@ -627,6 +631,7 @@ describe("Integration", () => {
 
           expect(yield* integrations.connection.active(integrationID)).toEqual({
             type: "credential",
+            method: "key",
             id: work.id,
             label: "Work",
           })
@@ -649,6 +654,7 @@ describe("Integration", () => {
           yield* integrations.connection.remove(work.id)
           expect(yield* integrations.connection.active(integrationID)).toEqual({
             type: "credential",
+            method: "key",
             id: personal.id,
             label: "Personal",
           })

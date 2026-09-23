@@ -207,20 +207,13 @@ it.effect("auto compaction estimates current content against the buffered prompt
     const inputLimited = { context: 400_000, input: 272_000, output: 128_000 }
     expect(compaction.required(input(251_999, inputLimited))).toBe(false)
     expect(compaction.required(input(252_000, inputLimited))).toBe(true)
-    const native = (
-      tokens: number,
-      limit: { context: number; input?: number; output: number } = inputLimited,
-      threshold?: number,
-    ) => {
+    const native = (tokens: number, limit: { context: number; input?: number; output: number } = inputLimited) => {
       const selected = input(tokens, limit)
-      return { ...selected, resolved: { ...selected.resolved, compaction: { mode: "provider" as const, threshold } } }
+      return { ...selected, resolved: { ...selected.resolved, compaction: { type: "native" as const } } }
     }
     expect(compaction.required(native(251_999))).toBe(false)
     expect(compaction.required(native(252_000))).toBe(true)
-    expect(compaction.required(native(99_999, inputLimited, 100_000))).toBe(false)
-    expect(compaction.required(native(100_000, inputLimited, 100_000))).toBe(true)
-    expect(compaction.required(native(252_000, inputLimited, 500_000))).toBe(true)
-    expect(compaction.required(native(1_000_000, { context: 0, input: undefined, output: 0 }, 100_000))).toBe(false)
+    expect(compaction.required(native(1_000_000, { context: 0, input: undefined, output: 0 }))).toBe(false)
 
     const contextLimited = { context: 100_000, output: 10_000 }
     expect(compaction.required(input(79_999, contextLimited))).toBe(false)
@@ -404,7 +397,7 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
     ])
 
     expect(requests).toHaveLength(1)
-    expect(requests[0]?.promptCacheKey).toBe(sessionID)
+    expect(requests[0]?.promptCacheKey).toBe(parentID)
     expect(requests[0]?.http?.headers).toEqual({
       "x-session-affinity": sessionID,
       "X-Session-Id": sessionID,

@@ -79,6 +79,15 @@
     grid-column: 2;
   }
 
+  /* Custom toasts render no close button, so their content takes the whole width. */
+  &:not(:has(> [data-close-button])) > [data-content] {
+    grid-column: 1 / -1;
+  }
+
+  [data-description]:empty {
+    display: none;
+  }
+
   > [data-close-button] {
     grid-column: 2;
     grid-row: 1;

@@ -1,9 +1,8 @@
 import { fn, methods } from "../interpreter/native.js"
 import { typeError } from "../interpreter/model.js"
-import { Bytes, Obj } from "../interpreter/objects.js"
+import { Bytes, Obj, coerceToString } from "../interpreter/objects.js"
 import { describeValue } from "../interpreter/references.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
-import { coerceToString } from "./value.js"
 
 // WebIDL DOMString conversion: a missing argument is a TypeError, anything else stringifies. Invalid input is a
 // TypeError as well; browsers throw a DOMException named InvalidCharacterError, which CodeMode does not have.

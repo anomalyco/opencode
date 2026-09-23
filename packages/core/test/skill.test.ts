@@ -119,7 +119,7 @@ describe("Skill", () => {
         }),
       )
       const agent = yield* agents.get(Agent.ID.make("reviewer"))
-      expect(Skill.available([info("deploy", "Deploy")], agent!)).toEqual([])
+      expect(Skill.available([info("deploy", "Deploy")], agent!.permissions)).toEqual([])
     }),
   )
 })

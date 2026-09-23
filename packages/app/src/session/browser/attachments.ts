@@ -1,14 +1,15 @@
-import { createEffect, createMemo, getOwner, on, onCleanup, runWithOwner } from "solid-js"
+import { batch, createEffect, createMemo, createRoot, getOwner, on, onCleanup, runWithOwner } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { createSimpleContext } from "@opencode/ui/context"
-import type { Browser } from "@opencode/plugin-browser/rpc"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { BrowserPaneCommand } from "@/runtime/platform/browser-pane"
 import { usePlatform } from "@/runtime/platform/platform"
 import type { useServer } from "@/runtime/server/current"
+import type { SessionStateKey } from "@/runtime/server/scope"
 import { useSettings } from "@/settings/model"
 import { findSessionTab, tabKey, useTabs } from "@/shell/tabs/tabs"
-import { useCurrentRoute } from "@/shell/state/layout"
+import { useCurrentRoute, useLayout } from "@/shell/state/layout"
+import { sessionBrowserTab } from "@/shell/state/session-tabs"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { createBrowserConnection, type BrowserConnectionState } from "./connection"
 
@@ -35,13 +36,14 @@ export const { use: useBrowserAttachments, provider: BrowserAttachmentsProvider 
     const settings = useSettings()
     const language = useLanguage()
     const shellTabs = useTabs()
+    const layout = useLayout()
     const route = useCurrentRoute()
     const owner = getOwner()
     const [store, setStore] = createStore<Record<string, BrowserAttachment | undefined>>({})
     // Servers whose plugin lacks the browser RPC; sessions on them stop retrying.
     const [unsupported, setUnsupported] = createStore<Record<string, true | undefined>>({})
     const live = new Map<string, Live>()
-    const focus = new Map<string, Set<(tabID: Browser.TabID) => void>>()
+    const preview = new Map<string, Set<(path: string) => void>>()
     const key = (server: Server, sessionID: string) => `${server.key}\n${sessionID}`
     const enabled = createMemo(
       () => !!platform.browserPane && settings.ready() && settings.general.experimentalBrowser(),
@@ -87,11 +89,14 @@ export const { use: useBrowserAttachments, provider: BrowserAttachmentsProvider 
       enabled,
       supported: (server: Server) => !unsupported[server.key],
       state: (server: Server, sessionID: string) => store[key(server, sessionID)],
-      attach(server: Server, sessionID: string) {
+      attach(server: Server, sessionID: string, sessionKey: SessionStateKey) {
         const id = key(server, sessionID)
         if (live.has(id)) return
         const pane = platform.browserPane
         if (!pane || !enabled() || unsupported[server.key] || server.health?.incompatible) return
+        // Focus requests write to the owning session's layout even while another shell tab is routed,
+        // so the Review pane and browser tab are already selected when the user returns to it.
+        const tabs = createRoot((dispose) => ({ dispose, layout: layout.tabs(sessionKey) }), owner)
         const connection = createBrowserConnection({
           pane,
           // Resolve the current port at every wake, including after sidecar replacement.
@@ -100,7 +105,15 @@ export const { use: useBrowserAttachments, provider: BrowserAttachmentsProvider 
             sessionID,
             endpoint: { ...server.conn.http, url: server.ctx.sdk.url },
           }),
-          focus: (tabID) => focus.get(id)?.forEach((listener) => listener(tabID)),
+          focus: (tabID) => {
+            const tab = sessionBrowserTab(tabID)
+            batch(() => {
+              shellTabs.setPane(findSessionTab(shellTabs.store, server.key, sessionID), "review", true)
+              if (!tabs.layout.all().includes(tab)) tabs.layout.setAll([...tabs.layout.all(), tab])
+              tabs.layout.setActive(tab)
+            })
+          },
+          preview: (path) => preview.get(id)?.forEach((listener) => listener(path)),
           change: (state) => {
             if (state.error === "browser.pane.unsupported") {
               setUnsupported(server.key, true)
@@ -138,17 +151,18 @@ export const { use: useBrowserAttachments, provider: BrowserAttachmentsProvider 
         entry.dispose = () => {
           unsubscribe?.forEach((dispose) => dispose())
           connection.dispose()
+          tabs.dispose()
         }
       },
-      /** Desktop focus requests for a mounted session route; nothing is replayed to routes mounted later. */
-      onFocus(server: Server, sessionID: string, listener: (tabID: Browser.TabID) => void) {
+      /** Agent requests to show a file in this session's Review pane. */
+      onPreview(server: Server, sessionID: string, listener: (path: string) => void) {
         const id = key(server, sessionID)
-        const listeners = focus.get(id) ?? new Set()
+        const listeners = preview.get(id) ?? new Set()
         listeners.add(listener)
-        focus.set(id, listeners)
+        preview.set(id, listeners)
         return () => {
           listeners.delete(listener)
-          if (!listeners.size) focus.delete(id)
+          if (!listeners.size) preview.delete(id)
         }
       },
       command(server: Server, sessionID: string, command: BrowserPaneCommand) {

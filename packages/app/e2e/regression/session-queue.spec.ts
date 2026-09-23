@@ -284,7 +284,7 @@ for (const delivery of ["steer", "queue"] as const) {
     await expect(thinking).toHaveCount(0)
 
     // The next assistant step still belongs to U1: U2 has been admitted, not delivered.
-    mock.emit("session.step.started", { sessionID, assistantMessageID: assistantID, agent: "build", model })
+    mock.emit("session.step.started", { sessionID, assistantMessageID: assistantID, agent: "build", model, started: Date.now() })
     for (const tool of [
       { id: "tool_queue_read", name: "read", input: { path: "src/queue.ts" } },
       { id: "tool_queue_grep", name: "grep", input: { pattern: "retry", path: "src" } },
@@ -341,7 +341,7 @@ for (const delivery of ["steer", "queue"] as const) {
     )
 
     const later = { sessionID, assistantMessageID: "msg_queue_follow_up_assistant" }
-    mock.emit("session.step.started", { ...later, agent: "build", model })
+    mock.emit("session.step.started", { ...later, agent: "build", model, started: Date.now() })
     mock.emit("session.text.started", { ...later, ordinal: 0 })
     mock.emit("session.text.ended", { ...later, ordinal: 0, text: "A3: Now checking the retry path for U2." })
     const response = transcript

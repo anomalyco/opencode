@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { recentModels } from "../../src/context/local"
+import { recentModels } from "../../src/model-preference"
 
 test("moves a model to the front, deduplicates, and limits recents", () => {
   const recent = Array.from({ length: 12 }, (_, index) => ({

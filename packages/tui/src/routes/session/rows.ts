@@ -19,6 +19,26 @@ import {
 } from "./grouping/session"
 export type { CacheUsage, PartRef, SessionRow } from "./grouping/session"
 
+/**
+ * A page boundary can cut a group in half, which would show a partial summary and
+ * give the group a provisional ID (derived from its first part). While the oldest
+ * row is a group, keep loading older pages until something precedes it.
+ */
+export async function completeGroupBoundary(input: {
+  rows: readonly SessionRow[]
+  messages: () => number
+  more: () => boolean
+  loadMore: () => Promise<void>
+  active: () => boolean
+}) {
+  while (input.active() && input.rows[0]?.type === "group" && input.more()) {
+    const before = input.messages()
+    await input.loadMore()
+    // A page that adds nothing would otherwise loop forever.
+    if (input.messages() === before) return
+  }
+}
+
 export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessionID: string) => void) {
   const data = useData()
   const client = useClient()
@@ -75,14 +95,22 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
       if (status !== "connected") return
       setRows(reconcile(reduce()))
       void data.session.pending.sync(id).catch(() => undefined)
-      void data.session.message.sync(id).then(
-        () => {
+      void data.session.message
+        .sync(id)
+        .then(async () => {
           if (sessionID() !== id) return
           setRows(reconcile(reduce()))
-          onSynced?.(id)
-        },
-        () => undefined,
-      )
+          // Restoration waits for complete boundary groups so saved group IDs resolve.
+          await completeGroupBoundary({
+            rows,
+            messages: () => data.session.message.list(id).length,
+            more: () => data.session.message.more(id),
+            loadMore: () => data.session.message.loadMore(id),
+            active: () => sessionID() === id,
+          }).catch(() => undefined)
+          if (sessionID() === id) onSynced?.(id)
+        })
+        .catch(() => undefined)
     }),
   )
 
@@ -378,7 +406,7 @@ export function turnTokensPerSecond(
     step.time.streamed === undefined ? [] : [Math.max(0, step.time.streamed - step.time.created)],
   )
   if (steps.length === 0 || durations.length !== steps.length) return
-  const output = steps.reduce((total, step) => total + (step.tokens?.output ?? 0), 0)
+  const output = steps.reduce((total, step) => total + (step.tokens?.output ?? 0) + (step.tokens?.reasoning ?? 0), 0)
   const duration = durations.reduce((total, value) => total + value, 0)
   if (output <= 0 || duration <= 0) return
   // Aggregate before dividing so each step is weighted by its provider-active duration.

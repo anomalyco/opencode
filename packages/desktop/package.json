@@ -1,7 +1,7 @@
 {
   "name": "@opencode/desktop",
   "private": true,
-  "version": "2.0.6",
+  "version": "2.0.15",
   "type": "module",
   "license": "MIT",
   "homepage": "https://opencode.ai",
@@ -20,16 +20,15 @@
     "package": "electron-builder --config electron-builder.config.ts",
     "package:mac": "electron-builder --mac --config electron-builder.config.ts",
     "package:win": "electron-builder --win --config electron-builder.config.ts",
-    "package:linux": "electron-builder --linux --config electron-builder.config.ts"
+    "package:linux": "electron-builder --linux --config electron-builder.config.ts",
+    "bench:startup": "bun ./scripts/bench-startup.ts"
   },
   "main": "./out/main/index.js",
   "dependencies": {
     "@zip.js/zip.js": "2.7.62",
-    "electron-context-menu": "4.1.2",
+    "electron-context-menu": "5.0.0",
     "electron-log": "^5",
-    "electron-store": "11.0.2",
     "electron-updater": "6.8.9",
-    "electron-window-state": "^5.0.3",
     "lighthouse": "13.4.1"
   },
   "devDependencies": {
@@ -54,7 +53,7 @@
     "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
-    "electron": "42.10.1",
+    "electron": "44.4.3",
     "electron-builder": "26.15.7",
     "electron-vite": "6.0.0-beta.1",
     "puppeteer-core": "25.9.0",
@@ -68,7 +67,6 @@
     "@lydell/node-pty-linux-arm64": "1.2.0-beta.12",
     "@lydell/node-pty-linux-x64": "1.2.0-beta.12",
     "@lydell/node-pty-win32-arm64": "1.2.0-beta.12",
-    "@lydell/node-pty-win32-x64": "1.2.0-beta.12",
-    "msgpackr-extract": "3.0.4"
+    "@lydell/node-pty-win32-x64": "1.2.0-beta.12"
   }
 }
