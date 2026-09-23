@@ -1,4 +1,7 @@
+import { DESKTOP_NATIVE_ENGLISH } from "./desktop-native"
+
 export const dict = {
+  ...DESKTOP_NATIVE_ENGLISH,
   "command.category.suggested": "Suggested",
   "command.category.view": "View",
   "command.category.project": "Project",
@@ -16,6 +19,7 @@ export const dict = {
   "command.category.permissions": "Permissions",
   "command.category.workspace": "Workspace",
   "command.category.settings": "Settings",
+  "command.logs.export": "Export logs",
 
   "theme.scheme.system": "System",
   "theme.scheme.light": "Light",
@@ -91,6 +95,8 @@ export const dict = {
   "command.session.share.description": "Share this session and copy the URL to clipboard",
   "command.session.unshare": "Unshare session",
   "command.session.unshare.description": "Stop sharing this session",
+  "command.session.export": "Export session",
+  "command.session.export.description": "Export the full session transcript as JSON",
 
   "palette.search.placeholder": "Search files, commands, and sessions",
   "palette.search.placeholder.home": "Search commands and sessions",
@@ -131,6 +137,8 @@ export const dict = {
   "provider.connect.title.anthropicProMax": "Login with Claude Pro/Max",
   "provider.connect.selectMethod": "Select login method for {{provider}}.",
   "provider.connect.method.apiKey": "API key",
+  "provider.connect.method.browser": "Browser",
+  "provider.connect.method.headless": "Headless",
   "provider.connect.status.inProgress": "Authorization in progress...",
   "provider.connect.status.waiting": "Waiting for authorization...",
   "provider.connect.status.failed": "Authorization failed: {{error}}",
@@ -163,6 +171,7 @@ export const dict = {
   "provider.connect.toast.connected.description": "{{provider}} models are now available to use.",
 
   "provider.custom.title": "Custom provider",
+  "provider.custom.unavailable": "Custom providers are unavailable on this server",
   "provider.custom.description.prefix": "Configure an OpenAI-compatible provider. See the ",
   "provider.custom.description.link": "provider config docs",
   "provider.custom.description.suffix": ".",
@@ -301,6 +310,7 @@ export const dict = {
 
   "prompt.toast.pasteUnsupported.title": "Unsupported attachment",
   "prompt.toast.pasteUnsupported.description": "Only images, PDFs, or text files can be attached here.",
+  "prompt.toast.attachmentDuplicate.title": "This file has already been uploaded",
   "prompt.toast.modelAgentRequired.title": "Select an agent and model",
   "prompt.toast.modelAgentRequired.description": "Choose an agent and model before sending a prompt.",
   "prompt.toast.worktreeCreateFailed.title": "Failed to create worktree",
@@ -436,6 +446,22 @@ export const dict = {
   "wsl.onboarding.desktopVersion": "desktop {{version}}",
   "wsl.onboarding.versionMismatch": "Installed version does not match the desktop app version.",
   "wsl.onboarding.adding": "Adding...",
+
+  "help.tabs.toast.ariaLabel": "Introducing Tabs. Organize your work and active sessions with tabs",
+  "help.tabs.toast.dismiss": "Dismiss Tabs information",
+  "help.tabs.title": "Introducing Tabs",
+  "help.tabs.description": "Organize your work and active sessions with tabs",
+  "help.tabs.date": "July 14",
+  "help.tabs.introduction": "OpenCode Desktop is now built around tabs.",
+  "help.tabs.sessions":
+    "Start a new session in a tab, or open an existing session from any of your projects. Open a new tab when you're starting something new, and close it when you're done.",
+  "help.tabs.organize":
+    "Keeping a few tabs open makes it easier to organize your active sessions. Rename tabs to something memorable if you plan to keep them around.",
+  "help.tabs.home":
+    "You'll find all your sessions and projects on the new Home screen. Selecting a session opens it in a tab.",
+  "help.tabs.persistence": "When you reopen the app, your tabs are still open.",
+  "help.tabs.worktrees":
+    "The new design does not support Git Worktrees yet, it's coming soon. So if you'd prefer to continue using the previous layout, you can switch between layouts in Settings. Just keep in mind that the new layout will become permanent in a few weeks.",
   "server.row.noUsername": "no username",
 
   "dialog.project.edit.title": "Edit project",
@@ -454,6 +480,7 @@ export const dict = {
   "dialog.releaseNotes.action.next": "Next",
   "dialog.releaseNotes.action.hideFuture": "Don't show these in the future",
   "dialog.releaseNotes.media.alt": "Release preview",
+  "dialog.usageExceeded.dontShowAgain": "Don't show again",
 
   "context.breakdown.title": "Context Breakdown",
   "context.breakdown.note": 'Approximate breakdown of input tokens. "Other" includes tool definitions and overhead.',
@@ -465,6 +492,7 @@ export const dict = {
 
   "context.systemPrompt.title": "System Prompt",
   "context.rawMessages.title": "Raw messages",
+  "context.export.session": "Export session",
 
   "context.stats.session": "Session",
   "context.stats.messages": "Messages",
@@ -543,6 +571,11 @@ export const dict = {
   "toast.session.unshare.success.description": "Session unshared successfully!",
   "toast.session.unshare.failed.title": "Failed to unshare session",
   "toast.session.unshare.failed.description": "An error occurred while unsharing the session",
+
+  "toast.session.export.success.title": "Session exported",
+  "toast.session.export.success.description": "Saved session to {{filename}}",
+  "toast.session.export.failed.title": "Failed to export session",
+  "toast.session.export.failed.description": "An error occurred while exporting the session",
 
   "toast.session.listFailed.title": "Failed to load sessions for {{project}}",
   "toast.project.reloadFailed.title": "Failed to reload {{project}}",
@@ -764,6 +797,12 @@ export const dict = {
   "terminal.connectionLost.abnormalClose": "WebSocket closed abnormally: {{code}}",
   "terminal.connectionLost.description":
     "The terminal connection was interrupted. This can happen when the server restarts.",
+  "terminal.connectTicket.csrfError":
+    "PTY connect ticket rejected by origin or CSRF checks. Check the server CORS config.",
+  "terminal.connectTicket.statusError": "PTY connect ticket failed with {{status}}",
+
+  "titlebar.update": "Update",
+  "titlebar.updateVersion": "Update {{version}}",
 
   "common.closeTab": "Close tab",
   "common.dismiss": "Dismiss",
@@ -772,6 +811,7 @@ export const dict = {
   "common.moreOptions": "More options",
   "common.learnMore": "Learn more",
   "common.rename": "Rename",
+  "common.export": "Export",
   "common.reset": "Reset",
   "common.archive": "Archive",
   "common.delete": "Delete",
@@ -838,6 +878,14 @@ export const dict = {
   "debugBar.mem.label": "MEM",
   "debugBar.mem.tipUnavailable": "Used JS heap vs heap limit. Chromium only.",
   "debugBar.mem.tip": "Used JS heap vs heap limit. {{used}} of {{limit}}.",
+  "debugBar.focus.label": "FOCUS",
+  "debugBar.focus.tip": "Force focus styles on all interactive elements",
+  "debugBar.focus.on": "ON",
+  "debugBar.focus.off": "OFF",
+  "debugBar.direction.label": "DIR",
+  "debugBar.direction.tip": "Force the full app layout direction without changing the selected language",
+  "debugBar.direction.ltr": "LTR",
+  "debugBar.direction.rtl": "RTL",
 
   "app.name.desktop": "OpenCode Desktop",
 

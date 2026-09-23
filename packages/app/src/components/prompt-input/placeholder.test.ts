@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { promptPlaceholder } from "./placeholder"
+import { promptDesignPlaceholder, promptPlaceholder } from "./placeholder"
 
 describe("promptPlaceholder", () => {
   const t = (key: string, params?: Record<string, string>) => `${key}${params?.example ? `:${params.example}` : ""}`
@@ -44,5 +44,20 @@ describe("promptPlaceholder", () => {
       t,
     })
     expect(value).toBe("prompt.placeholder.simple")
+  })
+})
+
+describe("promptDesignPlaceholder", () => {
+  const t = (key: string, params?: Record<string, string>) => {
+    if (key !== "ui.promptInput.placeholder.normal") return key
+    return `Ask anything, ${params?.slash} for commands, ${params?.at} for context...`
+  }
+
+  test("composes the design placeholder from localized fragments", () => {
+    expect(promptDesignPlaceholder("normal", "fallback", t)).toBe("Ask anything, / for commands, @ for context...")
+  })
+
+  test("preserves the shell placeholder", () => {
+    expect(promptDesignPlaceholder("shell", "Enter shell command...", t)).toBe("Enter shell command...")
   })
 })

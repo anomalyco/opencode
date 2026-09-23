@@ -6,6 +6,7 @@ import { createStore } from "solid-js/store"
 import { useModels } from "@/context/models"
 import { useSettings } from "@/context/settings"
 import { useProviders } from "@/hooks/use-providers"
+import { resolveDefaultModel } from "@/hooks/provider-catalog"
 import { Persist, persisted } from "@/utils/persist"
 import { hasCustomAgent, resolveAgent } from "./local-agent"
 import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "./model-variant"
@@ -149,10 +150,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     })
 
     const configuredModel = () => {
-      const configured = sync().data.config.model
-      if (!configured) return
-      const [providerID, modelID] = configured.split("/")
-      const model = { providerID, modelID }
+      const model = resolveDefaultModel(providers.defaultModel(), sync().data.config.model)
+      if (!model) return
       if (validModel(model)) return model
     }
 

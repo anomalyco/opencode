@@ -104,7 +104,8 @@ export function isTimelineReady(messages: Message[] | undefined, loading: boolea
 
 export function selectVisibleUserMessages(messages: UserMessage[], revertMessageID?: string) {
   if (!revertMessageID) return messages
-  return messages.filter((message) => message.id < revertMessageID)
+  const boundary = messages.findIndex((message) => message.id === revertMessageID)
+  return boundary < 0 ? messages : messages.slice(0, boundary)
 }
 
 export async function loadOlderTimeline(input: {

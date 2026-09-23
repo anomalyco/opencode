@@ -255,6 +255,7 @@ export function createChildStoreManager(input: {
             vcs: vcsStore.value,
             limit: 5,
             message: {},
+            session_message: {},
             part: {},
             part_text_accum_delta: {},
           })

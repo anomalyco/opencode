@@ -12,6 +12,6 @@ export function forwardTabRef(ref: Ref<HTMLDivElement> | undefined, element: HTM
   if (typeof ref === "function") ref(element)
 }
 
-export function canOpenTabRename(dragging: boolean | undefined, editing: boolean, committing: boolean) {
-  return !dragging && !editing && !committing
+export function canOpenTabRename(dragging: boolean | undefined, editing: boolean, pending: boolean) {
+  return !dragging && !editing && !pending
 }

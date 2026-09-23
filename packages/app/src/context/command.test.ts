@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { commandPaletteOptions, resolveKeybindOption, upsertCommandRegistration, type CommandOption } from "./command"
+import {
+  activeCommandRegistrations,
+  addCommandRegistration,
+  commandPaletteOptions,
+  resolveKeybindOption,
+  type CommandOption,
+} from "./command"
 
 const paletteOptions: CommandOption[] = [
   { id: "settings.open", title: "Open settings" },
@@ -15,22 +21,31 @@ describe("commandPaletteOptions", () => {
   })
 })
 
-describe("upsertCommandRegistration", () => {
-  test("replaces keyed registrations", () => {
+describe("command registrations", () => {
+  test("shadows keyed registrations while retaining the previous owner", () => {
     const one = () => [{ id: "one", title: "One" }]
     const two = () => [{ id: "two", title: "Two" }]
 
-    const next = upsertCommandRegistration([{ key: "layout", options: one }], { key: "layout", options: two })
+    const registrations = addCommandRegistration([{ key: "layout", options: one }], {
+      key: "layout",
+      options: two,
+    })
+    const active = activeCommandRegistrations(registrations)
 
-    expect(next).toHaveLength(1)
-    expect(next[0]?.options).toBe(two)
+    expect(registrations).toHaveLength(2)
+    expect(active).toHaveLength(1)
+    expect(active[0]?.options).toBe(two)
+
+    const restored = activeCommandRegistrations(registrations.filter((entry) => entry.options !== two))
+    expect(restored).toHaveLength(1)
+    expect(restored[0]?.options).toBe(one)
   })
 
   test("keeps unkeyed registrations additive", () => {
     const one = () => [{ id: "one", title: "One" }]
     const two = () => [{ id: "two", title: "Two" }]
 
-    const next = upsertCommandRegistration([{ options: one }], { options: two })
+    const next = activeCommandRegistrations(addCommandRegistration([{ options: one }], { options: two }))
 
     expect(next).toHaveLength(2)
     expect(next[0]?.options).toBe(two)

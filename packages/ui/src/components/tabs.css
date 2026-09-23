@@ -61,7 +61,7 @@
     flex-shrink: 0;
     max-width: 280px;
     border-bottom: 1px solid var(--border-weak-base);
-    border-right: 1px solid var(--border-weak-base);
+    border-inline-end: 1px solid var(--border-weak-base);
     background-color: var(--background-base);
 
     [data-slot="tabs-trigger"] {
@@ -111,10 +111,10 @@
       color: var(--text-strong);
     }
     &:has([data-slot="tabs-trigger-close-button"]) {
-      padding-right: 12px;
+      padding-inline-end: 12px;
 
       [data-slot="tabs-trigger"] {
-        padding-right: 0;
+        padding-inline-end: 0;
       }
     }
   }
@@ -141,8 +141,8 @@
 
     [data-slot="tabs-list"] {
       height: var(--tabs-bar-height);
-      padding-left: 12px;
-      padding-right: 0;
+      padding-inline-start: 12px;
+      padding-inline-end: 0;
       --tabs-review-gap: 16px;
       --tabs-review-fade: 16px;
       gap: var(--tabs-review-gap);
@@ -162,10 +162,14 @@
           position: absolute;
           top: 0;
           bottom: 0;
-          left: calc(var(--tabs-review-fade) * -1);
+          inset-inline-end: 100%;
           width: var(--tabs-review-fade);
           pointer-events: none;
           background: linear-gradient(90deg, transparent, var(--background-stronger));
+        }
+
+        &:dir(rtl)::before {
+          background: linear-gradient(270deg, transparent, var(--background-stronger));
         }
       }
     }
@@ -213,9 +217,9 @@
       }
 
       &:has([data-slot="tabs-trigger-close-button"]) {
-        padding-right: 5px;
+        padding-inline-end: 5px;
         [data-slot="tabs-trigger"] {
-          padding-right: 0 !important;
+          padding-inline-end: 0 !important;
         }
       }
 
@@ -271,7 +275,7 @@
   #terminal-panel &[data-variant="normal"][data-orientation="horizontal"] {
     [data-slot="tabs-list"] {
       height: 52px;
-      padding-right: 12px;
+      padding-inline-end: 12px;
       gap: 8px;
     }
 
@@ -291,7 +295,7 @@
       }
 
       &:has([data-slot="tabs-trigger-close-button"]) {
-        padding-right: 8px;
+        padding-inline-end: 8px;
       }
 
       &:has([data-selected]) {
@@ -378,9 +382,9 @@
       }
 
       &:has([data-slot="tabs-trigger-close-button"]) {
-        padding-right: 0;
+        padding-inline-end: 0;
         [data-slot="tabs-trigger"] {
-          padding-right: 0;
+          padding-inline-end: 0;
         }
       }
     }
@@ -490,7 +494,7 @@
       padding: 8px;
       gap: 4px;
       background-color: var(--background-base);
-      border-right: 1px solid var(--border-weak-base);
+      border-inline-end: 1px solid var(--border-weak-base);
 
       &::after {
         display: none;
@@ -572,7 +576,7 @@
         padding: 12px;
         gap: 0;
         background-color: var(--background-base);
-        border-right: 1px solid var(--border-weak-base);
+        border-inline-end: 1px solid var(--border-weak-base);
 
         &::after {
           display: none;
@@ -581,7 +585,8 @@
 
       [data-slot="tabs-section-title"] {
         width: 100%;
-        padding: 0 0 0 4px;
+        padding: 0;
+        padding-inline-start: 4px;
         font-family: var(--font-family-sans);
         font-size: var(--font-size-small);
         font-weight: var(--font-weight-medium);
@@ -695,6 +700,10 @@ body[data-new-layout] #terminal-panel [data-component="tabs"][data-variant="norm
       &::before {
         background: linear-gradient(90deg, transparent, var(--v2-background-bg-base));
       }
+
+      &:dir(rtl)::before {
+        background: linear-gradient(270deg, transparent, var(--v2-background-bg-base));
+      }
     }
   }
 }
@@ -702,7 +711,7 @@ body[data-new-layout] #terminal-panel [data-component="tabs"][data-variant="norm
 body[data-new-layout] #review-panel [data-component="tabs"][data-variant="normal"][data-orientation="horizontal"] {
   [data-slot="tabs-list"] {
     height: 52px;
-    padding-right: 12px;
+    padding-inline-end: 12px;
     gap: 8px;
     --tabs-review-fade: 8px;
   }
@@ -723,10 +732,10 @@ body[data-new-layout] #review-panel [data-component="tabs"][data-variant="normal
     }
 
     &:has([data-slot="tabs-trigger-close-button"]) {
-      padding-right: 8px;
+      padding-inline-end: 8px;
 
       [data-slot="tabs-trigger-close-button"] {
-        margin-left: 2px;
+        margin-inline-start: 2px;
       }
     }
 
@@ -754,7 +763,7 @@ body[data-new-layout] #review-panel [data-component="tabs"][data-variant="normal
     .tab-fileicon-color,
     .tab-fileicon-mono,
     [data-slot="icon-svg"] {
-      margin-left: -2px;
+      margin-inline-start: -2px;
     }
   }
 
@@ -792,7 +801,7 @@ body[data-new-layout]
   .session-review-v2-tabs-bar
   [data-slot="tabs-list"]
   > .sticky {
-  padding-right: 0;
+  padding-inline-end: 0;
 
   [data-component="icon-button-v2"] {
     position: relative;
@@ -800,7 +809,7 @@ body[data-new-layout]
     &::after {
       content: "";
       position: absolute;
-      left: 100%;
+      inset-inline-start: 100%;
       top: 50%;
       transform: translateY(-50%);
       width: 20px;
@@ -816,16 +825,30 @@ body[data-new-layout]
   [data-component="tabs"]
   .session-review-v2-tabs-bar
   [data-slot="tabs-list"]
+  > .sticky:not(.session-review-v2-sidebar-toggle-slot) {
+  left: auto;
+  right: auto;
+  inset-inline-end: 0;
+}
+
+body[data-new-layout]
+  #review-panel
+  [data-component="tabs"]
+  .session-review-v2-tabs-bar
+  [data-slot="tabs-list"]
   > .session-review-v2-sidebar-toggle-slot.sticky {
-  padding-right: 0;
+  left: auto;
+  right: auto;
+  inset-inline-start: 0;
+  padding-inline-end: 0;
 
   &::before {
     content: "";
     position: absolute;
     top: 50%;
     bottom: auto;
-    left: auto;
-    right: 100%;
+    inset-inline-start: auto;
+    inset-inline-end: 100%;
     transform: translateY(-50%);
     width: 12px;
     height: 28px;
@@ -838,12 +861,17 @@ body[data-new-layout]
     content: "";
     position: absolute;
     top: 50%;
-    left: 100%;
+    inset-inline-start: 100%;
+    inset-inline-end: auto;
     transform: translateY(-50%);
     width: 8px;
     height: 28px;
     pointer-events: none;
     background: linear-gradient(90deg, var(--v2-background-bg-base), transparent);
+  }
+
+  &:dir(rtl)::after {
+    background: linear-gradient(270deg, var(--v2-background-bg-base), transparent);
   }
 
   [data-component="icon-button-v2"]::after {
@@ -853,7 +881,7 @@ body[data-new-layout]
 
 body[data-new-layout] #review-panel [data-component="tabs"] .session-review-v2-open-in-app-slot {
   flex-shrink: 0;
-  margin-left: auto;
+  margin-inline-start: auto;
 }
 
 body[data-new-layout] #review-panel [data-component="tabs"] .session-review-v2-open-in-app {

@@ -15,12 +15,14 @@ export const dict = {
   "desktop.updater.downloadFailed.title": "更新失敗",
   "desktop.updater.downloadFailed.message": "無法下載更新",
   "desktop.updater.downloaded.title": "更新已下載",
-  "desktop.updater.downloaded.prompt": "已下載 OpenCode {{version}} 版本，是否安裝並重新啟動？",
+  "desktop.updater.downloaded.prompt": "OpenCode {{version}} 已下載。要安裝並重新啟動嗎？",
   "desktop.updater.installFailed.title": "更新失敗",
   "desktop.updater.installFailed.message": "無法安裝更新",
 
   "desktop.cli.installed.title": "CLI 已安裝",
-  "desktop.cli.installed.message": "CLI 已安裝到 {{path}}\n\n重新啟動終端機以使用 'opencode' 命令。",
+  "desktop.cli.installed.message": "CLI 已安裝到 {{path}}\n\n重新啟動終端機即可使用 `opencode` 命令。",
   "desktop.cli.failed.title": "安裝失敗",
-  "desktop.cli.failed.message": "無法安裝 CLI: {{error}}",
+  "desktop.cli.failed.message": "無法安裝 CLI：{{error}}",
+
+  "desktop.error.dev.rootNotFound": "找不到根元素。你是不是忘了把它新增到 index.html？或者 id 屬性拼錯了？",
 }

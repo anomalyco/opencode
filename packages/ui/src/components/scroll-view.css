@@ -21,7 +21,7 @@
 
 .scroll-view__thumb {
   position: absolute;
-  right: 0;
+  inset-inline-end: 0;
   top: 0;
   width: 12px;
   transition: opacity 200ms ease;

@@ -1,7 +1,7 @@
 export function SectionHeading(props: {
   href: string
   title: string
-  description: string
+  description?: string
   as?: "h2" | "p"
   slot?: string
 }) {
@@ -12,10 +12,16 @@ export function SectionHeading(props: {
           <span data-slot="heading-anchor" aria-hidden="true">
             #
           </span>
-          {props.title}.
+          {props.title}
+          {props.description ? "." : ""}
         </a>
-      </strong>{" "}
-      <span>{props.description}</span>
+      </strong>
+      {props.description && (
+        <>
+          {" "}
+          <span>{props.description}</span>
+        </>
+      )}
     </>
   )
 

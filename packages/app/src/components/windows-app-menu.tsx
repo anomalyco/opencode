@@ -8,6 +8,7 @@ import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { useCommand } from "@/context/command"
 import { DESKTOP_MENU, desktopMenuVisible, type DesktopMenuAction, type DesktopMenuEntry } from "@/desktop-menu"
 import { usePlatform } from "@/context/platform"
+import { useLanguage } from "@/context/language"
 
 export function WindowsAppMenu(props: {
   command: ReturnType<typeof useCommand>
@@ -15,6 +16,7 @@ export function WindowsAppMenu(props: {
   variant?: "legacy" | "v2"
 }) {
   let lastFocused: HTMLElement | undefined
+  const language = useLanguage()
 
   const rememberFocus = () => {
     const active = document.activeElement
@@ -43,7 +45,7 @@ export function WindowsAppMenu(props: {
       runAction(entry.action)
       return
     }
-    if (entry.href) props.platform.openLink(entry.href)
+    if (entry.href) props.platform.openExternal(entry.href)
   }
 
   return (
@@ -58,7 +60,7 @@ export function WindowsAppMenu(props: {
             variant="ghost-muted"
             size="large"
             icon={<IconV2 name="menu" />}
-            aria-label="OpenCode menu"
+            aria-label={language.t("desktop.menu.ariaLabel")}
             onPointerDown={rememberFocus}
             onKeyDown={rememberFocus}
           />
@@ -69,7 +71,7 @@ export function WindowsAppMenu(props: {
           icon="menu"
           variant="ghost"
           class="titlebar-icon rounded-md shrink-0"
-          aria-label="OpenCode menu"
+          aria-label={language.t("desktop.menu.ariaLabel")}
           onPointerDown={rememberFocus}
           onKeyDown={rememberFocus}
         />
@@ -79,7 +81,7 @@ export function WindowsAppMenu(props: {
           <DropdownMenu.Group>
             <DropdownMenu.GroupLabel class="desktop-app-menu-heading">OpenCode</DropdownMenu.GroupLabel>
             {DESKTOP_MENU.filter((menu) => desktopMenuVisible(menu, "windows")).map((menu) => (
-              <DesktopMenuSubmenu label={menu.label}>
+              <DesktopMenuSubmenu label={language.t(menu.labelKey)}>
                 {menu.items
                   ?.filter((entry) => desktopMenuVisible(entry, "windows"))
                   .map((entry) =>
@@ -87,7 +89,7 @@ export function WindowsAppMenu(props: {
                       <DropdownMenu.Separator />
                     ) : (
                       <DesktopMenuItem
-                        label={entry.label ?? ""}
+                        label={entry.labelKey ? language.t(entry.labelKey) : ""}
                         keybind={entry.command ? props.command.keybind(entry.command) : entry.accelerator?.windows}
                         disabled={entry.command ? commandDisabled(entry.command) : false}
                         onSelect={() => runEntry(entry)}

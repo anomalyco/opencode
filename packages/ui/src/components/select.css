@@ -1,6 +1,7 @@
 [data-component="select"] {
   [data-slot="select-select-trigger"] {
-    padding: 0 4px 0 8px;
+    padding-block: 0;
+    padding-inline: 8px 4px;
     box-shadow: none;
 
     [data-slot="select-select-trigger-value"] {
@@ -46,7 +47,8 @@
 
   &[data-trigger-style="settings"] {
     [data-slot="select-select-trigger"] {
-      padding: 6px 6px 6px 12px;
+      padding-block: 6px;
+      padding-inline: 12px 6px;
       box-shadow: none;
       border-radius: 6px;
       min-width: 160px;
@@ -154,7 +156,7 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      margin-left: auto;
+      margin-inline-start: auto;
       width: 16px;
       height: 16px;
     }

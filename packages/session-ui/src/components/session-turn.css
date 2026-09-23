@@ -169,6 +169,8 @@
     display: flex;
     flex-grow: 1;
     min-width: 0;
+    direction: ltr;
+    unicode-bidi: isolate;
 
     font-family: var(--font-family-sans);
     font-size: var(--font-size-small);

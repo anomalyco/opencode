@@ -17,13 +17,18 @@ describe("plugin.openai.ws", () => {
 
     const socket = await OpenAIWebSocket.connectResponsesWebSocket({
       url: server.wsUrl,
-      headers: { authorization: "Bearer test", "content-length": "123" },
+      headers: {
+        authorization: "Bearer test",
+        "content-length": "123",
+        "x-openai-internal-codex-residency": "eu",
+      },
     })
 
     expect(OpenAIWebSocket.toWebSocketUrl("http://example.com/v1/responses")).toBe("ws://example.com/v1/responses")
     expect(OpenAIWebSocket.toWebSocketUrl("https://example.com/v1/responses")).toBe("wss://example.com/v1/responses")
     expect(headers?.authorization).toBe("Bearer test")
     expect(headers?.["openai-beta"]).toBe(OpenAIWebSocket.PROTOCOL_HEADER)
+    expect(headers?.["x-openai-internal-codex-residency"]).toBe("eu")
     expect(headers?.["content-length"]).toBeUndefined()
     socket.terminate()
   })
@@ -228,6 +233,26 @@ describe("plugin.openai.ws-pool", () => {
 
     expect(await second.text()).toBe("http")
     expect(websocketAttempts).toBe(1)
+    expect(server.httpRequests).toHaveLength(2)
+    fetch.close()
+  })
+
+  test("falls back immediately to HTTP when a websocket request is too large", async () => {
+    let connections = 0
+    await using server = await createWebSocketServer((socket) => {
+      connections += 1
+      socket.once("message", () => socket.close(1009, "payload too large"))
+    })
+    const fetch = OpenAIWebSocketPool.createWebSocketFetch({
+      url: server.url,
+    })
+
+    const first = await fetch(server.url, streamRequest())
+    const second = await fetch(server.url, streamRequest())
+
+    expect(await first.text()).toBe("http")
+    expect(await second.text()).toBe("http")
+    expect(connections).toBe(1)
     expect(server.httpRequests).toHaveLength(2)
     fetch.close()
   })

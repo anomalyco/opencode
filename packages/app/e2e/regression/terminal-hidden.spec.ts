@@ -10,6 +10,7 @@ const title = "Hidden terminal regression"
 test("unmounts the terminal panel while it is hidden", async ({ page }) => {
   await page.setViewportSize({ width: 1400, height: 900 })
   await mockOpenCodeServer(page, {
+    protocol: "v2",
     directory,
     project: {
       id: projectID,
@@ -43,17 +44,53 @@ test("unmounts the terminal panel while it is hidden", async ({ page }) => {
     ],
     pageMessages: () => ({ items: [] }),
   })
-  await page.route("**/pty", (route) =>
+  await page.route("**/api/pty*", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ id: "pty_hidden_terminal", title: "Terminal 1" }),
+      body: JSON.stringify({
+        location: { directory, project: { id: projectID, directory } },
+        data: {
+          id: "pty_hidden_terminal",
+          title: "Terminal 1",
+          command: "cmd.exe",
+          args: [],
+          cwd: directory,
+          status: "running",
+          pid: 1,
+        },
+      }),
     }),
   )
-  await page.route("**/pty/pty_hidden_terminal", (route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: "{}" }),
+  await page.route("**/api/pty/pty_hidden_terminal*", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        location: { directory, project: { id: projectID, directory } },
+        data: {
+          id: "pty_hidden_terminal",
+          title: "Terminal 1",
+          command: "cmd.exe",
+          args: [],
+          cwd: directory,
+          status: "running",
+          pid: 1,
+        },
+      }),
+    }),
   )
-  await page.routeWebSocket("**/pty/pty_hidden_terminal/connect", () => undefined)
+  await page.route("**/api/pty/pty_hidden_terminal/connect-token*", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        location: { directory, project: { id: projectID, directory } },
+        data: { ticket: "e2e-ticket", expires_in: 60 },
+      }),
+    }),
+  )
+  await page.routeWebSocket("**/api/pty/pty_hidden_terminal/connect", () => undefined)
 
   await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
   await expectSessionTitle(page, title)

@@ -17,7 +17,7 @@ export type ComparisonPair = {
   description?: string
 }
 
-export function modelRefFromCatalog(entry: ModelCatalogEntry): ComparisonModelRef {
+export function modelRefFromCatalog(entry: Pick<ModelCatalogEntry, "name" | "lab" | "slug">): ComparisonModelRef {
   return {
     name: entry.name,
     lab: entry.lab,
@@ -83,11 +83,7 @@ export function ComparisonCardsSection(props: {
 
 function FeaturedComparisonCard(props: { pair: ComparisonPair }) {
   return (
-    <a
-      data-component="compare-home-card"
-      href={canonicalComparisonHref(props.pair.first, props.pair.second)}
-      aria-label={`${props.pair.detail}: ${props.pair.first.name} vs ${props.pair.second.name}`}
-    >
+    <a data-component="compare-home-card" href={canonicalComparisonHref(props.pair.first, props.pair.second)}>
       <span data-slot="compare-home-card-head">
         <span>
           <strong>{props.pair.detail}</strong>
@@ -123,17 +119,24 @@ function ComparisonCardIcon() {
 }
 
 function ComparisonPanelCard(props: { pair: ComparisonPair }) {
+  const firstLabName = () => props.pair.first.labName
+  const secondLabName = () => props.pair.second.labName
+
   return (
     <a data-component="comparison-card" href={canonicalComparisonHref(props.pair.first, props.pair.second)}>
       <span>{props.pair.detail}</span>
       <strong>
         {props.pair.first.name} <em>vs</em> {props.pair.second.name}
       </strong>
-      <p>
-        <b>{props.pair.first.labName ?? formatCatalogLabName(props.pair.first.lab)}</b>
-        <i />
-        <b>{props.pair.second.labName ?? formatCatalogLabName(props.pair.second.lab)}</b>
-      </p>
+      <Show when={firstLabName() || secondLabName()}>
+        <p>
+          <Show when={firstLabName()}>{(name) => <b>{name()}</b>}</Show>
+          <Show when={firstLabName() && secondLabName()}>
+            <i />
+          </Show>
+          <Show when={secondLabName()}>{(name) => <b>{name()}</b>}</Show>
+        </p>
+      </Show>
       <Show when={props.pair.first.metric || props.pair.second.metric}>
         <small>
           {props.pair.first.metric ?? "Listed"} / {props.pair.second.metric ?? "Listed"}
@@ -147,14 +150,11 @@ function ComparisonLabLogo(props: { model: ComparisonModelRef }) {
   const iconId = () => providerIconId(props.model.lab)
 
   return (
-    <span
-      data-slot="compare-home-avatar"
-      data-lab={iconId()}
-      data-size="small"
-      aria-label={props.model.labName ?? formatCatalogLabName(props.model.lab)}
-    >
-      <ProviderIcon aria-hidden="true" id={iconId()} />
-    </span>
+    <Show when={props.model.labName}>
+      <span data-slot="compare-home-avatar" data-lab={iconId()} data-size="small" aria-label={props.model.labName}>
+        <ProviderIcon aria-hidden="true" id={iconId()} />
+      </span>
+    </Show>
   )
 }
 

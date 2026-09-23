@@ -8,6 +8,7 @@ import { Effect, Exit, Fiber, Layer, Schema } from "effect"
 import { HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { eq } from "drizzle-orm"
 import { GlobalBus, type GlobalEvent } from "@/bus/global"
+import { Project } from "@/project/project"
 import { Database } from "@opencode-ai/core/database/database"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
@@ -132,6 +133,9 @@ const startWorkspaceSyncingWithFlag = (projectID: ProjectV2.ID, experimentalWork
   Effect.runPromise(
     Workspace.use.startWorkspaceSyncing(projectID).pipe(Effect.provide(workspaceLayer(experimentalWorkspaces))),
   )
+
+const listWithFlag = (project: Project.Info, experimentalWorkspaces: boolean) =>
+  Effect.runPromise(Workspace.use.list(project).pipe(Effect.provide(workspaceLayer(experimentalWorkspaces))))
 
 function captureGlobalEvents() {
   const events: GlobalEvent[] = []
@@ -413,6 +417,18 @@ describe("workspace CRUD", () => {
         yield* insertWorkspace(a)
 
         expect(yield* workspace.list(instance.project)).toEqual([a, b])
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "list is disabled by the experimental workspace flag",
+    () =>
+      Effect.gen(function* () {
+        const instance = yield* requireInstance
+        yield* insertWorkspace(workspaceInfo(instance.project.id, "manual"))
+
+        expect(yield* Effect.promise(() => listWithFlag(instance.project, false))).toEqual([])
       }),
     { git: true },
   )

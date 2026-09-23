@@ -1,0 +1,6 @@
+{
+  "skills": {
+    "paths": ["./skills", "/opt/skills"],
+    "urls": ["https://example.com/skills", "http://localhost:8080/skills"]
+  }
+}

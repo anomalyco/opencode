@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { canReusePendingBlock, project, stream } from "./markdown-stream"
+import { canReusePendingBlock } from "./markdown-projection"
+import { project, stream } from "./markdown-stream"
 
 describe("markdown stream", () => {
   test("heals incomplete emphasis while streaming", () => {
@@ -129,6 +130,9 @@ describe("markdown stream", () => {
     expect(
       canReusePendingBlock({ mode: "code", raw: "```ts\none" }, { mode: "code", raw: "```ts\none two", src: "" }),
     ).toBe(true)
+    expect(canReusePendingBlock({ mode: "live", raw: "partial" }, { mode: "live", raw: "partial text", src: "" })).toBe(
+      true,
+    )
     expect(canReusePendingBlock({ mode: "code", raw: "```ts\none" }, { mode: "live", raw: "one", src: "" })).toBe(false)
   })
 
@@ -143,6 +147,39 @@ describe("markdown stream", () => {
       mode: "code",
       language: "ts",
     })
+  })
+
+  test("finalizes only the live tail when streaming stops", () => {
+    const live = project(undefined, "# Plan\n\nFinished paragraph.\n\n- final item", true)
+    const final = project(live, live.text, false)
+
+    expect(final.blocks[0]).toBe(live.blocks[0])
+    expect(final.blocks[1]).toBe(live.blocks[1])
+    expect(final.blocks[2]).toEqual({ raw: "- final item", src: "- final item", mode: "full" })
+  })
+
+  test("catches up paced text before finalizing", () => {
+    const live = project(undefined, "# Plan\n\nFinished paragraph.\n\n- final", true)
+    const final = project(live, `${live.text} item`, false)
+
+    expect(canReusePendingBlock(live.blocks[0], final.blocks[0]!)).toBe(true)
+    expect(canReusePendingBlock(live.blocks[1], final.blocks[1]!)).toBe(true)
+    expect(final.blocks[2]).toEqual({ raw: "- final item", src: "- final item", mode: "full" })
+  })
+
+  test("completes an open code block when streaming stops", () => {
+    const live = project(undefined, "```ts\nconst value = 1", true)
+    const final = project(live, live.text, false)
+
+    expect(final.blocks).toEqual([
+      {
+        raw: "```ts\nconst value = 1",
+        src: "const value = 1",
+        mode: "code",
+        language: "ts",
+        complete: true,
+      },
+    ])
   })
 
   test("does not add a blank line before the first streamed code", () => {

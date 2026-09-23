@@ -133,7 +133,7 @@ test("opens and searches project files inline", async ({ page }) => {
   await expect(panel.getByRole("tab", { name: "nested.ts" })).toHaveCount(1)
   await expect(panel.getByRole("tab", { name: "Open file" })).toHaveAttribute("data-selected", "")
   await expect(sidebarToggle).toBeDisabled()
-  await panel.getByRole("tab", { name: /Review/ }).click()
+  await panel.locator("#session-side-panel-review-tab").click()
   await expect(sidebarToggle).toBeEnabled()
   await panel.getByRole("tab", { name: "Open file" }).click()
   await page.keyboard.press("Control+w")

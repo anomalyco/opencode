@@ -25,9 +25,6 @@ as it appears in the context tool group on the session page.`,
 const TEXT = {
   active: "Exploring",
   done: "Explored",
-  read: { one: "{{count}} read", other: "{{count}} reads" },
-  search: { one: "{{count}} search", other: "{{count}} searches" },
-  list: { one: "{{count}} list", other: "{{count}} lists" },
 } as const
 
 function rand(min: number, max: number) {
@@ -118,9 +115,9 @@ export const Playground = {
     }
 
     const items = (): CountItem[] => [
-      { key: "read", count: reads(), one: TEXT.read.one, other: TEXT.read.other },
-      { key: "search", count: searches(), one: TEXT.search.one, other: TEXT.search.other },
-      { key: "list", count: lists(), one: TEXT.list.one, other: TEXT.list.other },
+      { key: "ui.messagePart.context.read", count: reads() },
+      { key: "ui.messagePart.context.search", count: searches() },
+      { key: "ui.messagePart.context.list", count: lists() },
     ]
 
     return (
@@ -210,8 +207,8 @@ export const Empty = {
       <ToolStatusTitle active activeText="Exploring" doneText="Explored" split={false} />
       <AnimatedCountList
         items={[
-          { key: "read", count: 0, one: "{{count}} read", other: "{{count}} reads" },
-          { key: "search", count: 0, one: "{{count}} search", other: "{{count}} searches" },
+          { key: "ui.messagePart.context.read", count: 0 },
+          { key: "ui.messagePart.context.search", count: 0 },
         ]}
         fallback=""
       />
@@ -226,9 +223,9 @@ export const Done = {
       <span style={{ "font-weight": "400", color: "var(--text-base, #ccc)" }}>
         <AnimatedCountList
           items={[
-            { key: "read", count: 5, one: "{{count}} read", other: "{{count}} reads" },
-            { key: "search", count: 3, one: "{{count}} search", other: "{{count}} searches" },
-            { key: "list", count: 1, one: "{{count}} list", other: "{{count}} lists" },
+            { key: "ui.messagePart.context.read", count: 5 },
+            { key: "ui.messagePart.context.search", count: 3 },
+            { key: "ui.messagePart.context.list", count: 1 },
           ]}
           fallback=""
         />

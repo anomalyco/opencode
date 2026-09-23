@@ -326,7 +326,7 @@ describe("HttpApi UI fallback", () => {
     }),
   )
 
-  it.live("allows embedded UI terminal wasm and theme preload CSP", () =>
+  it.live("allows embedded UI terminal wasm, blob attachments, and theme preload CSP", () =>
     Effect.gen(function* () {
       const script = 'document.documentElement.dataset.theme = "dark"'
 
@@ -351,7 +351,8 @@ describe("HttpApi UI fallback", () => {
       const csp = response.headers.get("content-security-policy") ?? ""
       expect(csp).toContain("script-src 'self' 'wasm-unsafe-eval'")
       expect(csp).toContain(`'sha256-${createHash("sha256").update(script).digest("base64")}'`)
-      expect(csp).toContain("connect-src * data:")
+      expect(csp).toContain("img-src 'self' data: https: blob:")
+      expect(csp).toContain("connect-src * data: blob:")
     }),
   )
 

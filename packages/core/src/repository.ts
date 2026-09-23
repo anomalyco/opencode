@@ -118,8 +118,14 @@ export function isRemote(reference: Reference): reference is RemoteReference {
   return !isFile(reference)
 }
 
-export function cachePath(root: string, reference: Reference): string {
-  return path.join(root, ...reference.host.split(":"), ...reference.segments)
+/**
+ * Checkouts are keyed by remote and branch: a branch-specific reference gets
+ * its own directory so branchless refreshes can never move it. The branch is
+ * percent-encoded because valid branch names may contain `/`.
+ */
+export function cachePath(root: string, reference: Reference, branch?: string): string {
+  const base = path.join(root, ...reference.host.split(":"), ...reference.segments)
+  return branch ? `${base}@${encodeURIComponent(branch)}` : base
 }
 
 export function cacheIdentity(reference: Reference): string {

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import type { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
-import { selectProviderCatalog } from "./provider-catalog"
+import { resolveDefaultModel, selectProviderCatalog } from "./provider-catalog"
 
 const catalog = (id: string): NormalizedProviderListResponse => ({
   all: new Map([[id, { id, name: id, source: "api", env: [], options: {}, models: {} }]]),
@@ -56,4 +56,22 @@ test("falls back to the global catalog for route consumers", () => {
       global,
     }),
   ).toBe(global)
+})
+
+test("uses the current server default model", () => {
+  expect(resolveDefaultModel({ providerID: "openai", modelID: "gpt-5" }, "anthropic/claude")).toEqual({
+    providerID: "openai",
+    modelID: "gpt-5",
+  })
+})
+
+test("does not use legacy config when the current server has no default", () => {
+  expect(resolveDefaultModel(null, "anthropic/claude")).toBeUndefined()
+})
+
+test("uses config for legacy servers", () => {
+  expect(resolveDefaultModel(undefined, "anthropic/claude")).toEqual({
+    providerID: "anthropic",
+    modelID: "claude",
+  })
 })
