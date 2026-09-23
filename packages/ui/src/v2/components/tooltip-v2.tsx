@@ -1,5 +1,15 @@
 import { Tooltip as KobalteTooltip } from "@kobalte/core/tooltip"
-import { createEffect, Match, onCleanup, splitProps, Switch, type JSX } from "solid-js"
+import {
+  createContext,
+  createEffect,
+  Match,
+  onCleanup,
+  splitProps,
+  Switch,
+  useContext,
+  type JSX,
+  type ParentProps,
+} from "solid-js"
 import type { ComponentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import "./tooltip-v2.css"
@@ -13,12 +23,20 @@ export interface TooltipV2Props extends ComponentProps<typeof KobalteTooltip> {
   forceOpen?: boolean
 }
 
+const Group = createContext<{ triggers: Set<HTMLElement>; active?: HTMLElement; closedAt: number }>()
+
+export function TooltipV2Group(props: ParentProps) {
+  return <Group.Provider value={{ triggers: new Set(), closedAt: 0 }}>{props.children}</Group.Provider>
+}
+
 export function TooltipV2(props: TooltipV2Props) {
   let ref: HTMLDivElement | undefined
+  const group = useContext(Group)
   const [state, setState] = createStore({
     open: false,
     block: false,
     expand: false,
+    instant: false,
   })
   const [local, others] = splitProps(props, [
     "children",
@@ -28,10 +46,20 @@ export function TooltipV2(props: TooltipV2Props) {
     "inactive",
     "forceOpen",
     "ignoreSafeArea",
+    "openDelay",
     "value",
   ])
 
-  const close = () => setState("open", false)
+  const warm = () =>
+    !!group && ((group.active !== undefined && group.active !== ref) || Date.now() - group.closedAt < 300)
+
+  const close = () => {
+    if (group && group.active === ref) {
+      group.active = undefined
+      if (state.open) group.closedAt = Date.now()
+    }
+    setState("open", false)
+  }
 
   const inside = () => {
     const active = document.activeElement
@@ -62,22 +90,40 @@ export function TooltipV2(props: TooltipV2Props) {
     close()
   }
 
-  const leave = () => {
-    if (!inside()) close()
+  const leave = (event: PointerEvent) => {
+    if (!inside()) {
+      // Kobalte invokes this handler before its own close callback.
+      if (group && state.open) {
+        setState(
+          "instant",
+          [...group.triggers].some(
+            (trigger) =>
+              trigger !== ref && event.relatedTarget instanceof Node && trigger.contains(event.relatedTarget),
+          ),
+        )
+      }
+      close()
+    }
     drop()
   }
 
   createEffect(() => {
-    if (!ref) return
+    const trigger = ref
+    if (!trigger) return
+    group?.triggers.add(trigger)
     sync()
     const obs = new MutationObserver(sync)
-    obs.observe(ref, {
+    obs.observe(trigger, {
       subtree: true,
       childList: true,
       attributes: true,
       attributeFilter: ["aria-expanded", "data-expanded"],
     })
-    onCleanup(() => obs.disconnect())
+    onCleanup(() => {
+      obs.disconnect()
+      group?.triggers.delete(trigger)
+      if (group && group.active === trigger) group.active = undefined
+    })
   })
 
   let justClickedTrigger = false
@@ -88,9 +134,10 @@ export function TooltipV2(props: TooltipV2Props) {
       <Match when={true}>
         <KobalteTooltip
           gutter={4}
-          openDelay={400}
           skipDelayDuration={300}
           {...others}
+          // Controlled pointer-leave closes bypass Kobalte's global skip-delay timer.
+          openDelay={warm() ? 0 : (local.openDelay ?? 400)}
           closeDelay={0}
           ignoreSafeArea={local.ignoreSafeArea ?? true}
           open={local.forceOpen || state.open}
@@ -100,6 +147,15 @@ export function TooltipV2(props: TooltipV2Props) {
             if (justClickedTrigger) {
               justClickedTrigger = false
               return
+            }
+            if (group) {
+              setState(
+                "instant",
+                open ? warm() : [...group.triggers].some((trigger) => trigger !== ref && trigger.matches(":hover")),
+              )
+              if (open) group.active = ref
+              if (!open && group.active === ref) group.active = undefined
+              if (!open && state.open) group.closedAt = Date.now()
             }
             setState("open", open)
           }}
@@ -128,6 +184,7 @@ export function TooltipV2(props: TooltipV2Props) {
               data-component="tooltip-v2"
               data-placement={props.placement}
               data-force-open={local.forceOpen}
+              data-instant={state.instant || undefined}
               class={local.contentClass}
               style={local.contentStyle}
               onPointerDownOutside={(e) => {

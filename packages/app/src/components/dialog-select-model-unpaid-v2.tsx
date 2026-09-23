@@ -2,7 +2,7 @@ import { DialogBody, DialogHeader, DialogTitle, DialogV2 } from "@opencode-ai/ui
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { Tag } from "@opencode-ai/ui/v2/badge-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { TooltipV2, TooltipV2Group } from "@opencode-ai/ui/v2/tooltip-v2"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useTheme } from "@opencode-ai/ui/theme"
 import { createMemo, onCleanup, onMount, type Component, For, Show } from "solid-js"
@@ -82,40 +82,42 @@ export const DialogSelectModelUnpaidV2: Component<{ model?: ModelState }> = (pro
                 {language.t("dialog.model.unpaid.freeModels.title")}
               </div>
             </div>
-            <For each={freeModels()}>
-              {(item) => (
-                <TooltipV2
-                  class="w-full"
-                  placement="right-start"
-                  gutter={6}
-                  openDelay={0}
-                  contentStyle={{ "font-family": "var(--v2-font-family-sans)" }}
-                  value={
-                    <ModelTooltip
-                      model={{ ...item, name: displayModelName(item.name) }}
-                      latest={item.latest}
-                      free={isFree(item)}
-                      v2
-                    />
-                  }
-                >
-                  <button
-                    type="button"
-                    class="flex w-full scroll-my-3.5 flex-row items-center gap-1.5 rounded-md px-3 py-2 text-left text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:var(--v2-font-family-sans)] [font-variation-settings:'slnt'_0] hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none"
-                    onClick={() => selectModel(item)}
+            <TooltipV2Group>
+              <For each={freeModels()}>
+                {(item) => (
+                  <TooltipV2
+                    class="w-full"
+                    placement="right-start"
+                    gutter={6}
+                    openDelay={0}
+                    contentStyle={{ "font-family": "var(--v2-font-family-sans)" }}
+                    value={
+                      <ModelTooltip
+                        model={{ ...item, name: displayModelName(item.name) }}
+                        latest={item.latest}
+                        free={isFree(item)}
+                        v2
+                      />
+                    }
                   >
-                    <span class="min-w-0 truncate">{displayModelName(item.name)}</span>
-                    <Tag class="shrink-0">{language.t("model.tag.free")}</Tag>
-                    <Show when={item.latest}>
-                      <Tag class="shrink-0">{language.t("model.tag.latest")}</Tag>
-                    </Show>
-                    <Show when={currentKey() === modelKey(item)}>
-                      <Icon name="check" class="ml-auto size-4 shrink-0 text-v2-icon-icon-base" />
-                    </Show>
-                  </button>
-                </TooltipV2>
-              )}
-            </For>
+                    <button
+                      type="button"
+                      class="flex w-full scroll-my-3.5 flex-row items-center gap-1.5 rounded-md px-3 py-2 text-left text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-base [font-family:var(--v2-font-family-sans)] [font-variation-settings:'slnt'_0] hover:bg-v2-overlay-simple-overlay-hover focus:bg-v2-overlay-simple-overlay-hover focus:outline-none"
+                      onClick={() => selectModel(item)}
+                    >
+                      <span class="min-w-0 truncate">{displayModelName(item.name)}</span>
+                      <Tag class="shrink-0">{language.t("model.tag.free")}</Tag>
+                      <Show when={item.latest}>
+                        <Tag class="shrink-0">{language.t("model.tag.latest")}</Tag>
+                      </Show>
+                      <Show when={currentKey() === modelKey(item)}>
+                        <Icon name="check" class="ml-auto size-4 shrink-0 text-v2-icon-icon-base" />
+                      </Show>
+                    </button>
+                  </TooltipV2>
+                )}
+              </For>
+            </TooltipV2Group>
           </div>
 
           <div class="flex w-full flex-col">

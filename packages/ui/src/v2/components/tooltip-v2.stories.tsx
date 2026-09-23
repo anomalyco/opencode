@@ -1,4 +1,4 @@
-import { TooltipV2 } from "./tooltip-v2"
+import { TooltipV2, TooltipV2Group } from "./tooltip-v2"
 import { KeybindV2 } from "./keybind-v2"
 
 const docs = `### Overview
@@ -35,6 +35,23 @@ export const Simple = {
       <TooltipV2 value="Tooltip Text">
         <span>Hover me</span>
       </TooltipV2>
+    </div>
+  ),
+}
+
+export const Grouped = {
+  render: () => (
+    <div style={{ padding: "80px" }}>
+      <TooltipV2Group>
+        <div style={{ display: "flex", gap: "8px" }}>
+          <TooltipV2 value="First tooltip" openDelay={800}>
+            <button type="button">First</button>
+          </TooltipV2>
+          <TooltipV2 value="Second tooltip" openDelay={800}>
+            <button type="button">Second</button>
+          </TooltipV2>
+        </div>
+      </TooltipV2Group>
     </div>
   ),
 }

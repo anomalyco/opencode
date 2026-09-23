@@ -9,7 +9,7 @@ import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { TooltipV2, TooltipV2Group } from "@opencode-ai/ui/v2/tooltip-v2"
 import { AttachmentCardV2 } from "../attachment-card-v2"
 import { CommentCardV2 } from "../comment-card-v2"
 import { typeLabel } from "../../../components/message-file"
@@ -393,66 +393,68 @@ export function PromptInputV2Attachments(props: {
           data-slot="prompt-attachments-scroll"
           class="flex flex-nowrap gap-2 overflow-x-auto no-scrollbar px-2 pt-2 pb-1"
         >
-          <For each={props.comments ?? []}>
-            {(comment) => (
-              <div class="relative group shrink-0">
-                <TooltipV2
-                  value={comment.comment}
-                  placement="top"
-                  openDelay={800}
-                  contentClass="max-w-[300px] break-words"
-                >
-                  <CommentCardV2
-                    comment={comment.comment ?? ""}
-                    path={comment.path}
-                    selection={comment.selection}
-                    active={comment.key === props.activeCommentID}
-                    onClick={() => props.onCommentClick?.(comment)}
-                  />
-                </TooltipV2>
-                <button
-                  type="button"
-                  onClick={() => props.onCommentRemove?.(comment)}
-                  class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                  aria-label={props.removeLabel}
-                >
-                  <IconV2 name="outline-xmark" class="text-v2-icon-icon-contrast" />
-                </button>
-              </div>
-            )}
-          </For>
-          <For each={props.attachments}>
-            {(attachment) => (
-              <div class="relative group shrink-0">
-                <TooltipV2 value={attachment.filename} placement="top" contentClass="break-all">
-                  <Show
-                    when={attachment.mime.startsWith("image/")}
-                    fallback={
-                      <AttachmentCardV2 title={attachment.filename}>
-                        {typeLabel(attachment.filename, attachment.mime, i18n.t("ui.common.file"))}
-                      </AttachmentCardV2>
-                    }
+          <TooltipV2Group>
+            <For each={props.comments ?? []}>
+              {(comment) => (
+                <div class="relative group shrink-0">
+                  <TooltipV2
+                    value={comment.comment}
+                    placement="top"
+                    openDelay={800}
+                    contentClass="max-w-[300px] break-words"
                   >
-                    <img
-                      src={attachment.blob.url}
-                      alt={attachment.filename}
-                      class="w-[58px] h-[46px] rounded-[6px] object-cover"
-                      onClick={() => props.onAttachmentClick?.(attachment)}
+                    <CommentCardV2
+                      comment={comment.comment ?? ""}
+                      path={comment.path}
+                      selection={comment.selection}
+                      active={comment.key === props.activeCommentID}
+                      onClick={() => props.onCommentClick?.(comment)}
                     />
-                    <div class="absolute inset-0 rounded-[6px] shadow-[inset_0_0_0_0.5px_var(--v2-border-border-base)] pointer-events-none" />
-                  </Show>
-                </TooltipV2>
-                <button
-                  type="button"
-                  onClick={() => props.onAttachmentRemove(attachment)}
-                  class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
-                  aria-label={props.removeLabel}
-                >
-                  <IconV2 name="outline-xmark" class="text-v2-icon-icon-contrast" />
-                </button>
-              </div>
-            )}
-          </For>
+                  </TooltipV2>
+                  <button
+                    type="button"
+                    onClick={() => props.onCommentRemove?.(comment)}
+                    class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    aria-label={props.removeLabel}
+                  >
+                    <IconV2 name="outline-xmark" class="text-v2-icon-icon-contrast" />
+                  </button>
+                </div>
+              )}
+            </For>
+            <For each={props.attachments}>
+              {(attachment) => (
+                <div class="relative group shrink-0">
+                  <TooltipV2 value={attachment.filename} placement="top" contentClass="break-all">
+                    <Show
+                      when={attachment.mime.startsWith("image/")}
+                      fallback={
+                        <AttachmentCardV2 title={attachment.filename}>
+                          {typeLabel(attachment.filename, attachment.mime, i18n.t("ui.common.file"))}
+                        </AttachmentCardV2>
+                      }
+                    >
+                      <img
+                        src={attachment.blob.url}
+                        alt={attachment.filename}
+                        class="w-[58px] h-[46px] rounded-[6px] object-cover"
+                        onClick={() => props.onAttachmentClick?.(attachment)}
+                      />
+                      <div class="absolute inset-0 rounded-[6px] shadow-[inset_0_0_0_0.5px_var(--v2-border-border-base)] pointer-events-none" />
+                    </Show>
+                  </TooltipV2>
+                  <button
+                    type="button"
+                    onClick={() => props.onAttachmentRemove(attachment)}
+                    class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                    aria-label={props.removeLabel}
+                  >
+                    <IconV2 name="outline-xmark" class="text-v2-icon-icon-contrast" />
+                  </button>
+                </div>
+              )}
+            </For>
+          </TooltipV2Group>
         </div>
         <div
           data-slot="prompt-attachments-fade-left"
