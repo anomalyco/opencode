@@ -80,9 +80,10 @@ in observer mode.
 
 ### Plugin-provided controller policy
 
-The companion registers the `superpowers-execution-reporting` skill and injects the controller
-preflight into root-session model requests through its context hook. No `AGENTS.md` entry is
-required. The hook instructs the controller to register or reconcile an approved plan before work,
+The companion registers the `superpowers-execution-reporting` skill and injects its full contents
+alongside the controller preflight into root-session model requests through its context hook,
+including after compaction. It labels the skill as already loaded, so the controller does not need
+to invoke the skill tool. No `AGENTS.md` entry is required. The hook instructs the controller to register or reconcile an approved plan before work,
 pause on reporting failure, and report evidence-backed progress. It does not create runs itself or
 block native tools. If the companion fails to load, its instructions and reporting tools are both
 absent; plugin-only policy cannot direct the controller in that case.

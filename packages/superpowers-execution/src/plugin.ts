@@ -208,6 +208,7 @@ export default Plugin.define({
     const reporting = await ctx.session.hook(
       "context",
       createReportingContextHook({
+        skillContent: reportingSkill.content,
         readSession: createSessionReader(ctx.session),
         readActiveRun: (rootSessionID) => readActiveRun(repository, rootSessionID),
         onDiagnostic: warnReportingDiagnostic,

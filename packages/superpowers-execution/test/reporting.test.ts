@@ -28,6 +28,9 @@ test("reporting context is root-only and deduplicated", async () => {
   await harness.apply(root)
   await harness.apply(root)
   expect(harness.reportingReminderCount(root)).toBe(1)
+  expect(harness.reminders(root)[0]).toContain("skill is already loaded below")
+  expect(harness.reminders(root)[0]).toContain("do not invoke the skill tool to load it again")
+  expect(harness.reminders(root)[0]).toContain(await Bun.file(reportingSkillFile()).text())
   expect(harness.historyWrites()).toBe(0)
 })
 
@@ -116,6 +119,7 @@ test("an active run is named with its revision and the reminder survives a later
   await harness.apply(compacted)
   expect(harness.reminders(compacted)).toHaveLength(1)
   expect(harness.reminders(compacted)[0]).toContain("Active run run-1 is at revision 1")
+  expect(harness.reminders(compacted)[0]).toContain(await Bun.file(reportingSkillFile()).text())
   expect(harness.storage.writes()).toBe(1)
   expect(harness.historyWrites()).toBe(0)
 })
@@ -203,6 +207,7 @@ test("a failed session lookup skips the reminder, reports a diagnostic, and retr
   const diagnostics: ReportingDiagnostic[] = []
   let failing = true
   const hook = createReportingContextHook({
+    skillContent: await Bun.file(reportingSkillFile()).text(),
     readSession: createSessionReader({
       get: async () => {
         if (failing) throw new Error("native session lookup failed")
