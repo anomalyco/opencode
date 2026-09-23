@@ -1,6 +1,6 @@
 import { isAbsolute, resolve } from "node:path"
 import type { ToolCall, ToolCallContent, ToolCallLocation, ToolCallUpdate, ToolKind } from "@agentclientprotocol/sdk"
-import { readDisplayText } from "@opencode-ai/tui/mini/tool"
+import { readDisplayText } from "@opencode/tui/mini/tool"
 
 export type ToolInput = Record<string, unknown>
 export type ToolContent = ReadonlyArray<

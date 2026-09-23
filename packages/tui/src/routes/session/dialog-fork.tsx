@@ -23,7 +23,7 @@ export function DialogFork(props: { sessionID: string; messageID?: string; onMov
     const result = await client.api.session
       .fork({
         sessionID: props.sessionID,
-        boundary: messageID ? { type: "before", messageID } : { type: "through" },
+        before: messageID,
       })
       .catch((error) => {
         toast.show({ message: errorMessage(error), variant: "error", duration: 5000 })
@@ -75,7 +75,7 @@ export function DialogFork(props: { sessionID: string; messageID?: string; onMov
       when={!pending()}
       fallback={
         <box paddingLeft={2} paddingRight={2} paddingBottom={1}>
-          <Spinner>Forking session...</Spinner>
+          <Spinner>Forking session…</Spinner>
         </box>
       }
     >

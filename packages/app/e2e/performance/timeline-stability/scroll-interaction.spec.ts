@@ -126,13 +126,19 @@ test("keeps moving upward while drag-selecting above the timeline", async ({ pag
       )
     })
   })
-  const textBox = await text.boundingBox()
+  const textBox = await text.evaluate((element) => {
+    const range = document.createRange()
+    range.selectNodeContents(element)
+    const rect = range.getClientRects()[0]
+    return rect ? { x: rect.x, y: rect.y, width: rect.width, height: rect.height } : null
+  })
   const scrollBox = await scroller.boundingBox()
   expect(textBox).not.toBeNull()
   expect(scrollBox).not.toBeNull()
   if (!textBox || !scrollBox) return
 
-  await page.mouse.move(textBox.x + textBox.width - 10, textBox.y + textBox.height / 2)
+  // Start on a text line, not the empty right edge or gap between wrapped lines.
+  await page.mouse.move(textBox.x + Math.min(20, textBox.width / 2), textBox.y + textBox.height / 2)
   await page.mouse.down()
   await page.mouse.move(textBox.x + 20, scrollBox.y - 120, { steps: 30 })
 
@@ -193,6 +199,45 @@ test("does not pull a keyboard-scrolled user during shell remeasurement", async 
   await timeline.send(partUpdated(shell(shellID, "running", lines(50))), 400)
   const trace = await stopVisualProbe<keyof typeof regions>(page)
   await reportVisualStability(testInfo, "keyboard-during-resize", trace, anchorPlan(regions))
+})
+
+test("keeps an older answer selected while scrolling within the interaction buffer", async ({ page }) => {
+  await setupTimeline(page, {
+    messages: history(80),
+    viewport: { width: 1400, height: 700 },
+    reducedMotion: true,
+  })
+  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+  const answer = page.getByText("History 78.", { exact: false })
+  await expect(answer).toBeVisible()
+  await expect
+    .poll(() =>
+      answer.evaluate((element) => element.closest('[data-component="markdown"]')?.hasAttribute("data-markdown-ready")),
+    )
+    .toBe(true)
+  const textBox = await answer.evaluate((element) => {
+    const range = document.createRange()
+    range.selectNodeContents(element)
+    const rect = range.getClientRects()[0]
+    return { x: rect.x, y: rect.y, width: rect.width, height: rect.height }
+  })
+  const scrollBox = await scroller.boundingBox()
+  expect(scrollBox).not.toBeNull()
+  if (!scrollBox) return
+  await page.mouse.move(textBox.x + Math.min(180, textBox.width - 2), textBox.y + textBox.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(textBox.x + 2, textBox.y + textBox.height / 2, { steps: 30 })
+  await page.mouse.up()
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toContain("History 78.")
+  await page.mouse.move(scrollBox.x + scrollBox.width / 2, scrollBox.y + scrollBox.height / 2)
+  await page.mouse.wheel(0, -450)
+  await expect
+    .poll(() => scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
+    .toBeGreaterThan(400)
+  await expect(answer).toHaveCount(1)
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.toString())).toContain("History 78.")
+  await page.getByRole("heading", { name: "Timeline visual stability" }).click()
+  await expect.poll(() => page.evaluate(() => window.getSelection()?.isCollapsed)).toBe(true)
 })
 
 test("tracks keyboard scrolling from a focused timeline descendant", async ({ page }, testInfo) => {
@@ -259,12 +304,16 @@ test("does not claim keyboard scrolling owned by a nested scrollable", async ({ 
   const before = await scroller.evaluate((element) => element.scrollTop)
   const nestedBefore = await nested.evaluate((element) => element.scrollTop)
   await nested.press("PageUp")
-  await page.waitForTimeout(300)
+  await expect.poll(() => nested.evaluate((element) => element.scrollTop)).toBeLessThan(nestedBefore)
   expect(await scroller.evaluate((element) => element.scrollTop)).toBe(before)
-  expect(await nested.evaluate((element) => element.scrollTop)).toBeLessThan(nestedBefore)
 
-  await nested.evaluate((element) => (element.scrollTop = 0))
-  await scroller.evaluate((element) => (element.scrollTop = Math.min(300, element.scrollHeight - element.clientHeight)))
+  await nested.evaluate((element) => element.scrollTo({ top: 0, behavior: "instant" }))
+  await expect.poll(() => nested.evaluate((element) => element.scrollTop)).toBe(0)
+  await scroller.evaluate((element) => {
+    element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: -1 }))
+    element.scrollTo({ top: Math.min(300, element.scrollHeight - element.clientHeight), behavior: "instant" })
+  })
+  await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeLessThan(500)
   const boundaryBefore = await scroller.evaluate((element) => element.scrollTop)
   expect(boundaryBefore).toBeGreaterThan(0)
   await nested.press("PageUp")

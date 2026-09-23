@@ -1,88 +1,58 @@
 import { createStore, produce } from "solid-js/store"
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@opencode/ui/context"
 import { batch, createEffect, createMemo, createRoot, on, onCleanup } from "solid-js"
 import { useWorkspaceLocation, type LocationContext } from "@/workspaces/location"
 import type { Platform } from "@/runtime/platform/platform"
 import { useServerSDK } from "@/runtime/server/client"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode/util/encode"
 import { defaultTitle, titleNumber } from "./title"
 import { Persist, persisted, removePersisted } from "@/runtime/persistence/storage"
 import { ScopedKey, ServerScope } from "@/runtime/server/scope"
+import { Persistence } from "@/runtime/persistence/schema"
+import { Schema, SchemaGetter } from "effect"
 
-export type LocalPTY = {
-  id: string
-  title: string
-  titleNumber: number
-  rows?: number
-  cols?: number
-  buffer?: string
-  scrollY?: number
-  cursor?: number
-}
+const PTY = Persistence.struct({
+  id: Schema.NonEmptyString,
+  title: Persistence.fallback(Schema.String, () => ""),
+  titleNumber: Persistence.fallback(Schema.Finite, () => 0),
+  rows: Persistence.optional(Schema.Finite),
+  cols: Persistence.optional(Schema.Finite),
+  buffer: Persistence.optional(Schema.String),
+  scrollY: Persistence.optional(Schema.Finite),
+  cursor: Persistence.optional(Schema.Finite),
+})
+
+export type LocalPTY = typeof PTY.Type
 
 const WORKSPACE_KEY = "__workspace__"
 const MAX_TERMINAL_SESSIONS = 20
-
-function record(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-}
-
-function text(value: unknown) {
-  return typeof value === "string" ? value : undefined
-}
-
-function num(value: unknown) {
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined
-}
 
 function numberFromTitle(title: string) {
   return titleNumber(title, MAX_TERMINAL_SESSIONS)
 }
 
-function pty(value: unknown): LocalPTY | undefined {
-  if (!record(value)) return
+const State = Persistence.struct({
+  active: Persistence.optional(Schema.String),
+  all: Persistence.array(PTY),
+})
 
-  const id = text(value.id)
-  if (!id) return
-
-  const title = text(value.title) ?? ""
-  const number = num(value.titleNumber)
-  const rows = num(value.rows)
-  const cols = num(value.cols)
-  const buffer = text(value.buffer)
-  const scrollY = num(value.scrollY)
-  const cursor = num(value.cursor)
-
-  return {
-    id,
-    title,
-    titleNumber: number && number > 0 ? number : (numberFromTitle(title) ?? 0),
-    ...(rows !== undefined ? { rows } : {}),
-    ...(cols !== undefined ? { cols } : {}),
-    ...(buffer !== undefined ? { buffer } : {}),
-    ...(scrollY !== undefined ? { scrollY } : {}),
-    ...(cursor !== undefined ? { cursor } : {}),
-  }
-}
-
-export function migrateTerminalState(value: unknown) {
-  if (!record(value)) return value
-
-  const seen = new Set<string>()
-  const all = (Array.isArray(value.all) ? value.all : []).flatMap((item) => {
-    const next = pty(item)
-    if (!next || seen.has(next.id)) return []
-    seen.add(next.id)
-    return [next]
-  })
-
-  const active = text(value.active)
-
-  return {
-    active: active && seen.has(active) ? active : all[0]?.id,
-    all,
-  }
-}
+export const TerminalState = State.pipe(
+  Schema.decodeTo(Schema.toType(State), {
+    decode: SchemaGetter.transform((value) => {
+      const seen = new Set<string>()
+      const all = value.all.flatMap((pty) => {
+        if (seen.has(pty.id)) return []
+        seen.add(pty.id)
+        return [{ ...pty, titleNumber: pty.titleNumber > 0 ? pty.titleNumber : (numberFromTitle(pty.title) ?? 0) }]
+      })
+      return {
+        active: value.active && seen.has(value.active) ? value.active : all[0]?.id,
+        all,
+      }
+    }),
+    encode: SchemaGetter.transform((value) => value),
+  }),
+)
 
 export function getWorkspaceTerminalCacheKey(dir: string, scope: ServerScope = ServerScope.local) {
   return ScopedKey.from(scope, dir, WORKSPACE_KEY)
@@ -131,18 +101,7 @@ function createWorkspaceTerminalSession(
 ) {
   const location = { directory: sdk.directory }
 
-  const [store, setStore, _, ready] = persisted(
-    {
-      ...terminalPersistTarget(scope, dir),
-      migrate: migrateTerminalState,
-    },
-    createStore<{
-      active?: string
-      all: LocalPTY[]
-    }>({
-      all: [],
-    }),
-  )
+  const [store, setStore, _, ready] = persisted(terminalPersistTarget(scope, dir), TerminalState, { all: [] })
   const [ui, setUi] = createStore({
     focus: undefined as { request: number; id?: string; pending: boolean } | undefined,
   })
@@ -285,9 +244,9 @@ function createWorkspaceTerminalSession(
         setStore("all", [])
       })
     },
-    new(options?: { focus?: boolean }) {
+    new() {
       const nextNumber = pickNextTerminalNumber()
-      const focusRequest = options?.focus ? requestFocus(undefined, true) : undefined
+      const focusRequest = requestFocus(undefined, true)
 
       const doCreate = async () => {
         return serverSDK.api.pty.create({ location, title: defaultTitle(nextNumber) }).then((result) => result.data)
@@ -296,7 +255,7 @@ function createWorkspaceTerminalSession(
         .then((data) => {
           const id = data?.id
           if (!id) {
-            if (focusRequest !== undefined) cancelFocus(focusRequest)
+            cancelFocus(focusRequest)
             return
           }
           const newTerminal = {
@@ -307,13 +266,13 @@ function createWorkspaceTerminalSession(
           batch(() => {
             setStore("all", store.all.length, newTerminal)
             setStore("active", id)
-            if (focusRequest !== undefined && ui.focus?.request === focusRequest) {
+            if (ui.focus?.request === focusRequest) {
               setUi("focus", { request: focusRequest, id, pending: false })
             }
           })
         })
         .catch((error: unknown) => {
-          if (focusRequest !== undefined) cancelFocus(focusRequest)
+          cancelFocus(focusRequest)
           console.error("Failed to create terminal", error)
         })
     },
@@ -481,7 +440,7 @@ export const { use: useTerminal, provider: TerminalProvider } = createSimpleCont
       ready: () => workspace().ready(),
       all: () => workspace().all(),
       active: () => workspace().active(),
-      new: (options?: { focus?: boolean }) => workspace().new(options),
+      new: () => workspace().new(),
       update: (pty: Partial<LocalPTY> & { id: string }) => workspace().update(pty),
       trim: (id: string) => workspace().trim(id),
       trimAll: () => workspace().trimAll(),

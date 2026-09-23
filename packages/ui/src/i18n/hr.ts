@@ -10,7 +10,7 @@ export const dict: Record<string, string> = {
   "ui.sessionReview.change.added": "Dodano",
   "ui.sessionReview.change.removed": "Uklonjeno",
   "ui.sessionReview.change.modified": "Izmijenjeno",
-  "ui.sessionReview.image.loading": "Učitavanje...",
+  "ui.sessionReview.image.loading": "Učitavanje…",
   "ui.sessionReview.image.placeholder": "Slika",
   "ui.sessionReview.largeDiff.title": "Razlika je prevelika za iscrtavanje",
   "ui.sessionReview.largeDiff.meta":
@@ -29,7 +29,7 @@ export const dict: Record<string, string> = {
   "ui.sessionReviewV2.empty.noGit.title": "Nema praćenih promjena",
   "ui.sessionReviewV2.empty.noGit.description": "Pratite, pregledajte i poništite promjene u ovom projektu",
   "ui.sessionReviewV2.empty.noGit.action": "Napravi Git spremište",
-  "ui.sessionReviewV2.empty.noGit.actionLoading": "Stvaranje Git repozitorija...",
+  "ui.sessionReviewV2.empty.noGit.actionLoading": "Stvaranje Git repozitorija…",
   "ui.sessionReviewV2.empty.changes.title": "Još nema promjena datoteke",
   "ui.sessionReviewV2.empty.changes.description": "Ovdje će se pojaviti promjene projekta",
   "ui.sessionReview.openFile": "Otvori datoteku",
@@ -38,7 +38,7 @@ export const dict: Record<string, string> = {
   "ui.fileMedia.kind.image": "slika",
   "ui.fileMedia.kind.audio": "audio",
   "ui.fileMedia.state.removed": "Uklonjena {{kind}} datoteka.",
-  "ui.fileMedia.state.loading": "Učitavanje {{kind}}...",
+  "ui.fileMedia.state.loading": "Učitavanje {{kind}}…",
   "ui.fileMedia.state.error": "Nije moguće učitati {{kind}}.",
   "ui.fileMedia.state.unavailable": "Pregled {{kind}} nije dostupan.",
   "ui.fileMedia.binary.title": "Binarna datoteka",
@@ -71,7 +71,7 @@ export const dict: Record<string, string> = {
   "ui.sessionTurn.error.addCredits": "Dodaj kredite",
   "dialog.usageExceeded.freeTier.title": "Dosegnuto je besplatno ograničenje",
   "dialog.usageExceeded.freeTier.description":
-    "Pretplatite se na OpenCode Go za pouzdan pristup najboljim modelima otvorenog koda, počevši od 5 USD mjesečno.",
+    "Pretplatite se na OpenCode Go za 10 USD mjesečno i ostvarite pouzdan pristup najboljim modelima otvorenog koda.",
   "dialog.usageExceeded.freeTier.actionLabel": "Pretplatite se",
   "dialog.usageExceeded.accountRateLimit.title": "Dosegnuto je ograničenje usluge Go",
   "dialog.usageExceeded.accountRateLimit.description":
@@ -120,8 +120,8 @@ export const dict: Record<string, string> = {
   "ui.promptInput.dropFiles": "Ispustite datoteke za prilaganje",
   "ui.promptInput.removeAttachment": "Ukloni privitak",
   "ui.promptInput.label": "Upit",
-  "ui.promptInput.placeholder.shell": "Unesite naredbu ljuske...",
-  "ui.promptInput.placeholder.normal": "Pitaj bilo što, {{slash}} za naredbe, {{at}} za kontekst...",
+  "ui.promptInput.placeholder.shell": "Unesite naredbu ljuske…",
+  "ui.promptInput.placeholder.normal": "Pitaj bilo što, {{slash}} za naredbe, {{at}} za kontekst…",
   "ui.promptInput.add": "Dodajte slike i datoteke",
   "ui.promptInput.attachments": "Slike i datoteke",
   "ui.promptInput.context": "Kontekst",
@@ -196,5 +196,5 @@ export const dict: Record<string, string> = {
   "ui.question.review.notAnswered": "(bez odgovora)",
   "ui.question.multiHint": "Odaberite sve primjenjive odgovore",
   "ui.question.singleHint": "Odaberite jedan odgovor",
-  "ui.question.custom.placeholder": "Upišite svoj odgovor...",
+  "ui.question.custom.placeholder": "Upišite svoj odgovor…",
 }

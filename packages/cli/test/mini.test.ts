@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ClientError, OpenCode } from "@opencode-ai/client/promise"
+import { ClientError, OpenCode } from "@opencode/client/promise"
 import { OPENCODE_VERSION } from "../src/version"
 import path from "node:path"
 import { createMiniConnection, mergeInput as mergeInteractiveInput, resolveMiniTarget } from "../src/mini"
@@ -31,14 +31,24 @@ describe("mini command", () => {
     const initial = Bun.serve({
       port: 0,
       fetch() {
-        return Response.json({ healthy: true, version: OPENCODE_VERSION, pid: process.pid })
+        return Response.json({
+          version: OPENCODE_VERSION,
+          pid: process.pid,
+          urls: [],
+          paths: { tmp: "/tmp/opencode" },
+        })
       },
     })
     const replacement = Bun.serve({
       port: 0,
       fetch(request) {
         authorization.push(request.headers.get("authorization"))
-        return Response.json({ healthy: true, version: OPENCODE_VERSION, pid: process.pid })
+        return Response.json({
+          version: OPENCODE_VERSION,
+          pid: process.pid,
+          urls: [],
+          paths: { tmp: "/tmp/opencode" },
+        })
       },
     })
     const controller = new AbortController()
@@ -57,7 +67,7 @@ describe("mini command", () => {
       })
       const client = await connection.reconnect?.(controller.signal)
       if (!client) throw new Error("Expected a replacement client")
-      await client.health.get()
+      await client.server.info()
 
       expect(client).not.toBe(connection.sdk)
       expect(signal).toBe(controller.signal)
@@ -117,8 +127,8 @@ describe("mini command", () => {
     const result = await cli(["--help"])
 
     expect(result.exitCode).toBe(0)
-    expect(result.stdout).toContain("mini       Start the minimal interactive interface")
-    expect(result.stdout).toContain("run        Run OpenCode with a message")
+    expect(result.stdout).toMatch(/^  mini[ \t]+Start the minimal interactive interface\r?$/m)
+    expect(result.stdout).toMatch(/^  run[ \t]+Run OpenCode with a message\r?$/m)
   })
 
   test("exposes run without legacy interactive, attach, or command modes", async () => {
@@ -147,8 +157,13 @@ describe("mini command", () => {
       async fetch(request) {
         const url = new URL(request.url)
         requests.push(url.pathname)
-        if (url.pathname === "/api/health")
-          return Response.json({ healthy: true, version: OPENCODE_VERSION, pid: process.pid })
+        if (url.pathname === "/api/info")
+          return Response.json({
+            version: OPENCODE_VERSION,
+            pid: process.pid,
+            urls: [],
+            paths: { tmp: "/tmp/opencode" },
+          })
         if (url.pathname === "/api/location")
           return Response.json({ directory: process.cwd(), project: { id: "global", directory: process.cwd() } })
         if (url.pathname === "/api/session") {
@@ -190,7 +205,12 @@ describe("mini command", () => {
       port: 0,
       fetch(request) {
         if (new URL(request.url).pathname === "/api/session") return new Response("boom", { status: 500 })
-        return Response.json({ healthy: true, version: "incompatible", pid: process.pid })
+        return Response.json({
+          version: "incompatible",
+          pid: process.pid,
+          urls: [],
+          paths: { tmp: "/tmp/opencode" },
+        })
       },
     })
 

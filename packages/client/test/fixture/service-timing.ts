@@ -2,7 +2,6 @@ import { withEnsureTiming } from "../../src/service-timing"
 
 const timing = {
   pollInterval: 20,
-  attempts: 120,
   requestTimeout: 100,
   spawnDelay: 200,
   maxSpawnDelay: 1_200,
@@ -10,7 +9,7 @@ const timing = {
   stopPollInterval: 5,
 }
 
-export function accelerate<A extends object, B>(ensure: (options: A) => B) {
+export function accelerate<A extends object, B>(ensure: (options?: A) => B) {
   return (options: A) => ensure(withEnsureTiming(options, timing))
 }
 

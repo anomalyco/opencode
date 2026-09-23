@@ -5,7 +5,9 @@ import { useData } from "../../../context/data"
 import { useClient } from "../../../context/client"
 import { useTheme } from "../../../context/theme"
 import { Keymap } from "../../../context/keymap"
-import { useComposerTab } from "./index"
+import { useComposerTab } from "./context"
+import { useDialog } from "../../../ui/dialog"
+import { DialogShellOutput } from "../../../component/dialog-shell-output"
 
 export function ShellTab(props: { sessionID: string }) {
   const data = useData()
@@ -13,6 +15,7 @@ export function ShellTab(props: { sessionID: string }) {
   const theme = useTheme()
   const composer = useComposerTab()
   const shortcuts = Keymap.useShortcuts()
+  const dialog = useDialog()
 
   const entries = createMemo(() =>
     data.shell.listBySession(props.sessionID).filter((shell) => shell.status === "running"),
@@ -22,6 +25,11 @@ export function ShellTab(props: { sessionID: string }) {
   let scroll: ScrollBoxRenderable | undefined
 
   const selectedEntry = createMemo(() => entries()[store.selected])
+
+  const open = () => {
+    const entry = selectedEntry()
+    if (entry) dialog.replace(() => <DialogShellOutput shell={entry} location={entry.location} />)
+  }
 
   createEffect(() => {
     if (store.selected >= entries().length) setStore("selected", Math.max(0, entries().length - 1))
@@ -42,7 +50,13 @@ export function ShellTab(props: { sessionID: string }) {
     const cleanup = composer.register({
       id: "shell",
       label: "Shell",
-      hints: () => (selectedEntry() ? [{ label: "kill", shortcut: shortcuts.get("composer.shell.kill") ?? "" }] : []),
+      hints: () =>
+        selectedEntry()
+          ? [
+              { label: "output", shortcut: shortcuts.get("composer.shell.select") ?? "" },
+              { label: "kill", shortcut: shortcuts.get("composer.shell.kill") ?? "" },
+            ]
+          : [],
     })
     onCleanup(cleanup)
   })
@@ -75,6 +89,12 @@ export function ShellTab(props: { sessionID: string }) {
         },
       },
       {
+        id: "composer.shell.select",
+        title: "View shell output",
+        group: "Composer",
+        run: open,
+      },
+      {
         id: "composer.shell.kill",
         title: "Kill shell command",
         group: "Composer",
@@ -83,7 +103,7 @@ export function ShellTab(props: { sessionID: string }) {
           if (!entry) return
           void client.api.shell.remove({
             id: entry.id,
-            location: { directory: entry.location.directory, workspace: entry.location.workspaceID },
+            location: { directory: entry.location.directory },
           })
         },
       },
@@ -93,7 +113,7 @@ export function ShellTab(props: { sessionID: string }) {
   return (
     <Show when={composer.active("shell")}>
       <scrollbox scrollbarOptions={{ visible: false }} maxHeight={5} ref={(r: ScrollBoxRenderable) => (scroll = r)}>
-        <Show when={entries().length > 0} fallback={<text fg={theme.text.subdued}> No shell commands</text>}>
+        <Show when={entries().length > 0} fallback={<text fg={theme.text.muted}> No shell commands</text>}>
           <For each={entries()}>
             {(shell, index) => {
               const active = createMemo(() => index() === store.selected)
@@ -103,16 +123,20 @@ export function ShellTab(props: { sessionID: string }) {
                   paddingLeft={1}
                   paddingRight={1}
                   backgroundColor={
-                    active() ? theme.background.action.primary.focused : theme.background.action.primary.default
+                    active() ? theme.background.action.primary.focused : theme.background.action.primary.base
                   }
-                  onMouseOver={() => setStore("selected", index())}
+                  onMouseMove={() => setStore("selected", index())}
+                  onMouseUp={() => {
+                    setStore("selected", index())
+                    open()
+                  }}
                 >
                   <text
-                    fg={active() ? theme.text.action.primary.focused : theme.text.action.primary.default}
+                    fg={active() ? theme.text.action.primary.focused : theme.text.action.primary.base}
                     attributes={active() ? TextAttributes.BOLD : undefined}
                     wrapMode="none"
                   >
-                    {shell.command}
+                    {shell.command.split("\n", 1)[0]}
                   </text>
                 </box>
               )

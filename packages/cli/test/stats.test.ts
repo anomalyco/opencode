@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { ClientError, type SessionStatsInfo } from "@opencode-ai/client"
+import { ClientError, type SessionStatsInfo } from "@opencode/client"
 import { Effect } from "effect"
 import { renderStats, request } from "../src/commands/handlers/stats"
 
@@ -46,6 +46,20 @@ describe("stats rendering", () => {
     expect(output).toContain("80.0% tool success · 2 active days · best streak 2 days")
     expect(output).not.toContain("private_tool")
     expect(output).not.toContain("$12.34")
+  })
+
+  test("renders shared intensity levels and partial month labels", () => {
+    const output = renderStats(
+      {
+        ...stats,
+        range: { from: new Date(2026, 3, 29).getTime(), to: new Date(2026, 4, 20).getTime() },
+        activity: [{ date: "2026-04-29", steps: 1 }],
+      },
+      options(),
+    )
+    expect(output).toContain("    May")
+    expect(output).not.toContain("Apr")
+    expect(output.split(/\r?\n/).find((line) => line.startsWith("We "))).toContain("\u2588")
   })
 
   test("renders only requested detail tables", () => {

@@ -101,3 +101,37 @@ test("continues navigation after the prepended page is laid out", async () => {
 
   expect(events).toEqual(["loaded", "layout", "anchored", "continued"])
 })
+
+test.each(["success", "failure", "cancel", "takeover"])("settles superseded prepend navigation (%s)", async (mode) => {
+  const load = Promise.withResolvers<void>()
+  const layout: (() => void)[] = []
+  const events: (number | string)[] = []
+  let height = 100
+  const prepend = createHistoryPrepend({
+    sessionID: () => "session-1",
+    more: () => true,
+    loadMore: () => load.promise,
+    height: () => height,
+    afterLayout: (continuation) => layout.push(continuation),
+    active: () => true,
+    scrollBy: (amount) => events.push(amount),
+  })
+  prepend(-4, () => events.push("obsolete"))
+  prepend.cancel()
+  prepend.after(() => events.push("jump"))
+  if (mode === "cancel" || mode === "takeover") prepend.cancel()
+  if (mode === "takeover") expect(prepend(-8)).toBe(true)
+  if (mode === "failure") load.reject(new Error("offline"))
+  if (mode !== "failure") {
+    height = 160
+    load.resolve()
+  }
+  await Promise.resolve()
+  expect(events).toEqual(mode === "failure" ? ["jump"] : [])
+  layout.shift()?.()
+  expect(events).toEqual(
+    mode === "failure" ? ["jump"] : mode === "success" ? [60, "jump"] : mode === "takeover" ? [52] : [60],
+  )
+  prepend.after(() => events.push("idle"))
+  expect(events.at(-1)).toBe("idle")
+})

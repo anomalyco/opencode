@@ -1,68 +1,38 @@
-import { Effect, Encoding, Schema } from "effect"
-import { Headers, HttpClientRequest } from "effect/unstable/http"
-import { GeneratedImage, ImageModel, ImageResponse, type ImageRequestFor, type ImageRoute } from "../image.js"
-import { Auth, type Definition as AuthDefinition } from "../route/auth.js"
-import {
-  InvalidProviderOutputReason,
-  AIError,
-  Usage,
-  mergeHttpOptions,
-  mergeJsonRecords,
-  type HttpOptions,
-} from "../schema/index.js"
+import { Effect, Schema } from "effect"
+import type { HttpClientResponse } from "effect/unstable/http"
+import { ImageModel, ImageResponse, type ImageRequestFor } from "../image.js"
+import { Media } from "../media.js"
+import { MediaProtocol } from "../route/media-protocol.js"
+import { MediaRoute } from "../route/media.js"
+import { ProviderID, mergeJsonRecords, type AIError } from "../schema/index.js"
 import { ProviderShared, optionalNull } from "./shared.js"
-import { ImageInputs } from "./utils/image-input.js"
+import { MediaInput } from "./utils/media-input.js"
 
 const ADAPTER = "xai-images"
+const NAME = "xAI Images"
+const PROVIDER = ProviderID.make("xai")
 export const DEFAULT_BASE_URL = "https://api.x.ai/v1"
 export const PATH = "/images/generations"
 export const EDIT_PATH = "/images/edits"
 
+// ---------------------------------------------------------------------------
+// 1. Public model input
+// ---------------------------------------------------------------------------
+
 export type XAIImageString<Known extends string> = Known | (string & {})
 
+/** Provider-native options. Common fields (`n`, `aspectRatio`, `images`) live on the request. */
 export type XAIImageOptions = {
-  readonly n?: number
-  readonly aspectRatio?: XAIImageString<
-    | "1:1"
-    | "3:4"
-    | "4:3"
-    | "9:16"
-    | "16:9"
-    | "2:3"
-    | "3:2"
-    | "9:19.5"
-    | "19.5:9"
-    | "9:20"
-    | "20:9"
-    | "1:2"
-    | "2:1"
-    | "auto"
-  >
-  readonly aspect_ratio?: XAIImageString<
-    | "1:1"
-    | "3:4"
-    | "4:3"
-    | "9:16"
-    | "16:9"
-    | "2:3"
-    | "3:2"
-    | "9:19.5"
-    | "19.5:9"
-    | "9:20"
-    | "20:9"
-    | "1:2"
-    | "2:1"
-    | "auto"
-  >
   readonly resolution?: XAIImageString<"1k" | "2k">
   readonly responseFormat?: XAIImageString<"url" | "b64_json">
   readonly response_format?: XAIImageString<"url" | "b64_json">
 } & Record<string, unknown>
 
-type XAIImageBody = Record<string, unknown> & {
-  readonly model: string
-  readonly prompt: string
-}
+export type Request = ImageRequestFor<XAIImageOptions>
+
+// ---------------------------------------------------------------------------
+// 2. Response schema
+// ---------------------------------------------------------------------------
 
 const XAIImageResponse = Schema.Struct({
   data: Schema.Array(
@@ -76,127 +46,109 @@ const XAIImageResponse = Schema.Struct({
   usage: Schema.optional(Schema.Unknown),
 })
 
-export interface ModelInput {
-  readonly id: string
-  readonly auth: AuthDefinition
-  readonly baseURL?: string
-  readonly headers?: Record<string, string>
-  readonly http?: HttpOptions
-}
+// ---------------------------------------------------------------------------
+// 5. Request body construction
+// ---------------------------------------------------------------------------
 
 const nativeOptions = (options: XAIImageOptions | undefined) => {
   if (!options) return undefined
-  const { aspectRatio, responseFormat, ...native } = options
-  return {
-    aspect_ratio: aspectRatio,
-    response_format: responseFormat,
-    ...native,
-  }
+  const { responseFormat, ...native } = options
+  return { response_format: responseFormat, ...native }
 }
 
-const invalidOutput = (message: string) =>
-  new AIError({
-    module: ADAPTER,
-    method: "generate",
-    reason: new InvalidProviderOutputReason({ message, route: ADAPTER }),
-  })
+const isEdit = (request: Request) => (request.images?.length ?? 0) > 0
 
-const applyQuery = (url: string, query: Record<string, string> | undefined) => {
-  if (!query) return url
-  const next = new URL(url)
-  Object.entries(query).forEach(([key, value]) => next.searchParams.set(key, value))
-  return next.toString()
+const reference = (asset: Media.Asset): Effect.Effect<Record<string, unknown>, AIError> => {
+  const inline = asset.inline()
+  if (inline) return Effect.succeed({ url: inline.dataUrl, type: "image_url" as const })
+  const url = ProviderShared.mediaUrl(asset)
+  if (url) return Effect.succeed({ url, type: "image_url" as const })
+  const id = MediaInput.refID(asset, PROVIDER)
+  if (id) return Effect.succeed({ file_id: id })
+  return Effect.fail(ProviderShared.invalidRequest(`${NAME} accepts image URLs, data URLs, bytes, and xAI file IDs`))
 }
 
-export const model = (input: ModelInput) => {
-  const route: ImageRoute<XAIImageOptions> = {
-    id: ADAPTER,
-    generate: Effect.fn("XAIImages.generate")(function* (request: ImageRequestFor<XAIImageOptions>, execute) {
-      const http = mergeHttpOptions(request.model.http, request.http)
-      const imageReferences = (request.images ?? []).map((image) => {
-        if (image.type === "bytes") return { url: ImageInputs.dataUrl(image), type: "image_url" as const }
-        if (image.type === "url") return { url: image.url, type: "image_url" as const }
-        if (image.type === "file-id") return { file_id: image.id }
-        return undefined
-      })
-      if (imageReferences.some((image) => image === undefined))
-        return yield* ImageInputs.invalid(ADAPTER, "xAI Images accepts image URLs, data URLs, bytes, and file IDs")
-      const requestBody = mergeJsonRecords(
+const fromRequest = Effect.fn("XAIImages.fromRequest")(function* (request: Request) {
+  const references = yield* Effect.forEach(request.images ?? [], reference)
+  return MediaProtocol.json(
+    mergeJsonRecords(
+      {
+        model: request.model.id,
+        prompt: request.prompt,
+        // xAI takes one edit source as `image` and several as `images`.
+        image: references.length === 1 ? references[0] : undefined,
+        images: references.length > 1 ? references : undefined,
+        n: request.n,
+        aspect_ratio: request.aspectRatio,
+      },
+      nativeOptions(request.providerOptions),
+      request.http?.body,
+    ) ?? {},
+  )
+})
+
+// ---------------------------------------------------------------------------
+// 6. Response decoding
+// ---------------------------------------------------------------------------
+
+const decodeResponse = Effect.fn("XAIImages.decodeResponse")(function* (
+  response: HttpClientResponse.HttpClientResponse,
+) {
+  const output = yield* MediaProtocol.decodeJson(ADAPTER, NAME, XAIImageResponse)(response)
+  const decoded = output.value
+  const images = yield* Effect.forEach(decoded.data, (item, index) => {
+    const providerMetadata =
+      item.revised_prompt === undefined || item.revised_prompt === null
+        ? undefined
+        : { xai: { revisedPrompt: item.revised_prompt } }
+    if (item.b64_json)
+      return MediaInput.decodedAsset(
+        output.invalid,
+        `${NAME} result ${index}`,
+        item.b64_json,
+        item.mime_type ?? undefined,
         {
-          model: request.model.id,
-          prompt: request.prompt,
-          image: imageReferences.length === 1 ? imageReferences[0] : undefined,
-          images: imageReferences.length > 1 ? imageReferences : undefined,
+          providerMetadata,
         },
-        nativeOptions(request.options),
-        http?.body,
-      ) as XAIImageBody
-      const text = ProviderShared.encodeJson(requestBody)
-      const url = applyQuery(
-        `${(input.baseURL ?? DEFAULT_BASE_URL).replace(/\/$/, "")}${imageReferences.length === 0 ? PATH : EDIT_PATH}`,
-        http?.query,
       )
-      const headers = yield* Auth.toEffect(input.auth)({
-        request,
-        method: "POST",
-        url,
-        body: text,
-        headers: Headers.fromInput({ ...input.headers, ...http?.headers }),
-      })
-      const response = yield* execute(
-        HttpClientRequest.post(url).pipe(
-          HttpClientRequest.setHeaders(headers),
-          HttpClientRequest.bodyText(text, "application/json"),
-        ),
-      )
-      const payload = yield* response.json.pipe(
-        Effect.mapError(() => invalidOutput("Failed to read the xAI Images response")),
-      )
-      const decoded = yield* Schema.decodeUnknownEffect(XAIImageResponse)(payload).pipe(
-        Effect.mapError(() => invalidOutput("xAI Images returned an invalid response")),
-      )
-      const images = yield* Effect.forEach(decoded.data, (item, index) => {
-        const mediaType = item.mime_type ?? "application/octet-stream"
-        if (item.b64_json)
-          return Effect.fromResult(Encoding.decodeBase64(item.b64_json)).pipe(
-            Effect.mapError(() => invalidOutput(`xAI Images result ${index} contains invalid base64 data`)),
-            Effect.map(
-              (data) =>
-                new GeneratedImage({
-                  mediaType,
-                  data,
-                  providerMetadata:
-                    item.revised_prompt === undefined || item.revised_prompt === null
-                      ? undefined
-                      : { xai: { revisedPrompt: item.revised_prompt } },
-                }),
-            ),
-          )
-        if (item.url)
-          return Effect.succeed(
-            new GeneratedImage({
-              mediaType,
-              data: item.url,
-              providerMetadata:
-                item.revised_prompt === undefined || item.revised_prompt === null
-                  ? undefined
-                  : { xai: { revisedPrompt: item.revised_prompt } },
-            }),
-          )
-        return Effect.fail(invalidOutput(`xAI Images result ${index} has neither image data nor a URL`))
-      })
-      if (images.length === 0) return yield* invalidOutput("xAI Images returned no images")
-      const usage = ProviderShared.isRecord(decoded.usage) ? decoded.usage : undefined
-      return new ImageResponse({
-        images,
-        usage: usage === undefined ? undefined : new Usage({ providerMetadata: { xai: usage } }),
-        providerMetadata: usage === undefined ? undefined : { xai: { usage } },
-      })
-    }),
-  }
-  return ImageModel.make<XAIImageOptions>({ id: input.id, provider: "xai", route, http: input.http })
-}
+    if (item.url)
+      return Effect.succeed(Media.url(item.url, { mediaType: item.mime_type ?? undefined, providerMetadata }))
+    return Effect.fail(output.invalid(`${NAME} result ${index} has neither image data nor a URL`))
+  })
+  if (images.length === 0) return yield* output.invalid(`${NAME} returned no images`)
+  const usage = ProviderShared.isRecord(decoded.usage) ? decoded.usage : undefined
+  // xAI reports image counts rather than tokens, seconds, or credits; the raw record stays in provider metadata.
+  return new ImageResponse({
+    images,
+    providerMetadata: usage === undefined ? undefined : { xai: { usage } },
+  })
+})
+
+// ---------------------------------------------------------------------------
+// 7. Protocol and route
+// ---------------------------------------------------------------------------
+
+export const protocol = MediaProtocol.inline<Request, ImageResponse>({
+  id: ADAPTER,
+  name: NAME,
+  unsupported: ["mask", "size", "seed", "format"],
+  body: { from: fromRequest },
+  response: { decode: decodeResponse },
+})
+
+export const model = (input: MediaRoute.ModelInput) =>
+  ImageModel.fromRoute<XAIImageOptions>(
+    {
+      id: ADAPTER,
+      provider: PROVIDER,
+      protocol,
+      baseURL: DEFAULT_BASE_URL,
+      path: ({ request }) => (isEdit(request) ? EDIT_PATH : PATH),
+    },
+    input,
+  )
 
 export const XAIImages = {
+  protocol,
   model,
 } as const

@@ -5,7 +5,7 @@ describe("acp command", () => {
   test("is registered", async () => {
     const result = await cli(["--help"])
     expect(result.exitCode).toBe(0)
-    expect(result.stdout).toContain("acp        Start an Agent Client Protocol server")
+    expect(result.stdout).toMatch(/^  acp[ \t]+Start an Agent Client Protocol server\r?$/m)
   })
 })
 

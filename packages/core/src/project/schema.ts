@@ -1,7 +1,7 @@
 export * as ProjectSchema from "./schema.js"
 
 import { Schema } from "effect"
-import { Project } from "@opencode-ai/schema/project"
+import { Project } from "@opencode/schema/project"
 import { AbsolutePath } from "../schema.js"
 
 export const ID = Project.ID
@@ -18,14 +18,8 @@ export type UpdateInput = typeof UpdateInput.Type
 
 export const Event = Project.Event
 
-export const Vcs = Schema.Union([
-  Schema.Struct({
-    type: Schema.Literal("git"),
-    store: AbsolutePath,
-  }),
-  Schema.Struct({
-    type: Schema.Literal("hg"),
-    store: AbsolutePath,
-  }),
-])
+export const Vcs = Schema.Struct({
+  type: Project.Vcs,
+  store: AbsolutePath,
+})
 export type Vcs = typeof Vcs.Type

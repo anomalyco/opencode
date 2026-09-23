@@ -1,20 +1,10 @@
 import katex from "katex"
-import { Marked, type MarkedExtension, type Tokens } from "marked"
+import type { MarkedExtension, Tokens } from "marked"
 import markedShiki from "marked-shiki"
+import { createMarkdownBase } from "./marked-base"
 
 export function createMarkdownParser(highlight: (code: string, language: string) => string | Promise<string>) {
-  return new Marked(
-    {
-      renderer: {
-        link({ href, title, text }) {
-          const titleAttr = title ? ` title="${title}"` : ""
-          return `<a href="${href}"${titleAttr} class="external-link" target="_blank" rel="noopener noreferrer">${text}</a>`
-        },
-      },
-    },
-    katexExtension,
-    markedShiki({ highlight }),
-  )
+  return createMarkdownBase().use(katexExtension, markedShiki({ highlight }))
 }
 
 const inlineMathRegex = /^\\\(((?:\\.|[^\\\n])*?)\\\)/

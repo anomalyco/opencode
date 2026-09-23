@@ -2,7 +2,7 @@ import { EOL } from "node:os"
 import { Effect, Option } from "effect"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
-import { Service, type Endpoint } from "@opencode-ai/client/effect/service"
+import { Service, type Endpoint } from "@opencode/client/effect/service"
 import { ServerConnection } from "../../services/server-connection"
 
 const methods = new Set(["delete", "get", "head", "options", "patch", "post", "put"])
@@ -44,6 +44,10 @@ export default Runtime.handler(
     )
     const output = yield* Effect.promise(() => response.text())
     if (output) process.stdout.write(output + (output.endsWith(EOL) ? "" : EOL))
+    if (!response.ok) {
+      process.stderr.write(`HTTP ${response.status} ${response.statusText}${EOL}`)
+      process.exitCode = 1
+    }
   }),
 )
 

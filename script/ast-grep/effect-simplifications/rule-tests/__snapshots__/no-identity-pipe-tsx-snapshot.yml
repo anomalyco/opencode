@@ -1,0 +1,38 @@
+id: no-identity-pipe-tsx
+snapshots:
+  const view = <Widget value={schema.pipe((value) => value)} />:
+    labels:
+      - source: schema.pipe((value) => value)
+        style: primary
+        start: 28
+        end: 57
+  const view = <Widget value={schema.pipe((value) => { return value })} />:
+    labels:
+      - source: schema.pipe((value) => { return value })
+        style: primary
+        start: 28
+        end: 68
+  "const view = <Widget value={schema.pipe((value: Schema) => value)} />":
+    labels:
+      - source: "schema.pipe((value: Schema) => value)"
+        style: primary
+        start: 28
+        end: 65
+  "const view = <Widget value={schema.pipe((value: Schema) => { return value })} />":
+    labels:
+      - source: "schema.pipe((value: Schema) => { return value })"
+        style: primary
+        start: 28
+        end: 76
+  const view = <Widget value={schema.pipe(value => value)} />:
+    labels:
+      - source: schema.pipe(value => value)
+        style: primary
+        start: 28
+        end: 55
+  const view = <Widget value={schema.pipe(value => { return value })} />:
+    labels:
+      - source: schema.pipe(value => { return value })
+        style: primary
+        start: 28
+        end: 66

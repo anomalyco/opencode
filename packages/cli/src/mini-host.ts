@@ -1,9 +1,10 @@
-import type { MiniFrontendInput } from "@opencode-ai/tui/mini"
-import { createModelPreferenceRepository } from "@opencode-ai/tui/model-preference"
+import type { MiniFrontendInput } from "@opencode/tui/mini"
+import { createModelPreferenceRepository } from "@opencode/tui/model-preference"
 import fs from "node:fs"
 import { readFile } from "node:fs/promises"
 import path from "node:path"
 import { ReadStream } from "node:tty"
+import { OPENCODE_VERSION } from "./version"
 
 export const INTERACTIVE_INPUT_ERROR = "opencode mini requires a controlling terminal for input"
 
@@ -137,6 +138,7 @@ export function createMiniHost(input: {
     argv: process.argv.slice(2),
   }
   return {
+    version: OPENCODE_VERSION,
     terminal: { stdin: input.terminal.stdin },
     platform: process.platform,
     stdout: {
@@ -149,7 +151,7 @@ export function createMiniHost(input: {
     },
     editor: {
       async open(options) {
-        const { openEditor } = await import("@opencode-ai/tui/editor")
+        const { openEditor } = await import("@opencode/tui/editor")
         return openEditor(options)
       },
     },

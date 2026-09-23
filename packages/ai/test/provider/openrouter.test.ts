@@ -295,7 +295,7 @@ describe("OpenRouter", () => {
               {
                 type: "reasoning",
                 text: "Thinking",
-                providerMetadata: { openai: { reasoningField: "reasoning", reasoningDetails: details } },
+                providerMetadata: { openrouter: { reasoningField: "reasoning", reasoningDetails: details } },
               },
             ]),
           ],
@@ -305,18 +305,19 @@ describe("OpenRouter", () => {
       expect(prepared.body.messages).toEqual([
         {
           role: "assistant",
-          content: null,
+          content: "",
           reasoning: "Thinking",
+          reasoning_content: undefined,
           reasoning_details: details,
+          reasoning_text: undefined,
         },
       ])
     }),
   )
 
-  it.effect("preserves opaque and duplicate continuation details", () =>
+  it.effect("drops unrecognized details and preserves duplicate continuation details", () =>
     Effect.gen(function* () {
       const details = [
-        { type: "reasoning.future", format: "provider-v2", state: { opaque: true } },
         { type: "reasoning.encrypted", id: "state", data: "opaque" },
         { type: "reasoning.encrypted", id: "state", data: "opaque" },
       ]
@@ -328,14 +329,29 @@ describe("OpenRouter", () => {
             Message.assistant({
               type: "reasoning",
               text: "Thinking",
-              providerMetadata: { openai: { reasoningField: "reasoning", reasoningDetails: details } },
+              providerMetadata: {
+                openrouter: {
+                  reasoningField: "reasoning",
+                  reasoningDetails: [
+                    { type: "reasoning.future", format: "provider-v2", state: { opaque: true } },
+                    ...details,
+                  ],
+                },
+              },
             }),
           ],
         }),
       )
 
       expect(prepared.body.messages).toEqual([
-        { role: "assistant", content: null, reasoning: "Thinking", reasoning_details: details },
+        {
+          role: "assistant",
+          content: "",
+          reasoning: "Thinking",
+          reasoning_content: undefined,
+          reasoning_details: details,
+          reasoning_text: undefined,
+        },
       ])
     }),
   )
@@ -354,14 +370,21 @@ describe("OpenRouter", () => {
             Message.assistant({
               type: "reasoning",
               text: "AB",
-              providerMetadata: { openai: { reasoningField: "reasoning", reasoningDetails: details } },
+              providerMetadata: { openrouter: { reasoningField: "reasoning", reasoningDetails: details } },
             }),
           ],
         }),
       )
 
       expect(prepared.body.messages).toEqual([
-        { role: "assistant", content: null, reasoning: "AB", reasoning_details: details },
+        {
+          role: "assistant",
+          content: "",
+          reasoning: "AB",
+          reasoning_content: undefined,
+          reasoning_details: details,
+          reasoning_text: undefined,
+        },
       ])
     }),
   )
@@ -376,7 +399,16 @@ describe("OpenRouter", () => {
         }),
       )
 
-      expect(prepared.body.messages).toEqual([{ role: "assistant", content: null }])
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: "",
+          reasoning: undefined,
+          reasoning_content: undefined,
+          reasoning_details: undefined,
+          reasoning_text: undefined,
+        },
+      ])
     }),
   )
 })

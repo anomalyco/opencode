@@ -10,7 +10,7 @@ export const dict: Record<string, string> = {
   "ui.sessionReview.change.added": "އިތުރުކޮށްފިއެވެ",
   "ui.sessionReview.change.removed": "ނައްތާލެވިއްޖެއެވެ",
   "ui.sessionReview.change.modified": "ބަދަލުކޮށްފައި",
-  "ui.sessionReview.image.loading": "ލޯޑިންގ...",
+  "ui.sessionReview.image.loading": "ލޯޑިންގ…",
   "ui.sessionReview.image.placeholder": "ފޮޓޯ",
   "ui.sessionReview.largeDiff.title": "ޑިފް މާ ބޮޑު ރެންޑަރ ކުރަން",
   "ui.sessionReview.largeDiff.meta":
@@ -29,7 +29,7 @@ export const dict: Record<string, string> = {
   "ui.sessionReviewV2.empty.noGit.title": "ޓްރެކް ކުރެވިފައިވާ ބަދަލެއް ނެތެވެ",
   "ui.sessionReviewV2.empty.noGit.description": "މި މަޝްރޫޢަށް އަންނަ ބަދަލުތައް ޓްރެކްކޮށް، ރިވިއުކޮށް، އަންޑޯކުރުން",
   "ui.sessionReviewV2.empty.noGit.action": "Git ރިޕޮޒިޓަރީ އުފެއްދުން",
-  "ui.sessionReviewV2.empty.noGit.actionLoading": "Git ރިޕޮޒިޓަރީ އުފެއްދުމުގެ މަސައްކަތް...",
+  "ui.sessionReviewV2.empty.noGit.actionLoading": "Git ރިޕޮޒިޓަރީ އުފެއްދުމުގެ މަސައްކަތް…",
   "ui.sessionReviewV2.empty.changes.title": "އަދި ފައިލަށް ބަދަލެއް ނާދެއެވެ",
   "ui.sessionReviewV2.empty.changes.description": "މަޝްރޫޢަށް އަންނަ ބަދަލުތައް މިތަނުން ފެންނާނެއެވެ",
   "ui.sessionReview.openFile": "ފައިލް ހުޅުވާލާށެވެ",
@@ -38,7 +38,7 @@ export const dict: Record<string, string> = {
   "ui.fileMedia.kind.image": "ފޮޓޯ",
   "ui.fileMedia.kind.audio": "އޯޑިއޯ އެވެ",
   "ui.fileMedia.state.removed": "{{kind}} ފައިލް ނައްތާލެވިއްޖެއެވެ.",
-  "ui.fileMedia.state.loading": "ލޯޑިންގ {{kind}}...",
+  "ui.fileMedia.state.loading": "ލޯޑިންގ {{kind}}…",
   "ui.fileMedia.state.error": "{{kind}} ލޯޑް ނުކުރެވޭ.",
   "ui.fileMedia.state.unavailable": "{{kind}} ޕްރިވިއު ނުލިބެއެވެ.",
   "ui.fileMedia.binary.title": "ބައިނަރީ ފައިލް އެވެ",
@@ -70,7 +70,7 @@ export const dict: Record<string, string> = {
   "ui.sessionTurn.error.addCredits": "ކްރެޑިޓްތައް އިތުރުކުރުން",
   "dialog.usageExceeded.freeTier.title": "ހިލޭ ލިމިޓަށް އާދެވިއްޖެއެވެ",
   "dialog.usageExceeded.freeTier.description":
-    "އެންމެ ރަނގަޅު އޮޕަން ސޯސް މޮޑެލްތަކަށް އިތުބާރުހުރި ގޮތެއްގައި އެކްސެސް ހޯދުމަށް OpenCode Go އަށް ސަބްސްކްރައިބް ކޮށްލައްވާ، މަހަކު 5 ޑޮލަރުން ފެށިގެންނެވެ.",
+    "އެންމެ ރަނގަޅު އޮޕަން ސޯސް މޮޑެލްތަކަށް އިތުބާރުހުރި ގޮތެއްގައި އެކްސެސް ހޯދުމަށް މަހަކު 10 ޑޮލަރަށް OpenCode Go އަށް ސަބްސްކްރައިބް ކޮށްލައްވާ.",
   "dialog.usageExceeded.freeTier.actionLabel": "ސަބްސްކްރައިބް ކޮށްލައްވާ",
   "dialog.usageExceeded.accountRateLimit.title": "ގޯ ލިމިޓް އާދެވުނެވެ",
   "dialog.usageExceeded.accountRateLimit.description":
@@ -116,8 +116,8 @@ export const dict: Record<string, string> = {
   "ui.promptInput.dropFiles": "އެޓޭޗް ކުރަން ފައިލްތައް ވައްޓާލާށެވެ",
   "ui.promptInput.removeAttachment": "އެޓޭޗްމަންޓް ނަގާށެވެ",
   "ui.promptInput.label": "ޕްރޮމްޕްޓް",
-  "ui.promptInput.placeholder.shell": "ޝެލް ކޮމާންޑް ލިޔުއްވާ...",
-  "ui.promptInput.placeholder.normal": "އެއްވެސް އެއްޗެއް އަހާ، ކޮމާންޑްތަކަށް {{slash}}، ކޮންޓެކްސްޓަށް {{at}}...",
+  "ui.promptInput.placeholder.shell": "ޝެލް ކޮމާންޑް ލިޔުއްވާ…",
+  "ui.promptInput.placeholder.normal": "އެއްވެސް އެއްޗެއް އަހާ، ކޮމާންޑްތަކަށް {{slash}}، ކޮންޓެކްސްޓަށް {{at}}…",
   "ui.promptInput.add": "ތަސްވީރުތަކާއި ފައިލްތައް އިތުރުކުރުން",
   "ui.promptInput.attachments": "ތަސްވީރުތަކާއި ފައިލްތައް",
   "ui.promptInput.context": "ކޮންޓެކްސްޓް",
@@ -192,5 +192,5 @@ export const dict: Record<string, string> = {
   "ui.question.review.notAnswered": "(ޖަވާބެއް ނުލިބޭ)",
   "ui.question.multiHint": "އެކަމާ ގުޅޭ ހުރިހާ ޖަވާބެއް ހޮވާށެވެ",
   "ui.question.singleHint": "އެއް ޖަވާބެއް ހޮވާށެވެ",
-  "ui.question.custom.placeholder": "ޖަވާބު ޓައިޕް ކުރާށެވެ...",
+  "ui.question.custom.placeholder": "ޖަވާބު ޓައިޕް ކުރާށެވެ…",
 }

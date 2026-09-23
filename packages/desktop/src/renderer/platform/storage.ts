@@ -1,26 +1,36 @@
-import { createDraftStore, type Platform } from "@opencode-ai/app/desktop"
-import type { AsyncStorage } from "@solid-primitives/storage"
+import {
+  createDraftStore,
+  createNamespaceStorage,
+  flushPersisted,
+  type NamespaceStorage,
+  type Platform,
+} from "@opencode/app/desktop"
 import type { ElectronAPI } from "../api-types"
+import { onBeforeDispose } from "../ipc-client"
 
 export function createDesktopStorage(api: ElectronAPI) {
-  const cache = new Map<string, AsyncStorage>()
+  const namespaces = new Map<string, NamespaceStorage>()
+  const driver = { items: api.storeItems, update: api.storeUpdate, clear: api.storeClear }
   const storage: NonNullable<Platform["storage"]> = (name = "default.dat") => {
-    const cached = cache.get(name)
+    const cached = namespaces.get(name)
     if (cached) return cached
-    const next: AsyncStorage = {
-      getItem: (key) => api.storeGet(name, key),
-      setItem: (key, value) => api.storeSet(name, key, value),
-      removeItem: (key) => api.storeDelete(name, key),
-      clear: () => api.storeClear(name),
-      key: async (index: number) => (await api.storeKeys(name))[index],
-      getLength: () => api.storeLength(name),
-      get length() {
-        return next.getLength()
-      },
-    }
-    cache.set(name, next)
+    const next = createNamespaceStorage(driver, name)
+    namespaces.set(name, next)
     return next
   }
+  // Dirty stores must serialize into their namespaces before the namespaces are sent; the app's
+  // own pagehide listener registers after the IPC client's, so it cannot be relied on here.
+  const flush = () => {
+    flushPersisted()
+    return Promise.all([...namespaces.values()].map((namespace) => namespace.flush()))
+  }
+
+  api.onStoreChanged((name, insert, remove, revision) => namespaces.get(name)?.accept(insert, remove, revision))
+  // Durability boundaries: the window going away, and it leaving the foreground.
+  onBeforeDispose(flush)
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") void flush()
+  })
 
   return {
     storage,

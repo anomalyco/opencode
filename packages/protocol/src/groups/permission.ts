@@ -1,9 +1,9 @@
-import { Agent } from "@opencode-ai/schema/agent"
-import { Location } from "@opencode-ai/schema/location"
-import { Permission } from "@opencode-ai/schema/permission"
-import { PermissionSaved } from "@opencode-ai/schema/permission-saved"
-import { Project } from "@opencode-ai/schema/project"
-import { Session } from "@opencode-ai/schema/session"
+import { Agent } from "@opencode/schema/agent"
+import { Location } from "@opencode/schema/location"
+import { Permission } from "@opencode/schema/permission"
+import { PermissionSaved } from "@opencode/schema/permission-saved"
+import { Project } from "@opencode/schema/project"
+import { Session } from "@opencode/schema/session"
 import { Context, Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { PermissionNotFoundError, SessionNotFoundError } from "../errors.js"
@@ -27,7 +27,7 @@ export const makePermissionGroup = <
         .annotateMerge(locationQueryOpenApi)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.permission.request.list",
+            identifier: "permission.request.list",
             summary: "List pending permission requests",
             description: "Retrieve pending permission requests for a location.",
           }),
@@ -39,7 +39,7 @@ export const makePermissionGroup = <
         success: Schema.Struct({ data: Schema.Array(PermissionSaved.Info) }),
       }).annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.permission.saved.list",
+          identifier: "permission.saved.list",
           summary: "List saved permissions",
           description: "Retrieve saved permissions, optionally filtered by project.",
         }),
@@ -51,7 +51,7 @@ export const makePermissionGroup = <
         success: HttpApiSchema.NoContent,
       }).annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.permission.saved.remove",
+          identifier: "permission.saved.remove",
           summary: "Remove saved permission",
           description: "Remove a saved permission by ID.",
         }),
@@ -79,7 +79,7 @@ export const makePermissionGroup = <
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.session.permission.create",
+            identifier: "session.permission.create",
             summary: "Create permission request",
             description: "Evaluate and, when approval is required, create a permission request for a session.",
           }),
@@ -90,15 +90,13 @@ export const makePermissionGroup = <
         params: { sessionID: Session.ID },
         success: Schema.Struct({ data: Schema.Array(Permission.Request) }),
         error: SessionNotFoundError,
-      })
-        .middleware(sessionLocationMiddleware)
-        .annotateMerge(
-          OpenApi.annotations({
-            identifier: "v2.session.permission.list",
-            summary: "List session permission requests",
-            description: "Retrieve pending permission requests owned by a session.",
-          }),
-        ),
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "session.permission.list",
+          summary: "List session permission requests",
+          description: "Retrieve pending permission requests owned by a session.",
+        }),
+      ),
     )
     .add(
       HttpApiEndpoint.get("session.permission.get", "/api/session/:sessionID/permission/:requestID", {
@@ -109,7 +107,7 @@ export const makePermissionGroup = <
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.session.permission.get",
+            identifier: "session.permission.get",
             summary: "Get permission request",
             description: "Retrieve a pending permission request owned by a session.",
           }),
@@ -119,7 +117,7 @@ export const makePermissionGroup = <
       HttpApiEndpoint.post("session.permission.reply", "/api/session/:sessionID/permission/:requestID/reply", {
         params: { sessionID: Session.ID, requestID: Permission.ID },
         payload: Schema.Struct({
-          reply: Permission.Reply,
+          decision: Permission.Reply,
           message: Schema.String.pipe(Schema.optional),
         }),
         success: HttpApiSchema.NoContent,
@@ -128,7 +126,7 @@ export const makePermissionGroup = <
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.session.permission.reply",
+            identifier: "session.permission.reply",
             summary: "Reply to pending permission request",
             description: "Respond to a pending permission request owned by a session.",
           }),

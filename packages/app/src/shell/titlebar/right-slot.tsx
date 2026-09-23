@@ -38,9 +38,15 @@ export function createTitlebarRightSlot(): TitlebarRightSlot {
   }
 }
 
-export function TitlebarRightMount() {
+export function TitlebarRightMount(props: { vertical?: boolean }) {
   const slot = useTitlebarRightSlot()
-  return <div ref={slot.setMount} id="opencode-titlebar-right" class="flex shrink-0 items-center justify-end gap-0" />
+  return (
+    <div
+      ref={slot.setMount}
+      id="opencode-titlebar-right"
+      class={props.vertical ? "flex w-full shrink-0 flex-col" : "flex shrink-0 items-center justify-end gap-0"}
+    />
+  )
 }
 
 export function TitlebarRight(props: ParentProps) {

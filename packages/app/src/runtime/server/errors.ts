@@ -29,6 +29,14 @@ export function formatServerError(error: unknown, translate?: Translator, fallba
   const unwrapped = unwrapNamedError(error)
   if (isConfigInvalidErrorLike(unwrapped)) return parseReadableConfigInvalidError(unwrapped, translate)
   if (isProviderModelNotFoundErrorLike(unwrapped)) return parseReadableProviderModelNotFoundError(unwrapped, translate)
+  if (
+    typeof unwrapped === "object" &&
+    unwrapped !== null &&
+    "message" in unwrapped &&
+    typeof unwrapped.message === "string" &&
+    unwrapped.message
+  )
+    return unwrapped.message
   if (error instanceof Error && error.message) return error.message
   if (typeof error === "string" && error) return error
   if (fallback) return fallback
@@ -36,10 +44,9 @@ export function formatServerError(error: unknown, translate?: Translator, fallba
 }
 
 function unwrapNamedError(error: unknown): unknown {
-  if (error instanceof Error && error.cause && typeof error.cause === "object" && "body" in error.cause) {
-    return (error.cause as Record<string, unknown>).body
-  }
-  return error
+  if (!(error instanceof Error) || !error.cause || typeof error.cause !== "object") return error
+  if ("body" in error.cause) return (error.cause as Record<string, unknown>).body
+  return error.cause
 }
 
 // Client-synthesized session not-found errors share one constructor and

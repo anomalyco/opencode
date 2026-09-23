@@ -1,4 +1,4 @@
-import { makeDefaultApi } from "@opencode-ai/protocol/api"
+import { makeDefaultApi } from "@opencode/protocol/api"
 import { LocationMiddleware } from "./location"
 import { FormLocationMiddleware } from "./middleware/form-location"
 import { SessionLocationMiddleware } from "./middleware/session-location"

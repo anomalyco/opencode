@@ -1,17 +1,17 @@
-import { useFilteredList } from "@opencode-ai/ui/hooks"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { Switch } from "@opencode-ai/ui/switch"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { TextInput } from "@opencode-ai/ui/text-input"
-import { type Component, For, Show } from "solid-js"
-import { createStore } from "solid-js/store"
+import { useFilteredList } from "@opencode/ui/hooks"
+import { ProviderIcon } from "@opencode/ui/provider-icon"
+import { Switch } from "@opencode/ui/switch"
+import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
+import { TextInput } from "@opencode/ui/text-input"
+import { type Component, createEffect, For, on, onCleanup, Show } from "solid-js"
+import { Schema } from "effect"
+import { Persistence } from "@/runtime/persistence/schema"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useModels } from "@/providers/models/models"
 import { useServerSDK } from "@/runtime/server/client"
 import { popularProviders } from "@/providers/catalog/providers"
 import { Persist, persisted } from "@/runtime/persistence/storage"
-import { InlineServerSelect } from "@/settings/server-select"
 import { SettingsList } from "@/settings/list"
 import { SettingsRow } from "@/settings/row"
 import "@/settings/settings.css"
@@ -20,13 +20,32 @@ type ModelItem = ReturnType<ReturnType<typeof useModels>["list"]>[number]
 
 const PROVIDER_ICON_SIZE = 16
 
-export const SettingsModels: Component = () => {
+export const ModelProvidersSchema = Schema.Struct({
+  collapsed: Persistence.record(Persistence.fallback(Schema.Boolean, () => false)),
+})
+
+export const SettingsModels: Component<{ active?: boolean; autofocus?: boolean }> = (props) => {
   const language = useLanguage()
   const models = useModels()
   const serverSdk = useServerSDK()
+  let search: HTMLInputElement | undefined
+  createEffect(
+    on(
+      () => props.active ?? true,
+      (active) => {
+        if (!active) return
+        const frame = requestAnimationFrame(() => {
+          if (props.active !== false && props.autofocus !== false && search?.isConnected)
+            search.focus({ preventScroll: true })
+        })
+        onCleanup(() => cancelAnimationFrame(frame))
+      },
+    ),
+  )
   const [store, setStore] = persisted(
     Persist.serverGlobal(serverSdk.scope, "settings-v2.models.providers"),
-    createStore({ collapsed: {} as Record<string, boolean> }),
+    ModelProvidersSchema,
+    { collapsed: {} },
   )
 
   const list = useFilteredList<ModelItem>({
@@ -59,10 +78,10 @@ export const SettingsModels: Component = () => {
             <h2 class="settings-tab-title">{language.t("settings.models.title")}</h2>
             <span class="text-11-regular text-v2-text-text-muted">{language.t("settings.models.description")}</span>
           </div>
-          <InlineServerSelect />
         </div>
         <div class="settings-tab-search">
           <TextInput
+            ref={search}
             type="search"
             appearance="base"
             value={list.filter()}
@@ -154,12 +173,12 @@ export const SettingsModels: Component = () => {
                             height={PROVIDER_ICON_SIZE}
                             class="settings-models-provider-icon shrink-0"
                           />
-                          <span class="settings-section-title">{group.items[0].provider.name}</span>
+                          <span class="settings-models-group-title">{group.items[0].provider.name}</span>
                         </span>
                       </button>
                     </h3>
                     <Show when={expanded()}>
-                      <SettingsList>
+                      <SettingsList variant="catalog">
                         <For each={group.items}>
                           {(item) => {
                             const key = { providerID: item.provider.id, modelID: item.id }

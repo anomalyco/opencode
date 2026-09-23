@@ -7,7 +7,8 @@ import { AwsV4Signer } from "aws4fetch"
 import { Config, ConfigProvider, Effect, FileSystem, PlatformError, Redacted } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
 import * as ProviderShared from "../src/protocols/shared"
-import * as Cloudflare from "../src/providers/cloudflare"
+import { CloudflareAIGateway } from "../src/providers/cloudflare-ai-gateway.js"
+import { CloudflareWorkersAI } from "../src/providers/cloudflare-workers-ai.js"
 
 type Provider = {
   readonly id: string
@@ -120,11 +121,11 @@ const PROVIDERS: ReadonlyArray<Provider> = [
     ],
     validate: (env) =>
       validateChat({
-        url: `${Cloudflare.aiGatewayBaseURL({
+        url: `${CloudflareAIGateway.baseURL({
           accountId: env.CLOUDFLARE_ACCOUNT_ID,
           gatewayId: env.CLOUDFLARE_GATEWAY_ID || undefined,
         })}/chat/completions`,
-        token: Redacted.make(envValue(env, Cloudflare.aiGatewayAuthEnvVars)),
+        token: Redacted.make(envValue(env, CloudflareAIGateway.authEnvVars)),
         tokenHeader: "cf-aig-authorization",
         model: "workers-ai/@cf/meta/llama-3.1-8b-instruct",
       }),
@@ -140,8 +141,8 @@ const PROVIDERS: ReadonlyArray<Provider> = [
     ],
     validate: (env) =>
       validateChat({
-        url: `${Cloudflare.workersAIBaseURL({ accountId: env.CLOUDFLARE_ACCOUNT_ID })}/chat/completions`,
-        token: Redacted.make(envValue(env, Cloudflare.workersAIAuthEnvVars)),
+        url: `${CloudflareWorkersAI.baseURL({ accountId: env.CLOUDFLARE_ACCOUNT_ID })}/chat/completions`,
+        token: Redacted.make(envValue(env, CloudflareWorkersAI.authEnvVars)),
         model: "@cf/meta/llama-3.1-8b-instruct",
       }),
   },
@@ -157,9 +158,9 @@ const PROVIDERS: ReadonlyArray<Provider> = [
     id: "togetherai",
     label: "TogetherAI",
     tier: "compatible",
-    note: "Existing OpenAI-compatible text/tool recorded tests",
-    vars: [{ name: "TOGETHER_AI_API_KEY" }],
-    validate: (env) => validateBearer("https://api.together.xyz/v1/models", Redacted.make(env.TOGETHER_AI_API_KEY)),
+    note: "Native Together AI text/tool recorded tests",
+    vars: [{ name: "TOGETHER_API_KEY" }],
+    validate: (env) => validateBearer("https://api.together.xyz/v1/models", Redacted.make(env.TOGETHER_API_KEY)),
   },
   {
     id: "minimax",
@@ -200,8 +201,8 @@ const PROVIDERS: ReadonlyArray<Provider> = [
   {
     id: "cerebras",
     label: "Cerebras",
-    tier: "optional",
-    note: "OpenAI-compatible bridge",
+    tier: "compatible",
+    note: "Native Cerebras text/tool/tool-loop recorded tests",
     vars: [{ name: "CEREBRAS_API_KEY" }],
     validate: (env) => validateBearer("https://api.cerebras.ai/v1/models", Redacted.make(env.CEREBRAS_API_KEY)),
   },

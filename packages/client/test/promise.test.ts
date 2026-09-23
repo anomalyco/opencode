@@ -5,7 +5,6 @@ test("exposes every standard HTTP API group", () => {
   const client = OpenCode.make({ baseUrl: "http://localhost:3000" })
 
   expect(Object.keys(client)).toEqual([
-    "health",
     "server",
     "location",
     "agent",
@@ -24,13 +23,13 @@ test("exposes every standard HTTP API group", () => {
     "file",
     "command",
     "skill",
+    "rpc",
     "event",
     "pty",
     "experimental",
     "shell",
     "reference",
     "worktree",
-    "workspace",
     "vcs",
     "debug",
     "migration",
@@ -47,11 +46,13 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.integration.command)).toEqual(["connect", "status", "cancel"])
   expect(Object.keys(client.websearch)).toEqual(["providers", "query"])
   expect(Object.keys(client.file)).toEqual(["read", "list", "find"])
-  expect(Object.keys(client.vcs)).toEqual(["get", "status", "branches", "diff"])
+  expect(Object.keys(client.vcs)).toEqual(["get", "base", "status", "branches", "diff"])
   expect(Object.keys(client.pty)).toEqual(["list", "create", "get", "update", "remove", "connect"])
   expect(Object.keys(client.pty.connect)).toEqual(["token"])
+  expect(Object.keys(client.experimental)).toEqual(["persistentPty"])
+  expect(client.experimental.persistentPty.read).toBeFunction()
   expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "timeout", "output", "remove"])
-  expect(Object.keys(client.project)).toEqual(["list", "update", "current"])
+  expect(Object.keys(client.project)).toEqual(["list", "update"])
   expect(Object.keys(client.worktree)).toEqual(["list", "create", "remove", "refresh"])
 })
 
@@ -80,6 +81,114 @@ test("config.get returns ordered config entries for a location", async () => {
   expect(await client.config.get({ location: { directory: "/tmp/project" } })).toEqual(entries)
   expect(request?.method).toBe("GET")
   expect(request?.url).toBe("http://localhost:3000/api/config?location%5Bdirectory%5D=%2Ftmp%2Fproject")
+})
+
+test("requests keep a path prefix on baseUrl", async () => {
+  let request: Request | undefined
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:8888/ws/abc",
+    fetch: async (input) => {
+      request = input instanceof Request ? input : new Request(input)
+      return Response.json({ version: "2.0.0", pid: 1, urls: [], paths: { tmp: "/tmp" } })
+    },
+  })
+
+  await client.server.info()
+  expect(request?.url).toBe("http://localhost:8888/ws/abc/api/info")
+})
+
+test("requests join against the base URL pathname", async () => {
+  let request: Request | undefined
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:8888/ws/abc?tenant=one#fragment",
+    fetch: async (input) => {
+      request = input instanceof Request ? input : new Request(input)
+      return Response.json({ version: "2.0.0", pid: 1, urls: [], paths: { tmp: "/tmp" } })
+    },
+  })
+
+  await client.server.info()
+  expect(request?.url).toBe("http://localhost:8888/ws/abc/api/info")
+})
+
+test("vcs.base and committed diffs preserve location and explicit base on the wire", async () => {
+  const requests: Request[] = []
+  const location = { directory: "/repo", project: { id: "global", directory: "/repo", canonical: "/repo" } }
+  const base = { name: "release", ref: "refs/remotes/origin/release", source: "reflog" }
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      requests.push(request)
+      return Response.json({ location, data: new URL(request.url).pathname.endsWith("/base") ? base : [] })
+    },
+  })
+  expect(await client.vcs.base({ location: { directory: "/repo" } })).toEqual({ location, data: base })
+  expect(
+    await client.vcs.diff({ location: { directory: "/repo" }, mode: "committed", base: base.ref, context: 1 }),
+  ).toEqual({ location, data: [] })
+  expect(new URL(requests[0].url).pathname).toBe("/api/vcs/base")
+  const query = new URL(requests[1].url).searchParams
+  expect(query.get("location[directory]")).toBe("/repo")
+  expect(query.get("mode")).toBe("committed")
+  expect(query.get("base")).toBe(base.ref)
+  expect(query.get("context")).toBe("1")
+})
+
+test("vcs.diff exposes unavailable comparisons as errors, not empty diffs", async () => {
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () =>
+      Response.json(
+        { _tag: "ServiceUnavailableError", service: "vcs", message: "No review base available" },
+        { status: 503 },
+      ),
+  })
+  await expect(client.vcs.diff({ mode: "committed" })).rejects.toMatchObject({
+    _tag: "ServiceUnavailableError",
+    service: "vcs",
+    message: "No review base available",
+  })
+})
+
+test("declared errors are thrown as Error instances that keep the body", async () => {
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () =>
+      Response.json(
+        { _tag: "InvalidRequestError", message: "Incompatible auth server", kind: "integration_authorization" },
+        { status: 400 },
+      ),
+  })
+  const error = await client.integration.oauth
+    .connect({ integrationID: "mcp_test", methodID: "oauth", location: { directory: "/repo" } })
+    .then(
+      () => undefined,
+      (cause: unknown) => cause,
+    )
+  expect(error).toBeInstanceOf(Error)
+  if (!(error instanceof Error)) throw error
+  expect(error.message).toBe("Incompatible auth server")
+  expect(error.name).toBe("InvalidRequestError")
+  expect(error.stack).toContain("InvalidRequestError: Incompatible auth server")
+  expect(error).toMatchObject({ _tag: "InvalidRequestError", kind: "integration_authorization" })
+})
+
+test("declared errors with a data envelope read the nested message", async () => {
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () =>
+      Response.json({ name: "WorktreeError", data: { message: "Worktree directory unavailable" } }, { status: 400 }),
+  })
+  const error = await client.worktree.create({ projectID: "prj_test" }).then(
+    () => undefined,
+    (cause: unknown) => cause,
+  )
+  expect(error).toBeInstanceOf(Error)
+  if (!(error instanceof Error)) throw error
+  expect(error.message).toBe("Worktree directory unavailable")
+  expect(error.name).toBe("WorktreeError")
+  expect(error).toMatchObject({ name: "WorktreeError", data: { message: "Worktree directory unavailable" } })
 })
 
 test("project.update uses the global project contract", async () => {
@@ -116,7 +225,7 @@ test("generate.text uses the locationless public contract", async () => {
   })
 
   expect(await client.generate.text({ prompt: "ping" })).toEqual({ text: "pong" })
-  expect(request?.url).toBe("http://localhost:3000/api/generate")
+  expect(request?.url).toBe("http://localhost:3000/api/experimental/generate")
   expect(await request?.json()).toEqual({ prompt: "ping" })
 })
 
@@ -151,19 +260,29 @@ test("websearch.query uses the public HTTP contract", async () => {
   expect(await request?.json()).toEqual({ query: "opencode", providerID: "exa" })
 })
 
-test("server.get uses the public HTTP contract", async () => {
+test("server.info uses the public HTTP contract", async () => {
   let request: Request | undefined
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",
     fetch: async (input) => {
       request = input instanceof Request ? input : new Request(input)
-      return Response.json({ urls: ["http://192.168.1.10:4096"] })
+      return Response.json({
+        version: "2.0.0",
+        pid: 1,
+        urls: ["http://192.168.1.10:4096"],
+        paths: { tmp: "/tmp/opencode" },
+      })
     },
   })
 
-  expect(await client.server.get()).toEqual({ urls: ["http://192.168.1.10:4096"] })
+  expect(await client.server.info()).toEqual({
+    version: "2.0.0",
+    pid: 1,
+    urls: ["http://192.168.1.10:4096"],
+    paths: { tmp: "/tmp/opencode" },
+  })
   expect(request?.method).toBe("GET")
-  expect(request?.url).toBe("http://localhost:3000/api/server")
+  expect(request?.url).toBe("http://localhost:3000/api/info")
 })
 
 test("experimental wellknown integration add uses the public HTTP contract", async () => {
@@ -198,12 +317,10 @@ test("credential.activate uses the public HTTP contract", async () => {
     },
   })
 
-  await client.credential.activate({ credentialID: "cred_work", location: { directory: "/tmp/project" } })
+  await client.credential.activate({ credentialID: "cred_work" })
 
   expect(request?.method).toBe("POST")
-  expect(request?.url).toBe(
-    "http://localhost:3000/api/credential/cred_work/activate?location%5Bdirectory%5D=%2Ftmp%2Fproject",
-  )
+  expect(request?.url).toBe("http://localhost:3000/api/credential/cred_work/activate")
 })
 
 test("integration connections optionally submit a form answer", async () => {
@@ -293,7 +410,7 @@ test("file.read returns binary content from the public HTTP contract", async () 
   )
 })
 
-test("worktree methods use the global project contract", async () => {
+test("all worktree operations require a project ID", async () => {
   const requests: Request[] = []
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",
@@ -301,55 +418,75 @@ test("worktree methods use the global project contract", async () => {
       const request = input instanceof Request ? input : new Request(input, init)
       requests.push(request)
       if (request.method === "GET") return Response.json([{ directory: "/tmp/project" }])
-      if (request.method === "POST" && !request.url.endsWith("/refresh"))
+      if (request.method === "POST" && new URL(request.url).pathname === "/api/worktree")
         return Response.json({ directory: "/tmp/worktrees/api" })
+      if (request.method === "POST") return new Response(null, { status: 204 })
       return new Response(null, { status: 204 })
     },
   })
 
-  expect(await client.worktree.list({ projectID: "proj_test" })).toEqual([{ directory: "/tmp/project" }])
+  expect(await client.worktree.list({ projectID: "project" })).toEqual([{ directory: "/tmp/project" }])
   expect(
     await client.worktree.create({
-      projectID: "proj_test",
-      strategy: "git",
+      projectID: "project",
       directory: "/tmp/worktrees",
       name: "api",
     }),
   ).toEqual({ directory: "/tmp/worktrees/api" })
   await client.worktree.remove({
-    projectID: "proj_test",
+    projectID: "project",
     directory: "/tmp/worktrees/api",
     force: false,
   })
-  await client.worktree.refresh({ projectID: "proj_test" })
+  await client.worktree.refresh({ projectID: "project" })
 
   expect(requests.map((request) => [request.method, request.url])).toEqual([
-    ["GET", "http://localhost:3000/api/worktree/proj_test"],
-    ["POST", "http://localhost:3000/api/worktree/proj_test"],
-    ["DELETE", "http://localhost:3000/api/worktree/proj_test"],
-    ["POST", "http://localhost:3000/api/worktree/proj_test/refresh"],
+    ["GET", "http://localhost:3000/api/worktree?projectID=project"],
+    ["POST", "http://localhost:3000/api/worktree"],
+    ["DELETE", "http://localhost:3000/api/worktree"],
+    ["POST", "http://localhost:3000/api/worktree/refresh"],
   ])
   expect(await requests[1]?.json()).toEqual({
-    strategy: "git",
+    projectID: "project",
     directory: "/tmp/worktrees",
     name: "api",
   })
-  expect(await requests[2]?.json()).toEqual({ directory: "/tmp/worktrees/api", force: false })
+  expect(await requests[2]?.json()).toEqual({ projectID: "project", directory: "/tmp/worktrees/api", force: false })
+  expect(await requests[3]?.json()).toEqual({ projectID: "project" })
 })
 
-test("workspace.destroy returns the transition result", async () => {
-  let request: Request | undefined
+test("worktree operations use the explicit project even with default location headers", async () => {
+  const requests: Request[] = []
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",
+    headers: { "x-opencode-directory": "/unrelated" },
     fetch: async (input, init) => {
-      request = input instanceof Request ? input : new Request(input, init)
-      return Response.json({ destroyed: false })
+      const request = new Request(input, init)
+      requests.push(request)
+      if (request.method === "GET") return Response.json([{ directory: "/configured/task", strategy: "git" }])
+      if (request.method === "DELETE") return new Response(null, { status: 204 })
+      if (new URL(request.url).pathname.endsWith("/refresh")) return new Response(null, { status: 204 })
+      return Response.json({ directory: "/configured/task" })
     },
   })
-
-  expect(await client.workspace.destroy({ workspaceID: "wrk_missing" })).toEqual({ destroyed: false })
-  expect(request?.method).toBe("DELETE")
-  expect(request?.url).toBe("http://localhost:3000/api/workspace/wrk_missing")
+  expect(await client.worktree.create({ projectID: "project", name: "task" })).toEqual({
+    directory: "/configured/task",
+  })
+  expect(requests[0]?.url).toBe("http://localhost:3000/api/worktree")
+  expect(await requests[0]?.json()).toEqual({ projectID: "project", name: "task" })
+  await client.worktree.remove({
+    projectID: "project",
+    directory: "/configured/task",
+    force: true,
+  })
+  await client.worktree.refresh({ projectID: "project" })
+  expect(requests[1]?.url).toBe("http://localhost:3000/api/worktree")
+  expect(await requests[1]?.json()).toEqual({ projectID: "project", directory: "/configured/task", force: true })
+  expect(requests[2]?.url).toBe("http://localhost:3000/api/worktree/refresh")
+  expect(await client.worktree.list({ projectID: "project" })).toEqual([
+    { directory: "/configured/task", strategy: "git" },
+  ])
+  expect(requests[3]?.url).toBe("http://localhost:3000/api/worktree?projectID=project")
 })
 
 test("shell list and remove use the public HTTP contract", async () => {
@@ -432,17 +569,17 @@ test("session instructions methods use the public HTTP contract", async () => {
   expect(requests).toEqual([
     {
       method: "GET",
-      url: "http://localhost:3000/api/session/ses_test/instructions/entries",
+      url: "http://localhost:3000/api/experimental/session/ses_test/instructions/entries",
       body: undefined,
     },
     {
       method: "PUT",
-      url: "http://localhost:3000/api/session/ses_test/instructions/entries/review-notes",
+      url: "http://localhost:3000/api/experimental/session/ses_test/instructions/entries/review-notes",
       body: { value: { text: "Check the diff", priority: 1 } },
     },
     {
       method: "DELETE",
-      url: "http://localhost:3000/api/session/ses_test/instructions/entries/review-notes",
+      url: "http://localhost:3000/api/experimental/session/ses_test/instructions/entries/review-notes",
       body: undefined,
     },
   ])
@@ -454,7 +591,7 @@ test("session.inbox.list uses the public HTTP contract", async () => {
     {
       id: "msg_pending",
       sessionID: "ses_test",
-      timeCreated: 1_717_171_717_000,
+      time: { created: 1_717_171_717_000 },
       type: "user",
       payload: { text: "Fix the failing tests" },
       delivery: "steer",
@@ -487,13 +624,13 @@ test("session.inbox mutations use the public HTTP contract", async () => {
   })
 
   await client.session.inbox.cancel({ sessionID: "ses_test", inboxID: "msg_cancel" })
-  await client.session.inbox.steer({ sessionID: "ses_test", inboxID: "msg_steer" })
-  await client.session.inbox.queue({ sessionID: "ses_test", inboxID: "msg_queue" })
+  await client.session.inbox.update({ sessionID: "ses_test", inboxID: "msg_steer", delivery: "steer" })
+  await client.session.inbox.update({ sessionID: "ses_test", inboxID: "msg_queue", delivery: "queue" })
 
   expect(requests).toEqual([
     { method: "DELETE", url: "http://localhost:3000/api/session/ses_test/inbox/msg_cancel" },
-    { method: "POST", url: "http://localhost:3000/api/session/ses_test/inbox/msg_steer/steer" },
-    { method: "POST", url: "http://localhost:3000/api/session/ses_test/inbox/msg_queue/queue" },
+    { method: "PATCH", url: "http://localhost:3000/api/session/ses_test/inbox/msg_steer" },
+    { method: "PATCH", url: "http://localhost:3000/api/session/ses_test/inbox/msg_queue" },
   ])
 })
 
@@ -514,6 +651,150 @@ test("event.subscribe exposes the Promise event stream wire projection", async (
   expect(events[1]?.type === "session.model.selected" && events[1].created).toBe(1_717_171_717_000)
 })
 
+// Moved from packages/app/e2e/regression/session-timeline-transport.spec.ts
+test("event.subscribe keeps one request open while delivering multiple events", async () => {
+  const requests: Request[] = []
+  const events = [
+    { id: "evt_first", created: 1, type: "server.connected", data: {} },
+    { id: "evt_second", created: 2, type: "server.connected", data: {} },
+  ]
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      requests.push(input instanceof Request ? input : new Request(input, init))
+      return new Response(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(""), {
+        headers: { "content-type": "text/event-stream" },
+      })
+    },
+  })
+  const received = []
+  for await (const event of client.event.subscribe()) received.push(event)
+  expect(received).toEqual(events)
+  expect(requests).toHaveLength(1)
+})
+
+// Moved from packages/app/e2e/regression/session-timeline-transport.spec.ts
+test("event.subscribe delivers every event from one stream chunk", async () => {
+  const events = Array.from({ length: 4 }, (_, index) => ({
+    id: `evt_burst_${index}`,
+    created: index,
+    type: "server.connected",
+    data: {},
+  }))
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () =>
+      new Response(new TextEncoder().encode(events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("")), {
+        headers: { "content-type": "text/event-stream" },
+      }),
+  })
+  const received = []
+  for await (const event of client.event.subscribe()) received.push(event)
+  expect(received).toEqual(events)
+  expect(new Set(received.map((event) => event.id)).size).toBe(4)
+})
+
+// Moved from packages/app/e2e/regression/session-timeline-transport.spec.ts
+test("event.subscribe parses split JSON and a split multibyte code point", async () => {
+  const event = {
+    id: "evt_split",
+    created: 1,
+    type: "server.connected",
+    data: { text: "split snowman \u2603\u2603\u2603" },
+  }
+  const encoded = new TextEncoder().encode(`data: ${JSON.stringify(event)}\n\n`)
+  const multibyte = encoded.indexOf(new TextEncoder().encode("\u2603")[0]!)
+  const boundaries = [9, multibyte + 1, multibyte + 2, encoded.length]
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            boundaries.forEach((end, index) =>
+              controller.enqueue(encoded.slice(index ? boundaries[index - 1] : 0, end)),
+            )
+            controller.close()
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } },
+      ),
+  })
+  await expect(client.event.subscribe()[Symbol.asyncIterator]().next()).resolves.toEqual({ done: false, value: event })
+})
+
+// Moved from packages/app/e2e/regression/session-timeline-transport.spec.ts
+test("event.subscribe ignores server heartbeat comments", async () => {
+  const event = { id: "evt_sentinel", created: 1, type: "server.connected", data: {} }
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () =>
+      new Response(`: heartbeat\n\ndata: ${JSON.stringify(event)}\n\n: heartbeat\n\n`, {
+        headers: { "content-type": "text/event-stream" },
+      }),
+  })
+  const received = []
+  for await (const item of client.event.subscribe()) received.push(item)
+  expect(received).toEqual([event])
+})
+
+test("event.subscribe reports heartbeat comments as stream activity", async () => {
+  const event = { id: "evt_sentinel", created: 1, type: "server.connected", data: {} }
+  const encoder = new TextEncoder()
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () =>
+      new Response(
+        new ReadableStream({
+          start(controller) {
+            controller.enqueue(encoder.encode(": heartbeat\n\n"))
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
+            controller.enqueue(encoder.encode(": heartbeat\n\n"))
+            controller.close()
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } },
+      ),
+  })
+  let activity = 0
+  const received = []
+  for await (const item of client.event.subscribe({ onActivity: () => activity++ })) received.push(item)
+  expect(received).toEqual([event])
+  expect(activity).toBe(3)
+})
+
+// Moved from packages/app/e2e/regression/session-timeline-transport.spec.ts
+test("event transport passes through ordinary info requests", async () => {
+  const requests: string[] = []
+  const event = { id: "evt_connected", created: 1, type: "server.connected", data: {} }
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      requests.push(new URL(request.url).pathname)
+      if (new URL(request.url).pathname === "/api/event") {
+        return new Response(`data: ${JSON.stringify(event)}\n\n`, {
+          headers: { "content-type": "text/event-stream" },
+        })
+      }
+      return Response.json({
+        version: "2.0.0",
+        pid: 1,
+        urls: ["http://localhost:3000"],
+        paths: { tmp: "/tmp/opencode" },
+      })
+    },
+  })
+  await expect(client.event.subscribe()[Symbol.asyncIterator]().next()).resolves.toEqual({ done: false, value: event })
+  await expect(client.server.info()).resolves.toEqual({
+    version: "2.0.0",
+    pid: 1,
+    urls: ["http://localhost:3000"],
+    paths: { tmp: "/tmp/opencode" },
+  })
+  expect(requests).toEqual(["/api/event", "/api/info"])
+})
+
 test("event.subscribe terminates on malformed Promise SSE data", async () => {
   const client = OpenCode.make({
     baseUrl: "http://localhost:3000",
@@ -524,6 +805,51 @@ test("event.subscribe terminates on malformed Promise SSE data", async () => {
     name: "ClientError",
     reason: "MalformedResponse",
   })
+})
+
+test("native event signals cancel only their listener and close transport after the last listener", async () => {
+  const opened = Promise.withResolvers<Request>()
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    headers: { authorization: "Bearer events" },
+    fetch: async (input, init) => {
+      const request = new Request(input, init)
+      opened.resolve(request)
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            request.signal.addEventListener("abort", () => controller.error(request.signal.reason), { once: true })
+          },
+        }),
+        { headers: { "content-type": "text/event-stream" } },
+      )
+    },
+  })
+  const first = new AbortController()
+  const second = new AbortController()
+  const one = client.event.subscribe({ signal: first.signal })[Symbol.asyncIterator]().next()
+  const two = client.event.subscribe({ signal: second.signal })[Symbol.asyncIterator]().next()
+  const request = await opened.promise
+  expect(request.headers.get("authorization")).toBe("Bearer events")
+  first.abort()
+  expect((await one).done).toBe(true)
+  expect(request.signal.aborted).toBe(false)
+  second.abort()
+  expect((await two).done).toBe(true)
+  expect(request.signal.aborted).toBe(true)
+})
+
+test("native pre-aborted event signals do not open a transport", async () => {
+  let requests = 0
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:3000",
+    fetch: async () => {
+      requests++
+      return new Response(null)
+    },
+  })
+  expect((await client.event.subscribe({ signal: AbortSignal.abort() })[Symbol.asyncIterator]().next()).done).toBe(true)
+  expect(requests).toBe(0)
 })
 
 test("event.subscribe accepts a fragmented SSE event below the size limit", async () => {
@@ -621,7 +947,7 @@ test("session methods use the public HTTP contract", async () => {
   const log = []
   for await (const item of client.session.log({ sessionID: "ses_test", after: 0 })) log.push(item)
   const interrupted = await client.session.interrupt({ sessionID: "ses_test", continue: true })
-  const message = await client.session.message({ sessionID: "ses_test", messageID: "msg_model" })
+  const message = await client.session.message.get({ sessionID: "ses_test", messageID: "msg_model" })
 
   expect(page.cursor.next).toBe("next")
   expect(page.data[0].time).toMatchObject({ idle: 1_717_171_717_002, viewed: 1_717_171_717_001 })
@@ -645,7 +971,7 @@ test("session methods use the public HTTP contract", async () => {
     ["POST", "http://localhost:3000/api/session/ses_test/generate"],
     ["POST", "http://localhost:3000/api/session/ses_test/synthetic"],
     ["POST", "http://localhost:3000/api/session/ses_test/compact"],
-    ["POST", "http://localhost:3000/api/session/ses_test/wait"],
+    ["POST", "http://localhost:3000/api/experimental/session/ses_test/wait"],
     ["GET", "http://localhost:3000/api/session/ses_test/context"],
     ["GET", "http://localhost:3000/api/experimental/session/ses_test/log?after=0"],
     ["POST", "http://localhost:3000/api/session/ses_test/interrupt?continue=true"],
@@ -731,7 +1057,7 @@ const admission = {
     type: "user",
     data: { text: "Hello" },
     delivery: "steer",
-    timeCreated: 1_717_171_717_000,
+    time: { created: 1_717_171_717_000 },
   },
 }
 
@@ -742,7 +1068,7 @@ const syntheticAdmission = {
     type: "synthetic",
     data: { text: "Completed" },
     delivery: "queue",
-    timeCreated: 1_717_171_717_000,
+    time: { created: 1_717_171_717_000 },
   },
 }
 
@@ -751,7 +1077,7 @@ const compactionAdmission = {
     type: "compaction",
     id: "msg_compaction",
     sessionID: "ses_test",
-    timeCreated: 1_717_171_717_000,
+    time: { created: 1_717_171_717_000 },
   },
 }
 

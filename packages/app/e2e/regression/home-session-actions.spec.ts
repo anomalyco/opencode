@@ -11,8 +11,9 @@ test("renames, exports, and deletes a home session from its context menu", async
     project: fixture.project,
     pageMessages,
   })
-  await page.route("**/api/session/*/rename", async (route) => {
-    const sessionID = new URL(route.request().url()).pathname.split("/").at(-2)
+  await page.route("**/api/session/*", async (route) => {
+    if (route.request().method() !== "PATCH") return route.fallback()
+    const sessionID = new URL(route.request().url()).pathname.split("/").at(-1)
     const session = sessions.find((item) => item.id === sessionID)
     const payload: unknown = route.request().postDataJSON()
     if (!payload || typeof payload !== "object" || !("title" in payload) || typeof payload.title !== "string")
@@ -49,8 +50,8 @@ test("renames, exports, and deletes a home session from its context menu", async
   await row.click({ button: "right", position: { x: 48, y: 12 } })
   await expect(page).toHaveURL("/")
   await expect(page.getByRole("menuitem", { name: "Rename" })).toBeVisible()
-  await expect(page.getByRole("menuitem", { name: "Export..." })).toBeVisible()
-  await expect(page.getByRole("menuitem", { name: "Delete..." })).toBeVisible()
+  await expect(page.getByRole("menuitem", { name: "Export…" })).toBeVisible()
+  await expect(page.getByRole("menuitem", { name: "Delete…" })).toBeVisible()
   const menuBox = await page.locator('[data-component="menu-v2-content"]').boundingBox()
   expect(Math.abs((menuBox?.x ?? 0) - (rowBox?.x ?? 0) - 48)).toBeLessThan(4)
 
@@ -71,7 +72,8 @@ test("renames, exports, and deletes a home session from its context menu", async
   expect(await container.evaluate((element) => getComputedStyle(element).outlineStyle)).toBe("none")
   await title.fill("Renamed from Home")
   const renamed = page.waitForRequest(
-    (request) => request.method() === "POST" && new URL(request.url()).pathname.endsWith("/rename"),
+    (request) =>
+      request.method() === "PATCH" && new URL(request.url()).pathname.endsWith(`/session/${fixture.targetID}`),
   )
   await title.press("Enter")
   expect((await renamed).postDataJSON()).toEqual({ title: "Renamed from Home" })
@@ -88,13 +90,13 @@ test("renames, exports, and deletes a home session from its context menu", async
 
   await renamedRow.click({ button: "right" })
   const download = page.waitForEvent("download")
-  const exportItem = page.getByRole("menuitem", { name: "Export..." })
+  const exportItem = page.getByRole("menuitem", { name: "Export…" })
   await exportItem.click()
   expect((await download).suggestedFilename()).toBe("renamed-from-home.json")
   await expect(exportItem).toBeHidden()
 
   await renamedRow.click({ button: "right" })
-  await page.getByRole("menuitem", { name: "Delete..." }).click()
+  await page.getByRole("menuitem", { name: "Delete…" }).click()
   const dialog = page.getByRole("dialog")
   await expect(dialog).toContainText('Delete session "Renamed from Home"?')
   const removed = page.waitForRequest(

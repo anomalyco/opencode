@@ -1,7 +1,8 @@
-import type { Endpoint } from "@opencode-ai/client/effect/service"
+import type { Endpoint } from "@opencode/client/effect/service"
 import { Effect } from "effect"
 import path from "node:path"
 import { Standalone } from "../services/standalone"
+import { errorMessage } from "../util/error"
 import { reportRunError, runNonInteractiveWithOptions, type RunCommandInput } from "./run"
 
 export type V1RunCommandInput = {
@@ -53,7 +54,7 @@ export function runV1Bridge(input: V1RunCommandInput) {
         )
       }),
     ),
-  ).catch((error) => reportRunError(input, error instanceof Error ? error.message : String(error)))
+  ).catch((error) => reportRunError(input, errorMessage(error)))
 }
 
 function nativeInput(input: V1RunCommandInput, endpoint: Endpoint): RunCommandInput {

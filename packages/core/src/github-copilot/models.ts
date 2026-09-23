@@ -1,6 +1,6 @@
 export * as CopilotModels from "./models.js"
 
-import { Money } from "@opencode-ai/schema/money"
+import { Money } from "@opencode/schema/money"
 import { Option, Schema } from "effect"
 import { Model } from "../model.js"
 import { Provider } from "../provider.js"
@@ -18,7 +18,9 @@ const RemoteModel = Schema.Struct({
         Schema.Struct({
           batch_size: Schema.Number,
           default: Schema.Struct({
-            cache_price: Schema.Number,
+            // API version 2026-08-01 renamed cache_price to cache_read_price.
+            cache_price: Schema.optional(Schema.Number),
+            cache_read_price: Schema.optional(Schema.Number),
             input_price: Schema.Number,
             output_price: Schema.Number,
           }),
@@ -71,18 +73,28 @@ type UsableModel = RemoteModel & {
 }
 
 export async function get(baseURL: string, headers: RequestInit["headers"], existing: readonly Model.Info[]) {
+  return derive(baseURL, await load(baseURL, headers), existing)
+}
+
+export type Snapshot = ReadonlyMap<string, UsableModel>
+
+export async function load(baseURL: string, headers: RequestInit["headers"]): Promise<Snapshot> {
   const response = await fetch(`${baseURL}/models`, {
     headers,
     signal: AbortSignal.timeout(5_000),
   })
   if (!response.ok) throw new Error(`Failed to fetch Copilot models: ${response.status}`)
 
-  const remote = new Map(
+  return new Map(
     decodeResponse(await response.json()).data.flatMap((raw) => {
       const model = Option.getOrUndefined(decodeModel(raw))
       return model && usable(model) ? ([[model.id, model]] as const) : []
     }),
   )
+}
+
+/** Combine remote facts with source templates, never a previously transformed model result. */
+export function derive(baseURL: string, remote: Snapshot, existing: readonly Model.Info[]) {
   const result = new Map(existing.map((model) => [model.id, model]))
 
   // Keep aliases and local metadata, but only when their advertised API model
@@ -147,7 +159,7 @@ function build(id: Model.ID, remote: UsableModel, baseURL: string, previous?: Mo
     providerID: Provider.ID.githubCopilot,
     family: previous?.family ?? Model.Family.make(remote.capabilities.family),
     name: previous?.name ?? remote.name,
-    package: Provider.aisdk(messages ? "@ai-sdk/anthropic" : "@ai-sdk/github-copilot"),
+    package: messages ? "@opencode/ai/providers/anthropic" : Provider.aisdk("@ai-sdk/github-copilot"),
     settings: Provider.mergeOverlay(previous?.settings, {
       baseURL: messages ? `${baseURL}/v1` : baseURL,
       ...(endpoint ? { endpoint } : {}),
@@ -166,7 +178,9 @@ function build(id: Model.ID, remote: UsableModel, baseURL: string, previous?: Mo
         input: Money.USDPerMillionTokens.make((prices?.default.input_price ?? 0) * usdPerMillion),
         output: Money.USDPerMillionTokens.make((prices?.default.output_price ?? 0) * usdPerMillion),
         cache: {
-          read: Money.USDPerMillionTokens.make((prices?.default.cache_price ?? 0) * usdPerMillion),
+          read: Money.USDPerMillionTokens.make(
+            (prices?.default.cache_read_price ?? prices?.default.cache_price ?? 0) * usdPerMillion,
+          ),
           write: Money.USDPerMillionTokens.zero,
         },
       },
@@ -199,7 +213,7 @@ function variants(remote: UsableModel, messages: boolean): Model.Info["variants"
       settings: {
         thinking: {
           type: "adaptive",
-          ...(remote.id.includes("opus-4.7") ? { display: "summarized" } : {}),
+          display: "summarized",
         },
         effort,
       },

@@ -1,13 +1,13 @@
 import { For, Show, createEffect, createMemo, onCleanup, onMount, type Component } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useMutation } from "@tanstack/solid-query"
-import { Button } from "@opencode-ai/ui/button"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { DockPrompt } from "@opencode-ai/session-ui/dock-prompt"
-import { Icon } from "@opencode-ai/ui/icon"
-import { useSpring } from "@opencode-ai/ui/motion-spring"
+import { Button } from "@opencode/ui/button"
+import { IconButton } from "@opencode/ui/icon-button"
+import { DockPrompt } from "@opencode/session-ui/dock-prompt"
+import { Icon } from "@opencode/ui/icon"
+import { useSpring } from "@opencode/ui/motion-spring"
 import { showToast } from "@/shell/notifications/toast"
-import type { FormAnswer, FormInfo, FormMultiselectField, FormStringField } from "@opencode-ai/client/promise"
+import type { FormAnswer, FormInfo, FormMultiselectField, FormStringField } from "@opencode/client/promise"
 import { useLanguage } from "@/runtime/i18n/language"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
@@ -237,7 +237,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
 
   const replyMutation = useMutation(() => ({
     mutationFn: (answer: FormAnswer) =>
-      serverSDK.api.form.reply({ sessionID: props.request.sessionID, formID: props.request.id, answer }),
+      serverSDK.api.session.form.reply({ sessionID: props.request.sessionID, formID: props.request.id, answer }),
     onMutate: () => {
       props.onSubmit()
     },
@@ -249,7 +249,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
   }))
 
   const rejectMutation = useMutation(() => ({
-    mutationFn: () => serverSDK.api.form.cancel({ sessionID: props.request.sessionID, formID: props.request.id }),
+    mutationFn: () => serverSDK.api.session.form.cancel({ sessionID: props.request.sessionID, formID: props.request.id }),
     onMutate: () => {
       props.onSubmit()
     },
@@ -523,7 +523,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
                 </Button>
               </Show>
               <Button
-                variant={last() ? "contrast" : "neutral"}
+                variant={last() ? "submit" : "neutral"}
                 size="large"
                 disabled={sending()}
                 onClick={next}

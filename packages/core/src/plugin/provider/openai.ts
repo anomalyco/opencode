@@ -1,5 +1,5 @@
-import type { IntegrationOAuthMethodRegistration } from "@opencode-ai/plugin/effect/integration"
-import { define } from "@opencode-ai/plugin/effect/plugin"
+import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
+import { define } from "@opencode/plugin/effect/plugin"
 import { Deferred, Effect, Option, Schema, Semaphore, Stream } from "effect"
 import type { Server } from "node:http"
 import { App } from "../../app.js"
@@ -20,7 +20,8 @@ const pollingSafetyMargin = 3000
 const codexBaseURL = "https://chatgpt.com/backend-api/codex"
 const browserMethodID = Integration.MethodID.make("chatgpt-browser")
 const headlessMethodID = Integration.MethodID.make("chatgpt-headless")
-const codexAllowed = new Set(["gpt-5.5", "gpt-5.3-codex-spark", "gpt-5.4", "gpt-5.4-mini"])
+// ChatGPT accounts lost gpt-5.4 and gpt-5.4-mini in Codex on 2026-08-31 (replacements: gpt-5.6-terra, gpt-5.6-luna).
+const codexAllowed = new Set(["gpt-5.5", "gpt-5.3-codex-spark"])
 const codexDisallowed = new Set(["gpt-5.5-pro", "gpt-5.6"])
 
 type Pkce = {
@@ -245,39 +246,45 @@ export const OpenAIPlugin = define({
           : undefined
     })
 
-    yield* ctx.integration.transform((draft) => {
-      draft.method.update(browser(ctx.app))
-      draft.method.update(headless(ctx.app))
+    yield* ctx.integration.transform((editor) => {
+      editor.method.update(browser(ctx.app))
+      editor.method.update(headless(ctx.app))
     })
     yield* load()
-    yield* ctx.catalog.transform((evt) => {
-      const item = evt.provider.get(Provider.ID.openai)
+    yield* ctx.provider.transform((providers) => {
+      const item = providers.get(Provider.ID.openai)
       if (!item) return
-      for (const model of item.models.values()) {
-        evt.model.update(item.provider.id, model.id, (draft) => {
-          draft.capabilities.responsesWebsockets = true
+      const account = chatgpt?.metadata?.accountID
+      providers.update(item.provider.id, (provider) => {
+        provider.settings = Provider.mergeOverlay(provider.settings, {
+          transport: provider.settings?.transport ?? "websocket",
+          ...(chatgpt ? { baseURL: codexBaseURL } : {}),
         })
-      }
-      if (!chatgpt) return
-      item.provider.settings = Provider.mergeOverlay(item.provider.settings, { baseURL: codexBaseURL })
-      const account = chatgpt.metadata?.accountID
-      item.provider.headers = Provider.mergeHeaders(item.provider.headers, {
-        originator: "opencode",
-        ...(typeof account === "string" ? { "chatgpt-account-id": account } : {}),
+        if (!chatgpt) return
+        provider.headers = Provider.mergeHeaders(provider.headers, {
+          originator: "opencode",
+          "x-codex-beta-features": "remote_compaction_v2",
+          ...(typeof account === "string" ? { "chatgpt-account-id": account } : {}),
+        })
       })
-      for (const model of item.models.values()) {
+    })
+    yield* ctx.model.transform((models) => {
+      for (const model of models.list(Provider.ID.openai)) {
         // ChatGPT-plan tokens only authorize codex-eligible models, and the
         // subscription covers usage, so hide the rest and zero the cost.
-        evt.model.update(item.provider.id, model.id, (draft) => {
+        models.update(model.providerID, model.id, (draft) => {
+          if (!chatgpt) return
           if (Schema.is(Schema.Struct({ mode: Schema.Literal("pro") }))(draft.body?.reasoning)) {
             draft.enabled = false
             return
           }
           const apiID = draft.modelID ?? draft.id
-          const match = apiID.match(/^gpt-(\d+\.\d+)/)
+          const match = apiID.match(/^gpt-(\d+)(?:\.(\d+))?/)
+          const major = Number(match?.[1])
+          const minor = Number(match?.[2] ?? 0)
           if (
             !codexAllowed.has(apiID) &&
-            (codexDisallowed.has(apiID) || !match || Number.parseFloat(match[1]) <= 5.4)
+            (codexDisallowed.has(apiID) || !match || !(major > 5 || (major === 5 && minor > 4)))
           ) {
             draft.enabled = false
             return
@@ -300,7 +307,7 @@ export const OpenAIPlugin = define({
         }),
       { providerID: Provider.ID.openai },
     )
-    const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.catalog.reload())))
+    const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.provider.reload())))
     yield* bus.subscribe(Credential.Event.Switched).pipe(
       Stream.filter((event) => event.data.integrationID === Integration.ID.make("openai")),
       Stream.runForEach(refresh),

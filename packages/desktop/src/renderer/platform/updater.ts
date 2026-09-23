@@ -1,4 +1,4 @@
-import type { UpdaterPlatform, UpdaterState } from "@opencode-ai/app/desktop"
+import type { UpdaterPlatform, UpdaterState } from "@opencode/app/desktop"
 import { createSignal } from "solid-js"
 import type { ElectronAPI } from "../api-types"
 

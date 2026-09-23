@@ -1,5 +1,5 @@
-import type { ToolDefinition } from "@opencode-ai/ai"
-import { Tool } from "@opencode-ai/schema/tool"
+import type { ToolDefinition } from "@opencode/ai"
+import { Tool } from "@opencode/schema/tool"
 import type { StandardJSONSchemaV1, StandardSchemaV1 } from "@standard-schema/spec"
 import { Cache, Effect, JsonSchema, Schema, SchemaIssue, SchemaRepresentation } from "effect"
 import { $ZodType, toJSONSchema } from "zod/v4/core"
@@ -18,6 +18,7 @@ const jsonSchemas = Effect.runSync(
 )
 
 export const definition = (tool: Tool.Info<any, any>): ToolDefinition => ({
+  type: "tool",
   name: effectiveName(tool),
   description: tool.description,
   inputSchema: inputJsonSchema(tool.input),
@@ -270,9 +271,9 @@ const stringify = (value: unknown) => {
   }
 }
 
-const normalizedName = (tool: Tool.Info) => tool.name.replace(/[^a-zA-Z0-9_-]/g, "_")
+export const normalizedName = (tool: Tool.Info) => tool.name.replace(/[^a-zA-Z0-9_-]/g, "_")
 
-const effectiveName = (tool: Tool.Info) =>
+export const effectiveName = (tool: Tool.Info) =>
   tool.options?.namespace === undefined
     ? normalizedName(tool)
     : `${tool.options.namespace.replaceAll(".", "_")}_${normalizedName(tool)}`

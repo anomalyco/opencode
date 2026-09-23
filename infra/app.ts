@@ -1,4 +1,5 @@
 import { domain } from "./stage"
+import { createWebApp } from "./webapp"
 
 const GITHUB_APP_ID = new sst.Secret("GITHUB_APP_ID")
 const GITHUB_APP_PRIVATE_KEY = new sst.Secret("GITHUB_APP_PRIVATE_KEY")
@@ -59,11 +60,4 @@ new sst.cloudflare.x.Astro("Web", {
   },
 })
 
-new sst.cloudflare.StaticSite("WebApp", {
-  domain: "app." + domain,
-  path: "packages/app",
-  build: {
-    command: "bun turbo build",
-    output: "./dist",
-  },
-})
+createWebApp("app." + domain)

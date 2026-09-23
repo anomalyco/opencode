@@ -1,11 +1,12 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { Flock } from "@opencode-ai/util/flock"
-import { Global } from "@opencode-ai/util/global"
+import { Flock } from "@opencode/util/flock"
+import { Global } from "@opencode/util/global"
 import { Effect, FileSystem, Option, Schema } from "effect"
 import { expect, test } from "bun:test"
 import { parse } from "jsonc-parser"
 import path from "path"
 import { Config } from "../src/config"
+import { tmpdir } from "./fixture/tmpdir"
 
 function run<A, E>(directory: string, effect: Effect.Effect<A, E, Config.Service>) {
   return Effect.runPromise(
@@ -35,53 +36,110 @@ test("generates reusable keybind schemas and preserves descriptions and numeric 
 })
 
 test("includes the published schema when creating cli.json", async () => {
-  const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
+  await using directory = await tmpdir()
 
-  try {
-    const config = await run(
-      directory,
-      Effect.gen(function* () {
-        const service = yield* Config.Service
-        return yield* service.update((draft) => {
-          draft.animations = false
-        })
-      }),
-    )
+  const config = await run(
+    directory.path,
+    Effect.gen(function* () {
+      const service = yield* Config.Service
+      return yield* service.update((draft) => {
+        draft.animations = false
+      })
+    }),
+  )
 
-    expect(config).toEqual({ $schema: "https://opencode.ai/v2/cli.json", animations: false })
-    expect(await Bun.file(path.join(directory, "cli.json")).json()).toEqual(config)
-  } finally {
-    await Bun.$`rm -rf ${directory}`
-  }
+  expect(config).toEqual({ $schema: "https://opencode.ai/v2/cli.json", animations: false })
+  expect(await Bun.file(path.join(directory.path, "cli.json")).json()).toEqual(config)
 })
 
 test("preserves the schema in an existing cli.json", async () => {
-  const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
-  const file = path.join(directory, "cli.json")
+  await using directory = await tmpdir()
+  const file = path.join(directory.path, "cli.json")
   await Bun.write(file, JSON.stringify({ $schema: "https://opencode.ai/v2/cli.json", animations: true }))
 
+  const config = await run(
+    directory.path,
+    Effect.gen(function* () {
+      const service = yield* Config.Service
+      return yield* service.update((draft) => {
+        draft.animations = false
+      })
+    }),
+  )
+
+  expect(config).toEqual({ $schema: "https://opencode.ai/v2/cli.json", animations: false })
+  expect(await Bun.file(file).json()).toEqual(config)
+})
+
+test("merges inline CLI config content over the global config", async () => {
+  await using directory = await tmpdir()
+  const file = path.join(directory.path, "cli.json")
+  const previous = process.env.OPENCODE_CLI_CONFIG_CONTENT
+  await Bun.write(
+    file,
+    JSON.stringify({
+      tabs: { mode: "on", scope: "global" },
+      keybinds: { "app.exit": "ctrl+q" },
+      plugins: ["global"],
+      animations: true,
+    }),
+  )
+  process.env.OPENCODE_CLI_CONFIG_CONTENT = JSON.stringify({
+    tabs: { enabled: false },
+    keybinds: { "help.show": false },
+    plugins: ["inline"],
+    animations: false,
+  })
+
   try {
-    const config = await run(
-      directory,
+    const result = await run(
+      directory.path,
       Effect.gen(function* () {
         const service = yield* Config.Service
-        return yield* service.update((draft) => {
-          draft.animations = false
+        const loaded = yield* service.get()
+        const updated = yield* service.update((draft) => {
+          draft.animations = true
+          draft.mouse = false
         })
+        return { loaded, updated }
       }),
     )
 
-    expect(config).toEqual({ $schema: "https://opencode.ai/v2/cli.json", animations: false })
-    expect(await Bun.file(file).json()).toEqual(config)
+    expect(result.loaded.tabs).toEqual({ mode: "off", scope: "global" })
+    expect(result.loaded.keybinds).toEqual({ "app.exit": "ctrl+q", "help.show": false })
+    expect(result.loaded.plugins).toEqual(["inline"])
+    expect(result.updated).toMatchObject({ animations: false, mouse: false })
+    expect(await Bun.file(file).json()).toMatchObject({ animations: true, mouse: false })
   } finally {
-    await Bun.$`rm -rf ${directory}`
+    if (previous === undefined) delete process.env.OPENCODE_CLI_CONFIG_CONTENT
+    else process.env.OPENCODE_CLI_CONFIG_CONTENT = previous
   }
 })
 
+test("reads the legacy tabs toggle without rewriting it", async () => {
+  await using directory = await tmpdir()
+  const file = path.join(directory.path, "cli.json")
+  await Bun.write(file, JSON.stringify({ tabs: { enabled: false } }))
+
+  const config = await run(
+    directory.path,
+    Effect.gen(function* () {
+      const service = yield* Config.Service
+      expect((yield* service.get()).tabs).toEqual({ mode: "off" })
+      return yield* service.update((draft) => {
+        draft.animations = false
+      })
+    }),
+  )
+
+  expect(config.tabs).toEqual({ mode: "off" })
+  expect(await Bun.file(file).json()).toEqual({ tabs: { enabled: false }, animations: false })
+})
+
 test("migrates tui and kv config into cli.json", async () => {
-  const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
+  await using directory = await tmpdir()
   await Bun.write(
-    path.join(directory, "tui.json"),
+    path.join(directory.path, "tui.json"),
     JSON.stringify({
       theme: "legacy",
       keybinds: {
@@ -92,8 +150,6 @@ test("migrates tui and kv config into cli.json", async () => {
         session_delete: false,
         "dialog.select.next": "ctrl+n",
       },
-      plugin: [["example", { mode: "safe" }]],
-      plugin_enabled: { disabled: false },
       leader_timeout: 500,
       scroll_speed: 2,
       scroll_acceleration: { enabled: true },
@@ -102,7 +158,7 @@ test("migrates tui and kv config into cli.json", async () => {
     }),
   )
   await Bun.write(
-    path.join(directory, "kv.json"),
+    path.join(directory.path, "kv.json"),
     JSON.stringify({
       theme_mode_lock: "light",
       attention_sound_pack: "custom.pack",
@@ -124,115 +180,107 @@ test("migrates tui and kv config into cli.json", async () => {
     }),
   )
 
-  try {
-    const config = await run(
-      directory,
-      Effect.gen(function* () {
-        const service = yield* Config.Service
-        return yield* service.get()
-      }),
-    )
+  const config = await run(
+    directory.path,
+    Effect.gen(function* () {
+      const service = yield* Config.Service
+      return yield* service.get()
+    }),
+  )
 
-    expect(config).toMatchObject({
-      $schema: "https://opencode.ai/v2/cli.json",
-      theme: { name: "legacy", mode: "light" },
-      keybinds: {
-        leader: "ctrl+o",
-        "app.exit": "ctrl+q",
-        "prompt.paste": { key: "ctrl+v", preventDefault: false },
-        "session.delete": false,
-        "dialog.select.next": "ctrl+n",
-      },
-      plugins: [{ package: "example", options: { mode: "safe" } }, "-disabled"],
-      leader: { timeout: 500 },
-      scroll: { speed: 2, acceleration: true },
-      attention: { sound_pack: "custom.pack" },
-      diffs: { wrap: "none", tree: false, single: true, view: "split" },
-      terminal: { title: false },
-      prompt: { editor: false, paste: "full" },
-      session: { sidebar: "hide", scrollbar: true, thinking: "show", grouping: "none" },
-      animations: false,
-      mouse: false,
-    })
-    expect(config).not.toHaveProperty("skipped_version")
-    expect(config).not.toHaveProperty("which_key")
-    expect(config).not.toHaveProperty("hints")
-    expect((await Bun.file(path.join(directory, "cli.json")).json()).keybinds).toEqual({
+  expect(config).toMatchObject({
+    $schema: "https://opencode.ai/v2/cli.json",
+    theme: { name: "legacy", mode: "light" },
+    keybinds: {
       leader: "ctrl+o",
       "app.exit": "ctrl+q",
       "prompt.paste": { key: "ctrl+v", preventDefault: false },
       "session.delete": false,
       "dialog.select.next": "ctrl+n",
-    })
-    expect(await Bun.file(path.join(directory, "cli.json")).exists()).toBe(true)
-    expect(await Bun.file(path.join(directory, "tui.json")).exists()).toBe(true)
-    expect(await Bun.file(path.join(directory, "kv.json")).exists()).toBe(true)
-  } finally {
-    await Bun.$`rm -rf ${directory}`
-  }
+    },
+    leader: { timeout: 500 },
+    scroll: { speed: 2, acceleration: true },
+    attention: { sound_pack: "custom.pack" },
+    diffs: { wrap: "none", tree: false, single: true, view: "split" },
+    terminal: { title: false },
+    prompt: { editor: false, paste: "full" },
+    session: { sidebar: "hide", scrollbar: true, thinking: "show", grouping: "none" },
+    animations: false,
+    mouse: false,
+  })
+  expect(config).not.toHaveProperty("skipped_version")
+  expect(config).not.toHaveProperty("which_key")
+  expect(config).not.toHaveProperty("hints")
+  expect((await Bun.file(path.join(directory.path, "cli.json")).json()).keybinds).toEqual({
+    leader: "ctrl+o",
+    "app.exit": "ctrl+q",
+    "prompt.paste": { key: "ctrl+v", preventDefault: false },
+    "session.delete": false,
+    "dialog.select.next": "ctrl+n",
+  })
+  expect(await Bun.file(path.join(directory.path, "cli.json")).exists()).toBe(true)
+  expect(await Bun.file(path.join(directory.path, "tui.json")).exists()).toBe(true)
+  expect(await Bun.file(path.join(directory.path, "kv.json")).exists()).toBe(true)
 })
 
 test("migrates before the first update and does not remigrate afterward", async () => {
-  const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
-  await Bun.write(path.join(directory, "tui.json"), JSON.stringify({ theme: "legacy" }))
+  await using directory = await tmpdir()
+  await Bun.write(path.join(directory.path, "tui.json"), JSON.stringify({ theme: "legacy" }))
 
-  try {
-    const config = await run(
-      directory,
-      Effect.gen(function* () {
-        const service = yield* Config.Service
-        yield* service.update((draft) => {
-          draft.animations = false
-          draft.mouse = false
-        })
-        yield* Effect.promise(() => Bun.write(path.join(directory, "tui.json"), JSON.stringify({ theme: "changed" })))
-        return yield* service.get()
-      }),
-    )
+  const config = await run(
+    directory.path,
+    Effect.gen(function* () {
+      const service = yield* Config.Service
+      yield* service.update((draft) => {
+        draft.animations = false
+        draft.mouse = false
+      })
+      yield* Effect.promise(() =>
+        Bun.write(path.join(directory.path, "tui.json"), JSON.stringify({ theme: "changed" })),
+      )
+      return yield* service.get()
+    }),
+  )
 
-    expect(config).toEqual({
-      $schema: "https://opencode.ai/v2/cli.json",
-      theme: { name: "legacy" },
-      animations: false,
-      mouse: false,
-    })
-    expect(await Bun.file(path.join(directory, "cli.json")).json()).toEqual({
-      $schema: "https://opencode.ai/v2/cli.json",
-      theme: { name: "legacy" },
-      animations: false,
-      mouse: false,
-    })
-  } finally {
-    await Bun.$`rm -rf ${directory}`
-  }
+  expect(config).toEqual({
+    $schema: "https://opencode.ai/v2/cli.json",
+    theme: { name: "legacy" },
+    animations: false,
+    mouse: false,
+  })
+  expect(await Bun.file(path.join(directory.path, "cli.json")).json()).toEqual({
+    $schema: "https://opencode.ai/v2/cli.json",
+    theme: { name: "legacy" },
+    animations: false,
+    mouse: false,
+  })
 })
 
 test("preserves legacy cursor settings", async () => {
-  const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
-  await Bun.write(path.join(directory, "tui.json"), JSON.stringify({ cursor: { style: "underline", blinking: false } }))
+  await using directory = await tmpdir()
+  await Bun.write(
+    path.join(directory.path, "tui.json"),
+    JSON.stringify({ cursor: { style: "underline", blinking: false } }),
+  )
 
-  try {
-    const config = await run(
-      directory,
-      Effect.gen(function* () {
-        const service = yield* Config.Service
-        return yield* service.get()
-      }),
-    )
+  const config = await run(
+    directory.path,
+    Effect.gen(function* () {
+      const service = yield* Config.Service
+      return yield* service.get()
+    }),
+  )
 
-    expect(config.cursor).toEqual({ style: "underline", blinking: false })
-    expect((await Bun.file(path.join(directory, "cli.json")).json()).cursor).toEqual({
-      style: "underline",
-      blinking: false,
-    })
-  } finally {
-    await Bun.$`rm -rf ${directory}`
-  }
+  expect(config.cursor).toEqual({ style: "underline", blinking: false })
+  expect((await Bun.file(path.join(directory.path, "cli.json")).json()).cursor).toEqual({
+    style: "underline",
+    blinking: false,
+  })
 })
 
 test("migrates legacy keybind names in an existing cli.json", async () => {
-  const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
-  const file = path.join(directory, "cli.json")
+  await using directory = await tmpdir()
+  const file = path.join(directory.path, "cli.json")
   await Bun.write(
     file,
     `{
@@ -251,31 +299,27 @@ test("migrates legacy keybind names in an existing cli.json", async () => {
 `,
   )
 
-  try {
-    const config = await run(
-      directory,
-      Effect.gen(function* () {
-        const service = yield* Config.Service
-        return yield* service.get()
-      }),
-    )
+  const config = await run(
+    directory.path,
+    Effect.gen(function* () {
+      const service = yield* Config.Service
+      return yield* service.get()
+    }),
+  )
 
-    expect(config.keybinds).toEqual({
-      "session.list": "ctrl+l",
-      "session.delete": "ctrl+x",
-    })
-    const text = await Bun.file(file).text()
-    expect(text).toContain("// Preserve this comment")
-    expect(text).toContain("// Session list shortcut")
-    expect(text).toContain("// Legacy delete shortcut")
-    expect(text).toContain("// Canonical delete shortcut")
-    expect(parse(text).keybinds).toEqual({
-      "session.list": "ctrl+l",
-      "session.delete": "ctrl+x",
-    })
-  } finally {
-    await Bun.$`rm -rf ${directory}`
-  }
+  expect(config.keybinds).toEqual({
+    "session.list": "ctrl+l",
+    "session.delete": "ctrl+x",
+  })
+  const text = await Bun.file(file).text()
+  expect(text).toContain("// Preserve this comment")
+  expect(text).toContain("// Session list shortcut")
+  expect(text).toContain("// Legacy delete shortcut")
+  expect(text).toContain("// Canonical delete shortcut")
+  expect(parse(text).keybinds).toEqual({
+    "session.list": "ctrl+l",
+    "session.delete": "ctrl+x",
+  })
 })
 
 test("migrates copy_on_select in an existing cli.json", async () => {
@@ -284,8 +328,8 @@ test("migrates copy_on_select in an existing cli.json", async () => {
     { legacy: false, expected: "manual" },
     { legacy: true, copy: "manual", expected: "manual" },
   ] as const) {
-    const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
-    const file = path.join(directory, "cli.json")
+    await using directory = await tmpdir()
+    const file = path.join(directory.path, "cli.json")
     await Bun.write(
       file,
       `{
@@ -298,120 +342,105 @@ test("migrates copy_on_select in an existing cli.json", async () => {
 `,
     )
 
-    try {
-      const config = await run(
-        directory,
-        Effect.gen(function* () {
-          const service = yield* Config.Service
-          return yield* service.get()
-        }),
-      )
+    const config = await run(
+      directory.path,
+      Effect.gen(function* () {
+        const service = yield* Config.Service
+        return yield* service.get()
+      }),
+    )
 
-      expect(config.terminal).toEqual({ copy: item.expected })
-      const text = await Bun.file(file).text()
-      expect(text).toContain("// Preserve this comment")
-      expect(text).not.toContain("copy_on_select")
-      expect(parse(text).terminal).toEqual({ copy: item.expected })
-    } finally {
-      await Bun.$`rm -rf ${directory}`
-    }
+    expect(config.terminal).toEqual({ copy: item.expected })
+    const text = await Bun.file(file).text()
+    expect(text).toContain("// Preserve this comment")
+    expect(text).not.toContain("copy_on_select")
+    expect(parse(text).terminal).toEqual({ copy: item.expected })
   }
 })
 
 test("uses migrated keybinds when persistence fails", async () => {
-  const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
-  const file = path.join(directory, "cli.json")
+  await using directory = await tmpdir()
+  const file = path.join(directory.path, "cli.json")
   await Bun.write(file, `{"keybinds":{"session_list":"ctrl+l"}}`)
   const node = await Effect.runPromise(FileSystem.FileSystem.pipe(Effect.provide(NodeFileSystem.layer)))
   const fs = new Proxy(node, {
     get(target, property, receiver) {
       if (property === "rename") return () => Effect.die(new Error("read-only config"))
+      // oxlint-disable-next-line no-restricted-globals -- Proxy forwarding requires receiver-aware property access.
       return Reflect.get(target, property, receiver)
     },
   })
 
-  try {
-    const config = await Effect.runPromise(
-      Effect.gen(function* () {
-        const service = yield* Config.Service
-        return yield* service.get()
-      }).pipe(
-        Effect.provide(Config.layer),
-        Effect.provide(Global.layerWith({ config: directory, state: directory })),
-        Effect.provideService(FileSystem.FileSystem, fs),
-      ),
-    )
+  const config = await Effect.runPromise(
+    Effect.gen(function* () {
+      const service = yield* Config.Service
+      return yield* service.get()
+    }).pipe(
+      Effect.provide(Config.layer),
+      Effect.provide(Global.layerWith({ config: directory.path, state: directory.path })),
+      Effect.provideService(FileSystem.FileSystem, fs),
+    ),
+  )
 
-    expect(config.keybinds).toEqual({ "session.list": "ctrl+l" })
-    expect(await Bun.file(file).json()).toEqual({ keybinds: { session_list: "ctrl+l" } })
-    expect(await Array.fromAsync(new Bun.Glob("*.tmp").scan(directory))).toEqual([])
-  } finally {
-    await Bun.$`rm -rf ${directory}`
-  }
+  expect(config.keybinds).toEqual({ "session.list": "ctrl+l" })
+  expect(await Bun.file(file).json()).toEqual({ keybinds: { session_list: "ctrl+l" } })
+  expect(await Array.fromAsync(new Bun.Glob("*.tmp").scan(directory.path))).toEqual([])
 })
 
 test("preserves the effective value when migrating duplicate legacy keybinds", async () => {
-  const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
-  const file = path.join(directory, "cli.json")
+  await using directory = await tmpdir()
+  const file = path.join(directory.path, "cli.json")
   await Bun.write(file, `{"keybinds":{"session_delete":"ctrl+a","session_delete":"ctrl+b"}}`)
 
-  try {
-    const config = await run(
-      directory,
-      Effect.gen(function* () {
-        const service = yield* Config.Service
-        return yield* service.get()
-      }),
-    )
+  const config = await run(
+    directory.path,
+    Effect.gen(function* () {
+      const service = yield* Config.Service
+      return yield* service.get()
+    }),
+  )
 
-    expect(config.keybinds).toEqual({ "session.delete": "ctrl+b" })
-    expect(parse(await Bun.file(file).text()).keybinds).toEqual({ "session.delete": "ctrl+b" })
-  } finally {
-    await Bun.$`rm -rf ${directory}`
-  }
+  expect(config.keybinds).toEqual({ "session.delete": "ctrl+b" })
+  expect(parse(await Bun.file(file).text()).keybinds).toEqual({ "session.delete": "ctrl+b" })
 })
 
 test("migrates and updates the effective duplicate top-level keybinds", async () => {
-  const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
-  const file = path.join(directory, "cli.json")
+  await using directory = await tmpdir()
+  const file = path.join(directory.path, "cli.json")
   await Bun.write(file, `{"keybinds":{"session_delete":"first"},"keybinds":{"session_delete":"last"}}`)
 
-  try {
-    const config = await run(
-      directory,
-      Effect.gen(function* () {
-        const service = yield* Config.Service
-        expect((yield* service.get()).keybinds).toEqual({ "session.delete": "last" })
-        return yield* service.update((draft) => {
-          draft.keybinds = { ...draft.keybinds, "session.delete": "changed" }
-        })
-      }),
-    )
+  const config = await run(
+    directory.path,
+    Effect.gen(function* () {
+      const service = yield* Config.Service
+      expect((yield* service.get()).keybinds).toEqual({ "session.delete": "last" })
+      return yield* service.update((draft) => {
+        draft.keybinds = { ...draft.keybinds, "session.delete": "changed" }
+      })
+    }),
+  )
 
-    expect(config.keybinds).toEqual({ "session.delete": "changed" })
-    expect(parse(await Bun.file(file).text()).keybinds).toEqual({ "session.delete": "changed" })
-  } finally {
-    await Bun.$`rm -rf ${directory}`
-  }
+  expect(config.keybinds).toEqual({ "session.delete": "changed" })
+  expect(parse(await Bun.file(file).text()).keybinds).toEqual({ "session.delete": "changed" })
 })
 
 test("serializes migration and updates across processes", async () => {
-  const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
-  const file = path.join(directory, "cli.json")
-  const started = path.join(directory, "started")
-  const release = path.join(directory, "release")
-  const migrateReady = path.join(directory, "migrate-ready")
-  const updateReady = path.join(directory, "update-ready")
+  await using directory = await tmpdir()
+  const file = path.join(directory.path, "cli.json")
+  const started = path.join(directory.path, "started")
+  const release = path.join(directory.path, "release")
+  const migrateReady = path.join(directory.path, "migrate-ready")
+  const updateReady = path.join(directory.path, "update-ready")
   await Bun.write(file, `{"keybinds":{"session_delete":"ctrl+d"}}`)
   const worker = path.join(import.meta.dir, "fixture/config-concurrency.ts")
-  const migrate = Bun.spawn([process.execPath, worker, "migrate", directory, started, release, migrateReady], {
+  const migrate = Bun.spawn([process.execPath, worker, "migrate", directory.path, started, release, migrateReady], {
     stdout: "ignore",
     stderr: "pipe",
   })
 
   try {
     await waitForFile(started, migrate.exited)
-    const update = Bun.spawn([process.execPath, worker, "update", directory, started, release, updateReady], {
+    const update = Bun.spawn([process.execPath, worker, "update", directory.path, started, release, updateReady], {
       stdout: "ignore",
       stderr: "pipe",
     })
@@ -431,21 +460,20 @@ test("serializes migration and updates across processes", async () => {
     await Bun.write(release, "")
     migrate.kill()
     await migrate.exited
-    await Bun.$`rm -rf ${directory}`
   }
 })
 
 test("config reads remain interruptible while waiting for the file lock", async () => {
-  const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
-  const file = path.join(directory, "cli.json")
-  const locks = path.join(directory, "locks")
+  await using directory = await tmpdir()
+  const file = path.join(directory.path, "cli.json")
+  const locks = path.join(directory.path, "locks")
   const held = await Flock.acquire(file, { dir: locks })
 
   try {
     const service = await Effect.runPromise(
       Config.Service.pipe(
         Effect.provide(Config.layer),
-        Effect.provide(Global.layerWith({ config: directory, state: directory })),
+        Effect.provide(Global.layerWith({ config: directory.path, state: directory.path })),
         Effect.provide(NodeFileSystem.layer),
       ),
     )
@@ -453,43 +481,38 @@ test("config reads remain interruptible while waiting for the file lock", async 
     expect(await Promise.race([result, Bun.sleep(250).then(() => "blocked" as const)])).toEqual(Option.none())
   } finally {
     await held.release()
-    await Bun.$`rm -rf ${directory}`
   }
 })
 
 test("updates effective duplicate canonical keybinds", async () => {
-  const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
-  const file = path.join(directory, "cli.json")
+  await using directory = await tmpdir()
+  const file = path.join(directory.path, "cli.json")
   await Bun.write(
     file,
-    `{"keybinds":{"session.delete":"first","session.delete":"last","permission.mode":"off","permission.mode":"on"}}`,
+    `{"keybinds":{"session.delete":"first","session.delete":"last","opencode.settings":"off","opencode.settings":"on"}}`,
   )
 
-  try {
-    const config = await run(
-      directory,
-      Effect.gen(function* () {
-        const service = yield* Config.Service
-        expect((yield* service.get()).keybinds).toEqual({ "session.delete": "last", "permission.mode": "on" })
-        return yield* service.update((draft) => {
-          draft.keybinds = { ...draft.keybinds, "session.delete": "changed", "permission.mode": "changed" }
-        })
-      }),
-    )
+  const config = await run(
+    directory.path,
+    Effect.gen(function* () {
+      const service = yield* Config.Service
+      expect((yield* service.get()).keybinds).toEqual({ "session.delete": "last", "opencode.settings": "on" })
+      return yield* service.update((draft) => {
+        draft.keybinds = { ...draft.keybinds, "session.delete": "changed", "opencode.settings": "changed" }
+      })
+    }),
+  )
 
-    expect(config.keybinds).toEqual({ "session.delete": "changed", "permission.mode": "changed" })
-    expect(parse(await Bun.file(file).text()).keybinds).toEqual({
-      "session.delete": "changed",
-      "permission.mode": "changed",
-    })
-  } finally {
-    await Bun.$`rm -rf ${directory}`
-  }
+  expect(config.keybinds).toEqual({ "session.delete": "changed", "opencode.settings": "changed" })
+  expect(parse(await Bun.file(file).text()).keybinds).toEqual({
+    "session.delete": "changed",
+    "opencode.settings": "changed",
+  })
 })
 
 test("removes orphaned keybinds without deleting trailing comments", async () => {
-  const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
-  const file = path.join(directory, "cli.json")
+  await using directory = await tmpdir()
+  const file = path.join(directory.path, "cli.json")
   await Bun.write(
     file,
     `{
@@ -501,50 +524,56 @@ test("removes orphaned keybinds without deleting trailing comments", async () =>
 `,
   )
 
-  try {
-    const config = await run(
-      directory,
-      Effect.gen(function* () {
-        const service = yield* Config.Service
-        return yield* service.get()
-      }),
-    )
+  const config = await run(
+    directory.path,
+    Effect.gen(function* () {
+      const service = yield* Config.Service
+      return yield* service.get()
+    }),
+  )
 
-    expect(config.keybinds).toEqual({})
-    const text = await Bun.file(file).text()
-    expect(text).toContain("/* Keep legacy explanation */")
-    expect(text).toContain("/* Keep canonical explanation */")
-    expect(parse(text).keybinds).toEqual({})
-  } finally {
-    await Bun.$`rm -rf ${directory}`
-  }
+  expect(config.keybinds).toEqual({})
+  const text = await Bun.file(file).text()
+  expect(text).toContain("/* Keep legacy explanation */")
+  expect(text).toContain("/* Keep canonical explanation */")
+  expect(parse(text).keybinds).toEqual({})
 })
 
 test("updates a config draft while preserving JSONC comments", async () => {
-  const directory = await Bun.$`mktemp -d`.text().then((value) => value.trim())
-  await Bun.write(path.join(directory, "cli.json"), '{\n  // Keep this comment\n  "animations": true\n}\n')
+  await using directory = await tmpdir()
+  await Bun.write(path.join(directory.path, "cli.json"), '{\n  // Keep this comment\n  "animations": true\n}\n')
 
-  try {
-    const config = await run(
-      directory,
-      Effect.gen(function* () {
-        const service = yield* Config.Service
-        return yield* service.update((draft) => {
-          draft.prompt = { paste: "compact" }
-          draft.mini = { thinking: "hide", shell_output: "hide", turn_summary: "hide", splash: "hide", mono: true }
-        })
-      }),
-    )
+  const config = await run(
+    directory.path,
+    Effect.gen(function* () {
+      const service = yield* Config.Service
+      return yield* service.update((draft) => {
+        draft.prompt = { paste: "compact" }
+        draft.mini = {
+          thinking: "hide",
+          shell_output: "hide",
+          turn_summary: "hide",
+          splash: "hide",
+          work_spinner: "block-low-comet",
+          mono: true,
+        }
+      })
+    }),
+  )
 
-    expect(config).toEqual({
-      animations: true,
-      prompt: { paste: "compact" },
-      mini: { thinking: "hide", shell_output: "hide", turn_summary: "hide", splash: "hide", mono: true },
-    })
-    expect(await Bun.file(path.join(directory, "cli.json")).text()).toContain("// Keep this comment")
-  } finally {
-    await Bun.$`rm -rf ${directory}`
-  }
+  expect(config).toEqual({
+    animations: true,
+    prompt: { paste: "compact" },
+    mini: {
+      thinking: "hide",
+      shell_output: "hide",
+      turn_summary: "hide",
+      splash: "hide",
+      work_spinner: "block-low-comet",
+      mono: true,
+    },
+  })
+  expect(await Bun.file(path.join(directory.path, "cli.json")).text()).toContain("// Keep this comment")
 })
 
 async function waitForFile(file: string, exited: Promise<number>) {

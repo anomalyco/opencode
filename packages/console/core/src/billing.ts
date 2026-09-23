@@ -12,7 +12,7 @@ import {
 import { Actor } from "./actor"
 import { fn } from "./util/fn"
 import { z } from "zod"
-import { Resource } from "@opencode-ai/console-resource"
+import { Resource } from "@opencode/console-resource"
 import { Identifier } from "./identifier"
 import { centsToMicroCents } from "./util/price"
 import { User } from "./user"
@@ -328,7 +328,6 @@ export namespace Billing {
           return LiteData.threeMonths100Coupon
         if (coupons.some((coupon) => coupon.type === "GOFREEMONTH" && !coupon.timeRedeemed))
           return LiteData.firstMonth100Coupon
-        if (!coupons.some((coupon) => coupon.type === "GO1MONTH50")) return LiteData.firstMonth50Coupon
         return undefined
       })()
       const createSession = () =>

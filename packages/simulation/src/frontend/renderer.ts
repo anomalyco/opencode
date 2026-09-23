@@ -1,7 +1,7 @@
 import type { CliRenderer, CliRendererConfig } from "@opentui/core"
 import { createTestRenderer, type TestRendererSetup } from "@opentui/core/testing"
 import { Effect } from "effect"
-import { Timeline } from "../recording"
+import { Timeline, type Pointer } from "../recording"
 
 const setups = new WeakMap<CliRenderer, TestRendererSetup>()
 const recordings = new WeakMap<CliRenderer, Timeline>()
@@ -62,6 +62,10 @@ export const create = Effect.fn("SimulationRenderer.create")(function* (
 
 export function recordResize(renderer: CliRenderer, cols: number, rows: number) {
   recordings.get(renderer)?.resize(cols, rows)
+}
+
+export function recordPointer(renderer: CliRenderer, action: Pointer["action"], x: number, y: number) {
+  recordings.get(renderer)?.pointer(action, x, y)
 }
 
 export function setupFor(renderer: CliRenderer): TestRendererSetup | undefined {

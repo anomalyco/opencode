@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { Service, type Info } from "@opencode-ai/client/effect/service"
-import { Global } from "@opencode-ai/util/global"
+import { Service, type Info } from "@opencode/client/effect/service"
+import { Global } from "@opencode/util/global"
 import { OPENCODE_VERSION } from "../src/version"
 import { expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
@@ -9,6 +9,7 @@ import os from "node:os"
 import path from "node:path"
 import { ServiceConfig } from "../src/services/service-config"
 import { ServiceRegistration } from "../src/services/service-registration"
+import { isolatedEnv } from "./fixture/environment"
 
 test("managed service ports are stable per installation channel", () => {
   expect(ServiceConfig.defaultPort("latest")).toBe(0xc0de)
@@ -255,13 +256,15 @@ test("concurrent service processes elect one server", async () => {
     expect((await Bun.file(config).json()).password).toBe(info.password)
     expect(await Bun.file(registration + ".lock").exists()).toBe(false)
     expect(
-      await fetch(new URL("/api/health", info.url), {
+      await fetch(new URL("/api/info", info.url), {
         headers: { authorization: "Basic " + btoa(`opencode:${info.password}`) },
       }).then((response) => response.json()),
     ).toEqual({
-      healthy: true,
       version: info.version,
       pid: info.pid,
+      urls: [info.url],
+      // The server reports the canonical tmp directory; Windows os.tmpdir() can be an 8.3 short name.
+      paths: { tmp: await fs.realpath(path.join(os.tmpdir(), "opencode")) },
     })
     const contender = Bun.spawn(command, { env, stderr: "pipe", stdout: "ignore" })
     try {
@@ -312,6 +315,48 @@ test("configured managed service port overrides the channel default", async () =
     await fs.rm(root, { recursive: true, force: true })
   }
 }, 30_000)
+
+test.each([
+  { args: [], origins: ["http://192.0.2.10:3001", "https://configured.example.com"] },
+  {
+    args: ["--cors", "http://192.0.2.20:3001", "--cors", "https://override.example.com"],
+    origins: ["http://192.0.2.20:3001", "https://override.example.com"],
+  },
+])(
+  "managed service applies CORS configuration with flag overrides: $args",
+  async ({ args, origins }) => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-cors-"))
+    const config = path.join(root, "config", ServiceConfig.filename())
+    const registration = path.join(root, "state", "opencode", ServiceConfig.filename())
+    const cors = ["http://192.0.2.10:3001", "https://configured.example.com"]
+    await fs.mkdir(path.dirname(config), { recursive: true })
+    await fs.writeFile(config, JSON.stringify({ cors }))
+    const owner = Bun.spawn(
+      [process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service", "--port", "0", ...args],
+      { env: isolatedEnv(root), stderr: "pipe", stdout: "ignore" },
+    )
+    try {
+      const info = await waitForInfo(registration)
+      await Promise.all(
+        [...new Set([...cors, ...origins, "https://unlisted.example.com"])].map(async (origin) => {
+          const response = await fetch(new URL("/api/info", info.url), {
+            method: "OPTIONS",
+            headers: { Origin: origin, "Access-Control-Request-Method": "GET" },
+          })
+          expect(response.headers.get("access-control-allow-origin")).toBe(
+            origins.some((value) => value === origin) ? origin : null,
+          )
+        }),
+      )
+      expect((await Bun.file(config).json()).cors).toEqual(cors)
+    } finally {
+      owner.kill("SIGTERM")
+      await owner.exited
+      await fs.rm(root, { recursive: true, force: true })
+    }
+  },
+  30_000,
+)
 
 test("unrelated managed port occupancy reports an actionable conflict", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-conflict-"))
@@ -397,7 +442,10 @@ test("port contender recognizes an incumbent registered during the bind race", a
     fetch() {
       requests.count += 1
       if (requests.count === 2) recognizing.resolve()
-      return Response.json({ healthy: true, version: OPENCODE_VERSION, pid: process.pid }, { status: 503 })
+      return Response.json(
+        { version: OPENCODE_VERSION, pid: process.pid, urls: [], paths: { tmp: "/tmp/opencode" } },
+        { status: 503 },
+      )
     },
   })
   const registration = path.join(root, "state", "opencode", "service-local.json")
@@ -532,7 +580,7 @@ async function waitForInfo(file: string, accept: (info: Info) => boolean = () =>
 
 async function waitForFailed(info: Info) {
   for (let attempt = 0; attempt < 400; attempt++) {
-    const status = await fetch(new URL("/api/health", info.url), {
+    const status = await fetch(new URL("/api/info", info.url), {
       headers: { authorization: "Basic " + btoa(`opencode:${info.password}`) },
     })
       .then((response) => response.status)

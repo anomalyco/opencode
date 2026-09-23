@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import type { AgentSideConnection } from "@agentclientprotocol/sdk"
-import { OpenCode } from "@opencode-ai/client/promise"
+import { OpenCode } from "@opencode/client/promise"
 import { streamTurn } from "../../src/acp/event"
 
 test("acp prompt resolves after ordered turn updates", async () => {
@@ -27,7 +27,7 @@ test("acp prompt resolves after ordered turn updates", async () => {
         if (!body || typeof body !== "object") {
           return new Response(null, { status: 400 })
         }
-        const id = Reflect.get(body, "id")
+        const id = "id" in body ? body.id : undefined
         if (typeof id !== "string") return new Response(null, { status: 400 })
         queueMicrotask(() => {
           if (!events) return

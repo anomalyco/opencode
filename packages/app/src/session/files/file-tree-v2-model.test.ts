@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { buildFileTreeV2Model, flattenFileTreeV2, flattenLiveFileTreeV2 } from "./file-tree-v2-model"
+import { buildFileTreeV2Model, flattenFileTreeV2, flattenLiveFileTreeV2, sortFileTreeV2Paths } from "./file-tree-v2-model"
 import type { FileNode } from "@/runtime/server/types"
 
 describe("buildFileTreeV2Model", () => {
@@ -42,6 +42,33 @@ describe("buildFileTreeV2Model", () => {
     const model = buildFileTreeV2Model([file])
 
     expect(flattenFileTreeV2(model, () => true)).toHaveLength(131)
+  })
+})
+
+describe("sortFileTreeV2Paths", () => {
+  test("orders navigation depth-first with directories before sibling files", () => {
+    const paths = ["README.md", "src/a.ts", "src/lib/z.ts", "docs/guide.md", "src/lib/b.ts"]
+
+    expect(sortFileTreeV2Paths(paths)).toEqual([
+      "docs/guide.md",
+      "src/lib/b.ts",
+      "src/lib/z.ts",
+      "src/a.ts",
+      "README.md",
+    ])
+    expect(paths[0]).toBe("README.md")
+  })
+
+  test("preserves original paths for selection", () => {
+    expect(sortFileTreeV2Paths(["README.md", "src\\lib\\a.ts", "/docs//guide.md/"])).toEqual([
+      "/docs//guide.md/",
+      "src\\lib\\a.ts",
+      "README.md",
+    ])
+  })
+
+  test("handles an empty file list", () => {
+    expect(sortFileTreeV2Paths([])).toEqual([])
   })
 })
 

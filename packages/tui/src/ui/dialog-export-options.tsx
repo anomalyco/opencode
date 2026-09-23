@@ -13,20 +13,22 @@ export type DialogExportOptionsProps = {
     action: "copy" | "export"
     format: ExportFormat
     thinking: boolean
+    tools: boolean
     sanitize: boolean
   }) => void
   onCancel?: () => void
 }
 
-type Active = ExportFormat | "thinking" | "sanitize" | "copy" | "export"
+type Active = ExportFormat | "thinking" | "tools" | "sanitize" | "copy" | "export"
 
 export function DialogExportOptions(props: DialogExportOptionsProps) {
   const dialog = useDialog()
-  const theme = useTheme("elevated")
-  const overlayTheme = useTheme("overlay")
+  const theme = useTheme().surface("dialog")
+  const overlayTheme = useTheme()
   const [store, setStore] = createStore({
     format: "markdown" as ExportFormat,
     thinking: props.defaultThinking,
+    tools: true,
     sanitize: false,
     active: "markdown" as Active,
   })
@@ -36,6 +38,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
       action,
       format: store.format,
       thinking: store.thinking,
+      tools: store.tools,
       sanitize: store.sanitize,
     })
 
@@ -45,6 +48,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
       return
     }
     if (store.active === "thinking") setStore("thinking", !store.thinking)
+    if (store.active === "tools") setStore("tools", !store.tools)
     if (store.active === "sanitize") setStore("sanitize", !store.sanitize)
     if (store.active === "copy" || store.active === "export") confirm(store.active)
   }
@@ -59,7 +63,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
         run: () => {
           const order: Active[] =
             store.format === "markdown"
-              ? ["markdown", "json", "thinking", "copy", "export"]
+              ? ["markdown", "json", "thinking", "tools", "copy", "export"]
               : ["markdown", "json", "sanitize", "copy", "export"]
           setStore("active", order[(order.indexOf(store.active) + 1) % order.length])
         },
@@ -81,15 +85,15 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
   return (
     <box paddingLeft={2} paddingRight={2} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
-        <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
+        <text attributes={TextAttributes.BOLD} fg={theme.text.base}>
           Export session
         </text>
-        <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
+        <text fg={theme.text.muted} onMouseUp={() => dialog.clear()}>
           esc
         </text>
       </box>
       <box flexDirection="row" gap={1}>
-        <text fg={theme.text.default}>Export as:</text>
+        <text fg={theme.text.base}>Export as:</text>
         <box flexDirection="row" gap={1}>
           <For each={["markdown", "json"] as const}>
             {(format) => (
@@ -101,7 +105,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
                     ? theme.background.formfield.focused
                     : store.format === format
                       ? theme.background.formfield.selected
-                      : theme.background.formfield.default
+                      : theme.background.formfield.base
                 }
                 onMouseUp={() => selectFormat(format)}
               >
@@ -111,7 +115,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
                       ? theme.text.formfield.focused
                       : store.format === format
                         ? theme.text.formfield.selected
-                        : theme.text.formfield.default
+                        : theme.text.formfield.base
                   }
                 >
                   {store.format === format ? "◉" : "○"} {format === "markdown" ? "Markdown" : "JSON"}
@@ -130,7 +134,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
               ? theme.background.formfield.focused
               : store.thinking
                 ? theme.background.formfield.selected
-                : theme.background.formfield.default
+                : theme.background.formfield.base
           }
           onMouseUp={() => {
             setStore("active", "thinking")
@@ -143,7 +147,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
                 ? theme.text.formfield.focused
                 : store.thinking
                   ? theme.text.formfield.selected
-                  : theme.text.formfield.default
+                  : theme.text.formfield.base
             }
           >
             {store.thinking ? "[x]" : "[ ]"}
@@ -154,10 +158,48 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
                 ? theme.text.formfield.focused
                 : store.thinking
                   ? theme.text.formfield.selected
-                  : theme.text.formfield.default
+                  : theme.text.formfield.base
             }
           >
             Include thinking
+          </text>
+        </box>
+        <box
+          flexDirection="row"
+          gap={1}
+          backgroundColor={
+            store.active === "tools"
+              ? theme.background.formfield.focused
+              : store.tools
+                ? theme.background.formfield.selected
+                : theme.background.formfield.base
+          }
+          onMouseUp={() => {
+            setStore("active", "tools")
+            setStore("tools", !store.tools)
+          }}
+        >
+          <text
+            fg={
+              store.active === "tools"
+                ? theme.text.formfield.focused
+                : store.tools
+                  ? theme.text.formfield.selected
+                  : theme.text.formfield.base
+            }
+          >
+            {store.tools ? "[x]" : "[ ]"}
+          </text>
+          <text
+            fg={
+              store.active === "tools"
+                ? theme.text.formfield.focused
+                : store.tools
+                  ? theme.text.formfield.selected
+                  : theme.text.formfield.base
+            }
+          >
+            Include tools
           </text>
         </box>
       </Show>
@@ -170,7 +212,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
               ? theme.background.formfield.focused
               : store.sanitize
                 ? theme.background.formfield.selected
-                : theme.background.formfield.default
+                : theme.background.formfield.base
           }
           onMouseUp={() => {
             setStore("active", "sanitize")
@@ -183,7 +225,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
                 ? theme.text.formfield.focused
                 : store.sanitize
                   ? theme.text.formfield.selected
-                  : theme.text.formfield.default
+                  : theme.text.formfield.base
             }
           >
             {store.sanitize ? "[x]" : "[ ]"}
@@ -194,7 +236,7 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
                 ? theme.text.formfield.focused
                 : store.sanitize
                   ? theme.text.formfield.selected
-                  : theme.text.formfield.default
+                  : theme.text.formfield.base
             }
           >
             Sanitize sensitive data
@@ -205,10 +247,10 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
         <box
           paddingLeft={4}
           paddingRight={4}
-          backgroundColor={overlayTheme.background.default}
+          backgroundColor={overlayTheme.background.raised.high}
           onMouseUp={() => confirm("copy")}
         >
-          <text fg={overlayTheme.text.default}>Copy</text>
+          <text fg={overlayTheme.text.base}>Copy</text>
         </box>
         <box
           paddingLeft={4}
@@ -216,11 +258,11 @@ export function DialogExportOptions(props: DialogExportOptionsProps) {
           backgroundColor={
             store.active === "export"
               ? theme.background.action.primary.focused
-              : theme.background.action.primary.default
+              : theme.background.action.primary.base
           }
           onMouseUp={() => confirm("export")}
         >
-          <text fg={store.active === "export" ? theme.text.action.primary.focused : theme.text.action.primary.default}>
+          <text fg={store.active === "export" ? theme.text.action.primary.focused : theme.text.action.primary.base}>
             Export
           </text>
         </box>
@@ -234,6 +276,7 @@ DialogExportOptions.show = (dialog: DialogContext, defaultThinking: boolean) => 
     action: "copy" | "export"
     format: ExportFormat
     thinking: boolean
+    tools: boolean
     sanitize: boolean
   } | null>((resolve) => {
     dialog.replace(

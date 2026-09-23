@@ -13,6 +13,7 @@ describe("hasExistingAppState", () => {
   test("recognizes state written by an earlier OpenCode launch", () => {
     expect(hasExistingAppState([file("opencode.settings")])).toBe(true)
     expect(hasExistingAppState([file("opencode.global.dat")])).toBe(true)
+    expect(hasExistingAppState([file("drafts.sqlite")])).toBe(true)
     expect(hasExistingAppState([file("window-state-abc.json")])).toBe(true)
     expect(hasExistingAppState([directory("opencode")])).toBe(true)
   })

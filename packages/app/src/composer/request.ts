@@ -1,8 +1,13 @@
-import { getFilename } from "@opencode-ai/util/path"
+import { getFilename } from "@opencode/util/path"
 import type { FileSelection } from "@/workspaces/files/model"
 import { encodeFilePath } from "@/workspaces/files/path"
-import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt, SkillPart } from "@/composer/state"
-import { formatCommentNote, type PromptComment } from "@/composer/comment-note"
+import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, PathAttachmentPart, Prompt, SkillPart } from "@/composer/state"
+import {
+  formatAttachmentReference,
+  formatCommentNote,
+  type PromptAttachmentReference,
+  type PromptComment,
+} from "@/composer/comment-note"
 
 // Network fields feed both boundaries; display fields keep desktop-only rendering details in the local echo.
 type PromptRequest = {
@@ -12,6 +17,7 @@ type PromptRequest = {
   agents: { name: string; mention?: { start: number; end: number; text: string } }[]
   skills: { id: string; name: string; mention?: { start: number; end: number; text: string } }[]
   comments: PromptComment[]
+  attachments: PromptAttachmentReference[]
 }
 
 type ContextFile = {
@@ -56,6 +62,7 @@ const parseCommentMentions = (comment: string) => {
 const isFileAttachment = (part: Prompt[number]): part is FileAttachmentPart => part.type === "file"
 const isAgentAttachment = (part: Prompt[number]): part is AgentPart => part.type === "agent"
 const isSkillAttachment = (part: Prompt[number]): part is SkillPart => part.type === "skill"
+const isPathAttachment = (part: Prompt[number]): part is PathAttachmentPart => part.type === "path"
 
 export function buildPromptRequest(input: BuildPromptRequestInput): PromptRequest {
   const skills = input.prompt.filter(isSkillAttachment).map((attachment) => ({
@@ -106,18 +113,27 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
     return [file, ...mentions]
   })
 
-  const images = input.images.map((attachment) => ({
+  const inline = input.images.map((attachment) => ({
     uri: attachment.dataUrl,
     mime: attachment.mime,
     name: attachment.sourcePath ?? attachment.filename,
   }))
+  // Like comments, path references reach the model as text and the message UI through metadata.
+  const attachments = input.prompt
+    .filter(isPathAttachment)
+    .map((part) => ({ name: part.filename, mime: part.mime, path: part.path }))
 
   return {
-    text: [...(input.text.trim() ? [input.text] : []), ...comments.map(formatCommentNote)].join("\n"),
+    text: [
+      ...(input.text.trim() ? [input.text] : []),
+      ...attachments.map(formatAttachmentReference),
+      ...comments.map(formatCommentNote),
+    ].join("\n"),
     displayText: input.text,
-    files: [...files, ...context, ...images],
+    files: [...files, ...context, ...inline],
     agents,
     skills,
     comments,
+    attachments,
   }
 }

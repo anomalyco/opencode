@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { SessionsCursor } from "../src/groups/session.js"
-import { Session } from "@opencode-ai/schema/session"
+import { Session } from "@opencode/schema/session"
 
 describe("SessionsCursor", () => {
   test("round trips without Node globals", async () => {

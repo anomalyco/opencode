@@ -2,9 +2,10 @@ export * as DesktopLogging from "./logging"
 
 import log from "electron-log/main.js"
 import { app, crashReporter, netLog, shell } from "electron"
-import { Context, Effect, FileSystem, Layer, Logger, Option, Path, References } from "effect"
+import { Context, Effect, FileSystem, Layer, Logger, Option, Path, References, Stream } from "effect"
 import { homedir } from "node:os"
 import { VERSION } from "../constants"
+import { marks } from "../lifecycle/marks"
 
 const MAX_LOG_AGE_DAYS = 7
 const TAIL_LINES = 1000
@@ -18,6 +19,7 @@ let netLogPath: string | undefined
 
 export interface Interface {
   readonly startNetwork: Effect.Effect<void>
+  readonly startCrashReporter: Effect.Effect<void>
   readonly exportDebug: Effect.Effect<string>
 }
 
@@ -29,16 +31,25 @@ const serviceLayer = Layer.effect(
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
     yield* initLogging(fs, path).pipe(Effect.orDie)
-    yield* initCrashReporter(fs, path).pipe(Effect.orDie)
+    // Old run directories go away in the background; listing them is not worth a wait at startup.
+    yield* Effect.forkScoped(cleanup(fs, path).pipe(Effect.catch(() => Effect.void)))
+    marks.logging = Date.now()
     yield* Effect.logInfo("app starting", {
       version: VERSION,
       packaged: app.isPackaged,
       onboardingTest: process.env.OPENCODE_TEST_ONBOARDING === "1",
+      marks,
     })
     const exportDebug = exportDebugLogsEffect(fs, path).pipe(Effect.orDie)
     return Service.of({
       startNetwork: startNetLog(path).pipe(
         Effect.catch((error) => Effect.logWarning("failed to start net log", { error })),
+      ),
+      // Starting crashpad spawns its handler process, ~60 ms on the main thread, so the first window
+      // and its IPC port come first.
+      startCrashReporter: initCrashReporter(fs, path).pipe(
+        Effect.tap(() => Effect.sync(() => (marks.crash = Date.now()))),
+        Effect.catch((error) => Effect.logWarning("failed to start crash reporter", { error })),
       ),
       exportDebug,
     })
@@ -97,7 +108,6 @@ function initLogging(fs: FileSystem.FileSystem, path: Path.Path) {
       log.initialize({ preload: false, spyRendererConsole: true })
       initConsoleTransport()
     })
-    yield* cleanup(fs, path)
   })
 }
 
@@ -134,11 +144,15 @@ function exportDebugLogsEffect(fs: FileSystem.FileSystem, path: Path.Path) {
     const output = path.join(app.getPath("downloads"), `opencode-debug-${stamp()}.zip`)
     return yield* Effect.gen(function* () {
       yield* Effect.logInfo("exporting debug logs", { output })
-      yield* writeZip(fs, output, [
-        { name: "manifest.json", data: Buffer.from(JSON.stringify(manifest(path), null, 2)) },
+      const files = [
         ...(yield* collect(fs, path, root, "desktop")),
         ...(yield* Effect.forEach(serverLogRoots(path), (dir, i) => collect(fs, path, dir, `server-${i + 1}`))).flat(),
         ...(yield* collect(fs, path, app.getPath("crashDumps"), "crashpad")),
+      ]
+      const truncated = files.filter((file) => file.offset > 0).map((file) => file.name)
+      yield* writeZip(fs, output, [
+        { name: "manifest.json", data: Buffer.from(JSON.stringify({ ...manifest(path), truncated }, null, 2)) },
+        ...files,
       ])
       yield* Effect.sync(() => shell.showItemInFolder(output))
       return output
@@ -229,7 +243,7 @@ function serverLogRoots(path: Path.Path) {
   ]
 }
 
-type Entry = { name: string; path: string } | { name: string; data: Uint8Array }
+type Entry = { name: string; path: string; offset: number } | { name: string; data: Uint8Array }
 
 function collect(fs: FileSystem.FileSystem, path: Path.Path, dir: string, prefix: string) {
   return Effect.gen(function* () {
@@ -242,9 +256,11 @@ function collect(fs: FileSystem.FileSystem, path: Path.Path, dir: string, prefix
         const info = yield* fs.stat(file)
         if (info.type === "Directory") return null
         if (Option.getOrElse(info.mtime, () => new Date(0)).getTime() < cutoff) return null
-        if (info.size > FileSystem.Size(MAX_EXPORT_FILE_SIZE)) return null
         if (file.endsWith(".heapsnapshot")) return null
-        return { name: path.join(prefix, entry).replace(/\\/g, "/"), path: file }
+        // Server logs append forever without rotation, so the active log is often the largest
+        // file. Export its tail rather than dropping the most relevant file from the bundle.
+        const offset = Math.max(0, Number(info.size) - MAX_EXPORT_FILE_SIZE)
+        return { name: path.join(prefix, entry).replace(/\\/g, "/"), path: file, offset }
       }),
     )).filter((entry) => entry !== null)
   })
@@ -258,7 +274,12 @@ function writeZip(fs: FileSystem.FileSystem, output: string, entries: Entry[]) {
       entries,
       (entry) =>
         Effect.gen(function* () {
-          const data = "data" in entry ? entry.data : yield* fs.readFile(entry.path)
+          const data =
+            "data" in entry
+              ? entry.data
+              : entry.offset === 0
+                ? yield* fs.readFile(entry.path)
+                : Buffer.concat(yield* Stream.runCollect(fs.stream(entry.path, { offset: entry.offset })))
           yield* Effect.tryPromise(() => writer.add(entry.name, new BlobReader(new Blob([new Uint8Array(data)]))))
         }),
       { concurrency: 1, discard: true },

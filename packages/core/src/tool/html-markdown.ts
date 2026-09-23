@@ -95,7 +95,7 @@ export function convertHTMLToMarkdown(html: string) {
     const remaining = limit - outputBytes
     const next = bytes.byteLength <= remaining ? value : sliceBytes(value, remaining)
     output.push(next)
-    outputBytes += encoder.encode(next).byteLength
+    outputBytes += bytes.byteLength <= remaining ? bytes.byteLength : encoder.encode(next).byteLength
     last = next.at(-1) ?? last
   }
   const appendRaw = (value: string) => {
@@ -197,6 +197,12 @@ export function convertHTMLToMarkdown(html: string) {
           .trim()
           .replace(/([\\"])/g, "\\$1")}"`
       : ""
+  const inlineMarker = (name: string) => {
+    if (name === "strong" || name === "b") return "**"
+    if (name === "em" || name === "i") return "*"
+    if (name === "s" || name === "strike" || name === "del") return "~~"
+    return undefined
+  }
   const finishCode = (code: NonNullable<Frame["code"]>) => {
     if (code.inline && !code.text) return
     let backticks = 0
@@ -211,13 +217,20 @@ export function convertHTMLToMarkdown(html: string) {
     }
     if (code.inline) {
       const fence = "`".repeat(Math.max(1, backticks + 1))
-      const padding = /^ | $/.test(code.text) && !/^ +$/.test(code.text) ? " " : ""
       flushSpace()
       prefixQuote()
-      const wrapper = encoder.encode(`${fence}${padding}${padding}${fence}`).byteLength
-      appendRaw(
-        `${fence}${padding}${sliceBytes(code.text, Math.max(0, CONTENT_BYTES - outputBytes - wrapper))}${padding}${fence}`,
-      )
+      const available = Math.max(0, CONTENT_BYTES - outputBytes - fence.length * 2)
+      let payload = sliceBytes(code.text, available)
+      while (payload) {
+        const padding = /^[ `]|[ `]$/.test(payload) && !/^ +$/.test(payload) ? " " : ""
+        const bytes = encoder.encode(payload).byteLength
+        if (bytes + padding.length * 2 <= available) {
+          appendRaw(`${fence}${padding}${payload}${padding}${fence}`)
+          return
+        }
+        // Padding costs at most two bytes, so at most two whole-code-point trims are needed.
+        payload = sliceBytes(payload, bytes - 1)
+      }
       return
     }
     if (activeCell) {
@@ -240,6 +253,8 @@ export function convertHTMLToMarkdown(html: string) {
         block()
         return
       }
+      // No amount of trimming can make the empty fenced block fit.
+      if (!payload) return
       const excess = valueBytes - Math.max(0, CONTENT_BYTES - outputBytes)
       payload = sliceBytes(payload, Math.max(0, encoder.encode(payload).byteLength - Math.ceil(excess)))
     }
@@ -321,20 +336,9 @@ export function convertHTMLToMarkdown(html: string) {
         block()
         return
       }
-      if (name === "strong" || name === "b") {
-        inline("**", true)
-        frame.marker = { index: output.length - 1, block: blockCount, previous: activeMarker }
-        activeMarker = frame.marker
-        return
-      }
-      if (name === "em" || name === "i") {
-        inline("*", true)
-        frame.marker = { index: output.length - 1, block: blockCount, previous: activeMarker }
-        activeMarker = frame.marker
-        return
-      }
-      if (name === "s" || name === "strike" || name === "del") {
-        inline("~~", true)
+      const marker = inlineMarker(name)
+      if (marker) {
+        inline(marker, true)
         frame.marker = { index: output.length - 1, block: blockCount, previous: activeMarker }
         activeMarker = frame.marker
         return
@@ -509,16 +513,8 @@ export function convertHTMLToMarkdown(html: string) {
         return
       }
       if (name === "dd") return block()
-      if (
-        name === "strong" ||
-        name === "b" ||
-        name === "em" ||
-        name === "i" ||
-        name === "s" ||
-        name === "strike" ||
-        name === "del"
-      ) {
-        const value = name === "strong" || name === "b" ? "**" : name === "em" || name === "i" ? "*" : "~~"
+      const marker = inlineMarker(name)
+      if (marker) {
         const trailingSpace = pendingSpace
         pendingSpace = false
         if (frame.marker) activeMarker = frame.marker.previous
@@ -527,15 +523,15 @@ export function convertHTMLToMarkdown(html: string) {
           pendingSpace = trailingSpace || frame.marker.leadingSpace === true
           return
         }
-        inline(value)
+        inline(marker)
         pendingSpace = trailingSpace || frame.marker?.leadingSpace === true
         return
       }
       if (name === "a") {
         if (frame.link && (activeLink === frame.link || !activeLink)) {
           activeLink = frame.link
-          if (linkOpen) append(`](${destination(frame.link?.href ?? "")}${title(frame.link?.title)})`)
-          else if (last && last !== "\n") append(`](${destination(frame.link?.href ?? "")}${title(frame.link?.title)})`)
+          if (linkOpen || (last && last !== "\n"))
+            append(`](${destination(frame.link.href)}${title(frame.link.title)})`)
           linkOpen = false
           activeLink = undefined
         }

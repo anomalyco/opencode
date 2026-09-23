@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/merman",
-  "version": "0.0.0",
+  "name": "@opencode/merman",
+  "version": "2.0.14",
   "private": true,
   "type": "module",
   "exports": {
@@ -15,7 +15,7 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@opencode-ai/plugin": "workspace:*",
+    "@opencode/plugin": "workspace:*",
     "@opentui/core": "catalog:",
     "entities": "7.0.1",
     "string-width": "catalog:"

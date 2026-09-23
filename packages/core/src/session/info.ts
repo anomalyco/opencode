@@ -1,15 +1,15 @@
 import { DateTime, Schema } from "effect"
-import { Agent } from "../agent.js"
-import { Location } from "../location.js"
-import { Model } from "../model.js"
-import { Project } from "../project.js"
-import { Provider } from "../provider.js"
+import { Agent } from "@opencode/schema/agent"
+import { Location } from "@opencode/schema/location"
+import { Model } from "@opencode/schema/model"
+import { Project } from "@opencode/schema/project"
+import { Provider } from "@opencode/schema/provider"
 import { AbsolutePath, RelativePath } from "../schema.js"
-import { Workspace } from "../workspace.js"
+import { Workspace } from "@opencode/schema/workspace"
 import { SessionSchema } from "./schema.js"
-import { SessionTable } from "./sql.js"
-import { PersistedRevert } from "@opencode-ai/schema/session-revert"
-import { Money } from "@opencode-ai/schema/money"
+import type { SessionTable } from "./sql.js"
+import { PersistedRevert } from "@opencode/schema/session-revert"
+import { Money } from "@opencode/schema/money"
 
 const decodeRevert = Schema.decodeUnknownSync(PersistedRevert)
 
@@ -49,6 +49,8 @@ export function fromRow(row: typeof SessionTable.$inferSelect): SessionSchema.In
       workspaceID: row.workspace_id ? Workspace.ID.make(row.workspace_id) : undefined,
     }),
     subpath: row.path ? RelativePath.make(row.path) : undefined,
+    metadata: row.metadata ?? undefined,
+    permissions: row.permission ?? undefined,
     revert: row.revert ? decodeRevert(row.revert) : undefined,
     outcome: row.idle_outcome ?? undefined,
     time: {

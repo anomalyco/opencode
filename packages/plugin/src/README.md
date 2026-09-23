@@ -1,22 +1,24 @@
 # OpenCode V2 Promise Plugin API
 
-The Promise plugin API at `@opencode-ai/plugin` is the async/await equivalent of `@opencode-ai/plugin/effect`. It grants plugins the same two in-process capabilities:
+The Promise plugin API at `@opencode/plugin` is the async/await equivalent of `@opencode/plugin/effect`. It grants plugins the same two in-process capabilities:
 
 - `hook` installs behavior at an OpenCode extension point.
 - `reload` reruns every transform hook for a stateful domain.
 
-The only difference from the Effect API is the async boundary: hook callbacks, hook registration, `reload`, and `Registration.dispose` use Promises instead of Effects.
+The Promise API uses Promises instead of Effects for setup, runtime hook
+callbacks, hook registration, `reload`, and `Registration.dispose`. Transform
+editor callbacks remain synchronous.
 
 ## Defining A Plugin
 
 ```ts
-import { Plugin } from "@opencode-ai/plugin"
+import { Plugin } from "@opencode/plugin"
 
 export default Plugin.define({
   id: "example",
   setup: async (ctx) => {
-    await ctx.catalog.transform((catalog) => {
-      catalog.provider.update("example", (provider) => {
+    await ctx.provider.transform((editor) => {
+      editor.update("example", (provider) => {
         provider.name = "Example"
       })
     })
@@ -40,18 +42,21 @@ Configuration supplied for the plugin is available as `ctx.options`.
 A registration may be removed early through `dispose`:
 
 ```ts
-const registration = await ctx.catalog.transform(applyCatalog)
+const registration = await ctx.model.transform(applyModelPolicy)
 await registration.dispose()
 ```
 
 ## Transform Hooks
 
-Transform hooks contribute to stateful domains. The draft editor is synchronous; the callback may be `async` when it needs to await other work:
+Transform hooks contribute to stateful domains. The editor is synchronous,
+so load asynchronous data before registering a transform or reloading its domain:
 
 ```ts
+const description = await loadReviewerDescription()
+
 await ctx.agent.transform((agent) => {
   agent.update("reviewer", (item) => {
-    item.description = "Reviews code for regressions"
+    item.description = description
     item.mode = "subagent"
   })
 })
@@ -61,11 +66,31 @@ Available transform hooks are namespaced by domain:
 
 ```ts
 ctx.agent.transform
-ctx.catalog.transform
 ctx.command.transform
 ctx.integration.transform
+ctx.mcp.transform
+ctx.model.transform
+ctx.provider.transform
 ctx.reference.transform
 ctx.skill.transform
+ctx.tool.transform
+ctx.vcs.transform
+ctx.websearch.transform
+```
+
+Provider transforms contribute provider settings and immutable model definitions. After provider availability is resolved,
+model transforms edit the complete active-provider candidate collection in order. Use `ctx.model.transform` for runtime
+model restrictions; `editor.provider.get()` reads source templates even when their provider is inactive.
+
+```ts
+await ctx.model.transform((editor) => {
+  editor
+    .list()
+    .filter((model) => model.cost.some((tier) => tier.output > 20))
+    .forEach((model) => {
+      editor.remove(model.providerID, model.id)
+    })
+})
 ```
 
 ## Runtime Hooks
@@ -81,7 +106,7 @@ await ctx.aisdk.hook("sdk", async (event) => {
 
 await ctx.aisdk.hook("language", (event) => {
   if (event.model.providerID !== "xai") return
-  event.language = event.sdk.responses(event.model.api.id)
+  event.language = event.sdk.responses(event.model.modelID)
 })
 ```
 
@@ -92,16 +117,21 @@ await ctx.session.hook("context", (event) => {
   event.tools.read.description = "Read a file using narrow line ranges."
   delete event.tools.write
 })
+
+await ctx.session.hook("retry", (event) => {
+  if (event.attempt >= 3) event.decision = { retry: false }
+})
 ```
 
-Promise tools use executable tool values with async executors. Registration
-supplies the tool's name and options separately:
+Promise tools use complete executable tool values with async executors:
 
 ```ts
 import { Schema } from "effect"
 
 await ctx.tool.transform((tools) => {
-  tools.add("echo", {
+  tools.add({
+    name: "echo",
+    options: { codemode: false },
     description: "Echo text",
     input: Schema.Struct({ text: Schema.String }),
     output: Schema.Struct({ text: Schema.String }),
@@ -115,23 +145,32 @@ await ctx.tool.transform((tools) => {
 When data captured by a transform changes, reload the affected domain:
 
 ```ts
-let data = await loadCatalog()
+const source = { providers: await loadProviders() }
 
-await ctx.catalog.transform((catalog) => {
-  applyCatalog(data, catalog)
+await ctx.provider.transform((editor) => {
+  source.providers.forEach((provider) => editor.add(provider))
 })
 
-data = await loadCatalog()
-await ctx.catalog.reload()
+source.providers = await loadProviders()
+await ctx.provider.reload()
 ```
+
+`loadProviders()` returns entries shaped as `{ info: Provider.Info, models: readonly Model.Info[] }`. Provider reloads
+also invalidate the active model result, so every model transform runs again with the refreshed definitions. Model
+callbacks edit raw overrides; provider defaults are merged once when the result is committed.
 
 Available reload operations are:
 
 ```ts
 ctx.agent.reload()
-ctx.catalog.reload()
 ctx.command.reload()
 ctx.integration.reload()
+ctx.mcp.reload()
+ctx.model.reload()
+ctx.provider.reload()
 ctx.reference.reload()
 ctx.skill.reload()
+ctx.tool.reload()
+ctx.vcs.reload()
+ctx.websearch.reload()
 ```

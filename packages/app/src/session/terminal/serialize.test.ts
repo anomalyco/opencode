@@ -1,4 +1,4 @@
-import { describe, test, expect, beforeAll, afterEach } from "bun:test"
+import { describe, test, expect, beforeAll, afterEach, spyOn } from "bun:test"
 import { Terminal, Ghostty } from "ghostty-web"
 import { SerializeAddon } from "./serialize"
 
@@ -37,6 +37,62 @@ function writeAndWait(term: Terminal, data: string): Promise<void> {
 }
 
 describe("SerializeAddon", () => {
+  test("reuses cells across style changes without rereading their rows", async () => {
+    const { term, addon } = createTerminal(20, 5)
+    await writeAndWait(term, "\x1b[31mred\x1b[32mgreen\x1b[0m\r\n\x1b[1;44mbold\x1b[0m")
+    const reads = spyOn(term.buffer.normal, "getLine")
+    const serialized = addon.serialize({ range: { start: 0, end: 1 } })
+    expect(reads.mock.calls.map((args) => args[0])).toEqual([0, 1, 1])
+    reads.mockRestore()
+
+    const restored = createTerminal(20, 5)
+    await writeAndWait(restored.term, serialized)
+    for (let row = 0; row < 2; row++) {
+      const original = term.buffer.normal.getLine(row)!
+      const replayed = restored.term.buffer.normal.getLine(row)!
+      expect(replayed.translateToString()).toBe(original.translateToString())
+      for (let col = 0; col < 20; col++) {
+        const before = original.getCell(col)!
+        const after = replayed.getCell(col)!
+        expect([after.getFgColor(), after.getBgColor(), after.isBold()]).toEqual([
+          before.getFgColor(),
+          before.getBgColor(),
+          before.isBold(),
+        ])
+      }
+    }
+  })
+
+  describe("scrollback option", () => {
+    test("reads only the requested tail and restores the cursor on its screen row", async () => {
+      const { term, addon } = createTerminal(20, 5)
+      await writeAndWait(term, Array.from({ length: 30 }, (_, i) => `line ${i}`).join("\r\n"))
+      await writeAndWait(term, "\x1b[2A\x1b[3G")
+      expect(term.buffer.normal.length).toBe(30)
+      expect([term.buffer.normal.cursorX, term.buffer.normal.cursorY]).toEqual([2, 2])
+
+      const reads = spyOn(term.buffer.normal, "getLine")
+      const serialized = addon.serialize({ scrollback: 3 })
+      expect(new Set(reads.mock.calls.map((args) => args[0]))).toEqual(new Set([22, 23, 24, 25, 26, 27, 28, 29]))
+      reads.mockRestore()
+
+      const restored = createTerminal(20, 5)
+      await writeAndWait(restored.term, serialized)
+      expect(restored.term.getScrollbackLength()).toBe(3)
+      for (let row = 0; row < 8; row++) {
+        expect(restored.term.buffer.normal.getLine(row)?.translateToString(true)).toBe(`line ${22 + row}`)
+      }
+      expect([restored.term.buffer.normal.cursorX, restored.term.buffer.normal.cursorY]).toEqual([2, 2])
+    })
+
+    test("serializes the whole buffer when it has fewer rows than requested", async () => {
+      const { term, addon } = createTerminal(20, 5)
+      await writeAndWait(term, Array.from({ length: 30 }, (_, i) => `line ${i}`).join("\r\n"))
+
+      expect(addon.serialize({ scrollback: 100 })).toBe(addon.serialize())
+    })
+  })
+
   test("preserves color scheme reporting mode", async () => {
     const { term, addon } = createTerminal()
     await writeAndWait(term, "\x1b[?2031h")

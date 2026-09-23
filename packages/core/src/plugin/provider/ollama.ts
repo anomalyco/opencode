@@ -1,11 +1,11 @@
-import { define } from "@opencode-ai/plugin/effect/plugin"
-import { Document, type Entry } from "@opencode-ai/schema/config"
+import { define } from "@opencode/plugin/effect/plugin"
+import type { Entry } from "@opencode/schema/config"
 import { Duration, Effect, Schedule, Schema, Semaphore, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { Config } from "../../config.js"
 import { Model } from "../../model.js"
-import { Provider } from "../../provider.js"
 import type { PluginInternal } from "../internal.js"
+import { foldSettings } from "./configured.js"
 
 const providerID = "ollama"
 
@@ -66,15 +66,15 @@ export function make(origin = "http://127.0.0.1:11434", interval: Duration.Input
         integrations.remove(providerID)
       })
 
-      yield* ctx.catalog.transform((catalog) => {
+      yield* ctx.provider.transform((providers) => {
         if (loaded.models.length === 0) return
-        for (const model of catalog.provider.get(providerID)?.models.values() ?? []) {
-          catalog.model.remove(providerID, model.id)
+        for (const model of providers.get(providerID)?.models.values() ?? []) {
+          providers.models.remove(providerID, model.id)
         }
-        catalog.provider.update(providerID, (provider) => {
+        providers.update(providerID, (provider) => {
           provider.name = "Ollama"
           provider.activation = "enabled"
-          provider.package = "@opencode-ai/ai/providers/openai-compatible"
+          provider.package = "@opencode/ai/providers/openai-compatible"
           provider.settings = {
             baseURL: source.current.baseURL,
             provider: providerID,
@@ -83,7 +83,7 @@ export function make(origin = "http://127.0.0.1:11434", interval: Duration.Input
           provider.integrationID = undefined
         })
         for (const item of loaded.models) {
-          catalog.model.update(providerID, item.model, (model) => {
+          providers.models.update(providerID, item.model, (model) => {
             model.modelID = Model.ID.make(item.model)
             model.name = item.name || item.model
             model.family = item.show.details?.family
@@ -174,7 +174,7 @@ export function make(origin = "http://127.0.0.1:11434", interval: Duration.Input
         loaded.models = result.models
         loaded.hash = hash
         yield* ctx.integration.reload()
-        yield* ctx.catalog.reload()
+        yield* ctx.provider.reload()
       })
 
       // Keep the last successful inventory through transient outages instead of flickering model availability.
@@ -191,7 +191,7 @@ export function make(origin = "http://127.0.0.1:11434", interval: Duration.Input
         loaded.models = []
         loaded.hash = "[]"
         yield* ctx.integration.reload()
-        yield* ctx.catalog.reload()
+        yield* ctx.provider.reload()
         yield* refresh().pipe(Effect.ignore)
       })
       yield* ctx.event.subscribe().pipe(
@@ -206,13 +206,7 @@ export function make(origin = "http://127.0.0.1:11434", interval: Duration.Input
 export const OllamaPlugin = make()
 
 function configured(entries: readonly Entry[], origin: string) {
-  const settings = entries
-    .filter((entry): entry is Document => entry.type === "document")
-    .flatMap((entry) => {
-      const settings = entry.info.providers?.[providerID]?.settings
-      return settings ? [settings] : []
-    })
-    .reduce<Provider.Settings | undefined>((result, item) => Provider.mergeOverlay(result, item), undefined)
+  const settings = foldSettings(entries, providerID, undefined)
   const baseURL = (
     typeof settings?.baseURL === "string" ? settings.baseURL : `${origin.replace(/\/+$/, "")}/v1`
   ).replace(/\/+$/, "")

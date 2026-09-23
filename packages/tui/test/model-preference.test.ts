@@ -15,11 +15,11 @@ test("repairs known model preferences and preserves unrelated fields", () => {
     unrelated: { keep: true },
     recent: [{ providerID: "openai", modelID: "gpt-5" }],
     favorite: [],
-    variant: { "openai/gpt-5": "high" },
+    variant: { "openai/gpt-5": "high", default: "default" },
   })
 })
 
-test("atomically serializes patches and variant updates", async () => {
+test("atomically serializes model preference updates", async () => {
   await using tmp = await tmpdir()
   const file = path.join(tmp.path, "model.json")
   await Bun.write(file, JSON.stringify({ unrelated: "keep", favorite: [], variant: {} }))
@@ -28,7 +28,7 @@ test("atomically serializes patches and variant updates", async () => {
   const anthropic = { providerID: "anthropic", modelID: "claude/sonnet" }
 
   await Promise.all([
-    repository.patch({ recent: [openai] }),
+    repository.addRecent(openai),
     repository.saveVariant(openai, "high"),
     repository.saveVariant(anthropic, "low"),
   ])
@@ -41,5 +41,8 @@ test("atomically serializes patches and variant updates", async () => {
 
   await repository.saveVariant(openai, "default")
   expect(await repository.resolveVariant(openai)).toBeUndefined()
-  expect((await Bun.file(file).json()).variant).toEqual({ "anthropic/claude/sonnet": "low" })
+  expect((await Bun.file(file).json()).variant).toEqual({
+    "openai/org/gpt-5": "default",
+    "anthropic/claude/sonnet": "low",
+  })
 })

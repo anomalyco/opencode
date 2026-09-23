@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import type { AsyncStorage } from "@solid-primitives/storage"
 import { createEffect, createRoot } from "solid-js"
-import { createStore } from "solid-js/store"
+import { Schema } from "effect"
 import type { Platform } from "@/runtime/platform/platform"
 import { createComposerReady, createComposerState } from "@/composer/state"
 import { ServerScope } from "@/runtime/server/scope"
-import { createDraftStore } from "@/runtime/persistence/drafts"
+import { createDraftStore, resolveBlobUrl } from "@/runtime/persistence/drafts"
+import { flushPersisted } from "@/runtime/persistence/persist"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 
 let read: ((value: string | null) => void) | undefined
@@ -34,12 +35,96 @@ const platform: Platform = {
 }
 
 describe("prompt persistence", () => {
+  test.each([null, "null", '"invalid"', "not json"])(
+    "keeps dynamic initial input with unavailable stored state: %s",
+    async (raw) => {
+      const store = createDraftStore({
+        get: async () => raw,
+        set: async () => [],
+        remove: async () => undefined,
+        putBlob: async () => "unused",
+        getBlob: async () => null,
+      })
+      const model = { providerID: "provider", modelID: "model", variant: "high" }
+      const root = createRoot((dispose) => ({
+        dispose,
+        session: createComposerState(
+          ServerScope.local,
+          { draftID: `draft-initial-${raw}` },
+          { prompt: "initial prompt", model },
+          { ...platform, draftStore: store },
+        ),
+      }))
+      await root.session.ready.promise
+      expect(root.session.current()).toEqual([{ type: "text", content: "initial prompt", start: 0, end: 14 }])
+      expect(root.session.cursor()).toBe(14)
+      expect(root.session.model.current()).toEqual(model)
+      root.dispose()
+    },
+  )
+
+  test("decodes hydrated images and writes canonical blob references through draft storage", async () => {
+    const documents = new Map<string, string>()
+    const blobs = new Map<string, Blob>()
+    const store = createDraftStore({
+      get: async (key) => documents.get(key) ?? null,
+      set: async (key, value) => {
+        documents.set(key, value)
+        return []
+      },
+      remove: async (key) => void documents.delete(key),
+      putBlob: async (blob) => {
+        blobs.set("composer-image", blob)
+        return "composer-image"
+      },
+      getBlob: async (id) => blobs.get(id) ?? null,
+    })
+    const target = Persist.draft("draft-schema-image", "prompt")
+    const key = `${target.storage}:${target.key}`
+    await store.setItem(
+      key,
+      JSON.stringify({
+        prompt: [
+          {
+            type: "image",
+            id: "image",
+            filename: "image.png",
+            mime: "image/png",
+            dataUrl: "data:image/png;base64,YQ==",
+          },
+        ],
+      }),
+    )
+    const root = createRoot((dispose) => ({
+      dispose,
+      session: createComposerState(ServerScope.local, { draftID: "draft-schema-image" }, undefined, {
+        ...platform,
+        draftStore: store,
+      }),
+    }))
+    await root.session.ready.promise
+    // Bytes stay in the store until the image is shown or sent.
+    expect(root.session.current()).toEqual([
+      { type: "image", id: "image", filename: "image.png", mime: "image/png", blob: { id: "composer-image", url: "" } },
+    ])
+    expect(await resolveBlobUrl(root.session.current()[0]!.blob)).toStartWith("blob:")
+    root.session.set([{ type: "text", content: "hello", start: 0, end: 5 }, ...root.session.current()])
+    flushPersisted()
+    await Bun.sleep(0)
+    expect(documents.get(key)).toContain("hello")
+    expect(documents.get(key)).toContain('"blob":{"id":"composer-image"}')
+    expect(documents.get(key)).not.toContain("dataUrl")
+    expect(documents.get(key)).not.toContain("blob:")
+    root.dispose()
+  })
+
   test("relocates a previous key into canonical storage", () => {
     localStorage.setItem("server.v3", JSON.stringify({ list: ["https://example.com"] }))
 
     const [state] = persisted(
       { ...Persist.global("server"), previousKey: "server.v3" },
-      createStore({ list: [] as string[] }),
+      Schema.Struct({ list: Schema.mutable(Schema.Array(Schema.String)) }),
+      { list: [] },
       platform,
     )
 
@@ -84,7 +169,10 @@ describe("prompt persistence", () => {
     const documents = new Map<string, string>()
     const store = createDraftStore({
       get: async (key) => documents.get(key) ?? null,
-      set: async (key, value) => void documents.set(key, value),
+      set: async (key, value) => {
+        documents.set(key, value)
+        return []
+      },
       remove: async (key) => void documents.delete(key),
       putBlob: async () => "blob",
       getBlob: async () => null,
@@ -115,7 +203,10 @@ describe("prompt persistence", () => {
     const documents = new Map<string, string>()
     const store = createDraftStore({
       get: async (key) => documents.get(key) ?? null,
-      set: async (key, value) => void documents.set(key, value),
+      set: async (key, value) => {
+        documents.set(key, value)
+        return []
+      },
       remove: async (key) => void documents.delete(key),
       putBlob: async () => "blob",
       getBlob: async () => null,
@@ -142,12 +233,15 @@ describe("prompt persistence", () => {
   })
 })
 
-test("moves image data URLs into blobs and hydrates object URLs", async () => {
+test("moves image data URLs into blobs and resolves object URLs on demand", async () => {
   const documents = new Map<string, string>()
   const blobs = new Map<string, Blob>()
   const store = createDraftStore({
     get: async (key) => documents.get(key) ?? null,
-    set: async (key, value) => void documents.set(key, value),
+    set: async (key, value) => {
+      documents.set(key, value)
+      return []
+    },
     remove: async (key) => void documents.delete(key),
     putBlob: async (blob) => {
       const id = String(blob.size)
@@ -160,8 +254,8 @@ test("moves image data URLs into blobs and hydrates object URLs", async () => {
   await store.setItem("prompt", JSON.stringify({ prompt: [{ type: "image", dataUrl: "data:image/png;base64,YQ==" }] }))
   expect(documents.get("prompt")).not.toContain("dataUrl")
   const value = JSON.parse((await store.getItem("prompt"))!)
-  expect(value.prompt[0].blob.id).toBe("1")
-  expect(value.prompt[0].blob.url).toStartWith("blob:")
+  expect(value.prompt[0].blob).toEqual({ id: "1" })
+  expect(await resolveBlobUrl(value.prompt[0].blob)).toStartWith("blob:")
 })
 
 test("does not let delayed blob migration overwrite a newer draft", async () => {
@@ -169,7 +263,10 @@ test("does not let delayed blob migration overwrite a newer draft", async () => 
   const migration = Promise.withResolvers<void>()
   const store = createDraftStore({
     get: async () => null,
-    set: async (key, value) => void documents.set(key, value),
+    set: async (key, value) => {
+      documents.set(key, value)
+      return []
+    },
     remove: async () => undefined,
     putBlob: async () => {
       await migration.promise

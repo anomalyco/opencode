@@ -1,8 +1,8 @@
-import { withAlpha } from "@opencode-ai/ui/theme/color"
-import { useTheme } from "@opencode-ai/ui/theme/context"
-import { resolveThemeVariant } from "@opencode-ai/ui/theme/resolve"
-import { resolveThemeVariantV2 } from "@opencode-ai/ui/theme/v2/resolve"
-import type { HexColor, ResolvedV2Theme } from "@opencode-ai/ui/theme/types"
+import { withAlpha } from "@opencode/ui/theme/color"
+import { useTheme } from "@opencode/ui/theme/context"
+import { resolveThemeVariant } from "@opencode/ui/theme/resolve"
+import { resolveThemeVariantV2 } from "@opencode/ui/theme/v2/resolve"
+import type { HexColor, ResolvedV2Theme } from "@opencode/ui/theme/types"
 import { showToast } from "@/shell/notifications/toast"
 import type { FitAddon, Ghostty, Terminal as Term } from "ghostty-web"
 import { type ComponentProps, createEffect, createMemo, onCleanup, onMount, splitProps } from "solid-js"
@@ -20,6 +20,12 @@ import { terminalWriter } from "@/session/terminal/writer"
 
 const TOGGLE_TERMINAL_ID = "terminal.toggle"
 const DEFAULT_TOGGLE_TERMINAL_KEYBIND = "ctrl+`"
+// Serialization on unmount is a synchronous O(rows x cols) walk on the main thread and the
+// result is written to localStorage or desktop state for every terminal in the workspace.
+// Persisting the most recent 2k scrollback rows keeps restore fidelity for the history users
+// actually scroll back through while capping teardown cost and snapshot size; the live
+// terminal keeps its full 10k scrollback while mounted.
+const persistedScrollbackRows = 2_000
 export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
   autoFocus?: boolean
@@ -152,7 +158,7 @@ const persistTerminal = (input: {
   if (!input.addon || !input.onCleanup || !input.term) return
   const buffer = (() => {
     try {
-      return input.addon.serialize()
+      return input.addon.serialize({ scrollback: persistedScrollbackRows })
     } catch {
       debugTerminal("failed to serialize terminal buffer")
       return ""

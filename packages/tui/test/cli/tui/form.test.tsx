@@ -67,7 +67,7 @@ async function mountForm(
         replies.push(answer)
         return response?.reply ? failure(response.reply) : new Response(null, { status: 204 })
       })
-    if (url.pathname === "/api/session/ses_test/form/frm_test/cancel") {
+    if (url.pathname === "/api/session/ses_test/form/frm_test" && request.method === "DELETE") {
       cancellations.push(true)
       return response?.cancel ? failure(response.cancel) : new Response(null, { status: 204 })
     }
@@ -106,7 +106,7 @@ async function mountForm(
         <ConfigProvider config={config}>
           <Keymap.Provider>
             <ClientProvider api={createApi(transport.fetch)}>
-              <DataProvider>
+              <DataProvider directory={process.cwd()}>
                 <ThemeProvider mode="dark" source={emptyThemeSource}>
                   <ToastProvider>{response ? <CurrentForm /> : <FormPrompt form={form} />}</ToastProvider>
                 </ThemeProvider>
@@ -601,6 +601,25 @@ test("text fields retain default paste behavior", async () => {
 
     expect(prompt.app.renderer.currentFocusedEditor?.plainText).toBe("normal paste")
     expect(prompt.replies).toEqual([])
+  } finally {
+    prompt.app.renderer.destroy()
+  }
+})
+
+test("ctrl+c clears a text field before cancelling its form", async () => {
+  await using tmp = await tmpdir()
+  const prompt = await mountForm(tmp.path, 80, [{ key: "notes", type: "string" }])
+
+  try {
+    await prompt.app.mockInput.typeText("draft answer")
+    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor?.plainText === "draft answer")
+
+    prompt.app.mockInput.pressKey("c", { ctrl: true })
+    await prompt.app.waitFor(() => prompt.app.renderer.currentFocusedEditor?.plainText === "")
+    expect(prompt.cancellations).toEqual([])
+
+    prompt.app.mockInput.pressKey("c", { ctrl: true })
+    await prompt.app.waitFor(() => prompt.cancellations.length === 1)
   } finally {
     prompt.app.renderer.destroy()
   }

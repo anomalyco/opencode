@@ -1,14 +1,19 @@
 import type { Page } from "@playwright/test"
-import type { JsonValue, OpenCodeEvent, SessionMessageInfo } from "@opencode-ai/client/promise"
+import type { JsonValue, OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
 import { Duration, Effect, Layer } from "effect"
 import { HttpRouter, HttpServer, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { MockApi, MockBadRequest, MockNotFound } from "./mock-api"
 
 export interface MockServerConfig {
+  server?: string
   provider: unknown | (() => unknown)
   integrationMethods?: Record<string, unknown[]>
+  integrations?: unknown[]
   onConnectKey?: (input: { integrationID: string; body: unknown }) => void
+  shells?: unknown[]
+  configEntries?: unknown[]
+  websearchProviders?: unknown[]
   directory: string
   project: unknown
   sessions: ({ id: string } & Record<string, unknown>)[]
@@ -38,7 +43,8 @@ export interface MockServerConfig {
   sessionStatus?: Record<string, unknown> | (() => Record<string, unknown>)
   inbox?: unknown[] | (() => unknown[])
   onPrompt?: (input: { sessionID: string; body: Record<string, unknown> }) => void
-  onInboxChange?: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" }) => void
+  generate?: (input: { sessionID: string; prompt: string }) => { text: string } | Promise<{ text: string }>
+  onInboxChange?: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" | "queue" }) => void
 }
 
 type MockStreamWindow = Window & {
@@ -47,8 +53,9 @@ type MockStreamWindow = Window & {
 }
 
 export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
-  const state = { cursors: new Map<string, string>(), nextCursor: 0 }
-  const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
+  const server =
+    config.server ??
+    `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 
   await page.addInitScript(
     ({ server, retry }) => {
@@ -81,6 +88,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
         const id = state.connections
         let ended = false
         let own: ReadableStreamDefaultController<Uint8Array> | undefined
+        let keepalive: ReturnType<typeof setInterval> | undefined
         const stream = new ReadableStream<Uint8Array>({
           start(controller) {
             own = controller
@@ -90,11 +98,15 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
               encoder.encode(frame({ id: `evt_mock_connected_${id}`, type: "server.connected", data: {} })),
             )
             state.buffer.splice(0).forEach((item) => controller.enqueue(encoder.encode(item)))
+            // Match the real server's idle stream so long scenarios do not
+            // trigger the client's 45-second stall watchdog and reload history.
+            keepalive = setInterval(() => controller.enqueue(encoder.encode(": keepalive\n\n")), 15_000)
             request.signal.addEventListener(
               "abort",
               () => {
                 if (ended) return
                 ended = true
+                clearInterval(keepalive)
                 if (state.controller === controller) state.controller = undefined
                 controller.error(request.signal.reason ?? new DOMException("The operation was aborted", "AbortError"))
               },
@@ -104,6 +116,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
           cancel() {
             if (ended) return
             ended = true
+            clearInterval(keepalive)
             if (state.controller === own) state.controller = undefined
           },
         })
@@ -135,21 +148,17 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
     }, 50)
     page.on("close", () => clearInterval(timer))
   }
-  const transport = HttpRouter.toWebHandler(
-    HttpApiBuilder.layer(MockApi).pipe(
-      Layer.provide(mockHandlers(config, state)),
-      Layer.provide(HttpServer.layerServices),
-    ),
-    { disableLogger: true },
-  )
+  const transport = createMockServerHandler(config)
   page.on("close", () => void transport.dispose())
 
-  await page.route("**/*", async (route) => {
+  await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url())
     const appPort = new URL(
       process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${process.env.PLAYWRIGHT_PORT ?? "3000"}`,
     ).port
     if (url.origin !== server && url.port !== appPort) return route.fallback()
+    // Production serves the UI and API from one origin; leave app assets to Vite.
+    if (!url.pathname.startsWith("/api/")) return route.fallback()
     if (route.request().method() === "OPTIONS") {
       return route.fulfill({ status: 204, headers: corsHeaders })
     }
@@ -171,16 +180,27 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
   })
 }
 
+export function createMockServerHandler(config: MockServerConfig) {
+  return HttpRouter.toWebHandler(
+    HttpApiBuilder.layer(MockApi).pipe(
+      Layer.provide(mockHandlers(config, { cursors: new Map<string, string>(), nextCursor: 0 })),
+      Layer.provide(HttpServer.layerServices),
+    ),
+    { disableLogger: true },
+  )
+}
+
 const corsHeaders = {
   "access-control-allow-origin": "*",
   "access-control-allow-headers": "*",
-  "access-control-allow-methods": "GET, POST, PUT, DELETE, OPTIONS",
+  "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE, OPTIONS",
   "access-control-expose-headers": "x-next-cursor",
 }
 
 function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, string>; nextCursor: number }) {
   const noContent = Effect.succeed(HttpApiSchema.NoContent.make())
   const delay = config.messageDelay === undefined ? Effect.void : Effect.sleep(Duration.millis(config.messageDelay))
+  const configEntries = config.configEntries ?? []
   return HttpApiBuilder.group(MockApi, "mock", (handlers) =>
     handlers
       .handleRaw("event", () => {
@@ -201,7 +221,14 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
         }),
       )
       .handleAll({
-        health: () => Effect.succeed({ healthy: true, version: "2.0.0", pid: 1 }),
+        info: () =>
+          Effect.succeed({
+            version: "2.0.0",
+            pid: 1,
+            urls: config.server ? [config.server] : [],
+            paths: { tmp: "/tmp/opencode" },
+          }),
+        config: () => Effect.succeed(configEntries),
         reference: () =>
           Effect.succeed({
             location: {
@@ -232,11 +259,13 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
         model: () => Effect.succeed({ location: location(config), data: currentModels(providerConfig(config)) }),
         modelDefault: () =>
           Effect.succeed({ location: location(config), data: currentDefaultModel(providerConfig(config)) }),
-        integrationList: () => Effect.succeed({ location: location(config), data: [] }),
+        integrationList: () => Effect.succeed({ location: location(config), data: config.integrations ?? [] }),
         integrationGet: (ctx) =>
           Effect.succeed({
             location: location(config),
-            data: {
+            data: config.integrations
+              ?.filter(record)
+              .find((integration) => integration.id === ctx.params.integrationID) ?? {
               id: ctx.params.integrationID,
               name: ctx.params.integrationID,
               methods: config.integrationMethods?.[ctx.params.integrationID] ?? [{ type: "key", label: "API key" }],
@@ -257,12 +286,18 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
           const project = config.project as typeof config.project & { canonical?: string; worktree?: string }
           return Effect.succeed([{ ...project, canonical: project.canonical ?? project.worktree ?? config.directory }])
         },
-        projectCurrent: () =>
-          Effect.succeed({
-            id: (config.project as { id?: string }).id,
-            directory: config.directory,
-            canonical: config.directory,
-          }),
+        projectUpdate: (ctx) => {
+          const project = config.project as { canonical?: string }
+          return Effect.succeed({
+            ...project,
+            ...ctx.payload,
+            id: ctx.params.projectID,
+            canonical: project.canonical ?? config.directory,
+          })
+        },
+        configShells: () => Effect.succeed(config.shells ?? []),
+        configUpdate: () => noContent,
+        websearchProviders: () => Effect.succeed({ location: location(config), data: config.websearchProviders ?? [] }),
         worktreeList: () =>
           Effect.succeed([
             { directory: config.directory },
@@ -272,7 +307,7 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
             })),
           ]),
         worktreeCreate: (ctx) => {
-          const input = record(ctx.payload) ? ctx.payload : {}
+          const input = ctx.payload
           return Effect.succeed({
             directory: `${typeof input.directory === "string" ? input.directory : config.directory}/${
               typeof input.name === "string" ? input.name : "copy"
@@ -412,7 +447,7 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
               data: {
                 id: typeof body.id === "string" ? body.id : `inb_mock_${Date.now()}`,
                 sessionID: ctx.params.sessionID,
-                timeCreated: Date.now(),
+                time: { created: Date.now() },
                 type: "user",
                 payload: {
                   text: typeof body.text === "string" ? body.text : "",
@@ -425,13 +460,23 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
               },
             }
           }),
+        sessionGenerate: (ctx) =>
+          Effect.promise(async () => ({
+            data: (await config.generate?.({ sessionID: ctx.params.sessionID, prompt: ctx.payload.prompt })) ?? {
+              text: "Side-question answer",
+            },
+          })),
         sessionInboxCancel: (ctx) =>
           Effect.sync(() =>
             config.onInboxChange?.({ sessionID: ctx.params.sessionID, inboxID: ctx.params.inboxID, action: "cancel" }),
           ).pipe(Effect.andThen(noContent)),
-        sessionInboxSteer: (ctx) =>
+        sessionInboxUpdate: (ctx) =>
           Effect.sync(() =>
-            config.onInboxChange?.({ sessionID: ctx.params.sessionID, inboxID: ctx.params.inboxID, action: "steer" }),
+            config.onInboxChange?.({
+              sessionID: ctx.params.sessionID,
+              inboxID: ctx.params.inboxID,
+              action: ctx.payload.delivery,
+            }),
           ).pipe(Effect.andThen(noContent)),
         sessionSwitchAgent: () => noContent,
         sessionSwitchModel: () => noContent,
@@ -604,9 +649,12 @@ export function currentSession(session: { id: string } & Record<string, unknown>
     model: session.model ?? { id: "mock-model", providerID: "mock-provider" },
     cost: session.cost ?? 0,
     tokens: session.tokens ?? { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    ...(typeof session.outcome === "string" ? { outcome: session.outcome } : {}),
     time: {
       created: "created" in time && typeof time.created === "number" ? time.created : 0,
       updated: "updated" in time && typeof time.updated === "number" ? time.updated : 0,
+      ...("idle" in time && typeof time.idle === "number" ? { idle: time.idle } : {}),
+      ...("viewed" in time && typeof time.viewed === "number" ? { viewed: time.viewed } : {}),
       ...(session.time && typeof session.time === "object" && "archived" in session.time
         ? { archived: session.time.archived }
         : {}),
@@ -619,11 +667,6 @@ export function currentSession(session: { id: string } & Record<string, unknown>
           : typeof session.directory === "string"
             ? session.directory
             : fallbackDirectory,
-      ...(typeof session.workspaceID === "string"
-        ? { workspaceID: session.workspaceID }
-        : "workspaceID" in location && typeof location.workspaceID === "string"
-          ? { workspaceID: location.workspaceID }
-          : {}),
     },
     subpath: session.subpath ?? session.path,
     revert: session.revert,

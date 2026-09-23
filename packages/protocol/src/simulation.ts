@@ -203,6 +203,8 @@ export namespace Frontend {
     "ui.focus",
     "ui.click",
     "ui.click.semantic",
+    "ui.mouse",
+    "ui.recording.pointer",
     "ui.resize",
     "ui.matches",
     "ui.state",
@@ -228,12 +230,39 @@ export namespace Frontend {
   })
   export interface SemanticClickTarget extends Schema.Schema.Type<typeof SemanticClickTarget> {}
 
+  const MousePosition = {
+    x: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    y: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    modifiers: Schema.optionalKey(
+      Schema.Struct({
+        shift: Schema.optionalKey(Schema.Boolean),
+        alt: Schema.optionalKey(Schema.Boolean),
+        ctrl: Schema.optionalKey(Schema.Boolean),
+      }),
+    ),
+  }
+  export const MouseParams = Schema.Union([
+    Schema.Struct({ ...MousePosition, action: Schema.Literal("move") }),
+    Schema.Struct({
+      ...MousePosition,
+      action: Schema.Literals(["down", "up"]),
+      button: Schema.optionalKey(Schema.Literals(["left", "middle", "right"])),
+    }),
+    Schema.Struct({
+      ...MousePosition,
+      action: Schema.Literal("scroll"),
+      direction: Schema.Literals(["up", "down", "left", "right"]),
+    }),
+  ])
+  export type MouseParams = Schema.Schema.Type<typeof MouseParams>
+
   export const Action = Schema.Union([
     Schema.Struct({ type: Schema.Literal("ui.type"), text: Schema.String }),
     Schema.Struct({ type: Schema.Literal("ui.press"), key: Schema.String, modifiers: Schema.optional(KeyModifiers) }),
     Schema.Struct({ type: Schema.Literal("ui.enter") }),
     Schema.Struct({ type: Schema.Literal("ui.arrow"), direction: Schema.Literals(["up", "down", "left", "right"]) }),
     Schema.Struct({ type: Schema.Literal("ui.focus"), target: Schema.Number }),
+    Schema.Struct({ type: Schema.Literal("ui.mouse"), params: MouseParams }),
     Schema.Struct({
       type: Schema.Literal("ui.click"),
       target: Schema.Number,
@@ -311,6 +340,17 @@ export namespace Frontend {
   export const Color = Schema.Tuple([Schema.Number, Schema.Number, Schema.Number, Schema.Number])
   export type Color = Schema.Schema.Type<typeof Color>
 
+  export const CapturedImage = Schema.Struct({
+    x: Schema.Number,
+    y: Schema.Number,
+    width: Schema.Number,
+    height: Schema.Number,
+    pixelWidth: Schema.Number,
+    pixelHeight: Schema.Number,
+    rgba: Schema.String.check(Schema.isBase64()),
+  })
+  export interface CapturedImage extends Schema.Schema.Type<typeof CapturedImage> {}
+
   export const CapturedFrame = Schema.Struct({
     cols: Schema.Number,
     rows: Schema.Number,
@@ -328,6 +368,7 @@ export namespace Frontend {
         ),
       }),
     ),
+    images: Schema.optionalKey(Schema.Array(CapturedImage)),
   })
   export interface CapturedFrame extends Schema.Schema.Type<typeof CapturedFrame> {}
 
@@ -375,6 +416,7 @@ export namespace Frontend {
     Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.arrow"), params: ArrowParams }),
     Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.focus"), params: FocusParams }),
     Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.click"), params: ClickParams }),
+    Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.mouse"), params: MouseParams }),
     Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.resize"), params: ResizeParams }),
     Schema.Struct({ ...JsonRpc.RequestFields, method: Schema.Literal("ui.matches"), params: MatchesParams }),
     Schema.Struct({
@@ -631,6 +673,7 @@ export const UiRpcs = RpcGroup.make(
   request("ui.arrow", { payload: Frontend.ArrowParams, success: Frontend.State }),
   request("ui.focus", { payload: Frontend.FocusParams, success: Frontend.State }),
   request("ui.click", { payload: Frontend.ClickParams, success: Frontend.State }),
+  request("ui.mouse", { payload: Frontend.MouseParams, success: Frontend.State }),
   request("ui.resize", { payload: Frontend.ResizeParams, success: Frontend.State }),
 )
 

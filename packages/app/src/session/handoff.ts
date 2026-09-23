@@ -1,5 +1,5 @@
 import type { SelectedLineRange } from "@/workspaces/files/model"
-import type { SessionMessageUser } from "@opencode-ai/client/promise"
+import type { SessionMessageUser } from "@opencode/client/promise"
 import { createStore } from "solid-js/store"
 
 type HandoffSession = {

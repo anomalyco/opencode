@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/protocol",
-  "version": "1.17.11",
+  "name": "@opencode/protocol",
+  "version": "2.0.14",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -26,7 +26,7 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@opencode-ai/schema": "workspace:*",
+    "@opencode/schema": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {

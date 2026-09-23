@@ -1,4 +1,4 @@
-import type { PromptInput, PromptMention } from "@opencode-ai/schema"
+import type { PromptInput, PromptMention } from "@opencode/schema"
 import type { EditablePromptInput } from "./codec"
 import { promptOffsetWidth } from "./display"
 import { expandTrackedPastedText } from "./part"

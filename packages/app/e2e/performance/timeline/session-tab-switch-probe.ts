@@ -14,119 +14,132 @@ async function installSessionSwitchProbe(
     lastID: string
     requiredPartID?: string
     requireBottomAnchor?: boolean
+    triggerSelector?: string
     href: string
   },
 ) {
-  await page.evaluate(({ destinationIDs, sourceIDs, lastID, requiredPartID, requireBottomAnchor, href }) => {
-    const destination = new Set(destinationIDs)
-    const source = new Set(sourceIDs)
-    const samples: SessionSwitchSample[] = []
-    let started: number | undefined
-    let running = true
-    const reviewLevels: Record<string, string> = {
-      panel: "#review-panel",
-    tabs: '#review-panel [data-component="tabs"]',
-      body: '#review-panel [data-slot="session-review-v2-body"]',
-      review: '#review-panel [data-component="session-review-v2"]',
-      preview: '#review-panel [data-slot="session-review-v2-preview"]',
-      scroll: '#review-panel [data-slot="session-review-v2-diff-scroll"]',
-      file: '#review-panel [data-component="file"][data-mode="diff"]',
-    }
-    const initialReviewNodes: Record<string, Element | null> = {}
-    const sample = () => {
-      if (!running || started === undefined) return
-      setTimeout(() => {
+  await page.evaluate(
+    ({ destinationIDs, sourceIDs, lastID, requiredPartID, requireBottomAnchor, triggerSelector, href }) => {
+      const destination = new Set(destinationIDs)
+      const source = new Set(sourceIDs)
+      const samples: SessionSwitchSample[] = []
+      let started: number | undefined
+      let running = true
+      const reviewLevels: Record<string, string> = {
+        panel: "#review-panel",
+        tabs: '#review-panel [data-component="tabs"]',
+        body: '#review-panel [data-slot="session-review-v2-body"]',
+        review: '#review-panel [data-component="session-review-v2"]',
+        preview: '#review-panel [data-slot="session-review-v2-preview"]',
+        scroll: '#review-panel [data-slot="session-review-v2-diff-scroll"]',
+        file: '#review-panel [data-component="file"][data-mode="diff"]',
+      }
+      const initialReviewNodes: Record<string, Element | null> = {}
+      const sample = () => {
         if (!running || started === undefined) return
-        const observedAtMs = performance.now() - started
-        const reviewPanel = document.querySelector<HTMLElement>("#review-panel")
-        const reviewFile = reviewPanel?.querySelector('[data-component="file"][data-mode="diff"]')
-        const initialReviewFile = initialReviewNodes.file
-        const replacedLevels = Object.entries(reviewLevels).flatMap(([name, selector]) => {
-          const initial = initialReviewNodes[name]
-          if (!initial) return []
-          const current = document.querySelector(selector)
-          return current && current !== initial ? [name] : []
-        })
-        const review = reviewPanel
-          ? {
-              fileHost: !!reviewFile,
-              fileHostReplaced: !!initialReviewFile && !!reviewFile && reviewFile !== initialReviewFile,
-              header:
-                reviewPanel
-                  .querySelector<HTMLElement>('[data-slot="session-review-v2-file-header"]')
-                  ?.textContent?.trim() ?? "",
-              replacedLevels,
-            }
-          : undefined
-        const root = [...document.querySelectorAll<HTMLElement>(".scroll-view__viewport")].find((element) =>
-          element.querySelector("[data-timeline-row]"),
-        )
-        if (root) {
-          const view = root.getBoundingClientRect()
-          const visible = [...root.querySelectorAll<HTMLElement>("[data-message-id]")]
-            .filter((element) => {
-              const rect = element.getBoundingClientRect()
-              return rect.bottom > view.top && rect.top < view.bottom
-            })
-            .map((element) => element.dataset.messageId!)
-          const hasVisibleRows = [...root.querySelectorAll<HTMLElement>("[data-timeline-key]")].some((element) => {
-            const rect = element.getBoundingClientRect()
-            return rect.bottom > view.top && rect.top < view.bottom
+        setTimeout(() => {
+          if (!running || started === undefined) return
+          const reviewPanel = document.querySelector<HTMLElement>("#review-panel")
+          const reviewFile = reviewPanel?.querySelector('[data-component="file"][data-mode="diff"]')
+          const initialReviewFile = initialReviewNodes.file
+          const replacedLevels = Object.entries(reviewLevels).flatMap(([name, selector]) => {
+            const initial = initialReviewNodes[name]
+            if (!initial) return []
+            const current = document.querySelector(selector)
+            return current && current !== initial ? [name] : []
           })
-          const requiredPartVisible = requiredPartID
-            ? [...root.querySelectorAll<HTMLElement>("[data-timeline-part-id]")].some((element) => {
-                if (element.dataset.timelinePartId !== requiredPartID) return false
-                const rect = element.getBoundingClientRect()
-                return rect.width > 0 && rect.height > 0 && rect.bottom > view.top && rect.top < view.bottom
-              })
+          const review = reviewPanel
+            ? {
+                fileHost: !!reviewFile,
+                fileHostReplaced: !!initialReviewFile && !!reviewFile && reviewFile !== initialReviewFile,
+                header:
+                  reviewPanel
+                    .querySelector<HTMLElement>('[data-slot="session-review-v2-file-header"]')
+                    ?.textContent?.trim() ?? "",
+                replacedLevels,
+              }
             : undefined
-          const spacer = root.querySelector<HTMLElement>('[data-timeline-row="bottom-spacer"]')?.getBoundingClientRect()
-          samples.push({
-            observedAtMs,
-            destination: visible.filter((id) => destination.has(id)),
-            source: visible.filter((id) => source.has(id)),
-            hasVisibleRows,
-            last: visible.includes(lastID),
-            requiredPartVisible,
-            bottomAnchorRequired: requireBottomAnchor !== false,
-            bottomErrorPx: spacer ? spacer.bottom - view.bottom : undefined,
-            review,
-          })
-        } else {
-          samples.push({
-            observedAtMs,
-            destination: [],
-            source: [],
-            hasVisibleRows: false,
-            last: false,
-            requiredPartVisible: requiredPartID ? false : undefined,
-            bottomAnchorRequired: requireBottomAnchor !== false,
-            review,
-          })
-        }
-        requestAnimationFrame(sample)
-      }, 0)
-    }
-    document.addEventListener(
-      "click",
-      (event) => {
-        const link = event.target instanceof Element ? event.target.closest("a") : undefined
-        if (link?.getAttribute("href") !== href) return
+          const root = [...document.querySelectorAll<HTMLElement>(".scroll-view__viewport")].find((element) =>
+            element.querySelector("[data-timeline-row]"),
+          )
+          if (root) {
+            const view = root.getBoundingClientRect()
+            const inViewport = (element: HTMLElement) => {
+              if (!element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) return false
+              const rect = element.getBoundingClientRect()
+              const clip = element.closest<HTMLElement>("[data-timeline-key]")?.getBoundingClientRect() ?? view
+              return (
+                Math.min(rect.bottom, clip.bottom, view.bottom) > Math.max(rect.top, clip.top, view.top) &&
+                Math.min(rect.right, clip.right, view.right) > Math.max(rect.left, clip.left, view.left)
+              )
+            }
+            const visible = [...root.querySelectorAll<HTMLElement>("[data-message-id]")]
+              .filter(inViewport)
+              .map((element) => element.dataset.messageId!)
+            const hasVisibleRows = [...root.querySelectorAll<HTMLElement>("[data-timeline-key]")].some(inViewport)
+            const requiredPartVisible = requiredPartID
+              ? [...root.querySelectorAll<HTMLElement>("[data-timeline-part-id]")].some((element) => {
+                  if (element.dataset.timelinePartId !== requiredPartID) return false
+                  if (!element.textContent?.trim()) return false
+                  if (element.querySelector('[data-component="markdown"]:not([data-markdown-ready])')) return false
+                  return inViewport(element)
+                })
+              : undefined
+            const spacer = root
+              .querySelector<HTMLElement>('[data-timeline-row="bottom-spacer"]')
+              ?.getBoundingClientRect()
+            samples.push({
+              observedAtMs: performance.now() - started,
+              destination: visible.filter((id) => destination.has(id)),
+              source: visible.filter((id) => source.has(id)),
+              hasVisibleRows,
+              last: visible.includes(lastID),
+              requiredPartVisible,
+              bottomAnchorRequired: requireBottomAnchor !== false,
+              bottomErrorPx: spacer ? spacer.bottom - view.bottom : undefined,
+              review,
+            })
+          } else {
+            samples.push({
+              observedAtMs: performance.now() - started,
+              destination: [],
+              source: [],
+              hasVisibleRows: false,
+              last: false,
+              requiredPartVisible: requiredPartID ? false : undefined,
+              bottomAnchorRequired: requireBottomAnchor !== false,
+              review,
+            })
+          }
+          requestAnimationFrame(sample)
+        }, 0)
+      }
+      const start = (event: MouseEvent) => {
+        if (started !== undefined || event.button !== 0) return
+        const trigger = event.target instanceof Element ? event.target.closest(triggerSelector ?? "a") : undefined
+        if (!trigger || (!triggerSelector && trigger.getAttribute("href") !== href)) return
         started = performance.now()
+        performance.mark("session-switch:start", { startTime: started })
         for (const [name, selector] of Object.entries(reviewLevels)) {
           initialReviewNodes[name] = document.querySelector(selector)
         }
         requestAnimationFrame(sample)
-      },
-      { capture: true, once: true },
-    )
-    ;(window as Window & { __sessionSwitchProbe?: SessionSwitchProbe }).__sessionSwitchProbe = {
-      samples,
-      stop: () => {
-        running = false
-      },
-    }
-  }, input)
+      }
+      // Tabs activate on mousedown; click alone misses the synchronous navigation work.
+      document.addEventListener("mousedown", start, true)
+      document.addEventListener("click", start, true)
+      ;(window as Window & { __sessionSwitchProbe?: SessionSwitchProbe }).__sessionSwitchProbe = {
+        samples,
+        stop: () => {
+          running = false
+          document.removeEventListener("mousedown", start, true)
+          document.removeEventListener("click", start, true)
+          Object.keys(initialReviewNodes).forEach((key) => (initialReviewNodes[key] = null))
+        },
+      }
+    },
+    input,
+  )
 }
 
 async function waitForStableSessionSwitch(page: Page) {
@@ -154,9 +167,17 @@ async function collectSessionSwitchResult(page: Page) {
   const samples = await page.evaluate(() => {
     const probe = (window as Window & { __sessionSwitchProbe?: SessionSwitchProbe }).__sessionSwitchProbe!
     probe.stop()
+    delete (window as Window & { __sessionSwitchProbe?: SessionSwitchProbe }).__sessionSwitchProbe
     return probe.samples
   })
-  return classifySessionSwitch(samples)
+  const result = classifySessionSwitch(samples)
+  await page.evaluate(({ firstCorrectObservedMs, stableObservedMs }) => {
+    const start = performance.getEntriesByName("session-switch:start").at(-1)!.startTime
+    if (firstCorrectObservedMs !== null)
+      performance.mark("session-switch:ready", { startTime: start + firstCorrectObservedMs })
+    if (stableObservedMs !== null) performance.mark("session-switch:stable", { startTime: start + stableObservedMs })
+  }, result)
+  return result
 }
 
 export async function measureSessionSwitch(
@@ -167,6 +188,7 @@ export async function measureSessionSwitch(
     lastID: string
     requiredPartID?: string
     requireBottomAnchor?: boolean
+    triggerSelector?: string
     href: string
     switch: () => Promise<void>
   },
@@ -180,6 +202,7 @@ export async function measureSessionSwitch(
   } finally {
     await page.evaluate(() => {
       ;(window as Window & { __sessionSwitchProbe?: SessionSwitchProbe }).__sessionSwitchProbe?.stop()
+      delete (window as Window & { __sessionSwitchProbe?: SessionSwitchProbe }).__sessionSwitchProbe
     })
   }
 }

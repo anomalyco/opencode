@@ -1,4 +1,4 @@
-import { FSUtil } from "@opencode-ai/util/fs-util"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Effect, FileSystem } from "effect"
 import { HttpServerError, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { createHash } from "node:crypto"
@@ -10,25 +10,26 @@ export const handler = Effect.fn("cli.web-ui.handler")(function* (options?: { re
     ? Effect.succeed(options.assets)
     : yield* Effect.cached(load().pipe(Effect.provideService(FileSystem.FileSystem, fileSystem)))
   return <E, R>(api: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>) =>
-    api.pipe(
-      Effect.catchIf(isRouteNotFound, () =>
-        HttpServerRequest.HttpServerRequest.pipe(
-          Effect.flatMap((request) => {
-            const url = new URL(request.url, "http://localhost")
-            if (url.pathname === "/api" || url.pathname.startsWith("/api/"))
-              return Effect.succeed(HttpServerResponse.empty({ status: 404 }))
-            return assets.pipe(Effect.flatMap((files) => serveUI(request, url, files)))
-          }),
-        ),
-      ),
-    )
+    Effect.gen(function* () {
+      const request = yield* HttpServerRequest.HttpServerRequest
+      const url = new URL(request.url, "http://localhost")
+      // Serve the web shell before API authentication so /connect can load credentials in JavaScript.
+      if (url.pathname === "/api" || url.pathname.startsWith("/api/") || url.pathname === "/openapi.json")
+        return yield* api.pipe(
+          Effect.catchIf(isRouteNotFound, () => Effect.succeed(HttpServerResponse.empty({ status: 404 }))),
+        )
+      return yield* assets.pipe(Effect.flatMap((files) => serveUI(request, url, files)))
+    })
 })
 
 function serveUI(request: HttpServerRequest.HttpServerRequest, url: URL, assets: AssetMap) {
   const key = url.pathname.replace(/^\//, "")
-  const name = assets[key] !== undefined ? key : "index.html"
-  const file = assets[name]
-  if (!file) return Effect.succeed(HttpServerResponse.empty({ status: 404 }))
+  const requested = assets[key]
+  if ((key.startsWith("_assets/") || key.startsWith("icons/")) && requested === undefined)
+    return Effect.succeed(HttpServerResponse.empty({ status: 404, headers: { "cache-control": "no-store" } }))
+  const name = requested !== undefined ? key : "index.html"
+  const file = requested ?? assets["index.html"]
+  if (file === undefined) return Effect.succeed(HttpServerResponse.empty({ status: 404 }))
   if (request.method !== "GET" && request.method !== "HEAD")
     return Effect.succeed(HttpServerResponse.empty({ status: 405 }))
   const html = name === "index.html"
@@ -43,7 +44,7 @@ function serveUI(request: HttpServerRequest.HttpServerRequest, url: URL, assets:
   }
   return Effect.succeed(
     request.method === "HEAD"
-      ? HttpServerResponse.empty({ headers })
+      ? HttpServerResponse.empty({ status: 200, headers })
       : HttpServerResponse.raw(file, { headers, contentType: headers["content-type"] }),
   )
 }

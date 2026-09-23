@@ -1,19 +1,19 @@
 export * as ConfigAgentPlugin from "./agent.js"
 
-import { define } from "@opencode-ai/plugin/effect/plugin"
-import { Document, Info, type Entry } from "@opencode-ai/schema/config"
-import { ConfigAgent } from "@opencode-ai/schema/config/agent"
+import { define } from "@opencode/plugin/effect/plugin"
+import { Document, Info, type Entry } from "@opencode/schema/config"
+import { ConfigAgent } from "@opencode/schema/config/agent"
 import path from "path"
-import { Effect, Option, Schema, Stream } from "effect"
+import { Effect, Option, PubSub, Schema, Stream } from "effect"
 import { Agent } from "../../agent.js"
 import { Config } from "../../config.js"
 import { ConfigMarkdown } from "../markdown.js"
-import { FSUtil } from "@opencode-ai/util/fs-util"
+import { FSUtil } from "@opencode/util/fs-util"
 import { ConfigAgentV1 } from "../../v1/config/agent.js"
 import { ConfigMigrateV1 } from "../../v1/config/migrate.js"
-import { Global } from "@opencode-ai/util/global"
+import { Global } from "@opencode/util/global"
 import { Permission } from "../../permission.js"
-import type { LocationMutation } from "../../location-mutation.js"
+import type { FileAccess } from "../../file-access.js"
 import type { ReadTool } from "../../tool/plugin/read.js"
 import type { EditTool } from "../../tool/plugin/edit.js"
 import { AbsolutePath } from "../../schema.js"
@@ -27,24 +27,9 @@ const sourceDirectories = ["agent", "agents", "mode", "modes"] as const
 const decodeAgent = Schema.decodeUnknownOption(ConfigAgent.Info)
 const decodeLegacyAgent = Schema.decodeUnknownOption(ConfigAgentV1.Info)
 const decodeConfig = Schema.decodeUnknownOption(Info)
-type PathAction =
-  | LocationMutation.ExternalDirectoryAuthorization["action"]
-  | typeof ReadTool.name
-  | typeof EditTool.name
+type PathAction = FileAccess.ExternalDirectoryAuthorization["action"] | typeof ReadTool.name | typeof EditTool.name
 const pathActions = ["external_directory", "read", "edit"] as const satisfies readonly PathAction[]
-const agentKeys = new Set([
-  "model",
-  "variant",
-  "request",
-  "system",
-  "description",
-  "mode",
-  "hidden",
-  "color",
-  "steps",
-  "disabled",
-  "permissions",
-])
+const agentKeys = new Set(["variant", ...Object.keys(ConfigAgent.Info.fields)])
 
 export const Plugin = define({
   id: "opencode.config.agent",
@@ -71,42 +56,51 @@ export const Plugin = define({
       Effect.tap((documents) => Effect.sync(() => (loaded.documents = documents))),
       Effect.andThen(ctx.agent.reload()),
     )
-    // One merged trigger stream serializes reloads and shares one debounce
-    // window; subscribing before the initial scan means updates racing the
-    // scan still trigger a rebuild.
-    const sourceChanges = config
-      .changes()
-      .pipe(
-        Stream.filterEffect((update) => Effect.map(config.entries(), (entries) => isAgentSource(entries, update.path))),
-      )
-    const configUpdates = ctx.event.subscribe().pipe(Stream.filter((event) => event.type === "config.updated"))
-    yield* Stream.merge(sourceChanges, configUpdates).pipe(
+    // One trigger feed serializes reloads and shares one debounce window;
+    // subscribing before the initial scan means updates racing the scan still
+    // trigger a rebuild. Each source is subscribed eagerly on its own fiber
+    // (Stream.merge and Stream.debounce both open upstream a fiber hop later)
+    // so no update slips through while the debounce starts its pull.
+    const changes = yield* PubSub.sliding<void>(1)
+    const notify = () => PubSub.publish(changes, undefined)
+    yield* config.changes().pipe(
+      Stream.filterEffect((update) => Effect.map(config.entries(), (entries) => isAgentSource(entries, update.path))),
+      Stream.runForEach(notify),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    yield* ctx.event.subscribe().pipe(
+      Stream.filter((event) => event.type === "config.updated"),
+      Stream.runForEach(notify),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    const updates = yield* PubSub.subscribe(changes)
+    yield* Stream.fromSubscription(updates).pipe(
       Stream.debounce("100 millis"),
       Stream.runForEach(() => reload),
       Effect.forkScoped({ startImmediately: true }),
     )
     loaded.documents = yield* load()
-    yield* ctx.agent.transform((draft) => {
+    yield* ctx.agent.transform((editor) => {
       const permissions = expandPermissions(
         loaded.documents.flatMap((document) => document.info.permissions ?? []),
         global.home,
       )
       const configuredDefault = Config.latest(loaded.documents, "default_agent")
-      if (configuredDefault !== undefined) draft.default(Agent.ID.make(configuredDefault))
-      for (const current of draft.list()) {
-        draft.update(current.id, (agent) => agent.permissions.push(...permissions))
+      if (configuredDefault !== undefined) editor.default(Agent.ID.make(configuredDefault))
+      for (const current of editor.list()) {
+        editor.update(current.id, (agent) => agent.permissions.push(...permissions))
       }
 
       for (const document of loaded.documents) {
         for (const [id, item] of Object.entries(document.info.agents ?? {})) {
           const agentID = Agent.ID.make(id)
           if (item.disabled) {
-            draft.remove(agentID)
+            editor.remove(agentID)
             continue
           }
 
-          const exists = draft.get(agentID) !== undefined
-          draft.update(agentID, (agent) => {
+          const exists = editor.get(agentID) !== undefined
+          editor.update(agentID, (agent) => {
             if (!exists) agent.permissions.push(...permissions)
             if (item.model !== undefined)
               agent.model = {
@@ -190,6 +184,15 @@ function decode(file: { directory: string; filepath: string; primary: boolean },
     .replace(/\.md$/, "")
   const body = markdown.content.trim()
   const legacy = Object.keys(markdown.data).some((key) => !agentKeys.has(key))
+  // Join legacy model + variant without sending native request/permissions through migration.
+  // Embedded and structured native selections, and a variant without a model, stay unchanged.
+  const data =
+    typeof markdown.data.model === "string" &&
+    !markdown.data.model.includes("#") &&
+    typeof markdown.data.variant === "string" &&
+    /^[^#]+$/.test(markdown.data.variant)
+      ? { ...markdown.data, model: `${markdown.data.model}#${markdown.data.variant}` }
+      : markdown.data
   const agent = legacy
     ? Option.getOrUndefined(
         Option.map(
@@ -197,9 +200,7 @@ function decode(file: { directory: string; filepath: string; primary: boolean },
           ConfigMigrateV1.migrateAgent,
         ),
       )
-    : Option.getOrUndefined(
-        decodeAgent({ ...markdown.data, system: body }, { errors: "all", propertyOrder: "original" }),
-      )
+    : Option.getOrUndefined(decodeAgent({ ...data, system: body }, { errors: "all", propertyOrder: "original" }))
   if (!agent) return
   const info = Option.getOrUndefined(
     decodeConfig({

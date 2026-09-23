@@ -1,8 +1,8 @@
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { For, onMount, type JSX } from "solid-js"
-import { Menu } from "@opencode-ai/ui/menu"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
+import { Menu } from "@opencode/ui/menu"
+import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
 
 import { matchKeybind, parseKeybind, useCommand } from "@/shell/commands/command"
 import {
@@ -16,6 +16,8 @@ import { useLanguage } from "@/runtime/i18n/language"
 
 const accelerators = DESKTOP_MENU.flatMap((menu) => menu.items ?? []).flatMap((entry) => {
   if (entry.type === "separator" || !entry.action || !entry.accelerator?.windows) return []
+  // Let the focused editor handle editing shortcuts without restoring stale menu focus.
+  if (entry.action.startsWith("edit.")) return []
   return [{ action: entry.action, keybind: parseKeybind(entry.accelerator.windows) }]
 })
 

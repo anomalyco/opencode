@@ -1,4 +1,4 @@
-import { Workspace } from "@opencode-ai/schema/workspace"
+import { Workspace } from "@opencode/schema/workspace"
 import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core"
 import type { WorkspaceDriver } from "./driver.js"
 

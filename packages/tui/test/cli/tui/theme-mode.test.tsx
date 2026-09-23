@@ -2,9 +2,10 @@
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { RGBA } from "@opentui/core"
-import { DEFAULT_THEME, selectTheme } from "@opencode-ai/theme/tui"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
-import { DEFAULT_THEMES } from "../../../src/theme"
+import { getOpenCodeTheme } from "../../../src/theme"
+import opencodeSource from "../../../src/theme/assets/opencode.json" with { type: "json" }
+import type { ThemeV1Json } from "@opencode/theme/tui/v1"
 import { ConfigProvider } from "../../../src/config"
 import { ThemeContextProvider, ThemeProvider, type ThemeError, useTheme, useThemes } from "../../../src/context/theme"
 
@@ -17,16 +18,20 @@ async function wait(fn: () => boolean) {
 }
 
 test("uses an available mode while retaining the pinned preference", async () => {
-  const lightOnly = structuredClone(DEFAULT_THEMES.opencode)
+  const opencodeV1 = opencodeSource as ThemeV1Json
+  const lightOnly = structuredClone(opencodeV1)
   lightOnly.theme.background = "#eeeeee"
   lightOnly.theme.text = "#111111"
-  const dual = structuredClone(DEFAULT_THEMES.opencode)
+  const dual = structuredClone(opencodeV1)
   dual.theme.background = { light: "#eeeeee", dark: "#111111" }
   dual.theme.text = { light: "#111111", dark: "#eeeeee" }
-  const darkOnly = structuredClone(DEFAULT_THEMES.opencode)
+  const darkOnly = structuredClone(opencodeV1)
   darkOnly.theme.background = "#111111"
   darkOnly.theme.text = "#eeeeee"
-  const native = { version: 2, dark: { text: { default: "#abcdef" } } } as const
+  const native = {
+    base: { ...getOpenCodeTheme().base, text: { ...getOpenCodeTheme().base.text, base: "#abcdef" } },
+    dark: { hue: getOpenCodeTheme().dark.hue },
+  } as const
   let themes: ReturnType<typeof useThemes> | undefined
 
   function Probe() {
@@ -72,16 +77,22 @@ test("uses an available mode while retaining the pinned preference", async () =>
     expect(current().set("native")).toBeTrue()
     await wait(() => current().selected === "native")
     expect(current().modes()).toEqual(["dark"])
-    expect(current().current.text.default.equals(RGBA.fromHex("#abcdef"))).toBeTrue()
+    expect(current().current.text.base.equals(RGBA.fromHex("#abcdef"))).toBeTrue()
   } finally {
     app.renderer.destroy()
   }
 })
 
 test.each([
-  ["schema", { version: 2, light: { categorical: [] } }],
-  ["mode merging", { version: 2, light: { mergeMode: true } }],
-  ["token reference", { version: 2, light: { text: { default: "$missing" } } }],
+  ["schema", { base: {}, light: {} }],
+  ["partial mode", { base: { text: { base: "#ffffff" } }, light: {} }],
+  [
+    "token reference",
+    {
+      base: { ...getOpenCodeTheme().base, text: { ...getOpenCodeTheme().base.text, base: "$missing" } },
+      light: getOpenCodeTheme().light,
+    },
+  ],
 ] as const)("falls back to OpenCode when configured V2 theme %s is invalid", async (_label, source) => {
   let themes: ReturnType<typeof useThemes> | undefined
   let failure: ThemeError | undefined
@@ -120,29 +131,21 @@ test.each([
   }
 })
 
-test("contextual hooks resolve overrides and fall back to a standalone theme's base view", async () => {
-  const standalone = {
-    version: 2,
-    standalone: true,
-    dark: {
-      hue: selectTheme(DEFAULT_THEME, "dark").hue,
-      "@context:elevated": { text: { default: "#abcdef" } },
-    },
-  } as const
+test("dialog surfaces are absolute and can be inherited through the theme context", async () => {
   let themes: ReturnType<typeof useThemes> | undefined
   let theme: ReturnType<typeof useTheme> | undefined
-  let explicit: ReturnType<typeof useTheme> | undefined
+  let contextual: ReturnType<typeof useTheme> | undefined
 
   function ContextProbe() {
-    theme = useTheme()
-    explicit = useTheme("elevated")
-    return <text>{theme.text.default.toString()}</text>
+    contextual = useTheme()
+    return <text>{contextual.text.base.toString()}</text>
   }
 
   function Probe() {
     themes = useThemes()
+    theme = useTheme()
     return (
-      <ThemeContextProvider context="elevated">
+      <ThemeContextProvider context="dialog">
         <ContextProbe />
       </ThemeContextProvider>
     )
@@ -150,8 +153,8 @@ test("contextual hooks resolve overrides and fall back to a standalone theme's b
 
   const app = await testRender(
     () => (
-      <ConfigProvider config={createTuiResolvedConfig({ theme: { name: "standalone", mode: "dark" } })}>
-        <ThemeProvider mode="dark" source={{ discover: () => Promise.resolve({ standalone }) }}>
+      <ConfigProvider config={createTuiResolvedConfig({ theme: { name: "opencode", mode: "dark" } })}>
+        <ThemeProvider mode="dark" source={{ discover: async () => ({}) }}>
           <Probe />
         </ThemeProvider>
       </ConfigProvider>
@@ -162,13 +165,14 @@ test("contextual hooks resolve overrides and fall back to a standalone theme's b
 
   try {
     await wait(() => themes?.ready === true)
-    if (!themes) throw new Error("Theme provider is not mounted")
-    if (!theme) throw new Error("Contextual theme is not mounted")
-    if (!explicit) throw new Error("Explicit contextual theme is not mounted")
-    expect(theme.text.default.equals(RGBA.fromHex("#abcdef"))).toBeTrue()
-    expect(theme).toBe(explicit)
-    expect(theme.text.default).toBe(themes.current.contextual.elevated.text.default)
-    expect(themes.current.contextual.overlay.background.default).toBe(themes.current.background.default)
+    if (!themes || !theme || !contextual) throw new Error("Theme provider is not mounted")
+    const dialog = theme.surface("dialog")
+    expect(theme.surface("dialog")).toBe(dialog)
+    expect(dialog.surface("dialog")).toBe(dialog)
+    expect(dialog.background.base).toBe(themes.currentTokens().background.raised.base)
+    expect(contextual.background.base).toBe(dialog.background.base)
+    expect(contextual.text.base).toBe(dialog.text.base)
+    expect(dialog.decrease(dialog.background.raised.base)).toBe(themes.currentTokens().hue.neutral[600])
   } finally {
     app.renderer.destroy()
   }

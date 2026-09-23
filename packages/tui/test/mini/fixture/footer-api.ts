@@ -56,9 +56,12 @@ export function createFooterApiFixture(input: { events?: FooterEvent[]; commits?
     commits,
     calls,
     promptReady,
-    submit(text: string, mode?: RunPrompt["mode"], delivery?: RunPrompt["delivery"]) {
+    submit(text: string | RunPrompt, mode?: RunPrompt["mode"], delivery?: RunPrompt["delivery"]) {
       if (prompts.size === 0) return false
-      const prompt: RunPrompt = { text, parts: [], ...(mode ? { mode } : {}), ...(delivery ? { delivery } : {}) }
+      const prompt: RunPrompt =
+        typeof text === "string"
+          ? { text, parts: [], ...(mode ? { mode } : {}), ...(delivery ? { delivery } : {}) }
+          : text
       for (const fn of [...prompts]) fn(prompt)
       return true
     },

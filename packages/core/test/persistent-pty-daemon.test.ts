@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test"
+import { expect } from "bun:test"
 import { spawn } from "node:child_process"
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import net from "node:net"
@@ -6,198 +6,208 @@ import os from "node:os"
 import path from "node:path"
 import { Effect } from "effect"
 import { makeDaemonTransport } from "../src/persistent-pty/daemon"
+import { it } from "./lib/effect"
 
-const pong = { type: "pong", instance_id: "test", pid: process.pid, protocol: 6 }
+const pong = { type: "pong", instance_id: "test", pid: process.pid, protocol: 7 }
 
-test("rediscovers a same-protocol daemon after its registration rotates", async () => {
-  const directory = await mkdtemp(path.join(os.tmpdir(), "opencode-pty-registration-"))
-  const socketPath = path.join(directory, "daemon.sock")
-  let token = "old-token"
-  let instance = "old-instance"
-  let creates = 0
-  const server = await listen(socketPath, (_socket, request, receivedToken) => {
-    if (receivedToken !== token) return { type: "error", message: "authentication failed" }
-    if (request.op === "ping") return { ...pong, instance_id: instance }
-    if (request.op === "create") creates++
-    return request.op === "list" ? { type: "terminals", terminals: [] } : { type: "ok" }
-  })
-  try {
-    await writeRegistration(directory, socketPath, instance, token)
-    const daemon = await Effect.runPromise(makeDaemonTransport(directory))
-    await Effect.runPromise(daemon.request({ op: "list" }))
+it.live("rediscovers a same-protocol daemon after its registration rotates", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectory()
+    const socketPath = path.join(directory, "daemon.sock")
+    let token = "old-token"
+    let instance = "old-instance"
+    let creates = 0
+    yield* listen(socketPath, (_socket, request, receivedToken) => {
+      if (receivedToken !== token) return { type: "error", message: "authentication failed" }
+      if (request.op === "ping") return { ...pong, instance_id: instance }
+      if (request.op === "create") creates++
+      return request.op === "list" ? { type: "terminals", terminals: [] } : { type: "ok" }
+    })
+    yield* Effect.promise(() => writeRegistration(directory, socketPath, instance, token))
+    const daemon = yield* makeDaemonTransport(directory)
+    yield* daemon.request({ op: "list" })
 
     token = "new-token"
     instance = "new-instance"
-    await writeRegistration(directory, socketPath, instance, token)
+    yield* Effect.promise(() => writeRegistration(directory, socketPath, instance, token))
 
-    const running = await Effect.runPromise(daemon.requestIfRunning({ op: "list" }))
+    const running = yield* daemon.requestIfRunning({ op: "list" })
     expect(running).toEqual({ type: "terminals", terminals: [] })
 
     token = "newest-token"
     instance = "newest-instance"
-    await writeRegistration(directory, socketPath, instance, token)
-    await Effect.runPromise(daemon.request({ op: "create" }, true))
+    yield* Effect.promise(() => writeRegistration(directory, socketPath, instance, token))
+    yield* daemon.request({ op: "create" }, true)
     expect(creates).toBe(1)
-  } finally {
-    await close(server)
-    await rm(directory, { recursive: true, force: true })
-  }
-})
+  }),
+)
 
-test("rediscovers a rotated registration when acquiring a subscription", async () => {
-  const directory = await mkdtemp(path.join(os.tmpdir(), "opencode-pty-subscription-"))
-  const socketPath = path.join(directory, "daemon.sock")
-  let token = "old-token"
-  let instance = "old-instance"
-  let subscriptions = 0
-  const server = await listen(socketPath, (_socket, request, receivedToken) => {
-    if (receivedToken !== token) return { type: "error", message: "authentication failed" }
-    if (request.op === "ping") return { ...pong, instance_id: instance }
-    if (request.op !== "subscribe") return { type: "terminals", terminals: [] }
-    subscriptions++
-    return {
-      type: "attached",
-      terminal: terminal(1),
-      role: "observer",
-      generation: 1,
-      requested_offset: 0,
-      available_offset: 0,
-      end_offset: 0,
-      truncated: false,
-      replay_base64: "",
-    }
-  })
-  try {
-    await writeRegistration(directory, socketPath, instance, token)
-    const daemon = await Effect.runPromise(makeDaemonTransport(directory))
-    await Effect.runPromise(daemon.request({ op: "list" }))
+it.live("rediscovers a rotated registration when acquiring a subscription", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectory()
+    const socketPath = path.join(directory, "daemon.sock")
+    let token = "old-token"
+    let instance = "old-instance"
+    let subscriptions = 0
+    yield* listen(socketPath, (_socket, request, receivedToken) => {
+      if (receivedToken !== token) return { type: "error", message: "authentication failed" }
+      if (request.op === "ping") return { ...pong, instance_id: instance }
+      if (request.op !== "subscribe") return { type: "terminals", terminals: [] }
+      subscriptions++
+      return {
+        type: "attached",
+        terminal: terminal(1),
+        role: "observer",
+        generation: 1,
+        requested_offset: 0,
+        available_offset: 0,
+        end_offset: 0,
+        truncated: false,
+        replay_base64: "",
+      }
+    })
+    yield* Effect.promise(() => writeRegistration(directory, socketPath, instance, token))
+    const daemon = yield* makeDaemonTransport(directory)
+    yield* daemon.request({ op: "list" })
 
     token = "new-token"
     instance = "new-instance"
-    await writeRegistration(directory, socketPath, instance, token)
+    yield* Effect.promise(() => writeRegistration(directory, socketPath, instance, token))
 
-    const attachment = await Effect.runPromise(
-      daemon.subscribe(1, {
-        cursor: 0,
-        attachmentID: "attachment",
-        role: "observer",
-        onEvent: () => {},
-        onEnd: () => {},
-      }),
-    )
+    const attachment = yield* daemon.subscribe(1, {
+      cursor: 0,
+      attachmentID: "attachment",
+      role: "observer",
+      onEvent: () => {},
+      onEnd: () => {},
+    })
     expect(attachment.terminal.id).toBe(1)
     expect(subscriptions).toBe(1)
     attachment.detach()
-  } finally {
-    await close(server)
-    await rm(directory, { recursive: true, force: true })
-  }
-})
+  }),
+)
 
-test("retries a start-required request when connection fails before dispatch", async () => {
-  const directory = await mkdtemp(path.join(os.tmpdir(), "opencode-pty-retry-"))
-  const firstSocket = path.join(directory, "first.sock")
-  const secondSocket = path.join(directory, "second.sock")
-  const first = await listen(firstSocket, (_socket, request) => {
-    if (request.op === "ping") return pong
-    return { type: "terminals", terminals: [] }
-  })
-  try {
-    await writeRegistration(directory, firstSocket)
-    const daemon = await Effect.runPromise(makeDaemonTransport(directory))
-    await Effect.runPromise(daemon.request({ op: "list" }))
-    await close(first)
+it.live("retries a start-required request when connection fails before dispatch", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectory()
+    const firstSocket = path.join(directory, "first.sock")
+    const secondSocket = path.join(directory, "second.sock")
+    const first = yield* listen(firstSocket, (_socket, request) => {
+      if (request.op === "ping") return pong
+      return { type: "terminals", terminals: [] }
+    })
+    yield* Effect.promise(() => writeRegistration(directory, firstSocket))
+    const daemon = yield* makeDaemonTransport(directory)
+    yield* daemon.request({ op: "list" })
+    yield* Effect.promise(first.close)
 
     let creates = 0
-    const second = await listen(secondSocket, (_socket, request) => {
+    yield* listen(secondSocket, (_socket, request) => {
       if (request.op === "ping") return pong
       creates++
       return { type: "ok" }
     })
-    try {
-      await writeRegistration(directory, secondSocket)
-      await Effect.runPromise(daemon.request({ op: "create" }, true))
-      expect(creates).toBe(1)
-    } finally {
-      await close(second)
-    }
-  } finally {
-    await close(first)
-    await rm(directory, { recursive: true, force: true })
-  }
-})
+    yield* Effect.promise(() => writeRegistration(directory, secondSocket))
+    yield* daemon.request({ op: "create" }, true)
+    expect(creates).toBe(1)
+  }),
+)
 
-test("does not replay a dispatched mutating request when its response is lost", async () => {
-  const directory = await mkdtemp(path.join(os.tmpdir(), "opencode-pty-response-"))
-  const socketPath = path.join(directory, "daemon.sock")
-  let creates = 0
-  const server = await listen(socketPath, (socket, request) => {
-    if (request.op === "ping") return pong
-    creates++
-    socket.destroy()
-    return undefined
-  })
-  try {
-    await writeRegistration(directory, socketPath)
-    const daemon = await Effect.runPromise(makeDaemonTransport(directory))
-    const error = await Effect.runPromise(Effect.flip(daemon.request({ op: "create" }, true)))
+it.live("does not replay a dispatched mutating request when its response is lost", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectory()
+    const socketPath = path.join(directory, "daemon.sock")
+    let creates = 0
+    yield* listen(socketPath, (socket, request) => {
+      if (request.op === "ping") return pong
+      creates++
+      socket.destroy()
+      return undefined
+    })
+    yield* Effect.promise(() => writeRegistration(directory, socketPath))
+    const daemon = yield* makeDaemonTransport(directory)
+    const error = yield* Effect.flip(daemon.request({ op: "create" }, true))
 
     expect(error.kind).toBe("response")
     expect(creates).toBe(1)
-  } finally {
-    await close(server)
-    await rm(directory, { recursive: true, force: true })
-  }
-})
+  }),
+)
 
-test("reports protocol mismatches until a start-required request replaces the daemon", async () => {
-  const directory = await mkdtemp(path.join(os.tmpdir(), "opencode-pty-mismatch-"))
-  const existing = spawn("sleep", ["30"])
-  const exited = new Promise<void>((resolve) => existing.once("exit", () => resolve()))
-  try {
+it.live("rejects incompatible daemons without replacing or killing them", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectory()
+    const existing = yield* Effect.acquireRelease(
+      Effect.sync(() => spawn("sleep", ["30"])),
+      (child) =>
+        Effect.promise(async () => {
+          if (child.exitCode !== null || child.signalCode !== null) return
+          const exited = new Promise<void>((resolve) => child.once("exit", () => resolve()))
+          child.kill("SIGKILL")
+          await exited
+        }),
+    )
     if (existing.pid === undefined) throw new Error("Expected fixture process PID")
-    await writeFile(
-      path.join(directory, "service.json"),
-      JSON.stringify({ instance_id: "old", pid: existing.pid, protocol: 5, socket: "/unused", token: "old" }),
+    yield* Effect.promise(() =>
+      writeFile(
+        path.join(directory, "service.json"),
+        JSON.stringify({ instance_id: "old", pid: existing.pid, protocol: 6, socket: "/unused", token: "old" }),
+      ),
     )
-    const daemon = await Effect.runPromise(
-      makeDaemonTransport(directory, () => Promise.resolve("/missing/opencode-pty")),
-    )
+    const daemon = yield* makeDaemonTransport(directory, () => Promise.resolve("/missing/opencode-pty"))
 
-    const optional = await Effect.runPromise(Effect.flip(daemon.requestIfRunning({ op: "list" })))
+    const optional = yield* Effect.flip(daemon.requestIfRunning({ op: "list" }))
     expect(optional).toMatchObject({
       kind: "protocol",
-      message: "opencode-pty protocol mismatch: daemon=5, client=6",
+      message: "opencode-pty protocol mismatch: daemon=6, client=7",
       pid: existing.pid,
     })
-    expect(existing.exitCode).toBeNull()
 
-    const starting = await Effect.runPromise(Effect.flip(daemon.request({ op: "create" }, true)))
-    await exited
-    expect(starting).toMatchObject({ kind: "spawn" })
-    expect(existing.signalCode).toBe(process.platform === "win32" ? null : "SIGTERM")
-  } finally {
-    existing.kill("SIGKILL")
-    await rm(directory, { recursive: true, force: true })
-  }
-})
+    const starting = yield* Effect.flip(daemon.request({ op: "create" }, true))
+    expect(starting).toEqual(optional)
+    expect(existing.exitCode).toBeNull()
+    expect(existing.signalCode).toBeNull()
+    expect(process.kill(existing.pid, 0)).toBeTrue()
+  }),
+)
+
+function temporaryDirectory() {
+  return Effect.acquireRelease(
+    Effect.promise(() => mkdtemp(path.join(os.tmpdir(), "opencode-pty-test-"))),
+    (directory) => Effect.promise(() => rm(directory, { recursive: true, force: true })),
+  )
+}
 
 function listen(
   socketPath: string,
   handle: (socket: net.Socket, request: Record<string, unknown>, token: string) => object | undefined,
 ) {
-  const server = net.createServer((socket) => {
-    void readRequest(socket)
-      .then((envelope) => {
-        const response = handle(socket, envelope.request, envelope.token)
-        if (response) socket.write(frame(response))
+  return Effect.acquireRelease(
+    Effect.promise(async () => {
+      const sockets = new Set<net.Socket>()
+      const server = net.createServer((socket) => {
+        sockets.add(socket)
+        socket.once("close", () => sockets.delete(socket))
+        void readRequest(socket)
+          .then((envelope) => {
+            const response =
+              envelope.request.op === "own" ? { type: "owned" } : handle(socket, envelope.request, envelope.token)
+            if (response) socket.write(frame(response))
+          })
+          .catch(() => socket.destroy())
       })
-      .catch(() => socket.destroy())
-  })
-  return new Promise<net.Server>((resolve, reject) => {
-    server.once("error", reject)
-    server.listen(socketPath, () => resolve(server))
-  })
+      await new Promise<void>((resolve, reject) => {
+        server.once("error", reject)
+        server.listen(socketPath, resolve)
+      })
+      return {
+        close: () => {
+          sockets.forEach((socket) => socket.destroy())
+          return close(server)
+        },
+      }
+    }),
+    (server) => Effect.promise(server.close),
+  )
 }
 
 function readRequest(socket: net.Socket) {
@@ -246,7 +256,7 @@ function frame(value: object) {
 function writeRegistration(directory: string, socket: string, instance = "test", token = "test") {
   return writeFile(
     path.join(directory, "service.json"),
-    JSON.stringify({ instance_id: instance, pid: process.pid, protocol: 6, socket, token }),
+    JSON.stringify({ instance_id: instance, pid: process.pid, protocol: 7, socket, token }),
   )
 }
 

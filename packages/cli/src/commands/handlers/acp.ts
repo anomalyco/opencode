@@ -1,6 +1,6 @@
-import { AgentSideConnection, ndJsonStream } from "@agentclientprotocol/sdk"
-import { OpenCode } from "@opencode-ai/client/promise"
-import { Service } from "@opencode-ai/client/effect/service"
+import { ndJsonStream } from "@agentclientprotocol/sdk"
+import { OpenCode } from "@opencode/client/promise"
+import { Service } from "@opencode/client/effect/service"
 import { Effect } from "effect"
 import { ACP } from "../../acp/agent"
 import { Commands } from "../commands"
@@ -26,8 +26,7 @@ export default Runtime.handler(
         process.stdin.on("error", (error) => controller.error(error))
       },
     })
-    const stream = ndJsonStream(input, output)
-    const connection = new AgentSideConnection((connection) => ACP.create(client, connection), stream)
+    const connection = ACP.connect(client, ndJsonStream(input, output))
     process.stdin.resume()
     yield* Effect.promise(() => connection.closed)
     // EOF owns this stdio process; exiting also closes the private server's lease pipe.

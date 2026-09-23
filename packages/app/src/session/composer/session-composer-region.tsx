@@ -2,23 +2,17 @@ import { Show, type JSX } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { SessionPermissionDock } from "@/session/requests/session-permission-dock"
 import { SessionQuestionDock } from "@/session/requests/session-question-dock"
+import { SessionWebSearchDock } from "@/session/requests/session-websearch-dock"
 import type { SessionComposerRegionController } from "./session-composer-region-controller"
 
 type SessionComposerRegionState = Pick<
   SessionComposerRegionController["state"],
-  "questionRequest" | "permissionRequest" | "permissionResponding" | "decide" | "blocked"
+  "questionRequest" | "websearch" | "permissionRequest" | "permissionResponding" | "decide" | "blocked"
 >
 
 export type SessionComposerRegionViewController = Pick<
   SessionComposerRegionController,
-  | "centered"
-  | "onResponseSubmit"
-  | "openParent"
-  | "setPromptRef"
-  | "setDockRef"
-  | "parentID"
-  | "child"
-  | "showComposer"
+  "centered" | "onResponseSubmit" | "openParent" | "setPromptRef" | "setDockRef" | "parentID" | "child" | "showComposer"
 > & { state: SessionComposerRegionState }
 
 export function SessionComposerRegion(props: {
@@ -39,6 +33,9 @@ export function SessionComposerRegion(props: {
           "md:max-w-[1000px] md:mx-auto": controller.centered(),
         }}
       >
+        <Show when={controller.state.websearch.request()}>
+          <SessionWebSearchDock model={controller.state.websearch} onSubmit={controller.onResponseSubmit} />
+        </Show>
         <Show when={controller.state.questionRequest()} keyed>
           {(request) => (
             <div>
@@ -68,10 +65,7 @@ export function SessionComposerRegion(props: {
               "relative z-[70]": true,
             }}
           >
-            <Show
-              when={controller.child()}
-              fallback={<Show when={!controller.state.blocked()}>{props.composer}</Show>}
-            >
+            <Show when={controller.child()} fallback={<Show when={!controller.state.blocked()}>{props.composer}</Show>}>
               <div
                 ref={controller.setPromptRef}
                 class="w-full rounded-[12px] border border-border-weak-base bg-background-base p-3 text-16-regular text-text-weak"

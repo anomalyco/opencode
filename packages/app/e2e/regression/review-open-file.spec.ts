@@ -1,5 +1,6 @@
-import { base64Encode } from "@opencode-ai/util/encode"
-import { expect, test } from "@playwright/test"
+import { base64Encode } from "@opencode/util/encode"
+import type { OpenCodeEvent } from "@opencode/client/promise"
+import { expect, test, type Route } from "@playwright/test"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectSessionTitle } from "../utils/waits"
 
@@ -13,6 +14,7 @@ test.use({ viewport: { width: 1440, height: 900 } })
 
 test("opens and searches project files inline", async ({ page }) => {
   const searches: { query: string; dirs?: string; limit?: number }[] = []
+  const events: OpenCodeEvent[] = []
   await mockOpenCodeServer(page, {
     directory,
     project: {
@@ -58,10 +60,11 @@ test("opens and searches project files inline", async ({ page }) => {
       searches.push(input)
       return input.query === "nested" ? ["src/nested.ts"] : []
     },
+    events: () => events.splice(0),
     pageMessages: () => ({ items: [] }),
   })
   await page.addInitScript(
-    ({ directory, server, sessionID }) => {
+    ({ directory, server, sessionID, tabKey }) => {
       localStorage.setItem(
         "opencode.global.dat:server",
         JSON.stringify({
@@ -69,10 +72,8 @@ test("opens and searches project files inline", async ({ page }) => {
           lastProject: { local: directory },
         }),
       )
-      localStorage.setItem(
-        "opencode.global.dat:layout",
-        JSON.stringify({ review: { diffStyle: "split", panelOpened: true } }),
-      )
+      localStorage.setItem("opencode.global.dat:layout", JSON.stringify({ review: { diffStyle: "split" } }))
+      localStorage.setItem("opencode.window.browser.dat:tabs.panes", JSON.stringify({ [tabKey]: { review: true } }))
       localStorage.setItem(
         "opencode.global.dat:review-panel-v2",
         JSON.stringify({ sidebarOpened: false, sidebarWidth: 240, expandMode: "collapse" }),
@@ -82,7 +83,7 @@ test("opens and searches project files inline", async ({ page }) => {
         JSON.stringify([{ type: "session", server, sessionId: sessionID }]),
       )
     },
-    { directory, server, sessionID },
+    { directory, server, sessionID, tabKey: `${server}\n/server/${base64Encode(server)}/session/${sessionID}` },
   )
 
   await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
@@ -94,12 +95,25 @@ test("opens and searches project files inline", async ({ page }) => {
   const contextButton = page.getByRole("button", { name: "View context usage" })
   await contextButton.click()
   await expect(panel.getByRole("tab", { name: "Context", selected: true })).toBeVisible()
+  await expect(panel.getByRole("button", { name: "Open file" }).locator("use")).toHaveAttribute(
+    "href",
+    "#opencode-v2-icon-plus",
+  )
   await panel.getByRole("button", { name: "Open file" }).click()
-  await expect(panel.getByRole("tab", { name: "Open file", selected: true })).toBeVisible()
+  const openFileTab = panel.getByRole("tab", { name: "Open file" })
+  const openFileTabClose = openFileTab.locator("..").getByRole("button", { name: "Close tab" })
+  await expect(openFileTab).toHaveAttribute("data-selected", "")
+  await expect(openFileTab.locator("..")).toHaveCSS("padding-inline-end", "4px")
+  await expect(openFileTab.locator("..")).toHaveCSS("gap", "8px")
+  await expect(openFileTab.locator("use")).toHaveAttribute("href", "#opencode-v2-icon-file-tree")
+  await expect(openFileTab.getByText("Open file", { exact: true }).locator("..")).not.toHaveClass(/italic/)
+  await expect(openFileTabClose).toHaveAttribute("data-variant", "ghost-muted")
+  await expect(openFileTabClose).toHaveCSS("opacity", "1")
   await expect(sidebarToggle).toBeDisabled()
   await expect(sidebar).toBeVisible()
   await contextButton.click()
   await expect(panel.getByRole("tab", { name: "Context", selected: true })).toBeVisible()
+  await expect(openFileTabClose).toHaveCSS("opacity", "0")
   await expect(sidebar).toBeHidden()
   await panel.getByRole("button", { name: "Open file" }).click()
   const filter = panel.getByRole("combobox", { name: "Filter files" })
@@ -109,9 +123,40 @@ test("opens and searches project files inline", async ({ page }) => {
 
   await panel.getByRole("button", { name: "README.md" }).click()
   await expect(panel.getByRole("tab", { name: "README.md", selected: true })).toBeVisible()
+  await expect(panel.getByRole("tab", { name: "README.md" }).locator("..")).toHaveCSS("padding-inline-end", "4px")
+  await expect(panel.getByRole("tab", { name: "README.md" }).locator("..")).toHaveCSS("gap", "8px")
   await expect(sidebarToggle).toBeEnabled()
   await expect(panel.getByText("contents:README.md", { exact: true })).toBeVisible()
   await expect(sidebar).toHaveCount(0)
+
+  const missingReadPattern = "**/api/fs/read/README.md*"
+  const missingRead = (route: Route) =>
+    route.fulfill({
+      status: 404,
+      contentType: "application/json",
+      body: JSON.stringify({
+        _tag: "FileNotFoundError",
+        path: "README.md",
+        message: "File not found: README.md",
+      }),
+    })
+  await page.route(missingReadPattern, missingRead)
+  const missingResponse = page.waitForResponse((response) => response.url().includes("/api/fs/read/README.md"))
+  events.push(filesystemEvent("README.md", "unlink"))
+  await missingResponse
+  await expect(page.getByText("Failed to load file", { exact: true })).toBeVisible()
+
+  const missingTab = panel.getByRole("tab", { name: "File not found: README.md", selected: true })
+  await expect(missingTab).toBeVisible()
+  await expect(missingTab.locator("[data-file-not-found]")).toHaveCSS("text-decoration-line", "line-through")
+  await expect(panel.getByText("File not found: README.md", { exact: true })).toBeVisible()
+
+  await page.unroute(missingReadPattern, missingRead)
+  events.push(filesystemEvent("README.md", "add"))
+  const restoredTab = panel.getByRole("tab", { name: "README.md", selected: true })
+  await expect(restoredTab).toBeVisible()
+  await expect(restoredTab.locator("[data-file-not-found]")).toHaveCount(0)
+  await expect(panel.getByText("contents:README.md", { exact: true })).toBeVisible()
 
   await panel.getByRole("button", { name: "Open file" }).click()
   await expect(panel.getByRole("tab", { name: "README.md" })).toHaveCount(0)
@@ -124,6 +169,8 @@ test("opens and searches project files inline", async ({ page }) => {
   await expect(filter).toHaveAttribute("aria-activedescendant", resultID!)
   await filter.press("Enter")
   await expect(panel.getByRole("tab", { name: "nested.ts", selected: true })).toBeVisible()
+  await expect(panel.getByRole("tab", { name: "nested.ts" }).locator("..")).toHaveCSS("padding-inline-end", "4px")
+  await expect(panel.getByRole("tab", { name: "nested.ts" }).locator("..")).toHaveCSS("gap", "8px")
   await expect(sidebarToggle).toBeEnabled()
   await expect(panel.getByText("contents:src/nested.ts", { exact: true })).toBeVisible()
   expect(searches).toContainEqual({ query: "nested", dirs: "file", limit: 200 })
@@ -139,6 +186,16 @@ test("opens and searches project files inline", async ({ page }) => {
   await expect(panel.getByRole("tab", { name: "Open file" })).toHaveCount(0)
   await expect(panel.getByRole("tab", { name: "nested.ts", selected: true })).toBeVisible()
 })
+
+function filesystemEvent(file: string, event: "add" | "change" | "unlink"): OpenCodeEvent {
+  return {
+    id: `evt_${file}_${event}`,
+    created: 1,
+    type: "filesystem.changed",
+    location: { directory },
+    data: { file, event },
+  }
+}
 
 function fileNode(path: string) {
   return {

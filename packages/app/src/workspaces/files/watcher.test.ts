@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { OpenCodeEvent } from "@opencode-ai/client/promise"
+import type { OpenCodeEvent } from "@opencode/client/promise"
 import { invalidateFromWatcher } from "./watcher"
 
 type FilesystemEvent = Extract<OpenCodeEvent, { type: "filesystem.changed" }>

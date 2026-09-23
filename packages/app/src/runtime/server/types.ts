@@ -1,4 +1,4 @@
-import type { ProjectListOutput, WorktreeDirectory } from "@opencode-ai/client/promise"
+import type { ProjectListOutput, WorktreeDirectory } from "@opencode/client/promise"
 
 export type Project = Omit<ProjectListOutput[number], "canonical"> & {
   worktree: string
@@ -33,6 +33,8 @@ export type FileContent = {
   }
   encoding?: "base64"
   mimeType?: string
+  /** On-disk size when the bytes themselves are not retained. */
+  size?: number
 }
 
 export type Path = {
@@ -127,6 +129,8 @@ export type Model = {
 
 export type Provider = {
   id: string
+  /** Integration that connects this provider; differs from `id` for Console-managed providers. */
+  integrationID?: string
   name: string
   source: "env" | "config" | "custom" | "api"
   env: string[]

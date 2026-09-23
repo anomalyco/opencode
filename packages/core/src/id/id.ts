@@ -1,4 +1,4 @@
-import { create } from "@opencode-ai/schema/identifier"
+import { create } from "@opencode/schema/identifier"
 
 const prefixes = {
   job: "job",

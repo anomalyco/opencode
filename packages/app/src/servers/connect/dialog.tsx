@@ -1,10 +1,20 @@
-import { Button } from "@opencode-ai/ui/button"
-import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@opencode-ai/ui/dialog"
-import { Divider } from "@opencode-ai/ui/divider"
-import { TextInput } from "@opencode-ai/ui/text-input"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { Button } from "@opencode/ui/button"
+import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@opencode/ui/dialog"
+import { Divider } from "@opencode/ui/divider"
+import { TextInput } from "@opencode/ui/text-input"
+import { useDialog } from "@opencode/ui/context/dialog"
 import { useMutation } from "@tanstack/solid-query"
-import { type Component, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import {
+  type Component,
+  Show,
+  Suspense,
+  createEffect,
+  createMemo,
+  createSignal,
+  lazy,
+  onCleanup,
+  onMount,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import {
   createServerHealthPreview,
@@ -16,20 +26,30 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { normalizeServerUrl, ServerConnection, useServers } from "@/runtime/server/registry"
 import { useTabs } from "@/shell/tabs/tabs"
 import { useCheckServerHealth } from "@/runtime/server/health"
+import { usePlatform } from "@/runtime/platform/platform"
+import { isMixedContent } from "./browser"
+import { createCameraAvailability } from "./camera"
+import { decodePairingCode } from "./pairing"
 import "@/settings/settings.css"
 
-const DEFAULT_USERNAME = "opencode"
+const PairingScanner = lazy(() => import("./scanner").then((module) => ({ default: module.PairingScanner })))
 
 type FormMode = "list" | "add" | "edit"
 
 export const DialogServer: Component<{
   mode: "add" | "edit"
   server?: ServerConnection.Http
+  onSave?: (server: ServerConnection.Http) => void
 }> = (props) => {
   const dialog = useDialog()
   const language = useLanguage()
+  const platform = usePlatform()
+  const camera = createCameraAvailability()
   const form = createFormController({
-    onSelect: () => dialog.close(),
+    onSelect: (server) => {
+      props.onSave?.(server)
+      dialog.close()
+    },
   })
   const [opened, setOpened] = createSignal(false)
 
@@ -71,53 +91,62 @@ export const DialogServer: Component<{
       </DialogHeader>
       <Divider />
       <DialogBody class="flex w-full min-w-0 flex-1 flex-col px-4 pt-4 pb-2">
-        <div class="flex w-full min-w-0 flex-col gap-6">
-          <div class="flex w-full min-w-0 flex-col gap-2">
-            <label class="settings-server-dialog-label">{language.t("dialog.server.add.url")}</label>
-            <TextInput
-              type="text"
-              appearance="large"
-              class="!w-full self-stretch"
-              value={form.state.value()}
-              placeholder={language.t("dialog.server.add.placeholder")}
-              invalid={!!form.state.error()}
-              disabled={form.state.busy()}
-              autofocus
-              onInput={(event) => form.change.value(event.currentTarget.value)}
-              onKeyDown={keyDown}
-            />
-            <Show when={form.state.error()}>
-              <span class="settings-server-dialog-error">{form.state.error()}</span>
-            </Show>
-          </div>
-          <div class="flex w-full min-w-0 flex-col gap-2">
-            <label class="settings-server-dialog-label">{language.t("dialog.server.add.name")}</label>
-            <TextInput
-              type="text"
-              appearance="large"
-              class="!w-full self-stretch"
-              value={form.state.name()}
-              placeholder={language.t("dialog.server.add.namePlaceholder")}
-              disabled={form.state.busy()}
-              onInput={(event) => form.change.name(event.currentTarget.value)}
-              onKeyDown={keyDown}
-            />
-          </div>
-          <div class="grid w-full min-w-0 grid-cols-2 gap-4">
-            <div class="flex min-w-0 flex-col gap-2">
-              <label class="settings-server-dialog-label">{language.t("dialog.server.add.username")}</label>
+        <Show
+          when={!form.state.scanning()}
+          fallback={
+            <Suspense fallback={<p role="status">{language.t("server.connect.camera.starting")}</p>}>
+              <PairingScanner
+                onCancel={() => {
+                  form.scan.stop()
+                  void camera.refetch()
+                }}
+                onScan={form.scan.complete}
+              />
+            </Suspense>
+          }
+        >
+          <div class="flex w-full min-w-0 flex-col gap-6">
+            <div class="flex w-full min-w-0 flex-col gap-2">
+              <label class="settings-server-dialog-label">{language.t("dialog.server.add.url")}</label>
               <TextInput
                 type="text"
                 appearance="large"
                 class="!w-full self-stretch"
-                value={form.state.username()}
-                placeholder={language.t("dialog.server.add.usernamePlaceholder")}
+                value={form.state.value()}
+                placeholder={language.t("dialog.server.add.placeholder")}
+                invalid={!!form.state.error()}
                 disabled={form.state.busy()}
-                onInput={(event) => form.change.username(event.currentTarget.value)}
+                autofocus
+                list="dialog-server-addresses"
+                aria-describedby={form.state.error() ? "dialog-server-error" : undefined}
+                onInput={(event) => form.change.value(event.currentTarget.value)}
+                onKeyDown={keyDown}
+              />
+              <datalist id="dialog-server-addresses">
+                {form.state.urls().map((url) => (
+                  <option value={url} />
+                ))}
+              </datalist>
+              <Show when={form.state.error()}>
+                <span id="dialog-server-error" class="settings-server-dialog-error" role="alert">
+                  {form.state.error()}
+                </span>
+              </Show>
+            </div>
+            <div class="flex w-full min-w-0 flex-col gap-2">
+              <label class="settings-server-dialog-label">{language.t("dialog.server.add.name")}</label>
+              <TextInput
+                type="text"
+                appearance="large"
+                class="!w-full self-stretch"
+                value={form.state.name()}
+                placeholder={language.t("dialog.server.add.namePlaceholder")}
+                disabled={form.state.busy()}
+                onInput={(event) => form.change.name(event.currentTarget.value)}
                 onKeyDown={keyDown}
               />
             </div>
-            <div class="flex min-w-0 flex-col gap-2">
+            <div class="flex w-full min-w-0 flex-col gap-2">
               <label class="settings-server-dialog-label">{language.t("dialog.server.add.password")}</label>
               <TextInput
                 type="password"
@@ -130,22 +159,50 @@ export const DialogServer: Component<{
                 onKeyDown={keyDown}
               />
             </div>
+            <Show when={props.mode === "add" && platform.platform === "web"}>
+              <div class="flex w-full min-w-0 flex-col gap-2">
+                <Button
+                  variant="neutral"
+                  size="large"
+                  class="!w-full self-stretch"
+                  disabled={form.state.busy() || !camera.available.latest}
+                  aria-describedby={
+                    !camera.available.latest && !camera.available.loading
+                      ? "dialog-server-camera-unavailable"
+                      : undefined
+                  }
+                  onClick={form.scan.start}
+                >
+                  {language.t("server.connect.scan")}
+                </Button>
+                <Show when={!camera.available.latest && !camera.available.loading}>
+                  <span id="dialog-server-camera-unavailable" class="settings-server-dialog-hint">
+                    {language.t(
+                      window.isSecureContext ? "server.connect.camera.unavailable" : "server.connect.camera.insecure",
+                    )}
+                  </span>
+                </Show>
+              </div>
+            </Show>
           </div>
-        </div>
+        </Show>
       </DialogBody>
-      <DialogFooter>
-        <Button variant="neutral" disabled={form.state.busy()} onClick={() => dialog.close()}>
-          {language.t("common.cancel")}
-        </Button>
-        <Button variant="contrast" disabled={form.state.busy()} onClick={form.submit}>
-          {submitLabel()}
-        </Button>
-      </DialogFooter>
+      <Show when={!form.state.scanning()}>
+        <DialogFooter>
+          <Button variant="neutral" disabled={form.state.busy()} onClick={() => dialog.close()}>
+            {language.t("common.cancel")}
+          </Button>
+          <Button variant="contrast" disabled={form.state.busy()} onClick={form.submit}>
+            {submitLabel()}
+          </Button>
+        </DialogFooter>
+      </Show>
     </Dialog>
   )
 }
 
-function createFormController(options: { onSelect?: () => void } = {}) {
+function createFormController(options: { onSelect?: (server: ServerConnection.Http) => void } = {}) {
+  const platform = usePlatform()
   const server = useServers()
   const tabs = useTabs()
   const global = useGlobal()
@@ -155,7 +212,9 @@ function createFormController(options: { onSelect?: () => void } = {}) {
   const [store, setStore] = createStore({
     mode: "list" as FormMode,
     originalUrl: undefined as string | undefined,
-    values: { url: "", name: "", username: DEFAULT_USERNAME, password: "" },
+    values: { url: "", name: "", password: "" },
+    urls: [] as string[],
+    scanning: false,
     error: "",
     status: undefined as boolean | undefined,
   })
@@ -167,7 +226,9 @@ function createFormController(options: { onSelect?: () => void } = {}) {
     setStore({
       mode: "list",
       originalUrl: undefined,
-      values: { url: "", name: "", username: DEFAULT_USERNAME, password: "" },
+      values: { url: "", name: "", password: "" },
+      urls: [],
+      scanning: false,
       error: "",
       status: undefined,
     })
@@ -197,13 +258,11 @@ function createFormController(options: { onSelect?: () => void } = {}) {
       const original = store.mode === "edit" ? editing() : undefined
       if (store.mode === "edit" && !original) return
       const name = store.values.name.trim() || undefined
-      const username = store.values.username || undefined
       const password = store.values.password || undefined
       if (
         original?.type === "http" &&
         normalized === original.http.url &&
         name === original.displayName &&
-        username === original.http.username &&
         password === original.http.password
       ) {
         reset()
@@ -215,25 +274,32 @@ function createFormController(options: { onSelect?: () => void } = {}) {
         displayName: name,
         http: {
           url: normalized,
-          username: store.mode === "add" && !password ? undefined : username,
           password,
         },
       }
       const result = await checkServerHealth(connection.http)
       if (!result.healthy) {
-        setStore("error", language.t("dialog.server.add.error"))
+        setStore(
+          "error",
+          language.t(
+            platform.platform === "web" && isMixedContent(location.href, normalized)
+              ? "server.connect.mixedContent"
+              : "dialog.server.add.error",
+          ),
+        )
         return
       }
       if (original?.type === "http") {
         if (normalized === original.http.url) add(connection)
         if (normalized !== original.http.url) replace(ServerConnection.key(original), connection)
+        options.onSelect?.(connection)
         reset()
         return
       }
 
       reset()
       add(connection)
-      options.onSelect?.()
+      options.onSelect?.(connection)
     },
   }))
 
@@ -256,7 +322,6 @@ function createFormController(options: { onSelect?: () => void } = {}) {
       values: {
         url: connection.http.url,
         name: connection.displayName ?? "",
-        username: connection.http.username ?? "",
         password: connection.http.password ?? "",
       },
       error: "",
@@ -266,6 +331,16 @@ function createFormController(options: { onSelect?: () => void } = {}) {
   const submit = () => {
     if (store.mode === "list" || request.isPending) return
     setStore("error", "")
+    request.mutate()
+  }
+  const pair = (pairing: NonNullable<ReturnType<typeof decodePairingCode>>) => {
+    healthPreview.cancel()
+    setStore({
+      values: { ...store.values, url: pairing.urls[0], password: pairing.password },
+      urls: pairing.urls,
+      scanning: false,
+      error: "",
+    })
     request.mutate()
   }
 
@@ -283,16 +358,21 @@ function createFormController(options: { onSelect?: () => void } = {}) {
       busy: () => request.isPending,
       value: () => store.values.url,
       name: () => store.values.name,
-      username: () => store.values.username,
       password: () => store.values.password,
+      urls: () => store.urls,
+      scanning: () => store.scanning,
       error: () => store.error,
       status: () => store.status,
     },
     change: {
       value: (value: string) => change("url", value),
       name: (value: string) => change("name", value),
-      username: (value: string) => change("username", value),
       password: (value: string) => change("password", value),
+    },
+    scan: {
+      start: () => setStore("scanning", true),
+      stop: () => setStore("scanning", false),
+      complete: pair,
     },
     start: { add: startAdd, edit: startEdit },
     reset,

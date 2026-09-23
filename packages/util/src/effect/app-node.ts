@@ -5,8 +5,8 @@ export const tags = LayerNode.tags({
   global: [],
 })
 
-export type GlobalNode<A, E = never> = LayerNode.Node<A, E, (typeof tags.values)["global"]>
-export type LocationNode<A, E = never> = LayerNode.Node<A, E, (typeof tags.values)["location"]>
+export type GlobalGraph<A, E = never> = LayerNode.Graph<A, E, (typeof tags.values)["global"]>
+export type LocationGraph<A, E = never> = LayerNode.Graph<A, E, (typeof tags.values)["location"]>
 
 export const makeGlobalNode = tags.make("global")
 export const makeLocationNode = tags.make("location")

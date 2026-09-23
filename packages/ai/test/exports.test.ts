@@ -1,15 +1,21 @@
 import { describe, expect, test } from "bun:test"
-import { AIError, ImageInput, LanguageModel, LLM, LLMClient, Provider } from "@opencode-ai/ai"
-import { Route, Protocol, WebSocketTransport } from "@opencode-ai/ai/route"
-import { Provider as ProviderSubpath } from "@opencode-ai/ai/provider"
+import { AIError, LanguageModel, LLM, LLMClient, Media, Provider } from "@opencode/ai"
+import { Route, Protocol, WebSocketTransport } from "@opencode/ai/route"
+import { Provider as ProviderSubpath } from "@opencode/ai/provider"
 import {
+  Baseten,
   CloudflareAIGateway,
   CloudflareWorkersAI,
+  DeepSeek,
+  Fireworks,
+  OpenCodeZen,
   OpenAI,
   OpenAICompatible,
   OpenRouter,
+  TypeSafeAI,
+  VercelAIGateway,
   XAI,
-} from "@opencode-ai/ai/providers"
+} from "@opencode/ai/providers"
 import {
   OpenAIChat,
   OpenAICompatibleChat,
@@ -17,9 +23,10 @@ import {
   OpenAIResponses,
   OpenResponses,
   OpenResponsesChannel,
-} from "@opencode-ai/ai/protocols"
-import * as AnthropicMessages from "@opencode-ai/ai/protocols/anthropic-messages"
-import { TestLLM } from "@opencode-ai/ai/testing"
+} from "@opencode/ai/protocols"
+import * as AnthropicMessages from "@opencode/ai/protocols/anthropic-messages"
+import { TestLLM } from "@opencode/ai/testing"
+import { Evaluation, EvaluationClient } from "@opencode/ai/experimental"
 
 describe("public exports", () => {
   test("root exposes app-facing runtime APIs", () => {
@@ -28,10 +35,15 @@ describe("public exports", () => {
     expect(LLMClient.layer).toBeDefined()
     expect(AIError).toBeFunction()
     expect(LanguageModel.make).toBeFunction()
-    expect(ImageInput.bytes).toBeFunction()
+    expect(Media.bytes).toBeFunction()
     expect(Provider.make).toBeFunction()
     expect(ProviderSubpath.make).toBe(Provider.make)
     expect(TestLLM.layer).toBeFunction()
+    expect(TestLLM.testLayer).toBeFunction()
+    expect(TestLLM.Test.of).toBeFunction()
+    expect(Evaluation.run).toBeFunction()
+    expect(EvaluationClient.layer).toBeDefined()
+    expect(EvaluationClient.fetchLayer).toBeDefined()
   })
 
   test("route barrel exposes route-authoring APIs", () => {
@@ -41,12 +53,18 @@ describe("public exports", () => {
   })
 
   test("provider barrels expose user-facing facades", async () => {
-    const { OpenAICompatibleResponses } = await import("@opencode-ai/ai/providers")
+    const { OpenAICompatibleResponses } = await import("@opencode/ai/providers")
 
     expect(OpenAI.model).toBeFunction()
     expect(OpenAI.provider.responses).toBe(OpenAI.responses)
     expect(OpenAI.configure({ apiKey: "fixture" }).responses).toBeFunction()
-    expect(OpenAICompatible.deepseek.model).toBeFunction()
+    for (const provider of [Baseten, DeepSeek, Fireworks]) {
+      expect(provider.configure).toBeFunction()
+      expect(provider.model).toBeFunction()
+    }
+    for (const name of ["baseten", "cerebras", "deepinfra", "deepseek", "fireworks", "groq", "togetherai"]) {
+      expect(OpenAICompatible).not.toHaveProperty(name)
+    }
     expect(
       OpenAICompatibleResponses.configure({ baseURL: "https://responses.test/v1" }).model("fixture").route.id,
     ).toBe("openai-compatible-responses")
@@ -55,6 +73,10 @@ describe("public exports", () => {
     expect(CloudflareWorkersAI.configure).toBeFunction()
     expect(CloudflareWorkersAI.configure({ accountId: "fixture", apiKey: "fixture" }).model).toBeFunction()
     expect(OpenRouter.model).toBeFunction()
+    expect(OpenRouter.experimental.evaluation).toBeFunction()
+    expect(TypeSafeAI.experimental.evaluation).toBeFunction()
+    expect(OpenCodeZen.experimental.evaluation).toBeFunction()
+    expect(VercelAIGateway.experimental.evaluation).toBeFunction()
     expect(XAI.model).toBeFunction()
     expect(XAI.provider.responses).toBe(XAI.responses)
     expect(XAI.provider.chat).toBe(XAI.chat)

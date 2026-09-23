@@ -142,9 +142,20 @@ export const makeWindowRecovery = Effect.gen(function* () {
       )
       sampler.stopAndFlush()
     })
-    win.webContents.on("console-message", (_event, level, message, line, sourceId) => {
-      if (message.toLowerCase().includes("terminal") || sourceId.toLowerCase().includes("terminal")) {
-        runFork(scoped("pty", Effect.logInfo("console", { window: name, level, message, line, sourceId })))
+    win.webContents.on("console-message", (event) => {
+      if (event.message.toLowerCase().includes("terminal") || event.sourceId.toLowerCase().includes("terminal")) {
+        runFork(
+          scoped(
+            "pty",
+            Effect.logInfo("console", {
+              window: name,
+              level: event.level,
+              message: event.message,
+              line: event.lineNumber,
+              sourceId: event.sourceId,
+            }),
+          ),
+        )
       }
     })
     win.webContents.on("preload-error", (_event, path, error) => {

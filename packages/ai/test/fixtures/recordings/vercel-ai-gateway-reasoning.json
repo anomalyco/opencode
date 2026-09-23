@@ -2,12 +2,7 @@
   "version": 1,
   "metadata": {
     "model": "anthropic/claude-sonnet-4.6",
-    "tags": [
-      "prefix:openai-compatible-chat",
-      "provider:vercel-ai-gateway",
-      "protocol:openai-chat",
-      "reasoning"
-    ],
+    "tags": ["prefix:openai-compatible-chat", "provider:vercel-ai-gateway", "protocol:openai-chat", "reasoning"],
     "name": "vercel-ai-gateway-reasoning",
     "recordedAt": "2026-07-18T11:28:42.077Z"
   },

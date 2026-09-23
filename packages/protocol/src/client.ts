@@ -6,11 +6,11 @@ import { HttpApiMiddleware } from "effect/unstable/httpapi"
 import type { EventGroup } from "./groups/event.js"
 
 class LocationMiddleware extends HttpApiMiddleware.Service<LocationMiddleware>()(
-  "@opencode-ai/client/LocationMiddleware",
+  "@opencode/client/LocationMiddleware",
 ) {}
 
 class SessionLocationMiddleware extends HttpApiMiddleware.Service<SessionLocationMiddleware>()(
-  "@opencode-ai/client/SessionLocationMiddleware",
+  "@opencode/client/SessionLocationMiddleware",
   { error: [InvalidRequestError, SessionNotFoundError] },
 ) {}
 
@@ -33,7 +33,6 @@ export const ClientApi: ClientApiShape = makeDefaultApi({
 })
 
 export const groupNames = {
-  "server.health": "health",
   "server.server": "server",
   "server.debug": "debug",
   "server.migration": "migration",
@@ -53,6 +52,7 @@ export const groupNames = {
   "server.fs": "file",
   "server.command": "command",
   "server.skill": "skill",
+  "server.rpc": "rpc",
   "server.event": "event",
   "server.pty": "pty",
   "server.experimental": "experimental",
@@ -61,10 +61,9 @@ export const groupNames = {
   "server.reference": "reference",
   "server.project": "project",
   "server.worktree": "worktree",
-  "server.workspace": "workspace",
   "server.vcs": "vcs",
   "server.config": "config",
 } as const
 
 export const promiseOmitEndpoints = new Set(["pty.connect", "persistentPty.connect"])
-export const effectOmitEndpoints = new Set(["fs.read", "pty.connect", "persistentPty.connect"])
+export const effectOmitEndpoints = new Set(["fs.read", "fs.write", "pty.connect", "persistentPty.connect"])

@@ -1,13 +1,12 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { Credential } from "@opencode-ai/core/credential"
-import { Integration } from "@opencode-ai/core/integration"
-import { Plugin } from "@opencode-ai/core/plugin"
-import { PluginHost } from "@opencode-ai/core/plugin/host"
-import { XAIPlugin } from "@opencode-ai/core/plugin/provider/xai"
-import { Model } from "@opencode-ai/core/model"
-import { Provider } from "@opencode-ai/core/provider"
+import { Credential } from "@opencode/core/credential"
+import { Integration } from "@opencode/core/integration"
+import { Plugin } from "@opencode/core/plugin"
+import { PluginHost } from "@opencode/core/plugin/host"
+import { XAIPlugin } from "@opencode/core/plugin/provider/xai"
+import { Model } from "@opencode/core/model"
+import { Provider } from "@opencode/core/provider"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
@@ -69,22 +68,25 @@ describe("XAIPlugin", () => {
     }),
   )
 
-  it.effect("marks xAI deployments as Responses WebSocket capable", () =>
+  it.effect("enables xAI Responses WebSockets", () =>
     Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
       const providerID = Provider.ID.make("xai")
-      yield* catalog.transform((draft) => {
-        draft.provider.update(providerID, (provider) => {
-          provider.package = Provider.aisdk("@ai-sdk/xai")
+      yield* providers.transform((editor) => {
+        editor.update(providerID, (provider) => {
+          provider.package = "@opencode/ai/providers/xai"
+          provider.activation = "enabled"
         })
-        draft.model.update(providerID, Model.ID.make("grok-4.6"), () => {})
+        editor.models.update(providerID, Model.ID.make("grok-4.6"), () => {})
       })
 
       yield* addPlugin()
 
-      expect((yield* catalog.model.get(providerID, Model.ID.make("grok-4.6")))?.capabilities.responsesWebsockets).toBe(
-        true,
-      )
+      const provider = yield* providers.get(providerID)
+      const model = yield* models.get(providerID, Model.ID.make("grok-4.6"))
+      expect(provider?.settings?.transport).toBe("websocket")
+      expect(model?.settings?.transport).toBeUndefined()
     }),
   )
 })

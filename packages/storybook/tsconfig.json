@@ -12,5 +12,5 @@
     "strict": true,
     "types": ["vite/client", "node"]
   },
-  "include": [".storybook/**/*.ts", ".storybook/**/*.tsx"]
+  "include": [".storybook/**/*.ts", ".storybook/**/*.tsx", "playwright/**/*.ts"]
 }

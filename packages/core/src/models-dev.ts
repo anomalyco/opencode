@@ -1,15 +1,17 @@
 import { Cause, Context, Duration, Effect, Layer, Option, Schedule, Schema, Semaphore } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
-import { ModelsDev } from "@opencode-ai/schema/models-dev"
-import { Money } from "@opencode-ai/schema/money"
+import { ModelsDev } from "@opencode/schema/models-dev"
+import { Money } from "@opencode/schema/money"
 import { App } from "./app.js"
-import { Hash } from "@opencode-ai/util/hash"
-import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Hash } from "@opencode/util/hash"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Bus } from "./bus.js"
-import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
-import { httpClient } from "@opencode-ai/util/effect/app-node-platform"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { httpClient } from "@opencode/util/effect/app-node-platform"
 import { Model } from "./model.js"
+import { AISDKNative } from "./aisdk-native.js"
 import { Provider } from "./provider.js"
+import { Variant } from "./variant.js"
 import { KV } from "./kv.js"
 import snapshotText from "./models-dev/snapshot.txt" with { type: "text" }
 
@@ -25,11 +27,6 @@ type Cost = {
   readonly context_over_200k?: Omit<Cost, "tiers" | "context_over_200k">
 }
 
-type ReasoningOption =
-  | { readonly type: "effort"; readonly values: readonly (string | null)[] }
-  | { readonly type: "toggle" }
-  | { readonly type: "budget_tokens"; readonly min?: number; readonly max?: number }
-
 type Modality = "text" | "audio" | "image" | "video" | "pdf"
 
 type SourceModel = {
@@ -39,7 +36,10 @@ type SourceModel = {
   readonly release_date: string
   readonly attachment: boolean
   readonly reasoning: boolean
-  readonly reasoning_options?: readonly ReasoningOption[]
+  readonly reasoning_options?: readonly (
+    | { readonly type: "effort"; readonly values: readonly (string | null)[] }
+    | Exclude<Variant.Support, { type: "effort" }>
+  )[]
   readonly temperature?: boolean
   readonly tool_call: boolean
   readonly interleaved?: boolean | string | { readonly field: string }
@@ -79,27 +79,36 @@ export type Snapshot = {
   readonly environment: readonly string[]
 }
 
+function nativePackage(provider: SourceProvider, model?: SourceModel) {
+  const npm = model?.provider?.npm ?? provider.npm
+  return AISDKNative.native(npm, { providerID: provider.id, modelID: model?.id }) ?? Provider.aisdk(npm)
+}
+
 function normalize(input: Record<string, SourceProvider>): readonly Snapshot[] {
   const providers: Snapshot[] = []
   for (const item of Object.values(input)) {
     const providerID = Provider.ID.make(item.id)
+    const packageName = nativePackage(item)
     const info = {
       id: providerID,
       name: item.name,
       activation: "auto",
-      package: Provider.aisdk(item.npm),
-      ...(item.api ? { settings: { baseURL: item.api } } : {}),
+      package: packageName,
+      ...(item.api && packageName !== "@opencode/ai/providers/cloudflare-workers-ai"
+        ? { settings: { baseURL: item.api } }
+        : {}),
     } satisfies Provider.Info
     const models: Model.Info[] = []
     for (const model of Object.values(item.models)) {
       const baseCost = cost(model.cost)
-      const variants = reasoningVariants(item, model)
       const id = Model.ID.make(model.id)
-      models.push(modelInfo(providerID, id, model, { cost: baseCost, variants }))
+      const base = modelInfo(item, id, model, { cost: baseCost })
+      const variants = Variant.resolve({ ...base, package: nativePackage(item, model) }, supports(model))
+      models.push({ ...base, variants })
       for (const [mode, options] of Object.entries(model.experimental?.modes ?? {})) {
         const modeID = Model.ID.make(`${model.id}-${mode}`)
         models.push(
-          modelInfo(providerID, modeID, model, {
+          modelInfo(item, modeID, model, {
             name: modeName(model, mode),
             cost: mergeCost(baseCost, options.cost),
             request: options.provider,
@@ -184,303 +193,20 @@ function mergeCost(base: Model.Info["cost"], override: SourceModel["cost"] | und
   ]
 }
 
-const OPENAI_INCLUDE_ENCRYPTED_REASONING = ["reasoning.encrypted_content"]
-const OUTPUT_TOKEN_MAX = 32_000
-
-function reasoningVariants(provider: SourceProvider, model: SourceModel): NonNullable<Model.Info["variants"]> {
-  const npm = model.provider?.npm ?? provider.npm
-  const options = model.reasoning_options
-  if (!options?.length) return []
-  const toggle = options.some((option) => option.type === "toggle")
-  const effort = options.find((option) => option.type === "effort")
-  if (effort?.type === "effort") {
-    const off = toggle ? toggleVariants(npm, model.id).filter((variant) => variant.id === "none") : []
-    const variants = [
-      ...off,
-      ...effort.values.flatMap((value) => {
-        const raw: unknown = value
-        const id = typeof raw === "string" && raw !== "null" ? raw : undefined
-        if (id === undefined) return []
-        if (id === "none" && off.length > 0) return []
-        const settings = settingsForEffort(npm, model.id, id)
-        return settings ? [{ id: Model.VariantID.make(id), settings }] : []
-      }),
-    ]
-    return [...new Map(variants.map((variant) => [variant.id, variant])).values()]
-  }
-  const budget = options.find((option) => option.type === "budget_tokens")
-  if (budget?.type === "budget_tokens")
-    return [
-      ...(toggle ? toggleVariants(npm, model.id).filter((variant) => variant.id === "none") : []),
-      ...budgetVariants(npm, model, budget),
-    ]
-  if (toggle) return toggleVariants(npm, model.id)
-  return []
-}
-
-function settingsForEffort(npm: string, modelID: string, effort: string): Provider.Settings | undefined {
-  if (npm === "@openrouter/ai-sdk-provider") return { reasoning: { effort } }
-  if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic") {
-    if (anthropicManualThinking(modelID)) return { effort }
-    return {
-      thinking: { type: "adaptive", display: "summarized" },
-      effort,
-    }
-  }
-  if (npm === "@ai-sdk/google" || npm === "@ai-sdk/google-vertex")
-    return { thinkingConfig: { includeThoughts: true, thinkingLevel: effort } }
-  if (npm === "@ai-sdk/amazon-bedrock") {
-    if (modelID.includes("anthropic"))
-      return {
-        reasoningConfig: {
-          ...(anthropicManualThinking(modelID) ? {} : { type: "adaptive", display: "summarized" }),
-          maxReasoningEffort: effort,
-        },
-      }
-    return { reasoningConfig: { type: "enabled", maxReasoningEffort: effort } }
-  }
-  if (npm === "@ai-sdk/gateway") {
-    const upstream = gatewayPackage(modelID)
-    if (upstream) return settingsForEffort(upstream, modelID, effort)
-    return { reasoningEffort: effort }
-  }
-  if (npm === "@ai-sdk/github-copilot") {
-    if (modelID.includes("gemini")) return
-    if (modelID.includes("claude")) return { reasoningEffort: effort }
-    return { reasoningEffort: effort, reasoningSummary: "auto", include: OPENAI_INCLUDE_ENCRYPTED_REASONING }
-  }
-  if (npm === "@ai-sdk/openai" || npm === "@ai-sdk/amazon-bedrock/mantle" || npm === "@ai-sdk/azure")
-    return { reasoningEffort: effort, reasoningSummary: "auto", include: OPENAI_INCLUDE_ENCRYPTED_REASONING }
-  if (npm === "@jerome-benoit/sap-ai-provider-v2") {
-    if (modelID.includes("anthropic"))
-      return {
-        modelParams: {
-          additionalModelRequestFields: {
-            ...(anthropicManualThinking(modelID) ? {} : { thinking: { type: "adaptive", display: "summarized" } }),
-            output_config: { effort },
-          },
-        },
-      }
-    if (modelID.includes("gemini"))
-      return { modelParams: { thinkingConfig: { includeThoughts: true, thinkingLevel: effort } } }
-    if (modelID.includes("amazon--nova"))
-      return { modelParams: { additionalModelRequestFields: { output_config: { effort } } } }
-    return { modelParams: { reasoning_effort: effort } }
-  }
-  if (
-    [
-      "@ai-sdk/openai-compatible",
-      "@ai-sdk/xai",
-      "@ai-sdk/mistral",
-      "@ai-sdk/groq",
-      "@ai-sdk/cerebras",
-      "@ai-sdk/deepinfra",
-      "@ai-sdk/togetherai",
-      "venice-ai-sdk-provider",
-      "ai-gateway-provider",
-    ].includes(npm)
-  )
-    return { reasoningEffort: effort }
-}
-
-function budgetVariants(
-  npm: string,
-  model: SourceModel,
-  option: Extract<NonNullable<SourceModel["reasoning_options"]>[number], { type: "budget_tokens" }>,
-): NonNullable<Model.Info["variants"]> {
-  const maximum = Math.min(option.max ?? OUTPUT_TOKEN_MAX - 1, model.limit.output - 1, OUTPUT_TOKEN_MAX - 1)
-  if (maximum <= 0) return []
-  const high = Math.min(Math.max(option.min ?? 0, Math.floor((maximum + 1) / 2)), maximum)
-  return [
-    { id: "high", budget: high },
-    { id: "max", budget: maximum },
-  ].flatMap((item) => {
-    const settings = settingsForBudget(npm, model.id, item.budget)
-    return settings ? [{ id: Model.VariantID.make(item.id), settings }] : []
-  })
-}
-
-function toggleVariants(npm: string, modelID: string): NonNullable<Model.Info["variants"]> {
-  if (npm === "@ai-sdk/gateway") {
-    const upstream = gatewayPackage(modelID)
-    if (upstream) return toggleVariants(upstream, modelID)
-    return [
-      {
-        id: Model.VariantID.make("none"),
-        settings: { reasoning: { enabled: false } },
-      },
-      {
-        id: Model.VariantID.make("thinking"),
-        settings: { reasoning: { enabled: true } },
-      },
-    ]
-  }
-  if (npm === "@openrouter/ai-sdk-provider")
-    return [
-      { id: Model.VariantID.make("none"), settings: { reasoning: { enabled: false } } },
-      { id: Model.VariantID.make("thinking"), settings: { reasoning: { enabled: true } } },
-    ]
-  if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic")
-    return [
-      { id: Model.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
-      {
-        id: Model.VariantID.make("thinking"),
-        settings: {
-          thinking: { type: "adaptive", display: "summarized" },
-        },
-      },
-    ]
-  if (npm === "@ai-sdk/google" || npm === "@ai-sdk/google-vertex")
-    return [
-      {
-        id: Model.VariantID.make("none"),
-        settings: { thinkingConfig: { includeThoughts: false, thinkingBudget: 0 } },
-      },
-      {
-        id: Model.VariantID.make("thinking"),
-        settings: { thinkingConfig: { includeThoughts: true, thinkingBudget: -1 } },
-      },
-    ]
-  if (npm === "@ai-sdk/amazon-bedrock") {
-    const anthropic = modelID.includes("anthropic")
-    return [
-      {
-        id: Model.VariantID.make("none"),
-        settings: {
-          additionalModelRequestFields: anthropic
-            ? { thinking: { type: "disabled" } }
-            : { reasoningConfig: { type: "disabled" } },
-        },
-      },
-      {
-        id: Model.VariantID.make("thinking"),
-        settings: {
-          additionalModelRequestFields: anthropic
-            ? { thinking: { type: "adaptive", display: "summarized" } }
-            : { reasoningConfig: { type: "enabled" } },
-        },
-      },
-    ]
-  }
-  if (npm === "@ai-sdk/alibaba")
-    return [
-      { id: Model.VariantID.make("none"), settings: { enableThinking: false } },
-      { id: Model.VariantID.make("thinking"), settings: { enableThinking: true } },
-    ]
-  if (npm === "@ai-sdk/cohere")
-    return [
-      { id: Model.VariantID.make("none"), settings: { thinking: { type: "disabled" } } },
-      { id: Model.VariantID.make("thinking"), settings: { thinking: { type: "enabled" } } },
-    ]
-  if (npm === "@jerome-benoit/sap-ai-provider-v2") {
-    if (modelID.includes("gemini"))
-      return [
-        {
-          id: Model.VariantID.make("none"),
-          settings: { modelParams: { thinkingConfig: { includeThoughts: false, thinkingBudget: 0 } } },
-        },
-        {
-          id: Model.VariantID.make("thinking"),
-          settings: { modelParams: { thinkingConfig: { includeThoughts: true, thinkingBudget: -1 } } },
-        },
-      ]
-    if (modelID.includes("cohere"))
-      return [
-        {
-          id: Model.VariantID.make("none"),
-          settings: { modelParams: { thinking: { type: "disabled" } } },
-        },
-        {
-          id: Model.VariantID.make("thinking"),
-          settings: { modelParams: { thinking: { type: "enabled" } } },
-        },
-      ]
-    if (modelID.includes("amazon--nova"))
-      return [
-        {
-          id: Model.VariantID.make("none"),
-          settings: { modelParams: { additionalModelRequestFields: { thinking: { type: "disabled" } } } },
-        },
-        {
-          id: Model.VariantID.make("thinking"),
-          settings: { modelParams: { additionalModelRequestFields: { thinking: { type: "enabled" } } } },
-        },
-      ]
-    if (modelID.includes("anthropic"))
-      return [
-        {
-          id: Model.VariantID.make("none"),
-          settings: {
-            modelParams: { additionalModelRequestFields: { thinking: { type: "disabled" } } },
-          },
-        },
-        {
-          id: Model.VariantID.make("thinking"),
-          settings: {
-            modelParams: {
-              additionalModelRequestFields: {
-                thinking: { type: "adaptive", display: "summarized" },
-              },
-            },
-          },
-        },
-      ]
-  }
-  return []
-}
-
-function settingsForBudget(npm: string, modelID: string, budget: number): Provider.Settings | undefined {
-  if (npm === "@openrouter/ai-sdk-provider") return { reasoning: { max_tokens: budget } }
-  if (npm === "@ai-sdk/anthropic" || npm === "@ai-sdk/google-vertex/anthropic")
-    return { thinking: { type: "enabled", budgetTokens: budget } }
-  if (npm === "@ai-sdk/google" || npm === "@ai-sdk/google-vertex")
-    return { thinkingConfig: { includeThoughts: true, thinkingBudget: budget } }
-  if (npm === "@ai-sdk/amazon-bedrock") return { reasoningConfig: { type: "enabled", budgetTokens: budget } }
-  if (npm === "@ai-sdk/gateway") {
-    const upstream = gatewayPackage(modelID)
-    return upstream ? settingsForBudget(upstream, modelID, budget) : { reasoning: { max_tokens: budget } }
-  }
-  if (npm === "@ai-sdk/cohere") return { thinking: { type: "enabled", tokenBudget: budget } }
-  if (npm === "@ai-sdk/alibaba") return { enableThinking: true, thinkingBudget: budget }
-  if (npm === "@jerome-benoit/sap-ai-provider-v2") {
-    if (modelID.includes("anthropic"))
-      return {
-        modelParams: {
-          additionalModelRequestFields: { thinking: { type: "enabled", budget_tokens: budget } },
-        },
-      }
-    if (modelID.includes("gemini"))
-      return { modelParams: { thinkingConfig: { includeThoughts: true, thinkingBudget: budget } } }
-    if (modelID.includes("cohere")) return { modelParams: { thinking: { type: "enabled", token_budget: budget } } }
-  }
-}
-
-function gatewayPackage(modelID: string) {
-  const separator = modelID.indexOf("/")
-  if (separator <= 0) return
-  const prefix = modelID.slice(0, separator)
-  if (prefix === "anthropic") return "@ai-sdk/anthropic"
-  if (prefix === "google") return "@ai-sdk/google"
-  if (prefix === "amazon") return "@ai-sdk/amazon-bedrock"
-  if (prefix === "alibaba") return "@ai-sdk/alibaba"
-}
-
-function anthropicManualThinking(modelID: string) {
-  const familyFirst = /(?:claude-)?(?:opus|sonnet|haiku)-(\d+)(?:[.-](\d+))?/i.exec(modelID)
-  const versionFirst = /claude-(\d+)(?:[.-](\d+))?-(?:opus|sonnet|haiku)/i.exec(modelID)
-  const major = Number(familyFirst?.[1] ?? versionFirst?.[1])
-  const rawMinor = Number(familyFirst?.[2] ?? versionFirst?.[2] ?? 0)
-  if (!Number.isFinite(major)) return false
-  const minor = rawMinor > 9 ? 0 : rawMinor
-  return major < 4 || (major === 4 && minor < 6)
-}
-
 function modeName(model: SourceModel, mode: string) {
   return `${model.name} ${mode.charAt(0).toUpperCase()}${mode.slice(1)}`
 }
 
+function supports(model: SourceModel): readonly Variant.Support[] {
+  return (model.reasoning_options ?? []).map((option) =>
+    option.type === "effort"
+      ? { type: "effort", values: option.values.filter((value): value is string => value !== null && value !== "null") }
+      : option,
+  )
+}
+
 function modelInfo(
-  providerID: Provider.ID,
+  provider: SourceProvider,
   id: Model.ID,
   model: SourceModel,
   input: {
@@ -490,6 +216,13 @@ function modelInfo(
     readonly variants?: NonNullable<Model.Info["variants"]>
   } = {},
 ): Model.Info {
+  const providerID = Provider.ID.make(provider.id)
+  const pkg = model.provider?.npm ? nativePackage(provider, model) : undefined
+  // Per model, so it never merges into a model that overrides to a different package.
+  const settings = {
+    ...(model.provider?.api ? { baseURL: model.provider.api } : {}),
+    ...(nativePackage(provider, model) === "@opencode/ai/providers/openai-compatible" ? { provider: providerID } : {}),
+  }
   return {
     id,
     modelID: Model.ID.make(model.id),
@@ -497,8 +230,8 @@ function modelInfo(
     name: input.name ?? model.name,
     compatibility: Model.compatibility(model.interleaved),
     family: model.family ? Model.Family.make(model.family) : undefined,
-    package: model.provider?.npm ? Provider.aisdk(model.provider.npm) : undefined,
-    settings: model.provider?.api ? { baseURL: model.provider.api } : undefined,
+    package: pkg,
+    settings: Object.keys(settings).length === 0 ? undefined : settings,
     capabilities: {
       tools: model.tool_call,
       input: [...(model.modalities?.input ?? [])],
@@ -519,7 +252,7 @@ function modelInfo(
   }
 }
 
-export { Event } from "@opencode-ai/schema/models-dev"
+export { Event } from "@opencode/schema/models-dev"
 
 export interface Interface {
   readonly get: () => Effect.Effect<readonly Snapshot[]>
@@ -636,8 +369,8 @@ export const layer = (options?: Options) =>
       // population. The payload has outgrown some KV backends' per-value
       // limits (Durable Object SQLite caps values at 2 MB and api.json
       // passed it in Aug 2026); a boot without a cache hit just refetches.
-      const writeCache = Effect.fn("ModelsDev.writeCache")(function* (text: string) {
-        yield* kv.set(key, { updatedAt: Date.now(), digest: bodyDigest(text), body: text }).pipe(
+      const writeCache = Effect.fn("ModelsDev.writeCache")(function* (text: string, digest = bodyDigest(text)) {
+        yield* kv.set(key, { updatedAt: Date.now(), digest, body: text }).pipe(
           Effect.catchCauseIf(
             (cause) => !Cause.hasInterruptsOnly(cause),
             (cause) => Effect.logWarning("Failed to cache models.dev catalog", { cause }),
@@ -681,12 +414,13 @@ export const layer = (options?: Options) =>
               const stored = yield* loadFromCache()
               if (!force && stored && Date.now() - stored.updatedAt < Duration.toMillis(ttl)) return
               const text = yield* fetchApi()
+              const digest = bodyDigest(text)
               // models.dev rarely changes between polls; skip the cache write,
               // invalidation, and Refreshed event for a byte-identical body so
-              // downstream catalog.updated listeners stay quiet.
-              if (!force && stored?.digest === bodyDigest(text)) return
+              // downstream provider/model update listeners stay quiet.
+              if (!force && stored?.digest === digest) return
               yield* decodeCatalog(text)
-              yield* writeCache(text)
+              yield* writeCache(text, digest)
               yield* invalidate
               yield* bus.publish(ModelsDev.Event.Refreshed, {})
             }),

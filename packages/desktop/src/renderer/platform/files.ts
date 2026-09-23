@@ -1,4 +1,4 @@
-import type { Platform } from "@opencode-ai/app/desktop"
+import type { Platform } from "@opencode/app/desktop"
 import type { ElectronAPI } from "../api-types"
 
 type DesktopOS = Extract<Platform, { platform: "desktop" }>["os"]
@@ -9,7 +9,7 @@ type DesktopFileAPI = Pick<
   | "readPickedFile"
   | "releasePickedFiles"
   | "getPathForFile"
-  | "saveFilePicker"
+  | "saveFile"
   | "openExternal"
   | "openLocalFile"
   | "resolveAppPath"
@@ -19,7 +19,7 @@ type DesktopFileAPI = Pick<
   | "writeClipboardText"
 >
 
-export function createDesktopFiles(api: DesktopFileAPI, os: DesktopOS, acceptedExtensions: string[]) {
+export function createDesktopFiles(api: DesktopFileAPI, os: DesktopOS) {
   const attachmentPaths = new WeakMap<File, string>()
   const openDirectoryPickerDialog: Extract<Platform, { platform: "desktop" }>["openDirectoryPickerDialog"] = async (
     options,
@@ -34,7 +34,7 @@ export function createDesktopFiles(api: DesktopFileAPI, os: DesktopOS, acceptedE
       multiple: options?.multiple ?? false,
       title: options?.title,
       defaultPath: options?.defaultPath,
-      extensions: options?.extensions ?? acceptedExtensions,
+      extensions: options?.extensions,
     })
     if (!result) return
     try {
@@ -52,9 +52,8 @@ export function createDesktopFiles(api: DesktopFileAPI, os: DesktopOS, acceptedE
     openDirectoryPickerDialog,
     openAttachmentPickerDialog,
     getPathForFile: (file: File) => attachmentPaths.get(file) ?? api.getPathForFile(file),
-    async saveFilePickerDialog(options?: { title?: string; defaultPath?: string }) {
-      return api.saveFilePicker({ title: options?.title, defaultPath: options?.defaultPath })
-    },
+    saveFile: (options: { title?: string; defaultPath?: string }, content: string) =>
+      api.saveFile({ title: options.title, defaultPath: options.defaultPath }, content),
     openExternal: (url: string) => api.openExternal(url),
     openLocalFile: (url: string) => api.openLocalFile(url),
     async openPath(path: string, app?: string) {

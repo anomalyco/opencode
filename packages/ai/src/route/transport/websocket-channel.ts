@@ -1,6 +1,6 @@
 import type { Effect, Scope, Stream } from "effect"
 import type { Headers } from "effect/unstable/http"
-import type { AIError } from "../../schema/index.js"
+import type { AIError, HttpContext } from "../../schema/index.js"
 
 export interface WebSocketChannelExecutor {
   readonly execute: (
@@ -10,6 +10,7 @@ export interface WebSocketChannelExecutor {
 
 export interface WebSocketChannelExecution {
   readonly frames: Stream.Stream<string, AIError>
+  readonly http?: HttpContext
   /** Commits staged state after the decoded Route stream ends successfully. */
   readonly complete: Effect.Effect<void>
 }
@@ -19,7 +20,7 @@ export interface WebSocketChannelExchange {
   readonly connect: {
     readonly url: string
     readonly headers: Headers.Headers
-    /** Provider-safe connection age after which Core should rotate before sending. */
+    /** Provider-safe connection age after which the channel executor should reconnect before sending. */
     readonly rotateAfterMs?: number
   }
   readonly fallback: () => Stream.Stream<string, AIError>

@@ -1,4 +1,4 @@
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode/util/encode"
 import { expect, test, type Page } from "@playwright/test"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { installSseTransport } from "../utils/sse-transport"
@@ -48,7 +48,10 @@ test("shows a pending question dock", async ({ page }) => {
   const rejectRequests: string[] = []
   page.on("request", (request) => {
     if (request.method() !== "POST") return
-    if (new URL(request.url()).pathname === `/api/session/${sessionID}/form/frm_question_request/cancel`)
+    if (
+      request.method() === "DELETE" &&
+      new URL(request.url()).pathname === `/api/session/${sessionID}/form/frm_question_request`
+    )
       rejectRequests.push(request.url())
   })
 
@@ -107,7 +110,7 @@ test("shows a pending permission dock", async ({ page }) => {
   await permission.getByRole("button", { name: "Allow once" }).click()
   const request = await reply
   expect(new URL(request.url()).pathname).toBe(`/api/session/${sessionID}/permission/permission-request/reply`)
-  expect(request.postDataJSON()).toEqual({ reply: "once" })
+  expect(request.postDataJSON()).toEqual({ decision: "once" })
 })
 
 test("restores the draft caret before typing after a request dock closes", async ({ page }) => {

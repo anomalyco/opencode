@@ -4,7 +4,7 @@ import { isDeepEqual } from "remeda"
 import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
 import { locationKey, useData } from "./data"
-import { withTimestampedFallback } from "@opencode-ai/util/session-title-fallback"
+import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import { useEvent } from "./event"
 import { useRoute } from "./route"
 import { useConfig } from "../config"
@@ -12,6 +12,7 @@ import { useLocation } from "./location"
 import { useStorage } from "./storage"
 import { useTuiPaths } from "./runtime"
 import { newSessionLocation } from "../config/new-session-location"
+import { createSessionRetention } from "./session-retention"
 import {
   closeSessionTab,
   cycleSessionTab,
@@ -61,11 +62,12 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     const location = useLocation()
     const paths = useTuiPaths()
     const renderer = useRenderer()
+    const storage = useStorage()
     const enabled = () => config.tabs.enabled
     const [focused, setFocused] = createSignal<boolean>()
     // Keyed reconcile keeps tab object identity across reorders, so strip rows move instead of
     // mutating in place, which per-row animations and drag state depend on.
-    const [store, updateStore] = useStorage().store<PersistedState>("tabs", {
+    const [store, updateStore] = storage.store<PersistedState>("tabs", {
       initial: {
         global: empty(),
         cwd: {},
@@ -131,6 +133,13 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       unread: {},
     })
     const current = () => (route.data.type === "session" ? root(route.data.sessionID) : undefined)
+    createSessionRetention({
+      session: data.session,
+      current: () =>
+        route.data.type === "session" && route.data.sessionID !== "dummy" ? route.data.sessionID : undefined,
+      keep: () => (enabled() ? state().tabs.map((tab) => tab.sessionID) : []),
+      limit: 3,
+    })
     const newTab = createMemo((open = false) => {
       if (route.data.type === "home") return true
       if (!open) return false
@@ -149,10 +158,18 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
             ? ("error" as const)
             : ("activity" as const),
         promptPulse: promptPulses()[session] ?? 0,
-        attention: members.some(
-          (id) => (data.session.permission.list(id)?.length ?? 0) > 0 || (data.session.form.list(id)?.length ?? 0) > 0,
+        attention: members.some((id) => (data.session.permission.list(id)?.length ?? 0) > 0)
+          ? ("permission" as const)
+          : members.some((id) => (data.session.form.list(id)?.length ?? 0) > 0)
+            ? ("question" as const)
+            : (false as const),
+        // Parked synthetic context (user shells, plan reminders) stays pending without execution; only work counts as busy.
+        busy: members.some(
+          (id) =>
+            data.session.status(id) === "running" ||
+            data.session.pending.list(id).some((item) => item.type !== "synthetic"),
         ),
-        busy: members.some((id) => data.session.status(id) === "running" || data.session.pending.list(id).length > 0),
+        renaming: data.session.title.pending(session),
       }
     }
 
@@ -172,10 +189,11 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
           const fallback = newTab() ? NEW_SESSION_TAB_TITLE : undefined
           update((draft) => {
             if (cancelledTabs.has(sessionID)) return
-            draft.tabs = openSessionTab(draft.tabs, {
+            const tab = {
               sessionID,
               title: title(sessionID, draft.tabs.find((tab) => tab.sessionID === sessionID)?.title, fallback),
-            })
+            }
+            draft.tabs = openSessionTab(draft.tabs, tab)
           })
         },
       ),
@@ -304,7 +322,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     function remove(sessionID: string, navigate: boolean) {
       const target = root(sessionID)
       cancelledTabs.add(target)
-      scrollAnchors.delete(target)
+      family(target).forEach((id) => scrollAnchors.delete(id))
       const closed = closeSessionTab(state().tabs, target)
       const selected = navigate && current() === target
       if (closed.tabs === state().tabs && !selected) return
@@ -338,21 +356,30 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       scrollAnchor(sessionID: string) {
         const target = root(sessionID)
         if (!state().tabs.some((tab) => tab.sessionID === target)) return
-        return scrollAnchors.get(target)
+        return scrollAnchors.get(sessionID)
       },
       setScrollAnchor(sessionID: string, anchor: ScrollAnchor | undefined) {
         const target = root(sessionID)
         if (anchor === undefined || !state().tabs.some((tab) => tab.sessionID === target)) {
-          scrollAnchors.delete(target)
+          scrollAnchors.delete(sessionID)
           return
         }
-        const current = scrollAnchors.get(target)
+        const current = scrollAnchors.get(sessionID)
         if (current?.messageID === anchor.messageID && current.screenY === anchor.screenY) return
-        scrollAnchors.set(target, anchor)
+        scrollAnchors.set(sessionID, anchor)
       },
       select(sessionID: string) {
         if (!enabled()) return
         route.navigate({ type: "session", sessionID: root(sessionID) })
+      },
+      open(sessionID: string) {
+        if (!enabled()) return
+        const session = root(sessionID)
+        if (state().tabs.some((tab) => tab.sessionID === session)) return
+        cancelledTabs.delete(session)
+        update((draft) => {
+          draft.tabs = openSessionTab(draft.tabs, { sessionID: session, title: title(session) })
+        })
       },
       add() {
         if (!enabled()) return
@@ -362,7 +389,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
           type: "home",
           location: newSessionLocation(
             config.session.new_location,
-            paths.cwd,
+            data.location.default().directory,
             currentLocation,
             location.error?.location,
           ),

@@ -1,5 +1,5 @@
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
-import type { Route, RouteDefaultsInput } from "../route/client.js"
+import type { Route, RouteDefaultsInput, CompactionOperations } from "../route/client.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { HttpOptions, ProviderID, ToolDefinition, mergeHttpOptions, type ModelID } from "../schema/index.js"
 import * as OpenAIChat from "../protocols/openai-chat.js"
@@ -57,14 +57,14 @@ export const imageGeneration = (options: ImageGenerationOptions = {}) =>
     },
   })
 
-export interface Settings extends ProviderPackage.Settings {
-  readonly apiKey?: string
-  readonly baseURL?: string
-  readonly organization?: string
-  readonly project?: string
-  readonly queryParams?: Readonly<Record<string, string>>
-  readonly providerOptions?: OpenAIProviderOptionsInput
-}
+export type Settings = ProviderPackage.Settings &
+  OpenAIProviderOptionsInput & {
+    readonly apiKey?: string
+    readonly baseURL?: string
+    readonly organization?: string
+    readonly project?: string
+    readonly queryParams?: Readonly<Record<string, string>>
+  }
 
 const auth = (options: ProviderAuthOption<"optional">) => AuthOptions.bearer(options, "OPENAI_API_KEY")
 
@@ -73,7 +73,10 @@ const defaults = (input: Config) => {
   return rest
 }
 
-const configuredRoute = <Body, Prepared>(route: Route<Body, Prepared>, input: Config) =>
+const configuredRoute = <Body, Prepared, Compact extends CompactionOperations | undefined>(
+  route: Route<Body, Prepared, Compact>,
+  input: Config,
+) =>
   route.with({
     auth: auth(input),
     endpoint: { baseURL: input.baseURL, query: input.queryParams },
@@ -88,7 +91,10 @@ export const configure = (input: Config = {}) => {
       .with(withOpenAIOptions(id, modelDefaults, { textVerbosity: true }))
       .model<OpenAIProviderOptionsInput>({ id })
   const chat = (id: string | ModelID) =>
-    chatRoute.with(withOpenAIOptions(id, modelDefaults)).model<OpenAIProviderOptionsInput>({ id })
+    chatRoute.with(withOpenAIOptions(id, modelDefaults)).model<OpenAIProviderOptionsInput>({
+      id,
+      compatibility: { supportsPromptCacheKey: true },
+    })
   const image = (modelID: string | ModelID) =>
     OpenAIImages.model({
       id: modelID,
@@ -113,23 +119,36 @@ export const configure = (input: Config = {}) => {
 
 export const provider = configure()
 
-const config = (settings: Settings): Config => {
+const config = ({
+  apiKey,
+  baseURL,
+  body,
+  headers: given,
+  organization,
+  project,
+  queryParams,
+  ...providerOptions
+}: Settings): Config => {
   const headers = {
-    ...(settings.organization === undefined ? {} : { "OpenAI-Organization": settings.organization }),
-    ...(settings.project === undefined ? {} : { "OpenAI-Project": settings.project }),
-    ...settings.headers,
+    ...(organization === undefined ? {} : { "OpenAI-Organization": organization }),
+    ...(project === undefined ? {} : { "OpenAI-Project": project }),
+    ...given,
   }
   return {
-    apiKey: settings.apiKey,
-    baseURL: settings.baseURL,
+    apiKey,
+    baseURL,
     headers: Object.keys(headers).length === 0 ? undefined : headers,
-    http: settings.body === undefined ? undefined : { body: { ...settings.body } },
-    providerOptions: settings.providerOptions,
-    queryParams: settings.queryParams === undefined ? undefined : { ...settings.queryParams },
+    http: body === undefined ? undefined : { body: { ...body } },
+    providerOptions,
+    queryParams: queryParams === undefined ? undefined : { ...queryParams },
   }
 }
 
-export const model: ProviderPackage.Definition<Settings, OpenAIProviderOptionsInput>["model"] = (modelID, settings) => {
+export const model: ProviderPackage.Definition<
+  Settings,
+  OpenAIProviderOptionsInput,
+  typeof OpenAIResponses.route.compact
+>["model"] = (modelID, settings) => {
   return configure(config(settings)).responses(modelID)
 }
 

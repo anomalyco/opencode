@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Effect, Encoding, Schema } from "effect"
 import type { MediaPart } from "../../schema/index.js"
 import { ProviderShared } from "../shared.js"
 
@@ -57,28 +57,64 @@ const documentBlock = (name: string, format: DocumentFormat, bytes: string): Doc
   },
 })
 
+function documentName(filename: string | undefined, names: Set<string>) {
+  const base =
+    (filename ?? "")
+      .replace(/\.[^.]*$/, "")
+      .replace(/[^a-zA-Z0-9 ()[\]-]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 200)
+      .trim() || "document"
+  let name = base
+  // Converse requires labels to be unique across the entire request, including tool results.
+  for (let index = 2; names.has(name); index++) {
+    const suffix = ` ${index}`
+    name = `${base.slice(0, 200 - suffix.length).trimEnd()}${suffix}`
+  }
+  names.add(name)
+  return name
+}
+
+const mediaBase64 = Effect.fn("BedrockMedia.mediaBase64")(function* (part: MediaPart) {
+  const media = yield* ProviderShared.requireInlineMedia("Bedrock Converse", part.media)
+  const bytes = yield* Effect.fromResult(Encoding.decodeBase64(media.base64)).pipe(
+    Effect.mapError((cause) =>
+      ProviderShared.invalidRequest("Bedrock Converse media data must be valid base64", cause),
+    ),
+  )
+  return Encoding.encodeBase64(bytes)
+})
+
 // Route by MIME. Known image/document formats lower into a typed block; anything
 // else fails with a clear error instead of silently degrading to a malformed
 // document block. Image MIME types not in `IMAGE_FORMATS` (e.g. `image/svg+xml`)
 // get an image-specific error so the caller knows it's a format-support issue,
 // not a kind-detection issue.
-export const lower = Effect.fn("BedrockMedia.lower")(function* (part: MediaPart) {
-  const mime = part.mediaType.toLowerCase()
+export const lower = Effect.fn("BedrockMedia.lower")(function* (part: MediaPart, documentNames: Set<string>) {
+  const mime = part.media.mediaType.toLowerCase()
   const imageFormat = IMAGE_FORMATS[mime as keyof typeof IMAGE_FORMATS]
   if (imageFormat) {
-    const media = ProviderShared.normalizeMedia(part)
-    return { image: { format: imageFormat, source: { bytes: media.base64 } } } satisfies ImageBlock
+    return [{ image: { format: imageFormat, source: { bytes: yield* mediaBase64(part) } } } satisfies ImageBlock]
   }
   if (mime.startsWith("image/"))
-    return yield* ProviderShared.invalidRequest(`Bedrock Converse does not support image media type ${part.mediaType}`)
+    return yield* ProviderShared.invalidRequest(
+      `Bedrock Converse does not support image media type ${part.media.mediaType}`,
+    )
   const documentFormat = DOCUMENT_FORMATS[mime as keyof typeof DOCUMENT_FORMATS]
   if (documentFormat) {
-    if (!part.filename)
-      return yield* ProviderShared.invalidRequest("Bedrock Converse document media requires a filename")
-    const media = ProviderShared.normalizeMedia(part)
-    return documentBlock(part.filename, documentFormat, media.base64)
+    const name = documentName(part.filename, documentNames)
+    const block = documentBlock(name, documentFormat, yield* mediaBase64(part))
+    return part.filename !== undefined && part.filename !== name
+      ? [
+          {
+            text: `Attached file ${ProviderShared.encodeJson(part.filename)} has document label ${ProviderShared.encodeJson(name)}.`,
+          },
+          block,
+        ]
+      : [block]
   }
-  return yield* ProviderShared.invalidRequest(`Bedrock Converse does not support media type ${part.mediaType}`)
+  return yield* ProviderShared.invalidRequest(`Bedrock Converse does not support media type ${part.media.mediaType}`)
 })
 
 export * as BedrockMedia from "./bedrock-media.js"

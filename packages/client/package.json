@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode-ai/client",
-  "version": "1.17.13",
+  "name": "@opencode/client",
+  "version": "2.0.14",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -33,11 +33,11 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@opencode-ai/schema": "workspace:*",
-    "@opencode-ai/protocol": "workspace:*"
+    "@opencode/schema": "workspace:*",
+    "@opencode/protocol": "workspace:*"
   },
   "peerDependencies": {
-    "effect": "4.0.0-rc.111",
+    "effect": "4.0.0-rc.112",
     "solid-js": ">=1.9.0"
   },
   "peerDependenciesMeta": {
@@ -50,11 +50,12 @@
   },
   "devDependencies": {
     "@effect/platform-node": "catalog:",
-    "@opencode-ai/httpapi-codegen": "workspace:*",
+    "@opencode/httpapi-codegen": "workspace:*",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@typescript/native-preview": "catalog:",
     "effect": "catalog:",
-    "solid-js": "catalog:"
+    "solid-js": "catalog:",
+    "zod": "catalog:"
   }
 }

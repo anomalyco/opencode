@@ -1,6 +1,6 @@
-import { base64Encode } from "@opencode-ai/util/encode"
-import { getDirectory } from "@opencode-ai/util/path"
-import type { SessionMessageUser } from "@opencode-ai/client/promise"
+import { base64Encode } from "@opencode/util/encode"
+import type { SessionMessageUser } from "@opencode/client/promise"
+import { Session } from "@opencode/schema/session"
 import { startTransition } from "solid-js"
 import type { NewSessionComposerAdapter } from "@/composer/adapter"
 import { useComposerState } from "@/composer/persistence"
@@ -12,16 +12,19 @@ import { useData, useServer } from "@/runtime/server/current"
 import { type ServerSDK, useServerSDK } from "@/runtime/server/client"
 import { useTabs } from "@/shell/tabs/tabs"
 import { useWorkspaceLocation } from "@/workspaces/location"
+import { createWorktree } from "@/workspaces/create"
 import { useSessionKey } from "@/session/session-layout"
 import { showToast } from "@/shell/notifications/toast"
 import { SessionRouteKey, SessionStateKey } from "@/runtime/server/scope"
 import { clearSessionMessageHandoff, setSessionMessageHandoff } from "@/session/handoff"
+import type { DraftMcpControls } from "./mcp"
 
 export function createNewSessionComposerAdapter(props: {
   draftID: string
   worktree: () => string
   branch: () => string | undefined
   submitted: () => void
+  mcp: DraftMcpControls
 }) {
   const route = useSessionKey()
   const prompt = useComposerState()
@@ -43,20 +46,46 @@ export function createNewSessionComposerAdapter(props: {
     controls,
     working: () => false,
     submitted: props.submitted,
-    async start(selection, submission) {
-      const projectDirectory = location().directory
+    async start(selection, submission, message) {
+      const draftID = props.draftID
+      const currentDirectory = location().directory
+      const projectDirectory = data.location.info({ directory: currentDirectory })?.project.canonical ?? currentDirectory
       const worktree = props.worktree()
+      const branch = props.branch()
+      const mcp = props.mcp.capture()
+      const id = Session.ID.create()
+      const pending =
+        worktree === "create"
+          ? tabs.prepareSession(draftID, { server: server.key, sessionId: id }, { message, selection })
+          : undefined
+      await pending?.ready
       const sessionDirectory = await resolveSessionDirectory({
         projectDirectory,
         worktree,
-        branch: props.branch(),
+        branch,
         data,
         serverSDK,
         language,
       })
-      if (!sessionDirectory) return
+      if (!sessionDirectory) {
+        await pending?.rollback()
+        return
+      }
+
+      const rollback = async () => {
+        if (!pending) return
+        data.project.invalidate()
+        await data.project.sync().catch(() => undefined)
+        await pending.rollback(sessionDirectory)
+      }
+      if (!(await props.mcp.prepare(sessionDirectory, mcp))) {
+        await rollback()
+        if (pending) props.mcp.remember(sessionDirectory, mcp)
+        return
+      }
 
       const created = data.session.create({
+        id,
         agent: selection.agent,
         model: {
           id: selection.model.modelID,
@@ -75,6 +104,10 @@ export function createNewSessionComposerAdapter(props: {
           return { ok: false as const, error }
         },
       )
+      if (pending && !(await creation).ok) {
+        await rollback()
+        return
+      }
       const afterCreation = async <T>(run: () => Promise<T>) => {
         const result = await creation
         if (!result.ok) throw result.error
@@ -85,23 +118,26 @@ export function createNewSessionComposerAdapter(props: {
         SessionRouteKey.fromRoute(base64Encode(sessionDirectory), created.id),
       )
       const cleanupReady = startTransition(() => {
-        tabs.updateDraft(props.draftID, { worktree: undefined, branch: undefined })
+        if (!pending) tabs.updateDraft(draftID, { worktree: undefined, branch: undefined })
         local.session.promote(sessionDirectory, created.id, {
           agent: selection.agent,
           model: selection.model,
           variant: selection.variant ?? null,
+          choices: model.remembered(),
         })
-        tabs.promoteDraft(props.draftID, { server: server.key, sessionId: created.id })
+        if (!pending) tabs.promoteDraft(draftID, { server: server.key, sessionId: created.id })
         submission.retarget(
           prompt.capture(
             { dir: base64Encode(sessionDirectory), id: created.id },
             { server: server.key, scope: serverSDK.scope },
           ),
+          { preserveDraft: !!pending },
         )
       })
 
       return {
         cleanupReady,
+        complete: pending ? () => pending.complete(submission.target()) : undefined,
         session: {
           id: created.id,
           directory: sessionDirectory,
@@ -133,7 +169,7 @@ export function createNewSessionComposerAdapter(props: {
 
   return {
     adapter,
-    project: createComposerProjectControls({ draftId: props.draftID }),
+    project: createComposerProjectControls({ draftId: props.draftID, worktree: props.worktree }),
     model,
     ready: prompt.ready,
   }
@@ -171,25 +207,18 @@ async function resolveSessionDirectory(input: {
   if (input.worktree === "main") return input.projectDirectory
   if (input.worktree !== "create") return input.worktree
 
-  return input.serverSDK.api.worktree
-    .create({
-      projectID: input.data.location.info({ directory: input.projectDirectory })?.project.id ?? "",
-      strategy: "git",
-      branch: input.branch,
-      directory: getDirectory(
-        input.data.location.info({ directory: input.projectDirectory })?.project.directory ?? input.projectDirectory,
-      ),
+  return createWorktree({
+    api: input.serverSDK.api,
+    data: input.data,
+    directory: input.projectDirectory,
+    project: input.data.location.info({ directory: input.projectDirectory })?.project,
+    branch: input.branch,
+  }).catch((error) => {
+    showToast({
+      title: input.language.t("prompt.toast.worktreeCreateFailed.title"),
+      description: errorMessage(input.language, error),
     })
-    .then(async (created) => {
-      await input.serverSDK.api.location.get({ location: { directory: created.directory } })
-      return created.directory
-    })
-    .catch((error) => {
-      showToast({
-        title: input.language.t("prompt.toast.worktreeCreateFailed.title"),
-        description: errorMessage(input.language, error),
-      })
-    })
+  })
 }
 
 function errorMessage(language: ReturnType<typeof useLanguage>, error: unknown) {

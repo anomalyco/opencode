@@ -36,7 +36,7 @@ export async function measureNavigationMilestones(
   page: Page,
   input: {
     triggerSelector: string
-    milestones: Record<string, { selector: string; visible?: boolean }>
+    milestones: Record<string, { selector: string; visible?: boolean; text?: string }>
     navigate: () => Promise<void>
   },
 ) {
@@ -47,11 +47,19 @@ export async function measureNavigationMilestones(
       const marked = new Set<string>()
       let started: number | undefined
       let running = true
-      const visible = (selector: string) =>
+      const visible = (selector: string, text?: string) =>
         [...document.querySelectorAll<HTMLElement>(selector)].some((element) => {
+          if (!element.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true })) return false
+          if (text !== undefined && element.textContent?.replace(/\s+/g, " ").trim() !== text) return false
           const rect = element.getBoundingClientRect()
-          const style = getComputedStyle(element)
-          return rect.width > 0 && rect.height > 0 && style.visibility !== "hidden" && style.display !== "none"
+          return (
+            rect.width > 0 &&
+            rect.height > 0 &&
+            rect.bottom > 0 &&
+            rect.top < innerHeight &&
+            rect.right > 0 &&
+            rect.left < innerWidth
+          )
         })
       const sample = () => {
         if (!running || started === undefined) return
@@ -61,7 +69,9 @@ export async function measureNavigationMilestones(
             const current = Object.fromEntries(
               Object.entries(milestones).map(([name, milestone]) => [
                 name,
-                milestone.visible === false ? !document.querySelector(milestone.selector) : visible(milestone.selector),
+                milestone.visible === false
+                  ? !document.querySelector(milestone.selector)
+                  : visible(milestone.selector, milestone.text),
               ]),
             )
             samples.push({
@@ -93,36 +103,46 @@ export async function measureNavigationMilestones(
           }, 0)
         })
       }
-      document.addEventListener(
-        "click",
-        (event) => {
-          if (!(event.target instanceof Element) || !event.target.closest(triggerSelector)) return
-          started = performance.now()
-          performance.mark("opencode.navigation.click")
-          sample()
-        },
-        { capture: true, once: true },
-      )
+      const start = (event: MouseEvent) => {
+        if (started !== undefined || event.button !== 0) return
+        if (!(event.target instanceof Element) || !event.target.closest(triggerSelector)) return
+        started = performance.now()
+        performance.mark("opencode.navigation.start")
+        sample()
+      }
+      document.addEventListener("mousedown", start, true)
+      document.addEventListener("click", start, true)
       ;(window as Window & { __navigationMilestones?: NavigationMilestoneProbe }).__navigationMilestones = {
         samples,
         stop: () => {
           running = false
+          document.removeEventListener("mousedown", start, true)
+          document.removeEventListener("click", start, true)
         },
       }
     },
     { triggerSelector: input.triggerSelector, milestones: input.milestones },
   )
-  await input.navigate()
-  await page.waitForFunction(() => {
-    const samples = (window as Window & { __navigationMilestones?: NavigationMilestoneProbe }).__navigationMilestones
-      ?.samples
-    if (!samples || samples.length < 3) return false
-    return samples.slice(-3).every((sample) => Object.values(sample.milestones).every(Boolean))
-  })
-  const samples = await page.evaluate(() => {
-    const probe = (window as Window & { __navigationMilestones?: NavigationMilestoneProbe }).__navigationMilestones!
-    probe.stop()
-    return probe.samples
-  })
-  return { summary: summarizeNavigationMilestones(samples), samples }
+  try {
+    await input.navigate()
+    await page.waitForFunction(() => {
+      const samples = (window as Window & { __navigationMilestones?: NavigationMilestoneProbe }).__navigationMilestones
+        ?.samples
+      return (
+        samples &&
+        samples.length >= 3 &&
+        samples.slice(-3).every((sample) => Object.values(sample.milestones).every(Boolean))
+      )
+    })
+    const samples = await page.evaluate(
+      () => (window as Window & { __navigationMilestones?: NavigationMilestoneProbe }).__navigationMilestones!.samples,
+    )
+    return { summary: summarizeNavigationMilestones(samples), samples }
+  } finally {
+    await page.evaluate(() => {
+      const host = window as Window & { __navigationMilestones?: NavigationMilestoneProbe }
+      host.__navigationMilestones?.stop()
+      delete host.__navigationMilestones
+    })
+  }
 }

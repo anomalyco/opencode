@@ -1,15 +1,14 @@
-import { Plugin } from "@opencode-ai/plugin/effect"
-import type { IntegrationMethod, IntegrationMethodRegistration } from "@opencode-ai/plugin/effect/integration"
-import { Agent } from "@opencode-ai/core/agent"
-import { Catalog } from "@opencode-ai/core/catalog"
-import { Credential } from "@opencode-ai/core/credential"
-import { Integration } from "@opencode-ai/core/integration"
-import { Location } from "@opencode-ai/core/location"
-import { Model } from "@opencode-ai/core/model"
-import { Project } from "@opencode-ai/core/project"
-import { Provider } from "@opencode-ai/core/provider"
-import { AbsolutePath } from "@opencode-ai/core/schema"
-import { WebSearch } from "@opencode-ai/core/websearch"
+import { Plugin } from "@opencode/plugin/effect"
+import type { IntegrationMethod } from "@opencode/plugin/effect/integration"
+import { Agent } from "@opencode/core/agent"
+import { Credential } from "@opencode/core/credential"
+import { Integration } from "@opencode/core/integration"
+import { Location } from "@opencode/core/location"
+import { Model } from "@opencode/core/model"
+import { Project } from "@opencode/core/project"
+import { Provider } from "@opencode/core/provider"
+import { AbsolutePath } from "@opencode/core/schema"
+import { WebSearch } from "@opencode/core/websearch"
 import { Effect, Stream } from "effect"
 
 type Overrides = Partial<Omit<Plugin.Context, "options" | "session">> & {
@@ -18,7 +17,25 @@ type Overrides = Partial<Omit<Plugin.Context, "options" | "session">> & {
 export function host(overrides: Overrides = {}): Plugin.Context {
   return {
     app: overrides.app ?? { name: "test", version: "test", channel: "test" },
+    location:
+      overrides.location ??
+      new Location.Info({
+        directory: AbsolutePath.make("/workspace"),
+        project: {
+          id: Project.ID.global,
+          directory: AbsolutePath.make("/workspace"),
+          canonical: AbsolutePath.make("/workspace"),
+        },
+      }),
     options: {},
+    rpc:
+      overrides.rpc ??
+      Object.assign(
+        () => {
+          throw new Error("unused rpc.client")
+        },
+        { register: () => Effect.die("unused rpc.register") },
+      ),
     agent: overrides.agent ?? {
       get: () => Effect.die("unused agent.get"),
       list: () => Effect.die("unused agent.list"),
@@ -28,17 +45,17 @@ export function host(overrides: Overrides = {}): Plugin.Context {
     aisdk: overrides.aisdk ?? {
       hook: () => Effect.die("unused aisdk.hook"),
     },
-    catalog: overrides.catalog ?? {
-      provider: {
-        list: () => Effect.die("unused catalog.provider.list"),
-        get: () => Effect.die("unused catalog.provider.get"),
-      },
-      model: {
-        list: () => Effect.die("unused catalog.model.list"),
-        default: () => Effect.die("unused catalog.model.default"),
-      },
-      transform: () => Effect.die("unused catalog.transform"),
-      reload: () => Effect.die("unused catalog.reload"),
+    provider: overrides.provider ?? {
+      list: () => Effect.die("unused provider.list"),
+      get: () => Effect.die("unused provider.get"),
+      transform: () => Effect.die("unused provider.transform"),
+      reload: () => Effect.die("unused provider.reload"),
+    },
+    model: overrides.model ?? {
+      list: () => Effect.die("unused model.list"),
+      default: () => Effect.die("unused model.default"),
+      transform: () => Effect.die("unused model.transform"),
+      reload: () => Effect.die("unused model.reload"),
     },
     command: overrides.command ?? {
       list: () => Effect.die("unused command.list"),
@@ -47,6 +64,11 @@ export function host(overrides: Overrides = {}): Plugin.Context {
     },
     event: overrides.event ?? {
       subscribe: () => Stream.empty,
+    },
+    experimental: overrides.experimental ?? {
+      terminal: {
+        read: () => Effect.die("unused experimental.terminal.read"),
+      },
     },
     generate: overrides.generate ?? {
       text: () => Effect.die("unused generate.text"),
@@ -77,10 +99,6 @@ export function host(overrides: Overrides = {}): Plugin.Context {
     },
     mcp: overrides.mcp ?? {
       list: () => Effect.die("unused mcp.list"),
-      add: () => Effect.die("unused mcp.add"),
-      remove: () => Effect.die("unused mcp.remove"),
-      connect: () => Effect.die("unused mcp.connect"),
-      disconnect: () => Effect.die("unused mcp.disconnect"),
       transform: () => Effect.die("unused mcp.transform"),
       reload: () => Effect.die("unused mcp.reload"),
     },
@@ -114,15 +132,28 @@ export function host(overrides: Overrides = {}): Plugin.Context {
     },
     tool: overrides.tool ?? {
       transform: () => Effect.die("unused tool.transform"),
+      reload: () => Effect.die("unused tool.reload"),
+      list: () => Effect.die("unused tool.list"),
       hook: () => Effect.die("unused tool.hook"),
     },
     vcs: overrides.vcs ?? {
+      base: () => Effect.die("unused vcs.base"),
       get: () => Effect.die("unused vcs.get"),
-      branches: () => Effect.die("unused vcs.branches"),
+      branch: {
+        list: () => Effect.die("unused vcs.branch.list"),
+      },
       status: () => Effect.die("unused vcs.status"),
       diff: () => Effect.die("unused vcs.diff"),
       transform: () => Effect.die("unused vcs.transform"),
       reload: () => Effect.die("unused vcs.reload"),
+    },
+    worktree: overrides.worktree ?? {
+      list: () => Effect.die("unused worktree.list"),
+      create: () => Effect.die("unused worktree.create"),
+      remove: () => Effect.die("unused worktree.remove"),
+      refresh: () => Effect.die("unused worktree.refresh"),
+      transform: () => Effect.die("unused worktree.transform"),
+      reload: () => Effect.die("unused worktree.reload"),
     },
     websearch: overrides.websearch ?? {
       providers: () => Effect.die("unused websearch.providers"),
@@ -139,7 +170,8 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       prompt: overrides.session?.prompt ?? (() => Effect.die("unused session.prompt")),
       generate: overrides.session?.generate ?? (() => Effect.die("unused session.generate")),
       command: overrides.session?.command ?? (() => Effect.die("unused session.command")),
-      rename: overrides.session?.rename ?? (() => Effect.die("unused session.rename")),
+      update: overrides.session?.update ?? (() => Effect.die("unused session.update")),
+      move: overrides.session?.move ?? (() => Effect.die("unused session.move")),
       synthetic: overrides.session?.synthetic ?? (() => Effect.die("unused session.synthetic")),
       interrupt: overrides.session?.interrupt ?? (() => Effect.die("unused session.interrupt")),
       wait: overrides.session?.wait ?? (() => Effect.die("unused session.wait")),
@@ -171,104 +203,85 @@ export function agentHost(agent: Agent.Interface): Plugin.Context["agent"] {
     list: () => Effect.die("unused agent.list"),
     reload: agent.reload,
     transform: (callback) =>
-      agent.transform((draft) =>
+      agent.transform((editor) =>
         callback({
-          list: () => draft.list().map(agentInfo),
+          list: () => editor.list().map(agentInfo),
           get: (id) => {
-            const value = draft.get(Agent.ID.make(id))
+            const value = editor.get(Agent.ID.make(id))
             return value && agentInfo(value)
           },
-          default: (id) => draft.default(id === undefined ? undefined : Agent.ID.make(id)),
+          default: (id) => editor.default(id === undefined ? undefined : Agent.ID.make(id)),
           update: (id, update) =>
-            draft.update(Agent.ID.make(id), (value) => {
+            editor.update(Agent.ID.make(id), (value) => {
               const current = agentInfo(value)
               update(current)
               Object.assign(value, current, { id: Agent.ID.make(current.id) })
             }),
-          remove: (id) => draft.remove(Agent.ID.make(id)),
+          remove: (id) => editor.remove(Agent.ID.make(id)),
         }),
       ),
   }
 }
 
-export function catalogHost(catalog: Catalog.Interface): Plugin.Context["catalog"] {
+export function providerHost(providers: Provider.Interface): Plugin.Context["provider"] {
   return {
-    provider: {
-      list: () => Effect.die("unused catalog.provider.list"),
-      get: () => Effect.die("unused catalog.provider.get"),
-    },
-    model: {
-      list: () =>
-        catalog.model.available().pipe(
-          Effect.map((data) => ({
-            location: new Location.Info({
-              directory: AbsolutePath.make("/"),
-              project: {
-                id: Project.ID.make("test"),
-                directory: AbsolutePath.make("/"),
-                canonical: AbsolutePath.make("/"),
-              },
-            }),
-            data: data.map(modelInfo),
-          })),
+    list: () => providers.available().pipe(Effect.map(located)),
+    get: (input) =>
+      providers.get(Provider.ID.make(input.providerID)).pipe(
+        Effect.flatMap((provider) =>
+          provider === undefined
+            ? Effect.fail(new Error(`Provider not found: ${input.providerID}`))
+            : Effect.succeed(located(provider)),
         ),
-      default: () => Effect.die("unused catalog.model.default"),
-    },
-    reload: catalog.reload,
+      ),
+    reload: providers.reload,
     transform: (callback) =>
-      catalog.transform((draft) =>
+      providers.transform((editor) =>
         callback({
-          provider: {
-            list: () =>
-              draft.provider.list().map((value) => ({
-                provider: providerInfo(value.provider),
-                models: new Map(Array.from(value.models, ([id, model]) => [id, modelInfo(model)])),
-              })),
-            get: (id) => {
-              const value = draft.provider.get(Provider.ID.make(id))
-              return (
-                value && {
-                  provider: providerInfo(value.provider),
-                  models: new Map(Array.from(value.models, ([id, model]) => [id, modelInfo(model)])),
-                }
-              )
-            },
-            update: (id, update) =>
-              draft.provider.update(Provider.ID.make(id), (value) => {
-                const current = providerInfo(value)
-                update(current)
-                Object.assign(value, current, { id: Provider.ID.make(current.id) })
-              }),
-            remove: (id) => draft.provider.remove(Provider.ID.make(id)),
-          },
-          model: {
-            get: (providerID, modelID) => {
-              const value = draft.model.get(Provider.ID.make(providerID), Model.ID.make(modelID))
-              return value && modelInfo(value)
-            },
+          list: editor.list,
+          get: (id) => editor.get(Provider.ID.make(id)),
+          add: editor.add,
+          update: (id, update) => editor.update(Provider.ID.make(id), update),
+          remove: (id) => editor.remove(Provider.ID.make(id)),
+          models: {
+            set: (id, models) => editor.models.set(Provider.ID.make(id), models),
             update: (providerID, modelID, update) =>
-              draft.model.update(Provider.ID.make(providerID), Model.ID.make(modelID), (value) => {
-                const current = modelInfo(value)
-                update(current)
-                Object.assign(value, current, {
-                  id: Model.ID.make(current.id),
-                  providerID: Provider.ID.make(current.providerID),
-                  family: current.family === undefined ? undefined : Model.Family.make(current.family),
-                  variants: current.variants?.map((variant) => ({
-                    ...variant,
-                    id: Model.VariantID.make(variant.id),
-                  })),
-                })
-              }),
-            remove: (providerID, modelID) => draft.model.remove(Provider.ID.make(providerID), Model.ID.make(modelID)),
-            default: {
-              get: () => {
-                const value = draft.model.default.get()
-                return value && { providerID: value.providerID, modelID: value.modelID }
-              },
-              set: (providerID, modelID) =>
-                draft.model.default.set(Provider.ID.make(providerID), Model.ID.make(modelID)),
-            },
+              editor.models.update(Provider.ID.make(providerID), Model.ID.make(modelID), update),
+            remove: (providerID, modelID) => editor.models.remove(Provider.ID.make(providerID), Model.ID.make(modelID)),
+          },
+        }),
+      ),
+  }
+}
+
+/** Empty catalog for hosts that only need provider lookups to fall back. */
+export const noProviders: Plugin.Context["provider"] = {
+  list: () => Effect.succeed(located([])),
+  get: () => Effect.die("unused provider.get"),
+  transform: () => Effect.die("unused provider.transform"),
+  reload: () => Effect.die("unused provider.reload"),
+}
+
+export function modelHost(models: Model.Interface): Plugin.Context["model"] {
+  return {
+    list: () => models.available().pipe(Effect.map(located)),
+    default: () => models.default().pipe(Effect.map(located)),
+    reload: models.reload,
+    transform: (callback) =>
+      models.transform((editor) =>
+        callback({
+          list: (id) => editor.list(id === undefined ? undefined : Provider.ID.make(id)),
+          get: (providerID, modelID) => editor.get(Provider.ID.make(providerID), Model.ID.make(modelID)),
+          update: (providerID, modelID, update) =>
+            editor.update(Provider.ID.make(providerID), Model.ID.make(modelID), update),
+          remove: (providerID, modelID) => editor.remove(Provider.ID.make(providerID), Model.ID.make(modelID)),
+          default: {
+            get: editor.default.get,
+            set: (providerID, modelID) => editor.default.set(Provider.ID.make(providerID), Model.ID.make(modelID)),
+          },
+          provider: {
+            list: editor.provider.list,
+            get: (id) => editor.provider.get(Provider.ID.make(id)),
           },
         }),
       ),
@@ -302,22 +315,22 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
         ),
     },
     transform: (callback) =>
-      integration.transform((draft) =>
+      integration.transform((editor) =>
         callback({
-          list: () => draft.list().map((value) => ({ id: value.id, name: value.name })),
+          list: () => editor.list().map((value) => ({ id: value.id, name: value.name })),
           get: (id) => {
-            const value = draft.get(Integration.ID.make(id))
+            const value = editor.get(Integration.ID.make(id))
             return value && { id: value.id, name: value.name }
           },
-          update: (id, update) => draft.update(Integration.ID.make(id), update),
-          remove: (id) => draft.remove(Integration.ID.make(id)),
+          update: (id, update) => editor.update(Integration.ID.make(id), update),
+          remove: (id) => editor.remove(Integration.ID.make(id)),
           method: {
-            list: (id) => draft.method.list(Integration.ID.make(id)),
+            list: (id) => editor.method.list(Integration.ID.make(id)),
             update: (input) => {
               if ("authorize" in input) {
                 const methodID = Integration.MethodID.make(input.method.id)
                 const refresh = input.refresh
-                draft.method.update({
+                editor.method.update({
                   integrationID: Integration.ID.make(input.integrationID),
                   method: { ...input.method, id: methodID },
                   authorize: (answer) =>
@@ -368,14 +381,14 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
                 return
               }
               if (input.method.type === "env") {
-                draft.method.update({
+                editor.method.update({
                   integrationID: Integration.ID.make(input.integrationID),
                   method: input.method,
                 })
                 return
               }
               if (input.method.type === "command") {
-                draft.method.update({
+                editor.method.update({
                   integrationID: Integration.ID.make(input.integrationID),
                   method: {
                     ...input.method,
@@ -384,12 +397,12 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
                 })
                 return
               }
-              draft.method.update({
+              editor.method.update({
                 integrationID: Integration.ID.make(input.integrationID),
                 method: input.method,
               })
             },
-            remove: (id, item) => draft.method.remove(Integration.ID.make(id), internalMethod(item)),
+            remove: (id, item) => editor.method.remove(Integration.ID.make(id), internalMethod(item)),
           },
         }),
       ),
@@ -413,28 +426,24 @@ export function webSearchHost(websearch: WebSearch.Interface): Plugin.Context["w
         .pipe(Effect.map((data) => ({ location, data }))),
     reload: websearch.reload,
     transform: (callback) =>
-      websearch.transform((draft) => {
+      websearch.transform((editor) => {
         callback({
           add: (definition) =>
-            draft.add({
+            editor.add({
               id: WebSearch.ID.make(definition.id),
               name: definition.name,
               execute: definition.execute,
             }),
           default: {
-            get: draft.default.get,
+            get: editor.default.get,
             set: (selection) =>
-              draft.default.set(
+              editor.default.set(
                 selection === false || selection === "random" ? selection : WebSearch.ID.make(selection),
               ),
           },
         })
       }),
   }
-}
-
-function oauthCredential(value: Credential.OAuth) {
-  return Credential.OAuth.make({ ...value, methodID: Integration.MethodID.make(value.methodID) })
 }
 
 function internalMethod(value: IntegrationMethod): Integration.Method {
@@ -457,34 +466,16 @@ function agentInfo(value: Agent.Info) {
   }
 }
 
-function providerInfo(value: Provider.MutableInfo) {
+function located<A>(data: A) {
   return {
-    ...value,
-    settings: value.settings && { ...value.settings },
-    headers: value.headers && { ...value.headers },
-    body: value.body && { ...value.body },
-  }
-}
-
-function modelInfo(value: Model.Info | Model.MutableInfo) {
-  return {
-    ...value,
-    settings: value.settings && { ...value.settings },
-    headers: value.headers && { ...value.headers },
-    body: value.body && { ...value.body },
-    capabilities: {
-      ...value.capabilities,
-      input: [...value.capabilities.input],
-      output: [...value.capabilities.output],
-    },
-    variants: value.variants?.map((variant) => ({
-      ...variant,
-      settings: variant.settings && { ...variant.settings },
-      headers: variant.headers && { ...variant.headers },
-      body: variant.body && { ...variant.body },
-    })),
-    time: { ...value.time },
-    cost: value.cost.map((cost) => ({ ...cost, tier: cost.tier && { ...cost.tier }, cache: { ...cost.cache } })),
-    limit: { ...value.limit },
+    location: new Location.Info({
+      directory: AbsolutePath.make("/"),
+      project: {
+        id: Project.ID.make("test"),
+        directory: AbsolutePath.make("/"),
+        canonical: AbsolutePath.make("/"),
+      },
+    }),
+    data,
   }
 }

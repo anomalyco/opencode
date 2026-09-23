@@ -1,10 +1,10 @@
 export * as CommandPlugin from "./command.js"
 
-import { define } from "@opencode-ai/plugin/effect/plugin"
+import { define } from "@opencode/plugin/effect/plugin"
 import { Effect, Stream } from "effect"
 import { Bus } from "../bus.js"
 import { Location } from "../location.js"
-import { MCP } from "../mcp/index.js"
+import { Mcp } from "../mcp/index.js"
 import PROMPT_INITIALIZE from "./command/initialize.txt"
 import PROMPT_REVIEW from "./command/review.txt"
 
@@ -12,23 +12,21 @@ export const Plugin = define({
   id: "opencode.command",
   effect: Effect.fn(function* (ctx) {
     const location = yield* Location.Service
-    const mcp = yield* MCP.Service
+    const mcp = yield* Mcp.Service
     const bus = yield* Bus.Service
-    const loaded = { prompts: [] as MCP.Prompt[] }
-    yield* bus
-      .subscribe(MCP.PromptsChanged)
-      .pipe(
-        Stream.runForEach(() =>
-          mcp.prompts().pipe(
-            Effect.tap((prompts) => Effect.sync(() => (loaded.prompts = prompts))),
-            Effect.andThen(ctx.command.reload()),
-          ),
+    const loaded = { prompts: [] as Mcp.Prompt[] }
+    yield* bus.subscribe(Mcp.PromptsChanged).pipe(
+      Stream.runForEach(() =>
+        mcp.prompts().pipe(
+          Effect.tap((prompts) => Effect.sync(() => (loaded.prompts = prompts))),
+          Effect.andThen(ctx.command.reload()),
         ),
-        Effect.forkScoped({ startImmediately: true }),
-      )
+      ),
+      Effect.forkScoped({ startImmediately: true }),
+    )
     loaded.prompts = yield* mcp.prompts()
-    yield* ctx.command.transform((draft) => {
-      draft.add({
+    yield* ctx.command.transform((editor) => {
+      editor.add({
         name: "init",
         description: "guided AGENTS.md setup",
         execute: (input) =>
@@ -41,7 +39,7 @@ export const Plugin = define({
             })
             .pipe(Effect.asVoid),
       })
-      draft.add({
+      editor.add({
         name: "review",
         description: "review changes [commit|branch|pr], defaults to uncommitted",
         execute: (input) =>
@@ -55,19 +53,17 @@ export const Plugin = define({
             .pipe(Effect.asVoid),
       })
       for (const prompt of loaded.prompts) {
-        draft.add({
+        editor.add({
           name: mcpCommandName(prompt.server, prompt.name),
           description: prompt.description,
           execute: (input) =>
             Effect.gen(function* () {
+              const args = parseArguments(input.prompt.text)
               const result = yield* mcp.prompt({
                 server: prompt.server,
                 name: prompt.name,
                 args: Object.fromEntries(
-                  (prompt.arguments ?? []).map((argument, index) => [
-                    argument.name,
-                    parseArguments(input.prompt.text)[index] ?? "",
-                  ]),
+                  (prompt.arguments ?? []).map((argument, index) => [argument.name, args[index] ?? ""]),
                 ),
               })
               if (!result) return yield* Effect.fail(new Error(`MCP prompt not found: ${prompt.server}:${prompt.name}`))
@@ -88,7 +84,9 @@ export const Plugin = define({
 })
 
 function append(template: string, input: string) {
-  return [template, input.trim()].filter(Boolean).join("\n\n")
+  const value = input.trim()
+  if (template.includes("$ARGUMENTS")) return template.replaceAll("$ARGUMENTS", () => value)
+  return [template, value].filter(Boolean).join("\n\n")
 }
 
 function parseArguments(input: string) {

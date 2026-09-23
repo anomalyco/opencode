@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs"
+import { createRequire } from "node:module"
 import solidPlugin from "vite-plugin-solid"
 import tailwindcss from "@tailwindcss/vite"
 import { fileURLToPath } from "url"
@@ -17,7 +18,25 @@ if (tailwindGenerate && typeof tailwindHotUpdate === "function") {
   }
 }
 
-const channel = (() => {
+// The markdown worker imports these directly, so they are served unbundled to keep worker startup
+// stable. Vite applies `exclude` to every import inside a pre-bundle too, which would leave a bare
+// `import "marked"` in mermaid's chunk that the browser cannot resolve from this package.
+const workerDeps = ["@shikijs/stream", "marked", "marked-shiki", "remend"]
+
+/** @type {import("rolldown").Plugin} */
+const bundleNestedWorkerDeps = {
+  name: "opencode-desktop:bundle-nested-worker-deps",
+  resolveId(id, importer) {
+    if (!importer || !workerDeps.includes(id) || !importer.includes("node_modules")) return
+    try {
+      return createRequire(importer).resolve(id)
+    } catch {
+      return
+    }
+  },
+}
+
+export const channel = (() => {
   const raw = process.env.OPENCODE_CHANNEL
   if (raw === "local" || raw === "dev" || raw === "beta" || raw === "prod") return raw
   if (process.env.OPENCODE_CHANNEL === "latest") return "prod"
@@ -44,8 +63,9 @@ export default [
           format: "es",
         },
         optimizeDeps: {
-          exclude: ["@shikijs/stream", "marked", "marked-shiki", "remend"],
-          include: ["@opencode-ai/session-ui > mermaid", "@opencode-ai/session-ui > mermaid > katex"],
+          exclude: workerDeps,
+          include: ["@opencode/session-ui > mermaid", "@opencode/session-ui > mermaid > katex"],
+          rolldownOptions: { plugins: [bundleNestedWorkerDeps] },
         },
       }
     },

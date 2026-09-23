@@ -211,6 +211,32 @@ flowchart LR
   expect(testRenderer.captureCharFrame()).toContain("Current")
 })
 
+test("renders the valid prefix of an interrupted Mermaid fence", async () => {
+  const testRenderer = await createTestRenderer({ width: 100, height: 18 })
+  renderer = testRenderer.renderer
+  const markdown = new MarkdownRenderable(renderer, {
+    id: "markdown-interrupted-mermaid",
+    content: `\`\`\`mermaid
+flowchart TD
+  A[Resolve Project] --> B[Current directory]
+  B --> C[Search ancestors]
+  C --> D[Marker found]
+  C --> E[No marker found]
+  E --> G[Project root is`,
+    syntaxStyle,
+    internalBlockMode: "top-level",
+    renderNode: createMermaidMarkdownRenderer(renderer),
+  })
+
+  renderer.root.add(markdown)
+  await renderMarkdown(markdown, testRenderer.renderOnce)
+
+  const frame = testRenderer.captureCharFrame()
+  expect(frame).toContain("Resolve Project")
+  expect(frame).toContain("No marker found")
+  expect(frame).not.toContain("flowchart TD")
+})
+
 test("renders a Mermaid sequence fence inside MarkdownRenderable", async () => {
   const testRenderer = await createTestRenderer({ width: 80, height: 14 })
   renderer = testRenderer.renderer

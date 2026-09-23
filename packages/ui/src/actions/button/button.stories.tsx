@@ -5,7 +5,8 @@ const docs = `### Overview
 Button v2 with visual variants and three sizes.
 
 ### API
-- \`variant\`: "neutral" | "danger" | "warning" | "contrast" | "ghost" | "ghost-muted" | "loading".
+- \`variant\`: "neutral" | "danger" | "warning" | "contrast" | "submit" | "ghost" | "ghost-muted" | "ghost-faint" | "loading".
+- \`submit\` shares the brighter contrast icon-button styling for Composer submission actions.
 - \`size\`: "small" | "normal" | "large".
 - \`icon\`: Optional icon name.
 - Inherits Kobalte Button props and native button attributes.
@@ -40,7 +41,7 @@ export default {
     },
     variant: {
       control: "select",
-      options: ["neutral", "danger", "warning", "contrast", "ghost", "ghost-muted", "loading"],
+      options: ["neutral", "danger", "warning", "contrast", "submit", "ghost", "ghost-muted", "ghost-faint", "loading"],
     },
     size: {
       control: "select",
@@ -65,9 +66,13 @@ export const Variants = {
       <Button variant="danger">Danger</Button>
       <Button variant="warning">Warning</Button>
       <Button variant="contrast">Contrast</Button>
+      <Button variant="submit">Submit</Button>
       <Button variant="ghost">Ghost</Button>
       <Button variant="ghost-muted" icon="edit">
         Ghost muted
+      </Button>
+      <Button variant="ghost-faint" icon="edit">
+        Ghost faint
       </Button>
       <Button variant="loading">Loading</Button>
     </div>
@@ -119,7 +124,17 @@ export const Icon = {
 
 export const AllStates = {
   render: () => {
-    const variants = ["neutral", "danger", "warning", "contrast", "ghost", "ghost-muted", "loading"] as const
+    const variants = [
+      "neutral",
+      "danger",
+      "warning",
+      "contrast",
+      "submit",
+      "ghost",
+      "ghost-muted",
+      "ghost-faint",
+      "loading",
+    ] as const
     const states = ["default", "hover", "pressed", "focus", "disabled"] as const
     const toTitleCase = (value: string) => value.charAt(0).toUpperCase() + value.slice(1)
     return (

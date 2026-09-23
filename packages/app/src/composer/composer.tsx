@@ -1,10 +1,10 @@
 import { Show, createMemo } from "solid-js"
-import { Button } from "@opencode-ai/ui/button"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Icon } from "@opencode-ai/ui/icon"
-import { Keybind } from "@opencode-ai/ui/keybind"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
+import { Button } from "@opencode/ui/button"
+import { useDialog } from "@opencode/ui/context/dialog"
+import { Icon } from "@opencode/ui/icon"
+import { Keybind } from "@opencode/ui/keybind"
+import { ProviderIcon } from "@opencode/ui/provider-icon"
+import { Tooltip } from "@opencode/ui/tooltip"
 import { ComposerEditor } from "./editor/editor"
 import { ModelSelectorPopover } from "@/providers/models/select-dialog"
 import { DialogSelectModelUnpaid } from "@/providers/models/unpaid"
@@ -12,12 +12,7 @@ import { formatKeybind, useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import type { ComposerModel } from "./model"
 
-export function Composer(props: {
-  class?: string
-  model: ComposerModel
-  borderUnderlay?: boolean
-  accentSubmit?: boolean
-}) {
+export function Composer(props: { class?: string; model: ComposerModel; borderUnderlay?: boolean }) {
   const dialog = useDialog()
   const command = useCommand()
   const language = useLanguage()
@@ -26,13 +21,13 @@ export function Composer(props: {
     <div class="flex flex-col gap-3">
       <ComposerEditor
         controller={props.model}
-        accentSubmit={props.accentSubmit}
         borderUnderlay={props.borderUnderlay}
         class={props.class}
         modelControlsVisible={!props.model.model.loading}
         attachKeybind={command.keybindParts("file.attach")}
         attachShortcut={command.keybind("file.attach")}
-        alternateKeybind={[formatKeybind("mod", language.t), formatKeybind("enter", language.t)]}
+        alternateKeybind={[formatKeybind("mod", language.t), "↵"]}
+        exitShellKeybind={[formatKeybind("esc", language.t)]}
         modelControl={
           <ComposerModelControl
             loading={props.model.model.loading}

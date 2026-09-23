@@ -1,4 +1,4 @@
-import { OpenCode, type OpenCodeEvent, type SessionMessageInfo } from "@opencode-ai/client/promise"
+import { OpenCode, type OpenCodeEvent, type SessionMessageInfo } from "@opencode/client/promise"
 
 type DurableEvent = Extract<OpenCodeEvent, { durable: unknown }>
 type EphemeralEvent = Exclude<OpenCodeEvent, DurableEvent>
@@ -128,7 +128,7 @@ export function createSseFixture(options: FixtureOptions = {}) {
 
       const permission = /^\/api\/session\/([^/]+)\/permission\/([^/]+)\/reply$/.exec(url.pathname)
       if (permission?.[1] && permission[2]) {
-        const reply = stringField(body, "reply")
+        const reply = stringField(body, "decision")
         if (!reply) return new Response(null, { status: 400 })
         await options.onPermissionReply?.({
           sessionID: decodeURIComponent(permission[1]),
@@ -140,8 +140,8 @@ export function createSseFixture(options: FixtureOptions = {}) {
         return new Response(null, { status: 204 })
       }
 
-      const form = /^\/api\/session\/([^/]+)\/form\/([^/]+)\/cancel$/.exec(url.pathname)
-      if (form?.[1] && form[2]) {
+      const form = /^\/api\/session\/([^/]+)\/form\/([^/]+)$/.exec(url.pathname)
+      if (request.method === "DELETE" && form?.[1] && form[2]) {
         await options.onFormCancel?.({
           sessionID: decodeURIComponent(form[1]),
           formID: decodeURIComponent(form[2]),
@@ -190,7 +190,7 @@ export async function withTimeout<Value>(promise: Promise<Value>, message: strin
 
 function stringField(value: unknown, key: string) {
   if (!value || typeof value !== "object") return undefined
-  const field = Reflect.get(value, key)
+  const field = (value as Record<string, unknown>)[key]
   return typeof field === "string" ? field : undefined
 }
 

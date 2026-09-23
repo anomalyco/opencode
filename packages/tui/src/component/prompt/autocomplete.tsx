@@ -20,22 +20,17 @@ import type { PromptInfo, PromptPartRef } from "../../prompt/history"
 import { useFrecency } from "../../prompt/frecency"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { displayCharAt, mentionTriggerIndex, slashTriggerIndex } from "../../prompt/display"
-import type { FileSystemEntry } from "@opencode-ai/client"
-import { Skill } from "@opencode-ai/schema/skill"
+import type { FileSystemEntry } from "@opencode/client"
+import { Skill } from "@opencode/schema/skill"
 import { stringWidth } from "../../util/string-width"
 import { parseFileLineRange, stripFileLineRange } from "../../prompt/parse"
 import { moveSelection, reconcileSelectionWindow, revealSelectionOffset } from "../../ui/select-controller"
-import {
-  directoryAutocompleteExactValue,
-  directoryAutocompleteMatches,
-  directoryAutocompleteResultValue,
-  directoryAutocompleteSearch,
-  slashArgumentAutocomplete,
-} from "../../prompt/directory-completion"
+import { directoryAutocomplete, slashArgumentAutocomplete } from "../../prompt/directory-completion"
 
 export type AutocompleteRef = {
   onInput: (value: string) => void
   visible: false | "reference" | "command" | "directory"
+  completeQueueableCommand: () => boolean
 }
 
 export type AutocompleteOption = {
@@ -49,7 +44,8 @@ export type AutocompleteOption = {
   path?: string
   absolute?: string
   destructive?: { id: string; confirm: string; run: () => void }
-  kind?: "skill"
+  kind?: "skill" | "agent" | "reference"
+  queueable?: boolean
 }
 
 type AutocompleteResults = {
@@ -81,7 +77,7 @@ export function Autocomplete(props: {
   const data = useData()
   const keymap = Keymap.use()
   const keymapCommands = Keymap.useCommands()
-  const theme = useTheme("overlay")
+  const theme = useTheme()
   const dimensions = useTerminalDimensions()
   const frecency = useFrecency()
   const config = useConfig().data
@@ -91,7 +87,6 @@ export function Autocomplete(props: {
     index: 0,
     selected: 0,
     visible: false as AutocompleteRef["visible"],
-    input: "keyboard" as "keyboard" | "mouse",
   })
 
   const [positionTick, setPositionTick] = createSignal(0)
@@ -153,14 +148,6 @@ export function Autocomplete(props: {
   createEffect(() => {
     const next = filter()
     setSearch(next ? next : "")
-  })
-
-  // When the filter changes due to how TUI works, the mousemove might still be triggered
-  // via a synthetic event as the layout moves underneath the cursor. This is a workaround to make sure the input mode remains keyboard so
-  // that the mouseover event doesn't trigger when filtering.
-  createEffect(() => {
-    filter()
-    setStore("input", "keyboard")
   })
 
   function insertPart(
@@ -341,20 +328,37 @@ export function Autocomplete(props: {
       if (referenceMatch())
         return { options: [], failed: false, mode: input.visible, query: input.query, resolved: true }
       const { lineRange, base } = parseFileLineRange(input.query ?? "")
-      const directorySearch =
-        input.visible === "directory"
-          ? directoryAutocompleteSearch(base, input.location?.directory ?? paths.cwd, paths.home)
-          : undefined
-
       const requestLocation = {
-        directory: directorySearch?.directory ?? input.location?.directory,
-        workspace: input.location?.workspaceID ?? data.location.default().workspaceID,
+        directory: input.location?.directory,
       }
-      const result = await (
-        input.visible === "directory"
-          ? client.api.file.list({ location: requestLocation })
-          : client.api.file.find({ query: base, limit: 20, location: requestLocation })
-      ).then(
+      const width = props.anchor().width - 4
+      if (input.visible === "directory") {
+        const result = await directoryAutocomplete(
+          client.api.file,
+          { ...requestLocation, directory: requestLocation.directory ?? paths.cwd },
+          base,
+          paths.home,
+        ).catch(() => undefined)
+        if (!result)
+          return info.value?.mode === input.visible
+            ? { ...info.value, failed: true }
+            : { options: [], failed: true, mode: input.visible, query: input.query, resolved: false }
+        return {
+          options: result.map((item) => ({
+            display: Locale.truncateMiddle(item.value, width),
+            value: item.value,
+            isDirectory: true,
+            path: item.value,
+            absolute: item.absolute,
+            onSelect: () => insertDirectory(item.value),
+          })),
+          failed: false,
+          mode: input.visible,
+          query: input.query,
+          resolved: true,
+        }
+      }
+      const result = await client.api.file.find({ query: base, limit: 20, location: requestLocation }).then(
         (result) => result,
         () => undefined,
       )
@@ -366,38 +370,8 @@ export function Autocomplete(props: {
 
       const options: AutocompleteOption[] = []
 
-      const width = props.anchor().width - 4
-      const exact = directorySearch ? directoryAutocompleteExactValue(base, directorySearch) : undefined
-      if (exact) {
-        options.push({
-          display: Locale.truncateMiddle(exact, width),
-          value: exact,
-          isDirectory: true,
-          path: exact,
-          absolute: result.location.directory,
-          onSelect: () => insertDirectory(exact),
-        })
-      }
-      const entries =
-        input.visible === "directory"
-          ? result.data.filter(
-              (item) =>
-                item.type === "directory" && directoryAutocompleteMatches(item.path, directorySearch?.query ?? ""),
-            )
-          : result.data
       options.push(
-        ...entries.map((item): AutocompleteOption => {
-          if (input.visible === "directory") {
-            const directory = directorySearch ? directoryAutocompleteResultValue(item.path, directorySearch) : item.path
-            return {
-              display: Locale.truncateMiddle(directory, width),
-              value: directory,
-              isDirectory: true,
-              path: directory,
-              absolute: path.resolve(result.location.directory, item.path),
-              onSelect: () => insertDirectory(directory),
-            }
-          }
+        ...result.data.map((item): AutocompleteOption => {
           const { filename, part } = createFilePart(item, path.join(result.location.directory, item.path), lineRange)
           return {
             display: Locale.truncateMiddle(filename, width),
@@ -430,41 +404,13 @@ export function Autocomplete(props: {
     return { options: [], failed: false, query: "", resolved: false }
   })
 
-  const mcpResources = createMemo(() => {
-    if (store.visible !== "reference") return []
-
-    const options: AutocompleteOption[] = []
-    const width = props.anchor().width - 4
-
-    for (const res of data.location.mcp.resource.list(location.current) ?? []) {
-      options.push({
-        display: Locale.truncateMiddle(res.name, width),
-        // Match the name only; matching the URI caused unrelated fuzzy hits.
-        value: res.name,
-        description: res.description,
-        onSelect: () => {
-          insertPart(res.name, {
-            type: "file",
-            value: {
-              uri: res.uri,
-              name: res.name,
-              description: res.description,
-              mention: { start: 0, end: 0, text: "" },
-            },
-          })
-        },
-      })
-    }
-
-    return options
-  })
-
   const agents = createMemo(() => {
     return (data.location.agent.list() ?? [])
       .filter((agent) => !agent.hidden && agent.mode !== "primary")
       .map(
         (agent): AutocompleteOption => ({
           display: "@" + agent.id,
+          kind: "agent",
           onSelect: () => {
             insertPart(agent.id, {
               type: "agent",
@@ -500,6 +446,7 @@ export function Autocomplete(props: {
       .map(
         (reference): AutocompleteOption => ({
           display: "@" + reference.name,
+          kind: "reference",
           description: ` ${reference.source.type === "git" ? reference.source.repository : reference.source.path}`,
           onSelect: () => {
             insertPart(reference.name, {
@@ -528,12 +475,11 @@ export function Autocomplete(props: {
     const results: AutocompleteOption[] = keymapCommands().flatMap((command) => {
       const slash = command.slash
       if (!slash) return []
-      return {
-        display: `/${slash.name}`,
+      return [slash.name, ...(slash.aliases ?? [])].map((name) => ({
+        display: `/${name}`,
         description: command.description ?? command.title,
-        aliases: slash.aliases?.map((alias) => `/${alias}`),
-        onSelect: slash.arguments ? () => insertSlash(slash.name) : command.run,
-      }
+        onSelect: slash.arguments ? () => insertSlash(name) : command.run,
+      }))
     })
     const commandNames = new Set<string>()
 
@@ -542,18 +488,8 @@ export function Autocomplete(props: {
       results.push({
         display: "/" + serverCommand.name,
         description: serverCommand.description,
+        queueable: true,
         onSelect: () => insertSlash(serverCommand.name),
-      })
-    }
-
-    for (const skill of data.location.skill
-      .list(location.current)
-      ?.filter((skill) => skill.slash === true && !commandNames.has(skill.id)) ?? []) {
-      results.push({
-        display: "/" + skill.id,
-        description: skill.description,
-        kind: "skill",
-        onSelect: () => insertSlash(skill.id),
       })
     }
 
@@ -604,7 +540,7 @@ export function Autocomplete(props: {
     const fileOptions: AutocompleteOption[] = store.visible === "reference" ? fileSearch.options : []
     const nonFileOptions: AutocompleteOption[] =
       store.visible === "reference"
-        ? [...skillOptions(), ...referenceAliasesValue, ...agentsValue, ...mcpResources()]
+        ? [...skillOptions(), ...referenceAliasesValue, ...agentsValue]
         : store.index === 0
           ? [...commandsValue]
           : []
@@ -732,13 +668,13 @@ export function Autocomplete(props: {
     mode: "autocomplete",
     target: props.input,
     enabled: () => Boolean(store.visible),
+    bindings: ["prompt.queue"],
     commands: [
       {
         id: "prompt.autocomplete.prev",
         title: "Previous autocomplete item",
         group: "Autocomplete",
         run() {
-          setStore("input", "keyboard")
           move(-1)
         },
       },
@@ -747,7 +683,6 @@ export function Autocomplete(props: {
         title: "Next autocomplete item",
         group: "Autocomplete",
         run() {
-          setStore("input", "keyboard")
           move(1)
         },
       },
@@ -757,6 +692,14 @@ export function Autocomplete(props: {
         group: "Autocomplete",
         run() {
           hide()
+        },
+      },
+      {
+        id: "prompt.clear",
+        title: "Dismiss autocomplete",
+        group: "Autocomplete",
+        run() {
+          hide(true)
         },
       },
       {
@@ -829,6 +772,11 @@ export function Autocomplete(props: {
       get visible() {
         return store.visible
       },
+      completeQueueableCommand() {
+        if (store.visible !== "command" || !options()[store.selected]?.queueable) return false
+        select()
+        return true
+      },
       onInput(value) {
         if (dismissedValue() === value) return
         setDismissedValue(undefined)
@@ -894,6 +842,11 @@ export function Autocomplete(props: {
     return "No matching files, agents, or references"
   })
   const emptyError = createMemo(() => store.visible === "reference" && !files.loading && visibleFiles().failed)
+  const labels = {
+    skill: "skill",
+    agent: "agent",
+    reference: "reference",
+  }
 
   return (
     <box
@@ -904,7 +857,7 @@ export function Autocomplete(props: {
       width={position().width}
       zIndex={100}
       {...SplitBorder}
-      borderColor={theme.border.default}
+      borderColor={theme.border.base}
     >
       <scrollbox
         ref={(r: ScrollBoxRenderable) => {
@@ -912,7 +865,7 @@ export function Autocomplete(props: {
           scroll = r
           scroll.verticalScrollBar.on("change", syncSelectionWindow)
         }}
-        backgroundColor={theme.background.default}
+        backgroundColor={theme.background.raised.high}
         height={height()}
         scrollbarOptions={{ visible: false }}
         scrollAcceleration={scrollAcceleration()}
@@ -921,12 +874,20 @@ export function Autocomplete(props: {
           each={options()}
           fallback={
             <box paddingLeft={1} paddingRight={1}>
-              <text fg={emptyError() ? theme.text.feedback.error.default : theme.text.subdued}>{emptyMessage()}</text>
+              <text fg={emptyError() ? theme.text.feedback.error.base : theme.text.muted}>{emptyMessage()}</text>
             </box>
           }
         >
           {(option, index) => {
             const destructive = () => option().destructive
+            const label = () => {
+              const kind = option().kind
+              return kind ? labels[kind] : undefined
+            }
+            const contentWidth = () => {
+              const text = label()
+              return Math.max(1, position().width - 4 - (text ? stringWidth(text) + 2 : 0))
+            }
             const confirmingAction = () => {
               const action = destructive()
               return action !== undefined && action.id === confirming()
@@ -943,17 +904,8 @@ export function Autocomplete(props: {
                       : undefined
                 }
                 flexDirection="row"
-                onMouseMove={() => {
-                  setStore("input", "mouse")
-                }}
-                onMouseOver={() => {
-                  if (store.input !== "mouse") return
-                  moveTo(index)
-                }}
-                onMouseDown={() => {
-                  setStore("input", "mouse")
-                  moveTo(index)
-                }}
+                onMouseMove={() => moveTo(index)}
+                onMouseDown={() => moveTo(index)}
                 onMouseUp={() => select()}
               >
                 <text
@@ -962,18 +914,33 @@ export function Autocomplete(props: {
                       ? theme.text.action.destructive.focused
                       : index === store.selected
                         ? theme.text.action.primary.focused
-                        : theme.text.default
+                        : theme.text.base
                   }
                   flexShrink={0}
+                  wrapMode="none"
                 >
-                  {confirmingAction() ? destructive()?.confirm : option().display}
+                  {Locale.truncateMiddle(
+                    confirmingAction() ? (destructive()?.confirm ?? "") : option().display,
+                    contentWidth(),
+                  )}
                 </text>
                 <Show when={!confirmingAction() && option().description}>
                   <text
-                    fg={index === store.selected ? theme.text.action.primary.focused : theme.text.subdued}
+                    fg={index === store.selected ? theme.text.action.primary.focused : theme.text.muted}
                     wrapMode="none"
+                    flexShrink={1}
+                    minWidth={0}
                   >
                     {" " + option().description?.replace(/\s+/g, " ").trim()}
+                  </text>
+                </Show>
+                <Show when={!confirmingAction() && label()}>
+                  <box flexGrow={1} minWidth={2} />
+                  <text
+                    flexShrink={0}
+                    fg={index === store.selected ? theme.text.action.primary.focused : theme.text.muted}
+                  >
+                    {label()}
                   </text>
                 </Show>
               </box>

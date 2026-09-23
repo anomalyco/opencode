@@ -1,8 +1,8 @@
 export * as Form from "./form.js"
 
-import { Form } from "@opencode-ai/schema/form"
+import { Form } from "@opencode/schema/form"
 import { Cache, Context, Deferred, Duration, Effect, Exit, Layer, Option, Schema } from "effect"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Bus } from "./bus.js"
 
 const RETENTION = Duration.minutes(10)
@@ -32,7 +32,7 @@ export type Answer = typeof Answer.Type
 export const Reply = Form.Reply
 export type Reply = typeof Reply.Type
 
-export { Event } from "@opencode-ai/schema/form"
+export { Event } from "@opencode/schema/form"
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Form.NotFoundError", {
   id: ID,
@@ -79,6 +79,7 @@ export interface ListInput {
 }
 
 export interface Interface {
+  readonly close: Effect.Effect<void>
   readonly create: (input: CreateInput) => Effect.Effect<Info, AlreadyExistsError | InvalidFormError>
   readonly ask: (input: CreateInput) => Effect.Effect<TerminalState, AlreadyExistsError | InvalidFormError>
   readonly get: (id: ID) => Effect.Effect<Info, NotFoundError>
@@ -100,6 +101,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
+    let closed = false
     const forms = yield* Cache.makeWith<ID, Entry>(
       () => Effect.die(new Error("Form cache must be used via set/getSuccess, never get")),
       {
@@ -137,6 +139,7 @@ export const layer = Layer.effect(
           }
           yield* Cache.set(forms, id, entry)
           yield* bus.publish(Form.Event.Created, { form }).pipe(Effect.onError(() => Cache.invalidate(forms, id)))
+          if (closed) yield* cancel(id).pipe(Effect.orDie)
           return form
         }),
       ),
@@ -202,19 +205,21 @@ export const layer = Layer.effect(
       ),
     )
 
-    yield* Effect.addFinalizer(() =>
-      Cache.values(forms).pipe(
-        Effect.flatMap((entries) =>
-          Effect.forEach(
-            Array.from(entries).filter((entry) => entry.state.status === "pending"),
-            (entry) => cancel(entry.form.id).pipe(Effect.ignore),
-            { discard: true },
-          ),
+    const close = Effect.sync(() => {
+      closed = true
+    }).pipe(
+      Effect.andThen(Cache.values(forms)),
+      Effect.flatMap((entries) =>
+        Effect.forEach(
+          Array.from(entries).filter((entry) => entry.state.status === "pending"),
+          (entry) => cancel(entry.form.id).pipe(Effect.ignore),
+          { discard: true },
         ),
       ),
     )
+    yield* Effect.addFinalizer(() => close)
 
-    return Service.of({ create, ask, get, list, state, reply, cancel })
+    return Service.of({ create, ask, get, list, state, reply, cancel, close })
   }),
 )
 
@@ -311,7 +316,7 @@ function validateField(field: InputField, value: Form.Value): string | undefined
     }
     if (field.format === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))
       return `Expected email for form field: ${field.key}`
-    if (field.format === "uri" && !isUri(value)) return `Expected URI for form field: ${field.key}`
+    if (field.format === "uri" && !URL.canParse(value)) return `Expected URI for form field: ${field.key}`
     if (field.format === "date" && !isDate(value)) return `Expected date for form field: ${field.key}`
     if (field.format === "date-time" && !isDateTime(value)) return `Expected date-time for form field: ${field.key}`
     if (field.options && !field.custom && !field.options.some((option) => option.value === value)) {
@@ -345,15 +350,6 @@ function validateField(field: InputField, value: Form.Value): string | undefined
 
 function isStringArray(value: Form.Value): value is ReadonlyArray<string> {
   return Array.isArray(value) && value.every((item): item is string => typeof item === "string")
-}
-
-function isUri(value: string) {
-  try {
-    new URL(value)
-    return true
-  } catch {
-    return false
-  }
 }
 
 function isDate(value: string) {

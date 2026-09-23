@@ -4,7 +4,6 @@ import type { ServerHealth } from "@/runtime/server/health"
 export type ServerFormValues = {
   url: string
   name: string
-  username: string
   password: string
 }
 
@@ -28,7 +27,6 @@ export function createServerHealthPreview(
       return
 
     const http: ServerConnection.HttpBase = { url: normalized }
-    if (values.username) http.username = values.username
     if (values.password) http.password = values.password
     const result = await check(http)
     if (current !== generation) return

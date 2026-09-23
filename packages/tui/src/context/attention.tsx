@@ -1,4 +1,4 @@
-import type { Attention } from "@opencode-ai/plugin/tui/context"
+import type { Attention } from "@opencode/plugin/tui/context"
 import { useRenderer } from "@opentui/solid"
 import { createContext, onCleanup, useContext, type ParentProps } from "solid-js"
 import { createTuiAttention } from "../attention"

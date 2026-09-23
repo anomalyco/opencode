@@ -1,17 +1,17 @@
 import { describe, expect } from "bun:test"
 import { Cause, Effect, Exit, Fiber, Layer } from "effect"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Form } from "@opencode-ai/core/form"
-import { Permission } from "@opencode-ai/core/permission"
-import { Session } from "@opencode-ai/core/session"
-import { Tool } from "@opencode-ai/core/tool"
-import { QuestionTool } from "@opencode-ai/core/tool/plugin/question"
-import { Image } from "@opencode-ai/core/image"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Form } from "@opencode/core/form"
+import { Permission } from "@opencode/core/permission"
+import { Session } from "@opencode/core/session"
+import { Tool } from "@opencode/core/tool"
+import { QuestionTool } from "@opencode/core/tool/plugin/question"
+import { Image } from "@opencode/core/image"
 import { testEffect } from "./lib/effect"
 import { imagePassthrough } from "./lib/image"
 import { permissionLayer } from "./lib/permission"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
 
 const sessionID = Session.ID.make("ses_question_tool_test")
@@ -45,28 +45,19 @@ const permission = permissionLayer({
       ),
     ),
 })
-const form = Layer.succeed(
-  Form.Service,
-  Form.Service.of({
-    ask: (input: Form.CreateInput) =>
-      Effect.sync(() => {
-        captured = input
-      }).pipe(
-        Effect.andThen(
-          Effect.sync(
-            (): Form.TerminalState =>
-              reject ? { status: "cancelled" } : { status: "answered", answer: { q0: "Build", q1: ["Dev"] } },
-          ),
+const form = Layer.mock(Form.Service, {
+  ask: (input: Form.CreateInput) =>
+    Effect.sync(() => {
+      captured = input
+    }).pipe(
+      Effect.andThen(
+        Effect.sync(
+          (): Form.TerminalState =>
+            reject ? { status: "cancelled" } : { status: "answered", answer: { q0: "Build", q1: ["Dev"] } },
         ),
       ),
-    create: () => Effect.die("unused"),
-    get: () => Effect.die("unused"),
-    list: () => Effect.die("unused"),
-    state: () => Effect.die("unused"),
-    reply: () => Effect.die("unused"),
-    cancel: () => Effect.die("unused"),
-  }),
-)
+    ),
+})
 const questionToolNode = makeLocationNode({
   name: "test/question-tool-plugin",
   layer: Layer.effectDiscard(registerToolPlugin(QuestionTool.Plugin)),
@@ -75,9 +66,9 @@ const questionToolNode = makeLocationNode({
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Tool.node, questionToolNode]), [
-    [Permission.node, permission],
-    [Form.node, form],
-    [Image.node, imagePassthrough],
+    Permission.node.replace(permission),
+    Form.node.replace(form),
+    Image.node.replace(imagePassthrough),
   ]),
 )
 
@@ -114,6 +105,7 @@ describe("QuestionTool", () => {
     Effect.gen(function* () {
       captured = undefined
       deny = true
+      yield* Effect.addFinalizer(() => Effect.sync(() => (deny = false)))
       const registry = yield* Tool.Service
 
       expect(
@@ -135,7 +127,6 @@ describe("QuestionTool", () => {
         },
       })
       expect(capturedInput()).toBeUndefined()
-      deny = false
     }),
   )
 

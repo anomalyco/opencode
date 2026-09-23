@@ -1,0 +1,84 @@
+diff --git a/dist/client/bundledDevClient.mjs b/dist/client/bundledDevClient.mjs
+index 4c4a3f6f884795001ffbae43cd3c3d6bf84169dc..b5e80b68140824e7460439b125eec8ec3fa14e8a 100644
+--- a/dist/client/bundledDevClient.mjs
++++ b/dist/client/bundledDevClient.mjs
+@@ -1796,6 +1796,13 @@ function injectQuery(url, queryToInject) {
+ if (typeof DevRuntime !== "undefined") {
+ 	var _ref;
+ 	class ViteDevRuntime extends DevRuntime {
++		payloadDelivered(filename) {
++			transport.send({
++				type: "custom",
++				event: "vite:bundled-dev:payload-delivered",
++				data: { filename }
++			});
++		}
+ 		createModuleHotContext(moduleId) {
+ 			const ctx = new BundledDevHMRContext(bundledDevHmrClient, moduleId);
+ 			ctx._internal = {
+diff --git a/dist/node/chunks/node.js b/dist/node/chunks/node.js
+index 87cfa480c3d4132f9dd1b74c6c1bbe2b90385d3f..83da417e7b9c380d06b7679d3fbfaeed998f5277 100644
+--- a/dist/node/chunks/node.js
++++ b/dist/node/chunks/node.js
+@@ -26309,7 +26309,6 @@ function memoryFilesMiddleware(server) {
+ 			const mime = lookup(filePath);
+ 			if (mime) res.setHeader("Content-Type", mime);
+ 			for (const name in headers) res.setHeader(name, headers[name]);
+-			res.on("finish", () => bundledDev.markPayloadDelivered(filePath));
+ 			return res.end(file.source);
+ 		}
+ 		next();
+@@ -26339,7 +26338,6 @@ function triggerLazyBundlingMiddleware(server) {
+ 		}
+ 		if (result == null) return next();
+ 		res.setHeader("Content-Type", "application/javascript");
+-		res.on("finish", () => bundledDev.markPayloadDelivered(result.filename));
+ 		return res.end(result.code);
+ 	};
+ }
+@@ -35155,6 +35153,9 @@ var BundledDev = class {
+ 			this.clients.setupIfNeeded(client, payload.clientId);
+ 			this.devEngine.registerClient(payload.clientId);
+ 		});
++		this.environment.hot.on("vite:bundled-dev:payload-delivered", (payload) => {
++			this.markPayloadDelivered(payload.filename);
++		});
+ 		this.environment.hot.on("vite:client:connect", (_payload, client) => {
+ 			if (this.lastBuildError) {
+ 				debug$1?.("REPLAY: replaying last build error to newly connected client");
+@@ -35287,12 +35288,11 @@ var BundledDev = class {
+ 		debug$1?.(`TRIGGER-LAZY: trigger lazy bundling for module ${moduleId} for client ${clientId}`);
+ 		const result = await this.devEngine.compileEntry(moduleId, clientId);
+ 		this.pendingPayloadFilenames.add(result.filename);
+-		return result;
++		return { filename: result.filename, code: result.code + payloadDeliveredAck(result.filename) };
+ 	}
+ 	/**
+-	* Called by the serving middlewares when the response for a payload completed.
+-	* Only delivered payloads are recorded on the server's per-client ship map, so
+-	* later chunks may omit a module only if the payload carrying it was delivered.
++	* Called after the client evaluates a payload and registers its factories.
++	* HTTP response completion alone does not mean the factories are available.
+ 	*
+ 	* Note: the payload filename is unique across all clients.
+ 	*/
+@@ -35364,7 +35364,7 @@ var BundledDev = class {
+ 			code: typeof hmrOutput.code === "string" ? "[code]" : hmrOutput.code
+ 		});
+ 		this.pendingPayloadFilenames.add(hmrOutput.filename);
+-		this.memoryFiles.set(hmrOutput.filename, { source: hmrOutput.code + "\n; export {}" });
++		this.memoryFiles.set(hmrOutput.filename, { source: hmrOutput.code + payloadDeliveredAck(hmrOutput.filename) + "\n; export {}" });
+ 		if (hmrOutput.sourcemapFilename && hmrOutput.sourcemap) this.memoryFiles.set(hmrOutput.sourcemapFilename, { source: hmrOutput.sourcemap });
+ 		client.send({
+ 			type: "bundled-dev-update",
+@@ -35407,6 +35407,10 @@ var Clients = class {
+ 		}
+ 	}
+ };
++// Backport https://github.com/vitejs/vite/pull/23373.
++function payloadDeliveredAck(filename) {
++	return `\n;__rolldown_runtime__.payloadDelivered(${JSON.stringify(filename)});`;
++}
+ function debounce(time, cb) {
+ 	let timer;
+ 	return () => {

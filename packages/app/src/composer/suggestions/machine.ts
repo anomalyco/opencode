@@ -1,4 +1,5 @@
 import type { ComposerHistoryEntry, ComposerPersistedState, ComposerSuggestion } from "../types"
+import { isAttachment } from "../prompt-parts"
 
 export type ComposerInteractionState = {
   mode: "normal" | "shell"
@@ -35,7 +36,7 @@ export type ComposerInteractionEvent =
 export type ComposerInteractionCommand =
   | { type: "draft.setText"; value: string }
   | { type: "draft.addText"; value: string }
-  | { type: "mention.add"; item: ComposerSuggestion }
+  | { type: "mention.add"; item: ComposerSuggestion; range?: { start: number; end: number } }
   | { type: "popover.filter"; popover: "command" | "context"; query: string }
   | { type: "suggestion.select"; id: string }
   | { type: "focus.editor" }
@@ -178,7 +179,13 @@ function suggestionSelected(
           : replaceTrigger(current, "/", `${item.label} `),
     })
   } else {
-    commands.push({ type: "mention.add", item })
+    commands.push({
+      type: "mention.add",
+      item,
+      ...(item.kind === "skill" && item.label.startsWith("/")
+        ? { range: { start: 0, end: state.popover.type === "command-menu" ? 0 : current.length } }
+        : {}),
+    })
   }
   commands.push({ type: "focus.editor" })
   return changed({ ...state, popover: { type: "closed" }, focus: "editor" }, commands)
@@ -230,7 +237,7 @@ function populated(persisted: ComposerPersistedState) {
   return (
     !!promptText(persisted).trim() ||
     persisted.context.items.length > 0 ||
-    persisted.prompt.some((part) => part.type === "file" || part.type === "image")
+    persisted.prompt.some((part) => part.type === "file" || isAttachment(part))
   )
 }
 

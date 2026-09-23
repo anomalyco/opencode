@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "muse-spark-1.3",
+    "tags": [
+      "prefix:meta-chat",
+      "provider:meta",
+      "protocol:openai-chat",
+      "tool",
+      "tool-loop",
+      "reasoning",
+      "usage",
+      "effort:low"
+    ],
+    "name": "meta-chat/continues-a-generated-tool-call",
+    "recordedAt": "2026-09-07T16:54:19.772Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.meta.ai/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"muse-spark-1.3\",\"messages\":[{\"role\":\"user\",\"content\":\"Look up the current weather in Paris using lookup_weather before answering. After receiving the result, report Paris's weather in one short sentence.\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"lookup_weather\",\"description\":\"Look up the current weather for a city\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\",\"enum\":[\"Paris\"]}},\"required\":[\"city\"],\"additionalProperties\":false},\"strict\":false}}],\"tool_choice\":\"auto\",\"stream\":true,\"stream_options\":{\"include_usage\":true},\"reasoning_effort\":\"low\",\"max_completion_tokens\":1024}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"id\":\"chatcmpl-01a07cca-c092-7423-880d-204c05dc6645\",\"choices\":[{\"delta\":{\"content\":\"I'll look up the current weather in Paris now.\",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"created\":1788800057,\"model\":\"muse-spark-1.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"id\":\"chatcmpl-01a07cca-c092-7423-880d-204c05dc6645\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_01a07ccac34671129bd9ef9a66fd3266\",\"type\":\"function\",\"function\":{\"name\":\"lookup_weather\",\"arguments\":\"\"}}]},\"finish_reason\":null,\"index\":0}],\"created\":1788800057,\"model\":\"muse-spark-1.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"id\":\"chatcmpl-01a07cca-c092-7423-880d-204c05dc6645\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"function\":{\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"}}]},\"finish_reason\":null,\"index\":0}],\"created\":1788800057,\"model\":\"muse-spark-1.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"id\":\"chatcmpl-01a07cca-c092-7423-880d-204c05dc6645\",\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\",\"index\":0}],\"created\":1788800057,\"model\":\"muse-spark-1.3\",\"object\":\"chat.completion.chunk\",\"usage\":{\"completion_tokens\":139,\"prompt_tokens\":570,\"total_tokens\":709,\"completion_tokens_details\":{\"reasoning_tokens\":70},\"prompt_tokens_details\":{\"cached_tokens\":497}}}\n\ndata: [DONE]\n\n"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.meta.ai/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"muse-spark-1.3\",\"messages\":[{\"role\":\"user\",\"content\":\"Look up the current weather in Paris using lookup_weather before answering. After receiving the result, report Paris's weather in one short sentence.\"},{\"role\":\"assistant\",\"content\":\"I'll look up the current weather in Paris now.\",\"tool_calls\":[{\"id\":\"call_01a07ccac34671129bd9ef9a66fd3266\",\"type\":\"function\",\"function\":{\"name\":\"lookup_weather\",\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"call_01a07ccac34671129bd9ef9a66fd3266\",\"content\":\"{\\\"condition\\\":\\\"sunny\\\",\\\"temperature\\\":\\\"18C\\\"}\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"lookup_weather\",\"description\":\"Look up the current weather for a city\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\",\"enum\":[\"Paris\"]}},\"required\":[\"city\"],\"additionalProperties\":false},\"strict\":false}}],\"tool_choice\":\"auto\",\"stream\":true,\"stream_options\":{\"include_usage\":true},\"reasoning_effort\":\"low\",\"max_completion_tokens\":1024}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"id\":\"chatcmpl-01a07cca-c622-77e3-8e2c-9c52bac9acb5\",\"choices\":[{\"delta\":{\"content\":\"Paris is currently sunny with a\",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0}],\"created\":1788800058,\"model\":\"muse-spark-1.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"id\":\"chatcmpl-01a07cca-c622-77e3-8e2c-9c52bac9acb5\",\"choices\":[{\"delta\":{\"content\":\" temperature of 18°C\"},\"finish_reason\":null,\"index\":0}],\"created\":1788800058,\"model\":\"muse-spark-1.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"id\":\"chatcmpl-01a07cca-c622-77e3-8e2c-9c52bac9acb5\",\"choices\":[{\"delta\":{\"content\":\".\"},\"finish_reason\":null,\"index\":0}],\"created\":1788800058,\"model\":\"muse-spark-1.3\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"id\":\"chatcmpl-01a07cca-c622-77e3-8e2c-9c52bac9acb5\",\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0}],\"created\":1788800058,\"model\":\"muse-spark-1.3\",\"object\":\"chat.completion.chunk\",\"usage\":{\"completion_tokens\":91,\"prompt_tokens\":666,\"total_tokens\":757,\"completion_tokens_details\":{\"reasoning_tokens\":69},\"prompt_tokens_details\":{\"cached_tokens\":497}}}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

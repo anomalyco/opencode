@@ -9,13 +9,16 @@ afterEach(async () => {
 })
 
 // Drives the updater the way the app does: start or check, then install like a button click. `calls` records the platform
-// operations in order; installs record the staged version they would apply.
+// operations in order; downloads record whether a differential download was allowed and installs record the staged
+// version they would apply.
 function setup(input?: {
   currentVersion?: string
   ready?: { version: string }
   latest?: () => string
   stage?: () => Promise<void>
   install?: () => Promise<never>
+  external?: boolean
+  open?: () => Promise<void>
 }) {
   const calls: string[] = []
   let ready = input?.ready
@@ -25,14 +28,18 @@ function setup(input?: {
       checkForUpdate: Effect.try({
         try: () => {
           calls.push("check")
-          return input?.latest?.() ?? "2.0.0"
+          const version = input?.latest?.() ?? "2.0.0"
+          return input?.external
+            ? { mode: "external" as const, version, url: `https://files.test/${version}.dmg` }
+            : { mode: "restart" as const, version }
         },
         catch: (error) => error,
       }),
-      stageUpdate: Effect.tryPromise(async () => {
-        calls.push("download")
-        await input?.stage?.()
-      }),
+      stageUpdate: (options) =>
+        Effect.tryPromise(async () => {
+          calls.push(options.differential ? "download" : "download:full")
+          await input?.stage?.()
+        }),
       installAndRestart: Effect.suspend(() => {
         calls.push(`install:${ready?.version}`)
         return Effect.tryPromise({
@@ -40,6 +47,13 @@ function setup(input?: {
           catch: (error) => error,
         })
       }),
+      externalInstall: input?.external
+        ? (url) =>
+            Effect.tryPromise(async () => {
+              calls.push(`external:${url}`)
+              await input.open?.()
+            })
+        : undefined,
       dispose: () => {},
     },
     prepareToRestart: Effect.sync(() => {
@@ -76,8 +90,65 @@ describe("updater", () => {
 
     await app.updater.start()
 
+    expect(app.calls).toEqual(["check", "download"])
     expect(await app.updater.getState()).toEqual({ status: "ready", version: "2.0.0" })
     expect(app.getReady()).toEqual({ version: "2.0.0" })
+  })
+
+  test("offers an external installer without staging or preparing to restart", async () => {
+    const app = setup({ external: true })
+
+    await app.updater.start()
+    expect(app.calls).toEqual(["check"])
+    expect(await app.updater.getState()).toEqual({ status: "download-required", version: "2.0.0" })
+    expect(app.getReady()).toBeUndefined()
+
+    await app.updater.install()
+    expect(app.calls).toEqual(["check", "check", "external:https://files.test/2.0.0.dmg"])
+    expect(await app.updater.getState()).toEqual({ status: "download-required", version: "2.0.0" })
+  })
+
+  test("offers an external installer when its version equals the running beta", async () => {
+    const app = setup({ currentVersion: "2.0.0", external: true })
+
+    await app.updater.start()
+
+    expect(await app.updater.getState()).toEqual({ status: "download-required", version: "2.0.0" })
+  })
+
+  test("keeps an external installer available when a refresh fails", async () => {
+    let offline = false
+    const app = setup({
+      external: true,
+      latest: () => {
+        if (offline) throw new Error("offline")
+        return "2.0.0"
+      },
+    })
+    await app.updater.start()
+
+    offline = true
+    await app.updater.check()
+
+    expect(await app.updater.getState()).toEqual({ status: "download-required", version: "2.0.0" })
+  })
+
+  test("opens an external installer once for concurrent clicks", async () => {
+    let release = () => {}
+    const app = setup({
+      external: true,
+      open: () => new Promise<void>((resolve) => (release = resolve)),
+    })
+    await app.updater.start()
+
+    const first = app.updater.install()
+    const second = app.updater.install()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect(app.calls).toEqual(["check", "check", "external:https://files.test/2.0.0.dmg"])
+    release()
+    await Promise.all([first, second])
+    expect(await app.updater.getState()).toEqual({ status: "download-required", version: "2.0.0" })
   })
 
   test("reports up to date and clears the record once the update is installed", async () => {
@@ -90,13 +161,35 @@ describe("updater", () => {
     expect(app.getReady()).toBeUndefined()
   })
 
-  test("revalidates a persisted target through the updater cache on launch", async () => {
+  test("revalidates a persisted target through the updater cache on launch without a differential download", async () => {
     const app = setup({ ready: { version: "2.0.0" } })
 
     await app.updater.start()
 
-    expect(app.calls).toEqual(["check", "download"])
+    expect(app.calls).toEqual(["check", "download:full"])
     expect(await app.updater.getState()).toEqual({ status: "ready", version: "2.0.0" })
+  })
+
+  test("keeps differential downloads after the persisted target was installed", async () => {
+    const app = setup({ currentVersion: "2.0.0", ready: { version: "2.0.0" }, latest: () => "3.0.0" })
+
+    await app.updater.start()
+
+    expect(app.calls).toEqual(["check", "download"])
+    expect(await app.updater.getState()).toEqual({ status: "ready", version: "3.0.0" })
+    expect(app.getReady()).toEqual({ version: "3.0.0" })
+  })
+
+  test("downloads newer releases in full once one is staged", async () => {
+    let latest = "2.0.0"
+    const app = setup({ latest: () => latest })
+    await app.updater.start()
+
+    latest = "3.0.0"
+    await app.updater.check()
+
+    expect(app.calls).toEqual(["check", "download", "check", "download:full"])
+    expect(await app.updater.getState()).toEqual({ status: "ready", version: "3.0.0" })
   })
 
   test("concurrent checks share one platform check", async () => {
@@ -140,7 +233,7 @@ describe("updater", () => {
 
     expect(await app.updater.getState()).toEqual({ status: "installing", version: "2.0.0" })
     await new Promise((resolve) => setTimeout(resolve, 0))
-    expect(app.calls).toEqual(["check", "download", "check", "download", "prepare", "install:3.0.0"])
+    expect(app.calls).toEqual(["check", "download", "check", "download:full", "prepare", "install:3.0.0"])
     expect(await app.updater.getState()).toEqual({ status: "installing", version: "3.0.0" })
   })
 
@@ -220,7 +313,7 @@ describe("updater", () => {
     await refresh
     expect(await app.updater.getState()).toEqual({ status: "installing", version: "3.0.0" })
     await new Promise((resolve) => setTimeout(resolve, 0))
-    expect(app.calls).toEqual(["check", "download", "check", "download", "prepare", "install:3.0.0"])
+    expect(app.calls).toEqual(["check", "download", "check", "download:full", "prepare", "install:3.0.0"])
   })
 
   test("returns to ready after a failed installation and allows a retry", async () => {

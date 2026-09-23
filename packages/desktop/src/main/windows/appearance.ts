@@ -1,6 +1,3 @@
-import { resolveThemeVariant } from "@opencode-ai/ui/theme/resolve"
-import type { DesktopTheme } from "@opencode-ai/ui/theme/types"
-import oc2ThemeJson from "../../../../ui/src/theme/themes/oc-2.json"
 import { app, BrowserWindow, nativeImage, nativeTheme } from "electron"
 import type { Path } from "effect"
 import { type TitlebarTheme } from "../../shared/ipc-contract"
@@ -9,15 +6,10 @@ import { emitIpcEvent } from "../ipc-events"
 import type { DesktopPaths } from "../paths"
 import { BACKGROUND_COLOR_KEY, PINCH_ZOOM_ENABLED_KEY } from "../storage/keys"
 import { getStore } from "../storage/store"
+import { storedBackgroundColor, titlebarOverlay, tone } from "./defaults"
 
-const oc2Theme = oc2ThemeJson as DesktopTheme
-const oc2Background = {
-  light: resolveThemeVariant(oc2Theme.light, false)["background-base"],
-  dark: resolveThemeVariant(oc2Theme.dark, true)["background-base"],
-}
 const titlebarThemes = new WeakMap<BrowserWindow, Partial<TitlebarTheme>>()
 const pinchZoomEnabled = new WeakMap<BrowserWindow, boolean>()
-const titlebarHeight = 40
 const maxZoomLevel = 10
 const minZoomLevel = 0.2
 let backgroundColor: string | undefined
@@ -27,7 +19,7 @@ export function windowAppearance(path: Path.Path, paths: DesktopPaths.Resolved) 
   return {
     title: "OpenCode",
     icon: iconPath(path, paths),
-    backgroundColor: getBackgroundColor() ?? oc2Background[mode],
+    backgroundColor: backgroundColor ?? storedBackgroundColor(),
     ...(process.platform === "darwin"
       ? {
           titleBarStyle: "hidden" as const,
@@ -57,8 +49,10 @@ export function setDockIcon(path: Path.Path, paths: DesktopPaths.Resolved) {
 }
 
 export function setBackgroundColor(color: string) {
+  // The renderer reports its theme background on every boot; electron-store rewrites and fsyncs the
+  // settings file on each set, so only persist a change.
+  if (getBackgroundColor() !== color) getStore().set(BACKGROUND_COLOR_KEY, color)
   backgroundColor = color
-  getStore().set(BACKGROUND_COLOR_KEY, color)
   BrowserWindow.getAllWindows().forEach((win) => {
     win.setBackgroundColor(color)
     if (process.platform === "darwin") win.invalidateShadow()
@@ -72,8 +66,10 @@ export function getBackgroundColor() {
 
 export function setTitlebar(win: BrowserWindow, theme: Partial<TitlebarTheme> = {}) {
   titlebarThemes.set(win, theme)
-  // The macOS frame follows nativeTheme, not the renderer theme.
-  if (process.platform === "darwin") nativeTheme.themeSource = theme.scheme ?? theme.mode ?? "system"
+  // Native window controls follow nativeTheme, not the renderer theme.
+  if (process.platform === "darwin" || process.platform === "win32") {
+    nativeTheme.themeSource = theme.scheme ?? theme.mode ?? "system"
+  }
   updateTitlebar(win)
 }
 
@@ -94,6 +90,11 @@ export function setPinchZoomEnabled(enabled: boolean) {
 
 export function getPinchZoomEnabled() {
   return getStore().get(PINCH_ZOOM_ENABLED_KEY) === true
+}
+
+export function setZoomFactor(win: BrowserWindow, factor: number) {
+  win.webContents.setZoomFactor(clampZoom(factor))
+  updateZoom(win)
 }
 
 export function wireZoom(win: BrowserWindow) {
@@ -129,17 +130,8 @@ function iconPath(path: Path.Path, paths: DesktopPaths.Resolved) {
   return path.join(iconsDir(path, paths), `icon.${process.platform === "win32" ? "ico" : "png"}`)
 }
 
-function tone() {
-  return nativeTheme.shouldUseDarkColors ? "dark" : "light"
-}
-
 function overlay(theme: Partial<TitlebarTheme> = {}, zoom = 1) {
-  const mode = theme.mode ?? tone()
-  return {
-    color: "#00000000",
-    symbolColor: mode === "dark" ? "white" : "black",
-    height: Math.max(titlebarHeight, Math.round(titlebarHeight * zoom)),
-  }
+  return titlebarOverlay(theme.mode ?? tone(), zoom)
 }
 
 function clampZoom(value: number) {

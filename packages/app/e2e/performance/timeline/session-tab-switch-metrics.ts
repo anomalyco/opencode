@@ -20,9 +20,10 @@ export function classifySessionSwitch(samples: SessionSwitchSample[]) {
   const firstCorrect = samples.findIndex(isCorrectDestination)
   const stable = samples.findIndex((_, index) => isStableSessionSwitch(samples.slice(index, index + 3)))
   return {
+    samples,
     firstDestinationObservedMs: samples[firstDestination]?.observedAtMs ?? null,
     firstCorrectObservedMs: samples[firstCorrect]?.observedAtMs ?? null,
-    stableObservedMs: samples[stable + 2]?.observedAtMs ?? null,
+    stableObservedMs: stable < 0 ? null : samples[stable + 2].observedAtMs,
     wrongDestinationSamples: samples
       .slice(firstDestination)
       .filter((sample) => sample.destination.length > 0 && !sample.last).length,

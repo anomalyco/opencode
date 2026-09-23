@@ -1,4 +1,4 @@
-import type { AgentSideConnection } from "@agentclientprotocol/sdk"
+import type { SessionNotification } from "@agentclientprotocol/sdk"
 import {
   OpenCode,
   type AgentInfo,
@@ -6,9 +6,8 @@ import {
   type ModelInfo,
   type ModelRef,
   type SessionInfo,
-  type SkillInfo,
   type TokenUsageInfo,
-} from "@opencode-ai/client/promise"
+} from "@opencode/client/promise"
 import { ACPService } from "../../src/acp/service"
 
 export type FixtureRequest = {
@@ -34,7 +33,6 @@ type FixtureOptions = {
   readonly defaultModel?: ModelInfo
   readonly agents?: readonly AgentInfo[]
   readonly commands?: readonly CommandInfo[]
-  readonly skills?: readonly SkillInfo[]
 }
 
 export const testModel = {
@@ -89,15 +87,6 @@ export const reviewCommand = {
   description: "Review changes",
 } satisfies CommandInfo
 
-export const verifySkill = {
-  id: "verify",
-  name: "verify",
-  description: "Verify work",
-  slash: true,
-  location: "/skills/verify.md",
-  content: "verify",
-} satisfies SkillInfo
-
 export function makeSession(
   id: string,
   input: {
@@ -125,7 +114,7 @@ export function makeSession(
 
 export function makeACPFixture(options: FixtureOptions = {}) {
   const requests: FixtureRequest[] = []
-  const updates: Parameters<AgentSideConnection["sessionUpdate"]>[0][] = []
+  const updates: SessionNotification[] = []
   const encoder = new TextEncoder()
   let eventController: ReadableStreamDefaultController<Uint8Array> | undefined
   const models = options.models ?? [testModel, secondModel]
@@ -177,9 +166,6 @@ export function makeACPFixture(options: FixtureOptions = {}) {
       }
       if (request.path === "/api/command") {
         return Response.json({ location, data: options.commands ?? [reviewCommand] })
-      }
-      if (request.path === "/api/skill") {
-        return Response.json({ location, data: options.skills ?? [verifySkill] })
       }
       return new Response(null, { status: 404 })
     },

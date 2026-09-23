@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { canScrollKey, scrollKey, scrollTopFromThumbPointer } from "./scroll-view"
+import { canScrollKey, scrollKey, scrollOffsetFromThumbPointer, scrollTopFromThumbPointer } from "./scroll-view"
 
 describe("scrollKey", () => {
   test("maps plain navigation keys", () => {
@@ -86,5 +86,26 @@ describe("scrollTopFromThumbPointer", () => {
     // track usable = 400 - 16 - 40 = 344; thumbTop = 400 - 100 - 8 = 292
     // maxScroll = 8000 - 800 = 7200 → 292/344 * 7200
     expect(scrollTopFromThumbPointer(input)).toBeCloseTo((292 / 344) * 7200)
+  })
+})
+
+describe("scrollOffsetFromThumbPointer", () => {
+  const input = {
+    viewportStart: 100,
+    grabOffset: 10,
+    clientSize: 400,
+    scrollClientSize: 400,
+    scrollSize: 1_000,
+    thumbSize: 100,
+  }
+
+  test("maps horizontal pointer movement to scroll offset", () => {
+    expect(scrollOffsetFromThumbPointer({ ...input, pointer: 118 })).toBe(0)
+    expect(scrollOffsetFromThumbPointer({ ...input, pointer: 402 })).toBe(600)
+  })
+
+  test("reverses horizontal pointer movement for RTL", () => {
+    expect(scrollOffsetFromThumbPointer({ ...input, pointer: 118, reverse: true })).toBe(600)
+    expect(scrollOffsetFromThumbPointer({ ...input, pointer: 402, reverse: true })).toBe(0)
   })
 })

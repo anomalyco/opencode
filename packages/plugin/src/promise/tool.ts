@@ -1,14 +1,15 @@
-export { CallID, Error } from "@opencode-ai/schema/tool"
-export type { Metadata, Options, Result } from "@opencode-ai/schema/tool"
+export { CallID, Error } from "@opencode/schema/tool"
+export type { Metadata, Options, Result } from "@opencode/schema/tool"
 
-import { Tool } from "@opencode-ai/schema/tool"
-import type { Agent } from "@opencode-ai/schema/agent"
-import type { Session } from "@opencode-ai/schema/session"
-import type { SessionMessage } from "@opencode-ai/schema/session-message"
-import type { JsonSchema } from "effect"
+import { Tool } from "@opencode/schema/tool"
+import type { Agent } from "@opencode/schema/agent"
+import type { Session } from "@opencode/schema/session"
+import type { SessionMessage } from "@opencode/schema/session-message"
+import type { Types } from "effect"
 import type { Hooks, Transform } from "./registration.js"
 
 export interface ToolContext extends Omit<Tool.Context, "progress"> {
+  readonly signal: AbortSignal
   readonly progress: (update: Tool.Metadata) => Promise<void>
 }
 
@@ -22,16 +23,21 @@ export type Info<
   ) => Promise<Tool.Result<Output>>
 }
 
-interface ToolDraft {
+export interface ToolEditor {
+  list(): readonly (Info & { readonly id: string })[]
+  get(id: string): (Info & { readonly id: string }) | undefined
+  namespace(namespace: Tool.Namespace): void
   add<Input extends Tool.ValueSchema<any>, Output extends Tool.ValueSchema<any> | undefined>(
     tool: Info<Input, Output>,
   ): void
+  /** Updates an existing tool; missing IDs are ignored. */
+  update(id: string, update: (tool: Types.Mutable<Info>) => void): void
+  remove(id: string): void
 }
 
 interface ToolHooks {
   readonly "execute.before": {
-    readonly tool: string
-    readonly inputSchema: JsonSchema.JsonSchema
+    tool: string
     readonly sessionID: Session.ID
     readonly agent: Agent.ID
     readonly messageID: SessionMessage.ID
@@ -58,6 +64,9 @@ interface ToolHooks {
 }
 
 export interface ToolDomain {
-  readonly transform: Transform<ToolDraft>
+  readonly transform: Transform<ToolEditor>
+  readonly reload: () => Promise<void>
+  /** Currently registered tools, after every transform, keyed by effective name. */
+  readonly list: () => Promise<readonly (Info & { readonly id: string })[]>
   readonly hook: Hooks<ToolHooks>
 }

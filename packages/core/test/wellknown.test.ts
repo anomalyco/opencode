@@ -1,10 +1,10 @@
 import { expect } from "bun:test"
 import { Effect, Fiber, Stream } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
-import { KV } from "@opencode-ai/core/kv"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Bus } from "@opencode-ai/core/bus"
-import { WellKnown } from "@opencode-ai/core/wellknown"
+import { KV } from "@opencode/core/kv"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Bus } from "@opencode/core/bus"
+import { WellKnown } from "@opencode/core/wellknown"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(FetchHttpClient.layer)

@@ -1,6 +1,6 @@
 import { pathKey } from "@/workspaces/path-key"
 import type { WorkspaceDefaultDestination, WorkspaceLastUsed } from "@/settings/model"
-import type { SessionInfo, WorktreeDirectory } from "@opencode-ai/client/promise"
+import type { SessionInfo, WorktreeDirectory } from "@opencode/client/promise"
 
 type WorkspaceProject = {
   worktree: string
@@ -104,6 +104,10 @@ export function isWorkspaceSelection(project: WorkspaceProject | undefined, sele
   if (!project) return false
   if (sameDirectory(project.worktree, selection)) return true
   return isWorkspaceDirectory(project, selection)
+}
+
+export function workspaceSelectionDestination(selection: string, projectWorktree: string) {
+  return selection === "main" || sameDirectory(selection, projectWorktree) ? "main" : "create"
 }
 
 export function workspaceDefaultSelection(

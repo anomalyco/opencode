@@ -1,6 +1,6 @@
 import type { APIEvent } from "@solidjs/start/server"
-import { AWS } from "@opencode-ai/console-core/aws.js"
-import { Resource } from "@opencode-ai/console-resource"
+import { AWS } from "@opencode/console-core/aws.js"
+import { Resource } from "@opencode/console-resource"
 import { i18n } from "~/i18n"
 import { localeFromRequest } from "~/lib/language"
 import { createLead } from "~/lib/salesforce"
@@ -98,7 +98,7 @@ ${body.phone ? `${body.phone}<br>` : ""}`.trim()
         return false
       }),
       AWS.sendEmail({
-        to: "contact@anoma.ly",
+        to: Resource.ENTERPRISE_SALES_INBOX_EMAIL.value,
         subject: `Enterprise Inquiry from ${body.name}`,
         body: emailContent,
         replyTo: body.email,

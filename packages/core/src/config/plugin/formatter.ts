@@ -1,10 +1,10 @@
 export * as ConfigFormatterPlugin from "./formatter.js"
 
-import { define } from "@opencode-ai/plugin/effect/plugin"
-import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Global } from "@opencode-ai/util/global"
-import { Npm } from "@opencode-ai/util/npm"
-import { AppProcess } from "@opencode-ai/util/process"
+import { define } from "@opencode/plugin/effect/plugin"
+import { FSUtil } from "@opencode/util/fs-util"
+import { Global } from "@opencode/util/global"
+import { Npm } from "@opencode/util/npm"
+import { AppProcess } from "@opencode/util/process"
 import { Effect } from "effect"
 import { Config } from "../../config.js"
 import { Formatter } from "../../formatter.js"
@@ -24,7 +24,7 @@ export const Plugin = define({
     const processes = yield* AppProcess.Service
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, formatter.reload())
 
-    yield* formatter.transform((draft) => {
+    yield* formatter.transform((editor) => {
       const configured = Config.latest(loaded.entries, "formatter")
       if (!configured) return
       const builtIns = make({
@@ -35,12 +35,12 @@ export const Plugin = define({
         processes,
         bin: global.bin,
       })
-      builtIns.forEach(draft.set)
+      builtIns.forEach(editor.set)
       if (configured === true) return
 
       for (const [name, entry] of Object.entries(configured)) {
         if (entry.disabled) {
-          draft.remove(name)
+          editor.remove(name)
           continue
         }
         const builtIn = builtIns.find((formatter) => formatter.name === name)
@@ -51,7 +51,7 @@ export const Plugin = define({
           enabled:
             builtIn && !entry.command ? builtIn.enabled : Effect.succeed(entry.command ? [...entry.command] : false),
         }
-        draft.set(current)
+        editor.set(current)
       }
     })
   }),

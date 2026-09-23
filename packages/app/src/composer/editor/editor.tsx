@@ -1,18 +1,23 @@
-import { createEffect, createMemo, createSignal, For, Show, type JSX } from "solid-js"
-import { FileIcon } from "@opencode-ai/ui/file-icon"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
+import { createEffect, createMemo, createResource, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
+import { createStore } from "solid-js/store"
+import { FileIcon } from "@opencode/ui/file-icon"
+import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { useI18n } from "@opencode-ai/ui/context/i18n"
-import { Button } from "@opencode-ai/ui/button"
-import { Keybind } from "@opencode-ai/ui/keybind"
-import { Menu } from "@opencode-ai/ui/menu"
-import { Tooltip } from "@opencode-ai/ui/tooltip"
-import { AttachmentCard } from "@opencode-ai/session-ui/attachment-card"
-import { CommentCard } from "@opencode-ai/session-ui/comment-card"
-import { typeLabel } from "@opencode-ai/session-ui/message-file"
-import { Skill } from "@opencode-ai/schema/skill"
+import { resolveBlobUrl } from "@/runtime/persistence/drafts"
+import { ProviderIcon } from "@opencode/ui/provider-icon"
+import { useI18n } from "@opencode/ui/context/i18n"
+import { Button } from "@opencode/ui/button"
+import { Keybind } from "@opencode/ui/keybind"
+import { Menu } from "@opencode/ui/menu"
+import { Tooltip } from "@opencode/ui/tooltip"
+import { ScrollView } from "@opencode/ui/scroll-view"
+import { AttachmentCard } from "@opencode/session-ui/attachment-card"
+import { ProgressCircle } from "@opencode/ui/progress-circle"
+import type { Upload } from "../attachments/uploads"
+import { CommentCard } from "@opencode/session-ui/comment-card"
+import { typeLabel } from "@opencode/session-ui/message-file"
+import { Skill } from "@opencode/schema/skill"
 import type {
   ComposerAttachment,
   ComposerComment,
@@ -22,6 +27,7 @@ import type {
   ComposerSuggestion,
 } from "../types"
 import type { ComposerEditorModel, ComposerSelectControl } from "./interaction"
+import { isAttachment } from "../prompt-parts"
 import "../attachments/attachments.css"
 import "./editor.css"
 
@@ -37,7 +43,6 @@ export type ComposerMode = "normal" | "shell"
 
 export type ComposerEditorProps = {
   controller: ComposerEditorModel
-  accentSubmit?: boolean
   disabled?: boolean
   readOnly?: boolean
   borderUnderlay?: boolean
@@ -47,6 +52,7 @@ export type ComposerEditorProps = {
   attachKeybind?: string[]
   attachShortcut?: string
   alternateKeybind?: string[]
+  exitShellKeybind?: string[]
 }
 
 export function ComposerEditor(props: ComposerEditorProps) {
@@ -54,6 +60,24 @@ export function ComposerEditor(props: ComposerEditorProps) {
   const state = props.controller.state
   const view = props.controller.view
   let editor: HTMLDivElement | undefined
+  let viewport: HTMLDivElement | undefined
+  let controlsViewport!: HTMLDivElement
+  let controlsContent!: HTMLDivElement
+  const [overflow, setOverflow] = createStore({ start: false, end: false })
+  const updateOverflow = () => {
+    const offset = Math.abs(controlsViewport.scrollLeft)
+    setOverflow({
+      start: offset > 1,
+      end: controlsViewport.scrollWidth - controlsViewport.clientWidth - offset > 1,
+    })
+  }
+  onMount(() => {
+    const observer = new ResizeObserver(updateOverflow)
+    observer.observe(controlsViewport)
+    observer.observe(controlsContent)
+    updateOverflow()
+    onCleanup(() => observer.disconnect())
+  })
   let localInput = false
   const updateCursor = () => {
     if (!editor || !window.getSelection()?.isCollapsed) return
@@ -82,7 +106,6 @@ export function ComposerEditor(props: ComposerEditorProps) {
         ref={props.controller.setFileInput}
         type="file"
         multiple
-        accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/*,application/json,application/ld+json,application/toml,application/x-toml,application/x-yaml,application/xml,application/yaml,.c,.cc,.cjs,.conf,.cpp,.css,.csv,.cts,.env,.go,.gql,.graphql,.h,.hh,.hpp,.htm,.html,.ini,.java,.js,.json,.jsx,.log,.md,.mdx,.mjs,.mts,.py,.rb,.rs,.sass,.scss,.sh,.sql,.toml,.ts,.tsx,.txt,.xml,.yaml,.yml,.zsh"
         class="hidden"
         onChange={(event) => {
           const list = event.currentTarget.files
@@ -90,7 +113,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
           event.currentTarget.value = ""
         }}
       />
-      <Show when={state.popover.type !== "closed"}>
+      <Show when={!view.draftOnly && state.popover.type !== "closed"}>
         <ComposerEditorPopover
           emptyLabel={i18n.t("ui.promptInput.noMatchingItems")}
           items={props.controller.suggestions()}
@@ -116,7 +139,6 @@ export function ComposerEditor(props: ComposerEditorProps) {
         class="group/composer relative min-h-[96px] w-full overflow-clip rounded-xl bg-v2-background-bg-base"
         classList={{
           "shadow-[var(--v2-elevation-raised)]": !props.borderUnderlay,
-          "border border-v2-icon-icon-info border-dashed": state.drag === "active",
         }}
         onSubmit={(event) => {
           event.preventDefault()
@@ -127,31 +149,33 @@ export function ComposerEditor(props: ComposerEditorProps) {
         onDragLeave={props.controller.onDragLeave}
         onDrop={props.controller.onDrop}
       >
-        <Show when={state.drag === "active"}>
-          <div class="pointer-events-none absolute inset-0 z-20 grid place-items-center rounded-xl bg-v2-background-bg-base/90 text-v2-text-text-base">
-            {i18n.t("ui.promptInput.dropFiles")}
-          </div>
-        </Show>
-
         <Show when={state.mode === "normal"}>
           <ComposerAttachments
             attachments={props.controller.attachments()}
+            uploads={props.controller.uploads()}
             comments={props.controller.comments()}
             activeCommentID={state.activeContextID}
             removeLabel={i18n.t("ui.promptInput.removeAttachment")}
             onAttachmentClick={props.controller.openAttachment}
             onAttachmentRemove={(attachment) => props.controller.removeAttachment(attachment.id)}
+            onUploadCancel={(upload) => props.controller.cancelUpload(upload.id)}
             onCommentClick={(comment) => props.controller.toggleContext(comment.key)}
             onCommentRemove={(comment) => props.controller.removeContext(comment.key)}
           />
         </Show>
 
-        <div class="relative min-h-[60px]">
+        <ScrollView
+          data-component="composer-scroll"
+          class="min-h-[60px] max-h-[180px]"
+          viewportRef={(element) => {
+            viewport = element
+            element.tabIndex = -1
+          }}
+        >
           <div
             ref={(element) => {
               editor = element
               props.controller.setEditor(element)
-              renderComposerEditor(element, props.controller.parts())
             }}
             data-component="composer-editor"
             role="textbox"
@@ -164,7 +188,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
             spellcheck={state.mode === "normal"}
             // @ts-expect-error
             autocomplete="off"
-            class="relative z-10 block min-h-[60px] max-h-[180px] w-full overflow-y-auto whitespace-pre-wrap bg-transparent px-4 pt-4 pb-2 text-[13px] font-[440] leading-5 text-v2-text-text-base focus:outline-none [&_[data-mention=file]]:text-syntax-property [&_[data-mention=agent]]:text-syntax-type [&_[data-mention=reference]]:text-syntax-keyword"
+            class="relative z-10 block min-h-[60px] w-full whitespace-pre-wrap bg-transparent px-4 pt-4 pb-2 text-[13px] font-[440] leading-5 text-v2-text-text-base focus:outline-none [&_[data-mention=file]]:text-syntax-property [&_[data-mention=agent]]:text-syntax-type [&_[data-mention=reference]]:text-syntax-keyword"
             classList={{ "font-mono!": state.mode === "shell", "opacity-50": props.disabled }}
             style={{
               "unicode-bidi": state.mode === "normal" ? "plaintext" : undefined,
@@ -173,12 +197,12 @@ export function ComposerEditor(props: ComposerEditorProps) {
             onInput={(event) => {
               const cursor = composerCursor(event.currentTarget)
               const prompt = parseComposerEditor(event.currentTarget)
-              const images = props.controller.parts().filter((part) => part.type === "image")
+              const attachments = props.controller.parts().filter(isAttachment)
               localInput = true
-              props.controller.onInput(prompt.map((part) => part.content).join(""), [...prompt, ...images], cursor)
+              props.controller.onInput(prompt.map((part) => part.content).join(""), [...prompt, ...attachments], cursor)
             }}
             onKeyDown={(event) => {
-              if (props.controller.onKeyDown(event)) return
+              if (!view.draftOnly && props.controller.onKeyDown(event)) return
               const mod = event.metaKey || event.ctrlKey
               if (mod && event.key === "ArrowUp" && !event.shiftKey && !event.altKey) {
                 if (view.submit.queue?.editFirst()) event.preventDefault()
@@ -192,7 +216,20 @@ export function ComposerEditor(props: ComposerEditorProps) {
             }}
             onKeyUp={updateCursor}
             onPointerUp={updateCursor}
-            onPaste={props.controller.onPaste}
+            onPaste={(event) => {
+              props.controller.onPaste(event)
+              // Programmatic multiline insertion does not reliably reveal the caret.
+              requestAnimationFrame(() => {
+                const selection = window.getSelection()
+                if (!editor || !viewport || !selection?.isCollapsed || !selection.rangeCount) return
+                if (!editor.contains(selection.anchorNode)) return
+                const caret = selection.getRangeAt(0).getBoundingClientRect()
+                if (!caret.height) return
+                const bounds = viewport.getBoundingClientRect()
+                if (caret.bottom > bounds.bottom - 8) viewport.scrollTop += caret.bottom - bounds.bottom + 8
+                if (caret.top < bounds.top + 8) viewport.scrollTop += caret.top - bounds.top - 8
+              })
+            }}
             onFocus={() => props.controller.dispatch({ type: "focus.editor" })}
           />
           <Show when={!props.controller.value()}>
@@ -208,17 +245,17 @@ export function ComposerEditor(props: ComposerEditorProps) {
                   : i18n.t("ui.promptInput.placeholder.normal", { slash: "/", at: "@" }))}
             </div>
           </Show>
-        </div>
+        </ScrollView>
 
         <div class="flex h-11 items-center px-2">
           <div
-            class="flex min-w-0 flex-1 items-center gap-1"
+            class="flex shrink-0 items-center"
             aria-hidden={state.mode === "shell"}
             inert={state.mode === "shell" ? true : undefined}
             style={buttons()}
           >
             <ComposerEditorAddMenu
-              disabled={state.mode === "shell"}
+              disabled={view.draftOnly || state.mode === "shell"}
               title={i18n.t("ui.promptInput.add")}
               keybind={props.attachKeybind ?? ["Mod", "U"]}
               attachLabel={i18n.t("ui.promptInput.attachments")}
@@ -231,46 +268,80 @@ export function ComposerEditor(props: ComposerEditorProps) {
               onContext={props.controller.openContext}
               onShell={props.controller.openShell}
             />
-            <Show when={view.agent} keyed>
-              {(control) => (
-                <ComposerEditorConfiguredSelect
-                  title={i18n.t("ui.promptInput.chooseAgent")}
-                  keybind={["Mod", "."]}
-                  control={control}
-                />
-              )}
-            </Show>
-            <Show when={props.modelControlsVisible ?? true}>
-              {props.modelControl}
-              <Show when={view.variant} keyed>
+          </div>
+          <div
+            ref={controlsViewport}
+            data-slot="composer-controls"
+            data-overflow-start={overflow.start}
+            data-overflow-end={overflow.end}
+            class="ms-1 me-3 h-full min-w-0 flex-1 overflow-x-auto overscroll-x-contain no-scrollbar"
+            onScroll={updateOverflow}
+            aria-hidden={state.mode === "shell"}
+            inert={state.mode === "shell" ? true : undefined}
+            style={buttons()}
+          >
+            <div ref={controlsContent} class="flex h-full w-max min-w-full items-center gap-1">
+              <Show when={view.agent} keyed>
                 {(control) => (
-                  <Show when={control.options().length > 1}>
-                    <ComposerEditorConfiguredSelect
-                      title={i18n.t("ui.promptInput.chooseVariant")}
-                      keybind={["Shift", "Mod", "D"]}
-                      control={control}
-                    />
-                  </Show>
+                  <ComposerEditorConfiguredSelect
+                    title={i18n.t("ui.promptInput.chooseAgent")}
+                    keybind={["Mod", "."]}
+                    control={control}
+                  />
                 )}
               </Show>
-            </Show>
+              <Show when={props.modelControlsVisible ?? true}>
+                {props.modelControl}
+                <Show when={view.variant} keyed>
+                  {(control) => (
+                    <Show when={control.options().length > 1}>
+                      <ComposerEditorConfiguredSelect
+                        title={i18n.t("ui.promptInput.chooseVariant")}
+                        keybind={["Shift", "Mod", "D"]}
+                        control={control}
+                        class={control.current() === "default" ? "composer-variant-default" : undefined}
+                      />
+                    </Show>
+                  )}
+                </Show>
+              </Show>
+            </div>
           </div>
-          <Show when={state.mode === "normal"}>
-            <ComposerEditorAlternateDelivery
-              controller={props.controller}
-              keybind={props.alternateKeybind ?? ["Mod", "Enter"]}
+          <div data-slot="composer-actions" class="flex shrink-0 items-center">
+            <Show when={state.mode === "normal"}>
+              <ComposerEditorAlternateDelivery
+                controller={props.controller}
+                keybind={props.alternateKeybind ?? ["Mod", "Enter"]}
+              />
+            </Show>
+            <Show when={state.mode === "shell"}>
+              <Button
+                data-action="composer-exit-shell"
+                type="button"
+                variant="ghost-faint"
+                size="small"
+                class="me-3 gap-1.5 px-1.5"
+                onClick={() => {
+                  props.controller.dispatch({ type: "mode.normal" })
+                  props.controller.restoreFocus()
+                }}
+              >
+                {i18n.t("ui.promptInput.exitShell")}
+                <span class="hidden sm:block">
+                  <Keybind keys={props.exitShellKeybind ?? ["ESC"]} variant="neutral" />
+                </span>
+              </Button>
+            </Show>
+            <ComposerEditorSubmitButton
+              mode={state.mode}
+              stopping={view.submit.stopping()}
+              disabled={!props.controller.canSubmit()}
+              sendLabel={i18n.t("ui.promptInput.send")}
+              stopLabel={i18n.t("ui.promptInput.stop")}
+              onSubmit={() => props.controller.submit()}
+              onStop={props.controller.stop}
             />
-          </Show>
-          <ComposerEditorSubmitButton
-            mode={state.mode}
-            stopping={view.submit.stopping()}
-            disabled={!props.controller.canSubmit()}
-            accent={props.accentSubmit}
-            sendLabel={i18n.t("ui.promptInput.send")}
-            stopLabel={i18n.t("ui.promptInput.stop")}
-            onSubmit={() => props.controller.submit()}
-            onStop={props.controller.stop}
-          />
+          </div>
         </div>
       </form>
     </div>
@@ -283,7 +354,7 @@ function renderComposerEditor(editor: HTMLDivElement, prompt: ComposerPrompt) {
   const active = document.activeElement === editor
   editor.replaceChildren(
     ...prompt.flatMap<Node>((part) => {
-      if (part.type === "image") return []
+      if (isAttachment(part)) return []
       if (part.type === "text") return [document.createTextNode(part.content)]
       const mention = document.createElement("span")
       mentionParts.set(mention, part)
@@ -410,17 +481,22 @@ function composerCursor(editor: HTMLDivElement) {
 
 export function ComposerAttachments(props: {
   attachments: ComposerAttachment[]
+  uploads?: Upload[]
   comments?: ComposerComment[]
   activeCommentID?: string
   removeLabel: string
   onAttachmentClick?: (attachment: ComposerAttachment) => void
   onAttachmentRemove: (attachment: ComposerAttachment) => void
+  onUploadCancel?: (upload: Upload) => void
   onCommentClick?: (comment: ComposerComment) => void
   onCommentRemove?: (comment: ComposerComment) => void
 }) {
   const i18n = useI18n()
+  const percent = (upload: Upload) => (upload.size === 0 ? 100 : Math.floor((upload.loaded / upload.size) * 100))
   return (
-    <Show when={props.attachments.length > 0 || (props.comments?.length ?? 0) > 0}>
+    <Show
+      when={props.attachments.length > 0 || (props.uploads?.length ?? 0) > 0 || (props.comments?.length ?? 0) > 0}
+    >
       <div data-component="composer-attachments" data-slot="composer-attachments" class="relative">
         <div
           data-slot="composer-attachments-scroll"
@@ -457,22 +533,34 @@ export function ComposerAttachments(props: {
           <For each={props.attachments}>
             {(attachment) => (
               <div class="relative group shrink-0">
-                <Tooltip value={attachment.filename} placement="top" contentClass="break-all">
+                <Tooltip
+                  value={attachment.type === "path" ? attachment.path : attachment.filename}
+                  placement="top"
+                  contentClass="break-all"
+                >
                   <Show
-                    when={attachment.mime.startsWith("image/")}
+                    when={attachment.type === "image" && attachment.mime.startsWith("image/") ? attachment : undefined}
                     fallback={
                       <AttachmentCard title={attachment.filename}>
                         {typeLabel(attachment.filename, attachment.mime, i18n.t("ui.common.file"))}
                       </AttachmentCard>
                     }
                   >
-                    <img
-                      src={attachment.blob.url}
-                      alt={attachment.filename}
-                      class="w-[58px] h-[46px] rounded-[6px] object-cover"
-                      onClick={() => props.onAttachmentClick?.(attachment)}
-                    />
-                    <div class="absolute inset-0 rounded-[6px] shadow-[inset_0_0_0_0.5px_var(--v2-border-border-base)] pointer-events-none" />
+                    {(image) => {
+                      // Restored drafts and history carry image ids only; bytes load when shown.
+                      const [url] = createResource(() => image().blob, resolveBlobUrl)
+                      return (
+                        <>
+                          <img
+                            src={url() ?? ""}
+                            alt={attachment.filename}
+                            class="w-[58px] h-[46px] rounded-[6px] object-cover"
+                            onClick={() => props.onAttachmentClick?.(attachment)}
+                          />
+                          <div class="absolute inset-0 rounded-[6px] shadow-[inset_0_0_0_0.5px_var(--v2-border-border-base)] pointer-events-none" />
+                        </>
+                      )
+                    }}
                   </Show>
                 </Tooltip>
                 <button
@@ -480,6 +568,28 @@ export function ComposerAttachments(props: {
                   onClick={() => props.onAttachmentRemove(attachment)}
                   class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
                   aria-label={props.removeLabel}
+                >
+                  <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
+                </button>
+              </div>
+            )}
+          </For>
+          <For each={props.uploads ?? []}>
+            {(upload) => (
+              <div class="relative group shrink-0" data-slot="composer-upload">
+                <Tooltip value={upload.filename} placement="top" contentClass="break-all">
+                  <AttachmentCard title={upload.filename}>
+                    <span class="inline-flex items-center gap-1">
+                      <ProgressCircle percentage={percent(upload)} />
+                      {i18n.t("ui.promptInput.uploading", { percent: percent(upload) })}
+                    </span>
+                  </AttachmentCard>
+                </Tooltip>
+                <button
+                  type="button"
+                  onClick={() => props.onUploadCancel?.(upload)}
+                  class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  aria-label={i18n.t("ui.promptInput.cancelUpload")}
                 >
                   <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
                 </button>
@@ -536,7 +646,10 @@ export function ComposerEditorAddMenu(props: {
           aria-label={props.title}
         />
         <Menu.Portal>
-          <Menu.Content style={{ "min-width": "180px" }}>
+          <Menu.Content
+            class="[&_[data-slot=menu-v2-item-shortcut]]:w-5 [&_[data-slot=menu-v2-item-shortcut]]:justify-center"
+            style={{ "min-width": "180px" }}
+          >
             <Menu.Item onSelect={props.onAttach} shortcut={props.attachShortcut}>
               {props.attachLabel}
             </Menu.Item>
@@ -562,12 +675,14 @@ function ComposerEditorConfiguredSelect(props: {
   keybind?: string[]
   control: ComposerSelectControl
   model?: boolean
+  class?: string
 }) {
   const current = () => props.control.current()
   const providerID = () => props.control.options().find((option) => option.id === current())?.providerID
   return (
     <ComposerEditorSelect
       title={props.title}
+      class={props.class}
       keybind={props.control.keybind?.() ?? props.keybind}
       options={props.control.options()}
       current={current()}
@@ -651,6 +766,7 @@ export function ComposerEditorPopover(props: {
 }) {
   return (
     <div
+      data-component="composer-suggestions"
       class="absolute inset-x-0 -top-2 z-40 flex max-h-80 -translate-y-full flex-col overflow-auto rounded-xl bg-v2-background-bg-base p-2 shadow-[var(--v2-elevation-raised)] no-scrollbar"
       onMouseDown={(event) => event.preventDefault()}
     >
@@ -679,6 +795,7 @@ export function ComposerEditorPopover(props: {
             <button
               type="button"
               data-suggestion-id={item.id}
+              data-active={props.activeID === item.id ? "" : undefined}
               class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-start hover:bg-v2-overlay-simple-overlay-hover"
               classList={{ "bg-v2-overlay-simple-overlay-hover": props.activeID === item.id }}
               onPointerMove={() => props.onActiveChange(item)}
@@ -727,9 +844,9 @@ function ComposerEditorAlternateDelivery(props: { controller: ComposerEditorMode
             ref={setButton}
             data-action="composer-alternate-delivery"
             type="button"
-            variant="ghost-muted"
+            variant="ghost-faint"
             size="small"
-            class="me-3 gap-1.5 px-1.5 text-v2-text-text-muted ![font-weight:530] duration-150 motion-reduce:animate-none"
+            class="me-3 gap-1.5 px-1.5 ![font-weight:530] duration-150 motion-reduce:animate-none"
             classList={{
               "animate-in fade-in": presence.animate() && presence.show(),
               "animate-out fade-out fill-mode-forwards": presence.animate() && !presence.show(),
@@ -751,7 +868,6 @@ export function ComposerEditorSubmitButton(props: {
   mode: ComposerMode
   stopping: boolean
   disabled: boolean
-  accent?: boolean
   sendLabel: string
   stopLabel: string
   onSubmit: () => void
@@ -769,18 +885,8 @@ export function ComposerEditorSubmitButton(props: {
         disabled={!props.stopping && props.disabled}
         tabIndex={props.mode === "normal" ? undefined : -1}
         icon={<Icon name={props.stopping ? "stop" : props.mode === "shell" ? "arrow-undo-down" : "arrow-up"} />}
-        variant="contrast"
-        class="size-7 rounded-md p-[6px] shadow-[var(--v2-elevation-button-contrast)] disabled:opacity-50"
-        classList={{
-          "text-v2-text-text-contrast": !!props.accent && !props.stopping && !props.disabled,
-          "text-v2-icon-icon-muted": !props.accent || props.stopping || props.disabled,
-        }}
-        style={{
-          "background-image":
-            props.accent && !props.stopping && !props.disabled
-              ? "linear-gradient(180deg,var(--v2-alpha-light-20) 0%,var(--v2-alpha-light-0) 100%),linear-gradient(90deg,var(--v2-background-bg-accent) 0%,var(--v2-background-bg-accent) 100%)"
-              : "linear-gradient(180deg,var(--v2-alpha-light-20) 0%,var(--v2-alpha-light-0) 100%),linear-gradient(90deg,var(--v2-background-bg-contrast) 0%,var(--v2-background-bg-contrast) 100%)",
-        }}
+        variant="submit"
+        class="size-7 rounded-md p-[6px]"
         aria-label={props.stopping ? props.stopLabel : props.sendLabel}
         onClick={(event) => {
           event.preventDefault()

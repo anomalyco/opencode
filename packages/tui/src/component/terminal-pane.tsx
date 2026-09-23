@@ -1,0 +1,403 @@
+import { EmbeddedTerminalRenderable, type RGBA } from "@opentui/core"
+import { rgbToOklch, type ResolvedThemeTokens } from "@opencode/theme/tui"
+import { extend, useRenderer } from "@opentui/solid"
+import { createEffect, createSignal, onCleanup, onMount, Show } from "solid-js"
+import { useClient } from "../context/client"
+import { Keymap } from "../context/keymap"
+import { useTheme, useThemes } from "../context/theme"
+import { errorMessage } from "../util/error"
+
+declare module "@opentui/solid" {
+  interface OpenTUIComponents {
+    embeddedTerminal: typeof EmbeddedTerminalRenderable
+  }
+}
+
+extend({ embeddedTerminal: EmbeddedTerminalRenderable })
+
+type TerminalSize = { cols: number; rows: number }
+type StreamItem =
+  | { type: "output"; data: Uint8Array }
+  | { type: "resize"; size: TerminalSize; checkpoint?: Uint8Array }
+  | { type: "ready" }
+
+export function TerminalPane(props: {
+  ptyID: string
+  resizing?: boolean
+  autoFocus?: boolean
+  onAutoFocus?: () => void
+  onFocusRequest?: (focus: (() => void) | undefined) => void
+  onDisconnect?: () => void
+}) {
+  const client = useClient()
+  const keymap = Keymap.use()
+  const leader = Keymap.useLeaderActive()
+  const theme = useTheme()
+  const themes = useThemes()
+  const renderer = useRenderer()
+  const [failure, setFailure] = createSignal<string>()
+  const attachmentID = crypto.randomUUID()
+  const stream: StreamItem[] = []
+  const pendingInput: Uint8Array[] = []
+  let terminal: EmbeddedTerminalRenderable | undefined
+  let socket: WebSocket | undefined
+  let attached = false
+  let controller = false
+  let restored = false
+  let wantsControl = false
+  let disposed = false
+  let exited = false
+  let size: TerminalSize | undefined
+  let canonicalSize: TerminalSize | undefined
+  let terminalSize: TerminalSize | undefined
+  let lastIntermediateRender = 0
+  let terminalTheme: Uint8Array | undefined
+  let waitingSize: { size: TerminalSize; resolve: () => void } | undefined
+
+  const setCanonicalSize = (value: TerminalSize) => {
+    canonicalSize = value
+    if (!terminal) return
+    terminal.width = value.cols
+    terminal.height = value.rows
+  }
+
+  const applyTerminalTheme = () => {
+    if (terminalTheme) terminal?.write(terminalTheme)
+  }
+
+  const send = (data: Uint8Array) => {
+    if (attached && socket?.readyState === WebSocket.OPEN) socket.send(data)
+  }
+
+  const interact = () => {
+    if (!restored) {
+      wantsControl = true
+      return
+    }
+    if (!size) return
+    send(interactionFrame(size))
+  }
+
+  createEffect(() => {
+    if (props.resizing) interact()
+  })
+
+  const sendInput = (data: Uint8Array) => {
+    if (!restored) {
+      pendingInput.push(data)
+      return
+    }
+    if (size) send(interactionFrame(size, data))
+  }
+
+  const processStream = () => {
+    if (disposed || !terminal || !sameSize(canonicalSize, terminalSize)) return
+    while (stream.length > 0) {
+      const item = stream[0]!
+      if (item.type === "output") {
+        stream.shift()
+        const output = [item.data]
+        while (true) {
+          const next = stream[0]
+          if (!next || next.type !== "output") break
+          output.push(next.data)
+          stream.shift()
+        }
+        terminal.write(output.length === 1 ? output[0] : Buffer.concat(output))
+        continue
+      }
+      if (item.type === "resize") {
+        setCanonicalSize(item.size)
+        if (!sameSize(canonicalSize, terminalSize)) return
+        stream.shift()
+        if (item.checkpoint) {
+          terminal.write(Buffer.concat([Buffer.from("\x1bc"), Buffer.from(item.checkpoint)]))
+          applyTerminalTheme()
+        }
+        continue
+      }
+      stream.shift()
+      restored = true
+      const input = pendingInput.splice(0)
+      if (input.length > 0) input.forEach(sendInput)
+      if (input.length === 0 && (controller || wantsControl)) interact()
+      wantsControl = false
+    }
+  }
+
+  const enqueue = (item: StreamItem) => {
+    stream.push(item)
+    processStream()
+  }
+
+  const waitForTerminalSize = (value: TerminalSize) => {
+    if (sameSize(value, terminalSize)) return Promise.resolve()
+    return new Promise<void>((resolve) => {
+      waitingSize = { size: value, resolve }
+    })
+  }
+
+  const offKeys = keymap.intercept(
+    "key",
+    ({ event }) => {
+      if (!terminal?.focused) return
+      if (keymap.isLeader(event) || leader()) return
+      event.preventDefault()
+      event.stopPropagation()
+      terminal.handleKeyPress(event)
+    },
+    { priority: 100 },
+  )
+  createEffect(() => {
+    if (!props.autoFocus || !terminal) return
+    terminal.focus()
+    props.onAutoFocus?.()
+  })
+
+  createEffect(() => {
+    const tokens = themes.currentTokens()
+    terminalTheme = terminalPalette(tokens, themes.mode(), tokens.background.raised.base)
+    applyTerminalTheme()
+  })
+
+  onMount(() => {
+    void connect().catch((error) => setFailure(errorMessage(error)))
+  })
+
+  onCleanup(() => {
+    disposed = true
+    waitingSize?.resolve()
+    socket?.close()
+    offKeys()
+    props.onFocusRequest?.(undefined)
+  })
+
+  async function connect() {
+    const snapshot = await client.api.experimental.persistentPty.snapshot({ ptyID: props.ptyID })
+    if (disposed) return
+    setCanonicalSize(snapshot.info.size)
+    await waitForTerminalSize(snapshot.info.size)
+    if (disposed) return
+    terminal?.write(Buffer.from(snapshot.checkpoint, "base64"))
+    applyTerminalTheme()
+    const next = await client.persistentPty.connect({
+      ptyID: props.ptyID,
+      cursor: snapshot.info.output.tail,
+      attachmentID,
+      takeover: true,
+    })
+    if (disposed) {
+      next.close()
+      return
+    }
+    next.addEventListener("message", (event) => {
+      if (disposed) return
+      if (event.data instanceof ArrayBuffer) {
+        enqueue({ type: "output", data: new Uint8Array(event.data) })
+        const now = performance.now()
+        if (now - lastIntermediateRender >= 16) {
+          lastIntermediateRender = now
+          renderer.intermediateRender()
+        }
+        return
+      }
+      if (typeof event.data !== "string") return
+      const message: unknown = JSON.parse(event.data)
+      if (!message || typeof message !== "object" || !("type" in message)) return
+      if (message.type === "exited") {
+        exited = true
+        return
+      }
+      if (
+        message.type === "resized" &&
+        "cols" in message &&
+        typeof message.cols === "number" &&
+        "rows" in message &&
+        typeof message.rows === "number" &&
+        "checkpoint" in message &&
+        typeof message.checkpoint === "string"
+      ) {
+        enqueue({
+          type: "resize",
+          size: { cols: message.cols, rows: message.rows },
+          checkpoint: Buffer.from(message.checkpoint, "base64"),
+        })
+        return
+      }
+      if (message.type === "replay_complete") {
+        enqueue({ type: "ready" })
+        return
+      }
+      if (
+        message.type === "controller_changed" &&
+        "attachmentID" in message &&
+        (typeof message.attachmentID === "string" || message.attachmentID === undefined)
+      ) {
+        const previous = controller
+        controller = message.attachmentID === attachmentID
+        if (controller && !previous && restored) interact()
+        return
+      }
+      if (message.type !== "attached") return
+      if (!("inputProtocol" in message) || message.inputProtocol !== 1) {
+        setFailure("Persistent terminal server is out of date; restart OpenCode")
+        next.close()
+        return
+      }
+      if (
+        "info" in message &&
+        message.info &&
+        typeof message.info === "object" &&
+        "size" in message.info &&
+        message.info.size &&
+        typeof message.info.size === "object" &&
+        "cols" in message.info.size &&
+        typeof message.info.size.cols === "number" &&
+        "rows" in message.info.size &&
+        typeof message.info.size.rows === "number"
+      )
+        enqueue({ type: "resize", size: { cols: message.info.size.cols, rows: message.info.size.rows } })
+      controller = "role" in message && message.role === "controller"
+      attached = true
+    })
+    next.addEventListener("error", () => {
+      if (disposed) return
+      const focused = terminal?.focused
+      terminal = undefined
+      setFailure("Terminal connection failed")
+      if (focused) props.onDisconnect?.()
+    })
+    next.addEventListener("close", () => {
+      if (disposed) return
+      const focused = terminal?.focused
+      terminal = undefined
+      // The removal event arrives separately; keep the terminal visible until then.
+      if (!exited) setFailure("Terminal disconnected")
+      if (focused) props.onDisconnect?.()
+    })
+    socket = next
+  }
+
+  return (
+    <box
+      flexGrow={1}
+      minWidth={0}
+      minHeight={0}
+      overflow="hidden"
+      backgroundColor={themes.currentTokens().background.raised.base}
+      onSizeChange={function () {
+        size = { cols: Math.max(1, this.width - 2), rows: this.height }
+        if (controller && restored) interact()
+      }}
+      // TODO: Revisit when embedded terminal mouse handlers can compose without replacing its internal focus handler.
+      onMouseDown={() => interact()}
+    >
+      <Show when={!failure()} fallback={<text fg={theme.text.feedback.error.base}>{failure()}</text>}>
+        <>
+          <embeddedTerminal
+            ref={(value) => {
+              terminal = value
+              props.onFocusRequest?.(() => {
+                value.focus()
+                interact()
+              })
+              terminalSize = { cols: 80, rows: 24 }
+              if (canonicalSize) {
+                value.width = canonicalSize.cols
+                value.height = canonicalSize.rows
+              }
+              applyTerminalTheme()
+            }}
+            position="absolute"
+            left={1}
+            top={0}
+            width={80}
+            height={24}
+            onData={(data, source) => {
+              if (source === "input") sendInput(data)
+            }}
+            onTerminalResize={(cols, rows) => {
+              terminalSize = { cols, rows }
+              if (waitingSize && sameSize(waitingSize.size, terminalSize)) {
+                waitingSize.resolve()
+                waitingSize = undefined
+              }
+              processStream()
+            }}
+          />
+        </>
+      </Show>
+    </box>
+  )
+}
+
+function sameSize(first: TerminalSize | undefined, second: TerminalSize | undefined) {
+  return !!first && !!second && first.cols === second.cols && first.rows === second.rows
+}
+
+export function terminalPalette(theme: ResolvedThemeTokens, mode: "light" | "dark", background: RGBA) {
+  const black = theme.hue.neutral[mode === "dark" ? 800 : 200]
+  const white = theme.hue.neutral[mode === "dark" ? 200 : 800]
+  const brightWhite = theme.hue.neutral[mode === "dark" ? 100 : 900]
+  const blue = terminalHue(theme, rgbToOklch(0, 0, 1).h)
+  const magenta = terminalHue(theme, rgbToOklch(1, 0, 1).h)
+  const normal = [
+    theme.text.feedback.error.base,
+    theme.text.feedback.success.base,
+    theme.text.feedback.warning.base,
+    blue,
+    magenta,
+    theme.text.feedback.info.base,
+    white,
+  ]
+  const colors = [
+    black,
+    ...normal,
+    theme.text.muted,
+    ...normal.slice(0, -1).map((color) => theme.decrease(color)),
+    brightWhite,
+  ]
+  return Buffer.from(
+    colors
+      .map((color, index) => `\x1b]4;${index};${hex(color)}\x1b\\`)
+      .concat(`\x1b]10;${hex(theme.text.base)}\x1b\\`, `\x1b]11;${hex(background)}\x1b\\`)
+      .join(""),
+  )
+}
+
+function terminalHue(theme: ResolvedThemeTokens, target: number) {
+  const nearest = Object.values(theme.hue)
+    .map((scale) => {
+      const color = scale[200]
+      const [red, green, blue, alpha] = color.toInts()
+      const converted = rgbToOklch(red / 255, green / 255, blue / 255)
+      return { color, alpha, chroma: converted.c, distance: hueDistance(converted.h, target) }
+    })
+    .filter((item) => item.alpha > 0 && item.chroma >= 0.03)
+    .sort((first, second) => first.distance - second.distance)[0]
+  if (!nearest || nearest.distance > 30) return theme.hue.accent[200]
+  return nearest.color
+}
+
+function hueDistance(first: number, second: number) {
+  const difference = Math.abs(first - second)
+  return Math.min(difference, 360 - difference)
+}
+
+function hex(color: RGBA) {
+  return `#${color
+    .toInts()
+    .slice(0, 3)
+    .map((value) => value.toString(16).padStart(2, "0"))
+    .join("")}`
+}
+
+function interactionFrame(size: { cols: number; rows: number }, data?: Uint8Array) {
+  const frame = new Uint8Array(5 + (data?.byteLength ?? 0))
+  const view = new DataView(frame.buffer)
+  frame[0] = data ? 1 : 0
+  view.setUint16(1, size.cols)
+  view.setUint16(3, size.rows)
+  if (data) frame.set(data, 5)
+  return frame
+}

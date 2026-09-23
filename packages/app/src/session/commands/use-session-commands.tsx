@@ -1,6 +1,6 @@
 import { useCommand, type CommandOption } from "@/shell/commands/command"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { previewSelectedLines } from "@opencode-ai/session-ui/pierre/selection-bridge"
+import { useDialog } from "@opencode/ui/context/dialog"
+import { previewSelectedLines } from "@opencode/session-ui/pierre/selection-bridge"
 import { useFile, selectionFromLines, type FileSelection, type SelectedLineRange } from "@/workspaces/files/model"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useLayout } from "@/shell/state/layout"
@@ -9,7 +9,7 @@ import { useServerSDK } from "@/runtime/server/client"
 import { useSettings } from "@/settings/model"
 import { useTerminal } from "@/session/terminal/context"
 import { showToast } from "@/shell/notifications/toast"
-import { downloadSessionExport, fetchSessionExport, sessionExportFilename } from "@/session/commands/export"
+import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "@/session/commands/export"
 import { usePlatform } from "@/runtime/platform/platform"
 import type { SessionModel } from "@/session/model"
 import type { SessionRevert } from "@/session/revert"
@@ -104,7 +104,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
         api: serverSDK.api,
       })
       const filename = sessionExportFilename(data.info)
-      downloadSessionExport(filename, data)
+      if (!(await saveSessionExport(filename, data, platform))) return
       showToast({
         variant: "success",
         icon: "circle-check",
@@ -194,7 +194,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const openTerminal = () => {
     actions.session.layout.view().terminal.open()
-    if (terminal.all().length > 0) terminal.new({ focus: true })
+    if (terminal.all().length > 0) terminal.new()
     if (terminal.all().length === 0) terminal.requestFocus()
   }
 
@@ -321,9 +321,10 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       }),
       tab &&
         fileCommand({
-          id: "tab.close",
+          id: "file.close",
           title: language.t("command.tab.close"),
-          keybind: "mod+w",
+          keybind: settings.keybinds.get("tab.close") ?? "mod+w",
+          when: (event) => !(event.target instanceof Element && event.target.closest('[data-component="terminal"]')),
           onSelect: closeTab,
         }),
     ].filter((v) => !!v)

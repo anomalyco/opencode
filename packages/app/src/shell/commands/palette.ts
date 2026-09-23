@@ -1,7 +1,7 @@
-import { getFilename } from "@opencode-ai/util/path"
+import { getFilename } from "@opencode/util/path"
 import type { Project } from "@/runtime/server/types"
-import type { SessionInfo } from "@opencode-ai/client/promise"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import type { SessionInfo } from "@opencode/client/promise"
+import { useDialog } from "@opencode/ui/context/dialog"
 import { createMemo, onCleanup } from "solid-js"
 import { commandPaletteOptions, useCommand, type CommandOption } from "@/shell/commands/command"
 import { useFile } from "@/workspaces/files/model"
@@ -166,7 +166,7 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
     state.cleanup = undefined
     dialog.close()
     if (item.type === "command") {
-      item.option?.onSelect?.("palette")
+      void item.option?.onSelect?.("palette")
       return
     }
     if (item.type === "session") {

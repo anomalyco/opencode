@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test"
 import path from "path"
 import { Effect } from "effect"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { Shell } from "@opencode-ai/core/shell"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Global } from "@opencode-ai/util/global"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Shell } from "@opencode/core/shell"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { FSUtil } from "@opencode/util/fs-util"
+import { Global } from "@opencode/util/global"
 import { tmpdir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 
@@ -14,7 +14,7 @@ const withStore = <A, E, R>(body: (fs: FSUtil.Interface, root: string) => Effect
     Effect.promise(() => tmpdir()),
     (tmp) => {
       const layer = AppNodeBuilder.build(LayerNode.group([FSUtil.node, Global.node]), [
-        [Global.node, Global.layerWith({ data: tmp.path })],
+        Global.node.replace(Global.layerWith({ data: tmp.path })),
       ])
       return Effect.gen(function* () {
         const fs = yield* FSUtil.Service

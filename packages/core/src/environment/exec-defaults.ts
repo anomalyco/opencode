@@ -1,7 +1,7 @@
 import { Effect, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import type { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
-import { collectStream } from "@opencode-ai/util/process"
+import { collectStream } from "@opencode/util/process"
 import { Failed, NotFound, WrongKind, type FileInfo, type FileType, type FilesImpl } from "./files.js"
 
 /**

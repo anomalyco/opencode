@@ -1,13 +1,13 @@
 export * as GlobTool from "./glob.js"
 
-import { ToolFailure } from "@opencode-ai/ai"
-import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
+import { ToolFailure } from "@opencode/ai"
+import type { Context } from "@opencode/plugin/effect/plugin"
 import { Effect, Schema } from "effect"
 import path from "path"
 import { Environment } from "../../environment/index.js"
 import { FileSystem } from "../../filesystem.js"
 import { Location } from "../../location.js"
-import { LocationMutation } from "../../location-mutation.js"
+import { FileAccess } from "../../file-access.js"
 import { Ripgrep } from "../../ripgrep.js"
 import { RelativePath } from "../../schema.js"
 import { Permission } from "../../permission.js"
@@ -18,6 +18,9 @@ export const Input = Schema.Struct({
   pattern: FileSystem.GlobInput.fields.pattern.annotate({ description: "Glob pattern to match files against" }),
   path: Schema.optionalKey(RelativePath).annotate({
     description: "Directory to search. Defaults to the current working directory.",
+  }),
+  hidden: FileSystem.GlobInput.fields.hidden.annotate({
+    description: "Include hidden files and directories (default: false).",
   }),
   limit: FileSystem.GlobInput.fields.limit.annotate({
     description: `Maximum number of matching files to return (default: ${FileSystem.DEFAULT_SEARCH_LIMIT})`,
@@ -41,16 +44,16 @@ export const toModelContent = (entries: EncodedOutput, truncated = false) => {
 /** Glob leaf that defaults its filesystem root to the active Location. */
 export const Plugin = {
   id: "opencode.tool.glob",
-  effect: Effect.fn("GlobTool.Plugin")(function* (ctx: PluginContext) {
+  effect: Effect.fn("GlobTool.Plugin")(function* (ctx: Context) {
     const environment = yield* Environment.Service
     const ripgrep = yield* Ripgrep.Service
     const location = yield* Location.Service
-    const mutation = yield* LocationMutation.Service
+    const access = yield* FileAccess.Service
     const permission = yield* Permission.Service
 
     yield* ctx.tool
-      .transform((draft) =>
-        draft.add({
+      .transform((editor) =>
+        editor.add({
           name,
           options: { codemode: false },
           description: 'Search file paths using a glob pattern (examples: "**/*.ts", "src/**/*.tsx").',
@@ -60,15 +63,8 @@ export const Plugin = {
             Effect.gen(function* () {
               const searchPath = input.path === "undefined" || input.path === "null" ? undefined : input.path
               const source = { type: "tool" as const, messageID: context.messageID, id: context.id }
-              const target = yield* mutation.resolve({ path: searchPath ?? ".", kind: "directory" })
-              const external = target.externalDirectory
-              if (external)
-                yield* permission.assert({
-                  ...LocationMutation.externalDirectoryPermission(external),
-                  sessionID: context.sessionID,
-                  agent: context.agent,
-                  source,
-                })
+              const target = yield* access.resolve({ path: searchPath ?? ".", kind: "directory" })
+              yield* access.authorizeExternal([target], context)
               yield* permission.assert({
                 action: name,
                 resources: [input.pattern],
@@ -76,6 +72,7 @@ export const Plugin = {
                 metadata: {
                   root: searchPath ?? ".",
                   path: searchPath,
+                  hidden: input.hidden,
                   limit: input.limit,
                 },
                 sessionID: context.sessionID,
@@ -97,6 +94,7 @@ export const Plugin = {
                 .glob({
                   cwd: root,
                   pattern: input.pattern,
+                  hidden: input.hidden,
                   limit: limit + 1,
                 })
                 .pipe(

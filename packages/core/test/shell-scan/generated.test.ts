@@ -14,7 +14,7 @@ describe("ShellScan generated properties", () => {
     for (const [left, leftWords] of staticCommands) {
       for (const separator of separators) {
         for (const [right, rightWords] of staticCommands) {
-          expect(ShellScan.scan(left + separator + right)).toEqual({
+          expect(ShellScan.scan(left + separator + right)).toMatchObject({
             kind: "scanned",
             commands: [
               { resource: left, words: [...leftWords] },
@@ -35,7 +35,7 @@ describe("ShellScan generated properties", () => {
     ])
 
     for (const form of forms) {
-      expect(ShellScan.scan(`printf %s ${form.source}`)).toEqual({
+      expect(ShellScan.scan(`printf %s ${form.source}`)).toMatchObject({
         kind: "scanned",
         commands: [{ resource: `printf %s ${form.source}`, words: ["printf", "%s", form.word] }],
       })
@@ -59,19 +59,24 @@ describe("ShellScan generated properties", () => {
     }
   })
 
-  test("fails closed for generated dynamic command heads", () => {
+  test("retains generated dynamic command heads without resolving them", () => {
     const heads = ["$COMMAND", "${COMMAND}", "pre$COMMAND", '"$COMMAND"', "$(printf git)", "`printf git`"]
     const tails = ["status", "--version", "-rf /"]
 
     for (const head of heads) {
-      for (const tail of tails) expect(ShellScan.scan(`${head} ${tail}`).kind).toBe("opaque")
+      for (const tail of tails) {
+        const result = ShellScan.scan(`${head} ${tail}`)
+        expect(result.kind).toBe("scanned")
+        if (result.kind === "opaque") return
+        expect(result.commands[0]?.rawWords[0]).toBe(head)
+        expect(result.commands[0]?.words[0]).toBe(head.replaceAll('"', ""))
+      }
     }
   })
 
   test("keeps wrappers and shell evaluators at their delegated boundary", () => {
     const prefixes = ["", "FOO=bar ", "FOO=bar BAR=baz "]
     const wrapped = [
-      "time git status",
       "command git status",
       "builtin printf ok",
       "exec git status",
@@ -90,6 +95,7 @@ describe("ShellScan generated properties", () => {
 
     for (const prefix of prefixes) {
       for (const command of wrapped) expect(ShellScan.scan(prefix + command).kind).toBe("scanned")
+      expect(ShellScan.scan(`${prefix}time git status`).kind).toBe("scanned")
     }
   })
 })
@@ -106,7 +112,7 @@ describe("ShellScan generated PowerShell properties", () => {
     for (const [left, leftWords] of commands) {
       for (const separator of separators) {
         for (const [right, rightWords] of commands) {
-          expect(ShellScan.scanPowerShell(left + separator + right)).toEqual({
+          expect(ShellScan.scanPowerShell(left + separator + right)).toMatchObject({
             kind: "scanned",
             commands: [
               { resource: left, words: [...leftWords] },
@@ -127,14 +133,7 @@ describe("ShellScan generated PowerShell properties", () => {
     ])
 
     for (const form of forms) {
-      if (form.source.startsWith("left`") && ";|&".includes(form.word[4] ?? "")) {
-        expect(ShellScan.scanPowerShell(`Write-Output ${form.source}`)).toEqual({
-          kind: "opaque",
-          reason: "invalid-structure",
-        })
-        continue
-      }
-      expect(ShellScan.scanPowerShell(`Write-Output ${form.source}`)).toEqual({
+      expect(ShellScan.scanPowerShell(`Write-Output ${form.source}`)).toMatchObject({
         kind: "scanned",
         commands: [{ resource: `Write-Output ${form.source}`, words: ["Write-Output", form.word] }],
       })
@@ -154,10 +153,11 @@ describe("ShellScan generated PowerShell properties", () => {
     for (const command of mutations) expect(ShellScan.scanPowerShell(command).kind).toBe("opaque")
   })
 
-  test("distinguishes dynamic heads from delegated execution", () => {
-    const dynamic = ["$Command status", "${Command} status", "& $Command status"]
+  test("distinguishes variable expressions from delegated execution", () => {
+    const expressions = ["$Command", "${Command}"]
     const delegated = [
       "& git status",
+      "& $Command status",
       ". ./script.ps1",
       "Invoke-Expression 'git status'",
       "iex 'git status'",
@@ -167,7 +167,8 @@ describe("ShellScan generated PowerShell properties", () => {
     const shells = ["powershell", "powershell.exe", "pwsh", "pwsh.exe"]
     const switches = ["-Command", "-c", "-EncodedCommand", "-e", "-File", "-f"]
 
-    for (const command of dynamic) expect(ShellScan.scanPowerShell(command).kind).toBe("opaque")
+    for (const command of expressions)
+      expect(ShellScan.scanPowerShell(command)).toEqual({ kind: "scanned", commands: [] })
     for (const command of delegated) expect(ShellScan.scanPowerShell(command).kind).toBe("scanned")
     for (const shell of shells) {
       for (const flag of switches) {
@@ -176,14 +177,25 @@ describe("ShellScan generated PowerShell properties", () => {
     }
   })
 
-  test("fails closed for dynamic location changes but accepts known directory variables", () => {
+  test("extracts nested commands in directory expressions without evaluating variables", () => {
     const locations = ["Set-Location", "cd", "chdir", "sl", "Push-Location"]
-    const dynamic = ["$target", "$(Resolve-Path ..)", "(Resolve-Path ..)"]
-    const known = ["$PWD/project", "$HOME/project", "$PSHOME/Modules", "$env:TEMP/project"]
+    const expressions = ["$(Resolve-Path ..)", "(Resolve-Path ..)"]
+    const variables = ["$target", "$PWD/project", "$HOME/project", "$PSHOME/Modules", "$env:TEMP/project"]
 
     for (const location of locations) {
-      for (const target of dynamic) expect(ShellScan.scanPowerShell(`${location} ${target}`).kind).toBe("opaque")
-      for (const target of known) expect(ShellScan.scanPowerShell(`${location} ${target}`).kind).toBe("scanned")
+      for (const target of expressions)
+        expect(ShellScan.scanPowerShell(`${location} ${target}`)).toMatchObject({
+          kind: "scanned",
+          commands: [
+            { resource: `${location} ${target}`, words: [location, target] },
+            { resource: "Resolve-Path ..", words: ["Resolve-Path", ".."] },
+          ],
+        })
+      for (const target of variables)
+        expect(ShellScan.scanPowerShell(`${location} ${target}`)).toMatchObject({
+          kind: "scanned",
+          commands: [{ resource: `${location} ${target}`, words: [location, target] }],
+        })
     }
   })
 })

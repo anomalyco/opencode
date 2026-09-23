@@ -1,17 +1,17 @@
-import { Button } from "@opencode-ai/ui/button"
-import { Dialog, DialogBody, DialogHeader, DialogTitleGroup } from "@opencode-ai/ui/dialog"
-import { Icon } from "@opencode-ai/ui/icon"
-import { IconButton } from "@opencode-ai/ui/icon-button"
-import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { Switch } from "@opencode-ai/ui/switch"
-import { TextInput } from "@opencode-ai/ui/text-input"
-import { useFilteredList } from "@opencode-ai/ui/hooks"
+import { Button } from "@opencode/ui/button"
+import { Dialog, DialogBody, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
+import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
+import { ProviderIcon } from "@opencode/ui/provider-icon"
+import { Switch } from "@opencode/ui/switch"
+import { TextInput } from "@opencode/ui/text-input"
+import { useFilteredList } from "@opencode/ui/hooks"
 import { For, Show, type Component } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLocal } from "@/providers/models/selection"
 import { popularProviders } from "@/providers/catalog/providers"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useDialog } from "@opencode/ui/context/dialog"
 import { DialogConnectProvider } from "@/providers/connect/dialog"
 import { decode64 } from "@/runtime/persistence/base64"
 import { SettingsList } from "@/settings/list"
@@ -149,7 +149,7 @@ export const DialogManageModels: Component = () => {
                             </span>
                             <span class="settings-models-group-label">
                               <ProviderIcon id={group.category} width={16} height={16} class="shrink-0" />
-                              <span class="settings-section-title">{group.items[0].provider.name}</span>
+                              <span class="settings-models-group-title">{group.items[0].provider.name}</span>
                             </span>
                           </button>
                           <Switch
@@ -162,7 +162,7 @@ export const DialogManageModels: Component = () => {
                           </Switch>
                         </div>
                         <Show when={expanded()}>
-                          <SettingsList>
+                          <SettingsList variant="catalog">
                             <For each={group.items}>
                               {(item) => (
                                 <SettingsRow title={item.name} description="">

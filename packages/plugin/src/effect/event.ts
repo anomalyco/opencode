@@ -1,3 +1,3 @@
-import type { EventApi } from "@opencode-ai/client/effect/api"
+import type { EventApi } from "@opencode/client/effect/api"
 
 export interface EventDomain extends Pick<EventApi<unknown>, "subscribe"> {}

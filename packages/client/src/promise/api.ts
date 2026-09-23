@@ -1,4 +1,8 @@
-type Client = ReturnType<typeof import("./generated/client.js").make>
+import type { OpenCode } from "./client.js"
+
+type Client = ReturnType<typeof OpenCode.make>
+
+export type { RpcApi, RpcCallOptions, RpcClient, RpcEventPayload } from "./rpc.js"
 
 export type AgentApi = Client["agent"]
 export type CommandApi = Client["command"]
@@ -16,8 +20,4 @@ export type WebSearchApi = Client["websearch"]
 export type SessionApi = Client["session"]
 export type SkillApi = Client["skill"]
 export type VcsApi = Client["vcs"]
-
-export interface CatalogApi {
-  readonly provider: ProviderApi
-  readonly model: ModelApi
-}
+export type WorktreeApi = Client["worktree"]

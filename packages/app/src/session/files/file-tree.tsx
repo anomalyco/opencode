@@ -1,8 +1,8 @@
 import { useFile } from "@/workspaces/files/model"
 import { encodeFilePath } from "@/workspaces/files/path"
-import { Collapsible } from "@opencode-ai/ui/collapsible"
-import { FileIcon } from "@opencode-ai/ui/file-icon"
-import { Icon } from "@opencode-ai/ui/icon"
+import { Collapsible } from "@opencode/ui/collapsible"
+import { FileIcon } from "@opencode/ui/file-icon"
+import { Icon } from "@opencode/ui/icon"
 import {
   createEffect,
   createMemo,
@@ -430,7 +430,7 @@ export default function FileTree(props: {
                     />
                     <Show
                       when={level < MAX_DEPTH && !chain.includes(key(node.path))}
-                      fallback={<div class="px-2 py-1 text-12-regular text-text-weak">...</div>}
+                      fallback={<div class="px-2 py-1 text-12-regular text-text-weak">…</div>}
                     >
                       <FileTree
                         path={node.path}

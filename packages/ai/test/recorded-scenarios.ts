@@ -1,6 +1,7 @@
 import { expect } from "bun:test"
 import { Effect, Schema } from "effect"
 import {
+  Media,
   LLM,
   LLMEvent,
   LLMRequest,
@@ -164,6 +165,7 @@ export const expectGoldenWeatherToolLoop = (events: ReadonlyArray<LLMEvent>) => 
 export interface GoldenScenarioContext {
   readonly id: string
   readonly model: LanguageModel
+  readonly prompt?: string
   readonly maxTokens?: number
   readonly temperature?: number | false
 }
@@ -298,7 +300,7 @@ const runGeneratedConversation = (context: GoldenScenarioContext, steps: Readonl
 
 const runTextScenario = (context: GoldenScenarioContext) =>
   runGeneratedConversation(context, [
-    user("Reply exactly with: Hello!"),
+    user(context.prompt ?? "Reply exactly with: Hello!"),
     assistant.expectText(/^Hello!?$/, {
       system: "You are concise.",
       maxTokens: context.maxTokens ?? 40,
@@ -329,7 +331,7 @@ const runImageScenario = (context: GoldenScenarioContext) =>
           type: "text",
           text: "The image contains exactly three lowercase English words. Read them left to right and reply with only those words.",
         },
-        { type: "media", mediaType: "image/png", data: yield* restroomImage() },
+        { type: "media", media: Media.base64(yield* restroomImage(), "image/png") },
       ]),
       assistant.expectText(/.+/, {
         system: "Read images carefully. Reply only with the visible text.",

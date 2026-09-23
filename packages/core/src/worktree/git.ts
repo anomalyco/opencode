@@ -1,11 +1,11 @@
 export * as WorktreeGit from "./git.js"
 
 import { Effect } from "effect"
-import { Worktree } from "@opencode-ai/schema/worktree"
-import { FSUtil } from "@opencode-ai/util/fs-util"
+import { Worktree } from "@opencode/schema/worktree"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Git } from "../git.js"
 import { canonical, DirectoryUnavailableError } from "./directory.js"
-import type { ListEntry, Strategy } from "../worktree.js"
+import type { Strategy } from "./strategies.js"
 
 export const make = Effect.gen(function* () {
   const fs = yield* FSUtil.Service
@@ -33,7 +33,7 @@ export const make = Effect.gen(function* () {
           Effect.map((directory) => ({ directory, type: entry.kind === "main" ? "root" : "worktree" }) as const),
           Effect.catchTag("Worktree.DirectoryUnavailableError", () => Effect.undefined),
         ),
-      ).pipe(Effect.map((items) => items.filter((item): item is ListEntry => item !== undefined)))
+      ).pipe(Effect.map((items) => items.filter((item): item is Worktree.ListEntry => item !== undefined)))
     }),
   } satisfies Strategy
 })

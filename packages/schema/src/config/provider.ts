@@ -3,12 +3,38 @@ export * as ConfigProvider from "./provider.js"
 import { Schema } from "effect"
 import { Money } from "../money.js"
 import { Capabilities, Compatibility, Family, ID, VariantID } from "../model.js"
+import { Provider } from "../provider.js"
 import { optional } from "../schema.js"
+
+export const Settings = Schema.StructWithRest(
+  Schema.Struct({
+    timeout: Schema.Union([Schema.Finite, Schema.Literal(false)]).pipe(optional),
+    chunkTimeout: Schema.Finite.pipe(optional),
+    compaction: Provider.Compaction.pipe(optional),
+    transport: Provider.Transport.pipe(optional),
+  }),
+  [Schema.Record(Schema.String, Schema.UndefinedOr(Schema.Json))],
+).annotate({ identifier: "Config.Provider.Settings" })
+export type Settings = typeof Settings.Type
+
+export const ModelSettings = Schema.StructWithRest(
+  Schema.Struct({
+    compaction: Provider.Compaction.pipe(optional),
+  }),
+  [Schema.Record(Schema.String, Schema.UndefinedOr(Schema.Json))],
+).annotate({ identifier: "Config.Model.Settings" })
+export type ModelSettings = typeof ModelSettings.Type
 
 const JsonRecord = Schema.Record(Schema.String, Schema.Json)
 
 export const Overlays = {
-  settings: JsonRecord.pipe(optional),
+  settings: Settings.pipe(optional),
+  headers: Schema.Record(Schema.String, Schema.String).pipe(optional),
+  body: JsonRecord.pipe(optional),
+}
+
+const ModelOverlays = {
+  settings: ModelSettings.pipe(optional),
   headers: Schema.Record(Schema.String, Schema.String).pipe(optional),
   body: JsonRecord.pipe(optional),
 }
@@ -45,11 +71,11 @@ class Model extends Schema.Class<Model>("Config.Model")({
   name: Schema.String.pipe(optional),
   compatibility: Compatibility.pipe(optional),
   package: Schema.String.pipe(optional),
-  ...Overlays,
+  ...ModelOverlays,
   capabilities: Capabilities.pipe(optional),
   variants: Schema.Struct({
     id: VariantID,
-    ...Overlays,
+    ...ModelOverlays,
   }).pipe(Schema.Array, optional),
   cost: Schema.Union([Cost, Cost.pipe(Schema.Array)]).pipe(optional),
   disabled: Schema.Boolean.pipe(optional),
@@ -57,6 +83,7 @@ class Model extends Schema.Class<Model>("Config.Model")({
 }) {}
 
 export class Info extends Schema.Class<Info>("Config.Provider")({
+  canonical: Provider.ID.pipe(optional),
   name: Schema.String.pipe(optional),
   env: Schema.String.pipe(Schema.Array, optional),
   package: Schema.String.pipe(optional),

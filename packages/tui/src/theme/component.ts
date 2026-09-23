@@ -1,9 +1,13 @@
 import type { RGBA } from "@opentui/core"
 import type { Accessor } from "solid-js"
-import type { Mode, ResolvedTheme, ResolvedThemeTokens } from "@opencode-ai/theme/tui"
+import type { ResolvedTheme, SurfaceName } from "@opencode/theme/tui"
 
-export function createComponentTheme(current: Accessor<ResolvedTheme>, mode: Accessor<Mode>) {
-  const create = (view: Accessor<ResolvedThemeTokens>) => ({
+export function createComponentTheme(
+  view: Accessor<ResolvedTheme>,
+  // Shared across a theme's surface views so `surface()` stays absolute at the wrapper level too.
+  surfaces = new Map<SurfaceName, ComponentTheme>(),
+): ComponentTheme {
+  return {
     get hue() {
       return view().hue
     },
@@ -34,15 +38,14 @@ export function createComponentTheme(current: Accessor<ResolvedTheme>, mode: Acc
     source: (color: RGBA) => view().source(color),
     increase: (color: RGBA, amount = 1) => view().increase(color, amount),
     decrease: (color: RGBA, amount = 1) => view().decrease(color, amount),
-    raise: (color: RGBA) => (mode() === "light" ? view().increase(color) : view().decrease(color)),
-  })
-
-  return Object.assign(create(current), {
-    contextual: {
-      elevated: create(() => current().contextual.elevated),
-      overlay: create(() => current().contextual.overlay),
+    surface(name: SurfaceName) {
+      const cached = surfaces.get(name)
+      if (cached) return cached
+      const created = createComponentTheme(() => view().surface(name), surfaces)
+      surfaces.set(name, created)
+      return created
     },
-  })
+  }
 }
 
-export type ComponentTheme = ReturnType<typeof createComponentTheme>
+export type ComponentTheme = ResolvedTheme

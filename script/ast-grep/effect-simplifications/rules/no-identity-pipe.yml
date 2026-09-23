@@ -1,0 +1,12 @@
+id: no-identity-pipe
+language: TypeScript
+message: Remove identity callbacks from pipe calls.
+severity: error
+rule:
+  any:
+    - pattern: $RECEIVER.pipe(($VALUE) => $VALUE)
+    - pattern: $RECEIVER.pipe($VALUE => $VALUE)
+    - pattern: "$RECEIVER.pipe(($VALUE: $TYPE) => $VALUE)"
+    - pattern: $RECEIVER.pipe(($VALUE) => { return $VALUE })
+    - pattern: $RECEIVER.pipe($VALUE => { return $VALUE })
+    - pattern: "$RECEIVER.pipe(($VALUE: $TYPE) => { return $VALUE })"

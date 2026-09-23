@@ -5,10 +5,10 @@ import {
   type IntegrationAttemptStatus,
   type IntegrationOAuthMethod,
   type OpenCodeClient,
-} from "@opencode-ai/client"
+} from "@opencode/client"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
-import { Service } from "@opencode-ai/client/effect/service"
+import { Service } from "@opencode/client/effect/service"
 import { ServiceConfig } from "../../../services/service-config"
 import { resolveIntegration } from "./resolve"
 

@@ -1,5 +1,5 @@
 import { type ComponentProps, Show, splitProps } from "solid-js"
-import { Icon, type IconProps } from "@opencode-ai/ui/icon"
+import { Icon, type IconProps } from "@opencode/ui/icon"
 
 type Variant = "normal" | "error" | "warning" | "success" | "info"
 

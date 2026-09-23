@@ -1,32 +1,32 @@
 import { RGBA } from "@opentui/core"
 import { Schema } from "effect"
-import { DEFAULT_CATEGORICAL, DEFAULT_THEME } from "./defaults.js"
-import { expandTheme, expandTokens, mergeTheme } from "./expand.js"
-import { fallback } from "./fallback.js"
+import { expandTheme, mergeTheme } from "./expand.js"
 import {
   ActionState,
   ActionVariant,
-  BaseHue,
-  FeedbackKind,
-  HueAlias,
   HueStep,
+  SurfaceName,
   ThemeDefinition,
   ThemeDocument,
 } from "./schema.js"
 import type {
   ActionStateKey,
-  ContextName,
-  HueDefinition,
+  ActionStates,
   HueScale,
+  Mode,
   ResolvedActionState,
   ResolvedTheme,
   ResolvedThemeTokens,
+  StatefulColor,
   StatefulColorDefinition,
   ThemeTokensDefinition,
 } from "./index.js"
-import { selectTheme, selectThemeMode } from "./select.js"
+import { selectThemeMode, themeModes } from "./select.js"
+
+type ResolvedHue = ResolvedThemeTokens["hue"] & Readonly<Record<string, HueScale>>
 
 const decodeThemeDefinitionSchema = Schema.decodeUnknownSync(ThemeDefinition, { reportInput: true })
+const decodeThemeDocumentSchema = Schema.decodeUnknownSync(ThemeDocument, { reportInput: true })
 
 function decodeThemeDefinition(input: unknown) {
   try {
@@ -42,17 +42,20 @@ export function themeDecodeError(error: unknown, name: string) {
   return new Error(`Invalid theme: ${name} ${value} is an invalid value`, { cause: error })
 }
 
-export function resolveThemeDocument(document: ThemeDocument, mode?: "light" | "dark") {
+export function parseThemeDocument(input: unknown, name = "theme") {
+  try {
+    const document = decodeThemeDocumentSchema(input)
+    themeModes(document).forEach((mode) => resolveThemeDocument(document, mode))
+    return document
+  } catch (error) {
+    throw themeDecodeError(error, name)
+  }
+}
+
+export function resolveThemeDocument(document: ThemeDocument, mode?: Mode) {
   const selected = selectThemeMode(document, mode)
-  const definition = selected.expanded ? selected.theme : expandTheme(selected.theme)
-  const defaults = expandTheme(selectTheme(DEFAULT_THEME, selected.mode))
-  const core = expandTokens(fallback())
-  const merged = document.standalone ? mergeTheme(core, definition) : mergeTheme(core, defaults, definition)
-  if (!merged["hue"]) throw new Error("Standalone themes must provide hues")
-  return resolveExpandedTheme({
-    ...merged,
-    categorical: merged["categorical"] ?? DEFAULT_CATEGORICAL,
-  } as ThemeDefinition)
+  const definition = expandTheme(selected.theme)
+  return resolveExpandedTheme(definition)
 }
 
 export function resolveTheme(definition: ThemeDefinition): ResolvedTheme {
@@ -61,21 +64,20 @@ export function resolveTheme(definition: ThemeDefinition): ResolvedTheme {
 
 function resolveExpandedTheme(definition: ThemeDefinition): ResolvedTheme {
   const hue = resolveHue(definition.hue)
-  const categorical = (definition.categorical ?? DEFAULT_CATEGORICAL).map((name) => hue[name])
+  const categorical = definition.categorical.map((name) => {
+    const scale = hue[name]
+    if (!scale) throw new Error(`Categorical hue "${name}" was not found`)
+    return scale
+  })
   const hueSteps = compileHueSteps(hue)
   const base = tokens(definition)
-  const resolved = resolveView(base, hue, categorical, hueSteps)
-  const context = (name: ContextName) => {
-    const override = definition[`@context:${name}`]
-    if (!override) return resolved
-    return resolveView(contextualize(base, override), hue, categorical, hueSteps)
-  }
-  const contextual = {
-    elevated: context("elevated"),
-    overlay: context("overlay"),
-  }
-
-  return { ...resolved, contextual } as ResolvedTheme
+  const views = {} as Record<SurfaceName, ResolvedTheme>
+  const view = (tokens: ThemeTokensDefinition): ResolvedTheme => ({
+    ...resolveView(tokens, hue, categorical, hueSteps),
+    surface: (name) => views[name],
+  })
+  views.dialog = definition["@dialog"] ? view(contextualize(base, definition["@dialog"])) : view(base)
+  return view(base)
 }
 
 function tokens(definition: ThemeDefinition): ThemeTokensDefinition {
@@ -92,38 +94,34 @@ function tokens(definition: ThemeDefinition): ThemeTokensDefinition {
 
 function contextualize(base: ThemeTokensDefinition, override: ThemeTokensDefinition) {
   const result = mergeTheme(base, override)
-  const baseText = base.text?.action
-  const contextText = override.text?.action
-  const baseBackground = base.background?.action
-  const contextBackground = override.background?.action
   const text = result["text"] as NonNullable<ThemeTokensDefinition["text"]>
   const background = result["background"] as NonNullable<ThemeTokensDefinition["background"]>
   return {
     ...result,
-    text: { ...text, action: contextualActions(baseText, contextText) },
-    background: { ...background, action: contextualActions(baseBackground, contextBackground) },
+    text: { ...text, action: contextualActions(base.text?.action, override.text?.action) },
+    background: { ...background, action: contextualActions(base.background?.action, override.background?.action) },
   } as ThemeTokensDefinition
 }
 
 function contextualActions(
   base: Partial<Record<ActionVariant, StatefulColorDefinition>> | undefined,
-  context: Partial<Record<ActionVariant, StatefulColorDefinition>> | undefined,
+  surface: Partial<Record<ActionVariant, StatefulColorDefinition>> | undefined,
 ) {
   return Object.fromEntries(
     ActionVariant.literals.map((variant) => {
       const baseVariant = base?.[variant]
-      const contextVariant = context?.[variant]
+      const surfaceVariant = surface?.[variant]
       return [
         variant,
         Object.fromEntries(
-          (["default", ...ActionState.literals] as readonly ResolvedActionState[]).map((state) => {
-            const key = state === "default" ? undefined : (`$${state}` as ActionStateKey)
+          (["base", ...ActionState.literals] as readonly ResolvedActionState[]).map((state) => {
+            const key = state === "base" ? undefined : (`$${state}` as ActionStateKey)
             return [
-              key ?? "default",
-              (key ? contextVariant?.[key] : undefined) ??
-                contextVariant?.default ??
+              key ?? "base",
+              (key ? surfaceVariant?.[key] : undefined) ??
+                surfaceVariant?.base ??
                 (key ? baseVariant?.[key] : undefined) ??
-                baseVariant?.default,
+                baseVariant?.base,
             ]
           }),
         ),
@@ -139,14 +137,43 @@ function resolveView(
   hueSteps: Pick<ResolvedThemeTokens, "source" | "increase" | "decrease">,
 ): ResolvedThemeTokens {
   const source: Record<string, unknown> = { hue, ...definition }
-  return { ...(createResolver(source)(source, "theme") as ResolvedThemeTokens), hue, categorical, ...hueSteps }
+  const resolved = createResolver(source)(source, "theme") as ResolvedThemeTokens
+  return {
+    ...resolved,
+    hue,
+    categorical,
+    text: {
+      ...resolved.text,
+      action: statefulActions(resolved.text.action),
+      formfield: statefulColor(resolved.text.formfield),
+    },
+    background: {
+      ...resolved.background,
+      action: statefulActions(resolved.background.action),
+      formfield: statefulColor(resolved.background.formfield),
+    },
+    ...hueSteps,
+  }
+}
+
+function statefulActions(actions: Readonly<Record<ActionVariant, StatefulColor>>) {
+  return Object.fromEntries(ActionVariant.literals.map((variant) => [variant, statefulColor(actions[variant])])) as Readonly<
+    Record<ActionVariant, StatefulColor>
+  >
+}
+
+function statefulColor(color: StatefulColor): StatefulColor {
+  return {
+    ...color,
+    state: (states: ActionStates) => color[ActionState.literals.find((state) => states[state]) ?? "base"],
+  }
 }
 
 function compileHueSteps(
-  hue: ResolvedThemeTokens["hue"],
+  hue: ResolvedHue,
 ): Pick<ResolvedThemeTokens, "source" | "increase" | "decrease"> {
-  const index = new WeakMap<RGBA, { hue: keyof typeof hue; step: HueStep; position: number }>()
-  for (const [name, scale] of Object.entries(hue) as [keyof typeof hue, HueScale][]) {
+  const index = new WeakMap<RGBA, { hue: string; step: HueStep; position: number }>()
+  for (const [name, scale] of Object.entries(hue)) {
     HueStep.literals.forEach((step, position) => index.set(scale[step], { hue: name, step, position }))
   }
   const shift = (color: RGBA, amount: number) => {
@@ -166,13 +193,9 @@ function compileHueSteps(
   }
 }
 
-function resolveHue(definition: HueDefinition) {
+function resolveHue(definition: ThemeDefinition["hue"]) {
   const source = definition as Record<string, unknown>
   const cache = new Map<string, HueScale>()
-  const expected = new Set<string>([...BaseHue.literals, ...HueAlias.literals])
-  for (const name of Object.keys(source)) {
-    if (!expected.has(name)) throw new Error(`Unknown hue "${name}"`)
-  }
 
   function resolve(name: string, stack: string[]): HueScale {
     const hit = cache.get(name)
@@ -180,8 +203,9 @@ function resolveHue(definition: HueDefinition) {
     if (stack.includes(name)) throw new Error(`Circular hue reference: ${[...stack, name].join(" -> ")}`)
     const value = source[name]
     if (typeof value === "string") {
-      const match = /^\$hue\.([^.]+)$/.exec(value)
+      const match = /^\$hue\.(.+)$/.exec(value)
       if (!match?.[1]) throw new Error(`Hue alias "${value}" must reference a hue scale`)
+      if (source[match[1]] === undefined) throw new Error(`Hue alias "${value}" references a missing hue`)
       const target = resolve(match[1], [...stack, name])
       const result = Object.fromEntries(HueStep.literals.map((step) => [step, RGBA.clone(target[step])])) as HueScale
       cache.set(name, result)
@@ -203,9 +227,7 @@ function resolveHue(definition: HueDefinition) {
     return result
   }
 
-  return Object.fromEntries(
-    [...BaseHue.literals, ...HueAlias.literals].map((name) => [name, resolve(name, [])]),
-  ) as ResolvedThemeTokens["hue"]
+  return Object.fromEntries(Object.keys(source).map((name) => [name, resolve(name, [])])) as ResolvedHue
 }
 
 function createResolver(source: Record<string, unknown>) {
@@ -229,13 +251,23 @@ function createResolver(source: Record<string, unknown>) {
     const hit = cache.get(target)
     if (hit) return hit
     if (stack.includes(target)) throw new Error(`Circular theme reference: ${[...stack, target].join(" -> ")}`)
-    const result = resolve(read(source, target), target, [...stack, target])
+    const result = resolve(readColor(source, target), target, [...stack, target])
     if (!(result instanceof RGBA)) throw new Error(`Theme reference "${value}" at "${path}" is not a color`)
     cache.set(target, result)
     return result
   }
 
   return (value: unknown, path: string) => resolve(value, path)
+}
+
+function readColor(source: Record<string, unknown>, path: string) {
+  const match = /^hue\.(.+)\.(100|200|300|400|500|600|700|800|900)$/.exec(path)
+  if (!match?.[1] || !match[2]) return read(source, path)
+  const scales = source.hue
+  const scale = isRecord(scales) ? scales[match[1]] : undefined
+  const color = isRecord(scale) ? scale[match[2]] : undefined
+  if (color === undefined) throw new Error(`Theme reference "$${path}" was not found`)
+  return color
 }
 
 function resolvedKey(key: string) {

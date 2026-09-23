@@ -1,5 +1,5 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { Global } from "@opencode-ai/util/global"
+import { Global } from "@opencode/util/global"
 import { expect, test } from "bun:test"
 import { Effect } from "effect"
 import { CpuProfile } from "../src/cpu-profile"

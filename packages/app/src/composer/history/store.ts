@@ -1,35 +1,23 @@
-import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
+import { type SetStoreFunction, type Store } from "solid-js/store"
 import type { Prompt } from "@/composer/state"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import {
   clonePromptHistoryComments,
   prependHistoryEntry,
+  removeHistoryEntry,
   type PromptHistoryComment,
   type PromptHistoryStoredEntry,
 } from "./entry"
 import { clonePrompt } from "../prompt-parts"
+import { PromptHistoryState } from "../schema"
 
 export type ComposerHistoryStore = {
   entries: (mode: "normal" | "shell") => PromptHistoryStoredEntry[]
   add: (prompt: Prompt, mode: "normal" | "shell", comments: PromptHistoryComment[]) => void
+  remove: (prompt: Prompt, mode: "normal" | "shell", comments: PromptHistoryComment[]) => void
 }
 
-type PromptHistoryState = { entries: PromptHistoryStoredEntry[] }
-
-export function upgradeHistoryState(value: unknown) {
-  if (!value || typeof value !== "object" || Array.isArray(value) || !("entries" in value)) return value
-  const entries = value.entries
-  if (!Array.isArray(entries)) return value
-  return {
-    ...value,
-    entries: entries.flatMap((entry): PromptHistoryStoredEntry[] => {
-      if (Array.isArray(entry)) return [{ prompt: clonePrompt(entry as Prompt), comments: [] }]
-      if (!entry || typeof entry !== "object" || !("prompt" in entry) || !Array.isArray(entry.prompt)) return []
-      if (!("comments" in entry) || !Array.isArray(entry.comments)) return []
-      return [entry as PromptHistoryStoredEntry]
-    }),
-  }
-}
+type PromptHistoryState = typeof PromptHistoryState.Type
 
 function createComposerHistoryStore(
   normal: Store<PromptHistoryState>,
@@ -46,17 +34,26 @@ function createComposerHistoryStore(
       if (next === current.entries) return
       setCurrent("entries", next)
     },
+    remove(prompt, mode, comments) {
+      const current = mode === "shell" ? shell : normal
+      const setCurrent = mode === "shell" ? setShell : setNormal
+      const next = removeHistoryEntry(current.entries, prompt, comments)
+      if (next === current.entries) return
+      setCurrent("entries", next)
+    },
   }
 }
 
 export function createComposerHistory() {
   const [normal, setNormal, normalInit] = persisted(
-    { ...Persist.prompt(Persist.global("prompt-history")), migrate: upgradeHistoryState },
-    createStore<PromptHistoryState>({ entries: [] }),
+    Persist.prompt(Persist.global("prompt-history")),
+    PromptHistoryState,
+    { entries: [] },
   )
   const [shell, setShell, shellInit] = persisted(
-    { ...Persist.prompt(Persist.global("prompt-history-shell")), migrate: upgradeHistoryState },
-    createStore<PromptHistoryState>({ entries: [] }),
+    Persist.prompt(Persist.global("prompt-history-shell")),
+    PromptHistoryState,
+    { entries: [] },
   )
   const history = createComposerHistoryStore(normal, setNormal, shell, setShell)
   return {
@@ -67,6 +64,13 @@ export function createComposerHistory() {
       const saved = clonePrompt(prompt)
       const metadata = clonePromptHistoryComments(comments)
       void ready.then(() => history.add(saved, mode, metadata))
+    },
+    remove(prompt: Prompt, mode: "normal" | "shell", comments: PromptHistoryComment[]) {
+      const ready = mode === "shell" ? shellInit : normalInit
+      if (!(ready instanceof Promise)) return history.remove(prompt, mode, comments)
+      const saved = clonePrompt(prompt)
+      const metadata = clonePromptHistoryComments(comments)
+      void ready.then(() => history.remove(saved, mode, metadata))
     },
   }
 }

@@ -1,4 +1,4 @@
-import type { Plugin } from "@opencode-ai/plugin/tui"
+import type { Plugin } from "@opencode/plugin/tui"
 import { For, Show } from "solid-js"
 
 export type StoryFooterControl = {
@@ -14,38 +14,35 @@ export function StoryFooter(props: {
   message?: string
   controls: readonly StoryFooterControl[]
 }) {
-  const theme = props.context.theme.contextual.elevated
+  const theme = props.context.theme
 
   return (
-    <box flexShrink={0} flexDirection="column" backgroundColor={theme.background.default}>
+    <box flexShrink={0} flexDirection="column" backgroundColor={theme.background.raised.base}>
       <box height={1} paddingLeft={1} paddingRight={1} flexDirection="row">
-        <text fg={theme.text.default}>{props.title}</text>
+        <text fg={theme.text.base}>{props.title}</text>
         <Show when={props.details?.length}>
-          <text fg={theme.text.subdued}> · {props.details?.join(" · ")}</text>
+          <text fg={theme.text.muted}> · {props.details?.join(" · ")}</text>
         </Show>
       </box>
       <Show when={props.status || props.message}>
         <box height={1} paddingLeft={1} paddingRight={1} flexDirection="row">
-          <text fg={theme.text.default}>{props.status ?? ""}</text>
-          <Show when={props.status && props.message}>
-            <text fg={theme.text.subdued}> · </text>
-          </Show>
-          <text fg={theme.text.subdued}>{props.message ?? ""}</text>
+          <text fg={theme.text.base} wrapMode="none">
+            {props.status ?? ""}
+            <span style={{ fg: theme.text.muted }}>
+              {props.status && props.message ? " · " : ""}
+              {props.message ?? ""}
+            </span>
+          </text>
         </box>
       </Show>
-      <box height={1} paddingLeft={1} paddingRight={1} flexDirection="row">
-        <text fg={theme.text.default} wrapMode="none">
-          <For each={props.controls}>
-            {(control, index) => (
-              <>
-                <Show when={index() > 0}>
-                  <span> </span>
-                </Show>
-                {control.shortcut} <span style={{ fg: theme.text.subdued }}>{control.label}</span>
-              </>
-            )}
-          </For>
-        </text>
+      <box paddingLeft={1} paddingRight={1} flexDirection="row" flexWrap="wrap" columnGap={1}>
+        <For each={props.controls}>
+          {(control) => (
+            <text fg={theme.text.base} wrapMode="none" flexShrink={0}>
+              {control.shortcut} <span style={{ fg: theme.text.muted }}>{control.label}</span>
+            </text>
+          )}
+        </For>
       </box>
       {/* The app-wide feature footer overlays the terminal's final row. */}
       <box height={1} />

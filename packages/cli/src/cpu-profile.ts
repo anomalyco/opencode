@@ -1,6 +1,6 @@
 export * as CpuProfile from "./cpu-profile"
 
-import { Global } from "@opencode-ai/util/global"
+import { Global } from "@opencode/util/global"
 import { Effect, FileSystem, Queue } from "effect"
 import { Session } from "node:inspector"
 import path from "node:path"

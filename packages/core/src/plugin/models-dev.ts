@@ -1,15 +1,35 @@
-import { define } from "@opencode-ai/plugin/effect/plugin"
-import { Integration } from "@opencode-ai/schema/integration"
+import { define } from "@opencode/plugin/effect/plugin"
+import { Integration } from "@opencode/schema/integration"
+import { Provider } from "@opencode/schema/provider"
 import { Effect, Stream } from "effect"
 import { Bus } from "../bus.js"
 import { ModelsDev } from "../models-dev.js"
-import { Provider } from "../provider.js"
+
+// These catalog entries require inference profiles on Bedrock Runtime.
+// Opus/Sonnet 4.6 support in-region calls in eu-west-2 and must remain available.
+const BEDROCK_PROFILE_ONLY_IDS = [
+  "amazon.nova-2-lite-v1:0",
+  "anthropic.claude-fable-5",
+  "anthropic.claude-fable-5-1",
+  "anthropic.claude-haiku-4-5-20251001-v1:0",
+  "anthropic.claude-opus-4-1-20250805-v1:0",
+  "anthropic.claude-opus-4-5-20251101-v1:0",
+  "anthropic.claude-opus-4-7",
+  "anthropic.claude-opus-4-8",
+  "anthropic.claude-opus-5",
+  "anthropic.claude-sonnet-4-5-20250929-v1:0",
+  "anthropic.claude-sonnet-5",
+  "deepseek.r1-v1:0",
+  "mistral.pixtral-large-2502-v1:0",
+]
 
 export const ModelsDevPlugin = define({
   id: "opencode.models.dev",
   effect: Effect.fn(function* (ctx) {
     const modelsDev = yield* ModelsDev.Service
     const bus = yield* Bus.Service
+    // Filtering and definition indexes are shared across Locations. Only Model materialization
+    // makes mutable copies, after provider configuration and access have been resolved.
     const loaded = { data: snapshots(yield* modelsDev.get()) }
     yield* ctx.integration.transform((integrations) => {
       for (const provider of loaded.data) {
@@ -29,28 +49,27 @@ export const ModelsDevPlugin = define({
         })
       }
     })
-    yield* ctx.catalog.transform((catalog) => {
+    yield* ctx.provider.transform((providers) => {
       for (const provider of loaded.data) {
-        catalog.provider.update(provider.info.id, (draft) => {
-          Object.assign(draft, provider.info)
-          draft.integrationID = Integration.ID.make(provider.info.id)
+        providers.add({
+          info: { ...provider.info, integrationID: Integration.ID.make(provider.info.id) },
+          models: provider.models,
         })
-        for (const model of provider.models) {
-          if (model.status === "deprecated") continue
-          catalog.model.update(provider.info.id, model.id, (draft) => Object.assign(draft, model))
-        }
       }
     })
+    const apply = (data: readonly ModelsDev.Snapshot[]) => {
+      loaded.data = snapshots(data)
+      return ctx.integration.reload().pipe(Effect.andThen(ctx.provider.reload()))
+    }
     yield* bus.subscribe(ModelsDev.Event.Refreshed).pipe(
-      Stream.runForEach(() =>
-        modelsDev.get().pipe(
-          Effect.tap((data) => Effect.sync(() => (loaded.data = snapshots(data)))),
-          Effect.andThen(ctx.integration.reload()),
-          Effect.andThen(ctx.catalog.reload()),
-        ),
-      ),
+      Stream.runForEach(() => modelsDev.get().pipe(Effect.flatMap(apply))),
       Effect.forkScoped({ startImmediately: true }),
     )
+    // A refresh that landed between the initial read and the subscription above published
+    // Refreshed to nobody here. On a cold cache that read served the bundled snapshot, so
+    // re-read now instead of waiting for the next TTL refresh.
+    const latest = yield* modelsDev.get()
+    if (snapshots(latest) !== loaded.data) yield* apply(latest)
   }),
 })
 
@@ -61,12 +80,32 @@ function environmentNames(provider: ModelsDev.Snapshot) {
   // Vertex. Those configure Google auth rather than carrying a key, so only the
   // Express Mode key may become a credential; GoogleVertexPlugin handles activation.
   if (provider.info.id === Provider.ID.googleVertex) return ["GOOGLE_VERTEX_API_KEY"]
+  if (provider.info.id === "cloudflare-workers-ai")
+    return ["CLOUDFLARE_API_KEY", "CLOUDFLARE_WORKERS_AI_TOKEN", "CLOUDFLARE_API_TOKEN"]
   return [...provider.environment]
 }
 
+const prepared = new WeakMap<readonly ModelsDev.Snapshot[], readonly ModelsDev.Snapshot[]>()
+
 function snapshots(data: readonly ModelsDev.Snapshot[]) {
-  return structuredClone(data).filter(
-    // These deprecated aliases are replaced by the canonical Azure and Google Vertex providers.
-    (provider) => provider.info.id !== "azure-cognitive-services" && provider.info.id !== "google-vertex-anthropic",
-  )
+  const cached = prepared.get(data)
+  if (cached) return cached
+  const result = data
+    .filter(
+      // These deprecated aliases are replaced by the canonical Azure and Google Vertex providers.
+      (provider) => provider.info.id !== "azure-cognitive-services" && provider.info.id !== "google-vertex-anthropic",
+    )
+    .map((provider) => ({
+      ...provider,
+      models: provider.models.filter(
+        (model) =>
+          model.status !== "deprecated" &&
+          !(
+            provider.info.id === Provider.ID.amazonBedrock &&
+            BEDROCK_PROFILE_ONLY_IDS.includes(model.modelID ?? model.id)
+          ),
+      ),
+    }))
+  prepared.set(data, result)
+  return result
 }

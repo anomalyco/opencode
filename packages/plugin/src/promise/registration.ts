@@ -15,7 +15,7 @@ export type Hooks<Spec> = <Name extends keyof Spec>(
 export type ModelHooks<Spec> = <Name extends keyof Spec>(
   name: Name,
   callback: (input: Spec[Name]) => Promise<void> | void,
-  options?: ModelHookOptions,
+  options?: Spec[Name] extends { readonly model: unknown } ? ModelHookOptions : never,
 ) => Promise<Registration>
 
 export type Transform<Input> = (callback: (input: Input) => void) => Promise<Registration>

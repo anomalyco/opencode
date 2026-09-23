@@ -1,11 +1,13 @@
-import { createSimpleContext } from "@opencode-ai/ui/context"
+import { createSimpleContext } from "@opencode/ui/context"
 import type { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
 import type { Accessor } from "solid-js"
 import type { DesktopMenuAction } from "@/shell/commands/desktop-menu"
 import { ServerConnection } from "@/runtime/server/registry"
 import type { WslServersPlatform } from "@/servers/wsl/types"
+import type { SshPlatform } from "@/servers/ssh/types"
 import type { UpdaterPlatform } from "@/shell/updates/types"
 import type { DraftStore } from "@/runtime/persistence/drafts"
+import type { BrowserPanePlatform } from "./browser-pane"
 
 type PickerPaths = string | string[] | null
 type OpenDirectoryPickerOptions = { title?: string; multiple?: boolean }
@@ -19,6 +21,12 @@ type OpenAttachmentPickerOptions = {
 type SaveFilePickerOptions = { title?: string; defaultPath?: string }
 type PlatformName = "web" | "desktop"
 type DesktopOS = "macos" | "windows" | "linux"
+
+export type PairingInfo = {
+  readonly urls: readonly string[]
+  readonly username: "opencode"
+  readonly password: string
+}
 
 export type FatalRendererErrorLog = {
   error: string
@@ -59,8 +67,11 @@ type PlatformBase = {
   /** Resolve the native source path for a desktop File. */
   getPathForFile?(file: File): string
 
-  /** Open a native save file picker dialog (desktop only) */
-  saveFilePickerDialog?(opts?: SaveFilePickerOptions): Promise<string | null>
+  /** Observe native drag cancellation that does not reach the renderer event loop. */
+  onDragCancel?(callback: () => void): () => void
+
+  /** Open a native save file dialog and write content to the selected path (desktop only) */
+  saveFile?(opts: SaveFilePickerOptions, content: string): Promise<boolean>
 
   /** Storage mechanism, defaults to localStorage */
   storage?: (name?: string) => SyncStorage | AsyncStorage
@@ -82,6 +93,7 @@ type PlatformBase = {
 
   /** Manage WSL sidecar servers (Electron on Windows only) */
   wslServers?: WslServersPlatform
+  sshServers?: SshPlatform
 
   /** Webview zoom level (desktop only) */
   webviewZoom?: Accessor<number>
@@ -94,6 +106,10 @@ type PlatformBase = {
 
   /** Allow native pinch/Ctrl-scroll zoom gestures (desktop only) */
   setPinchZoomEnabled?(enabled: boolean): Promise<void> | void
+
+  /** Prevent the local display from sleeping while the desktop app is running. */
+  getKeepScreenActive?(): Promise<boolean>
+  setKeepScreenActive?(enabled: boolean): Promise<void>
 
   /** Run a desktop-only menu action from the app chrome */
   runDesktopMenuAction?(action: DesktopMenuAction): Promise<void> | void
@@ -115,6 +131,14 @@ type PlatformBase = {
 
   /** Record a fatal renderer error in platform logs (desktop only) */
   recordFatalRendererError?(error: FatalRendererErrorLog): Promise<void>
+
+  /** Native browser pane hosted by the platform (desktop only). */
+  browserPane?: BrowserPanePlatform
+
+  /** Pair another device with the local desktop server. */
+  pair?: {
+    info(): Promise<PairingInfo>
+  }
 }
 
 export type Platform = PlatformBase &

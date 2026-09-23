@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { Failed, NotFound, WrongKind, type Files } from "@opencode-ai/core/environment/index"
+import { Failed, NotFound, WrongKind, type Files } from "@opencode/core/environment/index"
 
 export interface EnvironmentHarness {
   readonly files: Files
@@ -46,6 +46,29 @@ export const environmentConformance = <E>(
         expect(result.info.type).toBe("file")
         expect(result.info.size).toBe(5)
         expect(yield* harness.files.stat(target)).toEqual(result.info)
+      }),
+    )
+
+    check("observes filesystem state when an operation executes", (harness) =>
+      Effect.gen(function* () {
+        const target = `${harness.root}/deferred.txt`
+        const source = `${harness.root}/source.txt`
+        const destination = `${harness.root}/destination.txt`
+        const read = harness.files.read(target)
+        const stat = harness.files.stat(target)
+        const list = harness.files.list(harness.root)
+        const move = harness.files.move(source, destination)
+
+        yield* harness.files.write(target, bytes("first"))
+        yield* harness.files.write(source, bytes("moved"))
+        expect(text((yield* read).bytes)).toBe("first")
+        expect((yield* stat).size).toBe(5)
+        expect(yield* list).toContainEqual({ name: "deferred.txt", type: "file" })
+        yield* move
+        expect(text((yield* harness.files.read(destination)).bytes)).toBe("moved")
+
+        yield* harness.files.write(target, bytes("second"))
+        expect(text((yield* read).bytes)).toBe("second")
       }),
     )
 

@@ -1,9 +1,10 @@
 // @ts-nocheck
 import { createSignal } from "solid-js"
 import { LineCommentEditor, LineComment, LineCommentOverflowIcon } from "./line-comment"
+import { Menu } from "../../navigation/menu/menu"
 
 const docs = `### Overview
-Line comment **display** and **editor** cards aligned with OpenCode line-comment specs (raised \`#FAFAFA\` surface, footer line context, \`Button\` neutral + contrast actions).
+Line comment **display** and **editor** cards aligned with OpenCode line-comment specs (raised \`#FAFAFA\` surface, footer line context, \`Button\` ghost + contrast actions).
 
 ### Display
 - \`LineComment\`: column stack (body + meta) beside optional \`actions\` (overflow).
@@ -35,9 +36,17 @@ export const Display = {
         comment="Consider guarding against empty arrays."
         selection="Comment on line 40"
         actions={
-          <button type="button" data-slot="line-comment-v2-overflow" aria-label="Comment actions">
-            <LineCommentOverflowIcon />
-          </button>
+          <Menu gutter={4}>
+            <Menu.Trigger as="button" type="button" data-slot="line-comment-v2-overflow" aria-label="Comment actions">
+              <LineCommentOverflowIcon />
+            </Menu.Trigger>
+            <Menu.Portal>
+              <Menu.Content>
+                <Menu.Item>Edit</Menu.Item>
+                <Menu.Item>Delete</Menu.Item>
+              </Menu.Content>
+            </Menu.Portal>
+          </Menu>
         }
       />
     </div>

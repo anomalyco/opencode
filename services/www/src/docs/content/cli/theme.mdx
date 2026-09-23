@@ -1,0 +1,246 @@
+---
+title: "Theme"
+---
+
+OpenCode comes with many built-in themes for light and dark modes. Choose one in settings, or mix your own colors.
+
+## Choose a theme
+
+Press `Ctrl+P`, select **Open settings**, then open **Theme**. The default theme is `opencode`.
+
+You can also set them in your global [CLI settings](/cli/config):
+
+```json title="~/.config/opencode/cli.json"
+{
+  "$schema": "https://opencode.ai/v2/cli.json",
+  "theme": {
+    "name": "tokyonight",
+    "mode": "dark"
+  }
+}
+```
+
+Run `/themes` to change themes without opening settings.
+
+## System colors
+
+When OpenCode can read your terminal palette, the theme picker includes the `system` theme. It derives colors from your terminal's foreground, background, and ANSI palette.
+
+The theme name `system` selects terminal-derived colors. The mode `system` follows the terminal's light or dark appearance.
+
+## Mode
+
+Use `system` to follow your terminal's appearance, or lock the theme to light or dark mode:
+
+| Mode | Behavior |
+| --- | --- |
+| `system` | Follow the terminal's detected light or dark appearance. |
+| `dark` | Always use the theme's dark colors. |
+| `light` | Always use the theme's light colors. |
+
+This maps to the `mode` field inside `theme` in your CLI config. If a custom theme provides only one mode, OpenCode uses that mode when the other is requested.
+
+## Adding a Theme
+
+To add a theme you downloaded or received from someone else, copy its JSON file into the global themes directory:
+
+```bash
+cp theme.json ~/.config/opencode/themes/
+```
+
+You can also put the theme in a project's `.opencode/themes` directory to make it available only in that project.
+
+The filename becomes the theme name. For example, `my-theme.json` appears as `my-theme`. Restart OpenCode after adding the file, then run `/themes` to select it.
+
+OpenCode reads `.json` files only. A theme closer to the current directory replaces a global or parent theme with the same name.
+
+## Using Themes in Plugins
+
+[CLI plugins](/build/plugins/cli) read resolved colors through `context.theme` and the active mode through `context.themeMode`. Use semantic tokens so your plugin follows the selected theme:
+
+```tsx title="Inside a CLI plugin component"
+import { usePlugin } from "@opencode/plugin/tui"
+
+function Status() {
+  const context = usePlugin()
+  return <text fg={context.theme.text.base}>Ready</text>
+}
+```
+
+The public CLI plugin API does not register themes. Add custom theme definitions with JSON files in the directories above.
+
+## Creating a Theme
+
+Use our [Theme Tool](https://opencode.ai/theme/) to create or edit themes. This tool makes it easy to understand the structure, change it, and define custom colors. The explanation below is for reference.
+
+A theme separates shared semantic tokens from mode-specific palettes:
+
+| Section | Purpose |
+| --- | --- |
+| `base` | The complete token tree shared by every mode. |
+| `light`, `dark` | A complete hue palette and optional token overrides for that mode. |
+
+Every theme provides a complete `base` and defines at least one of `light` or `dark`. Modes inherit from the file's `base`; they do not inherit from the built-in OpenCode theme or from each other.
+
+The examples below show only the sections relevant to each concept. Use the theme editor to generate a complete file before customizing it.
+
+### Structure
+
+Put colors used by both modes in `base`, then override them inside `light` or `dark` when needed:
+
+```json title="theme.json (excerpt)"
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "base": {
+    "text": {
+      "base": "$hue.neutral.200",
+      "muted": "$hue.neutral.400"
+    }
+  },
+  "light": {
+    "hue": {}
+  },
+  "dark": {
+    "hue": {},
+    "text": {
+      "muted": "$hue.neutral.300"
+    }
+  }
+}
+```
+
+The complete `base` supplies every semantic token. Each mode supplies every required hue and may override any part of the base token tree.
+
+### Colors and references
+
+A color can be a hex value, `"transparent"`, or a reference to another theme color:
+
+```json title="Inside base or a mode"
+{
+  "text": {
+    "base": "#eeeeee",
+    "muted": "$hue.neutral.400"
+  },
+  "border": {
+    "base": "$text.muted"
+  }
+}
+```
+
+### Hues
+
+Hues are nine-step color scales. Every mode defines the eight base hues and three aliases:
+
+| Kind | Values |
+| --- | --- |
+| Base | `gray`, `red`, `orange`, `yellow`, `green`, `cyan`, `blue`, `purple` |
+| Alias | `accent`, `interactive`, `neutral` |
+| Step | `100`, `200`, `300`, `400`, `500`, `600`, `700`, `800`, `900` |
+
+Define all nine steps for a base hue, or alias one hue to another:
+
+```json title="Inside light or dark"
+{
+  "hue": {
+    "purple": {
+      "100": "#b38ff4",
+      "200": "#9d7cd8",
+      "300": "#8869bd",
+      "400": "#7357a2",
+      "500": "#5f4688",
+      "600": "#4b356f",
+      "700": "#392557",
+      "800": "#271640",
+      "900": "#17072b"
+    },
+    "accent": "$hue.purple"
+  }
+}
+```
+
+Hue steps follow the mode's contrast direction. Light themes run from dark at `100` to light at `900`; dark themes run from light at `100` to dark at `900`.
+
+The `categorical` array in `base` sets the ordered hues used to distinguish agents and other repeated items:
+
+```json title="Inside base"
+{
+  "categorical": ["accent", "purple", "green", "blue"]
+}
+```
+
+### Semantic tokens
+
+Semantic tokens assign colors to UI roles. Components use these roles instead of selecting colors directly.
+
+| Group | Purpose |
+| --- | --- |
+| `text` | Base, muted, action, form-field, status, and feedback text. |
+| `background` | Base, raised surfaces, actions, form fields, and feedback fills. |
+| `border`, `scrollbar` | Border and scrollbar colors. |
+| `diff` | Added, removed, context, highlight, and line-number colors. |
+| `syntax` | Source-code highlighting. |
+| `markdown` | Markdown elements. |
+
+For example, `text.muted` controls secondary text while `background.raised` defines progressively elevated surfaces:
+
+```json title="Inside base"
+{
+  "text": {
+    "base": "$hue.neutral.200",
+    "muted": "$hue.neutral.400"
+  },
+  "background": {
+    "base": "$hue.neutral.800",
+    "raised": {
+      "base": "$hue.neutral.700",
+      "high": "$hue.neutral.600",
+      "max": "$hue.neutral.500"
+    }
+  }
+}
+```
+
+Syntax keys are `comment`, `keyword`, `function`, `variable`, `string`, `number`, `type`, `operator`, and `punctuation`.
+
+Markdown keys are `text`, `heading`, `link`, `linkText`, `code`, `blockQuote`, `emphasis`, `strong`, `horizontalRule`, `listItem`, `listEnumeration`, `image`, `imageText`, and `codeBlock`.
+
+### Actions and states
+
+Actions have `primary`, `secondary`, and `destructive` variants. Actions and form fields use `base` plus optional interaction states:
+
+```json title="Inside base or a mode"
+{
+  "text": {
+    "action": {
+      "primary": {
+        "base": "$hue.interactive.400",
+        "$hovered": "$hue.interactive.300",
+        "$disabled": "$hue.neutral.600"
+      }
+    }
+  }
+}
+```
+
+The state keys are `$hovered`, `$focused`, `$pressed`, `$selected`, and `$disabled`. An unspecified state uses that action or form field's `base` color.
+
+### Dialog surface
+
+Panels, dialogs, menus, and toasts select their depth from `background.raised`. Dialogs may additionally override semantic tokens with `@dialog`:
+
+```json title="Inside base or a mode"
+{
+  "@dialog": {
+    "background": {
+      "base": "$background.raised.base",
+      "action": {
+        "primary": {
+          "$hovered": "$background.raised.high"
+        }
+      }
+    }
+  }
+}
+```
+
+The TUI resolves references again after applying `@dialog`, so tokens that reference `$background.base` follow the dialog background. A contextual action `base` becomes the fallback for its unspecified states; explicit state overrides still win.

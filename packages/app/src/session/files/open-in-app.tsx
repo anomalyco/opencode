@@ -5,6 +5,10 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { showToast } from "@/shell/notifications/toast"
 import { useServer } from "@/runtime/server/current"
+import { Schema } from "effect"
+import { Persistence } from "@/runtime/persistence/schema"
+import { fileManagerApp } from "@/home/projects/file-manager"
+import { openInAppParentPath } from "@/session/files/open-in-app-path"
 
 export const OPEN_APPS = [
   "vscode",
@@ -25,6 +29,12 @@ export const OPEN_APPS = [
 
 export type OpenApp = (typeof OPEN_APPS)[number]
 export type OpenAppOS = "macos" | "windows" | "linux" | "unknown"
+
+export const OpenAppPreferences = Persistence.struct({
+  app: Schema.Literals(OPEN_APPS),
+})
+
+const appExistence = new Map<string, Promise<boolean>>()
 
 export const MAC_OPEN_APPS = [
   {
@@ -102,9 +112,7 @@ export function detectOpenAppOS(platform: ReturnType<typeof usePlatform>): OpenA
 }
 
 export function openAppFileManager(os: OpenAppOS) {
-  if (os === "macos") return { label: "session.header.open.finder", icon: "finder" as const }
-  if (os === "windows") return { label: "session.header.open.fileExplorer", icon: "file-explorer" as const }
-  return { label: "session.header.open.fileManager", icon: "finder" as const }
+  return fileManagerApp(os)
 }
 
 export function openAppsForOS(os: OpenAppOS) {
@@ -121,7 +129,7 @@ const showRequestError = (language: ReturnType<typeof useLanguage>, err: unknown
   })
 }
 
-export function useOpenInApp(input: { directory: () => string }) {
+export function useOpenInApp(input: { path: () => string }) {
   const platform = usePlatform()
   const server = useServer()
   const language = useLanguage()
@@ -143,12 +151,7 @@ export function useOpenInApp(input: { directory: () => string }) {
     setExists(Object.fromEntries(list.map((app) => [app.id, undefined])) as Partial<Record<OpenApp, boolean>>)
 
     void Promise.all(
-      list.map((app) =>
-        Promise.resolve(platform.checkAppExists?.(app.openWith))
-          .then((value) => Boolean(value))
-          .catch(() => false)
-          .then((ok) => [app.id, ok] as const),
-      ),
+      list.map((app) => checkAppExists(platform, app.openWith).then((ok) => [app.id, ok] as const)),
     ).then((entries) => {
       setExists(Object.fromEntries(entries) as Partial<Record<OpenApp, boolean>>)
     })
@@ -163,7 +166,7 @@ export function useOpenInApp(input: { directory: () => string }) {
     ] as const
   })
 
-  const [prefs, setPrefs] = persisted(Persist.global("open.app"), createStore({ app: "finder" as OpenApp | "finder" }))
+  const [prefs, setPrefs] = persisted(Persist.global("open.app"), OpenAppPreferences, { app: "finder" })
   const [menu, setMenu] = createStore({ open: false })
   const [openRequest, setOpenRequest] = createStore({
     app: undefined as OpenApp | undefined,
@@ -183,33 +186,35 @@ export function useOpenInApp(input: { directory: () => string }) {
     setPrefs("app", app)
   }
 
-  const openDir = (app: OpenApp | "finder") => {
+  const openPath = (app: OpenApp | "finder", target = input.path(), reveal = false) => {
     if (opening() || !canOpen() || !platform.openPath) return
-    const directory = input.directory()
-    if (!directory) return
+    if (!target) return
 
+    const open = (path: string, openWith?: string) => platform.openPath!(path, openWith)
     const item = options().find((o) => o.id === app)
     const openWith = item && "openWith" in item ? item.openWith : undefined
     setOpenRequest("app", app)
-    platform
-      .openPath(directory, openWith)
+    const request =
+      app === "finder" && reveal && platform.revealPath
+        ? platform.revealPath(target).then((revealed) => (revealed ? undefined : open(openInAppParentPath(target))))
+        : open(target, openWith)
+    request
       .catch((err: unknown) => showRequestError(language, err))
       .finally(() => {
         setOpenRequest("app", undefined)
       })
   }
 
-  const copyPath = () => {
-    const directory = input.directory()
-    if (!directory) return
+  const copyPath = (target = input.path()) => {
+    if (!target) return
     navigator.clipboard
-      .writeText(directory)
+      .writeText(target)
       .then(() => {
         showToast({
           variant: "success",
           icon: "circle-check",
           title: language.t("common.copied"),
-          description: directory,
+          description: target,
         })
       })
       .catch((err: unknown) => showRequestError(language, err))
@@ -222,8 +227,18 @@ export function useOpenInApp(input: { directory: () => string }) {
     options,
     menu,
     setMenu,
-    openDir,
+    openPath,
     selectApp,
     copyPath,
   }
+}
+
+function checkAppExists(platform: ReturnType<typeof usePlatform>, app: string) {
+  const cached = appExistence.get(app)
+  if (cached) return cached
+  const request = Promise.resolve(platform.checkAppExists?.(app))
+    .then(Boolean)
+    .catch(() => false)
+  appExistence.set(app, request)
+  return request
 }

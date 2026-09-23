@@ -68,3 +68,7 @@
     }
   }
 }
+
+[data-color-scheme="dark"] [data-component="attachment-card"][data-surface="base"] {
+  background: var(--v2-overlay-simple-overlay-hover);
+}

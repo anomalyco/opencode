@@ -3,7 +3,7 @@ export * as KV from "./kv.js"
 import { and, asc, eq, gt, gte, lt } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Database } from "./database/database.js"
-import { makeGlobalNode } from "@opencode-ai/util/effect/app-node"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { KVTable } from "./kv/sql.js"
 
 export type Value = Schema.Json

@@ -2,13 +2,13 @@ import { Component, createMemo } from "solid-js"
 import { useNavigate, useParams } from "@solidjs/router"
 import { useData } from "@/runtime/server/current"
 import { useComposerState } from "@/composer/persistence"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
-import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode-ai/ui/dialog"
-import { List } from "@opencode-ai/ui/list"
+import { useDialog } from "@opencode/ui/context/dialog"
+import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode/ui/dialog"
+import { List } from "@opencode/ui/list"
 import { showToast } from "@/shell/notifications/toast"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServerSDK } from "@/runtime/server/client"
-import { base64Encode } from "@opencode-ai/util/encode"
+import { base64Encode } from "@opencode/util/encode"
 import { extractPromptComments, extractPromptFromMessage } from "@/composer/prompt"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useServer } from "@/runtime/server/current"
@@ -69,7 +69,7 @@ export const DialogFork: Component = () => {
     const dir = base64Encode(location().directory)
 
     serverSDK.api.session
-      .fork({ sessionID, boundary: { type: "before", messageID: item.id } })
+      .fork({ sessionID, before: item.id })
       .then((forked) => {
         data.session.remember(forked)
         dialog.close()

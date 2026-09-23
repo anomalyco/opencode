@@ -1,6 +1,6 @@
 export * as ReferenceInstructions from "./instructions.js"
 
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Reference } from "../reference.js"
 import { Instructions } from "../instructions/index.js"

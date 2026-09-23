@@ -1,5 +1,5 @@
 import { NodeFileSystem } from "@effect/platform-node"
-import { Global } from "@opencode-ai/util/global"
+import { Global } from "@opencode/util/global"
 import { OPENCODE_VERSION } from "../src/version"
 import { expect, test } from "bun:test"
 import { Effect, FileSystem, Scope } from "effect"
@@ -16,9 +16,9 @@ test("resolution groups Effect-native lifecycle operations only for the managed 
     port: 0,
     fetch() {
       return Response.json({
-        healthy: true,
         version: OPENCODE_VERSION,
         pid: process.pid,
+        urls: [],
       })
     },
   })

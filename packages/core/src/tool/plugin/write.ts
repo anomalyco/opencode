@@ -6,14 +6,14 @@
  */
 export * as WriteTool from "./write.js"
 
-import type { Context as PluginContext } from "@opencode-ai/plugin/effect/plugin"
-import { ToolFailure } from "@opencode-ai/ai"
+import type { Context } from "@opencode/plugin/effect/plugin"
+import { ToolFailure } from "@opencode/ai"
 import { Effect, Schema } from "effect"
-import { Bom } from "@opencode-ai/util/bom"
+import { Bom } from "@opencode/util/bom"
 import { Environment } from "../../environment/index.js"
 import { FileMutation } from "../../file-mutation.js"
 import { Formatter } from "../../formatter.js"
-import { LocationMutation } from "../../location-mutation.js"
+import { FileAccess } from "../../file-access.js"
 import { Permission } from "../../permission.js"
 import { fileDiff } from "./file-diff.js"
 
@@ -35,7 +35,7 @@ export const Output = Schema.Struct({
 })
 export type Output = typeof Output.Type
 
-export const toModelOutput = (output: Output) =>
+export const toModelContent = (output: Output) =>
   `${output.existed ? "Wrote" : "Created"} file successfully: ${output.resource}`
 
 /** Deferred write UX integrations remain visible at the model-facing seam. */
@@ -45,16 +45,16 @@ export const toModelOutput = (output: Output) =>
 
 export const Plugin = {
   id: "opencode.tool.write",
-  effect: Effect.fn("WriteTool.Plugin")(function* (ctx: PluginContext) {
-    const mutation = yield* LocationMutation.Service
+  effect: Effect.fn("WriteTool.Plugin")(function* (ctx: Context) {
+    const access = yield* FileAccess.Service
     const fileMutation = yield* FileMutation.Service
     const environment = yield* Environment.Service
     const formatter = yield* Formatter.Service
     const permission = yield* Permission.Service
 
     yield* ctx.tool
-      .transform((draft) =>
-        draft.add({
+      .transform((editor) =>
+        editor.add({
           name,
           options: { codemode: false, permission: "edit" },
           description:
@@ -68,15 +68,8 @@ export const Plugin = {
                 messageID: context.messageID,
                 id: context.id,
               }
-              const target = yield* mutation.resolve({ path: input.path, kind: "file" })
-              const external = target.externalDirectory
-              if (external)
-                yield* permission.assert({
-                  ...LocationMutation.externalDirectoryPermission(external),
-                  sessionID: context.sessionID,
-                  agent: context.agent,
-                  source,
-                })
+              const target = yield* access.resolve({ path: input.path, kind: "file" })
+              yield* access.authorizeExternal([target], context)
               const current = yield* FileMutation.readText(environment.files, target.absolute).pipe(
                 Effect.catchTag("Environment.NotFound", () => Effect.undefined),
               )
@@ -98,7 +91,7 @@ export const Plugin = {
               }
               return result
             }).pipe(
-              Effect.map((output) => ({ output, content: toModelOutput(output) })),
+              Effect.map((output) => ({ output, content: toModelContent(output) })),
               Effect.mapError((error) => new ToolFailure({ message: `Unable to write ${input.path}`, error })),
             ),
         }),

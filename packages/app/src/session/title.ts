@@ -1,5 +1,5 @@
-import type { SessionInfo } from "@opencode-ai/client/promise"
-import { displayLabel } from "@opencode-ai/util/session-title-fallback"
+import type { SessionInfo } from "@opencode/client/promise"
+import { displayLabel } from "@opencode/util/session-title-fallback"
 
 const pattern = /^(New session|Child session) - \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
 

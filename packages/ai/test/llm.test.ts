@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { CacheHint, LLM, LLMResponse } from "../src/index.js"
+import { Schema } from "effect"
+import { CacheHint, LLM, LLMResponse, ToolEntry, ToolNamespace } from "../src/index.js"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
 import * as OpenAIResponses from "../src/protocols/openai-responses.js"
 import {
@@ -17,6 +18,52 @@ const chatRoute = OpenAIChat.route
 const responsesRoute = OpenAIResponses.route
 
 describe("llm constructors", () => {
+  test("normalizes recursive tool namespaces", () => {
+    const request = LLM.request({
+      model: LanguageModel.make({ id: "fake-model", provider: "fake", route: responsesRoute }),
+      tools: [
+        {
+          type: "namespace",
+          name: "crm",
+          description: "Customer management",
+          tools: [
+            { name: "lookup", description: "Look up a customer", inputSchema: { type: "object" } },
+            {
+              type: "namespace",
+              name: "orders",
+              tools: [{ name: "list", description: "List orders", inputSchema: { type: "object" } }],
+            },
+          ],
+        },
+      ],
+    })
+
+    expect(request.tools[0]).toEqual({
+      type: "namespace",
+      name: "crm",
+      description: "Customer management",
+      tools: [
+        expect.objectContaining({ type: "tool", name: "lookup" }),
+        {
+          type: "namespace",
+          name: "orders",
+          description: undefined,
+          tools: [expect.objectContaining({ type: "tool", name: "list" })],
+        },
+      ],
+    })
+    expect(request.tools[0]).toEqual(
+      ToolNamespace.make({
+        name: "crm",
+        description: "Customer management",
+        tools: request.tools[0]!.type === "namespace" ? request.tools[0].tools : [],
+      }),
+    )
+    expect(Schema.decodeUnknownSync(ToolEntry)(Schema.encodeUnknownSync(ToolEntry)(request.tools[0]))).toEqual(
+      request.tools[0],
+    )
+  })
+
   test("builds canonical schema classes from ergonomic input", () => {
     const request = LLM.request({
       id: "req_1",

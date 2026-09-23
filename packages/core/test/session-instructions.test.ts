@@ -1,40 +1,39 @@
 import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { DateTime, Effect, Layer, Stream } from "effect"
-import { Message } from "@opencode-ai/ai"
-import { Agent } from "@opencode-ai/core/agent"
-import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
-import { LayerNode } from "@opencode-ai/util/effect/layer-node"
-import { Config } from "@opencode-ai/core/config"
-import { Database } from "@opencode-ai/core/database/database"
-import { Bus } from "@opencode-ai/core/bus"
-import { FSUtil } from "@opencode-ai/util/fs-util"
-import { Global } from "@opencode-ai/util/global"
-import { Image } from "@opencode-ai/core/image"
-import { Location } from "@opencode-ai/core/location"
-import { LocationMutation } from "@opencode-ai/core/location-mutation"
-import { Model } from "@opencode-ai/core/model"
-import { Permission } from "@opencode-ai/core/permission"
-import { Project } from "@opencode-ai/core/project"
-import { Provider } from "@opencode-ai/core/provider"
-import { ReadTool } from "@opencode-ai/core/tool/plugin/read"
-import { ReadToolFileSystem } from "@opencode-ai/core/tool/read-filesystem"
-import { SessionEvent } from "@opencode-ai/core/session/event"
-import { SessionExecution } from "@opencode-ai/core/session/execution"
-import { SessionInstructions } from "@opencode-ai/core/session/instructions"
-import { SessionMessage } from "@opencode-ai/core/session/message"
-import { SessionProjector } from "@opencode-ai/core/session/projector"
-import { SessionStore } from "@opencode-ai/core/session/store"
-import { Session } from "@opencode-ai/core/session"
-import { toLLMMessages } from "@opencode-ai/core/session/runner/to-llm-message"
-import { PluginHooks } from "@opencode-ai/core/plugin/hooks"
-import { Tool } from "@opencode-ai/core/tool"
+import { DateTime, Effect, Layer } from "effect"
+import { Agent } from "@opencode/core/agent"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Config } from "@opencode/core/config"
+import { Database } from "@opencode/core/database/database"
+import { Bus } from "@opencode/core/bus"
+import { FSUtil } from "@opencode/util/fs-util"
+import { Global } from "@opencode/util/global"
+import { Image } from "@opencode/core/image"
+import { Location } from "@opencode/core/location"
+import { FileAccess } from "@opencode/core/file-access"
+import { Model } from "@opencode/core/model"
+import { Permission } from "@opencode/core/permission"
+import { Project } from "@opencode/core/project"
+import { Provider } from "@opencode/core/provider"
+import { ReadTool } from "@opencode/core/tool/plugin/read"
+import { ReadToolFileSystem } from "@opencode/core/tool/read-filesystem"
+import { SessionEvent } from "@opencode/core/session/event"
+import { SessionExecution } from "@opencode/core/session/execution"
+import { SessionInstructions } from "@opencode/core/session/instructions"
+import { SessionMessage } from "@opencode/core/session/message"
+import { SessionProjector } from "@opencode/core/session/projector"
+import { SessionStore } from "@opencode/core/session/store"
+import { Session } from "@opencode/core/session"
+import { toLLMMessages } from "@opencode/core/session/runner/to-llm-message"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
+import { Tool } from "@opencode/core/tool"
 import { tempLocationLayer } from "./fixture/location"
-import { makeLocationNode } from "@opencode-ai/util/effect/app-node"
+import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
-import { globalProjectLayer } from "./lib/project"
+import { globalProjectNode } from "./lib/project"
 import { executeTool, registerToolPlugin } from "./lib/tool"
 
 const readToolNode = makeLocationNode({
@@ -43,7 +42,7 @@ const readToolNode = makeLocationNode({
   deps: [
     Tool.node,
     ReadToolFileSystem.node,
-    LocationMutation.node,
+    FileAccess.node,
     Image.node,
     Permission.node,
     SessionInstructions.node,
@@ -54,7 +53,7 @@ const readToolNode = makeLocationNode({
 
 const permission = permissionLayer({ assert: () => Effect.void })
 const config = Config.testLayer()
-const imageLayer = AppNodeBuilder.build(Image.node, [[Config.node, config]])
+const imageLayer = AppNodeBuilder.build(Image.node, [Config.node.replace(config)])
 
 const testLayer = AppNodeBuilder.build(
   LayerNode.group([
@@ -65,10 +64,9 @@ const testLayer = AppNodeBuilder.build(
     Session.node,
     Location.node,
     FSUtil.node,
-    LocationMutation.node,
+    FileAccess.node,
     ReadToolFileSystem.node,
     readToolNode,
-    Tool.node,
     Tool.node,
     PluginHooks.node,
     SessionInstructions.node,
@@ -76,14 +74,14 @@ const testLayer = AppNodeBuilder.build(
     Image.node,
   ]),
   [
-    [Project.node, globalProjectLayer],
-    [SessionExecution.node, SessionExecution.noopLayer],
-    [Location.node, tempLocationLayer],
-    [Permission.node, permission],
-    [Config.node, config],
-    [Image.node, imageLayer],
+    Project.node.replace(globalProjectNode),
+    SessionExecution.node.replace(SessionExecution.noopLayer),
+    Location.node.replace(tempLocationLayer),
+    Permission.node.replace(permission),
+    Config.node.replace(config),
+    Image.node.replace(imageLayer),
   ],
-) as unknown as Layer.Layer<unknown>
+)
 
 const it = testEffect(testLayer)
 
@@ -120,7 +118,7 @@ const seedSynthetic = (sessionID: Session.ID, paths: string[]) =>
   })
 
 describe("SessionInstructions", () => {
-  it.effect("injects AGENTS.md files above a read, excludes the Location root, and dedups across reads", () =>
+  it.live("injects AGENTS.md files above a read, excludes the Location root, and dedups across reads", () =>
     Effect.gen(function* () {
       const location = yield* Location.Service
       const dir = location.directory
@@ -170,7 +168,7 @@ describe("SessionInstructions", () => {
     }),
   )
 
-  it.effect("does not re-inject paths already recorded in durable session history", () =>
+  it.live("does not re-inject paths already recorded in durable session history", () =>
     Effect.gen(function* () {
       const location = yield* Location.Service
       const dir = location.directory
@@ -197,7 +195,7 @@ describe("SessionInstructions", () => {
     }),
   )
 
-  it.effect(
+  it.live(
     "discovers AGENTS.md on a directory listing, including the listed directory's own, and dedups with a later file read",
     () =>
       Effect.gen(function* () {
@@ -233,7 +231,7 @@ describe("SessionInstructions", () => {
       }),
   )
 
-  it.effect("re-injects nested instructions dropped from history by compaction", () =>
+  it.live("re-injects nested instructions dropped from history by compaction", () =>
     Effect.gen(function* () {
       const location = yield* Location.Service
       const dir = location.directory
@@ -264,7 +262,7 @@ describe("SessionInstructions", () => {
     }),
   )
 
-  it.effect("listing the Location root directory injects no instructions", () =>
+  it.live("listing the Location root directory injects no instructions", () =>
     Effect.gen(function* () {
       const location = yield* Location.Service
       const dir = location.directory
@@ -286,7 +284,7 @@ describe("SessionInstructions", () => {
     }),
   )
 
-  it.effect("loads instructions directly without a read", () =>
+  it.live("loads instructions directly without a read", () =>
     Effect.gen(function* () {
       const location = yield* Location.Service
       const dir = location.directory

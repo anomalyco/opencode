@@ -1,23 +1,11 @@
 import type { Prompt } from "@/composer/state"
 import type { SelectedLineRange } from "@/workspaces/files/model"
-import { clonePrompt } from "../prompt-parts"
+import { clonePrompt, isAttachment } from "../prompt-parts"
+import type { PromptHistoryComment, PromptHistoryEntry } from "../schema"
+
+export type { PromptHistoryComment, PromptHistoryEntry } from "../schema"
 
 export const MAX_HISTORY = 100
-
-export type PromptHistoryComment = {
-  id: string
-  path: string
-  selection: SelectedLineRange
-  comment: string
-  time: number
-  origin?: "review" | "file"
-  preview?: string
-}
-
-export type PromptHistoryEntry = {
-  prompt: Prompt
-  comments: PromptHistoryComment[]
-}
 
 export type PromptHistoryStoredEntry = PromptHistoryEntry
 
@@ -47,9 +35,9 @@ export function prependHistoryEntry(
     .map((part) => ("content" in part ? part.content : ""))
     .join("")
     .trim()
-  const hasImages = prompt.some((part) => part.type === "image")
+  const hasAttachments = prompt.some(isAttachment)
   const hasComments = comments.some((comment) => !!comment.comment.trim())
-  if (!text && !hasImages && !hasComments) return entries
+  if (!text && !hasAttachments && !hasComments) return entries
 
   const entry = {
     prompt: clonePrompt(prompt),
@@ -58,6 +46,18 @@ export function prependHistoryEntry(
   const last = entries[0]
   if (last && isPromptEqual(last, entry)) return entries
   return [entry, ...entries].slice(0, max)
+}
+
+// A send that failed puts its prompt back in the composer, so the entry recorded for it would
+// only duplicate the draft and keep its attachments referenced for as long as history holds it.
+export function removeHistoryEntry(
+  entries: PromptHistoryStoredEntry[],
+  prompt: Prompt,
+  comments: PromptHistoryComment[] = [],
+) {
+  const entry = { prompt, comments } satisfies PromptHistoryEntry
+  const next = entries.filter((item) => !isPromptEqual(item, entry))
+  return next.length === entries.length ? entries : next
 }
 
 function isCommentEqual(commentA: PromptHistoryComment, commentB: PromptHistoryComment) {
@@ -98,7 +98,7 @@ function isPromptEqual(entryA: PromptHistoryStoredEntry, entryB: PromptHistorySt
     if (partA.type === "skill") {
       if (partB.type !== "skill" || partA.id !== partB.id || partA.name !== partB.name) return false
     }
-    if (partA.type === "image" && partA.id !== (partB.type === "image" ? partB.id : "")) return false
+    if (isAttachment(partA) && partA.id !== (isAttachment(partB) ? partB.id : "")) return false
   }
   if (entryA.comments.length !== entryB.comments.length) return false
   for (let i = 0; i < entryA.comments.length; i++) {

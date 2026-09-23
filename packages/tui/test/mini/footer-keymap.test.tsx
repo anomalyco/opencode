@@ -14,7 +14,7 @@ async function renderSubagent(interrupt: "ctrl+i" | "none") {
     status: "",
     notice: "",
     model: "gpt-5",
-    usage: "",
+    usage: undefined,
     first: false,
     interrupt: 0,
     exit: 0,
@@ -57,7 +57,6 @@ async function renderSubagent(interrupt: "ctrl+i" | "none") {
           providers={() => undefined}
           currentAgent={() => "Build"}
           currentAgentID={() => "build"}
-          currentAgentExplicit={() => false}
           currentModel={() => undefined}
           variants={() => []}
           currentVariant={() => undefined}
@@ -68,10 +67,12 @@ async function renderSubagent(interrupt: "ctrl+i" | "none") {
           tuiConfig={config}
           miniSettings={() => ({
             thinking: "hide",
+            tools: "show",
             shell_output: "hide",
             turn_summary: "show",
             footer: "show",
             splash: "show",
+            work_spinner: "block-soft-slide",
             mono: false,
           })}
           mono={false}

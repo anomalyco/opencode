@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionMessageUser } from "@opencode-ai/client/promise"
+import type { SessionMessageUser } from "@opencode/client/promise"
 import { extractPromptComments, extractPromptFromMessage } from "./prompt"
 
 describe("extractPromptFromMessage", () => {

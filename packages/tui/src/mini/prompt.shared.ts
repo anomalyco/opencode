@@ -44,9 +44,11 @@ export function promptSame(a: RunPrompt, b: RunPrompt): boolean {
   )
 }
 
+export const EXIT_COMMANDS = ["exit", "quit", "q"]
+
 export function isExitCommand(input: string): boolean {
   const text = input.trim().toLowerCase()
-  return text === "/exit" || text === "/quit" || text === ":q"
+  return text === ":q" || EXIT_COMMANDS.some((name) => text === `/${name}`)
 }
 
 export function isNewCommand(input: string): boolean {
@@ -58,7 +60,9 @@ export function isCompactCommand(input: string): boolean {
 }
 
 export function createPromptHistory(items?: RunPrompt[]): PromptHistoryState {
-  const list = (items ?? []).filter((item) => item.text.trim().length > 0).map(promptCopy)
+  const list = (items ?? [])
+    .filter((item) => item.text.trim().length > 0 || item.parts.some((part) => part.type === "file"))
+    .map(promptCopy)
   const next: RunPrompt[] = []
   for (const item of list) {
     if (next.length > 0 && promptSame(next[next.length - 1], item)) {
@@ -76,7 +80,7 @@ export function createPromptHistory(items?: RunPrompt[]): PromptHistoryState {
 }
 
 export function pushPromptHistory(state: PromptHistoryState, prompt: RunPrompt): PromptHistoryState {
-  if (!prompt.text.trim()) {
+  if (!prompt.text.trim() && !prompt.parts.some((part) => part.type === "file")) {
     return state
   }
 

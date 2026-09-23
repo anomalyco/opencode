@@ -1,5 +1,5 @@
 import type { ElectronAPI } from "./api-types"
-import type { UpdaterState } from "@opencode-ai/app/updater"
+import type { UpdaterState } from "@opencode/app/updater"
 import { invoke, listen, send } from "./ipc-client"
 
 type Mutable<Value> =
@@ -22,9 +22,36 @@ const updaterHandler = (state: UpdaterState) => {
   updaterCallbacks.forEach((callback) => callback(state))
 }
 
+// One renderer-side copy: the bridge clones on every crossing, so consumption is tracked here.
+const seeded = window.electron.storageSnapshot.then((snapshot) => new Map(Object.entries(snapshot)))
+
 export const api: ElectronAPI = {
   awaitInitialization: () => invoke("AppAwaitInitialization"),
   reconnectService: () => invoke("AppReconnectService"),
+  sshServers: {
+    getState: () => invoke("SshGetState"),
+    subscribe: (callback) => {
+      const off = listen("SshChanged", (event) => callback(event.state))
+      void invoke("SshSubscribe")
+      return () => {
+        off()
+        void invoke("SshUnsubscribe")
+      }
+    },
+    hosts: () => invoke("SshHosts"),
+    start: (input) => invoke("SshStart", input),
+    resolve: (id) => invoke("SshResolve", { id }),
+    respond: (id, prompt, value) => invoke("SshRespond", { id, prompt, value }),
+    disconnect: (id) => invoke("SshDisconnect", { id }),
+    cancel: (id) => invoke("SshCancel", { id }),
+    forget: (id) => invoke("SshForget", { id }),
+    openConfig: () => invoke("SshOpenConfig"),
+  },
+  browserPane: {
+    request: (request) => invoke("BrowserPane", { request }),
+    send: (request) => send("BrowserPane", { request }),
+    onEvent: (callback) => listen("BrowserPaneEvent", (value) => callback(value)),
+  },
   wslServers: {
     getState: () => invoke("WslGetState").then(mutable),
     subscribe: (cb) => {
@@ -75,19 +102,27 @@ export const api: ElectronAPI = {
     invoke("AppFinishFirstLaunchOnboarding", { createDefaultProject }),
   checkAppExists: (appName) => invoke("AppCheckAppExists", { appName }),
   resolveAppPath: (appName) => invoke("AppResolveAppPath", { appName }),
-  storeGet: (name, key) => invoke("StorageGet", { name, key }),
-  storeSet: (name, key, value) => invoke("StorageSet", { name, key, value }),
-  storeDelete: (name, key) => invoke("StorageDelete", { name, key }),
+  // The first read of a namespace the preload already fetched is served from that snapshot; later
+  // reads (a window re-opening a namespace) go to the main process as usual.
+  storeItems: (name) =>
+    seeded.then((snapshot) => {
+      const item = snapshot.get(name)
+      if (!item) return invoke("StorageItems", { name }).then(mutable)
+      snapshot.delete(name)
+      return item
+    }),
+  storeUpdate: (name, insert, remove) => invoke("StorageUpdate", { name, insert, remove }),
   storeClear: (name) => invoke("StorageClear", { name }),
-  storeKeys: (name) => invoke("StorageKeys", { name }).then(mutable),
-  storeLength: (name) => invoke("StorageLength", { name }),
+  onStoreChanged: (cb) =>
+    listen("StorageChanged", (event) => cb(event.name, mutable(event.insert), mutable(event.remove), event.revision)),
   draftGet: (key) => invoke("DraftsGet", { key }),
-  draftSet: (key, value) => invoke("DraftsSet", { key, value }),
+  draftSet: (key, value, strict) => invoke("DraftsSet", { key, value, strict }).then(mutable),
   draftDelete: (key) => invoke("DraftsDelete", { key }),
   draftBlobPut: (data) => invoke("DraftsPutBlob", { data: new Uint8Array(data) }),
   draftBlobGet: (id) => invoke("DraftsGetBlob", { id }).then((data) => (data ? toArrayBuffer(data) : null)),
 
   getWindowID: () => window.electron.windowID,
+  getWindowBootstrap: () => window.electron.bootstrap,
   themeReady: () => invoke("WindowThemeReady"),
   onMenuCommand: (cb) => listen("MenuCommandTriggered", (event) => cb(event.id)),
   onDeepLink: (cb) => listen("DeepLinksOpened", (event) => cb(mutable(event.urls))),
@@ -97,7 +132,7 @@ export const api: ElectronAPI = {
   readPickedFile: (token, path) => invoke("FilesReadPickedFile", { token, path }).then(toArrayBuffer),
   releasePickedFiles: (token) => invoke("FilesReleasePickedFiles", { token }),
   getPathForFile: (file) => window.electron.getPathForFile(file),
-  saveFilePicker: (opts) => invoke("FilesSaveFilePicker", { options: opts }),
+  saveFile: (opts, content) => invoke("FilesSaveFile", { options: opts, content }),
   openExternal: (url) => send("FilesOpenExternal", { url }),
   openLocalFile: (url) => send("FilesOpenLocalFile", { url }),
   openPath: (path, app) => invoke("FilesOpenPath", { path, application: app }).then((value) => value ?? undefined),
@@ -126,4 +161,7 @@ export const api: ElectronAPI = {
   setForceFocus: (enabled) => invoke("AppSetForceFocus", { enabled }),
   recordFatalRendererError: (error) => invoke("AppRecordFatalRendererError", { error }),
   setNativeTranslations: (bundle) => invoke("AppSetNativeTranslations", { value: bundle }),
+  pairInfo: () => invoke("AppPairInfo").then(mutable),
+  getKeepScreenActive: () => invoke("AppGetKeepScreenActive"),
+  setKeepScreenActive: (enabled) => invoke("AppSetKeepScreenActive", { enabled }),
 }

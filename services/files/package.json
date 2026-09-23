@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode/files",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "wrangler deploy --dry-run --env dev --outdir dist",
+    "dev": "wrangler dev --env dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsgo --noEmit"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "catalog:",
+    "@tsconfig/node22": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "wrangler": "4.110.0"
+  }
+}

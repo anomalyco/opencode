@@ -1,9 +1,9 @@
-import { Agent } from "@opencode-ai/core/agent"
+import { Agent } from "@opencode/core/agent"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Api } from "../api"
 import { response } from "../location"
-import { AgentNotFoundError } from "@opencode-ai/protocol/errors"
+import { AgentNotFoundError } from "@opencode/protocol/errors"
 
 export const AgentHandler = HttpApiBuilder.group(Api, "server.agent", (handlers) =>
   handlers

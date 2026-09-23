@@ -1,10 +1,11 @@
 import { useCommand, type CommandOption } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useLocal, type ModelSelection } from "@/providers/models/selection"
-import { useDialog } from "@opencode-ai/ui/context/dialog"
+import { useDialog } from "@opencode/ui/context/dialog"
 import { getCursorPosition, setCursorPosition } from "./editor/dom"
 import { useSessionLayout } from "@/session/session-layout"
 import { createSessionOwnership } from "@/session/session-ownership"
+import { useWorkspaceLocation } from "@/workspaces/location"
 
 const withCategory = (category: string) => {
   return (option: Omit<CommandOption, "category">): CommandOption => ({
@@ -18,11 +19,19 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
   const dialog = useDialog()
   const language = useLanguage()
   const local = useLocal()
+  const workspace = useWorkspaceLocation()
   const { sessionKey } = useSessionLayout()
   const sessionOwnership = createSessionOwnership(sessionKey)
   const model = input.model ?? local.model
   const modelCommand = withCategory(language.t("command.category.model"))
   const agentCommand = withCategory(language.t("command.category.agent"))
+  const providerCommand = withCategory(language.t("command.category.provider"))
+
+  // Mirrors the TUI's `/connect`, which the Console's setup steps tell people to run.
+  const connectProvider = async () => {
+    const { DialogConnectProvider } = await import("@/providers/connect/dialog")
+    void dialog.show(() => <DialogConnectProvider directory={workspace().directory} />)
+  }
 
   const chooseModel = async () => {
     const owner = sessionOwnership.capture()
@@ -61,6 +70,13 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
       description: language.t("command.model.variant.cycle.description"),
       keybind: "shift+mod+d",
       onSelect: () => model.variant.cycle(),
+    }),
+    providerCommand({
+      id: "provider.connect",
+      title: language.t("command.provider.connect"),
+      description: language.t("command.provider.connect.description"),
+      slash: "connect",
+      onSelect: connectProvider,
     }),
     agentCommand({
       id: "agent.cycle",

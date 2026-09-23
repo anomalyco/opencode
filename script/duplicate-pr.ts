@@ -1,9 +1,9 @@
 #!/usr/bin/env bun
 
-/* TODO: Migrate this script to the new in-process @opencode-ai/sdk.
+/* TODO: Migrate this script to the new in-process @opencode/sdk.
 import path from "path"
 import { pathToFileURL } from "bun"
-import { createOpencode } from "@opencode-ai/sdk"
+import { createOpencode } from "@opencode/sdk"
 import { parseArgs } from "util"
 
 async function main() {

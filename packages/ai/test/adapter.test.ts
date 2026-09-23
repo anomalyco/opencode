@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import { LLM, LLMRequest, LLMResponse } from "../src/index.js"
 import { Route, Endpoint, LLMClient, Protocol, type FramingDef } from "../src/route.js"
@@ -148,15 +148,13 @@ describe("llm route", () => {
     }),
   )
 
-  it.effect("builds models from configured routes", () =>
-    Effect.gen(function* () {
-      const configured = fake.with({ provider: "fake-provider", endpoint: { baseURL: "https://fake.local" } })
+  test("builds models from configured routes", () => {
+    const configured = fake.with({ provider: "fake-provider", endpoint: { baseURL: "https://fake.local" } })
 
-      expect(configured.model({ id: "fake-model" })).toMatchObject({
-        provider: "fake-provider",
-      })
-    }),
-  )
+    expect(configured.model({ id: "fake-model" })).toMatchObject({
+      provider: "fake-provider",
+    })
+  })
 
   it.effect("does not register duplicate route ids globally", () =>
     Effect.gen(function* () {

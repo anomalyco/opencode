@@ -1,11 +1,12 @@
 import { afterEach, expect, test } from "bun:test"
-import type { SessionMessageAssistantTool } from "@opencode-ai/client/promise"
-import { CliRenderEvents, MarkdownRenderable, RGBA, SyntaxStyle, TextRenderable } from "@opentui/core"
+import type { SessionMessageAssistantTool } from "@opencode/client/promise"
+import { CliRenderEvents, MarkdownRenderable, RGBA, SyntaxStyle, TextAttributes, TextRenderable } from "@opentui/core"
 import { MockTreeSitterClient, createTestRenderer, type TestRenderer } from "@opentui/core/testing"
 import { monoSnapshot } from "../../src/mini/mono"
 import { RunScrollbackStream } from "../../src/mini/scrollback.surface"
+import { entryLook } from "../../src/mini/scrollback.shared"
 import { entryGroupKey } from "../../src/mini/scrollback.writer"
-import { RUN_THEME_FALLBACK, type RunTheme } from "../../src/mini/theme"
+import { RUN_THEME_FALLBACK, RUN_THEME_MONO, type RunTheme } from "../../src/mini/theme"
 import type { StreamCommit } from "../../src/mini/types"
 import { canonicalToolPart } from "./fixture/tool-part"
 
@@ -28,6 +29,7 @@ afterEach(() => {
 })
 
 function claim(renderer: TestRenderer): ClaimedCommit[] {
+  // oxlint-disable-next-line no-restricted-globals -- OpenTUI does not expose its external-output queue publicly.
   const queue = Reflect.get(renderer, "externalOutputQueue")
   if (!queue || typeof queue !== "object" || !("claim" in queue) || typeof queue.claim !== "function") {
     throw new Error("renderer missing external output queue")
@@ -92,6 +94,8 @@ async function setup(
 
   return {
     renderer: out.renderer,
+    renderOnce: out.renderOnce,
+    externalOutput: out.externalOutput,
     scrollback: new RunScrollbackStream(out.renderer, input.theme ?? RUN_THEME_FALLBACK, {
       treeSitterClient,
       wrote: input.wrote ?? false,
@@ -180,6 +184,7 @@ test("theme swaps restyle active reasoning without resetting the stream", async 
 })
 
 function activeSyntax(scrollback: RunScrollbackStream) {
+  // oxlint-disable-next-line no-restricted-globals -- RunScrollbackStream does not expose its active entry publicly.
   const entry = Reflect.get(scrollback, "active") as { renderable?: { syntaxStyle?: SyntaxStyle } } | undefined
   return entry?.renderable?.syntaxStyle
 }
@@ -213,6 +218,58 @@ test("theme swaps preserve streamed markdown parser state", async () => {
   }
 })
 
+test.each([false, true])("monochrome switches preserve printed blocks and open fences (initial=%s)", async (mono) => {
+  const out = await setup()
+  try {
+    await out.scrollback.setMono(mono)
+    out.scrollback.setTheme(mono ? RUN_THEME_MONO : RUN_THEME_FALLBACK)
+    await out.scrollback.append(assistant('Printed block\n\n```ts\nconst arrow = "'))
+    await out.renderOnce()
+    const printed = out.externalOutput.takeText()
+    expect(printed).toContain("Printed block")
+    expect(printed).not.toContain("const arrow")
+    await out.scrollback.setMono(!mono)
+    out.scrollback.setTheme(mono ? RUN_THEME_FALLBACK : RUN_THEME_MONO)
+    expect(out.externalOutput.takeText()).toBe("")
+    await out.scrollback.append(assistant('\u2192"\n```\n\nNext block'))
+    // A frame can flush the code block while completion is awaiting highlighting.
+    await out.renderOnce()
+    await out.scrollback.complete()
+    const next = out.externalOutput.takeText()
+    expect(next).toContain(mono ? 'const arrow = "\u2192"' : 'const arrow = "->"')
+    expect(next).toContain("Next block")
+    expect(next).not.toContain("Printed block")
+    expect(next).not.toContain("```")
+  } finally {
+    out.scrollback.destroy()
+    destroy(claim(out.renderer))
+  }
+})
+
+test.each([false, true])(
+  "monochrome switches finish pending reasoning without repeating it (initial=%s)",
+  async (mono) => {
+    const out = await setup()
+    const output: string[] = []
+    out.renderer.on(CliRenderEvents.EXTERNAL_OUTPUT, (event) => {
+      output.push(decoder.decode(event.snapshot.getRealCharBytes(true)))
+    })
+    try {
+      await out.scrollback.setMono(mono)
+      await out.scrollback.append(reasoning("Before switch"))
+      await out.scrollback.setMono(!mono)
+      expect(output.join("")).toContain("Before switch")
+      await out.scrollback.append(reasoning(" after switch"))
+      await out.scrollback.complete()
+      expect(output.join("").match(/Before switch/g)).toHaveLength(1)
+      expect(output.join("").match(/after switch/g)).toHaveLength(1)
+    } finally {
+      out.scrollback.destroy()
+      destroy(claim(out.renderer))
+    }
+  },
+)
+
 test("renders monochrome scrollback as ASCII markdown", async () => {
   const out = await setup({ mono: true, width: 60 })
   const output: string[] = []
@@ -222,12 +279,14 @@ test("renders monochrome scrollback as ASCII markdown", async () => {
 
   try {
     await out.scrollback.append(assistant("# H"))
+    // oxlint-disable-next-line no-restricted-globals -- RunScrollbackStream does not expose its active entry publicly.
     expect(Reflect.get(out.scrollback, "active")?.renderable).toBeInstanceOf(MarkdownRenderable)
     await out.scrollback.append(
       assistant(
         "éading →\n\n> “quote”\n\n---\n\n| A | B |\n| - | - |\n| α | β |\n\n• literal\n\n———\n\n[café](https://example.com/café)",
       ),
     )
+    // oxlint-disable-next-line no-restricted-globals -- RunScrollbackStream does not expose its active entry publicly.
     const active: unknown = Reflect.get(out.scrollback, "active")
     const renderable =
       active && typeof active === "object" && "renderable" in active && active.renderable instanceof MarkdownRenderable
@@ -369,6 +428,22 @@ function toolCommit(input: {
     ...(input.state ? { part: canonicalToolPart(input.tool, input.state, id) } : {}),
   }
 }
+
+test("entry looks preserve semantic colors without dimming and keep errors bold", () => {
+  const theme = {
+    ...RUN_THEME_FALLBACK.entry,
+    system: { body: "#123456" },
+    reasoning: { body: "#abcdef" },
+  }
+
+  expect(entryLook(reasoning("Thinking: next steps"), theme)).toEqual({ fg: theme.reasoning.body })
+  expect(entryLook(reasoning("", "final"), theme)).toEqual({ fg: theme.system.body })
+  expect(entryLook(error("failed"), theme)).toEqual({ fg: theme.error.body, attrs: TextAttributes.BOLD })
+  expect(entryLook(toolCommit({ tool: "shell", phase: "final", toolState: "error" }), theme)).toEqual({
+    fg: theme.error.body,
+    attrs: TextAttributes.BOLD,
+  })
+})
 
 test("scopes repeated tool part IDs to their assistant messages", () => {
   const first = toolCommit({

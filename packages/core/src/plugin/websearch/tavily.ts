@@ -1,6 +1,6 @@
 export * as WebSearchTavily from "./tavily.js"
 
-import { define } from "@opencode-ai/plugin/effect/plugin"
+import { define } from "@opencode/plugin/effect/plugin"
 import { Duration, Effect, Schema, Scope } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { App } from "../../app.js"
@@ -28,19 +28,19 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
   id: "opencode.websearch.tavily",
   effect: Effect.fn("WebSearchTavily.Plugin")(function* (ctx) {
     const http = yield* HttpClient.HttpClient
-    yield* ctx.integration.transform((draft) => {
-      draft.update("tavily", (integration) => (integration.name = "Tavily"))
-      draft.method.update({
+    yield* ctx.integration.transform((editor) => {
+      editor.update("tavily", (integration) => (integration.name = "Tavily"))
+      editor.method.update({
         integrationID: "tavily",
         method: { type: "key" },
       })
-      draft.method.update({
+      editor.method.update({
         integrationID: "tavily",
         method: { type: "env", names: ["TAVILY_API_KEY"] },
       })
     })
-    yield* ctx.websearch.transform((draft) => {
-      draft.add({
+    yield* ctx.websearch.transform((editor) => {
+      editor.add({
         id: "tavily",
         name: "Tavily",
         execute: (input) =>
@@ -63,10 +63,11 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
                 max_results: 8,
               }),
             )
-            const response = yield* HttpClient.filterStatusOk(http)
+            const response = yield* HttpClient.withScope(HttpClient.filterStatusOk(http))
               .execute(request)
               .pipe(
                 Effect.flatMap(HttpClientResponse.schemaBodyJson(SearchResponse)),
+                Effect.scoped,
                 Effect.timeoutOrElse({
                   duration: Duration.seconds(25),
                   orElse: () => Effect.fail(new Error("Tavily web search request timed out")),

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { isOpenCodeEvent, type OpenCodeEvent, type OpenCodeEventEncoded } from "../src/groups/event.js"
+import { isOpenCodeEvent, OpenCodeEvent, type OpenCodeEventEncoded } from "../src/groups/event.js"
 
 type JsonShape<Value> = Value extends string | number | boolean | null
   ? Value
@@ -26,6 +26,7 @@ test("classifies public events by type", () => {
   expect(isOpenCodeEvent({ type: "mcp.status.changed" })).toBe(true)
   expect(isOpenCodeEvent({ type: "mcp.resources.changed" })).toBe(true)
   expect(isOpenCodeEvent({ type: "mcp.tools.changed" })).toBe(false)
+  expect(isOpenCodeEvent({ type: "acme.updated" })).toBe(false)
 })
 
 test("keeps public event runtime values within the encoded contract", () => {

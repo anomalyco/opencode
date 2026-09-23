@@ -10,6 +10,7 @@ import {
   parseDiagnostics,
   parseQuestionAnswers,
   parseQuestions,
+  subagentModelLabel,
   toolDisplay,
 } from "../../../src/routes/session"
 
@@ -73,7 +74,7 @@ function Fixture(props: { errorExpanded?: boolean }) {
 
 function FailedPendingToolFixture() {
   return (
-    <InlineToolRow icon="%" complete={false} pending="Preparing patch..." failed={true} failure="Patch failed">
+    <InlineToolRow icon="%" complete={false} pending="Preparing patch…" failed={true} failure="Patch failed">
       Patch
     </InlineToolRow>
   )
@@ -81,7 +82,7 @@ function FailedPendingToolFixture() {
 
 function FailedCompleteToolFixture() {
   return (
-    <InlineToolRow icon="→" complete={true} pending="Reading file..." failed={true} failure="Read failed">
+    <InlineToolRow icon="→" complete={true} pending="Reading file…" failed={true} failure="Read failed">
       Read src/index.ts
     </InlineToolRow>
   )
@@ -191,13 +192,13 @@ describe("TUI inline tool wrapping", () => {
         status: "completed",
         input: { sessionID: "ses_example", notify: true },
       }),
-    ).toBe("↳ session.prompt [sessionID=ses_example, notify=true]")
+    ).toBe("session.prompt [sessionID=ses_example, notify=true]")
     expect(executeCallSummary({ tool: "session.get", status: "error", input: { nested: { hidden: true } } })).toBe(
-      "↳ session.get (failed)",
+      "session.get",
     )
     expect(
       executeCallSummary({ tool: "session.prompt", status: "completed", input: { text: "first line\nsecond line" } }),
-    ).toBe("↳ session.prompt [text=first line second line]")
+    ).toBe("session.prompt [text=first line second line]")
   })
 
   test("summarizes generic tool arguments on one line", () => {
@@ -235,6 +236,14 @@ describe("TUI inline tool wrapping", () => {
     expect(isBackgroundSubagent({ status: "running" }, "completed")).toBeTrue()
     expect(isBackgroundSubagent({ status: "running" }, "error")).toBeFalse()
     expect(isBackgroundSubagent({ status: "completed" }, "completed")).toBeFalse()
+  })
+
+  test("labels only explicit subagent model overrides", () => {
+    const models = [{ providerID: "anthropic", id: "claude-opus-4-1", name: "Claude Opus 4.1" }]
+    expect(subagentModelLabel(undefined, models)).toBeUndefined()
+    expect(subagentModelLabel("anthropic/claude-opus-4-1", models)).toBe("Claude Opus 4.1")
+    expect(subagentModelLabel("anthropic/claude-opus-4-1#max", models)).toBe("Claude Opus 4.1 (max)")
+    expect(subagentModelLabel("custom/reviewer", models)).toBe("custom/reviewer")
   })
 
   test("snapshots consecutive grep, glob, and read rows at a narrow width", async () => {

@@ -46,6 +46,13 @@ const applyZoom = (next: number) => {
     })
 }
 
+// A renderer reload keeps the window's zoom, so seed the signal from main.
+void api.getZoomFactor().then((factor) => {
+  if (requestedZoom !== 1) return
+  requestedZoom = clamp(factor)
+  setWebviewZoom(requestedZoom)
+})
+
 api.onZoomFactorChanged((factor) => {
   requestedZoom = clamp(factor)
   setWebviewZoom(requestedZoom)

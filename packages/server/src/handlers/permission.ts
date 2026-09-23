@@ -1,11 +1,14 @@
-import { Location } from "@opencode-ai/core/location"
-import { Permission } from "@opencode-ai/core/permission"
-import { PermissionSaved } from "@opencode-ai/core/permission/saved"
+import { Instance } from "@opencode/core/instance/service"
+import { Location } from "@opencode/core/location"
+import { Permission } from "@opencode/core/permission"
+import { PermissionSaved } from "@opencode/core/permission/saved"
+import { Session } from "@opencode/core/session"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
-import { PermissionNotFoundError, SessionNotFoundError } from "@opencode-ai/protocol/errors"
-import { response } from "../location"
+import { PermissionNotFoundError } from "@opencode/protocol/errors"
+import { response, sessionInfo } from "../location"
+import { missingSession } from "./session-error"
 
 function missingRequest(id: Permission.ID) {
   return new PermissionNotFoundError({ requestID: id, message: `Permission request not found: ${id}` })
@@ -13,6 +16,8 @@ function missingRequest(id: Permission.ID) {
 
 export const PermissionHandler = HttpApiBuilder.group(Api, "server.permission", (handlers) =>
   Effect.gen(function* () {
+    const instances = yield* Instance.Service
+    const sessions = yield* Session.Service
     const requireOwnedRequest = Effect.fnUntraced(function* (
       sessionID: Permission.Request["sessionID"],
       requestID: Permission.ID,
@@ -47,24 +52,18 @@ export const PermissionHandler = HttpApiBuilder.group(Api, "server.permission", 
                 source: ctx.payload.source,
                 agent: ctx.payload.agent,
               })
-              .pipe(
-                Effect.catchTag(
-                  "Session.NotFoundError",
-                  (error) =>
-                    new SessionNotFoundError({
-                      sessionID: error.sessionID,
-                      message: `Session not found: ${error.sessionID}`,
-                    }),
-                ),
-              ),
+              .pipe(Effect.catchTag("Session.NotFoundError", missingSession)),
           }
         }),
       )
       .handle(
         "session.permission.list",
         Effect.fn(function* (ctx) {
-          const permission = yield* Permission.Service
-          return { data: yield* permission.forSession(ctx.params.sessionID) }
+          const session = yield* sessionInfo(sessions, ctx.params.sessionID)
+          const requests = yield* Permission.Service.use((permission) =>
+            permission.forSession(ctx.params.sessionID),
+          ).pipe(instances.provide(session))
+          return { data: requests }
         }),
       )
       .handle(
@@ -79,7 +78,7 @@ export const PermissionHandler = HttpApiBuilder.group(Api, "server.permission", 
         Effect.fn(function* (ctx) {
           const owned = yield* requireOwnedRequest(ctx.params.sessionID, ctx.params.requestID)
           yield* owned.permission
-            .reply({ requestID: ctx.params.requestID, reply: ctx.payload.reply, message: ctx.payload.message })
+            .reply({ requestID: ctx.params.requestID, reply: ctx.payload.decision, message: ctx.payload.message })
             .pipe(Effect.catchTag("Permission.NotFoundError", () => missingRequest(ctx.params.requestID)))
           return HttpApiSchema.NoContent.make()
         }),

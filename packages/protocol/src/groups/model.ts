@@ -1,5 +1,5 @@
-import { Model } from "@opencode-ai/schema/model"
-import { Location } from "@opencode-ai/schema/location"
+import { Model } from "@opencode/schema/model"
+import { Location } from "@opencode/schema/location"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import { ServiceUnavailableError } from "../errors.js"
@@ -15,7 +15,7 @@ export const ModelGroup = HttpApiGroup.make("server.model")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.model.list",
+          identifier: "model.list",
           summary: "List models",
           description:
             "Retrieve the current snapshot of available models ordered by release date. The snapshot may precede initial plugin settlement.",
@@ -31,7 +31,7 @@ export const ModelGroup = HttpApiGroup.make("server.model")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.model.default",
+          identifier: "model.default",
           summary: "Get default model",
           description: "Retrieve the model used when a session has no explicit model selection.",
         }),

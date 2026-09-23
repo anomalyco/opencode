@@ -1,5 +1,4 @@
-import { afterEach, describe, expect, test } from "bun:test"
-import { mkdtemp, rm } from "node:fs/promises"
+import { describe, expect, test } from "bun:test"
 import path from "node:path"
 import { Readable } from "node:stream"
 import { pathToFileURL } from "node:url"
@@ -10,18 +9,13 @@ import {
   type InteractiveStdin,
   usingInteractiveStdin,
 } from "../src/mini-host"
+import { OPENCODE_VERSION } from "../src/version"
+import { tmpdir } from "./fixture/tmpdir"
 
-const temporary: string[] = []
 const model = { providerID: "openai", modelID: "gpt-5" }
 
 function stream(isTTY: boolean) {
   return Object.assign(new Readable({ read() {} }), { isTTY }) as NodeJS.ReadStream
-}
-
-async function root() {
-  const directory = await mkdtemp(path.join(import.meta.dir, ".mini-host-"))
-  temporary.push(directory)
-  return directory
 }
 
 function host(terminal: InteractiveStdin, directory: string) {
@@ -31,10 +25,6 @@ function host(terminal: InteractiveStdin, directory: string) {
     paths: { home: directory, state: directory, log: directory },
   })
 }
-
-afterEach(async () => {
-  await Promise.all(temporary.splice(0).map((directory) => rm(directory, { recursive: true, force: true })))
-})
 
 describe("Mini CLI host", () => {
   test("reuses tty stdin without taking ownership", () => {
@@ -129,30 +119,37 @@ describe("Mini CLI host", () => {
   })
 
   test("subscribes and unsubscribes process signals through host capabilities", async () => {
-    const input = host({ stdin: stream(true), cleanup() {} }, await root())
+    await using directory = await tmpdir()
+    const input = host({ stdin: stream(true), cleanup() {} }, directory.path)
     const sigint = process.listenerCount("SIGINT")
     const sigusr2 = process.listenerCount("SIGUSR2")
     const offInt = input.signals.sigint.subscribe(() => {})
     const offTheme = input.signals.sigusr2.subscribe(() => {})
 
-    expect(process.listenerCount("SIGINT")).toBe(sigint + 1)
-    expect(process.listenerCount("SIGUSR2")).toBe(sigusr2 + 1)
-    offInt()
-    offInt()
-    offTheme()
-    offTheme()
-    expect(process.listenerCount("SIGINT")).toBe(sigint)
-    expect(process.listenerCount("SIGUSR2")).toBe(sigusr2)
+    try {
+      expect(process.listenerCount("SIGINT")).toBe(sigint + 1)
+      expect(process.listenerCount("SIGUSR2")).toBe(sigusr2 + 1)
+      offInt()
+      offInt()
+      offTheme()
+      offTheme()
+      expect(process.listenerCount("SIGINT")).toBe(sigint)
+      expect(process.listenerCount("SIGUSR2")).toBe(sigusr2)
+    } finally {
+      offInt()
+      offTheme()
+    }
   })
 
   test("passes frontend host capabilities", async () => {
-    const directory = await root()
-    const input = host({ stdin: stream(true), cleanup() {} }, directory)
+    await using directory = await tmpdir()
+    const input = host({ stdin: stream(true), cleanup() {} }, directory.path)
 
-    expect(input.paths).toEqual({ home: directory })
+    expect(input.paths).toEqual({ home: directory.path })
+    expect(input.version).toBe(OPENCODE_VERSION)
     expect(input.platform).toBe(process.platform)
     expect(typeof input.files.readText).toBe("function")
-    const file = path.join(directory, "attachment.txt")
+    const file = path.join(directory.path, "attachment.txt")
     await Bun.write(file, "attachment contents")
     expect(await input.files.readText(pathToFileURL(file).href)).toBe("attachment contents")
     expect(typeof input.startup.showTiming).toBe("boolean")
@@ -160,9 +157,9 @@ describe("Mini CLI host", () => {
   })
 
   test("delegates model variant preferences", async () => {
-    const directory = await root()
-    const input = host({ stdin: stream(true), cleanup() {} }, directory)
-    const file = path.join(directory, "model.json")
+    await using directory = await tmpdir()
+    const input = host({ stdin: stream(true), cleanup() {} }, directory.path)
+    const file = path.join(directory.path, "model.json")
 
     await input.preferences.saveVariant(model, "high")
     expect(await input.preferences.resolveVariant(model)).toBe("high")

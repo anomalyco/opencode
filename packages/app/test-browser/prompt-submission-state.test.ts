@@ -70,4 +70,22 @@ describe("prompt submission state", () => {
     expect(submission.restore()).toBeUndefined()
     expect(target.current()[0]).toMatchObject({ type: "text", content: "new draft" })
   })
+
+  test("preserves a prepared follow-up and recovers both inputs when the first send fails", () => {
+    const draft = createMemoryComposerState({ prompt: "first prompt" })
+    const session = createMemoryComposerState({ prompt: "follow-up" })
+    const submission = createComposerSubmission({ target: draft, prompt: draft.current(), context: [] })
+    submission.retarget(session, { preserveDraft: true })
+    submission.clear()
+
+    expect(draft.current()[0]).toMatchObject({ content: "" })
+    expect(session.current()[0]).toMatchObject({ content: "follow-up" })
+    expect(submission.restore()?.prompt).toEqual([
+      { type: "text", content: "first prompt", start: 0, end: 12 },
+      { type: "text", content: "\n\n", start: 12, end: 14 },
+      { type: "text", content: "follow-up", start: 14, end: 23 },
+    ])
+    session.set([{ type: "text", content: "edited", start: 0, end: 6 }])
+    expect(submission.restore()).toBeUndefined()
+  })
 })

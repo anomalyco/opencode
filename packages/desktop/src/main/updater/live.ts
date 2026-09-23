@@ -2,7 +2,7 @@ export * as UpdaterLive from "./live"
 
 import { dialog } from "electron"
 import { Effect, Layer } from "effect"
-import type { UpdaterState } from "@opencode-ai/app/updater"
+import type { UpdaterState } from "@opencode/app/updater"
 import { UPDATER_ENABLED } from "../constants"
 import { DesktopInitialization } from "../lifecycle/desktop-initialization"
 import { ApplicationLifecycle } from "../lifecycle"
@@ -65,6 +65,7 @@ const show = Effect.fn("Updater.show")(function* (
     )
     return
   }
+  if (state.status === "download-required") return
   if (state.status !== "ready") return
 
   const response = yield* promise(() =>

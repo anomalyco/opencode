@@ -2,8 +2,8 @@ export * as ServerFetch from "./fetch"
 
 import { Context, Effect, Layer } from "effect"
 import { HttpEffect, HttpMiddleware, HttpRouter, HttpServer } from "effect/unstable/http"
-import { SessionRestart } from "@opencode-ai/core/session/execution/restart"
-import type { LayerNode } from "@opencode-ai/util/effect/layer-node"
+import { SessionRestart } from "@opencode/core/session/execution/restart"
+import type { LayerNode } from "@opencode/util/effect/layer-node"
 import { isAllowedCorsOrigin } from "./cors"
 import { createRoutes } from "./routes"
 import type { ServerOptions } from "./options"
@@ -48,7 +48,7 @@ export const make = Effect.fn("ServerFetch.make")(function* (options: ServerOpti
   return Context.get(context, HttpRouter.HttpRouter)
     .asHttpEffect()
     .pipe(
-      HttpMiddleware.cors({ allowedOrigins: isAllowedCorsOrigin, maxAge: 86_400 }),
+      HttpMiddleware.cors({ allowedOrigins: (origin) => isAllowedCorsOrigin(origin, options), maxAge: 86_400 }),
       HttpEffect.toWebHandlerWith(context),
     )
 })

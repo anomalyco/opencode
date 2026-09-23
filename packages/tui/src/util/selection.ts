@@ -1,3 +1,4 @@
+import type { SelectionBehavior } from "@opentui/core"
 import type { ClipboardService } from "../context/clipboard"
 
 type Toast = {
@@ -11,13 +12,20 @@ type FocusableSelectionTarget = {
 }
 
 type Renderer = {
-  getSelection: () => { getSelectedText: () => string; selectedRenderables: FocusableSelectionTarget[] } | null
+  getSelection: () => {
+    getSelectedText: () => string
+    selectedRenderables: FocusableSelectionTarget[]
+    isStart: boolean
+    behavior: SelectionBehavior
+  } | null
   clearSelection: () => void
   currentFocusedRenderable?: FocusableSelectionTarget | null
+  currentFocusedEditor?: FocusableSelectionTarget | null
 }
 
 type SelectionKeyEvent = {
   ctrl?: boolean
+  baseCode?: number
   name: string
   preventDefault: () => void
   stopPropagation: () => void
@@ -36,6 +44,7 @@ export function copyOnSelectRelease(
 export function copy(renderer: Renderer, toast: Toast, clipboard: ClipboardService): boolean {
   const selection = renderer.getSelection()
   if (!selection) return false
+  if (selection.isStart && selection.behavior === "cell") return false
 
   const text = selection.getSelectedText()
   if (!text) return false
@@ -49,8 +58,7 @@ export function copy(renderer: Renderer, toast: Toast, clipboard: ClipboardServi
     .then(() => toast.show({ message: "Copied to clipboard", variant: "info" }))
     .catch(toast.error)
 
-  // Keep the highlight. clearSelection() also resets OpenTUI's click
-  // counter, so clearing here would turn a triple-click into a new single-click.
+  // Copy never clears selection, including empty releases: clearing also resets multi-click history.
   return true
 }
 
@@ -59,12 +67,16 @@ export function handleSelectionKey(
   toast: Toast,
   event: SelectionKeyEvent,
   clipboard: ClipboardService,
+  copyOnSelect: boolean,
 ) {
   const selection = renderer.getSelection()
   if (!selection) return
+  const focus = renderer.currentFocusedEditor
+  const editing = focus?.hasSelection() && selection.selectedRenderables.includes(focus)
 
-  if (event.ctrl && event.name === "c") {
-    if (!copy(renderer, toast, clipboard)) {
+  // Kitty can report a non-Latin key name with a Latin base-layout C.
+  if (event.ctrl && (event.name === "c" || event.baseCode === 99 || event.baseCode === 67)) {
+    if ((copyOnSelect && !editing) || !copy(renderer, toast, clipboard)) {
       renderer.clearSelection()
       return
     }
@@ -75,14 +87,15 @@ export function handleSelectionKey(
   }
 
   if (event.name === "escape") {
+    const text = selection.isStart && selection.behavior === "cell" ? "" : selection.getSelectedText()
     renderer.clearSelection()
+    if (!text) return
     event.preventDefault()
     event.stopPropagation()
     return
   }
 
-  const focus = renderer.currentFocusedRenderable
-  if (focus?.hasSelection() && selection.selectedRenderables.includes(focus)) return
+  if (editing) return
 
   renderer.clearSelection()
 }

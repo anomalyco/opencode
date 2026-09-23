@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
-import { OpenCode } from "@opencode-ai/client/promise"
+import { OpenCode } from "@opencode/client/promise"
 import { resolveMiniSettings, resolveModelInfo, resolveRunTuiConfig } from "../../src/mini/runtime.boot"
 import { catalogModel, catalogProvider } from "./fixture/catalog"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
@@ -20,6 +20,7 @@ describe("run runtime boot", () => {
     expect(result.keybinds.get("prompt.history.previous")?.[0]?.key).toBe("up")
     expect(result.keybinds.get("prompt.history.next")?.[0]?.key).toBe("down")
     expect(result.keybinds.get("prompt.clear")?.[0]?.key).toBe("ctrl+c")
+    expect(result.keybinds.get("app.clear")?.[0]?.key).toBe("ctrl+l")
     expect(result.keybinds.get("input.submit")?.[0]?.key).toBe("return")
     expect(result.keybinds.get("input.newline")?.[0]?.key).toBe("shift+return,ctrl+return,alt+return,ctrl+j")
     expect(result.keybinds.get("prompt.queue")?.[0]?.key).toBe("<leader>return")
@@ -38,30 +39,36 @@ describe("run runtime boot", () => {
     expect(result.leader.timeout).toBe(450)
     expect(result.cursor).toEqual({ style: "underline", blinking: false })
     expect(resolveMiniSettings(result)).toEqual({
-      thinking: "hide",
+      thinking: "show",
+      tools: "hide",
       shell_output: "hide",
       turn_summary: "show",
       footer: "show",
       splash: "show",
+      work_spinner: "block-soft-slide",
       mono: false,
     })
     expect(
       resolveMiniSettings({
         mini: {
           thinking: "show",
+          tools: "hide",
           shell_output: "show",
           turn_summary: "hide",
           footer: "hide",
           splash: "hide",
+          work_spinner: "block-low-comet",
           mono: true,
         },
       }),
     ).toEqual({
       thinking: "show",
+      tools: "hide",
       shell_output: "show",
       turn_summary: "hide",
       footer: "hide",
       splash: "hide",
+      work_spinner: "block-low-comet",
       mono: true,
     })
   })

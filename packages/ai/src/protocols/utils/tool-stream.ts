@@ -55,6 +55,7 @@ const inputStart = (tool: PendingTool) =>
   LLMEvent.toolInputStart({
     id: tool.id,
     name: tool.name,
+    namespace: tool.namespace,
     providerExecuted: tool.providerExecuted ? true : undefined,
     providerMetadata: tool.providerMetadata,
   })
@@ -63,6 +64,7 @@ const inputDelta = (tool: PendingTool, text: string) =>
   LLMEvent.toolInputDelta({
     id: tool.id,
     name: tool.name,
+    namespace: tool.namespace,
     text,
     input: Option.getOrElse(parsePartialInput(tool.input), () => ({})),
   })
@@ -85,6 +87,7 @@ const toolCall = (route: string, tool: PendingTool, inputOverride?: string) => {
         LLMEvent.toolCall({
           id: tool.id,
           name: tool.name,
+          namespace: tool.namespace,
           input,
           providerExecuted: tool.providerExecuted ? true : undefined,
           providerMetadata: tool.providerMetadata,
@@ -94,7 +97,12 @@ const toolCall = (route: string, tool: PendingTool, inputOverride?: string) => {
 }
 
 const finishEvents = (tool: PendingTool, event: ToolCall): ReadonlyArray<LLMEvent> => [
-  LLMEvent.toolInputEnd({ id: tool.id, name: tool.name, providerMetadata: tool.providerMetadata }),
+  LLMEvent.toolInputEnd({
+    id: tool.id,
+    name: tool.name,
+    namespace: tool.namespace,
+    providerMetadata: tool.providerMetadata,
+  }),
   event,
 ]
 
@@ -150,6 +158,7 @@ export const appendOrStart = <K extends StreamKey>(
   const tool = {
     id,
     name,
+    namespace: current?.namespace,
     input: `${current?.input ?? ""}${delta.text}`,
     providerExecuted: current?.providerExecuted,
     providerMetadata: current?.providerMetadata,
@@ -157,6 +166,17 @@ export const appendOrStart = <K extends StreamKey>(
   if (current && delta.text.length === 0 && current.id === id && current.name === name)
     return { tools, tool: current, events: [] }
   return appendTool(tools, key, tool, delta.text)
+}
+
+/**
+ * Append argument text to a started tool. Returns `undefined` when no tool is
+ * open under `key`, for protocols that ignore deltas without a matching block.
+ */
+export const append = <K extends StreamKey>(tools: State<K>, key: K, text: string): AppendOutcome<K> | undefined => {
+  const current = tools[key]
+  if (!current) return undefined
+  if (text.length === 0) return { tools, tool: current, events: [] }
+  return appendTool(tools, key, { ...current, input: `${current.input}${text}` }, text)
 }
 
 /**
@@ -170,12 +190,7 @@ export const appendExisting = <K extends StreamKey>(
   key: K,
   text: string,
   missingToolMessage: string,
-): AppendOutcome<K> | AIError => {
-  const current = tools[key]
-  if (!current) return eventError(route, missingToolMessage)
-  if (text.length === 0) return { tools, tool: current, events: [] }
-  return appendTool(tools, key, { ...current, input: `${current.input}${text}` }, text)
-}
+): AppendOutcome<K> | AIError => append(tools, key, text) ?? eventError(route, missingToolMessage)
 
 /**
  * Finalize one pending tool call: parse the accumulated raw JSON, remove it

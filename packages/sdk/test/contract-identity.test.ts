@@ -1,30 +1,30 @@
 import { expect, test } from "bun:test"
-import { Location as CoreLocation } from "@opencode-ai/core/location"
-import { SessionInbox as CoreSessionInbox } from "@opencode-ai/core/session/inbox"
-import { SessionMessage as CoreSessionMessage } from "@opencode-ai/core/session/message"
-import { Agent } from "@opencode-ai/schema/agent"
-import { Config } from "@opencode-ai/schema/config"
-import { Event } from "@opencode-ai/schema/event"
-import { Location } from "@opencode-ai/schema/location"
-import { Model } from "@opencode-ai/schema/model"
-import { Project } from "@opencode-ai/schema/project"
-import { Provider } from "@opencode-ai/schema/provider"
-import { WebSearch } from "@opencode-ai/schema/websearch"
-import { Session } from "@opencode-ai/schema/session"
-import { SessionInbox } from "@opencode-ai/schema/session-inbox"
-import { SessionMessage } from "@opencode-ai/schema/session-message"
-import { Workspace } from "@opencode-ai/schema/workspace"
-import { Worktree } from "@opencode-ai/schema/worktree"
-import { Api } from "@opencode-ai/server/api"
-import { ClientApi, groupNames, promiseOmitEndpoints } from "@opencode-ai/protocol/client"
-import { compile, emitPromise } from "@opencode-ai/httpapi-codegen"
+import { Location as CoreLocation } from "@opencode/core/location"
+import { SessionInbox as CoreSessionInbox } from "@opencode/core/session/inbox"
+import { SessionMessage as CoreSessionMessage } from "@opencode/core/session/message"
+import { Agent } from "@opencode/schema/agent"
+import { Config } from "@opencode/schema/config"
+import { Event } from "@opencode/schema/event"
+import { Location } from "@opencode/schema/location"
+import { Model } from "@opencode/schema/model"
+import { Project } from "@opencode/schema/project"
+import { Provider } from "@opencode/schema/provider"
+import { WebSearch } from "@opencode/schema/websearch"
+import { Session } from "@opencode/schema/session"
+import { SessionInbox } from "@opencode/schema/session-inbox"
+import { SessionMessage } from "@opencode/schema/session-message"
+import { Workspace } from "@opencode/schema/workspace"
+import { Worktree } from "@opencode/schema/worktree"
+import { Api } from "@opencode/server/api"
+import { ClientApi, groupNames, promiseOmitEndpoints } from "@opencode/protocol/client"
+import { compile, emitPromise } from "@opencode/httpapi-codegen"
 
 const SDK = await import("../src/index")
-const CoreAgent = await import("@opencode-ai/core/agent")
-const CoreModel = await import("@opencode-ai/core/model")
-const CoreProject = await import("@opencode-ai/core/project")
-const CoreSession = await import("@opencode-ai/core/session")
-const CoreWorktree = await import("@opencode-ai/core/worktree")
+const CoreAgent = await import("@opencode/core/agent")
+const CoreModel = await import("@opencode/core/model")
+const CoreProject = await import("@opencode/core/project")
+const CoreSession = await import("@opencode/core/session")
+const CoreWorktree = await import("@opencode/core/worktree")
 
 test("re-exports canonical contracts directly from Schema", () => {
   expect(SDK.Agent).toBe(Agent)

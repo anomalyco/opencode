@@ -1,4 +1,4 @@
-import { batch, type Accessor } from "solid-js"
+import { batch, untrack, type Accessor } from "solid-js"
 import type { SetStoreFunction, Store } from "solid-js/store"
 import type {
   ComposerAgentPart,
@@ -7,7 +7,7 @@ import type {
   ComposerPersistedState,
   ComposerPrompt,
 } from "../types"
-import { promptLength } from "../prompt-parts"
+import { isAttachment, promptLength } from "../prompt-parts"
 
 export type ComposerStateStore = [
   Store<ComposerPersistedState> | Accessor<Store<ComposerPersistedState>>,
@@ -23,60 +23,67 @@ export function createComposerEditorActions(input: ComposerStateStoreInput) {
     return typeof value === "function" ? value() : value
   }
   const setStore = () => tuple()[1]
-  const clearRetry = () => setStore()("retry", undefined)
+  const clearRetry = () => {
+    if (untrack(() => store().retry) !== undefined) setStore()("retry", undefined)
+  }
 
   return {
     get state() {
       return store()
     },
     setPrompt(prompt: ComposerPrompt, cursor?: number) {
-      batch(() => {
-        setStore()("prompt", prompt)
-        if (cursor !== undefined) setStore()("cursor", cursor)
-        clearRetry()
-      })
+      // Persisted setters encode on every call, even inside a reactive batch.
+      batch(() => setStore()({ prompt, ...(cursor !== undefined ? { cursor } : {}), retry: undefined }))
     },
     setCursor(cursor: number) {
+      if (untrack(() => store().cursor) === cursor) return
       setStore()("cursor", cursor)
     },
     setMode(mode: "normal" | "shell") {
-      setStore()("mode", mode)
-      clearRetry()
+      if (untrack(() => store().mode === mode && store().retry === undefined)) return
+      setStore()({ mode, retry: undefined })
     },
     setText(content: string) {
-      batch(() => {
-        setStore()("prompt", (prompt) => [
-          { type: "text", content, start: 0, end: content.length },
-          ...prompt.filter((part) => part.type === "image"),
-        ])
-        setStore()("cursor", content.length)
-        clearRetry()
-      })
+      batch(() =>
+        setStore()((state) => ({
+          prompt: [
+            { type: "text", content, start: 0, end: content.length },
+            ...state.prompt.filter(isAttachment),
+          ],
+          cursor: content.length,
+          retry: undefined,
+        })),
+      )
     },
     addText(content: string) {
       const cursor = store().cursor ?? promptLength(store().prompt)
-      batch(() => {
-        setStore()("prompt", (prompt) => insertText(prompt, cursor, content))
-        setStore()("cursor", cursor + content.length)
-        clearRetry()
-      })
+      batch(() =>
+        setStore()((state) => ({
+          prompt: insertText(state.prompt, cursor, content),
+          cursor: cursor + content.length,
+          retry: undefined,
+        })),
+      )
     },
     removeContext(key: string) {
       setStore()("context", "items", (items) => items.filter((item) => item.key !== key))
       clearRetry()
     },
-    addMention(mention: ComposerFilePart | ComposerAgentPart | ComposerSkillPart) {
+    addMention(
+      mention: ComposerFilePart | ComposerAgentPart | ComposerSkillPart,
+      range?: { start: number; end: number },
+    ) {
       const text = store()
         .prompt.map((part) => ("content" in part ? part.content : ""))
         .join("")
-      const end = store().cursor ?? text.length
-      const start = text.slice(0, end).lastIndexOf("@")
+      const end = range?.end ?? store().cursor ?? text.length
+      const start = range?.start ?? text.slice(0, end).lastIndexOf("@")
       setStore()("prompt", insertMention(store().prompt, start < 0 ? end : start, end, mention))
       setStore()("cursor", (start < 0 ? end : start) + mention.content.length + 1)
       clearRetry()
     },
     removeAttachment(id: string) {
-      setStore()("prompt", (parts) => parts.filter((part) => part.type !== "image" || part.id !== id))
+      setStore()("prompt", (parts) => parts.filter((part) => !isAttachment(part) || part.id !== id))
       clearRetry()
     },
   }
@@ -86,7 +93,7 @@ function insertText(prompt: ComposerPrompt, cursor: number, content: string): Co
   let position = 0
   let inserted = false
   const parts = prompt.flatMap<ComposerPrompt[number]>((part) => {
-    if (part.type === "image") return [part]
+    if (isAttachment(part)) return [part]
     const start = position
     position += part.content.length
     if (inserted) return [part]
@@ -109,9 +116,12 @@ function insertMention(
   end: number,
   mention: ComposerFilePart | ComposerAgentPart | ComposerSkillPart,
 ): ComposerPrompt {
+  if (start === 0 && end === 0) {
+    return withOffsets([mention, { type: "text", content: " ", start: 0, end: 0 }, ...prompt])
+  }
   let position = 0
   const parts = prompt.flatMap<ComposerPrompt[number]>((part) => {
-    if (part.type === "image") return [part]
+    if (isAttachment(part)) return [part]
     const partStart = position
     position += part.content.length
     if (part.type !== "text" || start < partStart || end > position) return [part]
@@ -129,7 +139,7 @@ function insertMention(
 function withOffsets(prompt: ComposerPrompt): ComposerPrompt {
   let offset = 0
   return prompt.map((part) => {
-    if (part.type === "image") return part
+    if (isAttachment(part)) return part
     const next = { ...part, start: offset, end: offset + part.content.length }
     offset = next.end
     return next

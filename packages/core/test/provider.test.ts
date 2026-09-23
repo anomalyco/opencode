@@ -1,20 +1,60 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { Provider } from "@opencode-ai/core/provider"
+import { Provider } from "@opencode/core/provider"
 
 describe("Provider", () => {
-  test("loads Vertex native provider entrypoints", async () => {
+  test("loads bundled native provider entrypoints", async () => {
     const packages = [
-      "@opencode-ai/ai/providers/google-vertex",
-      "@opencode-ai/ai/providers/google-vertex/gemini",
-      "@opencode-ai/ai/providers/google-vertex/chat",
-      "@opencode-ai/ai/providers/google-vertex/responses",
-      "@opencode-ai/ai/providers/google-vertex/messages",
+      "@opencode/ai/providers/baseten",
+      "@opencode/ai/providers/cerebras",
+      "@opencode/ai/providers/cloudflare-ai-gateway",
+      "@opencode/ai/providers/cloudflare-workers-ai",
+      "@opencode/ai/providers/deepinfra",
+      "@opencode/ai/providers/deepseek",
+      "@opencode/ai/providers/fireworks",
+      "@opencode/ai/providers/google-vertex",
+      "@opencode/ai/providers/google-vertex/gemini",
+      "@opencode/ai/providers/google-vertex/chat",
+      "@opencode/ai/providers/google-vertex/responses",
+      "@opencode/ai/providers/google-vertex/messages",
+      "@opencode/ai/providers/groq",
+      "@opencode/ai/providers/mistral",
+      "@opencode/ai/providers/togetherai",
     ]
 
     for (const specifier of packages) {
       const loaded = await Effect.runPromise(Provider.loadPackage(specifier))
       expect(loaded.model).toBeFunction()
     }
+  })
+
+  test("passes flat settings to native packages without Core settings", () => {
+    expect(
+      Provider.nativeSettings({
+        apiKey: "secret",
+        reasoningEffort: "high",
+        chunkTimeout: 1000,
+        compaction: { type: "native" },
+        transport: "websocket",
+      }),
+    ).toEqual({
+      apiKey: "secret",
+      reasoningEffort: "high",
+    })
+  })
+
+  test("inherits shared and loose settings without provider-only policies", () => {
+    expect(
+      Provider.modelSettings({
+        timeout: 60_000,
+        chunkTimeout: 30_000,
+        transport: "websocket",
+        compaction: { type: "native" },
+        reasoningEffort: "high",
+      }),
+    ).toEqual({
+      compaction: { type: "native" },
+      reasoningEffort: "high",
+    })
   })
 })

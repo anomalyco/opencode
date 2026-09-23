@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import { ModelID, ProviderID } from "./ids.js"
-import type { AnyRoute } from "../route/client.js"
+import type { AnyRoute, CompactionOperations } from "../route/client.js"
 import { isRecord } from "../utils/record.js"
 
 export const JsonSchema = Schema.Record(Schema.String, Schema.Unknown)
@@ -38,6 +38,11 @@ const mergeStringRecords = (
 
 export const ProviderOptions = Schema.Record(Schema.String, Schema.Unknown)
 export type ProviderOptions = Schema.Schema.Type<typeof ProviderOptions>
+
+export const ProviderMetadata = Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Unknown)).annotate({
+  identifier: "LLM.ProviderMetadata",
+})
+export type ProviderMetadata = Schema.Schema.Type<typeof ProviderMetadata>
 
 export const mergeProviderOptions = (
   ...items: ReadonlyArray<ProviderOptions | undefined>
@@ -140,6 +145,13 @@ export namespace LanguageModelDefaults {
   }
 }
 
+export const ReasoningEfforts = ["none", "minimal", "low", "medium", "high", "xhigh", "max"] as const
+export type ReasoningEffort = (typeof ReasoningEfforts)[number] | (string & {})
+export const ReasoningEffort = Schema.declare<ReasoningEffort>(
+  (value): value is ReasoningEffort => typeof value === "string",
+  { title: "ReasoningEffort" },
+)
+
 export const LanguageModelToolSchemaCompatibility = Schema.Literals(["gemini", "moonshot"])
 export type LanguageModelToolSchemaCompatibility = Schema.Schema.Type<typeof LanguageModelToolSchemaCompatibility>
 
@@ -161,8 +173,15 @@ export class LanguageModelCompatibility extends Schema.Class<LanguageModelCompat
   supportsStore: Schema.optional(Schema.Boolean),
   supportsUsageInStreaming: Schema.optional(Schema.Boolean),
   supportsStrictMode: Schema.optional(Schema.Boolean),
+  // Accepts `prompt_cache_key` in the Chat Completions body. Chat omits the
+  // key unless this is set; session-affinity headers still flow regardless.
+  supportsPromptCacheKey: Schema.optional(Schema.Boolean),
   zaiToolStream: Schema.optional(Schema.Boolean),
   requireSignature: Schema.optional(Schema.Boolean),
+  /** Supports Anthropic's thinking-prefix mismatch controls. Overrides model-ID detection. */
+  supportsThinkingBlockBinding: Schema.optional(Schema.Boolean),
+  /** Supports per-message effort updates. Overrides model-ID detection. */
+  supportsEffortUpdates: Schema.optional(Schema.Boolean),
 }) {}
 
 export namespace LanguageModelCompatibility {
@@ -173,15 +192,18 @@ export namespace LanguageModelCompatibility {
     input instanceof LanguageModelCompatibility ? input : new LanguageModelCompatibility(input)
 }
 
-export class LanguageModel<Options extends ProviderOptions = ProviderOptions> {
+export class LanguageModel<
+  Options extends ProviderOptions = ProviderOptions,
+  Compact extends CompactionOperations | undefined = CompactionOperations | undefined,
+> {
   declare protected readonly _ProviderOptions: Options
   readonly id: ModelID
   readonly provider: ProviderID
-  readonly route: AnyRoute
+  readonly route: AnyRoute<Compact>
   readonly defaults?: LanguageModelDefaults
   readonly compatibility?: LanguageModelCompatibility
 
-  constructor(input: LanguageModel.ConstructorInput) {
+  constructor(input: LanguageModel.ConstructorInput<Compact>) {
     this.id = input.id
     this.provider = input.provider
     this.route = input.route
@@ -189,8 +211,11 @@ export class LanguageModel<Options extends ProviderOptions = ProviderOptions> {
     this.compatibility = input.compatibility
   }
 
-  static make<Options extends ProviderOptions = ProviderOptions>(input: LanguageModel.Input) {
-    return new LanguageModel<Options>({
+  static make<
+    Options extends ProviderOptions = ProviderOptions,
+    Compact extends CompactionOperations | undefined = CompactionOperations | undefined,
+  >(input: LanguageModel.Input<Compact>) {
+    return new LanguageModel<Options, Compact>({
       id: ModelID.make(input.id),
       provider: ProviderID.make(input.provider),
       route: input.route,
@@ -200,7 +225,9 @@ export class LanguageModel<Options extends ProviderOptions = ProviderOptions> {
     })
   }
 
-  static input<Options extends ProviderOptions>(model: LanguageModel<Options>): LanguageModel.ConstructorInput {
+  static input<Options extends ProviderOptions, Compact extends CompactionOperations | undefined>(
+    model: LanguageModel<Options, Compact>,
+  ): LanguageModel.ConstructorInput<Compact> {
     return {
       id: model.id,
       provider: model.provider,
@@ -210,25 +237,41 @@ export class LanguageModel<Options extends ProviderOptions = ProviderOptions> {
     }
   }
 
+  static update<Options extends ProviderOptions, Compact extends CompactionOperations | undefined>(
+    model: LanguageModel<Options>,
+    patch: Partial<LanguageModel.Input<Compact>> & { readonly route: AnyRoute<Compact> },
+  ): LanguageModel<Options, Compact>
+  static update<Options extends ProviderOptions, Compact extends CompactionOperations | undefined>(
+    model: LanguageModel<Options, Compact>,
+    patch: Partial<Omit<LanguageModel.Input, "route">> & { readonly route?: undefined },
+  ): LanguageModel<Options, Compact>
+  static update<Options extends ProviderOptions>(
+    model: LanguageModel<Options>,
+    patch: Partial<LanguageModel.Input>,
+  ): LanguageModel<Options>
   static update<Options extends ProviderOptions>(model: LanguageModel<Options>, patch: Partial<LanguageModel.Input>) {
     if (Object.keys(patch).length === 0) return model
     return LanguageModel.make<Options>({
       ...LanguageModel.input(model),
       ...patch,
+      route: patch.route ?? model.route,
     })
   }
 }
 
 export namespace LanguageModel {
-  export type ConstructorInput = {
+  export type ConstructorInput<Compact extends CompactionOperations | undefined = CompactionOperations | undefined> = {
     readonly id: ModelID
     readonly provider: ProviderID
-    readonly route: AnyRoute
+    readonly route: AnyRoute<Compact>
     readonly defaults?: LanguageModelDefaults
     readonly compatibility?: LanguageModelCompatibility
   }
 
-  export type Input = Omit<ConstructorInput, "id" | "provider" | "defaults" | "compatibility"> & {
+  export type Input<Compact extends CompactionOperations | undefined = CompactionOperations | undefined> = Omit<
+    ConstructorInput<Compact>,
+    "id" | "provider" | "defaults" | "compatibility"
+  > & {
     readonly id: string | ModelID
     readonly provider: string | ProviderID
     readonly defaults?: LanguageModelDefaults.Input
@@ -267,7 +310,7 @@ export const CachePolicyObject = Schema.Struct({
     Schema.Union([
       Schema.Literal("latest-user-message"),
       Schema.Literal("latest-assistant"),
-      Schema.Struct({ tail: Schema.Number }),
+      Schema.Struct({ tail: Schema.Natural }),
     ]),
   ),
   ttlSeconds: Schema.optional(Schema.Number),

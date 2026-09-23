@@ -3,26 +3,27 @@ import { $ } from "bun"
 import { fileURLToPath } from "url"
 import path from "path"
 import { SqliteClient } from "@effect/sql-sqlite-bun"
-import { EffectDrizzleSqlite } from "@opencode-ai/core/database/drizzle"
-import { Effect, Layer } from "effect"
+import { EffectDrizzleSqlite } from "@opencode/core/database/drizzle"
+import { Deferred, Effect, Fiber, Layer } from "effect"
+import { Reactivity } from "effect/unstable/reactivity"
+import { SqlClient, Statement } from "effect/unstable/sql"
 import { sql } from "drizzle-orm"
-import { DatabaseMigration } from "@opencode-ai/core/database/migration"
-import { migrations } from "@opencode-ai/core/database/migration.gen"
-import workspaceNameMigration from "@opencode-ai/core/database/migration/20260410174513_workspace-name"
-import { Database } from "@opencode-ai/core/database/database"
+import { DatabaseMigration } from "@opencode/core/database/migration"
+import { migrations } from "@opencode/core/database/migration.gen"
+import workspaceNameMigration from "@opencode/core/database/migration/20260410174513_workspace-name"
+import { Database } from "@opencode/core/database/database"
 import { tmpdir } from "./fixture/tmpdir"
-import type { SqlClient } from "effect/unstable/sql/SqlClient"
-import legacyCredentialsMigration from "@opencode-ai/core/database/migration/20260805200742_import_legacy_credentials"
-import worktreeMigration from "@opencode-ai/core/database/migration/20260812213948_worktree"
-import previousV2Migration from "@opencode-ai/core/database/migration/20260804233008_loose_psylocke"
-import workspaceMigration from "@opencode-ai/core/database/migration/20260808023530_workspace_domain"
-import executionClaimsMigration from "@opencode-ai/core/database/migration/20260811161259_execution_claim_attempts"
-import sessionInboxMigration from "@opencode-ai/core/database/migration/20260812181746_session_inbox"
-import sessionViewedStateMigration from "@opencode-ai/core/database/migration/20260819222447_session_viewed_state"
-import { Global } from "@opencode-ai/util/global"
+import legacyCredentialsMigration from "@opencode/core/database/migration/20260805200742_import_legacy_credentials"
+import worktreeMigration from "@opencode/core/database/migration/20260812213948_worktree"
+import previousV2Migration from "@opencode/core/database/migration/20260804233008_loose_psylocke"
+import workspaceMigration from "@opencode/core/database/migration/20260808023530_workspace_domain"
+import executionClaimsMigration from "@opencode/core/database/migration/20260811161259_execution_claim_attempts"
+import sessionInboxMigration from "@opencode/core/database/migration/20260812181746_session_inbox"
+import sessionViewedStateMigration from "@opencode/core/database/migration/20260819222447_session_viewed_state"
+import { Global } from "@opencode/util/global"
 
 const run = <A, E>(
-  effect: Effect.Effect<A, E, SqlClient | Global.Service>,
+  effect: Effect.Effect<A, E, SqlClient.SqlClient | Global.Service>,
   global = Global.make({ data: path.join(process.cwd(), ".test-data") }),
 ) =>
   Effect.runPromise(
@@ -34,6 +35,31 @@ const run = <A, E>(
   )
 
 const makeDb = EffectDrizzleSqlite.makeWithDefaults()
+
+// A real in-memory SqlClient whose schema inspection signals `arrived` and then
+// waits on `gate`. Bootstrap inspects the schema as its first locked statement,
+// so a database built over this client parks while holding its migration lock.
+const parkedClient = (arrived: Deferred.Deferred<void>, gate: Deferred.Deferred<void>) =>
+  Layer.effect(
+    SqlClient.SqlClient,
+    Effect.gen(function* () {
+      const client = yield* SqlClient.SqlClient
+      const connection = yield* client.reserve
+      const park = <A, E>(query: string, effect: Effect.Effect<A, E>) =>
+        query.includes("sqlite_master")
+          ? Deferred.succeed(arrived, undefined).pipe(Effect.andThen(Deferred.await(gate)), Effect.andThen(effect))
+          : effect
+      return yield* SqlClient.make({
+        acquirer: Effect.succeed({
+          ...connection,
+          execute: (query, params, transform) => park(query, connection.execute(query, params, transform)),
+          executeRaw: (query, params) => park(query, connection.executeRaw(query, params)),
+        }),
+        compiler: Statement.makeCompilerSqlite(),
+        spanAttributes: [],
+      })
+    }),
+  ).pipe(Layer.provide(SqliteClient.layer({ filename: ":memory:", disableWAL: true })), Layer.provide(Reactivity.layer))
 
 describe("DatabaseMigration", () => {
   test("defaults missing workspace names while preserving legacy workspace data", async () => {
@@ -109,6 +135,31 @@ describe("DatabaseMigration", () => {
         ),
         { concurrency: "unbounded" },
       ).pipe(Effect.provideService(Global.Service, Global.make({ data: tmp.path }))),
+    )
+  })
+
+  test("bootstraps distinct databases without waiting on each other's lock", async () => {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const arrived = yield* Deferred.make<void>()
+        const gate = yield* Deferred.make<void>()
+        // Park the first database inside its bootstrap, after it holds its lock.
+        const parked = yield* Effect.forkScoped(
+          Layer.build(Database.layerFromClient.pipe(Layer.provide(parkedClient(arrived, gate)))),
+        )
+        yield* Deferred.await(arrived)
+
+        yield* Layer.build(
+          Database.layerFromClient.pipe(Layer.provide(SqliteClient.layer({ filename: ":memory:", disableWAL: true }))),
+        ).pipe(Effect.timeout("2 seconds"))
+
+        expect(parked.pollUnsafe()).toBeUndefined()
+        yield* Deferred.succeed(gate, undefined)
+        yield* Fiber.join(parked)
+      }).pipe(
+        Effect.provideService(Global.Service, Global.make({ data: path.join(process.cwd(), ".test-data") })),
+        Effect.scoped,
+      ),
     )
   })
 
@@ -385,6 +436,9 @@ describe("DatabaseMigration", () => {
     const content = JSON.stringify({
       openai: { type: "oauth", refresh: "refresh", access: "access", expires: 123, accountId: "account" },
       anthropic: { type: "api", key: "legacy-key", metadata: { region: "us" } },
+      google: { type: "api", key: "google-key", metadata: { region: "us" } },
+      "github-copilot": { type: "oauth", refresh: "refresh", access: "access", expires: 123 },
+      "custom-provider": { type: "api", key: "custom-key" },
       "https://example.com/": { type: "wellknown", key: "TOKEN", token: "wellknown-key" },
       invalid: { type: "unknown" },
     })
@@ -402,6 +456,7 @@ describe("DatabaseMigration", () => {
 
         yield* db.run(sql`DELETE FROM migration WHERE id = ${legacyCredentialsMigration.id}`)
         yield* DatabaseMigration.applyOnly(db, [legacyCredentialsMigration])
+        yield* DatabaseMigration.applyOnly(db, [legacyCredentialsMigration])
 
         expect(yield* db.all(sql`SELECT integration_id, label, value FROM credential ORDER BY integration_id`)).toEqual(
           [
@@ -411,13 +466,34 @@ describe("DatabaseMigration", () => {
               value: JSON.stringify({ type: "key", key: "current-key" }),
             },
             {
+              integration_id: "custom-provider",
+              label: "API key",
+              value: JSON.stringify({ type: "key", key: "custom-key" }),
+            },
+            {
+              integration_id: "github-copilot",
+              label: "OAuth",
+              value: JSON.stringify({
+                type: "oauth",
+                methodID: "device",
+                refresh: "refresh",
+                access: "access",
+                expires: 123,
+              }),
+            },
+            {
+              integration_id: "google",
+              label: "API key",
+              value: JSON.stringify({ type: "key", key: "google-key", metadata: { region: "us" } }),
+            },
+            {
               integration_id: "https://example.com",
-              label: "default",
+              label: "API key",
               value: JSON.stringify({ type: "key", key: "wellknown-key" }),
             },
             {
               integration_id: "openai",
-              label: "default",
+              label: "OAuth",
               value: JSON.stringify({
                 type: "oauth",
                 methodID: "chatgpt-browser",
