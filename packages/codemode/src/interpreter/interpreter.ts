@@ -32,6 +32,7 @@ import type {
   Statement,
   Super,
   SwitchStatement,
+  TaggedTemplateExpression,
   Literal,
   TemplateLiteral,
   ThrowStatement,
@@ -69,6 +70,7 @@ import {
   assign,
   Callable,
   define,
+  frozen,
   get,
   hostCursor,
   IteratorObj,
@@ -270,6 +272,8 @@ export class Interpreter<R> {
   readonly pending: Pending<R>
   readonly builtins: Builtins
   readonly logs: Array<string>
+  /** Template objects by site: a tag sees the same `strings` array every time its literal is evaluated, as in JS. */
+  readonly templates = new WeakMap<TaggedTemplateExpression, Arr>()
   private readonly root: Frame<R>
 
   constructor(options: {
@@ -1295,6 +1299,8 @@ class Frame<R> {
         return this.evaluateArrayExpression(node)
       case "TemplateLiteral":
         return this.evaluateTemplateLiteral(node)
+      case "TaggedTemplateExpression":
+        return this.evaluateTaggedTemplate(node)
       case "ConditionalExpression":
         return this.evaluateConditionalExpression(node)
       case "UpdateExpression":
@@ -2006,7 +2012,7 @@ class Frame<R> {
     return Effect.gen(function* () {
       for (let index = 0; index < quasis.length; index += 1) {
         const quasi = quasis[index]!
-        // acorn only omits `cooked` for invalid escapes in tagged templates, which are unsupported.
+        // acorn only omits `cooked` for invalid escapes, which are a parse error outside a tagged template.
         if (typeof quasi.value.cooked !== "string") {
           throw typeError("Invalid template literal quasi.", quasi)
         }
@@ -2022,6 +2028,41 @@ class Frame<R> {
 
       return output
     })
+  }
+
+  // `tag\`a${x}b\`` is `tag(strings, x)`: the tag is read like a callee (a member keeps its receiver), the
+  // substitutions are evaluated in order, and `strings` carries the escaped source as `strings.raw`.
+  private evaluateTaggedTemplate(node: TaggedTemplateExpression): Effect.Effect<Value, unknown, R> {
+    const self = this
+    return Effect.gen(function* () {
+      const { callable, thisValue } =
+        node.tag.type === "MemberExpression"
+          ? yield* self.readMethod(node.tag)
+          : { callable: yield* self.evaluateExpression(node.tag), thisValue: undefined }
+      const strings = self.ctx.templates.get(node) ?? self.createTemplateObject(node)
+      const values = yield* Effect.forEach(node.quasi.expressions, (expression) => self.evaluateExpression(expression))
+      return yield* self.call(callable, thisValue, [strings, ...values], node, node.tag)
+    })
+  }
+
+  private createTemplateObject(node: TaggedTemplateExpression): Arr {
+    const array = this.ctx.builtins.Array
+    // An invalid escape such as `\unicode` cooks to `undefined` and survives only in `raw`.
+    const strings = new Arr(
+      array,
+      node.quasi.quasis.map((quasi) => quasi.value.cooked ?? undefined),
+    )
+    define(
+      strings,
+      "raw",
+      new Arr(
+        array,
+        node.quasi.quasis.map((quasi) => quasi.value.raw),
+      ),
+      frozen,
+    )
+    this.ctx.templates.set(node, strings)
+    return strings
   }
 
   private evaluateConditionalExpression(node: ConditionalExpression): Effect.Effect<Value, unknown, R> {

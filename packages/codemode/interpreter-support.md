@@ -52,12 +52,15 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Object literals with shorthand, computed string/number keys, and spread following ToObject: data objects and
       arrays copy own enumerable keys, strings copy index keys, and other values contribute nothing.
 - [x] Template literals with interpolation.
+- [x] Tagged templates: a tag applied to a template literal is called as `tag(strings, ...values)`, with the tag read
+      like a callee so a member tag keeps its receiver. `strings` is an array of the cooked text with a read-only `raw`
+      array of the source text; an invalid escape such as `\unicode` cooks to `undefined`. One template object per
+      site, as in JS, but it is not frozen: `strings[0] = "x"` succeeds here where JS throws.
 - [x] Regular-expression literals.
 - [x] `NaN` and `Infinity` globals.
 - [ ] BigInt literals and in-interpreter BigInt arithmetic; BigInt remains invalid at JSON-like host boundaries.
 - [ ] Arbitrary Symbol primitive values and symbol-keyed properties. The confined `Symbol.iterator` and
       `Symbol.asyncIterator` keys are available only for the iterator protocols.
-- [ ] Tagged-template calls.
 - [ ] Getter and setter definitions in object literals.
 
 ## Bindings and destructuring
@@ -345,7 +348,8 @@ reject }` object.
       `repeat` still requires a finite non-negative count.
 - [x] Native no-argument parity for `match()`, `matchAll()`, and `search()`; all behave as an empty pattern. Present
       arguments must still be a regular expression or string pattern.
-- [ ] `String.raw`.
+- [x] `String.raw`, on a template object or any `{ raw }` object; raw strings and substitutions coerce through their own
+      `toString`.
 - [ ] `match`, `search`, and `split` accept any value and coerce it (objects via `toString`), like JavaScript.
 
 ## Numbers and Math
