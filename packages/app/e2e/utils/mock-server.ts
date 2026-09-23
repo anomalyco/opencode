@@ -10,7 +10,9 @@ export interface MockServerConfig {
   onConnectKey?: (input: { integrationID: string; body: unknown }) => void
   onInstanceDispose?: () => void
   directory: string
+  home?: string
   project: unknown
+  directories?: string[]
   sessions: ({ id: string } & Record<string, unknown>)[]
   pageMessages: (sessionId: string, limit: number, before?: string) => { items: unknown[]; cursor?: string }
   vcsDiff?: unknown[]
@@ -33,16 +35,18 @@ export interface MockServerConfig {
 export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
   const cursors = new Map<string, string>()
   let nextCursor = 0
+  const pathFor = (url: URL) => {
+    const requested = url.searchParams.get("directory") ?? url.searchParams.get("location[directory]")
+    const target = requested && config.directories?.includes(requested) ? requested : config.directory
+    return {
+      state: target,
+      config: target,
+      worktree: target,
+      directory: target,
+      home: config.home ?? "C:/OpenCode",
+    }
+  }
   const staticRoutes: Record<string, unknown> = {
-    "/path": {
-      state: config.directory,
-      config: config.directory,
-      worktree: config.directory,
-      directory: config.directory,
-      home: "C:/OpenCode",
-    },
-    "/project": [config.project],
-    "/project/current": config.project,
     "/agent": [{ name: "build", mode: "primary" }],
     "/vcs": { branch: "main", default_branch: "main" },
     "/session": config.sessions,
@@ -149,18 +153,15 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       config.onConnectKey?.({ integrationID: integrationConnect, body: route.request().postDataJSON() })
       return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
     }
+    if (path === "/path") return json(route, pathFor(url))
+    if (path === "/project") return json(route, [config.project])
+    if (path === "/project/current") return json(route, config.project)
+    if (path === "/experimental/worktree") return json(route, config.directories ?? [config.directory])
     if (path === "/api/project") return json(route, [config.project])
     if (path === "/api/project/current")
       return json(route, { id: (config.project as { id?: string }).id, directory: config.directory })
     if (path.startsWith("/api/project/") && route.request().method() === "PATCH") return json(route, config.project)
-    if (path === "/api/path")
-      return json(route, {
-        state: config.directory,
-        config: config.directory,
-        worktree: config.directory,
-        directory: config.directory,
-        home: "C:/OpenCode",
-      })
+    if (path === "/api/path") return json(route, pathFor(url))
     if (path === "/api/permission/request")
       return json(route, {
         location: location(config),
