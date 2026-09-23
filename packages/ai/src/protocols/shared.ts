@@ -231,11 +231,11 @@ export const errorText = (error: unknown) => {
 
 /**
  * `framing` step for Server-Sent Events. Decodes UTF-8, runs the SSE channel
- * decoder, optionally filters named events, and drops empty events. `[DONE]`
- * is dropped by default or retained for protocols that use it as their stream
- * boundary. Retry control events are ignored without interrupting the stream.
- * Decoder failures become provider output errors so the public error channel
- * stays `AIError`.
+ * decoder, optionally filters named events, and drops empty and bare `null`
+ * events. `[DONE]` is dropped by default or retained for protocols that use it
+ * as their stream boundary. Retry control events are ignored without
+ * interrupting the stream. Decoder failures become provider output errors so
+ * the public error channel stays `AIError`.
  */
 export const sseFraming = (
   bytes: Stream.Stream<Uint8Array, AIError>,
@@ -265,6 +265,10 @@ export const sseFraming = (
       (event) =>
         (events === undefined || events.has(event.event)) &&
         event.data.length > 0 &&
+        // Some OpenAI-compatible proxies serialize an empty flush as a bare
+        // `data: null`, between events or after `[DONE]`. No protocol has a
+        // null event, so it carries nothing and must not abort the stream.
+        event.data !== "null" &&
         (event.data !== "[DONE]" || includeDone || (events !== undefined && event.event !== "message")),
     ),
     Stream.map((event) => event.data),

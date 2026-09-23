@@ -178,6 +178,20 @@ describe("AI.Usage", () => {
     }),
   )
 
+  it.effect("sseFraming drops bare null frames and keeps other payloads", () =>
+    Effect.gen(function* () {
+      const frames = yield* ProviderShared.sseFraming(
+        Stream.make(
+          new TextEncoder().encode(
+            'data: {"first":true}\n\ndata: null\n\nevent: update\ndata: null\n\ndata: "null"\n\ndata: 0\n\ndata: {"second":true}\n\ndata: [DONE]\n\ndata: null\n\n',
+          ),
+        ),
+      ).pipe(Stream.runCollect)
+
+      expect(Array.from(frames)).toEqual(['{"first":true}', '"null"', "0", '{"second":true}'])
+    }),
+  )
+
   test("visibleOutputTokens clamps reasoning > output to zero", () => {
     expect(new Usage({ outputTokens: 10, reasoningTokens: 4 }).visibleOutputTokens).toBe(6)
     expect(new Usage({ outputTokens: 10 }).visibleOutputTokens).toBe(10)
