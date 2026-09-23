@@ -4,6 +4,7 @@ import type { DesktopTheme } from "@opencode-ai/ui/theme/types"
 import oc2ThemeJson from "../../../ui/src/theme/themes/oc-2.json"
 import { randomUUID } from "node:crypto"
 import { rmSync } from "node:fs"
+import { stat } from "node:fs/promises"
 import { app, BrowserWindow, dialog, net, nativeImage, nativeTheme, protocol, shell } from "electron"
 import { dirname, isAbsolute, join, relative, resolve } from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
@@ -248,9 +249,17 @@ export function openLocalFileURL(value: string) {
     writeLog("window", "blocked local file target", { url: value }, "warn")
     return
   }
-  void shell.openPath(path).then((error) => {
-    if (error) writeLog("window", "failed to open local file", { path, error }, "error")
-  })
+  void stat(path)
+    .then((info) => {
+      // Only plain documents may be opened. Directories (e.g. macOS .app
+      // bundles) and other special files would be launched by the OS handler.
+      if (!info.isFile()) return "not a regular file"
+      return shell.openPath(path)
+    })
+    .then((error) => {
+      if (error) writeLog("window", "failed to open local file", { path, error }, "error")
+    })
+    .catch((error) => writeLog("window", "failed to open local file", { path, error }, "error"))
 }
 
 function wireNavigationPolicy(win: BrowserWindow) {

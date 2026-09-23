@@ -26,4 +26,18 @@ describe("external URLs", () => {
     expect(resolveLocalFilePath("file://example.com/share/index.html")).toBeUndefined()
     expect(resolveLocalFilePath("https://example.com/index.html")).toBeUndefined()
   })
+
+  test("refuses local paths the OS would execute instead of open", () => {
+    const executable = ["payload.exe", "payload.bat", "payload.cmd", "payload.hta", "payload.lnk", "payload.jar", "Payload.EXE", "payload.exe ", "payload.exe..."]
+    for (const name of executable) {
+      expect(resolveLocalFilePath(pathToFileURL(resolve(name)).href), name).toBeUndefined()
+    }
+    const bundle = resolve("My.app")
+    expect(resolveLocalFilePath(pathToFileURL(bundle + "/Contents/MacOS/My").href)).toBeUndefined()
+    expect(resolveLocalFilePath(pathToFileURL(resolve("runme.command")).href)).toBeUndefined()
+    expect(resolveLocalFilePath(pathToFileURL(resolve("install.pkg")).href)).toBeUndefined()
+    // Documents still open normally.
+    expect(resolveLocalFilePath(pathToFileURL(resolve("readme.md")).href)).toBe(resolve("readme.md"))
+    expect(resolveLocalFilePath(pathToFileURL(resolve("payload.exe.txt")).href)).toBe(resolve("payload.exe.txt"))
+  })
 })
