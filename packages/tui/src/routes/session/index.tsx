@@ -1102,8 +1102,9 @@ export function Session(props: {
         try {
           const sessionData = session()
           if (!sessionData) return
-          const transcript = formatSessionTranscript(sessionData, messages(), true)
-          await clipboard.write(transcript)
+          const transcript = await client.api.session.export({ sessionID: sessionData.id })
+          const content = formatSessionTranscript(transcript.info, transcript.messages, true)
+          await clipboard.write(content)
           toast.show({ message: "Session transcript copied to clipboard!", variant: "success" })
         } catch {
           toast.show({ message: "Failed to copy session transcript", variant: "error" })
@@ -1127,14 +1128,14 @@ export function Session(props: {
 
           if (options === null) return
 
+          const transcript = await client.api.session.export({
+            sessionID: sessionData.id,
+            sanitize: options.format === "json" ? options.sanitize : undefined,
+          })
           const content =
             options.format === "markdown"
-              ? formatSessionTranscript(sessionData, messages(), options.thinking, options.tools)
-              : JSON.stringify(
-                  await client.api.session.export({ sessionID: sessionData.id, sanitize: options.sanitize }),
-                  null,
-                  2,
-                ) + EOL
+              ? formatSessionTranscript(transcript.info, transcript.messages, options.thinking, options.tools)
+              : JSON.stringify(transcript, null, 2) + EOL
 
           if (options.action === "copy") {
             await clipboard.write(content)
