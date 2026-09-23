@@ -125,6 +125,8 @@ type ToolName =
   | "lsp"
   | "webfetch"
   | "websearch"
+  | "devsearch"
+  | "alexandria"
   | "skill"
 
 type ToolRule = {
@@ -420,6 +422,26 @@ function runWebSearch(p: ToolProps): ToolInline {
   return {
     icon: "◈",
     title: p.input.query ? `${title} "${p.input.query}"` : title,
+  }
+}
+
+function runDevSearch(p: ToolProps): ToolInline {
+  return {
+    icon: "◈",
+    title: p.input.query ? `Developer Search "${p.input.query}"` : "Developer Search",
+  }
+}
+
+function alexandriaTitle(p: ToolProps): string {
+  if (p.input.query) return `Alexandria "${p.input.query}"`
+  if (p.input.provider && p.input.capability) return `Alexandria ${p.input.provider}/${p.input.capability}`
+  return "Alexandria"
+}
+
+function runAlexandria(p: ToolProps): ToolInline {
+  return {
+    icon: "◈",
+    title: alexandriaTitle(p),
   }
 }
 
@@ -887,6 +909,19 @@ function scrollWebSearchStart(p: ToolProps): string {
   return `◈ ${title} "${query}"`
 }
 
+function scrollDevSearchStart(p: ToolProps): string {
+  const query = p.input.query ?? ""
+  if (!query) {
+    return "◈ Developer Search"
+  }
+
+  return `◈ Developer Search "${query}"`
+}
+
+function scrollAlexandriaStart(p: ToolProps): string {
+  return `◈ ${alexandriaTitle(p)}`
+}
+
 const TOOL_RULES = {
   invalid: {
     view: {
@@ -1052,6 +1087,26 @@ const TOOL_RULES = {
     run: runWebSearch,
     scroll: {
       start: scrollWebSearchStart,
+    },
+  },
+  devsearch: {
+    view: {
+      output: false,
+      final: false,
+    },
+    run: runDevSearch,
+    scroll: {
+      start: scrollDevSearchStart,
+    },
+  },
+  alexandria: {
+    view: {
+      output: false,
+      final: false,
+    },
+    run: runAlexandria,
+    scroll: {
+      start: scrollAlexandriaStart,
     },
   },
   skill: {

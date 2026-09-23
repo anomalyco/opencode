@@ -282,6 +282,13 @@ function readImagePath(input: Record<string, unknown>) {
   return path.replaceAll("\\", "/")
 }
 
+function alexandriaSubtitle(input: Record<string, unknown>) {
+  if (typeof input.query === "string" && input.query) return input.query
+  if (typeof input.provider === "string" && typeof input.capability === "string")
+    return `${input.provider}/${input.capability}`
+  return undefined
+}
+
 function skillToolName(input: Record<string, unknown>, metadata?: Record<string, unknown>) {
   if (typeof metadata?.name === "string") return metadata.name
   if (typeof input.id === "string") return input.id
@@ -338,6 +345,18 @@ export function getToolInfo(
         icon: "window-cursor",
         title: webSearchProviderLabel(metadata?.provider, i18n),
         subtitle: typeof input.query === "string" ? input.query : undefined,
+      }
+    case "devsearch":
+      return {
+        icon: "window-cursor",
+        title: i18n.t("ui.tool.devsearch"),
+        subtitle: typeof input.query === "string" ? input.query : undefined,
+      }
+    case "alexandria":
+      return {
+        icon: "window-cursor",
+        title: i18n.t("ui.tool.alexandria"),
+        subtitle: alexandriaSubtitle(input),
       }
     case "subagent": {
       const raw = input.agent
@@ -1271,7 +1290,8 @@ function toolErrorSubtitle(props: ToolProps, i18n: UiI18n) {
   if (props.tool === "list" || props.tool === "glob" || props.tool === "grep")
     return displayDirectory(text(props.input.path) ?? "/")
   if (props.tool === "webfetch") return text(props.input.url)
-  if (props.tool === "websearch") return text(props.input.query)
+  if (props.tool === "websearch" || props.tool === "devsearch") return text(props.input.query)
+  if (props.tool === "alexandria") return alexandriaSubtitle(props.input)
   if (props.tool === "skill") return skillToolName(props.input, props.metadata)
   if (props.tool === "patch") {
     const count = new Set(
@@ -1544,6 +1564,52 @@ ToolRegistry.register({
         trigger={{
           title: title(),
           subtitle: query(),
+          subtitleClass: "exa-tool-query",
+        }}
+      >
+        <ExaOutput output={props.output} />
+      </BasicTool>
+    )
+  },
+})
+ToolRegistry.register({
+  name: "devsearch",
+  render(props) {
+    const i18n = useI18n()
+    const query = createMemo(() => {
+      const value = props.input.query
+      if (typeof value !== "string") return ""
+      return value
+    })
+
+    return (
+      <BasicTool
+        {...props}
+        icon="window-cursor"
+        trigger={{
+          title: i18n.t("ui.tool.devsearch"),
+          subtitle: query(),
+          subtitleClass: "exa-tool-query",
+        }}
+      >
+        <ExaOutput output={props.output} />
+      </BasicTool>
+    )
+  },
+})
+ToolRegistry.register({
+  name: "alexandria",
+  render(props) {
+    const i18n = useI18n()
+    const subtitle = createMemo(() => alexandriaSubtitle(props.input) ?? "")
+
+    return (
+      <BasicTool
+        {...props}
+        icon="window-cursor"
+        trigger={{
+          title: i18n.t("ui.tool.alexandria"),
+          subtitle: subtitle(),
           subtitleClass: "exa-tool-query",
         }}
       >
