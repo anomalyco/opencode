@@ -92,8 +92,18 @@ export function partPath(part: AppendPart, verbosity?: Verbosity): readonly Grou
 
 /** Instruction loads group under the verbosity experiment; other messages stand alone. */
 export function messagePath(message: SessionMessageInfo, verbosity?: Verbosity): readonly GroupKind[] {
-  if (!verbosity || message.type !== "synthetic" || !message.metadata?.instruction) return []
+  if (!verbosity || instructionPaths(message).length === 0) return []
   return verbosity === "low" ? ["activity", "instructions"] : ["instructions"]
+}
+
+/** Files loaded by an instruction message; one load can carry several. */
+export function instructionPaths(message: SessionMessageInfo | undefined): string[] {
+  if (message?.type !== "synthetic") return []
+  const instruction = message.metadata?.instruction
+  if (typeof instruction !== "object" || instruction === null || Array.isArray(instruction)) return []
+  return Array.isArray(instruction.paths)
+    ? instruction.paths.filter((path): path is string => typeof path === "string")
+    : []
 }
 
 /** Production rules only: keep lifecycle/status decisions outside the tree engine. */

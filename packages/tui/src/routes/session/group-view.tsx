@@ -8,8 +8,8 @@ import { SplitBorder } from "../../ui/border"
 import { Locale } from "../../util/locale"
 import { EntryAnchor, GroupAnchor, visitEntries } from "./anchor-view"
 import { groupID } from "./anchors"
-import type { PartRef, SessionEntry, SessionGroup, SessionNode } from "./grouping/session"
-import { activitySummary } from "./activity-summary"
+import { instructionPaths, type PartRef, type SessionEntry, type SessionGroup, type SessionNode } from "./grouping/session"
+import { summarizeActivity } from "./activity-summary"
 import { InlineToolRow, reasoningContent, toolDisplay } from "./message-parts"
 import { use } from "./render-context"
 import { resolvePart } from "./rows"
@@ -206,22 +206,18 @@ function ActivityGroup(props: GroupProps) {
   const disclosure = useDisclosure(props)
   const [hover, setHover] = createSignal(false)
   const entries = createMemo(() => descendants(props.node))
-  const summary = createMemo(() =>
-    activitySummary(
-      entries().flatMap((entry) => {
-        if (entry.type !== "part" || isPending(entry, props.pending)) return []
-        const message = props.message(entry.ref.messageID)
-        if (message?.type !== "assistant") return []
-        const part = resolvePart(message, entry.ref.partID)
-        return part?.type === "reasoning" || part?.type === "tool" ? [{ message, part }] : []
-      }),
-      entries().filter((entry) => entry.type === "message").length,
-    ),
-  )
+  const summary = createMemo(() => summarizeActivity(props.node, props.message, props.pending))
   return (
     <GroupAnchor groupID={disclosure.id()} active={summary().label !== ""}>
-      {/* Until something finishes there is nothing to summarize; show the live items. */}
-      <Show when={summary().label} fallback={<Children {...props} nodes={props.node.children} mode="normal" />}>
+      {/* Until something finishes there is nothing to summarize; show the live items, spaced like Medium. */}
+      <Show
+        when={summary().label}
+        fallback={
+          <box flexDirection="column" gap={1}>
+            <Children {...props} nodes={props.node.children} mode="normal" />
+          </box>
+        }
+      >
         <InlineToolRow
           icon={summary().failed ? "✗" : disclosure.expanded() ? "−" : "+"}
           iconColor={summary().failed ? theme.text.feedback.error.base : undefined}
@@ -251,25 +247,16 @@ function InstructionsGroup(props: GroupProps) {
   const theme = useTheme()
   const disclosure = useDisclosure(props)
   const [hover, setHover] = createSignal(false)
-  const messages = createMemo(() =>
-    descendants(props.node).flatMap((entry) => {
-      const message = entry.type === "message" ? props.message(entry.messageID) : undefined
-      return message?.type === "synthetic" ? [message] : []
-    }),
-  )
   const files = createMemo(
     () =>
       new Set(
-        messages().flatMap((message) => {
-          const instruction = message.metadata?.instruction
-          if (typeof instruction !== "object" || instruction === null || Array.isArray(instruction)) return []
-          const paths = instruction.paths
-          return Array.isArray(paths) ? paths.filter((path) => typeof path === "string") : []
-        }),
+        descendants(props.node).flatMap((entry) =>
+          entry.type === "message" ? instructionPaths(props.message(entry.messageID)) : [],
+        ),
       ).size,
   )
   return (
-    <GroupAnchor groupID={disclosure.id()} active={messages().length > 0}>
+    <GroupAnchor groupID={disclosure.id()} active={files() > 0}>
       <InlineToolRow
         icon="◈"
         color={hover() ? theme.text.base : theme.text.muted}

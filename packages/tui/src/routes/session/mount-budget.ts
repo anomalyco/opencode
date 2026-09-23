@@ -9,14 +9,22 @@ import type { GroupKind, SessionNode, SessionRow } from "./grouping/session"
  */
 export function rowWeight(
   row: SessionRow,
-  input: { expanded: (groupID: string, kind: GroupKind) => boolean; grouped: (kind: GroupKind) => boolean },
+  input: {
+    expanded: (groupID: string, kind: GroupKind) => boolean
+    grouped: (kind: GroupKind) => boolean
+    /** False when a collapsed group has nothing to summarize and renders its children instead. */
+    summarized: (node: Extract<SessionNode, { type: "group" }>) => boolean
+  },
 ) {
   if (row.type !== "group") return 1
   const visit = (node: Extract<SessionNode, { type: "group" }>, level: number): number => {
     if (!input.grouped(node.kind)) return node.size
+    const children = () =>
+      node.children.reduce((total, child) => total + (child.type === "group" ? visit(child, level + 1) : 1), 0)
     const id = groupID(node, level)
+    if (!input.summarized(node)) return children()
     if (!id || !input.expanded(id, node.kind)) return 1
-    return node.children.reduce((total, child) => total + (child.type === "group" ? visit(child, level + 1) : 1), 1)
+    return 1 + children()
   }
   return visit(row, 0)
 }

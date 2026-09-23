@@ -121,6 +121,7 @@ import { SessionGroupView } from "./group-view"
 import { useEntryAnchor } from "./anchor-view"
 import { containsAnchor, createTimelineAnchors } from "./anchors"
 import { rowsAfter, rowsBefore, rowWeight } from "./mount-budget"
+import { summarizeActivity } from "./activity-summary"
 export { InlineToolRow } from "./message-parts"
 export { toolDisplay } from "./message-parts"
 
@@ -405,6 +406,9 @@ export function Session(props: {
       rowWeight(row, {
         expanded: groupExpanded,
         grouped: groupedKind,
+        summarized: (node) =>
+          node.kind !== "activity" ||
+          summarizeActivity(node, (messageID) => data.session.message.get(route.sessionID, messageID)).label !== "",
       }),
     ),
   )

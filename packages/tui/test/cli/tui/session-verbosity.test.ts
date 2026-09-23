@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client"
-import { activitySummary } from "../../../src/routes/session/activity-summary"
+import { activitySummary, summarizeActivity } from "../../../src/routes/session/activity-summary"
 import {
   append,
   groupRefs,
@@ -222,4 +222,20 @@ test("execute counts its finished nested calls instead of itself", () => {
     active: false,
     failed: true,
   })
+})
+
+test("activity summary counts distinct instruction files and skips redacted thoughts", () => {
+  const messages: SessionMessageInfo[] = [
+    assistant("a", [
+      { type: "reasoning", text: "[REDACTED]", time: { created: 1, completed: 2 } },
+      { type: "reasoning", text: "Plan", time: { created: 1, completed: 2 } },
+      tool("r1", "read"),
+    ]),
+    instruction("i1", ["AGENTS.md", "src/AGENTS.md"]),
+    instruction("i2", ["src/AGENTS.md", "docs/AGENTS.md"]),
+  ]
+  const activity = reduceSessionRows(messages, new Set(), false, "low")[0]
+  if (activity.type !== "group") throw new Error("Expected activity")
+  const message = (id: string) => messages.find((item) => item.id === id)
+  expect(summarizeActivity(activity, message).label).toBe("1 thought, 1 read, 3 instructions")
 })
