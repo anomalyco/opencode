@@ -1,4 +1,5 @@
 import { Formatter, Logger, type LogLevel } from "effect"
+import { renameSync, statSync } from "fs"
 import path from "path"
 import { Global } from "../global"
 import { runID } from "./shared"
@@ -46,9 +47,29 @@ function format(input: unknown) {
   return /^[^\s="\\]+$/.test(value) ? value : JSON.stringify(value)
 }
 
-export function fileLogger(file = path.join(Global.Path.log, "opencode.log"), id: string = runID) {
+const MAX_LOG_BYTES = 64 * 1024 * 1024
+
+export function fileLogger(
+  file = path.join(Global.Path.log, "opencode.log"),
+  id: string = runID,
+  maxBytes = MAX_LOG_BYTES,
+) {
+  rotate(file, maxBytes)
   // Do not set batchWindow to 0; it causes high idle CPU usage.
   return Logger.toFile(formatter(id), file, { flag: "a" })
+}
+
+// Every opencode process appends to the same file, so without a cap it grows forever.
+// Rotation is best effort: a concurrent process may rotate first or the directory may be
+// read-only, and logging must keep appending either way instead of failing startup.
+function rotate(file: string, maxBytes: number) {
+  if ((statSync(file, { throwIfNoEntry: false })?.size ?? 0) < maxBytes) return false
+  try {
+    renameSync(file, `${file}.1`)
+    return true
+  } catch {
+    return false
+  }
 }
 
 const stderrLogger = Logger.make((options) => process.stderr.write(formatter().log(options) + "\n"))
