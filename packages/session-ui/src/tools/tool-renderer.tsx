@@ -339,6 +339,12 @@ export function getToolInfo(
         title: webSearchProviderLabel(metadata?.provider, i18n),
         subtitle: typeof input.query === "string" ? input.query : undefined,
       }
+    case "devsearch":
+      return {
+        icon: "window-cursor",
+        title: i18n.t("ui.tool.devsearch"),
+        subtitle: typeof input.query === "string" ? input.query : undefined,
+      }
     case "subagent": {
       const raw = input.agent
       const type = typeof raw === "string" && raw ? raw[0].toUpperCase() + raw.slice(1) : undefined
@@ -1271,7 +1277,7 @@ function toolErrorSubtitle(props: ToolProps, i18n: UiI18n) {
   if (props.tool === "list" || props.tool === "glob" || props.tool === "grep")
     return displayDirectory(text(props.input.path) ?? "/")
   if (props.tool === "webfetch") return text(props.input.url)
-  if (props.tool === "websearch") return text(props.input.query)
+  if (props.tool === "websearch" || props.tool === "devsearch") return text(props.input.query)
   if (props.tool === "skill") return skillToolName(props.input, props.metadata)
   if (props.tool === "patch") {
     const count = new Set(
@@ -1543,6 +1549,31 @@ ToolRegistry.register({
         icon="window-cursor"
         trigger={{
           title: title(),
+          subtitle: query(),
+          subtitleClass: "exa-tool-query",
+        }}
+      >
+        <ExaOutput output={props.output} />
+      </BasicTool>
+    )
+  },
+})
+ToolRegistry.register({
+  name: "devsearch",
+  render(props) {
+    const i18n = useI18n()
+    const query = createMemo(() => {
+      const value = props.input.query
+      if (typeof value !== "string") return ""
+      return value
+    })
+
+    return (
+      <BasicTool
+        {...props}
+        icon="window-cursor"
+        trigger={{
+          title: i18n.t("ui.tool.devsearch"),
           subtitle: query(),
           subtitleClass: "exa-tool-query",
         }}
