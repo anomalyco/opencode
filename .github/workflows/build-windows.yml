@@ -1,0 +1,64 @@
+name: Build Windows Desktop
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.4.2
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Build CLI
+        shell: pwsh
+        run: |
+          $env:OPENCODE_CHANNEL = "prod"
+          $env:OPENCODE_VERSION = (Get-Content .\packages\cli\package.json | ConvertFrom-Json).version
+
+          bun run --cwd packages/cli script/build.ts --target=opencode-windows-x64-baseline
+
+      - name: Build desktop
+        shell: pwsh
+        run: |
+          $env:OPENCODE_CHANNEL = "prod"
+          $env:OPENCODE_VERSION = (Get-Content .\packages\cli\package.json | ConvertFrom-Json).version
+          $env:OPENCODE_CLI_DIST = (Resolve-Path .\packages\cli\dist).Path
+          $env:OPENCODE_CLI_TARGET = "x86_64-pc-windows-msvc"
+
+          Set-Location .\packages\desktop
+
+          bun run build
+          bun run package:win --x64 --publish never
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: opencode-desktop-win-x64
+          path: packages/desktop/dist/opencode-desktop-win-x64.exe
+
+      - name: Upload to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ github.ref_name }}" `
+            packages/desktop/dist/opencode-desktop-win-x64.exe `
+            --title "${{ github.ref_name }}" `
+            --generate-notes
