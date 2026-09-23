@@ -1053,7 +1053,7 @@ export function Session(props: {
       },
     },
     {
-      title: `Transcript verbosity: ${Locale.titlecase(verbosity())}`,
+      title: `Verbosity: ${Locale.titlecase(verbosity())}`,
       id: "session.verbosity.cycle",
       group: "Session",
       run: () => {
