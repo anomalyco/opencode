@@ -397,7 +397,10 @@ export function PromptGitStatus(props: { branch?: string; noGit?: boolean; from?
           class={`min-w-0 max-w-[220px] ${props.class ?? ""}`}
           contentClass="max-w-[calc(100vw-32px)] break-all"
         >
-          <div class="flex h-6 min-w-0 max-w-[220px] items-center gap-1.5 rounded-full bg-v2-background-bg-layer-02 px-2.5 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint">
+          <div
+            data-slot="prompt-git-status"
+            class="flex h-6 min-w-0 max-w-[220px] items-center gap-1.5 rounded-full bg-v2-background-bg-layer-02 px-2.5 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint"
+          >
             <Icon name={icon()} size="small" class="shrink-0 text-v2-icon-icon-muted" />
             <span ref={truncation.observe} class="min-w-0 truncate">
               {value()}

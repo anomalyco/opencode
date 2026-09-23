@@ -108,6 +108,22 @@ test("non-Git folders show their status without offering worktree actions", asyn
   ).toBeEnabled()
 })
 
+test("project and Git status wrap only when the mobile row runs out of space", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await openDraft(page, "main", { git: false, name: "summary-project-with-a-long-name" })
+  const project = page.locator('[data-action="prompt-project"]')
+  const git = page.locator('[data-slot="prompt-git-status"]')
+  const verticalOffset = async () => {
+    const [projectBox, gitBox] = await Promise.all([project.boundingBox(), git.boundingBox()])
+    if (!projectBox || !gitBox) return Number.POSITIVE_INFINITY
+    return Math.abs(projectBox.y + projectBox.height / 2 - gitBox.y - gitBox.height / 2)
+  }
+
+  await expect.poll(verticalOffset).toBeLessThanOrEqual(3)
+  await page.setViewportSize({ width: 320, height: 844 })
+  await expect.poll(verticalOffset).toBeGreaterThan(3)
+})
+
 test("submits locally after changing a new worktree draft to Local", async ({ page }) => {
   const mock = await openDraft(page, "create", { currentDirectory: workspace })
   await page.getByRole("button", { name: "New worktree", exact: true }).click()
@@ -308,13 +324,13 @@ test("new worktree sign-in completes before the draft can send", async ({ page, 
 async function openDraft(
   page: Page,
   worktree = "main",
-  options: { git?: boolean; direction?: "ltr" | "rtl"; currentDirectory?: string } = {},
+  options: { git?: boolean; direction?: "ltr" | "rtl"; currentDirectory?: string; name?: string } = {},
 ) {
   const currentDirectory = options.currentDirectory ?? directory
   const project = {
     id: "proj_new_summary",
     worktree: directory,
-    name: "summary-project",
+    name: options.name ?? "summary-project",
     vcs: options.git === false ? undefined : "git",
     time: { created: 1, updated: 1 },
     sandboxes: [workspace],
