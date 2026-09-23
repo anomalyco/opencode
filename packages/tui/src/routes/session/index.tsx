@@ -120,6 +120,7 @@ import type { SessionEntry } from "./grouping/session"
 import { SessionGroupView } from "./group-view"
 import { useEntryAnchor } from "./anchor-view"
 import { containsAnchor, createTimelineAnchors } from "./anchors"
+import { rowsAfter, rowsBefore, rowWeight } from "./mount-budget"
 export { InlineToolRow } from "./message-parts"
 export { toolDisplay } from "./message-parts"
 
@@ -129,6 +130,7 @@ addDefaultParsers(parsers.parsers)
 const NAVIGATION_SLACK_ID = "session-navigation-slack"
 const BACKGROUND_TOOL_HINT_DELAY = 3_000
 
+// Budgets count rendered entries (see mount-budget.ts); a collapsed group costs one.
 // The tail comfortably overfills a tall viewport; older rows mount as the reader approaches them.
 const TRANSCRIPT_TAIL_ROWS = 40
 const TRANSCRIPT_BACKFILL_CHUNK = 60
@@ -390,7 +392,17 @@ export function Session(props: {
   // at the bottom the hidden span follows appends; leaving the bottom pins it to preserve the viewport.
   const [hiddenRows, setHiddenRows] = createSignal<number>()
   const [visibleRowsEnd, setVisibleRowsEnd] = createSignal<number>()
-  const hidden = createMemo(() => Math.max(0, Math.min(hiddenRows() ?? Infinity, rows.length - TRANSCRIPT_TAIL_ROWS)))
+  const weights = createMemo(() =>
+    rows.map((row) =>
+      rowWeight(row, {
+        expanded: (groupID) => sessionTabs.groupExpanded(sessionID, groupID) ?? false,
+        grouped: (kind) => (kind === "reasoning" ? thinkingMode() === "hide" : groupExploration()),
+      }),
+    ),
+  )
+  const hidden = createMemo(() =>
+    Math.min(hiddenRows() ?? Infinity, rowsBefore(weights(), rows.length, TRANSCRIPT_TAIL_ROWS)),
+  )
   const visibleEnd = createMemo(() => Math.max(hidden(), Math.min(visibleRowsEnd() ?? rows.length, rows.length)))
   const visibleRows = createMemo(() => rows.slice(hidden(), visibleEnd()))
   const prependHistory = createHistoryPrepend({
@@ -422,7 +434,7 @@ export function Session(props: {
     revealingOlderRows = true
     const before = scroll.scrollHeight
     scroll.stickyScroll = false
-    setHiddenRows(Math.max(0, current - TRANSCRIPT_BACKFILL_CHUNK))
+    setHiddenRows(rowsBefore(weights(), current, TRANSCRIPT_BACKFILL_CHUNK))
     afterLayout(() => {
       scroll.scrollBy(scroll.scrollHeight - before + scrollBy)
       scroll.stickyScroll = !navigationMessage()
@@ -442,7 +454,7 @@ export function Session(props: {
     )
       return false
     revealingNewerRows = true
-    const next = Math.min(rows.length, current + TRANSCRIPT_BACKFILL_CHUNK)
+    const next = rowsAfter(weights(), current, TRANSCRIPT_BACKFILL_CHUNK)
     setVisibleRowsEnd(next === rows.length ? undefined : next)
     afterLayout(() => {
       revealingNewerRows = false
@@ -537,8 +549,8 @@ export function Session(props: {
       setAwayFromBottom(false)
       return
     }
-    setHiddenRows(Math.max(0, index - TRANSCRIPT_BACKFILL_CHUNK))
-    const end = Math.min(rows.length, index + TRANSCRIPT_BACKFILL_CHUNK)
+    setHiddenRows(rowsBefore(weights(), index, TRANSCRIPT_BACKFILL_CHUNK))
+    const end = rowsAfter(weights(), index, TRANSCRIPT_BACKFILL_CHUNK)
     setVisibleRowsEnd(end === rows.length ? undefined : end)
     scroll.stickyScroll = false
     const restore = () =>
@@ -555,7 +567,7 @@ export function Session(props: {
         const target = contentY - anchor.screenY
         const maximum = Math.max(0, scroll.scrollHeight - scroll.viewport.height)
         if (target > maximum && visibleEnd() < rows.length) {
-          const next = Math.min(rows.length, visibleEnd() + TRANSCRIPT_BACKFILL_CHUNK)
+          const next = rowsAfter(weights(), visibleEnd(), TRANSCRIPT_BACKFILL_CHUNK)
           setVisibleRowsEnd(next === rows.length ? undefined : next)
           restore()
           return
