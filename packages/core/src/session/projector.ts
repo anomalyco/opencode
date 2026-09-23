@@ -263,6 +263,15 @@ const layer = Layer.effectDiscard(
         const id = event.data.info.id
         const sessionID = event.data.info.sessionID
         const data = messageData(event.data.info)
+        // The session can be deleted while message events are still in flight, so
+        // skip instead of failing the foreign key on message.session_id.
+        const parent = yield* db
+          .select({ id: SessionTable.id })
+          .from(SessionTable)
+          .where(eq(SessionTable.id, sessionID))
+          .get()
+          .pipe(Effect.orDie)
+        if (!parent) return
         yield* db
           .insert(MessageTable)
           .values({ id, session_id: sessionID, time_created, data })
@@ -314,6 +323,16 @@ const layer = Layer.effectDiscard(
         const sessionID = event.data.part.sessionID
         const data = partData(event.data.part)
         const row = yield* db.select().from(PartTable).where(eq(PartTable.id, id)).get().pipe(Effect.orDie)
+        // The parent message can already be gone when the session is deleted while
+        // part events are still in flight (e.g. abort during generation). Skipping
+        // avoids a foreign key violation on part.message_id.
+        const parent = yield* db
+          .select({ id: MessageTable.id })
+          .from(MessageTable)
+          .where(eq(MessageTable.id, messageID))
+          .get()
+          .pipe(Effect.orDie)
+        if (!parent) return
         yield* db
           .insert(PartTable)
           .values({ id, message_id: messageID, session_id: sessionID, time_created: event.data.time, data })

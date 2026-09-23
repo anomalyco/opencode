@@ -12,6 +12,7 @@ import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { SessionV2 } from "@opencode-ai/core/session"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { SessionEvent } from "@opencode-ai/core/session/event"
 import { SessionMessage } from "@opencode-ai/core/session/message"
 import { Prompt } from "@opencode-ai/core/session/prompt"
@@ -19,7 +20,7 @@ import { SessionMessageUpdater } from "@opencode-ai/core/session/message-updater
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
 import { SessionInput } from "@opencode-ai/core/session/input"
-import { SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { MessageTable, PartTable, SessionInputTable, SessionMessageTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { testEffect } from "./lib/effect"
 import { Snapshot } from "@opencode-ai/core/snapshot"
 import { Location } from "@opencode-ai/core/location"
@@ -562,6 +563,65 @@ describe("SessionProjector", () => {
           time: { created },
         }),
       ])
+    }),
+  )
+
+  it.effect("skips part projection when the parent message no longer exists", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+      const events = yield* EventV2.Service
+      const messageID = SessionV1.MessageID.make("msg_orphan_part")
+
+      yield* events.publish(SessionV1.Event.PartUpdated, {
+        sessionID,
+        part: {
+          id: SessionV1.PartID.make("prt_orphan"),
+          messageID,
+          sessionID,
+          type: "step-start",
+          snapshot: "snapshot",
+        },
+        time: DateTime.toEpochMillis(created),
+      })
+
+      expect(yield* db.select({ id: PartTable.id }).from(PartTable).all().pipe(Effect.orDie)).toEqual([])
+    }),
+  )
+
+  it.effect("skips message projection when the parent session no longer exists", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: AbsolutePath.make("/project"), sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+      const events = yield* EventV2.Service
+
+      yield* events.publish(SessionV1.Event.MessageUpdated, {
+        sessionID,
+        info: {
+          id: SessionV1.MessageID.make("msg_orphan_message"),
+          sessionID,
+          role: "assistant",
+          parentID: SessionV1.MessageID.make("msg_orphan_parent"),
+          modelID: model.id,
+          providerID: model.providerID,
+          mode: "test",
+          agent: "build",
+          path: { cwd: "/project", root: "/project" },
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: DateTime.toEpochMillis(created) },
+        },
+      })
+
+      expect(yield* db.select({ id: MessageTable.id }).from(MessageTable).all().pipe(Effect.orDie)).toEqual([])
     }),
   )
 })
