@@ -116,7 +116,9 @@ const live: Layer.Layer<
       })
       const tools = isWebService
         ? Object.fromEntries(
-            Object.entries(prepared.tools).filter(([name]) => WebService.isLocalTool(name) || name === "StructuredOutput"),
+            Object.entries(prepared.tools).filter(
+              ([name]) => WebService.isLocalTool(name) || name === "StructuredOutput" || name === "invalid",
+            ),
           )
         : prepared.tools
       const headers = {
@@ -306,7 +308,6 @@ const live: Layer.Layer<
           // Copilot returns the authoritative billed amount only in provider-specific response fields.
           includeRawChunks: input.model.providerID.includes("github-copilot"),
           async experimental_repairToolCall(failed) {
-            if (isWebService) return null
             const lower = failed.toolCall.toolName.toLowerCase()
             if (lower !== failed.toolCall.toolName && prepared.tools[lower]) {
               return {

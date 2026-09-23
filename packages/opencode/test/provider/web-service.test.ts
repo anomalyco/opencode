@@ -14,6 +14,18 @@ const readTool: LanguageModelV3FunctionTool = {
   },
 }
 
+const globTool: LanguageModelV3FunctionTool = {
+  type: "function",
+  name: "glob",
+  description: "Find files by pattern",
+  inputSchema: {
+    type: "object",
+    properties: { pattern: { type: "string" } },
+    required: ["pattern"],
+    additionalProperties: false,
+  },
+}
+
 describe("provider.web-service", () => {
   test("advertises tool support and optional DeepSeek thinking", () => {
     const providers = WebService.providers()
@@ -33,13 +45,29 @@ describe("provider.web-service", () => {
     expect(WebService.isLocalTool("mcp_search")).toBe(false)
   })
 
-  test("parses exactly one available tool call", () => {
+  test("parses one available tool call", () => {
     expect(
       WebService.parseWebReply(
         '<opencode_tool_call>{"name":"read","arguments":{"filePath":"src/app.ts"}}</opencode_tool_call>',
         [readTool],
       ),
-    ).toEqual({ type: "tool-call", tool: readTool, input: { filePath: "src/app.ts" } })
+    ).toEqual({
+      type: "tool-calls",
+      text: "",
+      calls: [{ toolName: "read", input: { filePath: "src/app.ts" } }],
+    })
+  })
+
+  test("repairs tool names with the wrong casing", () => {
+    expect(
+      WebService.parseWebReply(
+        '<opencode_tool_call>{"name":"READ","arguments":{"filePath":"src/app.ts"}}</opencode_tool_call>',
+        [readTool],
+      ),
+    ).toMatchObject({
+      type: "tool-calls",
+      calls: [{ toolName: "read", input: { filePath: "src/app.ts" } }],
+    })
   })
 
   test("returns ordinary text without a tool marker", () => {
@@ -49,22 +77,81 @@ describe("provider.web-service", () => {
     })
   })
 
-  test.each([
-    ["partial marker", '<opencode_tool_call>{"name":"read"}'],
-    ["malformed JSON", '<opencode_tool_call>{"name":"read","arguments":}</opencode_tool_call>'],
-    ["extra keys", '<opencode_tool_call>{"name":"read","arguments":{},"extra":true}</opencode_tool_call>'],
-    ["prose outside envelope", 'I will read it. <opencode_tool_call>{"name":"read","arguments":{}}</opencode_tool_call>'],
-  ])("rejects %s without producing a tool call", (_name, text) => {
-    expect(() => WebService.parseWebReply(text, [readTool])).toThrow()
+  test("preserves prose and parses multiple tool calls", () => {
+    expect(
+      WebService.parseWebReply(
+        'I will inspect the project.\n<opencode_tool_call>{"name":"read","arguments":{"filePath":"src/app.ts"}}</opencode_tool_call>\n<opencode_tool_call>{"name":"glob","arguments":{"pattern":"*.ts"}}</opencode_tool_call>',
+        [readTool, globTool],
+      ),
+    ).toEqual({
+      type: "tool-calls",
+      text: "I will inspect the project.\n\n",
+      calls: [
+        { toolName: "read", input: { filePath: "src/app.ts" } },
+        { toolName: "glob", input: { pattern: "*.ts" } },
+      ],
+    })
   })
 
-  test("rejects unavailable tools", () => {
-    expect(() =>
-      WebService.parseWebReply(
-        '<opencode_tool_call>{"name":"task","arguments":{}}</opencode_tool_call>',
-        [readTool],
-      ),
-    ).toThrow("本轮不可用")
+  test("routes the screenshot's invalid Windows path to the invalid tool and keeps the valid glob call", () => {
+    const reply = [
+      "I'll look at the project structure and key files to understand it.",
+      String.raw`<opencode_tool_call>{"name":"read","arguments":{"filePath":"G:\chen\Study\chat-api"}}</opencode_tool_call>`,
+      '<opencode_tool_call>{"name":"glob","arguments":{"pattern":"*.{md,json,toml,yaml,yml,txt}"}}</opencode_tool_call>',
+    ].join("\n")
+
+    const result = WebService.parseWebReply(reply, [readTool, globTool])
+    expect(result.type).toBe("tool-calls")
+    if (result.type !== "tool-calls") return
+    expect(result.text).toContain("I'll look at the project structure")
+    expect(result.calls[0]).toMatchObject({
+      toolName: "invalid",
+      input: { tool: "unknown", error: expect.stringContaining("valid JSON") },
+    })
+    expect(result.calls[1]).toEqual({
+      toolName: "glob",
+      input: { pattern: "*.{md,json,toml,yaml,yml,txt}" },
+    })
+  })
+
+  test.each([
+    ["missing close marker", '<opencode_tool_call>{"name":"read"}'],
+    ["orphan close marker", "</opencode_tool_call>"],
+    ["nested start marker", "<opencode_tool_call><opencode_tool_call>{}</opencode_tool_call>"],
+    [
+      "unmatched close after a valid call",
+      '<opencode_tool_call>{"name":"read","arguments":{"filePath":"a"}}</opencode_tool_call></opencode_tool_call>',
+    ],
+  ])("rejects all calls when markers are malformed: %s", (_name, text) => {
+    expect(() => WebService.parseWebReply(text, [readTool])).toThrow("不完整")
+  })
+
+  test.each([
+    ["invalid JSON", '<opencode_tool_call>{"name":"read","arguments":}</opencode_tool_call>', "valid JSON"],
+    [
+      "invalid envelope fields",
+      '<opencode_tool_call>{"name":"read","arguments":{},"extra":true}</opencode_tool_call>',
+      "exactly a tool name",
+    ],
+    [
+      "arguments are not an object",
+      '<opencode_tool_call>{"name":"read","arguments":[]}</opencode_tool_call>',
+      "object of arguments",
+    ],
+  ])("maps %s to the invalid tool", (_name, text, error) => {
+    expect(WebService.parseWebReply(text, [readTool])).toMatchObject({
+      type: "tool-calls",
+      calls: [{ toolName: "invalid", input: { error: expect.stringContaining(error) } }],
+    })
+  })
+
+  test("maps unavailable tools to the invalid tool", () => {
+    expect(
+      WebService.parseWebReply('<opencode_tool_call>{"name":"task","arguments":{}}</opencode_tool_call>', [readTool]),
+    ).toMatchObject({
+      type: "tool-calls",
+      calls: [{ toolName: "invalid", input: { tool: "task", error: expect.stringContaining("not available") } }],
+    })
   })
 
   test("builds incremental tool-result prompts and a full recovery transcript", () => {
@@ -74,13 +161,18 @@ describe("provider.web-service", () => {
         { role: "user", content: [{ type: "text", text: "Read src/app.ts" }] },
         {
           role: "assistant",
-          content: [
-            { type: "tool-call", toolCallId: "call-1", toolName: "read", input: { filePath: "src/app.ts" } },
-          ],
+          content: [{ type: "tool-call", toolCallId: "call-1", toolName: "read", input: { filePath: "src/app.ts" } }],
         },
         {
           role: "tool",
-          content: [{ type: "tool-result", toolCallId: "call-1", toolName: "read", output: { type: "text", value: "export const app = 1" } }],
+          content: [
+            {
+              type: "tool-result",
+              toolCallId: "call-1",
+              toolName: "read",
+              output: { type: "text", value: "export const app = 1" },
+            },
+          ],
         },
       ],
     } satisfies Pick<LanguageModelV3CallOptions, "prompt" | "toolChoice">
@@ -89,8 +181,46 @@ describe("provider.web-service", () => {
     expect(prompts.prompt).toContain("export const app = 1")
     expect(prompts.prompt).not.toContain("Read src/app.ts")
     expect(prompts.prompt).toContain('"name":"read"')
+    expect(prompts.prompt).toContain("multiple envelopes")
+    expect(prompts.prompt).toContain("escape each backslash")
+    expect(prompts.prompt).toContain("uses \\\\ between folders")
     expect(prompts.fullPrompt).toContain("Use the OpenCode workspace.")
     expect(prompts.fullPrompt).toContain("Read src/app.ts")
+  })
+
+  test("sends invalid tool results back to the web model in the next prompt", () => {
+    const prompts = WebService.buildRequestPrompts(
+      {
+        prompt: [
+          { role: "user", content: [{ type: "text", text: "Read this file" }] },
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "tool-call",
+                toolCallId: "call-1",
+                toolName: "invalid",
+                input: { tool: "read", error: "Invalid JSON" },
+              },
+            ],
+          },
+          {
+            role: "tool",
+            content: [
+              {
+                type: "tool-result",
+                toolCallId: "call-1",
+                toolName: "invalid",
+                output: { type: "text", value: "The arguments provided to the tool are invalid: Invalid JSON" },
+              },
+            ],
+          },
+        ],
+      },
+      [readTool],
+    )
+
+    expect(prompts.prompt).toContain("The arguments provided to the tool are invalid: Invalid JSON")
   })
 
   test("rejects local attachments in the current user turn", () => {

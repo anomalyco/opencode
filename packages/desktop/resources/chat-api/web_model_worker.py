@@ -36,7 +36,15 @@ def save_state(path: Path, value: dict) -> None:
     temporary.replace(path)
 
 
-def deepseek(session_id: str, prompt: str, *, reset: bool, system_hash: str, thinking_enabled: bool) -> None:
+def deepseek(
+    session_id: str,
+    prompt: str,
+    *,
+    reset: bool,
+    system_hash: str,
+    thinking_enabled: bool,
+    search_enabled: bool,
+) -> None:
     from deepseek_edge_auth import EdgeAuthError, EdgeBrowserAuth
     from deepseek_web_api import Conversation, DeepSeekClient, DeepSeekConfig, DeepSeekError
 
@@ -72,7 +80,13 @@ def deepseek(session_id: str, prompt: str, *, reset: bool, system_hash: str, thi
     save_state(path, state)
     final_text = ""
     try:
-        for event in conversation.stream(prompt, thinking_enabled=thinking_enabled, search_enabled=False):
+        for event in conversation.stream(
+            prompt,
+            thinking_enabled=thinking_enabled,
+            search_enabled=search_enabled,
+        ):
+            if event.text:
+                emit("delta", text=event.text)
             if event.snapshot is not None:
                 final_text = event.snapshot
             state["parent_message_id"] = conversation.parent_message_id
@@ -127,7 +141,11 @@ def chatgpt(session_id: str, prompt: str, *, full_prompt: str, reset: bool, syst
             save_state(path, state)
 
     try:
-        final_text = client.chat(prompt, on_event=on_event)
+        final_text = client.chat(
+            prompt,
+            on_text=lambda delta: emit("delta", text=delta),
+            on_event=on_event,
+        )
     except ChatGPTError as error:
         raise RuntimeError(str(error)) from error
     state["in_flight"] = False
@@ -167,6 +185,7 @@ def main() -> int:
         system_hash = hashlib.sha256(system_prompt.encode("utf-8")).hexdigest()
         reset = request.get("reset") is True
         thinking_enabled = request.get("thinkingEnabled") is True
+        search_enabled = request.get("searchEnabled") is True
         operation = request.get("operation", "chat")
         if provider not in {"chatgpt-web", "deepseek-web"}:
             raise ValueError("不支持的网页模型服务")
@@ -198,6 +217,7 @@ def main() -> int:
                 reset=reset,
                 system_hash=system_hash,
                 thinking_enabled=thinking_enabled,
+                search_enabled=search_enabled,
             )
         emit("done")
         return 0
