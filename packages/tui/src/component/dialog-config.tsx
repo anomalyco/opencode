@@ -85,7 +85,7 @@ export const settings: Setting[] = [
     keywords: ["transcript", "messages", "reads", "searches"],
   },
   {
-    title: "Verbosity",
+    title: "Transcript verbosity",
     category: "Session",
     path: ["session", "verbosity"],
     default: "medium",
