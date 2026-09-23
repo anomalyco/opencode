@@ -23,7 +23,6 @@ export const goModels = [
   { id: "hy3", name: "Hy3", requests: 4300, allowance: 60 },
   { id: "qwen3.8-flash", name: "Qwen3.8 Flash", requests: 5400, allowance: 30 },
   { id: "glm-5.3-flash", name: "GLM-5.3-Flash", requests: 6320, allowance: 60, featured: true },
-  { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", requests: 13000, allowance: 30, featured: true },
   {
     id: "deepseek-flash",
     name: "DeepSeek V4.1 Flash",
@@ -59,5 +58,14 @@ export const goModels = [
     requests: 45300,
     allowance: 60,
     regions: true,
+  },
+  {
+    id: "space-bunny-free",
+    name: "Space Bunny Free",
+    requests: Infinity,
+    allowance: Infinity,
+    featured: true,
+    fresh: true,
+    limitedTime: true,
   },
 ].sort((a, b) => a.requests - b.requests)

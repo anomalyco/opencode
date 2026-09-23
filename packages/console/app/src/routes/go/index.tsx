@@ -25,6 +25,7 @@ const checkLoggedIn = query(async () => {
 }, "checkLoggedIn.get")
 
 const models = [
+  { name: "Space Bunny Free", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Grok 4.7", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "Grok 4.6", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "GPT 5.6 Luna", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
@@ -87,7 +88,7 @@ export default function Home() {
             <div data-component="desktop-app-banner">
               <span data-slot="badge">{i18n.t("home.banner.badge")}</span>
               <div data-slot="content">
-                <span data-slot="text">{i18n.t("go.promo.deepseek")}</span>
+                <span data-slot="text">{i18n.t("go.promo.spaceBunny")}</span>
               </div>
             </div>
             <div data-slot="hero-copy">
