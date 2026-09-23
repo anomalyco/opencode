@@ -29,6 +29,7 @@ export type SessionGroup = {
 
 /** Experimental transcript detail; undefined selects the default production rules. */
 export type Verbosity = "low" | "medium" | "high"
+export const defaultVerbosity: Verbosity = "medium"
 
 export type SessionRow = SessionEntry | SessionGroup
 
@@ -74,25 +75,22 @@ function unwrap(node: GroupNode<ProjectionEntry, GroupKind>): GroupNode<SessionE
   return { ...node, children: node.children.map(unwrap) }
 }
 
-const explorationTools = new Set(["read", "glob", "grep"])
-const experimentalExplorationTools = new Set([...explorationTools, "webfetch", "websearch"])
+const explorationTools = new Set(["read", "glob", "grep", "webfetch", "websearch"])
 
 /**
- * Grouping path for an assistant part. Default rules group adjacent thoughts and
- * reads/searches. The verbosity experiment adds web tools to exploration, and Low
- * wraps every run of tools and thoughts in one activity summary.
+ * Grouping path for an assistant part. Adjacent thoughts group, as do reads, searches
+ * and web fetches. Low wraps every run of tools and thoughts in one activity summary.
  */
-export function partPath(part: AppendPart, verbosity?: Verbosity): readonly GroupKind[] {
+export function partPath(part: AppendPart, verbosity: Verbosity): readonly GroupKind[] {
   const activity: GroupKind[] = verbosity === "low" && part.type !== "text" ? ["activity"] : []
   if (part.type === "reasoning") return [...activity, "reasoning"]
-  const exploration = verbosity ? experimentalExplorationTools : explorationTools
-  if (part.type === "tool" && exploration.has(part.name.toLowerCase())) return [...activity, "exploration"]
+  if (part.type === "tool" && explorationTools.has(part.name.toLowerCase())) return [...activity, "exploration"]
   return activity
 }
 
-/** Instruction loads group under the verbosity experiment; other messages stand alone. */
-export function messagePath(message: SessionMessageInfo, verbosity?: Verbosity): readonly GroupKind[] {
-  if (!verbosity || instructionPaths(message).length === 0) return []
+/** Instruction loads group; other messages stand alone. */
+export function messagePath(message: SessionMessageInfo, verbosity: Verbosity): readonly GroupKind[] {
+  if (instructionPaths(message).length === 0) return []
   return verbosity === "low" ? ["activity", "instructions"] : ["instructions"]
 }
 
@@ -107,7 +105,13 @@ export function instructionPaths(message: SessionMessageInfo | undefined): strin
 }
 
 /** Production rules only: keep lifecycle/status decisions outside the tree engine. */
-export function append(rows: SessionRow[], ref: PartRef, part: AppendPart, index = rows.length, verbosity?: Verbosity) {
+export function append(
+  rows: SessionRow[],
+  ref: PartRef,
+  part: AppendPart,
+  index = rows.length,
+  verbosity = defaultVerbosity,
+) {
   const [node] = groupEntries<SessionEntry, GroupKind>([{ type: "part", ref }], () => partPath(part, verbosity))
   if (node.type === "entry") {
     completePrevious(rows, index)

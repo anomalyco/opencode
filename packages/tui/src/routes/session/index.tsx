@@ -116,7 +116,7 @@ import { isRecord } from "../../util/record"
 import { createHistoryPrepend } from "./history"
 import { context, use, type PendingAction } from "./render-context"
 import { INLINE_TOOL_ICON_WIDTH, InlineToolRow, ReasoningPart, TextPart, toolDisplay } from "./message-parts"
-import type { GroupKind, SessionEntry } from "./grouping/session"
+import { defaultVerbosity, type GroupKind, type SessionEntry } from "./grouping/session"
 import { SessionGroupView } from "./group-view"
 import { useEntryAnchor } from "./anchor-view"
 import { containsAnchor, createTimelineAnchors } from "./anchors"
@@ -235,8 +235,7 @@ export function Session(props: {
   const markdownMode = createMemo(() => config.session?.markdown ?? "rendered")
   const diffWrapMode = createMemo(() => config.diffs?.wrap ?? "word")
   const groupExploration = createMemo(() => config.session?.grouping !== "none")
-  const verbosityExperiment = createMemo(() => config.experimental?.session_verbosity === true)
-  const verbosity = createMemo(() => (verbosityExperiment() ? (config.session?.verbosity ?? "medium") : undefined))
+  const verbosity = createMemo(() => config.session?.verbosity ?? defaultVerbosity)
   // High opens exploration and instruction summaries by default; everything else starts collapsed.
   const groupExpanded = (groupID: string, kind: GroupKind) =>
     sessionTabs.groupExpanded(sessionID, groupID) ??
@@ -1058,13 +1057,12 @@ export function Session(props: {
       },
     },
     {
-      title: `Transcript verbosity: ${Locale.titlecase(verbosity() ?? "medium")}`,
+      title: `Transcript verbosity: ${Locale.titlecase(verbosity())}`,
       id: "session.verbosity.cycle",
       group: "Session",
-      enabled: verbosityExperiment(),
       run: () => {
         const levels = ["low", "medium", "high"] as const
-        const next = levels[(levels.indexOf(verbosity() ?? "medium") + 1) % levels.length]
+        const next = levels[(levels.indexOf(verbosity()) + 1) % levels.length]
         void configState
           .update((draft) => {
             draft.session = { ...draft.session, verbosity: next }

@@ -116,7 +116,6 @@ function GroupContent(props: GroupProps) {
   const label = createMemo(() => {
     const counts = tools().reduce<Record<string, number>>((result, part) => {
       const tool = toolDisplay(part.name)
-      // Web tools join exploration only under the verbosity experiment.
       const name =
         tool === "grep" || tool === "glob" || tool === "websearch" ? "search" : tool === "webfetch" ? "fetch" : tool
       result[name] = (result[name] ?? 0) + 1

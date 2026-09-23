@@ -3,7 +3,7 @@ import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { Schema } from "effect"
 import { resolve, ConfigProvider, Info, useConfig, type Interface } from "../src/config"
-import { settings, settingVisible } from "../src/component/dialog-config"
+import { settings } from "../src/component/dialog-config"
 import { TuiKeybind } from "../src/config/keybind"
 import { CommandMap, Definitions } from "../src/config/v1/keybind"
 
@@ -114,17 +114,12 @@ test("shows the TPS default in session settings", () => {
   expect(setting?.default).toBe(true)
 })
 
-test("shows transcript verbosity in settings only while its experiment is enabled", () => {
-  const setting = settings.find((setting) => setting.path.join(".") === "session.verbosity")
-  if (!setting) throw new Error("Missing transcript verbosity setting")
-  expect(setting).toMatchObject({ category: "Session", default: "medium", values: ["low", "medium", "high"] })
-  const options = { terminalSuspend: true, environment: {} }
-  expect(settingVisible(setting, resolve({}, options))).toBe(false)
-  expect(settingVisible(setting, resolve({ experimental: { session_verbosity: false } }, options))).toBe(false)
-  expect(settingVisible(setting, resolve({ experimental: { session_verbosity: true } }, options))).toBe(true)
-  expect(
-    settings.filter((setting) => !settingVisible(setting, resolve({}, options))).map((s) => s.path.join(".")),
-  ).toEqual(["session.verbosity"])
+test("shows transcript verbosity in session settings", () => {
+  expect(settings.find((setting) => setting.path.join(".") === "session.verbosity")).toMatchObject({
+    category: "Session",
+    default: "medium",
+    values: ["low", "medium", "high"],
+  })
 })
 
 test("names tool grouping explicitly in settings", () => {

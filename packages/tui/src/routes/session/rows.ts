@@ -19,6 +19,7 @@ import {
   type ProjectionEntry,
   type SessionRow,
   type Verbosity,
+  defaultVerbosity,
 } from "./grouping/session"
 export type { CacheUsage, PartRef, SessionRow } from "./grouping/session"
 
@@ -49,8 +50,7 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
   const [rows, setRows] = createStore<SessionRow[]>([])
   const revertBoundary = () => data.session.get(sessionID())?.revert?.messageID
   const turnTokens = () => Boolean(config.data.debug?.turn_tokens)
-  const verbosity = (): Verbosity | undefined =>
-    config.data.experimental?.session_verbosity ? (config.data.session?.verbosity ?? "medium") : undefined
+  const verbosity = () => config.data.session?.verbosity ?? defaultVerbosity
 
   function reduce() {
     const messages = data.session.message.list(sessionID())
@@ -314,7 +314,7 @@ export function reduceSessionRows(
   messages: SessionMessageInfo[],
   inputs = new Set<string>(),
   turnTokens = false,
-  verbosity?: Verbosity,
+  verbosity: Verbosity = defaultVerbosity,
 ) {
   const isInput = (message: SessionMessageInfo) => inputs.has(message.id)
   const pendingCompactions = messages.filter((message) => message.type === "compaction" && message.status === "running")

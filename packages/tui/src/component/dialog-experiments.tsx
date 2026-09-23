@@ -13,13 +13,7 @@ type Experiment = {
 // In-flight features anyone can opt into. Each entry is temporary: an
 // experiment either graduates (delete the entry, make the behavior
 // unconditional) or dies (delete the entry and the branch it gated).
-export const experiments: Experiment[] = [
-  {
-    id: "session_verbosity",
-    title: "Transcript verbosity",
-    description: "Low, Medium and High transcript detail; Low summarizes each run of tool calls and thoughts",
-  },
-]
+export const experiments: Experiment[] = []
 
 export function DialogExperiments() {
   const config = useConfig()

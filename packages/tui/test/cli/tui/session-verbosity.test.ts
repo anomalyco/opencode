@@ -50,12 +50,11 @@ const instruction = (id: string, paths: string[]): SessionMessageInfo => ({
   time: { created: 1 },
 })
 
-test("default rules are unchanged when the experiment is off", () => {
-  expect(partPath({ type: "reasoning" })).toEqual(["reasoning"])
-  expect(partPath({ type: "tool", name: "read" })).toEqual(["exploration"])
-  expect(partPath({ type: "tool", name: "webfetch" })).toEqual([])
-  expect(partPath({ type: "tool", name: "shell" })).toEqual([])
-  expect(messagePath(instruction("i", ["AGENTS.md"]))).toEqual([])
+test("reasoning and exploration group at every level; other tools stand alone", () => {
+  for (const verbosity of ["medium", "high"] as const) {
+    expect(partPath({ type: "reasoning" }, verbosity)).toEqual(["reasoning"])
+    expect(partPath({ type: "tool", name: "read" }, verbosity)).toEqual(["exploration"])
+  }
 })
 
 test("medium and high add web tools to exploration and group instruction loads", () => {
