@@ -13,7 +13,7 @@ export const handler = Effect.fn("cli.web-ui.handler")(function* (options?: { re
     Effect.gen(function* () {
       const request = yield* HttpServerRequest.HttpServerRequest
       const url = new URL(request.url, "http://localhost")
-      // Serve the web shell before API authentication so /connect can load credentials in JavaScript.
+      // Serve the web shell before API authentication so a signed-out browser gets the app's sign-in screen.
       if (
         url.pathname === "/api" ||
         url.pathname.startsWith("/api/") ||

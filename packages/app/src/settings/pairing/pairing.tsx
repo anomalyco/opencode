@@ -8,8 +8,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createEffect, createMemo, onCleanup, Show } from "solid-js"
 import { renderSVG } from "uqr"
 import { useLanguage } from "@/runtime/i18n/language"
-import { usePlatform, type PairingInfo } from "@/runtime/platform/platform"
-import { pairingUrl } from "@/servers/connect/pairing"
+import { usePlatform } from "@/runtime/platform/platform"
 import { SettingsList } from "@/settings/list"
 import { SettingsRow } from "@/settings/row"
 
@@ -74,8 +73,8 @@ export function SettingsPairing() {
                   dialog.push(() => (
                     <DialogPairing
                       title={language.t("settings.pairing.connection")}
-                      info={localInfo()}
                       host={localHost()!}
+                      code={pair.code}
                     />
                   ))
                 }
@@ -117,17 +116,19 @@ export function SettingsPairing() {
   )
 }
 
-function DialogPairing(props: { title: string; info: PairingInfo | null | undefined; host: string }) {
+function DialogPairing(props: { title: string; host: string; code: () => Promise<string> }) {
   const language = useLanguage()
   const platform = usePlatform()
+  // Codes are single-use, so keep replacing the link while the dialog is open.
+  const code = useQuery(() => ({
+    queryKey: ["pairing", "code"],
+    queryFn: props.code,
+    gcTime: 0,
+    refetchInterval: 60_000,
+  }))
   const url = createMemo(() => {
-    if (!props.info) return
-    return pairingUrl({ username: props.info.username, password: props.info.password }, props.host)
-  })
-  const origin = createMemo(() => {
-    const value = url()
-    if (!value) return
-    return new URL(value).origin
+    if (!code.isSuccess) return
+    return new URL(`/auth/connect/${code.data}`, props.host).href
   })
   const copy = useMutation(() => ({
     mutationFn: async () => {
@@ -153,7 +154,7 @@ function DialogPairing(props: { title: string; info: PairingInfo | null | undefi
         <DialogTitleGroup title={props.title} description={language.t("pair.description")} />
       </DialogHeader>
       <DialogBody class="flex flex-col gap-4 px-4 pb-4">
-        <Show when={props.info}>
+        <Show when={url()}>
           <div
             class="aspect-square w-full shrink-0 rounded-[6px] bg-v2-background-bg-base p-6 text-v2-text-text-base [&>svg]:size-full"
             role="img"
@@ -176,11 +177,16 @@ function DialogPairing(props: { title: string; info: PairingInfo | null | undefi
               >
                 <Icon name={copy.isSuccess ? "check" : "copy"} size="small" class="shrink-0" />
                 <bdi dir="ltr" class="min-w-0 break-all text-start">
-                  {origin()}
+                  {new URL(props.host).origin}
                 </bdi>
               </button>
             </Tooltip>
           </div>
+        </Show>
+        <Show when={code.error}>
+          <p class="text-text-danger-base" role="alert">
+            {language.t("pair.error")}
+          </p>
         </Show>
         <Show when={copy.error}>
           <p class="text-text-danger-base" role="alert">

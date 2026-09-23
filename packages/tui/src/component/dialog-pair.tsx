@@ -8,95 +8,65 @@ import { useDialog } from "../ui/dialog"
 import { Link } from "../ui/link"
 import { errorMessage } from "../util/error"
 
-export type DialogPairCredentials = {
-  readonly username: string
-  readonly password: string
-}
-
-export function DialogPair(props: { credentials?: DialogPairCredentials }) {
+export function DialogPair() {
   const client = useClient()
   const dialog = useDialog()
   const dimensions = useTerminalDimensions()
   const theme = useTheme().surface("dialog")
   const [loadError, setLoadError] = createSignal<unknown>()
-  const [showPassword, setShowPassword] = createSignal(false)
-  const [passwordHover, setPasswordHover] = createSignal(false)
 
   dialog.setSize("large")
   dialog.setCentered(true)
 
-  const [server] = createResource(() =>
-    client.api.server.info().catch((error) => {
-      setLoadError(error)
-      return undefined
-    }),
+  const [info] = createResource(() =>
+    Promise.all([client.api.server.info(), client.api.server.pair()])
+      .then(([server, pairing]) => {
+        const link = (url: string) => new URL(`/auth/connect/${pairing.code}`, url).href
+        const local = server.urls[0] ? new URL(server.urls[0]) : undefined
+        if (local) local.hostname = "localhost"
+        return {
+          links: server.urls.map(link),
+          localhost: local ? link(local.href) : undefined,
+          minutes: Math.round(pairing.expires_in / 60),
+          loopback: server.urls.some((url) => ["localhost", "127.0.0.1", "[::1]"].includes(new URL(url).hostname)),
+        }
+      })
+      .catch((error) => {
+        setLoadError(error)
+        return undefined
+      }),
   )
-  const info = createMemo(() => {
-    const current = server()
-    if (!current) return
-    return {
-      urls: current.urls,
-      username: props.credentials?.username ?? "opencode",
-      password: props.credentials?.password ?? "",
-    }
-  })
-  const localhost = createMemo(() => {
-    const value = info()?.urls[0]
-    if (!value) return ""
-    const url = new URL(value)
-    url.hostname = "localhost"
-    return url.toString().replace(/\/$/, "")
-  })
   const horizontal = createMemo(() => dimensions().width >= 96)
   const content = () => {
     const value = info()
     if (!value) return
-    const href = (input: string) => {
-      const url = new URL(input)
-      url.username = encodeURIComponent(value.username)
-      url.password = encodeURIComponent(value.password)
-      return url.toString()
-    }
     return (
       <box flexDirection={horizontal() ? "row" : "column"} alignItems={horizontal() ? "flex-start" : "center"} gap={2}>
         <box width={horizontal() ? 29 : "100%"} flexShrink={0} gap={1}>
-          <box>
-            <text fg={theme.text.muted}>This device</text>
-            <Show when={localhost()}>
-              {(url) => (
-                <Link href={href(url())} fg={theme.text.base}>
+          <text fg={theme.text.muted} wrapMode="word">
+            Open a link to connect. Links work once and expire in {value.minutes} minutes.
+          </text>
+          <Show when={value.localhost}>
+            {(url) => (
+              <box>
+                <text fg={theme.text.muted}>This device</text>
+                <Link href={url()} fg={theme.text.base}>
                   {url()}
                 </Link>
-              )}
-            </Show>
-          </box>
+              </box>
+            )}
+          </Show>
           <box>
-            <text fg={theme.text.muted}>URLs</text>
-            <For each={value.urls}>
+            <text fg={theme.text.muted}>Links</text>
+            <For each={value.links}>
               {(url) => (
-                <Link href={href(url)} fg={theme.text.base}>
+                <Link href={url} fg={theme.text.base}>
                   {url}
                 </Link>
               )}
             </For>
           </box>
-          <box>
-            <text fg={theme.text.muted}>Username</text>
-            <text fg={theme.text.base}>{value.username}</text>
-          </box>
-          <box>
-            <text fg={theme.text.muted}>Password</text>
-            <text
-              fg={passwordHover() ? theme.text.base : theme.text.muted}
-              wrapMode="word"
-              onMouseOver={() => setPasswordHover(true)}
-              onMouseOut={() => setPasswordHover(false)}
-              onMouseUp={() => setShowPassword((current) => !current)}
-            >
-              {showPassword() ? value.password : "************"}
-            </text>
-          </box>
-          <Show when={value.urls.some((url) => ["localhost", "127.0.0.1", "[::1]"].includes(new URL(url).hostname))}>
+          <Show when={value.loopback}>
             <text fg={theme.text.muted} wrapMode="word">
               Run `opencode service set hostname 0.0.0.0` to access the service remotely.
             </text>
@@ -108,7 +78,9 @@ export function DialogPair(props: { credentials?: DialogPairCredentials }) {
           flexShrink={0}
           alignItems={horizontal() ? "flex-end" : "center"}
         >
-          <text fg={theme.text.base}>{renderUnicodeCompact(JSON.stringify(value), { border: 1 })}</text>
+          <Show when={value.links[0]}>
+            {(url) => <text fg={theme.text.base}>{renderUnicodeCompact(url(), { border: 1 })}</text>}
+          </Show>
         </box>
       </box>
     )

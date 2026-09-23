@@ -35,7 +35,7 @@ describe("web UI", () => {
       yield* Effect.forEach(
         [
           "/",
-          "/connect?data=%7B%7D",
+          "/settings",
           "/workspace/example",
           "/_assets/app.js",
           "/_assets/app.css",

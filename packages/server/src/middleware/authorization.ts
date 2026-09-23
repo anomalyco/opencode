@@ -37,6 +37,23 @@ function credentialFromRequest(request: HttpServerRequest.HttpServerRequest) {
   return Effect.succeed(emptyCredential())
 }
 
+const UNAUTHORIZED_MESSAGE = "Authentication required"
+
+// Browsers show a native credentials prompt for a Basic challenge even on fetch, which would stall the web app
+// before it can show its own sign-in screen. Only non-browser clients and page navigations get the challenge.
+function challengeRequest(request: HttpServerRequest.HttpServerRequest) {
+  const mode = request.headers["sec-fetch-mode"]
+  return mode === undefined || mode === "navigate"
+}
+
+// Matches what the Authorization middleware encodes, for requests rejected before the HttpApi runs.
+export function unauthorizedResponse(request: HttpServerRequest.HttpServerRequest) {
+  return HttpServerResponse.jsonUnsafe(
+    { _tag: "UnauthorizedError", message: UNAUTHORIZED_MESSAGE },
+    { status: 401, headers: challengeRequest(request) ? { "www-authenticate": WWW_AUTHENTICATE } : undefined },
+  )
+}
+
 export function authorizedRequest(request: HttpServerRequest.HttpServerRequest, config: ServerAuth.Info) {
   return credentialFromRequest(request).pipe(
     Effect.map((credential) => ServerAuth.authorized(credential, config) || authorizedSessionCookie(request, config)),
@@ -66,10 +83,11 @@ export const authorizationLayer = Layer.effect(
         if (hasPtyConnectTicketURL(url) || hasPersistentPtyConnectTicketURL(url) || isPairingConnectURL(url))
           return yield* effect
         if (yield* authorizedRequest(request, config)) return yield* effect
-        yield* HttpEffect.appendPreResponseHandler((_request, response) =>
-          Effect.succeed(HttpServerResponse.setHeader(response, "www-authenticate", WWW_AUTHENTICATE)),
-        )
-        return yield* new UnauthorizedError({ message: "Authentication required" })
+        if (challengeRequest(request))
+          yield* HttpEffect.appendPreResponseHandler((_request, response) =>
+            Effect.succeed(HttpServerResponse.setHeader(response, "www-authenticate", WWW_AUTHENTICATE)),
+          )
+        return yield* new UnauthorizedError({ message: UNAUTHORIZED_MESSAGE })
       }),
     )
   }),

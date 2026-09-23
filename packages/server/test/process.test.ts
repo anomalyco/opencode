@@ -128,7 +128,10 @@ it.live("authenticates API requests behind the frontend transform while allowing
       Effect.gen(function* () {
         const response = yield* Effect.promise(() => fetch(new URL(pathname, HttpServer.formatAddress(server.address))))
         expect(response.status).toBe(401)
-        expect(yield* Effect.promise(() => response.text())).toBe("")
+        expect(yield* Effect.promise(() => response.json())).toEqual({
+          _tag: "UnauthorizedError",
+          message: "Authentication required",
+        })
       }),
     )
 
@@ -185,7 +188,13 @@ it.live("pairing links sign in browsers with a cookie and API clients with a tok
       return (yield* Effect.promise(() => response.json())) as { code: string; expires_in: number }
     })
 
-    expect((yield* request("/api/pair", { method: "POST" })).status).toBe(401)
+    const rejected = yield* request("/api/pair", { method: "POST" })
+    expect(rejected.status).toBe(401)
+    expect(rejected.headers.get("www-authenticate")).toBe('Basic realm="Secure Area"')
+    // A Basic challenge on fetch makes browsers show a native prompt instead of the app's sign-in screen.
+    const fetched = yield* request("/api/info", { headers: { "sec-fetch-mode": "cors" } })
+    expect(fetched.status).toBe(401)
+    expect(fetched.headers.get("www-authenticate")).toBeNull()
 
     const browser = yield* pair
     expect(browser.expires_in).toBe(300)

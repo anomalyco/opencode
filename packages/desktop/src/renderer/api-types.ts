@@ -91,6 +91,7 @@ export type ElectronAPI = {
   recordFatalRendererError(error: FatalRendererError): Promise<void>
   setNativeTranslations(bundle: DesktopNativeBundle): Promise<void>
   pairInfo(): Promise<typeof PairingInfo.Type>
+  pairCode(): Promise<string>
   getKeepScreenActive(): Promise<boolean>
   setKeepScreenActive(enabled: boolean): Promise<void>
 }
