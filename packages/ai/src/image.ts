@@ -1,17 +1,9 @@
 import { Effect, Schema, Stream } from "effect"
 import { Media } from "./media.js"
-import { Endpoint } from "./route/endpoint.js"
+import { MediaModel, composeRoute, tryRequest } from "./media-model.js"
 import { MediaRoute } from "./route/media.js"
 import type { MediaProtocol } from "./route/media-protocol.js"
-import {
-  AIError,
-  HttpOptions,
-  InvalidRequestError,
-  MediaUsage,
-  ModelID,
-  ProviderID,
-  ProviderMetadata,
-} from "./schema/index.js"
+import { AIError, HttpOptions, MediaUsage, ProviderMetadata } from "./schema/index.js"
 import { ImageClient, Service } from "./image-client.js"
 
 // ---------------------------------------------------------------------------
@@ -25,27 +17,11 @@ export type ImageRoute<Options extends ImageOptions = ImageOptions> = MediaRoute
   ImageResponse
 >
 
-export class ImageModel<Options extends ImageOptions = ImageOptions> {
-  declare protected readonly _Options: (options: Options) => Options
-  readonly id: ModelID
-  readonly provider: ProviderID
-  readonly route: ImageRoute<Options>
-  readonly http?: HttpOptions
+export class ImageModel<Options extends ImageOptions = ImageOptions> extends MediaModel<ImageRoute<Options>, Options> {
+  declare protected readonly _ImageModel: void
 
-  constructor(input: ImageModel.Input<Options>) {
-    this.id = input.id
-    this.provider = input.provider
-    this.route = input.route
-    this.http = input.http
-  }
-
-  static make<Options extends ImageOptions = ImageOptions>(input: ImageModel.MakeInput<Options>) {
-    return new ImageModel<Options>({
-      id: ModelID.make(input.id),
-      provider: ProviderID.make(input.provider),
-      route: input.route,
-      http: input.http,
-    })
+  static make<Options extends ImageOptions = ImageOptions>(input: MediaModel.Input<ImageRoute<Options>>) {
+    return new ImageModel<Options>(input)
   }
 
   /** Compose an inline image protocol with its canonical path into a model for one deployment. */
@@ -53,44 +29,20 @@ export class ImageModel<Options extends ImageOptions = ImageOptions> {
     route: ImageModel.RouteInput<Options>,
     input: MediaRoute.ModelInput,
   ) {
-    return ImageModel.make<Options>({
+    return new ImageModel<Options>({
       id: input.id,
       provider: route.provider,
       http: input.http,
-      route: MediaRoute.make({
-        id: route.id,
-        provider: route.provider,
-        protocol: route.protocol,
-        endpoint: Endpoint.path(route.path, { baseURL: input.baseURL ?? route.baseURL }),
-        auth: input.auth,
-        headers: input.headers,
-      }),
+      route: composeRoute(MediaRoute.inline, route, input),
     })
   }
 }
 
 export namespace ImageModel {
-  export interface Input<Options extends ImageOptions = ImageOptions> {
-    readonly id: ModelID
-    readonly provider: ProviderID
-    readonly route: ImageRoute<Options>
-    readonly http?: HttpOptions
-  }
-
-  export interface MakeInput<Options extends ImageOptions = ImageOptions>
-    extends Omit<Input<Options>, "id" | "provider"> {
-    readonly id: string | ModelID
-    readonly provider: string | ProviderID
-  }
-
-  export interface RouteInput<Options extends ImageOptions = ImageOptions> {
-    readonly id: string
-    readonly provider: string | ProviderID
-    readonly protocol: MediaProtocol.Inline<ImageRequestFor<Options>, ImageResponse>
-    readonly path: Endpoint.EndpointPart<MediaProtocol.Body, ImageRequestFor<Options>>
-    /** Canonical base URL; `ModelInput.baseURL` overrides it per deployment. */
-    readonly baseURL?: string
-  }
+  export type RouteInput<Options extends ImageOptions = ImageOptions> = MediaModel.RouteInput<
+    ImageRequestFor<Options>,
+    MediaProtocol.Inline<ImageRequestFor<Options>, ImageResponse>
+  >
 }
 
 export const ImageModelSchema = Schema.declare((value): value is ImageModel => value instanceof ImageModel, {
@@ -107,11 +59,8 @@ export const ImageSize = Schema.declare<ImageSize>(
   { title: "ImageSize" },
 )
 
-export type ImageAspectRatio = `${number}:${number}`
-export const ImageAspectRatio = Schema.declare<ImageAspectRatio>(
-  (value): value is ImageAspectRatio => typeof value === "string" && /^\d+(?:\.\d+)?:\d+(?:\.\d+)?$/.test(value),
-  { title: "ImageAspectRatio" },
-)
+export type ImageAspectRatio = Media.AspectRatio
+export const ImageAspectRatio = Media.AspectRatio
 
 export type ImageFormat = "png" | "jpeg" | "webp" | (string & {})
 
@@ -216,17 +165,7 @@ export function request(input: ImageRequest | ImageRequestInput) {
   })
 }
 
-const requestEffect = (input: ImageRequest | ImageRequestInput) =>
-  Effect.try({
-    try: () => request(input),
-    catch: (error) =>
-      new AIError({
-        reason: new InvalidRequestError({
-          message: error instanceof Error ? error.message : String(error),
-          cause: error,
-        }),
-      }),
-  })
+const requestEffect = (input: ImageRequest | ImageRequestInput) => tryRequest(() => request(input))
 
 export function generate<const Model extends ImageModel>(
   input: ImageRequestInput<Model>,

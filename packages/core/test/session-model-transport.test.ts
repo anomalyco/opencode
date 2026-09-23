@@ -622,7 +622,7 @@ describe("SessionModelTransport", () => {
         yield* Deferred.await(started)
         yield* Effect.yieldNow
 
-        yield* TestClock.adjust("5 minutes")
+        yield* TestClock.adjust("30 minutes")
         const result = yield* Effect.result(Fiber.join(running))
 
         expect(result).toMatchObject({

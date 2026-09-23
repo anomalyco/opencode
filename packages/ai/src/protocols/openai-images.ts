@@ -4,7 +4,7 @@ import { ImageModel, ImageResponse, type ImageRequestFor } from "../image.js"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderID, mergeJsonRecords, type AIError } from "../schema/index.js"
+import { ProviderID, mergeJsonRecords } from "../schema/index.js"
 import { ProviderShared } from "./shared.js"
 import { MediaInput } from "./utils/media-input.js"
 
@@ -78,17 +78,10 @@ const blob = (data: Uint8Array, mediaType: string) => {
   return new Blob([buffer], { type: mediaType })
 }
 
-const reference = (asset: Media.Asset): Effect.Effect<Record<string, unknown>, AIError> => {
-  const inline = asset.inline()
-  if (inline) return Effect.succeed({ image_url: inline.dataUrl })
-  const url = ProviderShared.mediaUrl(asset)
-  if (url) return Effect.succeed({ image_url: url })
-  const id = MediaInput.refID(asset, PROVIDER)
-  if (id) return Effect.succeed({ file_id: id })
-  return Effect.fail(
-    ProviderShared.invalidRequest("OpenAI Images accepts image URLs, data URLs, bytes, and OpenAI file IDs"),
+const reference = (asset: Media.Asset) =>
+  ProviderShared.mediaReference(asset, PROVIDER, NAME).pipe(
+    Effect.map((item) => (item.type === "ref" ? { file_id: item.value } : { image_url: item.value })),
   )
-}
 
 const fromRequest = Effect.fn("OpenAIImages.fromRequest")(function* (request: Request) {
   const images = request.images ?? []

@@ -19,9 +19,12 @@ export const detectMediaType = (bytes: Uint8Array): string | undefined => {
   if (startsWith(bytes, [0x25, 0x50, 0x44, 0x46])) return "application/pdf"
   if (bytes.length >= 12 && ascii(bytes, 4, 8) === "ftyp") return "video/mp4"
   if (startsWith(bytes, [0x1a, 0x45, 0xdf, 0xa3])) return "video/webm"
-  if (startsWith(bytes, [0x49, 0x44, 0x33]) || startsWith(bytes, [0xff, 0xfb]) || startsWith(bytes, [0xff, 0xf3]))
-    return "audio/mpeg"
+  if (startsWith(bytes, [0x49, 0x44, 0x33])) return "audio/mpeg"
+  // An 11-bit frame sync; layer bits `00` mark AAC ADTS, any other layer is MPEG audio.
+  if (bytes.length >= 2 && bytes[0] === 0xff && (bytes[1] & 0xe0) === 0xe0)
+    return (bytes[1] & 0x06) === 0 ? "audio/aac" : "audio/mpeg"
   if (startsWith(bytes, [0x4f, 0x67, 0x67, 0x53])) return "audio/ogg"
+  if (startsWith(bytes, [0x66, 0x4c, 0x61, 0x43])) return "audio/flac"
   return undefined
 }
 
@@ -37,6 +40,8 @@ const EXTENSIONS: Readonly<Record<string, string>> = {
   mp3: "audio/mpeg",
   wav: "audio/wav",
   ogg: "audio/ogg",
+  flac: "audio/flac",
+  aac: "audio/aac",
   txt: "text/plain",
   md: "text/markdown",
   csv: "text/csv",

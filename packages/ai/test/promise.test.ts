@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Layer } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { AIError, LLMEvent, Media } from "../src/index.js"
+import { AIError, LLMEvent, Media, SpeechEvent } from "../src/index.js"
 import { RequestExecutor } from "../src/route.js"
 import { AI } from "../src/promise.js"
-import { OpenAI } from "../src/providers.js"
+import { OpenAI, Runway } from "../src/providers.js"
 import { handlerLayer } from "./lib/http.js"
 import { sseEvents } from "./lib/sse.js"
 
@@ -16,7 +16,10 @@ const chatBody = sseEvents(
   { choices: [{ delta: {}, finish_reason: "stop" }] },
 )
 
-/** Executor layer that answers chat completions with SSE text and image generations with one base64 PNG. */
+/**
+ * Executor layer that answers chat completions with SSE text, image generations with one base64 PNG, Runway video
+ * tasks with a queued submission that succeeds on the second poll, and speech with raw audio or SSE audio deltas.
+ */
 const executor = (seen: Array<string>) =>
   RequestExecutor.layer.pipe(
     Layer.provide(
@@ -30,6 +33,30 @@ const executor = (seen: Array<string>) =>
             })
           if (web.url.endsWith("/chat/completions"))
             return input.respond(chatBody, { headers: { "content-type": "text/event-stream" } })
+          if (web.url.endsWith("/audio/speech"))
+            return JSON.parse(input.text).stream_format === "sse"
+              ? input.respond(
+                  sseEvents(
+                    { type: "speech.audio.delta", audio: "AQI=" },
+                    { type: "speech.audio.delta", audio: "Aw==" },
+                    { type: "speech.audio.done", usage: { input_tokens: 4, output_tokens: 8, total_tokens: 12 } },
+                  ),
+                  { headers: { "content-type": "text/event-stream" } },
+                )
+              : input.respond(Uint8Array.from([1, 2, 3]), { headers: { "content-type": "audio/pcm" } })
+          if (web.url.endsWith("/text_to_video"))
+            return input.respond(JSON.stringify({ id: "task_1" }), { headers: { "content-type": "application/json" } })
+          if (web.url.endsWith("/tasks/task_1")) {
+            const polls = seen.filter((url) => url.endsWith("/tasks/task_1")).length
+            return input.respond(
+              JSON.stringify(
+                polls === 1
+                  ? { status: "RUNNING", progress: 0.5 }
+                  : { status: "SUCCEEDED", output: ["https://runway.test/out.mp4"], cost: { credits: 5 } },
+              ),
+              { headers: { "content-type": "application/json" } },
+            )
+          }
           return input.respond(JSON.stringify({ error: { message: "not found" } }), {
             status: 404,
             headers: { "content-type": "application/json" },
@@ -73,6 +100,55 @@ describe("AI promise client", () => {
     await ai.dispose()
   })
 
+  test("starts, awaits, and resumes video generations over the same runtime", async () => {
+    const seen: Array<string> = []
+    const ai = AI.make({ layer: executor(seen) })
+    const model = Runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5")
+
+    const generation = await ai.video.start({ model, prompt: "A kite" })
+    expect(generation.id).toBe("task_1")
+    expect(generation.status).toBe("queued")
+    expect(generation.token).toEqual({ taskID: "task_1" })
+
+    const refreshed = await generation.refresh()
+    expect(refreshed.status).toBe("running")
+    expect(refreshed.progress).toBe(0.5)
+
+    const response = await refreshed.await({ poll: { interval: 10 } })
+    expect(response.video).toBeInstanceOf(Media.Asset)
+    expect(response.video.source).toMatchObject({ type: "url", url: "https://runway.test/out.mp4" })
+    expect(response.usage).toEqual({ type: "credits", credits: 5 })
+
+    const resumed = await ai.video.resume(model, JSON.parse(JSON.stringify(generation.token)))
+    expect(resumed.status).toBe("completed")
+    expect((await resumed.await()).videos).toHaveLength(1)
+
+    const events: Array<string> = []
+    for await (const event of ai.video.stream({ model, prompt: "A kite" }, { poll: { interval: 10 } })) {
+      events.push(event.type)
+    }
+    expect(events).toEqual(["video", "finish"])
+
+    expect(seen[0]).toBe("https://runway.test/v1/text_to_video")
+    expect(seen.filter((url) => url.endsWith("/tasks/task_1")).length).toBeGreaterThanOrEqual(5)
+    await ai.dispose()
+  })
+
+  test("generates and streams speech over the same runtime", async () => {
+    const ai = AI.make({ layer: executor([]) })
+    const model = openai.speech("gpt-4o-mini-tts")
+
+    const response = await ai.speech.generate({ model, text: "Hello", voice: "coral", format: "pcm" })
+    expect(await ai.run(response.audio.bytes())).toEqual(Uint8Array.from([1, 2, 3]))
+
+    const events: Array<SpeechEvent> = []
+    for await (const event of ai.speech.stream({ model, text: "Hello", voice: "coral" })) events.push(event)
+    expect(events.map((event) => event.type)).toEqual(["audio-delta", "audio-delta", "finish"])
+    const finish = events.find(SpeechEvent.is.finish)
+    expect(await ai.run(finish!.audio.bytes())).toEqual(Uint8Array.from([1, 2, 3]))
+    await ai.dispose()
+  })
+
   test("rethrows AIError unchanged and honors abort signals", async () => {
     const ai = AI.make({ layer: executor([]) })
 
@@ -97,6 +173,8 @@ describe("AI promise client", () => {
   test("the default client is created lazily and can be disposed", async () => {
     expect(typeof AI.ai.llm.generate).toBe("function")
     expect(typeof AI.ai.image.generate).toBe("function")
+    expect(typeof AI.ai.video.start).toBe("function")
+    expect(typeof AI.ai.speech.generate).toBe("function")
     await AI.ai.dispose()
   })
 })

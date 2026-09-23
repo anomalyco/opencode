@@ -29,9 +29,54 @@ export type {
   ImageRoute,
 } from "./image.js"
 export { Image } from "./image.js"
+export { VideoClient } from "./video-client.js"
+export {
+  VideoAspectRatio,
+  VideoEvent,
+  VideoFrames,
+  VideoModel,
+  VideoModelSchema,
+  VideoRequest,
+  VideoResponse,
+} from "./video.js"
+export type {
+  VideoModelOptions,
+  VideoOptions,
+  VideoRequestFor,
+  VideoRequestInput,
+  VideoResolution,
+  VideoRoute,
+} from "./video.js"
+export { Video } from "./video.js"
+export { SpeechClient } from "./speech-client.js"
+export {
+  SpeechEvent,
+  SpeechModel,
+  SpeechModelSchema,
+  SpeechRequest,
+  SpeechResponse,
+  SpeechTimestamp,
+  SpeechVoice,
+} from "./speech.js"
+export type {
+  SpeechFormat,
+  SpeechModelOptions,
+  SpeechOptions,
+  SpeechRequestFor,
+  SpeechRequestInput,
+  SpeechRoute,
+} from "./speech.js"
+export { Speech } from "./speech.js"
 export { Media } from "./media.js"
 export { Generation } from "./generation.js"
-export type { Event as GenerationEvent, Poll, Route as GenerationRoute, Snapshot as GenerationSnapshot, Status as GenerationStatus } from "./generation.js"
+export type {
+  AwaitOptions as GenerationAwaitOptions,
+  Event as GenerationEvent,
+  Poll,
+  Route as GenerationRoute,
+  Snapshot as GenerationSnapshot,
+  Status as GenerationStatus,
+} from "./generation.js"
 export { Tool, ToolFailure, toDefinitions } from "./tool.js"
 export { ToolRuntime } from "./tool-runtime.js"
 export type { DispatchResult as ToolDispatchResult, ToolSettlement } from "./tool-runtime.js"

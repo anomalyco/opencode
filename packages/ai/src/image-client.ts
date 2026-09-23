@@ -48,7 +48,7 @@ export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer
       generate,
       // Inline routes have no partial frames yet; the stream is the completed response expanded into events.
       stream: (request) =>
-        Stream.unwrap(generate(request).pipe(Effect.map((response) => Stream.fromIterable(responseEvents(response))))),
+        Stream.fromIterableEffect(Effect.map(generate(request), responseEvents)),
     })
   }),
 )

@@ -452,10 +452,12 @@ describe("RegExp", () => {
     expect((await error(`return "aa".matchAll(/a/)`)).message).toContain("write /a/g, or use String.match")
   })
 
-  test("a non-pattern argument names the expected shapes", async () => {
-    const err = await error(`return "abc".match(42)`)
-    expect(err.message).toContain("expects a regular expression")
-    expect(err.message).toContain("not number")
+  test("any argument is a pattern string, as new RegExp(arg) reads it", async () => {
+    expect(
+      await value(
+        `return ["a42b".match(42)[0], "xnullx".search(null), "abc".match(undefined), [..."1a1".matchAll(1)].length]`,
+      ),
+    ).toEqual(["42", 1, [""], 2])
   })
 
   test("source and flags properties read through", async () => {
