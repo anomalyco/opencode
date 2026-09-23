@@ -4,8 +4,8 @@ import { HttpClientRequest } from "effect/unstable/http"
 import { AIError, LLMEvent, Media, SpeechEvent, TranscriptionEvent } from "../src/index.js"
 import { RequestExecutor } from "../src/route.js"
 import { AI } from "../src/promise.js"
-import { AssemblyAI, OpenAI, Runway } from "../src/providers.js"
-import { handlerLayer } from "./lib/http.js"
+import { AssemblyAI, OpenAI, Replicate, Runway } from "../src/providers.js"
+import { handlerLayer, json } from "./lib/http.js"
 import { sseEvents } from "./lib/sse.js"
 
 const openai = OpenAI.configure({ apiKey: "test", baseURL: "https://openai.test/v1" })
@@ -29,8 +29,28 @@ const executor = (seen: Array<string>) =>
           const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
           seen.push(web.url)
           if (web.url.endsWith("/images/generations"))
-            return input.respond(JSON.stringify({ data: [{ b64_json: "AQID" }], output_format: "png" }), {
-              headers: { "content-type": "application/json" },
+            return JSON.parse(input.text).stream === true
+              ? input.respond(
+                  sseEvents(
+                    {
+                      type: "image_generation.partial_image",
+                      b64_json: "AQ==",
+                      partial_image_index: 0,
+                      output_format: "png",
+                    },
+                    { type: "image_generation.completed", b64_json: "AQID", output_format: "png" },
+                  ),
+                  { headers: { "content-type": "text/event-stream" } },
+                )
+              : input.respond(JSON.stringify({ data: [{ b64_json: "AQID" }], output_format: "png" }), {
+                  headers: { "content-type": "application/json" },
+                })
+          if (web.url.startsWith("https://replicate.test"))
+            return json(input, {
+              id: "p_1",
+              status: "succeeded",
+              output: "https://replicate.test/a.webp",
+              urls: { get: "https://replicate.test/p_1", cancel: "https://replicate.test/p_1/cancel" },
             })
           if (web.url.endsWith("/chat/completions"))
             return input.respond(chatBody, { headers: { "content-type": "text/event-stream" } })
@@ -89,7 +109,7 @@ const executor = (seen: Array<string>) =>
   )
 
 describe("AI promise client", () => {
-  test("generates text, images, and streams over one managed runtime", async () => {
+  test("generates text, images, and streams over one managed runtime, and queues images", async () => {
     const seen: Array<string> = []
     const ai = AI.make({ layer: executor(seen) })
 
@@ -111,7 +131,7 @@ describe("AI promise client", () => {
     for await (const event of ai.image.stream({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" })) {
       imageEvents.push(event.type)
     }
-    expect(imageEvents).toEqual(["image", "finish"])
+    expect(imageEvents).toEqual(["image-partial", "image", "finish"])
 
     expect(seen).toEqual([
       "https://openai.test/v1/chat/completions",
@@ -119,6 +139,12 @@ describe("AI promise client", () => {
       "https://openai.test/v1/chat/completions",
       "https://openai.test/v1/images/generations",
     ])
+
+    const generation = await ai.image.start({
+      model: Replicate.configure({ apiKey: "test", baseURL: "https://replicate.test" }).image("owner/model"),
+      prompt: "A lighthouse",
+    })
+    expect((await generation.await()).image.source).toMatchObject({ url: "https://replicate.test/a.webp" })
     await ai.dispose()
   })
 

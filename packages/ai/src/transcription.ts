@@ -1,7 +1,7 @@
 import { Effect, Schema, Stream } from "effect"
 import { Generation, ProgressEvent, QueuedEvent, type AwaitOptions } from "./generation.js"
 import { Media } from "./media.js"
-import { MediaModel, composeRoute, tryRequest } from "./media-model.js"
+import { MediaModel, composeAnyRoute, tryRequest } from "./media-model.js"
 import { MediaRoute } from "./route/media.js"
 import type { MediaProtocol } from "./route/media-protocol.js"
 import { AIError, HttpOptions, MediaUsage, ProviderMetadata } from "./schema/index.js"
@@ -13,10 +13,11 @@ import { TranscriptionClient, Service } from "./transcription-client.js"
 
 export type TranscriptionOptions = Record<string, unknown>
 
-export type TranscriptionRoute<Options extends TranscriptionOptions = TranscriptionOptions> =
-  | MediaRoute.Route<TranscriptionRequestFor<Options>, TranscriptionResponse>
-  | MediaRoute.StreamRoute<TranscriptionRequestFor<Options>, TranscriptionEvent, TranscriptionResponse>
-  | MediaRoute.QueuedRoute<TranscriptionRequestFor<Options>, TranscriptionResponse>
+export type TranscriptionRoute<Options extends TranscriptionOptions = TranscriptionOptions> = MediaRoute.AnyRoute<
+  TranscriptionRequestFor<Options>,
+  TranscriptionEvent,
+  TranscriptionResponse
+>
 
 export class TranscriptionModel<Options extends TranscriptionOptions = TranscriptionOptions> extends MediaModel<
   TranscriptionRoute<Options>,
@@ -47,16 +48,11 @@ export class TranscriptionModel<Options extends TranscriptionOptions = Transcrip
     route: TranscriptionModel.RouteInput<Options, Frame, State, Token>,
     input: MediaRoute.ModelInput,
   ) {
-    const composed: TranscriptionRoute<Options> = isStreamInput(route)
-      ? composeRoute((composition) => MediaRoute.stream({ ...composition, collect: collectResponse }), route, input)
-      : isQueuedInput(route)
-        ? composeRoute(MediaRoute.queued, route, input)
-        : composeRoute(MediaRoute.inline, route, input)
     return new TranscriptionModel<Options>({
       id: input.id,
       provider: route.provider,
       http: input.http,
-      route: composed,
+      route: composeAnyRoute(route, input, collectResponse),
     })
   }
 }
@@ -89,16 +85,15 @@ export namespace TranscriptionModel {
     Frame = unknown,
     State = unknown,
     Token = unknown,
-  > = InlineRouteInput<Options> | StreamRouteInput<Options, Frame, State> | QueuedRouteInput<Options, Token>
+  > = MediaModel.AnyRouteInput<
+    TranscriptionRequestFor<Options>,
+    TranscriptionEvent,
+    TranscriptionResponse,
+    Frame,
+    State,
+    Token
+  >
 }
-
-const isStreamInput = <Options extends TranscriptionOptions, Frame, State, Token>(
-  route: TranscriptionModel.RouteInput<Options, Frame, State, Token>,
-): route is TranscriptionModel.StreamRouteInput<Options, Frame, State> => route.protocol.kind === "stream"
-
-const isQueuedInput = <Options extends TranscriptionOptions, Frame, State, Token>(
-  route: TranscriptionModel.RouteInput<Options, Frame, State, Token>,
-): route is TranscriptionModel.QueuedRouteInput<Options, Token> => route.protocol.kind === "queued"
 
 export const TranscriptionModelSchema = Schema.declare(
   (value): value is TranscriptionModel => value instanceof TranscriptionModel,

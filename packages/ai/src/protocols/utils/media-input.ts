@@ -34,6 +34,11 @@ export const query = (route: string, values: Record<string, unknown>): Effect.Ef
   )
 }
 
+export const dimensions = (size: string) => {
+  const [width, height] = size.split("x").map(Number)
+  return { width, height }
+}
+
 /** Provider file handle when the ref belongs to this provider; refs from other providers are never forwarded. */
 export const refID = (asset: Media.Asset, provider: ProviderID) =>
   asset.source.type === "ref" && asset.source.provider === provider ? asset.source.id : undefined

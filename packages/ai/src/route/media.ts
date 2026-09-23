@@ -2,10 +2,17 @@ import { Effect, Schema, Stream } from "effect"
 import { Headers, HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
 import { Auth, type AuthInput } from "./auth.js"
 import { Endpoint } from "./endpoint.js"
-import type { Interface } from "./executor-service.js"
+import { Service as RequestExecutorService, type Interface } from "./executor-service.js"
 import { RequestExecutor } from "./executor.js"
 import { MediaProtocol } from "./media-protocol.js"
-import { Generation, type Route as GenerationRoute } from "../generation.js"
+import {
+  Generation,
+  resultEvents,
+  type AwaitOptions,
+  type Observation,
+  type Route as GenerationRoute,
+} from "../generation.js"
+import type { Media } from "../media.js"
 import { ProviderShared } from "../protocols/shared.js"
 import {
   AIError,
@@ -72,6 +79,11 @@ export interface StreamRoute<Request extends MediaRequest, Event, Response> {
   readonly generate: (request: Request, execute: Execute) => Effect.Effect<Response, AIError>
 }
 
+export type AnyRoute<Request extends MediaRequest, Event, Response> =
+  | Route<Request, Response>
+  | StreamRoute<Request, Event, Response>
+  | QueuedRoute<Request, Response>
+
 export interface Composition<Request extends MediaRequest> {
   readonly id: string
   readonly provider: string | ProviderID
@@ -136,6 +148,8 @@ export const queued = <Request extends MediaRequest, Response, Token>(
   const encodeToken = Schema.encodeSync(protocol.token)
 
   const generationRoute = (token: Token, http: HttpOptions | undefined, execute: Execute) => {
+    const materialize = (asset: Media.Asset) =>
+      asset.materialize().pipe(Effect.provideService(RequestExecutorService, { execute }))
     const poll = <A>(operation: {
       readonly path: (token: Token) => string
       readonly decode: (
@@ -145,7 +159,7 @@ export const queued = <Request extends MediaRequest, Response, Token>(
     }) =>
       transport
         .call("GET", operation.path(token), http, execute)
-        .pipe(Effect.flatMap((sent) => operation.decode(sent.response, { token, auth: sent.auth })))
+        .pipe(Effect.flatMap((sent) => operation.decode(sent.response, { token, auth: sent.auth, materialize })))
     const cancel = protocol.cancel
     const route: GenerationRoute<Response> = {
       status: poll(protocol.status),
@@ -247,6 +261,57 @@ export const stream = <Request extends MediaRequest, Event, Response, Frame, Sta
     stream: (request, execute) => events(request, execute, "stream"),
     generate: (request, execute) =>
       events(request, execute, "generate").pipe(Stream.runCollect, Effect.flatMap(input.collect)),
+  }
+}
+
+export const dispatch = <Event, Response>(input: {
+  readonly modality: string
+  readonly execute: Execute
+  readonly responseEvents: (response: Response) => ReadonlyArray<Event>
+}) => {
+  const notQueued = (route: { readonly provider: ProviderID; readonly id: string }, operation: string) =>
+    ProviderShared.unsupportedOperation({
+      operation: `${input.modality}.${operation}`,
+      provider: route.provider,
+      route: route.id,
+      message: `${route.provider}/${route.id} is not a queued route; use generate or stream`,
+    })
+  const start = <Request extends MediaRequest>(route: AnyRoute<Request, Event, Response>, request: Request) => {
+    if (route.kind !== "queued") return Effect.fail(notQueued(route, "start"))
+    return route.start(request, input.execute)
+  }
+  return {
+    start,
+    resume: <Request extends MediaRequest>(
+      route: AnyRoute<Request, Event, Response>,
+      model: MediaRequest["model"],
+      token: unknown,
+    ) => {
+      if (route.kind !== "queued") return Effect.fail(notQueued(route, "resume"))
+      return route.resume(model, token, input.execute)
+    },
+    generate: <Request extends MediaRequest>(
+      route: AnyRoute<Request, Event, Response>,
+      request: Request,
+      options?: AwaitOptions,
+    ) => {
+      if (route.kind !== "queued") return route.generate(request, input.execute)
+      return start(route, request).pipe(Effect.flatMap((generation) => generation.await(options)))
+    },
+    stream: <Request extends MediaRequest>(
+      route: AnyRoute<Request, Event, Response>,
+      request: Request,
+      options?: AwaitOptions,
+    ): Stream.Stream<Event | Observation, AIError> => {
+      if (route.kind === "stream") return route.stream(request, input.execute)
+      if (route.kind === "queued")
+        return Stream.unwrap(
+          start(route, request).pipe(
+            Effect.map((generation) => resultEvents(generation, input.responseEvents, options)),
+          ),
+        )
+      return Stream.fromIterableEffect(Effect.map(route.generate(request, input.execute), input.responseEvents))
+    },
   }
 }
 

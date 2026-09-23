@@ -584,6 +584,61 @@ Z.ai does not include trustworthy MIME metadata for output URLs, so generated im
 `application/octet-stream` until materialized. Output URLs expire after 30 days; call `asset.materialize()` and
 persist the bytes promptly if they must remain available.
 
+### Partial images
+
+OpenAI's GPT image models stream previews. `Image.stream` sends `stream: true` with `partialImages` (0–3, default 2)
+and emits `image-partial` events before each final `image`; `Image.generate` keeps the plain JSON request.
+`dall-e-*` models do not stream and fail typed:
+
+```ts
+yield *
+  Image.stream({
+    model: openai.image("gpt-image-2"),
+    prompt: "A lighthouse at dusk",
+    providerOptions: { partialImages: 2 },
+  }).pipe(Stream.runForEach((event) => (ImageEvent.is.imagePartial(event) ? showPreview(event.image) : Effect.void)))
+```
+
+The provider may send fewer previews than requested when the final image is ready first.
+
+### Queued image providers
+
+Black Forest Labs, fal, Replicate, and Stability's creative upscaler are submit-then-poll routes. `Image.generate`
+and `Image.stream` poll for you (pass `{ poll }` to tune the interval and timeout); `Image.start` returns a
+`Generation` whose `token` is serializable JSON for `Image.resume` in another process:
+
+```ts
+import { BlackForestLabs, Stability } from "@opencode/ai/providers"
+
+const bfl = BlackForestLabs.configure({ apiKey: process.env.BFL_API_KEY })
+
+const generation = yield * Image.start({ model: bfl.image("flux-2-pro"), prompt, size: "1024x768" })
+persist(generation.token)
+
+const resumed = yield * Image.resume(bfl.image("flux-2-pro"), loadToken())
+const response = yield * resumed.await({ poll: { interval: "2 seconds" } })
+```
+
+- **Black Forest Labs** — results are downloaded before returning, because `result.sample` expires in 10 minutes.
+- **Replicate** — inputs are model-defined, so only `prompt` lowers: sizing, count, seed, format, and files go in
+  `providerOptions` under the model's names, with files as `Media.Asset` (data URLs up to 256 KB, larger by URL).
+  Outputs are removed an hour after the prediction completes. `Prefer: wait=60` in `headers` or `http.headers` holds
+  the submission open so a fast prediction costs one result read.
+- **Stability** — `stability.image(id)` generates inline; `stability.upscale()` is the creative upscaler, queued:
+
+```ts
+const stability = Stability.configure({ apiKey: process.env.STABILITY_API_KEY })
+const upscaled =
+  yield *
+  Image.generate(
+    { model: stability.upscale(), prompt: "A lighthouse", images: [yield * Media.file("./small.png")] },
+    { poll: { interval: "5 seconds" } },
+  )
+```
+
+Imagen is not available: Google shut it down on the Gemini API, and Vertex discontinued the Imagen 4 models on
+2026-06-30. `Google.image(...)` uses Gemini-native image models.
+
 Conversational image generation remains part of the LLM interaction. OpenAI Responses exposes it through its hosted image tool:
 
 ```ts
@@ -836,7 +891,7 @@ const transcript = await generation.await({ poll: { interval: 3_000 } })
 - **`Message.user(...)` / `Message.assistant(...)` / `Message.tool(...)`** — message constructors from the canonical schema model.
 - **`LanguageModel.make(...)` / `ToolCallPart.make(...)` / `ToolResultPart.make(...)` / `ToolDefinition.make(...)`** — model and tool-related constructors from the canonical schema model.
 - **`LLMEvent.is.*`** — typed guards (`is.textDelta`, `is.toolCall`, `is.finish`, …) for filtering streams.
-- **`Image.request` / `Image.generate` / `Image.stream`** — generate images through a provider-neutral image request and response model.
+- **`Image.request` / `generate` / `stream` / `start` / `resume`** — images over inline, streaming (partial previews), and queued routes through a provider-neutral request and response model.
 - **`ImageClient`** — Effect service and layer for image execution, parallel to `LLMClient`.
 - **`Media`** — the shared asset type (`Media.Asset`, `Media.Source`) and constructors used by messages, tool results, and media requests.
 - **`Generation`** — provider-neutral handle for an in-flight media generation (`await`, `refresh`, `cancel`, `events`) used by queued media routes.

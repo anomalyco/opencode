@@ -3,6 +3,7 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { OPENCODE_VERSION } from "../src/version"
+import { redactConfig } from "../src/commands/handlers/debug/redact"
 
 describe("debug config command", () => {
   test("is included in troubleshooting help", async () => {
@@ -14,6 +15,7 @@ describe("debug config command", () => {
     expect(config.exitCode).toBe(0)
     expect(config.stdout).toContain("opencode debug config [flags]")
     expect(config.stdout).toContain("List configuration sources")
+    expect(config.stdout).not.toContain("--reveal-secrets")
   })
 
   test("prints config entries from the invoking directory without reordering permissions", async () => {
@@ -29,6 +31,14 @@ describe("debug config command", () => {
             { action: "shell", resource: "*", effect: "ask" },
             { action: "shell", resource: "git status", effect: "allow" },
           ],
+          providers: {
+            example: {
+              settings: { apiKey: "sk-example", timeout: 1200 },
+              headers: { Authorization: "Bearer example", "X-API-Key": "key", "X-Custom": "opaque" },
+              models: { demo: { request: { headers: { "x-auth-token": "model-secret" } } } },
+            },
+          },
+          mcp: { remote: { oauth: { client_secret: "oauth-secret", client_id: "public" } } },
         },
       },
     ]
@@ -63,7 +73,18 @@ describe("debug config command", () => {
       const result = await cli(["debug", "config"], project, { XDG_STATE_HOME: path.join(root, "state") })
 
       expect({ exitCode: result.exitCode, stderr: result.stderr }).toEqual({ exitCode: 0, stderr: "" })
-      expect(JSON.parse(result.stdout)).toEqual(entries)
+      expect(JSON.parse(result.stdout)).toEqual(redactConfig(entries))
+      expect(JSON.parse(result.stdout)[0].info.providers.example).toEqual({
+        settings: { apiKey: "***", timeout: 1200 },
+        headers: { Authorization: "***", "X-API-Key": "***", "X-Custom": "***" },
+        models: { demo: { request: { headers: { "x-auth-token": "***" } } } },
+      })
+      expect(JSON.parse(result.stdout)[0].info.mcp.remote.oauth).toEqual({
+        client_secret: "***",
+        client_id: "public",
+      })
+      expect(result.stdout).not.toContain("sk-example")
+      expect(result.stdout).not.toContain("Bearer example")
       expect(requested?.pathname).toBe("/api/config")
       expect(requested?.searchParams.get("location[directory]")).toBe(project)
       expect(authorization).toEqual([`Basic ${btoa("opencode:secret")}`])
@@ -73,6 +94,26 @@ describe("debug config command", () => {
       await fs.rm(root, { recursive: true, force: true })
     }
   })
+})
+
+test("redacts URL credentials and credential environment variables without mutating config", () => {
+  const input = {
+    mcp: {
+      local: { environment: { SERVICE_TOKEN: "token-value", PATH: "/usr/bin" } },
+      remote: { url: "https://user:pass@example.com/mcp", headers: { "x-custom": "opaque" } },
+    },
+    url: "https://example.com/api?api_key=secret&mode=debug",
+    max_tokens: 100,
+  }
+  expect(redactConfig(input)).toEqual({
+    mcp: {
+      local: { environment: { SERVICE_TOKEN: "***", PATH: "/usr/bin" } },
+      remote: { url: "***", headers: { "x-custom": "***" } },
+    },
+    url: "***",
+    max_tokens: 100,
+  })
+  expect(input.mcp.remote.url).toBe("https://user:pass@example.com/mcp")
 })
 
 async function cli(args: string[], cwd = path.join(import.meta.dir, ".."), env?: Record<string, string>) {

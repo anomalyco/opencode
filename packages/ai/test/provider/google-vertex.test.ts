@@ -343,6 +343,34 @@ describe("Google Vertex providers", () => {
     }),
   )
 
+  // Captured from xai/grok-4.6 on Vertex: one keepalive every 15s until the first token.
+  it.effect("ignores keepalives sent as data while a partner model reasons", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLM.request({
+          model: GoogleVertexChat.configure({
+            accessToken: "vertex-token",
+            location: "global",
+            project: "vertex-project",
+          }).model("xai/grok-4.6"),
+          prompt: "Say hello.",
+        }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            `data: : keepalive\n\ndata: : keepalive\n\n${sseEvents(
+              deltaChunk({ role: "assistant", content: "Hello." }),
+              finishChunk("stop"),
+            )}`,
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Hello.")
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "stop" })
+    }),
+  )
+
   it.effect("sends Grok requests through Vertex Responses", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
