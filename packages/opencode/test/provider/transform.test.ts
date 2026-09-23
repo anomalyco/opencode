@@ -525,32 +525,6 @@ describe("ProviderTransform.options - google thinkingConfig gating", () => {
     })
     expect(openrouterResult.reasoning).toEqual({ effort: "high" })
   })
-
-  test("omits default effort when variants use token budgets", () => {
-    const reasoning_options: ModelsDev.Model["reasoning_options"] = [{ type: "budget_tokens", min: 0, max: 24_576 }]
-    const budgetOnly = { reasoning_options } as ModelsDev.Model
-    for (const npm of ["@ai-sdk/google", "@ai-sdk/google-vertex"] as const) {
-      const model = createGoogleModel(true, npm, "gemini-robotics-er-1.6-preview")
-      model.variants = ProviderTransform.reasoningVariants(budgetOnly, model)
-      expect(model.variants.high.thinkingConfig.thinkingBudget).toBeNumber()
-      expect(ProviderTransform.options({ model, sessionID, providerOptions: {} }).thinkingConfig).toEqual({
-        includeThoughts: true,
-      })
-    }
-
-    const openrouter = {
-      ...createGoogleModel(true, "@ai-sdk/google", "google/gemini-robotics-er-1.6-preview"),
-      providerID: "openrouter",
-      api: {
-        id: "google/gemini-robotics-er-1.6-preview",
-        url: "https://openrouter.ai/api/v1",
-        npm: "@openrouter/ai-sdk-provider",
-      },
-    }
-    openrouter.variants = ProviderTransform.reasoningVariants(budgetOnly, openrouter)
-    expect(openrouter.variants.high.reasoning.max_tokens).toBeNumber()
-    expect(ProviderTransform.options({ model: openrouter, sessionID, providerOptions: {} }).reasoning).toBeUndefined()
-  })
 })
 
 describe("ProviderTransform.options - gpt-5 textVerbosity", () => {
