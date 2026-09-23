@@ -17,6 +17,16 @@ if (mode === "environment") {
 }
 if (mode === "signal") process.kill(process.pid, process.platform === "win32" ? "SIGTERM" : "SIGKILL")
 
+if (mode === "controlled") {
+  await appendFile(registration + ".starts", process.pid + "\n")
+  const release = registration + `.release-${process.pid}`
+  while (!(await Bun.file(release).exists())) await Bun.sleep(5)
+  if ((await Bun.file(release).text()) === "fail") {
+    process.stderr.write("actionable startup failure: storage initialization denied\n")
+    process.exit(23)
+  }
+}
+
 if (mode === "delayed" || mode === "delayed-failed" || mode === "coordinated" || mode === "coordinated-failed-loser") {
   await appendFile(registration + ".starts", process.pid + "\n")
   const owner = await writeFile(registration + ".owner", String(process.pid), { flag: "wx" })
@@ -44,7 +54,7 @@ const handoff = {
 }
 const server = Bun.serve({
   port: 0,
-  async fetch(request) {
+  async fetch(request): Promise<Response> {
     const pathname = new URL(request.url).pathname
     if (pathname === "/api/experimental/persistent-pty/handoff" && mode === "handoff") {
       if (request.method !== "POST" || request.headers.get("authorization") !== "Basic " + btoa("opencode:private"))
