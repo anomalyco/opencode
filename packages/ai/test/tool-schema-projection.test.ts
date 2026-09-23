@@ -28,6 +28,38 @@ describe("tool schema projections", () => {
     })
   })
 
+  test("moonshot derives a type for untyped enums", () => {
+    expect(
+      ToolSchemaProjection.moonshot({
+        type: "object",
+        properties: {
+          kind: { description: "The kind of flag", enum: ["boolean", "string"] },
+          level: { enum: [1, 2.5] },
+          optional: { enum: [null, "a"] },
+          choice: { anyOf: [{ enum: [true, false] }, { type: "null" }] },
+          list: { type: "array", items: { enum: ["x"] } },
+          map: { type: "object", additionalProperties: { enum: ["y"] } },
+          typed: { type: "string", enum: ["a", null] },
+          mixed: { enum: ["a", 1] },
+        },
+        $defs: { Mode: { enum: ["fast"] } },
+      }),
+    ).toEqual({
+      type: "object",
+      properties: {
+        kind: { type: "string", description: "The kind of flag", enum: ["boolean", "string"] },
+        level: { type: "number", enum: [1, 2.5] },
+        optional: { type: ["string", "null"], enum: [null, "a"] },
+        choice: { anyOf: [{ type: "boolean", enum: [true, false] }, { type: "null" }] },
+        list: { type: "array", items: { type: "string", enum: ["x"] } },
+        map: { type: "object", additionalProperties: { type: "string", enum: ["y"] } },
+        typed: { type: "string", enum: ["a", null] },
+        mixed: { enum: ["a", 1] },
+      },
+      $defs: { Mode: { type: "string", enum: ["fast"] } },
+    })
+  })
+
   test("gemini handles numeric enums, dangling required fields, untyped arrays, and scalar object keys", () => {
     expect(
       ToolSchemaProjection.gemini({
