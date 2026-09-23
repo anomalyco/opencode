@@ -83,6 +83,34 @@ test("config.get returns ordered config entries for a location", async () => {
   expect(request?.url).toBe("http://localhost:3000/api/config?location%5Bdirectory%5D=%2Ftmp%2Fproject")
 })
 
+test("requests keep a path prefix on baseUrl", async () => {
+  let request: Request | undefined
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:8888/ws/abc",
+    fetch: async (input) => {
+      request = input instanceof Request ? input : new Request(input)
+      return Response.json({ version: "2.0.0", pid: 1, urls: [], paths: { tmp: "/tmp" } })
+    },
+  })
+
+  await client.server.info()
+  expect(request?.url).toBe("http://localhost:8888/ws/abc/api/info")
+})
+
+test("requests join against the base URL pathname", async () => {
+  let request: Request | undefined
+  const client = OpenCode.make({
+    baseUrl: "http://localhost:8888/ws/abc?tenant=one#fragment",
+    fetch: async (input) => {
+      request = input instanceof Request ? input : new Request(input)
+      return Response.json({ version: "2.0.0", pid: 1, urls: [], paths: { tmp: "/tmp" } })
+    },
+  })
+
+  await client.server.info()
+  expect(request?.url).toBe("http://localhost:8888/ws/abc/api/info")
+})
+
 test("vcs.base and committed diffs preserve location and explicit base on the wire", async () => {
   const requests: Request[] = []
   const location = { directory: "/repo", project: { id: "global", directory: "/repo", canonical: "/repo" } }

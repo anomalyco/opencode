@@ -13,6 +13,7 @@ import type { LocationRef } from "@opencode/client/promise"
 import type { Config } from "../config"
 import { newSessionLocation } from "../config/new-session-location"
 import { normalizeModelVariant } from "../model-preference"
+import { errorMessage } from "../util/error"
 import { loadRunAgents, loadRunCommands, loadRunReferences } from "./catalog.shared"
 import { resolveMiniModelPreference } from "./model-preference"
 import {
@@ -907,7 +908,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     if (signal?.aborted || footer.isClosed) return
     const text =
       (await state.stream?.then((item) => item.mod).catch(() => undefined))?.formatUnknownError(error) ??
-      (error instanceof Error ? error.message : String(error))
+      errorMessage(error)
     const commit = {
       kind: "error",
       text,
@@ -1051,7 +1052,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
               })
               const commit = {
                 kind: "error",
-                text: error instanceof Error ? error.message : String(error),
+                text: errorMessage(error),
                 phase: "start",
                 source: "system",
                 messageID: SessionMessage.ID.create(),

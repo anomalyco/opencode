@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent, Message, ToolDefinition } from "../../src/index.js"
+import { LLM, LLMEvent, Message, ToolDefinition, Media } from "../../src/index.js"
 import { configure } from "../../src/providers/openai-compatible-responses.js"
 import { OpenAI } from "../../src/providers.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
@@ -129,7 +129,7 @@ describe("Open Responses-compatible route", () => {
         LLM.request({
           model,
           messages: [
-            Message.user([{ type: "media", mediaType: "application/pdf", data: pdf, filename: "input.pdf" }]),
+            Message.user([{ type: "media", media: Media.fromDataUrl(pdf), filename: "input.pdf" }]),
             Message.assistant({ type: "tool-call", id: "call_1", name: "read", input: {} }),
             Message.tool({
               id: "call_1",

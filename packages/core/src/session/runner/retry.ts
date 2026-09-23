@@ -55,6 +55,7 @@ export function isRetryable(error: AIError) {
     case "InvalidRequest":
     case "UnsupportedOperation":
     case "NoRoute":
+    case "Timeout":
       return false
     default: {
       const exhaustive: never = error.reason
