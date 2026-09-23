@@ -10,6 +10,7 @@ Floating tooltip built on Kobalte's tooltip primitive with v2 styling.
 - \`placement\`: Kobalte placement string (e.g. "top", "bottom", "left", "right").
 - \`inactive\`: When true, renders only the trigger without tooltip behavior.
 - \`forceOpen\`: Forces the tooltip to stay open.
+- \`TooltipV2Group\`: Wrap neighboring tooltips to skip their enter/exit animations and hover delays when moving between triggers. The first hover still uses each tooltip's configured delay; the group cools down after 300ms.
 - Inherits Kobalte Tooltip root props.
 `
 
@@ -42,6 +43,7 @@ export const Simple = {
 export const Grouped = {
   render: () => (
     <div style={{ padding: "80px" }}>
+      <p>Hover the first button, then move across the group. Leave for a moment to reset the initial delay.</p>
       <TooltipV2Group>
         <div style={{ display: "flex", gap: "8px" }}>
           <TooltipV2 value="First tooltip" openDelay={800}>
@@ -49,6 +51,9 @@ export const Grouped = {
           </TooltipV2>
           <TooltipV2 value="Second tooltip" openDelay={800}>
             <button type="button">Second</button>
+          </TooltipV2>
+          <TooltipV2 value="Third tooltip" openDelay={800}>
+            <button type="button">Third</button>
           </TooltipV2>
         </div>
       </TooltipV2Group>
