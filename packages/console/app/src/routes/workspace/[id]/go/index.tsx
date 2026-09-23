@@ -1,4 +1,4 @@
-import { createAsync, useParams } from "@solidjs/router"
+import { createAsync, redirect, useParams } from "@solidjs/router"
 import { Show } from "solid-js"
 import { IconGo } from "~/component/icon"
 import { GoReferralSection, queryGoReferral } from "~/component/go-referral"
@@ -7,6 +7,7 @@ import { useLanguage } from "~/context/language"
 import { LiteSection, queryLiteSubscription } from "./lite-section"
 
 export default function () {
+  throw redirect("/console/go")
   const params = useParams()
   const i18n = useI18n()
   const language = useLanguage()
