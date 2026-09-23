@@ -9,6 +9,6 @@ export default {
   discord: "https://opencode.ai/discord",
   headerLinks: [
     { name: "app.header.home", url: "/" },
-    { name: "app.header.docs", url: "/docs/" },
+    { name: "app.header.docs", url: "/v2/docs" },
   ],
 }
