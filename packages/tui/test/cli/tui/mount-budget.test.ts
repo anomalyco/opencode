@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { groupID } from "../../../src/routes/session/anchors"
-import type { GroupKind, SessionEntry, SessionRow } from "../../../src/routes/session/grouping/session"
+import type { SessionEntry, SessionRow } from "../../../src/routes/session/grouping/session"
 import { groupEntries } from "../../../src/routes/session/grouping/tree"
 import { rowsAfter, rowsBefore, rowWeight } from "../../../src/routes/session/mount-budget"
 
@@ -9,18 +9,18 @@ const read = (index: number): SessionEntry => ({
   ref: { messageID: `m${index}`, partID: `read-${index}` },
 })
 
-function group(size: number, path: readonly GroupKind[] = ["exploration"]): SessionRow {
+function group(size: number, path: readonly ("exploration" | "reasoning")[] = ["exploration"]): SessionRow {
   const [node] = groupEntries(
     Array.from({ length: size }, (_, index) => read(index)),
     () => path,
   )
   if (node.type !== "group") throw new Error("Expected group")
-  return node.kind === "reasoning" || node.kind === "instructions"
-    ? { ...node, kind: node.kind, completed: true }
-    : { ...node, kind: node.kind, pending: [], completed: true }
+  return node.kind === "reasoning"
+    ? { ...node, kind: "reasoning", completed: true }
+    : { ...node, kind: "exploration", pending: [], completed: true }
 }
 
-const collapsed = { expanded: () => false, grouped: () => true, summarized: () => true }
+const collapsed = { expanded: () => false, grouped: () => true }
 
 test("with every group collapsed each row costs one, matching the former row-count budget", () => {
   const rows: SessionRow[] = [
@@ -46,7 +46,7 @@ test("an expanded group costs its header plus rendered children", () => {
   const row = group(200)
   if (row.type !== "group") throw new Error("Expected group")
   const id = groupID(row, 0)
-  expect(rowWeight(row, { expanded: (key) => key === id, grouped: () => true, summarized: () => true })).toBe(201)
+  expect(rowWeight(row, { expanded: (key) => key === id, grouped: () => true })).toBe(201)
 })
 
 test("a collapsed inner group costs one even when its parent is expanded", () => {
@@ -54,14 +54,14 @@ test("a collapsed inner group costs one even when its parent is expanded", () =>
   if (row.type !== "group" || row.children[0].type !== "group") throw new Error("Expected nested group")
   const outer = groupID(row, 0)
   const inner = groupID(row.children[0], 1)
-  expect(rowWeight(row, { expanded: (key) => key === outer, grouped: () => true, summarized: () => true })).toBe(2)
-  expect(rowWeight(row, { expanded: (key) => key === outer || key === inner, grouped: () => true, summarized: () => true })).toBe(52)
+  expect(rowWeight(row, { expanded: (key) => key === outer, grouped: () => true })).toBe(2)
+  expect(rowWeight(row, { expanded: (key) => key === outer || key === inner, grouped: () => true })).toBe(52)
   // A saved expanded inner group under a collapsed parent mounts nothing.
-  expect(rowWeight(row, { expanded: (key) => key === inner, grouped: () => true, summarized: () => true })).toBe(1)
+  expect(rowWeight(row, { expanded: (key) => key === inner, grouped: () => true })).toBe(1)
 })
 
 test("an ungrouped kind renders every leaf", () => {
-  expect(rowWeight(group(12, ["reasoning"]), { expanded: () => false, grouped: (kind) => kind !== "reasoning", summarized: () => true })).toBe(
+  expect(rowWeight(group(12, ["reasoning"]), { expanded: () => false, grouped: (kind) => kind !== "reasoning" })).toBe(
     12,
   )
 })
@@ -71,18 +71,4 @@ test("a heavy tail group leaves fewer older rows mounted", () => {
   // The expanded group alone exceeds the tail budget.
   expect(rowsBefore(weights, weights.length, 40)).toBe(100)
   expect(rowsAfter(weights, 90, 60)).toBe(101)
-})
-
-test("an activity group with nothing to summarize costs its rendered children", () => {
-  const input = {
-    expanded: () => false,
-    grouped: () => true,
-    summarized: (node: { kind: GroupKind }) => node.kind !== "activity",
-  }
-  // Summarized, a collapsed activity costs one header row.
-  expect(rowWeight(group(3, ["activity"]), { ...input, summarized: () => true })).toBe(1)
-  // Nothing finished: its three direct tools render.
-  expect(rowWeight(group(3, ["activity"]), input)).toBe(3)
-  // Nothing finished: it renders one collapsed exploration header.
-  expect(rowWeight(group(3, ["activity", "exploration"]), input)).toBe(1)
 })

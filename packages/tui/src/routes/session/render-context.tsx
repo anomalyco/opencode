@@ -4,7 +4,6 @@ import type { SessionInbox } from "@opencode/schema/session-inbox"
 import type { useConfig } from "../../config"
 import type { ThinkingMode } from "../../context/thinking"
 import type { createTimelineAnchors } from "./anchors"
-import type { GroupKind } from "./grouping/session"
 
 export type PendingAction = "steer" | "queue" | "cancel"
 
@@ -19,8 +18,7 @@ export const context = createContext<{
   terminal: { width: number; height: number }
   sessionID: string
   anchors: ReturnType<typeof createTimelineAnchors>
-  /** Saved disclosure, falling back to the verbosity default for the group kind. */
-  groupExpanded: (groupID: string, kind: GroupKind) => boolean
+  groupExpanded: (groupID: string) => boolean | undefined
   setGroupExpanded: (groupID: string, expanded: boolean) => void
   thinkingMode: () => ThinkingMode
   markdownMode: () => "source" | "rendered"

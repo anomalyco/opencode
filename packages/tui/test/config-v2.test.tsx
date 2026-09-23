@@ -114,14 +114,6 @@ test("shows the TPS default in session settings", () => {
   expect(setting?.default).toBe(true)
 })
 
-test("shows transcript verbosity in session settings", () => {
-  expect(settings.find((setting) => setting.path.join(".") === "session.verbosity")).toMatchObject({
-    category: "Session",
-    default: "medium",
-    values: ["low", "medium", "high"],
-  })
-})
-
 test("names tool grouping explicitly in settings", () => {
   expect(settings.find((setting) => setting.path.join(".") === "session.grouping")).toMatchObject({
     title: "Tool grouping",
