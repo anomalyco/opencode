@@ -14,7 +14,8 @@ export async function GET(input: APIEvent) {
       return redirect(`${destination}/login`, { headers: { "Cache-Control": "no-store" } })
     }
     return redirect(route(locale, `/workspace/${workspaceID}`))
-  } catch {
+  } catch (error) {
+    if (error instanceof Response) throw error
     return redirect("/auth/authorize")
   }
 }
