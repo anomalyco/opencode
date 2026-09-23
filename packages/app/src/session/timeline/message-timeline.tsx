@@ -548,7 +548,12 @@ function MessageTimelineView(
                     <SessionContextUsage placement="bottom" />
                     <Show when={!parentID() && project()}>
                       {(project) => (
-                        <SummaryPopover active={props.active} open={summaryOpen()} onOpenChange={setSummary}>
+                        <SummaryPopover
+                          active={props.active}
+                          directory={sessionDirectory()}
+                          open={summaryOpen()}
+                          onOpenChange={setSummary}
+                        >
                           <Suspense>
                             <SessionSummaryPanel
                               shown={summaryOpen()}

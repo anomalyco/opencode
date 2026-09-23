@@ -27,6 +27,8 @@ import { showToast } from "@/shell/notifications/toast"
 import { pluginLabel } from "@/providers/catalog/plugin"
 import { useMcpToggle, type McpControls } from "@/providers/connect/mcp"
 import { configuredLsps } from "./configured-lsp"
+import { serviceStatusDotClass } from "./indicator"
+import { useSummaryStatus } from "./status"
 
 const services = [
   { type: "mcp", icon: "mcp", label: "session.summary.mcp" },
@@ -54,6 +56,7 @@ export function SessionServerPanel(props: { directory: string; shown: boolean; m
   const settings = useSettings()
   const contentID = createUniqueId()
   const expanded = settings.sessionSummary.serverExpanded
+  const status = useSummaryStatus(() => props.directory)
   const name = createMemo(() => {
     const servers = global.servers.list()
     if (servers.length < 2) return language.t("session.summary.server")
@@ -71,7 +74,14 @@ export function SessionServerPanel(props: { directory: string; shown: boolean; m
         aria-controls={contentID}
         onClick={() => settings.sessionSummary.setServerExpanded(!expanded())}
       >
-        <Icon name="server" class="shrink-0 text-v2-icon-icon-muted" />
+        <span class="session-summary-server-icon">
+          <Icon name="server" class="text-v2-icon-icon-muted" />
+          <span
+            data-slot="status-indicator"
+            class={`session-summary-server-status ${status().server}`}
+            aria-hidden="true"
+          />
+        </span>
         <span dir="auto" class="session-summary-label">
           {name()}
         </span>
@@ -173,6 +183,7 @@ function McpMenu(props: ServiceMenuProps) {
       a.name.localeCompare(b.name),
     ),
   )
+  const status = createMemo(() => serviceStatusDotClass(servers().map((server) => server.status.status)))
   const defaults = createMemo(() =>
     Object.fromEntries(
       (data.location.config.list({ directory: props.directory }) ?? []).flatMap((entry) =>
@@ -186,6 +197,7 @@ function McpMenu(props: ServiceMenuProps) {
   return (
     <ServicePopover
       {...props}
+      status={status()}
       loading={load.loading}
       ready={
         data.location.mcp.server.list({ directory: props.directory }) !== undefined &&
@@ -378,6 +390,7 @@ function ServicePopover(
     error: unknown
     retry: () => unknown
     children: JSX.Element
+    status?: string
   },
 ) {
   const language = useLanguage()
@@ -397,7 +410,12 @@ function ServicePopover(
       modal={false}
     >
       <Popover.Trigger as="button" type="button" class="session-summary-row">
-        <Icon name={props.service.icon} class="shrink-0 text-v2-icon-icon-muted" />
+        <span class="session-summary-service-icon">
+          <Icon name={props.service.icon} class="text-v2-icon-icon-muted" />
+          <Show when={props.status}>
+            {(status) => <span class={`session-summary-service-status ${status()}`} aria-hidden="true" />}
+          </Show>
+        </span>
         <span class="session-summary-label">{language.t(props.service.label)}</span>
         <Icon name="fill-triangle-down" class="session-summary-menu-indicator shrink-0 text-v2-icon-icon-muted" />
       </Popover.Trigger>

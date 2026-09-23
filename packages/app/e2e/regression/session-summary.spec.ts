@@ -71,11 +71,16 @@ for (const layout of ["horizontal", "vertical"] as const) {
     await page.goto(stressSessionHref(fixture.targetID))
     const trigger = page.getByRole("button", { name: "Session details", exact: true })
     await expect(trigger).toBeEnabled()
+    await expect(trigger.locator('[data-slot="status-indicator"]')).toHaveCount(0)
     await expect(page.getByRole("button", { name: "Status", exact: true })).toHaveCount(0)
     await trigger.click()
     const summary = page.getByRole("dialog", { name: "Session details", exact: true })
     const project = summary.getByRole("button", { name: fixture.project.name, exact: true })
     const server = summary.getByRole("button", { name: "Extensions", exact: true })
+    await expect(server.locator('[data-slot="status-indicator"]')).toBeVisible()
+    await expect(
+      summary.getByRole("button", { name: "MCP", exact: true }).locator(".session-summary-service-status"),
+    ).toHaveCount(0)
     await expect(project).toHaveAttribute("aria-expanded", "true")
     await expect(server).toHaveAttribute("aria-expanded", "true")
     for (const heading of [project, server]) {
