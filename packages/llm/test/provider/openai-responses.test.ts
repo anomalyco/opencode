@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { ConfigProvider, Effect, Layer, Stream } from "effect"
+import { ConfigProvider, Effect, Layer, Schema, Stream } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
 import { LLM, LLMError, Message, Model, ToolCallPart, Usage } from "../../src"
 import { Auth, LLMClient, RequestExecutor, WebSocketExecutor } from "../../src/route"
@@ -227,6 +227,15 @@ describe("OpenAI Responses route", () => {
         input: [{ role: "user", content: [{ type: "input_text", text: "Say hello." }] }],
         store: false,
       })
+    }),
+  )
+
+  it.effect("terminates an OpenAI Responses stream on a top-level error event", () =>
+    Effect.sync(() => {
+      const event = Schema.decodeUnknownSync(OpenAIResponses.protocol.stream.event)(
+        ProviderShared.encodeJson({ type: "error", code: "rate_limit_exceeded", message: "Slow down" }),
+      )
+      expect(OpenAIResponses.protocol.stream.terminal?.(event)).toBe(true)
     }),
   )
 
