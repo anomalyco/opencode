@@ -60,6 +60,7 @@ test("the companion registers one uniquely named skill whose content is the pack
 test("the distributable controller rule pauses an unregistered plan", async () => {
   const readme = await Bun.file(new URL("../README.md", import.meta.url)).text()
   expect(readme).toContain("The rule applies even when reporting tools are missing")
+  expect(readme).not.toContain("before activating the policy")
   const policy = readme.split("### Required global controller policy\n")[1]?.split("```text\n")[1]?.split("\n```")[0]
   expect(policy).toBeDefined()
   for (const obligation of [

@@ -80,7 +80,7 @@ in observer mode.
 
 ### Required global controller policy
 
-After the companion is built, deployed, and verified, add this rule to your installation-wide
+After the companion source/package and Execution header fixes are built and verified, add this rule to your installation-wide
 OpenCode controller instructions (`~/.config/opencode/AGENTS.md`). Keep unrelated instructions;
 do not edit cached Superpowers skill files. The rule applies even when reporting tools are missing:
 subsequent approved-plan executions pause until reporting can register a run. It does not govern
@@ -92,8 +92,8 @@ Before implementation or implementer dispatch for an approved Superpowers plan, 
 
 This is a controller-workflow requirement. It does not add a host-side block to native tools, and
 the plugin does not infer approval or create a run from session text. A source build alone does not
-change the installed server: verify the staged package in a disposable host and separately confirm
-the controller can see the deployed reporting tools before activating the policy.
+change the installed server. Separately verify deployment and that the controller can see the
+reporting tools before claiming live registration or starting another approved-plan execution.
 
 ## Rollback to observer mode
 

@@ -27,6 +27,7 @@ export function createSessionScreenLayout(session: SessionModel) {
         opened: layout.fileTree.opened(),
       }),
   )
+  const fileTreeWidth = createMemo(() => Math.max(FILE_TREE_WIDTH_MIN, layout.fileTree.width()))
   const resizable = createMemo(() => reviewPanelOpen() || sideTerminalOpen())
   const sidePanelOpen = createMemo(() => resizable() || fileTreeOpen())
   const [rowSize, setRowSize] = createStore<{ width?: number; height?: number }>({})
@@ -51,7 +52,7 @@ export function createSessionScreenLayout(session: SessionModel) {
   const panelWidth = createMemo(() => {
     if (!sidePanelOpen()) return "100%"
     if (resizable()) return `${resizedWidth()}px`
-    return `calc(100% - ${Math.max(FILE_TREE_WIDTH_MIN, layout.fileTree.width())}px)`
+    return `calc(100% - ${fileTreeWidth()}px)`
   })
   const panelMax = createMemo(() => {
     const width = available()
@@ -86,12 +87,12 @@ export function createSessionScreenLayout(session: SessionModel) {
   const sideContentWidth = createMemo<string>((previous) => {
     const width = available()
     if (resizable() && width !== undefined) return `${Math.max(0, width - resizedWidth())}px`
-    if (fileTreeOpen()) return `${Math.max(FILE_TREE_WIDTH_MIN, layout.fileTree.width())}px`
+    if (fileTreeOpen()) return `${fileTreeWidth()}px`
     return previous
   }, "100%")
   return {
     centered: createMemo(() => session.isDesktop()),
-    files: { open: fileTreeOpen },
+    files: { open: fileTreeOpen, width: fileTreeWidth },
     panel: {
       max: panelMax,
       ref: (element: HTMLDivElement) => {

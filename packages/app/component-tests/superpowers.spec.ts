@@ -380,6 +380,29 @@ for (const scenario of ["session-screen-header-files", "session-screen-header-fi
   })
 }
 
+for (const scenario of ["session-screen-header-files", "session-screen-header-files-rtl"]) {
+  story(`execution header keeps combined review and file-tree tabs reachable in ${scenario}`, async ({ page }) => {
+    await page.setViewportSize({ width: 1600, height: 900 })
+    await openExecutionFixture(page, scenario)
+    await page.getByRole("button", { name: "Open fixture file tree" }).click()
+    await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+    const group = page.locator('[data-slot="session-review-toggle"]')
+    const tabs = page.locator('[data-scope="filetree"] [data-slot="tabs-list"]')
+    await expect(tabs).toBeVisible()
+    await expect(page.getByTestId("execution-status-label")).toBeHidden()
+    for (const name of ["Files Changed 0", "All files"]) {
+      await expect.poll(async () => {
+        const controls = await group.boundingBox()
+        const tab = await tabs.getByRole("tab", { name, exact: true }).boundingBox()
+        if (!controls || !tab) return Number.POSITIVE_INFINITY
+        return Math.min(controls.x + controls.width, tab.x + tab.width) - Math.max(controls.x, tab.x)
+      }).toBeLessThanOrEqual(0)
+    }
+    await tabs.getByRole("tab", { name: "All files", exact: true }).click()
+    await expect(tabs.getByRole("tab", { name: "All files", exact: true })).toHaveAttribute("aria-selected", "true")
+  })
+}
+
 
 story("execution shortcut mirrors the icon before the label in rtl", async ({ page }) => {
   await openExecutionFixture(page, "rtl")
