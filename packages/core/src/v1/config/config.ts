@@ -8,6 +8,7 @@ import { ConfigAgentV1 } from "./agent"
 import { ConfigAttachmentV1 } from "./attachment"
 import { ConfigCommandV1 } from "./command"
 import { ConfigFormatterV1 } from "./formatter"
+import { ConfigJevV1 } from "./jev"
 import { ConfigLayoutV1 } from "./layout"
 import { ConfigLSPV1 } from "./lsp"
 import { ConfigMCPV1 } from "./mcp"
@@ -76,6 +77,10 @@ export const Info = Schema.Struct({
   }),
   small_model: Schema.optional(Schema.String).annotate({
     description: "Small model to use for tasks like title generation in the format of provider/model",
+  }),
+  jev: Schema.optional(ConfigJevV1.Info).annotate({
+    description:
+      "Jev decision routing — confidence-gated model tier routing (default: disabled). Credentials resolve from TYPESAFE_API_KEY, the auth.json `typesafe` entry, or a custom `provider.typesafe` options.apiKey.",
   }),
   default_agent: Schema.optional(Schema.String).annotate({
     description:
