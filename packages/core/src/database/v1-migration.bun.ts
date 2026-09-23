@@ -523,8 +523,8 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
       if (!(yield* hasLegacySessions(db))) return { status: "completed" as const }
       const now = Date.now()
       yield* db.run(sql`
-          INSERT OR IGNORE INTO project (id, worktree, time_created, time_updated, sandboxes)
-          VALUES (${Project.ID.global}, ${path.parse(global.data).root}, ${now}, ${now}, '[]')
+          INSERT OR IGNORE INTO project (id, worktree, time_created, time_updated, time_active, sandboxes)
+          VALUES (${Project.ID.global}, ${path.parse(global.data).root}, ${now}, ${now}, ${now}, '[]')
         `)
       if (state === undefined)
         yield* db
@@ -753,11 +753,11 @@ function importNextDatabase(
                 yield* tx.run(sql`
                   INSERT OR IGNORE INTO project (
                     id, worktree, vcs, name, icon_url, icon_url_override, icon_color,
-                    time_created, time_updated, time_initialized, sandboxes, commands
+                    time_created, time_updated, time_initialized, time_active, sandboxes, commands
                   ) VALUES (
                     ${project.id}, ${project.worktree}, ${project.vcs}, ${project.name}, ${project.icon_url},
                     ${project.icon_url_override}, ${project.icon_color}, ${project.time_created}, ${project.time_updated},
-                    ${project.time_initialized}, ${project.sandboxes}, ${project.commands}
+                    ${project.time_initialized}, ${project.time_updated}, ${project.sandboxes}, ${project.commands}
                   )
                 `)
               const existing = yield* tx

@@ -153,7 +153,7 @@ test("syncs VCS info and applies branch updates", async () => {
   }
 })
 
-test("proactively syncs project metadata newest first", async () => {
+test("proactively syncs project metadata most recently active first", async () => {
   const events = createEventStream()
   const calls = createFetch((url) => {
     if (url.pathname !== "/api/project") return
@@ -162,14 +162,14 @@ test("proactively syncs project metadata newest first", async () => {
         id: "proj_old",
         canonical: "/old/project",
         name: "Old project",
-        time: { created: 1, updated: 1 },
+        time: { created: 1, updated: 1, active: 3 },
         sandboxes: [],
       },
       {
         id: "proj_test",
         canonical: worktree,
         name: "OpenCode",
-        time: { created: 1, updated: 2 },
+        time: { created: 1, updated: 2, active: 2 },
         sandboxes: [],
       },
     ])
@@ -197,17 +197,17 @@ test("proactively syncs project metadata newest first", async () => {
     await wait(() => data.project.get("proj_test") !== undefined)
     expect(data.project.list()).toEqual([
       {
-        id: "proj_test",
-        canonical: worktree,
-        name: "OpenCode",
-        time: { created: 1, updated: 2 },
-        sandboxes: [],
-      },
-      {
         id: "proj_old",
         canonical: "/old/project",
         name: "Old project",
-        time: { created: 1, updated: 1 },
+        time: { created: 1, updated: 1, active: 3 },
+        sandboxes: [],
+      },
+      {
+        id: "proj_test",
+        canonical: worktree,
+        name: "OpenCode",
+        time: { created: 1, updated: 2, active: 2 },
         sandboxes: [],
       },
     ])
