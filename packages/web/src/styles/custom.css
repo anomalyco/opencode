@@ -28,6 +28,32 @@
   /* For the share component */
   --sl-color-bg-surface: var(--sl-color-bg-nav);
   --sl-color-divider: var(--sl-color-gray-5);
+
+  /* Fixed v2 announcement bar rendered below the header by PageFrame */
+  --v2-banner-height: 2.75rem;
+}
+
+:root[data-has-hero] {
+  --v2-banner-height: 0rem;
+}
+
+/* Shift fixed chrome below the v2 banner */
+mobile-starlight-toc nav {
+  top: calc(var(--sl-nav-height) + var(--v2-banner-height) - 1px);
+}
+
+html {
+  scroll-padding-top: calc(1.5rem + var(--sl-nav-height) + var(--sl-mobile-toc-height) + var(--v2-banner-height));
+}
+
+@media (min-width: 72rem) {
+  .right-sidebar {
+    padding-top: calc(var(--sl-nav-height) + var(--v2-banner-height));
+  }
+
+  html {
+    scroll-padding-top: calc(1.5rem + var(--sl-nav-height) + var(--v2-banner-height));
+  }
 }
 
 body {
@@ -61,7 +87,7 @@ body {
   }
 }
 
-.header:where(.astro-tcroauqe) {
+body > .page > header.header {
   border-bottom: 1px solid var(--color-border-weak) !important;
 }
 
