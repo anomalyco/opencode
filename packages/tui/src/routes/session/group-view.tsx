@@ -126,7 +126,7 @@ function GroupContent(props: GroupProps) {
       ([name, count]) =>
         `${count} ${count === 1 ? name : name === "search" || name === "fetch" ? `${name}es` : `${name}s`}`,
     )
-    return `${completed() ? "Explored" : "Exploring"} — ${names.join(", ")}`
+    return `${completed() ? "Explored" : "Exploring"}: ${names.join(", ")}`
   })
   const toggle = disclosure.toggle
   const children = (mode: "normal" | "thought" | "tool") => (
