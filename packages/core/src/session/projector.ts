@@ -12,7 +12,7 @@ import { SessionMessage } from "./message"
 import { SessionMessageUpdater } from "./message-updater"
 import { SessionInput } from "./input"
 import { WorkspaceV2 } from "../workspace"
-import { MessageTable, PartTable, SessionInputTable, SessionMessageTable, SessionTable } from "./sql"
+import { MessageTable, PartTable, SessionInputTable, SessionMessageTable, SessionTable, TodoTable, SessionContextEpochTable } from "./sql"
 import type { DeepMutable } from "../schema"
 
 type DatabaseService = Database.Interface["db"]
@@ -255,7 +255,21 @@ const layer = Layer.effectDiscard(
       }),
     )
     yield* events.project(SessionV1.Event.Deleted, (event) =>
-      db.delete(SessionTable).where(eq(SessionTable.id, event.data.sessionID)).run().pipe(Effect.orDie),
+      Effect.gen(function* () {
+        const sessionID = event.data.sessionID
+        // Delete parts first (depends on messages)
+        yield* db.delete(PartTable).where(eq(PartTable.session_id, sessionID)).run().pipe(Effect.orDie)
+        // Delete remaining child tables in parallel
+        yield* Effect.all([
+          db.delete(MessageTable).where(eq(MessageTable.session_id, sessionID)).run().pipe(Effect.orDie),
+          db.delete(SessionMessageTable).where(eq(SessionMessageTable.session_id, sessionID)).run().pipe(Effect.orDie),
+          db.delete(SessionInputTable).where(eq(SessionInputTable.session_id, sessionID)).run().pipe(Effect.orDie),
+          db.delete(SessionContextEpochTable).where(eq(SessionContextEpochTable.session_id, sessionID)).run().pipe(Effect.orDie),
+          db.delete(TodoTable).where(eq(TodoTable.session_id, sessionID)).run().pipe(Effect.orDie),
+        ], { concurrency: "unbounded" })
+        // Finally delete the session itself
+        yield* db.delete(SessionTable).where(eq(SessionTable.id, sessionID)).run().pipe(Effect.orDie)
+      }),
     )
     yield* events.project(SessionV1.Event.MessageUpdated, (event) =>
       Effect.gen(function* () {
