@@ -57,24 +57,27 @@ test("the companion registers one uniquely named skill whose content is the pack
   expect(skill.content).not.toContain("Continue the underlying Superpowers work")
 })
 
-test("the distributable controller rule pauses an unregistered plan", async () => {
-  const readme = await Bun.file(new URL("../README.md", import.meta.url)).text()
-  expect(readme).toContain("The rule applies even when reporting tools are missing")
-  expect(readme).not.toContain("before activating the policy")
-  const policy = readme.split("### Required global controller policy\n")[1]?.split("```text\n")[1]?.split("\n```")[0]
-  expect(policy).toBeDefined()
+test("the plugin-provided root policy covers registration, failure, and completion", async () => {
+  const harness = await reportingHarness()
+  const context = harness.context("root")
+  await harness.apply(context)
+  const policy = harness.reminders(context)[0]
   for (const obligation of [
     "approved Superpowers plan",
-    "plan hash",
+    "SHA-256 plan hash",
+    "superpowers-execution-reporting",
     "execution_read",
     "execution_report run.start",
-    "complete graph, gates, and final review",
+    "complete task graph, required gates, and final review",
     "different plan",
     "until registration succeeds",
     "pause implementation",
     "cooperative safe stop",
     "After recovery",
+    "Report real progress and evidence",
+    "finish only after final review",
   ]) expect(policy).toContain(obligation)
+  expect(await Bun.file(new URL("../README.md", import.meta.url)).text()).toContain("No `AGENTS.md` entry is")
 })
 
 test("a read-only lookup reports no active run and never creates one", async () => {
@@ -82,7 +85,7 @@ test("a read-only lookup reports no active run and never creates one", async () 
   const context = harness.context("root")
   await harness.apply(context)
   expect(harness.reportingReminderCount(context)).toBe(1)
-  expect(harness.reminders(context)[0]).toContain("Before implementing an approved Superpowers plan")
+  expect(harness.reminders(context)[0]).toContain("Before implementation or implementer dispatch for an approved Superpowers plan")
   expect(harness.reminders(context)[0]).toContain("execution_read")
   expect(harness.reminders(context)[0]).toContain("execution_report")
   expect(harness.reminders(context)[0]).toContain("pause")

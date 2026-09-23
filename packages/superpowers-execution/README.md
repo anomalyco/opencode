@@ -78,22 +78,17 @@ for the user-facing guide.
 Importing the contract alone does not install the plugin. With no plugin configured, the UI stays
 in observer mode.
 
-### Required global controller policy
+### Plugin-provided controller policy
 
-After the companion source/package and Execution header fixes are built and verified, add this rule to your installation-wide
-OpenCode controller instructions (`~/.config/opencode/AGENTS.md`). Keep unrelated instructions;
-do not edit cached Superpowers skill files. The rule applies even when reporting tools are missing:
-subsequent approved-plan executions pause until reporting can register a run. It does not govern
-the bootstrap development of the companion itself.
+The companion registers the `superpowers-execution-reporting` skill and injects the controller
+preflight into root-session model requests through its context hook. No `AGENTS.md` entry is
+required. The hook instructs the controller to register or reconcile an approved plan before work,
+pause on reporting failure, and report evidence-backed progress. It does not create runs itself or
+block native tools. If the companion fails to load, its instructions and reporting tools are both
+absent; plugin-only policy cannot direct the controller in that case.
 
-```text
-Before implementation or implementer dispatch for an approved Superpowers plan, the root controller must read the approved plan, compute its plan hash, load superpowers-execution-reporting, call execution_read, then reconcile a matching plan run or persist execution_report run.start with the complete graph, gates, and final review. A run for a different plan is not a match. Do not begin plan work until registration succeeds. If the reporting skill, tools, or storage are unavailable, pause implementation and new dispatch, state the blocker, and allow only read-only diagnosis. If workers are already running, request a cooperative safe stop; do not claim they were automatically paused. After recovery, execution_read and reconcile before resuming. Never substitute a local ledger, badge, or capabilities response for persisted registration.
-```
-
-This is a controller-workflow requirement. It does not add a host-side block to native tools, and
-the plugin does not infer approval or create a run from session text. A source build alone does not
-change the installed server. Separately verify deployment and that the controller can see the
-reporting tools before claiming live registration or starting another approved-plan execution.
+A source build alone does not change the installed server. Verify deployment and that the controller
+can see the reporting tools before claiming live registration or starting another approved-plan execution.
 
 ## Rollback to observer mode
 
