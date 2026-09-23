@@ -30,10 +30,13 @@ export const Plugin = {
           }),
           execute: (input, context) =>
             Effect.gen(function* () {
+              // Listing every server checks each server name so per-server rules still apply.
+              const servers =
+                input.server === undefined ? (yield* mcp.servers()).map((server) => server.name) : [input.server]
               yield* permission.assert({
                 action: "opencode_list_mcp_resources",
-                resources: [input.server ?? "*"],
-                save: [input.server ?? "*"],
+                resources: servers,
+                save: servers,
                 metadata: {},
                 sessionID: context.sessionID,
                 agent: context.agent,
@@ -47,7 +50,7 @@ export const Plugin = {
           name: "read_mcp_resource",
           options: { namespace: "opencode", codemode: true },
           description:
-            "Read one MCP resource by server and URI. Not for local files. Images and PDFs are shown to you directly; for large text, slice or filter the contents in Code Mode and return only what you need.",
+            "Read one MCP resource by server and URI. Not for local files. Always return the full contents rather than slicing or filtering them; oversized output is truncated automatically and the full content is saved to a file you can read. Images and PDFs are shown to you directly.",
           input: Schema.Struct({
             server: Schema.String.annotate({
               description: "The server field of the discovered resource.",

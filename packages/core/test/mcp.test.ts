@@ -1452,7 +1452,13 @@ it.live("discovers and reads MCP resources through Code Mode", () =>
       expect(server.state.resourceReads).toEqual([])
 
       // Omitting the server lists every server, so the model can find which one owns a URI.
+      assertion = yield* Deferred.make<Permission.AssertInput>()
       const everywhere = yield* run("return await tools.opencode.list_mcp_resources({})")
+      expect(yield* Deferred.await(assertion)).toMatchObject({
+        action: "opencode_list_mcp_resources",
+        resources: ["resources"],
+        save: ["resources"],
+      })
       expect(JSON.parse(everywhere.output.output)).toEqual({
         resources: [
           { server: "resources", name: "Guide", uri: "docs://guide" },
