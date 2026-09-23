@@ -78,7 +78,7 @@ export const applyCollectionCallback = <R>(
   ctx: Interpreter<R>,
   callback: Value,
   name: string,
-): ((args: Array<Value>) => Effect.Effect<Value, unknown, R>) => {
+): ((args: Array<Value>, thisValue?: Value) => Effect.Effect<Value, unknown, R>) => {
   if (!isSupportedCallback(callback)) {
     if (typeofValue(callback) === "function") {
       throw typeError(
@@ -87,5 +87,5 @@ export const applyCollectionCallback = <R>(
     }
     throw typeError(`${name} expects a function callback.`)
   }
-  return (callbackArgs) => ctx.call(callback, undefined, callbackArgs)
+  return (callbackArgs, thisValue) => ctx.call(callback, thisValue, callbackArgs)
 }

@@ -1477,3 +1477,97 @@ describe("error constructor prototype chain", () => {
     ).toEqual([true, true, true, true])
   })
 })
+
+describe("this, arguments, and Function.prototype.call/apply/bind", () => {
+  test("this is the call receiver for non-arrow functions and lexical for arrows", async () => {
+    expect(
+      await value(`
+        const o = { n: 1, m() { return this.n }, a() { return (() => this.n)() }, bare() { return this } }
+        const detached = o.bare
+        function f() { return this }
+        return [o.m(), o["m"](), o?.m(), (o.m)(), o.a(), o.bare() === o, detached(), f(), (0, o.bare)(), this, (() => this)()]
+      `),
+    ).toEqual([1, 1, 1, 1, 1, true, null, null, null, null, null])
+  })
+
+  test("this reaches generator and async methods and plain-function callbacks", async () => {
+    expect(
+      await value(`
+        const o = { n: 2, *g() { yield this.n }, async m() { return this.n }, xs: [1, 2], go() { return this.xs.map(function (x) { return [x, this] }) } }
+        return [[...o.g()], await o.m(), o.go()]
+      `),
+    ).toEqual([
+      [2],
+      2,
+      [
+        [1, null],
+        [2, null],
+      ],
+    ])
+  })
+
+  test("arguments is an unmapped array-like that arrows and parameters interact with as in JS", async () => {
+    expect(
+      await value(`
+        function f(a) { arguments[0] = 9; return [arguments.length, arguments[1], a, [...arguments], Array.isArray(arguments), JSON.stringify(arguments), typeof arguments.map, (() => arguments[1])()] }
+        function shadow(arguments) { return arguments }
+        function hoisted() { var arguments; return arguments.length }
+        let outer
+        try { outer = arguments } catch (error) { outer = error.name }
+        return [f(1, 2), shadow(7), hoisted(1, 2, 3), outer]
+      `),
+    ).toEqual([[2, 2, 1, [9, 2], false, '{"0":9,"1":2}', "undefined", 2], 7, 3, "ReferenceError"])
+  })
+
+  test("call, apply, and bind set this and arguments on program functions and built-ins", async () => {
+    expect(
+      await value(`
+        function f(a, b, c) { return [this, a, b, c] }
+        const g = f.bind({ k: 1 }, "A")
+        const arr = [1]
+        Array.prototype.push.call(arr, 2, 3)
+        return [
+          f.call("t", 1, 2),
+          f.apply({ k: 2 }, [1, 2]),
+          f.apply(null, { length: 2, 0: "x", 1: "y" }),
+          f.apply(null).length,
+          g("B", "C"), g.name, g.length,
+          f.bind(1).bind(2)()[0],
+          arr,
+          Math.max.apply(null, [1, 5, 3]),
+          Math.max.bind(null, 10)(3),
+          [1, 2].map(f.bind(null, 0)).map((r) => r[1]),
+        ]
+      `),
+    ).toEqual([
+      ["t", 1, 2, null],
+      [{ k: 2 }, 1, 2, null],
+      [null, "x", "y", null],
+      4,
+      [{ k: 1 }, "A", "B", "C"],
+      "bound f",
+      2,
+      1,
+      [1, 2, 3],
+      5,
+      10,
+      [0, 0],
+    ])
+  })
+
+  test("call and apply reject non-callable receivers and non-array-like argument lists", async () => {
+    expect((await error(`Function.prototype.call.call(1)`)).message).toContain(
+      "Function.prototype.call called on incompatible receiver",
+    )
+    expect((await error(`(() => 1).apply(null, 5)`)).message).toContain("expects an array-like argument list")
+    expect((await error(`(() => 1).apply(null, { length: 1e9 })`)).message).toContain("Invalid array length")
+    expect(
+      await value(
+        `function f() { return arguments.length } return [f.apply(null, { length: -5 }), f.apply(null, { length: "2" })]`,
+      ),
+    ).toEqual([0, 2])
+    expect((await error(`function f(n) { return f.call(null, n + 1) } f(0)`)).message).toContain(
+      "Maximum call stack size exceeded",
+    )
+  })
+})

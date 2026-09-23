@@ -1,4 +1,5 @@
 import type {
+  AnyNode,
   ArrayExpression,
   ArrayPattern,
   AssignmentPattern,
@@ -81,6 +82,7 @@ import {
   keys,
   Native,
   parseArrayIndex,
+  Arguments,
   Arr,
   Fn,
   GeneratorObj,
@@ -176,6 +178,24 @@ const collectPatternNames = (pattern: Pattern, out: Array<string> = []): Array<s
       break
   }
   return out
+}
+
+// Whether a function body (or a parameter default) reads `arguments`, looking through arrows but not nested
+// functions, which own theirs. Memoized so the object is only built for calls that can observe it.
+const argumentsUse = new WeakMap<Fn["body"], boolean>()
+const usesArguments = (fn: Fn): boolean => {
+  const cached = argumentsUse.get(fn.body)
+  if (cached !== undefined) return cached
+  const found = [...fn.parameters, fn.body].some(function visit(node: AnyNode | null): boolean {
+    if (node === null || typeof node !== "object") return false
+    if (node.type === "Identifier") return node.name === "arguments"
+    if (node.type === "FunctionDeclaration" || node.type === "FunctionExpression") return false
+    return Object.values(node).some((child) =>
+      Array.isArray(child) ? child.some((item) => visit(item)) : visit(child as AnyNode | null),
+    )
+  })
+  argumentsUse.set(fn.body, found)
+  return found
 }
 
 // `var` names declared anywhere in a function body except inside nested functions, which own theirs.
@@ -287,7 +307,8 @@ export class Interpreter<R> {
     this.pending = options.pending
     this.builtins = options.builtins
     this.logs = options.logs ?? []
-    const globalScope = new Map<string, Binding>()
+    // Program code has no receiver: top-level `this` is undefined, as in a module.
+    const globalScope = new Map<string, Binding>([["this", { mutable: false, value: undefined }]])
     // Calling back into the program never reads frame state, so any frame serves; the root is always alive.
     this.root = new Frame(this, new ScopeStack([globalScope]))
     for (const [name, value] of [...globals(this), ...(options.globals?.(this) ?? [])]) {
@@ -468,6 +489,7 @@ class Frame<R> {
       this.scopes.capture(),
       node.async,
       node.generator,
+      node.type === "ArrowFunctionExpression",
     )
     // Each generator function gets its own prototype, so `g() instanceof g` holds as in JS.
     if (node.generator)
@@ -1257,6 +1279,8 @@ class Frame<R> {
       }
       case "Identifier":
         return Effect.sync(() => this.scopes.get(node.name, node))
+      case "ThisExpression":
+        return Effect.sync(() => this.scopes.get("this", node))
       case "BinaryExpression":
         return this.evaluateBinaryExpression(node)
       case "LogicalExpression":
@@ -1622,7 +1646,7 @@ class Frame<R> {
         }
         return yield* self.createToolCallPromise(callable.path, args)
       }
-      if (callable instanceof Fn) return yield* self.invokeFunction(callable, args, node)
+      if (callable instanceof Fn) return yield* self.invokeFunction(callable, thisValue, args, node)
       if (callable instanceof Native) {
         return yield* self.native(() => (callable as Native<R>).call(thisValue, args), node)
       }
@@ -1664,14 +1688,24 @@ class Frame<R> {
   }
 
   // A callback invoked by a built-in runs below the call that invoked the built-in, so the deeper of the two counts.
-  invokeFunction(fn: Fn, args: Array<Value>, node?: AstNode): Effect.Effect<Value, unknown, R> {
+  invokeFunction(fn: Fn, thisValue: Value, args: Array<Value>, node?: AstNode): Effect.Effect<Value, unknown, R> {
     const self = this
     return Effect.flatMap(CallSite, (site) => {
       const depth = Math.max(self.depth, site.depth) + 1
       if (depth > MAX_CALL_DEPTH) throw rangeError("Maximum call stack size exceeded", node)
       const invocation = new Frame(this.ctx, new ScopeStack([...fn.capturedScopes, new Map()]), depth)
-      // Seed all parameters first so defaults cannot fall through to same-named outer bindings.
       const paramScope = invocation.scopes.current()
+      // `this` and `arguments` are scope bindings so arrows resolve them lexically; a parameter named
+      // `arguments` shadows the object, as in JS.
+      if (!fn.arrow) paramScope.set("this", { mutable: false, value: thisValue, initialized: true })
+      if (!fn.arrow && usesArguments(fn)) {
+        paramScope.set("arguments", {
+          mutable: true,
+          value: new Arguments(self.ctx.builtins.Object, args),
+          initialized: true,
+        })
+      }
+      // Seed all parameters first so defaults cannot fall through to same-named outer bindings.
       for (const parameter of fn.parameters) {
         for (const name of collectPatternNames(parameter)) {
           paramScope.set(name, { mutable: true, value: undefined, initialized: false })

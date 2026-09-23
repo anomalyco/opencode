@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import type { Value } from "./objects.js"
+import { Arr, Callable, coerceToInteger, coerceToString, get, Obj, type Value } from "./objects.js"
 import { arrayGlobal } from "../stdlib/array.js"
 import { textDecoderGlobal, textEncoderGlobal, uint8ArrayGlobal } from "../stdlib/bytes.js"
 import { mapGlobal, setGlobal } from "../stdlib/collections.js"
@@ -19,8 +19,9 @@ import { base64Global, cryptoGlobal, structuredCloneGlobal } from "../stdlib/web
 import { ToolReference } from "../tool-runtime.js"
 import { errorGlobal } from "./errors.js"
 import { errorTypes } from "./intrinsics.js"
-import { constants, constructor, native } from "./native.js"
+import { constants, constructor, methods, native, receiver } from "./native.js"
 import { AsyncIteratorSymbol, IteratorSymbol, typeError } from "./model.js"
+import { checkArrayLength } from "./limits.js"
 import { generatorGlobals } from "./generators.js"
 import { promiseGlobal } from "./promises.js"
 import type { Interpreter } from "./interpreter.js"
@@ -31,12 +32,40 @@ const functionGlobal = <R>(ctx: Interpreter<R>) => {
     Effect.sync(() => {
       throw typeError("The Function constructor is not supported; write the function inline.")
     })
+  const target = (thisValue: Value, method: string) => receiver(Callable, thisValue, `Function.prototype.${method}`)
+  methods(ctx.builtins, ctx.builtins.Function, [
+    ["call", 1, (thisValue, args) => ctx.call(target(thisValue, "call"), args[0], args.slice(1))],
+    ["apply", 2, (thisValue, args) => ctx.call(target(thisValue, "apply"), args[0], listFromArrayLike(args[1]))],
+    [
+      "bind",
+      1,
+      (thisValue, args) => {
+        const fn = target(thisValue, "bind")
+        const bound = args.slice(1)
+        return native<R>(ctx.builtins, {
+          name: `bound ${coerceToString(get(fn, "name"))}`,
+          length: Math.max(0, fn.length - bound.length),
+          call: (_, rest) => ctx.call(fn, args[0], [...bound, ...rest]),
+        })
+      },
+    ],
+  ])
   return constructor<R>(ctx.builtins, ctx.builtins.Function, {
     name: "Function",
     length: 1,
     call: reject,
     construct: reject,
   })
+}
+
+// CreateListFromArrayLike: `apply` reads `length` and the indexed properties of any object.
+const listFromArrayLike = (value: Value): Array<Value> => {
+  if (value === undefined || value === null) return []
+  if (value instanceof Arr) return [...value.items]
+  if (!(value instanceof Obj)) throw typeError("Function.prototype.apply expects an array-like argument list.")
+  const length = Math.max(0, coerceToInteger(get(value, "length")))
+  checkArrayLength(length)
+  return Array.from({ length }, (_, index) => get(value, String(index)))
 }
 
 const symbolGlobal = <R>(ctx: Interpreter<R>) => {

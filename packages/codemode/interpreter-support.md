@@ -139,11 +139,24 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       arrow function.
 - [x] Promise-returning string replacers are coerced synchronously to `"[object Promise]"`, like JavaScript; they are
       not automatically awaited.
-- [x] The optional `thisArg` of iteration methods is accepted and ignored: CodeMode functions have no `this`, so
-      ignoring it matches JS arrow-function semantics exactly.
-- [ ] `this` in non-arrow CodeMode functions and callbacks.
+- [x] `this` in non-arrow functions is the call's receiver: `obj.m()` and `obj["m"]()` see `obj`, a bare or detached
+      call (`f()`, `const m = obj.m; m()`, `(0, obj.m)()`) sees `undefined`, as in strict JS. Arrows read the enclosing
+      function's `this`. Program code has no receiver, so top-level `this` is `undefined`, as in a module.
+- [x] `arguments` in non-arrow functions: an unmapped ordinary object with the call's arguments as indexed
+      properties and a hidden `length`; iterable, so spread, `for...of`, and `Array.from` work. It is not an Array
+      (`JSON.stringify` gives `{"0":1}`, `String` gives `[object Arguments]`). A parameter named `arguments` shadows
+      it; arrows read the enclosing function's; it is only created for functions whose body mentions it. `callee`
+      and `caller` are absent rather than poisoned.
+- [ ] Array methods on `arguments` and other array-likes (`Array.prototype.slice.call(arguments, 1)`); use
+      `[...arguments]` or a rest parameter meanwhile.
+- [x] `Function.prototype.call`, `apply`, and `bind` on program functions and built-ins:
+      `Array.prototype.push.call(arr, 1)`, `Math.max.apply(null, values)`, `fn.bind(obj, first)`. `apply` accepts an
+      array, an array-like object (its `length` clamped and capped like `Array.from`), or `null`/`undefined`. A
+      bound function is named `bound f`, has its remaining `length`, and is not constructible.
+- [x] `JSON.parse` revivers and `JSON.stringify` function replacers see the holder object as `this`.
+- [ ] The optional `thisArg` of iteration methods (`map`, `forEach`, `Map.prototype.forEach`, `Array.from`, …) is
+      accepted but not yet passed as `this`; callbacks run with `this` undefined.
 - [ ] User-defined constructor calls.
-- [ ] `Function.prototype.call`, `apply`, and `bind` for CodeMode functions.
 - [ ] Classes and private fields.
 - [x] Functions are objects: they hold own properties (`fn.count = 1`), enumerate them, and expose read-only `name`
       and `length`. Names follow JavaScript's NamedEvaluation: declarations, named expressions, bindings,
@@ -178,7 +191,7 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       yielded promises; mixed async request queues; sync and async `yield*` forwarding; malformed methods/results;
       and declaration, expression, and object-method forms with closure and parameter behavior. The adapted suite
       deliberately skips Test262 variants whose observation mechanism requires unsupported getter definitions,
-      proxies, prototype inspection or mutation, non-arrow `this`, classes, or arbitrary symbols. It also skips tests
+      proxies, prototype inspection or mutation, classes, or arbitrary symbols. It also skips tests
       asserting exact promise reaction-turn counts beyond the observable ordering guarantee documented below. These
       are interpreter-surface boundaries, not claims that the corresponding full Test262 families pass unchanged.
 
@@ -269,7 +282,7 @@ reject }` object.
 - [x] Recursive assimilation of objects with an own callable `then` field across `Promise.resolve`, combinators,
       constructors, reactions, `finally`, `await`, and async returns. Thenable methods run deferred, receive
       first-call-wins resolve/reject functions, and ignore throws after settlement. Inherited/accessor `then` fields
-      and a JavaScript `this` receiver remain outside the supported object/function model.
+      remain outside the supported object model.
 - [x] Dotted tool names are canonicalized into namespace paths; a path can be both callable and a namespace, and the
       last tool supplied for a canonical path wins.
 - [x] Tool path segments may be named `constructor`, `prototype`, or `__proto__` because paths use inert Map keys.
@@ -419,9 +432,9 @@ reject }` object.
 - [x] `JSON.parse` and `JSON.stringify` for supported data objects.
 - [x] Numeric/string indentation for `JSON.stringify`.
 - [x] `JSON.parse` reviver callbacks, including postorder traversal, deletion through `undefined`, and root replacement.
-      Revivers receive `(key, value)` but no `this` holder because CodeMode functions intentionally have no `this`.
+      Revivers receive `(key, value)` with the holder as `this`.
 - [x] `JSON.stringify` function and array replacers. Function replacers receive `(key, value)` in preorder, including
-      the root, but no `this` holder. Array replacers preserve requested property order, deduplicate names, coerce
+      the root, with the holder as `this`. Array replacers preserve requested property order, deduplicate names, coerce
       number primitives, and ignore non-string/non-number entries. Primitive wrapper entries remain unsupported.
 - [x] Captured `console.log`, `console.info`, `console.debug`, `console.warn`, and `console.error`. An Error prints as
       `Error.prototype.toString` would show it (`Error: boom`), wherever it appears in the logged value.
