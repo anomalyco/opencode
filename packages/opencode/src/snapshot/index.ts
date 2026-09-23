@@ -1,5 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Cause, Duration, Effect, Layer, Schedule, Schema, Semaphore, Context, Option } from "effect"
+import { Cause, Deferred, Duration, Effect, Layer, Schedule, Schema, Semaphore, Context, Option } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { formatPatch, structuredPatch } from "diff"
 import path from "path"
@@ -602,11 +602,12 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
             )
           })
 
-          const track = Effect.fnUntraced(function* () {
+          const trackOnce = Effect.fnUntraced(function* (onStart: () => void) {
             return yield* safeLocked(
               "track",
               undefined,
               Effect.gen(function* () {
+                onStart()
                 if (!(yield* enabled())) return
                 const existed = yield* exists(state.gitdir)
                 yield* fs.ensureDir(state.gitdir).pipe(Effect.orDie)
@@ -661,6 +662,36 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
                   }),
                 )
               }),
+            )
+          })
+
+          // Parallel agents in one worktree call track() at every step boundary, and each
+          // capture is a full stage + write-tree pass behind the gitdir lock. Coalesce bursts:
+          // callers that arrive before the queued capture takes the lock share its tree (taken
+          // after they asked, so it reflects their writes); callers that arrive while a capture
+          // runs queue the next one. A burst of N callers costs at most two captures instead of N.
+          const trackSlot: { pending?: Deferred.Deferred<{ hash: string | undefined } | undefined> } = {}
+          const track = Effect.fnUntraced(function* () {
+            const pending = trackSlot.pending
+            if (pending) {
+              const joined = yield* Deferred.await(pending)
+              // An interrupted leader resolves undefined; capture independently in that case.
+              if (joined) return joined.hash
+              return yield* trackOnce(() => {})
+            }
+            const next = Deferred.makeUnsafe<{ hash: string | undefined } | undefined>()
+            trackSlot.pending = next
+            const release = () => {
+              if (trackSlot.pending === next) trackSlot.pending = undefined
+            }
+            return yield* trackOnce(release).pipe(
+              Effect.tap((hash) => Deferred.succeed(next, { hash })),
+              Effect.ensuring(
+                Effect.suspend(() => {
+                  release()
+                  return Deferred.succeed(next, undefined)
+                }),
+              ),
             )
           })
 

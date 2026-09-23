@@ -118,6 +118,22 @@ it.instance(
 )
 
 it.instance(
+  "coalesces concurrent track() bursts into shared captures",
+  withTrackedSnapshot(({ tmp, snapshot, before }) =>
+    Effect.gen(function* () {
+      const burst = () => Effect.all(Array.from({ length: 20 }, () => snapshot.track()), { concurrency: "unbounded" })
+      expect(new Set(yield* burst())).toEqual(new Set([before]))
+      yield* write(`${tmp.path}/burst.txt`, "burst")
+      const changed = yield* burst()
+      expect(new Set(changed).size).toBe(1)
+      expect(changed[0]).toBeTruthy()
+      expect(changed[0]).not.toBe(before)
+    }),
+  ),
+  { git: true },
+)
+
+it.instance(
   "revert should remove new files",
   withTrackedSnapshot(({ tmp, snapshot, before }) =>
     Effect.gen(function* () {
