@@ -102,6 +102,9 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   plugins: ConfigPlugin.Plugins.pipe(Schema.optional).annotate({
     description: "Ordered external plugin packages to load",
   }),
+  secret_shield: Schema.Literals(["off", "warn", "mask", "block"]).pipe(Schema.optional).annotate({
+    description: "Scan outbound messages for credential patterns before sending to the model provider",
+  }),
   experimental: ConfigExperimental.Experimental.pipe(Schema.optional),
   providers: Schema.Record(Schema.String, ConfigProvider.Info).pipe(Schema.optional),
 }) {}
