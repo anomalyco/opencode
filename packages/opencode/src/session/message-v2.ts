@@ -161,7 +161,11 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
     if (model.api.npm === "@ai-sdk/anthropic") return true
     if (model.api.npm === "@ai-sdk/openai") return true
     if (model.api.npm === "@ai-sdk/amazon-bedrock/mantle") return true
-    if (model.api.npm === "@ai-sdk/amazon-bedrock") return attachment.mime.startsWith("image/")
+    if (model.api.npm === "@ai-sdk/amazon-bedrock") {
+      if (!attachment.mime.startsWith("image/")) return false
+      const id = model.api.id.toLowerCase()
+      return id.includes("anthropic.") || id.includes("nova") || id.includes("llama4") || id.includes("llama-4")
+    }
     if (model.api.npm === "@ai-sdk/xai") return attachment.mime.startsWith("image/")
     if (model.api.npm === "@ai-sdk/google-vertex/anthropic") return true
     if (model.api.npm === "@ai-sdk/google") {

@@ -1,5 +1,5 @@
 export const dict = {
-  "go.promo.unionAlpha": "Union Alpha is free for a limited time",
+  "go.promo.spaceBunny": "Space Bunny Free, a new anonymous model, is available for a limited time",
   "go.graph.bonus": "{{count}}× usage",
   "nav.github": "GitHub",
   "nav.docs": "Docs",
@@ -282,7 +282,6 @@ export const dict = {
   "go.graph.showLess": "Show fewer models",
   "go.graph.limitedRegions": "limited regions",
   "go.graph.limitedTime": "limited time",
-  "go.graph.unlimited": "unlimited",
   "go.graph.tick": "{{n}}x",
   "go.graph.usageLimits": "Usage limits",
   "go.graph.aria": "Requests per 5h: {{free}} vs {{go}}",
