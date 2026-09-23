@@ -791,6 +791,89 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("lowers inline PDFs as file parts", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user([
+              { type: "text", text: "Summarize these." },
+              { type: "media", media: Media.base64("JVBERi0=", "application/pdf"), filename: "report.pdf" },
+              { type: "media", media: Media.fromDataUrl("data:application/pdf;base64,JVBERi0=") },
+            ]),
+          ],
+        }),
+      )
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Summarize these." },
+            { type: "file", file: { filename: "report.pdf", file_data: "data:application/pdf;base64,JVBERi0=" } },
+            { type: "file", file: { filename: "document.pdf", file_data: "data:application/pdf;base64,JVBERi0=" } },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("moves PDFs from tool results into a follow-up user message", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user("Read the report."),
+            Message.assistant([ToolCallPart.make({ id: "call_pdf", name: "read", input: {} })]),
+            Message.tool({
+              id: "call_pdf",
+              name: "read",
+              resultType: "content",
+              result: [
+                { type: "text", text: "PDF read successfully" },
+                {
+                  type: "file",
+                  mime: "application/pdf",
+                  uri: "data:application/pdf;base64,JVBERi0=",
+                  name: "report.pdf",
+                },
+              ],
+            }),
+          ],
+        }),
+      )
+      expect(prepared.body.messages).toContainEqual({
+        role: "tool",
+        tool_call_id: "call_pdf",
+        content: "PDF read successfully",
+      })
+      expect(prepared.body.messages.at(-1)).toEqual({
+        role: "user",
+        content: [
+          { type: "file", file: { filename: "report.pdf", file_data: "data:application/pdf;base64,JVBERi0=" } },
+        ],
+      })
+    }),
+  )
+
+  it.effect("requires inline data for PDF files", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user({
+              type: "media",
+              media: Media.url("https://example.com/report.pdf", { mediaType: "application/pdf" }),
+            }),
+          ],
+        }),
+      ).pipe(Effect.flip)
+      expect(error.message).toContain("OpenAI Chat requires inline media")
+    }),
+  )
+
   it.effect("prepares raw and data URL image media as vision input", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
