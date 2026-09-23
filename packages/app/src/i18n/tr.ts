@@ -753,7 +753,6 @@ export const dict = {
 
   "session.tab.session": "Oturum",
   "session.tab.review": "İnceleme",
-  "session.tab.context": "Bağlam",
   "session.tab.unknown": "Bilinmeyen Oturum",
   "session.panel.reviewAndFiles": "İnceleme ve dosyalar",
   "session.error.notFound": "Bu oturum bulunamıyor",
