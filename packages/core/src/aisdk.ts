@@ -697,7 +697,7 @@ function metadataProviderOptions(input: ProviderMetadata | undefined): SharedV3P
 }
 
 function streamLanguage(language: LanguageModelV3, options: LanguageModelV3CallOptions, http?: HttpMiddleware) {
-  const state = { step: 0, toolNames: {} as Record<string, string> }
+  const state: StreamState = { step: 0, toolNames: {}, open: {} }
   return Stream.concat(
     Stream.make(LLMEvent.stepStart({ index: state.step })),
     Stream.unwrap(
@@ -723,8 +723,16 @@ function streamLanguage(language: LanguageModelV3, options: LanguageModelV3CallO
   )
 }
 
+type Fragment = "text" | "reasoning"
+
+type StreamState = {
+  step: number
+  toolNames: Record<string, string>
+  open: Partial<Record<Fragment, string>>
+}
+
 function streamPartEvents(
-  state: { step: number; toolNames: Record<string, string> },
+  state: StreamState,
   event: LanguageModelV3StreamPart,
 ): Effect.Effect<ReadonlyArray<LLMEvent>, AIError> {
   switch (event.type) {
@@ -736,11 +744,10 @@ function streamPartEvents(
     case "tool-approval-request":
       return Effect.succeed([])
     case "text-start":
-      return Effect.succeed([
-        LLMEvent.textStart({ id: event.id, providerMetadata: providerMetadata(event.providerMetadata) }),
-      ])
+      return Effect.succeed(openFragment(state, "text", event.id, providerMetadata(event.providerMetadata)))
     case "text-delta":
       return Effect.succeed([
+        ...openFragment(state, "text", event.id),
         LLMEvent.textDelta({
           id: event.id,
           text: event.delta,
@@ -748,15 +755,12 @@ function streamPartEvents(
         }),
       ])
     case "text-end":
-      return Effect.succeed([
-        LLMEvent.textEnd({ id: event.id, providerMetadata: providerMetadata(event.providerMetadata) }),
-      ])
+      return Effect.succeed(closeFragment(state, "text", event.id, providerMetadata(event.providerMetadata)))
     case "reasoning-start":
-      return Effect.succeed([
-        LLMEvent.reasoningStart({ id: event.id, providerMetadata: providerMetadata(event.providerMetadata) }),
-      ])
+      return Effect.succeed(openFragment(state, "reasoning", event.id, providerMetadata(event.providerMetadata)))
     case "reasoning-delta":
       return Effect.succeed([
+        ...openFragment(state, "reasoning", event.id),
         LLMEvent.reasoningDelta({
           id: event.id,
           text: event.delta,
@@ -764,9 +768,7 @@ function streamPartEvents(
         }),
       ])
     case "reasoning-end":
-      return Effect.succeed([
-        LLMEvent.reasoningEnd({ id: event.id, providerMetadata: providerMetadata(event.providerMetadata) }),
-      ])
+      return Effect.succeed(closeFragment(state, "reasoning", event.id, providerMetadata(event.providerMetadata)))
     case "tool-input-start":
       state.toolNames[event.id] = event.toolName
       return Effect.succeed([
@@ -841,6 +843,29 @@ function streamPartEvents(
     case "error":
       return Effect.fail(llmError(event.error, "read"))
   }
+}
+
+// Session persists one open text and one open reasoning fragment at a time, while AI SDK providers may overlap,
+// repeat, or omit fragment boundaries. Like the native protocol lifecycles, a start or delta for another fragment
+// closes the open one, repeated starts are ignored, and ends for fragments that are not open are dropped.
+function openFragment(state: StreamState, kind: Fragment, id: string, providerMetadata?: ProviderMetadata) {
+  const open = state.open[kind]
+  if (open === id) return []
+  state.open[kind] = id
+  const start =
+    kind === "text" ? LLMEvent.textStart({ id, providerMetadata }) : LLMEvent.reasoningStart({ id, providerMetadata })
+  if (open === undefined) return [start]
+  return [fragmentEnd(kind, open), start]
+}
+
+function closeFragment(state: StreamState, kind: Fragment, id: string, providerMetadata?: ProviderMetadata) {
+  if (state.open[kind] !== id) return []
+  state.open[kind] = undefined
+  return [fragmentEnd(kind, id, providerMetadata)]
+}
+
+function fragmentEnd(kind: Fragment, id: string, providerMetadata?: ProviderMetadata) {
+  return kind === "text" ? LLMEvent.textEnd({ id, providerMetadata }) : LLMEvent.reasoningEnd({ id, providerMetadata })
 }
 
 function usage(input: Extract<LanguageModelV3StreamPart, { type: "finish" }>["usage"]): UsageInput | undefined {
