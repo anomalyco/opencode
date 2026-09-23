@@ -746,8 +746,18 @@ function isGemini25(apiId: string) {
   return GEMINI_2_5_RE.test(apiId)
 }
 
+// Token budgets are the fallback for models without effort controls, so a
+// default effort must never be merged with a budget-shaped variant.
+function usesTokenBudget(model: Provider.Model) {
+  return Object.values(model.variants ?? {}).some(
+    (variant) => variant.thinkingConfig?.thinkingBudget !== undefined || variant.reasoning?.max_tokens !== undefined,
+  )
+}
+
 function googleThinkingLevelEfforts(apiId: string) {
   const id = apiId.toLowerCase()
+  // Gemma 4 only toggles thinking: "minimal" disables it and "high" enables it.
+  if (id.includes("gemma")) return ["minimal", "high"]
   if (isLegacyGemini(id)) return ["low", "high"]
   if (id.includes("flash-image")) return ["minimal", "high"]
   if (id.includes("pro-image")) return ["high"]
@@ -1248,7 +1258,11 @@ export function options(input: {
     result["usage"] = {
       include: true,
     }
-    if (input.model.api.id.toLowerCase().includes("gemini") && !isLegacyGemini(input.model.api.id)) {
+    if (
+      input.model.api.id.toLowerCase().includes("gemini") &&
+      !isLegacyGemini(input.model.api.id) &&
+      !usesTokenBudget(input.model)
+    ) {
       result["reasoning"] = { effort: "high" }
     }
   }
@@ -1280,7 +1294,7 @@ export function options(input: {
       result["thinkingConfig"] = {
         includeThoughts: true,
       }
-      if (!isLegacyGemini(input.model.api.id)) {
+      if (!isLegacyGemini(input.model.api.id) && !usesTokenBudget(input.model)) {
         result["thinkingConfig"]["thinkingLevel"] = "high"
       }
     }
