@@ -341,6 +341,42 @@ const make = Effect.gen(function* () {
     )
   }
 
+  // The installer script installs whatever `uname -s` reports, and it only knows Windows as
+  // MINGW/MSYS/CYGWIN. A Windows machine can hold two different bash.exe: Git Bash, which the
+  // installer supports, and the WSL entry point, which reports Linux and would replace the
+  // Windows binary with a Linux one. Which one a bare "bash" reaches depends on the PATH the
+  // process inherited, so ask each candidate which system it runs on instead of guessing.
+  const curlShell = Effect.fnUntraced(function* () {
+    if (process.platform !== "win32") return "bash"
+    const probe = (command: string[]) =>
+      exec(command).pipe(Effect.orElseSucceed(() => ({ code: 1, stdout: "", stderr: "" })))
+    const found = yield* probe(["where.exe", "bash"])
+    const roots = [process.env.ProgramFiles, process.env["ProgramFiles(x86)"]].filter(
+      (item): item is string => Boolean(item),
+    )
+    const candidates = Array.from(
+      new Set(
+        [
+          process.env.OPENCODE_GIT_BASH_PATH,
+          ...found.stdout.split(/\r?\n/).map((line) => line.trim()),
+          ...roots.map((root) => path.join(root, "Git", "bin", "bash.exe")),
+          "bash",
+        ].filter((item): item is string => Boolean(item)),
+      ),
+    )
+    for (const candidate of candidates) {
+      const uname = yield* probe([candidate, "-c", "uname -s"])
+      if (/^(mingw|msys|cygwin)/i.test(uname.stdout.trim())) return candidate
+    }
+    return yield* Effect.fail(
+      new UpgradeError({
+        title: "The OpenCode installer needs Git Bash",
+        detail: `No bash on this machine reports a Windows system: ${candidates.join(", ")}.`,
+        retry: "Install Git for Windows or set OPENCODE_GIT_BASH_PATH, then run opencode upgrade again.",
+      }),
+    )
+  })
+
   const upgrade = Effect.fnUntraced(function* (method: Method, input: string) {
     if (!parseReleaseVersion(input)) return yield* Effect.fail(new Error(`Invalid version: ${input}`))
     const version = input.trim().replace(/^v/, "")
@@ -385,6 +421,7 @@ const make = Effect.gen(function* () {
         }
         if (method === "curl") {
           yield* fs.makeDirectory(global.cache, { recursive: true })
+          const shell = yield* curlShell()
           const directory = yield* temporaryDirectory("update-")
           const installer = path.join(directory, "install")
           yield* runUpgrade({
@@ -398,7 +435,7 @@ const make = Effect.gen(function* () {
             method,
             runUpgrade({
               method,
-              command: ["bash", installer, "--version", version, "--no-modify-path"],
+              command: [shell, installer, "--version", version, "--no-modify-path"],
               displayCommand: ["opencode", "upgrade", version, "--method", "curl"],
               title: "The OpenCode installer failed",
             }),
