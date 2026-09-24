@@ -376,6 +376,7 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
             "tool-call",
           ])
         if (part.type === "text") {
+          if (part.text.length === 0) continue
           content.push(...textWithCache(breakpoints, part.text, part.cache))
           continue
         }
@@ -418,7 +419,7 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
     else messages.push({ role: "user", content })
   }
 
-  return messages
+  return ProviderShared.trimAssistantPrefill(messages)
 })
 
 // System prompts share the cache-point convention: emit the text block, then
