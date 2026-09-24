@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { LLM, Message, ToolCallPart } from "../../src/index.js"
+import { LanguageModel, LLM, Message, ToolCallPart } from "../../src/index.js"
 import { GoogleVertex, GoogleVertexChat, GoogleVertexMessages, GoogleVertexResponses } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -414,7 +414,7 @@ describe("Google Vertex providers", () => {
     }),
   )
 
-  it.effect("applies Gemini schema rules only on the Gemini API, including tuned endpoints", () =>
+  it.effect("applies Gemini schema rules to the Gemini API and Gemini models unless opted out", () =>
     Effect.gen(function* () {
       const vertex = { accessToken: "vertex-token", location: "us-central1", project: "vertex-project" }
       const inputSchema = { type: "object", required: ["query", "missing"], properties: { query: { type: "string" } } }
@@ -427,11 +427,14 @@ describe("Google Vertex providers", () => {
           }),
         )
 
-      const tuned = yield* request(GoogleVertex.configure(vertex).model("endpoints/1234567890"))
-      expect(tuned.body.tools?.[0]?.functionDeclarations[0]?.parametersJsonSchema).toEqual({
-        ...inputSchema,
-        required: ["query"],
-      })
+      const normalized = { ...inputSchema, required: ["query"] }
+      const tunedModel = GoogleVertex.configure(vertex).model("endpoints/1234567890")
+      const tuned = yield* request(tunedModel)
+      expect(tuned.body.tools?.[0]?.functionDeclarations[0]?.parametersJsonSchema).toEqual(normalized)
+      const optedOut = yield* request(LanguageModel.update(tunedModel, { compatibility: { toolSchema: "none" } }))
+      expect(optedOut.body.tools?.[0]?.functionDeclarations[0]?.parametersJsonSchema).toEqual(inputSchema)
+      const geminiChat = yield* request(GoogleVertexChat.configure(vertex).model("google/gemini-3.8-flash"))
+      expect(geminiChat.body.tools?.[0]?.function.parameters).toEqual(normalized)
 
       const chat = yield* request(GoogleVertexChat.configure(vertex).model("deepseek-ai/deepseek-v3.2-maas"))
       expect(chat.body.tools?.[0]?.function.parameters).toEqual(inputSchema)

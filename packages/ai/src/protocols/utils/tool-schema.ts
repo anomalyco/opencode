@@ -1,4 +1,4 @@
-import type { JsonSchema, LanguageModel } from "../../schema/index.js"
+import type { JsonSchema, LanguageModel, LanguageModelToolSchemaCompatibility } from "../../schema/index.js"
 import { isRecord } from "../../utils/record.js"
 import { GeminiJsonSchema } from "./gemini-json-schema.js"
 
@@ -48,19 +48,29 @@ const responses = openAI
 
 const gemini = GeminiJsonSchema.normalize
 
-// An explicit compatibility setting wins. Otherwise the model name selects the model family's
-// rules, so models reached through gateways and OpenAI-compatible endpoints get the same handling.
 const MODEL_NAMES = [
   [/gemini/i, "gemini"],
   [/kimi/i, "moonshot"],
 ] as const
 
-const modelCompatibility = (schema: JsonSchema, model: LanguageModel): JsonSchema => {
-  switch (model.compatibility?.toolSchema ?? MODEL_NAMES.find(([name]) => name.test(model.id))?.[1]) {
+// An explicit compatibility setting wins, and `none` opts out. Otherwise the protocol's own default
+// applies (the Gemini API always uses Gemini's rules), then the model name selects the family's rules
+// so models reached through gateways and OpenAI-compatible endpoints get the same handling.
+const modelCompatibility = (
+  schema: JsonSchema,
+  model: LanguageModel,
+  protocolDefault?: LanguageModelToolSchemaCompatibility,
+): JsonSchema => {
+  switch (
+    model.compatibility?.toolSchema ??
+    protocolDefault ??
+    MODEL_NAMES.find(([name]) => name.test(model.id))?.[1]
+  ) {
     case "gemini":
       return gemini(schema)
     case "moonshot":
       return moonshot(schema)
+    case "none":
     case undefined:
       return schema
   }

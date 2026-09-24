@@ -152,7 +152,8 @@ export const ReasoningEffort = Schema.declare<ReasoningEffort>(
   { title: "ReasoningEffort" },
 )
 
-export const LanguageModelToolSchemaCompatibility = Schema.Literals(["gemini", "moonshot"])
+/** Tool schema rules for a model family. `none` opts out of the protocol and model-name defaults. */
+export const LanguageModelToolSchemaCompatibility = Schema.Literals(["gemini", "moonshot", "none"])
 export type LanguageModelToolSchemaCompatibility = Schema.Schema.Type<typeof LanguageModelToolSchemaCompatibility>
 
 export const LanguageModelMaxTokensFieldCompatibility = Schema.Literals(["max_completion_tokens", "max_tokens"])

@@ -11,6 +11,7 @@ import {
   Usage,
   type FinishReason,
   type LLMRequest,
+  type LanguageModel,
   type MediaPart,
   type ProviderMetadata,
   type ProviderOptions,
@@ -22,8 +23,8 @@ import { classifyProviderFailure } from "../provider-error.js"
 import { Media } from "../media.js"
 import { JsonObject, knownString, lenient, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { GeminiGenerateContent } from "./utils/gemini-generate-content.js"
-import { GeminiJsonSchema } from "./utils/gemini-json-schema.js"
 import { Lifecycle } from "./utils/lifecycle.js"
+import { ToolSchemaProjection } from "./utils/tool-schema.js"
 
 const ADAPTER = "gemini"
 // Google documents this sentinel for replaying Gemini 3 function calls after their original signature was lost.
@@ -267,13 +268,12 @@ interface ParserState {
 // =============================================================================
 // Request Lowering
 // =============================================================================
-// Tool schemas go in `parametersJsonSchema`, which accepts standard JSON Schema.
-// `utils/gemini-json-schema` rewrites only the few shapes Gemini still rejects. This
-// protocol always applies it, including for tuned endpoints whose IDs do not name Gemini.
-const lowerTool = (tool: ToolDefinition) => ({
+// Tool schemas go in `parametersJsonSchema`, which accepts standard JSON Schema. Gemini's schema
+// rules are this API's default, including for tuned endpoints whose IDs do not name Gemini.
+const lowerTool = (tool: ToolDefinition, model: LanguageModel) => ({
   name: tool.name,
   description: tool.description,
-  parametersJsonSchema: GeminiJsonSchema.normalize(tool.inputSchema),
+  parametersJsonSchema: ToolSchemaProjection.modelCompatibility(tool.inputSchema, model, "gemini"),
 })
 
 const lowerToolConfig = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
@@ -468,7 +468,7 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
     tools: hasTools
       ? [
           {
-            functionDeclarations: flattened.tools.map(lowerTool),
+            functionDeclarations: flattened.tools.map((tool) => lowerTool(tool, request.model)),
           },
         ]
       : undefined,

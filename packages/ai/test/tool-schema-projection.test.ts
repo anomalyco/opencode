@@ -90,6 +90,12 @@ describe("tool schema projections", () => {
         yield* parameters(route.model({ id: "google/gemini-3.8-flash", compatibility: { toolSchema: "moonshot" } })),
       ).toEqual(moonshot)
       expect(yield* parameters(route.model({ id: "moonshotai/Kimi-K3" }))).toEqual(moonshot)
+      expect(
+        yield* parameters(route.model({ id: "google/gemini-3.8-flash", compatibility: { toolSchema: "none" } })),
+      ).toEqual(original)
+      expect(
+        yield* parameters(route.model({ id: "moonshotai/Kimi-K3", compatibility: { toolSchema: "none" } })),
+      ).toEqual(original)
       expect(yield* parameters(route.model({ id: "gpt-6-luna" }))).toEqual(original)
     }),
   )
