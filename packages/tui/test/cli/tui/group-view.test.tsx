@@ -200,7 +200,10 @@ test("a low activity group with nothing finished stays collapsed behind a status
   }
 })
 
-test("an exploration group shows ✗ when one of its tools failed", async () => {
+test.each([
+  ["exploration", "✗ Explored: 2 reads"],
+  ["activity", "✗ 2 reads"],
+] as const)("the %s group shows ✗ in its text color when one of its tools failed", async (kind, header) => {
   const config = createTuiResolvedConfig({ animations: false })
   const message: SessionMessageAssistant = {
     id: "a",
@@ -233,7 +236,7 @@ test("an exploration group shows ✗ when one of its tools failed", async () => 
   const app = await mount({
     row: {
       type: "group",
-      kind: "exploration",
+      kind,
       size: 2,
       completed: true,
       pending: [],
@@ -252,8 +255,12 @@ test("an exploration group shows ✗ when one of its tools failed", async () => 
   })
   try {
     app.renderer.start()
-    await app.waitForFrame((frame) => frame.includes("Explored"))
-    expect(app.captureCharFrame()).toContain("✗ Explored: 2 reads")
+    await app.waitForFrame((frame) => frame.includes(header))
+    // The ✗ uses the row's text color, not the error color.
+    const spans = app.captureSpans().lines.flatMap((line) => line.spans)
+    const icon = spans.find((span) => span.text.includes("✗"))
+    const label = spans.find((span) => span.text.includes("2 reads"))
+    expect(icon?.fg.toInts()).toEqual(label?.fg.toInts())
   } finally {
     app.renderer.destroy()
   }

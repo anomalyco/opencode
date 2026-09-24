@@ -145,7 +145,6 @@ function GroupContent(props: GroupProps) {
             <Show when={tools().length > 0}>
               <InlineToolRow
                 icon={failed() ? "✗" : completed() ? "→" : "✱"}
-                iconColor={failed() ? theme.text.feedback.error.base : undefined}
                 color={hover() ? theme.text.base : theme.text.muted}
                 complete={completed()}
                 pending={label()}
@@ -213,7 +212,6 @@ function ActivityGroup(props: GroupProps) {
       <Show when={summary().label}>
         <InlineToolRow
           icon={summary().failed ? "✗" : disclosure.expanded() ? "−" : "+"}
-          iconColor={summary().failed ? theme.text.feedback.error.base : undefined}
           color={hover() ? theme.text.base : theme.text.muted}
           complete={true}
           pending={summary().label}
