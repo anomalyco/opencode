@@ -1,7 +1,7 @@
 export * as ModelResolver from "./model-resolver.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { LanguageModel, ProviderConfigurationError } from "@opencode/ai"
+import { HttpOptions, LanguageModel, mergeHttpOptions, ProviderConfigurationError } from "@opencode/ai"
 import { Auth } from "@opencode/ai/route"
 import { Context, Effect, Layer, Schema, Struct } from "effect"
 import { AISDK } from "./aisdk.js"
@@ -237,6 +237,11 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
         compatibility: resolved.compatibility
           ? Object.assign({}, runtime.compatibility, resolved.compatibility)
           : runtime.compatibility,
+        // Timeouts are transport policy, so they land on the route's HTTP defaults instead of package settings.
+        defaults: {
+          ...runtime.defaults,
+          http: mergeHttpOptions(runtime.defaults?.http, new HttpOptions(Provider.timeouts(configured))),
+        },
       })
     },
     catch: (cause) =>
