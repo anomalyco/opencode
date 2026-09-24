@@ -1573,6 +1573,17 @@ describe("this, arguments, and Function.prototype.call/apply/bind", () => {
 })
 
 describe("ToPrimitive: operators and conversions honor program valueOf and toString", () => {
+  test("program-installed valueOf and toString on opaque values are ignored at every site", async () => {
+    expect(
+      await value(`
+        const f = () => 1
+        f.toString = () => "custom"
+        f.valueOf = () => 5
+        return [String(f), \`\${f}\`, [f].join(), new Error(f).message, isNaN(Number(f)), isNaN(Math.abs(f))]
+      `),
+    ).toEqual(["[object Function]", "[object Function]", "[object Function]", "[object Function]", true, true])
+  })
+
   test("== converts an object facing a non-nullish primitive through its own valueOf", async () => {
     expect(
       await value(`

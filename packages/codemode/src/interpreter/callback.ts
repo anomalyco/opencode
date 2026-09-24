@@ -13,7 +13,7 @@ import {
   type Cursor,
   type Value,
 } from "./objects.js"
-import { typeofValue } from "./references.js"
+import { isOpaque, typeofValue } from "./references.js"
 
 /** IteratorClose: a consumer failure closes the iterator and wins over any close failure, except that a generator's
  * return() is a return completion, so a failing close wins over it, as after `break`. */
@@ -35,10 +35,11 @@ export type Hint = "number" | "string" | "default"
 
 /**
  * ToPrimitive: calls `valueOf`/`toString` in hint order and returns the first primitive result. Dates treat the
- * default hint as "string", like their `Symbol.toPrimitive`.
+ * default hint as "string", like their `Symbol.toPrimitive`. Opaque values (functions, promises, generators, tool
+ * references) pass through unchanged so callers reject or describe them in their built-in form.
  */
 export const toPrimitive = <R>(ctx: Interpreter<R>, value: Value, hint: Hint): Effect.Effect<Value, unknown, R> => {
-  if (!(value instanceof Obj)) return Effect.succeed(value)
+  if (!(value instanceof Obj) || isOpaque(value)) return Effect.succeed(value)
   const asString = hint === "string" || (hint === "default" && value instanceof DateObj)
   const order = asString ? ["toString", "valueOf"] : ["valueOf", "toString"]
   return Effect.gen(function* () {

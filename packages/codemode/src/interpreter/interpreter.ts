@@ -1395,7 +1395,6 @@ class Frame<R> {
 
   /** ToPrimitive for an operand: data objects run their own methods; opaque values stay for the data gates below. */
   private toPrimitive(value: Value, hint: Hint, node: AstNode) {
-    if (!(value instanceof Obj) || isOpaque(value)) return Effect.succeed(value)
     return this.native(() => toPrimitive(this.ctx, value, hint), node)
   }
 
@@ -1476,8 +1475,8 @@ class Frame<R> {
     }
   }
 
-  // IsLooselyEqual: objects (including functions and tool references) compare by identity, and only a
-  // data object facing a non-nullish primitive needs to coerce, so an opaque value is rejected only there.
+  // IsLooselyEqual: objects (including functions and tool references) compare by identity, and a nullish
+  // primitive never equals an object.
   private looselyEqual(lhs: Value, rhs: Value, node: AstNode): boolean {
     const lhsObject = lhs !== null && typeof lhs === "object"
     const rhsObject = rhs !== null && typeof rhs === "object"
