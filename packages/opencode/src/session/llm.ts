@@ -24,6 +24,7 @@ import { SessionID } from "@/session/schema"
 import { Auth } from "@/auth"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { InstanceState } from "@/effect/instance-state"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
 import { LLMAISDK } from "./llm/ai-sdk"
@@ -123,7 +124,12 @@ const live: Layer.Layer<
         : prepared.tools
       const headers = {
         ...prepared.headers,
-        ...(isWebService ? { "X-OpenCode-Web-Reset": input.webSessionReset ? "true" : "false" } : {}),
+        ...(isWebService
+          ? {
+              "X-OpenCode-Web-Reset": input.webSessionReset ? "true" : "false",
+              "X-OpenCode-Directory": yield* InstanceState.directory,
+            }
+          : {}),
       }
 
       // Wire up toolExecutor for DWS workflow models so that tool calls

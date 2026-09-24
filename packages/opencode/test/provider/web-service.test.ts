@@ -44,8 +44,18 @@ describe("provider.web-service", () => {
     const deepseek = providers.find((item) => item.id === "deepseek-web")?.models.default
 
     expect(chatgpt?.capabilities.toolcall).toBe(true)
+    expect(chatgpt?.capabilities.attachment).toBe(true)
+    expect(chatgpt?.capabilities.input.image).toBe(true)
+    expect(chatgpt?.capabilities.input.pdf).toBe(true)
+    expect(chatgpt?.capabilities.output.image).toBe(true)
+    expect(chatgpt?.capabilities.output.pdf).toBe(true)
     expect(chatgpt?.variants).toEqual({})
     expect(deepseek?.capabilities.toolcall).toBe(true)
+    expect(deepseek?.capabilities.attachment).toBe(true)
+    expect(deepseek?.capabilities.input.image).toBe(true)
+    expect(deepseek?.capabilities.input.pdf).toBe(true)
+    expect(deepseek?.capabilities.output.image).toBe(false)
+    expect(deepseek?.capabilities.output.pdf).toBe(false)
     expect(deepseek?.variants).toEqual({ thinking: { thinking_enabled: true } })
   })
 
@@ -258,11 +268,25 @@ describe("provider.web-service", () => {
     expect(prompts.prompt).toContain("The arguments provided to the tool are invalid: Invalid JSON")
   })
 
-  test("rejects local attachments in the current user turn", () => {
+  test("passes only current user-turn attachments to the web model", () => {
     const options = {
-      prompt: [{ role: "user", content: [{ type: "file", mediaType: "text/plain", data: "c2VjcmV0" }] }],
+      prompt: [
+        { role: "user", content: [{ type: "file", filename: "old.md", mediaType: "text/markdown", data: "b2xk" }] },
+        { role: "assistant", content: [{ type: "text", text: "Earlier reply" }] },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Review these" },
+            { type: "file", filename: "screen.png", mediaType: "image/png", data: new Uint8Array([1, 2, 3]) },
+          ],
+        },
+      ],
     } satisfies Pick<LanguageModelV3CallOptions, "prompt" | "toolChoice">
+    const prompts = WebService.buildRequestPrompts(options, [], "chatgpt-web")
 
-    expect(() => WebService.buildRequestPrompts(options, [])).toThrow("不支持本地附件")
+    expect(prompts.attachments).toHaveLength(1)
+    expect(prompts.attachments[0].filename).toBe("screen.png")
+    expect(prompts.prompt).toContain("[Attached file: screen.png]")
+    expect(prompts.fullPrompt).toContain("[Attached file: old.md]")
   })
 })

@@ -35,7 +35,7 @@ STATE_FILE = Path(
     )
 )
 CONNECTION_FILE = STATE_FILE.with_name("edge-dom-bridge-connection.json")
-MAX_BODY = 256 * 1024
+MAX_BODY = 32 * 1024 * 1024
 MAX_EVENTS = 512
 TERMINAL = {"chat.completed", "chat.cancelled", "chat.error", "control.completed"}
 
@@ -47,7 +47,7 @@ class BridgeError(RuntimeError):
 
 
 class BridgeClient:
-    def __init__(self, state_file=STATE_FILE, *, timeout=240):
+    def __init__(self, state_file=STATE_FILE, *, timeout=480):
         try:
             state = json.loads(Path(state_file).read_text(encoding="utf-8"))
             port = int(state["port"])
@@ -128,7 +128,7 @@ class Broker:
         """Release an orphan only after the page's maximum generation window."""
         job_id = self.active_chat
         item = self.pending.get(job_id) if job_id else None
-        if item and not item["terminal"] and time.monotonic() - item["created"] > 220:
+        if item and not item["terminal"] and time.monotonic() - item["created"] > 470:
             self.publish(job_id, {"type": "chat.error", "code": "UNKNOWN",
                                   "message": "网页任务超过总期限；提交状态未知"})
 
@@ -160,7 +160,8 @@ class Broker:
                 self.owner_session = session_id
             job_id = str(uuid.uuid4())
             self.pending[job_id] = {"events": [], "condition": threading.Condition(self.lock),
-                                    "terminal": False, "created": time.monotonic()}
+                                    "terminal": False, "created": time.monotonic(),
+                                    "acknowledged": 0, "next_sequence": 0}
             if operation == "chat":
                 self.active_chat = job_id
             self.jobs.put({"id": job_id, **payload})
@@ -189,7 +190,8 @@ class Broker:
                 raise BridgeError("请求不存在或已结束", "UNKNOWN_REQUEST")
             if len(item["events"]) >= MAX_EVENTS:
                 event = {"type": "chat.error", "code": "EVENT_OVERFLOW", "message": "事件队列溢出"}
-            event = {**event, "seq": len(item["events"]) + 1, "request_id": job_id}
+            item["next_sequence"] += 1
+            event = {**event, "seq": item["next_sequence"], "request_id": job_id}
             item["events"].append(event)
             if event["type"] in TERMINAL:
                 item["terminal"] = True
@@ -203,12 +205,15 @@ class Broker:
             item = self.pending.get(job_id)
             if item is None:
                 raise BridgeError("请求状态已丢失，不能自动重发", "UNKNOWN_REQUEST")
-            if after < 0 or after > len(item["events"]):
+            if after < item["acknowledged"] or after > item["next_sequence"]:
                 raise BridgeError("事件序号无效", "EVENT_GAP")
-            if after == len(item["events"]) and not item["terminal"]:
+            if after > item["acknowledged"]:
+                item["events"] = [event for event in item["events"] if event["seq"] > after]
+                item["acknowledged"] = after
+            if after == item["next_sequence"] and not item["terminal"]:
                 item["condition"].wait(timeout=8)
             self.expire_abandoned_chat()
-            return item["events"][after:after + 32]
+            return item["events"][:32]
 
     def ack(self, job_id):
         with self.lock:

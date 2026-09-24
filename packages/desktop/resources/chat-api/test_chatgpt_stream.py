@@ -19,11 +19,12 @@ class EventBridge:
 
 
 class ChatGPTStreamTest(unittest.TestCase):
-    def chat(self, events, final, on_text):
+    def chat(self, events, final, on_text, attachments=None):
         bridge = EventBridge(events, final)
         client = ChatGPTClient(bridge=bridge)
         client._needs_new = False
-        return client.chat("聊聊周末散步", on_text=lambda text: on_text(text, bridge.completed))
+        return client.chat("聊聊周末散步", attachments=attachments,
+                           on_text=lambda text: on_text(text, bridge.completed))
 
     def test_streams_paragraphs_before_completion_and_flushes_tail(self):
         chunks = []
@@ -53,6 +54,38 @@ class ChatGPTStreamTest(unittest.TestCase):
                 {"type": "chat.snapshot", "revision": 2, "text": "改写全文。"},
             ], "改写全文。", lambda *_: None)
         self.assertEqual(raised.exception.code, "STREAM_REVISED")
+
+    def test_attachment_answer_waits_for_verified_final_text_before_streaming(self):
+        chunks = []
+        final = "附件1：图片界面摘要。\n\n附件2：文档摘要。"
+        result = self.chat([
+            {"type": "chat.delta", "revision": 1, "text": "附件1：图片界面摘要。\n\n附件2：文"},
+            {"type": "chat.snapshot", "revision": 2, "text": final},
+        ], final, lambda text, completed: chunks.append((text, completed)),
+            attachments=[{"filename": "screen.png", "mediaType": "image/png", "data": "AA=="}])
+        self.assertEqual(result, final)
+        self.assertEqual(chunks, [(final, True)])
+
+    def test_accepts_a_verified_media_only_completion(self):
+        file = {"filename": "generated-image-1.png", "mediaType": "image/png", "data": "AA=="}
+
+        class FileBridge:
+            def stream(self, _operation, **_payload):
+                yield {
+                    "type": "chat.completed",
+                    "revision": 0,
+                    "bytes": 0,
+                    "sha256": hashlib.sha256(b"").hexdigest(),
+                    "url": "https://chatgpt.com/c/session-1",
+                    "files": [file],
+                    "media_output": True,
+                }
+
+        client = ChatGPTClient(bridge=FileBridge())
+        client._needs_new = False
+        events = []
+        self.assertEqual(client.chat("生成图片", on_event=events.append), "")
+        self.assertEqual(events[0]["files"], [file])
 
     def test_hash_mismatch_does_not_flush_unverified_tail(self):
         chunks = []

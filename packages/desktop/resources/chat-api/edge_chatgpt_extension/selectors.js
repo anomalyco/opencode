@@ -33,6 +33,45 @@ const ChatGPTSelectors = {
       'button#composer-submit-button[aria-label*="Stop"]',
     ]);
   },
+  generating() {
+    if (this.stop()) return true;
+    const status = [...document.querySelectorAll(
+      '[aria-busy="true"], [role="progressbar"], [role="status"], [data-testid*="progress"], [data-testid*="generat"]',
+    )].filter(this.visible);
+    return status.some(element => /generat|creating image|drawing|rendering|processing|生成中|正在生成|正在创建|绘制中|处理中/i.test(
+      [element.innerText, element.getAttribute('aria-label'), element.getAttribute('title'),
+        element.getAttribute('data-testid')].filter(Boolean).join('\n'),
+    ));
+  },
+  generationError(turn) {
+    const elements = [
+      ...document.querySelectorAll('[role="alert"], [data-testid*="error"], [data-testid*="toast"]'),
+      ...(turn ? [turn] : []),
+    ].filter(this.visible);
+    const failure = elements.map(element => element.innerText || '').find(text =>
+      /image generation failed|failed to generate|couldn.t generate|there was an error generating|生成失败|图片生成失败|生成内容时出错/i.test(text),
+    );
+    return failure?.trim().slice(0, 500);
+  },
+  restrictionError(turn) {
+    const elements = [
+      ...document.querySelectorAll('[role="alert"], [data-testid*="error"], [data-testid*="toast"]'),
+      ...(turn ? [turn] : []),
+    ].filter(this.visible);
+    const restriction = elements.map(element => element.innerText || '').find(text =>
+      /unusual activity has been detected|suspicious activity|异常活动|可疑活动|检测到异常/i.test(text),
+    );
+    return restriction?.trim().slice(0, 500);
+  },
+  generatedMedia(turn) {
+    if (!turn) return false;
+    return this.generatedMediaCount(turn) > 0;
+  },
+  generatedMediaCount(turn) {
+    if (!turn) return 0;
+    return [...turn.querySelectorAll('img')].filter(image => this.visible(image) && image.naturalWidth > 0).length +
+      [...turn.querySelectorAll('a[download]')].filter(this.visible).length;
+  },
   turns() {
     return [...document.querySelectorAll('[data-message-author-role][data-message-id]')];
   },

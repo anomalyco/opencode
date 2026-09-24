@@ -1,6 +1,7 @@
 import http.client
 import json
 import threading
+import time
 import unittest
 from http.server import ThreadingHTTPServer
 
@@ -41,6 +42,43 @@ class ExtensionDiscoveryTest(unittest.TestCase):
             server.shutdown()
             server.server_close()
             thread.join()
+
+
+class EventBufferTest(unittest.TestCase):
+    def test_discards_acknowledged_events_without_reusing_sequence_numbers(self):
+        broker = Broker()
+        broker.last_poll = time.monotonic()
+        broker.owner_session = "session"
+        job_id = broker.start({"operation": "chat", "client_session_id": "session"})
+
+        broker.publish(job_id, {"type": "chat.accepted"})
+        broker.publish(job_id, {"type": "chat.delta", "text": "first"})
+        self.assertEqual([event["seq"] for event in broker.events(job_id, 0)], [1, 2])
+        broker.publish(job_id, {"type": "chat.delta", "text": "second"})
+        self.assertEqual([event["seq"] for event in broker.events(job_id, 2)], [3])
+        self.assertEqual([event["seq"] for event in broker.pending[job_id]["events"]], [3])
+
+        broker.publish(job_id, {"type": "chat.completed"})
+        self.assertEqual([event["seq"] for event in broker.events(job_id, 2)], [3, 4])
+
+    def test_long_stream_does_not_overflow_when_client_keeps_consuming(self):
+        broker = Broker()
+        broker.last_poll = time.monotonic()
+        broker.owner_session = "session"
+        job_id = broker.start({"operation": "chat", "client_session_id": "session"})
+        after = 0
+
+        for index in range(800):
+            broker.publish(job_id, {"type": "chat.delta", "text": str(index)})
+            if index % 16 == 15:
+                events = broker.events(job_id, after)
+                after = events[-1]["seq"]
+
+        broker.publish(job_id, {"type": "chat.completed"})
+        events = broker.events(job_id, after)
+        self.assertEqual(events[-1]["type"], "chat.completed")
+        self.assertEqual(events[-1]["seq"], 801)
+        self.assertNotIn("EVENT_OVERFLOW", {event.get("code") for event in events})
 
     def test_extension_fetch_without_origin_can_discover_bridge(self):
         broker = Broker()

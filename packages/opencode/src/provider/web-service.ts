@@ -14,10 +14,11 @@ import { randomUUID } from "node:crypto"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { spawn } from "node:child_process"
-import { join } from "node:path"
+import { extname, join } from "node:path"
 import type { Info, Model } from "./provider"
 
 const MODEL_API = "opencode-web-chat"
+const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
 const TOOL_START = "<opencode_tool_call>"
 const TOOL_END = "</opencode_tool_call>"
 const DSML_PREFIX = "<|DSML|"
@@ -41,6 +42,9 @@ const queues = new Map<string, Promise<void>>()
 type WorkerInput = {
   provider: string
   sessionID: string
+  attachments?: WebAttachment[]
+  projectDirectory?: string
+  outputPath?: string
   prompt?: string
   fullPrompt?: string
   systemPrompt?: string
@@ -48,6 +52,12 @@ type WorkerInput = {
   thinkingEnabled?: boolean
   searchEnabled?: boolean
   operation?: string
+}
+
+type WebAttachment = {
+  filename: string
+  mediaType: string
+  data: string
 }
 
 type WebReply =
@@ -79,10 +89,16 @@ function modelInfo(providerID: string, providerName: string, modelID: string, ur
     capabilities: {
       temperature: false,
       reasoning: false,
-      attachment: false,
+      attachment: true,
       toolcall: true,
-      input: { text: true, audio: false, image: false, video: false, pdf: false },
-      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      input: { text: true, audio: false, image: true, video: false, pdf: true },
+      output: {
+        text: true,
+        audio: false,
+        image: providerID === "chatgpt-web",
+        video: false,
+        pdf: providerID === "chatgpt-web",
+      },
       interleaved: false,
     },
     cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
@@ -226,6 +242,8 @@ async function runRequest(
 
   const tools = availableTools(options)
   const request = buildRequestPrompts(options, tools, providerID)
+  const attachments = await encodeAttachments(request.attachments, options.abortSignal)
+  const projectDirectory = options.headers?.["X-OpenCode-Directory"] ?? options.headers?.["x-opencode-directory"]
   const providerOptions = options.providerOptions?.[providerID]
   const thinkingEnabled =
     providerID === "deepseek-web" && isRecord(providerOptions) && providerOptions.thinking_enabled === true
@@ -238,6 +256,9 @@ async function runRequest(
       {
         provider: providerID,
         sessionID,
+        attachments,
+        projectDirectory,
+        outputPath: requestedOutputPath(options.prompt),
         prompt: request.prompt,
         fullPrompt: request.fullPrompt,
         systemPrompt: request.systemPrompt,
@@ -250,6 +271,13 @@ async function runRequest(
     ),
   )
   return parseWebReply(prompt, tools)
+}
+
+function requestedOutputPath(messages: LanguageModelV3Message[]) {
+  const latestUser = messages.findLast((message) => message.role === "user")
+  if (!latestUser) return undefined
+  const text = latestUser.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
+  return /(?:save|write|export|保存|存放|导出|写入)[^\r\n]{0,120}?[`'“"]([^`'”"]+)[`'”"]?/i.exec(text)?.[1]?.trim()
 }
 
 function availableTools(options: LanguageModelV3CallOptions) {
@@ -276,9 +304,9 @@ export function buildRequestPrompts(
     .slice(lastAssistant + 1)
     .filter((message) => message.role === "user" || message.role === "tool")
   if (delta.length === 0) throw new Error("网页模型没有收到新的用户消息或工具结果")
-  if (delta.some((message) => message.role === "user" && message.content.some((part) => part.type === "file"))) {
-    throw new Error("网页模型不支持本地附件，请改用文本输入")
-  }
+  const attachments = delta.flatMap((message) =>
+    message.role === "user" ? message.content.filter((part) => part.type === "file") : [],
+  )
 
   const systemPrompt = options.prompt
     .filter((message): message is Extract<LanguageModelV3Message, { role: "system" }> => message.role === "system")
@@ -290,6 +318,7 @@ export function buildRequestPrompts(
     prompt: composePrompt(undefined, delta, protocol),
     fullPrompt: composePrompt(systemPrompt, messages, protocol),
     systemPrompt,
+    attachments,
   }
 }
 
@@ -305,7 +334,7 @@ function composePrompt(system: string | undefined, messages: WebHistoryMessage[]
 function renderMessage(message: WebHistoryMessage) {
   const content = message.content.flatMap((part) => {
     if (part.type === "text") return [part.text]
-    if (part.type === "file") return [`[Attachment omitted: ${part.filename ?? part.mediaType}]`]
+    if (part.type === "file") return [`[Attached file: ${part.filename ?? part.mediaType}]`]
     if (part.type === "tool-call") {
       return [`Requested local tool ${part.toolName}: ${JSON.stringify(part.input)}`]
     }
@@ -316,6 +345,65 @@ function renderMessage(message: WebHistoryMessage) {
   if (message.role === "user") return `User: ${content.join("\n")}`
   if (message.role === "assistant") return `Assistant: ${content.join("\n")}`
   return `Tool results:\n${content.join("\n")}`
+}
+
+async function encodeAttachments(
+  files: ReturnType<typeof buildRequestPrompts>["attachments"],
+  signal?: AbortSignal,
+): Promise<WebAttachment[]> {
+  const attachments: WebAttachment[] = []
+  let totalBytes = 0
+  for (const [index, file] of files.entries()) {
+    let bytes: Uint8Array
+    if (file.data instanceof Uint8Array) bytes = file.data
+    else if (file.data instanceof URL) {
+      const response = await fetch(file.data, { signal })
+      if (!response.ok) throw new Error(`无法读取附件：HTTP ${response.status}`)
+      const length = Number(response.headers.get("content-length"))
+      if (Number.isFinite(length) && totalBytes + length > MAX_ATTACHMENT_BYTES)
+        throw new Error("网页模型附件总大小不能超过 20 MB")
+      bytes = new Uint8Array(await response.arrayBuffer())
+    } else if (file.data.startsWith("data:")) {
+      const separator = file.data.indexOf(",")
+      if (separator < 0 || !file.data.slice(0, separator).endsWith(";base64"))
+        throw new Error("网页模型仅支持 Base64 格式的数据附件")
+      bytes = decodeBase64(file.data.slice(separator + 1))
+    } else {
+      bytes = decodeBase64(file.data)
+    }
+    totalBytes += bytes.byteLength
+    if (totalBytes > MAX_ATTACHMENT_BYTES) throw new Error("网页模型附件总大小不能超过 20 MB")
+    attachments.push({
+      filename: file.filename || `attachment-${index + 1}`,
+      mediaType: normalizeMediaType(file.mediaType, file.filename),
+      data: Buffer.from(bytes).toString("base64"),
+    })
+  }
+  return attachments
+}
+
+function decodeBase64(value: string) {
+  if (!/^[A-Za-z0-9+/]*={0,2}$/.test(value) || value.length % 4 === 1)
+    throw new Error("网页模型附件数据格式无效")
+  return Buffer.from(value, "base64")
+}
+
+function normalizeMediaType(mediaType: string, filename?: string) {
+  if (mediaType !== "image/*") return mediaType
+  const imageTypes: Record<string, string> = {
+    ".avif": "image/avif",
+    ".bmp": "image/bmp",
+    ".gif": "image/gif",
+    ".heic": "image/heic",
+    ".jpeg": "image/jpeg",
+    ".jpg": "image/jpeg",
+    ".png": "image/png",
+    ".svg": "image/svg+xml",
+    ".tif": "image/tiff",
+    ".tiff": "image/tiff",
+    ".webp": "image/webp",
+  }
+  return imageTypes[extname(filename ?? "").toLowerCase()] ?? "application/octet-stream"
 }
 
 function renderToolOutput(output: LanguageModelV3ToolResultOutput): string {
@@ -695,6 +783,8 @@ function runWorker(
     let buffer = ""
     let workerError: Error | undefined
     let result: string | undefined
+    const artifacts: string[] = []
+    const artifactWarnings: string[] = []
     let done = false
     let settled = false
 
@@ -711,9 +801,11 @@ function runWorker(
     }
     const consume = (line: string) => {
       if (!line.trim()) return
-      const event = JSON.parse(line) as { type?: unknown; text?: unknown; message?: unknown }
+      const event = JSON.parse(line) as { type?: unknown; text?: unknown; message?: unknown; path?: unknown }
       if (event.type === "delta" && typeof event.text === "string") onTextDelta?.(event.text)
       if (event.type === "result" && typeof event.text === "string") result = event.text
+      if (event.type === "artifact" && typeof event.path === "string") artifacts.push(event.path)
+      if (event.type === "artifact-warning" && typeof event.message === "string") artifactWarnings.push(event.message)
       if (event.type === "done") done = true
       if (event.type === "error") {
         workerError = new Error(typeof event.message === "string" ? event.message : "网页模型请求失败")
@@ -760,7 +852,18 @@ function runWorker(
       }
       if (workerError) return finish(workerError)
       if (code !== 0 || !done) return finish(new Error("网页模型适配器意外退出"))
-      finish(undefined, result)
+      const notice = [
+        ...(artifacts.length > 0 ? [`\n\n网页生成文件已保存到项目：\n${artifacts.map((path) => `- ${path}`).join("\n")}`] : []),
+        ...artifactWarnings.map((warning) => `\n\n${warning}`),
+      ].join("")
+      if (notice) {
+        try {
+          onTextDelta?.(notice)
+        } catch (error) {
+          return finish(error instanceof Error ? error : new Error(String(error)))
+        }
+      }
+      finish(undefined, `${result ?? ""}${notice}`)
     })
     child.stdin.on("error", (error) => finish(new Error(`无法发送网页模型请求：${error.message}`)))
     child.stdin.end(JSON.stringify(input))

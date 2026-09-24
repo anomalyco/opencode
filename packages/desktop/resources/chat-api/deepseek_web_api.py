@@ -29,6 +29,8 @@ from deepseek_delta import DeltaDecoder
 BASE_URL = "https://chat.deepseek.com"
 CREATE_SESSION_PATH = "/api/v0/chat_session/create"
 COMPLETION_PATH = "/api/v0/chat/completion"
+UPLOAD_FILE_PATH = "/api/v0/file/upload_file"
+FETCH_FILES_PATH = "/api/v0/file/fetch_files"
 POW_CHALLENGE_PATH = "/api/v0/chat/create_pow_challenge"
 CLIENT_VERSION = "2.5.0"
 CLIENT_BUNDLE_ID = "com.deepseek.chat"
@@ -369,10 +371,10 @@ class DeepSeekClient:
             title=str(raw_session.get("title") or ""),
         )
 
-    def _solve_pow_for_completion(self) -> str:
+    def _solve_pow(self, target_path: str) -> str:
         payload = self._post_json(
             POW_CHALLENGE_PATH,
-            {"target_path": COMPLETION_PATH},
+            {"target_path": target_path},
         )
         data = payload.get("data", {}) if isinstance(payload, dict) else {}
         biz_code = data.get("biz_code") if isinstance(data, dict) else None
@@ -393,7 +395,7 @@ class DeepSeekClient:
             "salt": challenge.get("salt"),
             "answer": answer,
             "signature": challenge.get("signature"),
-            "target_path": COMPLETION_PATH,
+            "target_path": target_path,
         }
         encoded = base64.b64encode(
             json.dumps(
@@ -403,6 +405,109 @@ class DeepSeekClient:
             ).encode("utf-8")
         ).decode("ascii")
         return encoded
+
+    def upload_file(self, filename: str, media_type: str, content: bytes) -> str:
+        """Upload one file through the same multipart endpoint used by the web app."""
+
+        if not filename or not content:
+            raise DeepSeekConfigError("DeepSeek 附件名称和内容不能为空")
+        pow_header = self._solve_pow(UPLOAD_FILE_PATH)
+        for attempt in range(2):
+            headers = self._headers(stream=False)
+            headers.pop("Content-Type", None)
+            if pow_header:
+                headers["X-DS-PoW-Response"] = pow_header
+            try:
+                response = self._post(
+                    UPLOAD_FILE_PATH,
+                    files={"file": (filename, content, media_type)},
+                    headers=headers,
+                    timeout=self.config.timeout_seconds,
+                )
+            except requests.RequestException as exc:
+                raise DeepSeekAPIError(f"上传 DeepSeek 附件失败: {exc}") from exc
+
+            raw = response.content
+            parsed = _parse_json_bytes(raw)
+            body = raw.decode("utf-8", errors="replace")
+            if attempt == 0 and _is_pow_required(response.status_code, dict(response.headers), parsed, body):
+                response.close()
+                pow_header = self._solve_pow(UPLOAD_FILE_PATH)
+                continue
+            if not response.ok:
+                message = _extract_biz_message(parsed) or _short_body(body)
+                response.close()
+                raise DeepSeekAPIError(
+                    f"DeepSeek 附件上传返回 HTTP {response.status_code}: {message or '无响应正文'}",
+                    status_code=response.status_code,
+                    biz_code=_extract_biz_code(parsed),
+                    response_body=_short_body(body),
+                )
+            response.close()
+            if parsed is None:
+                raise DeepSeekAPIError("DeepSeek 附件上传响应的 JSON 无法解析")
+            biz_code = _extract_biz_code(parsed)
+            if biz_code not in (None, 0):
+                raise DeepSeekAPIError(
+                    f"DeepSeek 附件上传失败: {_extract_biz_message(parsed) or biz_code}",
+                    biz_code=biz_code,
+                )
+            data = parsed.get("data", {}) if isinstance(parsed, dict) else {}
+            biz_data = data.get("biz_data", {}) if isinstance(data, dict) else {}
+            uploaded = biz_data.get("file", biz_data) if isinstance(biz_data, dict) else {}
+            if isinstance(uploaded, list):
+                uploaded = uploaded[0] if uploaded else {}
+            if not isinstance(uploaded, dict):
+                raise DeepSeekAPIError("DeepSeek 附件上传响应中没有文件信息")
+            file_id = uploaded.get("id") or uploaded.get("file_id")
+            if not file_id and isinstance(biz_data, dict):
+                files = biz_data.get("files")
+                if isinstance(files, list) and files and isinstance(files[0], dict):
+                    file_id = files[0].get("id") or files[0].get("file_id")
+            if not file_id:
+                raise DeepSeekAPIError("DeepSeek 附件上传响应中没有文件 ID")
+            return str(file_id)
+        raise AssertionError("unreachable")
+
+    def fetch_files(self, file_ids: Iterable[str]) -> List[Dict[str, Any]]:
+        ids = list(file_ids)
+        if not ids:
+            return []
+        try:
+            response = self.http.get(
+                self._url(FETCH_FILES_PATH),
+                params=[("file_ids", file_id) for file_id in ids],
+                headers=self._headers(stream=False),
+                timeout=self.config.timeout_seconds,
+            )
+        except requests.RequestException as exc:
+            raise DeepSeekAPIError(f"查询 DeepSeek 附件状态失败: {exc}") from exc
+        raw = response.content
+        parsed = _parse_json_bytes(raw)
+        body = raw.decode("utf-8", errors="replace")
+        response.close()
+        if not response.ok:
+            raise DeepSeekAPIError(
+                f"查询 DeepSeek 附件状态返回 HTTP {response.status_code}: "
+                f"{_extract_biz_message(parsed) or _short_body(body) or '无响应正文'}",
+                status_code=response.status_code,
+                biz_code=_extract_biz_code(parsed),
+                response_body=_short_body(body),
+            )
+        if parsed is None:
+            raise DeepSeekAPIError("DeepSeek 附件状态响应的 JSON 无法解析")
+        biz_code = _extract_biz_code(parsed)
+        if biz_code not in (None, 0):
+            raise DeepSeekAPIError(
+                f"查询 DeepSeek 附件状态失败: {_extract_biz_message(parsed) or biz_code}",
+                biz_code=biz_code,
+            )
+        data = parsed.get("data", {}) if isinstance(parsed, dict) else {}
+        biz_data = data.get("biz_data", {}) if isinstance(data, dict) else {}
+        files = biz_data.get("files", []) if isinstance(biz_data, dict) else []
+        if not isinstance(files, list) or any(not isinstance(item, dict) for item in files):
+            raise DeepSeekAPIError("DeepSeek 附件状态响应格式无效")
+        return files
 
     def _completion_payload(
         self,
@@ -466,7 +571,7 @@ class DeepSeekClient:
             ref_file_ids=ref_file_ids,
         )
 
-        pow_header: Optional[str] = self._solve_pow_for_completion()
+        pow_header: Optional[str] = self._solve_pow(COMPLETION_PATH)
         for attempt in range(2):
             headers = self._headers(stream=True)
             if pow_header:
@@ -494,7 +599,7 @@ class DeepSeekClient:
                     body,
                 ):
                     response.close()
-                    pow_header = self._solve_pow_for_completion()
+                    pow_header = self._solve_pow(COMPLETION_PATH)
                     continue
                 response.close()
                 message = _extract_biz_message(parsed) or _short_body(body)
@@ -597,6 +702,7 @@ class Conversation:
         thinking_enabled: bool = False,
         search_enabled: bool = False,
         source: Optional[str] = None,
+        ref_file_ids: Iterable[str] = (),
     ) -> Iterator[StreamEvent]:
         self._ensure_session()
         assert self.session_id is not None
@@ -609,6 +715,7 @@ class Conversation:
             thinking_enabled=thinking_enabled,
             search_enabled=search_enabled,
             source=source,
+            ref_file_ids=ref_file_ids,
         ):
             if event.event == "ready" and isinstance(event.data, dict):
                 response_id = event.data.get("response_message_id")

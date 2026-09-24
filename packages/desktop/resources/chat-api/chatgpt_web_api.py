@@ -38,7 +38,7 @@ class ChatModel:
 
 
 class ChatGPTClient:
-    def __init__(self, *, model=None, thinking_effort=None, timeout=240,
+    def __init__(self, *, model=None, thinking_effort=None, timeout=480,
                  transport="edge", bridge=None, auth_provider=None, session=None,
                  client_session_id=None):
         if transport != "edge":
@@ -114,7 +114,7 @@ class ChatGPTClient:
         pass
 
     def chat(self, prompt, *, model=None, on_text: Callable | None = None,
-             on_event: Callable | None = None):
+             on_event: Callable | None = None, attachments=None):
         if not isinstance(prompt, str) or not prompt.strip():
             raise ValueError("消息不能为空")
         selected_model = model or self.model
@@ -129,8 +129,14 @@ class ChatGPTClient:
         revision = 0
         emitted = ""
         finished = False
+        buffer_until_complete = bool(attachments)
         try:
-            stream = self._bridge().stream("chat", text=prompt, client_session_id=self.client_session_id)
+            stream = self._bridge().stream(
+                "chat",
+                text=prompt,
+                client_session_id=self.client_session_id,
+                attachments=attachments or [],
+            )
             for event in stream:
                 event_type = event.get("type")
                 if event_type == "chat.accepted":
@@ -155,9 +161,13 @@ class ChatGPTClient:
                         raise ChatGPTError("回答快照格式无效", code="BAD_EVENT", partial_text=text)
                     text = snapshot
                 elif event_type == "chat.error":
+                    if on_event:
+                        on_event(event)
                     raise ChatGPTError(event.get("message") or event.get("code") or "网页对话失败",
                                        code=event.get("code", "PAGE_ERROR"), partial_text=text)
                 elif event_type == "chat.cancelled":
+                    if on_event:
+                        on_event(event)
                     raise ChatGPTError("网页回答已停止", code="CANCELLED", partial_text=text)
                 elif event_type == "chat.completed":
                     if event.get("revision") != revision:
@@ -166,21 +176,28 @@ class ChatGPTClient:
                     if len(raw) != event.get("bytes") or hashlib.sha256(raw).hexdigest() != event.get("sha256"):
                         raise ChatGPTError("最终回答与页面校验值不一致", code="INCOMPLETE_OUTPUT", partial_text=text)
                     if not text:
-                        raise ChatGPTError("网页返回空回答", code="EMPTY_OUTPUT")
+                        files = event.get("files")
+                        if not (isinstance(files, list) and files) and event.get("media_output") is not True:
+                            raise ChatGPTError("网页返回空回答", code="EMPTY_OUTPUT")
                     self.conversation_id = event.get("url")
                     finished = True
                 if on_text and event_type in {"chat.delta", "chat.snapshot", "chat.completed"}:
                     # The active paragraph can be replaced during DOM rendering. Keep it
                     # pending; the SDK stream can only append already published text.
-                    boundary = text.rfind("\n\n")
-                    stable = text if finished else text[:boundary + 2] if boundary >= 0 else ""
-                    if not text.startswith(emitted):
+                    if buffer_until_complete:
                         if finished:
-                            raise ChatGPTError("已发送的回复发生修订，无法追加最终文本",
-                                               code="STREAM_REVISED", partial_text=text)
-                    elif stable.startswith(emitted) and len(stable) > len(emitted):
-                        on_text(stable[len(emitted):])
-                        emitted = stable
+                            on_text(text)
+                            emitted = text
+                    else:
+                        boundary = text.rfind("\n\n")
+                        stable = text if finished else text[:boundary + 2] if boundary >= 0 else ""
+                        if not text.startswith(emitted):
+                            if finished:
+                                raise ChatGPTError("已发送的回复发生修订，无法追加最终文本",
+                                                   code="STREAM_REVISED", partial_text=text)
+                        elif stable.startswith(emitted) and len(stable) > len(emitted):
+                            on_text(stable[len(emitted):])
+                            emitted = stable
                 if on_event:
                     on_event(event)
             if not finished:
