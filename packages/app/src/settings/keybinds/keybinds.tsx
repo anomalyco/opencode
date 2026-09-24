@@ -433,21 +433,21 @@ function SettingsKeybindsView(props: {
                   <SettingsList>
                     <For each={filtered().get(group) ?? []}>
                       {(id) => {
-                        const binding = props.keybind(id)
+                        const binding = () => props.keybind(id)
                         return (
                           <div class="flex items-center justify-between gap-4 py-3 border-b border-border-weak-base last:border-none">
                             <span>{props.title(id)}</span>
                             <Button
                               type="button"
                               size="small"
-                              variant={binding ? "ghost" : "ghost-muted"}
+                              variant={binding() ? "ghost" : "ghost-muted"}
                               data-keybind-id={id}
                               data-expanded={props.active === id ? "" : undefined}
                               onClick={() => props.onCapture(id)}
                             >
                               <Show
                                 when={props.active === id}
-                                fallback={binding || language.t("settings.shortcuts.unassigned")}
+                                fallback={binding() || language.t("settings.shortcuts.unassigned")}
                               >
                                 {language.t("settings.shortcuts.pressKeys")}
                               </Show>

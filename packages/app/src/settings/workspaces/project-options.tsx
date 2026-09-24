@@ -9,7 +9,6 @@ import { ServerConnection } from "@/runtime/server/registry"
 import type { LocalProject } from "@/shell/state/layout"
 import { displayName, errorMessage } from "@/shell/layout/helpers"
 import { fileManagerApp } from "@/home/projects/file-manager"
-import { revealProject } from "@/home/projects/reveal"
 import { showToast } from "@/shell/notifications/toast"
 
 export const ProjectOptions: Component<{
@@ -36,11 +35,8 @@ export const ProjectOptions: Component<{
     )
   const reveal = () => {
     if (!platform.revealPath || !canReveal()) return
-    void revealProject({
-      directory: props.project.worktree,
-      reveal: platform.revealPath,
-      remove: context().projects.remove,
-    })
+    void platform
+      .revealPath(props.project.worktree)
       .then((revealed) => {
         if (revealed) return
         showToast({

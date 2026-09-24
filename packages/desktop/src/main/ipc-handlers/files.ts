@@ -32,7 +32,6 @@ export const fileHandlers = FileRpcs.toLayer(
           Effect.orDie,
         ),
       FilesRevealPath: ({ path }) => files.revealPath(path),
-      FilesCheckDirectories: ({ paths }) => files.checkDirectories(paths),
       FilesReadClipboardImage: () => files.readClipboardImage(),
       FilesWriteClipboardText: ({ text }) => files.writeClipboardText(text),
     })

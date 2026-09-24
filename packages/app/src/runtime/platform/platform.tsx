@@ -46,9 +46,6 @@ type PlatformBase = {
   /** Reveal a local path in the system file manager; false when the path does not exist (desktop only) */
   revealPath?(path: string): Promise<boolean>
 
-  /** Return the local paths that still exist as directories; paths that cannot be checked are kept (desktop only) */
-  checkDirectories?(paths: string[]): Promise<string[]>
-
   /** Restart the app  */
   restart(): Promise<void>
 

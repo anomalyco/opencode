@@ -17,7 +17,6 @@ import type { HomeController } from "../model"
 import { useGlobal } from "@/runtime/server/runtime"
 import { SessionTransfer } from "@opencode/schema/session-transfer"
 import { useSshAuthenticate } from "@/servers/ssh/authenticate"
-import { revealProject } from "./reveal"
 
 export const HomeServersSchema = Schema.Struct({
   collapsed: Persistence.record(Persistence.fallback(Schema.Boolean, () => false)),
@@ -169,12 +168,8 @@ export function createHomeProjectsController(home: HomeController) {
       canReveal: canRevealProject,
       reveal: (conn: ServerConnection.Any, project: LocalProject) => {
         if (!platform.revealPath || !canRevealProject(conn)) return
-        const context = global.ensureServerCtx(conn)
-        void revealProject({
-          directory: project.worktree,
-          reveal: platform.revealPath,
-          remove: context.projects.remove,
-        })
+        void platform
+          .revealPath(project.worktree)
           .then((revealed) => {
             if (revealed) return
             showToast({

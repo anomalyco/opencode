@@ -15,7 +15,6 @@ type DesktopFileAPI = Pick<
   | "resolveAppPath"
   | "openPath"
   | "revealPath"
-  | "checkDirectories"
   | "readClipboardImage"
   | "writeClipboardText"
 >
@@ -67,9 +66,6 @@ export function createDesktopFiles(api: DesktopFileAPI, os: DesktopOS) {
     },
     async revealPath(path: string) {
       return api.revealPath(path)
-    },
-    async checkDirectories(paths: string[]) {
-      return [...(await api.checkDirectories(paths))]
     },
     async readClipboardImage() {
       const image = await api.readClipboardImage().catch(() => null)
