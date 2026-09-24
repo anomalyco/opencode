@@ -56,11 +56,9 @@ test("completes a custom command mid-prompt without clearing the prefix", async 
   await setup.ready
   await setup.waitForFrame((frame) => frame.includes("Build ·"))
 
-  // A command character after the slash opens the list mid-prompt.
   await setup.mockInput.typeText("explain /rev")
   await setup.waitForFrame((frame) => frame.includes("/review") && frame.includes("Review the input"))
 
-  // Selecting splices the command in place, keeping the leading sentence.
   setup.mockInput.pressEnter()
   await setup.waitForFrame((frame) => frame.includes("explain /review"))
 })
@@ -79,8 +77,6 @@ test("submits a sentence with a spaced slash instead of swallowing Enter", async
   await setup.ready
   await setup.waitForFrame((frame) => frame.includes("Build ·"))
 
-  // The token after the slash matches no command, so the empty popup must not
-  // keep the autocomplete layer enabled and eat Enter (see #50604).
   await setup.mockInput.typeText("Do not use 'find /'")
   setup.mockInput.pressEnter()
   await setup.waitFor(() => submitted.length > 0)

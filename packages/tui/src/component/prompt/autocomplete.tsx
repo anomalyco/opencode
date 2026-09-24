@@ -465,9 +465,7 @@ export function Autocomplete(props: {
 
   function insertSlash(name: string) {
     const input = props.input()
-    // Replace only the typed "/..." token at store.index, so a command selected
-    // mid-prompt is spliced in place instead of clearing everything before the
-    // cursor. select() already removed the token before calling this.
+    // Replaces only the selected mid-prompt command token, preserving surrounding text.
     const needsSpace = displayCharAt(input.plainText, store.index) !== " "
     const newText = `/${name}` + (needsSpace ? " " : "")
     input.cursorOffset = store.index
@@ -476,19 +474,14 @@ export function Autocomplete(props: {
   }
 
   const commands = createMemo((): AutocompleteOption[] => {
-    // Mid-prompt a command is offered only when the typed token is a prefix of
-    // its name or an alias. Fuzzy matching there would let arbitrary text (e.g.
-    // the apostrophe in "session's") match a command description and reopen the
-    // popup over a sentence that merely contains "/".
+    // Restrict mid-prompt commands to explicit name or alias matches
     const query = store.index === 0 ? undefined : search().toLowerCase()
     const matches = (name: string) => query === undefined || name.toLowerCase().startsWith(query)
 
     const results: AutocompleteOption[] = keymapCommands().flatMap((command) => {
       const slash = command.slash
       if (!slash) return []
-      // Commands without arguments execute an action, so they are offered only
-      // when the slash opens the prompt. Mid-prompt only text-expanding commands
-      // are offered, so a completion can never run a command from mid-sentence.
+      // Prevents mid-sentence commands from executing
       if (store.index !== 0 && !slash.arguments) return []
       return [slash.name, ...(slash.aliases ?? [])]
         .filter((name) => matches(name))

@@ -56,9 +56,7 @@ export function slashTriggerIndex(value: string, offset = promptOffsetWidth(valu
     const query = text.slice(index)
     if (before !== undefined && !/\s/.test(before)) continue
     if (/\s/.test(query) || query.slice(1).includes("/")) return
-    // A bare "/" opens the command list only when it starts the prompt. Mid-prompt
-    // it is indistinguishable from a path separator ("find /"), so a command
-    // character is required to keep sentences containing "/" submittable.
+    // let users type / inside sentences without triggering the command menu
     if (index !== 0 && query.length === 1) return
     return promptOffsetWidth(text.slice(0, index))
   }

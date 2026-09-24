@@ -42,8 +42,6 @@ describe("prompt display", () => {
     expect(slashTriggerIndex("src/prompt/index.ts")).toBeUndefined()
     expect(slashTriggerIndex("/compact now", Bun.stringWidth("/compact"))).toBe(0)
     expect(slashTriggerIndex("/usr/bin")).toBeUndefined()
-    // A bare "/" only opens the command list at the start of the prompt, so a
-    // sentence with a spaced "/" stays submittable.
     expect(slashTriggerIndex("find /")).toBeUndefined()
     expect(slashTriggerIndex("Do not use 'find /'")).toBe(17)
   })
