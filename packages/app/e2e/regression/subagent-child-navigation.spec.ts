@@ -9,9 +9,12 @@ const projectID = "proj_subagent_navigation"
 const parentID = "ses_subagent_parent"
 const childID = "ses_subagent_child"
 const grandchildID = "ses_subagent_grandchild"
+const greatGrandchildID = "ses_subagent_great_grandchild"
 const parentTitle = "Parent session"
 const childTitle = "Subagent child session"
 const grandchildTitle = "Nested subagent session"
+const greatGrandchildTitle =
+  "Deep research subagent session investigating a very long chain of agent registry failures and navigation breadcrumbs"
 // Child session pages derive their heading from the task part that spawned them.
 const taskDescription = "Inspect child navigation"
 
@@ -28,7 +31,7 @@ test("navigates to a subagent child session missing from the session list", asyn
 })
 
 test("opens a directly linked nested subagent in its root session tab", async ({ page }) => {
-  await setup(page, undefined, true)
+  await setup(page, undefined, 1)
   await page.goto(sessionHref(grandchildID), { waitUntil: "domcontentloaded" })
 
   await expect(page.locator('[data-slot="session-title-parent"]')).toHaveText(childTitle)
@@ -37,6 +40,48 @@ test("opens a directly linked nested subagent in its root session tab", async ({
   await expect(tabs.locator(`a[href="${sessionHref(grandchildID)}"]`)).toHaveCount(1)
   await expect(tabs).toHaveCount(1)
   await expect(tabs.locator('[data-slot="tab-title"]')).toHaveText(parentTitle)
+})
+
+test("shows the full ancestor path and navigates to an earlier subagent", async ({ page }) => {
+  await setup(page, undefined, 2)
+  await page.goto(sessionHref(greatGrandchildID), { waitUntil: "domcontentloaded" })
+
+  await expect(page.locator("[data-timeline-virtual-content]")).toBeAttached()
+  const header = page.locator("[data-session-title]")
+  await expect(header.locator('[data-slot="session-title-ancestor"]')).toHaveText([parentTitle, childTitle])
+  await expect(header.locator('[data-slot="session-title-parent"]')).toHaveText(grandchildTitle)
+  await expect(header.getByRole("heading", { name: greatGrandchildTitle })).toBeVisible()
+
+  await header.getByRole("button", { name: childTitle, exact: true }).click()
+  await expect(page).toHaveURL(sessionHref(childID))
+  await expect(page.locator("[data-session-title]").getByRole("heading", { name: childTitle })).toBeVisible()
+  await expect(page.locator('[data-slot="titlebar-tabs"] [data-titlebar-tab-slot]')).toHaveCount(1)
+})
+
+test("keeps the active nested session visible in a narrow desktop header", async ({ page }) => {
+  await page.setViewportSize({ width: 820, height: 720 })
+  await setup(page, undefined, 2)
+  await page.goto(sessionHref(greatGrandchildID), { waitUntil: "domcontentloaded" })
+
+  const header = page.locator("[data-session-title]")
+  const heading = header.getByRole("heading", { name: greatGrandchildTitle })
+  const separator = header.locator('[data-slot="session-title-ancestors"] + [data-slot="session-title-separator"]')
+  await expect(header.locator('[data-slot="session-title-ancestor"]')).toHaveText([parentTitle, childTitle])
+  await expect(heading).toBeInViewport()
+  await expect(separator).toBeInViewport()
+  const bounds = await heading.boundingBox()
+  expect(bounds).not.toBeNull()
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(820)
+
+  await page.evaluate(() => document.documentElement.setAttribute("dir", "rtl"))
+  await expect(heading).toBeInViewport()
+  await expect(separator).toBeInViewport()
+
+  const root = header.locator(`[data-slot="session-title-ancestor"][data-session-id="${parentID}"]`)
+  await root.focus()
+  await expect(root).toBeFocused()
+  await root.press("Enter")
+  await expect(page).toHaveURL(sessionHref(parentID))
 })
 
 test("returns to the parent session with Escape", async ({ page }) => {
@@ -158,7 +203,7 @@ test("shows the not found fallback when the viewed session is deleted", async ({
   await expect(page.getByRole("heading", { name: taskDescription })).toHaveCount(0)
 })
 
-async function setup(page: Page, events?: () => OpenCodeEvent[], nested = false) {
+async function setup(page: Page, events?: () => OpenCodeEvent[], nestedDepth: 0 | 1 | 2 = 0) {
   await mockOpenCodeServer(page, {
     directory,
     project: {
@@ -185,7 +230,10 @@ async function setup(page: Page, events?: () => OpenCodeEvent[], nested = false)
     sessions: [
       session(parentID, parentTitle, 1700000000000),
       childSession(),
-      ...(nested ? [session(grandchildID, grandchildTitle, 1700000002000, { parentID: childID })] : []),
+      ...(nestedDepth >= 1 ? [session(grandchildID, grandchildTitle, 1700000002000, { parentID: childID })] : []),
+      ...(nestedDepth >= 2
+        ? [session(greatGrandchildID, greatGrandchildTitle, 1700000003000, { parentID: grandchildID })]
+        : []),
     ],
     pageMessages: (sessionID) => ({ items: sessionID === parentID ? parentMessages() : [] }),
     events,

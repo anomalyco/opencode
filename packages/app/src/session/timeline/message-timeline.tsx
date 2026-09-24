@@ -34,7 +34,7 @@ import { containsDirectory, isWorkspaceDirectory } from "@/workspaces/paths"
 import { projectForSession } from "@/shell/layout/helpers"
 import { parseCommentNote, readPromptPresentation } from "@/composer/comment-note"
 import { useCommand } from "@/shell/commands/command"
-import { SessionProjectMenu, SessionTitleHeader } from "../session-identity-header"
+import { SessionAncestorTrail, SessionProjectMenu, SessionTitleHeader } from "../session-identity-header"
 import { SessionHeaderSpacer } from "@/session/header/session-header"
 import type { BackgroundTask } from "../summary/background"
 
@@ -413,21 +413,14 @@ function MessageTimelineView(
                     workspace={workspaceSession()}
                   />
                   <Show when={parentID()}>
-                    <button
-                      type="button"
-                      data-slot="session-title-parent"
-                      class="min-w-0 max-w-[40%] truncate pl-2 text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:text-v2-text-text-muted"
-                      onClick={props.action.navigateParent}
-                    >
-                      {parentTitle()}
-                    </button>
-                    <span
-                      data-slot="session-title-separator"
-                      class="-translate-y-[0.5px] pl-2 pr-1 text-[11px] font-medium text-v2-text-text-faint"
-                      aria-hidden="true"
-                    >
-                      /
-                    </span>
+                    {(id) => (
+                      <SessionAncestorTrail
+                        sessionID={sessionID() ?? ""}
+                        parentID={id()}
+                        parentTitle={parentTitle()}
+                        trailing={!!(childTitle() || title.editing)}
+                      />
+                    )}
                   </Show>
                   <Show when={childTitle() || title.editing}>
                     <Show
@@ -436,6 +429,7 @@ function MessageTimelineView(
                         <h1
                           data-slot="session-title-child"
                           class="truncate text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base w-fit rounded-[6px] px-1 py-1 hover:bg-v2-overlay-simple-overlay-hover"
+                          classList={{ "max-w-[45%] shrink-0": !!parentID() }}
                           onClick={openTitleEditor}
                         >
                           {childTitle()}
@@ -451,6 +445,7 @@ function MessageTimelineView(
                         value={title.draft}
                         disabled={props.pending.rename()}
                         class="block text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base field-sizing-content rounded-[6px] px-1 py-1"
+                        classList={{ "max-w-[45%] shrink-0": !!parentID() }}
                         style={{
                           "--inline-input-shadow": "none",
                           "text-align": "start",
