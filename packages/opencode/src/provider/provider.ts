@@ -1143,9 +1143,19 @@ export class ModelNotFoundError extends Schema.TaggedErrorClass<ModelNotFoundErr
   modelID: ModelV2.ID,
   suggestions: Schema.optional(Schema.Array(Schema.String)),
   cause: Schema.optional(Schema.Defect()),
+  providerMissing: Schema.optional(Schema.Boolean),
 }) {
   override get message() {
-    const suggestions = this.suggestions?.length ? ` Did you mean: ${this.suggestions.join(", ")}?` : ""
+    // Filter here rather than only at the call sites: an exact match ranks
+    // first in fuzzy search, so any caller passing suggestions could otherwise
+    // offer the rejected id as the fix for itself.
+    const usable = this.suggestions?.filter((id) => id !== this.modelID) ?? []
+    const suggestions = usable.length ? ` Did you mean: ${usable.join(", ")}?` : ""
+    // When the provider itself was never registered, the model ID is usually
+    // fine and the real cause is upstream (e.g. a plugin that failed to load).
+    // Saying "model not found" sends the reader hunting for a typo instead.
+    if (this.providerMissing)
+      return `Provider not registered: ${this.providerID} (requested model ${this.modelID}). Check that the plugin or config providing it loaded successfully.${suggestions}`
     return `Model not found: ${this.providerID}/${this.modelID}.${suggestions}`
   }
 
@@ -1879,7 +1889,7 @@ const layer = Layer.effect(
           : fuzzysort
               .go(providerID, Object.keys({ ...s.catalog, ...s.providers }), { limit: 3, threshold: -10000 })
               .map((m) => m.target)
-        return yield* new ModelNotFoundError({ providerID, modelID, suggestions })
+        return yield* new ModelNotFoundError({ providerID, modelID, suggestions, providerMissing: true })
       }
 
       const info = provider.models[modelID]
