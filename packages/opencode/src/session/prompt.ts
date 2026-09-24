@@ -989,6 +989,21 @@ const layer = Layer.effect(
           ]
         }
 
+        if (part.type === "file") {
+          const filePath = part.source?.type === "file" && part.source.path ? part.source.path : part.filename
+          if (filePath) {
+            return [
+              {
+                messageID: info.id,
+                sessionID: input.sessionID,
+                type: "text",
+                synthetic: true,
+                text: `[Attached file: ${filePath}]`,
+              },
+              { ...part, messageID: info.id, sessionID: input.sessionID },
+            ]
+          }
+        }
         return [{ ...part, messageID: info.id, sessionID: input.sessionID }]
       })
 
