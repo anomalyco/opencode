@@ -1,4 +1,4 @@
-import { createMemo, For, Show, createEffect, onMount, onCleanup } from "solid-js"
+import { createMemo, createSignal, For, Show, createEffect, onMount, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { TextAttributes, ScrollBoxRenderable } from "@opentui/core"
 import { useData } from "../../../context/data"
@@ -8,6 +8,7 @@ import { Keymap } from "../../../context/keymap"
 import { useComposerTab } from "./context"
 import { useDialog } from "../../../ui/dialog"
 import { DialogShellOutput } from "../../../component/dialog-shell-output"
+import { Locale } from "../../../util/locale"
 
 export function ShellTab(props: { sessionID: string }) {
   const data = useData()
@@ -17,9 +18,22 @@ export function ShellTab(props: { sessionID: string }) {
   const shortcuts = Keymap.useShortcuts()
   const dialog = useDialog()
 
-  const entries = createMemo(() =>
-    data.shell.listBySession(props.sessionID).filter((shell) => shell.status === "running"),
-  )
+  const entries = createMemo(() => {
+    const shells = data.shell.listBySession(props.sessionID)
+    const running = shells.filter((shell) => shell.status === "running")
+    const finished = shells
+      .filter((shell) => shell.status !== "running")
+      .toSorted((a, b) => (b.time.completed ?? b.time.started) - (a.time.completed ?? a.time.started))
+    return [...running, ...finished]
+  })
+
+  const [now, setNow] = createSignal(Date.now())
+
+  createEffect(() => {
+    if (!composer.active("shell")) return
+    const timer = setInterval(() => setNow(Date.now()), 1000)
+    onCleanup(() => clearInterval(timer))
+  })
 
   const [store, setStore] = createStore({ selected: 0 })
   let scroll: ScrollBoxRenderable | undefined
@@ -117,6 +131,10 @@ export function ShellTab(props: { sessionID: string }) {
           <For each={entries()}>
             {(shell, index) => {
               const active = createMemo(() => index() === store.selected)
+              const elapsed = createMemo(() => {
+                const end = shell.status === "running" ? now() : (shell.time.completed ?? shell.time.started)
+                return Locale.duration(Math.max(0, end - shell.time.started))
+              })
               return (
                 <box
                   flexDirection="row"
@@ -131,12 +149,21 @@ export function ShellTab(props: { sessionID: string }) {
                     open()
                   }}
                 >
-                  <text
-                    fg={active() ? theme.text.action.primary.focused : theme.text.action.primary.base}
-                    attributes={active() ? TextAttributes.BOLD : undefined}
-                    wrapMode="none"
-                  >
-                    {shell.command.split("\n", 1)[0]}
+                  <box flexGrow={1} minWidth={0} flexDirection="row">
+                    <text
+                      fg={active() ? theme.text.action.primary.focused : theme.text.action.primary.base}
+                      attributes={active() ? TextAttributes.BOLD : undefined}
+                      wrapMode="none"
+                      truncate
+                      flexGrow={1}
+                      minWidth={0}
+                    >
+                      {shell.command.split("\n", 1)[0]}
+                    </text>
+                  </box>
+                  <text fg={active() ? theme.text.action.primary.focused : theme.text.muted} wrapMode="none">
+                    {" "}
+                    {elapsed()}
                   </text>
                 </box>
               )
