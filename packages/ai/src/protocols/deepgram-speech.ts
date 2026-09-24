@@ -1,14 +1,12 @@
 import { Effect } from "effect"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderID, mergeJsonRecords } from "../schema/index.js"
+import { mergeJsonRecords, type OpenString } from "../schema/index.js"
 import { SpeechModel, type SpeechEvent, type SpeechRequestFor } from "../speech.js"
 import { MediaInput } from "./utils/media-input.js"
 import { SpeechStream } from "./utils/speech-stream.js"
 
-const ADAPTER = "deepgram-speech"
-const NAME = "Deepgram"
-const PROVIDER = ProviderID.make("deepgram")
+const route = MediaProtocol.identity({ id: "deepgram-speech", name: "Deepgram", provider: "deepgram" })
 export const DEFAULT_BASE_URL = "https://api.deepgram.com"
 export const PATH = "/v1/speak"
 
@@ -16,13 +14,11 @@ export const PATH = "/v1/speak"
 // 1. Public model input
 // ---------------------------------------------------------------------------
 
-export type DeepgramSpeechString<Known extends string> = Known | (string & {})
-
-export type DeepgramEncoding = DeepgramSpeechString<"linear16" | "mulaw" | "alaw" | "mp3" | "opus" | "flac" | "aac">
+export type DeepgramEncoding = OpenString<"linear16" | "mulaw" | "alaw" | "mp3" | "opus" | "flac" | "aac">
 
 export type DeepgramSpeechOptions = {
   readonly encoding?: DeepgramEncoding
-  readonly container?: DeepgramSpeechString<"wav" | "ogg" | "none">
+  readonly container?: OpenString<"wav" | "ogg" | "none">
   readonly sampleRate?: number
   readonly bitRate?: number
   readonly mip_opt_out?: boolean
@@ -60,7 +56,7 @@ const audioFormat = (request: Request) => {
 
 const queryParameters = (request: Request) => {
   const { encoding: _encoding, container: _container, sampleRate, bitRate, ...native } = request.providerOptions ?? {}
-  return MediaInput.query(ADAPTER, {
+  return MediaInput.query(route.id, {
     ...native,
     model: request.model.id,
     ...audioFormat(request),
@@ -76,10 +72,9 @@ const fromRequest = Effect.fn("DeepgramSpeech.fromRequest")(function* (request: 
     FORMATS[request.format] === undefined &&
     request.providerOptions?.encoding === undefined
   )
-    return yield* SpeechStream.unsupportedFormat(
-      PROVIDER,
-      ADAPTER,
-      `${NAME} has no encoding for format "${request.format}"; pass providerOptions.encoding`,
+    return yield* route.unsupported(
+      "media.format",
+      `${route.name} has no encoding for format "${request.format}"; pass providerOptions.encoding`,
     )
   return MediaProtocol.json(
     mergeJsonRecords({ text: request.text }, request.http?.body) ?? {},
@@ -104,7 +99,7 @@ const finish = (state: State, context: MediaProtocol.ResponseContext<Request>) =
   const encoding = HEADERLESS_ENCODINGS[format.encoding ?? ""]
   const requestID = headers["dg-request-id"]
   const modelName = headers["dg-model-name"]
-  return SpeechStream.finish(ADAPTER, state, {
+  return SpeechStream.finish(route, state, {
     ...(format.container === "none" && encoding !== undefined
       ? SpeechStream.pcm(encoding, SpeechStream.sampleRate(mediaType), mediaType)
       : // Deepgram's default encoding is MP3; WAV is a container around any encoding.
@@ -121,9 +116,7 @@ const finish = (state: State, context: MediaProtocol.ResponseContext<Request>) =
 // 7. Protocol and route
 // ---------------------------------------------------------------------------
 
-export const protocol = MediaProtocol.stream<Request, SpeechEvent, Uint8Array, State>({
-  id: ADAPTER,
-  name: NAME,
+export const protocol = MediaProtocol.stream<Request, SpeechEvent, Uint8Array, State>(route, {
   unsupported: ["voice", "language", "instructions", "timestamps"],
   body: { from: fromRequest },
   frames: (bytes) => bytes,
@@ -134,7 +127,7 @@ export const protocol = MediaProtocol.stream<Request, SpeechEvent, Uint8Array, S
 
 export const model = (input: MediaRoute.ModelInput) =>
   SpeechModel.fromRoute<DeepgramSpeechOptions, Uint8Array, State>(
-    { id: ADAPTER, provider: PROVIDER, protocol, baseURL: DEFAULT_BASE_URL, path: PATH },
+    { protocol, baseURL: DEFAULT_BASE_URL, path: PATH },
     input,
   )
 

@@ -2,13 +2,11 @@ import { Effect, Schema } from "effect"
 import { Framing } from "../route/framing.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderID, mergeJsonRecords, type MediaUsage } from "../schema/index.js"
+import { mergeJsonRecords, type MediaUsage } from "../schema/index.js"
 import { SpeechModel, type SpeechEvent, type SpeechRequestFor } from "../speech.js"
 import { SpeechStream } from "./utils/speech-stream.js"
 
-const ADAPTER = "openai-speech"
-const NAME = "OpenAI Speech"
-const PROVIDER = ProviderID.make("openai")
+const route = MediaProtocol.identity({ id: "openai-speech", name: "OpenAI Speech", provider: "openai" })
 export const DEFAULT_BASE_URL = "https://api.openai.com/v1"
 export const PATH = "/audio/speech"
 /** `pcm` is raw 24 kHz, 16-bit signed little-endian mono samples without a header. */
@@ -44,7 +42,7 @@ const SpeechStreamEvent = Schema.Union([
   }),
 ])
 
-const decodeEvent = MediaProtocol.decodeFrame(ADAPTER, NAME, SpeechStreamEvent)
+const decodeEvent = route.decodeFrame(SpeechStreamEvent)
 
 // ---------------------------------------------------------------------------
 // 4. Parser state
@@ -110,9 +108,9 @@ const onEvent = Effect.fn("OpenAISpeech.onEvent")(function* (state: State, frame
 })
 
 const finish = (state: State, context: MediaProtocol.ResponseContext<Request>) => {
-  if (isSse(context.body) && !state.done) return Effect.fail(MediaProtocol.incomplete(ADAPTER))
+  if (isSse(context.body) && !state.done) return Effect.fail(route.incomplete())
   const format = context.request.format ?? "mp3"
-  return SpeechStream.finish(ADAPTER, state, {
+  return SpeechStream.finish(route, state, {
     ...(format === "pcm" ? SpeechStream.pcm("pcm_s16le", PCM_SAMPLE_RATE) : SpeechStream.container(format)),
     usage: state.usage,
   })
@@ -122,9 +120,7 @@ const finish = (state: State, context: MediaProtocol.ResponseContext<Request>) =
 // 7. Protocol and route
 // ---------------------------------------------------------------------------
 
-export const protocol = MediaProtocol.stream<Request, SpeechEvent, string | Uint8Array, State>({
-  id: ADAPTER,
-  name: NAME,
+export const protocol = MediaProtocol.stream<Request, SpeechEvent, string | Uint8Array, State>(route, {
   unsupported: ["language", "timestamps"],
   body: { from: fromRequest },
   frames: (bytes, context) => (isSse(context.body) ? Framing.sse.frame(bytes) : bytes),
@@ -135,7 +131,7 @@ export const protocol = MediaProtocol.stream<Request, SpeechEvent, string | Uint
 
 export const model = (input: MediaRoute.ModelInput) =>
   SpeechModel.fromRoute<OpenAISpeechOptions, string | Uint8Array, State>(
-    { id: ADAPTER, provider: PROVIDER, protocol, baseURL: DEFAULT_BASE_URL, path: PATH },
+    { protocol, baseURL: DEFAULT_BASE_URL, path: PATH },
     input,
   )
 

@@ -337,12 +337,11 @@ with the realtime work in phase 5. ElevenLabs Scribe is not implemented yet.
 ```ts
 class Generation<Response> {
   readonly id: string
-  readonly route: GenerationRoute<Response>        // token-free: { status, result, cancel?: Effect; pollHint? } closed over the decoded token
+  readonly route: GenerationRoute<Response>        // token-free: { status, result, cancel?: Effect } closed over the decoded token
   readonly token: unknown                          // route-owned serializable JSON
   readonly status: "queued" | "running" | "completed" | "failed" | "cancelled" | "expired"
   readonly progress?: number                       // 0..1, normalized
   readonly position?: number
-  readonly expiresAt?: number
   refresh(): Effect<Generation<Response>, AIError>
   result(): Effect<Response, AIError>
   await(options?: GenerationAwaitOptions): Effect<Response, AIError>
@@ -351,7 +350,7 @@ class Generation<Response> {
 }
 
 GenerationAwaitOptions = { poll?: Poll }
-Poll = { interval?: Duration; timeout?: Duration; schedule?: Schedule }   // route may override from provider hints (`openai-poll-after-ms`)
+Poll = { interval?: Duration; timeout?: Duration }
 ```
 
 `Generation` is not video-specific. Image routes on BFL, fal, and Replicate are queued; `Image.start` exists for them. A route declares itself `inline` or `queued`; `generate` on a queued route is `start` then `await`.
@@ -427,7 +426,7 @@ New facades follow the existing one-file-per-provider rule. The facade selector 
 Media does not fit the LLM four-axis route (SSE frames → event state machine) except for streaming TTS/STT. Reuse `Endpoint`, `Auth`, `Framing`, `RequestExecutor`, and add media protocol kinds:
 
 - `MediaProtocol.inline` — `body.from(request)` (JSON, multipart, or query), `response.decode(response)` (JSON, or binary body → `Media.Asset`).
-- `MediaProtocol.queued` — `start` (body + decode to `{ token, snapshot }`), `status`, `result`, optional `cancel`, `pollHint`, and a `token` codec. `result` is always a separate GET (against the status document for Veo/xAI/Runway, fal's `response_url` otherwise) so `await` after `start` and after `resume` share one path. `PollContext.auth` hands the auth headers the route sent to the protocol for output URLs that need them (Veo downloads); they become transient `Media.Asset.headers`, never part of `source`. There is no separate `download` step: `Media.Asset.bytes()` downloads through the executor with those headers. `MediaRoute.inline(...)` / `MediaRoute.queued(...)` compose each kind with endpoint and auth; the queued route decodes the token once and hands `Generation` a token-free `{ status, result, cancel? }`.
+- `MediaProtocol.queued` — `start` (body + decode to `{ token, snapshot }`), `status`, `result`, optional `cancel`, and a `token` codec. `result` is always a separate GET (against the status document for Veo/xAI/Runway, fal's `response_url` otherwise) so `await` after `start` and after `resume` share one path. `PollContext.auth` hands the auth headers the route sent to the protocol for output URLs that need them (Veo downloads); they become transient `Media.Asset.headers`, never part of `source`. There is no separate `download` step: `Media.Asset.bytes()` downloads through the executor with those headers. `MediaRoute.inline(...)` / `MediaRoute.queued(...)` compose each kind with endpoint and auth; the queued route decodes the token once and hands `Generation` a token-free `{ status, result, cancel? }`.
 - `MediaProtocol.stream` — `body.from(request)` over the request plus its `mode`, `frames` (a function that picks the framing for the call: `Framing.sse`, `lines`, `document`, or the raw bytes), fresh per-response `initial()` state, `step` emitting modality events, and `finish(state, context)` — with the observed response for header-only usage — emitting exactly one terminal event or failing as an incomplete stream. The route fills `reason.http` on stream errors. `MediaRoute.stream(...)` exposes `stream` and `generate` (the same stream folded by the modality's `collect`).
 
 `MediaRoute.inline` / `MediaRoute.queued` / `MediaRoute.stream` compose one protocol kind with endpoint/auth and tag the route with its `kind`; `ImageModel`/`VideoModel`/`SpeechModel`/`TranscriptionModel` share the `MediaModel` base (`src/media-model.ts`).

@@ -1,8 +1,9 @@
 import { Effect } from "effect"
 import { Endpoint } from "./route/endpoint.js"
+import { invalidRequest } from "./route/errors.js"
 import { MediaRoute } from "./route/media.js"
 import type { MediaProtocol } from "./route/media-protocol.js"
-import { AIError, HttpOptions, InvalidRequestError, ModelID, ProviderID } from "./schema/index.js"
+import { type AIError, HttpOptions, ModelID, ProviderID } from "./schema/index.js"
 
 /**
  * What every media model carries: ids, the configured route, and deployment `http` overlays. Modality classes
@@ -34,8 +35,6 @@ export namespace MediaModel {
 
   /** A protocol plus its canonical start path; `ModelInput.baseURL` overrides `baseURL` per deployment. */
   export interface RouteInput<Request extends MediaRoute.MediaRequest, Protocol> {
-    readonly id: string
-    readonly provider: string | ProviderID
     readonly protocol: Protocol
     readonly path: Endpoint.EndpointPart<MediaProtocol.Body, Request>
     readonly baseURL?: string
@@ -56,8 +55,6 @@ export const composeRoute = <Request extends MediaRoute.MediaRequest, Protocol, 
   input: MediaRoute.ModelInput,
 ): Route =>
   compose({
-    id: route.id,
-    provider: route.provider,
     protocol: route.protocol,
     endpoint: Endpoint.path(route.path, { baseURL: input.baseURL ?? route.baseURL }),
     auth: input.auth,
@@ -92,11 +89,5 @@ const isQueuedInput = <Request extends MediaRoute.MediaRequest, Event, Response,
 export const tryRequest = <A>(make: () => A): Effect.Effect<A, AIError> =>
   Effect.try({
     try: make,
-    catch: (error) =>
-      new AIError({
-        reason: new InvalidRequestError({
-          message: error instanceof Error ? error.message : String(error),
-          cause: error,
-        }),
-      }),
+    catch: (error) => invalidRequest(error instanceof Error ? error.message : String(error), error),
   })

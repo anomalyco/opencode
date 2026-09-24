@@ -54,6 +54,7 @@ describe("Speech", () => {
           ["UnsupportedOperation", "media.voice"],
         ],
       )
+      expect(errors[1].reason).toMatchObject({ provider: "google", route: "google-speech" })
     }).pipe(Effect.provide(layer(() => Effect.die("an unsupported request reached the network")))),
   )
 

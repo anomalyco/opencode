@@ -57,8 +57,13 @@ export class HttpOptions extends Schema.Class<HttpOptions>("AI.HttpOptions")({
 export namespace HttpOptions {
   export type Input = HttpOptions | ConstructorParameters<typeof HttpOptions>[0]
 
-  /** Normalize HTTP option input into the canonical `HttpOptions` class. */
-  export const make = (input: Input) => (input instanceof HttpOptions ? input : new HttpOptions(input))
+  /** Normalize HTTP option input into the canonical `HttpOptions` class; `undefined` stays `undefined`. */
+  export function make(input: Input): HttpOptions
+  export function make(input: Input | undefined): HttpOptions | undefined
+  export function make(input: Input | undefined) {
+    if (input === undefined || input instanceof HttpOptions) return input
+    return new HttpOptions(input)
+  }
 }
 
 export const mergeHttpOptions = (...items: ReadonlyArray<HttpOptions | undefined>): HttpOptions | undefined => {
@@ -140,13 +145,16 @@ export namespace LanguageModelDefaults {
     return new LanguageModelDefaults({
       generation: input.generation === undefined ? undefined : GenerationOptions.make(input.generation),
       providerOptions: input.providerOptions,
-      http: input.http === undefined ? undefined : HttpOptions.make(input.http),
+      http: HttpOptions.make(input.http),
     })
   }
 }
 
+/** Provider-defined string enum: known values for autocomplete, any string accepted. */
+export type OpenString<Known extends string> = Known | (string & {})
+
 export const ReasoningEfforts = ["none", "minimal", "low", "medium", "high", "xhigh", "max"] as const
-export type ReasoningEffort = (typeof ReasoningEfforts)[number] | (string & {})
+export type ReasoningEffort = OpenString<(typeof ReasoningEfforts)[number]>
 export const ReasoningEffort = Schema.declare<ReasoningEffort>(
   (value): value is ReasoningEffort => typeof value === "string",
   { title: "ReasoningEffort" },

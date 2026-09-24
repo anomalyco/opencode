@@ -5,13 +5,11 @@ import { ImageModel, ImageResponse, type ImageRequestFor } from "../image.js"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderID, mergeJsonRecords } from "../schema/index.js"
+import { mergeJsonRecords } from "../schema/index.js"
 import { ProviderShared, optionalNull } from "./shared.js"
 import { MediaInput } from "./utils/media-input.js"
 
-const ADAPTER = "bfl-images"
-const NAME = "Black Forest Labs"
-const PROVIDER = ProviderID.make("black-forest-labs")
+const route = MediaProtocol.identity({ id: "bfl-images", name: "Black Forest Labs", provider: "black-forest-labs" })
 export const DEFAULT_BASE_URL = "https://api.bfl.ai"
 
 // ---------------------------------------------------------------------------
@@ -94,33 +92,26 @@ const capabilities = (model: string): Capabilities => {
   return { sizing: "dimensions", imageField: "input_image", maxImages: 8, mask: false }
 }
 
-const unsupported = (model: string, field: string, message: string) =>
-  ProviderShared.unsupportedOperation({
-    operation: `media.${field}`,
-    provider: PROVIDER,
-    route: ADAPTER,
-    message: `${model} ${message}`,
-  })
-
 const validate = (request: Request, model: Capabilities) => {
   const id = request.model.id
   const images = request.images?.length ?? 0
   if (request.n !== undefined && request.n > 1)
-    return Effect.fail(unsupported(id, "n", "generates one image per request; call it once per image"))
+    return Effect.fail(route.unsupported("media.n", `${id} generates one image per request; call it once per image`))
   if (request.size !== undefined && model.sizing !== "dimensions")
-    return Effect.fail(unsupported(id, "size", "does not take size (width and height)"))
+    return Effect.fail(route.unsupported("media.size", `${id} does not take size (width and height)`))
   if (request.aspectRatio !== undefined && model.sizing !== "aspectRatio")
-    return Effect.fail(unsupported(id, "aspectRatio", "does not take aspectRatio"))
-  if (images > model.maxImages) return Effect.fail(unsupported(id, "images", `takes at most ${model.maxImages} images`))
+    return Effect.fail(route.unsupported("media.aspectRatio", `${id} does not take aspectRatio`))
+  if (images > model.maxImages)
+    return Effect.fail(route.unsupported("media.images", `${id} takes at most ${model.maxImages} images`))
   if (request.mask !== undefined && !model.mask)
-    return Effect.fail(unsupported(id, "mask", "does not inpaint; use flux-pro-1.0-fill"))
+    return Effect.fail(route.unsupported("media.mask", `${id} does not inpaint; use flux-pro-1.0-fill`))
   return Effect.void
 }
 
 const imageInput = (asset: Media.Asset) => {
   const value = asset.inline()?.base64 ?? ProviderShared.mediaUrl(asset)
   if (value === undefined)
-    return Effect.fail(ProviderShared.invalidRequest(`${NAME} accepts inline images or https URLs`))
+    return Effect.fail(ProviderShared.invalidRequest(`${route.name} accepts inline images or https URLs`))
   return Effect.succeed(value)
 }
 
@@ -153,12 +144,12 @@ const fromRequest = Effect.fn("BlackForestLabsImages.fromRequest")(function* (re
 // 6. Response decoding
 // ---------------------------------------------------------------------------
 
-const decodeStart = MediaProtocol.decodeStarted(ADAPTER, NAME, StartResponse, (value) => ({
+const decodeStart = route.decodeStarted(StartResponse, (value) => ({
   token: { id: value.id, pollingURL: value.polling_url },
   snapshot: { id: value.id, status: "queued" },
 }))
 
-const decodeDocument = MediaProtocol.decodeJson(ADAPTER, NAME, Result)
+const decodeDocument = route.decodeJson(Result)
 
 const decodeStatus = Effect.fn("BlackForestLabsImages.decodeStatus")(function* (
   response: HttpClientResponse.HttpClientResponse,
@@ -175,11 +166,11 @@ const decodeResult = Effect.fn("BlackForestLabsImages.decodeResult")(function* (
   const output = yield* decodeDocument(response)
   const document = output.value
   const status = yield* MediaProtocol.status(STATUS, document.status, output)
-  if (isModerated(document.status)) return yield* output.contentPolicy(`${NAME} moderated the generation`)
+  if (isModerated(document.status)) return yield* output.contentPolicy(`${route.name} moderated the generation`)
   if (status === "failed" || status === "expired")
-    return yield* output.ended(status, `${NAME} generation ${context.token.id} ended with ${document.status}`)
+    return yield* output.ended(status, `${route.name} generation ${context.token.id} ended with ${document.status}`)
   if (status !== "completed" || document.result === undefined || document.result === null)
-    return yield* output.invalid(`${NAME} generation ${context.token.id} has no result`)
+    return yield* output.invalid(`${route.name} generation ${context.token.id} has no result`)
   const { sample, seed, prompt, ...rest } = document.result
   return new ImageResponse({
     // `sample` is a signed URL that expires 10 minutes after the result is ready, so it is downloaded now.
@@ -196,9 +187,7 @@ const decodeResult = Effect.fn("BlackForestLabsImages.decodeResult")(function* (
 // 7. Protocol and route
 // ---------------------------------------------------------------------------
 
-export const protocol = MediaProtocol.queued<Request, ImageResponse, Token>({
-  id: ADAPTER,
-  name: NAME,
+export const protocol = MediaProtocol.queued<Request, ImageResponse, Token>(route, {
   token: Token,
   start: { body: { from: fromRequest }, decode: decodeStart },
   status: { path: (token) => token.pollingURL, decode: decodeStatus },
@@ -207,13 +196,7 @@ export const protocol = MediaProtocol.queued<Request, ImageResponse, Token>({
 
 export const model = (input: MediaRoute.ModelInput) =>
   ImageModel.fromRoute<BlackForestLabsImageOptions, Token>(
-    {
-      id: ADAPTER,
-      provider: PROVIDER,
-      protocol,
-      baseURL: DEFAULT_BASE_URL,
-      path: ({ request }) => `/v1/${request.model.id}`,
-    },
+    { protocol, baseURL: DEFAULT_BASE_URL, path: ({ request }) => `/v1/${request.model.id}` },
     input,
   )
 

@@ -17,7 +17,6 @@ import { resolveEffortUpdates } from "../effort-updates.js"
 import { OpenResponses } from "./open-responses.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
-import { OpenAIImage } from "./utils/openai-image.js"
 import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
 import { ToolSchemaProjection } from "./utils/tool-schema.js"
 import { OpenResponsesChannel } from "./open-responses-channel.js"
@@ -48,7 +47,16 @@ const OpenAIResponsesImageGenerationTool = Schema.Struct({
   output_format: Schema.optional(Schema.Literals(["png", "jpeg", "webp"])),
   partial_images: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
   quality: Schema.optional(Schema.Literals(["auto", "low", "medium", "high"])),
-  size: Schema.optional(OpenAIImage.Size),
+  size: Schema.optional(
+    Schema.String.check(
+      Schema.makeFilter((value) => {
+        if (value === "auto") return undefined
+        const match = /^(\d+)x(\d+)$/.exec(value)
+        if (!match) return "image size must be `auto` or `{width}x{height}`"
+        return Number(match[1]) > 0 && Number(match[2]) > 0 ? undefined : "image dimensions must be positive integers"
+      }),
+    ),
+  ),
 })
 
 const OpenAIResponsesHostedToolItem = Schema.Union([

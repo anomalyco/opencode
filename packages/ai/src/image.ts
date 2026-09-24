@@ -4,7 +4,7 @@ import { Media } from "./media.js"
 import { MediaModel, composeAnyRoute, tryRequest } from "./media-model.js"
 import { MediaRoute } from "./route/media.js"
 import type { MediaProtocol } from "./route/media-protocol.js"
-import { AIError, HttpOptions, MediaUsage, ProviderMetadata } from "./schema/index.js"
+import { AIError, HttpOptions, MediaUsage, ProviderMetadata, type OpenString } from "./schema/index.js"
 import { ImageClient, Service } from "./image-client.js"
 
 // ---------------------------------------------------------------------------
@@ -45,7 +45,7 @@ export class ImageModel<Options extends ImageOptions = ImageOptions> extends Med
   ) {
     return new ImageModel<Options>({
       id: input.id,
-      provider: route.provider,
+      provider: route.protocol.provider,
       http: input.http,
       route: composeAnyRoute(route, input, collectResponse),
     })
@@ -97,7 +97,7 @@ export const ImageSize = Schema.declare<ImageSize>(
 export type ImageAspectRatio = Media.AspectRatio
 export const ImageAspectRatio = Media.AspectRatio
 
-export type ImageFormat = "png" | "jpeg" | "webp" | (string & {})
+export type ImageFormat = OpenString<"png" | "jpeg" | "webp">
 
 export class ImageRequest extends Schema.Class<ImageRequest>("Image.Request")({
   model: ImageModelSchema,
@@ -225,7 +225,7 @@ export function request(input: ImageRequest | ImageRequestInput) {
   if (input instanceof ImageRequest) return input
   return new ImageRequest({
     ...input,
-    http: input.http === undefined ? undefined : HttpOptions.make(input.http),
+    http: HttpOptions.make(input.http),
   })
 }
 

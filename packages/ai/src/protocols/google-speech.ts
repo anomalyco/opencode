@@ -1,14 +1,12 @@
 import { Effect, Schema } from "effect"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderID, mergeJsonRecords } from "../schema/index.js"
+import { mergeJsonRecords } from "../schema/index.js"
 import { SpeechModel, type SpeechEvent, type SpeechRequestFor } from "../speech.js"
 import { GeminiGenerateContent } from "./utils/gemini-generate-content.js"
 import { SpeechStream } from "./utils/speech-stream.js"
 
-const ADAPTER = "google-speech"
-const NAME = "Google Speech"
-const PROVIDER = ProviderID.make("google")
+const route = MediaProtocol.identity({ id: "google-speech", name: "Google Speech", provider: "google" })
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 const DEFAULT_SAMPLE_RATE = 24000
 
@@ -43,7 +41,7 @@ const GenerateContentChunk = GeminiGenerateContent.chunk(
   }),
 )
 
-const decodeChunk = MediaProtocol.decodeFrame(ADAPTER, NAME, GenerateContentChunk)
+const decodeChunk = route.decodeFrame(GenerateContentChunk)
 
 // ---------------------------------------------------------------------------
 // 4. Parser state
@@ -59,10 +57,9 @@ interface State extends SpeechStream.Audio, GeminiGenerateContent.Metadata {
 
 const fromRequest = Effect.fn("GoogleSpeech.fromRequest")(function* (request: MediaProtocol.Addressed<Request>) {
   if (request.format !== undefined && request.format !== "pcm")
-    return yield* SpeechStream.unsupportedFormat(
-      PROVIDER,
-      ADAPTER,
-      `${NAME} only returns raw PCM; request format "pcm" or omit it, then wrap the samples yourself`,
+    return yield* route.unsupported(
+      "media.format",
+      `${route.name} only returns raw PCM; request format "pcm" or omit it, then wrap the samples yourself`,
     )
   const voiceName = SpeechStream.voiceID(request.voice)
   return MediaProtocol.json(
@@ -91,7 +88,7 @@ const fromRequest = Effect.fn("GoogleSpeech.fromRequest")(function* (request: Me
 
 const step = Effect.fn("GoogleSpeech.step")(function* (state: State, frame: string) {
   const chunk = yield* decodeChunk(frame)
-  const blocked = GeminiGenerateContent.blocked(NAME, chunk, frame)
+  const blocked = GeminiGenerateContent.blocked(route.name, chunk, frame)
   if (blocked !== undefined) return yield* blocked
   const audio = (chunk.candidates?.[0]?.content?.parts ?? []).flatMap((part) =>
     part.inlineData === undefined ? [] : [part.inlineData],
@@ -102,7 +99,7 @@ const step = Effect.fn("GoogleSpeech.step")(function* (state: State, frame: stri
 
 const finish = (state: State) => {
   const sampleRate = SpeechStream.sampleRate(state.mimeType) ?? DEFAULT_SAMPLE_RATE
-  return SpeechStream.finish(ADAPTER, state, {
+  return SpeechStream.finish(route, state, {
     ...SpeechStream.pcm("pcm_s16le", sampleRate, state.mimeType ?? `audio/L16;codec=pcm;rate=${sampleRate}`),
     usage: GeminiGenerateContent.usage(state.usage),
     providerMetadata: GeminiGenerateContent.providerMetadata(state),
@@ -114,9 +111,7 @@ const finish = (state: State) => {
 // 7. Protocol and route
 // ---------------------------------------------------------------------------
 
-export const protocol = MediaProtocol.stream<Request, SpeechEvent, string, State>({
-  id: ADAPTER,
-  name: NAME,
+export const protocol = MediaProtocol.stream<Request, SpeechEvent, string, State>(route, {
   unsupported: ["instructions", "speed", "timestamps"],
   body: { from: fromRequest },
   frames: (bytes, context) => GeminiGenerateContent.frames(bytes, context.request.mode),
@@ -128,8 +123,6 @@ export const protocol = MediaProtocol.stream<Request, SpeechEvent, string, State
 export const model = (input: MediaRoute.ModelInput) =>
   SpeechModel.fromRoute<GoogleSpeechOptions, string, State>(
     {
-      id: ADAPTER,
-      provider: PROVIDER,
       protocol,
       baseURL: DEFAULT_BASE_URL,
       // Only `gemini-3.1-flash-tts-preview` and later stream; earlier TTS models reject `streamGenerateContent`.

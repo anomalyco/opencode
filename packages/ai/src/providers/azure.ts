@@ -1,11 +1,11 @@
 import { Auth } from "../route/auth.js"
 import { type AtLeastOne, type ProviderAuthOption } from "../route/auth-options.js"
 import type { Route, RouteDefaultsInput, CompactionOperations } from "../route/client.js"
+import { Endpoint } from "../route/endpoint.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
 import * as OpenAIChat from "../protocols/openai-chat.js"
 import * as OpenAIResponses from "../protocols/openai-responses.js"
-import { ProviderShared } from "../protocols/shared.js"
 import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options.js"
 
 export const id = ProviderID.make("azure")
@@ -108,7 +108,7 @@ const configuredRoute = <Body, Prepared, Compact extends CompactionOperations | 
   })
 
 function endpoint(input: Config, modelID: string | ModelID) {
-  const baseURL = ProviderShared.trimBaseUrl(input.baseURL ?? resourceBaseURL(input.resourceName!))
+  const baseURL = Endpoint.trimBaseUrl(input.baseURL ?? resourceBaseURL(input.resourceName!))
   const query = { "api-version": input.apiVersion ?? "v1", ...input.queryParams }
 
   if (input.useDeploymentBasedUrls) return { baseURL: `${baseURL}/deployments/${modelID}`, query }

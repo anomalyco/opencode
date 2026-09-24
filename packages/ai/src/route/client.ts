@@ -152,7 +152,7 @@ const mergeRouteDefaults = (base: RouteDefaults | undefined, patch: RouteDefault
     providerOptions: mergeProviderOptions(base?.providerOptions, patch.providerOptions),
     http: mergeHttpOptions(
       base?.http,
-      httpOptions(patch.http),
+      HttpOptions.make(patch.http),
       headers === undefined ? undefined : new HttpOptions({ headers }),
     ),
   }
@@ -171,11 +171,6 @@ const mergeHeaders = (...items: ReadonlyArray<Record<string, string> | undefined
 
 export const generationOptions = (input: GenerationOptions.Input | undefined) =>
   input === undefined ? undefined : GenerationOptions.make(input)
-
-export const httpOptions = (input: HttpOptionsInput | undefined) => {
-  if (input === undefined) return input
-  return HttpOptions.make(input)
-}
 
 export interface Interface {
   readonly compact: CompactMethod

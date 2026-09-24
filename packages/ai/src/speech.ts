@@ -3,7 +3,7 @@ import { Media } from "./media.js"
 import { MediaModel, composeRoute, tryRequest } from "./media-model.js"
 import { MediaRoute } from "./route/media.js"
 import type { MediaProtocol } from "./route/media-protocol.js"
-import { AIError, HttpOptions, MediaUsage, ProviderMetadata } from "./schema/index.js"
+import { AIError, HttpOptions, MediaUsage, ProviderMetadata, type OpenString } from "./schema/index.js"
 import { SpeechClient, Service } from "./speech-client.js"
 
 // ---------------------------------------------------------------------------
@@ -35,7 +35,7 @@ export class SpeechModel<Options extends SpeechOptions = SpeechOptions> extends 
   ) {
     return new SpeechModel<Options>({
       id: input.id,
-      provider: route.provider,
+      provider: route.protocol.provider,
       http: input.http,
       route: composeRoute(
         (composition) => MediaRoute.stream({ ...composition, collect: collectResponse }),
@@ -71,7 +71,7 @@ export const SpeechVoice = Schema.Union([Schema.String, Schema.Struct({ id: Sche
 })
 export type SpeechVoice = Schema.Schema.Type<typeof SpeechVoice>
 
-export type SpeechFormat = "mp3" | "wav" | "pcm" | "opus" | "aac" | "flac" | (string & {})
+export type SpeechFormat = OpenString<"mp3" | "wav" | "pcm" | "opus" | "aac" | "flac">
 
 /** Granularity is provider-native: characters on ElevenLabs, words on Cartesia. */
 export const SpeechTimestamp = Schema.Struct({
@@ -188,7 +188,7 @@ export function request(input: SpeechRequest | SpeechRequestInput) {
   if (input instanceof SpeechRequest) return input
   return new SpeechRequest({
     ...input,
-    http: input.http === undefined ? undefined : HttpOptions.make(input.http),
+    http: HttpOptions.make(input.http),
   })
 }
 

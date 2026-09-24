@@ -1,8 +1,9 @@
 import type { RouteDefaultsInput } from "../route/client.js"
 import { Auth } from "../route/auth.js"
 import type { ProviderAuthOption } from "../route/auth-options.js"
+import { MediaRoute } from "../route/media.js"
 import type { ProviderPackage } from "../provider-package.js"
-import { HttpOptions, ProviderID, mergeHttpOptions, type ModelID } from "../schema/index.js"
+import { ProviderID, type ModelID } from "../schema/index.js"
 import { Gemini } from "../protocols/gemini.js"
 import { GoogleImages } from "../protocols/google-images.js"
 import { GoogleSpeech } from "../protocols/google-speech.js"
@@ -46,20 +47,14 @@ const configuredRoute = (input: Config) => {
 
 export const configure = (input: Config = {}) => {
   const route = configuredRoute(input)
-  const media = (modelID: string | ModelID) => ({
-    id: modelID,
-    auth: auth(input),
-    baseURL: input.baseURL,
-    headers: input.headers,
-    http: mergeHttpOptions(input.http === undefined ? undefined : HttpOptions.make(input.http)),
-  })
+  const media = MediaRoute.deployment(input, auth(input))
   return {
     id,
     model: (modelID: string | ModelID) => route.model<Gemini.ProviderOptionsInput>({ id: modelID }),
-    image: (modelID: string | ModelID) => GoogleImages.model(media(modelID)),
-    video: (modelID: string | ModelID) => GoogleVideo.model(media(modelID)),
-    speech: (modelID: string | ModelID) => GoogleSpeech.model(media(modelID)),
-    transcription: (modelID: string | ModelID) => GoogleTranscription.model(media(modelID)),
+    image: (modelID: string | ModelID) => GoogleImages.model({ ...media, id: modelID }),
+    video: (modelID: string | ModelID) => GoogleVideo.model({ ...media, id: modelID }),
+    speech: (modelID: string | ModelID) => GoogleSpeech.model({ ...media, id: modelID }),
+    transcription: (modelID: string | ModelID) => GoogleTranscription.model({ ...media, id: modelID }),
     configure,
   }
 }

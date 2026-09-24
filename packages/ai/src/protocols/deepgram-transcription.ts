@@ -2,14 +2,12 @@ import { Effect, Schema } from "effect"
 import type { HttpClientResponse } from "effect/unstable/http"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderID, mergeJsonRecords } from "../schema/index.js"
+import { mergeJsonRecords, type OpenString } from "../schema/index.js"
 import { TranscriptionModel, TranscriptionResponse, type TranscriptionRequestFor } from "../transcription.js"
 import { ProviderShared } from "./shared.js"
 import { MediaInput } from "./utils/media-input.js"
 
-const ADAPTER = "deepgram-transcription"
-const NAME = "Deepgram"
-const PROVIDER = ProviderID.make("deepgram")
+const route = MediaProtocol.identity({ id: "deepgram-transcription", name: "Deepgram", provider: "deepgram" })
 export const DEFAULT_BASE_URL = "https://api.deepgram.com"
 export const PATH = "/v1/listen"
 
@@ -24,7 +22,7 @@ export type DeepgramTranscriptionOptions = {
   readonly utterances?: boolean
   readonly detect_language?: boolean | ReadonlyArray<string>
   readonly keyterm?: ReadonlyArray<string>
-  readonly diarize_model?: "latest" | "v1" | "v2" | (string & {})
+  readonly diarize_model?: OpenString<"latest" | "v1" | "v2">
   readonly filler_words?: boolean
   readonly numerals?: boolean
   readonly mip_opt_out?: boolean
@@ -79,7 +77,7 @@ const ListenResponse = Schema.Struct({
 
 const query = (request: Request) =>
   MediaInput.query(
-    ADAPTER,
+    route.id,
     mergeJsonRecords(
       {
         model: request.model.id,
@@ -100,8 +98,10 @@ const fromRequest = Effect.fn("DeepgramTranscription.fromRequest")(function* (re
   if (url !== undefined)
     return MediaProtocol.json(mergeJsonRecords({ url }, request.http?.body) ?? {}, yield* query(request))
   if (request.http?.body !== undefined)
-    return yield* ProviderShared.invalidRequest(`${NAME} sends inline audio as the raw body, so http.body cannot apply`)
-  const audio = yield* MediaInput.inlineBytes(ADAPTER, request.audio)
+    return yield* ProviderShared.invalidRequest(
+      `${route.name} sends inline audio as the raw body, so http.body cannot apply`,
+    )
+  const audio = yield* MediaInput.inlineBytes(route.id, request.audio)
   return MediaProtocol.binary(audio, request.audio.mediaType, yield* query(request))
 })
 
@@ -109,7 +109,7 @@ const fromRequest = Effect.fn("DeepgramTranscription.fromRequest")(function* (re
 // 6. Response decoding
 // ---------------------------------------------------------------------------
 
-const decodeListen = MediaProtocol.decodeJson(ADAPTER, NAME, ListenResponse)
+const decodeListen = route.decodeJson(ListenResponse)
 
 const speaker = (value: number | undefined) => (value === undefined ? undefined : String(value))
 
@@ -131,7 +131,7 @@ const decodeResponse = Effect.fn("DeepgramTranscription.decodeResponse")(functio
   const output = yield* decodeListen(response)
   const channel = output.value.results.channels[0]
   const alternative = channel?.alternatives?.[0]
-  if (alternative === undefined) return yield* output.invalid(`${NAME} returned no transcript`)
+  if (alternative === undefined) return yield* output.invalid(`${route.name} returned no transcript`)
   const duration = output.value.metadata?.duration
   const requestID = output.value.metadata?.request_id
   return new TranscriptionResponse({
@@ -171,19 +171,14 @@ const decodeResponse = Effect.fn("DeepgramTranscription.decodeResponse")(functio
 // 7. Protocol and route
 // ---------------------------------------------------------------------------
 
-export const protocol = MediaProtocol.inline<Request, TranscriptionResponse>({
-  id: ADAPTER,
-  name: NAME,
+export const protocol = MediaProtocol.inline<Request, TranscriptionResponse>(route, {
   unsupported: ["prompt", "speakers"],
   body: { from: fromRequest },
   response: { decode: decodeResponse },
 })
 
 export const model = (input: MediaRoute.ModelInput) =>
-  TranscriptionModel.fromRoute<DeepgramTranscriptionOptions>(
-    { id: ADAPTER, provider: PROVIDER, protocol, baseURL: DEFAULT_BASE_URL, path: PATH },
-    input,
-  )
+  TranscriptionModel.fromRoute<DeepgramTranscriptionOptions>({ protocol, baseURL: DEFAULT_BASE_URL, path: PATH }, input)
 
 export const DeepgramTranscription = {
   protocol,

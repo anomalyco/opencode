@@ -28,6 +28,7 @@ import {
   Usage,
 } from "../src/schema/index.js"
 import { ProviderShared } from "../src/protocols/shared.js"
+import { Framing } from "../src/route/framing.js"
 import { it } from "./lib/effect.js"
 
 const model = new LanguageModel({
@@ -137,7 +138,7 @@ describe("AI.Usage", () => {
 
   it.effect("sseFraming maps decoder failures to AI errors", () =>
     Effect.gen(function* () {
-      const error = yield* ProviderShared.sseFraming(
+      const error = yield* Framing.sseFraming(
         Stream.make(new TextEncoder().encode(`data: ${"x".repeat(10 * 1024 * 1024)}`)),
       ).pipe(Stream.runCollect, Effect.flip)
 
@@ -149,7 +150,7 @@ describe("AI.Usage", () => {
   it.effect("sseFraming ignores retry directives without ending the stream", () =>
     Effect.gen(function* () {
       const encoder = new TextEncoder()
-      const frames = yield* ProviderShared.sseFraming(
+      const frames = yield* Framing.sseFraming(
         Stream.make(
           encoder.encode("retry: 1000\n\n"),
           encoder.encode('data: {"first":true}\n\n'),
@@ -165,7 +166,7 @@ describe("AI.Usage", () => {
   it.effect("sseFraming preserves event data around retry directives", () =>
     Effect.gen(function* () {
       const encoder = new TextEncoder()
-      const frames = yield* ProviderShared.sseFraming(
+      const frames = yield* Framing.sseFraming(
         Stream.make(
           encoder.encode("event: update\ndata: first\n"),
           encoder.encode("retry: 1000\n"),
@@ -180,7 +181,7 @@ describe("AI.Usage", () => {
 
   it.effect("sseFraming drops bare null frames and keeps other payloads", () =>
     Effect.gen(function* () {
-      const frames = yield* ProviderShared.sseFraming(
+      const frames = yield* Framing.sseFraming(
         Stream.make(
           new TextEncoder().encode(
             'data: {"first":true}\n\ndata: null\n\nevent: update\ndata: null\n\ndata: "null"\n\ndata: 0\n\ndata: {"second":true}\n\ndata: [DONE]\n\ndata: null\n\n',
@@ -194,7 +195,7 @@ describe("AI.Usage", () => {
 
   it.effect("sseFraming drops keepalive comments sent as data and keeps other payloads", () =>
     Effect.gen(function* () {
-      const frames = yield* ProviderShared.sseFraming(
+      const frames = yield* Framing.sseFraming(
         Stream.make(
           new TextEncoder().encode(
             'data: {"first":true}\n\ndata: : keepalive\n\n: keepalive\n\ndata: : ping\n\ndata: {"second":true}\n\n',

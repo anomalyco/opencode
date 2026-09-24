@@ -323,6 +323,23 @@ describe("Image", () => {
     ),
   )
 
+  it.effect("decodes URL images and rejects items with neither data nor a URL", () =>
+    Effect.gen(function* () {
+      const model = XAI.configure({ apiKey: "test", baseURL: "https://api.xai.test/v1" }).image("future-model")
+      const respond = (data: ReadonlyArray<object>) =>
+        layer((input) =>
+          Effect.succeed(input.respond(JSON.stringify({ data }), { headers: { "content-type": "application/json" } })),
+        )
+      const response = yield* Image.generate({ model, prompt: "A kite" }).pipe(
+        Effect.provide(respond([{ url: "https://xai.test/a.png", mime_type: "image/png" }])),
+      )
+      expect(response.images[0].source).toEqual({ type: "url", url: "https://xai.test/a.png", mediaType: "image/png" })
+      const error = yield* Image.generate({ model, prompt: "A kite" }).pipe(Effect.provide(respond([{}])), Effect.flip)
+      expect(error.reason._tag).toBe("InvalidProviderOutput")
+      expect(error.message).toContain("xAI Images result 0 has neither image data nor a URL")
+    }),
+  )
+
   it.effect("lowers ordered Google image inputs into generateContent parts", () =>
     Image.generate({
       model: Google.configure({ apiKey: "test", baseURL: "https://google.test/v1beta" }).image("future-model"),

@@ -61,7 +61,7 @@ export const request = <const SelectedLanguageModel extends LanguageModel>(
     toolChoice: requestToolChoice ? ToolChoice.make(requestToolChoice) : undefined,
     generation: requestGeneration === undefined ? undefined : GenerationOptions.make(requestGeneration),
     providerOptions: requestProviderOptions,
-    http: requestHttp === undefined ? undefined : HttpOptions.make(requestHttp),
+    http: HttpOptions.make(requestHttp),
   })
 }
 

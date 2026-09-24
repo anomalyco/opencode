@@ -11,13 +11,11 @@ import { Media } from "../media.js"
 import { Framing } from "../route/framing.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderID, mergeJsonRecords, type MediaUsage } from "../schema/index.js"
+import { mergeJsonRecords, type MediaUsage, type OpenString } from "../schema/index.js"
 import { ProviderShared } from "./shared.js"
 import { MediaInput } from "./utils/media-input.js"
 
-const ADAPTER = "openai-images"
-const NAME = "OpenAI Images"
-const PROVIDER = ProviderID.make("openai")
+const route = MediaProtocol.identity({ id: "openai-images", name: "OpenAI Images", provider: "openai" })
 export const DEFAULT_BASE_URL = "https://api.openai.com/v1"
 export const PATH = "/images/generations"
 export const EDIT_PATH = "/images/edits"
@@ -26,13 +24,11 @@ export const EDIT_PATH = "/images/edits"
 // 1. Public model input
 // ---------------------------------------------------------------------------
 
-export type OpenAIImageString<Known extends string> = Known | (string & {})
-
 /** Provider-native options. Common fields (`n`, `size`, `format`, `images`, `mask`) live on the request. */
 export type OpenAIImageOptions = {
-  readonly quality?: OpenAIImageString<"auto" | "low" | "medium" | "high" | "standard" | "hd">
-  readonly background?: OpenAIImageString<"auto" | "opaque" | "transparent">
-  readonly moderation?: OpenAIImageString<"auto" | "low">
+  readonly quality?: OpenString<"auto" | "low" | "medium" | "high" | "standard" | "hd">
+  readonly background?: OpenString<"auto" | "opaque" | "transparent">
+  readonly moderation?: OpenString<"auto" | "low">
   readonly outputCompression?: number
   /** Previews sent before the final image when streaming (default 2); ignored by `Image.generate`. */
   readonly partialImages?: number
@@ -83,7 +79,7 @@ const StreamEvent = Schema.Union([
   }),
 ])
 
-const decodeEvent = MediaProtocol.decodeFrame(ADAPTER, NAME, StreamEvent)
+const decodeEvent = route.decodeFrame(StreamEvent)
 const decodeDocument = Schema.decodeUnknownEffect(Schema.fromJsonString(OpenAIImageResponse))
 
 /** `generate` reads the whole JSON response as one frame, with the requested format for responses that omit it. */
@@ -116,21 +112,11 @@ const streamOptions = (request: MediaProtocol.Addressed<Request>) => {
   if (request.mode !== "stream") return Effect.succeed(undefined)
   if (request.model.id.startsWith("dall-e"))
     return Effect.fail(
-      ProviderShared.unsupportedOperation({
-        operation: "media.stream",
-        provider: PROVIDER,
-        route: ADAPTER,
-        message: `${request.model.id} does not stream; use Image.generate or a GPT image model`,
-      }),
+      route.unsupported("media.stream", `${request.model.id} does not stream; use Image.generate or a GPT image model`),
     )
   if (request.n !== undefined && request.n > 1)
     return Effect.fail(
-      ProviderShared.unsupportedOperation({
-        operation: "media.n",
-        provider: PROVIDER,
-        route: ADAPTER,
-        message: `${NAME} streams one image; use Image.generate for n=${request.n}`,
-      }),
+      route.unsupported("media.n", `${route.name} streams one image; use Image.generate for n=${request.n}`),
     )
   return Effect.succeed({ stream: true, partial_images: request.providerOptions?.partialImages ?? 2 })
 }
@@ -140,7 +126,7 @@ const isEdit = (request: Request) => (request.images?.length ?? 0) > 0
 const isInline = (asset: Media.Asset) => asset.source.type === "bytes" || asset.source.type === "base64"
 
 const reference = (asset: Media.Asset) =>
-  ProviderShared.mediaReference(asset, PROVIDER, NAME).pipe(
+  ProviderShared.mediaReference(asset, route.provider, route.name).pipe(
     Effect.map((item) => (item.type === "ref" ? { file_id: item.value } : { image_url: item.value })),
   )
 
@@ -158,18 +144,17 @@ const fromRequest = Effect.fn("OpenAIImages.fromRequest")(function* (request: Me
   // Owned bytes go through multipart edits; remote URLs and file IDs use the JSON edits body instead.
   if (images.length > 0 && images.every(isInline) && (mask === undefined || isInline(mask))) {
     const form = new FormData()
-    form.append("model", request.model.id)
-    form.append("prompt", request.prompt)
-    Object.entries(fields ?? {}).forEach(([key, value]) => {
-      if (RESERVED_FORM_FIELDS.has(key)) return
-      form.append(key, typeof value === "string" ? value : ProviderShared.encodeJson(value))
-    })
-    const uploads = yield* Effect.forEach(images, (image) => MediaInput.inlineBytes(ADAPTER, image))
+    MediaInput.appendFields(
+      form,
+      { model: request.model.id, prompt: request.prompt },
+      { overlay: fields, reserved: RESERVED_FORM_FIELDS },
+    )
+    const uploads = yield* Effect.forEach(images, (image) => MediaInput.inlineBytes(route.id, image))
     uploads.forEach((data, index) =>
       form.append("image[]", MediaInput.blob(data, images[index].mediaType), `image-${index}`),
     )
     if (mask !== undefined)
-      form.append("mask", MediaInput.blob(yield* MediaInput.inlineBytes(ADAPTER, mask), mask.mediaType), "mask")
+      form.append("mask", MediaInput.blob(yield* MediaInput.inlineBytes(route.id, mask), mask.mediaType), "mask")
     return MediaProtocol.multipart(form)
   }
 
@@ -210,22 +195,18 @@ const usage = (value: Schema.Schema.Type<typeof Usage> | undefined): MediaUsage 
       }
 
 const eventImage = (frame: string, label: string, data: string, format: string) =>
-  MediaInput.decodedAsset(
-    (message, cause) => MediaProtocol.frameError(ADAPTER, message, frame, cause),
-    label,
-    data,
-    `image/${format}`,
-    { info: { format } },
-  )
+  MediaInput.decodedAsset((message, cause) => route.frameError(message, frame, cause), label, data, `image/${format}`, {
+    info: { format },
+  })
 
 const onEvent = Effect.fn("OpenAIImages.onEvent")(function* (state: State, frame: string) {
   const event = yield* decodeEvent(frame)
   const format = event.output_format
   if ("partial_image_index" in event) {
-    const image = yield* eventImage(frame, `${NAME} partial image`, event.b64_json, format)
+    const image = yield* eventImage(frame, `${route.name} partial image`, event.b64_json, format)
     return [state, [ImagePartialEvent.make({ index: event.partial_image_index, image })]] as const
   }
-  const image = yield* eventImage(frame, `${NAME} result ${state.completed}`, event.b64_json, format)
+  const image = yield* eventImage(frame, `${route.name} result ${state.completed}`, event.b64_json, format)
   return [
     { ...state, completed: state.completed + 1, format, usage: usage(event.usage) },
     [ImageOutputEvent.make({ index: state.completed, image })],
@@ -233,25 +214,20 @@ const onEvent = Effect.fn("OpenAIImages.onEvent")(function* (state: State, frame
 })
 
 const onDocument = Effect.fn("OpenAIImages.onDocument")(function* (frame: Exclude<Frame, string>) {
-  const invalid = (message: string, cause?: unknown) =>
-    MediaProtocol.frameError(ADAPTER, message, frame.document, cause)
+  const invalid = (message: string, cause?: unknown) => route.frameError(message, frame.document, cause)
   const decoded = yield* decodeDocument(frame.document).pipe(
-    Effect.mapError((cause) => invalid(`${NAME} returned an invalid response`, cause)),
+    Effect.mapError((cause) => invalid(`${route.name} returned an invalid response`, cause)),
   )
   const format = decoded.output_format ?? frame.requested ?? "png"
   const mediaType = `image/${format}`
-  const images = yield* Effect.forEach(decoded.data, (item, index) => {
-    const providerMetadata =
-      item.revised_prompt === undefined ? undefined : { openai: { revisedPrompt: item.revised_prompt } }
-    if (item.b64_json)
-      return MediaInput.decodedAsset(invalid, `${NAME} result ${index}`, item.b64_json, mediaType, {
-        info: { format },
-        providerMetadata,
-      })
-    if (item.url) return Effect.succeed(Media.url(item.url, { mediaType, info: { format }, providerMetadata }))
-    return Effect.fail(invalid(`${NAME} result ${index} has neither image data nor a URL`))
-  })
-  if (images.length === 0) return yield* invalid(`${NAME} returned no images`)
+  const images = yield* Effect.forEach(decoded.data, (item, index) =>
+    MediaInput.imageOutput(invalid, `${route.name} result ${index}`, item, mediaType, {
+      info: { format },
+      providerMetadata:
+        item.revised_prompt === undefined ? undefined : { openai: { revisedPrompt: item.revised_prompt } },
+    }),
+  )
+  if (images.length === 0) return yield* invalid(`${route.name} returned no images`)
   const state: State = { completed: images.length, format, usage: usage(decoded.usage) }
   return [state, images.map((image, index) => ImageOutputEvent.make({ index, image }))] as const
 })
@@ -259,7 +235,7 @@ const onDocument = Effect.fn("OpenAIImages.onDocument")(function* (frame: Exclud
 const step = (state: State, frame: Frame) => (typeof frame === "string" ? onEvent(state, frame) : onDocument(frame))
 
 const finish = (state: State) => {
-  if (state.completed === 0) return Effect.fail(MediaProtocol.incomplete(ADAPTER))
+  if (state.completed === 0) return Effect.fail(route.incomplete())
   return Effect.succeed([
     ImageFinishEvent.make({ usage: state.usage, providerMetadata: { openai: { outputFormat: state.format } } }),
   ])
@@ -269,9 +245,7 @@ const finish = (state: State) => {
 // 7. Protocol and route
 // ---------------------------------------------------------------------------
 
-export const protocol = MediaProtocol.stream<Request, ImageEvent, Frame, State>({
-  id: ADAPTER,
-  name: NAME,
+export const protocol = MediaProtocol.stream<Request, ImageEvent, Frame, State>(route, {
   unsupported: ["aspectRatio", "seed"],
   body: { from: fromRequest },
   frames: (bytes, context) =>
@@ -287,13 +261,7 @@ export const protocol = MediaProtocol.stream<Request, ImageEvent, Frame, State>(
 
 export const model = (input: MediaRoute.ModelInput) =>
   ImageModel.fromRoute<OpenAIImageOptions, Frame, State>(
-    {
-      id: ADAPTER,
-      provider: PROVIDER,
-      protocol,
-      baseURL: DEFAULT_BASE_URL,
-      path: ({ request }) => (isEdit(request) ? EDIT_PATH : PATH),
-    },
+    { protocol, baseURL: DEFAULT_BASE_URL, path: ({ request }) => (isEdit(request) ? EDIT_PATH : PATH) },
     input,
   )
 

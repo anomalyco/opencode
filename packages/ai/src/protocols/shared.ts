@@ -1,29 +1,25 @@
 import { Tool } from "@opencode/schema/tool"
-import { Effect, Option, Schema, Stream } from "effect"
-import * as Sse from "effect/unstable/encoding/Sse"
+import { Effect, Option, Schema } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
 import { Media } from "../media.js"
 import {
-  InvalidProviderOutputError,
-  InvalidRequestError,
-  UnsupportedOperationError,
   AIError,
   LLMRequest,
   Message,
   ToolDefinition,
   type ContentPart,
   type MediaPart,
+  type OpenString,
   type ProviderID,
   type TextPart,
   type ToolEntry,
   type ToolResultPart,
 } from "../schema/index.js"
+import { eventError, invalidRequest, unsupportedOperation } from "../route/errors.js"
+import { Json, decodeJson, encodeJson } from "../utils/json.js"
 import { isRecord } from "../utils/record.js"
-export { isRecord }
+export { Json, decodeJson, encodeJson, eventError, invalidRequest, isRecord, unsupportedOperation }
 
-export const Json = Schema.fromJsonString(Schema.Unknown)
-export const decodeJson = Schema.decodeUnknownSync(Json)
-export const encodeJson = Schema.encodeSync(Json)
 const isJson = Schema.is(Schema.Json)
 export const JsonObject = Schema.Record(Schema.String, Schema.Unknown)
 export const optionalArray = <const S extends Schema.Top>(schema: S) => Schema.optional(Schema.Array(schema))
@@ -35,7 +31,7 @@ export const lenient = <const S extends Schema.Top>(schema: S) =>
   )
 /** Provider-defined string enum: known values for autocomplete, any string accepted at runtime. */
 export const knownString = <Known extends string>() =>
-  Schema.declare<Known | (string & {})>((value): value is Known | (string & {}) => typeof value === "string", {
+  Schema.declare<OpenString<Known>>((value): value is OpenString<Known> => typeof value === "string", {
     expected: "string",
   })
 
@@ -111,11 +107,6 @@ export const sumTokens = (...values: ReadonlyArray<number | undefined>): number 
   if (values.every((value) => value === undefined)) return undefined
   return values.reduce((acc: number, value) => acc + (value ?? 0), 0)
 }
-
-export const eventError = (route: string, message: string, body?: string, cause?: unknown) =>
-  new AIError({
-    reason: new InvalidProviderOutputError({ route, message, body, cause }),
-  })
 
 export const parseJson = (route: string, input: string, message: string) =>
   Effect.try({
@@ -229,8 +220,6 @@ export const toolFileMedia = (item: Tool.FileContent): MediaPart => {
   return Message.media(asset, { filename: item.name })
 }
 
-export const trimBaseUrl = (value: string) => value.replace(/\/+$/, "")
-
 export const toolResultText = (part: ToolResultPart) => {
   if (part.result.type === "text") return String(part.result.value)
   if (part.result.type === "error") {
@@ -251,85 +240,6 @@ export const errorText = (error: unknown) => {
   if (error === undefined) return "undefined"
   return "Unknown stream error"
 }
-
-/**
- * `framing` step for Server-Sent Events. Decodes UTF-8, runs the SSE channel
- * decoder, optionally filters named events, and drops empty events and known
- * keepalives that proxies send as data. `[DONE]` is dropped by default or
- * retained for protocols that use it as their stream boundary. Retry control events are ignored without
- * interrupting the stream. Decoder failures become provider output errors so
- * the public error channel stays `AIError`.
- */
-export const sseFraming = (
-  bytes: Stream.Stream<Uint8Array, AIError>,
-  events?: ReadonlySet<string>,
-  includeDone = false,
-): Stream.Stream<string, AIError> =>
-  bytes.pipe(
-    Stream.decodeText(),
-    Stream.mapAccumEffect(
-      () => {
-        const output: Sse.Event[] = []
-        return {
-          output,
-          parser: Sse.makeParser((event) => {
-            if (event._tag === "Event") output.push(event)
-          }),
-        }
-      },
-      (state, chunk) =>
-        Effect.gen(function* () {
-          const error = state.parser.feed(chunk)
-          if (error) return yield* eventError("sse", error.message, chunk, error)
-          return [state, state.output.splice(0)] as const
-        }),
-    ),
-    Stream.filter(
-      (event) =>
-        (events === undefined || events.has(event.event)) &&
-        event.data.length > 0 &&
-        // Some OpenAI-compatible proxies serialize an empty flush as a bare
-        // `data: null`, between events or after `[DONE]`. No protocol has a
-        // null event, so it carries nothing and must not abort the stream.
-        event.data !== "null" &&
-        // Vertex AI partner models (e.g. `xai/grok-4.6`) send their SSE
-        // keepalive comment as `data: : keepalive` while reasoning.
-        event.data !== ": keepalive" &&
-        (event.data !== "[DONE]" || includeDone || (events !== undefined && event.event !== "message")),
-    ),
-    Stream.map((event) => event.data),
-  )
-
-/**
- * Canonical invalid-request constructor shared by protocol lowering.
- */
-export const invalidRequest = (message: string, cause?: unknown) =>
-  new AIError({
-    reason: new InvalidRequestError({ message, cause }),
-  })
-
-/**
- * Canonical constructor for operations the selected route does not implement.
- * Prefer this over `invalidRequest` when the failure is a missing route
- * capability rather than a malformed caller input, so consumers can branch on
- * `reason._tag` plus `reason.operation` instead of matching message text.
- */
-export const unsupportedOperation = (input: {
-  readonly operation: string
-  readonly message: string
-  readonly provider?: ProviderID
-  readonly route?: string
-  readonly cause?: unknown
-}) =>
-  new AIError({
-    reason: new UnsupportedOperationError({
-      operation: input.operation,
-      message: input.message,
-      provider: input.provider,
-      route: input.route,
-      cause: input.cause,
-    }),
-  })
 
 /**
  * Lower namespaces to flat definitions for protocols without a native

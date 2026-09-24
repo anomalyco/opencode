@@ -3,20 +3,16 @@ import type { HttpClientResponse } from "effect/unstable/http"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderID, mergeJsonRecords } from "../schema/index.js"
+import { mergeJsonRecords, type OpenString } from "../schema/index.js"
 import { VideoModel, VideoResponse, type VideoRequestFor } from "../video.js"
-import { ProviderShared, optionalNull } from "./shared.js"
+import { optionalNull } from "./shared.js"
 import { FalQueue } from "./utils/fal-queue.js"
 
-const ADAPTER = "fal-video"
-const NAME = "fal Video"
-const PROVIDER = ProviderID.make("fal")
+const route = MediaProtocol.identity({ id: "fal-video", name: "fal Video", provider: "fal" })
 
 // ---------------------------------------------------------------------------
 // 1. Public model input
 // ---------------------------------------------------------------------------
-
-export type FalVideoString<Known extends string> = Known | (string & {})
 
 /**
  * Provider-native input. fal video endpoints are model-specific: `duration` is a string enum whose values differ per
@@ -24,7 +20,7 @@ export type FalVideoString<Known extends string> = Known | (string & {})
  * `last_frame_url`, `tail_image_url`), so those pass through here instead of lowering from common fields.
  */
 export type FalVideoOptions = {
-  readonly duration?: FalVideoString<"4s" | "6s" | "8s" | "5" | "10">
+  readonly duration?: OpenString<"4s" | "6s" | "8s" | "5" | "10">
 } & Record<string, unknown>
 
 export type Request = VideoRequestFor<FalVideoOptions>
@@ -52,15 +48,13 @@ const QueueResult = Schema.StructWithRest(
 
 const fromRequest = Effect.fn("FalVideo.fromRequest")(function* (request: Request) {
   if (request.frames?.last !== undefined)
-    return yield* ProviderShared.unsupportedOperation({
-      operation: "video.frames.last",
-      provider: PROVIDER,
-      route: ADAPTER,
-      message: `${NAME} names the last frame per model; pass it through providerOptions (e.g. end_image_url) instead of frames.last`,
-    })
+    return yield* route.unsupported(
+      "video.frames.last",
+      `${route.name} names the last frame per model; pass it through providerOptions (e.g. end_image_url) instead of frames.last`,
+    )
   const imageUrl =
-    request.frames?.first === undefined ? undefined : yield* FalQueue.mediaUrl(request.frames.first, NAME)
-  const videoUrl = request.video === undefined ? undefined : yield* FalQueue.mediaUrl(request.video, NAME)
+    request.frames?.first === undefined ? undefined : yield* FalQueue.mediaUrl(request.frames.first, route.name)
+  const videoUrl = request.video === undefined ? undefined : yield* FalQueue.mediaUrl(request.video, route.name)
   return MediaProtocol.json(
     mergeJsonRecords(
       {
@@ -83,7 +77,7 @@ const fromRequest = Effect.fn("FalVideo.fromRequest")(function* (request: Reques
 // 6. Response decoding
 // ---------------------------------------------------------------------------
 
-const decodeQueueResult = MediaProtocol.decodeJson(ADAPTER, NAME, QueueResult)
+const decodeQueueResult = route.decodeJson(QueueResult)
 
 const decodeResult = Effect.fn("FalVideo.decodeResult")(function* (
   response: HttpClientResponse.HttpClientResponse,
@@ -109,9 +103,7 @@ const decodeResult = Effect.fn("FalVideo.decodeResult")(function* (
 // 7. Protocol and route
 // ---------------------------------------------------------------------------
 
-export const protocol = FalQueue.protocol<Request, VideoResponse>({
-  id: ADAPTER,
-  name: NAME,
+export const protocol = FalQueue.protocol<Request, VideoResponse>(route, {
   unsupported: ["n", "durationSeconds", "references"],
   from: fromRequest,
   decodeResult,
@@ -119,13 +111,7 @@ export const protocol = FalQueue.protocol<Request, VideoResponse>({
 
 export const model = (input: MediaRoute.ModelInput) =>
   VideoModel.fromRoute<FalVideoOptions, FalQueue.Token>(
-    {
-      id: ADAPTER,
-      provider: PROVIDER,
-      protocol,
-      baseURL: FalQueue.DEFAULT_BASE_URL,
-      path: ({ request }) => `/${request.model.id}`,
-    },
+    { protocol, baseURL: FalQueue.DEFAULT_BASE_URL, path: ({ request }) => `/${request.model.id}` },
     input,
   )
 
