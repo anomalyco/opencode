@@ -584,7 +584,7 @@ const layer = Layer.effect(
     return Service.of({
       isOverflow,
       prune,
-      process: processCompaction,
+       process: (input) => processCompaction(input).pipe(Effect.orDie),
       create,
     })
   }),

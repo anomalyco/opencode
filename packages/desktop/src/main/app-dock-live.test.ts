@@ -33,10 +33,10 @@ async function fixture() {
     ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", key, "-out", cert, "-subj", "/CN=127.0.0.1", "-days", "1"],
     { stdio: "ignore" },
   )
-  const body = `<!doctype html><title>live fixture</title><button id=inc>Increment</button><output id=count>0</output><label for=name>Name</label><input id=name type=text placeholder="your name"><div id=host></div><div id=hiddenHost aria-hidden="true"></div><script>document.getElementById('inc').addEventListener('click',()=>{const c=document.getElementById('count');c.textContent=String(Number(c.textContent||0)+1)});document.getElementById('name').addEventListener('drop',()=>{document.title='drop-ok'});document.getElementById('host').attachShadow({mode:'open'}).innerHTML='<input id=shadowName placeholder="shadow name">';document.getElementById('hiddenHost').attachShadow({mode:'open'}).innerHTML='<input placeholder="hidden shadow">'</script>`
+  const body = `<!doctype html><title>live fixture</title><button id=inc>Increment</button><output id=count>0</output><a id=next href="/next">Next page</a><label for=name>Name</label><input id=name type=text placeholder="your name"><div id=host></div><div id=hiddenHost aria-hidden="true"></div><script>document.getElementById('inc').addEventListener('click',()=>{const c=document.getElementById('count');c.textContent=String(Number(c.textContent||0)+1)});document.getElementById('name').addEventListener('drop',()=>{document.title='drop-ok'});document.getElementById('host').attachShadow({mode:'open'}).innerHTML='<input id=shadowName placeholder="shadow name">';document.getElementById('hiddenHost').attachShadow({mode:'open'}).innerHTML='<input placeholder="hidden shadow">'</script>`
   const server = createHttpsServer({ key: await readFile(key), cert: await readFile(cert) }, (req: IncomingMessage, res: ServerResponse) => {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" })
-    res.end(body)
+    res.end(req.url === "/next" ? body.replace("live fixture", "next fixture") : body)
   })
   await new Promise<void>((ready) => server.listen(0, "127.0.0.1", () => ready()))
   const address = server.address()
@@ -113,8 +113,11 @@ async function child() {
         const id = randomUUID()
         const handled = handleDockRPC({ type: "dock.rpc", id, op, args }, (message) => {
           if (message.id !== id) return
-          if (message.ok) resolveRPC(message.value)
-          else rejectRPC(new Error(message.error?.message ?? "App Dock RPC failed"))
+           if (message.ok) {
+             resolveRPC(message.value)
+           } else {
+             rejectRPC(new Error(message.error?.message ?? "App Dock RPC failed"))
+           }
         })
         if (!handled) rejectRPC(new Error(`Unhandled App Dock RPC: ${op}`))
       })
@@ -203,7 +206,10 @@ async function child() {
     })
     check(!!clickAtResult && typeof clickAtResult === "object" && "ok" in clickAtResult && clickAtResult.ok === true, "clickAt failed")
     const afterClickAt = await rpc("read", {})
-    check(!!afterClickAt && typeof afterClickAt === "object" && "text" in afterClickAt && typeof afterClickAt.text === "string" && afterClickAt.text.includes("2"), "counter not incremented by clickAt")
+    check(
+      !!afterClickAt && typeof afterClickAt === "object" && "text" in afterClickAt && typeof afterClickAt.text === "string" && afterClickAt.text.includes("2"),
+      `counter not incremented by clickAt: result=${JSON.stringify(clickAtResult)} snapshot=${JSON.stringify(afterClickAt)}`,
+    )
     const clickAtGone = await rpc("clickAt", { x: 9999, y: 9999 })
     check(!!clickAtGone && typeof clickAtGone === "object" && "ok" in clickAtGone && clickAtGone.ok === false, "clickAt with no element at coordinates was not refused")
     pass("L09", "dock_clickAt clicks live coordinates")
@@ -240,7 +246,27 @@ async function child() {
     )
     pass("L12", "dock_read pierces open shadow DOM in live snapshot")
 
-    outcome = cases.length === required.length && required.every((id) => cases.some((item: Case) => item.id === id)) ? 0 : 1
+    const benchmarkStarted = Date.now()
+    for (let iteration = 0; iteration < 100; iteration++) {
+      const before = await rpc("read", {})
+      check(before && typeof before === "object" && "items" in before && Array.isArray(before.items), `benchmark read ${iteration + 1} failed`)
+      const buttonRef = before.items.find((item) => item.name === "Increment")?.ref
+      check(typeof buttonRef === "number", `benchmark ref ${iteration + 1} missing`)
+      const clicked = await rpc("click", { ref: buttonRef })
+      check(clicked && typeof clicked === "object" && "ok" in clicked && clicked.ok === true, `benchmark click ${iteration + 1} failed`)
+      const after = await rpc("read", {})
+      check(after && typeof after === "object" && "text" in after && typeof after.text === "string", `benchmark result ${iteration + 1} missing`)
+    }
+    pass("L14", `100 read-click-read cycles completed in ${Date.now() - benchmarkStarted}ms`)
+
+    const linkRef = shadowSnap.items.find((item) => item.name === "Next page")?.ref
+    check(typeof linkRef === "number", "fixture link ref missing")
+    await rpc("click", { ref: linkRef })
+    const nextPage = await rpc("read", {})
+    check(nextPage && typeof nextPage === "object" && "url" in nextPage && nextPage.url.endsWith("/next"), "link navigation was not observed")
+    pass("L13", "dock_click observes deterministic same-origin link navigation")
+
+    outcome = cases.length === required.length + 2 && required.every((id) => cases.some((item: Case) => item.id === id)) ? 0 : 1
   } finally {
     const report = { version: 1, cases }
     await mkdir(dirname(artifact), { recursive: true })
@@ -299,7 +325,7 @@ async function parent() {
     check(
       report.version === 1 &&
         Array.isArray(report.cases) &&
-        report.cases.length === required.length &&
+        report.cases.length === required.length + 2 &&
         required.every((id) => report.cases.some((item: Case) => item.id === id && item.status === "pass")),
       "invalid app-dock-live artifact",
     )

@@ -1,6 +1,5 @@
 import type { BrowserWindow } from "electron"
 import type { AppDock, DockBounds } from "./app-dock"
-import { buildClickScript, buildSnapshotScript, buildTypeScript } from "./app-dock-browser"
 import { getLastFocusedWindow } from "./windows"
 
 // Module singletons below are set-once-at-startup in the single-threaded
@@ -21,7 +20,10 @@ export function registerAppDockWindow(win: BrowserWindow) {
   dockWindow = win
 }
 
-const dockWindowFor = (): BrowserWindow | null => dockWindow ?? getLastFocusedWindow()
+const dockWindowFor = (): BrowserWindow | null => {
+  if (dockWindow && !dockWindow.isDestroyed()) return dockWindow
+  return getLastFocusedWindow()
+}
 
 export type DockRPCReply = (message: unknown) => void
 
@@ -53,6 +55,13 @@ const isDockRPCRequest = (value: unknown): value is DockRPCRequest => {
 const dockString = (value: unknown, name: string) => {
   if (typeof value !== "string" || value.length === 0) throw new Error(`Invalid App Dock ${name}`)
   return value
+}
+
+const dockStringArrayArg = (args: Record<string, unknown>, name: string, defaultValue: string[] = []) => {
+  const value = args[name]
+  if (Array.isArray(value)) return value
+  if (typeof value === "string" && value.length > 0) return [value]
+  return defaultValue
 }
 
 const dockNumber = (value: unknown, name: string, min: number, max: number) => {
@@ -92,22 +101,27 @@ async function dispatch(op: string, args: Record<string, unknown>): Promise<unkn
     case "list": {
       return dock.list(senderID)
     }
+    case "activate": {
+      const tabID = dockString(args.tabID, "tabID")
+      dock.activate(senderID, win, tabID)
+      return dock.list(senderID)
+    }
     case "read": {
       const tabID = resolveTabID(dock, senderID, args)
       const budget = args.budget === undefined ? 100 : dockNumber(args.budget, "budget", 1, 500)
       const maxText = args.maxText === undefined ? 1500 : dockNumber(args.maxText, "maxText", 0, 20000)
-      return dock.execute(senderID, tabID, buildSnapshotScript({ budget, maxText }))
+      return dock.read(senderID, tabID, budget, maxText)
     }
     case "click": {
       const tabID = resolveTabID(dock, senderID, args)
       const ref = dockNumber(args.ref, "element ref", 1, 1_000_000)
-      return dock.execute(senderID, tabID, buildClickScript(ref))
+      return dock.click(senderID, tabID, ref)
     }
     case "type": {
       const tabID = resolveTabID(dock, senderID, args)
       const ref = dockNumber(args.ref, "element ref", 1, 1_000_000)
       const text = dockString(args.text, "text")
-      return dock.execute(senderID, tabID, buildTypeScript(ref, text))
+      return dock.type(senderID, tabID, ref, text)
     }
     case "navigate": {
       const tabID = resolveTabID(dock, senderID, args)
@@ -138,7 +152,7 @@ async function dispatch(op: string, args: Record<string, unknown>): Promise<unkn
     case "close": {
       const tabID = args.tabID === undefined ? undefined : dockString(args.tabID, "tabID")
       dock.close(senderID, win, tabID)
-      return tabID === undefined ? dock.list(senderID) : undefined
+      return dock.list(senderID)
     }
     case "scroll": {
       const tabID = resolveTabID(dock, senderID, args)
@@ -172,6 +186,62 @@ async function dispatch(op: string, args: Record<string, unknown>): Promise<unkn
       const x = dockNumber(args.x, "x", 0, 10000)
       const y = dockNumber(args.y, "y", 0, 10000)
       return dock.scrollTo(senderID, tabID, x, y)
+    }
+    case "storage": {
+      const tabID = resolveTabID(dock, senderID, args)
+      const storage = dockString(args.storage, "storage")
+      if (storage !== "local" && storage !== "session") throw new Error("Invalid App Dock storage")
+      const key = dockString(args.key, "key")
+      return dock.storage(senderID, tabID, storage, key)
+    }
+    case "pdf": {
+      const tabID = resolveTabID(dock, senderID, args)
+      return dock.pdf(senderID, tabID)
+    }
+    case "frame": {
+      const tabID = resolveTabID(dock, senderID, args)
+      const direction = dockString(args.direction, "direction")
+      if (direction !== "next" && direction !== "prev") throw new Error("Invalid App Dock frame direction")
+      return dock.frame(senderID, tabID, direction)
+    }
+    case "retry": {
+      const tabID = resolveTabID(dock, senderID, args)
+      const attempts = dockNumber(args.attempts, "attempts", 1, 10)
+      const delay = dockNumber(args.delay, "delay", 100, 10000)
+      return dock.retry(senderID, tabID, attempts, delay)
+    }
+    case "evaluate": {
+      const tabID = resolveTabID(dock, senderID, args)
+      const script = dockString(args.script, "script")
+      return dock.evaluate(senderID, tabID, script)
+    }
+    case "network": {
+      const tabID = resolveTabID(dock, senderID, args)
+      const blockUrls = dockStringArrayArg(args, "blockUrls")
+      const allowedOrigins = dockStringArrayArg(args, "allowedOrigins")
+      const blockMethods = dockStringArrayArg(args, "blockMethods")
+      const probeUrl = args.probeUrl === undefined ? undefined : dockString(args.probeUrl, "probeUrl")
+      const probeMethod = args.probeMethod === undefined ? undefined : dockString(args.probeMethod, "probeMethod")
+      const config = { blockUrls, allowedOrigins, blockMethods, probeUrl, probeMethod }
+      return dock.network(senderID, tabID, config)
+    }
+    case "wait": {
+      const tabID = resolveTabID(dock, senderID, args)
+      const milliseconds = args.milliseconds === undefined ? 100 : args.milliseconds
+      if (typeof milliseconds !== "number" || !Number.isFinite(milliseconds) || milliseconds < 0 || milliseconds > 10_000)
+        throw new Error("Invalid App Dock milliseconds")
+      return dock.wait(senderID, tabID, milliseconds)
+    }
+    case "screenshot": {
+      const tabID = resolveTabID(dock, senderID, args)
+      return dock.screenshot(senderID, tabID)
+    }
+    case "keyboard": {
+      const tabID = resolveTabID(dock, senderID, args)
+      const type = dockString(args.type, "type")
+      if (type !== "keyDown" && type !== "keyUp") throw new Error("Invalid App Dock keyboard type")
+      const key = dockString(args.key, "key")
+      return dock.keyboard(senderID, tabID, type, key)
     }
     default:
       throw new Error(`Unknown App Dock operation: ${op}`)

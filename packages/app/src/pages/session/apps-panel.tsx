@@ -148,6 +148,8 @@ export function AppsPanel() {
   let disposed = false
   let manifest: AppDockManifest | undefined
   let manifestWrite = Promise.resolve()
+  let lastSavedHistoryURL: string | undefined
+  let lastSavedTabsKey: string | undefined
   const api = () => window.api as AppDockAPI | undefined
   const capability = (name: keyof AppDockAPI) => typeof api()?.[name] === "function"
   const closeMenu = (restoreFocus = true) => {
@@ -157,6 +159,7 @@ export function AppsPanel() {
   }
   const applyManifest = (next: AppDockManifest) => {
     manifest = next
+    lastSavedHistoryURL = next.history[0]
     setProfiles(next.profiles)
     setProfile(next.activeProfileID)
     setBookmarks(libraryEntries(next.bookmarks))
@@ -185,16 +188,19 @@ export function AppsPanel() {
     )
     return pending
   }
-  const saveTabs = (items = tabs(), profileID = profile()) =>
-    updateManifest((current) => ({
+  const saveTabs = (items = tabs(), profileID = profile()) => {
+    const saved = items.filter((tab) => isHTTPS(tab.url)).map((tab) => ({ url: tab.url, pinned: !!tab.pinned }))
+    const key = `${profileID}:${JSON.stringify(saved)}`
+    if (key === lastSavedTabsKey) return Promise.resolve(manifest)
+    lastSavedTabsKey = key
+    return updateManifest((current) => ({
       ...current,
-      tabs: {
-        ...current.tabs,
-        [profileID]: items.filter((tab) => isHTTPS(tab.url)).map((tab) => ({ url: tab.url, pinned: !!tab.pinned })),
-      },
+      tabs: { ...current.tabs, [profileID]: saved },
     }))
+  }
   const saveHistory = (url: string) => {
-    if (!isHTTPS(url)) return
+    if (!isHTTPS(url) || url === lastSavedHistoryURL) return
+    lastSavedHistoryURL = url
     void updateManifest((current) => ({
       ...current,
       history: [url, ...current.history.filter((item) => item !== url)].slice(0, 100),
@@ -364,6 +370,7 @@ export function AppsPanel() {
         if (generation === restoreGeneration) setSwitching(false)
       } catch (cause) {
         setError(cause instanceof Error ? cause.message : "Could not load App Dock")
+        setSwitching(false)
       }
     })()
     onCleanup(() => {
@@ -380,6 +387,8 @@ export function AppsPanel() {
   })
   const launch = async () => {
     if (!host || !api()) return
+    setError(undefined)
+    setNavigationError(undefined)
     try {
       const current = active()
       if (current) {
@@ -542,10 +551,14 @@ export function AppsPanel() {
     void api()
       ?.appDockZoom(tab.tabID)
       .then((factor) => api()?.appDockZoom(tab.tabID, factor + delta))
+      .catch((cause) => setError(cause instanceof Error ? cause.message : "Could not change zoom"))
   }
   const toggleFullscreen = () => {
     const tab = active()
-    if (tab) void api()?.appDockFullscreen(tab.tabID, !fullscreen())
+    if (tab)
+      void api()
+        ?.appDockFullscreen(tab.tabID, !fullscreen())
+        .catch((cause) => setError(cause instanceof Error ? cause.message : "Could not change fullscreen"))
   }
   const openLibraryItem = async (entry: Bookmark) => {
     setLibraryOpen(undefined)

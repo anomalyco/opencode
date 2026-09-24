@@ -43,6 +43,7 @@ function request(port: ParentPortLike, op: string, args: Record<string, unknown>
       router.delete(id)
       reject(new Error(`App Dock ${op} request timed out`))
     }, 15000)
+    timer.unref()
     router.set(id, { resolve, reject, timer })
     port.postMessage({ type: "dock.rpc", id, op, args })
   })
@@ -66,6 +67,11 @@ export const AppDockPlugin: Plugin = async (_input: PluginInput): Promise<Hooks>
         args: {},
         execute: () => request(port, "list", {}).then(toJSON, toolError),
       }),
+      dock_activate: tool({
+        description: "Activate one App Dock tab by tabID from dock_open or dock_list.",
+        args: { tabID: tool.schema.string().min(1) },
+        execute: (args: { tabID: string }) => request(port, "activate", { tabID: args.tabID }).then(toJSON, toolError),
+      }),
       dock_read: tool({
         description:
           "Read the App Dock page as a structured accessibility snapshot: current URL/title/viewport, a budget-pruned list of interactive elements each with a stable numeric `ref`, and visible page text. Use `ref` values with dock_click / dock_type. Re-read after a page change; refs may go stale after re-render.",
@@ -80,13 +86,78 @@ export const AppDockPlugin: Plugin = async (_input: PluginInput): Promise<Hooks>
         execute: (args: { budget?: number; maxText?: number }) =>
           request(port, "read", { budget: args.budget, maxText: args.maxText }).then(toJSON, toolError),
       }),
-      dock_click: tool({
-        description: "Click an interactive element in the App Dock page by its `ref` from dock_read.",
+      dock_wait: tool({
+        description: "Wait for the active App Dock tab to settle for a bounded duration.",
         args: {
-          ref: tool.schema.number().min(1).describe("Element ref from dock_read"),
+          milliseconds: tool.schema.number().min(0).max(30000).optional().describe("Wait duration in milliseconds"),
         },
-        execute: (args: { ref: number }) =>
-          request(port, "click", { ref: args.ref }).then(toJSON, toolError),
+        execute: (args: { milliseconds?: number }) =>
+          request(port, "wait", { milliseconds: args.milliseconds }).then(toJSON, toolError),
+      }),
+      dock_screenshot: tool({
+        description: "Capture the active App Dock tab as a base64 PNG.",
+        args: {},
+        execute: () => request(port, "screenshot", {}).then(toJSON, toolError),
+      }),
+      dock_scroll: tool({
+        description: "Scroll the active App Dock tab.",
+        args: {
+          direction: tool.schema.enum(["up", "down", "top", "bottom"]),
+          amount: tool.schema.number().min(1).max(10000).optional(),
+        },
+        execute: (args: { direction: "up" | "down" | "top" | "bottom"; amount?: number }) =>
+          request(port, "scroll", { direction: args.direction, amount: args.amount }).then(toJSON, toolError),
+      }),
+      dock_keyboard: tool({
+        description: "Dispatch a keyDown or keyUp event to the active App Dock tab.",
+        args: {
+          type: tool.schema.enum(["keyDown", "keyUp"]),
+          key: tool.schema.string().min(1),
+        },
+        execute: (args: { type: "keyDown" | "keyUp"; key: string }) =>
+          request(port, "keyboard", { type: args.type, key: args.key }).then(toJSON, toolError),
+      }),
+      dock_evaluate: tool({
+        description: "Evaluate JavaScript in the active App Dock tab.",
+        args: { script: tool.schema.string().min(1) },
+        execute: (args: { script: string }) => request(port, "evaluate", { script: args.script }).then(toJSON, toolError),
+      }),
+      dock_storage: tool({
+        description: "Read one localStorage or sessionStorage value from the active App Dock tab.",
+        args: {
+          storage: tool.schema.enum(["local", "session"]),
+          key: tool.schema.string().min(1),
+        },
+        execute: (args: { storage: "local" | "session"; key: string }) =>
+          request(port, "storage", { storage: args.storage, key: args.key }).then(toJSON, toolError),
+      }),
+      dock_network: tool({
+        description: "Install page-level fetch/XHR URL filtering for the active App Dock tab.",
+        args: {
+          blockUrls: tool.schema.array(tool.schema.string()).optional(),
+          allowedOrigins: tool.schema.array(tool.schema.string()).optional(),
+          blockMethods: tool.schema.array(tool.schema.string()).optional(),
+          probeUrl: tool.schema.string().url().optional(),
+          probeMethod: tool.schema.string().optional(),
+        },
+        execute: (args: { blockUrls?: string[]; allowedOrigins?: string[]; blockMethods?: string[]; probeUrl?: string; probeMethod?: string }) =>
+          request(port, "network", args).then(toJSON, toolError),
+      }),
+      dock_click: tool({
+        description: "Click an interactive App Dock element by `ref`, or click page coordinates when x and y are supplied.",
+        args: {
+          ref: tool.schema.number().min(1).optional().describe("Element ref from dock_read"),
+          x: tool.schema.number().min(0).optional().describe("Page x coordinate"),
+          y: tool.schema.number().min(0).optional().describe("Page y coordinate"),
+        },
+        execute: (args: { ref?: number; x?: number; y?: number }) => {
+          if (args.x !== undefined || args.y !== undefined) {
+            if (args.x === undefined || args.y === undefined) return Promise.resolve("dock_click requires both x and y")
+            return request(port, "clickAt", { x: args.x, y: args.y }).then(toJSON, toolError)
+          }
+          if (args.ref === undefined) return Promise.resolve("dock_click requires ref or both x and y")
+          return request(port, "click", { ref: args.ref }).then(toJSON, toolError)
+        },
       }),
       dock_type: tool({
         description: "Type text into an editable App Dock page element by its `ref` from dock_read.",
@@ -122,9 +193,11 @@ export const AppDockPlugin: Plugin = async (_input: PluginInput): Promise<Hooks>
           request(port, "open", { address: args.address }).then(toJSON, toolError),
       }),
       dock_close: tool({
-        description: "Close the active App Dock tab. Returns the remaining tab list.",
-        args: {},
-        execute: () => request(port, "close", {}).then(toJSON, toolError),
+        description: "Close one App Dock tab. Without tabID, closes only active tab. Returns remaining tabs.",
+        args: {
+          tabID: tool.schema.string().min(1).optional().describe("Specific tab ID from dock_open or dock_list"),
+        },
+        execute: (args: { tabID?: string }) => request(port, "close", { tabID: args.tabID }).then(toJSON, toolError),
       }),
     },
   }

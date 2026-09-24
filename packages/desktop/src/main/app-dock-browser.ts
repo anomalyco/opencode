@@ -119,32 +119,36 @@ export function buildSnapshotScript(options: SnapshotOptions = {}) {
     return out
   }
   const selector = "a[href], button, input, textarea, select, option, summary, [contenteditable], [role], [onclick], [tabindex], [aria-label], [aria-labelledby]"
-  function getAllElements(root, sel) {
-    const found = Array.from(root.querySelectorAll(sel))
-    for (const el of Array.from(root.querySelectorAll("*"))) {
-      if (el.shadowRoot) found.push(...getAllElements(el.shadowRoot, sel))
+  const elements = []
+  const collect = (root) => {
+    for (const el of root.querySelectorAll(selector)) {
+      elements.push(el)
+      if (elements.length > budget) return true
     }
-    return found
+    for (const host of root.querySelectorAll("*")) {
+      if (host.shadowRoot && collect(host.shadowRoot)) return true
+    }
+    return false
   }
-  const elements = getAllElements(document, selector)
-  const collapsed = (el, accepted) => accepted.some((prior) => prior.contains(el))
+  collect(document)
   const accepted = []
   for (const el of elements) {
     if (accepted.length >= budget) break
     if (inert(el) || !visible(el)) continue
-    if (collapsed(el, accepted)) continue
     accepted.push(el)
   }
   state.truncated = elements.length > budget
   state.items = accepted.map((el) => {
-    const rect = el.getBoundingClientRect()
+    const target = el.closest && el.closest("a[href]") ? el.closest("a[href]") : el
+    const rect = target.getBoundingClientRect()
     const round = (n) => Math.round(n * 10) / 10
-    return {
-      ref: registry.refFor(el),
-      role: roleOf(el),
-      name: nameOf(el),
-      tag: el.tagName.toLowerCase(),
-      x: round(rect.left),
+      return {
+        ref: registry.refFor(el),
+        role: roleOf(target),
+        name: nameOf(target),
+        tag: target.tagName.toLowerCase(),
+        href: target.href || undefined,
+        x: round(rect.left),
       y: round(rect.top),
       width: round(rect.width),
       height: round(rect.height),
@@ -159,22 +163,68 @@ export function buildSnapshotScript(options: SnapshotOptions = {}) {
 }
 
 export function buildClickScript(ref: number) {
+  return `(() => {
+  const registry = ${registryExpr}
+  const el = registry.resolve(${ref})
+  if (!el) return { ok: false, error: "Element ref ${ref} is gone; re-read the page" }
+  if (!el.isConnected) return { ok: false, error: "Element ref ${ref} is disconnected from DOM" }
+  const link = el.closest && el.closest("a[href]")
+  const clickTarget = link || el
+
+  // Check if element is visible and clickable
+  const style = getComputedStyle(clickTarget)
+  if (style.display === "none" || style.visibility === "hidden" || parseFloat(style.opacity) === 0)
+    return { ok: false, error: "Element ref ${ref} is not visible" }
+
+  clickTarget.scrollIntoView({ block: "center", inline: "center" })
+
+  const rect = clickTarget.getBoundingClientRect()
+  if (rect.width === 0 && rect.height === 0)
+    return { ok: false, error: "Element ref ${ref} has zero size" }
+
+  const x = rect.left + rect.width / 2
+  const y = rect.top + rect.height / 2
+  clickTarget.focus()
+  clickTarget.click()
+
+  return { ok: true, tag: clickTarget.tagName.toLowerCase(), ref: ${ref}, x, y, url: location.href, href: clickTarget.href || "" }
+})()`
+}
+
+export function buildElementPointScript(ref: number) {
   return `(async () => {
   const registry = ${registryExpr}
   const el = registry.resolve(${ref})
   if (!el) return { ok: false, error: "Element ref ${ref} is gone; re-read the page" }
+  if (!el.isConnected) return { ok: false, error: "Element ref ${ref} is disconnected from DOM" }
   el.scrollIntoView({ block: "center", inline: "center" })
-  const rect = el.getBoundingClientRect()
-  const x = rect.left + rect.width / 2
-  const y = rect.top + rect.height / 2
-  const options = { bubbles: true, cancelable: true, view: window, detail: 1, button: 0, clientX: x, clientY: y, screenX: x, screenY: y }
-  el.dispatchEvent(new PointerEvent("pointerdown", options))
-  el.dispatchEvent(new MouseEvent("mousedown", options))
+  await new Promise(r => setTimeout(r, 50))
+  const link = el.closest && el.closest("a[href]")
+  const target = link || el
+  const targetRect = target.getBoundingClientRect()
+  if (targetRect.width <= 0 || targetRect.height <= 0) return { ok: false, error: "Element ref ${ref} has zero size" }
+  return { ok: true, x: targetRect.left + targetRect.width / 2, y: targetRect.top + targetRect.height / 2, tag: target.tagName.toLowerCase(), name: (target.getAttribute("aria-label") || target.textContent || "").trim().slice(0, 200), href: target.href || "" }
+})()`
+}
+
+export function buildFocusScript(ref: number) {
+  return `(async () => {
+  const registry = ${registryExpr}
+  const el = registry.resolve(${ref})
+  if (!el) return { ok: false, error: "Element ref ${ref} is gone; re-read the page" }
+  if (!el.isConnected) return { ok: false, error: "Element ref ${ref} is disconnected from DOM" }
   el.focus()
-  el.dispatchEvent(new PointerEvent("pointerup", options))
-  el.dispatchEvent(new MouseEvent("mouseup", options))
-  el.dispatchEvent(new MouseEvent("click", options))
-  return { ok: true, tag: el.tagName.toLowerCase(), ref: ${ref} }
+  return { ok: true, ref: ${ref}, tag: el.tagName.toLowerCase() }
+})()`
+}
+
+export function buildReadElementScript(ref: number) {
+  return `(async () => {
+  const registry = ${registryExpr}
+  const el = registry.resolve(${ref})
+  if (!el) return { ok: false, error: "Element ref ${ref} is gone; re-read the page" }
+  const value = el.value !== undefined ? String(el.value) : el.textContent || ""
+  return { ok: true, value }
 })()`
 }
 
@@ -183,29 +233,45 @@ export function buildTypeScript(ref: number, text: string) {
   const registry = ${registryExpr}
   const el = registry.resolve(${ref})
   if (!el) return { ok: false, error: "Element ref ${ref} is gone; re-read the page" }
+  if (!el.isConnected) return { ok: false, error: "Element ref ${ref} is disconnected from DOM" }
   el.focus()
   const value = ${JSON.stringify(text)}
   if (el.isContentEditable) {
     el.textContent = value
     el.dispatchEvent(new InputEvent("input", { bubbles: true, data: value, inputType: "insertText" }))
     el.dispatchEvent(new Event("change", { bubbles: true }))
-    return { ok: true, ref: ${ref} }
+    return { ok: true, ref: ${ref}, method: "contentEditable" }
   }
   if (el.tagName === "INPUT" || el.tagName === "TEXTAREA") {
-    const setter = Object.getOwnPropertyDescriptor(el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype, "value").set
-    setter.call(el, value)
+    const proto = el.tagName === "TEXTAREA" ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
+    const descriptor = Object.getOwnPropertyDescriptor(proto, "value")
+    if (!descriptor?.set) return { ok: false, error: "Element ref ${ref} has no writable value" }
+    descriptor.set.call(el, value)
     el.dispatchEvent(new InputEvent("input", { bubbles: true, data: value, inputType: "insertText" }))
     el.dispatchEvent(new Event("change", { bubbles: true }))
-    return { ok: true, ref: ${ref}, value: el.value }
+    return { ok: true, ref: ${ref}, value: el.value, method: "valueSetter" }
   }
-  return { ok: false, error: "Element ref ${ref} is not editable" }
+  if (el.tagName === "SELECT") {
+    const option = Array.from(el.options).find((candidate) => candidate.value === value || candidate.text === value)
+    if (!option) return { ok: false, error: "No matching option for element ref ${ref}" }
+    el.value = option.value
+    el.dispatchEvent(new Event("input", { bubbles: true }))
+    el.dispatchEvent(new Event("change", { bubbles: true }))
+    return { ok: true, ref: ${ref}, value: el.value, method: "select" }
+  }
+  return { ok: false, error: "Element ref ${ref} is not editable (tag: " + el.tagName + ")" }
 })()`
 }
 
 export function buildScrollScript(direction: "up" | "down" | "top" | "bottom", amount?: number) {
   const pixels = amount ?? (direction === "top" || direction === "bottom" ? 10000 : 300)
   const dir = direction === "up" ? -pixels : direction === "down" ? pixels : direction === "top" ? -10000 : 10000
-  return `(window.scrollBy(0, ${dir}), undefined)`
+  return `(() => {
+  const before = { x: window.scrollX, y: window.scrollY }
+  window.scrollBy(0, ${dir})
+  const after = { x: window.scrollX, y: window.scrollY }
+  return { ok: true, direction: ${JSON.stringify(direction)}, amount: ${pixels}, before, after }
+})()`
 }
 
 export function buildHoverScript(ref: number) {
@@ -238,13 +304,174 @@ export function buildDragScript(fromRef: number, toRef: number) {
 
 export function buildClickAtScript(x: number, y: number) {
   return `(async () => {
-  const el = document.elementFromPoint(${x}, ${y})
+  const hit = document.elementFromPoint(${x}, ${y})
+  const registry = ${registryExpr}
+  const selector = "a[href],button,input,select,textarea,summary,[role=button],[onclick],[tabindex]"
+  const el = hit && (hit.matches?.(selector) ? hit : hit.closest?.(selector))
   if (!el) return { ok: false, error: "No element at coordinates" }
-  el.click()
-  return { ok: true }
+  if (!(el instanceof HTMLElement)) return { ok: false, error: "No interactive element at coordinates" }
+  return { ok: true, ref: registry.refFor(el), tag: el.tagName.toLowerCase(), id: el.id || "", name: (el.innerText || el.getAttribute("aria-label") || "").trim().slice(0, 80), href: el.href || el.closest?.("a[href]")?.href || "" }
+})()`
+}
+
+export function buildClickAtProbeScript(x: number, y: number) {
+  return `(async () => {
+  const hit = document.elementFromPoint(${x}, ${y})
+  const registry = ${registryExpr}
+  const selector = "a[href],button,input,select,textarea,summary,[role=button],[onclick],[tabindex]"
+  const el = hit && (hit.matches?.(selector) ? hit : hit.closest?.(selector))
+  if (!el) return { ok: false, error: "No element at coordinates" }
+  if (!(el instanceof HTMLElement)) return { ok: false, error: "No interactive element at coordinates" }
+  const ref = registry.refFor(el)
+  const key = "__opencodeDockClickProbe"
+  const previous = window[key]
+  if (previous?.cleanup) previous.cleanup()
+  let fired = false
+  const listener = (event) => {
+    const target = event.target
+    if (target === el || (target instanceof Node && el.contains(target))) fired = true
+  }
+  document.addEventListener("click", listener, true)
+  window[key] = { fired: () => fired, cleanup: () => document.removeEventListener("click", listener, true) }
+  return { ok: true, ref, tag: el.tagName.toLowerCase(), id: el.id || "", name: (el.innerText || el.getAttribute("aria-label") || "").trim().slice(0, 80), href: el.href || el.closest?.("a[href]")?.href || "" }
 })()`
 }
 
 export function buildScrollToScript(x: number, y: number) {
-  return `(window.scrollTo(${x}, ${y}), undefined)`
+  return `(() => { window.scrollTo(${x}, ${y}); return { ok: true, x: ${x}, y: ${y} } })()`
+}
+
+export function buildWaitScript(milliseconds: number) {
+  return `(new Promise((resolve) => setTimeout(() => resolve({ ok: true, waitedMs: ${milliseconds} }), ${milliseconds})))`
+}
+
+export function buildKeyboardScript(type: "keyDown" | "keyUp", key: string) {
+  return `(async () => {
+  const event = new KeyboardEvent(${JSON.stringify(type === "keyDown" ? "keydown" : "keyup")}, {
+    key: ${JSON.stringify(key)}, code: ${JSON.stringify(key)}, bubbles: true, cancelable: true,
+  })
+  const target = document.activeElement || document.body
+  target.dispatchEvent(event)
+  return {
+    ok: true,
+    type: ${JSON.stringify(type)},
+    key: ${JSON.stringify(key)},
+    activeTag: target.tagName.toLowerCase(),
+    activeId: target.id || "",
+  }
+})()`
+}
+/**
+ * Generates a script to set localStorage or sessionStorage.
+ * @storage - "local" or "session" storage type
+ * @returns Self-invoking async script snippet
+ */
+export function buildStorageScript(storage: "local" | "session", key: string) {
+  const storageName = JSON.stringify(storage)
+  const storageKey = JSON.stringify(key)
+  return `(async () => {
+  const store = ${storageName} === "local" ? window.localStorage : window.sessionStorage
+  const value = store.getItem(${storageKey})
+  return { ok: true, storage: ${storageName}, key: ${storageKey}, value }
+})()`
+}
+
+/**
+ * Generates a script to capture PDF from canvas.
+ * @returns Self-invoking async script snippet
+ */
+export function buildPDFSript() {
+  return '(async () => { const canvas = document.createElement("canvas"); canvas.width = window.innerWidth; canvas.height = window.innerHeight; const ctx = canvas.getContext("2d"); ctx.drawImage(document.body, 0, 0); const pdf = canvas.toBlob(function(blob) { if (blob) { const url = URL.createObjectURL(blob); return { ok: true, blob: blob, url: url } } else { return { ok: false, error: "Failed to create PDF" } } }); return { ok: false, error: "Canvas context failed" } })()'
+}
+
+/**
+ * Generates a script to change iframe focus.
+ * @direction - "next" or "prev" to navigate
+ * @returns Self-invoking async script snippet
+ */
+export function buildFrameScript(direction: "next" | "prev") {
+  return '(async () => { const iframes = document.getElementsByTagName("iframe"); const idx = Array.from(iframes).findIndex(f => f.contentWindow === window) || 0; let targetIdx; if (direction === "next") { targetIdx = (idx + 1) % iframes.length } else { targetIdx = (idx - 1 + iframes.length) % iframes.length }; if (iframes[targetIdx]) { iframes[targetIdx].contentWindow.location.href = window.location.href; return { ok: true, iframe: iframes[targetIdx] } } return { ok: false, error: "No more iframes in that direction" } })()'
+}
+
+/**
+ * Generates a retry script with exponential backoff.
+ * @attempts - Maximum retry attempts
+ * @delay - Delay in milliseconds between attempts
+ * @returns Self-invoking async script snippet
+ */
+export function buildRetryScript(attempts: number, delay: number) {
+  return '(async () => { let attemptsLeft = attempts; while (attemptsLeft > 0) { try { return { ok: true } } catch (e) { attemptsLeft--; if (attemptsLeft > 0) { await new Promise(r => setTimeout(r, delay)) } else { return { ok: false, error: "Max attempts exceeded" } } } } return { ok: false, error: "Retry loop ended" } })()'
+}
+
+/**
+ * Generates a script to evaluate custom JavaScript.
+ * @script - JavaScript string to evaluate
+ * @returns Self-invoking async script snippet
+ */
+export function buildEvaluateScript(script: string) {
+  return `(async () => {
+  try {
+    const result = await window.eval(${JSON.stringify(script)})
+    return { ok: true, result: String(result) }
+  } catch (error) {
+    return { ok: false, error: String(error) }
+  }
+})()`
+}
+
+/**
+ * Generates a network request interceptor script.
+ * @config - Configuration: blockUrls, allowedOrigins, blockMethods
+ * @returns Self-invoking async script snippet
+ */
+export function buildNetworkScript(config: { blockUrls?: string[]; allowedOrigins?: string[]; blockMethods?: string[] }) {
+  return `(async () => {
+  const config = ${JSON.stringify(config)}
+  const marker = "__opencodeDockNetwork"
+  const previous = window[marker]
+  if (previous) {
+    window.fetch = previous.fetch
+    XMLHttpRequest.prototype.open = previous.open
+    XMLHttpRequest.prototype.send = previous.send
+  }
+  const state = previous?.state ?? { blocked: 0, requests: 0 }
+  window.__appDockNetwork = state
+  const blocked = (url, method) => {
+    const parsed = new URL(url, location.href)
+    const methodBlocked = !config.blockMethods?.length || config.blockMethods.includes(method.toUpperCase())
+    const urlBlocked = config.blockUrls?.some((pattern) => parsed.href.includes(pattern) || parsed.origin === pattern)
+    const originAllowed = config.allowedOrigins?.some((origin) => parsed.origin === origin)
+    return Boolean(urlBlocked && methodBlocked && !originAllowed)
+  }
+  const originalFetch = window.fetch
+  window.fetch = async function(input, init) {
+    const request = new Request(input, init)
+    state.requests++
+    if (blocked(request.url, request.method)) {
+      state.blocked++
+      return new Response("Blocked by App Dock", { status: 403 })
+    }
+    return originalFetch.call(this, request)
+  }
+  const originalOpen = XMLHttpRequest.prototype.open
+  const originalSend = XMLHttpRequest.prototype.send
+  XMLHttpRequest.prototype.open = function(method, url) {
+    state.requests++
+    this.__appDockBlocked = blocked(url, method)
+    if (this.__appDockBlocked) state.blocked++
+    return originalOpen.apply(this, arguments)
+  }
+  XMLHttpRequest.prototype.send = function(body) {
+    if (this.__appDockBlocked) {
+      this.abort()
+      return
+    }
+    return originalSend.call(this, body)
+  }
+  if (config.probeUrl) {
+    try { await window.fetch(config.probeUrl, { method: config.probeMethod || "GET" }) } catch (_) {}
+  }
+  window[marker] = { fetch: originalFetch, open: originalOpen, send: originalSend, state }
+  return { ok: true, blocked: state.blocked, requests: state.requests, interceptorReady: true }
+})()`
 }

@@ -43,7 +43,15 @@ async function pluginWithPort(port?: FakePort) {
 
 const toolNames = [
   "dock_list",
+  "dock_activate",
   "dock_read",
+  "dock_wait",
+  "dock_screenshot",
+  "dock_scroll",
+  "dock_keyboard",
+  "dock_evaluate",
+  "dock_storage",
+  "dock_network",
   "dock_click",
   "dock_type",
   "dock_navigate",
@@ -118,5 +126,24 @@ describe("AppDockPlugin", () => {
     deliver({ type: "dock.rpc.result", id: goEnvelope.id, ok: true, value: "gone" })
     await expect(promise).resolves.toBe('"done"')
     await expect(go).resolves.toBe('"gone"')
+  })
+
+  test("routes coordinate clicks and scoped closes without destructive defaults", async () => {
+    const { port, sent, deliver } = fakePort()
+    const hooks = (await pluginWithPort(port)) as Required<Hooks>
+
+    const click = hooks.tool.dock_click.execute({ x: 12, y: 34 }, context)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const clickEnvelope = sent[0] as { id: string; op: string; args: Record<string, unknown> }
+    expect(clickEnvelope).toMatchObject({ op: "clickAt", args: { x: 12, y: 34 } })
+    deliver({ type: "dock.rpc.result", id: clickEnvelope.id, ok: true, value: { ok: true } })
+    await expect(click).resolves.toBe("{\n  \"ok\": true\n}")
+
+    const close = hooks.tool.dock_close.execute({ tabID: "tab-1" }, context)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const closeEnvelope = sent[1] as { id: string; op: string; args: Record<string, unknown> }
+    expect(closeEnvelope).toMatchObject({ op: "close", args: { tabID: "tab-1" } })
+    deliver({ type: "dock.rpc.result", id: closeEnvelope.id, ok: true, value: [] })
+    await expect(close).resolves.toBe("[]")
   })
 })
