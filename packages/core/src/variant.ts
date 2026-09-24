@@ -28,6 +28,8 @@ const EFFORTS = ["low", "medium", "high"]
 const ENCRYPTED_REASONING = ["reasoning.encrypted_content"]
 const ADAPTIVE_THINKING = { type: "adaptive", display: "summarized" }
 const ANTHROPIC_OUTPUT_TOKEN_MAX = 32_000
+// Alibaba thinking budget variants stay under 64k instead of reaching the model's whole output limit.
+const ALIBABA_THINKING_BUDGET_MAX = 64_000
 
 const variant = (id: string, overlay: Overlay): Variants[number] => ({ id: Model.VariantID.make(id), ...overlay })
 
@@ -224,9 +226,12 @@ const alibabaChat: Protocol = (model, support) => {
     case "toggle":
       return toggle({ settings: { enableThinking: false } }, { settings: { enableThinking: true } })
     case "budget_tokens":
-      return budgets(model, support, (tokens) => ({
-        settings: { enableThinking: true, thinkingBudget: tokens },
-      }))
+      return budgets(
+        model,
+        support,
+        (tokens) => ({ settings: { enableThinking: true, thinkingBudget: tokens } }),
+        ALIBABA_THINKING_BUDGET_MAX,
+      )
   }
 }
 
@@ -310,9 +315,12 @@ const alibabaMessages: Protocol = (model, support) => {
     case "toggle":
       return toggle({ settings: { thinking: { type: "disabled" } } }, { settings: { thinking: { type: "enabled" } } })
     case "budget_tokens":
-      return budgets(model, support, (tokens) => ({
-        settings: { thinking: { type: "enabled", budgetTokens: tokens } },
-      }))
+      return budgets(
+        model,
+        support,
+        (tokens) => ({ settings: { thinking: { type: "enabled", budgetTokens: tokens } } }),
+        ALIBABA_THINKING_BUDGET_MAX,
+      )
   }
 }
 
@@ -405,7 +413,12 @@ const alibabaAISDK: Protocol = (model, support) => {
     case "toggle":
       return toggle({ settings: { enableThinking: false } }, { settings: { enableThinking: true } })
     case "budget_tokens":
-      return budgets(model, support, (tokens) => ({ settings: { enableThinking: true, thinkingBudget: tokens } }))
+      return budgets(
+        model,
+        support,
+        (tokens) => ({ settings: { enableThinking: true, thinkingBudget: tokens } }),
+        ALIBABA_THINKING_BUDGET_MAX,
+      )
   }
 }
 
