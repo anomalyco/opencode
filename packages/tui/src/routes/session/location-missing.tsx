@@ -7,7 +7,7 @@ import { SessionQuestion } from "./permission"
 import { usePromptMove } from "../../component/prompt/move"
 
 export function SessionLocationMissing(props: { directory: string; projectID: string; sessionID: string }) {
-  const move = usePromptMove({ projectID: () => props.projectID, sessionID: () => props.sessionID })
+  const move = usePromptMove({ projectID: () => props.projectID, sessionID: () => props.sessionID, recover: true })
   return <SessionLocationUnavailable directory={props.directory} onMove={move.open} />
 }
 
