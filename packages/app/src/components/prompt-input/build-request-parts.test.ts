@@ -20,8 +20,13 @@ describe("buildRequestParts", () => {
     const result = buildRequestParts({
       prompt,
       context: [{ key: "ctx:1", type: "file", path: "src/bar.ts", comment: "check this" }],
-      images: [
-        { type: "image", id: "img_1", filename: "a.png", mime: "image/png", dataUrl: "data:image/png;base64,AAA" },
+      attachments: [
+        {
+          uri: "opencode://attachment/att_1",
+          name: "a.png",
+          mime: "image/png",
+          previewUrl: "blob:preview-1",
+        },
       ],
       text: "hello @src/foo.ts @planner",
       messageID: "msg_1",
@@ -53,14 +58,18 @@ describe("buildRequestParts", () => {
     const result = buildRequestParts({
       prompt: [{ type: "text", content: "check these", start: 0, end: 11 }],
       context: [],
-      images: [
-        { type: "image", id: "img_1", filename: "a.png", mime: "image/png", dataUrl: "data:image/png;base64,AAA" },
+      attachments: [
         {
-          type: "image",
-          id: "img_2",
-          filename: "b.pdf",
+          uri: "opencode://attachment/att_1",
+          name: "a.png",
+          mime: "image/png",
+          previewUrl: "blob:preview-1",
+        },
+        {
+          uri: "opencode://attachment/att_2",
+          name: "b.pdf",
           mime: "application/pdf",
-          dataUrl: "data:application/pdf;base64,BBB",
+          previewUrl: "blob:preview-2",
         },
       ],
       text: "check these",
@@ -69,24 +78,24 @@ describe("buildRequestParts", () => {
       sessionDirectory: "/repo",
     })
 
-    const files = result.requestParts.filter((part) => part.type === "file" && part.url.startsWith("data:"))
+    const files = result.requestParts.filter(
+      (part) => part.type === "file" && part.url.startsWith("opencode://attachment/"),
+    )
 
     expect(files).toHaveLength(2)
     expect(files.map((part) => (part.type === "file" ? part.filename : ""))).toEqual(["a.png", "b.pdf"])
   })
 
-  test("preserves an external attachment source path for the model", () => {
+  test("uses one managed URI representation while preserving the local preview", () => {
     const result = buildRequestParts({
       prompt: [],
       context: [],
-      images: [
+      attachments: [
         {
-          type: "image",
-          id: "img_external",
-          filename: "opencode.global.dat",
-          sourcePath: "C:\\Users\\Luke\\AppData\\Roaming\\ai.opencode.desktop.beta\\opencode.global.dat",
+          uri: "opencode://attachment/att_external",
+          name: "opencode.global.dat",
           mime: "text/plain",
-          dataUrl: "data:text/plain;base64,AAA",
+          previewUrl: "blob:external",
         },
       ],
       text: "inspect this",
@@ -95,9 +104,11 @@ describe("buildRequestParts", () => {
       sessionDirectory: "C:\\Repos\\sst\\opencode",
     })
 
-    expect(result.requestParts.find((part) => part.type === "file")?.filename).toBe(
-      "C:\\Users\\Luke\\AppData\\Roaming\\ai.opencode.desktop.beta\\opencode.global.dat",
-    )
+    expect(result.requestParts.find((part) => part.type === "file")).toMatchObject({
+      url: "opencode://attachment/att_external",
+      filename: "opencode.global.dat",
+    })
+    expect(result.optimisticParts.find((part) => part.type === "file")).toMatchObject({ url: "blob:external" })
   })
 
   test("preserves reference aliases as directory file parts", () => {
@@ -114,7 +125,7 @@ describe("buildRequestParts", () => {
         },
       ],
       context: [],
-      images: [],
+      attachments: [],
       text: "@docs",
       messageID: "msg_reference",
       sessionID: "ses_reference",
@@ -144,7 +155,7 @@ describe("buildRequestParts", () => {
         { key: "ctx:dup", type: "file", path: "src/foo.ts" },
         { key: "ctx:comment", type: "file", path: "src/foo.ts", comment: "focus here" },
       ],
-      images: [],
+      attachments: [],
       text: "@src/foo.ts",
       messageID: "msg_2",
       sessionID: "ses_2",
@@ -171,7 +182,7 @@ describe("buildRequestParts", () => {
           comment: "Compare with @src/shared.ts and @src/review.ts.",
         },
       ],
-      images: [],
+      attachments: [],
       text: "look",
       messageID: "msg_comment_mentions",
       sessionID: "ses_comment_mentions",
@@ -190,7 +201,7 @@ describe("buildRequestParts", () => {
     const result = buildRequestParts({
       prompt,
       context: [],
-      images: [],
+      attachments: [],
       text: "@src\\foo.ts",
       messageID: "msg_win_1",
       sessionID: "ses_win_1",
@@ -216,7 +227,7 @@ describe("buildRequestParts", () => {
     const result = buildRequestParts({
       prompt,
       context: [],
-      images: [],
+      attachments: [],
       text: "@file#name.txt",
       messageID: "msg_win_2",
       sessionID: "ses_win_2",
@@ -241,7 +252,7 @@ describe("buildRequestParts", () => {
     const result = buildRequestParts({
       prompt,
       context: [],
-      images: [],
+      attachments: [],
       text: "@src/app.ts",
       messageID: "msg_linux_1",
       sessionID: "ses_linux_1",
@@ -264,7 +275,7 @@ describe("buildRequestParts", () => {
     const result = buildRequestParts({
       prompt,
       context: [],
-      images: [],
+      attachments: [],
       text: "@README.md",
       messageID: "msg_mac_1",
       sessionID: "ses_mac_1",
@@ -290,7 +301,7 @@ describe("buildRequestParts", () => {
         { key: "ctx:1", type: "file", path: "src\\utils\\helper.ts" },
         { key: "ctx:2", type: "file", path: "test\\unit.test.ts", comment: "check tests" },
       ],
-      images: [],
+      attachments: [],
       text: "test",
       messageID: "msg_win_ctx",
       sessionID: "ses_win_ctx",
@@ -317,7 +328,7 @@ describe("buildRequestParts", () => {
     const result = buildRequestParts({
       prompt,
       context: [],
-      images: [],
+      attachments: [],
       text: "@D:\\other\\project\\file.ts",
       messageID: "msg_abs",
       sessionID: "ses_abs",
@@ -348,7 +359,7 @@ describe("buildRequestParts", () => {
     const result = buildRequestParts({
       prompt,
       context: [],
-      images: [],
+      attachments: [],
       text: "@src\\App.tsx",
       messageID: "msg_sel",
       sessionID: "ses_sel",
@@ -377,7 +388,7 @@ describe("buildRequestParts", () => {
     const result = buildRequestParts({
       prompt,
       context: [],
-      images: [],
+      attachments: [],
       text: "@..\\..\\shared\\util.ts",
       messageID: "msg_dots",
       sessionID: "ses_dots",
