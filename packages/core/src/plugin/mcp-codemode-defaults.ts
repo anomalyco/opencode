@@ -1,18 +1,22 @@
-export * as McpCodeModeExclusionPlugin from "./mcp-codemode-exclusion.js"
+export * as McpCodeModeDefaultsPlugin from "./mcp-codemode-defaults.js"
 
 import { define } from "@opencode/plugin/effect/plugin"
 import { Effect } from "effect"
 
-// These servers provide Code Mode, so expose them directly instead of nesting them inside OpenCode Code Mode.
+// Defaults that make known MCP servers work well with OpenCode Code Mode, so a server's own Code Mode never ends up
+// nested inside OpenCode's. A server with `codemode` set in config is left exactly as configured.
+
+// These servers are Code Mode themselves, so OpenCode Code Mode is turned off for them (`codemode: false`).
 const urls = [/^https:\/\/executor\.sh\/[^/]+\/mcp$/]
 
-// PostHog wraps its tools in its own Code Mode tool unless the client pins "tools" mode with this header
-// or `?mode=`. The header wins over the query parameter and leaves the URL, and credentials keyed by it, alone.
+// PostHog wraps all of its tools in one server-side Code Mode tool unless the client asks for "tools" mode, so OpenCode
+// Code Mode stays on and PostHog's is turned off. PostHog also reads `?mode=`, but the header wins over it and leaves
+// the URL, which stored credentials are keyed by, unchanged.
 const posthog = /^mcp(?:-eu|\.us|\.eu)?\.posthog\.com$/
 const mode = "x-posthog-mcp-mode"
 
 export const Plugin = define({
-  id: "opencode.mcp.codemode.exclusion",
+  id: "opencode.mcp.codemode.defaults",
   effect: Effect.fn(function* (ctx) {
     yield* ctx.mcp.transform((editor) => {
       for (const [, server] of editor.list()) {

@@ -92,7 +92,7 @@ import { NativeCompactionPlugin } from "./compaction.js"
 import { IdentityPlugin } from "./identity.js"
 import { PlanPlugin } from "./plan.js"
 import { ModelsDevPlugin } from "./models-dev.js"
-import { McpCodeModeExclusionPlugin } from "./mcp-codemode-exclusion.js"
+import { McpCodeModeDefaultsPlugin } from "./mcp-codemode-defaults.js"
 import { ProviderPlugins } from "./provider.js"
 import { OpencodePlugin } from "./provider/opencode.js"
 import { WebSearchPlugins } from "./websearch/index.js"
@@ -215,7 +215,7 @@ const pre = [
   ConfigWorktreePlugin.Plugin,
   BrowserPlugin,
   ConfigMcpPlugin.Plugin,
-  McpCodeModeExclusionPlugin.Plugin,
+  McpCodeModeDefaultsPlugin.Plugin,
   WellKnownPlugin.Plugin,
   VcsGitPlugin.Plugin,
   AgentPlugin.Plugin,

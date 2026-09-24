@@ -1,11 +1,11 @@
 import { expect } from "bun:test"
-import { McpCodeModeExclusionPlugin } from "@opencode/core/plugin/mcp-codemode-exclusion"
+import { McpCodeModeDefaultsPlugin } from "@opencode/core/plugin/mcp-codemode-defaults"
 import type { Mcp } from "@opencode/schema/mcp"
 import { Effect, type Types } from "effect"
 import { it } from "../lib/effect"
 import { host } from "./host"
 
-it.effect("keeps known Code Mode MCP servers from nesting inside OpenCode Code Mode", () =>
+it.effect("applies Code Mode defaults for known MCP servers unless codemode is configured", () =>
   Effect.gen(function* () {
     const cases: Array<{
       name: string
@@ -89,7 +89,7 @@ it.effect("keeps known Code Mode MCP servers from nesting inside OpenCode Code M
     )
     const base = host()
 
-    yield* McpCodeModeExclusionPlugin.Plugin.effect(
+    yield* McpCodeModeDefaultsPlugin.Plugin.effect(
       host({
         mcp: {
           ...base.mcp,
