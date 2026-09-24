@@ -1,5 +1,7 @@
 import { createSimpleContext } from "@opencode/ui/context"
-import { Accessor, batch, createEffect, createMemo, createResource, createRoot, getOwner } from "solid-js"
+import { Accessor, batch, createEffect, createMemo, createResource, createRoot, getOwner, onCleanup } from "solid-js"
+import { useQueryClient } from "@tanstack/solid-query"
+import type { SessionInfo } from "@opencode/client/promise"
 import { createServerProjects, RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServers } from "./registry"
 import { pathKey } from "@/workspaces/path-key"
 import { useServerHealth } from "@/runtime/server/health"
@@ -18,6 +20,7 @@ import { showToast } from "@/shell/notifications/toast"
 import { formatServerError } from "./errors"
 import { useSettings } from "@/settings/model"
 import { timelinePreset } from "@opencode/session-ui/timeline/detail"
+import { useTabs } from "@/shell/tabs/tabs"
 
 export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext({
   name: "Global",
@@ -131,8 +134,35 @@ function createServerController(
 ) {
   const language = useLanguage()
   const settings = useSettings()
+  const tabs = useTabs()
+  const queryClient = useQueryClient()
   const connKey = ServerConnection.key(conn)
   const sdk = createServerSdkContext(conn, scope)
+  const notifiedDeletionIDs = new Set<string>()
+  const forgetDeletedSession = (sessionID: string) => {
+    let removed = false
+    queryClient.setQueryData<SessionInfo[]>(["home-sessions", conn], (current) => {
+      if (!current?.some((session) => session.id === sessionID)) return current
+      removed = true
+      return current.filter((session) => session.id !== sessionID)
+    })
+    if (removed) void queryClient.invalidateQueries({ queryKey: ["home-sessions", conn], exact: true })
+  }
+  const notifyOpenSessionDeleted = (sessionID: string) => {
+    if (notifiedDeletionIDs.has(sessionID)) return
+    if (
+      !tabs.store.some(
+        (tab) =>
+          tab.type === "session" &&
+          tab.server === connKey &&
+          (tab.sessionId === sessionID || tab.routeSessionId === sessionID),
+      )
+    )
+      return
+    if (notifiedDeletionIDs.size >= 128) notifiedDeletionIDs.delete(notifiedDeletionIDs.values().next().value!)
+    notifiedDeletionIDs.add(sessionID)
+    showToast({ variant: "success", title: language.t("toast.session.deleted") })
+  }
   const source = createData({
     api: () => sdk.api,
     initialMessageLimit: () => (timelinePreset(settings.general.timelineDetail())?.id === "compact" ? 40 : 20),
@@ -152,8 +182,18 @@ function createServerController(
   })
   const data = createDesktopData({
     data: source,
-    remove: (sessionID) => sdk.api.session.remove({ sessionID }),
+    remove: async (sessionID) => {
+      await sdk.api.session.remove({ sessionID })
+      forgetDeletedSession(sessionID)
+      notifyOpenSessionDeleted(sessionID)
+    },
   })
+  onCleanup(
+    sdk.event.on("session.deleted", (event) => {
+      forgetDeletedSession(event.data.sessionID)
+      notifyOpenSessionDeleted(event.data.sessionID)
+    }),
+  )
   const sync = createServerSyncContext(sdk, data)
   createPermissionAutoApprover({ sdk, data })
   const notification = createServerNotificationState({ sdk, data, key: connKey, coordinator: notificationCoordinator })

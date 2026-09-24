@@ -105,4 +105,6 @@ test("renames, exports, and deletes a home session from its context menu", async
   await dialog.getByRole("button", { name: "Delete session" }).click()
   await removed
   await expect(renamedRow).toBeHidden()
+  await expect(page.getByText("Session deleted", { exact: true })).toBeVisible()
+  await expect(page.locator(`[data-slot="titlebar-tabs"] a[href$="/session/${fixture.targetID}"]`)).toHaveCount(0)
 })
