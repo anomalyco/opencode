@@ -39,8 +39,15 @@ it.effect("sets known OpenAI Responses defaults without overriding configured or
         info: { ...Provider.Info.empty(Provider.ID.make("openai")), package: "@opencode/ai/providers/openai" },
         models: [
           { ...Model.Info.default(Provider.ID.make("openai"), Model.ID.make("gpt-5.5")) },
+          { ...Model.Info.default(Provider.ID.make("openai"), Model.ID.make("gpt-5.6-luna-fast")) },
+          { ...Model.Info.default(Provider.ID.make("openai"), Model.ID.make("gpt-5.2-codex")) },
+          { ...Model.Info.default(Provider.ID.make("openai"), Model.ID.make("gpt-5-mini-fast")) },
+          { ...Model.Info.default(Provider.ID.make("openai"), Model.ID.make("gpt-6-astra-pro")) },
           { ...Model.Info.default(Provider.ID.make("openai"), Model.ID.make("gpt-4o")) },
           { ...Model.Info.default(Provider.ID.make("openai"), Model.ID.make("gpt-7")) },
+          { ...Model.Info.default(Provider.ID.make("openai"), Model.ID.make("gpt-5.7")) },
+          { ...Model.Info.default(Provider.ID.make("openai"), Model.ID.make("gpt-5.5-chat")) },
+          { ...Model.Info.default(Provider.ID.make("openai"), Model.ID.make("gpt-5.4-image-2")) },
           {
             ...Model.Info.default(Provider.ID.make("openai"), Model.ID.make("gpt-6-astra")),
             variants: [{ id: Model.VariantID.make("quiet"), settings: { textVerbosity: null } }],
@@ -53,7 +60,10 @@ it.effect("sets known OpenAI Responses defaults without overriding configured or
         ],
       })
       editor.add({
-        info: { ...Provider.Info.empty(Provider.ID.make("opencode")), package: "@opencode/ai/providers/openai-compatible" },
+        info: {
+          ...Provider.Info.empty(Provider.ID.make("opencode")),
+          package: "@opencode/ai/providers/openai-compatible",
+        },
         models: [
           {
             ...Model.Info.default(Provider.ID.make("opencode"), Model.ID.make("astra-alias")),
@@ -84,7 +94,7 @@ it.effect("sets known OpenAI Responses defaults without overriding configured or
         ["azure", "@opencode/ai/providers/azure/responses", "gpt-5.5"],
         ["bedrock-mantle", "@opencode/ai/providers/amazon-bedrock/mantle/responses", "openai.gpt-6-sol"],
         ["cloudflare", "@opencode/ai/providers/cloudflare-ai-gateway", "openai/gpt-5.6-sol"],
-        ["vercel", Provider.aisdk("@ai-sdk/gateway"), "openai/gpt-6-astra"],
+        ["vercel", Provider.aisdk("@ai-sdk/gateway"), "openai/gpt-6-astra-fast"],
         ["azure-chat", "@opencode/ai/providers/azure/chat", "gpt-5.5"],
         ["bedrock-converse", "@opencode/ai/providers/amazon-bedrock", "global.openai.gpt-6-sol"],
         ["cloudflare-chat", "@opencode/ai/providers/cloudflare-ai-gateway", "workers-ai/gpt-5.5"],
@@ -109,9 +119,18 @@ it.effect("sets known OpenAI Responses defaults without overriding configured or
       expect(event.options.textVerbosity).toBe("low")
     }
 
+    for (const id of ["gpt-5.6-luna-fast", "gpt-5.2-codex", "gpt-5-mini-fast", "gpt-6-astra-pro"]) {
+      const event = request(ref("openai", id))
+      yield* hooks.trigger("session", "context", event)
+      expect(event.options.textVerbosity).toBe("low")
+    }
+
     for (const model of [
       ref("openai", "gpt-4o"),
       ref("openai", "gpt-7"),
+      ref("openai", "gpt-5.7"),
+      ref("openai", "gpt-5.5-chat"),
+      ref("openai", "gpt-5.4-image-2"),
       ref("openai", "chat"),
       ref("openrouter", "gpt-5.5"),
       ref("configured", "gpt-5.5"),

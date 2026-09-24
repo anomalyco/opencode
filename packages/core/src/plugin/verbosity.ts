@@ -7,27 +7,6 @@ import { Model } from "../model.js"
 import { Provider } from "../provider.js"
 import type { PluginInternal } from "./internal.js"
 
-// Only known OpenAI GPT models get a style default. A new model starts with
-// the provider's default until its verbosity support is confirmed.
-const supported = new Set([
-  "gpt-5",
-  "gpt-5-mini",
-  "gpt-5-nano",
-  "gpt-5.1",
-  "gpt-5.2",
-  "gpt-5.3-codex",
-  "gpt-5.4",
-  "gpt-5.4-mini",
-  "gpt-5.4-nano",
-  "gpt-5.5",
-  "gpt-5.6",
-  "gpt-5.6-sol",
-  "gpt-5.6-terra",
-  "gpt-5.6-luna",
-  "gpt-6-astra",
-  "gpt-6-sol",
-  "gpt-6-luna",
-])
 const direct = new Set([
   "@opencode/ai/providers/openai",
   "@opencode/ai/providers/openai/responses",
@@ -46,7 +25,7 @@ export const Plugin = define({
         const model = yield* models.get(event.model.providerID, event.model.id)
         if (!model) return
         const id = openAIModelID(model)
-        if (!id || !supported.has(id)) return
+        if (!id || !supportsVerbosity(id)) return
         if (model.settings?.textVerbosity !== undefined) return
         const variant = model.variants.find((item) => item.id === event.model.variant)
         if (variant?.settings?.textVerbosity !== undefined) return
@@ -58,6 +37,13 @@ export const Plugin = define({
     yield* ctx.session.hook("title", hook)
   }),
 } satisfies PluginInternal.InternalPlugin)
+
+function supportsVerbosity(id: string) {
+  if (id.includes("gpt-6")) return true
+  if (id.includes("-chat") || id.includes("-image")) return false
+  // New GPT-5 minor versions remain unset until their support is known.
+  return /(?:^|[/.])gpt-5\.[1-6](?:[.:-]|$)/.test(id) || /(?:^|[/.])gpt-5(?:-(?:mini|nano)(?:[.:-]|$)|$)/.test(id)
+}
 
 function openAIModelID(model: Model.Info) {
   const id = model.modelID.toLowerCase()
