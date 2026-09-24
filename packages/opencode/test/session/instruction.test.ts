@@ -143,6 +143,47 @@ describe("Instruction.resolve", () => {
     ),
   )
 
+  it.live("expands shell directives in nearby AGENTS.md content", () =>
+    withFiles(
+      {
+        "subdir/AGENTS.md": "# Subdir Instructions\n\nOutput: !`printf expanded-ok`\n",
+        "subdir/nested/file.ts": "const x = 1",
+      },
+      (dir) =>
+        Effect.gen(function* () {
+          const svc = yield* Instruction.Service
+          const results = yield* svc.resolve(
+            [],
+            path.join(dir, "subdir", "nested", "file.ts"),
+            MessageID.make("msg_message-test-shell-1"),
+          )
+          expect(results).toHaveLength(1)
+          expect(results[0].content).toContain("Output: expanded-ok")
+          expect(results[0].content).not.toContain("!`printf expanded-ok`")
+        }),
+    ),
+  )
+
+  it.live("runs nearby AGENTS.md shell directives from the instruction file directory", () =>
+    withFiles(
+      {
+        "subdir/AGENTS.md": "# Subdir Instructions\n\nCurrent directory: !`pwd`\n",
+        "subdir/nested/file.ts": "const x = 1",
+      },
+      (dir) =>
+        Effect.gen(function* () {
+          const svc = yield* Instruction.Service
+          const results = yield* svc.resolve(
+            [],
+            path.join(dir, "subdir", "nested", "file.ts"),
+            MessageID.make("msg_message-test-shell-2"),
+          )
+          expect(results).toHaveLength(1)
+          expect(results[0].content).toContain(`Current directory: ${path.join(dir, "subdir")}`)
+        }),
+    ),
+  )
+
   it.live("doesn't reload AGENTS.md when reading it directly", () =>
     withFiles({ "subdir/AGENTS.md": "# Subdir Instructions", "subdir/nested/file.ts": "const x = 1" }, (dir) =>
       Effect.gen(function* () {
