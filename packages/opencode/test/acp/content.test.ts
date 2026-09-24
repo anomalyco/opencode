@@ -81,6 +81,35 @@ describe("acp content conversion", () => {
     ])
   })
 
+  test("resource_link JSON notebook is read as text", () => {
+    expect(
+      contentBlockToParts({
+        type: "resource_link",
+        uri: "file:///tmp/notebook.ipynb",
+        name: "notebook.ipynb",
+        mimeType: "application/x-ipynb+json",
+      }),
+    ).toEqual([
+      {
+        type: "file",
+        url: "file:///tmp/notebook.ipynb",
+        filename: "notebook.ipynb",
+        mime: "text/plain",
+      },
+    ])
+  })
+
+  test("resource_link PDF remains a file attachment", () => {
+    expect(
+      contentBlockToParts({
+        type: "resource_link",
+        uri: "file:///tmp/report.pdf",
+        name: "report.pdf",
+        mimeType: "application/pdf",
+      }),
+    ).toEqual([{ type: "file", url: "file:///tmp/report.pdf", filename: "report.pdf", mime: "application/pdf" }])
+  })
+
   test("resource_link zed path becomes a file URL part", () => {
     expect(
       contentBlockToParts({
