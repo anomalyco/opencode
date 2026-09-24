@@ -643,6 +643,7 @@ export function LiteSection(props: { lite: LiteSubscription | undefined }) {
             <li>Space Bunny Free</li>
             <li>Grok 4.7</li>
             <li>Grok 4.6</li>
+            <li>GPT 6 Luna</li>
             <li>GPT 5.6 Luna</li>
             <li>GLM-5.3-Flash</li>
             <li>GLM-5.3</li>
