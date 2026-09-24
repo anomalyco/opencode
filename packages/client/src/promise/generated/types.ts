@@ -188,6 +188,7 @@ export type ShellInfo = {
   file: string
   pid?: number
   exit?: number
+  signal?: string
   metadata: { [x: string]: any }
   time: { started: number; completed?: number }
 }
@@ -395,6 +396,7 @@ export type ShellInfo1 = {
   file: string
   pid?: number
   exit?: number
+  signal?: string
   metadata: { [x: string]: JsonValue }
   time: { started: number; completed?: number }
 }
