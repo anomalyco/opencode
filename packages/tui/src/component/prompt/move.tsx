@@ -9,11 +9,7 @@ import { useData } from "../../context/data"
 import { useLocation } from "../../context/location"
 import { useRoute } from "../../context/route"
 
-export function usePromptMove(input: {
-  projectID: () => string | undefined
-  sessionID: () => string | undefined
-  recover?: boolean
-}) {
+export function usePromptMove(input: { projectID: () => string | undefined; sessionID: () => string | undefined }) {
   const dialog = useDialog()
   const client = useClient()
   const toast = useToast()
@@ -39,11 +35,11 @@ export function usePromptMove(input: {
       const session = sessionID ? await resolveSession(sessionID) : undefined
       if (sessionID && !session) throw new Error("Unable to determine current session location")
       const location = session?.location ?? homeLocation()
-      if (!data.location.info(location) && !(input.recover && session)) await data.location.syncInfo(location)
-      const projectID = input.recover && session ? session.projectID : data.location.info(location)?.project.id
-      if (!projectID) throw new Error("Unable to determine current project")
+      if (!data.location.info(location)) await data.location.syncInfo(location)
+      const project = data.location.info(location)?.project
+      if (!project) throw new Error("Unable to determine current project")
       const result = await client.api.worktree.create({
-        projectID,
+        projectID: project.id,
         name,
       })
       const directory = result.directory
@@ -110,16 +106,6 @@ export function usePromptMove(input: {
     if (!directory) {
       setProgress(undefined)
       dialog.clear()
-      return
-    }
-    const sessionID = input.recover ? input.sessionID() : undefined
-    if (sessionID) {
-      const error = await client.api.session.move({ sessionID, directory }).then(
-        () => undefined,
-        (error) => error,
-      )
-      finishSubmit()
-      if (error) toast.show({ title: "Failed to move session", message: errorMessage(error), variant: "error" })
       return
     }
     finishSubmit()

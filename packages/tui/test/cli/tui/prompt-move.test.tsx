@@ -177,7 +177,7 @@ test.each([false, true])("Ctrl+M moves only an existing session (home=%s)", asyn
 })
 
 test("choosing a directory recovers the session when its location is unavailable", async () => {
-  const fixture = await renderMove({ directory: clone, unavailable: "location", recover: true })
+  const fixture = await renderMove({ directory: clone, unavailable: "location", showMissingLocation: true })
   try {
     await fixture.app.waitForFrame((frame) => frame.includes("Session location unavailable"))
     fixture.app.mockInput.pressEnter()
@@ -197,7 +197,7 @@ test("choosing a directory recovers the session when its location is unavailable
 })
 
 test("creating a worktree recovers the session without reading its removed location", async () => {
-  const fixture = await renderMove({ directory: clone, unavailable: "location", recover: true })
+  const fixture = await renderMove({ directory: clone, unavailable: "location", showMissingLocation: true })
   try {
     await fixture.app.waitForFrame((frame) => frame.includes("Session location unavailable"))
     fixture.app.mockInput.pressEnter()
@@ -219,7 +219,7 @@ test("creating a worktree recovers the session without reading its removed locat
 })
 
 test("failed recovery does not navigate away from the session", async () => {
-  const fixture = await renderMove({ directory: clone, unavailable: "location", recover: true, moveFails: true })
+  const fixture = await renderMove({ directory: clone, unavailable: "location", showMissingLocation: true, moveFails: true })
   try {
     await fixture.app.waitForFrame((frame) => frame.includes("Session location unavailable"))
     fixture.app.mockInput.pressEnter()
@@ -286,7 +286,7 @@ async function renderMove(input: {
   launch?: string
   launchProjectID?: string
   unavailable?: "session" | "location"
-  recover?: boolean
+  showMissingLocation?: boolean
   moveFails?: boolean
 }) {
   const launch = input.launch ?? (input.home ? input.directory : main)
@@ -379,7 +379,7 @@ async function renderMove(input: {
       projectID: () => (input.home ? data.location.info()?.project.id : "proj_test"),
       sessionID: () => (input.home ? undefined : "ses_clone"),
     })
-    return input.recover ? (
+    return input.showMissingLocation ? (
       <SessionLocationMissing directory={input.directory} projectID="proj_test" sessionID="ses_clone" />
     ) : null
   }
