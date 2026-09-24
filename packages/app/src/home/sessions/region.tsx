@@ -32,6 +32,7 @@ export function HomeSessions(props: {
           onOpenSession={props.sessions.session.open}
           onArchiveSession={props.sessions.session.archive}
           onRenameSession={props.sessions.session.rename}
+          onCopySessionID={props.sessions.session.copyID}
           onExportSession={props.sessions.session.export}
           onDeleteSession={props.sessions.session.showDelete}
           onSetHoverTarget={props.scroll.viewport.setHoverTarget}

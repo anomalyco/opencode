@@ -8,8 +8,10 @@ import { Icon } from "@opencode/ui/icon"
 import { Menu } from "@opencode/ui/menu"
 import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
+import { usePlatform } from "@/runtime/platform/platform"
 import { ServerConnection, serverName, useServers } from "@/runtime/server/registry"
 import { displayName, projectForSession } from "@/shell/layout/helpers"
+import { copySessionID } from "@/shell/clipboard"
 import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
 import type { SessionInfo } from "@opencode/client/promise"
@@ -41,6 +43,7 @@ export function TabNavItem(props: {
 }) {
   const language = useLanguage()
   const settings = useSettings()
+  const platform = usePlatform()
   const [menu, setMenu] = createStore({ open: false, rename: false })
   const [editing, setEditing] = createSignal(false)
   const [titleOverflowing, setTitleOverflowing] = createSignal(false)
@@ -360,6 +363,12 @@ export function TabNavItem(props: {
         >
           <Menu.Item disabled={!props.session || rename.isPending} onSelect={() => setMenu("rename", true)}>
             {language.t("common.rename")}
+          </Menu.Item>
+          <Menu.Item
+            disabled={!props.session}
+            onSelect={() => void copySessionID({ sessionID: props.session?.id, platform, language })}
+          >
+            {language.t("command.session.copyID")}
           </Menu.Item>
           <Menu.Item onSelect={props.onClose}>{language.t("common.closeTab")}</Menu.Item>
         </Menu.Context.Content>
