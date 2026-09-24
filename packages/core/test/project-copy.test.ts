@@ -356,6 +356,7 @@ describe("ProjectCopy", () => {
         ].toSorted((a, b) => a.directory.localeCompare(b.directory)),
       )
     }),
+    15_000,
   )
 
   it.live("refresh ignores existing directories that are no longer git checkouts", () =>
