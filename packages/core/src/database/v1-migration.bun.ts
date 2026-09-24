@@ -450,7 +450,6 @@ export function transformSession(input: TransformInput): TransformResult {
             seq: projected.length,
             data: {
               text: notice,
-              description: "Instructions updated: legacy tools",
               time: { created: last.time_created },
             },
           },
