@@ -246,7 +246,7 @@ export const defaultSettings: Settings = {
     mobileTitlebarPosition: "top",
     mobileDiffWrap: true,
     terminalPlacement: "side",
-    followUpBehavior: "steer",
+    followUpBehavior: "queue",
   },
   sessionSummary: { projectExpanded: true, serverExpanded: true },
   appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal" },
