@@ -7,7 +7,13 @@ import {
   toProviderAggregate,
   toRetentionAggregate,
 } from "./inference"
-import { modelAuthor, normalizeInferenceModel, statModel, statProvider } from "./model-normalization"
+import {
+  modelAuthor,
+  normalizeInferenceModel,
+  RETIRED_STAT_MODELS,
+  statModel,
+  statProvider,
+} from "./model-normalization"
 
 describe("inference stat normalization", () => {
   test("normalizes model suffixes used by router/provider variants", () => {
@@ -51,10 +57,40 @@ describe("inference stat normalization", () => {
     expect(statProvider("unknown", "", "custom-provider")).toBe("custom-provider")
   })
 
+  test("attributes hy4 preview traffic to Tencent instead of the unknown provider", () => {
+    expect(modelAuthor("hy4-preview")).toBe("tencent")
+    expect(toModelAggregate(aggregate("hy4-preview", "opencode"))).toMatchObject([
+      { model: "hy4-preview", provider: "tencent" },
+    ])
+    expect(toProviderAggregate(aggregate("hy4-preview", "opencode"))).toMatchObject([{ provider: "tencent" }])
+    expect(toGeoAggregate({ ...aggregate("hy4-preview", "opencode"), country: "US" })).toMatchObject([
+      { model: "hy4-preview", provider: "tencent" },
+    ])
+  })
+
+  test("maps oversized model ids to unknown before aggregation", () => {
+    expect(statModel("x".repeat(256), "")).toBe("x".repeat(256))
+    expect(statModel("x".repeat(257), "")).toBe("unknown")
+    expect(statModel("big-pickle", `provider/${"x".repeat(257)}`)).toBe("unknown")
+
+    const [query] = buildStatsQueries(new Date("2026-09-16T00:00:00.000Z"), new Date("2026-09-16T04:00:00.000Z"), {
+      namespace: "inference",
+      table: "generation",
+      dataset: "zen",
+    })
+    expect(query).toContain("WHEN length(")
+    expect(query).toContain(") > 256 THEN 'unknown'")
+  })
+
   test("keeps stealth model usage without exposing the route provider", () => {
     expect(statProvider("omen-alpha", "gpt-test-model", "test-provider")).toBe("unknown")
     expect(statProvider("OMEN-ALPHA-free:global", "gpt-test-model", "test-provider")).toBe("unknown")
     expect(statProvider("omen-alpha", "", "test-provider")).toBe("unknown")
+    expect(statProvider("space-bunny-free", "hidden-route-model", "hidden-provider")).toBe("unknown")
+
+    const spaceBunny = { ...aggregate("space-bunny-free", "hidden-provider"), provider_model: "hidden-route-model" }
+    expect(toModelAggregate(spaceBunny)).toMatchObject([{ model: "space-bunny", provider: "unknown", requests: 1 }])
+    expect(toProviderAggregate(spaceBunny)).toMatchObject([{ provider: "unknown", requests: 1 }])
 
     const row = { ...aggregate("omen-alpha", "test-provider"), provider_model: "gpt-test-model" }
     expect(toModelAggregate(row)).toMatchObject([{ model: "omen-alpha", provider: "unknown", requests: 1 }])
@@ -65,6 +101,20 @@ describe("inference stat normalization", () => {
     expect(toRetentionAggregate({ ...row, cohort_date: "2026-08-10", eligible_users: "12" })).toMatchObject([
       { model: "omen-alpha", provider: "unknown", eligibleUsers: 12 },
     ])
+    ;["opencode-go/union-alpha", "opencode/union-alpha"].forEach((model) => {
+      expect(statModel(model, "")).toBe("union-alpha")
+      expect(statProvider(model, "gpt-test-model", "test-provider")).toBe("unknown")
+
+      const row = { ...aggregate(model, "test-provider"), provider_model: "gpt-test-model" }
+      expect(toModelAggregate(row)).toMatchObject([{ model: "union-alpha", provider: "unknown", requests: 1 }])
+      expect(toProviderAggregate(row)).toMatchObject([{ provider: "unknown", requests: 1 }])
+      expect(toGeoAggregate({ ...row, country: "US" })).toMatchObject([
+        { model: "union-alpha", provider: "unknown", country: "US", requests: 1 },
+      ])
+      expect(toRetentionAggregate({ ...row, cohort_date: "2026-08-10", eligible_users: "12" })).toMatchObject([
+        { model: "union-alpha", provider: "unknown", eligibleUsers: 12 },
+      ])
+    })
   })
 
   test("merges renamed models under their current name", () => {
@@ -84,6 +134,26 @@ describe("inference stat normalization", () => {
       },
     ])
     expect(toProviderAggregate(aggregate("ox-alpha", "unknown"))).toMatchObject([{ provider: "zhipu" }])
+  })
+
+  test("renames DeepSeek Flash to V4.1 without merging V4 or vision usage", () => {
+    ;["deepseek-flash", "DEEPSEEK-FLASH-free:global", "deepseek-v4.1-flash"].forEach((model) => {
+      expect(statModel(model, "")).toBe("deepseek-v4.1-flash")
+      expect(toModelAggregate(aggregate(model, "deepseek"))).toMatchObject([
+        { model: "deepseek-v4.1-flash", provider: "deepseek" },
+      ])
+      expect(toGeoAggregate({ ...aggregate(model, "deepseek"), country: "US" })).toMatchObject([
+        { model: "deepseek-v4.1-flash", provider: "deepseek", country: "US" },
+      ])
+      expect(toRetentionAggregate({ ...aggregate(model, "deepseek"), cohort_date: "2026-08-10" })).toMatchObject([
+        { model: "deepseek-v4.1-flash", provider: "deepseek" },
+      ])
+    })
+    expect(statModel("big-pickle", "deepseek/deepseek-flash")).toBe("deepseek-v4.1-flash")
+    expect(statModel("deepseek-v4-flash", "")).toBe("deepseek-v4-flash")
+    expect(statModel("deepseek-v4-flash-vision-exp", "")).toBe("deepseek-v4-flash-vision-exp")
+    expect(RETIRED_STAT_MODELS).toContain("deepseek-flash")
+    expect(RETIRED_STAT_MODELS).not.toContain("deepseek-v4.1-flash")
   })
 
   test("model aggregates prefer provider.model and use normalized model", () => {
@@ -144,7 +214,12 @@ describe("inference stat normalization", () => {
     expect(queries).toHaveLength(8)
     queries.forEach((query) => {
       expect(query).toContain("WHERE lower(model) NOT IN ('alpha-gpt-next')")
-      expect(query).toContain("CASE\n      WHEN lower(model) IN ('omen-alpha') THEN 'unknown'\n")
+      expect(query).toContain(
+        "CASE\n      WHEN lower(model) IN ('omen-alpha', 'space-bunny', 'union-alpha') THEN 'unknown'\n",
+      )
+      expect(query).toContain("= 'opencode-go/union-alpha' THEN 'union-alpha'")
+      expect(query).toContain("= 'opencode/union-alpha' THEN 'union-alpha'")
+      expect(query).toContain("= 'deepseek-flash' THEN 'deepseek-v4.1-flash'")
     })
     expect(queries[0]).toContain("'week' AS grain")
     expect(queries[0]).toContain("'2026-W33' AS period_key")
@@ -164,7 +239,7 @@ describe("inference stat normalization", () => {
     expect(queries[0]).toContain("OR lower(raw_model) IN ('gpt-5-nano', 'grok-code', 'big-pickle')")
     expect(queries[0]).toContain("OR lower(raw_model) LIKE '%-free'")
     expect(queries[0]).toContain("THEN 'Free'")
-    expect(queries[0]).toContain("LIMIT 10000")
+    expect(queries[0]).not.toContain("LIMIT")
     expect(queries[0]).toContain("approx_distinct(session) AS sessions")
     expect(queries[1]).toContain("'geo_model' ELSE 'geo'")
     expect(queries[1]).toContain("0 AS sessions")
@@ -205,11 +280,18 @@ describe("inference stat normalization", () => {
       dataset: "zen",
     })
 
-    expect(queries).toHaveLength(1)
-    expect(queries[0]?.cohortDates).toEqual(["2026-08-10", "2026-08-17"])
+    expect(queries).toHaveLength(2)
+    queries.forEach(({ query }) => {
+      expect(query).toContain("= 'deepseek-flash' THEN 'deepseek-v4.1-flash'")
+    })
+    expect(queries.map((query) => query.cohortDates)).toEqual([["2026-08-10"], ["2026-08-17"]])
     expect(queries[0]?.query).toContain("AND product = 'go'")
     expect(queries[0]?.query).toContain("AND lower(model) NOT IN ('alpha-gpt-next')")
-    expect(queries[0]?.query).toContain("CASE\n      WHEN lower(model) IN ('omen-alpha') THEN 'unknown'\n")
+    expect(queries[0]?.query).toContain(
+      "CASE\n      WHEN lower(model) IN ('omen-alpha', 'space-bunny', 'union-alpha') THEN 'unknown'\n",
+    )
+    expect(queries[0]?.query).toContain("= 'opencode-go/union-alpha' THEN 'union-alpha'")
+    expect(queries[0]?.query).toContain("= 'opencode/union-alpha' THEN 'union-alpha'")
     expect(queries[0]?.query).toContain("COUNT(*) AS model_requests")
     expect(queries[0]?.query).toContain("SUM(model_requests) AS total_requests")
     expect(queries[0]?.query).toContain("MAX(model_requests) AS max_model_requests")
@@ -222,14 +304,40 @@ describe("inference stat normalization", () => {
     )
     expect(queries[0]?.query).not.toContain(" OVER (")
     expect(queries[0]?.query).toContain("WHEN '2026-08-17' THEN '2026-08-10'")
-    expect(queries[0]?.query).toContain("WHEN '2026-08-24' THEN '2026-08-17'")
+    expect(queries[0]?.query).not.toContain("WHEN '2026-08-24' THEN '2026-08-17'")
+    expect(queries[1]?.query).toContain("WHEN '2026-08-24' THEN '2026-08-17'")
     expect(queries[0]?.query).toContain("started_at >= '2026-08-10T00:00:00.000Z'")
-    expect(queries[0]?.query).toContain("started_at < '2026-08-31T00:00:00.000Z'")
+    expect(queries[0]?.query).toContain("started_at < '2026-08-24T00:00:00.000Z'")
+    expect(queries[1]?.query).toContain("started_at >= '2026-08-17T00:00:00.000Z'")
+    expect(queries[1]?.query).toContain("started_at < '2026-08-31T00:00:00.000Z'")
     expect(queries[0]?.query).toContain("LEFT JOIN returned ON primary_models.user_key = returned.user_key")
     expect(queries[0]?.query).toContain("primary_models.cohort_date = returned.cohort_date")
     expect(queries[0]?.query).toContain("'Go' AS tier")
     expect(queries[0]?.query).toContain("COUNT(*) AS eligible_users")
     expect(queries[0]?.query).toContain("LIMIT 10000")
+  })
+
+  test("splits a full retention window without dropping or duplicating cohorts", () => {
+    const source = { namespace: "inference", table: "generation", dataset: "zen" }
+    const queries = buildRetentionQueries(new Date("2026-07-16T19:00:00Z"), new Date("2026-09-10T00:00:00Z"), source)
+
+    expect(queries.flatMap((query) => query.cohortDates)).toEqual([
+      "2026-07-13",
+      "2026-07-20",
+      "2026-07-27",
+      "2026-08-03",
+      "2026-08-10",
+      "2026-08-17",
+      "2026-08-24",
+    ])
+    queries.forEach((query) => {
+      const start = new Date(`${query.cohortDates[0]}T00:00:00Z`)
+      const end = new Date(start.getTime() + 14 * 86_400_000)
+      expect(query).toEqual(buildRetentionQueries(start, end, source)[0])
+    })
+    expect(buildRetentionQueries(new Date("2026-08-31T00:00:00Z"), new Date("2026-09-10T00:00:00Z"), source)).toEqual(
+      [],
+    )
   })
 
   test("maps retention query results", () => {

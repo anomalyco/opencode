@@ -1,10 +1,12 @@
 import fs from "fs/promises"
 import path from "path"
+import { pathToFileURL } from "url"
 import { describe, expect, test } from "bun:test"
 import { Effect, Option } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Global } from "@opencode-ai/core/global"
 import { Npm } from "@opencode-ai/core/npm"
+import { which } from "@opencode-ai/core/util/which"
 import { tmpdir } from "./fixture/tmpdir"
 
 const win = process.platform === "win32"
@@ -55,6 +57,74 @@ describe("Npm.add", () => {
 
     expect(entry.entrypoint).toBeDefined()
   })
+
+  // The Desktop sidecar runs the server under Node, where import.meta.resolve cannot take a
+  // parent URL. Exercise the real Node branch instead of the Bun one the test runner uses.
+  test("resolves an importable file URL under Node", async () => {
+    await using tmp = await tmpdir()
+    const node = which("node")
+    if (!node) throw new Error("Node is required for the Npm Node runtime test")
+
+    const bundle = await Bun.build({
+      entrypoints: [path.join(import.meta.dir, "../src/npm.ts")],
+      target: "node",
+      format: "esm",
+    })
+    expect(bundle.success).toBe(true)
+    const entry = path.join(tmp.path, "npm.mjs")
+    await Bun.write(entry, bundle.outputs[0])
+
+    const dual = path.join(tmp.path, "dual-provider")
+    await writePackage(dual, {
+      name: "dual-provider",
+      exports: { ".": { import: "./dist/index.mjs", require: "./dist/index.js" } },
+    })
+    await Bun.write(path.join(dual, "dist", "index.mjs"), "export const createDual = () => 'esm'\n")
+    await Bun.write(path.join(dual, "dist", "index.js"), "exports.createDual = () => 'cjs'\n")
+
+    const scoped = path.join(tmp.path, "scoped-provider")
+    await writePackage(scoped, {
+      name: "@fixture/scoped-provider",
+      type: "module",
+      exports: "./dist/index.js",
+    })
+    await Bun.write(path.join(scoped, "dist", "index.js"), "export const createScoped = () => 'scoped'\n")
+
+    const proc = Bun.spawn(
+      [
+        node,
+        "--input-type=module",
+        "-e",
+        `
+        import assert from "node:assert/strict"
+        import { Npm } from ${JSON.stringify(pathToFileURL(entry).href)}
+        assert.equal(typeof Bun, "undefined")
+        for (const [spec, name] of [
+          [${JSON.stringify(`dual-provider@file:${dual}`)}, "createDual"],
+          [${JSON.stringify(`@fixture/scoped-provider@file:${scoped}`)}, "createScoped"],
+        ]) {
+          const result = await Npm.add(spec)
+          assert.ok(result.entrypoint?.startsWith("file://"), "entrypoint is a file URL: " + result.entrypoint)
+          const mod = await import(result.entrypoint)
+          assert.equal(typeof mod[name], "function", "module exports " + name)
+        }
+        process.exit(0)
+      `,
+      ],
+      {
+        env: { ...process.env, XDG_CACHE_HOME: path.join(tmp.path, "cache") },
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    )
+    const [stdout, stderr, code] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+      proc.exited,
+    ])
+    expect(stderr, stdout).toBe("")
+    expect(code).toBe(0)
+  }, 30_000)
 })
 
 describe("Npm.install", () => {
