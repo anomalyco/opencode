@@ -398,8 +398,9 @@ const bedrockConverse: Protocol = (model, support) => {
         model,
         support,
         (tokens) =>
+          // Claude's budget is a typed setting so the protocol can fit it under the output limit.
           claude
-            ? fields({ thinking: { type: "enabled", budget_tokens: tokens } })
+            ? { settings: { thinking: { type: "enabled", budgetTokens: tokens } } }
             : fields({ reasoningConfig: { type: "enabled", budgetTokens: tokens } }),
         claude ? ANTHROPIC_OUTPUT_TOKEN_MAX : model.limit.output,
       )

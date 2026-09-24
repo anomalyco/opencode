@@ -196,6 +196,17 @@ test("spells Chat Completions variants for direct providers", () => {
   ])
 })
 
+test("spells Bedrock Converse Claude budgets as a thinking setting", () => {
+  expect(
+    resolve(model("@opencode/ai/providers/amazon-bedrock", "us.anthropic.claude-haiku-4-5-20251001-v1:0", 64_000), [
+      { type: "budget_tokens", min: 1024 },
+    ]),
+  ).toEqual([
+    { id: "high", settings: { thinking: { type: "enabled", budgetTokens: 16_000 } } },
+    { id: "max", settings: { thinking: { type: "enabled", budgetTokens: 31_999 } } },
+  ])
+})
+
 test("spells Bedrock Converse effort for Grok and Nova", () => {
   const supports: Variant.Support[] = [{ type: "effort", values: ["low", "xhigh"] }]
   expect(resolve(model("@opencode/ai/providers/amazon-bedrock", "us.xai.grok-4.6"), supports)).toEqual([
