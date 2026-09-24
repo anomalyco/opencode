@@ -249,8 +249,9 @@ const checkpointBody = {
       return yield* ProviderShared.invalidRequest(
         "Trigger compaction requires complete canonical history, not an input or continuation override",
       )
+    const merged = mergeJsonRecords(native, overlay)
     return yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(CheckpointBody))({
-      ...mergeJsonRecords(native, overlay),
+      ...merged,
       input: [...native.input, { type: "compaction_trigger" }],
       stream: true,
       store: false,
@@ -258,7 +259,10 @@ const checkpointBody = {
       tool_choice: undefined,
       context_management: undefined,
       // Keep verbosity for cache reuse, but drop generation-only formatting from the overlay.
-      text: native.text,
+      text:
+        ProviderShared.isRecord(merged?.text) && merged.text.verbosity !== undefined
+          ? { verbosity: merged.text.verbosity }
+          : undefined,
       max_output_tokens: undefined,
       max_tool_calls: undefined,
     })

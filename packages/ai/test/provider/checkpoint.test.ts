@@ -118,10 +118,9 @@ testEffect(
   dynamicResponse(({ text, respond }) =>
     Effect.sync(() => {
       expect(JSON.parse(text).text).toEqual({ verbosity: "low" })
-      return respond(
-        sseEvents({ type: "response.completed", response: { id: "resp_1", output: [checkpoint] } }),
-        { headers: { "content-type": "text/event-stream" } },
-      )
+      return respond(sseEvents({ type: "response.completed", response: { id: "resp_1", output: [checkpoint] } }), {
+        headers: { "content-type": "text/event-stream" },
+      })
     }),
   ),
 ).effect("keeps explicit verbosity on a trigger checkpoint for prompt cache reuse", () =>
@@ -131,6 +130,27 @@ testEffect(
       prompt: "Hello.",
       providerOptions: { textVerbosity: "low" },
       http: { body: { text: { format: { type: "json_object" } } } },
+    }),
+    trigger,
+  ),
+)
+
+testEffect(
+  dynamicResponse(({ text, respond }) =>
+    Effect.sync(() => {
+      expect(JSON.parse(text).text).toEqual({ verbosity: "high" })
+      return respond(sseEvents({ type: "response.completed", response: { id: "resp_1", output: [checkpoint] } }), {
+        headers: { "content-type": "text/event-stream" },
+      })
+    }),
+  ),
+).effect("keeps the effective body-overlay verbosity without generation formatting", () =>
+  LLMClient.compact(
+    LLM.request({
+      model: OpenAI.configure({ apiKey: "fixture" }).responses("gpt-5.5"),
+      prompt: "Hello.",
+      providerOptions: { textVerbosity: "low" },
+      http: { body: { text: { verbosity: "high", format: { type: "json_object" } } } },
     }),
     trigger,
   ),
