@@ -25,8 +25,14 @@ export const Plugin = define({
     const global = yield* Global.Service
     const location = yield* Location.Service
     const watcher = yield* Watcher.Service
-    const loaded: { entries: Entry[]; skills: Skill.Info[] } = {
+    const compatibilityRoots = config.compatibility ?? (() => Effect.succeed({ claude: [], agents: [] }))
+    const loaded: {
+      entries: Entry[]
+      compatibility: { readonly claude: readonly AbsolutePath[]; readonly agents: readonly AbsolutePath[] }
+      skills: Skill.Info[]
+    } = {
       entries: yield* config.entries(),
+      compatibility: yield* compatibilityRoots(),
       skills: [],
     }
     const watches = yield* FiberMap.make<string>()
@@ -82,6 +88,9 @@ export const Plugin = define({
       }
       const directories = loaded.entries.flatMap((entry) => (entry.type === "directory" ? [entry.path] : []))
       const items = loaded.entries.flatMap((entry) => (entry.type === "document" ? (entry.info.skills ?? []) : []))
+      for (const directory of [...loaded.compatibility.claude, ...loaded.compatibility.agents]) {
+        add(Skill.DirectorySource.make({ type: "directory", path: AbsolutePath.make(path.join(directory, "skills")) }))
+      }
       for (const directory of directories) {
         add(Skill.DirectorySource.make({ type: "directory", path: AbsolutePath.make(path.join(directory, "skill")) }))
         add(Skill.DirectorySource.make({ type: "directory", path: AbsolutePath.make(path.join(directory, "skills")) }))
@@ -181,8 +190,13 @@ export const Plugin = define({
     yield* ctx.event.subscribe().pipe(
       Stream.filter((event) => event.type === "config.updated"),
       Stream.runForEach(() =>
-        config.entries().pipe(
-          Effect.tap((entries) => Effect.sync(() => (loaded.entries = entries))),
+        Effect.all({ entries: config.entries(), compatibility: compatibilityRoots() }).pipe(
+          Effect.tap((next) =>
+            Effect.sync(() => {
+              loaded.entries = next.entries
+              loaded.compatibility = next.compatibility
+            }),
+          ),
           Effect.andThen(refresh()),
           Effect.andThen(ctx.skill.reload()),
         ),

@@ -350,6 +350,34 @@ describe("Config", () => {
     ),
   )
 
+  it.live("publishes config updates when compatibility roots appear", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const global = path.join(tmp.path, "global")
+          const project = path.join(tmp.path, "project")
+          const root = path.join(project, ".claude")
+          yield* Effect.promise(() => Promise.all([fs.mkdir(global), fs.mkdir(project)]))
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const bus = yield* Bus.Service
+            const watcher = yield* Watcher.Test
+            expect((yield* config.compatibility!()).claude).not.toContain(AbsolutePath.make(root))
+            const changed = yield* bus
+              .subscribe(Event.Updated)
+              .pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true }))
+
+            yield* Effect.promise(() => fs.mkdir(root))
+            yield* watcher.emit({ type: "create", path: root })
+
+            yield* Fiber.join(changed).pipe(Effect.timeout("2 seconds"))
+            expect((yield* config.compatibility!()).claude).toContain(AbsolutePath.make(root))
+          }).pipe(Effect.provide(testLayer(project, global, project, undefined, Watcher.testLayer)))
+        }),
+      ),
+    ),
+  )
+
   // Real watcher on purpose: the regression this pins (a deleted config file's
   // watch being torn down, making recreation invisible) only reproduces with
   // path-faithful event delivery.
