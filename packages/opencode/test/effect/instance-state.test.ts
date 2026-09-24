@@ -317,6 +317,27 @@ it.live("InstanceState dedupes concurrent lookups", () =>
   }),
 )
 
+it.live("InstanceState retries after a failed lookup", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped()
+    let n = 0
+    const state = yield* InstanceState.make(() =>
+      Effect.gen(function* () {
+        n += 1
+        if (n === 1) return yield* Effect.fail(new Error("transient config parse failure"))
+        return { n }
+      }),
+    )
+
+    const first = yield* Effect.flip(access(state, dir))
+    expect(first).toBeInstanceOf(Error)
+    // A second get must re-run the lookup instead of replaying the cached failure.
+    const second = yield* access(state, dir)
+    expect(n).toBe(2)
+    expect(second).toEqual({ n: 2 })
+  }),
+)
+
 it.live("InstanceState survives deferred resume from the same instance context", () =>
   Effect.gen(function* () {
     const dir = yield* tmpdirScoped({ git: true })
