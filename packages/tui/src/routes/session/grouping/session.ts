@@ -80,8 +80,10 @@ const explorationTools = new Set(["read", "glob", "grep", "webfetch", "websearch
 /**
  * Grouping path for an assistant part. Adjacent thoughts group, as do reads, searches
  * and web fetches. Low wraps every run of tools and thoughts in one activity summary.
+ * Questions always stand alone.
  */
 export function partPath(part: AppendPart, verbosity: Verbosity): readonly GroupKind[] {
+  if (part.type === "tool" && part.name.toLowerCase() === "question") return []
   const activity: GroupKind[] = verbosity === "low" && part.type !== "text" ? ["activity"] : []
   if (part.type === "reasoning") return [...activity, "reasoning"]
   if (part.type === "tool" && explorationTools.has(part.name.toLowerCase())) return [...activity, "exploration"]

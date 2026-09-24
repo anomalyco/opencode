@@ -205,16 +205,16 @@ function ActivityGroup(props: GroupProps) {
   const disclosure = useDisclosure(props)
   const [hover, setHover] = createSignal(false)
   const entries = createMemo(() => descendants(props.node))
-  const summary = createMemo(() => summarizeActivity(props.node, props.message, props.pending))
+  const summary = createMemo(() => summarizeActivity(props.node, props.message, props.pending, props.completed))
   return (
     <GroupAnchor groupID={disclosure.id()} active={summary().label !== ""}>
-      {/* Until something finishes there is nothing to summarize; show the live items, spaced like Medium. */}
+      {/* Until something finishes there is nothing to summarize; show the one running item. */}
       <Show
         when={summary().label}
         fallback={
-          <box flexDirection="column" gap={1}>
-            <Children {...props} nodes={props.node.children} mode="normal" />
-          </box>
+          <Show when={summary().current}>
+            {(entry) => <Children {...props} nodes={[{ type: "entry", size: 1, entry: entry() }]} mode="normal" />}
+          </Show>
         }
       >
         <InlineToolRow

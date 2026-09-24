@@ -153,7 +153,7 @@ test("retains nested expansion state and registers exact headers and parts", asy
   expect(anchors.list()).toEqual([])
 })
 
-test("a low activity group with nothing finished spaces its live items", async () => {
+test("a low activity group with nothing finished shows only its first running item", async () => {
   const config = createTuiResolvedConfig({ animations: false })
   const shell = (id: string) => ({
     type: "tool" as const,
@@ -192,11 +192,8 @@ test("a low activity group with nothing finished spaces its live items", async (
   })
   try {
     app.renderer.start()
-    await app.waitForFrame((frame) => frame.includes("Shell two"))
-    const lines = app.captureCharFrame().split("\n")
-    const one = lines.findIndex((line) => line.includes("Shell one"))
-    const two = lines.findIndex((line) => line.includes("Shell two"))
-    expect(two - one).toBe(2)
+    await app.waitForFrame((frame) => frame.includes("Shell one"))
+    expect(app.captureCharFrame()).not.toContain("Shell two")
   } finally {
     app.renderer.destroy()
   }

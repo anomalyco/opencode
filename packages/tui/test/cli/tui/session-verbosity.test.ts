@@ -236,5 +236,44 @@ test("activity summary counts distinct instruction files and skips redacted thou
   const activity = reduceSessionRows(messages, new Set(), false, "low")[0]
   if (activity.type !== "group") throw new Error("Expected activity")
   const message = (id: string) => messages.find((item) => item.id === id)
-  expect(summarizeActivity(activity, message).label).toBe("1 thought, 1 read, 3 instructions")
+  expect(summarizeActivity(activity, message, [], true).label).toBe("1 thought, 1 read, 3 instructions")
+})
+
+test("questions stand alone at every level and end an activity run", () => {
+  for (const verbosity of ["low", "medium", "high"] as const)
+    expect(partPath({ type: "tool", name: "question" }, verbosity)).toEqual([])
+  const rows = reduceSessionRows(
+    [assistant("a", [tool("r1", "read"), tool("q", "question", "running"), tool("r2", "read")])],
+    new Set(),
+    false,
+    "low",
+  )
+  expect(rows.map((row) => (row.type === "group" ? row.kind : row.type))).toEqual(["activity", "part", "activity"])
+})
+
+test("a thought still streaming counts as finished once a later row closes its group", () => {
+  const open = { ...assistant("a", []), time: { created: 1 } }
+  const items = [
+    { message: open, part: { type: "reasoning" as const, text: "Planning", time: { created: 1 } } },
+    { message: open, part: tool("r1", "read") },
+  ]
+  expect(activitySummary(items, 0)).toEqual({ label: "1 read", active: true, failed: false })
+  expect(activitySummary(items, 0, true)).toEqual({ label: "1 thought, 1 read", active: false, failed: false })
+})
+
+test("until something finishes, the summary reports the first running entry", () => {
+  const open = {
+    ...assistant("a", [tool("e1", "edit", "running"), tool("e2", "edit", "running")]),
+    time: { created: 1 },
+  }
+  const activity = reduceSessionRows([open], new Set(), false, "low")[0]
+  if (activity.type !== "group") throw new Error("Expected activity")
+  const summary = summarizeActivity(activity, () => open, [], false)
+  expect(summary.label).toBe("")
+  expect(summary.current).toEqual({ type: "part", ref: { messageID: "a", partID: "e1" } })
+})
+
+test("a finished execute with no nested calls counts as one tool", () => {
+  const message = assistant("a", [])
+  expect(activitySummary([{ message, part: tool("x", "execute") }], 0).label).toBe("1 tool")
 })
