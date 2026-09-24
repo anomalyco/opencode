@@ -145,7 +145,7 @@ function selectIntegration(choices: LoginChoice[]) {
       const visible = this.filteredOptions.slice(start, start + maxItems)
       const rows = visible.flatMap((choice, index) => [
         ...(index === 0 || visible[index - 1].category !== choice.category
-          ? [...(compact ? [] : [`${color.cyan(S_BAR)}  `]), `${color.cyan(S_BAR)}  ${color.magenta(choice.category)}`]
+          ? [...(compact ? [] : [`${color.cyan(S_BAR)}  `]), `${color.cyan(S_BAR)}  ${color.bold(choice.category)}`]
           : []),
         `${color.cyan(S_BAR)}  ${start + index === this.cursor ? color.green(S_RADIO_ACTIVE) : color.dim(S_RADIO_INACTIVE)} ${
           start + index === this.cursor ? choice.label : color.dim(choice.label)
