@@ -128,16 +128,21 @@ export const configure = (input: LanguageModelOptions = {}) => {
   const configuredChat = chatRoute.with(options)
   const configuredMessages = messagesRoute.with(options)
   const responses = (modelID: string | ModelID) =>
-    configuredResponses.model<OpenResponsesProviderOptionsInput>({ id: modelID })
+    configuredResponses.model<OpenResponsesProviderOptionsInput>({ id: modelID, compatibility: { sanitizer: "meta" } })
   const chat = (modelID: string | ModelID) =>
     configuredChat.model<OpenResponsesProviderOptionsInput>({
       id: modelID,
-      compatibility: { maxTokensField: "max_completion_tokens", supportsStore: false, supportsPromptCacheKey: true },
+      compatibility: {
+        maxTokensField: "max_completion_tokens",
+        supportsStore: false,
+        supportsPromptCacheKey: true,
+        sanitizer: "meta",
+      },
     })
   const messages = (modelID: string | ModelID) =>
     configuredMessages.model<MessagesOptionsInput>({
       id: modelID,
-      compatibility: { requireSignature: false },
+      compatibility: { requireSignature: false, sanitizer: "meta" },
     })
   const image = (modelID: string | ModelID) =>
     MetaImages.model({

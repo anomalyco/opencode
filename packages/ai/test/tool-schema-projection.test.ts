@@ -5,7 +5,11 @@ import { OpenAIChat } from "../src/protocols.js"
 import { ToolSchemaProjection } from "../src/protocols/utils/tool-schema.js"
 import { Auth } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
+import type { JsonSchema } from "../src/schema/index.js"
 import { it } from "./lib/effect.js"
+
+const nested = (levels: number, leaf: JsonSchema) =>
+  Array.from({ length: levels }).reduce<JsonSchema>((schema) => ({ type: "object", properties: { a: schema } }), leaf)
 
 describe("tool schema projections", () => {
   test("moonshot strips $ref siblings and converts tuple arrays to a schema object", () => {
@@ -60,6 +64,108 @@ describe("tool schema projections", () => {
     })
   })
 
+  test("meta counts levels through references and sends schemas within its limits unchanged", () => {
+    const within = {
+      type: "object",
+      properties: { a: { $ref: "#/$defs/A" } },
+      $defs: { A: nested(9, { type: "string" }) },
+    }
+    expect(ToolSchemaProjection.meta(within)).toBe(within)
+    expect(ToolSchemaProjection.meta({ ...within, $defs: { A: nested(10, { type: "string" }) } })).toEqual({
+      type: "object",
+      properties: { a: nested(9, { type: "object" }) },
+    })
+  })
+
+  test("meta leaves structure past 10 levels unconstrained", () => {
+    expect(
+      ToolSchemaProjection.meta(
+        nested(9, {
+          type: "object",
+          properties: {
+            deep: {
+              type: "object",
+              description: "Deepest object",
+              required: ["x"],
+              properties: { x: { type: "string" } },
+              additionalProperties: false,
+            },
+            list: { type: "array", items: { type: "string" }, unevaluatedItems: false },
+            items: { type: "string" },
+            config: { type: "object", default: { items: {} }, examples: [{ a: 1 }] },
+            mode: { type: "string", enum: ["fast"] },
+          },
+        }),
+      ),
+    ).toEqual(
+      nested(9, {
+        type: "object",
+        properties: {
+          deep: { type: "object", description: "Deepest object", required: ["x"] },
+          list: { type: "array" },
+          items: true,
+          config: { type: "object", examples: [{ a: 1 }] },
+          mode: { type: "string", enum: ["fast"] },
+        },
+      }),
+    )
+  })
+
+  test("meta inlines references and cuts recursion", () => {
+    const tree = { type: "object", properties: { children: { type: "array", items: {} } } }
+    expect(
+      ToolSchemaProjection.meta({
+        type: "object",
+        properties: {
+          value: { type: "string" },
+          child: { $ref: "#", description: "Nested node" },
+          tree: { $ref: "#/$defs/Tree" },
+        },
+        $defs: {
+          Tree: { type: "object", properties: { children: { type: "array", items: { $ref: "#/$defs/Tree" } } } },
+        },
+      }),
+    ).toEqual({
+      type: "object",
+      properties: {
+        value: { type: "string" },
+        child: {
+          type: "object",
+          description: "Nested node",
+          properties: { value: { type: "string" }, child: { description: "Nested node" }, tree },
+        },
+        tree,
+      },
+    })
+  })
+
+  test("meta keeps $ref siblings alongside their target", () => {
+    const base = {
+      type: "object",
+      description: "Base",
+      properties: { id: { type: "string" } },
+      additionalProperties: false,
+    }
+    expect(
+      ToolSchemaProjection.meta({
+        type: "object",
+        properties: {
+          deep: nested(10, { type: "string" }),
+          described: { $ref: "#/$defs/Base", description: "Field" },
+          extended: { $ref: "#/$defs/Base", properties: { extra: { type: "string" } } },
+        },
+        $defs: { Base: base },
+      }),
+    ).toEqual({
+      type: "object",
+      properties: {
+        deep: nested(9, { type: "object" }),
+        described: { ...base, description: "Field" },
+        extended: { allOf: [base, { properties: { extra: { type: "string" } } }] },
+      },
+    })
+  })
+
   it.effect("selects tool schema handling from the model name unless compatibility is explicit", () =>
     Effect.gen(function* () {
       const route = OpenAIChat.route.with({
@@ -97,6 +203,33 @@ describe("tool schema projections", () => {
         yield* parameters(route.model({ id: "moonshotai/Kimi-K3", compatibility: { sanitizer: "none" } })),
       ).toEqual(original)
       expect(yield* parameters(route.model({ id: "gpt-6-luna" }))).toEqual(original)
+    }),
+  )
+
+  it.effect("selects Meta tool schema handling for Muse Spark models", () =>
+    Effect.gen(function* () {
+      const route = OpenAIChat.route.with({
+        endpoint: { baseURL: "https://api.openai.test/v1/" },
+        auth: Auth.bearer("test"),
+      })
+      const original = { type: "object", properties: { child: { $ref: "#" } } }
+      const parameters = (model: ReturnType<typeof route.model>) =>
+        compileRequest(
+          LLM.request({
+            model,
+            prompt: "Use the tool.",
+            tools: [{ name: "lookup", description: "Lookup data.", inputSchema: original }],
+          }),
+        ).pipe(Effect.map((prepared) => prepared.body.tools?.[0]?.function.parameters))
+
+      expect(yield* parameters(route.model({ id: "meta/Muse-Spark-1.3" }))).toEqual({
+        type: "object",
+        properties: { child: { type: "object", properties: { child: {} } } },
+      })
+      expect(yield* parameters(route.model({ id: "meta/muse-glimmer-30b" }))).toEqual(original)
+      expect(
+        yield* parameters(route.model({ id: "meta/muse-spark-1.3", compatibility: { sanitizer: "none" } })),
+      ).toEqual(original)
     }),
   )
 

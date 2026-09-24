@@ -1,6 +1,7 @@
 import type { JsonSchema, LanguageModel, LanguageModelSanitizerCompatibility } from "../../schema/index.js"
 import { isRecord } from "../../utils/record.js"
 import { GeminiJsonSchema } from "./gemini-json-schema.js"
+import { MetaJsonSchema } from "./meta-json-schema.js"
 
 const tupleItemsSchema = (items: ReadonlyArray<unknown>) => {
   const projected = items.map(moonshotNode)
@@ -47,10 +48,12 @@ const openAI = (schema: JsonSchema): JsonSchema => schema
 const responses = openAI
 
 const gemini = GeminiJsonSchema.normalize
+const meta = MetaJsonSchema.normalize
 
 const MODEL_NAMES = [
   [/gemini/i, "gemini"],
   [/kimi/i, "moonshot"],
+  [/muse-spark/i, "meta"],
 ] as const
 
 // An explicit `sanitizer` wins, and `none` opts out. Otherwise the protocol's own default
@@ -64,6 +67,8 @@ const modelCompatibility = (
   switch (model.compatibility?.sanitizer ?? protocolDefault ?? MODEL_NAMES.find(([name]) => name.test(model.id))?.[1]) {
     case "gemini":
       return gemini(schema)
+    case "meta":
+      return meta(schema)
     case "moonshot":
       return moonshot(schema)
     case "none":
@@ -74,6 +79,7 @@ const modelCompatibility = (
 
 export const ToolSchemaProjection = {
   gemini,
+  meta,
   modelCompatibility,
   moonshot,
   openAI,

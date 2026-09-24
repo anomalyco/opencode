@@ -153,7 +153,7 @@ export const ReasoningEffort = Schema.declare<ReasoningEffort>(
 )
 
 /** Tool schema sanitizer for a model family. `none` opts out of the protocol and model-name defaults. */
-export const LanguageModelSanitizerCompatibility = Schema.Literals(["gemini", "moonshot", "none"])
+export const LanguageModelSanitizerCompatibility = Schema.Literals(["gemini", "meta", "moonshot", "none"])
 export type LanguageModelSanitizerCompatibility = Schema.Schema.Type<typeof LanguageModelSanitizerCompatibility>
 
 export const LanguageModelMaxTokensFieldCompatibility = Schema.Literals(["max_completion_tokens", "max_tokens"])

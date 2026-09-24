@@ -117,6 +117,26 @@ it.effect("Meta package selectors preserve overrides and Chat token policy on cu
   }),
 )
 
+it.effect("Meta routes apply Meta tool schema limits to every model", () =>
+  Effect.gen(function* () {
+    const meta = Meta.configure({ apiKey: "fixture" })
+    const tools = [
+      {
+        name: "lookup",
+        description: "Lookup data.",
+        inputSchema: { type: "object", properties: { child: { $ref: "#" } } },
+      },
+    ]
+    const expected = { type: "object", properties: { child: { type: "object", properties: { child: {} } } } }
+    const responses = yield* compileRequest(LLM.request({ model: meta.responses("sam-3.1"), prompt: "Hello", tools }))
+    const chat = yield* compileRequest(LLM.request({ model: meta.chat("sam-3.1"), prompt: "Hello", tools }))
+    const messages = yield* compileRequest(LLM.request({ model: meta.messages("sam-3.1"), prompt: "Hello", tools }))
+    expect(responses.body.tools?.[0]?.parameters).toEqual(expected)
+    expect(chat.body.tools?.[0]?.function.parameters).toEqual(expected)
+    expect(messages.body.tools?.[0]?.input_schema).toEqual(expected)
+  }),
+)
+
 it.effect("Meta resolves environment credentials and accepts explicit auth overrides", () =>
   Effect.gen(function* () {
     for (const api of ["responses", "chat"] as const) {
