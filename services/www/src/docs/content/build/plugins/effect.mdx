@@ -969,6 +969,20 @@ effect: (ctx) =>
   }),
 ```
 
+Tools default to Code Mode. Set `codemode: false` for native model calls, using the effective name `acme_greeting`
+rather than the Code Mode function path `tools.acme.greeting`:
+
+```ts
+yield *
+  ctx.tool.transform((editor) => {
+    editor.update("acme_greeting", (tool) => {
+      tool.options = { namespace: "acme", codemode: false }
+    })
+  })
+```
+
+The same [direct tool and permission rules](/build/plugins#tools) apply to Promise and Effect plugins.
+
 Call `yield* ctx.tool.reload()` after changing source data captured by the callback. Reload replays active transforms
 without changing their order; it does not rerun the plugin effect.
 
