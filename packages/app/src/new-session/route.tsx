@@ -7,7 +7,7 @@ import { LocationProvider } from "@/workspaces/location"
 import { ModelsProvider } from "@/providers/models/models"
 import { ComposerPersistenceProvider } from "@/composer/persistence"
 import { ServerProvider, useServer } from "@/runtime/server/current"
-import { ServerConnection } from "@/runtime/server/registry"
+import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useTabs, type DraftTab } from "@/shell/tabs/tabs"
 import { SessionUIProvider } from "@/shell/routes/session-ui-provider"
 import NewSession from "@/new-session/screen"
@@ -30,11 +30,23 @@ export function DraftRoute() {
 
 function ResolvedDraftRoute(props: { draft: DraftTab }) {
   const global = useGlobal()
+  const servers = useServers()
   const conn = createMemo(() => global.servers.list().find((item) => ServerConnection.key(item) === props.draft.server))
 
   return (
     <Show when={`${props.draft.server}\0${props.draft.directory}`} keyed>
-      <Show when={conn()} keyed>
+      <Show
+        when={conn()}
+        keyed
+        fallback={
+          // The shell is up before the local service has connected; hold the panel's place.
+          <Show when={servers.pending}>
+            <SessionRouteFrame padded>
+              <SessionPanelFrame raised />
+            </SessionRouteFrame>
+          </Show>
+        }
+      >
         {(conn) => (
           <ServerProvider conn={conn}>
             <ResolvedDraftContent draft={props.draft} />

@@ -1,5 +1,5 @@
 import { ServerConnection, useCurrentRoute, useGlobal, useServers, useTabs } from "@opencode/app/desktop"
-import { createResource } from "solid-js"
+import { createEffect, createResource, createRoot } from "solid-js"
 import type { ElectronAPI } from "../api-types"
 
 export function DesktopFirstLaunchOnboarding(props: {
@@ -24,6 +24,16 @@ export function DesktopFirstLaunchOnboarding(props: {
       if (!props.pending) return
 
       await Promise.all([tabs.ready.promise, tabs.recentReady.promise].map((p) => p ?? Promise.resolve()))
+      // The shell mounts before the local service has connected; the decision needs the full list.
+      await new Promise<void>((resolve) =>
+        createRoot((dispose) =>
+          createEffect(() => {
+            if (server.pending) return
+            dispose()
+            resolve()
+          }),
+        ),
+      )
 
       const shouldTrigger =
         props.initialUrl === "/" &&

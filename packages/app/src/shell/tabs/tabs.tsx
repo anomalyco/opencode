@@ -138,8 +138,10 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
     onCleanup(memory.dispose)
 
+    // Tabs of a server that is gone are dropped, but not while the host is still discovering its
+    // servers: the shell mounts before the local service has connected.
     createEffect(() => {
-      if (!ready() || !recentReady()) return
+      if (!ready() || !recentReady() || servers.pending) return
       const serversSet = new Set(servers.list.map(ServerConnection.key))
       const next = store.filter((tab) => serversSet.has(tab.server))
       if (next.length !== store.length) {
@@ -165,7 +167,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     })
 
     createEffect(() => {
-      if (!closedReady()) return
+      if (!closedReady() || servers.pending) return
       const serversSet = new Set(servers.list.map(ServerConnection.key))
       const next = closed.filter((entry) => serversSet.has(entry.tab.server))
       if (next.length !== closed.length) setClosed(() => next)

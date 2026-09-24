@@ -84,12 +84,23 @@ function ConnectRoute() {
 function TargetServerRoute(props: ParentProps) {
   const params = useParams<{ serverKey: string }>()
   const global = useGlobal()
+  const servers = useServers()
   const connection = createMemo(() =>
     global.servers.list().find((item) => ServerConnection.key(item) === requireServerKey(params.serverKey)),
   )
 
   return (
-    <Show when={connection()} keyed>
+    <Show
+      when={connection()}
+      keyed
+      fallback={
+        <Show when={servers.pending}>
+          <div class="flex min-h-0 flex-1 px-2 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
+            <SessionPanelFrame raised />
+          </div>
+        </Show>
+      }
+    >
       {(connection) => <ServerProvider conn={connection}>{props.children}</ServerProvider>}
     </Show>
   )
@@ -98,7 +109,7 @@ function TargetServerRoute(props: ParentProps) {
 function AppLayout(props: ParentProps) {
   const servers = useServers()
   return (
-    <Show when={servers.list.length > 0} fallback={<ConnectServerScreen />}>
+    <Show when={servers.list.length > 0 || servers.pending} fallback={<ConnectServerScreen />}>
       <LayoutProvider>
         <SettingsSurfaceProvider>
           <DesktopPairingCommand />

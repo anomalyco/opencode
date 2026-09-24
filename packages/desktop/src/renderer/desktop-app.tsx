@@ -86,15 +86,11 @@ export function DesktopApp(props: { api: ElectronAPI; updater: UpdaterPlatform; 
     const ssh = useSsh()
     const sshConnections = createSshConnections(props.api.sshServers)
     const language = useLanguage()
-    const ready = createMemo(
-      () =>
-        !firstLaunch.loading &&
-        !defaultServer.loading &&
-        !sidecar.loading &&
-        !locale.loading &&
-        !wslServers.isLoading &&
-        !ssh.loading,
-    )
+    // The shell mounts from local state as soon as the quick lookups resolve. The local service,
+    // WSL and SSH connections are discovered meanwhile and appear in the server list when ready;
+    // until then the list is marked pending so nothing acts on it being empty.
+    const ready = createMemo(() => !firstLaunch.loading && !defaultServer.loading && !locale.loading)
+    const serversPending = createMemo(() => sidecar.loading || wslServers.isLoading || ssh.loading)
     const servers = createMemo(() => {
       const data = initializationData(sidecar)
       const list: ServerConnection.Any[] = []
@@ -117,30 +113,31 @@ export function DesktopApp(props: { api: ElectronAPI; updater: UpdaterPlatform; 
 
     return (
       <Show when={ready()}>
-        <Show when={effectiveDefaultServer()} keyed>
-          {(key) => (
-            <AppInterface defaultServer={key} servers={servers()} router={router}>
-              <DesktopStartupReady
-                routeReady={!initialRoute.loading && startup.onboardingReady}
-                onReady={() => setStartup("ready", true)}
-                onRoute={(route) => setStartup("route", route)}
-              />
-              <DesktopFirstLaunchOnboarding
-                api={props.api}
-                initialUrl={initialUrl}
-                serverKey={key}
-                pending={firstLaunch() ?? false}
-                onReady={() => setStartup("onboardingReady", true)}
-              />
-              <DesktopEffects api={props.api} />
-              <Suspense fallback={null}>
-                <Show when={initializationData(sidecar)} keyed>
-                  {(server) => <MigrationStatus server={server} />}
-                </Show>
-              </Suspense>
-            </AppInterface>
-          )}
-        </Show>
+        <AppInterface
+          defaultServer={effectiveDefaultServer()}
+          servers={servers()}
+          serversPending={serversPending()}
+          router={router}
+        >
+          <DesktopStartupReady
+            routeReady={!initialRoute.loading && startup.onboardingReady}
+            onReady={() => setStartup("ready", true)}
+            onRoute={(route) => setStartup("route", route)}
+          />
+          <DesktopFirstLaunchOnboarding
+            api={props.api}
+            initialUrl={initialUrl}
+            serverKey={effectiveDefaultServer()}
+            pending={firstLaunch() ?? false}
+            onReady={() => setStartup("onboardingReady", true)}
+          />
+          <DesktopEffects api={props.api} />
+          <Suspense fallback={null}>
+            <Show when={initializationData(sidecar)} keyed>
+              {(server) => <MigrationStatus server={server} />}
+            </Show>
+          </Suspense>
+        </AppInterface>
       </Show>
     )
   }
