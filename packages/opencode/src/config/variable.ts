@@ -20,6 +20,12 @@ type SubstituteInput = ParseSource & {
   text: string
   missing?: "error" | "empty"
   env?: Record<string, string>
+  /**
+   * Set when `text` is raw JSON(C) source: `{file:...}` path bodies are JSON string
+   * fragments and carry encoded escapes (e.g. `\\` on Windows paths) that must be
+   * decoded before filesystem access.
+   */
+  jsonc?: boolean
 }
 
 function source(input: ParseSource) {
@@ -59,6 +65,13 @@ export async function substitute(input: SubstituteInput) {
     }
 
     let filePath = token.replace(/^\{file:/, "").replace(/\}$/, "")
+    if (input.jsonc) {
+      try {
+        filePath = JSON.parse(`"${filePath}"`)
+      } catch {
+        // Not valid JSON string content; keep the raw path.
+      }
+    }
     if (filePath.startsWith("~/")) {
       filePath = path.join(os.homedir(), filePath.slice(2))
     }

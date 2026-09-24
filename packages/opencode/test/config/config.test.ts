@@ -6,6 +6,7 @@ import { Cause, Effect, Exit, Layer, Logger, Option } from "effect"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { Config } from "@/config/config"
+import { ConfigVariable } from "@/config/variable"
 import { ConfigManaged } from "@/config/managed"
 import { ConfigParse } from "../../src/config/parse"
 import { ConfigV2Compat } from "../../src/config/v2-compat"
@@ -738,6 +739,23 @@ it.instance("handles file inclusion with replacement tokens", () =>
     })
     const config = yield* Config.use.get()
     expect(config.username).toBe("const out = await Bun.$`echo hi`")
+  }),
+)
+
+it.instance("resolves JSON-escaped {file:} paths in raw config source", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    yield* FSUtil.use.writeWithDirs(path.join(test.directory, "included.txt"), "escaped-inclusion-user")
+    // Embed the path the way a JSON serializer emits it: backslashes doubled, forward
+    // slashes escaped as `\/`. Substitution runs on the raw text before parsing, so the
+    // escapes must be decoded before the path reaches the filesystem.
+    const body = JSON.stringify(path.join(test.directory, "included.txt")).slice(1, -1).replaceAll("/", "\\/")
+    yield* FSUtil.use.writeWithDirs(
+      path.join(test.directory, "opencode.json"),
+      `{\n  "$schema": "https://opencode.ai/config.json",\n  "username": "{file:${body}}"\n}\n`,
+    )
+    const config = yield* Config.use.get()
+    expect(config.username).toBe("escaped-inclusion-user")
   }),
 )
 
@@ -2231,4 +2249,78 @@ test("parseManagedPlist handles empty config", async () => {
     "test:mobileconfig",
   )
   expect(config.$schema).toBe("https://opencode.ai/config.json")
+})
+
+test("ConfigVariable.substitute decodes JSON string escapes in {file:} paths with jsonc", async () => {
+  // The issue scenario: a JSON-serialized UNC path reaches the filesystem with its
+  // escapes still encoded (four literal leading backslashes) and is reported missing.
+  const readText = spyOn(Filesystem, "readText").mockResolvedValue("unc-content")
+  try {
+    const uncPath = "\\\\server\\share\\system.md"
+    const body = JSON.stringify(uncPath).slice(1, -1)
+    await ConfigVariable.substitute({
+      text: `{"prompt": "{file:${body}}"}`,
+      type: "path",
+      path: "opencode.json",
+      jsonc: true,
+    })
+    expect(readText).toHaveBeenCalledWith(uncPath)
+  } finally {
+    readText.mockRestore()
+  }
+})
+
+test("ConfigVariable.substitute resolves JSON-escaped absolute paths against the filesystem", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-substitute-"))
+  try {
+    const target = path.join(dir, "included.txt")
+    await fs.writeFile(target, "escaped-path-user")
+    // Same shape a JSON serializer emits for the path: backslashes doubled, forward
+    // slashes escaped as `\/`.
+    const body = JSON.stringify(target).slice(1, -1).replaceAll("/", "\\/")
+    const out = await ConfigVariable.substitute({
+      text: `{"username": "{file:${body}}"}`,
+      type: "path",
+      path: path.join(dir, "opencode.json"),
+      jsonc: true,
+    })
+    expect(JSON.parse(out).username).toBe("escaped-path-user")
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true })
+  }
+})
+
+test("ConfigVariable.substitute keeps {file:} paths verbatim without jsonc", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-substitute-"))
+  try {
+    // Without the jsonc flag (e.g. already-decoded strings from a remote well-known
+    // config), escape sequences stay literal and the reference is treated as missing.
+    const out = await ConfigVariable.substitute({
+      text: '{"username": "{file:missing\\/dir\\/key.txt}"}',
+      type: "path",
+      path: path.join(dir, "opencode.json"),
+      missing: "empty",
+    })
+    expect(JSON.parse(out).username).toBe("")
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true })
+  }
+})
+
+test("ConfigVariable.substitute falls back to the raw path on invalid JSON escapes", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-substitute-"))
+  try {
+    // `\\y` is not a valid JSON escape: decoding must fall back to the raw path instead
+    // of crashing, preserving the pre-existing behavior for hand-written config text.
+    const out = await ConfigVariable.substitute({
+      text: '{"username": "{file:x\\yfile.txt}"}',
+      type: "path",
+      path: path.join(dir, "opencode.json"),
+      missing: "empty",
+      jsonc: true,
+    })
+    expect(JSON.parse(out).username).toBe("")
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true })
+  }
 })
