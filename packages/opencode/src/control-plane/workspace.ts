@@ -468,6 +468,9 @@ const layer = Layer.effect(
     const startSync = Effect.fn("Workspace.startSync")(function* (space: Info) {
       if (!flags.experimentalWorkspaces) return
 
+      // A listener in error may still be retrying; keep its backoff and target resolution in place.
+      if (yield* FiberMap.has(syncFibers, space.id)) return
+
       const target = yield* WorkspaceAdapterRuntime.target(space).pipe(
         Effect.catchCause((cause) =>
           Effect.gen(function* () {
@@ -485,10 +488,6 @@ const layer = Layer.effect(
         setStatus(space.id, (yield* fs.existsSafe(target.directory)) ? "connected" : "error")
         return
       }
-
-      // A remote target may be unavailable while its proxy restarts; the listener retries resolution.
-      const exists = yield* FiberMap.has(syncFibers, space.id)
-      if (exists && connections.get(space.id)?.status !== "error") return
 
       setStatus(space.id, "disconnected")
 

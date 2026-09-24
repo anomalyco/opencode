@@ -1412,6 +1412,51 @@ describe("workspace sync state", () => {
     })
   })
 
+  it.live("repeated start keeps retry backoff and removal cancels retries", () =>
+    provideTmpdirInstance(
+      () =>
+        Effect.gen(function* () {
+          const workspace = yield* Workspace.Service
+          const sessionSvc = yield* SessionNs.Service
+          const instance = yield* requireInstance
+          const type = unique("remote-retry-stop")
+          const info = workspaceInfo(instance.project.id, type)
+          let attempts = 0
+          yield* insertWorkspace(info)
+          registerAdapter(
+            instance.project.id,
+            type,
+            recordedAdapter({
+              target() {
+                attempts += 1
+                throw new Error("proxy unavailable")
+              },
+            }).adapter,
+          )
+          yield* attachSessionToWorkspace((yield* sessionSvc.create({})).id, info.id)
+
+          yield* workspace.startWorkspaceSyncing(instance.project.id)
+          yield* eventuallyEffect(
+            Effect.gen(function* () {
+              expect(attempts).toBe(2)
+              expect((yield* workspace.status()).find((item) => item.workspaceID === info.id)?.status).toBe("error")
+            }),
+          )
+
+          yield* workspace.startWorkspaceSyncing(instance.project.id)
+          yield* Effect.sleep("100 millis")
+          expect(attempts).toBe(2)
+
+          yield* workspace.remove(info.id)
+          expect(yield* workspace.isSyncing(info.id)).toBe(false)
+          const stoppedAt = attempts
+          yield* Effect.sleep("1200 millis")
+          expect(attempts).toBe(stoppedAt)
+        }),
+      { git: true },
+    ),
+  )
+
   it.live("remote connection HTTP failures set error and clear syncing", () =>
     Effect.gen(function* () {
       yield* HttpServer.serveEffect()(
