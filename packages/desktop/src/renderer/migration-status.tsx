@@ -14,6 +14,30 @@ export function MigrationStatus(props: { server: ServerReadyData }) {
   let toastID: number | undefined
   let disposeToast: (() => void) | undefined
 
+  const format = (progress: Progress | undefined) => {
+    if (!progress) return ""
+    if (progress.label === "Clearing old events") return language.t("toast.migration.progress.clearingOldEvents")
+    if (progress.label === "Migrating sessions") {
+      if (progress.numerator === undefined) return language.t("toast.migration.progress.migratingSessions")
+      if (progress.denominator === undefined)
+        return language.t("toast.migration.progress.migratingSessions.current", { current: progress.numerator })
+      return language.t("toast.migration.progress.migratingSessions.progress", {
+        current: progress.numerator,
+        total: progress.denominator,
+      })
+    }
+    if (progress.numerator === undefined) return language.tDynamic("toast.migration.progress.working", progress.label)
+    if (progress.denominator === undefined)
+      return language.tDynamic("toast.migration.progress.working.current", `${progress.label} ${progress.numerator}`, {
+        current: progress.numerator,
+      })
+    return language.tDynamic(
+      "toast.migration.progress.working.progress",
+      `${progress.label} ${progress.numerator}/${progress.denominator}`,
+      { current: progress.numerator, total: progress.denominator },
+    )
+  }
+
   const hide = () => {
     if (toastID !== undefined) toaster.dismiss(toastID)
     toastID = undefined
@@ -80,13 +104,6 @@ export function MigrationStatus(props: { server: ServerReadyData }) {
   })
 
   return null
-}
-
-function format(progress: Progress | undefined) {
-  if (!progress) return ""
-  if (progress.numerator === undefined) return progress.label
-  if (progress.denominator === undefined) return `${progress.label} ${progress.numerator}`
-  return `${progress.label} ${progress.numerator}/${progress.denominator}`
 }
 
 function wait(delay: number, signal: AbortSignal) {

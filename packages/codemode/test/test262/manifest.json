@@ -1,6 +1,21 @@
 {
   "revision": "250f204f23a9249ff204be2baec29600faae7b75",
-  "directories": ["built-ins/Array/prototype", "language/statements", "built-ins/Iterator"],
+  "directories": [
+    "built-ins/Array/prototype",
+    "built-ins/Iterator",
+    "built-ins/Object/freeze",
+    "built-ins/Object/getPrototypeOf",
+    "built-ins/Object/is",
+    "built-ins/Object/isExtensible",
+    "built-ins/Object/isFrozen",
+    "built-ins/Object/isSealed",
+    "built-ins/Object/preventExtensions",
+    "built-ins/String/raw",
+    "language/expressions/does-not-equals",
+    "language/expressions/equals",
+    "language/expressions/tagged-template",
+    "language/statements"
+  ],
   "harness": ["assert.js", "sta.js", "compareArray.js", "doneprintHandle.js"],
   "flags": ["module", "raw", "noStrict"],
   "boundaries": {
@@ -9,7 +24,7 @@
     "arguments": "\\barguments\\b",
     "call/apply/bind": "\\.(call|apply|bind)\\s*\\(",
     "accessor properties": "\\b(get|set)\\s+[\\w$\\[][^\\n(]*\\(",
-    "property descriptors": "Object\\.(defineProperty|defineProperties|getOwnPropertyDescriptors?|getOwnPropertyNames|create|getPrototypeOf|setPrototypeOf|freeze|seal|preventExtensions|isFrozen|isSealed|isExtensible)\\b",
+    "property descriptors": "Object\\.(defineProperty|defineProperties|getOwnPropertyDescriptors?|getOwnPropertyNames|setPrototypeOf)\\b",
     "boxed primitives": "\\bnew\\s+(String|Number|Boolean)\\s*\\(",
     "sloppy mode": "\\bwith\\s*\\(",
     "eval": "\\b(eval|Function)\\b",

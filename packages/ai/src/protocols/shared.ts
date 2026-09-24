@@ -192,6 +192,28 @@ export const inlineRequired = (route: string, asset: Media.Asset) =>
 /** The remote URL of a `url` asset, for protocols that accept `http(s)` references natively. */
 export const mediaUrl = (asset: Media.Asset) => (asset.source.type === "url" ? asset.source.url : undefined)
 
+export type MediaReference = { readonly type: "dataUrl" | "url" | "ref"; readonly value: string }
+
+/**
+ * The one string a provider can address an asset by: inline payloads as a data URL, `url` sources as their URL, and
+ * this provider's own `ref` as its id. Other providers' refs are never forwarded and fail typed; omit `provider` for
+ * APIs with no file handles at all.
+ */
+export const mediaReference = (
+  asset: Media.Asset,
+  provider: ProviderID | undefined,
+  label: string,
+): Effect.Effect<MediaReference, AIError> => {
+  const inline = asset.inline()
+  if (inline) return Effect.succeed({ type: "dataUrl", value: inline.dataUrl })
+  const url = mediaUrl(asset)
+  if (url) return Effect.succeed({ type: "url", value: url })
+  if (provider !== undefined && asset.source.type === "ref" && asset.source.provider === provider)
+    return Effect.succeed({ type: "ref", value: asset.source.id })
+  const accepted = provider === undefined ? "" : `, and ${provider} references`
+  return Effect.fail(invalidRequest(`${label} accepts inline bytes, data URLs, http(s) URLs${accepted}`))
+}
+
 /**
  * Lift a tool-result file into a `MediaPart`. Tool files carry either a data URL, an `http(s)` URL, or raw base64 in
  * `uri`; the declared `mime` wins over any data-URL prefix so tool authors control the type the model sees.
@@ -231,11 +253,11 @@ export const errorText = (error: unknown) => {
 
 /**
  * `framing` step for Server-Sent Events. Decodes UTF-8, runs the SSE channel
- * decoder, optionally filters named events, and drops empty events. `[DONE]`
- * is dropped by default or retained for protocols that use it as their stream
- * boundary. Retry control events are ignored without interrupting the stream.
- * Decoder failures become provider output errors so the public error channel
- * stays `AIError`.
+ * decoder, optionally filters named events, and drops empty events and known
+ * keepalives that proxies send as data. `[DONE]` is dropped by default or
+ * retained for protocols that use it as their stream boundary. Retry control events are ignored without
+ * interrupting the stream. Decoder failures become provider output errors so
+ * the public error channel stays `AIError`.
  */
 export const sseFraming = (
   bytes: Stream.Stream<Uint8Array, AIError>,
@@ -265,6 +287,13 @@ export const sseFraming = (
       (event) =>
         (events === undefined || events.has(event.event)) &&
         event.data.length > 0 &&
+        // Some OpenAI-compatible proxies serialize an empty flush as a bare
+        // `data: null`, between events or after `[DONE]`. No protocol has a
+        // null event, so it carries nothing and must not abort the stream.
+        event.data !== "null" &&
+        // Vertex AI partner models (e.g. `xai/grok-4.6`) send their SSE
+        // keepalive comment as `data: : keepalive` while reasoning.
+        event.data !== ": keepalive" &&
         (event.data !== "[DONE]" || includeDone || (events !== undefined && event.event !== "message")),
     ),
     Stream.map((event) => event.data),

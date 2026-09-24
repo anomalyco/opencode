@@ -62,7 +62,7 @@ describe("OptimizePlugin", () => {
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
       yield* catalog.transform((editor) => {
-        for (const id of ["gpt-5", "gpt-4.1", "gpt-5-codex", "gpt-6-astra"])
+        for (const id of ["gpt-5", "gpt-4.1", "gpt-5-codex", "gpt-6", "gpt-6-astra", "gpt-5-astra"])
           editor.models.update(Provider.ID.make("test"), Model.ID.make(id), () => {})
         editor.models.update(Provider.ID.make("test"), Model.ID.make("meta/muse-spark-1.1"), (model) => {
           model.name = "Muse Spark"
@@ -76,7 +76,9 @@ describe("OptimizePlugin", () => {
         ["gpt-4.1", PROMPT_GPT],
         ["o3", fallback],
         ["gpt-5-codex", PROMPT_GPT],
+        ["gpt-6", PROMPT_GPT],
         ["gpt-6-astra", PROMPT_ASTRA],
+        ["gpt-5-astra", PROMPT_ASTRA],
         ["gemini-2.5-pro", fallback],
         ["claude-sonnet-4", appended],
         ["kimi-k2", PROMPT_KIMI],
@@ -319,7 +321,8 @@ describe("OptimizePlugin", () => {
       const pluginHost = yield* makeHost
       const cases = [
         ["gpt-5-alias", "custom-model", undefined, PROMPT_GPT],
-        ["gpt-6-alias", "custom-model", undefined, PROMPT_ASTRA],
+        ["gpt-6-alias", "custom-model", undefined, PROMPT_GPT],
+        ["gpt-5-astra-alias", "custom-model", undefined, PROMPT_ASTRA],
         ["openai-alias", "GPT-5", undefined, fallback],
         ["codex-family-alias", "custom-deployment", "GPT-CODEX", fallback],
         ["astra-api-alias", "gpt-6-astra", undefined, fallback],

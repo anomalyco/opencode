@@ -1,5 +1,6 @@
 import { Effect, Encoding } from "effect"
 import { Media } from "../../media.js"
+import type { MediaProtocol } from "../../route/media-protocol.js"
 import type { AIError, ProviderID } from "../../schema/index.js"
 import { ProviderShared } from "../shared.js"
 
@@ -11,6 +12,31 @@ export const inlineBytes = (route: string, asset: Media.Asset): Effect.Effect<Ui
   return Effect.fromResult(Encoding.decodeBase64(inline.base64)).pipe(
     Effect.mapError((cause) => ProviderShared.invalidRequest(`${route} media contains invalid base64 data`, cause)),
   )
+}
+
+/** Copied because `BlobPart` requires a plain `ArrayBuffer`. */
+export const blob = (data: Uint8Array, mediaType: string) => {
+  const buffer = new ArrayBuffer(data.byteLength)
+  new Uint8Array(buffer).set(data)
+  return new Blob([buffer], { type: mediaType })
+}
+
+const isScalar = (value: unknown): value is string | number | boolean =>
+  typeof value === "string" || typeof value === "number" || typeof value === "boolean"
+
+export const query = (route: string, values: Record<string, unknown>): Effect.Effect<MediaProtocol.Query, AIError> => {
+  const entries = Object.entries(values).filter(([, value]) => value !== undefined)
+  const invalid = entries.find(([, value]) => !isScalar(value) && !(Array.isArray(value) && value.every(isScalar)))
+  if (invalid !== undefined)
+    return Effect.fail(ProviderShared.invalidRequest(`${route} cannot send "${invalid[0]}" as a query parameter`))
+  return Effect.succeed(
+    Object.fromEntries(entries.map(([key, value]) => [key, Array.isArray(value) ? value.map(String) : String(value)])),
+  )
+}
+
+export const dimensions = (size: string) => {
+  const [width, height] = size.split("x").map(Number)
+  return { width, height }
 }
 
 /** Provider file handle when the ref belongs to this provider; refs from other providers are never forwarded. */

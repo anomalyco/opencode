@@ -122,6 +122,8 @@ export interface Resolved {
   readonly compaction?: Provider.Compaction
   /** Provider transport policy; omitted means HTTP. */
   readonly transport?: Provider.Transport
+  /** Milliseconds without streamed data before a WebSocket exchange fails. */
+  readonly chunkTimeout?: number
 }
 
 export interface Interface {
@@ -388,6 +390,7 @@ export const layer = Layer.effect(
         limit: selected.limit,
         compaction: runtimeInfo.settings?.compaction,
         transport: provider?.settings?.transport,
+        chunkTimeout: provider?.settings?.chunkTimeout,
       }
     })
     return Service.of({

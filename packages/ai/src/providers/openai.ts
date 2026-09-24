@@ -6,9 +6,13 @@ import * as OpenAIChat from "../protocols/openai-chat.js"
 import * as OpenAIResponses from "../protocols/openai-responses.js"
 import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options.js"
 import { OpenAIImages, type OpenAIImageString } from "../protocols/openai-images.js"
+import { OpenAISpeech } from "../protocols/openai-speech.js"
+import { OpenAITranscription } from "../protocols/openai-transcription.js"
 
 export type { OpenAIOptionsInput, OpenAIResponseIncludable } from "./openai-options.js"
 export type { OpenAIImageOptions } from "../protocols/openai-images.js"
+export type { OpenAISpeechOptions } from "../protocols/openai-speech.js"
+export type { OpenAITranscriptionOptions } from "../protocols/openai-transcription.js"
 
 export const id = ProviderID.make("openai")
 
@@ -95,17 +99,19 @@ export const configure = (input: Config = {}) => {
       id,
       compatibility: { supportsPromptCacheKey: true },
     })
-  const image = (modelID: string | ModelID) =>
-    OpenAIImages.model({
-      id: modelID,
-      auth: auth(input),
-      baseURL: input.baseURL,
-      headers: input.headers,
-      http: mergeHttpOptions(
-        input.http === undefined ? undefined : HttpOptions.make(input.http),
-        input.queryParams === undefined ? undefined : new HttpOptions({ query: input.queryParams }),
-      ),
-    })
+  const media = (modelID: string | ModelID) => ({
+    id: modelID,
+    auth: auth(input),
+    baseURL: input.baseURL,
+    headers: input.headers,
+    http: mergeHttpOptions(
+      input.http === undefined ? undefined : HttpOptions.make(input.http),
+      input.queryParams === undefined ? undefined : new HttpOptions({ query: input.queryParams }),
+    ),
+  })
+  const image = (modelID: string | ModelID) => OpenAIImages.model(media(modelID))
+  const speech = (modelID: string | ModelID) => OpenAISpeech.model(media(modelID))
+  const transcription = (modelID: string | ModelID) => OpenAITranscription.model(media(modelID))
 
   return {
     id,
@@ -113,6 +119,8 @@ export const configure = (input: Config = {}) => {
     responses,
     chat,
     image,
+    speech,
+    transcription,
     configure,
   }
 }
@@ -159,3 +167,5 @@ export const chatModel: ProviderPackage.Definition<Settings, OpenAIProviderOptio
 export const responses = provider.responses
 export const chat = provider.chat
 export const image = provider.image
+export const speech = provider.speech
+export const transcription = provider.transcription

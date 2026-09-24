@@ -791,6 +791,89 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("lowers inline PDFs as file parts", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user([
+              { type: "text", text: "Summarize these." },
+              { type: "media", media: Media.base64("JVBERi0=", "application/pdf"), filename: "report.pdf" },
+              { type: "media", media: Media.fromDataUrl("data:application/pdf;base64,JVBERi0=") },
+            ]),
+          ],
+        }),
+      )
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Summarize these." },
+            { type: "file", file: { filename: "report.pdf", file_data: "data:application/pdf;base64,JVBERi0=" } },
+            { type: "file", file: { filename: "document.pdf", file_data: "data:application/pdf;base64,JVBERi0=" } },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("moves PDFs from tool results into a follow-up user message", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user("Read the report."),
+            Message.assistant([ToolCallPart.make({ id: "call_pdf", name: "read", input: {} })]),
+            Message.tool({
+              id: "call_pdf",
+              name: "read",
+              resultType: "content",
+              result: [
+                { type: "text", text: "PDF read successfully" },
+                {
+                  type: "file",
+                  mime: "application/pdf",
+                  uri: "data:application/pdf;base64,JVBERi0=",
+                  name: "report.pdf",
+                },
+              ],
+            }),
+          ],
+        }),
+      )
+      expect(prepared.body.messages).toContainEqual({
+        role: "tool",
+        tool_call_id: "call_pdf",
+        content: "PDF read successfully",
+      })
+      expect(prepared.body.messages.at(-1)).toEqual({
+        role: "user",
+        content: [
+          { type: "file", file: { filename: "report.pdf", file_data: "data:application/pdf;base64,JVBERi0=" } },
+        ],
+      })
+    }),
+  )
+
+  it.effect("requires inline data for PDF files", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user({
+              type: "media",
+              media: Media.url("https://example.com/report.pdf", { mediaType: "application/pdf" }),
+            }),
+          ],
+        }),
+      ).pipe(Effect.flip)
+      expect(error.message).toContain("OpenAI Chat requires inline media")
+    }),
+  )
+
   it.effect("prepares raw and data URL image media as vision input", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -1182,7 +1265,9 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  it.effect("preserves unknown reasoning details while using scalar display text", () =>
+  // Only recognized detail shapes are retained and replayed; echoing an
+  // undocumented provider payload is what breaks follow-up requests.
+  it.effect("drops unknown reasoning details while using scalar display text", () =>
     Effect.gen(function* () {
       const details = [{ type: "reasoning.future", format: "provider-v2", state: { opaque: true } }]
       const response = yield* LLMClient.generate(request).pipe(
@@ -1199,13 +1284,192 @@ describe("OpenAI Chat route", () => {
 
       expect(response.reasoning).toBe("thinking")
       expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
-        openai: { reasoningField: "reasoning", reasoningDetails: details },
+        openai: { reasoningField: "reasoning", reasoningDetails: [] },
       })
 
       const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
       expect(replay.body.messages).toEqual([
-        { role: "assistant", content: "Hello", reasoning: "thinking", reasoning_details: details },
+        { role: "assistant", content: "Hello", reasoning: "thinking", reasoning_details: [] },
       ])
+    }),
+  )
+
+  // Kimi's coding endpoint streams the full thinking through `reasoning_content`
+  // and a separate summary + encrypted blob through its own `reasoning_details`
+  // dialect. The stream-only `index` must not be echoed back.
+  it.effect("merges Kimi summary deltas by index and replays details without the streaming index", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { choices: [{ delta: { reasoning_content: "Let me" } }] },
+              { choices: [{ delta: { reasoning_content: " think" } }] },
+              { choices: [{ delta: { reasoning_details: [{ index: 0, type: "summary", summary: "Plan" }] } }] },
+              { choices: [{ delta: { reasoning_details: [{ index: 0, type: "summary", summary: " tools" }] } }] },
+              { choices: [{ delta: { reasoning_details: [{ index: 1, type: "encrypted", encrypted: "opaque" }] } }] },
+              {
+                choices: [
+                  {
+                    delta: {
+                      tool_calls: [
+                        { index: 0, id: "call_1", type: "function", function: { name: "get_time", arguments: "{}" } },
+                      ],
+                    },
+                  },
+                ],
+              },
+              { choices: [{ delta: {}, finish_reason: "tool_calls" }] },
+            ),
+          ),
+        ),
+      )
+
+      const stored = [
+        { index: 0, type: "summary", summary: "Plan tools" },
+        { index: 1, type: "encrypted", encrypted: "opaque" },
+      ]
+      expect(response.reasoning).toBe("Let me think")
+      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
+        openai: { reasoningField: "reasoning_content", reasoningDetails: stored },
+      })
+
+      const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
+      expect(replay.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [{ id: "call_1", type: "function", function: { name: "get_time", arguments: "{}" } }],
+          reasoning_content: "Let me think",
+          reasoning_details: [
+            { type: "summary", summary: "Plan tools" },
+            { type: "encrypted", encrypted: "opaque" },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("displays Kimi summaries and replays reasoning_content when no scalar reasoning streams", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { choices: [{ delta: { reasoning_details: [{ index: 0, type: "summary", summary: "Plan" }] } }] },
+              { choices: [{ delta: { reasoning_details: [{ index: 0, type: "summary", summary: " tools" }] } }] },
+              { choices: [{ delta: { reasoning_details: [{ index: 1, type: "encrypted", encrypted: "opaque" }] } }] },
+              { choices: [{ delta: { content: "Hello" } }] },
+              { choices: [{ delta: {}, finish_reason: "stop" }] },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("Plan tools")
+
+      const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
+      expect(replay.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: "Hello",
+          reasoning_content: "Plan tools",
+          reasoning_details: [
+            { type: "summary", summary: "Plan tools" },
+            { type: "encrypted", encrypted: "opaque" },
+          ],
+        },
+      ])
+    }),
+  )
+
+  // Sessions persisted before the fix already hold Kimi details with `index`.
+  it.effect("strips the streaming index from previously stored Kimi details", () =>
+    Effect.gen(function* () {
+      const replay = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              {
+                type: "reasoning",
+                text: "thinking",
+                providerMetadata: {
+                  openai: {
+                    reasoningField: "reasoning_content",
+                    reasoningDetails: [
+                      { index: 0, type: "summary", summary: "thinking" },
+                      { index: 1, type: "encrypted", encrypted: "opaque" },
+                    ],
+                  },
+                },
+              },
+            ]),
+          ],
+        }),
+      )
+
+      expect(replay.body.messages).toEqual([
+        {
+          role: "assistant",
+          content: "",
+          reasoning_content: "thinking",
+          reasoning_details: [
+            { type: "summary", summary: "thinking" },
+            { type: "encrypted", encrypted: "opaque" },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("merges consecutive OpenRouter summary deltas and replays them unmodified", () =>
+    Effect.gen(function* () {
+      const merged = [
+        { type: "reasoning.summary", summary: "Plan tools", format: "openai-responses-v1", index: 0 },
+        { type: "reasoning.encrypted", data: "opaque", format: "openai-responses-v1", index: 0 },
+      ]
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              {
+                choices: [
+                  {
+                    delta: {
+                      reasoning_details: [
+                        { type: "reasoning.summary", summary: "Plan", format: "openai-responses-v1", index: 0 },
+                      ],
+                    },
+                  },
+                ],
+              },
+              {
+                choices: [
+                  {
+                    delta: {
+                      reasoning_details: [
+                        { type: "reasoning.summary", summary: " tools", format: "openai-responses-v1", index: 0 },
+                      ],
+                    },
+                  },
+                ],
+              },
+              { choices: [{ delta: { reasoning_details: [merged[1]] } }] },
+              { choices: [{ delta: { content: "Hello" } }] },
+              { choices: [{ delta: {}, finish_reason: "stop" }] },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.reasoning).toBe("Plan tools")
+      expect(response.message.content.find((part) => part.type === "reasoning")?.providerMetadata).toEqual({
+        openai: { reasoningDetails: merged },
+      })
+
+      const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
+      expect(replay.body.messages).toEqual([{ role: "assistant", content: "Hello", reasoning_details: merged }])
     }),
   )
 

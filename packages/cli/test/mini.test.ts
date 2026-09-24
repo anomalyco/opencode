@@ -221,7 +221,7 @@ describe("mini command", () => {
       expect(JSON.parse(result.stdout)).toMatchObject({
         type: "error",
         sessionID: "",
-        error: { type: "unknown", message: "UnexpectedStatus" },
+        error: { type: "unknown", message: "UnexpectedStatus: 500" },
       })
     } finally {
       server.stop(true)

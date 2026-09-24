@@ -1,17 +1,38 @@
 import { describe, expect, test } from "bun:test"
-import { AIError, LanguageModel, LLM, LLMClient, Media, Provider } from "@opencode/ai"
+import {
+  AIError,
+  Generation,
+  Image,
+  LanguageModel,
+  LLM,
+  LLMClient,
+  Media,
+  Provider,
+  Speech,
+  SpeechClient,
+  SpeechEvent,
+  Video,
+  VideoClient,
+} from "@opencode/ai"
 import { Route, Protocol, WebSocketTransport } from "@opencode/ai/route"
 import { Provider as ProviderSubpath } from "@opencode/ai/provider"
 import {
+  AssemblyAI,
   Baseten,
+  Cartesia,
   CloudflareAIGateway,
   CloudflareWorkersAI,
+  Deepgram,
   DeepSeek,
+  ElevenLabs,
+  Fal,
   Fireworks,
+  Google,
   OpenCodeZen,
   OpenAI,
   OpenAICompatible,
   OpenRouter,
+  Runway,
   TypeSafeAI,
   VercelAIGateway,
   XAI,
@@ -36,6 +57,15 @@ describe("public exports", () => {
     expect(AIError).toBeFunction()
     expect(LanguageModel.make).toBeFunction()
     expect(Media.bytes).toBeFunction()
+    expect(Image.generate).toBeFunction()
+    expect(Video.start).toBeFunction()
+    expect(Video.resume).toBeFunction()
+    expect(VideoClient.layer).toBeDefined()
+    expect(Speech.generate).toBeFunction()
+    expect(Speech.stream).toBeFunction()
+    expect(SpeechClient.layer).toBeDefined()
+    expect(SpeechEvent.is.audioDelta).toBeFunction()
+    expect(Generation).toBeFunction()
     expect(Provider.make).toBeFunction()
     expect(ProviderSubpath.make).toBe(Provider.make)
     expect(TestLLM.layer).toBeFunction()
@@ -82,6 +112,21 @@ describe("public exports", () => {
     expect(XAI.provider.chat).toBe(XAI.chat)
     expect(XAI.configure({ apiKey: "fixture" }).responses("grok-4.3").route.id).toBe("openai-responses")
     expect(XAI.configure({ apiKey: "fixture" }).chat("grok-4.3").route.id).toBe("openai-compatible-chat")
+    expect(XAI.configure({ apiKey: "fixture" }).video("grok-imagine-video-1.5").route.id).toBe("xai-video")
+    expect(Fal.configure({ apiKey: "fixture" }).video("fal-ai/veo3.1").route.id).toBe("fal-video")
+    expect(Runway.configure({ apiKey: "fixture" }).video("gen4.5").route.id).toBe("runway-video")
+    expect(Runway.provider.video).toBe(Runway.video)
+    expect(OpenAI.configure({ apiKey: "fixture" }).speech("gpt-4o-mini-tts").route.id).toBe("openai-speech")
+    expect(Google.configure({ apiKey: "fixture" }).speech("gemini-2.5-flash-preview-tts").route.id).toBe(
+      "google-speech",
+    )
+    expect(ElevenLabs.configure({ apiKey: "fixture" }).speech("eleven_flash_v2_5").route.id).toBe("elevenlabs-speech")
+    expect(Cartesia.configure({ apiKey: "fixture" }).speech("sonic-3").route.id).toBe("cartesia-speech")
+    expect(Deepgram.configure({ apiKey: "fixture" }).speech("aura-2-thalia-en").route.id).toBe("deepgram-speech")
+    expect(OpenAI.configure({ apiKey: "fixture" }).transcription("gpt-transcribe").route.kind).toBe("stream")
+    expect(Google.configure({ apiKey: "fixture" }).transcription("gemini-3.5-transcribe").route.kind).toBe("stream")
+    expect(Deepgram.configure({ apiKey: "fixture" }).transcription("nova-3").route.kind).toBe("inline")
+    expect(AssemblyAI.configure({ apiKey: "fixture" }).transcription("universal-3-5-pro").route.kind).toBe("queued")
   })
 
   test("protocol barrels expose supported low-level routes", () => {

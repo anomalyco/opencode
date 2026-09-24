@@ -96,7 +96,7 @@ for (const field of [
     expect(patches).toEqual(field.patches)
 
     await settings.getByRole("tab", { name: "Worktrees", exact: true }).click()
-    await settings.getByRole("tab", { name: project.name, exact: true }).click()
+    await settings.getByRole("tab", { name: "General", exact: true }).click()
     if (field.name === "color") {
       await expect(settings.getByRole("button", { name: "Select orange color", exact: true })).toHaveAttribute(
         "aria-pressed",

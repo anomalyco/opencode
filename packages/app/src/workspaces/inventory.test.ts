@@ -107,7 +107,7 @@ describe("withWorktreeInventory", () => {
     id: "project",
     canonical: "/repo",
     name: "Before",
-    time: { created: 1, updated: 1 },
+    time: { created: 1, updated: 1, active: 1 },
     sandboxes: [],
   }
 

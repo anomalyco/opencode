@@ -32,6 +32,7 @@ import type {
   Statement,
   Super,
   SwitchStatement,
+  TaggedTemplateExpression,
   Literal,
   TemplateLiteral,
   ThrowStatement,
@@ -69,6 +70,7 @@ import {
   assign,
   Callable,
   define,
+  frozen,
   get,
   hostCursor,
   IteratorObj,
@@ -93,7 +95,7 @@ import {
 } from "./objects.js"
 import { preserveConsumerError } from "./callback.js"
 import { Pending, resolvePromise, resolvePromiseValue } from "./promises.js"
-import { containsOpaqueReference, describeValue, rejectCircularInsertion, typeofValue } from "./references.js"
+import { describeValue, isOpaque, rejectCircularInsertion, typeofValue } from "./references.js"
 import { ScopeStack } from "./scope.js"
 import { constructRegExp } from "../stdlib/regexp.js"
 import { enumerableSource } from "../stdlib/object.js"
@@ -270,6 +272,8 @@ export class Interpreter<R> {
   readonly pending: Pending<R>
   readonly builtins: Builtins
   readonly logs: Array<string>
+  /** Template objects by site: a tag sees the same `strings` array every time its literal is evaluated, as in JS. */
+  readonly templates = new WeakMap<TaggedTemplateExpression, Arr>()
   private readonly root: Frame<R>
 
   constructor(options: {
@@ -536,9 +540,6 @@ class Frame<R> {
     const self = this
     return Effect.gen(function* () {
       const discriminant = yield* self.evaluateExpression(node.discriminant)
-      if (containsOpaqueReference(discriminant)) {
-        throw invalidData("Switch discriminants must be data values.", node)
-      }
       self.scopes.push()
       return yield* Effect.gen(function* () {
         const cases = node.cases
@@ -553,11 +554,7 @@ class Frame<R> {
             defaultIndex = index
             continue
           }
-          const candidate = yield* self.evaluateExpression(test)
-          if (containsOpaqueReference(candidate)) {
-            throw invalidData("Switch case values must be data values.", test)
-          }
-          if (candidate === discriminant) {
+          if ((yield* self.evaluateExpression(test)) === discriminant) {
             selected = index
             break
           }
@@ -933,10 +930,10 @@ class Frame<R> {
 
       const keys = self.enumerableKeys(right, node.right)
 
-      if (left.type !== "Identifier" && left.type !== "VariableDeclaration") {
+      if (left.type === "RestElement" || left.type === "AssignmentPattern") {
         throw typeError("Unsupported for...in binding.", left)
       }
-      const assignmentName = left.type === "Identifier" ? left.name : undefined
+      const assignment = left.type === "VariableDeclaration" ? undefined : left
 
       for (const key of keys) {
         const result = yield* Effect.gen(function* () {
@@ -946,8 +943,8 @@ class Frame<R> {
             yield* self.declarePattern(declared.pattern, key, declared.mutable, left, true)
           } else if (declared) {
             yield* self.assignPattern(declared.pattern, key, left)
-          } else if (assignmentName) {
-            self.scopes.set(assignmentName, key, left)
+          } else if (assignment) {
+            yield* self.assignPattern(assignment, key, left)
           }
           return yield* self.evaluateStatement(node.body)
         }).pipe(
@@ -1295,6 +1292,8 @@ class Frame<R> {
         return this.evaluateArrayExpression(node)
       case "TemplateLiteral":
         return this.evaluateTemplateLiteral(node)
+      case "TaggedTemplateExpression":
+        return this.evaluateTaggedTemplate(node)
       case "ConditionalExpression":
         return this.evaluateConditionalExpression(node)
       case "UpdateExpression":
@@ -1352,16 +1351,17 @@ class Frame<R> {
   private applyBinaryOperator(operator: string, lhs: Value, rhs: Value, node: AstNode): Value {
     if (operator === "===") return lhs === rhs
     if (operator === "!==") return lhs !== rhs
-    if (operator === "in" && rhs instanceof Obj && !containsOpaqueReference(lhs)) {
+    if (operator === "==") return this.looselyEqual(lhs, rhs, node)
+    if (operator === "!=") return !this.looselyEqual(lhs, rhs, node)
+    if (operator === "in" && rhs instanceof Obj && !isOpaque(lhs)) {
       return has(rhs, lhs !== null && typeof lhs === "object" ? coerceToString(lhs) : (lhs as PropertyKey))
     }
-    if (containsOpaqueReference(lhs) || containsOpaqueReference(rhs)) {
+    if (isOpaque(lhs) || isOpaque(rhs)) {
       throw invalidData("Binary operators require data values.", node)
     }
-    // Addition and loose equality use the default hint; every other operator asks for a number.
-    const hint = operator === "+" || operator === "==" || operator === "!=" ? "default" : "number"
+    // Addition uses the default hint; every other operator asks for a number.
+    const hint = operator === "+" ? "default" : "number"
     const coerceOperand = (operand: Value) => (operand instanceof Obj ? operand.toPrimitive(hint) : operand)
-    const bothObjects = lhs !== null && typeof lhs === "object" && rhs !== null && typeof rhs === "object"
     const l = coerceOperand(lhs)
     const r = coerceOperand(rhs)
     switch (operator) {
@@ -1380,10 +1380,6 @@ class Frame<R> {
         return (l as number) % (r as number)
       case "**":
         return (l as number) ** (r as number)
-      case "==":
-        return bothObjects ? lhs === rhs : l == r
-      case "!=":
-        return bothObjects ? lhs !== rhs : l != r
       case "<":
         return (l as string) < (r as string)
       case "<=":
@@ -1414,6 +1410,21 @@ class Frame<R> {
     }
   }
 
+  // IsLooselyEqual: objects (including functions and tool references) compare by identity, and only a
+  // data object facing a non-nullish primitive needs to coerce, so an opaque value is rejected only there.
+  private looselyEqual(lhs: Value, rhs: Value, node: AstNode): boolean {
+    const lhsObject = lhs !== null && typeof lhs === "object"
+    const rhsObject = rhs !== null && typeof rhs === "object"
+    if (lhsObject === rhsObject) return lhsObject ? lhs === rhs : lhs == rhs
+    const object = lhsObject ? lhs : rhs
+    const primitive = lhsObject ? rhs : lhs
+    if (primitive === null || primitive === undefined) return false
+    if (!(object instanceof Obj) || isOpaque(object)) {
+      throw invalidData("Binary operators require data values.", node)
+    }
+    return object.toPrimitive("default") == primitive
+  }
+
   private evaluateLogicalExpression(node: LogicalExpression): Effect.Effect<Value, unknown, R> {
     const operator = node.operator
     return Effect.flatMap(this.evaluateExpression(node.left), (left) => {
@@ -1437,7 +1448,7 @@ class Frame<R> {
       if (operator === "typeof") return typeofValue(value)
       if (operator === "!") return !value
       if (operator === "void") return undefined
-      if (containsOpaqueReference(value)) {
+      if (isOpaque(value)) {
         throw invalidData("Unary operators require data values.", node)
       }
       const operand = value instanceof Obj ? value.toPrimitive("number") : value
@@ -1540,7 +1551,7 @@ class Frame<R> {
     // CodeMode numeric coercion, not host Number(): null-prototype data objects would make
     // the host throw during ToPrimitive, and opaque runtime references must reject clearly.
     const operand = (current: Value): number => {
-      if (containsOpaqueReference(current)) {
+      if (isOpaque(current)) {
         throw invalidData(`'${operator}' requires a data value.`, argument)
       }
       return coerceToNumber(current)
@@ -1666,6 +1677,9 @@ class Frame<R> {
           paramScope.set(name, { mutable: true, value: undefined, initialized: false })
         }
       }
+      const parameters = fn.parameters.map((parameter) =>
+        parameter.type === "Identifier" ? parameter.name : undefined,
+      )
       const bind = Effect.gen(function* () {
         for (const [index, parameter] of fn.parameters.entries()) {
           if (parameter.type === "RestElement") {
@@ -1678,6 +1692,8 @@ class Frame<R> {
             )
             break
           }
+          // A sloppy simple parameter list may repeat a name; the last occurrence wins, as in JS.
+          if (parameter.type === "Identifier" && parameters.lastIndexOf(parameter.name) !== index) continue
           yield* invocation.declarePattern(parameter, args[index], true, parameter, true)
         }
       })
@@ -2006,7 +2022,7 @@ class Frame<R> {
     return Effect.gen(function* () {
       for (let index = 0; index < quasis.length; index += 1) {
         const quasi = quasis[index]!
-        // acorn only omits `cooked` for invalid escapes in tagged templates, which are unsupported.
+        // acorn only omits `cooked` for invalid escapes, which are a parse error outside a tagged template.
         if (typeof quasi.value.cooked !== "string") {
           throw typeError("Invalid template literal quasi.", quasi)
         }
@@ -2022,6 +2038,41 @@ class Frame<R> {
 
       return output
     })
+  }
+
+  // `tag\`a${x}b\`` is `tag(strings, x)`: the tag is read like a callee (a member keeps its receiver), the
+  // substitutions are evaluated in order, and `strings` carries the escaped source as `strings.raw`.
+  private evaluateTaggedTemplate(node: TaggedTemplateExpression): Effect.Effect<Value, unknown, R> {
+    const self = this
+    return Effect.gen(function* () {
+      const { callable, thisValue } =
+        node.tag.type === "MemberExpression"
+          ? yield* self.readMethod(node.tag)
+          : { callable: yield* self.evaluateExpression(node.tag), thisValue: undefined }
+      const strings = self.ctx.templates.get(node) ?? self.createTemplateObject(node)
+      const values = yield* Effect.forEach(node.quasi.expressions, (expression) => self.evaluateExpression(expression))
+      return yield* self.call(callable, thisValue, [strings, ...values], node, node.tag)
+    })
+  }
+
+  private createTemplateObject(node: TaggedTemplateExpression): Arr {
+    const array = this.ctx.builtins.Array
+    // An invalid escape such as `\unicode` cooks to `undefined` and survives only in `raw`.
+    const strings = new Arr(
+      array,
+      node.quasi.quasis.map((quasi) => quasi.value.cooked ?? undefined),
+    )
+    define(
+      strings,
+      "raw",
+      new Arr(
+        array,
+        node.quasi.quasis.map((quasi) => quasi.value.raw),
+      ),
+      frozen,
+    )
+    this.ctx.templates.set(node, strings)
+    return strings
   }
 
   private evaluateConditionalExpression(node: ConditionalExpression): Effect.Effect<Value, unknown, R> {
@@ -2167,7 +2218,6 @@ class Frame<R> {
       }
     })()
     if (written) return
-    if (target instanceof Arr && key === "length") throw rangeError("Invalid array length", node)
     throw typeError(`Cannot assign to read only property '${String(key)}'.`, node)
   }
 

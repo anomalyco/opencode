@@ -436,6 +436,24 @@ export function transformSession(input: TransformInput): TransformResult {
       ]
     })
     .map((item, seq) => ({ ...item, seq }))
+  const last = projected.at(-1)
+  const notice = last === undefined ? undefined : legacyToolNotice(projected)
+  const migrated =
+    last === undefined || notice === undefined
+      ? projected
+      : [
+          ...projected,
+          {
+            ...last,
+            id: syntheticID(last.id, used),
+            type: "system" as const,
+            seq: projected.length,
+            data: {
+              text: notice,
+              time: { created: last.time_created },
+            },
+          },
+        ]
   const assistants = messages
     .map((item) => item.value)
     .filter((item): item is SessionV1.Assistant => item.role === "assistant")
@@ -446,7 +464,7 @@ export function transformSession(input: TransformInput): TransformResult {
     return !owned.some((part) => part.value.type === "subtask") || !owned.every((part) => part.value.type === "subtask")
   })
   return {
-    messages: projected,
+    messages: migrated,
     session: {
       agent: input.session.agent ?? (latestUser?.value.role === "user" ? latestUser.value.agent : null),
       model:
@@ -467,7 +485,7 @@ export function transformSession(input: TransformInput): TransformResult {
       revert: null,
       time_compacting: null,
     },
-    watermark: projected.length - 1,
+    watermark: migrated.length - 1,
     warnings,
   }
 }
@@ -523,8 +541,8 @@ export function run(options: Options = {}): Effect.Effect<RunResult, never, Data
       if (!(yield* hasLegacySessions(db))) return { status: "completed" as const }
       const now = Date.now()
       yield* db.run(sql`
-          INSERT OR IGNORE INTO project (id, worktree, time_created, time_updated, sandboxes)
-          VALUES (${Project.ID.global}, ${path.parse(global.data).root}, ${now}, ${now}, '[]')
+          INSERT OR IGNORE INTO project (id, worktree, time_created, time_updated, time_active, sandboxes)
+          VALUES (${Project.ID.global}, ${path.parse(global.data).root}, ${now}, ${now}, ${now}, '[]')
         `)
       if (state === undefined)
         yield* db
@@ -753,11 +771,11 @@ function importNextDatabase(
                 yield* tx.run(sql`
                   INSERT OR IGNORE INTO project (
                     id, worktree, vcs, name, icon_url, icon_url_override, icon_color,
-                    time_created, time_updated, time_initialized, sandboxes, commands
+                    time_created, time_updated, time_initialized, time_active, sandboxes, commands
                   ) VALUES (
                     ${project.id}, ${project.worktree}, ${project.vcs}, ${project.name}, ${project.icon_url},
                     ${project.icon_url_override}, ${project.icon_color}, ${project.time_created}, ${project.time_updated},
-                    ${project.time_initialized}, ${project.sandboxes}, ${project.commands}
+                    ${project.time_initialized}, ${project.time_updated}, ${project.sandboxes}, ${project.commands}
                   )
                 `)
               const existing = yield* tx
@@ -876,6 +894,58 @@ function row(
     time_updated: source.time_updated,
     data,
   }
+}
+
+const RENAMED_TOOLS: Readonly<Record<string, string>> = { bash: "shell", task: "subagent", apply_patch: "patch" }
+const PATH_TOOLS = ["read", "edit", "write"]
+const REMOVED_TOOLS = ["todowrite"]
+
+/**
+ * Tells the model about V1 tools it called in the still-visible history whose
+ * V2 names or arguments differ, so it does not repeat those calls. Only tools
+ * that actually appear after the last compaction are mentioned.
+ */
+function legacyToolNotice(messages: ReadonlyArray<TransformResult["messages"][number]>) {
+  const start = messages.findLastIndex((message) => message.type === "compaction")
+  const called = new Set(
+    messages.slice(start + 1).flatMap((message) => {
+      if (message.type !== "assistant" || !Array.isArray(message.data.content)) return []
+      return message.data.content.flatMap((item: Record<string, unknown>) =>
+        item.type === "tool" && typeof item.name === "string" ? [item.name] : [],
+      )
+    }),
+  )
+  const list = (names: ReadonlyArray<string>) => names.map((name) => `\`${name}\``).join(", ")
+  const renamed = Object.keys(RENAMED_TOOLS).filter((name) => called.has(name))
+  const paths = PATH_TOOLS.filter((name) => called.has(name))
+  const removed = REMOVED_TOOLS.filter((name) => called.has(name))
+  const parts = [
+    ...(renamed.length === 1
+      ? [`The \`${renamed[0]}\` tool is now \`${RENAMED_TOOLS[renamed[0]]}\` and must be called by that name.`]
+      : renamed.length > 1
+        ? [
+            `The following tools were renamed and must be called by their new names: ${renamed
+              .map((name) => `\`${name}\` is now \`${RENAMED_TOOLS[name]}\``)
+              .join("; ")}.`,
+          ]
+        : []),
+    ...(called.has("task")
+      ? ["The `subagent` tool takes `agent` instead of `subagent_type` and `sessionID` instead of `task_id`."]
+      : []),
+    ...(paths.length === 1
+      ? [`The \`${paths[0]}\` tool now takes \`path\` instead of \`filePath\`.`]
+      : paths.length > 1
+        ? [`The following tools now take \`path\` instead of \`filePath\`: ${list(paths)}.`]
+        : []),
+    ...(called.has("skill") ? ["The `skill` tool now takes `id` instead of `name`."] : []),
+    ...(removed.length === 1
+      ? [`The \`${removed[0]}\` tool is no longer available and must not be called.`]
+      : removed.length > 1
+        ? [`The following tools are no longer available and must not be called: ${list(removed)}.`]
+        : []),
+  ]
+  if (parts.length === 0) return undefined
+  return ["The available tools have changed.", ...parts].join("\n\n")
 }
 
 function migrateTool(part: typeof SessionV1.ToolPart.Type, fallback: number) {

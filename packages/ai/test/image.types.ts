@@ -10,7 +10,7 @@ import {
   type ImageRoute,
 } from "../src/index.js"
 import type { Service } from "../src/image-client.js"
-import { Anthropic, Google, OpenAI, XAI, ZAI } from "../src/providers.js"
+import { Anthropic, BlackForestLabs, Google, OpenAI, Stability, XAI, ZAI } from "../src/providers.js"
 
 type Requirements<T> = T extends Effect.Effect<infer _A, infer _E, infer R> ? R : never
 type Equal<A, B> = [A, B] extends [B, A] ? true : false
@@ -95,6 +95,14 @@ Image.generate({ model: openai, prompt: "A lighthouse", providerOptions: { nativ
 Image.generate({ model: openai, prompt: "A lighthouse", providerOptions: { quality: 1 } })
 // @ts-expect-error Known OpenAI numeric options retain their value kind.
 Image.generate({ model: openai, prompt: "A lighthouse", providerOptions: { outputCompression: "80" } })
+// @ts-expect-error Partial image counts are numeric.
+Image.stream({ model: openai, prompt: "A lighthouse", providerOptions: { partialImages: "1" } })
+const bfl = BlackForestLabs.configure({ apiKey: "test" }).image("flux-2-pro")
+// @ts-expect-error Known BFL numeric options retain their value kind.
+Image.start({ model: bfl, prompt: "A lighthouse", providerOptions: { safety_tolerance: "2" } })
+const stability = Stability.configure({ apiKey: "test" })
+// @ts-expect-error Only the creative upscaler is queued, so the selector takes no model id.
+stability.upscale("fast")
 OpenAI.imageGeneration({ action: "future-action", quality: "future-quality", size: "2048x2048" })
 // @ts-expect-error Hosted image generation numeric options retain their value kind.
 OpenAI.imageGeneration({ partialImages: "2" })

@@ -1,10 +1,13 @@
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Stream } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import { Image, ImageClient, Media } from "../src/index.js"
-import { Google, OpenAI, XAI, ZAI } from "../src/providers.js"
+import { BlackForestLabs, Fal, Google, OpenAI, Replicate, Stability, XAI, ZAI } from "../src/providers.js"
 import { it } from "./lib/effect.js"
-import { dynamicResponse } from "./lib/http.js"
+import { dynamicResponse, json } from "./lib/http.js"
+
+const layer = (handler: Parameters<typeof dynamicResponse>[0]) =>
+  ImageClient.layer.pipe(Layer.provideMerge(dynamicResponse(handler)))
 
 describe("Image", () => {
   for (const provider of [OpenAI, Google, XAI, ZAI]) {
@@ -69,7 +72,11 @@ describe("Image", () => {
 
       expect(response.images).toHaveLength(2)
       expect(response.image.mediaType).toBe("image/webp")
-      expect(response.image.source).toEqual({ type: "bytes", data: Uint8Array.from([1, 2, 3]), mediaType: "image/webp" })
+      expect(response.image.source).toEqual({
+        type: "bytes",
+        data: Uint8Array.from([1, 2, 3]),
+        mediaType: "image/webp",
+      })
       expect(yield* response.image.bytes()).toEqual(Uint8Array.from([1, 2, 3]))
       expect(response.image.providerMetadata).toEqual({ openai: { revisedPrompt: "A precise robot" } })
       expect(response.usage).toMatchObject({ type: "tokens", total: 12 })
@@ -688,6 +695,82 @@ describe("Image", () => {
               ),
             ),
           ),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("rejects what a route cannot honor before sending anything", () =>
+    Effect.gen(function* () {
+      const openai = OpenAI.configure({ apiKey: "test" })
+      const replicate = Replicate.configure({ apiKey: "test" }).image("black-forest-labs/flux-schnell")
+      const prompt = "A lighthouse"
+      const errors = yield* Effect.all(
+        [
+          Image.start({ model: Google.configure({ apiKey: "test" }).image("gemini-3.1-flash-image"), prompt }),
+          Image.start({
+            model: BlackForestLabs.configure({ apiKey: "test" }).image("flux-2-pro"),
+            prompt,
+            aspectRatio: "16:9",
+          }),
+          Image.start({
+            model: Fal.configure({ apiKey: "test" }).image("fal-ai/nano-banana-2"),
+            prompt,
+            size: "512x512",
+          }),
+          Stream.runCollect(Image.stream({ model: openai.image("dall-e-3"), prompt })),
+          Stream.runCollect(Image.stream({ model: openai.image("gpt-image-2"), prompt, n: 2 })),
+          Image.start({ model: replicate, prompt, seed: 7 }),
+          Image.start({
+            model: replicate,
+            prompt,
+            providerOptions: { image: Media.bytes(new Uint8Array(300 * 1024), "image/png") },
+          }),
+          Image.start({ model: Stability.configure({ apiKey: "test" }).upscale(), prompt }),
+        ].map((effect) => Effect.flip(effect)),
+      )
+      expect(errors.map((error) => [error.reason._tag, "operation" in error.reason && error.reason.operation])).toEqual(
+        [
+          ["UnsupportedOperation", "image.start"],
+          ["UnsupportedOperation", "media.aspectRatio"],
+          ["UnsupportedOperation", "media.size"],
+          ["UnsupportedOperation", "media.stream"],
+          ["UnsupportedOperation", "media.n"],
+          ["UnsupportedOperation", "media.seed"],
+          ["InvalidRequest", false],
+          ["InvalidRequest", false],
+        ],
+      )
+    }).pipe(Effect.provide(layer(() => Effect.die("an unsupported request reached the network")))),
+  )
+
+  const moderated = { id: "req_1", status: "Content Moderated" }
+  const prediction = {
+    id: "p_1",
+    status: "succeeded",
+    output: { text: "not an image" },
+    urls: { get: "https://replicate.test/p_1", cancel: "https://replicate.test/p_1/cancel" },
+  }
+  it.effect("classifies terminal outcomes the recordings never saw", () =>
+    Effect.gen(function* () {
+      const bfl = yield* Image.resume(BlackForestLabs.configure({ apiKey: "test" }).image("flux-2-pro"), {
+        id: "req_1",
+        pollingURL: "https://bfl.test/v1/get_result?id=req_1",
+      }).pipe(
+        Effect.flatMap((generation) => generation.await()),
+        Effect.flip,
+      )
+      const replicate = yield* Image.generate({
+        model: Replicate.configure({ apiKey: "test", baseURL: "https://replicate.test" }).image("owner/model"),
+        prompt: "A lighthouse",
+      }).pipe(Effect.flip)
+
+      expect(bfl.reason).toMatchObject({ _tag: "ContentPolicy", body: JSON.stringify(moderated) })
+      expect(replicate.reason).toMatchObject({ _tag: "InvalidProviderOutput", body: JSON.stringify(prediction) })
+    }).pipe(
+      Effect.provide(
+        layer((input) =>
+          Effect.succeed(json(input, input.request.url.startsWith("https://bfl.test") ? moderated : prediction)),
         ),
       ),
     ),

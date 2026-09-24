@@ -584,6 +584,61 @@ Z.ai does not include trustworthy MIME metadata for output URLs, so generated im
 `application/octet-stream` until materialized. Output URLs expire after 30 days; call `asset.materialize()` and
 persist the bytes promptly if they must remain available.
 
+### Partial images
+
+OpenAI's GPT image models stream previews. `Image.stream` sends `stream: true` with `partialImages` (0–3, default 2)
+and emits `image-partial` events before each final `image`; `Image.generate` keeps the plain JSON request.
+`dall-e-*` models do not stream and fail typed:
+
+```ts
+yield *
+  Image.stream({
+    model: openai.image("gpt-image-2"),
+    prompt: "A lighthouse at dusk",
+    providerOptions: { partialImages: 2 },
+  }).pipe(Stream.runForEach((event) => (ImageEvent.is.imagePartial(event) ? showPreview(event.image) : Effect.void)))
+```
+
+The provider may send fewer previews than requested when the final image is ready first.
+
+### Queued image providers
+
+Black Forest Labs, fal, Replicate, and Stability's creative upscaler are submit-then-poll routes. `Image.generate`
+and `Image.stream` poll for you (pass `{ poll }` to tune the interval and timeout); `Image.start` returns a
+`Generation` whose `token` is serializable JSON for `Image.resume` in another process:
+
+```ts
+import { BlackForestLabs, Stability } from "@opencode/ai/providers"
+
+const bfl = BlackForestLabs.configure({ apiKey: process.env.BFL_API_KEY })
+
+const generation = yield * Image.start({ model: bfl.image("flux-2-pro"), prompt, size: "1024x768" })
+persist(generation.token)
+
+const resumed = yield * Image.resume(bfl.image("flux-2-pro"), loadToken())
+const response = yield * resumed.await({ poll: { interval: "2 seconds" } })
+```
+
+- **Black Forest Labs** — results are downloaded before returning, because `result.sample` expires in 10 minutes.
+- **Replicate** — inputs are model-defined, so only `prompt` lowers: sizing, count, seed, format, and files go in
+  `providerOptions` under the model's names, with files as `Media.Asset` (data URLs up to 256 KB, larger by URL).
+  Outputs are removed an hour after the prediction completes. `Prefer: wait=60` in `headers` or `http.headers` holds
+  the submission open so a fast prediction costs one result read.
+- **Stability** — `stability.image(id)` generates inline; `stability.upscale()` is the creative upscaler, queued:
+
+```ts
+const stability = Stability.configure({ apiKey: process.env.STABILITY_API_KEY })
+const upscaled =
+  yield *
+  Image.generate(
+    { model: stability.upscale(), prompt: "A lighthouse", images: [yield * Media.file("./small.png")] },
+    { poll: { interval: "5 seconds" } },
+  )
+```
+
+Imagen is not available: Google shut it down on the Gemini API, and Vertex discontinued the Imagen 4 models on
+2026-06-30. `Google.image(...)` uses Gemini-native image models.
+
 Conversational image generation remains part of the LLM interaction. OpenAI Responses exposes it through its hosted image tool:
 
 ```ts
@@ -602,6 +657,233 @@ const program = Effect.gen(function* () {
 
 The hosted result is represented as a provider-executed tool call and tool result, and the generated image is also emitted as a first-class `media` `LLMEvent` (`response.message` then carries a `media` part). Gemini image-capable models emit the same `media` event for inline image output. Retaining `response.message` preserves the generated image for continuation on both routes.
 
+## Video generation
+
+Video mirrors `Image` with one difference: every provider is asynchronous, so the route is a submit-then-poll
+`Generation`. Models come from `.video(...)` selectors on the `Google` (Veo), `XAI`, `Fal`, and `Runway` facades.
+Common fields (`frames`, `references`, `video`, `durationSeconds`, `aspectRatio`, `resolution`, `audio`, `n`, `seed`,
+`negativePrompt`) lower natively or fail with a typed `AIError` before any network call; provider-native controls live
+under `providerOptions`, inferred from the selected model.
+
+```ts
+import { Video, VideoClient } from "@opencode/ai"
+import { Google } from "@opencode/ai/providers"
+
+const google = Google.configure({ apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY })
+
+// Simple: submit and wait.
+const program = Effect.gen(function* () {
+  const response = yield* Video.generate(
+    {
+      model: google.video("veo-3.1-generate-preview"),
+      prompt: "Panning wide shot of a calico kitten sleeping in the sunshine",
+      aspectRatio: "16:9",
+      resolution: "1080p",
+      durationSeconds: 8,
+      providerOptions: { personGeneration: "allow_adult" },
+    },
+    { poll: { interval: "10 seconds", timeout: "10 minutes" } },
+  )
+  // Veo serves files for two days behind the API key. The asset knows the deadline (`expiresAt`) and carries the
+  // download credentials only on the live instance (`asset.headers`), never in `source` or JSON: materialize
+  // before persisting, or the persisted URL cannot be fetched again.
+  return yield* response.video.materialize()
+})
+
+// Explicit control: keep the handle, persist the token, resume elsewhere.
+const controlled = Effect.gen(function* () {
+  const generation = yield* Video.start({ model: google.video("veo-3.1-generate-preview"), prompt })
+  generation.id // provider operation / task / request id
+  generation.status // "queued" | "running" | "completed" | "failed" | "cancelled" | "expired"
+  generation.token // route-owned JSON: `{ operation }`, `{ requestID }`, `{ taskID }`, or fal's follow-up URLs
+  const saved = JSON.stringify(generation.token)
+
+  const resumed = yield* Video.resume(google.video("veo-3.1-generate-preview"), JSON.parse(saved))
+  return yield* resumed.await({ poll: { interval: "10 seconds" } })
+})
+
+// Progress as a stream: generation-queued | generation-progress | video | finish.
+const events = Video.stream({ model: Runway.configure({ apiKey }).video("gen4.5"), prompt }, { poll })
+```
+
+`VideoClient.layer` needs `RequestExecutor.Service`, and status polls, result fetches, cancels, and asset downloads
+all run through the same executor with the route's auth. `Generation.await` and `Generation.events` fail with a
+`Timeout` reason when `poll.timeout` (default 10 minutes) elapses. Failed,
+cancelled, and expired generations fail typed with the provider's terminal document on `reason.body`; moderation
+outcomes (Veo `raiMediaFilteredReasons`, xAI `respect_moderation`, Runway `SAFETY.*` codes) surface as `notices` when
+a video is still returned and as a `ContentPolicy` reason when nothing is.
+
+Provider notes:
+
+- **Google Veo** takes inline bytes only (materialize `url` assets first); `frames.last` requires `frames.first`;
+  audio is always on, so `audio: false` fails typed; one video per request. Output URLs need the API key to
+  download, which the returned asset holds transiently (see above).
+- **xAI** sends a `video` input to `/videos/edits`, or `/videos/extensions` with `providerOptions.mode: "extend"`.
+  `seed` and `negativePrompt` are not supported.
+- **fal** endpoints are model-specific: `durationSeconds`, `references`, and `frames.last` fail typed and belong in
+  `providerOptions` under the model's own names (`duration: "8s"`, `end_image_url`, …). Auth is
+  `Authorization: Key <FAL_KEY>`.
+- **Runway** expects pixel ratios in `aspectRatio` for most models (`"1280:720"`), pins `X-Runway-Version`, reports
+  `usage: { type: "credits" }`, and its output URLs expire after 24–48 hours.
+
+The promise client exposes the same surface: `ai.video.start(...)` resolves to a handle with `await`, `refresh`,
+`cancel`, and `token`; `ai.video.generate`, `ai.video.resume(model, token)`, and `ai.video.stream` mirror the Effect
+API.
+
+```ts
+import { ai } from "@opencode/ai/promise"
+
+const generation = await ai.video.start({ model, prompt })
+const video = await generation.await({ poll: { interval: 10_000 }, signal })
+```
+
+## Speech generation
+
+Speech (text-to-speech) is one request whose response is parsed incrementally, so every route supports both
+`Speech.generate` (the whole file) and `Speech.stream` (audio chunks as they arrive). Models come from `.speech(...)`
+selectors on the `OpenAI`, `Google` (Gemini TTS), `ElevenLabs`, `Cartesia`, and `Deepgram` facades. Common fields
+(`voice`, `format`, `speed`, `language`, `instructions`, `timestamps`) lower natively or fail with a typed `AIError`
+before any network call; provider-native controls live under `providerOptions`, inferred from the selected model.
+
+```ts
+import { Media, Speech, SpeechClient, SpeechEvent } from "@opencode/ai"
+import { ElevenLabs, OpenAI } from "@opencode/ai/providers"
+
+const openai = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY })
+
+// The whole file, written to disk.
+const program = Effect.gen(function* () {
+  const response = yield* Speech.generate({
+    model: openai.speech("gpt-4o-mini-tts"),
+    text: "Hello from OpenCode.",
+    voice: "coral",
+    format: "mp3",
+    instructions: "Warm and unhurried.",
+  })
+  response.audio // Media.Asset with bytes; headerless PCM carries info.encoding / sampleRate / channels
+  response.usage // undefined: OpenAI reports tokens only on SSE streams (Gemini: tokens; ElevenLabs: credits; Deepgram: characters)
+  yield* Media.write(response.audio, "hello.mp3")
+})
+
+// Chunks as they arrive: audio-delta* (interleaved with timestamps) then one finish carrying the assembled asset.
+const events = Speech.stream({
+  model: ElevenLabs.configure({ apiKey }).speech("eleven_flash_v2_5"),
+  text: "Hello from OpenCode.",
+  voice: "JBFqnCBsd6RMkjVDRZzb",
+  format: "pcm",
+  timestamps: true,
+}).pipe(
+  Stream.tap((event) => {
+    if (SpeechEvent.is.audioDelta(event)) return play(event.chunk)
+    if (SpeechEvent.is.timestamps(event)) return highlight(event.items) // { text, startSeconds, endSeconds }[]
+    return Effect.void
+  }),
+)
+```
+
+`voice` is the provider's own identifier — a name on OpenAI and Gemini (`"coral"`, `"Kore"`), a voice id on
+ElevenLabs and Cartesia. `{ id }` selects an OpenAI custom voice (`{ id: "voice_1234" }`) and means the same as the
+plain string elsewhere. There is no cross-provider voice catalog. `format` is the container-level word (`mp3`, `wav`,
+`pcm`, `opus`, `aac`, `flac`); sample rates and bitrates live under `providerOptions`, and a value the route cannot
+produce fails as `UnsupportedOperation`. Streams buffer every chunk so `finish` can carry the whole clip.
+`SpeechClient.layer` needs `RequestExecutor.Service`.
+
+Provider notes:
+
+- **OpenAI** streams over SSE (`stream_format: "sse"`), which is also the only place it reports token usage; `tts-1`
+  and `tts-1-hd` do not support SSE and stream the raw audio body instead. `pcm` is 24 kHz 16-bit mono. `language`
+  and `timestamps` are not supported.
+- **Gemini TTS** returns raw 16-bit PCM only (`audio/L16;codec=pcm;rate=24000`), so any `format` other than `pcm`
+  fails typed; wrap the samples yourself. Style is directed in the text, so `instructions` and `speed` fail typed.
+  Only `gemini-3.1-flash-tts-preview` and later support streaming. Two-speaker audio goes through
+  `providerOptions.speechConfig.multiSpeakerVoiceConfig`.
+- **ElevenLabs** requires `voice` (the path voice id) and authenticates with `xi-api-key`. `format` maps to the
+  `output_format` query parameter (`mp3_44100_128`, `pcm_24000`, `wav_24000`, `opus_48000_64`);
+  `providerOptions.outputFormat` sets the exact string. WAV is only available from `generate`. `timestamps: true`
+  selects the `with-timestamps` endpoints and yields character-level alignment. `instructions` is not supported.
+- **Cartesia** requires `voice` and pins `Cartesia-Version`. `generate` defaults to MP3 from `/tts/bytes`; streams
+  and `timestamps: true` (word-level) use `/tts/sse`, which only serves raw PCM. `providerOptions.sampleRate`,
+  `bitRate`, and `encoding` complete `output_format`. No usage is reported.
+- **Deepgram** Aura's voice is the model id (`aura-2-thalia-en`), so `voice` and `language` fail typed. `format`
+  and `providerOptions` lower to query parameters (`encoding`, `container`, `sample_rate`, `bit_rate`); `pcm` is
+  `linear16` without a container. Auth is `Authorization: Token <DEEPGRAM_API_KEY>`.
+
+The promise client mirrors the Effect API; `ai.speech.stream` is an `AsyncIterable`.
+
+```ts
+import { ai } from "@opencode/ai/promise"
+
+const response = await ai.speech.generate({ model, text: "Hello from OpenCode.", voice: "coral" })
+await Bun.write("hello.mp3", await ai.run(response.audio.bytes()))
+
+for await (const event of ai.speech.stream({ model, text: "Hello from OpenCode.", voice: "coral" })) {
+  if (event.type === "audio-delta") player.write(event.chunk)
+}
+```
+
+## Transcription
+
+Transcription (speech-to-text) is the one modality whose providers use every route kind: OpenAI and Gemini stream,
+Deepgram answers inline, and AssemblyAI is queued. `Transcription.generate` and `Transcription.stream` work on all of
+them; `Transcription.start` / `resume` return a `Generation` on queued routes and fail with `UnsupportedOperation`
+elsewhere. Models come from `.transcription(...)` selectors on the `OpenAI`, `Google`, `Deepgram`, and `AssemblyAI`
+facades. Common fields (`language`, `prompt`, `timestamps: "none" | "segment" | "word"`, `diarize`, `speakers`) lower
+natively or fail with a typed `AIError` before any network call; a route may return more than asked.
+
+```ts
+import { Media, Transcription, TranscriptionEvent } from "@opencode/ai"
+import { AssemblyAI, Deepgram, OpenAI } from "@opencode/ai/providers"
+
+const openai = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY })
+
+const program = Effect.gen(function* () {
+  const audio = yield* Media.file("./call.mp3")
+
+  // Speaker-labelled segments; labels are provider-native strings ("A", "0", "spk:0").
+  const response = yield* Transcription.generate({
+    model: Deepgram.configure({ apiKey }).transcription("nova-3"),
+    audio,
+    diarize: true,
+    timestamps: "word",
+  })
+  response.text // "Hello from OpenCode."
+  response.segments // [{ text, startSeconds, endSeconds, speaker: "0" }]
+  response.words // [{ text, startSeconds, endSeconds, speaker, confidence }]
+  response.language // the provider's own value, lowercased ("en", "english", "en_us")
+
+  // Text deltas as the model transcribes, then one finish carrying the whole transcript.
+  yield* Transcription.stream({ model: openai.transcription("gpt-4o-mini-transcribe"), audio }).pipe(
+    Stream.tap((event) => (TranscriptionEvent.is.textDelta(event) ? Console.log(event.delta) : Effect.void)),
+    Stream.runDrain,
+  )
+
+  // Queued: persist the token, resume from another process, and await.
+  const model = AssemblyAI.configure({ apiKey }).transcription("universal-3-5-pro")
+  const generation = yield* Transcription.start({ model, audio })
+  const resumed = yield* Transcription.resume(model, JSON.parse(JSON.stringify(generation.token)))
+  const transcript = yield* resumed.await({ poll: { interval: "3 seconds" } })
+})
+```
+
+Inline routes emit only `finish` from `stream` (no faked deltas); queued routes emit `generation-queued` /
+`generation-progress` before it. `TranscriptionClient.layer` needs `RequestExecutor.Service`.
+
+Provider notes:
+
+- **OpenAI** takes inline audio only; `diarize` needs `gpt-4o-transcribe-diarize`, timestamps need `whisper-1`, and `whisper-1` does not stream.
+- **Gemini** needs a transcribe model (`gemini-3.5-transcribe`); `prompt` and `speakers` fail typed.
+- **Deepgram** detects the language unless `language` is set; vocabulary goes in `providerOptions.keyterm`.
+- **AssemblyAI** uploads inline audio before submitting and is the only route that accepts `speakers`.
+
+The promise client mirrors the Effect API:
+
+```ts
+const text = (await ai.transcription.generate({ model, audio })).text
+for await (const event of ai.transcription.stream({ model, audio })) if (event.type === "text-delta") write(event.delta)
+const generation = await ai.transcription.start({ model: assemblyai, audio })
+const transcript = await generation.await({ poll: { interval: 3_000 } })
+```
+
 ## Public API
 
 - **`LLM.request({...})`** — build a provider-neutral `LLMRequest`. Accepts ergonomic inputs (`system: string`, `prompt: string`) that normalize into the canonical Schema classes.
@@ -609,11 +891,13 @@ The hosted result is represented as a provider-executed tool call and tool resul
 - **`Message.user(...)` / `Message.assistant(...)` / `Message.tool(...)`** — message constructors from the canonical schema model.
 - **`LanguageModel.make(...)` / `ToolCallPart.make(...)` / `ToolResultPart.make(...)` / `ToolDefinition.make(...)`** — model and tool-related constructors from the canonical schema model.
 - **`LLMEvent.is.*`** — typed guards (`is.textDelta`, `is.toolCall`, `is.finish`, …) for filtering streams.
-- **`Image.request` / `Image.generate` / `Image.stream`** — generate images through a provider-neutral image request and response model.
+- **`Image.request` / `generate` / `stream` / `start` / `resume`** — images over inline, streaming (partial previews), and queued routes through a provider-neutral request and response model.
 - **`ImageClient`** — Effect service and layer for image execution, parallel to `LLMClient`.
 - **`Media`** — the shared asset type (`Media.Asset`, `Media.Source`) and constructors used by messages, tool results, and media requests.
 - **`Generation`** — provider-neutral handle for an in-flight media generation (`await`, `refresh`, `cancel`, `events`) used by queued media routes.
-- **`@opencode/ai/promise`** — `AI.make({ layer? })` and a default `ai` client exposing `llm` and `image` as Promise / `AsyncIterable` APIs.
+- **`Speech.request` / `Speech.generate` / `Speech.stream`** — text-to-speech through a provider-neutral request; `SpeechClient` is its Effect service and layer.
+- **`Transcription.request` / `generate` / `stream` / `start` / `resume`** — speech-to-text over inline, streaming, and queued routes; `TranscriptionClient` is its Effect service and layer.
+- **`@opencode/ai/promise`** — `AI.make({ layer? })` and a default `ai` client exposing `llm`, `image`, `video`, `speech`, and `transcription` as Promise / `AsyncIterable` APIs.
 
 ## Testing
 

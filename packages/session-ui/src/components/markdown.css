@@ -101,6 +101,55 @@
     text-underline-offset: 2px;
   }
 
+  a.external-link:is(
+      [href="https://github.com" i],
+      [href^="https://github.com/" i],
+      [href="http://github.com" i],
+      [href^="http://github.com/" i]
+    ):not(:has(img))::before {
+    content: "";
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    margin-inline-end: 4px;
+    vertical-align: -0.125em;
+    background: currentColor;
+    mask: url("./markdown-github.svg") center / contain no-repeat;
+  }
+
+  .markdown-link-favicon {
+    position: relative;
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    margin-inline-end: 4px;
+    vertical-align: -0.125em;
+  }
+
+  .markdown-link-favicon::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: currentColor;
+    mask: url("./markdown-globe.svg") center / contain no-repeat;
+  }
+
+  .markdown-link-favicon img {
+    position: absolute;
+    inset: 0;
+    display: block;
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    border-radius: 2px;
+    cursor: inherit;
+    opacity: 0;
+  }
+
+  .markdown-link-favicon img[data-loaded] {
+    opacity: 1;
+  }
+
   a[data-local-link] {
     cursor: pointer;
   }

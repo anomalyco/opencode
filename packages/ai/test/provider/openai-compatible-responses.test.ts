@@ -393,6 +393,33 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
+  it.effect("ignores bare null frames between events", () =>
+    Effect.gen(function* () {
+      const model = configure({
+        apiKey: "test-key",
+        baseURL: "https://responses.example.test/v1",
+      }).model("example-model")
+      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Say hello." })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", output_index: 0, item: { type: "message", id: "msg_1" } },
+              "null",
+              { type: "response.output_text.delta", output_index: 0, item_id: "msg_1", delta: "Hello" },
+              "null",
+              { type: "response.output_item.done", output_index: 0, item: { type: "message", id: "msg_1" } },
+              { type: "response.completed", response: { id: "resp_1" } },
+              "null",
+            ),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Hello")
+      expect(response.events.at(-1)).toMatchObject({ type: "finish" })
+    }),
+  )
+
   describe("stream validation", () => {
     const request = LLM.request({
       model: configure({ apiKey: "test-key", baseURL: "https://responses.example.test/v1" }).model("example-model"),

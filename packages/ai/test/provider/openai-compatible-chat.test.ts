@@ -375,6 +375,27 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
+  it.effect("ignores bare null frames between deltas", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ role: "assistant", content: "Hello" }),
+              "null",
+              deltaChunk({ content: "!" }),
+              "null",
+              deltaChunk({}, "stop"),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Hello!")
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "stop" })
+    }),
+  )
+
   it.effect("accepts nullable usage and preserves provider fields", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(

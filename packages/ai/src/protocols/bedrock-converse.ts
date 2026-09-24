@@ -11,7 +11,7 @@ import {
   type FinishReasonDetails,
   type JsonSchema,
   type LLMRequest,
-  type LanguageModelToolSchemaCompatibility,
+  type LanguageModel,
   type ProviderMetadata,
   type ReasoningPart,
   type ToolCallPart,
@@ -28,6 +28,7 @@ import { Lifecycle } from "./utils/lifecycle.js"
 import { MistralToolID } from "./utils/mistral-tool-id.js"
 import { ToolSchemaProjection } from "./utils/tool-schema.js"
 import { ToolStream } from "./utils/tool-stream.js"
+import { concatBytes } from "../utils/bytes.js"
 
 const ADAPTER = "bedrock-converse"
 
@@ -229,13 +230,13 @@ const lowerToolSpec = (tool: ToolDefinition, inputSchema: JsonSchema): BedrockTo
 })
 
 const lowerTools = (
-  compatibility: LanguageModelToolSchemaCompatibility | undefined,
+  model: LanguageModel,
   breakpoints: BedrockCache.Breakpoints,
   tools: ReadonlyArray<ToolDefinition>,
 ): BedrockTool[] => {
   const result: BedrockTool[] = []
   for (const tool of tools) {
-    result.push(lowerToolSpec(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, compatibility)))
+    result.push(lowerToolSpec(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, model)))
     const cachePoint = BedrockCache.block(breakpoints, tool.cache)
     if (cachePoint) result.push(cachePoint)
   }
@@ -439,7 +440,7 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
   const toolConfig = (() => {
     if (flattened.tools.length === 0) return undefined
     return {
-      tools: lowerTools(request.model.compatibility?.toolSchema, breakpoints, flattened.tools),
+      tools: lowerTools(request.model, breakpoints, flattened.tools),
       // Converse has no native "none". Keep definitions stable for prompt
       // caching and omit only the unsupported choice.
       toolChoice,
@@ -524,14 +525,7 @@ interface ParserState {
   readonly reasoningRedactedContent: Readonly<Record<number, ReadonlyArray<Uint8Array>>>
 }
 
-const encodeRedactedContent = (chunks: ReadonlyArray<Uint8Array>) => {
-  const bytes = new Uint8Array(chunks.reduce((total, chunk) => total + chunk.length, 0))
-  chunks.reduce((offset, chunk) => {
-    bytes.set(chunk, offset)
-    return offset + chunk.length
-  }, 0)
-  return Encoding.encodeBase64(bytes)
-}
+const encodeRedactedContent = (chunks: ReadonlyArray<Uint8Array>) => Encoding.encodeBase64(concatBytes(chunks))
 
 const step = (state: ParserState, event: BedrockEvent) =>
   Effect.gen(function* () {

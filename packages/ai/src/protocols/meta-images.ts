@@ -4,7 +4,7 @@ import { ImageModel, ImageResponse, type ImageRequestFor } from "../image.js"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderID, mergeJsonRecords, type AIError } from "../schema/index.js"
+import { ProviderID, mergeJsonRecords } from "../schema/index.js"
 import { JsonObject, ProviderShared, optionalNull } from "./shared.js"
 import { MediaInput } from "./utils/media-input.js"
 
@@ -70,13 +70,9 @@ const Response = Schema.Struct({
 
 const isEdit = (request: Request) => (request.images?.length ?? 0) > 0
 
-const reference = (asset: Media.Asset): Effect.Effect<Record<string, unknown>, AIError> => {
-  const inline = asset.inline()
-  if (inline) return Effect.succeed({ image_url: inline.dataUrl })
-  const url = ProviderShared.mediaUrl(asset)
-  if (url) return Effect.succeed({ image_url: url })
-  return Effect.fail(ProviderShared.invalidRequest(`${NAME} accepts image bytes and URLs`))
-}
+// Meta has no file handles: refs are rejected even when they name this provider.
+const reference = (asset: Media.Asset) =>
+  ProviderShared.mediaReference(asset, undefined, NAME).pipe(Effect.map((item) => ({ image_url: item.value })))
 
 const fromRequest = Effect.fn("MetaImages.fromRequest")(function* (request: Request) {
   const images = yield* Effect.forEach(request.images ?? [], reference)

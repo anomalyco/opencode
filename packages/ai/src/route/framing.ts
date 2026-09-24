@@ -1,4 +1,4 @@
-import type { Stream } from "effect"
+import { Stream } from "effect"
 import * as ProviderShared from "../protocols/shared.js"
 import type { AIError } from "../schema/index.js"
 
@@ -12,6 +12,8 @@ import type { AIError } from "../schema/index.js"
  *   `[DONE]`; protocols that use it as a terminal select `sseWithDone`.
  * - AWS event stream — length-prefixed binary frames with CRC checksums.
  *   Each emitted frame is one parsed binary event record.
+ * - Media streams — newline-delimited JSON (`lines`) or the whole body as one
+ *   frame (`document`); chunked binary bodies need no framing.
  *
  * The frame type is opaque to this layer; the protocol's event schema decodes
  * each frame before its state machine handles it.
@@ -37,5 +39,20 @@ export const sseEvents = (events: ReadonlySet<string>): Definition<string> => ({
   id: "sse",
   frame: (bytes) => ProviderShared.sseFraming(bytes, events),
 })
+
+export const lines: Definition<string> = {
+  id: "lines",
+  frame: (bytes) =>
+    bytes.pipe(
+      Stream.decodeText(),
+      Stream.splitLines,
+      Stream.filter((line) => line.trim().length > 0),
+    ),
+}
+
+export const document: Definition<string> = {
+  id: "document",
+  frame: (bytes) => Stream.fromEffect(Stream.mkString(bytes.pipe(Stream.decodeText()))),
+}
 
 export * as Framing from "./framing.js"

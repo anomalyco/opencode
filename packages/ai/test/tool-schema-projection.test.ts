@@ -28,33 +28,83 @@ describe("tool schema projections", () => {
     })
   })
 
-  test("gemini handles numeric enums, dangling required fields, untyped arrays, and scalar object keys", () => {
+  test("moonshot derives a type for untyped enums", () => {
     expect(
-      ToolSchemaProjection.gemini({
+      ToolSchemaProjection.moonshot({
         type: "object",
-        required: ["status", "missing"],
         properties: {
-          status: { type: "integer", enum: [1, 2] },
-          tags: { type: "array" },
-          name: { type: "string", properties: { ignored: { type: "string" } }, required: ["ignored"] },
+          kind: { description: "The kind of flag", enum: ["boolean", "string"] },
+          level: { enum: [1, 2.5] },
+          optional: { enum: [null, "a"] },
+          choice: { anyOf: [{ enum: [true, false] }, { type: "null" }] },
+          list: { type: "array", items: { enum: ["x"] } },
+          map: { type: "object", additionalProperties: { enum: ["y"] } },
+          typed: { type: "string", enum: ["a", null] },
+          mixed: { enum: ["a", 1] },
         },
+        $defs: { Mode: { enum: ["fast"] } },
       }),
     ).toEqual({
       type: "object",
-      required: ["status"],
       properties: {
-        status: { type: "string", enum: ["1", "2"] },
-        tags: { type: "array", items: { type: "string" } },
-        name: { type: "string" },
+        kind: { type: "string", description: "The kind of flag", enum: ["boolean", "string"] },
+        level: { type: "number", enum: [1, 2.5] },
+        optional: { type: ["string", "null"], enum: [null, "a"] },
+        choice: { anyOf: [{ type: "boolean", enum: [true, false] }, { type: "null" }] },
+        list: { type: "array", items: { type: "string", enum: ["x"] } },
+        map: { type: "object", additionalProperties: { type: "string", enum: ["y"] } },
+        typed: { type: "string", enum: ["a", null] },
+        mixed: { enum: ["a", 1] },
       },
+      $defs: { Mode: { type: "string", enum: ["fast"] } },
     })
   })
+
+  it.effect("selects tool schema handling from the model name unless compatibility is explicit", () =>
+    Effect.gen(function* () {
+      const route = OpenAIChat.route.with({
+        endpoint: { baseURL: "https://api.openai.test/v1/" },
+        auth: Auth.bearer("test"),
+      })
+      const original = {
+        type: "object",
+        required: ["mode", "missing"],
+        properties: { mode: { enum: ["fast", "safe"] } },
+      }
+      const parameters = (model: ReturnType<typeof route.model>) =>
+        compileRequest(
+          LLM.request({
+            model,
+            prompt: "Use the tool.",
+            tools: [{ name: "lookup", description: "Lookup data.", inputSchema: original }],
+          }),
+        ).pipe(Effect.map((prepared) => prepared.body.tools?.[0]?.function.parameters))
+      const gemini = { ...original, required: ["mode"] }
+      const moonshot = { ...original, properties: { mode: { type: "string", enum: ["fast", "safe"] } } }
+
+      expect(yield* parameters(route.model({ id: "google/Gemini-3.8-Flash" }))).toEqual(gemini)
+      expect(
+        yield* parameters(route.model({ id: "my-tuned-endpoint", compatibility: { sanitizer: "gemini" } })),
+      ).toEqual(gemini)
+      expect(
+        yield* parameters(route.model({ id: "google/gemini-3.8-flash", compatibility: { sanitizer: "moonshot" } })),
+      ).toEqual(moonshot)
+      expect(yield* parameters(route.model({ id: "moonshotai/Kimi-K3" }))).toEqual(moonshot)
+      expect(
+        yield* parameters(route.model({ id: "google/gemini-3.8-flash", compatibility: { sanitizer: "none" } })),
+      ).toEqual(original)
+      expect(
+        yield* parameters(route.model({ id: "moonshotai/Kimi-K3", compatibility: { sanitizer: "none" } })),
+      ).toEqual(original)
+      expect(yield* parameters(route.model({ id: "gpt-6-luna" }))).toEqual(original)
+    }),
+  )
 
   it.effect("applies model compatibility without changing schema semantics", () =>
     Effect.gen(function* () {
       const model = OpenAIChat.route
         .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
-        .model({ id: "kimi-k2", compatibility: { toolSchema: "moonshot" } })
+        .model({ id: "kimi-k2", compatibility: { sanitizer: "moonshot" } })
       const prepared = yield* compileRequest(
         LLM.request({
           model,
