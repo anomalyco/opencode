@@ -8,6 +8,8 @@ import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { registerAdapter } from "../../src/control-plane/adapters"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
+import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
+import { Database } from "@opencode-ai/core/database/database"
 import type { WorkspaceAdapter } from "../../src/control-plane/types"
 import { Workspace } from "../../src/control-plane/workspace"
 import { InstanceRef, WorkspaceRef } from "../../src/effect/instance-ref"
@@ -143,6 +145,46 @@ const serveDisposeProbe = () =>
   )
 
 describe("HttpApi instance context middleware", () => {
+  it.live("resumes a persisted workspace after loading its project", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const project = yield* Project.use.fromDirectory(dir)
+      const workspaceDir = path.join(dir, ".workspace-recovered")
+      const id = WorkspaceV2.ID.ascending()
+      yield* Effect.promise(() => mkdir(workspaceDir, { recursive: true }))
+      registerAdapter(project.project.id, "instance-context-recovered", localAdapter(workspaceDir))
+      yield* Database.Service.use(({ db }) =>
+        db
+          .insert(WorkspaceTable)
+          .values({
+            id,
+            type: "instance-context-recovered",
+            branch: null,
+            name: "persisted",
+            directory: workspaceDir,
+            extra: null,
+            project_id: project.project.id,
+            time_used: Date.now(),
+          })
+          .run(),
+      )
+      yield* serveProbe()
+      const connected = yield* waitGlobalBusEvent({
+        message: "persisted workspace did not reconnect",
+        predicate: (event) =>
+          event.workspace === id &&
+          event.payload.type === Workspace.Event.Status.type &&
+          event.payload.properties.status === "connected",
+      }).pipe(Effect.forkScoped({ startImmediately: true }))
+
+      const response = yield* HttpClient.get(`/probe?directory=${encodeURIComponent(dir)}`)
+
+      expect(response.status).toBe(200)
+      yield* Fiber.join(connected)
+      expect((yield* Workspace.use.status()).find((item) => item.workspaceID === id)?.status).toBe("connected")
+    }),
+  )
+
   it.live("provides instance context from the routed directory", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })

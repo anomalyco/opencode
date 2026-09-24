@@ -144,6 +144,7 @@ export interface Interface {
     timeout?: number,
   ) => Effect.Effect<void, WaitForSyncError>
   readonly startWorkspaceSyncing: (projectID: ProjectV2.ID) => Effect.Effect<void>
+  readonly resumeWorkspaceSyncing: (projectID: ProjectV2.ID) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Workspace") {}
@@ -164,6 +165,7 @@ const layer = Layer.effect(
     const { db } = yield* Database.Service
     const connections = new Map<WorkspaceV2.ID, ConnectionStatus>()
     const syncFibers = yield* FiberMap.make<WorkspaceV2.ID, void, SyncLoopError>()
+    const resumedProjects = new Set<ProjectV2.ID>()
 
     const setStatus = (id: WorkspaceV2.ID, status: ConnectionStatus["status"]) => {
       const prev = connections.get(id)
@@ -898,6 +900,19 @@ const layer = Layer.effect(
       }
     })
 
+    const resumeWorkspaceSyncing = Effect.fn("Workspace.resumeWorkspaceSyncing")(function* (projectID: ProjectV2.ID) {
+      if (!flags.experimentalWorkspaces || resumedProjects.has(projectID)) return
+      resumedProjects.add(projectID)
+      yield* startWorkspaceSyncing(projectID).pipe(
+        Effect.catchCause((cause) =>
+          Effect.gen(function* () {
+            resumedProjects.delete(projectID)
+            yield* Effect.logWarning("workspace sync recovery failed", { projectID, cause })
+          }),
+        ),
+      )
+    })
+
     return Service.of({
       create,
       sessionWarp,
@@ -909,6 +924,7 @@ const layer = Layer.effect(
       isSyncing,
       waitForSync,
       startWorkspaceSyncing,
+      resumeWorkspaceSyncing,
     })
   }),
 )
