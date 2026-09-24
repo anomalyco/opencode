@@ -116,7 +116,7 @@ test("single-server settings expose scoped pages without a server picker", async
   await expect(connection.getByRole("heading", { name: "Connection", exact: true })).toBeVisible()
   await expect(connection.locator('[data-component="settings-list"]')).toHaveCSS("padding-left", "16px")
   await expect(connection.locator(".settings-servers-row")).toHaveCSS("padding-top", "20px")
-  await expect(connection.locator(".settings-servers-lead")).toHaveCSS("column-gap", "4px")
+  await expect(connection.locator(".settings-servers-lead")).toHaveCSS("column-gap", "10px")
   await expect(connection.locator(".settings-servers-copy")).toHaveCSS("row-gap", "6px")
   await expect(settings.getByRole("heading", { name: "Preferences", exact: true })).toBeVisible()
   await expect(settings.getByText("Terminal shell", { exact: true })).toBeVisible()
@@ -134,10 +134,52 @@ test("project settings open as a nested autosaving view", async ({ page }) => {
   await settings.getByRole("button", { name: "Settings demo", exact: true }).click()
 
   await expect(settings.getByRole("button", { name: "Back to projects", exact: true })).toBeVisible()
-  await expect(settings.getByRole("tab", { name: "Settings demo", exact: true })).toBeVisible()
+  await expect(settings.getByRole("tab", { name: "General", exact: true })).toBeVisible()
   await expect(settings.getByRole("tab", { name: "Worktrees", exact: true })).toBeVisible()
   await expect(settings.getByRole("tab", { name: "Extensions", exact: true })).toBeVisible()
   await expect(settings.getByRole("tab", { name: "Scripts", exact: true })).toHaveCount(0)
+  await expect(settings.getByTitle(directory)).toHaveCount(0)
+  const projectIcon = settings.locator('.settings-tab-header [data-component="project-avatar-v2"]')
+  await expect(projectIcon).toHaveCSS("width", "32px")
+  const projectOptions = settings
+    .locator(".settings-tab-header")
+    .getByRole("button", { name: "More options", exact: true })
+  await expect(projectOptions).toHaveCSS("width", "28px")
+  await expect
+    .poll(async () =>
+      new Set(
+        await Promise.all(
+          [
+            settings.getByRole("button", { name: "Back to projects", exact: true }),
+            settings.getByRole("heading", { name: "Settings demo", exact: true }),
+            projectIcon,
+            projectOptions,
+          ].map((item) =>
+            item.evaluate((element) => {
+              const bounds = element.getBoundingClientRect()
+              return Math.round(bounds.top + bounds.height / 2)
+            }),
+          ),
+        ),
+      ).size,
+    )
+    .toBe(1)
+  await expect
+    .poll(async () => {
+      const back = await settings
+        .getByRole("button", { name: "Back to projects", exact: true })
+        .evaluate((element) => element.getBoundingClientRect().top)
+      const general = await settings
+        .getByRole("tab", { name: "General", exact: true })
+        .evaluate((element) => element.getBoundingClientRect().top)
+      return Math.round(general - back)
+    })
+    .toBe(72)
+  await projectOptions.click()
+  const projectMenu = page.getByRole("menu")
+  await expect(projectMenu.getByRole("menuitem")).toHaveText(["Clear notifications", "Close"])
+  await page.keyboard.press("Escape")
+  await expect(projectMenu).toBeHidden()
 
   const name = settings.getByRole("textbox", { name: "Project name", exact: true })
   const saved = page.waitForRequest(
@@ -146,7 +188,8 @@ test("project settings open as a nested autosaving view", async ({ page }) => {
   await name.fill("Renamed project")
   await name.blur()
   expect((await saved).postDataJSON()).toEqual({ name: "Renamed project" })
-  await expect(settings.getByRole("tab", { name: "Renamed project", exact: true })).toBeVisible()
+  await expect(settings.getByRole("tab", { name: "General", exact: true })).toBeVisible()
+  await expect(settings.getByRole("heading", { name: "Renamed project", exact: true })).toBeVisible()
 
   const startup = settings.getByRole("textbox", { name: "Worktree startup script", exact: true })
   const scriptSaved = page.waitForRequest(

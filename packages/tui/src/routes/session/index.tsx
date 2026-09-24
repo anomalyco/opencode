@@ -23,7 +23,7 @@ import { SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
 import { PatchDiff } from "../../component/patch-diff"
-import { createSyntaxStyleMemo, useTheme, useThemes } from "../../context/theme"
+import { useTheme, useThemes } from "../../context/theme"
 import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA, MouseEvent } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import type {
@@ -80,7 +80,7 @@ import { DialogExportResult } from "../../ui/dialog-export-result"
 import { sessionEpilogue } from "../../util/presentation"
 import { useConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
-import { nextThinkingMode, reasoningSummary, type ThinkingMode } from "../../context/thinking"
+import { nextThinkingMode, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
 import { collapseShellOutput, collapseToolOutput } from "../../util/collapse-tool-output"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
@@ -90,6 +90,7 @@ import { Slot } from "../../plugin/render"
 import { usePlugin } from "../../plugin/context"
 import {
   cacheReuseDrop,
+  completeGroupBoundary,
   createSessionRows,
   legacyTurns,
   messageBoundaryIDs,
@@ -106,18 +107,22 @@ import { findMessageBoundary, messageNavigationSlack } from "./message-navigatio
 import { stringWidth } from "../../util/string-width"
 import { useArgs } from "../../context/args"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
-import { useSessionTabs } from "../../context/session-tabs"
+import { useSessionTabs, type ScrollAnchor } from "../../context/session-tabs"
 import { createSingleFlight } from "../../util/single-flight"
 import type { SessionInbox } from "@opencode/schema/session-inbox"
-import { generateThinkingSyntax } from "./thinking-syntax"
 import { createDelayedPresence } from "../../util/delayed-presence"
 import { SessionLocationMissing } from "./location-missing"
 import { isRecord } from "../../util/record"
 import { createHistoryPrepend } from "./history"
 import { context, use, type PendingAction } from "./render-context"
-import { INLINE_TOOL_ICON_WIDTH, InlineToolRow, ReasoningPart, reasoningContent, TextPart } from "./message-parts"
-import { groupRefs } from "./grouping/session"
+import { INLINE_TOOL_ICON_WIDTH, InlineToolRow, ReasoningPart, TextPart, toolDisplay } from "./message-parts"
+import type { SessionEntry } from "./grouping/session"
+import { SessionGroupView } from "./group-view"
+import { useEntryAnchor } from "./anchor-view"
+import { containsAnchor, createTimelineAnchors } from "./anchors"
+import { rowsAfter, rowsBefore, rowWeight } from "./mount-budget"
 export { InlineToolRow } from "./message-parts"
+export { toolDisplay } from "./message-parts"
 
 addDefaultParsers(parsers.parsers)
 
@@ -125,6 +130,7 @@ addDefaultParsers(parsers.parsers)
 const NAVIGATION_SLACK_ID = "session-navigation-slack"
 const BACKGROUND_TOOL_HINT_DELAY = 3_000
 
+// Budgets count rendered entries (see mount-budget.ts); a collapsed group costs one.
 // The tail comfortably overfills a tall viewport; older rows mount as the reader approaches them.
 const TRANSCRIPT_TAIL_ROWS = 40
 const TRANSCRIPT_BACKFILL_CHUNK = 60
@@ -267,7 +273,7 @@ export function Session(props: {
     },
   )
   const boundaries = createMemo(() => messageBoundaryIDs(rows, messages()))
-  const boundaryIDs = createMemo(() => new Set(boundaries().filter((id) => id !== undefined)))
+  const anchors = createTimelineAnchors()
   const [navigationMessage, setNavigationMessage] = createSignal<string>()
   const [navigationSlack, setNavigationSlack] = createSignal(0)
   const [firstJump, setFirstJump] = createSignal<() => void>()
@@ -360,7 +366,7 @@ export function Session(props: {
     firstJump()?.()
     if (!scroll || scroll.isDestroyed) return
     scroll.verticalScrollBar.off("change", updateAwayFromBottom)
-    saveScrollAnchor()
+    saveScrollAnchor(true)
   })
   const [prompt, setPrompt] = createSignal<PromptRef>()
   const bind = (r: PromptRef | undefined) => {
@@ -386,13 +392,32 @@ export function Session(props: {
   // at the bottom the hidden span follows appends; leaving the bottom pins it to preserve the viewport.
   const [hiddenRows, setHiddenRows] = createSignal<number>()
   const [visibleRowsEnd, setVisibleRowsEnd] = createSignal<number>()
-  const hidden = createMemo(() => Math.max(0, Math.min(hiddenRows() ?? Infinity, rows.length - TRANSCRIPT_TAIL_ROWS)))
+  const weights = createMemo(() =>
+    rows.map((row) =>
+      rowWeight(row, {
+        expanded: (groupID) => sessionTabs.groupExpanded(sessionID, groupID) ?? false,
+        grouped: (kind) => (kind === "reasoning" ? thinkingMode() === "hide" : groupExploration()),
+      }),
+    ),
+  )
+  const hidden = createMemo(() =>
+    Math.min(hiddenRows() ?? Infinity, rowsBefore(weights(), rows.length, TRANSCRIPT_TAIL_ROWS)),
+  )
   const visibleEnd = createMemo(() => Math.max(hidden(), Math.min(visibleRowsEnd() ?? rows.length, rows.length)))
   const visibleRows = createMemo(() => rows.slice(hidden(), visibleEnd()))
   const prependHistory = createHistoryPrepend({
     sessionID: () => route.sessionID,
     more: (id) => data.session.message.more(id),
-    loadMore: (id) => data.session.message.loadMore(id),
+    loadMore: async (id) => {
+      await data.session.message.loadMore(id)
+      await completeGroupBoundary({
+        rows,
+        messages: () => data.session.message.list(id).length,
+        more: () => data.session.message.more(id),
+        loadMore: () => data.session.message.loadMore(id),
+        active: () => route.sessionID === id,
+      })
+    },
     height: () => scroll.scrollHeight,
     afterLayout,
     active: (id) => route.sessionID === id && Boolean(scroll && !scroll.isDestroyed),
@@ -409,7 +434,7 @@ export function Session(props: {
     revealingOlderRows = true
     const before = scroll.scrollHeight
     scroll.stickyScroll = false
-    setHiddenRows(Math.max(0, current - TRANSCRIPT_BACKFILL_CHUNK))
+    setHiddenRows(rowsBefore(weights(), current, TRANSCRIPT_BACKFILL_CHUNK))
     afterLayout(() => {
       scroll.scrollBy(scroll.scrollHeight - before + scrollBy)
       scroll.stickyScroll = !navigationMessage()
@@ -429,7 +454,7 @@ export function Session(props: {
     )
       return false
     revealingNewerRows = true
-    const next = Math.min(rows.length, current + TRANSCRIPT_BACKFILL_CHUNK)
+    const next = rowsAfter(weights(), current, TRANSCRIPT_BACKFILL_CHUNK)
     setVisibleRowsEnd(next === rows.length ? undefined : next)
     afterLayout(() => {
       revealingNewerRows = false
@@ -458,7 +483,14 @@ export function Session(props: {
   }
 
   function isAwayFromBottom() {
-    if (revealingOlderRows || revealingNewerRows || ensureAllRowsPending || navigationMessage() || firstJump())
+    if (
+      revealingOlderRows ||
+      revealingNewerRows ||
+      ensureAllRowsPending ||
+      navigationMessage() ||
+      navigationSlack() ||
+      firstJump()
+    )
       return true
     if (visibleEnd() < rows.length) return true
     return scroll.scrollTop < Math.max(0, scroll.scrollHeight - scroll.viewport.height)
@@ -479,20 +511,31 @@ export function Session(props: {
       saveScrollAnchor()
     })
   }
-  function saveScrollAnchor() {
+  function saveScrollAnchor(unmounting = false) {
     // Initial layout must not overwrite the saved position before synchronization restores it.
     if (!restored) return
+    const mounted = anchors.list()
+    // Solid disposes child registrations before the route's cleanup. Keep the
+    // last scroll-event anchor once those children have gone away.
+    if (unmounting && !mounted.length) return
     if (!isAwayFromBottom()) {
       sessionTabs.setScrollAnchor(sessionID, undefined)
       return
     }
-    let first: { messageID: string; screenY: number } | undefined
-    let anchor: { messageID: string; screenY: number } | undefined
-    for (const child of scroll.getChildren()) {
-      if (!child.id || !boundaryIDs().has(child.id)) continue
-      const item = { messageID: child.id, screenY: child.y - scroll.viewport.y }
+    let first: ScrollAnchor | undefined
+    let anchor: ScrollAnchor | undefined
+    for (const child of mounted) {
+      const item = {
+        target: child.target,
+        screenY: child.node.y - scroll.viewport.y,
+      }
       first ??= item
-      if (item.screenY <= 0) anchor = item
+      const inset =
+        item.target.type === "group" ||
+        data.session.message.get(sessionID, item.target.ref.messageID)?.type === "assistant"
+          ? 1
+          : 0
+      if (item.screenY <= inset && (!anchor || item.screenY > anchor.screenY)) anchor = item
     }
     anchor ??= first
     if (anchor) sessionTabs.setScrollAnchor(sessionID, anchor)
@@ -500,19 +543,19 @@ export function Session(props: {
   }
   function restoreScrollPosition() {
     const anchor = sessionTabs.scrollAnchor(sessionID)
-    const index = anchor ? boundaries().indexOf(anchor.messageID) : -1
+    const index = anchor ? rows.findIndex((row) => containsAnchor(row, anchor.target)) : -1
     if (!anchor || index === -1) {
       scroll.scrollTo(scroll.scrollHeight)
       setAwayFromBottom(false)
       return
     }
-    setHiddenRows(Math.max(0, index - TRANSCRIPT_BACKFILL_CHUNK))
-    const end = Math.min(rows.length, index + TRANSCRIPT_BACKFILL_CHUNK)
+    setHiddenRows(rowsBefore(weights(), index, TRANSCRIPT_BACKFILL_CHUNK))
+    const end = rowsAfter(weights(), index, TRANSCRIPT_BACKFILL_CHUNK)
     setVisibleRowsEnd(end === rows.length ? undefined : end)
     scroll.stickyScroll = false
     const restore = () =>
       afterLayout(() => {
-        const boundary = scroll.getRenderable(anchor.messageID)
+        const boundary = anchors.get(anchor.target)
         if (!boundary) {
           sessionTabs.setScrollAnchor(sessionID, undefined)
           scroll.stickyScroll = true
@@ -520,12 +563,24 @@ export function Session(props: {
           setAwayFromBottom(false)
           return
         }
-        const contentY = scroll.scrollTop + boundary.y - scroll.viewport.y
+        const contentY = scroll.scrollTop + boundary.node.y - scroll.viewport.y
         const target = contentY - anchor.screenY
         const maximum = Math.max(0, scroll.scrollHeight - scroll.viewport.height)
         if (target > maximum && visibleEnd() < rows.length) {
-          const next = Math.min(rows.length, visibleEnd() + TRANSCRIPT_BACKFILL_CHUNK)
+          const next = rowsAfter(weights(), visibleEnd(), TRANSCRIPT_BACKFILL_CHUNK)
           setVisibleRowsEnd(next === rows.length ? undefined : next)
+          restore()
+          return
+        }
+        if (target > maximum) {
+          setNavigationSlack(
+            messageNavigationSlack({
+              top: target,
+              viewportHeight: scroll.viewport.height,
+              scrollHeight: scroll.scrollHeight,
+              currentSlack: scroll.getRenderable(NAVIGATION_SLACK_ID)?.height ?? 0,
+            }),
+          )
           restore()
           return
         }
@@ -621,7 +676,7 @@ export function Session(props: {
     ensureAllRows(() => {
       const target = findMessageBoundary({
         direction,
-        children: scroll.getChildren(),
+        children: anchors.messagePositions(),
         messages: messages(),
         scrollTop: scroll.scrollTop,
         viewportY: scroll.viewport.y,
@@ -630,7 +685,7 @@ export function Session(props: {
       })
 
       if (target) {
-        alignMessage(target.id, target.top)
+        jumpToMessage(target.id)
         dialog.clear()
         return
       }
@@ -643,9 +698,9 @@ export function Session(props: {
 
   const jumpToMessage = (messageID: string) =>
     ensureAllRows(() => {
-      const child = scroll.getRenderable(messageID)
+      const child = anchors.forMessage(messageID)
       if (!child) return
-      const y = scroll.scrollTop + child.y - scroll.viewport.y
+      const y = scroll.scrollTop + child.node.y - scroll.viewport.y
       const message = data.session.message.get(route.sessionID, messageID)
       alignMessage(messageID, Math.max(0, y - (message?.type === "assistant" ? 1 : 0)))
     })
@@ -1102,8 +1157,9 @@ export function Session(props: {
         try {
           const sessionData = session()
           if (!sessionData) return
-          const transcript = formatSessionTranscript(sessionData, messages(), true)
-          await clipboard.write(transcript)
+          const transcript = await client.api.session.export({ sessionID: sessionData.id })
+          const content = formatSessionTranscript(transcript.info, transcript.messages, true)
+          await clipboard.write(content)
           toast.show({ message: "Session transcript copied to clipboard!", variant: "success" })
         } catch {
           toast.show({ message: "Failed to copy session transcript", variant: "error" })
@@ -1127,14 +1183,14 @@ export function Session(props: {
 
           if (options === null) return
 
+          const transcript = await client.api.session.export({
+            sessionID: sessionData.id,
+            sanitize: options.format === "json" ? options.sanitize : undefined,
+          })
           const content =
             options.format === "markdown"
-              ? formatSessionTranscript(sessionData, messages(), options.thinking, options.tools)
-              : JSON.stringify(
-                  await client.api.session.export({ sessionID: sessionData.id, sanitize: options.sanitize }),
-                  null,
-                  2,
-                ) + EOL
+              ? formatSessionTranscript(transcript.info, transcript.messages, options.thinking, options.tools)
+              : JSON.stringify(transcript, null, 2) + EOL
 
           if (options.action === "copy") {
             await clipboard.write(content)
@@ -1245,6 +1301,12 @@ export function Session(props: {
   return (
     <context.Provider
       value={{
+        anchors,
+        groupExpanded: (groupID) => sessionTabs.groupExpanded(sessionID, groupID),
+        setGroupExpanded: (groupID, expanded) => {
+          sessionTabs.setGroupExpanded(sessionID, groupID, expanded)
+          afterLayout(saveScrollAnchor)
+        },
         get width() {
           return contentWidth()
         },
@@ -1296,7 +1358,7 @@ export function Session(props: {
                     foregroundColor: theme.border.base,
                   },
                 }}
-                stickyScroll={!navigationMessage()}
+                stickyScroll={!navigationMessage() && !navigationSlack()}
                 stickyStart="bottom"
                 flexGrow={1}
                 scrollAcceleration={scrollAcceleration()}
@@ -1431,53 +1493,63 @@ type SessionRowViewProps = {
 }
 
 function SessionRowView(props: SessionRowViewProps) {
+  const [target, setTarget] = createSignal<BoxRenderable>()
+  useEntryAnchor({
+    entry: () => (props.row.type === "group" ? undefined : props.row),
+    node: target,
+  })
   return (
-    <box id={sessionRowID(props.row, props.boundaryID)} marginTop={1} flexShrink={0}>
+    <box ref={setTarget} id={sessionRowID(props.row, props.boundaryID)} marginTop={1} flexShrink={0}>
       <Switch>
-        <Match when={props.row.type === "message" ? props.row : undefined}>
-          {(row) => (
-            <Show when={props.message(row().messageID)}>{(message) => <SessionMessageView message={message()} />}</Show>
-          )}
-        </Match>
-        <Match when={props.row.type === "compaction-queued"}>
-          <CompactionQueued />
-        </Match>
-        <Match when={props.row.type === "part" ? props.row : undefined}>
-          {(row) => <SessionPartView partRef={row().ref} message={props.message} />}
-        </Match>
-        <Match when={props.row.type === "group" && props.row.kind === "reasoning" ? props.row : undefined}>
-          {(row) => (
-            <SessionReasoningGroupView refs={groupRefs(row())} completed={row().completed} message={props.message} />
-          )}
-        </Match>
-        <Match when={props.row.type === "group" && props.row.kind === "exploration" ? props.row : undefined}>
+        <Match when={props.row.type === "group" ? props.row : undefined}>
           {(row) => (
             <SessionGroupView
-              refs={groupRefs(row())}
-              pending={row().pending}
-              completed={row().completed}
+              row={row()}
               message={props.message}
+              entry={(entry, images) => <SessionEntryView row={entry} message={props.message} images={images} />}
+              images={(parts) => <ToolImages parts={parts} />}
             />
           )}
         </Match>
-        <Match when={props.row.type === "assistant-footer" ? props.row : undefined}>
-          {(row) => (
-            <Show when={props.message(row().messageID)}>
-              {(message) => (
-                <Show when={message().type === "assistant"}>
-                  <AssistantFooter message={message() as SessionMessageAssistant} />
-                </Show>
-              )}
-            </Show>
-          )}
-        </Match>
-        <Match when={props.row.type === "turn-usage" ? props.row : undefined}>
-          {(row) => (
-            <TurnTokenUsage messageIDs={row().messageIDs} previousCache={row().previousCache} message={props.message} />
-          )}
+        <Match when={props.row.type !== "group" ? props.row : undefined}>
+          {(row) => <SessionEntryView row={row()} message={props.message} />}
         </Match>
       </Switch>
     </box>
+  )
+}
+
+function SessionEntryView(props: { row: SessionEntry; message: SessionRowViewProps["message"]; images?: boolean }) {
+  return (
+    <Switch>
+      <Match when={props.row.type === "message" ? props.row : undefined}>
+        {(row) => (
+          <Show when={props.message(row().messageID)}>{(message) => <SessionMessageView message={message()} />}</Show>
+        )}
+      </Match>
+      <Match when={props.row.type === "compaction-queued"}>
+        <CompactionQueued />
+      </Match>
+      <Match when={props.row.type === "part" ? props.row : undefined}>
+        {(row) => <SessionPartView partRef={row().ref} message={props.message} images={props.images} />}
+      </Match>
+      <Match when={props.row.type === "assistant-footer" ? props.row : undefined}>
+        {(row) => (
+          <Show when={props.message(row().messageID)}>
+            {(message) => (
+              <Show when={message().type === "assistant"}>
+                <AssistantFooter message={message() as SessionMessageAssistant} />
+              </Show>
+            )}
+          </Show>
+        )}
+      </Match>
+      <Match when={props.row.type === "turn-usage" ? props.row : undefined}>
+        {(row) => (
+          <TurnTokenUsage messageIDs={row().messageIDs} previousCache={row().previousCache} message={props.message} />
+        )}
+      </Match>
+    </Switch>
   )
 }
 
@@ -1530,11 +1602,12 @@ function TurnTokenUsage(props: {
   }))
   const summary = createMemo(() => {
     const items = steps()
+    const latest = items.at(-1)
     return {
       count: items.length,
-      newTokens: items.reduce((sum, item) => sum + item.newTokens, 0),
-      cached: items.reduce((sum, item) => sum + item.cached, 0),
-      total: items.reduce((sum, item) => sum + item.total, 0),
+      latestNewTokens: latest?.newTokens ?? 0,
+      latestCached: latest?.cached ?? 0,
+      latestTotal: latest?.total ?? 0,
       reuseDrops: items.filter((item) => item.reuseDrop !== undefined).length,
     }
   })
@@ -1554,8 +1627,9 @@ function TurnTokenUsage(props: {
             <span>{expanded() ? "- " : "+ "}</span>
             <span style={{ attributes: TextAttributes.BOLD }}>Tokens</span>
             <span>
-              : {summary().count} {summary().count === 1 ? "step" : "steps"} · {summary().newTokens.toLocaleString()}{" "}
-              new · {summary().cached.toLocaleString()} cached · {summary().total.toLocaleString()} total
+              : {summary().count} {summary().count === 1 ? "step" : "steps"} · latest:{" "}
+              {summary().latestNewTokens.toLocaleString()} new · {summary().latestCached.toLocaleString()} cached ·{" "}
+              {summary().latestTotal.toLocaleString()} total
             </span>
             <Show when={summary().reuseDrops > 0}>
               <span style={{ fg: theme.text.feedback.warning.base }}>
@@ -1705,7 +1779,11 @@ function SessionMessageView(props: { message: SessionMessageInfo }) {
   )
 }
 
-function SessionPartView(props: { partRef: PartRef; message: (messageID: string) => SessionMessageInfo | undefined }) {
+function SessionPartView(props: {
+  partRef: PartRef
+  message: (messageID: string) => SessionMessageInfo | undefined
+  images?: boolean
+}) {
   const message = createMemo(() => props.message(props.partRef.messageID))
   const part = createMemo(() => {
     const item = message()
@@ -1731,202 +1809,10 @@ function SessionPartView(props: { partRef: PartRef; message: (messageID: string)
             />
           </Match>
           <Match when={item().type === "tool"}>
-            <ToolPart part={item() as SessionMessageAssistantTool} />
+            <ToolPart part={item() as SessionMessageAssistantTool} images={props.images} />
           </Match>
         </Switch>
       )}
-    </Show>
-  )
-}
-
-function SessionReasoningGroupView(props: {
-  refs: PartRef[]
-  completed: boolean
-  message: (messageID: string) => SessionMessageInfo | undefined
-}) {
-  const ctx = use()
-  const theme = useTheme()
-  const { currentSyntax: syntax } = useThemes()
-  const thinkingSyntax = createSyntaxStyleMemo(() => generateThinkingSyntax(syntax(), theme.text.muted))
-  const renderer = useRenderer()
-  const [expanded, setExpanded] = createSignal(false)
-  const [hover, setHover] = createSignal(false)
-  const parts = createMemo(() =>
-    props.refs.flatMap((ref) => {
-      const message = props.message(ref.messageID)
-      if (message?.type !== "assistant") return []
-      const part = resolvePart(message, ref.partID)
-      if (part?.type !== "reasoning" || !reasoningContent(part)) return []
-      return [{ message, part }]
-    }),
-  )
-  const latest = createMemo((previous: string | null) => {
-    const item = parts().at(-1)
-    if (!item) return previous
-    const title = reasoningSummary(reasoningContent(item.part)).title
-    if (title) return title
-    if (item.part.time?.completed !== undefined || item.message.time.completed !== undefined) return null
-    return previous
-  }, null)
-  const duration = createMemo(() =>
-    parts().reduce((total, item) => {
-      const start = item.part.time?.created
-      const end = item.part.time?.completed
-      return total + (start === undefined || end === undefined ? 0 : Math.max(0, end - start))
-    }, 0),
-  )
-
-  return (
-    <Show when={parts().length > 0}>
-      <Show
-        when={ctx.thinkingMode() === "hide"}
-        fallback={<For each={props.refs}>{(ref) => <SessionPartView partRef={ref} message={props.message} />}</For>}
-      >
-        <box flexDirection="column" flexShrink={0}>
-          <InlineToolRow
-            icon={expanded() ? "-" : "+"}
-            color={
-              !props.completed
-                ? theme.text.base
-                : hover() || expanded()
-                  ? theme.text.feedback.warning.base
-                  : RGBA.fromValues(
-                      theme.text.feedback.warning.base.r,
-                      theme.text.feedback.warning.base.g,
-                      theme.text.feedback.warning.base.b,
-                      0.6,
-                    )
-            }
-            complete={props.completed}
-            pending={latest() ? `Thinking: ${latest()}` : "Thinking"}
-            spinner={!props.completed}
-            onMouseOver={() => setHover(true)}
-            onMouseOut={() => setHover(false)}
-            onMouseUp={() => {
-              if (renderer.getSelection()?.getSelectedText()) return
-              setExpanded((value) => !value)
-            }}
-          >
-            {props.completed ? "Thought" : latest() ? `Thinking: ${latest()}` : "Thinking"}
-            <Show when={props.completed && !expanded() && latest()}>: {latest()}</Show>
-            <Show when={props.completed && parts().length > 1}> · {parts().length} steps</Show>
-            <Show when={props.completed && duration()}> · {Locale.duration(duration())}</Show>
-          </InlineToolRow>
-          <Show when={expanded()}>
-            <box paddingLeft={3}>
-              <For each={props.refs}>
-                {(ref) => {
-                  const message = createMemo(() => {
-                    const item = props.message(ref.messageID)
-                    return item?.type === "assistant" ? item : undefined
-                  })
-                  const part = createMemo(() => {
-                    const item = message()
-                    if (!item) return undefined
-                    const part = resolvePart(item, ref.partID)
-                    return part?.type === "reasoning" ? part : undefined
-                  })
-                  const content = createMemo(() => {
-                    const item = part()
-                    return item ? reasoningContent(item) : ""
-                  })
-                  return (
-                    <Show when={content()}>
-                      <box marginTop={1}>
-                        <box
-                          border={["left"]}
-                          customBorderChars={SplitBorder.customBorderChars}
-                          borderColor={theme.decrease(theme.background.raised.base)}
-                          paddingLeft={1}
-                        >
-                          <code
-                            filetype="markdown"
-                            drawUnstyledText={false}
-                            streaming={part()?.time?.completed === undefined && message()?.time.completed === undefined}
-                            syntaxStyle={thinkingSyntax()}
-                            content={content()}
-                            conceal={ctx.markdownMode() === "rendered"}
-                            fg={theme.text.muted}
-                          />
-                        </box>
-                      </box>
-                    </Show>
-                  )
-                }}
-              </For>
-            </box>
-          </Show>
-        </box>
-      </Show>
-    </Show>
-  )
-}
-
-function SessionGroupView(props: {
-  refs: PartRef[]
-  pending: PartRef[]
-  completed: boolean
-  message: (messageID: string) => SessionMessageInfo | undefined
-}) {
-  const theme = useTheme()
-  const ctx = use()
-  const renderer = useRenderer()
-  const [expanded, setExpanded] = createSignal(false)
-  const [hover, setHover] = createSignal(false)
-  const parts = (refs: PartRef[]) =>
-    refs.flatMap((ref) => {
-      const message = props.message(ref.messageID)
-      if (message?.type !== "assistant") return []
-      const part = resolvePart(message, ref.partID)
-      if (part?.type !== "tool") return []
-      return [part]
-    })
-  const grouped = createMemo(() => parts(props.refs))
-  const pending = createMemo(() => parts(props.pending))
-  const completed = createMemo(
-    () => props.completed || (grouped().length > 0 && grouped().every((part) => part.time.completed !== undefined)),
-  )
-  const label = createMemo(() => {
-    const counts = grouped().reduce<Record<string, number>>((result, part) => {
-      const tool = toolDisplay(part.name)
-      const name = tool === "grep" || tool === "glob" ? "search" : tool
-      result[name] = (result[name] ?? 0) + 1
-      return result
-    }, {})
-    const tools = Object.entries(counts).map(
-      ([name, count]) => `${count} ${count === 1 ? name : name === "search" ? "searches" : `${name}s`}`,
-    )
-    return `${completed() ? "Explored" : "Exploring"} — ${tools.join(", ")}`
-  })
-  return (
-    <Show when={grouped().length > 0 || pending().length > 0}>
-      <Show
-        when={ctx.groupExploration()}
-        fallback={<For each={[...grouped(), ...pending()]}>{(part) => <ToolPart part={part} />}</For>}
-      >
-        <Show when={grouped().length > 0}>
-          <InlineToolRow
-            icon={completed() ? "→" : "✱"}
-            color={hover() ? theme.text.base : theme.text.muted}
-            complete={completed()}
-            pending={label()}
-            spinner={!completed()}
-            onMouseOver={() => setHover(true)}
-            onMouseOut={() => setHover(false)}
-            onMouseUp={() => {
-              if (renderer.getSelection()?.getSelectedText()) return
-              setExpanded((value) => !value)
-            }}
-          >
-            {label()}
-          </InlineToolRow>
-        </Show>
-        <Show when={expanded() && grouped().length > 0}>
-          <For each={grouped()}>{(part) => <ToolPart part={part} images={false} />}</For>
-        </Show>
-        <ToolImages parts={grouped()} />
-        <For each={pending()}>{(part) => <ToolPart part={part} />}</For>
-      </Show>
     </Show>
   )
 }
@@ -2698,6 +2584,7 @@ function InlineTool(props: {
   children: JSX.Element
   part: SessionMessageAssistantTool
   onClick?: () => void
+  onErrorClick?: () => void
 }) {
   const theme = useTheme()
   const renderer = useRenderer()
@@ -2747,6 +2634,7 @@ function InlineTool(props: {
       onMouseUp={() => {
         if (renderer.getSelection()?.getSelectedText()) return
         if (failed()) {
+          if (props.onErrorClick) return props.onErrorClick()
           setErrorExpanded((value) => !value)
           return
         }
@@ -3290,6 +3178,7 @@ function Execute(props: ToolProps) {
   const hasRuntimeError = createMemo(() => props.metadata.error === true || props.part.state.status === "error")
   const outputPreview = createMemo(() => collapseToolOutput(output(), 4, 4 * Math.max(20, ctx.width - 6)).output)
   const showOutput = createMemo(() => output() && hasRuntimeError())
+  const openDetails = () => dialog.replace(() => <DialogExecute part={props.part} />)
 
   return (
     <>
@@ -3300,7 +3189,8 @@ function Execute(props: ToolProps) {
         pending="execute"
         complete={true}
         part={props.part}
-        onClick={() => dialog.replace(() => <DialogExecute part={props.part} />)}
+        onClick={openDetails}
+        onErrorClick={openDetails}
       >
         execute
       </InlineTool>
@@ -3580,32 +3470,16 @@ function stringValue(value: unknown) {
   return typeof value === "string" ? value : undefined
 }
 
-const toolDisplays = new Set([
-  "shell",
-  "glob",
-  "read",
-  "grep",
-  "webfetch",
-  "websearch",
-  "write",
-  "edit",
-  "subagent",
-  "execute",
-  "patch",
-  "question",
-  "skill",
-])
-
-export function toolDisplay(tool: string) {
-  const normalized = canonicalToolName(tool)
-  return toolDisplays.has(normalized) ? normalized : "generic"
-}
-
 function recordValue(value: unknown): Record<string, unknown> | undefined {
   return isRecord(value) ? value : undefined
 }
 
-function formatSessionTranscript(session: SessionInfo, messages: SessionMessageInfo[], thinking: boolean, tools = true) {
+function formatSessionTranscript(
+  session: SessionInfo,
+  messages: SessionMessageInfo[],
+  thinking: boolean,
+  tools = true,
+) {
   const body = messages.flatMap((message) => {
     if (message.type === "user") return [`## User\n\n${message.text}`]
     if (message.type === "shell")

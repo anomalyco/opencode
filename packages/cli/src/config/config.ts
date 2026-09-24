@@ -7,7 +7,7 @@ import { produce, type Draft } from "immer"
 import { applyEdits, modify, parse, type ParseError } from "jsonc-parser"
 import path from "path"
 import { ConfigMigration } from "./migrate"
-import { Info, SchemaURL } from "./schema"
+import { Info, normalizeLegacyTabs, SchemaURL } from "./schema"
 
 export * from "./schema"
 
@@ -119,7 +119,7 @@ function merge(...values: readonly (Info | undefined)[]) {
   return Option.getOrElse(
     decode(
       values.reduce<Record<string, unknown>>(
-        (result, value) => mergeRecords(result, value ?? {}),
+        (result, value) => mergeRecords(result, normalizeLegacyTabs(value) ?? {}),
         {},
       ),
     ),

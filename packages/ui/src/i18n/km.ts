@@ -70,7 +70,7 @@ export const dict = {
   "ui.sessionTurn.error.addCredits": "បន្ថែមក្រេឌីត",
   "dialog.usageExceeded.freeTier.title": "បានដល់ដែនកំណត់ឥតគិតថ្លៃ",
   "dialog.usageExceeded.freeTier.description":
-    "ជាវ OpenCode Go សម្រាប់ការចូលប្រើដែលអាចទុកចិត្តបានចំពោះម៉ូដែលប្រភពបើកចំហល្អបំផុត ដោយចាប់ផ្តើមពី $5/ខែ។",
+    "ជាវ OpenCode Go ក្នុងតម្លៃ $10/ខែ សម្រាប់ការចូលប្រើដែលអាចទុកចិត្តបានចំពោះម៉ូដែលប្រភពបើកចំហល្អបំផុត។",
   "dialog.usageExceeded.freeTier.actionLabel": "ជាវ",
   "dialog.usageExceeded.accountRateLimit.title": "ឈានដល់កម្រិតកំណត់",
   "dialog.usageExceeded.accountRateLimit.description":

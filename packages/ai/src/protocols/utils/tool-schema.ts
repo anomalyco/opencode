@@ -9,12 +9,24 @@ const tupleItemsSchema = (items: ReadonlyArray<unknown>) => {
   return { anyOf: projected }
 }
 
+// Moonshot rejects an `enum` without a sibling `type`. Its `type` may be one type, or one type plus "null".
+const enumType = (values: ReadonlyArray<unknown>) => {
+  const types = [
+    ...new Set(values.map((value) => (value === null ? "null" : Array.isArray(value) ? "array" : typeof value))),
+  ]
+  if (types.length === 1) return types[0]
+  if (types.length === 2 && types.includes("null")) return [...types.filter((type) => type !== "null"), "null"]
+  return undefined
+}
+
 const moonshotNode = (schema: unknown): unknown => {
   if (Array.isArray(schema)) return schema.map(moonshotNode)
   if (!isRecord(schema)) return schema
   if (typeof schema.$ref === "string") return { $ref: schema.$ref }
-  return Object.fromEntries(
-    Object.entries(schema).flatMap(([key, value]) => {
+  const type = schema.type === undefined && Array.isArray(schema.enum) ? enumType(schema.enum) : undefined
+  return Object.fromEntries([
+    ...(type === undefined ? [] : [["type", type]]),
+    ...Object.entries(schema).flatMap(([key, value]) => {
       if (key === "items" && Array.isArray(value)) return [[key, tupleItemsSchema(value)]]
       if (key === "prefixItems") {
         if ("items" in schema) return []
@@ -23,7 +35,7 @@ const moonshotNode = (schema: unknown): unknown => {
       if (key === "unevaluatedItems") return []
       return [[key, moonshotNode(value)]]
     }),
-  )
+  ])
 }
 
 const moonshot = (schema: JsonSchema): JsonSchema => {

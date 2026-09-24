@@ -9,6 +9,7 @@ export interface MockServerConfig {
   server?: string
   provider: unknown | (() => unknown)
   integrationMethods?: Record<string, unknown[]>
+  integrations?: unknown[]
   onConnectKey?: (input: { integrationID: string; body: unknown }) => void
   shells?: unknown[]
   configEntries?: unknown[]
@@ -42,6 +43,7 @@ export interface MockServerConfig {
   sessionStatus?: Record<string, unknown> | (() => Record<string, unknown>)
   inbox?: unknown[] | (() => unknown[])
   onPrompt?: (input: { sessionID: string; body: Record<string, unknown> }) => void
+  generate?: (input: { sessionID: string; prompt: string }) => { text: string } | Promise<{ text: string }>
   onInboxChange?: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" | "queue" }) => void
 }
 
@@ -257,11 +259,13 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
         model: () => Effect.succeed({ location: location(config), data: currentModels(providerConfig(config)) }),
         modelDefault: () =>
           Effect.succeed({ location: location(config), data: currentDefaultModel(providerConfig(config)) }),
-        integrationList: () => Effect.succeed({ location: location(config), data: [] }),
+        integrationList: () => Effect.succeed({ location: location(config), data: config.integrations ?? [] }),
         integrationGet: (ctx) =>
           Effect.succeed({
             location: location(config),
-            data: {
+            data: config.integrations
+              ?.filter(record)
+              .find((integration) => integration.id === ctx.params.integrationID) ?? {
               id: ctx.params.integrationID,
               name: ctx.params.integrationID,
               methods: config.integrationMethods?.[ctx.params.integrationID] ?? [{ type: "key", label: "API key" }],
@@ -456,6 +460,12 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
               },
             }
           }),
+        sessionGenerate: (ctx) =>
+          Effect.promise(async () => ({
+            data: (await config.generate?.({ sessionID: ctx.params.sessionID, prompt: ctx.payload.prompt })) ?? {
+              text: "Side-question answer",
+            },
+          })),
         sessionInboxCancel: (ctx) =>
           Effect.sync(() =>
             config.onInboxChange?.({ sessionID: ctx.params.sessionID, inboxID: ctx.params.inboxID, action: "cancel" }),

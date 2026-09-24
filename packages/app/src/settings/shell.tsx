@@ -3,9 +3,9 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { createEffect, createMemo, on, onCleanup, onMount, Show, Switch, Match, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
+import { usePlatform } from "@/runtime/platform/platform"
 import { useLayout } from "@/shell/state/layout"
 import { useTabs } from "@/shell/tabs/tabs"
-import { displayName } from "@/shell/layout/helpers"
 import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
 import { ServerConnection } from "@/runtime/server/registry"
 import type { LocalProject } from "@/shell/state/layout"
@@ -18,6 +18,7 @@ import { SettingsAppearance } from "./appearance/appearance"
 import { SettingsExperimental } from "./experimental/experimental"
 import { SettingsKeybinds } from "./keybinds/keybinds"
 import { SettingsNotifications } from "./notifications/notifications"
+import { SettingsPairing } from "./pairing/pairing"
 import { SettingsProviders } from "./providers/providers"
 import { SettingsModels } from "./models/models"
 import { SettingsServerGeneral } from "./servers/servers"
@@ -41,6 +42,7 @@ const rootClientTabs = [
   { value: "appearance", icon: pageIcons.appearance, label: "settings.general.section.appearance" },
   { value: "notifications", icon: pageIcons.notifications, label: "settings.tab.notifications" },
   { value: "shortcuts", icon: pageIcons.shortcuts, label: "settings.tab.shortcuts" },
+  { value: "pairing", icon: pageIcons.pairing, label: "settings.pairing.title" },
 ] as const
 
 const serverTabs = [
@@ -187,7 +189,11 @@ function RootSettings() {
   const tabs = useTabs()
   const servers = useServerCollectionController()
   const inventory = useSettingsServers()
-  const [state, setState] = createStore({ worktreeFilterReset: 0 })
+  const platform = usePlatform()
+  const [state, setState] = createStore({
+    worktreeFilterReset: 0,
+    modelProvider: undefined as string | undefined,
+  })
   const list = servers.collection.items
   const singleEntry = createMemo(() => (inventory().length === 1 ? inventory()[0] : undefined))
   const single = createMemo(() => singleEntry()?.connection)
@@ -216,7 +222,11 @@ function RootSettings() {
       <DialogServer mode="add" onSave={(server) => surface.openServer(ServerConnection.key(server))} />
     ))
   const groups = createMemo<SettingsNavGroup[]>(() => [
-    { items: rootClientTabs.map((item) => ({ ...item, label: language.t(item.label) })) },
+    {
+      items: rootClientTabs
+        .filter((item) => item.value !== "pairing" || !!platform.pair)
+        .map((item) => ({ ...item, label: language.t(item.label) })),
+    },
     ...(multiple()
       ? [
           {
@@ -282,6 +292,9 @@ function RootSettings() {
       <Tabs.Content value="shortcuts" class="settings-panel">
         <SettingsKeybinds active={surface.view().tab === "shortcuts"} autofocus={!surface.search.state.selected} />
       </Tabs.Content>
+      <Tabs.Content value="pairing" class="settings-panel">
+        <SettingsPairing />
+      </Tabs.Content>
       <Tabs.Content value="experimental" class="settings-panel">
         <SettingsExperimental />
       </Tabs.Content>
@@ -309,10 +322,21 @@ function RootSettings() {
               />
             </Tabs.Content>
             <Tabs.Content value="providers" class="settings-panel">
-              <SettingsProviders directory={undefined} onBack={() => surface.select("providers")} />
+              <SettingsProviders
+                directory={undefined}
+                onSelectProvider={(providerID) => {
+                  setState("modelProvider", providerID)
+                  surface.select("models")
+                }}
+              />
             </Tabs.Content>
             <Tabs.Content value="models" class="settings-panel">
-              <SettingsModels active={surface.view().tab === "models"} autofocus={!surface.search.state.selected} />
+              <SettingsModels
+                active={surface.view().tab === "models"}
+                autofocus={!surface.search.state.selected}
+                provider={state.modelProvider}
+                onReveal={() => setState("modelProvider", undefined)}
+              />
             </Tabs.Content>
             <Tabs.Content value="extensions" class="settings-panel">
               <SettingsExtensions subtab={surface.view().subtab} onSubtab={(value) => surface.subtab(value)} />
@@ -336,7 +360,10 @@ function ServerSettings(props: { entry: SettingsServer }) {
   const surface = useSettingsSurface()
   const activeDirectory = useSettingsDirectory(() => props.entry.connection)
   const prefetchWorkspaces = useWorkspacesPrefetch(() => props.entry.connection)
-  const [state, setState] = createStore({ worktreeFilterReset: 0 })
+  const [state, setState] = createStore({
+    worktreeFilterReset: 0,
+    modelProvider: undefined as string | undefined,
+  })
   const groups = createMemo<SettingsNavGroup[]>(() => [
     {
       items: nestedServerTabs.map((item) => ({
@@ -391,10 +418,20 @@ function ServerSettings(props: { entry: SettingsServer }) {
               />
             </Tabs.Content>
             <Tabs.Content value="providers" class="settings-panel">
-              <SettingsProviders directory={undefined} onBack={() => surface.select("providers")} />
+              <SettingsProviders
+                directory={undefined}
+                onSelectProvider={(providerID) => {
+                  setState("modelProvider", providerID)
+                  surface.select("models")
+                }}
+              />
             </Tabs.Content>
             <Tabs.Content value="models" class="settings-panel">
-              <SettingsModels active={surface.view().tab === "models"} />
+              <SettingsModels
+                active={surface.view().tab === "models"}
+                provider={state.modelProvider}
+                onReveal={() => setState("modelProvider", undefined)}
+              />
             </Tabs.Content>
             <Tabs.Content value="extensions" class="settings-panel">
               <SettingsExtensions subtab={surface.view().subtab} onSubtab={(value) => surface.subtab(value)} />
@@ -418,10 +455,8 @@ function ProjectSettings(props: { server: ServerConnection.Any; project: LocalPr
     {
       items: nestedProjectTabs.map((item) => ({
         ...item,
+        label: language.t(item.label),
         onPrefetch: item.value === "workspaces" ? prefetchWorkspaces : undefined,
-        get label() {
-          return item.value === "general" ? displayName(props.project) : language.t(item.label)
-        },
       })),
     },
   ]
@@ -440,6 +475,7 @@ function ProjectSettings(props: { server: ServerConnection.Any; project: LocalPr
               server={props.server}
               project={props.project}
               onOpenServer={() => surface.replaceServer(ServerConnection.key(props.server))}
+              onClose={() => surface.back()}
             />
           </Tabs.Content>
           <Tabs.Content value="workspaces" class="settings-panel">

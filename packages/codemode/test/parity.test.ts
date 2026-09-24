@@ -218,6 +218,19 @@ describe("property deletion", () => {
     ).toEqual([true, true, { keep: 1 }])
   })
 
+  test("a non-reference operand is evaluated and the result is true; a variable cannot be deleted", async () => {
+    expect(
+      await value(`
+        let called = false
+        const results = [delete 0, delete null, delete { x: 1 }, delete void 0, delete (() => { called = true })()]
+        let variable = 1
+        let failure
+        try { delete variable } catch (error) { failure = error.constructor.name }
+        return [results, called, failure]
+      `),
+    ).toEqual([[true, true, true, true, true], true, "TypeError"])
+  })
+
   test("evaluates computed object and key expressions once", async () => {
     expect(
       await value(`
@@ -502,6 +515,12 @@ describe("CodeMode-specific array behavior", () => {
     expect(err.message).toContain("circular")
   })
 
+  test("indexOf and lastIndexOf with no argument search for undefined", async () => {
+    expect(await value(`return [1, undefined, 3].indexOf()`)).toBe(1)
+    expect(await value(`return [1, undefined, 3].lastIndexOf()`)).toBe(1)
+    expect(await value(`return [1, 2, 3].indexOf()`)).toBe(-1)
+  })
+
   test("keys/values/entries return iterators usable with for...of and spread", async () => {
     expect(await value(`return [...["x","y","z"].keys()]`)).toEqual([0, 1, 2])
     expect(await value(`return [...["x","y"].values()]`)).toEqual(["x", "y"])
@@ -765,9 +784,17 @@ describe("destructuring assignment", () => {
     ).toEqual({ declared: "a", declarationRest: { 1: "b" }, assigned: "c", assignmentRest: { 1: "d" } })
   })
 
-  test("rejects computed keys that are not confined property keys", async () => {
-    const err = await error(`const key = {}; const { [key]: value } = {}`)
-    expect(err.message).toContain("Property key must be a string or number")
+  test("computed keys of any type become their string form, as in JS", async () => {
+    expect(
+      await value(`
+        const counts = {}
+        for (const category of ["a", null, undefined, "a", true, 1.5]) counts[category] = (counts[category] ?? 0) + 1
+        const key = {}
+        const { [key]: value } = { "[object Object]": 7 }
+        const o = { null: 1, "1,2": 2 }
+        return [counts, value, o[null], o[[1, 2]], undefined in o]
+      `),
+    ).toEqual([{ a: 2, null: 1, undefined: 1, true: 1, "1.5": 1 }, 7, 1, 2, false])
   })
 })
 
@@ -809,6 +836,36 @@ describe("coercion parity: global isFinite and isNaN", () => {
   test("work as array callbacks", async () => {
     expect(await value(`return [1, "2", "x", Infinity].filter(isFinite)`)).toEqual([1, "2"])
     expect(await value(`return ["1", "x"].map(isNaN)`)).toEqual([false, true])
+  })
+})
+
+describe("coercion parity: built-in arguments coerce as in JS", () => {
+  test("numeric arguments apply ToIntegerOrInfinity", async () => {
+    expect(
+      await value(`
+        return [
+          [1, 2, 3].indexOf(2, "1"), [1, 2, 3].lastIndexOf(3, "5"), [1, 2, 3].includes(1, "1"),
+          [1, 2, 3, 4].slice("1", "3"), [1, 2, 3].at(null), [1, 2, 3].at(1.7),
+          [1, [2, [3]]].flat(1.9), [1, 2, 3].with(1.5, 9), [1, 2, 3, 4].splice("1", "2"),
+          Math.max("3", "2"), Math.floor(null), Math.hypot("3", "4"),
+          parseInt("11", "2"), Number.parseInt("ff", "16"), (1.5).toFixed("2"), (255).toString("16"),
+          String.fromCharCode("65", 66.9), new Uint8Array([1, 2, 3]).indexOf(2, "1"),
+        ]
+      `),
+    ).toEqual([1, 2, false, [2, 3], 1, 2, [1, 2, [3]], [1, 9, 3], [2, 3], 3, 0, 5, 3, 255, "1.50", "ff", "AB", 1])
+  })
+
+  test("join separators, JSON.parse text, and Array.from length coerce", async () => {
+    expect(
+      await value(`
+        return [
+          [1, 2].join(null), [1, 2].join(0), [1, 2].join(undefined), new Uint8Array([1, 2]).join(null),
+          JSON.parse(123), JSON.parse(true),
+          Array.from({ length: "2" }), Array.from({ length: 2.5 }), Array.from({ length: -1 }), Array.from({}),
+        ]
+      `),
+    ).toEqual(["1null2", "102", "1,2", "1null2", 123, true, [null, null], [null, null], [], []])
+    expect((await error(`return JSON.parse(undefined)`)).message).toContain("JSON")
   })
 })
 
@@ -907,7 +964,7 @@ describe("coercion parity: unknown static members read as undefined", () => {
     expect(await value(`return typeof Math.sum`)).toBe("undefined")
     expect(await value(`return RegExp.quote === undefined`)).toBe(true)
     expect(await value(`return Number.range === undefined`)).toBe(true)
-    expect(await value(`return String.raw === undefined`)).toBe(true)
+    expect(await value(`return String.dedent === undefined`)).toBe(true)
     expect(await value(`return isFinite.something === undefined`)).toBe(true)
     expect(await value(`return console.group === undefined`)).toBe(true)
     expect(await value(`return Date.moment === undefined`)).toBe(true)
@@ -940,6 +997,12 @@ describe("coercion parity: unknown static members read as undefined", () => {
     expect(await value(`try { JSON.rawJSON("1") } catch (e) { return e.message }`)).toBe(
       "JSON.rawJSON is not a function.",
     )
+    expect(await value(`try { search({ query: "star" }).catch(() => 1) } catch (e) { return e.message }`)).toBe(
+      "search(...).catch is not a function.",
+    )
+    expect(
+      await value(`const foo = () => ({ bar: () => ({}) }); try { foo().bar().baz() } catch (e) { return e.message }`),
+    ).toBe("foo(...).bar(...).baz is not a function.")
   })
 
   test("built-ins are objects on a real prototype chain", async () => {
@@ -958,6 +1021,17 @@ describe("coercion parity: unknown static members read as undefined", () => {
         ]
       `),
     ).toEqual([true, true, true, "push", 1, 2, [], "function", true])
+  })
+})
+
+describe("async function line breaks", () => {
+  test("a line break between function and the name is an async function", async () => {
+    expect(await value(`async function\nfoo() { return 1 }\nreturn await foo()`)).toBe(1)
+  })
+
+  test("a line break between async and function is not an async function", async () => {
+    const failure = await error(`async\nfunction foo() { return 1 }\nreturn foo()`)
+    expect(failure.message).toContain("Unknown identifier 'async'")
   })
 })
 
@@ -1003,5 +1077,104 @@ describe("functions are objects", () => {
         return [fn.count, Object.keys(fn), "count" in fn, "name" in fn, name, count, renamed, delete fn.count, fn.count]
       `),
     ).toEqual([3, ["count"], true, true, "fn", 3, true, true, null])
+  })
+})
+
+describe("tagged templates", () => {
+  test("the tag receives the cooked strings, their raw forms, and the substitutions in order", async () => {
+    expect(
+      await value(`
+        const tag = (strings, ...values) => [strings, strings.raw, values, Object.keys(strings)]
+        return tag\`a\${1}b\\n\${2}c\`
+      `),
+    ).toEqual([
+      ["a", "b\n", "c"],
+      ["a", "b\\n", "c"],
+      [1, 2],
+      ["0", "1", "2"],
+    ])
+  })
+
+  test("an invalid escape cooks to undefined and keeps its raw text", async () => {
+    expect(await value(`return ((strings) => [strings[0] === undefined, strings.raw[0]])\`\\unicode\``)).toEqual([
+      true,
+      "\\unicode",
+    ])
+  })
+
+  test("each site has one template object; different sites differ", async () => {
+    expect(
+      await value(`
+        const seen = []
+        const tag = (strings) => { seen.push(strings) }
+        for (let i = 0; i < 2; i++) tag\`x\${i}\`
+        tag\`x\${0}\`
+        return [seen[0] === seen[1], seen[0] === seen[2]]
+      `),
+    ).toEqual([true, false])
+  })
+
+  test("the tag is read like a callee: members, chained tags, async tags, and the not-a-function error", async () => {
+    expect(
+      await value(`
+        const o = { tag: (strings) => strings[0].toUpperCase() }
+        const chain = () => chain
+        const asyncTag = async (strings, value) => strings[0] + value
+        let failure
+        try { (1)\`x\` } catch (error) { failure = error instanceof TypeError }
+        return [o.tag\`abc\`, typeof chain\`a\`\`b\`, await asyncTag\`n=\${1}\`, failure]
+      `),
+    ).toEqual(["ABC", "function", "n=1", true])
+  })
+
+  test("raw is read-only", async () => {
+    expect(await value(`try { ((strings) => { strings.raw = 1 })\`a\` } catch (error) { return error.name }`)).toBe(
+      "TypeError",
+    )
+  })
+})
+
+describe("String.raw", () => {
+  test("joins the raw strings with the substitutions", async () => {
+    expect(await value(`return [String.raw\`a\\n\${1}b\`, String.raw({ raw: ["x", "y", "z"] }, 1, 2, 3)]`)).toEqual([
+      "a\\n1b",
+      "x1y2z",
+    ])
+  })
+
+  test("extra substitutions are dropped, missing ones are skipped, and a program object's toString is used", async () => {
+    expect(
+      await value(`
+        const shout = { toString() { return "!" } }
+        return [String.raw({ raw: ["x", "y"] }, 1, 2), String.raw({ raw: ["x", "y", "z"] }, shout), String.raw({ raw: { length: 0 } })]
+      `),
+    ).toEqual(["x1y", "x!yz", ""])
+  })
+
+  test("a template without a raw array is a TypeError", async () => {
+    const failure = await error(`String.raw(1)`)
+    expect(failure.message).toContain("String.raw expects a template object with a raw array")
+  })
+})
+
+describe("sloppy duplicate parameters and for...in targets", () => {
+  test("a repeated parameter name binds the last argument", async () => {
+    expect(await value(`function f(a, b, a) { return [a, b] } return [f(1, 2, 3), f(1)]`)).toEqual([
+      [3, 2],
+      [null, null],
+    ])
+  })
+
+  test("for...in assigns to any target: members, computed members, and patterns", async () => {
+    expect(
+      await value(`
+        const x = {}, seen = [], a = []
+        let i = 0, first
+        for (x.y in { p: 1, q: 2 }) seen.push(x.y)
+        for (a[i++] in { p: 1, q: 2 });
+        for ([first] in { ab: 1 });
+        return [seen, x.y, a, first]
+      `),
+    ).toEqual([["p", "q"], "q", ["p", "q"], "a"])
   })
 })

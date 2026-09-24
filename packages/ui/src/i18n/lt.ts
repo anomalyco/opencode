@@ -71,7 +71,7 @@ export const dict: Record<string, string> = {
   "ui.sessionTurn.error.addCredits": "Pridėkite kreditų",
   "dialog.usageExceeded.freeTier.title": "Pasiektas nemokamas limitas",
   "dialog.usageExceeded.freeTier.description":
-    "Prenumeruokite OpenCode Go, kad gautumėte patikimą prieigą prie geriausių atvirojo kodo modelių, pradedant nuo 5 USD per mėnesį.",
+    "Prenumeruokite OpenCode Go už 10 USD per mėnesį ir gaukite patikimą prieigą prie geriausių atvirojo kodo modelių.",
   "dialog.usageExceeded.freeTier.actionLabel": "Prenumeruoti",
   "dialog.usageExceeded.accountRateLimit.title": "Pasiektas Go limitas",
   "dialog.usageExceeded.accountRateLimit.description":

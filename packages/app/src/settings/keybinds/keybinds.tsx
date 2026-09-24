@@ -2,8 +2,6 @@ import { For, Show, createEffect, createMemo, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { Button } from "@opencode/ui/button"
-import { Icon } from "@opencode/ui/icon"
-import { IconButton } from "@opencode/ui/icon-button"
 import { TextInput } from "@opencode/ui/text-input"
 import { showToast } from "@/shell/notifications/toast"
 import fuzzysort from "fuzzysort"
@@ -420,18 +418,9 @@ function SettingsKeybindsView(props: {
             autocomplete="off"
             autocapitalize="off"
             aria-label={language.t("settings.shortcuts.search.placeholder")}
+            showClearButton={!!store.filter}
+            onClearClick={() => setStore("filter", "")}
           />
-          <Show when={store.filter}>
-            <IconButton
-              type="button"
-              variant="ghost-muted"
-              size="small"
-              class="settings-tab-search-clear"
-              icon={<Icon name="close" size="large" class="text-v2-icon-icon-muted" />}
-              onClick={() => setStore("filter", "")}
-              aria-label={language.t("common.clear")}
-            />
-          </Show>
         </div>
       </div>
       <div class="settings-tab-body">
@@ -443,27 +432,29 @@ function SettingsKeybindsView(props: {
                   <h3 class="settings-section-title">{language.t(groupKey[group])}</h3>
                   <SettingsList>
                     <For each={filtered().get(group) ?? []}>
-                      {(id) => (
-                        <div class="flex items-center justify-between gap-4 py-3 border-b border-border-weak-base last:border-none">
-                          <span>{props.title(id)}</span>
-                          <button
-                            type="button"
-                            data-keybind-id={id}
-                            classList={{
-                              "settings-keybind-button": true,
-                              "settings-keybind-button--active": props.active === id,
-                            }}
-                            onClick={() => props.onCapture(id)}
-                          >
-                            <Show
-                              when={props.active === id}
-                              fallback={props.keybind(id) || language.t("settings.shortcuts.unassigned")}
+                      {(id) => {
+                        const binding = () => props.keybind(id)
+                        return (
+                          <div class="flex items-center justify-between gap-4 py-3 border-b border-border-weak-base last:border-none">
+                            <span>{props.title(id)}</span>
+                            <Button
+                              type="button"
+                              size="small"
+                              variant={binding() ? "ghost" : "ghost-muted"}
+                              data-keybind-id={id}
+                              data-expanded={props.active === id ? "" : undefined}
+                              onClick={() => props.onCapture(id)}
                             >
-                              {language.t("settings.shortcuts.pressKeys")}
-                            </Show>
-                          </button>
-                        </div>
-                      )}
+                              <Show
+                                when={props.active === id}
+                                fallback={binding() || language.t("settings.shortcuts.unassigned")}
+                              >
+                                {language.t("settings.shortcuts.pressKeys")}
+                              </Show>
+                            </Button>
+                          </div>
+                        )
+                      }}
                     </For>
                   </SettingsList>
                 </div>

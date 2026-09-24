@@ -20,9 +20,9 @@ import { CodeMode, Tool } from "../src/index.js"
 
 // Standard-library value types: Date, RegExp, Map, Set. Programs use them as ordinary JS;
 // intra-CodeMode checkpoints (Object.* helpers, spread, coercion inputs) preserve the live
-// values, while at the host boundary (final result, tool arguments, JSON.stringify) they
-// serialize exactly as JSON.stringify would: Date -> ISO string (invalid -> null),
-// URL -> href, and RegExp/Map/Set/URLSearchParams -> {}.
+// values. JSON.stringify keeps Date -> ISO string (invalid -> null), URL -> href, and
+// RegExp/Map/Set/URLSearchParams -> {}. The host boundary matches that except URLSearchParams,
+// which cross as their query string, and Set, which crosses as an array.
 const run = (code: string) => Effect.runPromise(CodeMode.execute({ code, tools: {} }))
 const value = async (code: string) => {
   const result = await run(code)
@@ -452,10 +452,12 @@ describe("RegExp", () => {
     expect((await error(`return "aa".matchAll(/a/)`)).message).toContain("write /a/g, or use String.match")
   })
 
-  test("a non-pattern argument names the expected shapes", async () => {
-    const err = await error(`return "abc".match(42)`)
-    expect(err.message).toContain("expects a regular expression")
-    expect(err.message).toContain("not number")
+  test("any argument is a pattern string, as new RegExp(arg) reads it", async () => {
+    expect(
+      await value(
+        `return ["a42b".match(42)[0], "xnullx".search(null), "abc".match(undefined), [..."1a1".matchAll(1)].length]`,
+      ),
+    ).toEqual(["42", 1, [""], 2])
   })
 
   test("source and flags properties read through", async () => {
@@ -947,6 +949,19 @@ describe("Map", () => {
 })
 
 describe("Set", () => {
+  test("forEach is live on Map and Set: deleted entries are skipped and added ones visited", async () => {
+    expect(
+      await value(`
+        const m = new Map([[1, "a"], [2, "b"]])
+        const s = new Set([1, 2])
+        const seen = []
+        m.forEach((v, k) => { seen.push(k); if (k === 1) { m.delete(2); m.set(3, "c") } })
+        s.forEach((v) => { seen.push(v); if (v === 1) { s.delete(2); s.add(3) } })
+        return seen
+      `),
+    ).toEqual([1, 3, 1, 3])
+  })
+
   test("add/has/delete/size with chaining", async () => {
     expect(
       await value(`
@@ -1158,10 +1173,151 @@ describe("TextEncoder and TextDecoder", () => {
   test("crypto.getRandomValues fills the given bytes in place", async () => {
     expect(
       await value(
-        `const b = new Uint8Array(16); const same = crypto.getRandomValues(b) === b; return [same, b.length, b.some ? 0 : Array.from(b).some((n) => n !== 0)]`,
+        `const b = new Uint8Array(16); const same = crypto.getRandomValues(b) === b; return [same, b.length, b.some((n) => n !== 0)]`,
       ),
     ).toEqual([true, 16, true])
     expect((await error(`crypto.getRandomValues([1])`)).message).toContain("expects a Uint8Array, received an array")
+  })
+})
+
+describe("Iterator helpers", () => {
+  test("lazy helpers chain over collection iterators and generators, one source step per result", async () => {
+    expect(
+      await value(`
+        const pulled = []
+        function* naturals() { let n = 0; while (true) { pulled.push(n); yield n++ } }
+        const squares = naturals().map((n) => n * n).filter((n) => n % 2 === 0).drop(1).take(3)
+        const first = squares.next()
+        return {
+          first,
+          rest: squares.toArray(),
+          after: squares.next(),
+          pulled,
+          values: new Map([["a", 1], ["b", 2]]).values().map((v, i) => v * 10 + i).toArray(),
+          flat: [1, 2].values().flatMap((n) => [n, [n]]).toArray(),
+          entries: [...new Map([[1, 2]]).entries().map(([k, v]) => k + v)],
+        }
+      `),
+    ).toEqual({
+      first: { value: 4, done: false },
+      rest: [16, 36],
+      after: { done: true },
+      pulled: [0, 1, 2, 3, 4, 5, 6],
+      values: [10, 21],
+      flat: [1, [1], 2, [2]],
+      entries: [3],
+    })
+  })
+
+  test("eager helpers consume the source and close it on early exit", async () => {
+    expect(
+      await value(`
+        const log = []
+        function* g() { try { yield 1; yield 2; yield 3 } finally { log.push("closed") } }
+        const seen = []
+        g().forEach((v, i) => seen.push([v, i]))
+        return {
+          seen,
+          sum: g().reduce((a, b) => a + b),
+          sumFrom: g().reduce((a, b) => a + b, 10),
+          some: g().some((v) => v === 2),
+          every: g().every((v) => v < 2),
+          find: g().find((v) => v > 1),
+          missing: g().find((v) => v > 5),
+          log,
+        }
+      `),
+    ).toEqual({
+      seen: [
+        [1, 0],
+        [2, 1],
+        [3, 2],
+      ],
+      sum: 6,
+      sumFrom: 16,
+      some: true,
+      every: false,
+      find: 2,
+      log: ["closed", "closed", "closed", "closed", "closed", "closed", "closed"],
+    })
+  })
+
+  test("a helper closes its source when a callback throws, on return(), and on early for...of exit", async () => {
+    expect(
+      await value(`
+        const log = []
+        function* g(name) { try { yield 1; yield 2 } finally { log.push(name) } }
+        const throwing = g("throw").map((v) => { if (v === 2) throw new Error("boom"); return v })
+        throwing.next()
+        let message
+        try { throwing.next() } catch (error) { message = error.message }
+        const returned = g("return").map((v) => v)
+        returned.next()
+        const closed = returned.return()
+        for (const v of g("loop").filter((v) => true)) break
+        return { message, afterThrow: throwing.next(), closed, afterReturn: returned.next(), log }
+      `),
+    ).toEqual({
+      message: "boom",
+      afterThrow: { done: true },
+      closed: { done: true },
+      afterReturn: { done: true },
+      log: ["throw", "return", "loop"],
+    })
+  })
+
+  test("collection iterators have no return() and continue after an early exit, as in JS", async () => {
+    expect(
+      await value(`
+        const it = [1, 2, 3].values()
+        const found = it.some((v) => v === 2)
+        return [typeof it.return, found, it.next().value, typeof it.map(x => x).return]
+      `),
+    ).toEqual(["undefined", true, 3, "function"])
+  })
+
+  test("Iterator.from and the abstract Iterator constructor", async () => {
+    expect(
+      await value(`
+        const it = [1].values()
+        let n = 0
+        const errors = []
+        for (const attempt of [() => Iterator(), () => new Iterator(), () => Iterator.from(5)]) {
+          try { attempt() } catch (error) { errors.push(error.name) }
+        }
+        return [
+          Iterator.from(it) === it,
+          Iterator.from("ab").toArray(),
+          Iterator.from([1, 2]).map((v) => v * 2).toArray(),
+          Iterator.from({ next: () => ({ done: n > 1, value: n++ }) }).toArray(),
+          it instanceof Iterator,
+          errors,
+        ]
+      `),
+    ).toEqual([true, ["a", "b"], [2, 4], [0, 1], true, ["TypeError", "TypeError", "TypeError"]])
+  })
+
+  test("argument validation", async () => {
+    const cases: Array<[string, string]> = [
+      ["[1].values().map(1)", "Iterator.prototype.map expects a function callback."],
+      ["[1].values().take(-1)", "Iterator.prototype.take expects a non-negative count, received -1."],
+      ["[1].values().drop()", "Iterator.prototype.drop expects a non-negative count, received NaN."],
+      [
+        "[1].values().flatMap((v) => 'ab').toArray()",
+        "Iterator.prototype.flatMap expects an iterable or iterator, received a string.",
+      ],
+      ["[].values().reduce((a, b) => a)", "Iterator.prototype.reduce of an empty iterator with no initial value."],
+    ]
+    for (const [code, message] of cases) {
+      expect((await error(`return ${code}`)).message).toContain(message)
+    }
+    expect(
+      await error(`
+        function* g() { while (true) yield 1 }
+        const it = g().map(() => it.next())
+        return it.next()
+      `),
+    ).toMatchObject({ message: expect.stringContaining("Iterator helper is already running.") })
   })
 })
 
@@ -1264,6 +1420,39 @@ describe("built-in iterators", () => {
     expect((await error(`const it = [1].keys(); const next = it.next; return next()`)).message).toContain(
       "Iterator.prototype.next called on incompatible receiver undefined",
     )
+  })
+})
+
+describe("Object.prototype.toString", () => {
+  test("reports the built-in kind it is inherited by, as JS does through Symbol.toStringTag", async () => {
+    expect(
+      await value(`
+      return [
+        new Map().toString(), new Set().toString(), new Headers().toString(), Promise.resolve(1).toString(),
+        [1].values().toString(), ({}).toString(), String(new Map()), String(Promise.resolve(1)),
+        \`\${new Set([1])}\`, [new Map()] + "", new Map() == "[object Map]",
+      ]
+    `),
+    ).toEqual([
+      "[object Map]",
+      "[object Set]",
+      "[object Headers]",
+      "[object Promise]",
+      "[object Iterator]",
+      "[object Object]",
+      "[object Map]",
+      "[object Promise]",
+      "[object Set]",
+      "[object Map]",
+      true,
+    ])
+  })
+})
+
+describe("console.log of errors", () => {
+  test("prints name and message, nested too", async () => {
+    const result = await run(`console.log(new Error("boom"), { e: new RangeError("r") })`)
+    expect(result.logs).toEqual(['Error: boom {"e":RangeError: r}'])
   })
 })
 
@@ -1732,5 +1921,99 @@ describe("CodeMode values at intra-CodeMode checkpoints", () => {
     )
     expect(result.ok).toBe(true)
     expect(observed).toStrictEqual([{ when: "1970-01-01T00:00:00.000Z", tags: {} }])
+  })
+})
+
+describe("Uint8Array callback methods", () => {
+  test("map and filter return new Uint8Arrays with clamped bytes", async () => {
+    expect(
+      await value(`
+      const b = new Uint8Array([1, 2, 3])
+      const mapped = b.map((byte) => byte * 100)
+      const filtered = b.filter((byte) => byte > 1)
+      mapped[0] = 9
+      return [
+        [...mapped], mapped instanceof Uint8Array, Array.isArray(mapped), [...b], [...filtered],
+        [...b.map(() => "7")], b.map((byte) => byte, {}).length, [...new Uint8Array().map((byte) => byte)],
+      ]
+    `),
+    ).toEqual([[9, 200, 44], true, false, [1, 2, 3], [2, 3], [7, 7, 7], 3, []])
+  })
+
+  test("find, findIndex, findLast, findLastIndex, some, every, and forEach", async () => {
+    expect(
+      await value(`
+      const b = new Uint8Array([1, 2, 3])
+      const seen = []
+      b.forEach((byte, index, array) => seen.push([byte, index, array === b]))
+      return [
+        b.find((byte) => byte > 1), b.find((byte) => byte > 5) === undefined, b.findIndex((byte) => byte > 1),
+        b.findIndex((byte) => byte > 5), b.findLast((byte) => byte < 3), b.findLastIndex((byte) => byte < 3),
+        b.findLastIndex((byte) => byte > 9), b.some((byte) => byte > 2), b.every((byte) => byte > 2),
+        new Uint8Array().some(() => true), new Uint8Array().every(() => false),
+        b.every((byte, index, array) => array === b), seen,
+      ]
+    `),
+    ).toEqual([
+      2,
+      true,
+      1,
+      -1,
+      2,
+      1,
+      -1,
+      true,
+      false,
+      false,
+      true,
+      true,
+      [
+        [1, 0, true],
+        [2, 1, true],
+        [3, 2, true],
+      ],
+    ])
+  })
+
+  test("reduce and reduceRight", async () => {
+    expect(
+      await value(`
+      const b = new Uint8Array([1, 2, 3])
+      return [
+        b.reduce((sum, byte) => sum + byte), b.reduce((sum, byte) => sum + byte, 10),
+        b.reduceRight((text, byte) => text + byte, ""), new Uint8Array().reduce((sum, byte) => sum + byte, 5),
+        b.reduce((_, byte, index, array) => array === b && index, 0),
+      ]
+    `),
+    ).toEqual([6, 16, "321", 5, 2])
+    expect((await error(`new Uint8Array().reduce((sum, byte) => sum + byte)`)).message).toContain(
+      "Uint8Array.reduce of an empty array with no initial value",
+    )
+    expect((await error(`new Uint8Array().reduceRight((sum, byte) => sum + byte)`)).message).toContain(
+      "Uint8Array.reduceRight of an empty array with no initial value",
+    )
+    expect((await error(`new Uint8Array([1]).map(null)`)).message).toContain("Uint8Array.map expects a function")
+  })
+
+  test("sort is numeric by default and in place, with an optional comparator", async () => {
+    expect(
+      await value(`
+      const b = new Uint8Array([10, 9, 1])
+      const same = b.sort() === b
+      const desc = new Uint8Array([3, 1, 2]).sort((x, y) => y - x)
+      return [same, [...b], [...desc], desc instanceof Uint8Array, [...new Uint8Array([2, 1]).sort(() => NaN)]]
+    `),
+    ).toEqual([true, [1, 9, 10], [3, 2, 1], true, [2, 1]])
+    expect((await error(`new Uint8Array([2, 1]).sort(null)`)).message).toContain("Uint8Array.sort expects a function")
+  })
+
+  test("lastIndexOf treats an explicit undefined fromIndex as 0", async () => {
+    expect(
+      await value(`
+      const a = [1, 2, 1]
+      const b = new Uint8Array([1, 2, 1])
+      return [a.lastIndexOf(1, undefined), a.lastIndexOf(1), a.lastIndexOf(2, undefined), b.lastIndexOf(1, undefined), b.lastIndexOf(1)]
+    `),
+    ).toEqual([0, 2, -1, 0, 2])
   })
 })

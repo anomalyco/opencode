@@ -152,6 +152,8 @@ export function NewSessionView(props: {
           </div>
         </div>
         <NewSessionTips
+          selection={props.composer.model.selection}
+          onDone={props.composer.restoreFocus}
           workspaceEligible={
             !!props.project.selected() &&
             props.workspace.bar.visible() &&
@@ -165,7 +167,12 @@ export function NewSessionView(props: {
   )
 }
 
-function NewSessionTips(props: { workspaceEligible: boolean; onWorkspace: () => void }) {
+function NewSessionTips(props: {
+  selection: ComposerModel["model"]["selection"]
+  onDone: () => void
+  workspaceEligible: boolean
+  onWorkspace: () => void
+}) {
   const language = useLanguage()
   const dialog = useDialog()
   const sdk = useWorkspaceLocation()
@@ -188,9 +195,8 @@ function NewSessionTips(props: { workspaceEligible: boolean; onWorkspace: () => 
   )
   const providerVisible = createMemo(
     () =>
-      providers.ready() &&
       providerReady() &&
-      providers.paid().length === 0 &&
+      providers.anyConnection() === false &&
       Date.now() - providerState.dismissedAt >= providerTipDismissalDuration,
   )
   const tip = createMemo<"workspace" | "provider" | undefined>(() => {
@@ -212,7 +218,9 @@ function NewSessionTips(props: { workspaceEligible: boolean; onWorkspace: () => 
       return
     }
     void import("@/providers/connect/dialog").then(({ DialogConnectProvider }) => {
-      void dialog.show(() => <DialogConnectProvider directory={sdk().directory} />)
+      void dialog.show(() => (
+        <DialogConnectProvider directory={sdk().directory} selection={props.selection} onDone={props.onDone} />
+      ))
     })
   }
   const dismiss = () => {

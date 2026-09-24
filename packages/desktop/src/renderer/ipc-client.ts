@@ -2,7 +2,7 @@ import type { Effect } from "effect"
 import type { RpcMessage } from "effect/unstable/rpc"
 import type { DesktopRpcClient } from "../shared/ipc-rpc"
 import type { DesktopEvent } from "../shared/ipc-rpc/events"
-import { IpcTransportPort } from "../shared/ipc-transport"
+import { IpcTransportPort, omitUndefined } from "../shared/ipc-transport"
 
 // The main process serves Effect's RpcServer over a MessagePort; this side speaks its wire format
 // directly. Messages cross by structured clone (no serialization layer, binary stays binary), every
@@ -80,7 +80,13 @@ function request(tag: string, payload: unknown, chunk?: Pending["chunk"]) {
   const id = nextId++
   return new Promise<unknown>((resolve, reject) => {
     pending.set(id, { resolve, reject, chunk })
-    const message: RpcMessage.RequestEncoded = { _tag: "Request", id, tag, payload, headers: [] }
+    const message: RpcMessage.RequestEncoded = {
+      _tag: "Request",
+      id,
+      tag,
+      payload: omitUndefined(payload),
+      headers: [],
+    }
     void port.then((p) => p.postMessage(message))
   })
 }

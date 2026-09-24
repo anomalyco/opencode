@@ -258,7 +258,6 @@ export const GithubCopilotPlugin = define({
         evt.sdk = mod.createOpenaiCompatible(evt.options)
       }),
     )
-    // Runs for every route, unlike http.request, which the AI SDK route bypasses.
     yield* ctx.session.hook(
       "model.request",
       (evt) =>
@@ -304,9 +303,15 @@ export const GithubCopilotPlugin = define({
           return
         }
         const id = evt.model.modelID ?? evt.model.id
-        const match = /^gpt-(\d+)/.exec(id)
-        evt.language =
-          match && Number(match[1]) >= 5 && !id.startsWith("gpt-5-mini") ? evt.sdk.responses(id) : evt.sdk.chat(id)
+        // Copilot serves Grok, Gemini, and MAI Code only on /responses; advertised
+        // endpoint metadata above wins whenever the live model list provides it.
+        const gpt = /^gpt-(\d+)/.exec(id)
+        const responses =
+          (gpt !== null && Number(gpt[1]) >= 5 && !id.startsWith("gpt-5-mini")) ||
+          id.startsWith("grok-") ||
+          id.startsWith("gemini-") ||
+          id.startsWith("mai-code-")
+        evt.language = responses ? evt.sdk.responses(id) : evt.sdk.chat(id)
       }),
     )
   }),

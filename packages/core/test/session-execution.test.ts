@@ -508,7 +508,7 @@ describe("SessionRestart background recovery", () => {
         run: Deferred.await(complete),
       })
       yield* jobs.background("call-completed-shell")
-      yield* Deferred.succeed(complete, "(no output)\n\nCommand exited with code 7.")
+      yield* Deferred.succeed(complete, "Exited with code 7")
       yield* jobs.wait({ id: "call-completed-shell" })
 
       const scope = yield* Scope.make()
@@ -530,7 +530,7 @@ describe("SessionRestart background recovery", () => {
         {
           type: "synthetic",
           payload: {
-            text: '<shell id="call-completed-shell" state="completed" command="exit 7">\n(no output)\n\nCommand exited with code 7.\n</shell>',
+            text: '<shell id="call-completed-shell" state="completed" command="exit 7">\nExited with code 7\n</shell>',
           },
         },
       ])

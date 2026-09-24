@@ -16,6 +16,7 @@ import type {
   ServerReadyData,
   TitlebarTheme,
 } from "../shared/ipc-contract"
+import type { PairingInfo } from "../shared/ipc-rpc/app"
 
 export type WslServersAPI = WslServersPlatform
 export type UpdaterAPI = {
@@ -65,6 +66,7 @@ export type ElectronAPI = {
   getPathForFile(file: File): string
   saveFile(opts: SaveFilePickerOptions, content: string): Promise<boolean>
   openExternal(url: string): void
+  openBrowser(url: string): Promise<boolean>
   openLocalFile(url: string): void
   openPath(path: string, app?: string): Promise<string | undefined>
   revealPath(path: string): Promise<boolean>
@@ -89,4 +91,7 @@ export type ElectronAPI = {
   setForceFocus(enabled: boolean): Promise<void>
   recordFatalRendererError(error: FatalRendererError): Promise<void>
   setNativeTranslations(bundle: DesktopNativeBundle): Promise<void>
+  pairInfo(): Promise<typeof PairingInfo.Type>
+  getKeepScreenActive(): Promise<boolean>
+  setKeepScreenActive(enabled: boolean): Promise<void>
 }

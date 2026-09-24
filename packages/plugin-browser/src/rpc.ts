@@ -183,6 +183,12 @@ export const Operations = [
     State,
   ),
   operation(
+    "preview",
+    "Show a file to the user. Opens the file in the Review pane and focuses its tab for viewing. Images and screenshots (PNG, JPEG, GIF, WebP, charts, plots, photos), SVG, audio, video (MP4, WebM), PDF documents, HTML pages, Markdown, Mermaid diagrams, CSV and TSV tables, and fonts render as a media preview; code and other text files display highlighted source. Use this to present an artifact, output, or result you created or changed instead of pasting its contents, describing it, or opening a file:// URL in a browser tab. The path is server-local: relative to the workspace or absolute.",
+    { path: short.annotate({ description: "Server-local path to the file, relative to the workspace or absolute." }) },
+    Schema.Struct({ path: short }),
+  ),
+  operation(
     "navigate",
     "Navigate this tab to HTTP/HTTPS or about:blank; wait for the document load. Element refs expire.",
     { ...tab, url: short },

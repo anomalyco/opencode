@@ -86,6 +86,7 @@ const INVALID_REQUEST_CODES = new Set(["invalid_prompt", "invalid_request_error"
 // emits `image_content_policy_violation` as the native code.
 const CONTENT_POLICY_CODES = new Set([
   "content_filter",
+  "content_moderation",
   "responsibleaipolicyviolation",
   "content_policy_violation",
   "image_content_policy_violation",
@@ -204,6 +205,8 @@ function providerCodes(value: unknown) {
   const exception = isRecord(decoded.exception) ? decoded.exception : undefined
   return [
     decoded.code,
+    // Stability's `{ id, name, errors }` bodies carry the code in `name`.
+    Array.isArray(decoded.errors) ? decoded.name : undefined,
     decoded.error_type,
     error?.code,
     error?.type,

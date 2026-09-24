@@ -71,7 +71,7 @@ export const dict: Record<string, string> = {
   "ui.sessionTurn.error.addCredits": "ক্রেডিট যোগ করুন",
   "dialog.usageExceeded.freeTier.title": "বিনামূল্যের সীমা পৌঁছেছে",
   "dialog.usageExceeded.freeTier.description":
-    "OpenCode-এ সদস্যতা নিন $5/মাস থেকে শুরু করে সেরা ওপেন-সোর্স মডেলগুলিতে নির্ভরযোগ্য অ্যাক্সেসের জন্য যান৷",
+    "সেরা ওপেন-সোর্স মডেলগুলিতে নির্ভরযোগ্য অ্যাক্সেসের জন্য $10/মাসে OpenCode Go-তে সদস্যতা নিন৷",
   "dialog.usageExceeded.freeTier.actionLabel": "সদস্যতা",
   "dialog.usageExceeded.accountRateLimit.title": "যাওয়ার সীমা পৌঁছে গেছে",
   "dialog.usageExceeded.accountRateLimit.description":

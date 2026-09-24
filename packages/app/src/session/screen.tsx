@@ -38,6 +38,8 @@ import { SessionReviewToggle } from "./header/session-header-actions"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
 import { createSessionBrowser } from "./browser/model"
 import { createTimelineCache } from "./timeline/cache"
+import { ArtifactMarkdownProvider, ArtifactOpenerProvider } from "./files/open-artifact"
+import { createSessionBtw } from "./btw/model"
 
 const SessionMobileFiles = lazy(async () => {
   const { SessionMobileFiles } = await import("./files/session-mobile-files")
@@ -50,14 +52,27 @@ const SessionSummaryPanel = lazy(async () => {
 })
 
 export function SessionScreen(props: { session: SessionModel }) {
+  // The timeline cache captures its owner when created, so link handling must be provided above it.
+  const browser = createSessionBrowser(props.session)
+  return (
+    <ArtifactOpenerProvider session={props.session} browser={browser}>
+      <ArtifactMarkdownProvider>
+        <SessionScreenContent session={props.session} browser={browser} />
+      </ArtifactMarkdownProvider>
+    </ArtifactOpenerProvider>
+  )
+}
+
+function SessionScreenContent(props: { session: SessionModel; browser: ReturnType<typeof createSessionBrowser> }) {
   const session = props.session
+  const browser = props.browser
   const server = useServer()
   const detailsProject = createMemo(() => {
     const info = session.data.info()
     return info ? projectForSession(info, server.ctx.sync.data.project) : undefined
   })
   const isDesktop = session.isDesktop
-  const browser = createSessionBrowser(session)
+  const btw = createSessionBtw(session)
   const screen = createSessionScreenLayout(session)
   const timeline = createSessionTimelineInteraction(session)
   const timelineSearch = createTimelineSearchController({
@@ -438,7 +453,12 @@ export function SessionScreen(props: { session: SessionModel }) {
                         setStore("sideReviewPresent", false)
                       }}
                     >
-                      <SessionDesktopReview review={review} browser={browser} present={store.sideReviewPresent} />
+                      <SessionDesktopReview
+                        review={review}
+                        browser={browser}
+                        btw={btw}
+                        present={store.sideReviewPresent}
+                      />
                     </div>
                   </Show>
                 </div>

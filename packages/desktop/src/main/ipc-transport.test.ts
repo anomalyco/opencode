@@ -5,9 +5,51 @@ import type { MessagePortMain, WebContents } from "electron"
 import { Context, Effect, Layer, ManagedRuntime, Option, Queue, Schema, Stream } from "effect"
 import { Rpc, RpcClient, RpcClientError, RpcGroup, RpcMessage, RpcServer } from "effect/unstable/rpc"
 import { Transferable } from "effect/unstable/workers"
+import { omitUndefined } from "../shared/ipc-transport"
+import { FilesOpenFilePicker } from "../shared/ipc-rpc/files"
 import { IpcPortHandoff, IpcServerProtocolLive } from "./ipc-transport"
 
 describe("desktop RPC transport", () => {
+  test("decodes renderer payloads whose optional fields are undefined", async () => {
+    let received: unknown
+    const rpcs = RpcGroup.make(FilesOpenFilePicker)
+    const handlers = rpcs.toLayer({
+      FilesOpenFilePicker: ({ options }) =>
+        Effect.sync(() => {
+          received = options
+          return null
+        }),
+    })
+    const live = RpcServer.layer(rpcs).pipe(Layer.provide(handlers), Layer.provideMerge(IpcServerProtocolLive))
+    const runtime = ManagedRuntime.make(live)
+    const handoff = await runtime.runPromise(IpcPortHandoff)
+    const channel = new MessageChannel()
+    handoff.bind(sender(1), serverPort(channel.port1))
+    // What openAttachmentPickerDialog sends for the composer's attach button.
+    const payload = { options: { multiple: true, title: undefined, defaultPath: "C:\\project", extensions: undefined } }
+
+    // The renderer posts the wire format itself, so a present-but-undefined key reaches the JSON codec.
+    const rejected = await rawRequest(channel.port2, 0, payload)
+    expect(rejected).toMatchObject({
+      _tag: "Exit",
+      exit: { _tag: "Failure", cause: [{ _tag: "Die", defect: expect.stringContaining('["options"]["title"]') }] },
+    })
+
+    const accepted = await rawRequest(channel.port2, 1, omitUndefined(payload))
+    expect(accepted).toMatchObject({ _tag: "Exit", exit: { _tag: "Success", value: null } })
+    expect(received).toEqual({ multiple: true, defaultPath: "C:\\project" })
+
+    channel.port2.close()
+    await runtime.dispose()
+  })
+
+  test("omitting undefined fields leaves bytes and defined values alone", () => {
+    const data = new Uint8Array([0, 255, 2])
+    const result = omitUndefined({ data, nested: [{ keep: null, drop: undefined }], count: 0 }) as { data: Uint8Array }
+    expect(result).toEqual({ data, nested: [{ keep: null }], count: 0 })
+    expect(result.data).toBe(data)
+  })
+
   test("keeps multiple renderer ports independent", async () => {
     let received: unknown
     const handlers = TestRpcs.toLayer(
@@ -143,6 +185,12 @@ function clientProtocol(port: MessagePort) {
       }),
     ),
   )
+}
+
+function rawRequest(port: MessageChannel["port2"], id: number, payload: unknown) {
+  const response = new Promise<RpcMessage.FromServerEncoded>((resolve) => port.once("message", resolve))
+  port.postMessage({ _tag: "Request", id, tag: "FilesOpenFilePicker", payload, headers: [] })
+  return response
 }
 
 function sender(id: number) {

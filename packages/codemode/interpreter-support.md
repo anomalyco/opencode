@@ -24,7 +24,7 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       and Map, RegExp, and generators serialize as `{}`. A bare `undefined` result is `null`.
       Tool results come back the way `JSON.parse(JSON.stringify(result))` would. The table, where a value cannot
       be JSON but what the program meant is clear: a promise is awaited (a rejection fails the program), a Set
-      crosses as an array, a URLSearchParams as its query string, an Error as `{ name, message, ...own }`, a
+      crosses as an array, a URLSearchParams as its query string, an Error as `{ name, message, ...own enumerable }`, a
       Uint8Array is rejected with a hint to encode as text, and own `__proto__` keys are dropped so merging tool
       inputs or results cannot replace a prototype. In-program `JSON.stringify` keeps JS behavior except for the
       Error form and a promise, which is a `TypeError` with an await hint rather than a silent `{}`.
@@ -38,8 +38,11 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       10,000,000 elements (`Array(n)`, `length =`, `Array.from`, `split`, `matchAll`, `concat`, `flat`; below the JS
       maximum of 2^32 - 1), and 10,000 pending promises at once. Exceeding one throws a `RangeError`. A single regular
       expression match can still run long on a pathological pattern; the host regex engine has no interrupt hook.
-- [ ] Strict-mode early errors: duplicate parameter names, `yield` as an identifier, and a trailing comma after a
-      rest parameter are accepted unless the program itself begins with `"use strict"`.
+- [x] A trailing comma after a rest parameter is a syntax error, with or without `"use strict"`.
+- [x] A program that begins with `"use strict"` rejects `yield` as an identifier and duplicate parameter names at
+      parse time. Without it, `yield` is an ordinary binding.
+- [x] Duplicate parameter names in non-strict code bind the last parameter, as in JS (`function f(a, a)` called
+      with `(1, 2)` sees `a === 2`).
 
 ## Values and literals
 
@@ -49,12 +52,15 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Object literals with shorthand, computed string/number keys, and spread following ToObject: data objects and
       arrays copy own enumerable keys, strings copy index keys, and other values contribute nothing.
 - [x] Template literals with interpolation.
+- [x] Tagged templates: a tag applied to a template literal is called as `tag(strings, ...values)`, with the tag read
+      like a callee so a member tag keeps its receiver. `strings` is an array of the cooked text with a read-only `raw`
+      array of the source text; an invalid escape such as `\unicode` cooks to `undefined`. One template object per
+      site, as in JS, but it is not frozen: `strings[0] = "x"` succeeds here where JS throws.
 - [x] Regular-expression literals.
 - [x] `NaN` and `Infinity` globals.
 - [ ] BigInt literals and in-interpreter BigInt arithmetic; BigInt remains invalid at JSON-like host boundaries.
 - [ ] Arbitrary Symbol primitive values and symbol-keyed properties. The confined `Symbol.iterator` and
       `Symbol.asyncIterator` keys are available only for the iterator protocols.
-- [ ] Tagged-template calls.
 - [ ] Getter and setter definitions in object literals.
 
 ## Bindings and destructuring
@@ -83,8 +89,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       sources are rejected.
 - [x] Destructuring reads through the prototype chain like member access: `const { constructor } = error` and
       `const { slice } = values` find the inherited built-in.
-- [ ] Member expressions as `for...in` targets (`for (x.y in obj)`).
-- [ ] `IteratorClose` during destructuring should throw a `TypeError` when `return()` yields a non-object.
+- [x] Any assignment target as a `for...in` head, like `for...of`: `for (x.y in obj)`, `for (a[i++] in obj)`, and
+      destructuring patterns.
 
 ## Statements and control flow
 
@@ -94,7 +100,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] `for`, `while`, and `do...while`.
 - [x] `for...of` over arrays, strings, Maps, Sets, URLSearchParams, Headers, Uint8Arrays, built-in iterators, custom
       synchronous iterators, and confined synchronous generators. Abrupt completion invokes the iterator's optional `return()`.
-- [x] `for...in` over own keys of plain objects, arrays, strings, and tool references; other values iterate nothing.
+- [x] `for...in` over own keys of plain objects, arrays, strings, and tool references. `null`, `undefined`, and other
+      non-objects iterate nothing. An un-awaited promise throws rather than iterating.
 - [x] Unlabeled `break` and `continue`.
 - [x] `try`, `catch`, optional catch bindings, and `finally`.
 - [x] `throw` with arbitrary values.
@@ -108,7 +115,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 ## Functions and callbacks
 
 - [x] Function declarations, function expressions, and arrow functions.
-- [x] Synchronous and `async` functions.
+- [x] Synchronous and `async` functions. A line break between `function` and the name is allowed, as in JavaScript;
+      a line break between `async` and `function` is not an async function.
 - [x] Closures, recursion, default parameters, rest parameters, and destructured parameters.
 - [x] A call depth limit of 10000: deeper nesting throws a catchable `RangeError: Maximum call stack size exceeded`
       at the overflowing call instead of running until the timeout. Callbacks invoked by built-ins count below the
@@ -120,8 +128,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] `Boolean`, `Number`, `String`, `parseInt`, `parseFloat`, `isFinite`, `isNaN`, and URI helpers as callbacks.
 - [x] Built-in method references as callbacks, such as `values.map(Math.abs)`, `records.map(JSON.stringify)`,
       `items.forEach(console.log)`, and `Promise.resolve(-1).then(Math.abs)`. Extra callback arguments a built-in
-      does not consume are ignored, like JS; consumed arguments stay strictly validated (`Math.floor` still rejects a
-      string). A detached method loses its receiver, as in JS: `values.filter("abc".includes)` is a `TypeError`
+      does not consume are ignored, like JS, and consumed arguments coerce, like JS (`"3.7".replace(/\d\.\d/,
+    Math.floor)` is `"3"`). A detached method loses its receiver, as in JS: `values.filter("abc".includes)` is a `TypeError`
       because `includes` is called without a string `this`.
 - [x] Constructors work as callbacks with JS call semantics: `Error` types construct (`messages.map(Error)`),
       and new-requiring constructors (`Map`, `Set`, `URL`, `URLSearchParams`, `Headers`, `Promise`) throw a `TypeError`,
@@ -141,11 +149,13 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       assignments, object literal keys, and destructuring or parameter defaults.
 - [x] Built-in functions are objects too, with `name` and `length` (`Math.max.length === 2`,
       `Array.prototype.push.name === "push"`).
-- [ ] A named function expression's name is not bound inside its own body.
-- [ ] Redeclaring a function in the same scope is rejected; in JavaScript the last declaration wins.
-- [ ] A line terminator between `async function` and the function name.
-- [ ] Generator and async generator functions evaluate parameter defaults and destructuring at the first `next()`
-      rather than at the call, so their errors are not thrown synchronously.
+- [x] A named function expression's name is bound read-only inside its own body; assigning to it throws a
+      `TypeError`, as in strict mode.
+- [x] Redeclaring a function in the same scope, or alongside a `var`, is allowed: the last declaration wins.
+- [x] Generator functions have their own `prototype` (inheriting the shared generator prototype), so
+      `g() instanceof g` holds. Plain functions have none, since they cannot construct.
+- [x] Generator and async generator functions bind parameters (defaults, destructuring) at the call and defer only the
+      body to the first `next()`, so a bad argument throws synchronously from the call site, as in JS.
 - [x] Synchronous and async generator declarations/expressions, `yield`, and `yield*`, including lazy bodies,
       `next(value)`, `return(value)`, `throw(value)`, exhaustion, promise adoption, async request ordering,
       `try`/`catch`/`finally`, and sync/async iterator symbols. Async `yield*` awaits values while adapting a sync
@@ -158,7 +168,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       rejected by every synchronous consumer.
 - [x] Synchronous iterator acquisition and result validation follow `IteratorClose` boundaries: consumer errors and
       intentional early stops invoke `return()`, acquisition/`next()` failures do not, and an original consumer error
-      wins over a cleanup failure. Async iterator consumption remains limited to `for await...of` and async `yield*`.
+      wins over a cleanup failure. A generator's `return()` is an intentional stop, so a `return()` that throws or
+      yields a non-object surfaces from it as a `TypeError`. Async iterator consumption remains limited to `for await...of` and async `yield*`.
 - [x] Portable generator protocol coverage is adapted from pinned Test262 cases for suspended-start, suspended-yield,
       and completed states; sync and async `next`/`return`/`throw`; finally yields and completion overrides; rejected
       yielded promises; mixed async request queues; sync and async `yield*` forwarding; malformed methods/results;
@@ -192,13 +203,22 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Plain, arithmetic, bitwise, and logical assignment operators.
 - [x] Property deletion on plain data objects and arrays, including computed and optional forms; deleting an array index
       creates a hole without changing its length. Deleting a non-configurable property (`length`) or
-      assigning a read-only one (`Math.PI`, `fn.name`) throws a `TypeError`, as in strict mode.
-- [ ] Operators, `switch` discriminants, template interpolation, and coercion helpers such as `String` and `isNaN`
-      applied to functions and namespaces; JavaScript coerces them, the interpreter rejects non-data operands.
-- [ ] ToPrimitive on object operands: operators, `Error(message)`, `Date` arguments, and `parseInt` radix should call
-      `valueOf`/`toString` in spec order and surface their throws.
-- [ ] Property keys follow ToPropertyKey: `x[null]`, `x[true]`, and objects (via `toString`) become string keys; only
-      strings and numbers are accepted.
+      assigning a read-only one (`Math.PI`, `fn.name`) throws a `TypeError`, as in strict mode. `delete` of a
+      non-reference (`delete 0`, `delete f()`) evaluates the operand and is `true`; `delete x` on a variable throws.
+- [x] Coercion helpers and template interpolation accept functions and namespaces: `String(fn)` and `${fn}` give
+      `"[object Function]"` rather than the source text, `isNaN(fn)` is `true`.
+- [ ] Operators other than `===`/`!==`, `switch` discriminants and cases, and `Object.is` applied to a function,
+      promise, generator, tool reference, or any object holding one anywhere inside; JavaScript compares by identity or
+      coerces (`fn == null` is `false`, `fn + ""` is its source text), the interpreter throws
+      `TypeError: Binary operators require data values.` The check walks both operands' whole object graphs, so
+      `rows == null` on a large array is slow where `rows === null` is not.
+- [ ] ToPrimitive on program objects: operators, `Number`/`String`, `Error(message)`, `parseInt` radix, multi-argument
+      `Date` construction and `Date.UTC`, and numeric built-in arguments (`Math.max`, `at`, `indexOf` start) should call
+      the object's own `valueOf`/`toString` in spec order and surface their throws. Today they use the built-in form
+      (`NaN`, `"[object Object]"`) and ignore own methods. Date setters and one-argument `Date` construction already
+      follow ToPrimitive.
+- [x] Property keys follow ToPropertyKey: `x[null]`, `x[true]`, and objects (via their built-in string form) become
+      string keys.
 
 ## Promises and tools
 
@@ -234,6 +254,10 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       resolving with the promise itself rejects with a `TypeError`. Resolver callables work anywhere callbacks are
       accepted, including `.then`/`.catch` handlers and collection callbacks, and vanish at the data boundary like
       any function.
+- [x] `Promise.withResolvers()`: the same promise and resolver callables as the constructor, as a `{ promise, resolve,
+reject }` object.
+- [x] `Promise.try(fn, ...args)`: calls `fn` synchronously; a throw rejects, a return fulfils, and a returned promise or
+      thenable is adopted.
 - [x] Recursive assimilation of objects with an own callable `then` field across `Promise.resolve`, combinators,
       constructors, reactions, `finally`, `await`, and async returns. Thenable methods run deferred, receive
       first-call-wins resolve/reject functions, and ignore throws after settlement. Inherited/accessor `then` fields
@@ -254,7 +278,9 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       not construct.
 - [x] `Object()` and `new Object()` return `{}` for nullish arguments and pass objects through unchanged;
       primitive wrapper objects (`Object(1)`) are rejected explicitly.
-- [x] Computed property names and object spread.
+- [x] Computed property names and object spread. Any value works as a key (ToPropertyKey): strings, numbers, and the
+      two confined symbols as themselves, everything else as its string form (`o[null]` is `o["null"]`, `o[{}]` is
+      `o["[object Object]"]`), in reads, writes, literals, `in`, and destructuring.
 - [x] `Object.keys`, `Object.values`, `Object.entries`, `Object.hasOwn`, `Object.assign`, and `Object.fromEntries`, with
       synchronous iterator support for `fromEntries`. Sources follow ToObject: strings enumerate by index, other
       primitives and wrappers contribute nothing, and `null`/`undefined` throw. `Object.assign` accepts array
@@ -271,7 +297,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] `Object.is` for supported data values.
 - [x] `Object.groupBy` over finite collections and custom synchronous iterators/generators, with string-key coercion
       and plain-object results.
-- [x] `Object.prototype` methods on values: `toString` (`"[object Array]"`), `toLocaleString` (calls the value's
+- [x] `Object.prototype` methods on values: `toString` (`"[object Array]"`, `"[object Map]"`, `"[object Promise]"`, and so
+      on for every built-in kind, as JS reports through `Symbol.toStringTag`), `toLocaleString` (calls the value's
       `toString`, as in JS), `valueOf`, `hasOwnProperty`, `isPrototypeOf`, and `propertyIsEnumerable`.
 
 ## Arrays
@@ -283,7 +310,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       `(value, index)` arguments and stepwise synchronous iterator consumption.
 - [x] Iteration/transformation: `map`, `filter`, `flatMap`, and `forEach`.
 - [x] Searching/tests: `find`, `findIndex`, `findLast`, `findLastIndex`, `some`, `every`, `includes`, `indexOf`, and
-      `lastIndexOf`.
+      `lastIndexOf`. An explicit `undefined` fromIndex counts as present: `[1, 2, 1].lastIndexOf(1, undefined)` is `0`
+      while `lastIndexOf(1)` is `2`.
 - [x] Aggregation: `reduce` and `reduceRight`.
 - [x] Ordering: `sort`, `toSorted`, `reverse`, and `toReversed`.
 - [x] Access/copying: `at`, `slice`, `concat`, `flat`, `with`, `join`, and `toLocaleString` (each element's
@@ -292,7 +320,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] `keys`, `values`, `entries`, and `[Symbol.iterator]` (the same function as `values`) return live iterator objects
       with `next()` and `[Symbol.iterator]`, as in JS. Iterator objects are opaque references: they print as
       `[opaque reference]`, serialize to `{}`, and cannot be passed to extensions. Every built-in collection iterator
-      shares one prototype, which is only observable through `getPrototypeOf`.
+      shares one prototype. JavaScript gives each collection its own; the difference is not observable here because
+      `Object.getPrototypeOf` is not exposed.
 - [x] `length`, numeric indexing, index assignment, spread, and `for...of`.
 - [x] The `thisArg` argument of `Array.from` is accepted and ignored, like JS arrows.
 - [x] `Array.prototype.toSpliced`.
@@ -303,10 +332,12 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Assigning `length` to truncate or extend an array; invalid lengths throw `RangeError`.
 - [x] Non-index own properties on arrays (`arr.foo = 1`, `arr.constructor = null`). They are excluded from the JSON
       form, like `JSON.stringify`.
-- [ ] Argument coercion for `indexOf`, `lastIndexOf`, `includes`, `fill`, `flat`, `copyWithin`, and the `join`
-      separator: JavaScript applies ToIntegerOrInfinity/ToString (including `valueOf`, strings, and `undefined`), the
-      interpreter requires numbers and strings; `includes()`/`indexOf()` with no argument should search for
-      `undefined`.
+- [x] Numeric arguments coerce as in JS (ToIntegerOrInfinity): `indexOf(x, "1")`, `slice("1", "3")`, `at(null)`,
+      `flat(1.9)`, `with(1.5, v)`, `Math.max("3", "2")`, `parseInt("11", "2")`, `(1.5).toFixed("2")`,
+      `String.fromCharCode("65")`, and the Uint8Array equivalents. `join(sep)` and `JSON.parse(text)` apply ToString
+      (`join(null)` is `"1null2"`, `JSON.parse(123)` is `123`). `Array.from({ length: "2" })` applies ToLength; a
+      promise source still throws with an `await` hint rather than JS's silent `[]`. A program object's own
+      `valueOf`/`toString` is not consulted yet (see ToPrimitive above).
 
 ## Strings
 
@@ -325,10 +356,12 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       native JS, `split(undefined)` returns the whole string, and `includes`/`startsWith`/`endsWith` reject regular
       expressions with a native-style `TypeError`. Opaque runtime references still reject as data errors, and
       `repeat` still requires a finite non-negative count.
-- [x] Native no-argument parity for `match()`, `matchAll()`, and `search()`; all behave as an empty pattern. Present
-      arguments must still be a regular expression or string pattern.
-- [ ] `String.raw`.
-- [ ] `match`, `search`, and `split` accept any value and coerce it (objects via `toString`), like JavaScript.
+- [x] Native no-argument parity for `match()`, `matchAll()`, and `search()`; all behave as an empty pattern.
+- [x] `String.raw`, on a template object or any `{ raw }` object; raw strings and substitutions coerce through their own
+      `toString`.
+- [x] `match`, `matchAll`, `search`, and `split` read any non-RegExp argument as a pattern string, as `new RegExp(arg)`
+      would: `"a1b".match(1)` matches `/1/`, `search(null)` looks for `"null"`, and `undefined` is the empty pattern.
+      Objects use their built-in string form until ToPrimitive lands.
 
 ## Numbers and Math
 
@@ -349,7 +382,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       use their epoch time) and reject opaque runtime references as data errors.
 - [x] Unknown static members on global namespaces and on `Number`/`String`/the coercion functions read as `undefined`
       for feature detection. Calling any undefined value reports a native-style `TypeError` naming the callee, for
-      example `Math.sum is not a function.` Unknown `Promise` statics keep their descriptive error.
+      example `Math.sum is not a function.` or `search(...).catch is not a function.` Unknown `Promise` statics keep
+      their descriptive error.
 - [x] `Math.sumPrecise` over finite collections and custom synchronous iterators/generators, rejecting non-number
       elements without coercion.
 - [x] Global coercing `isFinite` and `isNaN`; opaque runtime references reject as data errors, like `Number(...)`.
@@ -363,7 +397,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] `JSON.stringify` function and array replacers. Function replacers receive `(key, value)` in preorder, including
       the root, but no `this` holder. Array replacers preserve requested property order, deduplicate names, coerce
       number primitives, and ignore non-string/non-number entries. Primitive wrapper entries remain unsupported.
-- [x] Captured `console.log`, `console.info`, `console.debug`, `console.warn`, and `console.error`.
+- [x] Captured `console.log`, `console.info`, `console.debug`, `console.warn`, and `console.error`. An Error prints as
+      `Error.prototype.toString` would show it (`Error: boom`), wherever it appears in the logged value.
 - [x] Captured `console.dir` and `console.table`.
 
 ## Date
@@ -386,8 +421,9 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] `toLocaleString`, `toLocaleDateString`, and `toLocaleTimeString` always format as `en-US` in UTC
       (`"1/1/1970, 12:00:00 AM"`) so output does not depend on the host.
 - [x] Native one-argument Date coercion for supported values, including booleans, null, arrays, and plain objects.
-- [ ] Date setters and multi-argument construction coerce object arguments through `valueOf`/`toString` and surface
-      their throws.
+- [x] Date setters and one-argument construction coerce object arguments through their own `valueOf`/`toString` and
+      surface their throws.
+- [ ] Multi-argument construction and `Date.UTC` coerce object arguments the same way (see ToPrimitive above).
 - [x] Native Date loose-equality and default primitive-coercion semantics, using CodeMode's deterministic ISO string
       representation for the string primitive.
 - [x] Native `RangeError` branding for invalid `toISOString()` calls.
@@ -406,15 +442,30 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Match `indices` metadata for the `d` flag, including named groups on `exec`, `match`, and `matchAll` results.
 - [x] `RegExp.escape`.
 
+## Iterator
+
+- [x] `Iterator.prototype.map`, `filter`, `take`, `drop`, and `flatMap` on any iterator or generator: lazy, one source
+      step per result, closing the source when a callback throws, on early `return()`, or when `for...of` or
+      destructuring finishes with it early. Once done or closed a helper stays done, and a callback that re-enters its
+      own helper is a `TypeError`. `take`/`drop` coerce their count and reject `NaN` or negative counts with a
+      `RangeError`; `flatMap` callbacks must return an iterable or iterator, not a string.
+- [x] `Iterator.prototype.reduce`, `toArray`, `forEach`, `some`, `every`, and `find`, closing the source on early exit.
+- [x] `Iterator.from(value)` returns iterators and generators as they are, and wraps strings, iterables, and objects
+      with a `next` method. `Iterator` itself is abstract: calling or constructing it is a `TypeError`.
+- [x] Helpers and `Iterator.from` wrappers have `return()`; collection iterators (`array.values()`) do not, as in JS,
+      so an early exit from them leaves them where they were.
+- [ ] `Iterator.concat`, `Iterator.zip`, and `Iterator.zipKeyed` (stage 3 proposals).
+
 ## Map and Set
 
 - [x] Static `Map.groupBy` over finite collections and custom synchronous iterators/generators, preserving key identity.
 - [x] `new Map()` from synchronous iterables of entries.
 - [x] Map `get`, `set`, `has`, `delete`, `clear`, `size`, `forEach`, `getOrInsert`, and `getOrInsertComputed`.
+      `forEach` is live: entries deleted during the walk are skipped and entries added are visited, as in JS.
 - [x] `new Set()` from synchronous iterables.
 - [x] Set `add`, `has`, `delete`, `clear`, `size`, and `forEach`.
 - [x] Live `keys`, `values`, `entries`, and `[Symbol.iterator]` iterators for Map and Set; a Set-like operand's `keys()`
-      may return a built-in iterator or an array.
+      may return any iterator or an array.
 - [x] Spread, `for...of`, `Array.from`, and `Object.fromEntries` integration.
 - [x] Map and Set values serialize to `{}` at host/JSON boundaries.
 - [x] Set composition and relation methods: `union`, `intersection`, `difference`, `symmetricDifference`, `isSubsetOf`,
@@ -431,7 +482,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] `new URLSearchParams()` from query strings, data objects, synchronous iterables of pairs, and URLSearchParams.
 - [x] URLSearchParams `append`, `delete`, `get`, `getAll`, `has`, `set`, `sort`, `forEach`, `keys`, `values`,
       `entries`, `[Symbol.iterator]`, `toString`, and `size`.
-- [x] URL values serialize to their href; URLSearchParams serialize to `{}`.
+- [x] URL values are their href in `JSON.stringify` and at the host boundary. URLSearchParams are `{}` in
+      `JSON.stringify` and their query string at the host boundary.
 
 ## Uint8Array
 
@@ -444,11 +496,16 @@ with a hint to encode as text first (`TextDecoder`, `toBase64`, `toHex`).
       cannot be deleted. `length` is a prototype accessor, so `Object.keys` lists only indexes.
 - [x] `at`, `slice`, `subarray` (a view on the same bytes), `set`, `fill`, `reverse`, `indexOf`, `lastIndexOf`,
       `includes`, `join`, `toString`, `toBase64`, `toHex`, and live `keys`, `values`, `entries`, and `[Symbol.iterator]`
-      iterators.
+      iterators. Start indexes coerce as for arrays, and `lastIndexOf(x, undefined)` searches from index 0 while
+      `lastIndexOf(x)` searches from the end, as in JS.
 - [x] Spread, destructuring, `for...of`, `yield*`, `Array.from`, and `new Set(bytes)`. `Array.isArray` is false.
 - [x] String coercion joins with commas; `JSON.stringify` gives `{"0":1,...}`; `console.log` prints
       `Uint8Array(n) [...]`.
-- [ ] Callback methods (`forEach`, `map`, `filter`, `find`, `reduce`, ...); use `Array.from(bytes, fn)` meanwhile.
+- [x] Callback methods `forEach`, `map`, `filter`, `find`, `findIndex`, `findLast`, `findLastIndex`, `some`, `every`,
+      `reduce`, and `reduceRight`, sharing the Array implementations; the callback receives `(byte, index, bytes)`.
+      `map` and `filter` return new Uint8Arrays with results clamped like index writes (`map((b) => b * 100)` on
+      `[1, 2, 3]` is `[100, 200, 44]`); `reduce` on an empty Uint8Array without an initial value is a `TypeError`.
+- [x] `sort` in place, numeric ascending by default (`[10, 9, 1]` sorts to `[1, 9, 10]`) or by comparator.
 - [ ] `ArrayBuffer`, `DataView`, and other typed arrays.
 
 ## Web platform helpers
@@ -476,7 +533,8 @@ Nothing is exposed unless a host provides it; extension calls are not tool calls
 - [x] Every value crossing in either direction is converted, never shared: plain objects and arrays are copied,
       `Date`, `RegExp`, `URL`, `URLSearchParams`, `Headers`, `Map`, `Set`, and `Uint8Array` become fresh copies with
       their contents converted (a host `ArrayBuffer` comes in as a `Uint8Array`; other typed arrays cannot come out),
-      errors cross as errors with their name and message, and a `__proto__` key is dropped. Functions, generators,
+      errors cross as errors with their name, message, `cause`, and own enumerable data, and a `__proto__` key is
+      dropped. Functions, generators,
       un-awaited promises, and symbols cannot be passed in; a class instance, a symbol, or a BigInt cannot come out.
 - [x] A host function inside a result becomes a program function whose calls cross the same way, so a result can
       carry methods (`res.json()`) whose host closures keep the host state. Diagnostics name it by its path
@@ -501,8 +559,10 @@ Nothing is exposed unless a host provides it; extension calls are not tool calls
 - [x] `AggregateError` with the `(errors, message?)` signature and an own `errors` array, constructed directly or by
       an all-rejected `Promise.any`; direct construction accepts custom synchronous iterators and generators.
 - [x] Error `name`/`message`, error inheritance through `instanceof`, and plain-data serialization. `message` is an own
-      non-enumerable property and `name` is inherited, as in JS, so `Object.keys(err)` is `[]` while the host still
-      receives `{ name, message }`. Errors have no `stack`; the diagnostic carries the source location instead.
+      non-enumerable property and `name` is inherited, as in JS, so `Object.keys(err)` is `[]` for a plain error. The
+      result boundary still emits `{ name, message, ...own enumerable }`, so a field such as `code` crosses. `cause` is
+      non-enumerable: an extension Error carries it, and this JSON form does not. Errors have no `stack`; the diagnostic
+      carries a 1-based line and column in the submitted source instead.
 - [x] `instanceof` against any constructor with a `prototype`, including every built-in and `Function`.
 - [x] Catchable user throws, runtime failures raised during interpreted evaluation, awaited tool failures, and awaited
       tool-call-limit failures; parse/compile failures, cooperative timeout, and output bounding remain outside program
@@ -511,8 +571,9 @@ Nothing is exposed unless a host provides it; extension calls are not tool calls
       short orientation to the supported subset; this matrix is the full reference.
 - [x] Model-visible host failure messages and underlying causes, including output-validation errors.
 - [x] Caught errors do not distinguish user throws, interpreter failures, and tool failures; a program sees one
-      Error-shaped value with `name` and `message` in `catch`, rejection handlers, and `Promise.allSettled` reasons.
-      This is deliberate: the program should handle a failure the same way regardless of where it originated.
+      Error-shaped value in `catch`, rejection handlers, and `Promise.allSettled` reasons. It always has `name` and
+      `message`, plus `cause` and own data when the failure carried them. This is deliberate: the program should
+      handle a failure the same way regardless of where it originated.
 - [x] Failures raised by the interpreter are `TypeError`s unless JavaScript names them otherwise (`RangeError`,
       `ReferenceError`, `SyntaxError`, `URIError`), so `e instanceof TypeError` and `e.constructor === TypeError`
       hold. Unsupported syntax reached at runtime is a `SyntaxError`; awaited tool failures stay plain `Error`.

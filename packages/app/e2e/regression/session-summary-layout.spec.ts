@@ -84,6 +84,7 @@ for (const direction of ["ltr", "rtl"] as const) {
     await expect(content).toHaveAttribute("data-summary-motion", "transitionrun,transitionend,")
     await expect(content).not.toHaveCSS("translate", shifted)
     await page.setViewportSize({ width: 1440, height: 900 })
+    await expect(panel).toHaveAttribute("data-summary-resizing", "false")
     await expect(content).toHaveCSS("translate", shifted)
 
     await content.evaluate((element) => element.setAttribute("data-summary-motion", ""))
@@ -112,6 +113,7 @@ for (const direction of ["ltr", "rtl"] as const) {
     await expect(summary).toBeVisible()
 
     await page.setViewportSize({ width: 1800, height: 900 })
+    await expect(panel).toHaveAttribute("data-summary-resizing", "false")
     await expect(content).toHaveCSS("translate", "none")
     await expect(summary).toBeVisible()
 

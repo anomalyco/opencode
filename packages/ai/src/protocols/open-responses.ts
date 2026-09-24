@@ -18,6 +18,7 @@ import {
   type ToolDefinition,
   type ToolResultPart,
 } from "../schema/index.js"
+import type { Media } from "../media.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { effortUpdate } from "../effort-updates.js"
@@ -403,7 +404,7 @@ export interface ProviderAdapter {
   ) => Effect.Effect<{ readonly type: string }, AIError>
   readonly lowerMedia?: (input: {
     readonly part: MediaPart
-    readonly media: ProviderShared.NormalizedMedia
+    readonly media: Media.Inline | undefined
     readonly request: LLMRequest
   }) => MediaInput | undefined
   readonly restoreHostedToolItem?: (item: unknown) => HostedToolReplayItem | undefined
@@ -510,29 +511,28 @@ const lowerMedia = Effect.fn("OpenResponses.lowerMedia")(function* (
   adapter: ProviderAdapter,
   target: "message" | "tool-result",
 ) {
-  const media = ProviderShared.normalizeMedia(part)
+  const media = part.media.inline()
   const providerMedia = adapter.lowerMedia?.({ part, media, request })
   if (providerMedia) return providerMedia
   const detail = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenResponsesInputImage.fields.detail))(
     part.providerMetadata?.[metadataKey(request.model)]?.detail,
   )
-  const url =
-    typeof part.data === "string" && (part.data.startsWith("https://") || part.data.startsWith("http://"))
-      ? part.data
-      : undefined
-  if (!media.mime.startsWith("image/")) {
-    if (target === "tool-result" && media.mime.startsWith("video/"))
-      return { type: "input_video" as const, video_url: url ?? media.dataUrl }
+  const mime = part.media.mediaType.toLowerCase()
+  const url = ProviderShared.mediaUrl(part.media)
+  const location = url ?? (yield* ProviderShared.requireInlineMedia(adapter.name, part.media)).dataUrl
+  if (part.media.kind !== "image") {
+    if (target === "tool-result" && part.media.kind === "video")
+      return { type: "input_video" as const, video_url: location }
     return {
       type: "input_file" as const,
-      filename: part.filename ?? (media.mime === "application/pdf" ? "document.pdf" : "file"),
+      filename: part.filename ?? (mime === "application/pdf" ? "document.pdf" : "file"),
       detail,
-      ...(url ? { file_url: url } : { file_data: media.dataUrl }),
+      ...(url ? { file_url: url } : { file_data: location }),
     }
   }
   return {
     type: "input_image" as const,
-    image_url: url ?? media.dataUrl,
+    image_url: location,
     detail,
   }
 })
@@ -562,12 +562,7 @@ const lowerToolResultContentItem = Effect.fnUntraced(function* (
   adapter: ProviderAdapter,
 ) {
   if (item.type === "text") return { type: "input_text" as const, text: item.text }
-  return yield* lowerMedia(
-    { type: "media", mediaType: item.mime, data: item.uri, filename: item.name },
-    request,
-    adapter,
-    "tool-result",
-  )
+  return yield* lowerMedia(ProviderShared.toolFileMedia(item), request, adapter, "tool-result")
 })
 
 const lowerHostedToolResultContentItem = Effect.fnUntraced(function* (
@@ -576,11 +571,7 @@ const lowerHostedToolResultContentItem = Effect.fnUntraced(function* (
   adapter: ProviderAdapter,
 ) {
   if (item.type === "text") return { type: "input_text" as const, text: item.text }
-  return yield* lowerMessageMedia(
-    { type: "media", mediaType: item.mime, data: item.uri, filename: item.name },
-    request,
-    adapter,
-  )
+  return yield* lowerMessageMedia(ProviderShared.toolFileMedia(item), request, adapter)
 })
 
 const lowerToolResultOutput = Effect.fnUntraced(function* (
@@ -726,11 +717,22 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
           })
           continue
         }
+        if (part.type === "media") {
+          flushText()
+          // Responses has no assistant-authored image item; replay generated media (e.g. from Gemini) as user input.
+          input.push({
+            type: "message",
+            role: "user",
+            content: [yield* lowerMessageMedia(part, request, adapter)],
+          })
+          continue
+        }
         return yield* ProviderShared.unsupportedContent(adapter.name, "assistant", [
           "text",
           "reasoning",
           "tool-call",
           "tool-result",
+          "media",
         ])
       }
       flushText()
