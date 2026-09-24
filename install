@@ -410,6 +410,9 @@ case $current_shell in
     fish)
         config_files="$HOME/.config/fish/config.fish"
     ;;
+    nu|nushell)
+        config_files="$XDG_CONFIG_HOME/nushell/env.nu $HOME/.config/nushell/env.nu $XDG_CONFIG_HOME/nushell/config.nu $HOME/.config/nushell/config.nu"
+    ;;
     zsh)
         config_files="${ZDOTDIR:-$HOME}/.zshrc ${ZDOTDIR:-$HOME}/.zshenv $XDG_CONFIG_HOME/zsh/.zshrc $XDG_CONFIG_HOME/zsh/.zshenv"
     ;;
@@ -439,11 +442,24 @@ if [[ "$no_modify_path" != "true" ]]; then
 
     if [[ -z $config_file ]]; then
         print_message warning "No config file found for $current_shell. You may need to manually add to PATH:"
-        print_message info "  export PATH=$INSTALL_DIR:\$PATH"
+        case $current_shell in
+            fish)
+                print_message info "  fish_add_path $INSTALL_DIR"
+            ;;
+            nu|nushell)
+                print_message info "  \$env.PATH = (\$env.PATH | split row (char esep) | prepend \"$INSTALL_DIR\")"
+            ;;
+            *)
+                print_message info "  export PATH=$INSTALL_DIR:\$PATH"
+            ;;
+        esac
     elif [[ ":$PATH:" != *":$INSTALL_DIR:"* ]]; then
         case $current_shell in
             fish)
                 add_to_path "$config_file" "fish_add_path $INSTALL_DIR"
+            ;;
+            nu|nushell)
+                add_to_path "$config_file" "\$env.PATH = (\$env.PATH | split row (char esep) | prepend \"$INSTALL_DIR\")"
             ;;
             zsh)
                 add_to_path "$config_file" "export PATH=$INSTALL_DIR:\$PATH"
