@@ -1,52 +1,46 @@
 import { expect, test } from "bun:test"
 import { createPluginContext, type Registry, type usePluginHost } from "../src/plugin/api"
+import { model, renderLocal } from "./fixture/local"
 
-type Host = ReturnType<typeof usePluginHost>
-type Selection = { providerID: string; modelID: string; variant?: string }
-
-function setup(selection: Selection | undefined, variants: string[]) {
-  const selected: (string | undefined)[] = []
+// Eagerly read host services need a shape; model access goes through the real LocalProvider.
+function pluginModel(local: ReturnType<typeof usePluginHost>["local"]) {
   const host = {
-    app: { version: "test", channel: "test" },
-    client: { api: {} },
+    app: {},
+    client: {},
     keymap: {},
     shortcuts: {},
     keymapState: {},
     sessionTabs: {},
-    local: {
-      model: {
-        selection: () => selection,
-        variant: {
-          list: () => (selection ? variants : []),
-          set: (variant: string | undefined) => selected.push(variant),
-        },
-      },
-    },
-  } as unknown as Host
+    local,
+  } as unknown as ReturnType<typeof usePluginHost>
   const registry: Registry = { has: () => false, set() {}, remove() {}, active: () => true }
-  const context = createPluginContext({ host, id: "test", options: undefined, owned: [], registry })
-  return { selected, model: context.ui.model }
+  return createPluginContext({ host, id: "test", options: undefined, owned: [], registry }).ui.model
 }
 
-test("reads the selected model and its variants", () => {
-  const harness = setup({ providerID: "openai", modelID: "gpt-5.5", variant: "high" }, ["low", "high"])
-  expect(harness.model.current()).toEqual({ providerID: "openai", modelID: "gpt-5.5", variant: "high" })
-  expect(harness.model.variant.list()).toEqual(["low", "high"])
+test("plugins read and select variants of the selected model", async () => {
+  await using setup = await renderLocal({ models: [model("first", ["low", "high"])] })
+  const selected = pluginModel(setup.local)
+
+  expect(selected.current()).toEqual({ providerID: "provider", modelID: "first", variant: undefined })
+  expect(selected.variant.list()).toEqual(["low", "high"])
+
+  expect(selected.variant.set("high")).toBe(true)
+  expect(selected.current()?.variant).toBe("high")
+  expect(setup.local.model.variant.current()).toBe("high")
+
+  expect(selected.variant.set(undefined)).toBe(true)
+  expect(selected.current()?.variant).toBeUndefined()
 })
 
-test("selects listed variants or the model default", () => {
-  const harness = setup({ providerID: "openai", modelID: "gpt-5.5" }, ["low", "high"])
-  expect(harness.model.variant.set("high")).toBe(true)
-  expect(harness.model.variant.set(undefined)).toBe(true)
-  expect(harness.selected).toEqual(["high", undefined])
-})
+test("plugins cannot select unavailable variants or variants without a model", async () => {
+  await using setup = await renderLocal({ models: [model("first", ["low", "high"])] })
+  const selected = pluginModel(setup.local)
+  expect(selected.variant.set("max")).toBe(false)
+  expect(selected.current()?.variant).toBeUndefined()
 
-test("rejects unavailable variants and missing selections", () => {
-  const harness = setup({ providerID: "openai", modelID: "gpt-5.5" }, ["low", "high"])
-  expect(harness.model.variant.set("max")).toBe(false)
-
-  const empty = setup(undefined, [])
-  expect(empty.model.current()).toBeUndefined()
-  expect(empty.model.variant.set(undefined)).toBe(false)
-  expect([...harness.selected, ...empty.selected]).toEqual([])
+  await using empty = await renderLocal({ models: [] })
+  const none = pluginModel(empty.local)
+  expect(none.current()).toBeUndefined()
+  expect(none.variant.list()).toEqual([])
+  expect(none.variant.set(undefined)).toBe(false)
 })
