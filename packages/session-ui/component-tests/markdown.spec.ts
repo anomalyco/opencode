@@ -194,6 +194,58 @@ story("shows a stable GitHub mark without changing link text or other sites", as
   }
 })
 
+story("keeps favicon space stable across loading and failure without fetching private hosts", async ({ page }) => {
+  const requested: string[] = []
+  let release: () => void = () => undefined
+  const loading = new Promise<void>((resolve) => (release = resolve))
+  await page.route("https://www.google.com/s2/favicons?**", async (route) => {
+    requested.push(route.request().url())
+    if (route.request().url().includes("developer.mozilla.org")) await loading
+    if (route.request().url().includes("broken.example.org")) return route.abort()
+    await route.fulfill({ status: 200, contentType: "image/png", body: png })
+  })
+
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({
+      text: [
+        "[docs](https://developer.mozilla.org/docs)",
+        "[missing](https://broken.example.org/docs)",
+        "[private](http://localhost:8080/docs)",
+        "[GitHub](https://github.com/anomalyco/opencode)",
+      ].join(" · "),
+      cached: true,
+    })
+  }, fixture)
+
+  const markdown = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+  const docs = markdown.getByRole("link", { name: "docs" })
+  const image = docs.locator(".markdown-link-favicon img")
+  await expect.poll(() => requested.some((url) => url.includes("developer.mozilla.org"))).toBe(true)
+  await expect(image).toHaveCSS("opacity", "0")
+  await expect(docs.locator(".markdown-link-favicon")).toHaveCSS("width", "14px")
+  const width = await docs.evaluate((link) => link.getBoundingClientRect().width)
+  release()
+  await expect(image).toHaveAttribute("data-loaded", "")
+  await expect(image).toHaveCSS("opacity", "1")
+  await expect(image).not.toHaveAttribute("role", "button")
+  expect(await image.evaluate((favicon) => favicon.onclick)).toBeNull()
+  expect(await docs.evaluate((link) => link.getBoundingClientRect().width)).toBe(width)
+  expect(
+    await image.evaluate((favicon) => favicon.getBoundingClientRect().top - favicon.parentElement!.getBoundingClientRect().top),
+  ).toBe(0)
+
+  await expect(markdown.getByRole("link", { name: "missing" }).locator(".markdown-link-favicon img")).not.toHaveAttribute(
+    "data-loaded",
+    "",
+  )
+  await expect(markdown.getByRole("link", { name: "private" }).locator(".markdown-link-favicon img")).toHaveCount(0)
+  await expect(markdown.getByRole("link", { name: "GitHub" }).locator(".markdown-link-favicon")).toHaveCount(0)
+  expect(requested).toHaveLength(2)
+  expect(requested.every((url) => !url.includes("localhost") && !url.includes("github.com"))).toBe(true)
+})
+
 async function resolvedColor(page: Page, token: string) {
   return page.evaluate((token) => {
     const probe = document.createElement("span")
