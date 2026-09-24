@@ -163,6 +163,37 @@ story("mounts cached completed Markdown with sanitized HTML and decorations", as
   await expect(markdown).toHaveAttribute("data-markdown-ready", "")
 })
 
+story("shows a stable GitHub mark without changing link text or other sites", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({
+      text: [
+        "[#540](https://github.com/anomalyco/opencode/pull/540)",
+        "[GitHub](https://github.com)",
+        "[other site](https://example.com/docs)",
+        "[lookalike](https://github.com.evil.example/pull/540)",
+      ].join(" · "),
+      cached: true,
+    })
+  }, fixture)
+
+  const markdown = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+  const github = markdown.getByRole("link", { name: "#540" })
+  await expect(github).toHaveAttribute("href", "https://github.com/anomalyco/opencode/pull/540")
+  await expect(github).toHaveText("#540")
+  expect(await github.evaluate((link) => getComputedStyle(link, "::before").width)).toBe("14px")
+  expect(await github.evaluate((link) => getComputedStyle(link, "::before").maskImage)).toContain("data:image/svg+xml")
+  expect(
+    await markdown.getByRole("link", { name: "GitHub" }).evaluate((link) => getComputedStyle(link, "::before").content),
+  ).toBe('""')
+  for (const name of ["other site", "lookalike"]) {
+    expect(
+      await markdown.getByRole("link", { name }).evaluate((link) => getComputedStyle(link, "::before").content),
+    ).toBe("none")
+  }
+})
+
 async function resolvedColor(page: Page, token: string) {
   return page.evaluate((token) => {
     const probe = document.createElement("span")
