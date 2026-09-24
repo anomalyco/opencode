@@ -209,6 +209,7 @@ function successfulGrep(inboxID: string): V2Event[] {
 async function run(input: {
   turn: (inboxID: string) => V2Event[]
   pendingForms?: FormInfo[]
+  listError?: "permission" | "session-form" | "global-form"
   attached?: boolean
   format?: "default" | "json"
   compatibility?: "v1"
@@ -240,16 +241,23 @@ async function run(input: {
     }
   })()
   spyOn(sdk.event, "subscribe").mockImplementation(() => stream)
-  spyOn(sdk.permission, "list").mockImplementation(() => ok([]) as never)
+  spyOn(sdk.permission, "list").mockImplementation(
+    () => (input.listError === "permission" ? Promise.reject(new Error("permission list failed")) : ok([])) as never,
+  )
   spyOn(sdk.session.form, "list").mockImplementation(
-    (request) => ok(input.pendingForms?.filter((item) => item.sessionID === request.sessionID) ?? []) as never,
+    (request) =>
+      (input.listError === "session-form"
+        ? Promise.reject(new Error("session form list failed"))
+        : ok(input.pendingForms?.filter((item) => item.sessionID === request.sessionID) ?? [])) as never,
   )
   spyOn(sdk.form, "list").mockImplementation(
     () =>
-      ok({
-        location: { ...location, project: { id: "proj_1", directory: location.directory } },
-        data: input.pendingForms?.filter((item) => item.sessionID === "global") ?? [],
-      }) as never,
+      (input.listError === "global-form"
+        ? Promise.reject(new Error("global form list failed"))
+        : ok({
+            location: { ...location, project: { id: "proj_1", directory: location.directory } },
+            data: input.pendingForms?.filter((item) => item.sessionID === "global") ?? [],
+          })) as never,
   )
   spyOn(sdk.session.form, "cancel").mockImplementation((request) => (input.cancel?.(request) ?? ok(undefined)) as never)
   let promptID = "msg_prompt"
@@ -449,6 +457,22 @@ describe("runNonInteractivePrompt", () => {
       expect.anything(),
     )
   })
+
+  for (const { source, message } of [
+    { source: "permission", message: "permission list failed" },
+    { source: "session-form", message: "session form list failed" },
+    { source: "global-form", message: "global form list failed" },
+  ] as const) {
+    test(`fails when ${source} lookup fails after prompt admission`, async () => {
+      await expect(
+        run({
+          listError: source,
+          turn: (messageID) => [prompted(messageID), settled()],
+          wait: () => Promise.resolve(),
+        }),
+      ).rejects.toThrow(message)
+    })
+  }
 
   test("V1 JSON output flushes step_start before an unrelated step failure", async () => {
     const output = await capture({
