@@ -155,7 +155,7 @@ export const read = Effect.fn("ReadTool.read")(function* (
       type: "file" as const,
       uri: pathToFileURL(input).href,
       name: path.basename(input),
-      content: new TextDecoder().decode(first.bytes).split("\n").map(displayLine).join("\n"),
+      content: new TextDecoder().decode(first.bytes).split("\n").map(clampLine).join("\n"),
       encoding: "utf8" as const,
       mime: mimeType(input),
     }
@@ -294,17 +294,18 @@ const textPage = (bytes: Uint8Array, eof: boolean, page: PageInput) => {
   const decoded = new TextDecoder().decode(bytes)
   const split = decoded.split("\n")
   const complete = eof ? (split.at(-1) === "" ? split.slice(0, -1) : split) : split.slice(0, -1)
-  const available = complete.map(displayLine)
+  const available = complete.map((line) => (line.endsWith("\r") ? line.slice(0, -1) : line))
 
   const entries: string[] = []
   let size = 0
   let next: number | undefined
-  for (const [index, text] of available.slice(offset - 1).entries()) {
+  for (const [index, value] of available.slice(offset - 1).entries()) {
     const line = offset + index
     if (entries.length >= limit || size >= MAX_READ_BYTES) {
       next = line
       break
     }
+    const text = clampLine(value)
     const lineSize = Buffer.byteLength(text, "utf-8") + (entries.length > 0 ? 1 : 0)
     if (size + lineSize > MAX_READ_BYTES) {
       next = line
@@ -322,10 +323,8 @@ const textPage = (bytes: Uint8Array, eof: boolean, page: PageInput) => {
   return { entries, offset, next, consumed }
 }
 
-const displayLine = (line: string) => {
-  const text = line.endsWith("\r") ? line.slice(0, -1) : line
-  return text.length > MAX_LINE_LENGTH ? text.slice(0, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX : text
-}
+const clampLine = (line: string) =>
+  line.length > MAX_LINE_LENGTH ? line.slice(0, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX : line
 
 // A trailing newline ends the last line instead of starting an empty one.
 const lineCount = (newlines: number, last: number | undefined) => newlines + (last === undefined || last === 10 ? 0 : 1)
