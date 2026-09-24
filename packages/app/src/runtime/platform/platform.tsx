@@ -24,8 +24,6 @@ type DesktopOS = "macos" | "windows" | "linux"
 
 export type PairingInfo = {
   readonly urls: readonly string[]
-  readonly username: "opencode"
-  readonly password: string
 }
 
 export type FatalRendererErrorLog = {
@@ -141,6 +139,8 @@ type PlatformBase = {
   /** Pair another device with the local desktop server. */
   pair?: {
     info(): Promise<PairingInfo>
+    /** Single-use code for an `/auth/connect/:code` link. */
+    code(): Promise<string>
   }
 }
 

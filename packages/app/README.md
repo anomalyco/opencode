@@ -94,9 +94,10 @@ In Vite development mode, `origin` uses `VITE_OPENCODE_SERVER_HOST` / `VITE_OPEN
 (default: `http://localhost:4096`) instead of the frontend origin. Both modes restore user-added servers
 from storage. Desktop provides the local server it discovers or starts through native initialization.
 
-With no configured servers, the app shows a full-screen connection form. Enter a server address and password,
-or choose **Scan QR code** to open the camera and read the pairing code from `opencode pair`.
-Scanning fills the form and immediately attempts to connect. Failed connections leave the details available
+With no configured servers, or when the only server rejects the saved credentials, the app shows a full-screen
+connection form. Enter a server address and password, paste a link from `opencode pair`, or choose
+**Scan QR code** to read its QR code. Pairing links are single-use; the app exchanges them for a session token
+and immediately attempts to connect. Failed connections leave the details available
 to edit and retry with **Connect**. Credentials are checked before saving the server. Camera access requires
 HTTPS (or localhost) and browser permission. Saved offline servers continue to use the normal app UI.
 
@@ -106,7 +107,7 @@ When the service is exposed through an HTTPS reverse proxy, advertise its extern
 opencode pair --url https://opencode.example.com
 ```
 
-This replaces the addresses printed and encoded in the QR code while retaining the local service password.
+This replaces the addresses in the printed links and QR code.
 The proxy URL must reach the OpenCode API, not just the frontend. For separate frontend and API processes,
 route `/api` to the service while preserving the `/api` prefix. No machine-specific app or CLI build is required.
 

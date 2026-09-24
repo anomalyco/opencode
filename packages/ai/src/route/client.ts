@@ -261,7 +261,9 @@ const unsupportedCompaction = (request: LLMRequest, mechanism: string | undefine
   })
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/LLMClient") {}
+export class LLMClientService extends Context.Service<LLMClientService, Interface>()("@opencode/LLMClient") {}
+export const Service = LLMClientService
+export type Service = LLMClientService
 
 const resolveRequestOptions = (request: LLMRequest) => {
   const messages = normalizeToolHistory(request.messages)

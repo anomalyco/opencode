@@ -163,6 +163,7 @@ export const api: ElectronAPI = {
   recordFatalRendererError: (error) => invoke("AppRecordFatalRendererError", { error }),
   setNativeTranslations: (bundle) => invoke("AppSetNativeTranslations", { value: bundle }),
   pairInfo: () => invoke("AppPairInfo").then(mutable),
+  pairCode: () => invoke("AppPairCode"),
   getKeepScreenActive: () => invoke("AppGetKeepScreenActive"),
   setKeepScreenActive: (enabled) => invoke("AppSetKeepScreenActive", { enabled }),
 }

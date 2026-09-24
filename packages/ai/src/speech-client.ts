@@ -12,7 +12,9 @@ export interface Interface {
   ) => Stream.Stream<SpeechEvent, AIError>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/SpeechClient") {}
+export class SpeechClientService extends Context.Service<SpeechClientService, Interface>()("@opencode/SpeechClient") {}
+export const Service = SpeechClientService
+export type Service = SpeechClientService
 
 export const generate = <Options extends SpeechOptions>(
   request: SpeechRequestFor<Options>,

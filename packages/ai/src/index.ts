@@ -1,3 +1,4 @@
+export { AIClient } from "./ai-client.js"
 export { LLMClient } from "./route/client.js"
 export { ImageClient } from "./image-client.js"
 export { Auth } from "./route/auth.js"
@@ -8,7 +9,7 @@ export type {
   RouteLanguageModelInput,
   RouteRoutedLanguageModelInput,
   Interface as LLMClientShape,
-  Service as LLMClientService,
+  LLMClientService,
 } from "./route/client.js"
 export * from "./schema/index.js"
 export {

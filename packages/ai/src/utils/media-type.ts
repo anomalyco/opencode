@@ -48,8 +48,11 @@ const EXTENSIONS: Readonly<Record<string, string>> = {
   csv: "text/csv",
 }
 
-export const extensionMediaType = (path: string): string | undefined =>
+const extensionMediaType = (path: string): string | undefined =>
   EXTENSIONS[path.slice(path.lastIndexOf(".") + 1).toLowerCase()]
+
+/** Media type of a file's contents: sniffed magic bytes, then the path's extension. */
+export const fileMediaType = (bytes: Uint8Array, path: string) => detectMediaType(bytes) ?? extensionMediaType(path)
 
 const EXTENSION_ALIASES: Readonly<Record<string, string>> = {
   "audio/mp3": "mp3",
