@@ -12,6 +12,7 @@ import { AISDK } from "../aisdk.js"
 import { Command } from "../command.js"
 import { Credential } from "../credential.js"
 import { Bus } from "../bus.js"
+import { Form } from "../form.js"
 import { Integration } from "../integration.js"
 import { KV } from "../kv.js"
 import { Location } from "../location.js"
@@ -69,6 +70,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
   const permission = yield* Permission.Service
   const hooks = yield* PluginHooks.Service
   const sessions = yield* Session.Service
+  const forms = yield* Form.Service
   const persistentPty = yield* PersistentPty.Service
   const locations = yield* LocationServiceMap.Service
   const worktrees = yield* Worktree.Service
@@ -548,6 +550,40 @@ export const make = Effect.fn("PluginHost.make")(function* (
           .pipe(Effect.map((interrupted) => ({ interrupted }))),
       wait: (input) => sessions.wait(input.sessionID),
       context: (input) => sessions.context(input.sessionID),
+      form: {
+        list: (input) => forms.list({ sessionID: input.sessionID }),
+        create: (input) =>
+          forms.create({
+            id: input.id,
+            sessionID: input.sessionID,
+            title: input.title,
+            metadata: input.metadata,
+            fields: input.fields,
+          }),
+        get: (input) =>
+          forms.get(input.formID).pipe(
+            Effect.flatMap((info) => {
+              if (info.sessionID !== input.sessionID) return Effect.fail(new Form.NotFoundError({ id: input.formID }))
+              return Effect.map(forms.state(input.formID), (state) => ({ ...info, state }))
+            }),
+          ),
+        reply: (input) =>
+          forms.get(input.formID).pipe(
+            Effect.flatMap((info) =>
+              info.sessionID !== input.sessionID
+                ? Effect.fail(new Form.NotFoundError({ id: input.formID }))
+                : forms.reply({ id: input.formID, answer: input.answer }),
+            ),
+          ),
+        cancel: (input) =>
+          forms.get(input.formID).pipe(
+            Effect.flatMap((info) =>
+              info.sessionID !== input.sessionID
+                ? Effect.fail(new Form.NotFoundError({ id: input.formID }))
+                : forms.cancel(input.formID),
+            ),
+          ),
+      },
     },
   }
   return context
@@ -561,6 +597,7 @@ export const requirements = LayerNode.group([
   Model.node,
   Command.node,
   Bus.node,
+  Form.node,
   Integration.node,
   KV.node,
   Mcp.node,
