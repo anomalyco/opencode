@@ -29,22 +29,65 @@ export const RETRY_JITTER_FACTOR = 0.25
 export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // 30 seconds
 export const RETRY_MAX_DELAY = 2_147_483_647 // max 32-bit signed integer for setTimeout
 export const RETRY_MAX_RETRIES = 5
+// Steady cadence for transient transport faults (proxy blips, cert rotation, socket resets).
+export const RETRY_FIXED_NETWORK_DELAY = 5000
 
-const RETRYABLE_MESSAGE_PATTERNS = [
-  /429|500|502|503|504|524/i,
-  /rate increased too quickly|rate limit|rate-limit|rate_limit|too many requests/i,
+const STATUS_CODE_PATTERNS = [/429|500|502|503|504|524/i]
+const RATE_LIMIT_PATTERNS = [/rate increased too quickly|rate limit|rate-limit|rate_limit|too many requests/i]
+const SERVER_ERROR_PATTERNS = [
   /overloaded|service unavailable|service_unavailable|service-unavailable|internal error|internal_error|internal server error|server error|server_error|server-error|provider returned error|provider_returned_error|provider-returned-error/i,
+]
+// Transient transport-layer faults: sockets, DNS, timeouts, and TLS/certificate problems.
+const NETWORK_TRANSIENT_PATTERNS = [
   /terminated|fetch failed|failed to fetch|network[-_\s]error|upstream connect|connection error|connection refused|connection lost|socket connection was closed|socket hang up|reset before headers|getaddrinfo|enotfound|eai_again|econnrefused|econnreset|etimedout/i,
   /^timeout$|\b(?:request|response|connection|network|stream|read) (?:timeout|timed out|time out)\b/i,
+  /certificate|unable to verify|self[\s_-]*sign(ed)?|(^|[^a-z])(ssl|tls)([^a-z]|$)|err_tls_[a-z]+|cert_has_(expired|invalid)|alt_name_invalid|expired cert(iificate)?/i,
+]
+const SUGGESTION_PATTERNS = [
   /try your request again|retry your request|resource exhausted|resource_exhausted/i,
   /\btry again (?:later|in\b)|\b(?:currently|temporarily) at capacity\b/i,
 ]
+// Same members and order as the historical combined list, extended with the cert/TLS rule.
+const RETRYABLE_MESSAGE_PATTERNS = [
+  ...STATUS_CODE_PATTERNS,
+  ...RATE_LIMIT_PATTERNS,
+  ...SERVER_ERROR_PATTERNS,
+  ...NETWORK_TRANSIENT_PATTERNS,
+  ...SUGGESTION_PATTERNS,
+]
+
+const CAUSE_WALK_DEPTH = 8
+
+// Collects readable fragments along an error's `cause` chain. Normalizers drop
+// the chain, so cert/TLS wording frequently survives only there.
+function collectCauseChain(input: unknown): string[] {
+  const out: string[] = []
+  let cursor: unknown = input
+  for (let depth = 0; cursor != null && depth <= CAUSE_WALK_DEPTH; depth += 1) {
+    if (typeof cursor === "string") {
+      out.push(cursor)
+      break
+    }
+    if (typeof cursor === "object") {
+      const record = cursor as { message?: unknown; cause?: unknown }
+      if (typeof record.message === "string" && record.message) out.push(record.message)
+      cursor = record.cause
+    } else {
+      break
+    }
+  }
+  return out
+}
+
+export function isTransientNetwork(input: unknown): boolean {
+  return collectCauseChain(input).some((fragment) => NETWORK_TRANSIENT_PATTERNS.some((pattern) => pattern.test(fragment)))
+}
 
 function cap(ms: number) {
   return Math.min(ms, RETRY_MAX_DELAY)
 }
 
-export function delay(attempt: number, error?: SessionV1.APIError, random = Math.random()) {
+export function delay(attempt: number, error?: SessionV1.APIError, random = Math.random(), flat = false) {
   if (error) {
     const headers = error.data.responseHeaders
     if (headers) {
@@ -74,6 +117,9 @@ export function delay(attempt: number, error?: SessionV1.APIError, random = Math
     }
   }
 
+  // An authoritative retry-after already returned above; none remained, so hold
+  // the steady 5s cadence for transient transport faults.
+  if (flat) return RETRY_FIXED_NETWORK_DELAY
   return cap(Math.min(exponential(attempt, random), RETRY_MAX_DELAY_NO_HEADERS))
 }
 
@@ -82,7 +128,7 @@ function exponential(attempt: number, random: number) {
   return Math.ceil(base + base * RETRY_JITTER_FACTOR * random)
 }
 
-export function retryable(error: Err, provider: string) {
+export function retryable(error: Err, provider: string, raw?: unknown) {
   // context overflow errors should not be retried
   if (SessionV1.ContextOverflowError.isInstance(error)) return undefined
   if (SessionV1.APIError.isInstance(error)) {
@@ -146,11 +192,15 @@ export function retryable(error: Err, provider: string) {
   }
 
   const message = isRecord(error.data) ? error.data.message : undefined
-  if (typeof message !== "string") return undefined
+  if (typeof message !== "string") {
+    if (raw !== undefined && isTransientNetwork(raw)) return { message: "Transient network error" }
+    return undefined
+  }
   const lower = message.toLowerCase()
   if (lower.includes("too_many_requests")) return { message: "Too Many Requests" }
   if (lower.includes("exhausted") || lower.includes("unavailable")) return { message: "Provider is overloaded" }
   if (matchesRetryableMessage(message)) return { message }
+  if (raw !== undefined && isTransientNetwork(raw)) return { message }
   return undefined
 }
 
@@ -188,11 +238,12 @@ export function policy(opts: {
   return Schedule.fromStepWithMetadata(
     Effect.succeed((meta: Schedule.InputMetadata<unknown>) => {
       const error = opts.parse(meta.input)
-      const retry = retryable(error, opts.provider)
+      const retry = retryable(error, opts.provider, meta.input)
       if (!retry) return Cause.done(meta.attempt)
       if (meta.attempt > RETRY_MAX_RETRIES) return Cause.done(meta.attempt)
       return Effect.gen(function* () {
-        const wait = delay(meta.attempt, SessionV1.APIError.isInstance(error) ? error : undefined)
+        const flat = isTransientNetwork(meta.input)
+        const wait = delay(meta.attempt, SessionV1.APIError.isInstance(error) ? error : undefined, Math.random(), flat)
         const now = yield* Clock.currentTimeMillis
         yield* opts.set({
           attempt: meta.attempt,

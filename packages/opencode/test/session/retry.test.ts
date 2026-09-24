@@ -148,6 +148,47 @@ describe("session.retry.delay", () => {
   )
 })
 
+describe("session.retry.transient network", () => {
+  test("detects cert/TLS fault buried in the cause chain", () => {
+    const raw = Object.assign(new TypeError("Something went wrong"), {
+      cause: new Error("unable to verify the first certificate"),
+    })
+    expect(SessionRetry.isTransientNetwork(raw)).toBe(true)
+    expect(SessionRetry.retryable(wrap("Something went wrong"), retryProvider, raw)).toEqual({
+      message: "Something went wrong",
+    })
+  })
+
+  test("recovers transient classification when flattened message carries no clues", () => {
+    const raw = Object.assign(new Error(""), { cause: new Error("ECONNRESET") })
+    expect(SessionRetry.retryable(wrap(undefined), retryProvider, raw)).toEqual({
+      message: "Transient network error",
+    })
+  })
+
+  test("recognizes self-signed and ssl errno variants", () => {
+    expect(SessionRetry.isTransientNetwork(new Error("self signed certificate in certificate chain"))).toBe(true)
+    expect(
+      SessionRetry.isTransientNetwork(Object.assign(new Error("x"), { cause: new Error("ERR_SSL_WRONG_VERSION_NUMBER") })),
+    ).toBe(true)
+    expect(SessionRetry.isTransientNetwork(new Error("bad request"))).toBe(false)
+  })
+
+  test("keeps unrelated errors non-retryable", () => {
+    expect(SessionRetry.retryable(wrap("bad request"), retryProvider, new Error("bad request"))).toBeUndefined()
+  })
+
+  test("uses a flat 5s interval for transient network faults", () => {
+    expect(SessionRetry.delay(1, undefined, 0, true)).toBe(5000)
+    expect(SessionRetry.delay(5, undefined, 0, true)).toBe(5000)
+    expect(SessionRetry.delay(5, undefined, 0, false)).toBeGreaterThan(5000)
+  })
+
+  test("still honours retry-after over the flat interval", () => {
+    expect(SessionRetry.delay(1, apiError({ "retry-after": "30" }), 0, true)).toBe(30000)
+  })
+})
+
 describe("session.retry.retryable", () => {
   test("retries serialized too_many_requests messages", () => {
     const error = wrap(JSON.stringify({ type: "error", error: { type: "too_many_requests" } }))
