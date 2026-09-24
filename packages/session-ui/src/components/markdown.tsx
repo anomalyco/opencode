@@ -319,7 +319,7 @@ function markExternalLinkFavicons(root: HTMLDivElement) {
       image.decoding = "async"
       favicon.appendChild(image)
     }
-    link.prepend(favicon)
+    link.insertBefore(favicon, link.firstChild)
   })
 }
 
