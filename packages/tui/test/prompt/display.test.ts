@@ -33,11 +33,18 @@ describe("prompt display", () => {
 
   test("finds slash attachments at token boundaries", () => {
     expect(slashTriggerIndex("/")).toBe(0)
+    expect(slashTriggerIndex("/compact")).toBe(0)
     expect(slashTriggerIndex("Review this /api-design")).toBe(12)
     expect(slashTriggerIndex("中文 /api-design")).toBe(5)
     expect(slashTriggerIndex("Review /api design")).toBeUndefined()
     expect(slashTriggerIndex("Review /tmp/file.ts")).toBeUndefined()
     expect(slashTriggerIndex("https://opencode.ai/docs")).toBeUndefined()
     expect(slashTriggerIndex("src/prompt/index.ts")).toBeUndefined()
+    expect(slashTriggerIndex("/compact now", Bun.stringWidth("/compact"))).toBe(0)
+    expect(slashTriggerIndex("/usr/bin")).toBeUndefined()
+    // A bare "/" only opens the command list at the start of the prompt, so a
+    // sentence with a spaced "/" stays submittable.
+    expect(slashTriggerIndex("find /")).toBeUndefined()
+    expect(slashTriggerIndex("Do not use 'find /'")).toBe(17)
   })
 })

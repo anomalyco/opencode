@@ -464,26 +464,44 @@ export function Autocomplete(props: {
   )
 
   function insertSlash(name: string) {
-    const newText = `/${name} `
-    const cursor = props.input().logicalCursor
-    props.input().deleteRange(0, 0, cursor.row, cursor.col)
-    props.input().insertText(newText)
-    props.input().cursorOffset = stringWidth(newText)
+    const input = props.input()
+    // Replace only the typed "/..." token at store.index, so a command selected
+    // mid-prompt is spliced in place instead of clearing everything before the
+    // cursor. select() already removed the token before calling this.
+    const needsSpace = displayCharAt(input.plainText, store.index) !== " "
+    const newText = `/${name}` + (needsSpace ? " " : "")
+    input.cursorOffset = store.index
+    input.insertText(newText)
+    input.cursorOffset = store.index + stringWidth(newText)
   }
 
   const commands = createMemo((): AutocompleteOption[] => {
+    // Mid-prompt a command is offered only when the typed token is a prefix of
+    // its name or an alias. Fuzzy matching there would let arbitrary text (e.g.
+    // the apostrophe in "session's") match a command description and reopen the
+    // popup over a sentence that merely contains "/".
+    const query = store.index === 0 ? undefined : search().toLowerCase()
+    const matches = (name: string) => query === undefined || name.toLowerCase().startsWith(query)
+
     const results: AutocompleteOption[] = keymapCommands().flatMap((command) => {
       const slash = command.slash
       if (!slash) return []
-      return [slash.name, ...(slash.aliases ?? [])].map((name) => ({
-        display: `/${name}`,
-        description: command.description ?? command.title,
-        onSelect: slash.arguments ? () => insertSlash(name) : command.run,
-      }))
+      // Commands without arguments execute an action, so they are offered only
+      // when the slash opens the prompt. Mid-prompt only text-expanding commands
+      // are offered, so a completion can never run a command from mid-sentence.
+      if (store.index !== 0 && !slash.arguments) return []
+      return [slash.name, ...(slash.aliases ?? [])]
+        .filter((name) => matches(name))
+        .map((name) => ({
+          display: `/${name}`,
+          description: command.description ?? command.title,
+          onSelect: slash.arguments ? () => insertSlash(name) : command.run,
+        }))
     })
     const commandNames = new Set<string>()
 
     for (const serverCommand of data.location.command.list(location.current) ?? []) {
+      if (!matches(serverCommand.name)) continue
       commandNames.add(serverCommand.name)
       results.push({
         display: "/" + serverCommand.name,
@@ -541,9 +559,7 @@ export function Autocomplete(props: {
     const nonFileOptions: AutocompleteOption[] =
       store.visible === "reference"
         ? [...skillOptions(), ...referenceAliasesValue, ...agentsValue]
-        : store.index === 0
-          ? [...commandsValue]
-          : []
+        : [...commandsValue]
 
     if (!searchValue) {
       return [...nonFileOptions, ...fileOptions]
@@ -579,6 +595,13 @@ export function Autocomplete(props: {
     filter()
     setStore("selected", 0)
     setConfirming(undefined)
+  })
+
+  createEffect(() => {
+    // A mid-prompt command token that matches nothing closes the popup, so its
+    // Enter binding cannot swallow submission of sentences that merely contain
+    // "/" (see #50604). At the prompt start the empty list is still shown.
+    if (store.visible === "command" && store.index !== 0 && options().length === 0) hide()
   })
 
   function move(direction: -1 | 1) {
