@@ -16,6 +16,34 @@ function spawnFakeServer() {
 }
 
 describe("LSPClient interop", () => {
+  test("opens JSONC documents with the JSONC language ID", async () => {
+    await using tmp = await tmpdir()
+    const file = path.join(tmp.path, "opencode.jsonc")
+    await Bun.write(file, "{\n  // configuration\n}\n")
+
+    await withTestInstance({
+      directory: tmp.path,
+      fn: async (ctx) => {
+        const client = await LSPClient.create({
+          serverID: "fake",
+          server: spawnFakeServer(),
+          root: tmp.path,
+          directory: tmp.path,
+          instance: ctx,
+        })
+        try {
+          await client.notify.open({ path: file })
+          const opened = await client.connection.sendRequest("test/get-last-open", {})
+          expect(opened).toMatchObject({
+            textDocument: { uri: pathToFileURL(file).href, languageId: "jsonc" },
+          })
+        } finally {
+          await client.shutdown()
+        }
+      },
+    })
+  })
+
   test("handles workspace/workspaceFolders request", async () => {
     const handle = spawnFakeServer() as any
 
