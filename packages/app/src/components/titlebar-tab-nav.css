@@ -143,8 +143,6 @@
   }
 
   [data-slot="tab-close"] {
-    right: auto;
-    left: 50%;
-    transform: translateX(-50%);
+    inset-inline-end: 4px;
   }
 }
