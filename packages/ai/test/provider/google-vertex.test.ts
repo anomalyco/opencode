@@ -414,6 +414,34 @@ describe("Google Vertex providers", () => {
     }),
   )
 
+  it.effect("applies Gemini schema rules only on the Gemini API, including tuned endpoints", () =>
+    Effect.gen(function* () {
+      const vertex = { accessToken: "vertex-token", location: "us-central1", project: "vertex-project" }
+      const inputSchema = { type: "object", required: ["query", "missing"], properties: { query: { type: "string" } } }
+      const request = (model: Parameters<typeof LLM.request>[0]["model"]) =>
+        compileRequest(
+          LLM.request({
+            model,
+            prompt: "Use the tool.",
+            tools: [{ name: "lookup", description: "Lookup.", inputSchema }],
+          }),
+        )
+
+      const tuned = yield* request(GoogleVertex.configure(vertex).model("endpoints/1234567890"))
+      expect(tuned.body.tools?.[0]?.functionDeclarations[0]?.parametersJsonSchema).toEqual({
+        ...inputSchema,
+        required: ["query"],
+      })
+
+      const chat = yield* request(GoogleVertexChat.configure(vertex).model("deepseek-ai/deepseek-v3.2-maas"))
+      expect(chat.body.tools?.[0]?.function.parameters).toEqual(inputSchema)
+      const responses = yield* request(GoogleVertexResponses.configure(vertex).model("xai/grok-4.20-reasoning"))
+      expect(responses.body.tools?.[0]).toMatchObject({ parameters: inputSchema })
+      const messages = yield* request(GoogleVertexMessages.configure(vertex).model("claude-sonnet-4-6"))
+      expect(messages.body.tools?.[0]).toMatchObject({ input_schema: inputSchema })
+    }),
+  )
+
   it.effect("routes tuned Gemini models through their deployed endpoint", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
