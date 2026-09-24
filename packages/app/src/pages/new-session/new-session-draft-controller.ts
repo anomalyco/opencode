@@ -9,6 +9,7 @@ import { createPromptInputController, createPromptProjectControls } from "@/page
 import { createPromptModelSelection } from "@/pages/session/composer/prompt-model-selection"
 import { useSessionKey } from "@/pages/session/session-layout"
 import { useComposerCommands } from "@/pages/session/use-composer-commands"
+import { createPromptAgentSelection } from "./prompt-agent-selection"
 
 export function createNewSessionDraftController(workspace: { worktree: () => string; resetWorktree: () => void }) {
   const prompt = usePrompt()
@@ -18,14 +19,16 @@ export function createNewSessionDraftController(workspace: { worktree: () => str
   const route = useSessionKey()
   const [searchParams, setSearchParams] = useSearchParams<{ draftId?: string; prompt?: string }>()
   const model = createPromptModelSelection({ agent: () => local.agent.current() })
+  const agent = createPromptAgentSelection({ agent: local.agent, model: prompt.model })
 
-  useComposerCommands({ model })
+  useComposerCommands({ model, agent })
 
   const controls = createPromptInputController({
     sessionKey: route.sessionKey,
     sessionID: () => route.params.id,
     queryOptions: serverSync().queryOptions,
     model,
+    agent,
   })
   const projectControls = createPromptProjectControls()
   const input = usePromptInputV2Controller({
