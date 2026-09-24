@@ -23,7 +23,7 @@ import {
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { compileRequest } from "@opencode/ai/route/client"
 import { expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect, Fiber, Layer, Stream } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { testEffect } from "./lib/effect"
 
@@ -1143,5 +1143,65 @@ it.effect("falls back to the status alone for malformed response bodies", () =>
     expect(error.reason).toMatchObject({ _tag: "ProviderInternal" })
     expect(error.reason.http?.status).toBe(502)
     expect(error.message).toBe("Provider request failed with HTTP 502")
+  }),
+)
+
+// A model that records the abort signal it was given and keeps its stream open until told otherwise.
+const signalModel = (seen: { signal?: AbortSignal; called: () => void; finish?: boolean }): LanguageModelV3 => ({
+  specificationVersion: "v3",
+  provider: "test",
+  modelId: "test",
+  supportedUrls: {},
+  doGenerate: () => Promise.reject(new Error("Unexpected non-streaming request")),
+  doStream: (options) => {
+    seen.signal = options.abortSignal
+    seen.called()
+    return Promise.resolve({
+      stream: new ReadableStream<LanguageModelV3StreamPart>({
+        start(controller) {
+          controller.enqueue({ type: "stream-start", warnings: [] })
+          if (seen.finish) {
+            controller.enqueue({ type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage })
+            controller.close()
+          }
+        },
+      }),
+    })
+  },
+})
+
+it.live("aborts the model's abortSignal when the stream is interrupted", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    let called!: () => void
+    const started = new Promise<void>((resolve) => (called = resolve))
+    const seen: { signal?: AbortSignal; called: () => void } = { called: () => called() }
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = { languageModel: () => signalModel(seen) }
+    })
+    const resolved = yield* aisdk.model(model("@ai-sdk/openai"))
+    const fiber = yield* LLMClient.stream(LLM.request({ model: resolved, prompt: "Hello" })).pipe(
+      Stream.runDrain,
+      Effect.provide(client),
+      Effect.forkChild,
+    )
+    yield* Effect.promise(() => started)
+    expect(seen.signal?.aborted).toBe(false)
+    yield* Fiber.interrupt(fiber)
+    expect(seen.signal?.aborted).toBe(true)
+  }),
+)
+
+it.live("leaves the model's abortSignal alone when the stream completes", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    const seen: { signal?: AbortSignal; called: () => void; finish: boolean } = { called: () => {}, finish: true }
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = { languageModel: () => signalModel(seen) }
+    })
+    const resolved = yield* aisdk.model(model("@ai-sdk/openai"))
+    yield* LLMClient.stream(LLM.request({ model: resolved, prompt: "Hello" })).pipe(Stream.runDrain, Effect.provide(client))
+    expect(seen.signal).toBeDefined()
+    expect(seen.signal?.aborted).toBe(false)
   }),
 )
