@@ -28,6 +28,7 @@ const models = [
   { name: "Space Bunny Free", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Grok 4.7", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "Grok 4.6", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
+  { name: "GPT 6 Luna", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "GPT 5.6 Luna", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "GLM-5.3-Flash", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "GLM-5.3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
@@ -333,7 +334,7 @@ export default function Home() {
                       .
                     </p>
                     <p>
-                      <strong>GPT 5.6 Luna:</strong> {i18n.t("go.faq.a5.gptRetention")}{" "}
+                      <strong>GPT 6 Luna / GPT 5.6 Luna:</strong> {i18n.t("go.faq.a5.gptRetention")}{" "}
                       <a href="https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring">
                         {i18n.t("go.faq.a5.learnMore")}
                       </a>
