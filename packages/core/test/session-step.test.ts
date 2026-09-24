@@ -16,6 +16,7 @@ import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { SessionStep } from "@opencode/core/session/runner/step"
 import { SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
+import { SessionStore } from "@opencode/core/session/store"
 import { Snapshot } from "@opencode/core/snapshot"
 import { ToolOutput } from "@opencode/core/tool-output"
 import { Money } from "@opencode/schema/money"
@@ -23,12 +24,14 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { asc, eq } from "drizzle-orm"
 import { Effect, Exit, Layer } from "effect"
 import { testEffect } from "./lib/effect"
+import { permissionLayer } from "./lib/permission"
 
 const it = testEffect(
   Layer.merge(
-    AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SessionProjector.node, ToolOutput.node]), [
-      Bus.node.replace(Bus.configured({ persist: true })),
-    ]),
+    AppNodeBuilder.build(
+      LayerNode.group([Database.node, Bus.node, SessionProjector.node, ToolOutput.node, SessionStore.node]),
+      [Bus.node.replace(Bus.configured({ persist: true }))],
+    ),
     TestLLM.testLayer(),
   ),
 )
@@ -51,13 +54,16 @@ for (const fixture of [
       let executions = 0
       const steps = yield* SessionStep.make.pipe(
         Effect.provide(
-          Layer.mock(Snapshot.Service)({
-            capture: () => Effect.sync(() => (captures++ === 0 ? start : end)),
-            files: (input) => {
-              expect(input).toEqual({ from: start, to: end })
-              return Effect.succeed(files)
-            },
-          }),
+          Layer.merge(
+            Layer.mock(Snapshot.Service)({
+              capture: () => Effect.sync(() => (captures++ === 0 ? start : end)),
+              files: (input) => {
+                expect(input).toEqual({ from: start, to: end })
+                return Effect.succeed(files)
+              },
+            }),
+            permissionLayer(),
+          ),
         ),
       )
       yield* db
