@@ -1296,6 +1296,10 @@
   white-space: nowrap;
 }
 
+.settings-models [data-model-id] {
+  touch-action: none;
+}
+
 .settings-models-status {
   display: flex;
   flex-direction: column;

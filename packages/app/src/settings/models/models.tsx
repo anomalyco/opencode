@@ -1,6 +1,6 @@
 import { useFilteredList } from "@opencode/ui/hooks"
 import { Switch } from "@opencode/ui/switch"
-import { type Component, createEffect, createMemo, For, Show } from "solid-js"
+import { type Component, batch, createEffect, createMemo, For, onCleanup, Show } from "solid-js"
 
 import { Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
@@ -37,6 +37,27 @@ export const SettingsModels: Component<{
     { collapsed: {} },
   )
   const sections = new Map<string, HTMLElement>()
+  const drag = {
+    current: undefined as
+      | {
+          id: number
+          source: HTMLElement
+          rows: HTMLElement[]
+          positions: Map<HTMLElement, number>
+          initial: boolean[]
+          start: number
+          index: number
+          checked: boolean
+          panel: HTMLElement
+          header: HTMLElement | null
+          x: number
+          y: number
+          changed: boolean
+        }
+      | undefined,
+    frame: 0,
+    suppress: undefined as { source: HTMLElement } | undefined,
+  }
 
   const list = useFilteredList<ModelItem>({
     items: (_filter) => models.list(),
@@ -68,6 +89,161 @@ export const SettingsModels: Component<{
       .filter((item) => item.provider.id === providerID)
       .forEach((item) => models.setVisibility({ providerID, modelID: item.id }, visible))
 
+  function paint() {
+    const current = drag.current
+    if (!current) return
+    const bounds = current.panel.getBoundingClientRect()
+    if (current.x < bounds.left || current.x > bounds.right) return
+    const top = current.header?.getBoundingClientRect().bottom ?? bounds.top
+    const target = document
+      .elementFromPoint(current.x, Math.max(top + 1, Math.min(bounds.bottom - 1, current.y)))
+      ?.closest<HTMLElement>('[data-component="settings-row"]')
+      ?.querySelector<HTMLElement>("[data-model-id]")
+    const index = target ? current.positions.get(target) : undefined
+    if (index === undefined || index === current.index) return
+    const before = [Math.min(current.start, current.index), Math.max(current.start, current.index)]
+    const after = [Math.min(current.start, index), Math.max(current.start, index)]
+    batch(() => {
+      for (let position = Math.min(before[0], after[0]); position <= Math.max(before[1], after[1]); position++) {
+        const was = position >= before[0] && position <= before[1]
+        const now = position >= after[0] && position <= after[1]
+        if (was === now && (position !== current.start || current.changed)) continue
+        const row = current.rows[position]
+        const key = { providerID: row.dataset.modelProvider!, modelID: row.dataset.modelId! }
+        const checked = now ? current.checked : current.initial[position]
+        if (models.visible(key) !== checked) models.setVisibility(key, checked)
+      }
+    })
+    current.index = index
+    current.changed = true
+  }
+
+  function scroll() {
+    drag.frame = 0
+    const current = drag.current
+    if (!current) return
+    const bounds = current.panel.getBoundingClientRect()
+    if (current.x < bounds.left || current.x > bounds.right) return
+    const top = current.header?.getBoundingClientRect().bottom ?? bounds.top
+    const edge = 36
+    const speed =
+      current.y < top + edge
+        ? -Math.min(18, Math.max(0, top + edge - current.y) / 2)
+        : Math.min(18, Math.max(0, current.y - (bounds.bottom - edge)) / 2)
+    if (!speed) return
+    const previous = current.panel.scrollTop
+    current.panel.scrollTop += speed
+    if (current.panel.scrollTop === previous) return
+    paint()
+    drag.frame = requestAnimationFrame(scroll)
+  }
+
+  function move(event: PointerEvent) {
+    const current = drag.current
+    if (!current || event.pointerId !== current.id) return
+    current.x = event.clientX
+    current.y = event.clientY
+    paint()
+    if (drag.frame) return
+    drag.frame = requestAnimationFrame(scroll)
+  }
+
+  function end(event?: PointerEvent) {
+    const current = drag.current
+    if (!current || (event && event.pointerId !== current.id)) return
+    if (event?.type === "pointerup") {
+      if (!current.changed) {
+        const key = { providerID: current.source.dataset.modelProvider!, modelID: current.source.dataset.modelId! }
+        if (models.visible(key) !== current.checked) models.setVisibility(key, current.checked)
+      }
+      const click = drag.suppress
+      setTimeout(() => {
+        if (drag.suppress !== click) return
+        click?.source.removeEventListener("click", suppress, true)
+        drag.suppress = undefined
+      }, 400)
+    } else {
+      if (current.changed) {
+        batch(() => {
+          for (
+            let position = Math.min(current.start, current.index);
+            position <= Math.max(current.start, current.index);
+            position++
+          ) {
+            const row = current.rows[position]
+            const key = { providerID: row.dataset.modelProvider!, modelID: row.dataset.modelId! }
+            if (models.visible(key) !== current.initial[position]) models.setVisibility(key, current.initial[position])
+          }
+        })
+      }
+      current.source.removeEventListener("click", suppress, true)
+      drag.suppress = undefined
+    }
+    drag.current = undefined
+    cancelAnimationFrame(drag.frame)
+    drag.frame = 0
+    document.removeEventListener("pointermove", move)
+    document.removeEventListener("pointerup", end)
+    document.removeEventListener("pointercancel", end)
+    current.panel.removeEventListener("scroll", paint)
+    window.removeEventListener("blur", blur)
+  }
+
+  function blur() {
+    end()
+  }
+
+  function suppress(event: MouseEvent) {
+    if (drag.suppress?.source !== event.currentTarget) return
+    event.preventDefault()
+    event.stopImmediatePropagation()
+    drag.suppress.source.removeEventListener("click", suppress, true)
+    drag.suppress = undefined
+  }
+
+  function start(event: PointerEvent & { currentTarget: HTMLElement }) {
+    if (!event.isPrimary || event.button !== 0 || drag.current) return
+    const panel = event.currentTarget.closest<HTMLElement>(".settings-panel")
+    if (!panel) return
+    const rows = Array.from(panel.querySelectorAll<HTMLElement>(".settings-models [data-model-id]"))
+    const index = rows.indexOf(event.currentTarget)
+    if (index < 0) return
+    drag.suppress?.source.removeEventListener("click", suppress, true)
+    drag.suppress = { source: event.currentTarget }
+    drag.suppress.source.addEventListener("click", suppress, true)
+    const key = {
+      providerID: event.currentTarget.dataset.modelProvider!,
+      modelID: event.currentTarget.dataset.modelId!,
+    }
+    drag.current = {
+      id: event.pointerId,
+      source: event.currentTarget,
+      rows,
+      positions: new Map(rows.map((row, index) => [row, index])),
+      initial: rows.map((row) =>
+        models.visible({ providerID: row.dataset.modelProvider!, modelID: row.dataset.modelId! }),
+      ),
+      start: index,
+      index,
+      checked: !models.visible(key),
+      panel,
+      header: panel.querySelector<HTMLElement>(".settings-tab-header"),
+      x: event.clientX,
+      y: event.clientY,
+      changed: false,
+    }
+    document.addEventListener("pointermove", move)
+    document.addEventListener("pointerup", end)
+    document.addEventListener("pointercancel", end)
+    panel.addEventListener("scroll", paint, { passive: true })
+    window.addEventListener("blur", blur)
+  }
+
+  onCleanup(() => {
+    end()
+    drag.suppress?.source.removeEventListener("click", suppress, true)
+  })
+
   function ModelRows(props: { items: ModelItem[] }) {
     return (
       <SettingsList variant="catalog">
@@ -78,8 +254,11 @@ export const SettingsModels: Component<{
               <SettingsRow title={item.name} description="">
                 <div>
                   <Switch
+                    data-model-provider={key.providerID}
+                    data-model-id={key.modelID}
                     checked={models.visible(key)}
                     onChange={(checked) => models.setVisibility(key, checked)}
+                    onPointerDown={start}
                     hideLabel
                   >
                     {item.name}
