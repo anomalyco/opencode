@@ -8,8 +8,10 @@ const directory = "C:/OpenCode/SubagentNavigation"
 const projectID = "proj_subagent_navigation"
 const parentID = "ses_subagent_parent"
 const childID = "ses_subagent_child"
+const grandchildID = "ses_subagent_grandchild"
 const parentTitle = "Parent session"
 const childTitle = "Subagent child session"
+const grandchildTitle = "Nested subagent session"
 // Child session pages derive their heading from the task part that spawned them.
 const taskDescription = "Inspect child navigation"
 
@@ -23,6 +25,18 @@ test("navigates to a subagent child session missing from the session list", asyn
   await expect(page.getByRole("heading", { name: parentTitle })).toHaveCount(0)
 
   await expect(page.getByRole("button", { name: "Toggle review", exact: true })).toBeVisible()
+})
+
+test("opens a directly linked nested subagent in its root session tab", async ({ page }) => {
+  await setup(page, undefined, true)
+  await page.goto(sessionHref(grandchildID), { waitUntil: "domcontentloaded" })
+
+  await expect(page.locator('[data-slot="session-title-parent"]')).toHaveText(childTitle)
+  await expect(page.locator('[data-slot="session-title-child"]')).toHaveText(grandchildTitle)
+  const tabs = page.locator('[data-slot="titlebar-tabs"] [data-titlebar-tab-slot]')
+  await expect(tabs.locator(`a[href="${sessionHref(grandchildID)}"]`)).toHaveCount(1)
+  await expect(tabs).toHaveCount(1)
+  await expect(tabs.locator('[data-slot="tab-title"]')).toHaveText(parentTitle)
 })
 
 test("returns to the parent session with Escape", async ({ page }) => {
@@ -144,7 +158,7 @@ test("shows the not found fallback when the viewed session is deleted", async ({
   await expect(page.getByRole("heading", { name: taskDescription })).toHaveCount(0)
 })
 
-async function setup(page: Page, events?: () => OpenCodeEvent[]) {
+async function setup(page: Page, events?: () => OpenCodeEvent[], nested = false) {
   await mockOpenCodeServer(page, {
     directory,
     project: {
@@ -168,7 +182,11 @@ async function setup(page: Page, events?: () => OpenCodeEvent[]) {
       connected: ["opencode"],
       default: { providerID: "opencode", modelID: "claude-opus-4-6" },
     },
-    sessions: [session(parentID, parentTitle, 1700000000000), childSession()],
+    sessions: [
+      session(parentID, parentTitle, 1700000000000),
+      childSession(),
+      ...(nested ? [session(grandchildID, grandchildTitle, 1700000002000, { parentID: childID })] : []),
+    ],
     pageMessages: (sessionID) => ({ items: sessionID === parentID ? parentMessages() : [] }),
     events,
     eventRetry: events ? 16 : undefined,
