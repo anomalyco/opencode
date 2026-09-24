@@ -7,7 +7,7 @@ import type { Framing } from "./framing"
 import { HttpTransport } from "./transport"
 import type { Transport, TransportRuntime } from "./transport"
 import { WebSocketExecutor } from "./transport"
-import type { Protocol } from "./protocol"
+import type { MediaAdmissionQuery, Protocol } from "./protocol"
 import { applyCachePolicy } from "../cache-policy"
 import * as ProviderShared from "../protocols/shared"
 import type { LLMError, LLMEvent, PreparedRequestOf, ProtocolID, ProviderOptions } from "../schema"
@@ -42,6 +42,7 @@ export interface Route<Body, Prepared = unknown> {
   readonly transport: Transport<Body, Prepared, unknown>
   readonly defaults: RouteDefaults
   readonly body: RouteBody<Body>
+  readonly media: MediaAdmissionQuery
   readonly with: (patch: RoutePatch<Body, Prepared>) => Route<Body, Prepared>
   readonly model: (input: RouteMappedModelInput) => Model
   readonly prepareTransport: (body: Body, request: LLMRequest) => Effect.Effect<Prepared, LLMError>
@@ -254,6 +255,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
       transport: routeInput.transport,
       defaults: routeInput.defaults ?? {},
       body: protocol.body,
+      media: protocol.media ?? (() => undefined),
       with: (patch: RoutePatch<Body, Prepared>) => {
         const { id, provider, auth, transport, endpoint, ...defaults } = patch
         return build({
