@@ -11,6 +11,7 @@ import {
 import { Cause, DateTime, Effect, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
 import { AgentV2 } from "../../agent"
 import { Config } from "../../config"
+import { DecisionGate } from "../../superfast/decision-gate"
 import { Database } from "../../database/database"
 import { EventV2 } from "../../event"
 import { Location } from "../../location"
@@ -29,6 +30,7 @@ import { SessionCompaction } from "../compaction"
 import { SessionEvent } from "../event"
 import { SessionHistory } from "../history"
 import { SessionInput } from "../input"
+import { SessionMessage } from "../message"
 import { SessionSchema } from "../schema"
 import { SessionStore } from "../store"
 import { type RunError, Service } from "./index"
@@ -106,7 +108,19 @@ const layer = Layer.effect(
     const config = yield* Config.Service
     const snapshots = yield* Snapshot.Service
     const db = (yield* Database.Service).db
-    const compaction = SessionCompaction.make({ events, llm, config: yield* config.entries() })
+    const configEntries = yield* config.entries()
+    const compaction = SessionCompaction.make({ events, llm, config: configEntries })
+    const superfastConfig = Config.latest(configEntries, "superfast")
+    const superfastSettings = DecisionGate.resolveGateSettings(
+      superfastConfig
+        ? {
+            enabled: superfastConfig.enabled,
+            endpoint: superfastConfig.endpoint,
+            model: superfastConfig.model,
+            timeoutMs: superfastConfig.timeout_ms,
+          }
+        : undefined,
+    )
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
@@ -184,9 +198,9 @@ const layer = Layer.effect(
       const toolFibers = yield* FiberSet.make<void, ToolOutputStore.Error>()
       let needsContinuation = false
       let currentStep = step
+      let promoted = 0
       if (promotion) {
         const cutoff = yield* EventV2.latestSequence(db, session.id)
-        let promoted = 0
         if (promotion === "steer") promoted = yield* SessionInput.promoteSteers(db, events, session.id, cutoff)
         if (promotion === "queue") {
           promoted += Number(yield* SessionInput.promoteNextQueued(db, events, session.id))
@@ -199,6 +213,30 @@ const layer = Layer.effect(
       const model = yield* models.resolve(session)
       const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
       const context = entries.map((entry) => entry.message)
+      // Shadow-mode decision gate: when enabled and a fresh user message was just
+      // promoted, ask the System One backend what route it WOULD pick and log it.
+      // Forked as a daemon and fully error-swallowed so it can never affect the
+      // provider turn. Routing is unchanged regardless of the recommendation.
+      if (superfastSettings.enabled && promoted > 0) {
+        const userText = context.filter((m): m is SessionMessage.User => m.type === "user").pop()?.text
+        if (userText)
+          yield* Effect.tryPromise({
+            try: () => DecisionGate.classifyTurn(userText, superfastSettings),
+            catch: (cause) => cause,
+          }).pipe(
+            Effect.flatMap((decision) =>
+              decision
+                ? Effect.logDebug("superfast shadow decision", {
+                    sessionID: session.id,
+                    route: decision.route,
+                    latencyMs: decision.latencyMs,
+                  })
+                : Effect.void,
+            ),
+            Effect.ignore,
+            Effect.forkDetach,
+          )
+      }
       const isLastStep = agent.info?.steps !== undefined && currentStep >= agent.info.steps
       const toolMaterialization = isLastStep ? undefined : yield* tools.materialize(agent.info?.permissions)
       const promptCacheKey = /^ses_[0-9a-f]{64}$/.test(session.id) ? session.id.slice(4) : session.id
