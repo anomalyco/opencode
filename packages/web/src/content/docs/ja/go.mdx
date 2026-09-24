@@ -55,6 +55,7 @@ OpenCode Goをサブスクライブできるのは、1つのワークスペー�
 - **GLM-5.3**
 - **GLM-5.2**
 - **GLM-5.1**
+- **GPT 6 Luna**
 - **GPT 5.6 Luna**
 - **Kimi K3**
 - **Kimi K2.7 Code**
@@ -178,6 +179,8 @@ OpenCodeに加えて、以下のクライアントがOpenCode Goで正常に動�
 | Grok 4.7 (> 200K tokens)                | $4.00  | $12.00 | $1.00       | -            | **$15**                                              |
 | Grok 4.6 (≤ 200K tokens)                | $2.00  | $6.00  | $0.50       | -            | **$15**                                              |
 | Grok 4.6 (> 200K tokens)                | $4.00  | $12.00 | $1.00       | -            | **$15**                                              |
+| GPT 6 Luna (≤ 272K tokens)              | $0.10  | $0.50  | $0.01       | $0.125       | **$15**                                              |
+| GPT 6 Luna (> 272K tokens)              | $0.20  | $0.75  | $0.02       | $0.25        | **$15**                                              |
 | GPT 5.6 Luna (≤ 272K tokens)            | $0.20  | $1.20  | $0.02       | $0.25        | **$15**                                              |
 | GPT 5.6 Luna (> 272K tokens)            | $0.40  | $1.80  | $0.04       | $0.50        | **$15**                                              |
 
@@ -223,6 +226,7 @@ OpenCodeに加えて、以下のクライアントがOpenCode Goで正常に動�
 | Space Bunny Free                                         | 無制限                    | 無制限                     | 無制限                      |
 | Grok 4.7                                                 | 169                       | 423                        | 845                         |
 | Grok 4.6                                                 | 169                       | 423                        | 845                         |
+| GPT 6 Luna                                               | 4,230                     | 10,560                     | 21,130                      |
 | GPT 5.6 Luna                                             | 2,050                     | 5,100                      | 10,250                      |
 
 推定値には、リクエストあたり以下のトークン数を使用しています。実際の使用量は異なります。
@@ -230,6 +234,7 @@ OpenCodeに加えて、以下のクライアントがOpenCode Goで正常に動�
 - Grok 4.7/4.6 — リクエストあたり 入力 390トークン、キャッシュ 32,500トークン、出力 120トークン
 - GLM-5.3-Flash — リクエストあたり 入力 1,000トークン、キャッシュ 55,000トークン、出力 200トークン
 - GLM-5.3/5.2/5.1 — リクエストあたり 入力 700トークン、キャッシュ 52,000トークン、出力 150トークン
+- GPT 6 Luna — リクエストあたり 入力 1,000トークン、キャッシュ 50,000トークン、出力 220トークン
 - GPT 5.6 Luna — リクエストあたり 入力 1,000トークン、キャッシュ 50,000トークン、出力 220トークン
 - Kimi K3 — リクエストあたり 入力 1,050トークン、キャッシュ 76,500トークン、出力 300トークン
 - Kimi K2.7/K2.6 — リクエストあたり 入力 870トークン、キャッシュ 55,000トークン、出力 200トークン
@@ -290,6 +295,7 @@ Goでは月額$10を支払い、含まれる月間利用枠はモデルによっ
 | ---------------------------- | ---------------------------- | ------------------------------------------------ | --------------------------- |
 | Grok 4.7                     | grok-4.7                     | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | Grok 4.6                     | grok-4.6                     | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
+| GPT 6 Luna                   | gpt-6-luna                   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GPT 5.6 Luna                 | gpt-5.6-luna                 | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GLM-5.3-Flash                | glm-5.3-flash                | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.3                      | glm-5.3                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -341,6 +347,7 @@ https://opencode.ai/zen/go/v1/models
 | ---------------------------- | -------------------- | ----------- |
 | Grok 4.7                     | 使用なし             | 30日        |
 | Grok 4.6                     | 使用なし             | 30日        |
+| GPT 6 Luna                   | 使用なし             | 30日        |
 | GPT 5.6 Luna                 | 使用なし             | 30日        |
 | GLM-5.3-Flash                | 使用なし             | 0日         |
 | GLM-5.3                      | 使用なし             | 0日         |
@@ -372,7 +379,7 @@ https://opencode.ai/zen/go/v1/models
 | Space Bunny Free             | 使用なし             | 0日         |
 
 - **Grok 4.7/4.6:** ZDRでは、保存データに依存する重要なAPI機能（ステートフルなResponses API、Files and Collections、Batch APIなど）が無効になります。[詳しく見る](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr)。
-- **GPT 5.6 Luna:** 不正使用監視ログはすべてのAPI機能の使用時に生成され、最大30日間保持されます。[詳しく見る](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring)。
+- **GPT 6 Luna / GPT 5.6 Luna:** 不正使用監視ログはすべてのAPI機能の使用時に生成され、最大30日間保持されます。[詳しく見る](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring)。
 - **Muse Spark 1.3 Contributor:** 将来のMetaモデルのトレーニングにプロンプトと生成結果を使用する許可と引き換えに、トークン料金が大幅に割引されます。利用できるのは、Metaの[地域別利用ポリシー](https://ai.developer.meta.com/legal/geographic-use-policy)で許可されている地域に限られます。[詳しく見る](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier)。
 - **Muse Spark 1.2 Contributor:** 将来のMetaモデルのトレーニングにプロンプトと生成結果を使用する許可と引き換えに、トークン料金が大幅に割引されます。利用できるのは、Metaの[地域別利用ポリシー](https://ai.developer.meta.com/legal/geographic-use-policy)で許可されている地域に限られます。[詳しく見る](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier)。
 - **DeepSeek:** ZDR契約は毎月更新されます。現在の契約は2026年9月30日まで有効です。
