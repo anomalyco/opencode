@@ -66,7 +66,6 @@ it.effect("keeps known Code Mode MCP servers from nesting inside OpenCode Code M
         name: "posthog explicit code mode",
         server: { type: "remote", url: "https://mcp.us.posthog.com/mcp", codemode: true },
         codemode: true,
-        headers: { "x-posthog-mcp-mode": "tools" },
       },
       {
         name: "posthog mode in url",

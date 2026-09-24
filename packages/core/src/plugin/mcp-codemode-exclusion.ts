@@ -16,17 +16,16 @@ export const Plugin = define({
   effect: Effect.fn(function* (ctx) {
     yield* ctx.mcp.transform((editor) => {
       for (const [, server] of editor.list()) {
+        if (server.codemode !== undefined) continue
         if (server.type === "local") {
-          if (server.codemode === undefined && server.command[0] === "executor" && server.command[1] === "mcp")
-            server.codemode = false
+          if (server.command[0] === "executor" && server.command[1] === "mcp") server.codemode = false
           continue
         }
         if (!URL.canParse(server.url)) continue
         const url = new URL(server.url)
         const endpoint = `${url.origin}${url.pathname.replace(/\/+$/, "")}`
-        if (server.codemode === undefined && urls.some((pattern) => pattern.test(endpoint))) server.codemode = false
+        if (urls.some((pattern) => pattern.test(endpoint))) server.codemode = false
         if (
-          server.codemode !== false &&
           posthog.test(url.hostname) &&
           !url.searchParams.has("mode") &&
           !Object.keys(server.headers ?? {}).some((key) => key.toLowerCase() === mode)
