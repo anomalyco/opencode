@@ -3,7 +3,7 @@ import { spawn } from "child_process"
 import fs from "fs/promises"
 import path from "path"
 import os from "os"
-import { Cause, Effect, Exit } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber } from "effect"
 import { testEffect } from "../lib/effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -118,6 +118,151 @@ const testLayer = AppNodeBuilder.build(EffectFlock.node, [[Global.node, testGlob
 
 describe("util.effect-flock", () => {
   const it = testEffect(testLayer)
+
+  it.live(
+    "refreshes held lease and regular lock heartbeats across their interval",
+    Effect.gen(function* () {
+      const flock = yield* EffectFlock.Service
+      const tmp = yield* Effect.promise(() => fs.mkdtemp(path.join(os.tmpdir(), "eflock-heartbeat-")))
+      yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(tmp, { recursive: true, force: true })))
+      const dir = path.join(tmp, "locks")
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const lease = yield* flock.tryAcquire("lease", dir)
+          expect(lease._tag).toBe("Some")
+          yield* flock.acquire("regular", dir)
+          const old = new Date(Date.now() - 120_000)
+          yield* Effect.promise(async () => {
+            for (const key of ["lease", "regular"]) {
+              const target = lock(dir, key)
+              await fs.utimes(path.join(target, "heartbeat"), old, old)
+              await fs.utimes(path.join(target, "meta.json"), old, old)
+              await fs.utimes(target, old, old)
+            }
+          })
+          yield* Effect.sleep("21 seconds")
+          for (const key of ["lease", "regular"]) {
+            const mtime = yield* Effect.promise(() => fs.stat(path.join(lock(dir, key), "heartbeat")))
+            expect(Date.now() - mtime.mtimeMs).toBeLessThan(5_000)
+            expect((yield* flock.tryAcquire(key, dir))._tag).toBe("None")
+          }
+        }),
+      )
+    }),
+    35_000,
+  )
+
+  it.live(
+    "tryAcquire exposes ownership and preserves a takeover",
+    Effect.gen(function* () {
+      const flock = yield* EffectFlock.Service
+      const tmp = yield* Effect.promise(() => fs.mkdtemp(path.join(os.tmpdir(), "eflock-lease-")))
+      const dir = path.join(tmp, "locks")
+      const key = "eflock:lease"
+      const lockDir = lock(dir, key)
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const first = yield* flock.tryAcquire(key, dir)
+          expect(first._tag).toBe("Some")
+          expect((yield* flock.tryAcquire(key, dir))._tag).toBe("None")
+          const holder = yield* flock.holder(key, dir)
+          expect(holder._tag).toBe("Some")
+          if (holder._tag === "Some") expect(holder.value.pid).toBe(process.pid)
+          if (first._tag === "None") return false
+          expect(yield* first.value.verify).toBe(true)
+          yield* Effect.promise(async () => {
+            const old = new Date(Date.now() - 120_000)
+            await fs.utimes(path.join(lockDir, "heartbeat"), old, old)
+            await fs.utimes(path.join(lockDir, "meta.json"), old, old)
+          })
+          const second = yield* flock.tryAcquire(key, dir)
+          expect(second._tag).toBe("Some")
+          expect(yield* first.value.verify).toBe(false)
+          if (second._tag === "None") return
+          expect(yield* second.value.verify).toBe(true)
+        }),
+      )
+      expect(yield* Effect.promise(() => exists(lockDir))).toBe(false)
+      expect((yield* flock.holder(key, dir))._tag).toBe("None")
+      yield* Effect.promise(() => fs.rm(tmp, { recursive: true, force: true }))
+    }),
+  )
+
+  it.live(
+    "releasing a stale holder preserves the new owner's lock",
+    Effect.gen(function* () {
+      const flock = yield* EffectFlock.Service
+      const tmp = yield* Effect.promise(() => fs.mkdtemp(path.join(os.tmpdir(), "eflock-takeover-")))
+      yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(tmp, { recursive: true, force: true })))
+      const dir = path.join(tmp, "locks")
+      const key = "eflock:takeover-release"
+      const lockDir = lock(dir, key)
+      const ready = yield* Deferred.make<EffectFlock.Held>()
+      const finish = yield* Deferred.make<void>()
+      const owner = yield* Effect.gen(function* () {
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const result = yield* flock.tryAcquire(key, dir)
+            if (result._tag === "None") return
+            yield* Deferred.succeed(ready, result.value)
+            yield* Deferred.await(finish)
+          }),
+        )
+      }).pipe(Effect.forkScoped)
+      const original = yield* Deferred.await(ready)
+      yield* Effect.sleep("100 millis")
+      yield* Effect.promise(async () => {
+        const old = new Date(Date.now() - 120_000)
+        await fs.utimes(path.join(lockDir, "heartbeat"), old, old)
+        await fs.utimes(path.join(lockDir, "meta.json"), old, old)
+        await fs.utimes(lockDir, old, old)
+      })
+      const current = yield* flock.tryAcquire(key, dir)
+      expect(current._tag).toBe("Some")
+      expect(yield* original.verify).toBe(false)
+      if (current._tag === "None") return
+      yield* Deferred.succeed(finish, undefined)
+      yield* Fiber.join(owner)
+      expect(yield* Effect.promise(() => exists(lockDir))).toBe(true)
+      expect(yield* current.value.verify).toBe(true)
+    }),
+  )
+
+  it.live(
+    "an interrupted retry loop leaves the released key available",
+    Effect.gen(function* () {
+      const flock = yield* EffectFlock.Service
+      const tmp = yield* Effect.promise(() => fs.mkdtemp(path.join(os.tmpdir(), "eflock-wait-")))
+      const dir = path.join(tmp, "locks")
+      const key = "eflock:wait-interrupt"
+      const lockDir = lock(dir, key)
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const holder = yield* flock.tryAcquire(key, dir)
+          expect(holder._tag).toBe("Some")
+          let waiterAcquired = false
+          const waiter = yield* Effect.gen(function* () {
+            while (true) {
+              const result = yield* flock.tryAcquire(key, dir)
+              if (result._tag === "Some") {
+                waiterAcquired = true
+                return
+              }
+              yield* Effect.sleep("50 millis")
+            }
+          }).pipe(Effect.forkScoped)
+          yield* Effect.sleep("10 millis")
+          yield* Fiber.interrupt(waiter)
+          expect(waiterAcquired).toBe(false)
+          expect(yield* Effect.promise(() => exists(lockDir))).toBe(true)
+        }),
+      )
+      expect(yield* Effect.promise(() => exists(lockDir))).toBe(false)
+      const fresh = yield* Effect.scoped(flock.tryAcquire(key, dir))
+      expect(fresh._tag).toBe("Some")
+      yield* Effect.promise(() => fs.rm(tmp, { recursive: true, force: true }))
+    }),
+  )
 
   it.live(
     "acquire and release via scoped Effect",

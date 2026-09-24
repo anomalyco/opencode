@@ -3,10 +3,25 @@
 // same process. See `test/lib/cli-process.ts` for the harness — each test uses
 // `opencode.run(message, opts?)` to spawn `bun src/index.ts run ...` with
 // `OPENCODE_CONFIG_CONTENT` providing the test provider config inline.
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
+import { Database } from "bun:sqlite"
+import path from "node:path"
 import { Effect } from "effect"
 import { reply } from "../../lib/llm-server"
 import { cliIt } from "../../lib/cli-process"
+import { createRunErrorDeduper } from "../../../src/cli/cmd/run-error"
+
+test("JSON error deduplication preserves distinct session errors and drops the request duplicate", () => {
+  const duplicate = createRunErrorDeduper()
+  expect(duplicate({ name: "ModelError", data: { message: "missing model" } }, "session")).toBe(false)
+  expect(duplicate({ name: "ToolError", data: { message: "tool failed" } }, "session")).toBe(false)
+  expect(duplicate({ name: "UnknownError", data: { message: "Unexpected server error." } }, "request")).toBe(true)
+
+  const reversed = createRunErrorDeduper()
+  const error = { name: "ModelError", data: { message: "missing model" } }
+  expect(reversed(error, "request")).toBe(false)
+  expect(reversed(error, "session")).toBe(true)
+})
 
 describe("opencode run (non-interactive subprocess)", () => {
   // Happy path: prompt completes, output reaches stdout, process exits 0.
@@ -19,6 +34,212 @@ describe("opencode run (non-interactive subprocess)", () => {
         const result = yield* opencode.run("say hi")
         opencode.expectExit(result, 0)
         expect(result.stdout).toBe("hello from the test llm\n")
+      }),
+    60_000,
+  )
+
+  cliIt.live(
+    "prints a reply from another process that continued the session",
+    ({ home, llm, opencode }) =>
+      Effect.gen(function* () {
+        const phase = <A>(name: string, effect: Effect.Effect<A>) =>
+          effect.pipe(
+            Effect.timeoutOrElse({
+              duration: "20 seconds",
+              orElse: () => Effect.fail(new Error(`timed out waiting for ${name}`)),
+            }),
+          )
+        const databasePath = path.join(home, "shared.db")
+        const env = { OPENCODE_DB: databasePath }
+        yield* llm.text("seed reply")
+        const seed = yield* opencode.run("seed", { format: "json", env })
+        const sessionID = opencode.parseJsonEvents(seed.stdout).at(-1)?.sessionID
+        if (typeof sessionID !== "string") throw new Error("seed run did not emit a session ID")
+
+        const db = new Database(databasePath, { readonly: true })
+        const count = (role: string) =>
+          Number(
+            (
+              db
+                .query(
+                  "SELECT COUNT(*) AS count FROM message WHERE session_id = ? AND json_extract(data, '$.role') = ?",
+                )
+                .get(sessionID, role) as { count: number } | undefined
+            )?.count,
+          )
+        expect(count("user")).toBe(1)
+        expect(count("assistant")).toBe(1)
+
+        yield* llm.reset
+        let release: () => void = () => {}
+        const gate = new Promise<void>((resolve) => {
+          release = resolve
+        })
+        yield* Effect.addFinalizer(() => Effect.sync(release))
+        yield* llm.hold("first reply", gate)
+        const first = yield* opencode.startRun("first prompt", {
+          format: "json",
+          extraArgs: ["--session", String(sessionID)],
+          env,
+        })
+        const firstRequestDeadline = Date.now() + 20_000
+        while (Date.now() < firstRequestDeadline && !JSON.stringify(yield* llm.inputs).includes("first prompt")) {
+          yield* Effect.sleep("25 millis")
+        }
+        if (!JSON.stringify(yield* llm.inputs).includes("first prompt")) {
+          throw new Error("timed out waiting for A's first provider request")
+        }
+
+        const second = yield* opencode.startRun("reply two", {
+          format: "json",
+          extraArgs: ["--session", String(sessionID)],
+          env,
+        })
+        const deadline = Date.now() + 10_000
+        while (Date.now() < deadline && count("user") < 3) {
+          yield* Effect.sleep("25 millis")
+        }
+        const userCount = count("user")
+        db.close()
+        if (userCount !== 3) throw new Error(`timed out waiting for B's admitted user row; found ${userCount}`)
+        expect(userCount).toBe(3)
+
+        yield* llm.text("two")
+        release()
+        const secondRequestDeadline = Date.now() + 20_000
+        const isTitle = (input: Record<string, unknown>) =>
+          JSON.stringify(input).includes("Generate a title for this conversation")
+        let inputs = yield* llm.inputs
+        while (Date.now() < secondRequestDeadline && inputs.filter((input) => !isTitle(input)).length < 2) {
+          yield* Effect.sleep("25 millis")
+          inputs = yield* llm.inputs
+        }
+        const modelRequests = inputs.filter((input) => !isTitle(input))
+        if (modelRequests.length !== 2) {
+          throw new Error(
+            `timed out waiting for A's continuation request; found ${modelRequests.length} provider requests`,
+          )
+        }
+        expect(modelRequests).toHaveLength(2)
+        const firstResult = yield* phase("A exit", first.result)
+        const firstText = opencode
+          .parseJsonEvents(firstResult.stdout)
+          .filter((event) => event.type === "text")
+          .map((event) => (event.part as { text: string }).text)
+        expect(firstText).toContain("two")
+        const modelRequestsAfterRun = (yield* llm.inputs).filter((input) => !isTitle(input))
+        expect(modelRequestsAfterRun).toHaveLength(2)
+        const secondResult = yield* phase("B exit", second.result)
+        const secondEvents = opencode.parseJsonEvents(secondResult.stdout)
+        expect(firstResult.exitCode).toBe(0)
+        expect(secondResult.exitCode).toBe(0)
+        expect(secondEvents.map((event) => event.type)).toEqual(["step_start", "text", "step_finish"])
+        expect(
+          secondEvents.filter((event) => event.type === "text").map((event) => (event.part as { text: string }).text),
+        ).toEqual(["two"])
+      }),
+    60_000,
+  )
+
+  cliIt.live(
+    "prints every turn from another process that continued the session",
+    ({ home, llm, opencode }) =>
+      Effect.gen(function* () {
+        const phase = <A>(name: string, effect: Effect.Effect<A>) =>
+          effect.pipe(
+            Effect.timeoutOrElse({
+              duration: "20 seconds",
+              orElse: () => Effect.fail(new Error(`timed out waiting for ${name}`)),
+            }),
+          )
+        const databasePath = path.join(home, "shared.db")
+        const env = { OPENCODE_DB: databasePath }
+        yield* llm.text("seed reply")
+        const seed = yield* opencode.run("seed", { format: "json", env })
+        const sessionID = opencode.parseJsonEvents(seed.stdout).at(-1)?.sessionID
+        if (typeof sessionID !== "string") throw new Error("seed run did not emit a session ID")
+
+        const db = new Database(databasePath, { readonly: true })
+        const userCount = () =>
+          Number(
+            (
+              db
+                .query(
+                  "SELECT COUNT(*) AS count FROM message WHERE session_id = ? AND json_extract(data, '$.role') = 'user'",
+                )
+                .get(sessionID) as { count: number } | undefined
+            )?.count,
+          )
+        expect(userCount()).toBe(1)
+
+        yield* llm.reset
+        let release: () => void = () => {}
+        const gate = new Promise<void>((resolve) => {
+          release = resolve
+        })
+        yield* Effect.addFinalizer(() => Effect.sync(release))
+        yield* llm.hold("first reply", gate)
+        const first = yield* opencode.startRun("first prompt", {
+          format: "json",
+          extraArgs: ["--session", sessionID, "--dangerously-skip-permissions"],
+          env,
+        })
+        const firstRequestDeadline = Date.now() + 20_000
+        while (Date.now() < firstRequestDeadline && !JSON.stringify(yield* llm.inputs).includes("first prompt")) {
+          yield* Effect.sleep("25 millis")
+        }
+        if (!JSON.stringify(yield* llm.inputs).includes("first prompt")) {
+          throw new Error("timed out waiting for A's first provider request")
+        }
+
+        const second = yield* opencode.startRun("reply two", {
+          format: "json",
+          extraArgs: ["--session", sessionID],
+          env,
+        })
+        const admissionDeadline = Date.now() + 10_000
+        while (Date.now() < admissionDeadline && userCount() < 3) yield* Effect.sleep("25 millis")
+        const admittedUsers = userCount()
+        db.close()
+        if (admittedUsers !== 3) throw new Error(`timed out waiting for B's admitted user row; found ${admittedUsers}`)
+
+        yield* llm.push(
+          reply().text("before tool").tool("bash", {
+            command: "printf tool-output",
+            description: "Print deterministic output",
+          }),
+        )
+        yield* llm.text("final text")
+        release()
+        const requestDeadline = Date.now() + 20_000
+        const isTitle = (input: Record<string, unknown>) =>
+          JSON.stringify(input).includes("Generate a title for this conversation")
+        let inputs = yield* llm.inputs
+        while (Date.now() < requestDeadline && inputs.filter((input) => !isTitle(input)).length < 3) {
+          yield* Effect.sleep("25 millis")
+          inputs = yield* llm.inputs
+        }
+        const modelRequests = inputs.filter((input) => !isTitle(input))
+        if (modelRequests.length !== 3) {
+          throw new Error(
+            `timed out waiting for A's two continuation requests; found ${modelRequests.length} provider requests`,
+          )
+        }
+        const firstResult = yield* phase("A exit", first.result)
+        const firstText = opencode
+          .parseJsonEvents(firstResult.stdout)
+          .filter((event) => event.type === "text")
+          .map((event) => (event.part as { text: string }).text)
+        expect(firstResult.exitCode).toBe(0)
+        expect(firstText).toContain("before tool")
+        expect(firstText).toContain("final text")
+        const secondResult = yield* phase("B exit", second.result)
+        const secondText = opencode
+          .parseJsonEvents(secondResult.stdout)
+          .filter((event) => event.type === "text")
+          .map((event) => (event.part as { text: string }).text)
+        expect(secondResult.exitCode).toBe(0)
+        expect(secondText).toEqual(["before tool", "final text"])
       }),
     60_000,
   )
@@ -121,6 +342,10 @@ describe("opencode run (non-interactive subprocess)", () => {
           expect(typeof evt.type).toBe("string")
           expect(typeof evt.sessionID).toBe("string")
         }
+        const textPartIDs = events
+          .filter((event) => event.type === "text")
+          .map((event) => (event.part as { id: string }).id)
+        expect(new Set(textPartIDs).size).toBe(textPartIDs.length)
         expect(events.map((event) => event.type)).toEqual(["step_start", "text", "step_finish"])
         expect(events.map(({ timestamp: _, sessionID: __, ...event }) => event)).toEqual([
           { type: "step_start", part: expect.objectContaining({ type: "step-start" }) },

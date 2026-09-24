@@ -74,11 +74,16 @@ export namespace EffectFlock {
 
   export interface Interface {
     readonly acquire: (key: string, dir?: string) => Effect.Effect<void, LockError, Scope.Scope>
+    readonly tryAcquire: (key: string, dir?: string) => Effect.Effect<Option.Option<Held>, never, Scope.Scope>
+    readonly holder: (key: string, dir?: string) => Effect.Effect<Option.Option<Holder>>
     readonly withLock: {
       (key: string, dir?: string): <A, E, R>(body: Effect.Effect<A, E, R>) => Effect.Effect<A, E | LockError, R>
       <A, E, R>(body: Effect.Effect<A, E, R>, key: string, dir?: string): Effect.Effect<A, E | LockError, R>
     }
   }
+
+  export type Holder = { readonly pid: number; readonly hostname: string; readonly createdAt: string }
+  export type Held = { readonly verify: Effect.Effect<boolean> }
 
   export class Service extends Context.Service<Service, Interface>()("EffectFlock") {}
 
@@ -196,8 +201,19 @@ export namespace EffectFlock {
             // We own the breaker — double-check staleness, nuke, recreate
             const recreated = yield* Effect.gen(function* () {
               if (!(yield* isStale(lockDir, heartbeatPath, metaPath))) return false
+              const previous = yield* fs.readFileString(metaPath).pipe(
+                Effect.map((raw) => Schema.decodeUnknownOption(LockMetaJson)(raw)),
+                Effect.orElseSucceed(() => Option.none()),
+              )
               yield* forceRemove(lockDir)
-              return yield* atomicMkdir(lockDir)
+              const recreated = yield* atomicMkdir(lockDir)
+              if (recreated) {
+                yield* Effect.logWarning("EffectFlock stale lock broken", {
+                  lockDir,
+                  pid: Option.isSome(previous) ? previous.value.pid : "unknown",
+                })
+              }
+              return recreated
             }).pipe(Effect.ensuring(forceRemove(breakerPath)))
 
             if (!recreated) return yield* new NotAcquired()
@@ -248,21 +264,86 @@ export namespace EffectFlock {
           yield* forceRemove(handle.lockDir)
         })
 
-      // -- build service --
+      const verify = (handle: Handle) =>
+        fs.readFileString(handle.metaPath).pipe(
+          Effect.map((raw) =>
+            Option.match(Schema.decodeUnknownOption(LockMetaJson)(raw), {
+              onNone: () => false,
+              onSome: (meta) => meta.token === handle.token,
+            }),
+          ),
+          Effect.orElseSucceed(() => false),
+        )
+
+      const releaseLease = (handle: Handle) =>
+        Effect.uninterruptible(
+          Effect.gen(function* () {
+            const breakerPath = handle.lockDir + ".breaker"
+            const claimed = yield* fs.makeDirectory(breakerPath, { mode: 0o700 }).pipe(
+              Effect.as(true),
+              Effect.catchIf(
+                (e) => e.reason._tag === "AlreadyExists",
+                () => Effect.succeed(false),
+              ),
+              Effect.orDie,
+            )
+            if (!claimed) {
+              yield* Effect.logWarning("EffectFlock lease lost before release; preserving current lock", {
+                lockDir: handle.lockDir,
+              })
+              return
+            }
+            yield* Effect.gen(function* () {
+              if (yield* verify(handle)) return yield* forceRemove(handle.lockDir)
+              yield* Effect.logWarning("EffectFlock lease lost before release; preserving current lock", {
+                lockDir: handle.lockDir,
+              })
+            }).pipe(Effect.ensuring(forceRemove(breakerPath)))
+          }),
+        )
+
+      const tryAcquire = Effect.fn("EffectFlock.tryAcquire")(function* (key: string, dir?: string) {
+        const lockDir = dir ?? lockRoot
+        yield* ensureDir(lockDir)
+        // acquireRelease runs the single attempt uninterruptibly and registers the release in
+        // the same step, so an interrupt can't leave an acquired lock without its release
+        const acquired = yield* Effect.acquireRelease(
+          tryAcquireLockDir(path.join(lockDir, Hash.fast(key) + ".lock"), key).pipe(Effect.option),
+          (result) => (Option.isSome(result) ? releaseLease(result.value) : Effect.void),
+        )
+        if (Option.isNone(acquired)) return Option.none()
+        yield* Effect.suspend(() => fs.utimes(acquired.value.heartbeatPath, new Date(), new Date())).pipe(
+          Effect.ignore,
+          Effect.repeat(Schedule.spaced(HEARTBEAT_MS)),
+          Effect.forkScoped,
+        )
+        return Option.some({ verify: verify(acquired.value) })
+      })
+
+      const holder = Effect.fn("EffectFlock.holder")(function* (key: string, dir?: string) {
+        const metaPath = path.join(dir ?? lockRoot, Hash.fast(key) + ".lock", "meta.json")
+        return yield* fs.readFileString(metaPath).pipe(
+          Effect.map((raw) =>
+            Schema.decodeUnknownOption(LockMetaJson)(raw).pipe(
+              Option.map((meta) => ({ pid: meta.pid, hostname: meta.hostname, createdAt: meta.createdAt })),
+            ),
+          ),
+          Effect.orElseSucceed(() => Option.none<Holder>()),
+        )
+      })
 
       const acquire = Effect.fn("EffectFlock.acquire")(function* (key: string, dir?: string) {
         const lockDir = dir ?? lockRoot
         yield* ensureDir(lockDir)
-
-        const lockfile = path.join(lockDir, Hash.fast(key) + ".lock")
-
-        // acquireRelease: acquire is uninterruptible, release is guaranteed
-        const handle = yield* Effect.acquireRelease(acquireHandle(lockfile, key), (handle) => release(handle))
-
-        // Heartbeat fiber — scoped, so it's interrupted before release runs
-        yield* fs
-          .utimes(handle.heartbeatPath, new Date(), new Date())
-          .pipe(Effect.ignore, Effect.repeat(Schedule.spaced(HEARTBEAT_MS)), Effect.forkScoped)
+        const handle = yield* Effect.acquireRelease(
+          acquireHandle(path.join(lockDir, Hash.fast(key) + ".lock"), key),
+          (handle) => release(handle),
+        )
+        yield* Effect.suspend(() => fs.utimes(handle.heartbeatPath, new Date(), new Date())).pipe(
+          Effect.ignore,
+          Effect.repeat(Schedule.spaced(HEARTBEAT_MS)),
+          Effect.forkScoped,
+        )
       })
 
       const withLock: Interface["withLock"] = Function.dual(
@@ -276,7 +357,7 @@ export namespace EffectFlock {
           ),
       )
 
-      return Service.of({ acquire, withLock })
+      return Service.of({ acquire, tryAcquire, holder, withLock })
     }),
   )
 
