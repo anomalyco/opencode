@@ -1,6 +1,4 @@
 import { Effect } from "effect"
-import { shell } from "electron"
-import { resolveExternalURL } from "../files/external-url"
 import { FileRpcs } from "../../shared/ipc-rpc"
 import { DesktopFiles, openExternalURL, openLocalFileURL } from "../files"
 import { IpcPortHandoff } from "../ipc-transport"
@@ -26,15 +24,8 @@ export const fileHandlers = FileRpcs.toLayer(
       FilesReleasePickedFiles: ({ token }, context) =>
         Effect.sync(() => files.releasePickedFiles(sender(handoff, context).id, token)),
       FilesSaveFile: ({ options, content }) => files.saveFile(options, content).pipe(Effect.orDie),
-      FilesOpenExternal: ({ url }) => openExternalURL(url),
-      FilesOpenBrowser: ({ url }) => {
-        const target = resolveExternalURL(url)
-        if (!target || !/^https?:/.test(target)) return Effect.succeed(false)
-        return Effect.tryPromise(() => shell.openExternal(target)).pipe(
-          Effect.as(true),
-          Effect.orElseSucceed(() => false),
-        )
-      },
+      FilesOpenExternal: ({ url }) => openExternalURL(url).pipe(Effect.asVoid),
+      FilesOpenBrowser: ({ url }) => (/^https?:/i.test(url) ? openExternalURL(url) : Effect.succeed(false)),
       FilesOpenLocalFile: ({ url }) => openLocalFileURL(url),
       FilesOpenPath: ({ path, application }) =>
         files.openPath(path, application).pipe(

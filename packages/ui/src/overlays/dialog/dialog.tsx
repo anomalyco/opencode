@@ -1,5 +1,6 @@
 import { CloseButton, Content, Description, Title } from "@kobalte/core/dialog"
-import { type ComponentProps, type JSXElement, type ParentProps, Show, children, splitProps } from "solid-js"
+import { type ComponentProps, type JSXElement, type ParentProps, Show, children, createEffect, splitProps } from "solid-js"
+import { useDialogLayer } from "../../context/dialog"
 import { useI18n } from "../../context/i18n"
 import "./dialog.css"
 
@@ -95,6 +96,8 @@ export function Dialog(props: DialogProps) {
     "onCloseAutoFocus",
     "preventBackdropDismiss",
   ])
+  const layer = useDialogLayer()
+  createEffect(() => layer?.setBackdropDismiss(!local.preventBackdropDismiss))
 
   return (
     <div
@@ -102,7 +105,6 @@ export function Dialog(props: DialogProps) {
       data-variant={local.variant === "settings" ? "settings" : undefined}
       data-fit={local.fit ? true : undefined}
       data-size={local.size || "normal"}
-      data-prevent-backdrop-dismiss={local.preventBackdropDismiss ? "" : undefined}
     >
       <div data-slot="dialog-container" class={local.containerClass}>
         <Content

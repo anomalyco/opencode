@@ -201,6 +201,7 @@ export const dict = {
   "provider.connect.console.instructions":
     "Continue in your browser. Confirm the code shown there matches the one below.",
   "provider.connect.console.deviceCode": "Device code",
+  "provider.connect.console.deviceCode.label": "Device code: {{code}}",
   "provider.connect.console.waiting": "Waiting for confirmation…",
   "provider.connect.console.browserHint": "Browser didn't open?",
   "provider.connect.console.copyLink": "Copy sign-in link",

@@ -19,7 +19,6 @@ import {
 import { useLanguage } from "@/runtime/i18n/language"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useProviders } from "@/providers/catalog/providers"
-import { useIntegrations } from "@/providers/catalog/integrations"
 import { NEW_SESSION_CONTENT_WIDTH } from "@/new-session/layout"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
@@ -178,7 +177,6 @@ function NewSessionTips(props: {
   const dialog = useDialog()
   const sdk = useWorkspaceLocation()
   const providers = useProviders(() => sdk().directory)
-  const integrations = useIntegrations(() => sdk().directory)
   const [providerState, setProviderState, , providerReady] = persisted(
     Persist.global("new-session.provider-tip"),
     ProviderTipSchema,
@@ -197,12 +195,8 @@ function NewSessionTips(props: {
   )
   const providerVisible = createMemo(
     () =>
-      providers.ready() &&
       providerReady() &&
-      !integrations.list().some((integration) => integration.connections.length > 0) &&
-      !providers
-        .connected()
-        .some((provider) => provider.id !== "opencode" && Object.keys(provider.models).length > 0) &&
+      providers.anyConnection() === false &&
       Date.now() - providerState.dismissedAt >= providerTipDismissalDuration,
   )
   const tip = createMemo<"workspace" | "provider" | undefined>(() => {

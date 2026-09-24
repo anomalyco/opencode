@@ -85,7 +85,7 @@ export const DialogConnectProvider: Component<{
   const language = useLanguage()
   const reset = controller.reset
   const back = { current: reset }
-  const console = () => CONSOLE_PROVIDERS.has(controller.selected() ?? "")
+  const consoleSelected = () => CONSOLE_PROVIDERS.has(controller.selected() ?? "")
   let focusHost: HTMLDivElement | undefined
   const holdFocus = () => focusHost?.focus({ preventScroll: true })
   const select = (provider?: string) => {
@@ -131,7 +131,7 @@ export const DialogConnectProvider: Component<{
       containerClass={
         state.modelProvider
           ? "!h-[min(calc(100vh_-_16px),560px)] !w-[min(calc(100vw_-_16px),640px)]"
-          : console() && state.authorization
+          : consoleSelected() && state.authorization
             ? "!h-auto !max-h-[min(calc(100vh_-_16px),560px)] !w-[min(calc(100vw_-_16px),640px)]"
             : "!h-[min(calc(100vh_-_16px),512px)] !w-[min(calc(100vw_-_16px),640px)]"
       }
@@ -142,7 +142,7 @@ export const DialogConnectProvider: Component<{
       }}
       class="[font-family:var(--v2-font-family-sans)] [&_[data-slot=dialog-header]]:!px-5 [&_[data-slot=dialog-header-title]]:!text-[15px] [&_[data-slot=dialog-header-title]]:!tracking-[-0.13px]"
       classList={{
-        "[&_[data-slot=dialog-header]]:!pt-4 [&_[data-slot=dialog-header]]:!pb-3": console() && !state.modelProvider,
+        "[&_[data-slot=dialog-header]]:!pt-4 [&_[data-slot=dialog-header]]:!pb-3": consoleSelected() && !state.modelProvider,
         "[&_[data-slot=dialog-header]]:!pt-5": !!state.modelProvider,
       }}
     >
@@ -172,7 +172,7 @@ export const DialogConnectProvider: Component<{
         </Switch>
       </DialogHeader>
       <DialogBody
-        class={`min-h-0 flex-1 overflow-hidden px-2 ${state.modelProvider || console() ? "pb-0" : "pb-2"}`}
+        class={`min-h-0 flex-1 overflow-hidden px-2 ${state.modelProvider || consoleSelected() ? "pb-0" : "pb-2"}`}
       >
         <div ref={focusHost} tabIndex={-1} class="flex min-h-0 flex-1 flex-col outline-none">
           <Content />
@@ -380,6 +380,7 @@ function ProviderConnection(props: {
     copyFailed: false,
     firstConnection: undefined as boolean | undefined,
     models: false,
+    noModels: false,
     selectedModel: "",
     collapsed: {} as Record<string, boolean>,
   })
@@ -412,7 +413,10 @@ function ProviderConnection(props: {
           return
         }
         // Keep the "connected, but no models" state visible so the workspace can be fixed.
-        if (isConsole) return
+        if (isConsole) {
+          setState("noModels", true)
+          return
+        }
       }
       dialog.close()
       showToast({
@@ -423,13 +427,12 @@ function ProviderConnection(props: {
       })
     },
   })
+  // Captured before the new credential lands, so the connection itself never counts as existing.
   createEffect(() => {
-    if (!controller.integration() || state.firstConnection !== undefined) return
-    const existingConnection = integrations.list().some((integration) => integration.connections.length > 0)
-    const existingProvider = providers
-      .connected()
-      .some((provider) => provider.id !== "opencode" && Object.keys(provider.models).length > 0)
-    setState("firstConnection", !existingConnection && !existingProvider)
+    if (state.firstConnection !== undefined) return
+    const existing = providers.anyConnection()
+    if (existing === undefined) return
+    setState("firstConnection", !existing)
   })
   const connectionProviders = createMemo(() =>
     (data.location.provider.list(location()) ?? []).filter(
@@ -534,9 +537,9 @@ function ProviderConnection(props: {
   // The Console device flow owns the dialog from the first frame until the catalogs are loaded.
   const consoleSignIn = () =>
     isConsole &&
+    !state.noModels &&
     controller.currentMethod()?.type !== "key" &&
     controller.auth.state() !== "error" &&
-    controller.auth.state() !== "ready" &&
     (controller.busy() || controller.authorization()?.mode === "auto")
 
   function AuthFormView() {
@@ -936,7 +939,13 @@ function ProviderConnection(props: {
           <Button onClick={() => platform.openExternal("https://opencode.ai/console")}>
             {language.t("provider.connect.console.openAgain")}
           </Button>
-          <Button onClick={() => void controller.auth.refresh()}>{language.t("provider.connect.console.refresh")}</Button>
+          <Button
+            disabled={controller.auth.state() === "refreshing"}
+            aria-busy={controller.auth.state() === "refreshing"}
+            onClick={() => void controller.auth.refresh()}
+          >
+            {language.t("provider.connect.console.refresh")}
+          </Button>
         </div>
       </div>
     )
@@ -1120,7 +1129,7 @@ function ProviderConnection(props: {
             </div>
           </Show>
           <Switch>
-            <Match when={isConsole && controller.auth.state() === "ready"}>
+            <Match when={state.noModels && controller.auth.state() !== "error"}>
               <ConsoleNoModels />
             </Match>
             <Match when={consoleSignIn()}>
@@ -1165,8 +1174,8 @@ function ProviderConnection(props: {
             when={
               isConsole &&
               !controller.loading() &&
+              !state.noModels &&
               controller.currentMethod()?.type !== "key" &&
-              controller.auth.state() !== "ready" &&
               keyIndex() !== -1
             }
           >

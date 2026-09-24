@@ -1,5 +1,4 @@
 import { Button } from "@opencode/ui/button"
-import { Badge } from "@opencode/ui/badge"
 import { Dialog, DialogBody, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
@@ -16,19 +15,10 @@ import { DialogConnectProvider } from "@/providers/connect/dialog"
 import { decode64 } from "@/runtime/persistence/base64"
 import { SettingsList } from "@/settings/list"
 import { SettingsRow } from "@/settings/row"
-import { OpenCodeLogo } from "@/providers/opencode-logo"
-import { consoleProviderGroup, consoleProviderName } from "@/providers/catalog/console"
-import { ProviderModelGroup, ProviderModelIcon } from "@/providers/models/provider-group"
+import { consoleModelGroup, ProviderModelSections } from "@/providers/models/provider-group"
 import "@/settings/settings.css"
 
 type ModelItem = ReturnType<ReturnType<typeof useLocal>["model"]["list"]>[number]
-type ModelGroup = { category: string; items: ModelItem[] }
-type ConsoleGroup = NonNullable<ReturnType<typeof consoleProviderGroup<ModelItem["provider"]>>>
-type DisplayGroup =
-  | { type: "provider"; group: ModelGroup }
-  | { type: "console"; managed: ConsoleGroup; providers: ModelGroup[] }
-
-const CONSOLE_GROUP_KEY = "console:opencode"
 
 export const DialogManageModels: Component = () => {
   const local = useLocal()
@@ -68,29 +58,9 @@ export const DialogManageModels: Component = () => {
       return a.items[0].provider.name.localeCompare(b.items[0].provider.name)
     },
   })
-  const consoleGroup = createMemo(() =>
-    consoleProviderGroup([...new Map(local.model.list().map((item) => [item.provider.id, item.provider])).values()]),
-  )
-  const groups = createMemo<DisplayGroup[]>(() => {
-    const managed = consoleGroup()
-    if (!managed) return list.grouped.latest.map((group) => ({ type: "provider" as const, group }))
-    const ids = new Set(managed.providers.map((provider) => provider.id))
-    const providers = list.grouped.latest.filter((group) => ids.has(group.category))
-    if (providers.length === 0) return list.grouped.latest.map((group) => ({ type: "provider" as const, group }))
-    const first = list.grouped.latest.findIndex((group) => ids.has(group.category))
-    return list.grouped.latest.flatMap<DisplayGroup>((group, index) => {
-      if (!ids.has(group.category)) return [{ type: "provider" as const, group }]
-      if (index !== first) return []
-      return [{ type: "console" as const, managed, providers }]
-    })
-  })
+  const managed = createMemo(() => consoleModelGroup(local.model.list()))
   const searching = () => list.filter().length > 0
   const expanded = (key: string) => searching() || !store.collapsed[key]
-  // Only the keyless catalog is free; a Zen key or Console account keeps the provider's own name.
-  const providerName = (group: ModelGroup) =>
-    group.category === "opencode" && group.items.every((item) => !item.cost?.input)
-      ? language.t("provider.connect.opencode.freeName")
-      : group.items[0].provider.name
 
   function ModelRows(props: { items: ModelItem[] }) {
     return (
@@ -177,112 +147,25 @@ export const DialogManageModels: Component = () => {
                   </div>
                 }
               >
-                <For each={groups()}>
-                  {(item) => (
-                    <Show
-                      when={item.type === "console" ? item : undefined}
-                      fallback={
-                        <Show when={item.type === "provider" ? item.group : undefined}>
-                          {(group) => (
-                            <div
-                              class="settings-section"
-                              data-component="settings-models-provider"
-                              data-expanded={expanded(group().category) ? "" : undefined}
-                            >
-                              <div class="settings-models-group-header justify-between">
-                                <button
-                                  type="button"
-                                  class="settings-models-group-trigger"
-                                  aria-expanded={expanded(group().category)}
-                                  disabled={searching()}
-                                  onClick={() => setStore("collapsed", group().category, expanded(group().category))}
-                                >
-                                  <span class="settings-models-group-chevron">
-                                    <Icon
-                                      name="chevron-down"
-                                      size="small"
-                                      classList={{ collapsed: !expanded(group().category) }}
-                                    />
-                                  </span>
-                                  <span class="settings-models-group-label">
-                                    <ProviderModelIcon provider={group().items[0].provider} class="shrink-0" />
-                                    <bdi class="settings-models-group-title">
-                                      {providerName(group())}
-                                    </bdi>
-                                  </span>
-                                </button>
-                                <Switch
-                                  class="me-6"
-                                  checked={providerVisible(group().category)}
-                                  onChange={(checked) => setProviderVisibility(group().category, checked)}
-                                  hideLabel
-                                >
-                                  {group().items[0].provider.name}
-                                </Switch>
-                              </div>
-                              <Show when={expanded(group().category)}>
-                                <ModelRows items={group().items} />
-                              </Show>
-                            </div>
-                          )}
-                        </Show>
-                      }
+                <ProviderModelSections
+                  groups={list.grouped.latest}
+                  managed={managed()}
+                  expanded={expanded}
+                  disabled={searching()}
+                  onExpandedChange={(key, value) => setStore("collapsed", key, !value)}
+                  onSetVisibility={setProviderVisibility}
+                  action={(group) => (
+                    <Switch
+                      class="me-6"
+                      checked={providerVisible(group.category)}
+                      onChange={(checked) => setProviderVisibility(group.category, checked)}
+                      hideLabel
                     >
-                      {(console) => (
-                        <div
-                          class="settings-section settings-models-console"
-                          data-component="manage-models-console"
-                          data-expanded={expanded(CONSOLE_GROUP_KEY) ? "" : undefined}
-                        >
-                          <div class="settings-models-group-header">
-                            <button
-                              type="button"
-                              class="settings-models-group-trigger"
-                              aria-expanded={expanded(CONSOLE_GROUP_KEY)}
-                              disabled={searching()}
-                              onClick={() => setStore("collapsed", CONSOLE_GROUP_KEY, expanded(CONSOLE_GROUP_KEY))}
-                            >
-                              <span class="settings-models-group-chevron">
-                                <Icon
-                                  name="chevron-down"
-                                  size="small"
-                                  classList={{ collapsed: !expanded(CONSOLE_GROUP_KEY) }}
-                                />
-                              </span>
-                              <span class="settings-models-group-label">
-                                <OpenCodeLogo class="settings-models-provider-icon size-4 shrink-0" />
-                                <span class="settings-models-group-title">
-                                  {language.t("provider.connect.opencode.name")}
-                                </span>
-                                <Badge>{console().managed.workspace}</Badge>
-                              </span>
-                            </button>
-                          </div>
-                          <Show when={expanded(CONSOLE_GROUP_KEY)}>
-                            <div class="provider-model-groups settings-models-console-groups">
-                              <For each={console().providers}>
-                                {(group) => {
-                                  return (
-                                    <ProviderModelGroup
-                                      provider={group.items[0].provider}
-                                      name={consoleProviderName(console().managed, group.items[0].provider.name)}
-                                      expanded={expanded(group.category)}
-                                      disabled={searching()}
-                                      onSetVisibility={(visible) => setProviderVisibility(group.category, visible)}
-                                      onExpandedChange={(value) => setStore("collapsed", group.category, !value)}
-                                    >
-                                      <ModelRows items={group.items} />
-                                    </ProviderModelGroup>
-                                  )
-                                }}
-                              </For>
-                            </div>
-                          </Show>
-                        </div>
-                      )}
-                    </Show>
+                      {group.items[0].provider.name}
+                    </Switch>
                   )}
-                </For>
+                  rows={(items) => <ModelRows items={items} />}
+                />
               </Show>
             </Show>
           </div>

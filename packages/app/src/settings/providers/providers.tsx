@@ -146,13 +146,13 @@ export const SettingsProviders: Component<{
     // key, including one imported from a v1 auth.json, makes Zen "connected" without any account, so
     // the Popular list keeps the sign-in row until the active credential is an OAuth grant. Until the
     // integration list arrives the row is still the models.dev Zen provider, so dedupe it as before.
-    const console = integrations.list().find((entry) => entry.id === CONSOLE_INTEGRATION)
+    const account = integrations.list().find((entry) => entry.id === CONSOLE_INTEGRATION)
     const items = providers
       .popular()
       .filter((p) => {
         // Go signs in through the same Console account, so it follows the Console row.
-        if (!CONSOLE_PROVIDERS.has(p.id) || !console) return !connectedIDs.has(p.id)
-        return console.connections.find((connection) => connection.type === "credential")?.method !== "oauth"
+        if (!CONSOLE_PROVIDERS.has(p.id) || !account) return !connectedIDs.has(p.id)
+        return account.connections.find((connection) => connection.type === "credential")?.method !== "oauth"
       })
       .slice()
     items.sort((a, b) => popularProviders.indexOf(a.id) - popularProviders.indexOf(b.id))
@@ -243,19 +243,15 @@ export const SettingsProviders: Component<{
             >
               <For each={displayed()}>
                 {(item) => {
-                  const console = () => (consoleGroup()?.root.id === item.id ? consoleGroup() : undefined)
+                  const managedGroup = () => (consoleGroup()?.root.id === item.id ? consoleGroup() : undefined)
                   return (
                     <Show
-                      when={console()}
+                      when={managedGroup()}
                       fallback={
                         <div class="settings-provider-row group">
                           <div class="settings-provider-lead">
-                            <Show
-                              when={item.id === "opencode"}
-                              fallback={<ProviderModelIcon provider={item} class="settings-provider-icon shrink-0" />}
-                            >
-                              <OpenCodeLogo class="settings-provider-icon size-4 shrink-0" />
-                            </Show>
+                            <ProviderModelIcon provider={item} class="settings-provider-icon shrink-0" />
+
                             <div class="settings-provider-main">
                               <span class="settings-provider-name truncate">
                                 {item.id === "opencode" ? language.t("provider.connect.opencode.name") : item.name}
@@ -371,12 +367,8 @@ export const SettingsProviders: Component<{
               {(item) => (
                 <div class="settings-provider-row">
                   <div class="settings-provider-lead">
-                    <Show
-                      when={item.id === "opencode"}
-                      fallback={<ProviderModelIcon provider={item} class="settings-provider-icon shrink-0" />}
-                    >
-                      <OpenCodeLogo class="settings-provider-icon size-4 shrink-0" />
-                    </Show>
+                    <ProviderModelIcon provider={item} class="settings-provider-icon shrink-0" />
+
                     <div class="settings-provider-copy">
                       <div class="settings-provider-main">
                         <span class="settings-provider-name">

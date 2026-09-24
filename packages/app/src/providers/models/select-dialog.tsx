@@ -21,9 +21,7 @@ import { createMenuDismissController } from "@/shell/commands/menu-dismiss"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { matchesModelSearch } from "./search"
 import { SettingsList } from "@/settings/list"
-import { OpenCodeLogo } from "@/providers/opencode-logo"
-import { consoleProviderGroup, consoleProviderName } from "@/providers/catalog/console"
-import { ProviderModelGroup, ProviderModelIcon } from "@/providers/models/provider-group"
+import { CONSOLE_GROUP_KEY, consoleModelGroup, ProviderModelSections } from "@/providers/models/provider-group"
 import "@/settings/settings.css"
 
 const isFree = (provider: string, cost: { input: number } | undefined) =>
@@ -31,15 +29,9 @@ const isFree = (provider: string, cost: { input: number } | undefined) =>
 
 type ModelState = ModelSelection
 type ModelItem = ReturnType<ModelState["list"]>[number]
-type ModelGroup = { category: string; items: ModelItem[] }
-type ConsoleGroup = NonNullable<ReturnType<typeof consoleProviderGroup<ModelItem["provider"]>>>
-type DisplayGroup =
-  | { type: "provider"; group: ModelGroup }
-  | { type: "console"; managed: ConsoleGroup; providers: ModelGroup[] }
 
 const modelKey = (model: ModelItem) => `${model.provider.id}:${model.id}`
 const manageKey = "action:manage"
-const CONSOLE_GROUP_KEY = "console:opencode"
 
 const sortModelGroups = (a: { category: string; items: ModelItem[] }, b: { category: string; items: ModelItem[] }) => {
   const aIndex = popularProviders.indexOf(a.category)
@@ -71,29 +63,9 @@ const ModelList: Component<{
   })
   const models = createMemo(() => controller.models(store.search))
   const modelGroups = createMemo(() => controller.groups(models()))
-  const consoleGroup = createMemo(() =>
-    consoleProviderGroup([...new Map(controller.all().map((item) => [item.provider.id, item.provider])).values()]),
-  )
-  const groups = createMemo<DisplayGroup[]>(() => {
-    const managed = consoleGroup()
-    if (!managed) return modelGroups().map((group) => ({ type: "provider" as const, group }))
-    const ids = new Set(managed.providers.map((provider) => provider.id))
-    const providers = modelGroups().filter((group) => ids.has(group.category))
-    if (providers.length === 0) return modelGroups().map((group) => ({ type: "provider" as const, group }))
-    const first = modelGroups().findIndex((group) => ids.has(group.category))
-    return modelGroups().flatMap<DisplayGroup>((group, index) => {
-      if (!ids.has(group.category)) return [{ type: "provider" as const, group }]
-      if (index !== first) return []
-      return [{ type: "console" as const, managed, providers }]
-    })
-  })
+  const managed = createMemo(() => consoleModelGroup(controller.all()))
   const expanded = (provider: string) => store.search.length > 0 || !store.collapsed[provider]
-  // Only the keyless catalog is free; a Zen key or Console account keeps the provider's own name.
-  const providerName = (group: ModelGroup) =>
-    group.category === "opencode" && group.items.every((item) => !item.cost?.input)
-      ? language.t("provider.connect.opencode.freeName")
-      : group.items[0].provider.name
-  const managedIDs = createMemo(() => new Set(consoleGroup()?.providers.map((provider) => provider.id) ?? []))
+  const managedIDs = createMemo(() => new Set(managed()?.providers.map((provider) => provider.id) ?? []))
   const visibleModels = () =>
     models().filter(
       (item) => expanded(item.provider.id) && (!managedIDs().has(item.provider.id) || expanded(CONSOLE_GROUP_KEY)),
@@ -222,96 +194,14 @@ const ModelList: Component<{
             when={models().length > 0}
             fallback={<div class="settings-models-status">{language.t("dialog.model.empty")}</div>}
           >
-            <For each={groups()}>
-              {(item) => (
-                <Show
-                  when={item.type === "console" ? item : undefined}
-                  fallback={
-                    <Show when={item.type === "provider" ? item.group : undefined}>
-                      {(group) => {
-                        const open = () => expanded(group().category)
-                        return (
-                          <section class="settings-section" data-expanded={open() ? "" : undefined}>
-                            <h3 class="settings-models-group-header">
-                              <button
-                                type="button"
-                                class="settings-models-group-trigger"
-                                aria-expanded={open()}
-                                disabled={store.search.length > 0}
-                                onClick={() => setStore("collapsed", group().category, open())}
-                              >
-                                <span class="settings-models-group-chevron">
-                                  <Icon name="chevron-down" size="small" classList={{ collapsed: !open() }} />
-                                </span>
-                                <span class="settings-models-group-label">
-                                  <ProviderModelIcon provider={group().items[0].provider} class="shrink-0" />
-                                  <bdi class="settings-models-group-title">
-                                    {providerName(group())}
-                                  </bdi>
-                                </span>
-                              </button>
-                            </h3>
-                            <Show when={open()}>
-                              <ModelRows items={group().items} />
-                            </Show>
-                          </section>
-                        )
-                      }}
-                    </Show>
-                  }
-                >
-                  {(console) => (
-                    <section
-                      class="settings-section settings-models-console"
-                      data-component="select-model-console"
-                      data-expanded={expanded(CONSOLE_GROUP_KEY) ? "" : undefined}
-                    >
-                      <h3 class="settings-models-group-header">
-                        <button
-                          type="button"
-                          class="settings-models-group-trigger"
-                          aria-expanded={expanded(CONSOLE_GROUP_KEY)}
-                          disabled={store.search.length > 0}
-                          onClick={() => setStore("collapsed", CONSOLE_GROUP_KEY, expanded(CONSOLE_GROUP_KEY))}
-                        >
-                          <span class="settings-models-group-chevron">
-                            <Icon
-                              name="chevron-down"
-                              size="small"
-                              classList={{ collapsed: !expanded(CONSOLE_GROUP_KEY) }}
-                            />
-                          </span>
-                          <span class="settings-models-group-label">
-                            <OpenCodeLogo class="settings-models-provider-icon size-4 shrink-0" />
-                            <span class="settings-models-group-title">
-                              {language.t("provider.connect.opencode.name")}
-                            </span>
-                            <Badge>{console().managed.workspace}</Badge>
-                          </span>
-                        </button>
-                      </h3>
-                      <Show when={expanded(CONSOLE_GROUP_KEY)}>
-                        <div class="provider-model-groups settings-models-console-groups">
-                          <For each={console().providers}>
-                            {(group) => (
-                              <ProviderModelGroup
-                                provider={group.items[0].provider}
-                                name={consoleProviderName(console().managed, group.items[0].provider.name)}
-                                expanded={expanded(group.category)}
-                                disabled={store.search.length > 0}
-                                onExpandedChange={(value) => setStore("collapsed", group.category, !value)}
-                              >
-                                <ModelRows items={group.items} />
-                              </ProviderModelGroup>
-                            )}
-                          </For>
-                        </div>
-                      </Show>
-                    </section>
-                  )}
-                </Show>
-              )}
-            </For>
+            <ProviderModelSections
+              groups={modelGroups()}
+              managed={managed()}
+              expanded={expanded}
+              disabled={store.search.length > 0}
+              onExpandedChange={(key, value) => setStore("collapsed", key, !value)}
+              rows={(items) => <ModelRows items={items} />}
+            />
           </Show>
         </div>
       </div>
