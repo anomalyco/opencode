@@ -1087,7 +1087,7 @@ export const dict = {
   "settings.projects.description": "Manage projects and their settings",
   "settings.projects.empty": "No projects found",
   "settings.projects.empty.title": "No projects yet",
-  "settings.projects.empty.description": "Create your first project to get started",
+  "settings.projects.empty.description": "Add a project to get started",
   "settings.projects.search.placeholder": "Search projects",
   "settings.projects.server.all": "All servers",
   "settings.mcps.description": "Manage Model Context Protocol (MCP) servers and tools",

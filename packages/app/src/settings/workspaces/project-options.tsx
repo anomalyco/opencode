@@ -7,9 +7,8 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection } from "@/runtime/server/registry"
 import type { LocalProject } from "@/shell/state/layout"
-import { displayName, errorMessage } from "@/shell/layout/helpers"
 import { fileManagerApp } from "@/home/projects/file-manager"
-import { showToast } from "@/shell/notifications/toast"
+import { useRevealProject } from "@/home/projects/reveal"
 
 export const ProjectOptions: Component<{
   server: ServerConnection.Any
@@ -25,33 +24,13 @@ export const ProjectOptions: Component<{
   const language = useLanguage()
   const global = useGlobal()
   const platform = usePlatform()
+  const revealProject = useRevealProject()
   const context = () => global.ensureServerCtx(props.server)
-  const canReveal = () =>
-    platform.platform === "desktop" && !!platform.revealPath && ServerConnection.local(props.server)
   const unseen = () =>
     [props.project.worktree, ...(props.project.sandboxes ?? [])].reduce(
       (total, directory) => total + context().notification.project.unseenCount(directory),
       0,
     )
-  const reveal = () => {
-    if (!platform.revealPath || !canReveal()) return
-    void platform
-      .revealPath(props.project.worktree)
-      .then((revealed) => {
-        if (revealed) return
-        showToast({
-          variant: "error",
-          title: language.t("home.project.missing.title"),
-          description: language.t("home.project.missing.description", { name: displayName(props.project) }),
-        })
-      })
-      .catch((cause: unknown) =>
-        showToast({
-          title: language.t("common.requestFailed"),
-          description: errorMessage(cause, language.t("common.requestFailed")),
-        }),
-      )
-  }
   const clearNotifications = () => {
     const notification = context().notification
     const directories = [props.project.worktree, ...(props.project.sandboxes ?? [])]
@@ -88,8 +67,8 @@ export const ProjectOptions: Component<{
           <Show when={props.onRename} keyed>
             {(rename) => <Menu.Item onSelect={rename}>{language.t("common.rename")}</Menu.Item>}
           </Show>
-          <Show when={canReveal()}>
-            <Menu.Item onSelect={reveal}>{language.t(fileManagerApp(platform.os ?? "unknown").actionLabel)}</Menu.Item>
+          <Show when={revealProject.available(props.server)}>
+            <Menu.Item onSelect={() => revealProject.reveal(props.server, props.project)}>{language.t(fileManagerApp(platform.os ?? "unknown").actionLabel)}</Menu.Item>
           </Show>
           <Menu.Item disabled={unseen() === 0} onSelect={clearNotifications}>
             {language.t("sidebar.project.clearNotifications")}

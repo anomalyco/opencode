@@ -249,7 +249,7 @@ test("Projects shows an add action in its empty state", async ({ page }) => {
   const view = ui(page)
   await view.settings.getByRole("tab", { name: "Projects", exact: true }).click()
   await expect(view.settings.getByText("No projects yet", { exact: true })).toBeVisible()
-  await expect(view.settings.getByText("Create your first project to get started", { exact: true })).toBeVisible()
+  await expect(view.settings.getByText("Add a project to get started", { exact: true })).toBeVisible()
   const emptyCard = view.settings.locator('[data-component="settings-project-empty-card"]')
   await expect(emptyCard).toHaveCSS("border-radius", "8px")
   await expect(emptyCard).toHaveCSS("padding-top", "96px")
