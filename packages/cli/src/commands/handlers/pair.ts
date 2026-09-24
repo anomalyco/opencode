@@ -35,7 +35,7 @@ export default Runtime.handler(
               "  Scan to pair",
               "",
               renderUnicodeCompact(link, { border: 2 })
-                .split(EOL)
+                .split("\n")
                 .map((line) => "  " + line)
                 .join(EOL),
               "",
