@@ -146,7 +146,7 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
       "join",
       1,
       (thisValue, args) => {
-        // Array.from keeps holes as "" where a spread would make them "undefined".
+        // .map would keep holes, which Effect.forEach would then hand to the body as undefined.
         const parts = Array.from(self(thisValue, "join").items, (item) => item ?? "")
         return withPrimitives(
           ctx,

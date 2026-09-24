@@ -1404,11 +1404,13 @@ class Frame<R> {
   private applyOperator(operator: string, lhs: Value, rhs: Value, node: AstNode): Effect.Effect<Value, unknown, R> {
     if (!(lhs instanceof Obj || rhs instanceof Obj))
       return Effect.succeed(this.applyBinaryOperator(operator, lhs, rhs, node))
-    // IsLooselyEqual converts only an object facing a non-nullish primitive; two objects compare by identity.
+    // IsLooselyEqual converts only an object facing a non-nullish primitive; two objects (including tool
+    // references, which are not Obj) compare by identity.
     const equality = operator === "==" || operator === "!="
     const other = lhs instanceof Obj ? rhs : lhs
     const converts =
-      primitiveOperators.has(operator) || (equality && !(other instanceof Obj) && other !== null && other !== undefined)
+      primitiveOperators.has(operator) ||
+      (equality && other !== null && other !== undefined && typeof other !== "object")
     if (!converts) return Effect.succeed(this.applyBinaryOperator(operator, lhs, rhs, node))
     const hint = operator === "+" || equality ? "default" : "number"
     const self = this
@@ -1623,8 +1625,7 @@ class Frame<R> {
       throw typeError(`Unsupported update operator '${operator}'.`, node)
     }
 
-    // CodeMode numeric coercion, not host Number(): null-prototype data objects would make
-    // the host throw during ToPrimitive, and opaque runtime references must reject clearly.
+    // CodeMode numeric coercion, not host Number(), so opaque runtime references reject clearly.
     const operand = (current: Value): number => {
       if (isOpaque(current)) {
         throw invalidData(`'${operator}' requires a data value.`, argument)
