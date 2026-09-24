@@ -70,7 +70,12 @@ function listState() {
     const cfg = yield* Config.Service
     const mcp = yield* MCP.Service
     const config = yield* cfg.get()
-    const statuses = yield* mcp.status()
+    const statuses = yield* mcp.status().pipe(
+      Effect.timeoutOrElse({
+        duration: "20 seconds",
+        orElse: () => Effect.succeed({} as Record<string, MCP.Status>),
+      }),
+    )
     const stored = yield* Effect.all(
       Object.fromEntries(configuredServers(config).map(([name]) => [name, mcp.hasStoredTokens(name)])),
       { concurrency: "unbounded" },
