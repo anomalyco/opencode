@@ -1,9 +1,8 @@
 import { Context, Effect, Layer, Stream } from "effect"
-import type { AwaitOptions, Generation } from "./generation.js"
+import { resultEvents, type AwaitOptions, type Generation } from "./generation.js"
 import { RequestExecutor } from "./route/executor.js"
 import type { AIError } from "./schema/index.js"
 import {
-  isObservation,
   responseEvents,
   type VideoEvent,
   type VideoModel,
@@ -30,7 +29,9 @@ export interface Interface {
   ) => Stream.Stream<VideoEvent, AIError>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/VideoClient") {}
+export class VideoClientService extends Context.Service<VideoClientService, Interface>()("@opencode/VideoClient") {}
+export const Service = VideoClientService
+export type Service = VideoClientService
 
 export const start = <Options extends VideoOptions>(
   request: VideoRequestFor<Options>,
@@ -69,15 +70,6 @@ export const stream = <Options extends VideoOptions>(
     }),
   )
 
-/** Status observations until the first terminal one, then the fetched result expanded into events. */
-const events = (generation: Generation<VideoResponse>, options: AwaitOptions | undefined) =>
-  generation
-    .events(options)
-    .pipe(
-      Stream.filter(isObservation),
-      Stream.concat(Stream.fromIterableEffect(Effect.map(generation.result(), responseEvents))),
-    )
-
 export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -89,7 +81,9 @@ export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer
       resume: (model, token) => model.route.resume(model, token, executor.execute),
       generate: (request, options) => start(request).pipe(Effect.flatMap((generation) => generation.await(options))),
       stream: (request, options) =>
-        Stream.unwrap(start(request).pipe(Effect.map((generation) => events(generation, options)))),
+        Stream.unwrap(
+          start(request).pipe(Effect.map((generation) => resultEvents(generation, responseEvents, options))),
+        ),
     })
   }),
 )

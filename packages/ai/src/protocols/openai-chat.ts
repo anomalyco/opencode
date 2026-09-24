@@ -130,6 +130,10 @@ const OpenAIChatUserContent = Schema.Union([
     type: Schema.Literal("image_url"),
     image_url: Schema.Struct({ url: Schema.String }),
   }),
+  Schema.Struct({
+    type: Schema.Literal("file"),
+    file: Schema.Struct({ filename: Schema.String, file_data: Schema.String }),
+  }),
 ])
 
 const OpenAIChatMessage = Schema.Union([
@@ -360,6 +364,15 @@ const lowerToolCall = (part: ToolCallPart, options: LoweringOptions): OpenAIChat
 })
 
 const lowerMedia = Effect.fn("OpenAIChat.lowerMedia")(function* (part: MediaPart) {
+  // Chat Completions accepts PDFs, and no other documents, as inline `file` parts; file URLs are not supported.
+  if (part.media.mediaType.toLowerCase() === "application/pdf")
+    return {
+      type: "file" as const,
+      file: {
+        filename: part.filename ?? "document.pdf",
+        file_data: (yield* ProviderShared.requireInlineMedia("OpenAI Chat", part.media)).dataUrl,
+      },
+    }
   if (part.media.kind !== "image")
     return yield* ProviderShared.invalidRequest(`OpenAI Chat does not support media type ${part.media.mediaType}`)
   const url =
@@ -489,7 +502,7 @@ const lowerToolMessages = Effect.fn("OpenAIChat.lowerToolMessages")(function* (
   options: LoweringOptions,
 ) {
   const messages: OpenAIChatMessage[] = []
-  const images: Array<Schema.Schema.Type<typeof OpenAIChatUserContent>> = []
+  const attachments: Array<Schema.Schema.Type<typeof OpenAIChatUserContent>> = []
   for (const part of message.content) {
     if (!ProviderShared.supportsContent(part, ["tool-result"]))
       return yield* ProviderShared.unsupportedContent("OpenAI Chat", "tool", ["tool-result"])
@@ -511,9 +524,9 @@ const lowerToolMessages = Effect.fn("OpenAIChat.lowerToolMessages")(function* (
       cache_control: options.cacheControl?.(part.cache),
     })
     const files = content.filter((item) => item.type === "file")
-    images.push(...(yield* Effect.forEach(files, (item) => lowerMedia(ProviderShared.toolFileMedia(item)))))
+    attachments.push(...(yield* Effect.forEach(files, (item) => lowerMedia(ProviderShared.toolFileMedia(item)))))
   }
-  return { messages, images }
+  return { messages, attachments }
 })
 
 const lowerMessage = Effect.fn("OpenAIChat.lowerMessage")(function* (
@@ -574,21 +587,21 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
     if (requireAssistantAfterTool && messages.at(-1)?.role === "tool")
       messages.push({ role: "assistant", content: "Done." })
   }
-  const pendingImages: Array<Schema.Schema.Type<typeof OpenAIChatUserContent>> = []
-  const flushImages = () => {
-    if (pendingImages.length === 0) return
+  const pendingAttachments: Array<Schema.Schema.Type<typeof OpenAIChatUserContent>> = []
+  const flushAttachments = () => {
+    if (pendingAttachments.length === 0) return
     bridgeTools()
-    messages.push({ role: "user", content: pendingImages.splice(0) })
+    messages.push({ role: "user", content: pendingAttachments.splice(0) })
   }
   for (const message of request.messages) {
     if (message.role === "user") bridgeTools()
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("OpenAI Chat", message)
-      if (pendingImages.length > 0) {
+      if (pendingAttachments.length > 0) {
         messages.push({
           role: "user",
           content: [
-            ...pendingImages.splice(0),
+            ...pendingAttachments.splice(0),
             { type: "text", text: part.text, cache_control: options.cacheControl?.(part.cache) },
           ],
         })
@@ -632,13 +645,13 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
     if (message.role === "tool") {
       const lowered = yield* lowerToolMessages(message, lowering)
       messages.push(...lowered.messages)
-      pendingImages.push(...lowered.images)
+      pendingAttachments.push(...lowered.attachments)
       continue
     }
-    flushImages()
+    flushAttachments()
     messages.push(...(yield* lowerMessage(message, reasoningField, requireReasoning, lowering)))
   }
-  flushImages()
+  flushAttachments()
   return messages
 })
 
@@ -790,7 +803,6 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
       `OpenAI Chat reasoning field conflicts with reserved field ${reasoningField}`,
     )
   const generation = request.generation
-  const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   const flattened = ProviderShared.flattenToolRequest(request)
   const provider = String(request.model.provider)
   const baseURL = request.model.route.endpoint.baseURL
@@ -816,7 +828,7 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
         : flattened.tools.map((tool) =>
             lowerTool(
               tool,
-              ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility),
+              ToolSchemaProjection.modelCompatibility(tool.inputSchema, request.model),
               options,
               supportsStrictMode,
             ),

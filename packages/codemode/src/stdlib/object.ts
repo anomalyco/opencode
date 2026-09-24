@@ -1,13 +1,6 @@
 import { Effect } from "effect"
 import { constructor, methods, receiver } from "../interpreter/native.js"
-import {
-  type AstNode,
-  AsyncIteratorSymbol,
-  invalidData,
-  IteratorSymbol,
-  rangeError,
-  typeError,
-} from "../interpreter/model.js"
+import { type AstNode, AsyncIteratorSymbol, invalidData, IteratorSymbol, typeError } from "../interpreter/model.js"
 import {
   define,
   entries,
@@ -18,13 +11,16 @@ import {
   hidden,
   keys,
   own,
+  ownKeys,
   Arr,
+  Bytes,
   Obj,
   PromiseObj,
   set,
   coerceToString,
   type Value,
 } from "../interpreter/objects.js"
+import { primitivePrototype } from "../interpreter/intrinsics.js"
 import { containsOpaqueReference, describeValue, rejectCircularInsertion } from "../interpreter/references.js"
 import { invoke, preserveConsumerError } from "../interpreter/callback.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
@@ -63,7 +59,6 @@ export const objectAssign = <R>(ctx: Interpreter<R>, args: Array<Value>): Value 
     for (const key of enumerableKeys(from)) {
       rejectCircularInsertion(target, getOwn(from, key), "Object.assign result", seen)
       if (!set(target, key, getOwn(from, key))) {
-        if (target instanceof Arr && key === "length") throw rangeError("Invalid array length")
         throw typeError(`Cannot assign to read only property '${String(key)}'.`)
       }
     }
@@ -106,6 +101,34 @@ const classTag = (value: Value): string => {
 
 const propertyKey = (value: Value): PropertyKey =>
   value === AsyncIteratorSymbol || value === IteratorSymbol ? value : coerceToString(value)
+
+// SetIntegrityLevel: primitives pass through. A typed array's bytes cannot carry attributes, so JS throws after
+// already making it non-extensible.
+const restrict = (level: "freeze" | "seal" | "preventExtensions", value: Value): Value => {
+  if (!(value instanceof Obj)) return value
+  value.extensible = false
+  if (level === "preventExtensions") return value
+  if (value instanceof Bytes && value.bytes.length > 0) {
+    throw typeError(`Cannot ${level} array buffer views with elements.`)
+  }
+  for (const slot of value.props.values()) {
+    slot.configurable = false
+    if (level === "freeze" && "value" in slot) slot.writable = false
+  }
+  if (value instanceof Arr) value.elements = { writable: level === "seal", enumerable: true, configurable: false }
+  return value
+}
+
+// TestIntegrityLevel: array elements and `length` answer through `own`, so a non-extensible empty array is sealed
+// but not frozen, as in JS.
+const integrity = (value: Value, frozen: boolean): boolean => {
+  if (!(value instanceof Obj)) return true
+  if (value.extensible) return false
+  return ownKeys(value).every((key) => {
+    const slot = own(value, key)
+    return slot !== undefined && !slot.configurable && !(frozen && "value" in slot && slot.writable)
+  })
+}
 
 // Object constructs identically with or without new, like JS. Only `keys` copies its result into the
 // program; `values`, `entries`, `assign`, and `fromEntries` hand back the program's own values.
@@ -154,18 +177,42 @@ export const objectGlobal = <R>(ctx: Interpreter<R>) => {
         ),
     ],
     ["hasOwn", 2, (_, args) => hasOwn(enumerableSource(ctx, "Object.hasOwn(...)", args[0]), propertyKey(args[1]))],
-    [
-      "is",
-      2,
-      (_, args) => {
-        if (containsOpaqueReference(args[0]) || containsOpaqueReference(args[1])) {
-          throw invalidData("Object.is requires data values.")
-        }
-        return Object.is(args[0], args[1])
-      },
-    ],
+    ["is", 2, (_, args) => Object.is(args[0], args[1])],
     ["assign", 2, (_, args) => objectAssign(ctx, args)],
     ["fromEntries", 1, (_, args) => objectFromEntries(ctx, args[0])],
+    ["freeze", 1, (_, args) => restrict("freeze", args[0])],
+    ["seal", 1, (_, args) => restrict("seal", args[0])],
+    ["preventExtensions", 1, (_, args) => restrict("preventExtensions", args[0])],
+    ["isFrozen", 1, (_, args) => integrity(args[0], true)],
+    ["isSealed", 1, (_, args) => integrity(args[0], false)],
+    ["isExtensible", 1, (_, args) => args[0] instanceof Obj && args[0].extensible],
+    [
+      "getPrototypeOf",
+      1,
+      (_, args) => {
+        if (args[0] instanceof Obj) return args[0].proto
+        const proto = primitivePrototype(builtins, args[0])
+        if (proto === undefined) {
+          throw typeError(`Object.getPrototypeOf cannot convert ${describeValue(args[0])} to an object.`)
+        }
+        return proto
+      },
+    ],
+    [
+      "create",
+      2,
+      (_, args) => {
+        if (args[0] !== null && !(args[0] instanceof Obj)) {
+          throw typeError("Object prototype may only be an Object or null.")
+        }
+        if (args[1] !== undefined) {
+          throw typeError(
+            "Object.create property descriptors are not supported; assign the fields after creating the object.",
+          )
+        }
+        return new Obj(args[0])
+      },
+    ],
   ])
   define(object, "groupBy", groupBy(ctx, "Object"), hidden)
   methods(builtins, builtins.Object, [

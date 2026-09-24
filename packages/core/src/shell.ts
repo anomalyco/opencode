@@ -6,6 +6,7 @@ import { ChildProcess } from "effect/unstable/process"
 import { produce } from "immer"
 import { Shell } from "@opencode/schema/shell"
 import { AppProcess } from "@opencode/util/process"
+import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { makeGlobalNode, makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Bus } from "./bus.js"
@@ -42,6 +43,7 @@ type Active = {
   info: Info
   file: string
   size: number
+  newlines: number
   // Resolves with the terminal Info once the command exits, times out, or is killed. A wait
   // started after termination resolves immediately from the already-completed deferred.
   done: Deferred.Deferred<Info, NotFoundError>
@@ -239,10 +241,12 @@ const layer = () =>
           if (page.output.endsWith("\n")) lines.pop()
           const truncated = latest.size > maxBytes || lines.length > maxLines
           const text = lines.length > maxLines ? lines.slice(-maxLines).join("\n") : page.output
+          const total = (yield* require(info.id)).newlines + (page.output.endsWith("\n") ? 0 : 1)
+          const shown = Math.min(lines.length, maxLines)
           const notice = truncated
-            ? `${text ? "\n\n" : ""}[full output saved to ${info.file}]`
+            ? `\n\n[showing lines ${total - shown + 1}-${total} of ${total}; full output saved to ${info.file}]`
             : ""
-          return { output: `${text}${notice}`, truncated }
+          return { output: `${text || "(no output)"}${notice}`, truncated }
         }).pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.succeed(undefined)))
         return { info, capture }
       })
@@ -311,6 +315,7 @@ const layer = () =>
                 }),
                 file,
                 size: 0,
+                newlines: 0,
                 done: Deferred.makeUnsafe<Info, NotFoundError>(),
               }
               commands.set(id, command)
@@ -322,6 +327,9 @@ const layer = () =>
                   Effect.sync(() => {
                     stream.write(chunk)
                     command.size += chunk.length
+                    // Count while streaming so truncation notices never rescan the output file.
+                    for (let index = chunk.indexOf(10); index !== -1; index = chunk.indexOf(10, index + 1))
+                      command.newlines++
                   }),
                 ),
               )
@@ -345,12 +353,13 @@ const layer = () =>
                   }),
               )
 
-              const finish = (status: Info["status"], exit?: number, beforeWait = Effect.void) =>
+              const finish = (status: Info["status"], exit?: number, beforeWait = Effect.void, signal?: string) =>
                 Effect.gen(function* () {
                   if (command.info.status !== "running") return
                   command.info = produce(command.info, (draft) => {
                     draft.status = status
                     if (exit !== undefined) draft.exit = exit
+                    if (signal !== undefined) draft.signal = signal
                     draft.time.completed = Date.now()
                   })
                   yield* beforeWait
@@ -401,7 +410,14 @@ const layer = () =>
               runFork(
                 handle.exitCode.pipe(
                   Effect.flatMap((code) => finish("exited", code)),
-                  Effect.catch(() => finish("exited")),
+                  Effect.catch((error) =>
+                    finish(
+                      "exited",
+                      undefined,
+                      Effect.void,
+                      error.cause instanceof CrossSpawnSpawner.KilledBySignal ? error.cause.signal : undefined,
+                    ),
+                  ),
                 ),
               )
 

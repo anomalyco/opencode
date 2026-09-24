@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import { Video } from "../../src/index.js"
 import { Google } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
-import { videoPoll } from "./video-recording.js"
+import { queuedPoll } from "./queued-recording.js"
 
 const model = Google.configure({
   apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY ?? "fixture",
@@ -28,7 +28,7 @@ describe("Google Veo recorded", () => {
             aspectRatio: "16:9",
             durationSeconds: 4,
           },
-          { poll: videoPoll },
+          { poll: queuedPoll },
         )
 
         expect(response.videos).toHaveLength(1)

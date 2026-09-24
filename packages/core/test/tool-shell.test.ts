@@ -1555,7 +1555,7 @@ describe("ShellTool", () => {
               {
                 id: settled.metadata?.shellID,
                 status: "completed",
-                output: "Exited with code 7",
+                output: "(no output)\n\nExited with code 7",
               },
             ])
           }),
@@ -1679,7 +1679,7 @@ describe("ShellTool", () => {
               process.kill(-info.pid, "SIGTERM")
               const result = yield* shell.wait(id).pipe(Effect.timeoutOption(Duration.seconds(1)))
               expect(result._tag).toBe("Some")
-              if (result._tag === "Some") expect(result.value.status).toBe("exited")
+              if (result._tag === "Some") expect(result.value).toMatchObject({ status: "exited", signal: "SIGTERM" })
               expect((yield* shell.list()).map((item) => item.id)).not.toContain(id)
             }),
           )

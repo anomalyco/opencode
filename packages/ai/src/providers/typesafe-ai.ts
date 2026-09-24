@@ -20,7 +20,7 @@ export const configure = (input: Options = {}) => {
       auth: AuthOptions.bearer(input, "TYPESAFE_API_KEY"),
       baseURL: input.baseURL ?? baseURL,
       headers: input.headers,
-      http: input.http === undefined ? undefined : HttpOptions.make(input.http),
+      http: HttpOptions.make(input.http),
     })
   return { id, experimental: { evaluation }, configure }
 }

@@ -818,7 +818,6 @@ export const fromRequestWithAdapter = Effect.fn("OpenResponses.fromRequestWithAd
   adapter: ProviderAdapter,
 ) {
   const projected = ProviderShared.flattenToolRequest(request)
-  const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   return {
     ...(yield* lowerConversation(projected.request, adapter)),
     ...lowerGeneration(request),
@@ -828,11 +827,7 @@ export const fromRequestWithAdapter = Effect.fn("OpenResponses.fromRequestWithAd
         : yield* Effect.forEach(projected.tools, (tool) =>
             tool.native !== undefined && adapter.nativeTool
               ? adapter.nativeTool(tool.native)
-              : lowerTool(
-                  adapter.name,
-                  tool,
-                  ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility),
-                ),
+              : lowerTool(adapter.name, tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, request.model)),
           ),
     tool_choice:
       allowedToolChoice(request) ??

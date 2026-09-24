@@ -71,6 +71,9 @@ const source = {
   "ui.sessionTurn.retry.attemptLine": "{{line}} - attempt #{{attempt}}",
   "ui.sessionTurn.retry.attemptLabel": "Attempt {{attempt}}",
   "ui.sessionTurn.retry.attemptRetrying": "Attempt {{attempt}} - {{line}}",
+  "ui.sessionTurn.retry.attemptWaiting.one": "Attempt {{attempt}} - retrying in {{count}}s",
+  "ui.sessionTurn.retry.attemptWaiting.other": "Attempt {{attempt}} - retrying in {{count}}s",
+  "ui.sessionTurn.retry.attemptRetryingNow": "Attempt {{attempt}} - retrying",
   "ui.sessionTurn.retry.geminiHot": "gemini is way too hot right now",
   "ui.sessionTurn.error.freeUsageExceeded": "Free usage exceeded",
   "ui.sessionTurn.error.addCredits": "Add credits",
@@ -210,6 +213,8 @@ const source = {
 
   "ui.common.file.one": "file",
   "ui.common.file.other": "files",
+  "ui.common.fileCount.one": "{{count}} file",
+  "ui.common.fileCount.other": "{{count}} files",
   "ui.common.question.one": "question",
   "ui.common.question.other": "questions",
 
@@ -252,6 +257,7 @@ const source = {
   "ui.sessionTimeline.notice.cancelled": "{{actor}} cancelled",
   "ui.sessionTimeline.notice.finished": "{{actor}} finished",
   "ui.sessionTimeline.notice.instructionsUpdated": "Instructions updated",
+  "ui.sessionTimeline.notice.restart": "Continuing after restart",
   "ui.message.queued": "Queued",
   "ui.message.attachment.alt": "attachment",
 

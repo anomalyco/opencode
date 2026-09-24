@@ -1,41 +1,12 @@
 import { describe, expect } from "bun:test"
-import { Effect, Fiber, Layer, Stream } from "effect"
-import * as TestClock from "effect/testing/TestClock"
-import { HttpClientRequest } from "effect/unstable/http"
+import { Effect, Layer, Stream } from "effect"
 import { Media, Video, VideoClient, type GenerationEvent } from "../src/index.js"
 import { Fal, Google, Runway, XAI } from "../src/providers.js"
 import { it } from "./lib/effect.js"
-import { dynamicResponse, type HandlerInput } from "./lib/http.js"
-
-interface Call {
-  readonly method: string
-  readonly url: string
-  readonly headers: Headers
-  readonly body: string
-}
-
-/** Record every request and tell the handler how many times this exact method+URL has been seen (1-based). */
-const observe = (calls: Array<Call>, input: HandlerInput) =>
-  Effect.gen(function* () {
-    const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
-    const call = { method: web.method, url: web.url, headers: web.headers, body: input.text }
-    calls.push(call)
-    return { call, nth: calls.filter((seen) => seen.method === call.method && seen.url === call.url).length }
-  })
-
-const json = (input: HandlerInput, value: unknown, init?: ResponseInit) =>
-  input.respond(JSON.stringify(value), { ...init, headers: { "content-type": "application/json", ...init?.headers } })
+import { dynamicResponse, json, observe, settle, type Call } from "./lib/http.js"
 
 const layer = (handler: Parameters<typeof dynamicResponse>[0]) =>
   VideoClient.layer.pipe(Layer.provideMerge(dynamicResponse(handler)))
-
-/** Fork the polling program, let the test clock cover `seconds` of polling, and join. */
-const settle = <A, E, R>(program: Effect.Effect<A, E, R>, seconds: number) =>
-  Effect.gen(function* () {
-    const fiber = yield* Effect.forkChild(program)
-    yield* TestClock.adjust(`${seconds} seconds`)
-    return yield* Fiber.join(fiber)
-  })
 
 const DAY = 24 * 60 * 60 * 1000
 
@@ -160,6 +131,35 @@ describe("Video / Google Veo", () => {
         `GET ${fileUri}`,
       ])
     }),
+  )
+
+  it.effect("hands the asset the auth header that overwrote a deployment header", () =>
+    Effect.gen(function* () {
+      const generation = yield* Video.start({
+        model: Google.configure({
+          apiKey: "test",
+          baseURL: "https://google.test/v1beta",
+          headers: { "x-goog-api-key": "stale" },
+        }).video("veo-3.1-generate-preview"),
+        prompt: "A kite",
+      })
+      const response = yield* generation.result()
+      expect(response.video.headers).toEqual({ "x-goog-api-key": "test" })
+    }).pipe(
+      Effect.provide(
+        layer((input) =>
+          input.request.method === "POST"
+            ? Effect.succeed(json(input, { name: operation }))
+            : Effect.succeed(
+                json(input, {
+                  name: operation,
+                  done: true,
+                  response: { generateVideoResponse: { generatedSamples: [{ video: { uri: fileUri } }] } },
+                }),
+              ),
+        ),
+      ),
+    ),
   )
 
   it.effect("surfaces an operation error as a failed generation with the provider body", () =>
@@ -562,6 +562,7 @@ describe("Video / fal", () => {
         "InvalidRequest",
       ])
       expect(errors[1].message).toContain("end_image_url")
+      expect(errors[4].message).toContain("; got fal:handle")
     }).pipe(Effect.provide(layer(() => Effect.die("unsupported input reached the network")))),
   )
 })

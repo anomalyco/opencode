@@ -3,29 +3,27 @@ import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
-import { HttpOptions, ProviderID, type CacheHint, type ModelID } from "../schema/index.js"
+import { HttpOptions, ProviderID, type CacheHint, type ModelID, type OpenString } from "../schema/index.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { SystemOne } from "../experimental/system-one.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { newBreakpoints, ttlBucket } from "../protocols/utils/cache.js"
-import { isRecord } from "../protocols/shared.js"
+import { isRecord, ProviderShared } from "../protocols/shared.js"
 
 export const id = ProviderID.make("openrouter")
 const baseURL = "https://openrouter.ai/api/v1"
 const ADAPTER = "openrouter"
-
-type OpenRouterString<Known extends string> = Known | (string & {})
 
 export interface OpenRouterProviderRouting {
   readonly [key: string]: unknown
   readonly order?: ReadonlyArray<string>
   readonly allow_fallbacks?: boolean
   readonly require_parameters?: boolean
-  readonly data_collection?: OpenRouterString<"allow" | "deny">
+  readonly data_collection?: OpenString<"allow" | "deny">
   readonly only?: ReadonlyArray<string>
   readonly ignore?: ReadonlyArray<string>
   readonly quantizations?: ReadonlyArray<string>
-  readonly sort?: OpenRouterString<"price" | "throughput" | "latency">
+  readonly sort?: OpenString<"price" | "throughput" | "latency">
   readonly max_price?: Readonly<{
     prompt?: number | string
     completion?: number | string
@@ -41,7 +39,7 @@ export type OpenRouterPlugin =
       id: "web"
       max_results?: number
       search_prompt?: string
-      engine?: OpenRouterString<"native" | "exa">
+      engine?: OpenString<"native" | "exa">
     }>
   | Readonly<{ id: "file-parser"; max_files?: number; pdf?: { engine?: string } }>
   | Readonly<{ id: "moderation" }>
@@ -58,7 +56,7 @@ export interface OpenRouterOptions {
   readonly reasoning?: Readonly<{
     enabled?: boolean
     exclude?: boolean
-    effort?: OpenRouterString<"none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max">
+    effort?: OpenString<"none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max">
     max_tokens?: number
   }>
   readonly usage?: boolean | Readonly<{ include: boolean }>
@@ -66,7 +64,7 @@ export interface OpenRouterOptions {
   readonly web_search_options?: Readonly<{
     max_results?: number
     search_prompt?: string
-    engine?: OpenRouterString<"native" | "exa">
+    engine?: OpenString<"native" | "exa">
   }>
 }
 
@@ -125,7 +123,7 @@ export const protocol = Protocol.make({
           return {
             ...body,
             messages,
-            ...bodyOptions(request.providerOptions),
+            ...bodyOptions(request.providerOptions, request.generation?.maxTokens),
           } as OpenRouterBody
         }),
       ),
@@ -145,7 +143,14 @@ const cacheControl = () => {
   }
 }
 
-const bodyOptions = (input: unknown) => {
+// OpenRouter forwards `reasoning.max_tokens` as the upstream thinking budget. Upstreams such as Anthropic and Alibaba
+// reject one that is not below the output limit; 1,024 is Anthropic's minimum budget.
+const fitReasoning = (reasoning: Record<string, unknown>, maxTokens: number | undefined) =>
+  typeof reasoning.max_tokens === "number"
+    ? { ...reasoning, max_tokens: ProviderShared.fitThinkingBudget(reasoning.max_tokens, maxTokens, 1_024) }
+    : reasoning
+
+const bodyOptions = (input: unknown, maxTokens: number | undefined) => {
   const openrouter = isRecord(input) ? input : {}
   const { usage, models, provider, plugins, web_search_options, debug, user, reasoning, promptCacheKey, ...options } =
     openrouter
@@ -164,7 +169,7 @@ const bodyOptions = (input: unknown) => {
     ...(isRecord(web_search_options) ? { web_search_options } : {}),
     ...(isRecord(debug) ? { debug } : {}),
     ...(typeof user === "string" ? { user } : {}),
-    ...(isRecord(reasoning) ? { reasoning } : {}),
+    ...(isRecord(reasoning) ? { reasoning: fitReasoning(reasoning, maxTokens) } : {}),
   }
 }
 
@@ -198,7 +203,7 @@ export const configure = (input: LanguageModelOptions = {}) => {
       auth: AuthOptions.bearer(input, "OPENROUTER_API_KEY"),
       baseURL: input.baseURL ?? baseURL,
       headers: input.headers,
-      http: input.http === undefined ? undefined : HttpOptions.make(input.http),
+      http: HttpOptions.make(input.http),
     })
   return {
     id,

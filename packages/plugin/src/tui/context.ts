@@ -509,6 +509,16 @@ export interface UI {
     /** Closes an open tab, or the active tab when omitted, and returns false when no tab matched. */
     close(sessionID?: string): boolean
   }
+  readonly model: {
+    /** The prompt's selected model; variant is undefined for the model default. Reactive when read in a Solid computation. */
+    current(): { readonly providerID: string; readonly modelID: string; readonly variant?: string } | undefined
+    readonly variant: {
+      /** Variant IDs of the selected model. Reactive when read in a Solid computation. */
+      list(): readonly string[]
+      /** Selects a variant of the selected model, or the model default when undefined. Returns false when no model is selected or the variant is unavailable. */
+      set(variant: string | undefined): boolean
+    }
+  }
   /** Claims a place in the slot tree; see SlotClaim. */
   readonly slot: (claim: SlotClaim) => () => void
 }

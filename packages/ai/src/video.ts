@@ -1,10 +1,10 @@
 import { Effect, Schema, Stream } from "effect"
-import { Generation, type AwaitOptions, type Event as GenerationEvent } from "./generation.js"
+import { Generation, ProgressEvent, QueuedEvent, type AwaitOptions } from "./generation.js"
 import { Media } from "./media.js"
 import { MediaModel, composeRoute, tryRequest } from "./media-model.js"
 import { MediaRoute } from "./route/media.js"
 import type { MediaProtocol } from "./route/media-protocol.js"
-import { AIError, HttpOptions, MediaUsage, ProviderMetadata } from "./schema/index.js"
+import { AIError, HttpOptions, MediaUsage, ProviderMetadata, type OpenString } from "./schema/index.js"
 import { VideoClient, Service } from "./video-client.js"
 
 // ---------------------------------------------------------------------------
@@ -32,7 +32,7 @@ export class VideoModel<Options extends VideoOptions = VideoOptions> extends Med
   ) {
     return new VideoModel<Options>({
       id: input.id,
-      provider: route.provider,
+      provider: route.protocol.provider,
       http: input.http,
       route: composeRoute(MediaRoute.queued, route, input),
     })
@@ -57,7 +57,7 @@ export const VideoModelSchema = Schema.declare((value): value is VideoModel => v
 export type VideoAspectRatio = Media.AspectRatio
 export const VideoAspectRatio = Media.AspectRatio
 
-export type VideoResolution = "480p" | "720p" | "1080p" | "4k" | (string & {})
+export type VideoResolution = OpenString<"480p" | "720p" | "1080p" | "4k">
 
 /** Pinned frames. Routes that accept only a first frame fail typed when `last` is present. */
 export const VideoFrames = Schema.Struct({
@@ -123,18 +123,6 @@ export class VideoResponse extends Schema.Class<VideoResponse>("Video.Response")
   }
 }
 
-export const VideoQueuedEvent = Schema.Struct({
-  type: Schema.tag("generation-queued"),
-  id: Schema.String,
-  position: Schema.optional(Schema.Number),
-}).annotate({ identifier: "Video.Event.Queued" })
-
-export const VideoProgressEvent = Schema.Struct({
-  type: Schema.tag("generation-progress"),
-  id: Schema.String,
-  progress: Schema.optional(Schema.Number),
-}).annotate({ identifier: "Video.Event.Progress" })
-
 export const VideoOutputEvent = Schema.Struct({
   type: Schema.tag("video"),
   index: Schema.Number,
@@ -148,7 +136,7 @@ export const VideoFinishEvent = Schema.Struct({
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "Video.Event.Finish" })
 
-const videoEventTagged = Schema.Union([VideoQueuedEvent, VideoProgressEvent, VideoOutputEvent, VideoFinishEvent]).pipe(
+const videoEventTagged = Schema.Union([QueuedEvent, ProgressEvent, VideoOutputEvent, VideoFinishEvent]).pipe(
   Schema.toTaggedUnion("type"),
 )
 export const VideoEvent = Object.assign(videoEventTagged, {
@@ -171,10 +159,6 @@ export const responseEvents = (response: VideoResponse): ReadonlyArray<VideoEven
   }),
 ]
 
-/** A status observation as a video event; the terminal observation is replaced by the result events, so `none`. */
-export const isObservation = (event: GenerationEvent): event is Extract<VideoEvent, { type: "generation-queued" | "generation-progress" }> =>
-  event.type !== "generation-finished"
-
 // ---------------------------------------------------------------------------
 // Request-shaped call API
 // ---------------------------------------------------------------------------
@@ -187,7 +171,7 @@ export function request(input: VideoRequest | VideoRequestInput) {
   if (input instanceof VideoRequest) return input
   return new VideoRequest({
     ...input,
-    http: input.http === undefined ? undefined : HttpOptions.make(input.http),
+    http: HttpOptions.make(input.http),
   })
 }
 

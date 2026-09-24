@@ -2,11 +2,16 @@ import type { SessionInfo } from "@opencode/client/promise"
 import type { LocalProject } from "@/shell/state/layout"
 import { compareSessionTime, displayName } from "@/shell/layout/helpers"
 import { pathKey } from "@/workspaces/path-key"
+import { getFilename } from "@opencode/util/path"
 
 export type HomeSessionRecord = {
   session: SessionInfo
   project: LocalProject
   projectName: string
+}
+
+export function homeSessionLocation(directory: string, branch?: string) {
+  return { worktree: getFilename(directory) || directory, branch }
 }
 
 export function buildHomeSessionRecords(input: {

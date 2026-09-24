@@ -1,5 +1,4 @@
 import type { LLMRequest } from "../schema/index.js"
-import * as ProviderShared from "../protocols/shared.js"
 
 export interface EndpointInput<Body, Request = LLMRequest> {
   readonly request: Request
@@ -47,6 +46,8 @@ export const merge = <Body, Request = LLMRequest>(
   query: patch.query === undefined ? base.query : { ...base.query, ...patch.query },
 })
 
+export const trimBaseUrl = (value: string) => value.replace(/\/+$/, "")
+
 const renderPart = <Body, Request>(part: EndpointPart<Body, Request>, input: EndpointInput<Body, Request>) =>
   typeof part === "function" ? part(input) : part
 
@@ -54,7 +55,7 @@ export const render = <Body, Request = LLMRequest>(
   endpoint: Definition<Body, Request>,
   input: EndpointInput<Body, Request>,
 ) => {
-  const url = new URL(`${ProviderShared.trimBaseUrl(endpoint.baseURL ?? "")}${renderPart(endpoint.path, input)}`)
+  const url = new URL(`${trimBaseUrl(endpoint.baseURL ?? "")}${renderPart(endpoint.path, input)}`)
   for (const [key, value] of Object.entries(endpoint.query ?? {})) url.searchParams.set(key, value)
   return url
 }

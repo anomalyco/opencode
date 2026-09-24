@@ -90,6 +90,23 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("fits the thinking budget to half the output limit", () =>
+    Effect.gen(function* () {
+      const thinkingBudget = (budget: number, maxTokens = 32_000) =>
+        compileRequest(
+          LLMRequest.update(request, {
+            generation: { maxTokens },
+            providerOptions: { thinkingConfig: { thinkingBudget: budget } },
+          }),
+        ).pipe(Effect.map((prepared) => prepared.body.generationConfig?.thinkingConfig?.thinkingBudget))
+
+      expect(yield* thinkingBudget(32_768)).toBe(16_000)
+      expect(yield* thinkingBudget(8_000)).toBe(8_000)
+      expect(yield* thinkingBudget(-1)).toBe(-1)
+      expect(yield* thinkingBudget(8_192, 1_000)).toBe(512)
+    }),
+  )
+
   it.effect("forwards standard Gemini generation options", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -381,7 +398,7 @@ describe("Gemini route", () => {
               {
                 name: "lookup",
                 description: "Lookup data",
-                parameters: { type: "object", properties: { query: { type: "string" } } },
+                parametersJsonSchema: { type: "object", properties: { query: { type: "string" } } },
               },
             ],
           },
@@ -676,7 +693,7 @@ describe("Gemini route", () => {
     }),
   )
 
-  it.effect("sanitizes integer enums, dangling required, untyped arrays, and scalar object keys", () =>
+  it.effect("normalizes the JSON Schema shapes Gemini rejects", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
@@ -689,11 +706,32 @@ describe("Gemini route", () => {
               description: "Lookup data",
               inputSchema: {
                 type: "object",
-                required: ["status", "missing"],
+                required: ["ttl", "items", "parent", "missing"],
                 properties: {
-                  status: { type: "integer", enum: [1, 2] },
-                  tags: { type: "array" },
-                  name: { type: "string", properties: { ignored: { type: "string" } }, required: ["ignored"] },
+                  ttl: { type: "number", minimum: 0, exclusiveMinimum: true, maximum: 60, exclusiveMaximum: false },
+                  pair: { type: "array", items: [{ type: "string" }, { type: "integer" }], additionalItems: false },
+                  items: { type: "array", items: { type: "string" } },
+                  required: { type: "boolean" },
+                  params: { $ref: "#/$defs/Json" },
+                  tree: { $ref: "#/$defs/Node" },
+                  chain: { $ref: "#/$defs/Link" },
+                  batch: { $ref: "#/$defs/Batch" },
+                  self: { $ref: "#" },
+                  parent: { $ref: "#" },
+                  cart: { type: "object", default: { items: ["a"] } },
+                },
+                dependentRequired: { items: ["ttl"] },
+                $defs: {
+                  Json: {
+                    anyOf: [
+                      { type: "string" },
+                      { type: "array", items: { $ref: "#/$defs/Json" } },
+                      { type: "object", additionalProperties: { $ref: "#/$defs/Json" } },
+                    ],
+                  },
+                  Node: { type: "object", properties: { child: { $ref: "#/$defs/Node" } } },
+                  Link: { type: "object", required: ["next"], properties: { next: { $ref: "#/$defs/Link" } } },
+                  Batch: { type: "array", minItems: 1, items: { $ref: "#/$defs/Batch" } },
                 },
               },
             },
@@ -701,24 +739,35 @@ describe("Gemini route", () => {
         }),
       )
 
-      expect(prepared.body).toMatchObject({
-        tools: [
-          {
-            functionDeclarations: [
-              {
-                parameters: {
-                  type: "object",
-                  required: ["status"],
-                  properties: {
-                    status: { type: "string", enum: ["1", "2"] },
-                    tags: { type: "array", items: { type: "string" } },
-                    name: { type: "string" },
-                  },
-                },
-              },
+      expect(prepared.body.tools?.[0]?.functionDeclarations[0]?.parametersJsonSchema).toEqual({
+        type: "object",
+        required: ["ttl", "items", "parent"],
+        properties: {
+          ttl: { type: "number", exclusiveMinimum: 0, maximum: 60 },
+          pair: { type: "array", prefixItems: [{ type: "string" }, { type: "integer" }], items: false },
+          items: { type: "array", items: { type: "string" } },
+          required: { type: "boolean" },
+          params: { $ref: "#/$defs/Json" },
+          tree: { $ref: "#/$defs/Node" },
+          chain: { $ref: "#/$defs/Link" },
+          batch: { $ref: "#/$defs/Batch" },
+          self: { $ref: "#" },
+          parent: {},
+          cart: { type: "object", default: { items: ["a"] } },
+        },
+        dependentRequired: { items: ["ttl"] },
+        $defs: {
+          Json: {
+            anyOf: [
+              { type: "string" },
+              { type: "array", items: { $ref: "#/$defs/Json" } },
+              { type: "object", additionalProperties: {} },
             ],
           },
-        ],
+          Node: { type: "object", properties: { child: { $ref: "#/$defs/Node" } } },
+          Link: { type: "object", required: ["next"], properties: { next: {} } },
+          Batch: { type: "array", minItems: 1, items: {} },
+        },
       })
     }),
   )
@@ -751,7 +800,7 @@ describe("Gemini route", () => {
             {
               name: "configure",
               description: "Configure the operation",
-              parameters: {
+              parametersJsonSchema: {
                 type: "object",
                 required: ["options"],
                 properties: {
@@ -765,55 +814,38 @@ describe("Gemini route", () => {
     }),
   )
 
-  it.effect("projects Gemini type arrays without narrowing their allowed values", () =>
+  it.effect("sends standard JSON Schema tool parameters unchanged", () =>
     Effect.gen(function* () {
+      const inputSchema = {
+        type: "object",
+        required: ["level"],
+        properties: {
+          level: { type: "integer", enum: [1, 2, 3] },
+          status: { type: ["number", "string"], description: "Status filter" },
+          maybe: { anyOf: [{ type: "string" }, { type: "null" }] },
+          kind: { const: "fixed" },
+          mode: { enum: ["fast", "safe"] },
+          tags: { type: "array" },
+          env: { type: "object", additionalProperties: { type: "string" } },
+          action: {
+            oneOf: [
+              { type: "object", properties: { type: { const: "move" }, to: { type: "string" } } },
+              { type: "object", properties: { type: { const: "delete" } } },
+            ],
+          },
+          item: { $ref: "#/$defs/Item" },
+        },
+        $defs: { Item: { type: "object", properties: { id: { type: "string" } }, required: ["id"] } },
+      }
       const prepared = yield* compileRequest(
         LLM.request({
           model,
           prompt: "Use the tool.",
-          tools: [
-            {
-              name: "filter",
-              description: "Filter values",
-              inputSchema: {
-                type: "object",
-                properties: {
-                  status: { type: ["number", "string"], description: "Status filter" },
-                  maybe: { type: ["string", "null"] },
-                  nothing: { type: ["null"] },
-                  explicit: { anyOf: [{ type: "string" }, { type: "null" }] },
-                  choice: { anyOf: [{ type: "string" }, { type: "number" }, { type: "null" }] },
-                },
-              },
-            },
-          ],
+          tools: [{ name: "filter", description: "Filter values", inputSchema }],
         }),
       )
 
-      expect(prepared.body.tools?.[0]?.functionDeclarations[0]?.parameters).toEqual({
-        type: "object",
-        properties: {
-          status: {
-            description: "Status filter",
-            anyOf: [{ type: "number" }, { type: "string" }],
-          },
-          maybe: {
-            nullable: true,
-            anyOf: [{ type: "string" }],
-          },
-          nothing: {
-            type: "null",
-          },
-          explicit: {
-            type: "string",
-            nullable: true,
-          },
-          choice: {
-            anyOf: [{ type: "string" }, { type: "number" }],
-            nullable: true,
-          },
-        },
-      })
+      expect(prepared.body.tools?.[0]?.functionDeclarations[0]?.parametersJsonSchema).toEqual(inputSchema)
     }),
   )
 

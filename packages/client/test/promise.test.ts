@@ -191,6 +191,27 @@ test("declared errors with a data envelope read the nested message", async () =>
   expect(error).toMatchObject({ name: "WorktreeError", data: { message: "Worktree directory unavailable" } })
 })
 
+test("client errors keep the reason and describe the failure in the message", async () => {
+  const failure = (fetch: () => Promise<Response>) =>
+    OpenCode.make({ baseUrl: "http://localhost:3000", fetch })
+      .session.list()
+      .catch((cause: unknown) => cause)
+  expect(await failure(() => Promise.reject(new TypeError("Unable to connect")))).toMatchObject({
+    reason: "Transport",
+    message: "Transport: Unable to connect",
+  })
+  expect(await failure(async () => new Response("", { status: 500 }))).toMatchObject({
+    reason: "UnexpectedStatus",
+    message: "UnexpectedStatus: 500",
+  })
+  expect(await failure(async () => new Response("<html>", { headers: { "content-type": "text/html" } }))).toMatchObject(
+    {
+      reason: "UnsupportedContentType",
+      message: "UnsupportedContentType: text/html",
+    },
+  )
+})
+
 test("project.update uses the global project contract", async () => {
   let request: Request | undefined
   const project = {

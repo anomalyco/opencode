@@ -38,6 +38,7 @@ const ADAPTER = "anthropic-messages"
 export const DEFAULT_BASE_URL = "https://api.anthropic.com/v1"
 export const PATH = "/messages"
 export const DEFAULT_MAX_TOKENS = 32_000
+const MIN_THINKING_BUDGET = 1_024
 const DEFAULT_EFFORT = "high"
 
 const SSE_EVENTS = new Set([
@@ -1027,6 +1028,15 @@ const applyThinkingBindingDefault = (model: LLMRequest["model"], thinking: Anthr
   }
 }
 
+// Anthropic also requires an explicit thinking budget below `max_tokens` and at or above its minimum.
+const fitThinking = (thinking: AnthropicThinking | undefined, maxTokens: number) =>
+  thinking?.type === "enabled"
+    ? {
+        ...thinking,
+        budget_tokens: ProviderShared.fitThinkingBudget(thinking.budget_tokens, maxTokens, MIN_THINKING_BUDGET),
+      }
+    : thinking
+
 const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (request: LLMRequest) {
   const options = yield* decodeOptions(request.providerOptions ?? {})
   const management = options.contextManagement
@@ -1034,7 +1044,6 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
   const format = outputConfig?.format ?? undefined
   const updates = resolveEffortUpdates(request, options.effort ?? outputConfig?.effort ?? undefined)
   const generation = request.generation
-  const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   // Allocate the 4-breakpoint budget in invalidation order: tools → system →
   // messages. Tools live highest in the cache hierarchy, so when callers
   // over-mark we keep their tool hints and shed the message-tail ones first.
@@ -1044,11 +1053,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
     flattened.tools.length === 0
       ? undefined
       : flattened.tools.map((tool) =>
-          lowerTool(
-            breakpoints,
-            tool,
-            ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility),
-          ),
+          lowerTool(breakpoints, tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, request.model)),
         )
   // Anthropic rejects tool_choice when tools are absent; "none" is only meaningful with tools present.
   const toolChoice = tools === undefined || !request.toolChoice ? undefined : yield* lowerToolChoice(request.toolChoice)
@@ -1069,6 +1074,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
   }
   const output_config =
     updates.effort === undefined && format === undefined ? undefined : { effort: updates.effort, format }
+  const maxTokens = generation?.maxTokens ?? DEFAULT_MAX_TOKENS
   const body = {
     model: request.model.id,
     system,
@@ -1076,12 +1082,12 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
     tools,
     tool_choice: toolChoice,
     stream: true as const,
-    max_tokens: generation?.maxTokens ?? DEFAULT_MAX_TOKENS,
+    max_tokens: maxTokens,
     temperature: generation?.temperature,
     top_p: generation?.topP,
     top_k: generation?.topK,
     stop_sequences: generation?.stop,
-    thinking: applyThinkingBindingDefault(request.model, options.thinking),
+    thinking: applyThinkingBindingDefault(request.model, fitThinking(options.thinking, maxTokens)),
     output_config,
     // top-level passthrough per SDK MessageCreateParamsBase:4638,4643,4649,4654,4670
     cache_control: options.cache_control ?? options.cacheControl,

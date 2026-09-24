@@ -247,6 +247,17 @@ describe("AISDKNative", () => {
       },
     })
 
+    expect(
+      map(
+        "@ai-sdk/amazon-bedrock",
+        { reasoningConfig: { type: "enabled", budgetTokens: 12_000 } },
+        "anthropic.claude-sonnet-4-5-20250929-v1:0",
+      ),
+    ).toEqual({
+      package: "@opencode/ai/providers/amazon-bedrock",
+      settings: { thinking: { type: "enabled", budgetTokens: 12_000 } },
+    })
+
     // gpt-oss (Harmony) keeps the flat chat-completions field.
     expect(
       map("@ai-sdk/amazon-bedrock", { reasoningConfig: { maxReasoningEffort: "high" } }, "openai.gpt-oss-120b-1:0")

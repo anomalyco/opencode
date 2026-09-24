@@ -38,6 +38,7 @@ const EXTENSIONS: Readonly<Record<string, string>> = {
   mp4: "video/mp4",
   webm: "video/webm",
   mp3: "audio/mpeg",
+  m4a: "audio/mp4",
   wav: "audio/wav",
   ogg: "audio/ogg",
   flac: "audio/flac",
@@ -47,5 +48,23 @@ const EXTENSIONS: Readonly<Record<string, string>> = {
   csv: "text/csv",
 }
 
-export const extensionMediaType = (path: string): string | undefined =>
+const extensionMediaType = (path: string): string | undefined =>
   EXTENSIONS[path.slice(path.lastIndexOf(".") + 1).toLowerCase()]
+
+/** Media type of a file's contents: sniffed magic bytes, then the path's extension. */
+export const fileMediaType = (bytes: Uint8Array, path: string) => detectMediaType(bytes) ?? extensionMediaType(path)
+
+const EXTENSION_ALIASES: Readonly<Record<string, string>> = {
+  "audio/mp3": "mp3",
+  "audio/m4a": "m4a",
+  "audio/x-m4a": "m4a",
+  "audio/webm": "webm",
+  "audio/wave": "wav",
+  "audio/x-wav": "wav",
+  "audio/x-flac": "flac",
+}
+
+export const mediaTypeExtension = (mediaType: string): string | undefined => {
+  const type = mediaType.split(";", 1)[0].trim().toLowerCase()
+  return EXTENSION_ALIASES[type] ?? Object.entries(EXTENSIONS).find(([, known]) => known === type)?.[0]
+}

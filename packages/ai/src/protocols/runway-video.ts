@@ -4,13 +4,11 @@ import type { Status } from "../generation.js"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderID, mergeJsonRecords } from "../schema/index.js"
+import { mergeJsonRecords, type OpenString } from "../schema/index.js"
 import { VideoModel, VideoResponse, type VideoRequestFor } from "../video.js"
 import { ProviderShared, optionalArray, optionalNull } from "./shared.js"
 
-const ADAPTER = "runway-video"
-const NAME = "Runway"
-const PROVIDER = ProviderID.make("runway")
+const route = MediaProtocol.identity({ id: "runway-video", name: "Runway", provider: "runway" })
 export const DEFAULT_BASE_URL = "https://api.dev.runwayml.com/v1"
 /** Every Runway request must pin the API version. */
 export const API_VERSION = "2024-11-06"
@@ -25,16 +23,14 @@ const OUTPUT_RETENTION = Duration.hours(24)
 // 1. Public model input
 // ---------------------------------------------------------------------------
 
-export type RunwayVideoString<Known extends string> = Known | (string & {})
-
 /**
  * Provider-native options. Common fields lower to Runway's names: `aspectRatio` → `ratio` (Runway expects pixel
  * ratios such as `1280:720` for most models), `durationSeconds` → `duration`, `audio`, `negativePrompt`,
  * `resolution`, `references`, and `frames` → `promptImage`.
  */
 export type RunwayVideoOptions = {
-  readonly contentModeration?: { readonly publicFigureThreshold?: RunwayVideoString<"auto" | "low"> }
-  readonly outputFormat?: RunwayVideoString<"mp4" | "prores" | "png_sequence">
+  readonly contentModeration?: { readonly publicFigureThreshold?: OpenString<"auto" | "low"> }
+  readonly outputFormat?: OpenString<"mp4" | "prores" | "png_sequence">
 } & Record<string, unknown>
 
 export type Request = VideoRequestFor<RunwayVideoOptions>
@@ -75,7 +71,7 @@ const STATUS = {
 
 // Runway accepts HTTPS URLs, `runway://` upload URIs, and data URIs, all as one string.
 const mediaUri = (asset: Media.Asset) =>
-  ProviderShared.mediaReference(asset, PROVIDER, NAME).pipe(Effect.map((reference) => reference.value))
+  ProviderShared.mediaReference(asset, route.provider, route.name).pipe(Effect.map((reference) => reference.value))
 
 const fromRequest = Effect.fn("RunwayVideo.fromRequest")(function* (request: Request) {
   const first = request.frames?.first === undefined ? undefined : yield* mediaUri(request.frames.first)
@@ -113,12 +109,12 @@ const fromRequest = Effect.fn("RunwayVideo.fromRequest")(function* (request: Req
 // 6. Response decoding
 // ---------------------------------------------------------------------------
 
-const decodeStart = MediaProtocol.decodeStarted(ADAPTER, NAME, StartResponse, (value) => ({
+const decodeStart = route.decodeStarted(StartResponse, (value) => ({
   token: { taskID: value.id },
   snapshot: { id: value.id, status: "queued" },
 }))
 
-const decodeTask = MediaProtocol.decodeJson(ADAPTER, NAME, Task)
+const decodeTask = route.decodeJson(Task)
 
 const decodeStatus = Effect.fn("RunwayVideo.decodeStatus")(function* (
   response: HttpClientResponse.HttpClientResponse,
@@ -138,16 +134,17 @@ const decodeResult = Effect.fn("RunwayVideo.decodeResult")(function* (
   const status = yield* MediaProtocol.status(STATUS, task.status, output)
   if (status === "failed") {
     const code = task.failureCode ?? undefined
-    const message = `${NAME} task failed${code === undefined ? "" : ` (${code})`}${task.failure ? `: ${task.failure}` : ""}`
+    const message = `${route.name} task failed${code === undefined ? "" : ` (${code})`}${task.failure ? `: ${task.failure}` : ""}`
     // Runway failure codes are dotted paths; every moderation outcome carries a SAFETY segment.
     if (code !== undefined && /(^|\.)SAFETY(\.|$)/.test(code)) return yield* output.contentPolicy(message)
     return yield* output.ended("failed", message)
   }
   if (status === "cancelled")
-    return yield* output.ended("cancelled", `${NAME} task ${context.token.taskID} was cancelled`)
-  if (status !== "completed") return yield* output.invalid(`${NAME} task ${context.token.taskID} has not finished`)
+    return yield* output.ended("cancelled", `${route.name} task ${context.token.taskID} was cancelled`)
+  if (status !== "completed")
+    return yield* output.invalid(`${route.name} task ${context.token.taskID} has not finished`)
   const urls = task.output ?? []
-  if (urls.length === 0) return yield* output.invalid(`${NAME} task succeeded without any output`)
+  if (urls.length === 0) return yield* output.invalid(`${route.name} task succeeded without any output`)
   return new VideoResponse({
     videos: yield* Effect.forEach(urls, (url) =>
       MediaProtocol.expiringUrl(url, OUTPUT_RETENTION, { mediaType: "video/mp4" }),
@@ -168,9 +165,7 @@ const decodeResult = Effect.fn("RunwayVideo.decodeResult")(function* (
 
 const taskPath = (token: Token) => `${TASKS_PATH}/${token.taskID}`
 
-export const protocol = MediaProtocol.queued<Request, VideoResponse, Token>({
-  id: ADAPTER,
-  name: NAME,
+export const protocol = MediaProtocol.queued<Request, VideoResponse, Token>(route, {
   token: Token,
   unsupported: ["n"],
   start: { body: { from: fromRequest }, decode: decodeStart },
@@ -188,8 +183,6 @@ const startPath = (request: Request) => {
 export const model = (input: MediaRoute.ModelInput) =>
   VideoModel.fromRoute<RunwayVideoOptions, Token>(
     {
-      id: ADAPTER,
-      provider: PROVIDER,
       protocol,
       baseURL: DEFAULT_BASE_URL,
       headers: { "X-Runway-Version": API_VERSION },

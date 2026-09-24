@@ -66,6 +66,7 @@ export type ElectronAPI = {
   getPathForFile(file: File): string
   saveFile(opts: SaveFilePickerOptions, content: string): Promise<boolean>
   openExternal(url: string): void
+  openBrowser(url: string): Promise<boolean>
   openLocalFile(url: string): void
   openPath(path: string, app?: string): Promise<string | undefined>
   revealPath(path: string): Promise<boolean>
@@ -91,6 +92,7 @@ export type ElectronAPI = {
   recordFatalRendererError(error: FatalRendererError): Promise<void>
   setNativeTranslations(bundle: DesktopNativeBundle): Promise<void>
   pairInfo(): Promise<typeof PairingInfo.Type>
+  pairCode(): Promise<string>
   getKeepScreenActive(): Promise<boolean>
   setKeepScreenActive(enabled: boolean): Promise<void>
 }

@@ -35,6 +35,7 @@ export type RequestInput<SelectedLanguageModel extends LanguageModel = LanguageM
   readonly http?: HttpOptions.Input
 }
 
+/** Run an `LLMRequest` built with `LLM.request(...)`. */
 export const generate = LLMClient.generate
 
 export const stream = LLMClient.stream
@@ -61,7 +62,7 @@ export const request = <const SelectedLanguageModel extends LanguageModel>(
     toolChoice: requestToolChoice ? ToolChoice.make(requestToolChoice) : undefined,
     generation: requestGeneration === undefined ? undefined : GenerationOptions.make(requestGeneration),
     providerOptions: requestProviderOptions,
-    http: requestHttp === undefined ? undefined : HttpOptions.make(requestHttp),
+    http: HttpOptions.make(requestHttp),
   })
 }
 

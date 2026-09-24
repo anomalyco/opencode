@@ -29,6 +29,17 @@ describe("checkServerHealth", () => {
     expect(headers).toEqual([password ? `Basic ${btoa(`opencode:${password}`)}` : null])
   })
 
+  test("reports rejected credentials without retrying", async () => {
+    let calls = 0
+    const fetch = (async () => {
+      calls++
+      return Response.json({ _tag: "UnauthorizedError", message: "Authentication required" }, { status: 401 })
+    }) as unknown as typeof globalThis.fetch
+
+    expect(await checkServerHealth(server, fetch)).toEqual({ healthy: false, unauthorized: true })
+    expect(calls).toBe(1)
+  })
+
   test("returns healthy response with version", async () => {
     let request: URL | undefined
     const fetch = (async (input: RequestInfo | URL) => {

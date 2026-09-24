@@ -2,7 +2,6 @@ import { EOL } from "os"
 import { Effect, Option } from "effect"
 import { Service } from "@opencode/client/effect/service"
 import { OpenCode } from "@opencode/client/promise"
-import { base64Encode } from "@opencode/util/encode"
 import { renderUnicodeCompact } from "uqr"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
@@ -12,34 +11,25 @@ export default Runtime.handler(
   Commands.commands.pair,
   Effect.fn("cli.pair")(function* (input: Runtime.Input<typeof Commands.commands.pair>) {
     const endpoint = yield* Service.ensure(yield* ServiceConfig.options())
-    const password = yield* ServiceConfig.password()
+    const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
     const urls = Option.isSome(input.url)
       ? [input.url.value]
-      : (yield* Effect.tryPromise(() =>
-          OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) }).server.info(),
-        )).urls
-    const info = { urls, username: "opencode", password }
-    const link = info.urls[0]
-      ? `${new URL("/connect", info.urls[0])}#${base64Encode(JSON.stringify({ username: info.username, password }))}`
-      : undefined
+      : (yield* Effect.tryPromise(() => client.server.info())).urls
+    const pairing = yield* Effect.tryPromise(() => client.server.pair())
+    const links = urls.map((url) => new URL(`/auth/connect/${pairing.code}`, url).href)
     process.stdout.write(
       [
         "",
-        `  URLs      ${info.urls[0] ?? "(none)"}`,
-        ...info.urls.slice(1).map((url) => `            ${url}`),
-        `  Username  ${info.username}`,
-        `  Password  ${info.password}`,
-        ...(link
+        `  Open a link to connect. Links work once and expire in ${Math.round(pairing.expires_in / 60)} minutes.`,
+        "",
+        ...(links.length ? links.map((link) => `  ${link}`) : ["  (no server URLs)"]),
+        ...(links[0]
           ? [
               "",
-              "  Scan to pair",
-              "",
-              renderUnicodeCompact(link, { border: 2 })
+              renderUnicodeCompact(links[0], { border: 2 })
                 .split(EOL)
                 .map((line) => "  " + line)
                 .join(EOL),
-              "",
-              `  Link      ${link}`,
             ]
           : []),
         "",
@@ -47,8 +37,17 @@ export default Runtime.handler(
     )
 
     if (Option.isSome(input.url)) return
-    const hostname = new URL(endpoint.url).hostname
-    if (!["localhost", "127.0.0.1", "[::1]"].includes(hostname)) return
-    process.stderr.write(`  Run \`opencode service set hostname 0.0.0.0\` to access the service remotely.${EOL}${EOL}`)
+    const url = new URL(endpoint.url)
+    if (!["localhost", "127.0.0.1", "[::1]"].includes(url.hostname)) return
+    process.stderr.write(
+      [
+        `  Over SSH? Forward the port, then open the link on your machine:`,
+        `  ssh -L ${url.port}:${url.hostname}:${url.port} <host>`,
+        `  If port ${url.port} is busy locally, forward another port and use it in the link.`,
+        "",
+        "  To connect from other devices, run `opencode service set hostname 0.0.0.0`.",
+        "",
+      ].join(EOL) + EOL,
+    )
   }),
 )

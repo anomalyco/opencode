@@ -9,24 +9,46 @@ import {
   HttpContext,
   InvalidProviderOutputError,
   InvalidRequestError,
+  ProviderID,
   ProviderInternalError,
+  UnsupportedOperationError,
 } from "../schema/index.js"
 
 // ---------------------------------------------------------------------------
 // Bodies
 // ---------------------------------------------------------------------------
 
-/** JSON `query` is appended to the endpoint URL before the route and caller `http.query` overlays. */
-export type Body =
-  | { readonly type: "json"; readonly value: Record<string, unknown>; readonly query?: Record<string, string> }
-  | { readonly type: "multipart"; readonly value: FormData }
+/** Array values become repeated parameters (`keyterm=a&keyterm=b`). */
+export type Query = Readonly<Record<string, string | ReadonlyArray<string>>>
 
-export const json = (value: Record<string, unknown>, query?: Record<string, string>): Body => ({
+/** `query` is appended to the endpoint URL before the route and caller `http.query` overlays. */
+export type Body =
+  | { readonly type: "json"; readonly value: Record<string, unknown>; readonly query?: Query }
+  | { readonly type: "multipart"; readonly value: FormData }
+  | {
+      readonly type: "binary"
+      readonly value: Uint8Array
+      readonly contentType: string
+      readonly query?: Query
+    }
+
+export const json = (value: Record<string, unknown>, query?: Query): Body => ({
   type: "json",
   value,
   query,
 })
 export const multipart = (value: FormData): Body => ({ type: "multipart", value })
+export const binary = (value: Uint8Array, contentType: string, query?: Query): Body => ({
+  type: "binary",
+  value,
+  contentType,
+  query,
+})
+
+export type Send = (path: string, body: Body) => Effect.Effect<HttpClientResponse.HttpClientResponse, AIError>
+
+/** Runs after unsupported-field rejection and before `body.from`, for providers that need an upload first. */
+export type Prepare<Request> = (request: Request, send: Send) => Effect.Effect<Request, AIError>
 
 // ---------------------------------------------------------------------------
 // Protocol kinds
@@ -41,7 +63,7 @@ export interface DecodeContext<Request> {
 export interface Inline<Request, Response> {
   readonly kind: "inline"
   readonly id: string
-  readonly name: string
+  readonly provider: ProviderID
   /** Common request fields this protocol cannot lower; the route rejects them before `body.from` runs. */
   readonly unsupported?: ReadonlyArray<keyof Request & string>
   readonly body: { readonly from: (request: Request) => Effect.Effect<Body, AIError> }
@@ -54,11 +76,9 @@ export interface Inline<Request, Response> {
 }
 
 export const inline = <Request, Response>(
-  input: Omit<Inline<Request, Response>, "kind">,
-): Inline<Request, Response> => ({
-  kind: "inline",
-  ...input,
-})
+  route: Identity,
+  input: Omit<Inline<Request, Response>, "kind" | "id" | "provider">,
+): Inline<Request, Response> => ({ kind: "inline", id: route.id, provider: route.provider, ...input })
 
 /** What `start` learned from the submission response: the route-owned handle plus the first observation. */
 export interface Started<Token> {
@@ -68,11 +88,13 @@ export interface Started<Token> {
 
 /**
  * A follow-up call's inputs: the decoded token and the auth headers the route sent, so a protocol can attach them
- * to output URLs that require the same credentials to download (Veo).
+ * to output URLs that require the same credentials to download (Veo). `materialize` downloads an output through the
+ * route's executor, for URLs that expire too soon to hand back (BFL).
  */
 export interface PollContext<Token> {
   readonly token: Token
   readonly auth: Record<string, string>
+  readonly materialize: (asset: Media.Asset) => Effect.Effect<Media.Asset, AIError>
 }
 
 /**
@@ -85,12 +107,13 @@ export interface PollContext<Token> {
 export interface Queued<Request, Response, Token> {
   readonly kind: "queued"
   readonly id: string
-  readonly name: string
+  readonly provider: ProviderID
   /** Common request fields this protocol cannot lower; the route rejects them before `start.body.from` runs. */
   readonly unsupported?: ReadonlyArray<keyof Request & string>
   /** Serializable handle. `Generation.token` carries the encoded form so it can be persisted and resumed elsewhere. */
   readonly token: Schema.Codec<Token, unknown>
   readonly start: {
+    readonly prepare?: Prepare<Request>
     readonly body: { readonly from: (request: Request) => Effect.Effect<Body, AIError> }
     readonly decode: (
       response: HttpClientResponse.HttpClientResponse,
@@ -118,11 +141,9 @@ export interface Queued<Request, Response, Token> {
 }
 
 export const queued = <Request, Response, Token>(
-  input: Omit<Queued<Request, Response, Token>, "kind">,
-): Queued<Request, Response, Token> => ({
-  kind: "queued",
-  ...input,
-})
+  route: Identity,
+  input: Omit<Queued<Request, Response, Token>, "kind" | "id" | "provider">,
+): Queued<Request, Response, Token> => ({ kind: "queued", id: route.id, provider: route.provider, ...input })
 
 export type Mode = "generate" | "stream"
 
@@ -139,7 +160,7 @@ export interface ResponseContext<Request> extends DecodeContext<Addressed<Reques
 export interface Streamed<Request, Event, Frame, State> {
   readonly kind: "stream"
   readonly id: string
-  readonly name: string
+  readonly provider: ProviderID
   /** Common request fields this protocol cannot lower; the route rejects them before `body.from` runs. */
   readonly unsupported?: ReadonlyArray<keyof Request & string>
   readonly body: { readonly from: (request: Addressed<Request>) => Effect.Effect<Body, AIError> }
@@ -154,11 +175,9 @@ export interface Streamed<Request, Event, Frame, State> {
 }
 
 export const stream = <Request, Event, Frame, State>(
-  input: Omit<Streamed<Request, Event, Frame, State>, "kind">,
-): Streamed<Request, Event, Frame, State> => ({
-  kind: "stream",
-  ...input,
-})
+  route: Identity,
+  input: Omit<Streamed<Request, Event, Frame, State>, "kind" | "id" | "provider">,
+): Streamed<Request, Event, Frame, State> => ({ kind: "stream", id: route.id, provider: route.provider, ...input })
 
 // ---------------------------------------------------------------------------
 // Response helpers
@@ -167,71 +186,98 @@ export const stream = <Request, Event, Frame, State>(
 const context = (response: HttpClientResponse.HttpClientResponse) =>
   new HttpContext({ url: response.request.url, status: response.status, headers: response.headers })
 
-/**
- * Read a text body while retaining the original payload and HTTP context on every downstream error. `invalid` is a
- * malformed provider document; `ended` is a generation that reached a terminal status without output (`failed` is
- * provider-side, `cancelled`/`expired` mean the result will never exist); `contentPolicy` is a moderated result.
- */
-export const text = Effect.fn("MediaProtocol.text")(function* (
-  route: string,
-  name: string,
-  response: HttpClientResponse.HttpClientResponse,
-) {
-  const http = context(response)
-  const body = yield* response.text.pipe(
-    Effect.mapError(
-      (cause) =>
-        new AIError({
-          reason: new InvalidProviderOutputError({
-            route,
-            message: `Failed to read the ${name} response`,
-            http,
-            cause,
+/** One protocol's route id, display name, and provider, with the decoders and errors that carry them. */
+export const identity = (input: { readonly id: string; readonly name: string; readonly provider: string }) => {
+  const provider = ProviderID.make(input.provider)
+  const frameError = (message: string, body?: string, cause?: unknown) =>
+    new AIError({ reason: new InvalidProviderOutputError({ route: input.id, message, body, cause }) })
+
+  /**
+   * Read a text body while retaining the original payload and HTTP context on every downstream error. `invalid` is a
+   * malformed provider document; `ended` is a generation that reached a terminal status without output (`failed` is
+   * provider-side, `cancelled`/`expired` mean the result will never exist); `contentPolicy` is a moderated result.
+   */
+  const text = Effect.fn("MediaProtocol.text")(function* (response: HttpClientResponse.HttpClientResponse) {
+    const http = context(response)
+    const body = yield* response.text.pipe(
+      Effect.mapError(
+        (cause) =>
+          new AIError({
+            reason: new InvalidProviderOutputError({
+              route: input.id,
+              message: `Failed to read the ${input.name} response`,
+              http,
+              cause,
+            }),
           }),
-        }),
-    ),
-  )
-  return {
-    body,
-    http,
-    invalid: (message: string, cause?: unknown) =>
-      new AIError({ reason: new InvalidProviderOutputError({ route, message, body, http, cause }) }),
-    ended: (status: Exclude<Status, "queued" | "running" | "completed">, message: string) =>
-      new AIError({
-        reason:
-          status === "failed"
-            ? new ProviderInternalError({ message, body, http })
-            : new InvalidRequestError({ message, body, http }),
-      }),
-    contentPolicy: (message: string) => new AIError({ reason: new ContentPolicyError({ message, body, http }) }),
-  }
-})
-
-export type Output = Effect.Success<ReturnType<typeof text>>
-
-/** Read and Schema-decode a JSON body. Decode failures keep the raw body as `reason.body`. */
-export const decodeJson = <A>(route: string, name: string, schema: Schema.Codec<A, unknown>) => {
-  const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(schema))
-  return Effect.fn("MediaProtocol.decodeJson")(function* (response: HttpClientResponse.HttpClientResponse) {
-    const output = yield* text(route, name, response)
-    const value = yield* decode(output.body).pipe(
-      Effect.mapError((cause) => output.invalid(`${name} returned an invalid response`, cause)),
+      ),
     )
-    return { ...output, value }
+    return {
+      body,
+      http,
+      invalid: (message: string, cause?: unknown) =>
+        new AIError({ reason: new InvalidProviderOutputError({ route: input.id, message, body, http, cause }) }),
+      ended: (status: Exclude<Status, "queued" | "running" | "completed">, message: string) =>
+        new AIError({
+          reason:
+            status === "failed"
+              ? new ProviderInternalError({ message, body, http })
+              : new InvalidRequestError({ message, body, http }),
+        }),
+      contentPolicy: (message: string) => new AIError({ reason: new ContentPolicyError({ message, body, http }) }),
+    }
   })
+
+  /** Read and Schema-decode a JSON body. Decode failures keep the raw body as `reason.body`. */
+  const decodeJson = <A>(schema: Schema.Codec<A, unknown>) => {
+    const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(schema))
+    return Effect.fn("MediaProtocol.decodeJson")(function* (response: HttpClientResponse.HttpClientResponse) {
+      const output = yield* text(response)
+      const value = yield* decode(output.body).pipe(
+        Effect.mapError((cause) => output.invalid(`${input.name} returned an invalid response`, cause)),
+      )
+      return { ...output, value }
+    })
+  }
+
+  return {
+    id: input.id,
+    name: input.name,
+    provider,
+    text,
+    decodeJson,
+    /** Decode a submission response into the token and first snapshot. */
+    decodeStarted: <A, Token>(schema: Schema.Codec<A, unknown>, started: (value: A) => Started<Token>) => {
+      const decode = decodeJson(schema)
+      return (response: HttpClientResponse.HttpClientResponse) =>
+        decode(response).pipe(Effect.map((output) => started(output.value)))
+    },
+    /** Schema-decode one JSON stream frame. Decode failures keep the frame as `reason.body`. */
+    decodeFrame: <A>(schema: Schema.Codec<A, unknown>) => {
+      const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(schema))
+      return (frame: string) =>
+        decode(frame).pipe(
+          Effect.mapError((cause) => frameError(`${input.name} sent an invalid stream event`, frame, cause)),
+        )
+    },
+    /** A stream-time failure; the frame stays on `reason.body`. */
+    frameError,
+    incomplete: () =>
+      new AIError({
+        reason: new InvalidProviderOutputError({
+          route: input.id,
+          message: "The provider response ended unexpectedly.",
+          classification: "incomplete-stream",
+        }),
+      }),
+    unsupported: (operation: string, message: string) =>
+      new AIError({ reason: new UnsupportedOperationError({ operation, provider, route: input.id, message }) }),
+  }
 }
 
-/** Decode a submission response into the token and first snapshot. */
-export const decodeStarted = <A, Token>(
-  route: string,
-  name: string,
-  schema: Schema.Codec<A, unknown>,
-  started: (value: A) => Started<Token>,
-) => {
-  const decode = decodeJson(route, name, schema)
-  return (response: HttpClientResponse.HttpClientResponse) =>
-    decode(response).pipe(Effect.map((output) => started(output.value)))
-}
+export type Identity = ReturnType<typeof identity>
+
+export type Output = Effect.Success<ReturnType<Identity["text"]>>
 
 /** Map a provider status string through the protocol's table; unknown values are an invalid provider document. */
 export const status = <Table extends Record<string, Status>>(
@@ -242,27 +288,6 @@ export const status = <Table extends Record<string, Status>>(
   const normalized: Status | undefined = table[raw]
   if (normalized === undefined) return Effect.fail(output.invalid(`Unknown generation status "${raw}"`))
   return Effect.succeed(normalized)
-}
-
-export const frameError = (route: string, message: string, body?: string, cause?: unknown) =>
-  new AIError({ reason: new InvalidProviderOutputError({ route, message, body, cause }) })
-
-export const incomplete = (route: string) =>
-  new AIError({
-    reason: new InvalidProviderOutputError({
-      route,
-      message: "The provider response ended unexpectedly.",
-      classification: "incomplete-stream",
-    }),
-  })
-
-/** Schema-decode one JSON stream frame. Decode failures keep the frame as `reason.body`. */
-export const decodeFrame = <A>(route: string, name: string, schema: Schema.Codec<A, unknown>) => {
-  const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(schema))
-  return (frame: string) =>
-    decode(frame).pipe(
-      Effect.mapError((cause) => frameError(route, `${name} sent an invalid stream event`, frame, cause)),
-    )
 }
 
 /** A `url` asset whose provider-declared retention window starts now. */

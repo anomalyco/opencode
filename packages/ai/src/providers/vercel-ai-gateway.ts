@@ -67,7 +67,7 @@ export const configure = (input: Options = {}) => {
     EvaluationModel.make<EvaluationOptions>({
       id: modelID,
       provider: id,
-      http: input.http === undefined ? undefined : HttpOptions.make(input.http),
+      http: HttpOptions.make(input.http),
       route: {
         id: "vercel-evaluation",
         evaluate: (req, send) =>

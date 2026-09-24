@@ -1,3 +1,4 @@
+export { AIClient } from "./ai-client.js"
 export { LLMClient } from "./route/client.js"
 export { ImageClient } from "./image-client.js"
 export { Auth } from "./route/auth.js"
@@ -8,7 +9,7 @@ export type {
   RouteLanguageModelInput,
   RouteRoutedLanguageModelInput,
   Interface as LLMClientShape,
-  Service as LLMClientService,
+  LLMClientService,
 } from "./route/client.js"
 export * from "./schema/index.js"
 export {
@@ -67,6 +68,25 @@ export type {
   SpeechRoute,
 } from "./speech.js"
 export { Speech } from "./speech.js"
+export { TranscriptionClient } from "./transcription-client.js"
+export {
+  TranscriptionEvent,
+  TranscriptionModel,
+  TranscriptionModelSchema,
+  TranscriptionRequest,
+  TranscriptionResponse,
+  TranscriptionSegment,
+  TranscriptionTimestamps,
+  TranscriptionWord,
+} from "./transcription.js"
+export type {
+  TranscriptionModelOptions,
+  TranscriptionOptions,
+  TranscriptionRequestFor,
+  TranscriptionRequestInput,
+  TranscriptionRoute,
+} from "./transcription.js"
+export { Transcription } from "./transcription.js"
 export { Media } from "./media.js"
 export { Generation } from "./generation.js"
 export type {

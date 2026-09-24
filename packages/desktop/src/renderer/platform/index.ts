@@ -91,6 +91,7 @@ export function createDesktopPlatform(
     },
     pair: {
       info: () => api.pairInfo(),
+      code: () => api.pairCode(),
     },
   }
 }

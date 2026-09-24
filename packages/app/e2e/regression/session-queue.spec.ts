@@ -284,7 +284,13 @@ for (const delivery of ["steer", "queue"] as const) {
     await expect(thinking).toHaveCount(0)
 
     // The next assistant step still belongs to U1: U2 has been admitted, not delivered.
-    mock.emit("session.step.started", { sessionID, assistantMessageID: assistantID, agent: "build", model, started: Date.now() })
+    mock.emit("session.step.started", {
+      sessionID,
+      assistantMessageID: assistantID,
+      agent: "build",
+      model,
+      started: Date.now(),
+    })
     for (const tool of [
       { id: "tool_queue_read", name: "read", input: { path: "src/queue.ts" } },
       { id: "tool_queue_grep", name: "grep", input: { pattern: "retry", path: "src" } },
@@ -309,7 +315,10 @@ for (const delivery of ["steer", "queue"] as const) {
     const tools = page.locator('[data-timeline-part-ids="tool_queue_read,tool_queue_grep"]')
     await expect(tools).toBeVisible()
     await expect(tools).toHaveText(/^Used\s*2\s*Read, Grep$/)
-    await expect(tools.locator('[data-slot="basic-tool-tool-title"]')).toHaveText("Read, Grep")
+    await expect(tools.locator('[data-component="context-tool-group-trigger"]')).toHaveAttribute(
+      "aria-label",
+      "Used 2 Read, Grep",
+    )
     await expect(thinking).toHaveCount(0)
     await expect(pending).toBeVisible()
     expect(mock.rows.map((row) => ({ id: row.id, delivery: row.delivery }))).toEqual([
