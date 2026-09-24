@@ -9,15 +9,13 @@ import { OpenAI } from "@opencode/ai/providers"
 
 const openai = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY })
 
-const request = LLM.request({
-  model: openai.responses("gpt-4o-mini"), // `.chat(...)` selects the Chat Completions API instead
-  system: "You are concise.",
-  prompt: "Say hello in one short sentence.",
-  generation: { maxTokens: 40 },
-})
-
 const program = Effect.gen(function* () {
-  const response = yield* LLM.generate(request)
+  const response = yield* LLM.generate({
+    model: openai.responses("gpt-4o-mini"), // `.chat(...)` selects the Chat Completions API instead
+    system: "You are concise.",
+    prompt: "Say hello in one short sentence.",
+    generation: { maxTokens: 40 },
+  })
   console.log(response.text)
 })
 
@@ -25,7 +23,8 @@ const program = Effect.gen(function* () {
 await Effect.runPromise(program.pipe(Effect.provide(AIClient.layer)))
 ```
 
-Run `LLM.stream(request)` instead of `generate` when you want incremental `LLMEvent`s. The event stream is provider-neutral — same shape across OpenAI Chat, OpenAI Responses,
+Run `LLM.stream(...)` instead of `generate` when you want incremental `LLMEvent`s. Both accept input or a prebuilt
+`LLM.request(...)`. The event stream is provider-neutral — same shape across OpenAI Chat, OpenAI Responses,
 Anthropic Messages, Gemini, Bedrock Converse, and any OpenAI-compatible deployment.
 
 The same configured facade names image, video, speech, and transcription models. `Image.generate` resolves the
@@ -72,10 +71,11 @@ helpers; `ai.file` and `ai.write` load `node:fs/promises` on first use, so no Ef
 import { AI } from "@opencode/ai/promise"
 
 const ai = AI.make()
-const text = await ai.llm.generate({ model: openai.responses("gpt-4o-mini"), prompt: "Say hello." })
+const input = { model: openai.responses("gpt-4o-mini"), prompt: "Say hello." }
+const text = await ai.llm.generate(input)
 const generated = await ai.image.generate({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" })
 await ai.write(generated.image, "./lighthouse.png") // also ai.file(path), ai.bytes(asset), ai.base64(asset), ai.materialize(asset)
-for await (const event of ai.llm.stream({ model: openai.responses("gpt-4o-mini"), prompt: "Stream hello." })) {
+for await (const event of ai.llm.stream(ai.llm.request(input))) {
   // LLMEvent
 }
 await ai.dispose()
@@ -936,7 +936,7 @@ const transcript = await generation.await({ poll: { interval: 3_000 } })
 ## Public API
 
 - **`LLM.request({...})`** — build a provider-neutral `LLMRequest`. Accepts ergonomic inputs (`system: string`, `prompt: string`) that normalize into the canonical Schema classes.
-- **`LLM.generate` / `LLM.stream`** — re-exported from `LLMClient` for one-import use.
+- **`LLM.generate` / `LLM.stream`** — run direct input or an `LLMRequest` through `LLMClient` for one-import use.
 - **`Message.user(...)` / `Message.assistant(...)` / `Message.tool(...)`** — message constructors from the canonical schema model.
 - **`LanguageModel.make(...)` / `ToolCallPart.make(...)` / `ToolResultPart.make(...)` / `ToolDefinition.make(...)`** — model and tool-related constructors from the canonical schema model.
 - **`LLMEvent.is.*`** — typed guards (`is.textDelta`, `is.toolCall`, `is.finish`, …) for filtering streams.

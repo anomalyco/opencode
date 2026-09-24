@@ -8,7 +8,6 @@ import {
   ProviderInternalError,
   Usage,
   type FinishReason,
-  type JsonSchema,
   type LLMRequest,
   type MediaPart,
   type ProviderMetadata,
@@ -24,7 +23,6 @@ import { classifyProviderFailure } from "../provider-error.js"
 import { effortUpdate } from "../effort-updates.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { Lifecycle } from "./utils/lifecycle.js"
-import { ToolSchemaProjection } from "./utils/tool-schema.js"
 import { ToolStream } from "./utils/tool-stream.js"
 
 const ADAPTER = "open-responses"
@@ -443,22 +441,23 @@ interface ReasoningStreamItem {
 // =============================================================================
 // Request Lowering
 // =============================================================================
-export const lowerTool = Effect.fn("OpenResponses.lowerTool")(function* (
-  protocolName: string,
-  tool: ToolDefinition,
-  inputSchema: JsonSchema,
-) {
+export const lowerTool = Effect.fn("OpenResponses.lowerTool")(function* (protocolName: string, tool: ToolDefinition) {
   if (tool.native !== undefined)
     return yield* ProviderShared.invalidRequest(`${protocolName} does not support provider-native tool ${tool.name}`)
   return {
     type: "function" as const,
     name: tool.name,
     description: tool.description,
-    parameters: inputSchema,
+    parameters: tool.inputSchema,
     // The common tool definition does not currently express Responses strict-schema policy.
     strict: false,
   }
 })
+
+export const lowerTools = (tools: ReadonlyArray<ToolDefinition>, adapter: ProviderAdapter) =>
+  Effect.forEach(tools, (tool) =>
+    tool.native !== undefined && adapter.nativeTool ? adapter.nativeTool(tool.native) : lowerTool(adapter.name, tool),
+  )
 
 export const lowerToolChoice = (protocolName: string, toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
   ProviderShared.matchToolChoice(protocolName, toolChoice, {
@@ -821,14 +820,7 @@ export const fromRequestWithAdapter = Effect.fn("OpenResponses.fromRequestWithAd
   return {
     ...(yield* lowerConversation(projected.request, adapter)),
     ...lowerGeneration(request),
-    tools:
-      projected.tools.length === 0
-        ? undefined
-        : yield* Effect.forEach(projected.tools, (tool) =>
-            tool.native !== undefined && adapter.nativeTool
-              ? adapter.nativeTool(tool.native)
-              : lowerTool(adapter.name, tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, request.model)),
-          ),
+    tools: projected.tools.length === 0 ? undefined : yield* lowerTools(projected.tools, adapter),
     tool_choice:
       allowedToolChoice(request) ??
       (request.toolChoice ? yield* lowerToolChoice(adapter.name, request.toolChoice) : undefined),

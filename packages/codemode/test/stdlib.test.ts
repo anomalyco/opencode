@@ -1416,7 +1416,9 @@ describe("built-in iterators", () => {
     const logged = await run(`console.log([1].keys()); return null`)
     expect(logged.logs?.[0]).toBe("[opaque reference]")
     expect((await error(`return [1].keys() + ""`)).message).toContain("Binary operators require data values")
-    expect((await error(`return [1].keys().next.call({})`)).message).toContain("is not a function")
+    expect((await error(`return [1].keys().next.call({})`)).message).toContain(
+      "Iterator.prototype.next called on incompatible receiver a data object",
+    )
     expect((await error(`const it = [1].keys(); const next = it.next; return next()`)).message).toContain(
       "Iterator.prototype.next called on incompatible receiver undefined",
     )

@@ -13,7 +13,7 @@ import {
   type Cursor,
   type Value,
 } from "./objects.js"
-import { typeofValue } from "./references.js"
+import { isOpaque, typeofValue } from "./references.js"
 
 /** IteratorClose: a consumer failure closes the iterator and wins over any close failure, except that a generator's
  * return() is a return completion, so a failing close wins over it, as after `break`. */
@@ -31,16 +31,15 @@ export const preserveConsumerError = <A, R>(
     })
   })
 
+export type Hint = "number" | "string" | "default"
+
 /**
  * ToPrimitive: calls `valueOf`/`toString` in hint order and returns the first primitive result. Dates treat the
- * default hint as "string", like their `Symbol.toPrimitive`.
+ * default hint as "string", like their `Symbol.toPrimitive`. Opaque values (functions, promises, generators, tool
+ * references) pass through unchanged so callers reject or describe them in their built-in form.
  */
-export const toPrimitive = <R>(
-  ctx: Interpreter<R>,
-  value: Value,
-  hint: "number" | "string" | "default",
-): Effect.Effect<Value, unknown, R> => {
-  if (!(value instanceof Obj)) return Effect.succeed(value)
+export const toPrimitive = <R>(ctx: Interpreter<R>, value: Value, hint: Hint): Effect.Effect<Value, unknown, R> => {
+  if (!(value instanceof Obj) || isOpaque(value)) return Effect.succeed(value)
   const asString = hint === "string" || (hint === "default" && value instanceof DateObj)
   const order = asString ? ["toString", "valueOf"] : ["valueOf", "toString"]
   return Effect.gen(function* () {
@@ -67,6 +66,25 @@ export const toPrimitiveString = <R>(ctx: Interpreter<R>, value: Value) =>
 export const toPrimitiveNumber = <R>(ctx: Interpreter<R>, value: Value) =>
   Effect.map(toPrimitive(ctx, value, "number"), coerceToNumber)
 
+/**
+ * Runs a synchronous native body on its arguments after ToPrimitive, in order, with one hint for all positions or
+ * one per position. Primitive arguments skip the Effect entirely.
+ */
+export const withPrimitives = <R>(
+  ctx: Interpreter<R>,
+  hints: Hint | ReadonlyArray<Hint>,
+  values: Array<Value>,
+  body: (primitives: Array<Value>) => Value,
+): Value | Effect.Effect<Value, unknown, R> => {
+  if (!values.some((value) => value instanceof Obj)) return body(values)
+  return Effect.map(
+    Effect.forEach(values, (value, index) =>
+      toPrimitive(ctx, value, typeof hints === "string" ? hints : hints[index]!),
+    ),
+    body,
+  )
+}
+
 // The single acceptance list for callbacks: collections, sort, string replacers,
 // Array.from mappers, and promise reactions all admit exactly these callables.
 // Admission means dispatchable, not necessarily invocable: new-requiring
@@ -78,7 +96,7 @@ export const applyCollectionCallback = <R>(
   ctx: Interpreter<R>,
   callback: Value,
   name: string,
-): ((args: Array<Value>) => Effect.Effect<Value, unknown, R>) => {
+): ((args: Array<Value>, thisValue?: Value) => Effect.Effect<Value, unknown, R>) => {
   if (!isSupportedCallback(callback)) {
     if (typeofValue(callback) === "function") {
       throw typeError(
@@ -87,5 +105,5 @@ export const applyCollectionCallback = <R>(
     }
     throw typeError(`${name} expects a function callback.`)
   }
-  return (callbackArgs) => ctx.call(callback, undefined, callbackArgs)
+  return (callbackArgs, thisValue) => ctx.call(callback, thisValue, callbackArgs)
 }

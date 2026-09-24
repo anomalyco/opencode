@@ -149,7 +149,11 @@ export abstract class Opaque extends Obj {
 
 export abstract class Callable extends Opaque {
   override readonly tag = "Function"
-  constructor(proto: Obj, name: string, length: number) {
+  constructor(
+    proto: Obj,
+    name: string,
+    readonly length: number,
+  ) {
     super(proto)
     define(this, "length", length, readonly)
     define(this, "name", name, readonly)
@@ -168,9 +172,26 @@ export class Fn extends Callable {
     readonly capturedScopes: Array<Map<string, Binding>>,
     readonly async: boolean,
     readonly generator: boolean,
+    /** Arrows have no `this` or `arguments` of their own; they read the enclosing function's. */
+    readonly arrow: boolean,
   ) {
     const optional = parameters.findIndex((p) => p.type === "AssignmentPattern" || p.type === "RestElement")
     super(proto, name, optional === -1 ? parameters.length : optional)
+  }
+}
+
+/** The strict `arguments` object: an ordinary object with indexed own properties and a hidden `length`. */
+export class Arguments extends Obj {
+  override readonly tag = "Arguments"
+  constructor(proto: Obj, args: Array<Value>) {
+    super(proto)
+    args.forEach((arg, index) => define(this, String(index), arg))
+    define(this, "length", args.length, hidden)
+  }
+  override iterator() {
+    return keys(this)
+      .map((key) => get(this, key))
+      .values()
   }
 }
 

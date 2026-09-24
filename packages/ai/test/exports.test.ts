@@ -54,6 +54,19 @@ import { TestLLM } from "@opencode/ai/testing"
 import { Evaluation, EvaluationClient } from "@opencode/ai/experimental"
 
 describe("public exports", () => {
+  test("modality, provider, and protocol entrypoints load first in a fresh process", async () => {
+    const results = await Promise.all(
+      ["image", "video", "speech", "transcription", "providers", "protocols"].map(async (entry) => {
+        const child = Bun.spawn(
+          [process.execPath, "-e", `await import(${JSON.stringify(`${import.meta.dir}/../src/${entry}.ts`)})`],
+          { stderr: "pipe" },
+        )
+        return { entry, exitCode: await child.exited, stderr: await new Response(child.stderr).text() }
+      }),
+    )
+    expect(results.filter((result) => result.exitCode !== 0)).toEqual([])
+  })
+
   test("root exposes app-facing runtime APIs", () => {
     expect(LLM.request).toBeFunction()
     expect(LLMClient.Service).toBeFunction()

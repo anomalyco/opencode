@@ -1461,3 +1461,230 @@ describe("structuredClone", () => {
     expect((await error(`structuredClone()`)).message).toContain("structuredClone requires 1 argument")
   })
 })
+
+describe("error constructor prototype chain", () => {
+  test("derived error constructors extend Error and inherit its statics", async () => {
+    expect(
+      await value(`
+        const derived = [TypeError, RangeError, SyntaxError, ReferenceError, EvalError, URIError, AggregateError]
+        return [
+          derived.every((ctor) => Object.getPrototypeOf(ctor) === Error),
+          Object.getPrototypeOf(Error) === Function.prototype,
+          TypeError.isError(new RangeError("x")),
+          new TypeError("x") instanceof Error,
+        ]
+      `),
+    ).toEqual([true, true, true, true])
+  })
+})
+
+describe("this, arguments, and Function.prototype.call/apply/bind", () => {
+  test("this is the call receiver for non-arrow functions and lexical for arrows", async () => {
+    expect(
+      await value(`
+        const o = { n: 1, m() { return this.n }, a() { return (() => this.n)() }, bare() { return this } }
+        const detached = o.bare
+        function f() { return this }
+        return [o.m(), o["m"](), o?.m(), (o.m)(), o.a(), o.bare() === o, detached(), f(), (0, o.bare)(), this, (() => this)()]
+      `),
+    ).toEqual([1, 1, 1, 1, 1, true, null, null, null, null, null])
+  })
+
+  test("this reaches generator and async methods and plain-function callbacks", async () => {
+    expect(
+      await value(`
+        const o = { n: 2, *g() { yield this.n }, async m() { return this.n }, xs: [1, 2], go() { return this.xs.map(function (x) { return [x, this] }) } }
+        return [[...o.g()], await o.m(), o.go()]
+      `),
+    ).toEqual([
+      [2],
+      2,
+      [
+        [1, null],
+        [2, null],
+      ],
+    ])
+  })
+
+  test("arguments is an unmapped array-like that arrows and parameters interact with as in JS", async () => {
+    expect(
+      await value(`
+        function f(a) { arguments[0] = 9; return [arguments.length, arguments[1], a, [...arguments], Array.isArray(arguments), JSON.stringify(arguments), typeof arguments.map, (() => arguments[1])()] }
+        function shadow(arguments) { return arguments }
+        function hoisted() { var arguments; return arguments.length }
+        let outer
+        try { outer = arguments } catch (error) { outer = error.name }
+        return [f(1, 2), shadow(7), hoisted(1, 2, 3), outer]
+      `),
+    ).toEqual([[2, 2, 1, [9, 2], false, '{"0":9,"1":2}', "undefined", 2], 7, 3, "ReferenceError"])
+  })
+
+  test("call, apply, and bind set this and arguments on program functions and built-ins", async () => {
+    expect(
+      await value(`
+        function f(a, b, c) { return [this, a, b, c] }
+        const g = f.bind({ k: 1 }, "A")
+        const arr = [1]
+        Array.prototype.push.call(arr, 2, 3)
+        return [
+          f.call("t", 1, 2),
+          f.apply({ k: 2 }, [1, 2]),
+          f.apply(null, { length: 2, 0: "x", 1: "y" }),
+          f.apply(null).length,
+          g("B", "C"), g.name, g.length,
+          f.bind(1).bind(2)()[0],
+          arr,
+          Math.max.apply(null, [1, 5, 3]),
+          Math.max.bind(null, 10)(3),
+          [1, 2].map(f.bind(null, 0)).map((r) => r[1]),
+        ]
+      `),
+    ).toEqual([
+      ["t", 1, 2, null],
+      [{ k: 2 }, 1, 2, null],
+      [null, "x", "y", null],
+      4,
+      [{ k: 1 }, "A", "B", "C"],
+      "bound f",
+      2,
+      1,
+      [1, 2, 3],
+      5,
+      10,
+      [0, 0],
+    ])
+  })
+
+  test("call and apply reject non-callable receivers and non-array-like argument lists", async () => {
+    expect((await error(`Function.prototype.call.call(1)`)).message).toContain(
+      "Function.prototype.call called on incompatible receiver",
+    )
+    expect((await error(`(() => 1).apply(null, 5)`)).message).toContain("expects an array-like argument list")
+    expect((await error(`(() => 1).apply(null, { length: 1e9 })`)).message).toContain("Invalid array length")
+    expect(
+      await value(
+        `function f() { return arguments.length } return [f.apply(null, { length: -5 }), f.apply(null, { length: "2" })]`,
+      ),
+    ).toEqual([0, 2])
+    expect((await error(`function f(n) { return f.call(null, n + 1) } f(0)`)).message).toContain(
+      "Maximum call stack size exceeded",
+    )
+  })
+})
+
+describe("ToPrimitive: operators and conversions honor program valueOf and toString", () => {
+  test("program-installed valueOf and toString on opaque values are ignored at every site", async () => {
+    expect(
+      await value(`
+        const f = () => 1
+        f.toString = () => "custom"
+        f.valueOf = () => 5
+        return [String(f), \`\${f}\`, [f].join(), new Error(f).message, isNaN(Number(f)), isNaN(Math.abs(f))]
+      `),
+    ).toEqual(["[object Function]", "[object Function]", "[object Function]", "[object Function]", true, true])
+  })
+
+  test("== converts an object facing a non-nullish primitive through its own valueOf", async () => {
+    expect(
+      await value(`
+        const one = { valueOf() { return 1 } }
+        return [one == 1, 1 == one, one == true, one == "1", one == null, one == one, one == { valueOf() { return 1 } }, [1] == 1]
+      `),
+    ).toEqual([true, true, true, true, false, true, false, true])
+    expect((await error(`(() => 1) == 1`)).message).toContain("Binary operators require data values")
+  })
+
+  test("operators, unary, template literals, and conversion functions use the object's own methods", async () => {
+    expect(
+      await value(`
+        const money = { valueOf() { return 7 } }
+        return [money * 2, money + 1, money + "", -money, +money, ~money, money < 8, money ** 2, money | 8,
+          Number(money), Math.max(money, 1), \`\${money}\`, String(money), isNaN(money), isFinite(money),
+          parseInt({ toString() { return "42px" } }), parseInt("ff", { valueOf() { return 16 } }),
+          Number.parseFloat({ toString() { return "1.5" } })]
+      `),
+    ).toEqual([
+      14,
+      8,
+      "7",
+      -7,
+      7,
+      -8,
+      true,
+      49,
+      15,
+      7,
+      7,
+      "[object Object]",
+      "[object Object]",
+      false,
+      true,
+      42,
+      255,
+      1.5,
+    ])
+  })
+
+  test("the hint picks the method: + and Number prefer valueOf, template literals and String prefer toString", async () => {
+    expect(
+      await value(`
+        const both = { valueOf() { return 1 }, toString() { return "s" } }
+        return [both + "", \`\${both}\`, String(both), both * 2, new Error(both).message, [both].join(), [both, 2] + ""]
+      `),
+    ).toEqual(["1", "s", "s", 2, "s", "s", "s,2"])
+  })
+
+  test("operands convert left then right, and a throwing valueOf surfaces as the program error", async () => {
+    expect(
+      await value(`
+        const order = []
+        const a = { valueOf() { order.push("a"); return 1 } }, b = { valueOf() { order.push("b"); return 2 } }
+        a + b; a < b; a - b
+        return order
+      `),
+    ).toEqual(["a", "b", "a", "b", "a", "b"])
+    expect(
+      await value(`
+        const bad = { valueOf() { throw new RangeError("nope") } }
+        const names = []
+        try { bad + 1 } catch (e) { names.push(e.name) }
+        try { Number(bad) } catch (e) { names.push(e.name) }
+        try { Math.abs(bad) } catch (e) { names.push(e.name) }
+        return names
+      `),
+    ).toEqual(["RangeError", "RangeError", "RangeError"])
+  })
+
+  test("arrays keep their built-in join form unless the program replaces toString", async () => {
+    expect(
+      await value(`
+        const arr = [1, 2]
+        const before = [arr + "", [] + [], [1, , 3].join("-"), [1, { toString() { return "q" } }].join("-")]
+        arr.toString = () => "x"
+        return [...before, arr + "", \`\${arr}\`, String(arr)]
+      `),
+    ).toEqual(["1,2", "", "1--3", "1-q", "x", "x", "x"])
+  })
+
+  test("update and compound assignment convert the current value", async () => {
+    expect(
+      await value(`
+        let x = { valueOf() { return 5 } }
+        const o = { n: { valueOf() { return 4 } } }
+        const after = x++
+        o.n += 1
+        o.n++
+        let s = { valueOf() { return 2 } }
+        s *= 3
+        return [after, x, o.n, s]
+      `),
+    ).toEqual([5, 6, 6, 6])
+  })
+
+  test("functions and other opaque values still reject arithmetic, and an object without a primitive form throws", async () => {
+    expect((await error(`const f = () => 1; return f + 1`)).message).toContain("Binary operators require data values")
+    expect((await error(`return -(() => 1)`)).message).toContain("Unary operators require data values")
+    const failure = await error(`return { valueOf() { return {} }, toString() { return [] } } + 1`)
+    expect(failure.message).toContain("Cannot convert object to primitive value")
+  })
+})

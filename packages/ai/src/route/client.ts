@@ -11,7 +11,8 @@ import { applyEffortUpdates } from "../effort-updates.js"
 import { normalizeToolHistory } from "../tool-history.js"
 import { sanitizeSurrogates } from "../utils/sanitize.js"
 import * as ProviderShared from "../protocols/shared.js"
-import type { ProtocolID, ProviderOptions } from "../schema/index.js"
+import { ToolSchemaProjection } from "../protocols/utils/tool-schema.js"
+import type { LanguageModelSanitizerCompatibility, ProtocolID, ProviderOptions } from "../schema/index.js"
 import {
   AIError,
   CompactionResponse,
@@ -57,6 +58,7 @@ export interface Route<
   readonly defaults: RouteDefaults
   readonly body: RouteBody<Body>
   readonly supportsEffortUpdates?: (request: LLMRequest) => boolean
+  readonly sanitizer?: LanguageModelSanitizerCompatibility
   readonly with: {
     <Next extends CompactionOperations | undefined>(
       patch: RoutePatch<Body, Prepared> & { readonly compact: Next },
@@ -388,6 +390,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
       defaults: routeInput.defaults ?? {},
       body: protocol.body,
       supportsEffortUpdates: protocol.supportsEffortUpdates,
+      sanitizer: protocol.sanitizer,
       with: (patch: RoutePatch<Body, Prepared>) => {
         const { compact, id, provider, providerMetadataKey, auth, transport, endpoint, ...defaults } = patch
         return build({
@@ -559,7 +562,9 @@ const prepareRequest = (request: LLMRequest) => {
       tool.type === "tool" ? tool : { ...tool, tools: dedupe(tool.tools) },
     )
   const resolved = applyCachePolicy(
-    applyEffortUpdates(LLMRequest.update(sanitized, { tools: dedupe(sanitized.tools) })),
+    applyEffortUpdates(
+      LLMRequest.update(sanitized, { tools: ToolSchemaProjection.tools(dedupe(sanitized.tools), sanitized.model) }),
+    ),
   )
   const headers = resolved.model.route.headers?.({ request: resolved })
   return headers === undefined

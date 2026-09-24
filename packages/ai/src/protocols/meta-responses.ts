@@ -5,7 +5,6 @@ import { LLMEvent, LLMRequest, Message, ToolResultPart } from "../schema/index.j
 import { OpenResponses } from "./open-responses.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
-import { ToolSchemaProjection } from "./utils/tool-schema.js"
 import { detectMediaType } from "../utils/media-type.js"
 
 const ADAPTER = "meta-responses"
@@ -103,12 +102,7 @@ const fromRequest = Effect.fn("MetaResponses.fromRequest")(function* (request: L
         ? undefined
         : yield* Effect.forEach(projected.tools, (tool) =>
             Effect.gen(function* () {
-              if (tool.native === undefined)
-                return yield* OpenResponses.lowerTool(
-                  NAME,
-                  tool,
-                  ToolSchemaProjection.modelCompatibility(tool.inputSchema, request.model),
-                )
+              if (tool.native === undefined) return yield* OpenResponses.lowerTool(NAME, tool)
               return yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(NativeTool))(tool.native.meta)
             }),
           ),

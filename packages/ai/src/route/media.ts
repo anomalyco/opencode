@@ -5,7 +5,7 @@ import { Endpoint } from "./endpoint.js"
 import { RequestExecutorService, type Interface } from "./executor-service.js"
 import { RequestExecutor } from "./executor.js"
 import { MediaProtocol } from "./media-protocol.js"
-import { Generation, resultEvents, type AwaitOptions, type Observation } from "../generation.js"
+import { Generation } from "../generation.js"
 import type { Media } from "../media.js"
 import {
   AIError,
@@ -52,7 +52,7 @@ export const deployment = (
 // ---------------------------------------------------------------------------
 
 /** One request, one response. */
-export interface Route<Request extends MediaRequest, Response> {
+export interface InlineRoute<Request extends MediaRequest, Response> {
   readonly kind: "inline"
   readonly id: string
   readonly provider: ProviderID
@@ -86,7 +86,7 @@ export interface StreamRoute<Request extends MediaRequest, Event, Response> {
 }
 
 export type AnyRoute<Request extends MediaRequest, Event, Response> =
-  | Route<Request, Response>
+  | InlineRoute<Request, Response>
   | StreamRoute<Request, Event, Response>
   | QueuedRoute<Request, Response>
 
@@ -119,7 +119,7 @@ export interface StreamInput<Request extends MediaRequest, Event, Response, Fram
  */
 export const inline = <Request extends MediaRequest, Response>(
   input: InlineInput<Request, Response>,
-): Route<Request, Response> => {
+): InlineRoute<Request, Response> => {
   const transport = makeTransport(input)
   return {
     kind: "inline",
@@ -264,59 +264,6 @@ export const stream = <Request extends MediaRequest, Event, Response, Frame, Sta
     stream: (request, execute) => events(request, execute, "stream"),
     generate: (request, execute) =>
       events(request, execute, "generate").pipe(Stream.runCollect, Effect.flatMap(input.collect)),
-  }
-}
-
-export const dispatch = <Event, Response>(input: {
-  readonly modality: string
-  readonly execute: Execute
-  readonly responseEvents: (response: Response) => ReadonlyArray<Event>
-}) => {
-  const notQueued = (route: { readonly provider: ProviderID; readonly id: string }, operation: string) =>
-    new AIError({
-      reason: new UnsupportedOperationError({
-        operation: `${input.modality}.${operation}`,
-        provider: route.provider,
-        route: route.id,
-        message: `${route.provider}/${route.id} is not a queued route; use generate or stream`,
-      }),
-    })
-  const start = <Request extends MediaRequest>(route: AnyRoute<Request, Event, Response>, request: Request) => {
-    if (route.kind !== "queued") return Effect.fail(notQueued(route, "start"))
-    return route.start(request, input.execute)
-  }
-  return {
-    start,
-    resume: <Request extends MediaRequest>(
-      route: AnyRoute<Request, Event, Response>,
-      model: MediaRequest["model"],
-      token: unknown,
-    ) => {
-      if (route.kind !== "queued") return Effect.fail(notQueued(route, "resume"))
-      return route.resume(model, token, input.execute)
-    },
-    generate: <Request extends MediaRequest>(
-      route: AnyRoute<Request, Event, Response>,
-      request: Request,
-      options?: AwaitOptions,
-    ) => {
-      if (route.kind !== "queued") return route.generate(request, input.execute)
-      return start(route, request).pipe(Effect.flatMap((generation) => generation.await(options)))
-    },
-    stream: <Request extends MediaRequest>(
-      route: AnyRoute<Request, Event, Response>,
-      request: Request,
-      options?: AwaitOptions,
-    ): Stream.Stream<Event | Observation, AIError> => {
-      if (route.kind === "stream") return route.stream(request, input.execute)
-      if (route.kind === "queued")
-        return Stream.unwrap(
-          start(route, request).pipe(
-            Effect.map((generation) => resultEvents(generation, input.responseEvents, options)),
-          ),
-        )
-      return Stream.fromIterableEffect(Effect.map(route.generate(request, input.execute), input.responseEvents))
-    },
   }
 }
 

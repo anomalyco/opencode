@@ -18,7 +18,7 @@ import {
   type Value,
 } from "../interpreter/objects.js"
 import { describeValue, rejectCircularInsertion } from "../interpreter/references.js"
-import { applyCollectionCallback, invoke, preserveConsumerError } from "../interpreter/callback.js"
+import { applyCollectionCallback, invoke, preserveConsumerError, withPrimitives } from "../interpreter/callback.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
 import { compareText } from "../tool-runtime.js"
 
@@ -146,20 +146,30 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
       "join",
       1,
       (thisValue, args) => {
-        const joined = self(thisValue, "join")
-          .items.map((item) => coerceToString(item ?? ""))
-          .join(args[0] === undefined ? "," : coerceToString(args[0]))
-        checkStringLength(joined.length)
-        return joined
+        // .map would keep holes, which Effect.forEach would then hand to the body as undefined.
+        const parts = Array.from(self(thisValue, "join").items, (item) => item ?? "")
+        return withPrimitives(
+          ctx,
+          "string",
+          [args[0] === undefined ? "," : args[0], ...parts],
+          ([separator, ...items]) => {
+            const joined = items.map(coerceToString).join(coerceToString(separator))
+            checkStringLength(joined.length)
+            return joined
+          },
+        )
       },
     ],
     [
       "toString",
       0,
       (thisValue) =>
-        self(thisValue, "toString")
-          .items.map((item) => coerceToString(item ?? ""))
-          .join(","),
+        withPrimitives(
+          ctx,
+          "string",
+          Array.from(self(thisValue, "toString").items, (item) => item ?? ""),
+          (items) => items.map(coerceToString).join(","),
+        ),
     ],
     [
       "includes",

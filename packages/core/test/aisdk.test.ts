@@ -13,6 +13,7 @@ import {
   CompactionPart,
   ProviderID,
   HttpContext,
+  InvalidRequestError,
   LLMEvent,
   Message,
   RateLimitError,
@@ -372,6 +373,18 @@ it.effect("routes AI Gateway model options by upstream prefix", () =>
     const bedrockPrepared = yield* compileRequest(LLM.request({ model: bedrock, prompt: "Hello" }))
     expect(bedrockPrepared.body.providerOptions).toEqual({
       bedrock: { reasoningConfig: { type: "enabled" } },
+    })
+
+    const openai = yield* aisdk.model({
+      ...model("@ai-sdk/gateway", { gateway: { order: ["openai"] } }),
+      modelID: Model.ID.make("openai/gpt-5.5"),
+    })
+    const openaiPrepared = yield* compileRequest(
+      LLM.request({ model: openai, prompt: "Hello", providerOptions: { textVerbosity: "low" } }),
+    )
+    expect(openaiPrepared.body.providerOptions).toEqual({
+      gateway: { order: ["openai"] },
+      openai: { textVerbosity: "low" },
     })
 
     const fallback = yield* aisdk.model({
@@ -882,6 +895,23 @@ Object.values({
     }),
   )
 })
+
+// Shapes the Vercel AI Gateway streams when the upstream rejects a request.
+Object.entries({
+  "type validation": {
+    name: "AI_TypeValidationError",
+    value: { error: { type: "invalid_request_error", message: "Bad max_tokens" } },
+  },
+  invalid_request: { code: "invalid_request", message: "Bad max_tokens" },
+}).forEach(([shape, failure]) =>
+  it.effect(`reads gateway ${shape} stream errors as invalid requests`, () =>
+    Effect.gen(function* () {
+      const error = yield* streamFailure(failure, true)
+      expect(error.message).toBe("Bad max_tokens")
+      expect(error.reason).toBeInstanceOf(InvalidRequestError)
+    }),
+  ),
+)
 
 it.effect("does not copy Error request internals into the provider body", () =>
   Effect.gen(function* () {

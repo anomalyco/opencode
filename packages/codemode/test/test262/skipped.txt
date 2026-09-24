@@ -4,13 +4,92 @@ built-ins/Array/prototype/concat/S15.4.4.4_A2_T2.js  # Array.prototype.concat ca
 built-ins/Array/prototype/concat/S15.4.4.4_A3_T1.js  # arr.hasOwnProperty("1") must return true Expected SameValue(«false», «true») to be true
 built-ins/Array/prototype/concat/S15.4.4.4_A3_T2.js  # b.hasOwnProperty("2") must return true Expected SameValue(«false», «true») to be true
 built-ins/Array/prototype/concat/S15.4.4.4_A3_T3.js  # b.hasOwnProperty("2") must return true Expected SameValue(«false», «true») to be true
+built-ins/Array/prototype/concat/call-with-boolean.js  # TypeError: Array.prototype.concat called on incompatible receiver a boolean.
 built-ins/Array/prototype/concat/create-ctor-non-object.js  # a.concat() throws a TypeError exception Expected a TypeError to be thrown but no exception was throw
+built-ins/Array/prototype/copyWithin/call-with-boolean.js  # TypeError: Array.prototype.copyWithin called on incompatible receiver a boolean.
 built-ins/Array/prototype/copyWithin/coerced-values-start-change-target.js  # Array.copyWithin expects start to be a number.
+built-ins/Array/prototype/copyWithin/length-near-integer-limit.js  # TypeError: Array.prototype.copyWithin called on incompatible receiver a data object.
 built-ins/Array/prototype/copyWithin/return-abrupt-from-end.js  # Expected a Test262Error but got a TypeError
 built-ins/Array/prototype/copyWithin/return-abrupt-from-start.js  # Expected a Test262Error but got a TypeError
 built-ins/Array/prototype/copyWithin/return-abrupt-from-target.js  # Expected a Test262Error but got a TypeError
+built-ins/Array/prototype/copyWithin/return-this.js  # TypeError: Array.prototype.copyWithin called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-1-10.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-1-11.js  # TypeError: Array.prototype.every called on incompatible receiver a Date.
+built-ins/Array/prototype/every/15.4.4.16-1-12.js  # TypeError: Array.prototype.every called on incompatible receiver a RegExp.
+built-ins/Array/prototype/every/15.4.4.16-1-13.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-1-14.js  # TypeError: Array.prototype.every called on incompatible receiver an Error.
+built-ins/Array/prototype/every/15.4.4.16-1-3.js  # TypeError: Array.prototype.every called on incompatible receiver a boolean.
+built-ins/Array/prototype/every/15.4.4.16-1-5.js  # TypeError: Array.prototype.every called on incompatible receiver a number.
+built-ins/Array/prototype/every/15.4.4.16-1-7.js  # TypeError: Array.prototype.every called on incompatible receiver a string.
+built-ins/Array/prototype/every/15.4.4.16-2-1.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-2-14.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-2-17.js  # func(12, 11) !== true
+built-ins/Array/prototype/every/15.4.4.16-2-19.js  # TypeError: Array.prototype.every called on incompatible receiver a function.
+built-ins/Array/prototype/every/15.4.4.16-2-3.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/every/15.4.4.16-2-6.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/every/15.4.4.16-3-1.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-3-10.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-3-11.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-3-12.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-3-13.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-3-14.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-3-15.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-3-16.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-3-17.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-3-18.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-3-19.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-3-2.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-3-20.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-3-21.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-3-22.js  # toStringAccessed !== true
+built-ins/Array/prototype/every/15.4.4.16-3-24.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-3-25.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-3-29.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-3-3.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-3-4.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-3-5.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-3-6.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-3-7.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-3-8.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-3-9.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-5-10.js  # [11].every(callbackfn, objArray) !== true
+built-ins/Array/prototype/every/15.4.4.16-5-14.js  # [11].every(callbackfn, Math) !== true
+built-ins/Array/prototype/every/15.4.4.16-5-15.js  # [11].every(callbackfn, objDate) !== true
+built-ins/Array/prototype/every/15.4.4.16-5-16.js  # [11].every(callbackfn, objRegExp) !== true
+built-ins/Array/prototype/every/15.4.4.16-5-17.js  # [11].every(callbackfn, JSON) !== true
+built-ins/Array/prototype/every/15.4.4.16-5-18.js  # [11].every(callbackfn, objError) !== true
+built-ins/Array/prototype/every/15.4.4.16-5-19.js  # [11].every(callbackfn, arg) !== true
+built-ins/Array/prototype/every/15.4.4.16-5-2.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/every/15.4.4.16-5-22.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/every/15.4.4.16-5-23.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/every/15.4.4.16-5-24.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/every/15.4.4.16-5-3.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/every/15.4.4.16-5-4.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/every/15.4.4.16-5-5.js  # TypeError: foo cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/every/15.4.4.16-5-6.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/every/15.4.4.16-5-9.js  # [11].every(callbackfn, objFunction) !== true
 built-ins/Array/prototype/every/15.4.4.16-7-6.js  # res Expected SameValue(«true», «false») to be true
+built-ins/Array/prototype/every/15.4.4.16-7-8.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-7-c-i-1.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-7-c-i-3.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/every/15.4.4.16-7-c-i-7.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
 built-ins/Array/prototype/every/15.4.4.16-7-c-i-8.js  # [, , , ].every(callbackfn) Expected SameValue(«true», «false») to be true
+built-ins/Array/prototype/every/15.4.4.16-7-c-ii-16.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-7-c-ii-17.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-7-c-ii-18.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-7-c-ii-19.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-7-c-ii-20.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-7-c-ii-21.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-7-c-ii-22.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-7-c-ii-23.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-7-c-ii-6.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-7-c-ii-7.js  # Expected a Test262Error but got a TypeError
+built-ins/Array/prototype/every/15.4.4.16-7-c-ii-8.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-7-c-iii-1.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-7-c-iii-2.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-7-c-iii-27.js  # [11].every(callbackfn) !== true
+built-ins/Array/prototype/every/15.4.4.16-7-c-iii-3.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-7-c-iii-4.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
 built-ins/Array/prototype/every/15.4.4.16-8-10.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/every/15.4.4.16-8-2.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/every/15.4.4.16-8-3.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
@@ -19,9 +98,66 @@ built-ins/Array/prototype/every/15.4.4.16-8-5.js  # … cannot be constructed: u
 built-ins/Array/prototype/every/15.4.4.16-8-6.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/every/15.4.4.16-8-7.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/every/15.4.4.16-8-8.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
+built-ins/Array/prototype/every/call-with-boolean.js  # TypeError: Array.prototype.every called on incompatible receiver a boolean.
+built-ins/Array/prototype/fill/call-with-boolean.js  # TypeError: Array.prototype.fill called on incompatible receiver a boolean.
+built-ins/Array/prototype/fill/length-near-integer-limit.js  # TypeError: Array.prototype.fill called on incompatible receiver a data object.
 built-ins/Array/prototype/fill/return-abrupt-from-end.js  # Expected a Test262Error but got a TypeError
 built-ins/Array/prototype/fill/return-abrupt-from-start.js  # Expected a Test262Error but got a TypeError
+built-ins/Array/prototype/fill/return-this.js  # TypeError: Array.prototype.fill called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-1-10.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-1-11.js  # TypeError: Array.prototype.filter called on incompatible receiver a Date.
+built-ins/Array/prototype/filter/15.4.4.20-1-12.js  # TypeError: Array.prototype.filter called on incompatible receiver a RegExp.
+built-ins/Array/prototype/filter/15.4.4.20-1-13.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-1-14.js  # TypeError: Array.prototype.filter called on incompatible receiver an Error.
+built-ins/Array/prototype/filter/15.4.4.20-1-3.js  # TypeError: Array.prototype.filter called on incompatible receiver a boolean.
+built-ins/Array/prototype/filter/15.4.4.20-1-5.js  # TypeError: Array.prototype.filter called on incompatible receiver a number.
+built-ins/Array/prototype/filter/15.4.4.20-1-7.js  # TypeError: Array.prototype.filter called on incompatible receiver a string.
 built-ins/Array/prototype/filter/15.4.4.20-10-3.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
+built-ins/Array/prototype/filter/15.4.4.20-2-1.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-2-14.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-2-19.js  # TypeError: Array.prototype.filter called on incompatible receiver a function.
+built-ins/Array/prototype/filter/15.4.4.20-2-3.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/filter/15.4.4.20-2-6.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/filter/15.4.4.20-3-1.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-3-10.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-3-11.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-3-12.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-3-13.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-3-14.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-3-15.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-3-16.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-3-17.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-3-18.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-3-19.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-3-2.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-3-20.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-3-21.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-3-22.js  # firstStepOccured !== true
+built-ins/Array/prototype/filter/15.4.4.20-3-23.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/filter/15.4.4.20-3-24.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-3-25.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-3-3.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-3-4.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-3-5.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-3-6.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-3-7.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-3-9.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-5-10.js  # newArr[0] Expected SameValue(«undefined», «11») to be true
+built-ins/Array/prototype/filter/15.4.4.20-5-14.js  # newArr[0] Expected SameValue(«undefined», «11») to be true
+built-ins/Array/prototype/filter/15.4.4.20-5-15.js  # newArr[0] Expected SameValue(«undefined», «11») to be true
+built-ins/Array/prototype/filter/15.4.4.20-5-16.js  # newArr[0] Expected SameValue(«undefined», «11») to be true
+built-ins/Array/prototype/filter/15.4.4.20-5-17.js  # newArr[0] Expected SameValue(«undefined», «11») to be true
+built-ins/Array/prototype/filter/15.4.4.20-5-18.js  # newArr[0] Expected SameValue(«undefined», «11») to be true
+built-ins/Array/prototype/filter/15.4.4.20-5-19.js  # newArr[0] Expected SameValue(«undefined», «11») to be true
+built-ins/Array/prototype/filter/15.4.4.20-5-2.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/filter/15.4.4.20-5-22.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/filter/15.4.4.20-5-23.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/filter/15.4.4.20-5-24.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/filter/15.4.4.20-5-3.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/filter/15.4.4.20-5-4.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/filter/15.4.4.20-5-5.js  # TypeError: foo cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/filter/15.4.4.20-5-6.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/filter/15.4.4.20-5-9.js  # newArr[0] Expected SameValue(«undefined», «11») to be true
 built-ins/Array/prototype/filter/15.4.4.20-6-2.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/filter/15.4.4.20-6-3.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/filter/15.4.4.20-6-4.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
@@ -30,11 +166,121 @@ built-ins/Array/prototype/filter/15.4.4.20-6-6.js  # … cannot be constructed: 
 built-ins/Array/prototype/filter/15.4.4.20-6-7.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/filter/15.4.4.20-6-8.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/filter/15.4.4.20-9-6.js  # resArr.length Expected SameValue(«3», «4») to be true
+built-ins/Array/prototype/filter/15.4.4.20-9-8.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-9-c-i-1.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-9-c-i-3.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/filter/15.4.4.20-9-c-i-7.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
 built-ins/Array/prototype/filter/15.4.4.20-9-c-i-8.js  # newArr.length Expected SameValue(«0», «1») to be true
+built-ins/Array/prototype/filter/15.4.4.20-9-c-ii-16.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-9-c-ii-17.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-9-c-ii-18.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-9-c-ii-19.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-9-c-ii-20.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-9-c-ii-21.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-9-c-ii-22.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-9-c-ii-23.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-9-c-ii-6.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-9-c-ii-7.js  # Expected a Error but got a TypeError
+built-ins/Array/prototype/filter/15.4.4.20-9-c-ii-8.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-9-c-iii-1-1.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-9-c-iii-1-2.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-9-c-iii-1-3.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-9-c-iii-1-4.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-9-c-iii-2.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-9-c-iii-28.js  # newArr.length Expected SameValue(«0», «1») to be true
+built-ins/Array/prototype/filter/15.4.4.20-9-c-iii-29.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-9-c-iii-3.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-9-c-iii-4.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-9-c-iii-5.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/call-with-boolean.js  # TypeError: Array.prototype.filter called on incompatible receiver a boolean.
 built-ins/Array/prototype/filter/create-ctor-non-object.js  # null value Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Array/prototype/find/call-with-boolean.js  # TypeError: Array.prototype.find called on incompatible receiver a boolean.
+built-ins/Array/prototype/find/predicate-call-this-strict.js  # Expected SameValue(«undefined», «object») to be true
+built-ins/Array/prototype/findIndex/call-with-boolean.js  # TypeError: Array.prototype.findIndex called on incompatible receiver a boolean.
+built-ins/Array/prototype/findIndex/predicate-call-this-strict.js  # Expected SameValue(«undefined», «object») to be true
+built-ins/Array/prototype/findLast/call-with-boolean.js  # TypeError: Array.prototype.findLast called on incompatible receiver a boolean.
+built-ins/Array/prototype/findLast/maximum-index.js  # TypeError: Array.prototype.findLast called on incompatible receiver a data object.
+built-ins/Array/prototype/findLast/predicate-call-this-strict.js  # Expected SameValue(«undefined», «object») to be true
+built-ins/Array/prototype/findLastIndex/call-with-boolean.js  # TypeError: Array.prototype.findLastIndex called on incompatible receiver a boolean.
+built-ins/Array/prototype/findLastIndex/maximum-index.js  # TypeError: Array.prototype.findLastIndex called on incompatible receiver a data object.
+built-ins/Array/prototype/findLastIndex/predicate-call-this-strict.js  # Expected SameValue(«undefined», «object») to be true
+built-ins/Array/prototype/flat/array-like-objects.js  # TypeError: Array.prototype.flat called on incompatible receiver a data object.
+built-ins/Array/prototype/flat/call-with-boolean.js  # TypeError: Array.prototype.flat called on incompatible receiver a boolean.
 built-ins/Array/prototype/flat/non-object-ctor-throws.js  # null value Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Array/prototype/flat/proxy-access-count.js  # ReferenceError: Unknown identifier '…'.
+built-ins/Array/prototype/flatMap/call-with-boolean.js  # TypeError: Array.prototype.flatMap called on incompatible receiver a boolean.
+built-ins/Array/prototype/flatMap/proxy-access-count.js  # ReferenceError: Unknown identifier '…'.
+built-ins/Array/prototype/flatMap/thisArg-argument.js  # Actual [undefined] and expected ["TestString"] should have the same contents. The value of actual is
+built-ins/Array/prototype/forEach/15.4.4.18-1-10.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-1-11.js  # TypeError: Array.prototype.forEach called on incompatible receiver a Date.
+built-ins/Array/prototype/forEach/15.4.4.18-1-12.js  # TypeError: Array.prototype.forEach called on incompatible receiver a RegExp.
+built-ins/Array/prototype/forEach/15.4.4.18-1-13.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-1-14.js  # TypeError: Array.prototype.forEach called on incompatible receiver an Error.
+built-ins/Array/prototype/forEach/15.4.4.18-1-3.js  # TypeError: Array.prototype.forEach called on incompatible receiver a boolean.
+built-ins/Array/prototype/forEach/15.4.4.18-1-5.js  # TypeError: Array.prototype.forEach called on incompatible receiver a number.
+built-ins/Array/prototype/forEach/15.4.4.18-1-7.js  # TypeError: Array.prototype.forEach called on incompatible receiver a string.
+built-ins/Array/prototype/forEach/15.4.4.18-2-1.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-2-14.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-2-17.js  # func(12, 11) !== true
+built-ins/Array/prototype/forEach/15.4.4.18-2-19.js  # TypeError: Array.prototype.forEach called on incompatible receiver a function.
+built-ins/Array/prototype/forEach/15.4.4.18-2-3.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/forEach/15.4.4.18-2-6.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/forEach/15.4.4.18-3-1.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-3-10.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-3-11.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-3-12.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-3-13.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-3-14.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-3-15.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-3-16.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-3-17.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-3-18.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-3-19.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-3-2.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-3-20.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-3-21.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-3-23.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/forEach/15.4.4.18-3-24.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-3-25.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-3-3.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-3-4.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-3-5.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-3-6.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-3-7.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-3-9.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-5-10.js  # result !== true
+built-ins/Array/prototype/forEach/15.4.4.18-5-14.js  # result !== true
+built-ins/Array/prototype/forEach/15.4.4.18-5-15.js  # result !== true
+built-ins/Array/prototype/forEach/15.4.4.18-5-16.js  # result !== true
+built-ins/Array/prototype/forEach/15.4.4.18-5-17.js  # result !== true
+built-ins/Array/prototype/forEach/15.4.4.18-5-18.js  # result !== true
+built-ins/Array/prototype/forEach/15.4.4.18-5-19.js  # result !== true
+built-ins/Array/prototype/forEach/15.4.4.18-5-2.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/forEach/15.4.4.18-5-22.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/forEach/15.4.4.18-5-23.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/forEach/15.4.4.18-5-24.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/forEach/15.4.4.18-5-3.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/forEach/15.4.4.18-5-4.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/forEach/15.4.4.18-5-5.js  # TypeError: foo cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/forEach/15.4.4.18-5-6.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/forEach/15.4.4.18-5-9.js  # result !== true
 built-ins/Array/prototype/forEach/15.4.4.18-7-5.js  # callCnt Expected SameValue(«4», «5») to be true
+built-ins/Array/prototype/forEach/15.4.4.18-7-8.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-7-c-i-1.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-7-c-i-3.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/forEach/15.4.4.18-7-c-i-7.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
 built-ins/Array/prototype/forEach/15.4.4.18-7-c-i-8.js  # testResult !== true
+built-ins/Array/prototype/forEach/15.4.4.18-7-c-ii-16.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-7-c-ii-17.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-7-c-ii-18.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-7-c-ii-19.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-7-c-ii-20.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-7-c-ii-21.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-7-c-ii-22.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-7-c-ii-23.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-7-c-ii-6.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-7-c-ii-7.js  # Expected a Error but got a TypeError
+built-ins/Array/prototype/forEach/15.4.4.18-7-c-ii-8.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
 built-ins/Array/prototype/forEach/15.4.4.18-8-10.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/forEach/15.4.4.18-8-2.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/forEach/15.4.4.18-8-3.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
@@ -44,33 +290,236 @@ built-ins/Array/prototype/forEach/15.4.4.18-8-6.js  # … cannot be constructed:
 built-ins/Array/prototype/forEach/15.4.4.18-8-7.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/forEach/15.4.4.18-8-8.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/forEach/15.4.4.18-8-9.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
+built-ins/Array/prototype/forEach/call-with-boolean.js  # TypeError: Array.prototype.forEach called on incompatible receiver a boolean.
+built-ins/Array/prototype/includes/call-with-boolean.js  # TypeError: Array.prototype.includes called on incompatible receiver a boolean.
+built-ins/Array/prototype/includes/length-boundaries.js  # TypeError: Array.prototype.includes called on incompatible receiver a data object.
 built-ins/Array/prototype/includes/return-abrupt-tointeger-fromindex.js  # Expected a Test262Error but got a TypeError
+built-ins/Array/prototype/includes/return-abrupt-tonumber-length.js  # valueOf Expected a Test262Error but got a TypeError
 built-ins/Array/prototype/includes/tointeger-fromindex.js  # Array.includes expects start index to be a number.
+built-ins/Array/prototype/includes/tolength-length.js  # TypeError: Array.prototype.includes called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-1-10.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-1-11.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a Date.
+built-ins/Array/prototype/indexOf/15.4.4.14-1-12.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a RegExp.
+built-ins/Array/prototype/indexOf/15.4.4.14-1-13.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-1-14.js  # TypeError: Array.prototype.indexOf called on incompatible receiver an Error.
+built-ins/Array/prototype/indexOf/15.4.4.14-1-3.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a boolean.
+built-ins/Array/prototype/indexOf/15.4.4.14-1-5.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a number.
+built-ins/Array/prototype/indexOf/15.4.4.14-1-7.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a string.
+built-ins/Array/prototype/indexOf/15.4.4.14-1-9.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a function.
+built-ins/Array/prototype/indexOf/15.4.4.14-2-1.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-2-14.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-2-17.js  # func(0, true) !== true
+built-ins/Array/prototype/indexOf/15.4.4.14-2-19.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a function.
+built-ins/Array/prototype/indexOf/15.4.4.14-2-3.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/indexOf/15.4.4.14-2-6.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/indexOf/15.4.4.14-3-1.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-3-10.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-3-11.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-3-12.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-3-13.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-3-14.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-3-15.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-3-16.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-3-17.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-3-18.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-3-19.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-3-2.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-3-20.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-3-21.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-3-22.js  # toStringAccessed
+built-ins/Array/prototype/indexOf/15.4.4.14-3-23.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/indexOf/15.4.4.14-3-24.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-3-25.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-3-28.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-3-29.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-3-3.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-3-4.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-3-5.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-3-6.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-3-7.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-3-8.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-3-9.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-4-10.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-4-11.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-4-2.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-4-3.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-4-4.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-4-5.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-4-6.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-4-7.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-4-8.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-4-9.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
 built-ins/Array/prototype/indexOf/15.4.4.14-5-23.js  # Array.indexOf expects start index to be a number.
 built-ins/Array/prototype/indexOf/15.4.4.14-5-24.js  # toStringAccessed
 built-ins/Array/prototype/indexOf/15.4.4.14-5-25.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/indexOf/15.4.4.14-9-7.js  # Array assignment result contains a circular value.
+built-ins/Array/prototype/indexOf/15.4.4.14-9-a-2.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
 built-ins/Array/prototype/indexOf/15.4.4.14-9-a-3.js  # Array.indexOf expects start index to be a number.
+built-ins/Array/prototype/indexOf/15.4.4.14-9-a-5.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
 built-ins/Array/prototype/indexOf/15.4.4.14-9-a-6.js  # Array.indexOf expects start index to be a number.
+built-ins/Array/prototype/indexOf/15.4.4.14-9-b-i-1.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-9-b-i-4.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
 built-ins/Array/prototype/indexOf/15.4.4.14-9-b-i-7.js  # [, , , ].indexOf(true) Expected SameValue(«-1», «0») to be true
+built-ins/Array/prototype/indexOf/15.4.4.14-9-b-i-8.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/call-with-boolean.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a boolean.
+built-ins/Array/prototype/indexOf/length-near-integer-limit.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
 built-ins/Array/prototype/join/S15.4.4.5_A2_T1.js  # Array.prototype.join called on incompatible receiver a data object.
 built-ins/Array/prototype/join/S15.4.4.5_A2_T4.js  # Array.prototype.join called on incompatible receiver a data object.
-built-ins/Array/prototype/join/S15.4.4.5_A3.1_T2.js  # Array.join expects zero arguments or one string separator.
-built-ins/Array/prototype/join/S15.4.4.5_A3.2_T2.js  # x.join() must return "*" Expected SameValue(«"[object Object]"», «"*"») to be true
 built-ins/Array/prototype/join/S15.4.4.5_A4_T3.js  # Array.prototype.join called on incompatible receiver a data object.
 built-ins/Array/prototype/join/S15.4.4.5_A5_T1.js  # #1: Array.prototype[1] = 1; x = [0]; x.length = 2; x.join() === "0,1". Actual: 0,
+built-ins/Array/prototype/join/call-with-boolean.js  # TypeError: Array.prototype.join called on incompatible receiver a boolean.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-1-10.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-1-11.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a Date.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-1-12.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a RegExp.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-1-13.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-1-14.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver an Error.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-1-3.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a boolean.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-1-5.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a number.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-1-7.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a string.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-1-9.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a function.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-2-1.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-2-14.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-2-17.js  # func(0, targetObj) !== true
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-2-19.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a function.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-2-3.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-2-6.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-3-1.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-3-10.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-3-11.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-3-12.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-3-13.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-3-14.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-3-15.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-3-16.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-3-17.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-3-19.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-3-2.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-3-20.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-3-21.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-3-22.js  # toStringAccessed
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-3-23.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-3-24.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-3-25.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-3-28.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-3-3.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-3-4.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-3-5.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-3-6.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-3-7.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-3-9.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-4-10.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-4-11.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-4-2.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-4-3.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-4-4.js  # TypeError: foo cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-4-5.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-4-6.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-4-7.js  # TypeError: foo cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-4-8.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-4-9.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-21.js  # Array.lastIndexOf expects start index to be a number.
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-22.js  # Array.lastIndexOf expects start index to be a number.
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-23.js  # Array.lastIndexOf expects start index to be a number.
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-24.js  # toStringAccessed
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-25.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-7.js  # Array assignment result contains a circular value.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-a-2.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-a-3.js  # Array.lastIndexOf expects start index to be a number.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-a-5.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-b-i-1.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-b-i-4.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-b-i-7.js  # [, , , ].lastIndexOf(true) Expected SameValue(«-1», «0») to be true
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-b-i-8.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/call-with-boolean.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a boolean.
+built-ins/Array/prototype/lastIndexOf/length-near-integer-limit.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-1-10.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-1-11.js  # TypeError: Array.prototype.map called on incompatible receiver a Date.
+built-ins/Array/prototype/map/15.4.4.19-1-12.js  # TypeError: Array.prototype.map called on incompatible receiver a RegExp.
+built-ins/Array/prototype/map/15.4.4.19-1-13.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-1-14.js  # TypeError: Array.prototype.map called on incompatible receiver an Error.
+built-ins/Array/prototype/map/15.4.4.19-1-3.js  # TypeError: Array.prototype.map called on incompatible receiver a boolean.
+built-ins/Array/prototype/map/15.4.4.19-1-5.js  # TypeError: Array.prototype.map called on incompatible receiver a number.
+built-ins/Array/prototype/map/15.4.4.19-1-7.js  # TypeError: Array.prototype.map called on incompatible receiver a string.
+built-ins/Array/prototype/map/15.4.4.19-2-1.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-2-14.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-2-19.js  # TypeError: Array.prototype.map called on incompatible receiver a function.
+built-ins/Array/prototype/map/15.4.4.19-2-3.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/map/15.4.4.19-2-6.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/map/15.4.4.19-3-1.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-3-10.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-3-11.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-3-12.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-3-13.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-3-14.js  # Expected a RangeError but got a TypeError
+built-ins/Array/prototype/map/15.4.4.19-3-15.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-3-16.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-3-17.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-3-18.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-3-19.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-3-2.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-3-20.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-3-21.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-3-23.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/map/15.4.4.19-3-24.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-3-25.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-3-28.js  # Expected a RangeError but got a TypeError
+built-ins/Array/prototype/map/15.4.4.19-3-29.js  # Expected a RangeError but got a TypeError
+built-ins/Array/prototype/map/15.4.4.19-3-3.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-3-4.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-3-5.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-3-6.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-3-7.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-3-8.js  # Expected a RangeError but got a TypeError
+built-ins/Array/prototype/map/15.4.4.19-3-9.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-5-10.js  # testResult[0] Expected SameValue(«false», «true») to be true
+built-ins/Array/prototype/map/15.4.4.19-5-14.js  # testResult[0] Expected SameValue(«false», «true») to be true
+built-ins/Array/prototype/map/15.4.4.19-5-15.js  # testResult[0] Expected SameValue(«false», «true») to be true
+built-ins/Array/prototype/map/15.4.4.19-5-16.js  # testResult[0] Expected SameValue(«false», «true») to be true
+built-ins/Array/prototype/map/15.4.4.19-5-17.js  # testResult[0] Expected SameValue(«false», «true») to be true
+built-ins/Array/prototype/map/15.4.4.19-5-18.js  # testResult[0] Expected SameValue(«false», «true») to be true
+built-ins/Array/prototype/map/15.4.4.19-5-19.js  # testResult[0] Expected SameValue(«false», «true») to be true
+built-ins/Array/prototype/map/15.4.4.19-5-2.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/map/15.4.4.19-5-22.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/map/15.4.4.19-5-23.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/map/15.4.4.19-5-24.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/map/15.4.4.19-5-3.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/map/15.4.4.19-5-4.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/map/15.4.4.19-5-5.js  # TypeError: foo cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/map/15.4.4.19-5-6.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/map/15.4.4.19-5-9.js  # testResult[0] Expected SameValue(«false», «true») to be true
 built-ins/Array/prototype/map/15.4.4.19-8-6.js  # resArr[4] Expected SameValue(«undefined», «1») to be true
+built-ins/Array/prototype/map/15.4.4.19-8-8.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-8-c-i-1.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-8-c-i-3.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/map/15.4.4.19-8-c-i-7.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
 built-ins/Array/prototype/map/15.4.4.19-8-c-i-8.js  # newArr[1] Expected SameValue(«13», «true») to be true
+built-ins/Array/prototype/map/15.4.4.19-8-c-ii-16.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-8-c-ii-17.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-8-c-ii-18.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-8-c-ii-19.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-8-c-ii-20.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-8-c-ii-21.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-8-c-ii-22.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-8-c-ii-23.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-8-c-ii-6.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-8-c-ii-7.js  # Expected a Error but got a TypeError
+built-ins/Array/prototype/map/15.4.4.19-8-c-ii-8.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-8-c-iii-2.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-8-c-iii-3.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-8-c-iii-4.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-8-c-iii-5.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-9-10.js  # TypeError: Foo cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/map/15.4.4.19-9-11.js  # TypeError: Foo cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/map/15.4.4.19-9-12.js  # TypeError: Foo cannot be constructed: user-defined constructors and classes are not supported. Call 
 built-ins/Array/prototype/map/15.4.4.19-9-3.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
+built-ins/Array/prototype/map/15.4.4.19-9-5.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-9-6.js  # TypeError: Foo cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/map/15.4.4.19-9-7.js  # TypeError: Foo cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/map/15.4.4.19-9-8.js  # TypeError: Foo cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/map/15.4.4.19-9-9.js  # TypeError: Foo cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/map/call-with-boolean.js  # TypeError: Array.prototype.map called on incompatible receiver a boolean.
 built-ins/Array/prototype/map/create-ctor-non-object.js  # null value Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Array/prototype/map/create-non-array-invalid-len.js  # Expected a RangeError but got a TypeError
 built-ins/Array/prototype/pop/S15.4.4.6_A2_T1.js  # Array.prototype.pop called on incompatible receiver a data object.
 built-ins/Array/prototype/pop/S15.4.4.6_A2_T4.js  # Array.prototype.pop called on incompatible receiver a data object.
 built-ins/Array/prototype/pop/S15.4.4.6_A3_T1.js  # Array.prototype.pop called on incompatible receiver a data object.
@@ -78,6 +527,9 @@ built-ins/Array/prototype/pop/S15.4.4.6_A3_T2.js  # Array.prototype.pop called o
 built-ins/Array/prototype/pop/S15.4.4.6_A3_T3.js  # Array.prototype.pop called on incompatible receiver a data object.
 built-ins/Array/prototype/pop/S15.4.4.6_A4_T1.js  # #1: Array.prototype[1] = 1; x = [0]; x.length = 2; x.pop() === 1. Actual: undefined
 built-ins/Array/prototype/pop/S15.4.4.6_A4_T2.js  # Array.prototype.pop called on incompatible receiver a data object.
+built-ins/Array/prototype/pop/call-with-boolean.js  # TypeError: Array.prototype.pop called on incompatible receiver a boolean.
+built-ins/Array/prototype/pop/clamps-to-integer-limit.js  # TypeError: Array.prototype.pop called on incompatible receiver a data object.
+built-ins/Array/prototype/pop/length-near-integer-limit.js  # TypeError: Array.prototype.pop called on incompatible receiver a data object.
 built-ins/Array/prototype/push/S15.4.4.7_A2_T1.js  # Array.prototype.push called on incompatible receiver a data object.
 built-ins/Array/prototype/push/S15.4.4.7_A2_T3.js  # Array.prototype.push called on incompatible receiver a data object.
 built-ins/Array/prototype/push/S15.4.4.7_A3.js  # The value of x[4294967295] is expected to be "x" Expected SameValue(«undefined», «"x"») to be true
@@ -85,10 +537,51 @@ built-ins/Array/prototype/push/S15.4.4.7_A4_T1.js  # Array.prototype.push called
 built-ins/Array/prototype/push/S15.4.4.7_A4_T2.js  # Array.prototype.push called on incompatible receiver a data object.
 built-ins/Array/prototype/push/S15.4.4.7_A4_T3.js  # Array.prototype.push called on incompatible receiver a data object.
 built-ins/Array/prototype/push/S15.4.4.7_A5_T1.js  # Array.prototype.push called on incompatible receiver a data object.
+built-ins/Array/prototype/push/call-with-boolean.js  # TypeError: Array.prototype.push called on incompatible receiver a boolean.
+built-ins/Array/prototype/push/clamps-to-integer-limit.js  # TypeError: Array.prototype.push called on incompatible receiver a data object.
+built-ins/Array/prototype/push/length-near-integer-limit.js  # TypeError: Array.prototype.push called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-1-10.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-1-11.js  # TypeError: Array.prototype.reduce called on incompatible receiver a Date.
+built-ins/Array/prototype/reduce/15.4.4.21-1-12.js  # TypeError: Array.prototype.reduce called on incompatible receiver a RegExp.
+built-ins/Array/prototype/reduce/15.4.4.21-1-13.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-1-14.js  # TypeError: Array.prototype.reduce called on incompatible receiver an Error.
+built-ins/Array/prototype/reduce/15.4.4.21-1-3.js  # TypeError: Array.prototype.reduce called on incompatible receiver a boolean.
+built-ins/Array/prototype/reduce/15.4.4.21-1-5.js  # TypeError: Array.prototype.reduce called on incompatible receiver a number.
+built-ins/Array/prototype/reduce/15.4.4.21-1-7.js  # TypeError: Array.prototype.reduce called on incompatible receiver a string.
 built-ins/Array/prototype/reduce/15.4.4.21-10-3.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/reduce/15.4.4.21-10-4.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/reduce/15.4.4.21-10-6.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/reduce/15.4.4.21-10-7.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
+built-ins/Array/prototype/reduce/15.4.4.21-2-1.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-2-14.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-2-17.js  # func(12, 11) Expected SameValue(«false», «true») to be true
+built-ins/Array/prototype/reduce/15.4.4.21-2-19.js  # TypeError: Array.prototype.reduce called on incompatible receiver a function.
+built-ins/Array/prototype/reduce/15.4.4.21-2-3.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/reduce/15.4.4.21-2-6.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/reduce/15.4.4.21-3-1.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-3-10.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-3-11.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-3-12.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-3-13.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-3-14.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-3-15.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-3-16.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-3-17.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-3-18.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-3-19.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-3-2.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-3-20.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-3-21.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-3-22.js  # toStringAccessed !== true
+built-ins/Array/prototype/reduce/15.4.4.21-3-23.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/reduce/15.4.4.21-3-24.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-3-25.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-3-3.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-3-4.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-3-5.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-3-6.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-3-7.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-3-9.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
 built-ins/Array/prototype/reduce/15.4.4.21-5-2.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/reduce/15.4.4.21-5-3.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/reduce/15.4.4.21-5-4.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
@@ -104,14 +597,77 @@ built-ins/Array/prototype/reduce/15.4.4.21-7-6.js  # … cannot be constructed: 
 built-ins/Array/prototype/reduce/15.4.4.21-7-7.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/reduce/15.4.4.21-7-8.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/reduce/15.4.4.21-7-9.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
+built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-1.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-29.js  # TypeError: Array.prototype.reduce called on incompatible receiver a function.
+built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-3.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-7.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
 built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-8.js  # Array.reduce of an empty array with no initial value.
 built-ins/Array/prototype/reduce/15.4.4.21-8-c-4.js  # Array.reduce of an empty array with no initial value.
 built-ins/Array/prototype/reduce/15.4.4.21-9-6.js  # res Expected SameValue(«"123"», «"1235"») to be true
+built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-1.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-29.js  # TypeError: Array.prototype.reduce called on incompatible receiver a function.
+built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-3.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-7.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
 built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-8.js  # testResult !== true
+built-ins/Array/prototype/reduce/15.4.4.21-9-c-ii-16.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-9-c-ii-18.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-9-c-ii-20.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-9-c-ii-21.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-9-c-ii-22.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-9-c-ii-23.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-9-c-ii-24.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-9-c-ii-25.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-9-c-ii-26.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-9-c-ii-30.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-9-c-ii-31.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-9-c-ii-32.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-9-c-ii-33.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-9-c-ii-34.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-9-c-ii-35.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-9-c-ii-37.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-9-c-ii-7.js  # Expected a Error but got a TypeError
+built-ins/Array/prototype/reduce/15.4.4.21-9-c-ii-8.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/call-with-boolean.js  # TypeError: Array.prototype.reduce called on incompatible receiver a boolean.
+built-ins/Array/prototype/reduceRight/15.4.4.22-1-10.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-1-11.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a Date.
+built-ins/Array/prototype/reduceRight/15.4.4.22-1-12.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a RegExp.
+built-ins/Array/prototype/reduceRight/15.4.4.22-1-13.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-1-14.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver an Error.
+built-ins/Array/prototype/reduceRight/15.4.4.22-1-3.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a boolean.
+built-ins/Array/prototype/reduceRight/15.4.4.22-1-5.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a number.
+built-ins/Array/prototype/reduceRight/15.4.4.22-1-7.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a string.
 built-ins/Array/prototype/reduceRight/15.4.4.22-10-3.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/reduceRight/15.4.4.22-10-4.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/reduceRight/15.4.4.22-10-6.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/reduceRight/15.4.4.22-10-7.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
+built-ins/Array/prototype/reduceRight/15.4.4.22-2-1.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-2-14.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-2-19.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a function.
+built-ins/Array/prototype/reduceRight/15.4.4.22-2-3.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/reduceRight/15.4.4.22-2-6.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/reduceRight/15.4.4.22-3-1.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-3-10.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-3-11.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-3-12.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-3-13.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-3-14.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-3-15.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-3-16.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-3-17.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-3-18.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-3-19.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-3-2.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-3-20.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-3-21.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-3-22.js  # toStringAccessed !== true
+built-ins/Array/prototype/reduceRight/15.4.4.22-3-24.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-3-25.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-3-3.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-3-4.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-3-5.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-3-6.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-3-7.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-3-9.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
 built-ins/Array/prototype/reduceRight/15.4.4.22-5-2.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/reduceRight/15.4.4.22-5-3.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/reduceRight/15.4.4.22-5-4.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
@@ -127,20 +683,50 @@ built-ins/Array/prototype/reduceRight/15.4.4.22-7-6.js  # … cannot be construc
 built-ins/Array/prototype/reduceRight/15.4.4.22-7-7.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/reduceRight/15.4.4.22-7-8.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/reduceRight/15.4.4.22-7-9.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
+built-ins/Array/prototype/reduceRight/15.4.4.22-8-b-iii-1-1.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-8-b-iii-1-29.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a function.
+built-ins/Array/prototype/reduceRight/15.4.4.22-8-b-iii-1-3.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/reduceRight/15.4.4.22-8-b-iii-1-7.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
 built-ins/Array/prototype/reduceRight/15.4.4.22-8-b-iii-1-8.js  # Array.reduceRight of an empty array with no initial value.
 built-ins/Array/prototype/reduceRight/15.4.4.22-8-c-4.js  # Array.reduceRight of an empty array with no initial value.
 built-ins/Array/prototype/reduceRight/15.4.4.22-9-6.js  # res Expected SameValue(«"91"», «"151"») to be true
+built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-i-1.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-i-29.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a function.
+built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-i-3.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-i-7.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
 built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-i-8.js  # testResult !== true
+built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-ii-16.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-ii-20.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-ii-21.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-ii-22.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-ii-23.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-ii-24.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-ii-25.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-ii-26.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-ii-30.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-ii-31.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-ii-32.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-ii-33.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-ii-34.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-ii-35.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-ii-37.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-ii-7.js  # Expected a Test262Error but got a TypeError
+built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-ii-8.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/call-with-boolean.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a boolean.
+built-ins/Array/prototype/reduceRight/length-near-integer-limit.js  # The value of acc.length is expected to be 2 Expected SameValue(«undefined», «2») to be true
 built-ins/Array/prototype/reverse/S15.4.4.8_A2_T1.js  # Array.prototype.reverse called on incompatible receiver a data object.
 built-ins/Array/prototype/reverse/S15.4.4.8_A3_T3.js  # Array.prototype.reverse called on incompatible receiver a data object.
 built-ins/Array/prototype/reverse/S15.4.4.8_A4_T1.js  # #1: Array.prototype[1] = 1; x = [0]; x.length = 2; x.reverse(); x[0] === 1. Actual: undefined
 built-ins/Array/prototype/reverse/S15.4.4.8_A4_T2.js  # Array.prototype.reverse called on incompatible receiver a data object.
+built-ins/Array/prototype/reverse/call-with-boolean.js  # TypeError: Array.prototype.reverse called on incompatible receiver a boolean.
+built-ins/Array/prototype/reverse/length-exceeding-integer-limit-with-object.js  # TypeError: Only init object properties are supported.
 built-ins/Array/prototype/shift/S15.4.4.9_A2_T1.js  # Array.prototype.shift called on incompatible receiver a data object.
 built-ins/Array/prototype/shift/S15.4.4.9_A2_T4.js  # Array.prototype.shift called on incompatible receiver a data object.
 built-ins/Array/prototype/shift/S15.4.4.9_A2_T5.js  # Array.prototype.shift called on incompatible receiver a data object.
 built-ins/Array/prototype/shift/S15.4.4.9_A3_T3.js  # Array.prototype.shift called on incompatible receiver a data object.
 built-ins/Array/prototype/shift/S15.4.4.9_A4_T1.js  # #2: Array.prototype[1] = 1; x = [0]; x.length = 2; x.shift(); x[0] === 1. Actual: undefined
 built-ins/Array/prototype/shift/S15.4.4.9_A4_T2.js  # Array.prototype.shift called on incompatible receiver a data object.
+built-ins/Array/prototype/shift/call-with-boolean.js  # TypeError: Array.prototype.shift called on incompatible receiver a boolean.
 built-ins/Array/prototype/slice/S15.4.4.10_A2.2_T5.js  # Array.slice expects end to be a number.
 built-ins/Array/prototype/slice/S15.4.4.10_A2_T1.js  # Array.prototype.slice called on incompatible receiver a data object.
 built-ins/Array/prototype/slice/S15.4.4.10_A2_T2.js  # Array.prototype.slice called on incompatible receiver a data object.
@@ -152,9 +738,89 @@ built-ins/Array/prototype/slice/S15.4.4.10_A3_T1.js  # Expected a RangeError but
 built-ins/Array/prototype/slice/S15.4.4.10_A3_T2.js  # Expected a RangeError but got a TypeError
 built-ins/Array/prototype/slice/S15.4.4.10_A3_T3.js  # Array.prototype.slice called on incompatible receiver a data object.
 built-ins/Array/prototype/slice/S15.4.4.10_A4_T1.js  # #3: Array.prototype[1] = 1; x = [0]; x.length = 2; var arr = x.slice(); arr.hasOwnProperty('…') === 
+built-ins/Array/prototype/slice/call-with-boolean.js  # TypeError: Array.prototype.slice called on incompatible receiver a boolean.
 built-ins/Array/prototype/slice/create-ctor-non-object.js  # null value Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Array/prototype/slice/length-exceeding-integer-limit-proxied-array.js  # ReferenceError: Unknown identifier '…'.
+built-ins/Array/prototype/slice/length-exceeding-integer-limit.js  # TypeError: Array.prototype.slice called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-1-10.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-1-11.js  # TypeError: Array.prototype.some called on incompatible receiver a Date.
+built-ins/Array/prototype/some/15.4.4.17-1-12.js  # TypeError: Array.prototype.some called on incompatible receiver a RegExp.
+built-ins/Array/prototype/some/15.4.4.17-1-13.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-1-14.js  # TypeError: Array.prototype.some called on incompatible receiver an Error.
+built-ins/Array/prototype/some/15.4.4.17-1-3.js  # TypeError: Array.prototype.some called on incompatible receiver a boolean.
+built-ins/Array/prototype/some/15.4.4.17-1-5.js  # TypeError: Array.prototype.some called on incompatible receiver a number.
+built-ins/Array/prototype/some/15.4.4.17-1-7.js  # TypeError: Array.prototype.some called on incompatible receiver a string.
+built-ins/Array/prototype/some/15.4.4.17-2-1.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-2-14.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-2-17.js  # func(9, 11) !== true
+built-ins/Array/prototype/some/15.4.4.17-2-19.js  # TypeError: Array.prototype.some called on incompatible receiver a function.
+built-ins/Array/prototype/some/15.4.4.17-2-3.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/some/15.4.4.17-2-6.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/some/15.4.4.17-3-1.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-3-10.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-3-11.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-3-12.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-3-13.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-3-14.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-3-15.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-3-16.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-3-17.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-3-18.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-3-19.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-3-2.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-3-20.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-3-21.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-3-22.js  # toStringAccessed !== true
+built-ins/Array/prototype/some/15.4.4.17-3-23.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/some/15.4.4.17-3-24.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-3-25.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-3-28.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-3-29.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-3-3.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-3-4.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-3-5.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-3-6.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-3-7.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-3-8.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-3-9.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-5-10.js  # [11].some(callbackfn, objArray) !== true
+built-ins/Array/prototype/some/15.4.4.17-5-14.js  # [11].some(callbackfn, Math) !== true
+built-ins/Array/prototype/some/15.4.4.17-5-15.js  # [11].some(callbackfn, objDate) !== true
+built-ins/Array/prototype/some/15.4.4.17-5-16.js  # [11].some(callbackfn, objRegExp) !== true
+built-ins/Array/prototype/some/15.4.4.17-5-17.js  # [11].some(callbackfn, JSON) !== true
+built-ins/Array/prototype/some/15.4.4.17-5-18.js  # [11].some(callbackfn, objError) !== true
+built-ins/Array/prototype/some/15.4.4.17-5-19.js  # [11].some(callbackfn, arg) !== true
+built-ins/Array/prototype/some/15.4.4.17-5-2.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/some/15.4.4.17-5-22.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/some/15.4.4.17-5-23.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/some/15.4.4.17-5-24.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/some/15.4.4.17-5-3.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/some/15.4.4.17-5-4.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/some/15.4.4.17-5-5.js  # TypeError: foo cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/some/15.4.4.17-5-6.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/prototype/some/15.4.4.17-5-9.js  # [11].some(callbackfn, objFunction) !== true
 built-ins/Array/prototype/some/15.4.4.17-7-6.js  # res Expected SameValue(«false», «true») to be true
+built-ins/Array/prototype/some/15.4.4.17-7-8.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-7-c-i-1.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-7-c-i-3.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/prototype/some/15.4.4.17-7-c-i-7.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
 built-ins/Array/prototype/some/15.4.4.17-7-c-i-8.js  # [, ].some(callbackfn) !== true
+built-ins/Array/prototype/some/15.4.4.17-7-c-ii-16.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-7-c-ii-17.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-7-c-ii-18.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-7-c-ii-19.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-7-c-ii-20.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-7-c-ii-21.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-7-c-ii-22.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-7-c-ii-23.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-7-c-ii-6.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-7-c-ii-7.js  # Expected a Error but got a TypeError
+built-ins/Array/prototype/some/15.4.4.17-7-c-ii-8.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-7-c-iii-1.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-7-c-iii-2.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-7-c-iii-26.js  # [11].some(callbackfn) !== true
+built-ins/Array/prototype/some/15.4.4.17-7-c-iii-3.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-7-c-iii-4.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
 built-ins/Array/prototype/some/15.4.4.17-8-10.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/some/15.4.4.17-8-2.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/some/15.4.4.17-8-3.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
@@ -163,8 +829,8 @@ built-ins/Array/prototype/some/15.4.4.17-8-5.js  # … cannot be constructed: us
 built-ins/Array/prototype/some/15.4.4.17-8-6.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/some/15.4.4.17-8-7.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/some/15.4.4.17-8-8.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
+built-ins/Array/prototype/some/call-with-boolean.js  # TypeError: Array.prototype.some called on incompatible receiver a boolean.
 built-ins/Array/prototype/sort/S15.4.4.11_A2.1_T3.js  # #1: Check ToString operator
-built-ins/Array/prototype/sort/S15.4.4.11_A2.2_T3.js  # #1: Check ToString operator
 built-ins/Array/prototype/sort/S15.4.4.11_A3_T1.js  # Array.prototype.sort called on incompatible receiver a data object.
 built-ins/Array/prototype/sort/S15.4.4.11_A3_T2.js  # Array.prototype.sort called on incompatible receiver a data object.
 built-ins/Array/prototype/sort/S15.4.4.11_A4_T3.js  # Array.prototype.sort called on incompatible receiver a data object.
@@ -181,38 +847,62 @@ built-ins/Array/prototype/splice/S15.4.4.12_A3_T3.js  # Array.prototype.splice c
 built-ins/Array/prototype/splice/S15.4.4.12_A4_T1.js  # Array.prototype.splice called on incompatible receiver a data object.
 built-ins/Array/prototype/splice/S15.4.4.12_A4_T2.js  # Array.prototype.splice called on incompatible receiver a data object.
 built-ins/Array/prototype/splice/S15.4.4.12_A4_T3.js  # Array.prototype.splice called on incompatible receiver a data object.
+built-ins/Array/prototype/splice/call-with-boolean.js  # TypeError: Array.prototype.splice called on incompatible receiver a boolean.
+built-ins/Array/prototype/splice/clamps-length-to-integer-limit.js  # TypeError: Array.prototype.splice called on incompatible receiver a data object.
 built-ins/Array/prototype/splice/create-ctor-non-object.js  # null value Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Array/prototype/splice/length-and-deleteCount-exceeding-integer-limit.js  # TypeError: Array.prototype.splice called on incompatible receiver a data object.
+built-ins/Array/prototype/splice/length-exceeding-integer-limit-shrink-array.js  # TypeError: Array.prototype.splice called on incompatible receiver a data object.
+built-ins/Array/prototype/splice/length-near-integer-limit-grow-array.js  # TypeError: Array.prototype.splice called on incompatible receiver a data object.
 built-ins/Array/prototype/toLocaleString/S15.4.4.3_A3_T1.js  # #1: var n = 0; var obj = {toLocaleString: function() {n++}}; Array.prototype[1] = obj; x = [obj]; x.
 built-ins/Array/prototype/toReversed/holes-not-preserved.js  # Actual [4, undefined, 2, undefined, 0] and expected [4, 3, 2, undefined, 0] should have the same con
+built-ins/Array/prototype/toReversed/length-casted-to-zero.js  # TypeError: Array.prototype.toReversed called on incompatible receiver a data object.
+built-ins/Array/prototype/toReversed/length-exceeding-array-length-limit.js  # TypeError: Only init object properties are supported.
+built-ins/Array/prototype/toReversed/length-tolength.js  # TypeError: Array.prototype.toReversed called on incompatible receiver a data object.
+built-ins/Array/prototype/toReversed/this-value-boolean.js  # TypeError: Array.prototype.toReversed called on incompatible receiver a boolean.
 built-ins/Array/prototype/toSorted/holes-not-preserved.js  # Actual [1, 3, 4, undefined, undefined] and expected [1, 2, 3, 4, undefined] should have the same con
+built-ins/Array/prototype/toSorted/length-casted-to-zero.js  # TypeError: Array.prototype.toSorted called on incompatible receiver a data object.
+built-ins/Array/prototype/toSorted/length-exceeding-array-length-limit.js  # TypeError: Only init object properties are supported.
+built-ins/Array/prototype/toSorted/length-tolength.js  # TypeError: Array.prototype.toSorted called on incompatible receiver a data object.
+built-ins/Array/prototype/toSorted/this-value-boolean.js  # TypeError: Array.prototype.toSorted called on incompatible receiver a boolean.
 built-ins/Array/prototype/toSpliced/holes-not-preserved.js  # Actual [0, undefined, 2, undefined, 4] and expected [0, undefined, 2, 3, 4] should have the same con
-built-ins/Array/prototype/toString/S15.4.4.2_A1_T4.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+built-ins/Array/prototype/toSpliced/length-casted-to-zero.js  # TypeError: Array.prototype.toSpliced called on incompatible receiver a data object.
+built-ins/Array/prototype/toSpliced/length-clamped-to-2pow53minus1.js  # TypeError: Array.prototype.toSpliced called on incompatible receiver a data object.
+built-ins/Array/prototype/toSpliced/length-exceeding-array-length-limit.js  # TypeError: Only init object properties are supported.
+built-ins/Array/prototype/toSpliced/length-tolength.js  # TypeError: Array.prototype.toSpliced called on incompatible receiver a data object.
+built-ins/Array/prototype/toSpliced/this-value-boolean.js  # TypeError: Array.prototype.toSpliced called on incompatible receiver a boolean.
 built-ins/Array/prototype/toString/S15.4.4.2_A3_T1.js  # #1: Array.prototype[1] = 1; x = [0]; x.length = 2; x.toString() === "0,1". Actual: 0,
+built-ins/Array/prototype/toString/call-with-boolean.js  # TypeError: Array.prototype.toString called on incompatible receiver a boolean.
 built-ins/Array/prototype/unshift/S15.4.4.13_A2_T1.js  # Array.prototype.unshift called on incompatible receiver a data object.
 built-ins/Array/prototype/unshift/S15.4.4.13_A2_T3.js  # Array.prototype.unshift called on incompatible receiver a data object.
 built-ins/Array/prototype/unshift/S15.4.4.13_A3_T2.js  # Array.prototype.unshift called on incompatible receiver a data object.
 built-ins/Array/prototype/unshift/S15.4.4.13_A4_T1.js  # Array.prototype.unshift called on incompatible receiver a data object.
 built-ins/Array/prototype/unshift/S15.4.4.13_A4_T2.js  # #3: Array.prototype[0] = 1; x = []; x.length = 1; x.unshift(0); x[1] === 1. Actual: undefined
+built-ins/Array/prototype/unshift/call-with-boolean.js  # TypeError: Array.prototype.unshift called on incompatible receiver a boolean.
+built-ins/Array/prototype/unshift/clamps-to-integer-limit.js  # TypeError: Array.prototype.unshift called on incompatible receiver a data object.
+built-ins/Array/prototype/unshift/length-near-integer-limit.js  # TypeError: Only init object properties are supported.
+built-ins/Array/prototype/with/length-exceeding-array-length-limit.js  # TypeError: Only init object properties are supported.
+built-ins/Array/prototype/with/length-tolength.js  # TypeError: Array.prototype.with called on incompatible receiver a data object.
+built-ins/Array/prototype/with/this-value-boolean.js  # TypeError: Array.prototype.with called on incompatible receiver a boolean.
+built-ins/Function/prototype/bind/15.3.4.5-2-6.js  # TypeError: Object(number) wrapper objects are not supported; use the primitive value directly.
+built-ins/Function/prototype/bind/15.3.4.5-20-2.js  # Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Function/prototype/bind/15.3.4.5-20-3.js  # Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Function/prototype/bind/15.3.4.5-21-2.js  # Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Function/prototype/bind/15.3.4.5-21-3.js  # Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Function/prototype/bind/S15.3.4.5_A1.js  # baz() throws a TypeError exception Expected a TypeError to be thrown but no exception was thrown at 
+built-ins/Function/prototype/bind/S15.3.4.5_A2.js  # baz() throws a TypeError exception Expected a TypeError to be thrown but no exception was thrown at 
 built-ins/Iterator/from/return-method-returns-iterator-result.js  # Iterator next must be a function.
 built-ins/Iterator/prototype/Symbol.iterator/is-function.js  # every built-in collection iterator shares one prototype, so its parent is Object.prototype
 built-ins/Iterator/prototype/drop/limit-tonumber-throws.js  # Expected a Test262Error but got a RangeError
 built-ins/Iterator/prototype/drop/limit-tonumber.js  # Iterator.prototype.drop expects a non-negative count, received NaN.
+built-ins/Iterator/prototype/drop/this-non-callable-next.js  # TypeError: Iterator next must be a function.
+built-ins/Iterator/prototype/filter/this-non-callable-next.js  # TypeError: Iterator next must be a function.
+built-ins/Iterator/prototype/flatMap/this-non-callable-next.js  # TypeError: Iterator next must be a function.
+built-ins/Iterator/prototype/map/this-non-callable-next.js  # TypeError: Iterator next must be a function.
 built-ins/Iterator/prototype/take/limit-tonumber-throws.js  # Expected a Test262Error but got a RangeError
 built-ins/Iterator/prototype/take/limit-tonumber.js  # Iterator.prototype.take expects a non-negative count, received NaN.
 built-ins/Object/is/not-same-value-x-y-object.js  # Object(number) wrapper objects are not supported; use the primitive value directly.
 built-ins/Object/is/same-value-x-y-object.js  # Object(number) wrapper objects are not supported; use the primitive value directly.
-language/expressions/does-not-equals/S11.9.2_A7.8.js  # #1: (true != {valueOf: function() {return 1}}) === false
-language/expressions/does-not-equals/S11.9.2_A7.9.js  # #1: ({valueOf: function() {return 1}} != true) === false
-language/expressions/equals/S11.9.1_A7.8.js  # #1: ({valueOf: function() {return 1}} == true) === true
-language/expressions/equals/S11.9.1_A7.9.js  # #1: (true == {valueOf: function() {return 1}}) === true
-language/expressions/equals/S9.1_A1_T3.js  # #1: var object = {valueOf: function() {return 1}, toString: function() {return 0}}; object + "" ===
 built-ins/Object/freeze/throws-when-false.js  # Unknown identifier 'Proxy'.
-built-ins/Object/getPrototypeOf/15.2.3.2-2-12.js  # Object.getPrototypeOf(EvalError) Expected SameValue(«», «Error») to be true
-built-ins/Object/getPrototypeOf/15.2.3.2-2-13.js  # Object.getPrototypeOf(RangeError) Expected SameValue(«», «Error») to be true
-built-ins/Object/getPrototypeOf/15.2.3.2-2-14.js  # Object.getPrototypeOf(ReferenceError) Expected SameValue(«», «Error») to be true
-built-ins/Object/getPrototypeOf/15.2.3.2-2-15.js  # Object.getPrototypeOf(SyntaxError) Expected SameValue(«», «Error») to be true
-built-ins/Object/getPrototypeOf/15.2.3.2-2-16.js  # Object.getPrototypeOf(TypeError) Expected SameValue(«», «Error») to be true
-built-ins/Object/getPrototypeOf/15.2.3.2-2-17.js  # Object.getPrototypeOf(URIError) Expected SameValue(«», «Error») to be true
 built-ins/Object/getPrototypeOf/15.2.3.2-2-2.js  # … cannot be constructed: user-defined constructors and classes are not supported.
 built-ins/Object/isExtensible/15.2.3.13-2-24.js  # … cannot be constructed: user-defined constructors and classes are not supported.
 built-ins/Object/isExtensible/15.2.3.13-2-25.js  # … cannot be constructed: user-defined constructors and classes are not supported.
@@ -220,12 +910,21 @@ built-ins/Object/isExtensible/15.2.3.13-2-26.js  # … cannot be constructed: us
 built-ins/Object/isExtensible/15.2.3.13-2-27.js  # … cannot be constructed: user-defined constructors and classes are not supported.
 built-ins/Object/preventExtensions/15.2.3.10-3-24.js  # … cannot be constructed: user-defined constructors and classes are not supported.
 built-ins/Object/preventExtensions/throws-when-false.js  # Unknown identifier 'Proxy'.
+built-ins/Iterator/prototype/take/this-non-callable-next.js  # TypeError: Iterator next must be a function.
+language/arguments-object/10.6-13-c-1-s.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/arguments-object/10.6-14-c-4-s.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/arguments-object/10.6-2gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/arguments-object/S10.6_A3_T1.js  # #1: arguments object doesn't exists
 language/expressions/tagged-template/constructor-invocation.js  # The called value cannot be constructed: user-defined constructors and classes are not supported.
 language/expressions/tagged-template/template-object-frozen-strict.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/this/11.1.1-1.js  # Expected SameValue(«undefined», «undefined») to be false
 language/statements/async-generator/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/statements/async-generator/dstr/dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/async-generator/dstr/dflt-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/statements/async-generator/return-undefined-implicit-and-explicit.js  # Actual ["tick 1", "tick 2", "g1 ret", "g2 ret", "g3 ret", "g4 ret"] and expected ["tick 1", "g1 ret"
 language/statements/const/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/const/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/statements/for-await-of/async-func-decl-dstr-obj-empty-bool.js  # TypeError: Object destructuring requires a data object or array value, received a boolean.
 language/statements/for-await-of/async-func-decl-dstr-obj-empty-num.js  # TypeError: Object destructuring requires a data object or array value, received a number.
 language/statements/for-await-of/async-func-decl-dstr-obj-empty-string.js  # TypeError: Object destructuring requires a data object or array value, received a string.
@@ -238,49 +937,91 @@ language/statements/for-await-of/async-gen-decl-dstr-obj-rest-number.js  # TypeE
 language/statements/for-await-of/async-gen-decl-dstr-obj-rest-str-val.js  # TypeError: Object destructuring requires a data object or array value, received a string.
 language/statements/for-in/S12.6.4_A7_T2.js  # for...in visits keys deleted during the loop
 language/statements/for-in/order-enumerable-shadowed.js  # Object.create property descriptors are not supported; assign the fields after creating the object.
+language/statements/for-in/S12.6.4_A6.1.js  # TypeError: FACTORY cannot be constructed: user-defined constructors and classes are not supported. C
+language/statements/for-in/S12.6.4_A6.js  # TypeError: FACTORY cannot be constructed: user-defined constructors and classes are not supported. C
 language/statements/for-of/dstr/array-elem-iter-rtrn-close-err.js  # Iterator next must be a function.
 language/statements/for-of/dstr/array-elem-iter-thrw-close-err.js  # Expected SameValue(«1», «0») to be true
+language/statements/for-of/dstr/array-elem-iter-thrw-close.js  # Expected SameValue(«1», «0») to be true
 language/statements/for-of/dstr/array-elem-trlg-iter-list-thrw-close-err.js  # Expected SameValue(«1», «0») to be true
+language/statements/for-of/dstr/array-elem-trlg-iter-list-thrw-close.js  # Expected SameValue(«1», «0») to be true
 language/statements/for-of/dstr/array-elem-trlg-iter-rest-rtrn-close-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
 language/statements/for-of/dstr/array-elem-trlg-iter-rest-rtrn-close-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/for-of/dstr/array-elem-trlg-iter-rest-rtrn-close.js  # Expected SameValue(«11», «1») to be true
 language/statements/for-of/dstr/array-elem-trlg-iter-rest-thrw-close-err.js  # Expected SameValue(«11», «1») to be true
+language/statements/for-of/dstr/array-elem-trlg-iter-rest-thrw-close.js  # Expected SameValue(«11», «1») to be true
 language/statements/for-of/dstr/array-rest-iter-rtrn-close-err.js  # Iterator next must be a function.
 language/statements/for-of/dstr/array-rest-iter-rtrn-close-null.js  # Iterator next must be a function.
+language/statements/for-of/dstr/array-rest-iter-rtrn-close.js  # Test262Error
 language/statements/for-of/dstr/array-rest-iter-thrw-close-err.js  # Expected SameValue(«11», «0») to be true
+language/statements/for-of/dstr/array-rest-iter-thrw-close.js  # Expected SameValue(«11», «0») to be true
 language/statements/for-of/dstr/array-rest-lref-err.js  # Expected SameValue(«1», «0») to be true
 language/statements/for-of/dstr/const-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/for-of/dstr/const-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/statements/for-of/dstr/let-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/for-of/dstr/let-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/statements/for-of/dstr/obj-empty-bool.js  # Object destructuring requires a data object or array value, received a boolean.
 language/statements/for-of/dstr/obj-empty-num.js  # Object destructuring requires a data object or array value, received a number.
 language/statements/for-of/dstr/obj-empty-string.js  # Object destructuring requires a data object or array value, received a string.
 language/statements/for-of/dstr/obj-rest-number.js  # Object destructuring requires a data object or array value, received a number.
 language/statements/for-of/dstr/obj-rest-str-val.js  # Object destructuring requires a data object or array value, received a string.
 language/statements/for-of/dstr/var-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/for-of/dstr/var-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/statements/for-of/throw-from-catch.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 language/statements/for-of/throw-from-finally.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 language/statements/for-of/throw.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 language/statements/for/dstr/const-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/for/dstr/const-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/statements/for/dstr/let-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/for/dstr/let-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/statements/for/dstr/var-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError but got a ReferenceError
+language/statements/for/dstr/var-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
+language/statements/function/13.2-1-s.js  # TypeError: foo cannot be constructed: user-defined constructors and classes are not supported. Call 
 language/statements/function/13.2-19-b-3gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/function/13.2-2-s.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/function/13.2-3-s.js  # TypeError: foo cannot be constructed: user-defined constructors and classes are not supported. Call 
+language/statements/function/13.2-4-s.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/function/S13.2.2_A10.js  # #1: var obj = new FACTORY() does not lead to throwing exception. Actual: Exception is TypeError: FAC
+language/statements/function/S13.2.2_A12.js  # #1: var obj = new FACTORY() does not lead to throwing exception. Actual: Exception is TypeError: FAC
+language/statements/function/S13.2.2_A15_T1.js  # TypeError: __FACTORY cannot be constructed: user-defined constructors and classes are not supported.
+language/statements/function/S13.2.2_A15_T2.js  # TypeError: __FACTORY cannot be constructed: user-defined constructors and classes are not supported.
+language/statements/function/S13.2.2_A15_T3.js  # TypeError: __FACTORY cannot be constructed: user-defined constructors and classes are not supported.
+language/statements/function/S13.2.2_A15_T4.js  # TypeError: __FACTORY cannot be constructed: user-defined constructors and classes are not supported.
+language/statements/function/S13.2.2_A16_T1.js  # TypeError: The called value cannot be constructed: user-defined constructors and classes are not sup
+language/statements/function/S13.2.2_A16_T2.js  # TypeError: The called value cannot be constructed: user-defined constructors and classes are not sup
+language/statements/function/S13.2.2_A16_T3.js  # TypeError: The called value cannot be constructed: user-defined constructors and classes are not sup
 language/statements/function/S13.2.2_A1_T1.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 language/statements/function/S13.2.2_A1_T2.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 language/statements/function/S13.2.2_A2.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 language/statements/function/S13.2.2_A3_T1.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 language/statements/function/S13.2.2_A3_T2.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
+language/statements/function/S13.2.2_A4_T1.js  # TypeError: __FACTORY cannot be constructed: user-defined constructors and classes are not supported.
+language/statements/function/S13.2.2_A4_T2.js  # TypeError: __FACTORY cannot be constructed: user-defined constructors and classes are not supported.
+language/statements/function/S13.2.2_A5_T1.js  # TypeError: __FACTORY cannot be constructed: user-defined constructors and classes are not supported.
+language/statements/function/S13.2.2_A5_T2.js  # TypeError: __FACTORY cannot be constructed: user-defined constructors and classes are not supported.
+language/statements/function/S13.2.2_A6_T1.js  # TypeError: __func cannot be constructed: user-defined constructors and classes are not supported. Ca
+language/statements/function/S13.2.2_A6_T2.js  # TypeError: __func cannot be constructed: user-defined constructors and classes are not supported. Ca
+language/statements/function/S13.2.2_A7_T1.js  # TypeError: __func cannot be constructed: user-defined constructors and classes are not supported. Ca
+language/statements/function/S13.2.2_A7_T2.js  # TypeError: __func cannot be constructed: user-defined constructors and classes are not supported. Ca
+language/statements/function/S13.2.2_A8_T1.js  # TypeError: __func cannot be constructed: user-defined constructors and classes are not supported. Ca
+language/statements/function/S13.2.2_A8_T2.js  # TypeError: __func cannot be constructed: user-defined constructors and classes are not supported. Ca
 language/statements/function/S13.2_A1_T1.js  # #1: __func.prototype !== undefined
 language/statements/function/S13.2_A1_T2.js  # #1: __func.prototype !== undefined
 language/statements/function/S13.2_A4_T1.js  # Unknown identifier '…'.
 language/statements/function/S13.2_A4_T2.js  # #1: typeof __gunc.prototype === '…'. Actual: typeof __gunc.prototype ===undefined
 language/statements/function/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/function/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/statements/function/dstr/dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/generators/default-proto.js  # generator functions have no GeneratorFunction.prototype
+language/statements/function/dstr/dflt-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/statements/generators/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/generators/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/statements/generators/dstr/dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/generators/prototype-relation-to-function.js  # generator functions have no GeneratorFunction.prototype
+language/statements/generators/dstr/dflt-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
+language/statements/generators/restricted-properties.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/labeled/value-await-non-module.js  # Failed to parse TypeScript: Expression expected.
 language/statements/let/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/let/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/statements/return/S12.9_A1_T1.js  # expected SyntaxError but the program ran
 language/statements/return/S12.9_A1_T10.js  # expected SyntaxError but the program ran
 language/statements/return/S12.9_A1_T2.js  # expected SyntaxError but the program ran
@@ -291,5 +1032,68 @@ language/statements/return/S12.9_A1_T6.js  # expected SyntaxError but the progra
 language/statements/return/S12.9_A1_T7.js  # expected SyntaxError but the program ran
 language/statements/return/S12.9_A1_T8.js  # expected SyntaxError but the program ran
 language/statements/return/S12.9_A1_T9.js  # expected SyntaxError but the program ran
+language/statements/try/S12.14_A17.js  # TypeError: Integer cannot be constructed: user-defined constructors and classes are not supported. C
 language/statements/try/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/try/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
+language/statements/variable/S12.2_A11.js  # TypeError: Cannot read properties of undefined (reading '…').
+language/statements/variable/S12.2_A9.js  # #1: When using property attributes, {DontEnum} not used
 language/statements/variable/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/variable/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
+built-ins/Array/prototype/entries/returns-iterator-from-object.js  # TypeError: Array.prototype.entries called on incompatible receiver a data object.
+built-ins/Array/prototype/keys/returns-iterator-from-object.js  # TypeError: Array.prototype.keys called on incompatible receiver a data object.
+built-ins/Array/prototype/toReversed/frozen-this-value.js  # TypeError: Array.prototype.toReversed called on incompatible receiver a data object.
+built-ins/Array/prototype/toSorted/frozen-this-value.js  # TypeError: Array.prototype.toSorted called on incompatible receiver a data object.
+built-ins/Array/prototype/toSpliced/frozen-this-value.js  # TypeError: Array.prototype.toSpliced called on incompatible receiver a data object.
+built-ins/Array/prototype/values/returns-iterator-from-object.js  # TypeError: Array.prototype.values called on incompatible receiver a data object.
+built-ins/Object/getPrototypeOf/15.2.3.2-2-30.js  # TypeError: Object.getPrototypeOf cannot convert undefined to an object.
+built-ins/Object/isExtensible/15.2.3.13-2-1.js  # Expected true but got false
+built-ins/Object/isExtensible/15.2.3.13-2-29.js  # Object.isExtensible(this) !== true
+built-ins/Object/isFrozen/15.2.3.12-3-1.js  # Expected true but got false
+built-ins/Object/isSealed/15.2.3.11-4-1.js  # Expected true but got false
+built-ins/Array/prototype/every/15.4.4.16-1-15.js  # TypeError: Array.prototype.every called on incompatible receiver an Arguments.
+built-ins/Array/prototype/every/15.4.4.16-7-c-i-25.js  # TypeError: Array.prototype.every called on incompatible receiver an Arguments.
+built-ins/Array/prototype/every/15.4.4.16-7-c-i-26.js  # TypeError: Array.prototype.every called on incompatible receiver an Arguments.
+built-ins/Array/prototype/every/15.4.4.16-7-c-i-27.js  # TypeError: Array.prototype.every called on incompatible receiver an Arguments.
+built-ins/Array/prototype/filter/15.4.4.20-1-15.js  # TypeError: Array.prototype.filter called on incompatible receiver an Arguments.
+built-ins/Array/prototype/filter/15.4.4.20-2-17.js  # TypeError: Array.prototype.filter called on incompatible receiver an Arguments.
+built-ins/Array/prototype/filter/15.4.4.20-9-c-i-25.js  # TypeError: Array.prototype.filter called on incompatible receiver an Arguments.
+built-ins/Array/prototype/filter/15.4.4.20-9-c-i-26.js  # TypeError: Array.prototype.filter called on incompatible receiver an Arguments.
+built-ins/Array/prototype/filter/15.4.4.20-9-c-i-27.js  # TypeError: Array.prototype.filter called on incompatible receiver an Arguments.
+built-ins/Array/prototype/forEach/15.4.4.18-1-15.js  # TypeError: Array.prototype.forEach called on incompatible receiver an Arguments.
+built-ins/Array/prototype/forEach/15.4.4.18-7-c-i-25.js  # TypeError: Array.prototype.forEach called on incompatible receiver an Arguments.
+built-ins/Array/prototype/forEach/15.4.4.18-7-c-i-26.js  # TypeError: Array.prototype.forEach called on incompatible receiver an Arguments.
+built-ins/Array/prototype/forEach/15.4.4.18-7-c-i-27.js  # TypeError: Array.prototype.forEach called on incompatible receiver an Arguments.
+built-ins/Array/prototype/indexOf/15.4.4.14-1-15.js  # TypeError: Array.prototype.indexOf called on incompatible receiver an Arguments.
+built-ins/Array/prototype/indexOf/15.4.4.14-9-b-i-25.js  # TypeError: Array.prototype.indexOf called on incompatible receiver an Arguments.
+built-ins/Array/prototype/indexOf/15.4.4.14-9-b-i-26.js  # TypeError: Array.prototype.indexOf called on incompatible receiver an Arguments.
+built-ins/Array/prototype/indexOf/15.4.4.14-9-b-i-27.js  # TypeError: Array.prototype.indexOf called on incompatible receiver an Arguments.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-1-15.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver an Arguments.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-b-i-25.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver an Arguments.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-b-i-26.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver an Arguments.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-b-i-27.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver an Arguments.
+built-ins/Array/prototype/map/15.4.4.19-1-15.js  # TypeError: Array.prototype.map called on incompatible receiver an Arguments.
+built-ins/Array/prototype/map/15.4.4.19-2-17.js  # TypeError: Array.prototype.map called on incompatible receiver an Arguments.
+built-ins/Array/prototype/map/15.4.4.19-8-c-i-25.js  # TypeError: Array.prototype.map called on incompatible receiver an Arguments.
+built-ins/Array/prototype/map/15.4.4.19-8-c-i-26.js  # TypeError: Array.prototype.map called on incompatible receiver an Arguments.
+built-ins/Array/prototype/map/15.4.4.19-8-c-i-27.js  # TypeError: Array.prototype.map called on incompatible receiver an Arguments.
+built-ins/Array/prototype/reduce/15.4.4.21-1-15.js  # TypeError: Array.prototype.reduce called on incompatible receiver an Arguments.
+built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-25.js  # TypeError: Array.prototype.reduce called on incompatible receiver an Arguments.
+built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-26.js  # TypeError: Array.prototype.reduce called on incompatible receiver an Arguments.
+built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-27.js  # TypeError: Array.prototype.reduce called on incompatible receiver an Arguments.
+built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-25.js  # TypeError: Array.prototype.reduce called on incompatible receiver an Arguments.
+built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-26.js  # TypeError: Array.prototype.reduce called on incompatible receiver an Arguments.
+built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-27.js  # TypeError: Array.prototype.reduce called on incompatible receiver an Arguments.
+built-ins/Array/prototype/reduceRight/15.4.4.22-1-15.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver an Arguments.
+built-ins/Array/prototype/reduceRight/15.4.4.22-2-17.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver an Arguments.
+built-ins/Array/prototype/reduceRight/15.4.4.22-8-b-iii-1-25.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver an Arguments.
+built-ins/Array/prototype/reduceRight/15.4.4.22-8-b-iii-1-26.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver an Arguments.
+built-ins/Array/prototype/reduceRight/15.4.4.22-8-b-iii-1-27.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver an Arguments.
+built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-i-25.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver an Arguments.
+built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-i-26.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver an Arguments.
+built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-i-27.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver an Arguments.
+built-ins/Array/prototype/some/15.4.4.17-1-15.js  # TypeError: Array.prototype.some called on incompatible receiver an Arguments.
+built-ins/Array/prototype/some/15.4.4.17-7-c-i-25.js  # TypeError: Array.prototype.some called on incompatible receiver an Arguments.
+built-ins/Array/prototype/some/15.4.4.17-7-c-i-26.js  # TypeError: Array.prototype.some called on incompatible receiver an Arguments.
+built-ins/Array/prototype/some/15.4.4.17-7-c-i-27.js  # TypeError: Array.prototype.some called on incompatible receiver an Arguments.
+built-ins/parseFloat/S15.1.2.3_A7.5.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/parseInt/S15.1.2.2_A9.5.js  # TypeError: Cannot read properties of undefined (reading '…').

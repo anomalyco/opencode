@@ -9,7 +9,6 @@ import {
   type VideoModelOptions,
   type VideoOptions,
   type VideoRequestFor,
-  type VideoRoute,
 } from "../src/index.js"
 import type { Service } from "../src/video-client.js"
 import { Anthropic, Fal, Google, OpenAI, Runway, XAI } from "../src/providers.js"
@@ -23,8 +22,7 @@ type VeoLikeOptions = {
   readonly personGeneration?: "allow_all" | "allow_adult"
 } & Record<string, unknown>
 
-declare const route: VideoRoute<VeoLikeOptions>
-const veo = VideoModel.make<VeoLikeOptions>({ id: "veo", provider: "google", route })
+declare const veo: VideoModel<VeoLikeOptions>
 // @ts-expect-error Extracted model options retain known provider fields.
 const invalidVeoOptions: VideoModelOptions<typeof veo> = { personGeneration: "everyone" }
 void invalidVeoOptions
@@ -99,6 +97,8 @@ Video.generate({ model: google, prompt: "A kitten", durationSeconds: "8s" })
 Video.generate({ model: google, prompt: "A kitten", options: { personGeneration: "allow_all" } })
 
 declare const generic: VideoModel<VideoOptions>
+const widenVideo = <Options extends VideoOptions>(model: VideoModel<Options>): VideoModel => model
+void widenVideo
 Video.generate({ model: generic, prompt: "A kitten", providerOptions: { arbitrary: true } })
 
 const request = Video.request({ model: veo, prompt: "A kitten", providerOptions: { personGeneration: "allow_all" } })
