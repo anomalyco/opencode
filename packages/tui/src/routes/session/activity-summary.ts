@@ -17,7 +17,7 @@ type Item = {
 
 /**
  * Summary for an activity group's subtree; permission-blocked tools are left out.
- * `current` is the first running entry, shown in place of the summary until something finishes.
+ * Until something finishes, the label is the first running item's status, e.g. "Running command…".
  */
 export function summarizeActivity(
   node: Extract<SessionNode, { type: "group" }>,
@@ -38,10 +38,17 @@ export function summarizeActivity(
   const files = new Set(
     entries.flatMap((entry) => (entry.type === "message" ? instructionPaths(message(entry.messageID)) : [])),
   )
-  return {
-    ...activitySummary(items, files.size, closed),
-    current: items.find((item) => isActive(item, closed))?.entry,
-  }
+  const summary = activitySummary(items, files.size, closed)
+  const current = items.find((item) => isActive(item, closed))
+  return { ...summary, label: summary.label || (current ? busyLabel(current.part) : "") }
+}
+
+/** Status for a running item, independent of its details, so it doesn't flicker as they arrive. */
+export function busyLabel(part: Item["part"]) {
+  if (part.type === "reasoning") return "Thinking…"
+  const name = canonicalToolName(part.name)
+  const noun = name === "shell" ? "command" : name === "execute" ? "code" : name
+  return `${part.state.status === "streaming" ? "Preparing" : "Running"} ${noun}…`
 }
 
 /**

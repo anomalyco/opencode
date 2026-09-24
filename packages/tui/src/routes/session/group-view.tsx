@@ -208,15 +208,7 @@ function ActivityGroup(props: GroupProps) {
   const summary = createMemo(() => summarizeActivity(props.node, props.message, props.pending, props.completed))
   return (
     <GroupAnchor groupID={disclosure.id()} active={summary().label !== ""}>
-      {/* Until something finishes there is nothing to summarize; show the one running item. */}
-      <Show
-        when={summary().label}
-        fallback={
-          <Show when={summary().current}>
-            {(entry) => <Children {...props} nodes={[{ type: "entry", size: 1, entry: entry() }]} mode="normal" />}
-          </Show>
-        }
-      >
+      <Show when={summary().label}>
         <InlineToolRow
           icon={summary().failed ? "✗" : disclosure.expanded() ? "−" : "+"}
           iconColor={summary().failed ? theme.text.feedback.error.base : undefined}

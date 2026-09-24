@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client"
-import { activitySummary, summarizeActivity } from "../../../src/routes/session/activity-summary"
+import { activitySummary, busyLabel, summarizeActivity } from "../../../src/routes/session/activity-summary"
 import {
   append,
   groupRefs,
@@ -261,16 +261,30 @@ test("a thought still streaming counts as finished once a later row closes its g
   expect(activitySummary(items, 0, true)).toEqual({ label: "1 thought, 1 read", active: false, failed: false })
 })
 
-test("until something finishes, the summary reports the first running entry", () => {
+test("until something finishes, the label is the first running item's status", () => {
   const open = {
-    ...assistant("a", [tool("e1", "edit", "running"), tool("e2", "edit", "running")]),
+    ...assistant("a", [tool("e1", "edit", "running"), tool("s1", "shell", "running")]),
     time: { created: 1 },
   }
   const activity = reduceSessionRows([open], new Set(), false, "low")[0]
   if (activity.type !== "group") throw new Error("Expected activity")
-  const summary = summarizeActivity(activity, () => open, [], false)
-  expect(summary.label).toBe("")
-  expect(summary.current).toEqual({ type: "part", ref: { messageID: "a", partID: "e1" } })
+  expect(summarizeActivity(activity, () => open, [], false)).toEqual({
+    label: "Running edit…",
+    active: true,
+    failed: false,
+  })
+})
+
+test("busy labels depend only on the tool and whether it is still being prepared", () => {
+  const streaming: SessionMessageAssistantTool = {
+    ...tool("s", "bash", "running"),
+    state: { status: "streaming", input: "" },
+  }
+  expect(busyLabel(streaming)).toBe("Preparing command…")
+  expect(busyLabel(tool("s", "shell", "running"))).toBe("Running command…")
+  expect(busyLabel(tool("r", "read", "running"))).toBe("Running read…")
+  expect(busyLabel(tool("x", "execute", "running"))).toBe("Running code…")
+  expect(busyLabel({ type: "reasoning", text: "", time: { created: 1 } })).toBe("Thinking…")
 })
 
 test("a finished execute with no nested calls counts as one tool", () => {

@@ -153,7 +153,7 @@ test("retains nested expansion state and registers exact headers and parts", asy
   expect(anchors.list()).toEqual([])
 })
 
-test("a low activity group with nothing finished shows only its first running item", async () => {
+test("a low activity group with nothing finished stays collapsed behind a status", async () => {
   const config = createTuiResolvedConfig({ animations: false })
   const shell = (id: string) => ({
     type: "tool" as const,
@@ -192,7 +192,8 @@ test("a low activity group with nothing finished shows only its first running it
   })
   try {
     app.renderer.start()
-    await app.waitForFrame((frame) => frame.includes("Shell one"))
+    await app.waitForFrame((frame) => frame.includes("Running command…"))
+    expect(app.captureCharFrame()).not.toContain("Shell one")
     expect(app.captureCharFrame()).not.toContain("Shell two")
   } finally {
     app.renderer.destroy()
