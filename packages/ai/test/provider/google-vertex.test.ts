@@ -431,7 +431,7 @@ describe("Google Vertex providers", () => {
       const tunedModel = GoogleVertex.configure(vertex).model("endpoints/1234567890")
       const tuned = yield* request(tunedModel)
       expect(tuned.body.tools?.[0]?.functionDeclarations[0]?.parametersJsonSchema).toEqual(normalized)
-      const optedOut = yield* request(LanguageModel.update(tunedModel, { compatibility: { toolSchema: "none" } }))
+      const optedOut = yield* request(LanguageModel.update(tunedModel, { compatibility: { sanitizer: false } }))
       expect(optedOut.body.tools?.[0]?.functionDeclarations[0]?.parametersJsonSchema).toEqual(inputSchema)
       const geminiChat = yield* request(GoogleVertexChat.configure(vertex).model("google/gemini-3.8-flash"))
       expect(geminiChat.body.tools?.[0]?.function.parameters).toEqual(normalized)

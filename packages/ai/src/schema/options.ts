@@ -152,9 +152,9 @@ export const ReasoningEffort = Schema.declare<ReasoningEffort>(
   { title: "ReasoningEffort" },
 )
 
-/** Tool schema rules for a model family. `none` opts out of the protocol and model-name defaults. */
-export const LanguageModelToolSchemaCompatibility = Schema.Literals(["gemini", "moonshot", "none"])
-export type LanguageModelToolSchemaCompatibility = Schema.Schema.Type<typeof LanguageModelToolSchemaCompatibility>
+/** Tool schema sanitizer for a model family. `false` opts out of the protocol and model-name defaults. */
+export const LanguageModelSanitizerCompatibility = Schema.Literals(["gemini", "moonshot", false])
+export type LanguageModelSanitizerCompatibility = Schema.Schema.Type<typeof LanguageModelSanitizerCompatibility>
 
 export const LanguageModelMaxTokensFieldCompatibility = Schema.Literals(["max_completion_tokens", "max_tokens"])
 export type LanguageModelMaxTokensFieldCompatibility = Schema.Schema.Type<
@@ -164,7 +164,7 @@ export type LanguageModelMaxTokensFieldCompatibility = Schema.Schema.Type<
 export class LanguageModelCompatibility extends Schema.Class<LanguageModelCompatibility>(
   "LLM.LanguageModelCompatibility",
 )({
-  toolSchema: Schema.optional(LanguageModelToolSchemaCompatibility),
+  sanitizer: Schema.optional(LanguageModelSanitizerCompatibility),
   reasoningField: Schema.optional(Schema.String),
   /** Require every assistant message to include its reasoning field, even when empty. */
   requireReasoning: Schema.optional(Schema.Boolean),

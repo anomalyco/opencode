@@ -84,18 +84,18 @@ describe("tool schema projections", () => {
 
       expect(yield* parameters(route.model({ id: "google/Gemini-3.8-Flash" }))).toEqual(gemini)
       expect(
-        yield* parameters(route.model({ id: "my-tuned-endpoint", compatibility: { toolSchema: "gemini" } })),
+        yield* parameters(route.model({ id: "my-tuned-endpoint", compatibility: { sanitizer: "gemini" } })),
       ).toEqual(gemini)
       expect(
-        yield* parameters(route.model({ id: "google/gemini-3.8-flash", compatibility: { toolSchema: "moonshot" } })),
+        yield* parameters(route.model({ id: "google/gemini-3.8-flash", compatibility: { sanitizer: "moonshot" } })),
       ).toEqual(moonshot)
       expect(yield* parameters(route.model({ id: "moonshotai/Kimi-K3" }))).toEqual(moonshot)
       expect(
-        yield* parameters(route.model({ id: "google/gemini-3.8-flash", compatibility: { toolSchema: "none" } })),
+        yield* parameters(route.model({ id: "google/gemini-3.8-flash", compatibility: { sanitizer: false } })),
       ).toEqual(original)
-      expect(
-        yield* parameters(route.model({ id: "moonshotai/Kimi-K3", compatibility: { toolSchema: "none" } })),
-      ).toEqual(original)
+      expect(yield* parameters(route.model({ id: "moonshotai/Kimi-K3", compatibility: { sanitizer: false } }))).toEqual(
+        original,
+      )
       expect(yield* parameters(route.model({ id: "gpt-6-luna" }))).toEqual(original)
     }),
   )
@@ -104,7 +104,7 @@ describe("tool schema projections", () => {
     Effect.gen(function* () {
       const model = OpenAIChat.route
         .with({ endpoint: { baseURL: "https://api.openai.test/v1/" }, auth: Auth.bearer("test") })
-        .model({ id: "kimi-k2", compatibility: { toolSchema: "moonshot" } })
+        .model({ id: "kimi-k2", compatibility: { sanitizer: "moonshot" } })
       const prepared = yield* compileRequest(
         LLM.request({
           model,
