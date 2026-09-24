@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import { Video } from "../../src/index.js"
 import { Fal } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
-import { videoPoll } from "./video-recording.js"
+import { queuedPoll } from "./queued-recording.js"
 
 const model = Fal.configure({
   apiKey: process.env.FAL_KEY ?? "fixture",
@@ -29,7 +29,7 @@ describe("fal Video recorded", () => {
             resolution: "720p",
             providerOptions: { duration: "4s" },
           },
-          { poll: videoPoll },
+          { poll: queuedPoll },
         )
 
         expect(response.videos).toHaveLength(1)

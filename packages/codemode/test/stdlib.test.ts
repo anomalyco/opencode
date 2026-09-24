@@ -1173,7 +1173,7 @@ describe("TextEncoder and TextDecoder", () => {
   test("crypto.getRandomValues fills the given bytes in place", async () => {
     expect(
       await value(
-        `const b = new Uint8Array(16); const same = crypto.getRandomValues(b) === b; return [same, b.length, b.some ? 0 : Array.from(b).some((n) => n !== 0)]`,
+        `const b = new Uint8Array(16); const same = crypto.getRandomValues(b) === b; return [same, b.length, b.some((n) => n !== 0)]`,
       ),
     ).toEqual([true, 16, true])
     expect((await error(`crypto.getRandomValues([1])`)).message).toContain("expects a Uint8Array, received an array")
@@ -1535,8 +1535,8 @@ describe("stdlib integration", () => {
     ).toEqual([true, false, true, false])
   })
 
-  test("Object.is rejects opaque runtime references", async () => {
-    expect((await error(`return Object.is(Math.max, Math.max)`)).kind).toBe("InvalidDataValue")
+  test("Object.is compares opaque runtime references by identity", async () => {
+    expect(await value(`return [Object.is(Math.max, Math.max), Object.is(Math.max, Math.min)]`)).toEqual([true, false])
   })
 
   test("Object values and entries accept arrays", async () => {
@@ -1921,5 +1921,99 @@ describe("CodeMode values at intra-CodeMode checkpoints", () => {
     )
     expect(result.ok).toBe(true)
     expect(observed).toStrictEqual([{ when: "1970-01-01T00:00:00.000Z", tags: {} }])
+  })
+})
+
+describe("Uint8Array callback methods", () => {
+  test("map and filter return new Uint8Arrays with clamped bytes", async () => {
+    expect(
+      await value(`
+      const b = new Uint8Array([1, 2, 3])
+      const mapped = b.map((byte) => byte * 100)
+      const filtered = b.filter((byte) => byte > 1)
+      mapped[0] = 9
+      return [
+        [...mapped], mapped instanceof Uint8Array, Array.isArray(mapped), [...b], [...filtered],
+        [...b.map(() => "7")], b.map((byte) => byte, {}).length, [...new Uint8Array().map((byte) => byte)],
+      ]
+    `),
+    ).toEqual([[9, 200, 44], true, false, [1, 2, 3], [2, 3], [7, 7, 7], 3, []])
+  })
+
+  test("find, findIndex, findLast, findLastIndex, some, every, and forEach", async () => {
+    expect(
+      await value(`
+      const b = new Uint8Array([1, 2, 3])
+      const seen = []
+      b.forEach((byte, index, array) => seen.push([byte, index, array === b]))
+      return [
+        b.find((byte) => byte > 1), b.find((byte) => byte > 5) === undefined, b.findIndex((byte) => byte > 1),
+        b.findIndex((byte) => byte > 5), b.findLast((byte) => byte < 3), b.findLastIndex((byte) => byte < 3),
+        b.findLastIndex((byte) => byte > 9), b.some((byte) => byte > 2), b.every((byte) => byte > 2),
+        new Uint8Array().some(() => true), new Uint8Array().every(() => false),
+        b.every((byte, index, array) => array === b), seen,
+      ]
+    `),
+    ).toEqual([
+      2,
+      true,
+      1,
+      -1,
+      2,
+      1,
+      -1,
+      true,
+      false,
+      false,
+      true,
+      true,
+      [
+        [1, 0, true],
+        [2, 1, true],
+        [3, 2, true],
+      ],
+    ])
+  })
+
+  test("reduce and reduceRight", async () => {
+    expect(
+      await value(`
+      const b = new Uint8Array([1, 2, 3])
+      return [
+        b.reduce((sum, byte) => sum + byte), b.reduce((sum, byte) => sum + byte, 10),
+        b.reduceRight((text, byte) => text + byte, ""), new Uint8Array().reduce((sum, byte) => sum + byte, 5),
+        b.reduce((_, byte, index, array) => array === b && index, 0),
+      ]
+    `),
+    ).toEqual([6, 16, "321", 5, 2])
+    expect((await error(`new Uint8Array().reduce((sum, byte) => sum + byte)`)).message).toContain(
+      "Uint8Array.reduce of an empty array with no initial value",
+    )
+    expect((await error(`new Uint8Array().reduceRight((sum, byte) => sum + byte)`)).message).toContain(
+      "Uint8Array.reduceRight of an empty array with no initial value",
+    )
+    expect((await error(`new Uint8Array([1]).map(null)`)).message).toContain("Uint8Array.map expects a function")
+  })
+
+  test("sort is numeric by default and in place, with an optional comparator", async () => {
+    expect(
+      await value(`
+      const b = new Uint8Array([10, 9, 1])
+      const same = b.sort() === b
+      const desc = new Uint8Array([3, 1, 2]).sort((x, y) => y - x)
+      return [same, [...b], [...desc], desc instanceof Uint8Array, [...new Uint8Array([2, 1]).sort(() => NaN)]]
+    `),
+    ).toEqual([true, [1, 9, 10], [3, 2, 1], true, [2, 1]])
+    expect((await error(`new Uint8Array([2, 1]).sort(null)`)).message).toContain("Uint8Array.sort expects a function")
+  })
+
+  test("lastIndexOf treats an explicit undefined fromIndex as 0", async () => {
+    expect(
+      await value(`
+      const a = [1, 2, 1]
+      const b = new Uint8Array([1, 2, 1])
+      return [a.lastIndexOf(1, undefined), a.lastIndexOf(1), a.lastIndexOf(2, undefined), b.lastIndexOf(1, undefined), b.lastIndexOf(1)]
+    `),
+    ).toEqual([0, 2, -1, 0, 2])
   })
 })

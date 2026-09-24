@@ -1,11 +1,11 @@
 import { Effect, Schema } from "effect"
 import type { HttpClientResponse } from "effect/unstable/http"
 import { ImageModel, ImageResponse, type ImageRequestFor } from "../image.js"
-import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderID, mergeJsonRecords, type AIError } from "../schema/index.js"
+import { ProviderID, mergeJsonRecords } from "../schema/index.js"
 import { ProviderShared } from "./shared.js"
+import { GeminiGenerateContent } from "./utils/gemini-generate-content.js"
 import { MediaInput } from "./utils/media-input.js"
 
 const ADAPTER = "google-images"
@@ -102,25 +102,6 @@ const generationConfig = (request: Request) => {
   )
 }
 
-// Gemini does not fetch public URLs; inline payloads or Gemini Files references are the only accepted inputs.
-const imagePart = (asset: Media.Asset): Effect.Effect<Record<string, unknown>, AIError> => {
-  const inline = asset.inline()
-  if (inline) return Effect.succeed({ inlineData: { mimeType: inline.mime, data: inline.base64 } })
-  const id = MediaInput.refID(asset, PROVIDER)
-  if (id) return Effect.succeed({ fileData: { mimeType: asset.mediaType, fileUri: id } })
-  if (asset.source.type === "ref")
-    return Effect.fail(
-      ProviderShared.invalidRequest(
-        "Google generateContent requires Gemini file references rather than other providers' file IDs",
-      ),
-    )
-  return Effect.fail(
-    ProviderShared.invalidRequest(
-      "Google generateContent does not fetch public image URLs; use bytes, a data URL, or a Gemini file reference",
-    ),
-  )
-}
-
 const fromRequest = Effect.fn("GoogleImages.fromRequest")(function* (request: Request) {
   if (request.n !== undefined && request.n > 1)
     return yield* ProviderShared.unsupportedOperation({
@@ -129,7 +110,7 @@ const fromRequest = Effect.fn("GoogleImages.fromRequest")(function* (request: Re
       route: ADAPTER,
       message: `${NAME} generates one image per request; call it once per image instead of n=${request.n}`,
     })
-  const parts = yield* Effect.forEach(request.images ?? [], imagePart)
+  const parts = yield* Effect.forEach(request.images ?? [], (image) => GeminiGenerateContent.mediaPart(NAME, image))
   return MediaProtocol.json(
     mergeJsonRecords(
       {

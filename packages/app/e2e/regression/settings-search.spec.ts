@@ -30,6 +30,19 @@ function projectList(count: number) {
   }))
 }
 
+async function persistProjects(page: Page, projects: ReturnType<typeof projectList>) {
+  await page.evaluate((projects) => {
+    const value = JSON.parse(localStorage.getItem("opencode.global.dat:server") ?? "{}")
+    localStorage.setItem(
+      "opencode.global.dat:server",
+      JSON.stringify({
+        ...value,
+        projects: { ...value.projects, local: projects.map((project) => ({ worktree: project.canonical })) },
+      }),
+    )
+  }, projects)
+}
+
 function ui(page: Page) {
   const settings = page.getByTestId("settings-screen")
   return {
@@ -50,6 +63,14 @@ test.use({ viewport: { width: 1280, height: 900 } })
 test.beforeEach(async ({ page }) => {
   await mockOpenCodeServer(page, config)
   await page.route("https://api.github.com/**", (route) => route.fulfill({ json: [] }))
+  await page.addInitScript((directory) => {
+    const value = JSON.parse(localStorage.getItem("opencode.global.dat:server") ?? "{}")
+    if (value.projects?.local) return
+    localStorage.setItem(
+      "opencode.global.dat:server",
+      JSON.stringify({ ...value, projects: { ...value.projects, local: [{ worktree: directory, expanded: true }] } }),
+    )
+  }, directory)
   await page.goto("/")
   if ((page.viewportSize()?.width ?? 1280) < 800) await page.getByRole("button", { name: "Tabs", exact: true }).click()
   await page.getByRole("button", { name: "Settings", exact: true }).click()
@@ -156,7 +177,7 @@ test("empty queries keep the closing quote beside the ellipsis while typing and 
   await expect(status).toHaveText('No results for "zzzzzzzzzzx"')
 })
 
-test("Models and Shortcuts autofocus their filters on normal navigation", async ({ page }) => {
+test("Models and Shortcuts leave focus on navigation", async ({ page }) => {
   const view = ui(page)
   for (const entry of [
     { tab: "Models", search: "Search models" },
@@ -164,12 +185,178 @@ test("Models and Shortcuts autofocus their filters on normal navigation", async 
     { tab: "Models", search: "Search models" },
   ]) {
     await view.settings.getByRole("tab", { name: entry.tab, exact: true }).click()
-    await expect(view.settings.getByRole("searchbox", { name: entry.search, exact: true })).toBeFocused()
+    await expect(view.settings.getByRole("searchbox", { name: entry.search, exact: true })).not.toBeFocused()
   }
   await view.search.fill("shortcuts")
   const result = view.results.getByRole("option", { name: "Keyboard shortcuts", exact: true })
   await result.click()
   await expect(result).toBeFocused()
+})
+
+test("Shortcuts search keeps focus while filtering", async ({ page }) => {
+  const view = ui(page)
+  await view.settings.getByRole("tab", { name: "Shortcuts", exact: true }).click()
+  const search = view.settings.getByRole("searchbox", { name: "Search shortcuts", exact: true })
+  await search.press("p")
+  await expect(search).toBeFocused()
+  await page.keyboard.type("alette")
+  await expect(search).toHaveValue("palette")
+  await expect(view.settings.getByText("Command palette", { exact: true })).toBeVisible()
+})
+
+test("section searches share controls and hierarchical Escape behavior", async ({ page }) => {
+  const projects = projectList(8)
+  await page.route("**/api/project", (route) => route.fulfill({ json: projects }))
+  await persistProjects(page, projects)
+  await page.reload()
+  const view = ui(page)
+
+  for (const [index, entry] of [
+    { tab: "Projects", label: "Search projects", query: "missing-project" },
+    { tab: "Shortcuts", label: "Search shortcuts", query: "missing-shortcut" },
+    { tab: "Models", label: "Search models", query: "missing-model" },
+  ].entries()) {
+    if (index > 0) {
+      await page.getByRole("button", { name: "Settings", exact: true }).click()
+      await expect(view.settings).toBeVisible()
+    }
+    await view.settings.getByRole("tab", { name: entry.tab, exact: true }).click()
+    const field = view.settings.locator('[data-component="settings-filter-search"]')
+    const search = field.getByRole("searchbox", { name: entry.label, exact: true })
+    await expect(field).toHaveCount(1)
+    await expect(field.locator('[data-slot="text-input-v2-leading-icon"]')).toBeVisible()
+    await expect(search).not.toBeFocused()
+
+    await page.keyboard.type(entry.query)
+    await expect(search).toBeFocused()
+    await expect(search).toHaveValue(entry.query)
+    await expect(view.settings.getByText(`No results for "${entry.query}"`, { exact: true })).toBeVisible()
+    const clear = field.getByRole("button", { name: "Clear", exact: true })
+    await expect(clear).toHaveAttribute("data-variant", "clear")
+    await clear.click()
+    await expect(search).toHaveValue("")
+    await expect(search).toBeFocused()
+
+    await search.fill(`${entry.query} `.repeat(20))
+    await search.press("End")
+    await expect(search).toHaveAttribute("data-overflow-start", "true")
+    await search.press("Home")
+    await expect(search).toHaveAttribute("data-overflow-start", "false")
+    await expect(search).toHaveAttribute("data-overflow-end", "true")
+    await search.press("Escape")
+    await expect(search).toHaveValue("")
+    await expect(search).toBeFocused()
+    await expect(view.settings).toBeVisible()
+
+    await search.press("Escape")
+    await expect(search).not.toBeFocused()
+    await expect(view.settings).toBeFocused()
+    await expect(view.settings).toBeVisible()
+
+    await page.keyboard.press("Escape")
+    await expect(view.settings).toBeHidden()
+    await expect(page).toHaveURL("/")
+  }
+})
+
+for (const count of [7, 8]) {
+  test(`Projects search uses the full list threshold with ${count} projects`, async ({ page }) => {
+    const inventory = projectList(count)
+    await page.route("**/api/project", (route) => route.fulfill({ json: inventory }))
+    await persistProjects(page, inventory)
+    await page.reload()
+    const view = ui(page)
+    await view.search.fill("OpenCode")
+    await expect(view.results.getByRole("option")).toHaveCount(count)
+    await view.search.clear()
+    await view.settings.getByRole("tab", { name: "Projects", exact: true }).click()
+    const search = view.settings.getByRole("searchbox", { name: "Search projects", exact: true })
+    const projects = view.settings.getByRole("button", { name: /^OpenCode / })
+    await expect(projects).toHaveCount(count)
+    if (count === 7) {
+      await expect(search).toHaveCount(0)
+      return
+    }
+    await expect(search).not.toBeFocused()
+    await search.fill("  CODE 06  ")
+    await expect(projects).toHaveCount(1)
+    await expect(projects).toHaveAccessibleName("OpenCode 06")
+    await expect(search).toBeVisible()
+    await search.fill("missing-project")
+    await expect(projects).toHaveCount(0)
+    await expect(view.settings.getByText('No results for "missing-project"', { exact: true })).toBeVisible()
+    await view.settings.getByRole("button", { name: "Clear", exact: true }).click()
+    await expect(search).toBeFocused()
+    await expect(projects).toHaveCount(count)
+    await view.settings.getByRole("tab", { name: "Models", exact: true }).click()
+    await view.settings.getByRole("tab", { name: "Projects", exact: true }).click()
+    await expect(search).not.toBeFocused()
+    await search.fill("OpenCode 06")
+    await projects.click()
+    await expect(view.settings.getByRole("heading", { name: "OpenCode 06", exact: true })).toBeVisible()
+  })
+}
+
+test("Projects shows an add action in its empty state", async ({ page }) => {
+  await page.route("**/api/project", (route) => route.fulfill({ json: [] }))
+  await persistProjects(page, [])
+  await page.reload()
+  const view = ui(page)
+  await view.settings.getByRole("tab", { name: "Projects", exact: true }).click()
+  await expect(view.settings.getByText("No projects yet", { exact: true })).toBeVisible()
+  await expect(view.settings.getByText("Add a project to get started", { exact: true })).toBeVisible()
+  const emptyCard = view.settings.locator('[data-component="settings-project-empty-card"]')
+  await expect(emptyCard).toHaveCSS("border-radius", "8px")
+  await expect(emptyCard).toHaveCSS("padding-top", "96px")
+  await expect(emptyCard).toHaveCSS("padding-bottom", "96px")
+  const emptyBackground = await emptyCard.evaluate((element) => {
+    const probe = document.createElement("div")
+    probe.style.background =
+      "color-mix(in oklab, var(--v2-background-bg-base) 50%, var(--v2-background-bg-layer-01))"
+    element.append(probe)
+    const color = getComputedStyle(probe).backgroundColor
+    probe.remove()
+    return color
+  })
+  await expect(emptyCard).toHaveCSS("background-color", emptyBackground)
+  const add = view.settings.getByRole("button", { name: "Add project", exact: true })
+  await expect(add).toHaveCount(1)
+  await add.click()
+  const picker = page.getByRole("dialog", { name: "Open project", exact: true })
+  await expect(picker).toBeVisible()
+  await picker.getByRole("button", { name: "Cancel", exact: true }).click()
+  await expect(picker).toBeHidden()
+})
+
+test("a single project uses the full grouped hover surface", async ({ page }) => {
+  const view = ui(page)
+  await view.settings.getByRole("tab", { name: "Projects", exact: true }).click()
+  const list = view.settings.getByRole("list")
+  const project = list.getByRole("listitem")
+  await expect(project).toHaveCount(1)
+  await expect
+    .poll(() =>
+      project.evaluate((item) => {
+        const row = item.getBoundingClientRect()
+        const group = item.parentElement?.parentElement?.getBoundingClientRect()
+        if (!group) return []
+        return [row.top - group.top, row.left - group.left, group.right - row.right, group.bottom - row.bottom]
+      }),
+    )
+    .toEqual([0, 0, 0, 0])
+})
+
+test("Projects search renders with a qualifying persisted inventory", async ({ page }) => {
+  const projects = projectList(8)
+  await page.route("**/api/project", (route) => route.fulfill({ json: projects }))
+  await persistProjects(page, projects)
+  await page.reload()
+  const view = ui(page)
+  const search = view.settings.getByRole("searchbox", { name: "Search projects", exact: true })
+  await view.settings.getByRole("tab", { name: "Projects", exact: true }).click()
+  await expect(search).toBeVisible()
+  await expect(search).not.toBeFocused()
+  await expect(view.settings.getByRole("button", { name: /^OpenCode / })).toHaveCount(8)
 })
 
 test("all indexed client controls resolve to visible production controls", async ({ page }) => {
@@ -207,11 +394,13 @@ test("qualified project results preserve query and selection on return", async (
 })
 
 test("returning from a project restores a scrolled result list", async ({ page }) => {
+  const projects = projectList(30)
   await page.route("**/api/project", (route) =>
     route.fulfill({
-      json: projectList(30),
+      json: projects,
     }),
   )
+  await persistProjects(page, projects)
   await page.reload()
   const view = ui(page)
   await view.search.fill("OpenCode")
@@ -313,14 +502,17 @@ test("multi-server results navigate to the named server and hide search in neste
       body: Buffer.from(await response.arrayBuffer()),
     })
   })
-  await page.addInitScript(
-    (server) =>
-      localStorage.setItem(
-        "opencode.global.dat:server",
-        JSON.stringify({ list: [{ type: "http", displayName: "Build server", http: { url: server } }] }),
-      ),
-    server,
-  )
+  await page.addInitScript((server) => {
+    const value = JSON.parse(localStorage.getItem("opencode.global.dat:server") ?? "{}")
+    localStorage.setItem(
+      "opencode.global.dat:server",
+      JSON.stringify({
+        ...value,
+        list: [{ type: "http", displayName: "Build server", http: { url: server } }],
+        projects: { ...value.projects, [server]: [{ worktree: "/remote/opencode", expanded: true }] },
+      }),
+    )
+  }, server)
   await page.reload()
   const view = ui(page)
   await view.search.fill("MCPs")
@@ -334,6 +526,13 @@ test("multi-server results navigate to the named server and hide search in neste
   await view.search.fill("Build server models")
   await view.results.getByRole("option").click()
   await expect(view.settings.getByRole("searchbox", { name: "Search models", exact: true })).toBeFocused()
+  await view.settings.getByRole("button", { name: "Back to settings", exact: true }).click()
+  await view.search.fill("Build server projects")
+  await view.results.getByRole("option").click()
+  await expect(view.settings.getByRole("heading", { name: "Projects", exact: true })).toBeVisible()
+  await expect(view.settings.getByRole("button", { name: "Add project", exact: true })).toBeVisible()
+  await expect(view.settings.getByRole("list").getByRole("listitem")).toHaveCount(1)
+  await expect(view.settings.getByRole("button", { name: "OpenCode", exact: true })).toBeVisible()
   await view.settings.getByRole("button", { name: "Back to settings", exact: true }).click()
   await view.search.fill("Build server OpenCode name")
   await expect(view.results.getByRole("option")).toHaveCount(1)

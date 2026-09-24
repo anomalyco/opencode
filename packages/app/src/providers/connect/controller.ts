@@ -23,12 +23,20 @@ export function consoleIntegration(provider: string) {
   return CONSOLE_PROVIDERS.has(provider) ? CONSOLE_INTEGRATION : provider
 }
 
-function hiddenDefaults(method: ProviderConnectMethod | undefined) {
-  return Object.fromEntries(
-    (method?.form ?? []).flatMap((field) =>
-      field.type !== "external" && field.hidden && field.default !== undefined ? [[field.key, field.default]] : [],
-    ),
-  ) as FormAnswer
+export function providerFormDefaults(fields: ProviderConnectMethod["form"]) {
+  return (fields ?? []).reduce<FormAnswer>((answer, field) => {
+    if (field.type === "external" || !field.hidden || field.default === undefined) return answer
+    const active = (field.when ?? []).every((condition) => {
+      const actual = answer[condition.key]
+      if (actual === undefined) return false
+      const equal = Array.isArray(actual)
+        ? typeof condition.value === "string" && actual.includes(condition.value)
+        : actual === condition.value
+      return condition.op === "eq" ? equal : !equal
+    })
+    if (!active) return answer
+    return { ...answer, [field.key]: field.default }
+  }, {})
 }
 
 export function createProviderConnectionController(options: {
@@ -39,6 +47,8 @@ export function createProviderConnectionController(options: {
   onComplete: () => void
   /** Picks the method to start without asking when the integration exposes several. */
   autoSelect?: (methods: ProviderConnectMethod[]) => number | undefined
+  /** Runs after the catalogs refresh; returning false keeps the dialog on a retryable error. */
+  prepare?: (active: () => boolean) => Promise<boolean>
   pollInterval?: number
 }) {
   const language = useLanguage()
@@ -49,6 +59,7 @@ export function createProviderConnectionController(options: {
     const directory = options.directory()
     return directory ? { directory } : undefined
   }
+  const isConsole = () => options.provider() === CONSOLE_INTEGRATION
   // Not createResource: the dialog is owned by whichever page opened it, so reading a pending
   // resource here would suspend that page's <Suspense> and blank the screen behind the dialog.
   const [integration, setIntegration] = createStore({
@@ -85,9 +96,14 @@ export function createProviderConnectionController(options: {
     formAnswer: undefined as FormAnswer | undefined,
     // Nothing is in flight until a method is selected; `busy()` reads this, so a truthy initial
     // value would keep multi-method providers on the spinner instead of the method list.
-    state: undefined as "pending" | "complete" | "error" | "form" | undefined,
+    state: undefined as "pending" | "waiting" | "refreshing" | "ready" | "error" | "form" | undefined,
     error: undefined as string | undefined,
     auto: false,
+    // The credential is stored; a retry only needs to reload the catalogs.
+    connected: false,
+    browserFailed: false,
+    // The attempt is still open on the server; a retry resumes polling it.
+    statusFailed: false,
   })
   const polling = {
     generation: 0,
@@ -112,26 +128,21 @@ export function createProviderConnectionController(options: {
     | { type: "auth.form" }
     | { type: "auth.answer"; answer: FormAnswer | undefined }
     | { type: "auth.pending" }
-    | { type: "auth.complete"; authorization: Authorization }
+    | { type: "auth.waiting"; authorization: Authorization }
     | { type: "auth.error"; error: string }
 
   const dispatch = (action: Action) => {
     setStore(
       produce((draft) => {
-        if (action.type === "method.select") {
-          draft.methodIndex = action.index
+        if (action.type === "method.select" || action.type === "method.reset") {
+          draft.methodIndex = action.type === "method.select" ? action.index : undefined
           draft.authorization = undefined
           draft.formAnswer = undefined
           draft.state = undefined
           draft.error = undefined
-          return
-        }
-        if (action.type === "method.reset") {
-          draft.methodIndex = undefined
-          draft.authorization = undefined
-          draft.formAnswer = undefined
-          draft.state = undefined
-          draft.error = undefined
+          draft.connected = false
+          draft.browserFailed = false
+          draft.statusFailed = false
           return
         }
         if (action.type === "auth.form") {
@@ -150,8 +161,8 @@ export function createProviderConnectionController(options: {
           draft.error = undefined
           return
         }
-        if (action.type === "auth.complete") {
-          draft.state = "complete"
+        if (action.type === "auth.waiting") {
+          draft.state = "waiting"
           draft.authorization = action.authorization
           draft.error = undefined
           return
@@ -162,6 +173,7 @@ export function createProviderConnectionController(options: {
     )
   }
 
+  const errorMessage = (error: unknown) => (error instanceof Error ? error.message : String(error))
   const cancelAttempt = () => {
     const attempt = polling.attempt
     polling.attempt = undefined
@@ -179,16 +191,28 @@ export function createProviderConnectionController(options: {
   const finish = async () => {
     cancelPolling()
     polling.attempt = undefined
+    const generation = polling.generation
+    const active = () => !polling.disposed && generation === polling.generation
+    setStore({ connected: true, state: "refreshing", error: undefined })
     const ref = location()
     data.location.integration.invalidate(ref)
     data.location.provider.invalidate(ref)
     data.location.model.invalidate(ref)
-    await Promise.all([
+    const refreshed = await Promise.all([
       data.location.integration.sync(ref),
       data.location.provider.sync(ref),
       data.location.model.sync(ref),
-    ]).catch(() => undefined)
-    if (polling.disposed) return
+    ])
+      .then(() => true)
+      .catch(() => false)
+    if (!active()) return
+    const prepared = refreshed && options.prepare ? await options.prepare(active) : refreshed
+    if (!active()) return
+    if (!prepared && options.prepare) {
+      dispatch({ type: "auth.error", error: language.t("provider.connect.console.refreshFailed") })
+      return
+    }
+    setStore("state", "ready")
     options.onComplete()
   }
   const poll = async (authorization: Authorization, generation: number) => {
@@ -202,10 +226,10 @@ export function createProviderConnectionController(options: {
       .catch((error) => ({ ok: false as const, error }))
     if (polling.disposed || generation !== polling.generation) return
     if (!result.ok) {
-      polling.attempt = undefined
+      setStore("statusFailed", true)
       dispatch({
         type: "auth.error",
-        error: result.error instanceof Error ? result.error.message : String(result.error),
+        error: isConsole() ? language.t("provider.connect.console.statusFailed") : errorMessage(result.error),
       })
       return
     }
@@ -215,19 +239,41 @@ export function createProviderConnectionController(options: {
     }
     if (result.status.status === "failed") {
       polling.attempt = undefined
-      dispatch({ type: "auth.error", error: result.status.message })
+      const message = result.status.message
+      dispatch({
+        type: "auth.error",
+        error:
+          isConsole() && message.includes("expired_token")
+            ? language.t("provider.connect.console.expired")
+            : isConsole() && message.includes("access_denied")
+              ? language.t("provider.connect.console.denied")
+              : message,
+      })
       return
     }
     if (result.status.status === "expired") {
       polling.attempt = undefined
-      dispatch({ type: "auth.error", error: language.t("provider.connect.oauth.expired") })
+      dispatch({
+        type: "auth.error",
+        error: language.t(isConsole() ? "provider.connect.console.expired" : "provider.connect.oauth.expired"),
+      })
       return
     }
     polling.timer = setTimeout(() => void poll(authorization, generation), options.pollInterval ?? 1_000)
   }
-  const open = () => {
+  const open = async () => {
     const url = store.authorization?.url
-    if (url) platform.openExternal(url)
+    if (!url) return
+    const generation = polling.generation
+    const opened = await Promise.resolve()
+      .then(() => {
+        if (platform.openBrowser) return platform.openBrowser(url)
+        platform.openExternal(url)
+        return true
+      })
+      .catch(() => false)
+    if (polling.disposed || generation !== polling.generation) return
+    setStore("browserFailed", !opened)
   }
   const select = async (index: number, answer?: FormAnswer) => {
     cancelPolling()
@@ -240,14 +286,14 @@ export function createProviderConnectionController(options: {
       dispatch({ type: "auth.form" })
       return
     }
-    const merged = { ...hiddenDefaults(selected), ...answer }
+    const merged = { ...providerFormDefaults(selected.form), ...answer }
     if (selected.type === "key") {
       dispatch({ type: "auth.answer", answer: Object.keys(merged).length ? merged : undefined })
       return
     }
     if (selected.type !== "oauth") return
     if (selected.form?.some((field) => field.type !== "string")) {
-      dispatch({ type: "auth.error", error: "This authentication form contains unsupported fields" })
+      dispatch({ type: "auth.error", error: language.t("provider.connect.error.unsupportedFields") })
       return
     }
     dispatch({ type: "auth.pending" })
@@ -259,9 +305,11 @@ export function createProviderConnectionController(options: {
         location: location(),
       })
       .then((response) => {
-        if (options.provider() === CONSOLE_INTEGRATION && platform.platform === "desktop") {
+        if (isConsole() && platform.platform === "desktop") {
           const url = new URL(response.data.url)
           url.searchParams.set("client_id", "opencode-desktop")
+          // Lets the Console return link focus the window that started the sign-in.
+          url.searchParams.set("return_window", platform.windowID)
           response.data.url = url.href
         }
         return { ok: true as const, authorization: response.data }
@@ -281,21 +329,28 @@ export function createProviderConnectionController(options: {
     if (!result.ok) {
       dispatch({
         type: "auth.error",
-        error: result.error instanceof Error ? result.error.message : String(result.error),
+        error: isConsole() ? language.t("provider.connect.console.startFailed") : errorMessage(result.error),
       })
       return
     }
     polling.attempt = result.authorization
-    dispatch({ type: "auth.complete", authorization: result.authorization })
+    dispatch({ type: "auth.waiting", authorization: result.authorization })
     // Same as `opencode auth login`: hand the user straight to the browser instead of
     // asking them to click a link and retype a code.
-    platform.openExternal(result.authorization.url)
+    void open()
     if (result.authorization.mode === "auto") void poll(result.authorization, generation)
   }
-  const retry = () => {
+  const retry = async () => {
+    if (store.connected) return finish()
+    const authorization = store.authorization
+    if (store.statusFailed && authorization) {
+      polling.attempt = authorization
+      setStore({ state: "waiting", error: undefined, statusFailed: false })
+      return poll(authorization, polling.generation)
+    }
     const index = store.methodIndex
     if (index === undefined) return
-    void select(index, store.formAnswer)
+    return select(index, store.formAnswer)
   }
   const reset = () => {
     cancelPolling()
@@ -323,10 +378,7 @@ export function createProviderConnectionController(options: {
       })
       .then(() => ({ ok: true as const }))
       .catch((error) => ({ ok: false as const, error }))
-    if (!result.ok) {
-      const message = result.error instanceof Error ? result.error.message : String(result.error)
-      return message || language.t("provider.connect.oauth.code.invalid")
-    }
+    if (!result.ok) return errorMessage(result.error) || language.t("provider.connect.oauth.code.invalid")
     await finish()
     return undefined
   }
@@ -350,6 +402,7 @@ export function createProviderConnectionController(options: {
     currentMethod,
     methodIndex: () => store.methodIndex,
     authorization: () => store.authorization,
+    browserFailed: () => store.browserFailed,
     // True while nothing useful can be shown yet: the integration is loading, a method is
     // about to be picked automatically, or the authorization request is in flight.
     busy: () =>
@@ -363,6 +416,7 @@ export function createProviderConnectionController(options: {
       reset,
       retry,
       open,
+      refresh: finish,
       connectKey,
       completeCode,
     },

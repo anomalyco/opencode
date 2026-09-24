@@ -253,9 +253,9 @@ export const errorText = (error: unknown) => {
 
 /**
  * `framing` step for Server-Sent Events. Decodes UTF-8, runs the SSE channel
- * decoder, optionally filters named events, and drops empty and bare `null`
- * events. `[DONE]` is dropped by default or retained for protocols that use it
- * as their stream boundary. Retry control events are ignored without
+ * decoder, optionally filters named events, and drops empty events and known
+ * keepalives that proxies send as data. `[DONE]` is dropped by default or
+ * retained for protocols that use it as their stream boundary. Retry control events are ignored without
  * interrupting the stream. Decoder failures become provider output errors so
  * the public error channel stays `AIError`.
  */
@@ -291,6 +291,9 @@ export const sseFraming = (
         // `data: null`, between events or after `[DONE]`. No protocol has a
         // null event, so it carries nothing and must not abort the stream.
         event.data !== "null" &&
+        // Vertex AI partner models (e.g. `xai/grok-4.6`) send their SSE
+        // keepalive comment as `data: : keepalive` while reasoning.
+        event.data !== ": keepalive" &&
         (event.data !== "[DONE]" || includeDone || (events !== undefined && event.event !== "message")),
     ),
     Stream.map((event) => event.data),

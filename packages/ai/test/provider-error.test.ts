@@ -196,6 +196,10 @@ describe("provider error classification", () => {
         classifyProviderFailure({ message: messages.error.message, rawBody: JSON.stringify(messages) }),
       ].map((failure) => failure._tag),
     ).toEqual(["ContentPolicy", "ContentPolicy", "ContentPolicy"])
+    const stability = { id: "a1b2", name: "content_moderation", errors: ["Your request was flagged"] }
+    expect(
+      classifyProviderFailure({ message: "Forbidden", status: 403, rawBody: JSON.stringify(stability) })._tag,
+    ).toBe("ContentPolicy")
   })
 
   test("recovers policy codes that OpenCode Zen preserves only in its message label", () => {

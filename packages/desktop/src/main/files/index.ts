@@ -121,9 +121,14 @@ export const openExternalURL = Effect.fn("DesktopFiles.openExternalURL")(functio
   const url = resolveExternalURL(value)
   if (!url) {
     yield* scoped("window", Effect.logWarning("blocked external target", { url: value }))
-    return
+    return false
   }
-  yield* Effect.promise(() => shell.openExternal(url))
+  return yield* Effect.tryPromise(() => shell.openExternal(url)).pipe(
+    Effect.as(true),
+    Effect.catch((error) =>
+      scoped("window", Effect.logError("failed to open external target", { url, error })).pipe(Effect.as(false)),
+    ),
+  )
 })
 
 export const openLocalFileURL = Effect.fn("DesktopFiles.openLocalFileURL")(function* (value: string) {

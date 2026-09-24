@@ -40,10 +40,21 @@ export interface AwaitOptions {
 export const DEFAULT_POLL_INTERVAL = Duration.seconds(5)
 export const DEFAULT_POLL_TIMEOUT = Duration.minutes(10)
 
-export type Event =
-  | { readonly type: "generation-queued"; readonly id: string; readonly position?: number }
-  | { readonly type: "generation-progress"; readonly id: string; readonly progress?: number }
-  | { readonly type: "generation-finished"; readonly id: string; readonly status: Status }
+export const QueuedEvent = Schema.Struct({
+  type: Schema.tag("generation-queued"),
+  id: Schema.String,
+  position: Schema.optional(Schema.Number),
+}).annotate({ identifier: "Generation.Event.Queued" })
+
+export const ProgressEvent = Schema.Struct({
+  type: Schema.tag("generation-progress"),
+  id: Schema.String,
+  progress: Schema.optional(Schema.Number),
+}).annotate({ identifier: "Generation.Event.Progress" })
+
+export type Observation = Schema.Schema.Type<typeof QueuedEvent> | Schema.Schema.Type<typeof ProgressEvent>
+
+export type Event = Observation | { readonly type: "generation-finished"; readonly id: string; readonly status: Status }
 
 const TERMINAL: ReadonlySet<Status> = new Set(["completed", "failed", "cancelled", "expired"])
 
@@ -168,3 +179,13 @@ export class Generation<Response> {
     )
   }
 }
+
+export const resultEvents = <Response, A>(
+  generation: Generation<Response>,
+  expand: (response: Response) => ReadonlyArray<A>,
+  options?: AwaitOptions,
+): Stream.Stream<Observation | A, AIError> =>
+  generation.events(options).pipe(
+    Stream.filter((event): event is Observation => event.type !== "generation-finished"),
+    Stream.concat(Stream.fromIterableEffect(Effect.map(generation.result(), expand))),
+  )

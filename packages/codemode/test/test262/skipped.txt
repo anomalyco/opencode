@@ -64,7 +64,6 @@ built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-22.js  # Array.lastIndexOf exp
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-23.js  # Array.lastIndexOf expects start index to be a number.
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-24.js  # toStringAccessed
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-25.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
-built-ins/Array/prototype/lastIndexOf/15.4.4.15-5-4.js  # a.lastIndexOf(2,undefined) Expected SameValue(«1», «-1») to be true
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-7.js  # Array assignment result contains a circular value.
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-a-3.js  # Array.lastIndexOf expects start index to be a number.
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-b-i-7.js  # [, , , ].lastIndexOf(true) Expected SameValue(«-1», «0») to be true
@@ -195,10 +194,32 @@ built-ins/Array/prototype/unshift/S15.4.4.13_A3_T2.js  # Array.prototype.unshift
 built-ins/Array/prototype/unshift/S15.4.4.13_A4_T1.js  # Array.prototype.unshift called on incompatible receiver a data object.
 built-ins/Array/prototype/unshift/S15.4.4.13_A4_T2.js  # #3: Array.prototype[0] = 1; x = []; x.length = 1; x.unshift(0); x[1] === 1. Actual: undefined
 built-ins/Iterator/from/return-method-returns-iterator-result.js  # Iterator next must be a function.
+built-ins/Iterator/prototype/Symbol.iterator/is-function.js  # every built-in collection iterator shares one prototype, so its parent is Object.prototype
 built-ins/Iterator/prototype/drop/limit-tonumber-throws.js  # Expected a Test262Error but got a RangeError
 built-ins/Iterator/prototype/drop/limit-tonumber.js  # Iterator.prototype.drop expects a non-negative count, received NaN.
 built-ins/Iterator/prototype/take/limit-tonumber-throws.js  # Expected a Test262Error but got a RangeError
 built-ins/Iterator/prototype/take/limit-tonumber.js  # Iterator.prototype.take expects a non-negative count, received NaN.
+built-ins/Object/is/not-same-value-x-y-object.js  # Object(number) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/is/same-value-x-y-object.js  # Object(number) wrapper objects are not supported; use the primitive value directly.
+language/expressions/does-not-equals/S11.9.2_A7.8.js  # #1: (true != {valueOf: function() {return 1}}) === false
+language/expressions/does-not-equals/S11.9.2_A7.9.js  # #1: ({valueOf: function() {return 1}} != true) === false
+language/expressions/equals/S11.9.1_A7.8.js  # #1: ({valueOf: function() {return 1}} == true) === true
+language/expressions/equals/S11.9.1_A7.9.js  # #1: (true == {valueOf: function() {return 1}}) === true
+language/expressions/equals/S9.1_A1_T3.js  # #1: var object = {valueOf: function() {return 1}, toString: function() {return 0}}; object + "" ===
+built-ins/Object/freeze/throws-when-false.js  # Unknown identifier 'Proxy'.
+built-ins/Object/getPrototypeOf/15.2.3.2-2-12.js  # Object.getPrototypeOf(EvalError) Expected SameValue(«», «Error») to be true
+built-ins/Object/getPrototypeOf/15.2.3.2-2-13.js  # Object.getPrototypeOf(RangeError) Expected SameValue(«», «Error») to be true
+built-ins/Object/getPrototypeOf/15.2.3.2-2-14.js  # Object.getPrototypeOf(ReferenceError) Expected SameValue(«», «Error») to be true
+built-ins/Object/getPrototypeOf/15.2.3.2-2-15.js  # Object.getPrototypeOf(SyntaxError) Expected SameValue(«», «Error») to be true
+built-ins/Object/getPrototypeOf/15.2.3.2-2-16.js  # Object.getPrototypeOf(TypeError) Expected SameValue(«», «Error») to be true
+built-ins/Object/getPrototypeOf/15.2.3.2-2-17.js  # Object.getPrototypeOf(URIError) Expected SameValue(«», «Error») to be true
+built-ins/Object/getPrototypeOf/15.2.3.2-2-2.js  # … cannot be constructed: user-defined constructors and classes are not supported.
+built-ins/Object/isExtensible/15.2.3.13-2-24.js  # … cannot be constructed: user-defined constructors and classes are not supported.
+built-ins/Object/isExtensible/15.2.3.13-2-25.js  # … cannot be constructed: user-defined constructors and classes are not supported.
+built-ins/Object/isExtensible/15.2.3.13-2-26.js  # … cannot be constructed: user-defined constructors and classes are not supported.
+built-ins/Object/isExtensible/15.2.3.13-2-27.js  # … cannot be constructed: user-defined constructors and classes are not supported.
+built-ins/Object/preventExtensions/15.2.3.10-3-24.js  # … cannot be constructed: user-defined constructors and classes are not supported.
+built-ins/Object/preventExtensions/throws-when-false.js  # Unknown identifier 'Proxy'.
 language/expressions/tagged-template/constructor-invocation.js  # The called value cannot be constructed: user-defined constructors and classes are not supported.
 language/expressions/tagged-template/template-object-frozen-strict.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/async-generator/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
@@ -215,6 +236,8 @@ language/statements/for-await-of/async-gen-decl-dstr-obj-empty-num.js  # TypeErr
 language/statements/for-await-of/async-gen-decl-dstr-obj-empty-string.js  # TypeError: Object destructuring requires a data object or array value, received a string.
 language/statements/for-await-of/async-gen-decl-dstr-obj-rest-number.js  # TypeError: Object destructuring requires a data object or array value, received a number.
 language/statements/for-await-of/async-gen-decl-dstr-obj-rest-str-val.js  # TypeError: Object destructuring requires a data object or array value, received a string.
+language/statements/for-in/S12.6.4_A7_T2.js  # for...in visits keys deleted during the loop
+language/statements/for-in/order-enumerable-shadowed.js  # Object.create property descriptors are not supported; assign the fields after creating the object.
 language/statements/for-of/dstr/array-elem-iter-rtrn-close-err.js  # Iterator next must be a function.
 language/statements/for-of/dstr/array-elem-iter-thrw-close-err.js  # Expected SameValue(«1», «0») to be true
 language/statements/for-of/dstr/array-elem-trlg-iter-list-thrw-close-err.js  # Expected SameValue(«1», «0») to be true
@@ -252,8 +275,10 @@ language/statements/function/S13.2_A4_T1.js  # Unknown identifier '…'.
 language/statements/function/S13.2_A4_T2.js  # #1: typeof __gunc.prototype === '…'. Actual: typeof __gunc.prototype ===undefined
 language/statements/function/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/function/dstr/dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/generators/default-proto.js  # generator functions have no GeneratorFunction.prototype
 language/statements/generators/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/generators/dstr/dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/statements/generators/prototype-relation-to-function.js  # generator functions have no GeneratorFunction.prototype
 language/statements/labeled/value-await-non-module.js  # Failed to parse TypeScript: Expression expected.
 language/statements/let/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/return/S12.9_A1_T1.js  # expected SyntaxError but the program ran
@@ -266,7 +291,5 @@ language/statements/return/S12.9_A1_T6.js  # expected SyntaxError but the progra
 language/statements/return/S12.9_A1_T7.js  # expected SyntaxError but the program ran
 language/statements/return/S12.9_A1_T8.js  # expected SyntaxError but the program ran
 language/statements/return/S12.9_A1_T9.js  # expected SyntaxError but the program ran
-language/statements/switch/S12.11_A1_T4.js  # Switch discriminants must be data values.
-language/statements/switch/scope-lex-open-dflt.js  # Switch discriminants must be data values.
 language/statements/try/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/variable/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all

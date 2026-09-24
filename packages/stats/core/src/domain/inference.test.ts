@@ -38,6 +38,17 @@ describe("inference stat normalization", () => {
     expect(statProvider("unknown", "", "custom-provider")).toBe("custom-provider")
   })
 
+  test("attributes hy4 preview traffic to Tencent instead of the unknown provider", () => {
+    expect(modelAuthor("hy4-preview")).toBe("tencent")
+    expect(toModelAggregate(aggregate("hy4-preview", "opencode"))).toMatchObject([
+      { model: "hy4-preview", provider: "tencent" },
+    ])
+    expect(toProviderAggregate(aggregate("hy4-preview", "opencode"))).toMatchObject([{ provider: "tencent" }])
+    expect(toGeoAggregate({ ...aggregate("hy4-preview", "opencode"), country: "US" })).toMatchObject([
+      { model: "hy4-preview", provider: "tencent" },
+    ])
+  })
+
   test("merges union alpha routes without exposing the provider", () => {
     ;["opencode-go/union-alpha", "opencode/union-alpha"].forEach((model) => {
       expect(statModel(model, "")).toBe("union-alpha")

@@ -3,7 +3,7 @@ import { Effect, Stream } from "effect"
 import { Video } from "../../src/index.js"
 import { XAI } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
-import { videoPoll } from "./video-recording.js"
+import { queuedPoll } from "./queued-recording.js"
 
 const model = XAI.configure({
   apiKey: process.env.XAI_API_KEY ?? "fixture",
@@ -28,7 +28,7 @@ describe("xAI Video recorded", () => {
           resolution: "480p",
           durationSeconds: 2,
         })
-        const observed = yield* generation.events({ poll: videoPoll }).pipe(Stream.runCollect)
+        const observed = yield* generation.events({ poll: queuedPoll }).pipe(Stream.runCollect)
         const progress = Array.from(observed).flatMap((event) =>
           event.type === "generation-progress" && event.progress !== undefined ? [event.progress] : [],
         )

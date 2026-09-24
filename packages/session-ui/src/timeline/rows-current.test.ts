@@ -96,7 +96,7 @@ describe("current session timeline rows", () => {
   })
 
   test("keeps CLI notice messages between the assistant steps they surround", () => {
-    const source = [
+    const source: SessionMessageInfo[] = [
       { id: "msg_user", type: "user", text: "run", time: { created: 1 } },
       { id: "msg_agent", type: "agent-switched", agent: "explore", time: { created: 2 } },
       {
@@ -134,6 +134,7 @@ describe("current session timeline rows", () => {
         type: "synthetic",
         text: "continue",
         description: "Continuing after restart",
+        metadata: { notice: "restart" },
         time: { created: 9 },
       },
       { id: "msg_skill", type: "skill", skill: "review", name: "Review", text: "instructions", time: { created: 10 } },
@@ -146,7 +147,7 @@ describe("current session timeline rows", () => {
         recent: "recent",
         time: { created: 11 },
       },
-    ] satisfies SessionMessageInfo[]
+    ]
     const result = Timeline.constructSessionMessageRows(source, true, { type: "idle" })
 
     expect(result.rows.map(TimelineRow.key)).toEqual([

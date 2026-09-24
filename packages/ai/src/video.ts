@@ -1,5 +1,5 @@
 import { Effect, Schema, Stream } from "effect"
-import { Generation, type AwaitOptions, type Event as GenerationEvent } from "./generation.js"
+import { Generation, ProgressEvent, QueuedEvent, type AwaitOptions } from "./generation.js"
 import { Media } from "./media.js"
 import { MediaModel, composeRoute, tryRequest } from "./media-model.js"
 import { MediaRoute } from "./route/media.js"
@@ -123,18 +123,6 @@ export class VideoResponse extends Schema.Class<VideoResponse>("Video.Response")
   }
 }
 
-export const VideoQueuedEvent = Schema.Struct({
-  type: Schema.tag("generation-queued"),
-  id: Schema.String,
-  position: Schema.optional(Schema.Number),
-}).annotate({ identifier: "Video.Event.Queued" })
-
-export const VideoProgressEvent = Schema.Struct({
-  type: Schema.tag("generation-progress"),
-  id: Schema.String,
-  progress: Schema.optional(Schema.Number),
-}).annotate({ identifier: "Video.Event.Progress" })
-
 export const VideoOutputEvent = Schema.Struct({
   type: Schema.tag("video"),
   index: Schema.Number,
@@ -148,7 +136,7 @@ export const VideoFinishEvent = Schema.Struct({
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "Video.Event.Finish" })
 
-const videoEventTagged = Schema.Union([VideoQueuedEvent, VideoProgressEvent, VideoOutputEvent, VideoFinishEvent]).pipe(
+const videoEventTagged = Schema.Union([QueuedEvent, ProgressEvent, VideoOutputEvent, VideoFinishEvent]).pipe(
   Schema.toTaggedUnion("type"),
 )
 export const VideoEvent = Object.assign(videoEventTagged, {
@@ -170,10 +158,6 @@ export const responseEvents = (response: VideoResponse): ReadonlyArray<VideoEven
     providerMetadata: response.providerMetadata,
   }),
 ]
-
-/** A status observation as a video event; the terminal observation is replaced by the result events, so `none`. */
-export const isObservation = (event: GenerationEvent): event is Extract<VideoEvent, { type: "generation-queued" | "generation-progress" }> =>
-  event.type !== "generation-finished"
 
 // ---------------------------------------------------------------------------
 // Request-shaped call API

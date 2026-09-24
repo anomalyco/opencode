@@ -9,11 +9,8 @@ import {
   createEffect,
   createComputed,
   on,
-  onMount,
 } from "solid-js"
 import { createStore } from "solid-js/store"
-import { makeEventListener } from "@solid-primitives/event-listener"
-import { debounce } from "@solid-primitives/scheduled"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
 import { MessageTimeline } from "@/session/timeline/message-timeline"
 import { useServer } from "@/runtime/server/current"
@@ -93,24 +90,11 @@ function SessionScreenContent(props: { session: SessionModel; browser: ReturnTyp
     sideTerminalPresent: false,
     mobileTerminalCached: false,
     mobileMoveDismissed: false,
-    summaryResizeTranslate: undefined as string | undefined,
   })
   const [elements, setElements] = createStore<{
-    chat?: HTMLDivElement
     side?: HTMLDivElement
     bottomTerminal?: HTMLDivElement
   }>({})
-  const finishWindowResize = debounce(() => setStore("summaryResizeTranslate", undefined), 150)
-  onMount(() => {
-    makeEventListener(window, "resize", () => {
-      if (store.summaryResizeTranslate === undefined) {
-        const content = elements.chat?.querySelector("[data-timeline-virtual-content]")
-        // Freeze the painted offset, including an in-flight slide, until resizing settles.
-        setStore("summaryResizeTranslate", content ? getComputedStyle(content).translate : "none")
-      }
-      finishWindowResize()
-    })
-  })
   const sideVisible = createMemo(() => isDesktop() && screen.side.layout().visible)
   const sideTerminalVisible = createMemo(() => isDesktop() && screen.terminal.side() && screen.terminal.open())
   const bottomTerminalVisible = createMemo(() => isDesktop() && screen.terminal.open() && screen.terminal.bottom())
@@ -340,7 +324,7 @@ function SessionScreenContent(props: { session: SessionModel; browser: ReturnTyp
       </div>
 
       <Show when={composer.active()} keyed>
-        {(model) => <ActiveSessionComposerRegion model={model} />}
+        {(model) => <ActiveSessionComposerRegion model={model} suggestionBoundary={timeline.scroller} />}
       </Show>
     </>
   )
@@ -369,9 +353,6 @@ function SessionScreenContent(props: { session: SessionModel; browser: ReturnTyp
               "transition-none": screen.size.active() || !sidePresence.animate(),
             }}
             data-slot="session-chat-panel"
-            ref={(element) => setElements("chat", element)}
-            data-summary-open={isDesktop() && review.details.open()}
-            data-summary-resizing={store.summaryResizeTranslate !== undefined}
             data-width-animating={store.sideWidthMotion}
             data-scrollbar-hidden={store.timelineScrollbarHidden || store.sideWidthMotion}
             onPointerMove={revealTimelineScrollbar}
@@ -381,10 +362,7 @@ function SessionScreenContent(props: { session: SessionModel; browser: ReturnTyp
             onTransitionRun={trackSideWidthMotion}
             onTransitionEnd={trackSideWidthMotion}
             onTransitionCancel={trackSideWidthMotion}
-            style={{
-              width: screen.panel.width(),
-              "--session-summary-resize-translate": store.summaryResizeTranslate,
-            }}
+            style={{ width: screen.panel.width() }}
           >
             <Show when={!!session.identity.params.id}>
               <SessionPanelFrame raised>

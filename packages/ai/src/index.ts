@@ -48,6 +48,44 @@ export type {
   VideoRoute,
 } from "./video.js"
 export { Video } from "./video.js"
+export { SpeechClient } from "./speech-client.js"
+export {
+  SpeechEvent,
+  SpeechModel,
+  SpeechModelSchema,
+  SpeechRequest,
+  SpeechResponse,
+  SpeechTimestamp,
+  SpeechVoice,
+} from "./speech.js"
+export type {
+  SpeechFormat,
+  SpeechModelOptions,
+  SpeechOptions,
+  SpeechRequestFor,
+  SpeechRequestInput,
+  SpeechRoute,
+} from "./speech.js"
+export { Speech } from "./speech.js"
+export { TranscriptionClient } from "./transcription-client.js"
+export {
+  TranscriptionEvent,
+  TranscriptionModel,
+  TranscriptionModelSchema,
+  TranscriptionRequest,
+  TranscriptionResponse,
+  TranscriptionSegment,
+  TranscriptionTimestamps,
+  TranscriptionWord,
+} from "./transcription.js"
+export type {
+  TranscriptionModelOptions,
+  TranscriptionOptions,
+  TranscriptionRequestFor,
+  TranscriptionRequestInput,
+  TranscriptionRoute,
+} from "./transcription.js"
+export { Transcription } from "./transcription.js"
 export { Media } from "./media.js"
 export { Generation } from "./generation.js"
 export type {
