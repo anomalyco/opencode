@@ -1303,7 +1303,7 @@ describe("workspace sync state", () => {
             const info = workspaceInfo(instance.project.id, type)
             let calls = 0
             let releaseFirst = () => {}
-            let releaseSecond = () => {}
+            let rejectSecond = () => {}
             yield* insertWorkspace(info)
             registerAdapter(
               instance.project.id,
@@ -1317,8 +1317,8 @@ describe("workspace sync state", () => {
                       releaseFirst = () => resolve(target)
                     })
                   if (calls === 2)
-                    return new Promise<Target>((resolve) => {
-                      releaseSecond = () => resolve(target)
+                    return new Promise<Target>((_, reject) => {
+                      rejectSecond = () => reject(new Error("late target failure"))
                     })
                   return target
                 },
@@ -1337,10 +1337,12 @@ describe("workspace sync state", () => {
                 )
               }),
             )
-            releaseSecond()
+            rejectSecond()
             yield* Effect.sleep("50 millis")
             expect(calls).toBe(3)
             expect(connections).toBe(1)
+            expect((yield* workspace.status()).find((item) => item.workspaceID === info.id)?.status).toBe("connected")
+            expect(yield* workspace.isSyncing(info.id)).toBe(true)
             yield* workspace.remove(info.id)
           }),
         { git: true },

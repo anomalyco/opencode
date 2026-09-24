@@ -165,6 +165,7 @@ const layer = Layer.effect(
     const { db } = yield* Database.Service
     const connections = new Map<WorkspaceV2.ID, ConnectionStatus>()
     const syncFibers = yield* FiberMap.make<WorkspaceV2.ID, void, SyncLoopError>()
+    // Tracks projects scanned in this service lifetime, not live connection state.
     const resumedProjects = new Set<ProjectV2.ID>()
 
     const setStatus = (id: WorkspaceV2.ID, status: ConnectionStatus["status"]) => {
@@ -477,7 +478,6 @@ const layer = Layer.effect(
         Effect.catchCause((cause) =>
           Effect.gen(function* () {
             if (Cause.hasInterrupts(cause)) return yield* Effect.failCause(cause)
-            setStatus(space.id, "error")
             yield* Effect.logWarning("workspace target failed", {
               workspaceID: space.id,
               error: errorData(Cause.squash(cause)),
@@ -488,12 +488,13 @@ const layer = Layer.effect(
       )
       // Another start may have installed a listener while target() was pending.
       if (yield* FiberMap.has(syncFibers, space.id)) return
+      if (target === null) setStatus(space.id, "error")
       if (target?.type === "local") {
         setStatus(space.id, (yield* fs.existsSafe(target.directory)) ? "connected" : "error")
         return
       }
 
-      setStatus(space.id, "disconnected")
+      if (target !== null) setStatus(space.id, "disconnected")
 
       yield* FiberMap.run(
         syncFibers,
@@ -909,6 +910,7 @@ const layer = Layer.effect(
         Effect.catchCause((cause) =>
           Effect.gen(function* () {
             resumedProjects.delete(projectID)
+            if (Cause.hasInterrupts(cause)) return yield* Effect.failCause(cause)
             yield* Effect.logWarning("workspace sync recovery failed", { projectID, cause })
           }),
         ),
