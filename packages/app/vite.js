@@ -3,6 +3,7 @@ import { createRequire } from "node:module"
 import solidPlugin from "vite-plugin-solid"
 import tailwindcss from "@tailwindcss/vite"
 import { fileURLToPath } from "url"
+import { IOS_INPUT_ZOOM_SCRIPT } from "@opencode/ui/ios-input-zoom"
 
 const theme = fileURLToPath(new URL("./public/oc-theme-preload.js", import.meta.url))
 const themeScript = readFileSync(theme, "utf8")
@@ -71,6 +72,13 @@ export default [
     },
   },
   {
+    name: "opencode-desktop:ios-input-zoom",
+    transformIndexHtml: {
+      order: "pre",
+      handler: inlineIosInputZoom,
+    },
+  },
+  {
     name: "opencode-desktop:theme-preload",
     transformIndexHtml: {
       order: "pre",
@@ -80,6 +88,13 @@ export default [
   ...tailwind,
   solidPlugin(),
 ]
+
+export function inlineIosInputZoom(html) {
+  return html.replace(
+    /<script id="oc-ios-input-zoom-script"><\/script>/,
+    `<script id="oc-ios-input-zoom-script">${IOS_INPUT_ZOOM_SCRIPT}</script>`,
+  )
+}
 
 export function inlineThemePreload(html) {
   return html.replace(
