@@ -27,7 +27,7 @@ const Background = Schema.Struct({
   status: Schema.Literals(["running", "completed", "error", "cancelled"]),
   output: Schema.optionalKey(Schema.String),
   error: Schema.optionalKey(Schema.String),
-  pid: Schema.optionalKey(Schema.Number),
+  pid: Schema.optionalKey(Schema.Int),
 })
 
 export type Background = typeof Background.Type

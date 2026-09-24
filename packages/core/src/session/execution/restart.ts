@@ -139,7 +139,10 @@ export const layer = (options?: Options) =>
         background: Job.Background,
         recovery: Extract<Job.Recovery, { kind: "subagent" }>,
         suspended: ReadonlySet<SessionSchema.ID>,
+        foreign: ReadonlySet<SessionSchema.ID>,
       ) {
+        // The live owner still runs the child and delivers its result to the parent.
+        if (foreign.has(recovery.parentSessionID) || foreign.has(recovery.childSessionID)) return
         const child = yield* store.get(recovery.childSessionID)
         if (!child || child.parentID !== recovery.parentSessionID || !(yield* store.get(recovery.parentSessionID))) {
           yield* jobs.completeBackground(background.notificationID)
@@ -189,15 +192,20 @@ export const layer = (options?: Options) =>
         )
       })
 
+      const foreignClaims = store
+        .listClaimOwners()
+        .pipe(
+          Effect.map(
+            (owners) =>
+              new Set(owners.flatMap((owner) => (heldByOtherLiveProcess(owner.pid) ? [owner.sessionID] : []))),
+          ),
+        )
+
       return Service.of({
         resumeSuspendedSessions: Effect.gen(function* () {
           const active = yield* execution.active
           // Unregistered servers can share this database; their live work is not orphaned.
-          const foreign = new Set(
-            (yield* store.listClaimOwners()).flatMap((owner) =>
-              heldByOtherLiveProcess(owner.pid) ? [owner.sessionID] : [],
-            ),
-          )
+          const foreign = yield* foreignClaims
           const pending = (yield* jobs.pendingBackground).filter(
             (background) => background.pid === undefined || !heldByOtherLiveProcess(background.pid),
           )
@@ -208,9 +216,7 @@ export const layer = (options?: Options) =>
           )
           // Early notices wait for recovery's accounting, including Sessions that exhaust their budget.
           const suspended = new Set(
-            [...(yield* store.listSuspended()), ...children].filter(
-              (sessionID) => !active.has(sessionID) && !foreign.has(sessionID),
-            ),
+            [...(yield* store.listSuspended()), ...children].filter((sessionID) => !active.has(sessionID)),
           )
           yield* store.releaseChildClaims([...children, ...foreign])
           yield* Effect.forEach(
@@ -221,15 +227,19 @@ export const layer = (options?: Options) =>
               const recovery = background.recovery
               yield* recovery.kind === "shell"
                 ? recoverShell(background, recovery)
-                : recoverSubagent(background, recovery, suspended)
+                : recoverSubagent(background, recovery, suspended, foreign)
             }),
             { discard: true },
           )
 
           // Background completion can wake a parent, so inspect local ownership only after recovery.
+          // Another server may have claimed Sessions while jobs recovered, so read owners again.
           const resumed = yield* execution.active
+          const stillForeign = yield* foreignClaims
           yield* Effect.forEach(
-            (yield* store.listSuspended()).filter((sessionID) => !resumed.has(sessionID) && !foreign.has(sessionID)),
+            (yield* store.listSuspended()).filter(
+              (sessionID) => !resumed.has(sessionID) && !stillForeign.has(sessionID),
+            ),
             (sessionID) =>
               execution
                 .resume(sessionID)
@@ -244,8 +254,11 @@ export const layer = (options?: Options) =>
   )
 
 function heldByOtherLiveProcess(pid: number) {
-  if (pid === process.pid) return false
-  // Signal 0 probes existence only; EPERM still means the process is alive.
+  // kill(0|-1, 0) probes a process group and pid 1 is always init, so those prove nothing.
+  if (!Number.isSafeInteger(pid) || pid <= 1 || pid === process.pid) return false
+  // Signal 0 probes existence only; EPERM still means the process is alive. Unlike
+  // retained-image.ts, any other failure (including a runtime without process.kill) counts
+  // as dead so recovery falls back to resuming rather than stranding the claim.
   try {
     process.kill(pid, 0)
     return true

@@ -1355,15 +1355,159 @@ describe("SessionRestart claim ownership", () => {
       expect((yield* jobs.pendingBackground).map((job) => job.pid)).toEqual([process.pid])
     }),
   )
+
+  it.effect("the sweep keeps child claims held by another live process", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const parent = Session.ID.make("ses_claim_owner_child_parent")
+      const child = Session.ID.make("ses_claim_owner_child_live")
+      yield* seedSessions(database, [parent])
+      yield* seedSessions(database, [child], {
+        parent_id: parent,
+        time_suspended: Date.now(),
+        claim_pid: yield* liveProcess,
+      })
+
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, () => Effect.void)
+      yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+
+      expect((yield* claims(database))[child]).toBe(true)
+    }),
+  )
+
+  it.effect("treats pid 1 as an unknown owner and resumes the claim", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const sessionID = Session.ID.make("ses_claim_owner_pid_one")
+      yield* seedSessions(database, [sessionID], { time_suspended: Date.now(), claim_pid: 1 })
+
+      const drained = yield* Deferred.make<string>()
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, ({ sessionID: id }) => Deferred.succeed(drained, id))
+      yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+
+      expect(yield* Deferred.await(drained)).toBe(sessionID)
+    }),
+  )
+
+  it.effect("resumes only the orphaned claims when a live owner holds others", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const orphaned = Session.ID.make("ses_claim_owner_mixed_dead")
+      const held = Session.ID.make("ses_claim_owner_mixed_live")
+      yield* seedSessions(database, [orphaned], { time_suspended: Date.now(), claim_pid: yield* exitedProcess })
+      yield* seedSessions(database, [held], { time_suspended: Date.now(), claim_pid: yield* liveProcess })
+
+      const drained: string[] = []
+      const orphanedDrained = yield* Deferred.make<void>()
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, ({ sessionID: id }) =>
+        Effect.sync(() => void drained.push(id)).pipe(
+          Effect.andThen(id === orphaned ? Deferred.succeed(orphanedDrained, undefined) : Effect.void),
+        ),
+      )
+      yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+      yield* Deferred.await(orphanedDrained)
+
+      expect(drained).toEqual([orphaned])
+      expect(yield* attempts(database, held)).toBe(0)
+      expect((yield* claims(database))[held]).toBe(true)
+    }),
+  )
+
+  it.effect("skips subagent jobs whose child is held by another live process", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const kv = yield* KV.Service
+      const parent = Session.ID.make("ses_subagent_owner_parent")
+      const child = Session.ID.make("ses_subagent_owner_child_live")
+      yield* seedSessions(database, [parent])
+      yield* seedSessions(database, [child], {
+        parent_id: parent,
+        time_suspended: Date.now(),
+        claim_pid: yield* liveProcess,
+      })
+      yield* seedSubagentJob(kv, parent, child, "running")
+
+      const drained: string[] = []
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const restarted = yield* Job.make.pipe(Effect.provideService(Scope.Scope, scope))
+      const context = yield* buildExecution(
+        scope,
+        ({ sessionID: id }) => Effect.sync(() => void drained.push(id)),
+        undefined,
+        restarted,
+      )
+      yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+      yield* Context.get(context, SessionExecution.Service).awaitIdle(child)
+
+      expect(drained).toEqual([])
+      expect(yield* attempts(database, child)).toBe(0)
+      expect((yield* restarted.pendingBackground).map((job) => job.id)).toEqual(["call-subagent-owner"])
+    }),
+  )
+
+  it.effect("leaves subagent results for a parent held by another live process undelivered", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const kv = yield* KV.Service
+      const store = yield* SessionStore.Service
+      const parent = Session.ID.make("ses_subagent_owner_parent_live")
+      const child = Session.ID.make("ses_subagent_owner_child_done")
+      yield* seedSessions(database, [parent], { time_suspended: Date.now(), claim_pid: yield* liveProcess })
+      yield* seedSessions(database, [child], { parent_id: parent })
+      yield* seedSubagentJob(kv, parent, child, "completed")
+
+      const drained: string[] = []
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const restarted = yield* Job.make.pipe(Effect.provideService(Scope.Scope, scope))
+      const context = yield* buildExecution(
+        scope,
+        ({ sessionID: id }) => Effect.sync(() => void drained.push(id)),
+        undefined,
+        restarted,
+      )
+      yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+      yield* Context.get(context, SessionExecution.Service).awaitIdle(parent)
+
+      expect(drained).toEqual([])
+      expect((yield* store.context(parent)).filter((message) => message.type === "synthetic")).toEqual([])
+      expect((yield* restarted.pendingBackground).map((job) => job.id)).toEqual(["call-subagent-owner"])
+    }),
+  )
 })
 
+/** A subagent job persisted without a pid, as servers from before claim ownership write them. */
+function seedSubagentJob(kv: KV.Interface, parent: Session.ID, child: Session.ID, status: "running" | "completed") {
+  const notificationID = SessionMessage.ID.create()
+  return kv.set(`job.background/${notificationID}`, {
+    id: "call-subagent-owner",
+    notificationID,
+    recovery: {
+      kind: "subagent",
+      parentSessionID: parent,
+      childSessionID: child,
+      agent: "general",
+      description: "review",
+    },
+    status,
+    ...(status === "completed" ? { output: "done" } : {}),
+  })
+}
+
 const liveProcess = Effect.acquireRelease(
-  Effect.sync(() => Bun.spawn(["sleep", "60"])),
+  Effect.sync(() => Bun.spawn([process.execPath, "-e", "setTimeout(() => {}, 60_000)"])),
   (child) => Effect.sync(() => child.kill()),
 ).pipe(Effect.map((child) => child.pid))
 
 const exitedProcess = Effect.promise(async () => {
-  const child = Bun.spawn(["true"])
+  const child = Bun.spawn([process.execPath, "-e", ""])
   await child.exited
   return child.pid
 })
