@@ -80,12 +80,16 @@ const Response = Schema.Struct({
   usage: Schema.optional(Schema.StructWithRest(OpenResponses.OpenResponsesUsage, [JsonObject])),
 })
 
-export const make = (adapter: OpenResponses.ProviderAdapter): CompactOperation =>
+export const make = (
+  adapter: OpenResponses.ProviderAdapter,
+  lowerTools: (request: LLMRequest) => Effect.Effect<ReadonlyArray<Record<string, unknown>>, AIError>,
+): CompactOperation =>
   Effect.fn("ResponsesCompaction.execute")(function* (request, executor, options) {
     const route = request.model.route
     // The standalone compaction endpoint rejects histories containing configuration updates.
     const native = yield* OpenResponses.lowerConversation(stripEffortUpdates(request), adapter)
     const generation = OpenResponses.lowerGeneration(request)
+    const tools = request.tools.length === 0 ? undefined : yield* lowerTools(request)
     const body = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Body))(
       mergeJsonRecords(
         {
@@ -95,6 +99,7 @@ export const make = (adapter: OpenResponses.ProviderAdapter): CompactOperation =
           text: generation.text,
           include: generation.include,
           parallel_tool_calls: generation.parallel_tool_calls,
+          tools,
           prompt_cache_key: generation.prompt_cache_key,
         },
         request.http?.body,

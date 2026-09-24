@@ -119,7 +119,7 @@ for (const model of [
         return respond(JSON.stringify({ object: "response.compaction", output: [checkpoint] }))
       }),
     ),
-  ).effect(`${model.provider} compacts provider-specific history despite unrelated invalid generation settings`, () =>
+  ).effect(`${model.provider} validates tools but ignores unrelated unsupported generation settings`, () =>
     Effect.gen(function* () {
       const request = LLM.request({
         model,
@@ -156,6 +156,11 @@ for (const model of [
       ] as const) {
         const error = yield* LLMClient.generate(candidate).pipe(Effect.flip)
         expect(error.reason._tag).toBe(tag)
+        if (candidate.tools.length > 0) {
+          const compactError = yield* LLMClient.compact(candidate).pipe(Effect.flip)
+          expect(compactError.reason._tag).toBe("InvalidRequest")
+          continue
+        }
         const response = yield* LLMClient.compact(candidate)
         expect(response.replacement[0]?.content[0]?.type).toBe("compaction")
       }
@@ -264,6 +269,9 @@ for (const overlay of [undefined, { service_tier: "priority", prompt_cache_key: 
           text: { verbosity: "low", format: { type: "json_object" } },
           include: ["reasoning.encrypted_content"],
           parallel_tool_calls: false,
+          tools: [
+            { type: "function", name: "lookup", description: "Lookup", parameters: { type: "object" }, strict: false },
+          ],
           prompt_cache_key: overlay?.prompt_cache_key ?? "affinity",
           prompt_cache_retention: "24h",
           prompt_cache_options: { mode: "explicit", ttl: "30m" },
@@ -285,6 +293,7 @@ for (const overlay of [undefined, { service_tier: "priority", prompt_cache_key: 
           parallelToolCalls: false,
         },
         generation: { maxTokens: 100 },
+        tools: [{ name: "lookup", description: "Lookup", inputSchema: {} }],
         http: {
           body: {
             stream: true,

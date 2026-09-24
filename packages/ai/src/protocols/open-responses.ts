@@ -460,6 +460,13 @@ export const lowerTool = Effect.fn("OpenResponses.lowerTool")(function* (
   }
 })
 
+export const lowerTools = (tools: ReadonlyArray<ToolDefinition>, request: LLMRequest, adapter: ProviderAdapter) =>
+  Effect.forEach(tools, (tool) =>
+    tool.native !== undefined && adapter.nativeTool
+      ? adapter.nativeTool(tool.native)
+      : lowerTool(adapter.name, tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, request.model)),
+  )
+
 export const lowerToolChoice = (protocolName: string, toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
   ProviderShared.matchToolChoice(protocolName, toolChoice, {
     auto: () => "auto" as const,
@@ -821,14 +828,7 @@ export const fromRequestWithAdapter = Effect.fn("OpenResponses.fromRequestWithAd
   return {
     ...(yield* lowerConversation(projected.request, adapter)),
     ...lowerGeneration(request),
-    tools:
-      projected.tools.length === 0
-        ? undefined
-        : yield* Effect.forEach(projected.tools, (tool) =>
-            tool.native !== undefined && adapter.nativeTool
-              ? adapter.nativeTool(tool.native)
-              : lowerTool(adapter.name, tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, request.model)),
-          ),
+    tools: projected.tools.length === 0 ? undefined : yield* lowerTools(projected.tools, request, adapter),
     tool_choice:
       allowedToolChoice(request) ??
       (request.toolChoice ? yield* lowerToolChoice(adapter.name, request.toolChoice) : undefined),

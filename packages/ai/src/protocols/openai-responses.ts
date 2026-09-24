@@ -203,6 +203,8 @@ const lowerToolEntry = Effect.fn("OpenAIResponses.lowerToolEntry")(function* (to
   }
 })
 
+const lowerTools = (request: LLMRequest) => Effect.forEach(request.tools, (tool) => lowerToolEntry(tool, request.model))
+
 const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>, tools: ReadonlyArray<ToolEntry>) =>
   ProviderShared.matchToolChoice(NAME, toolChoice, {
     auto: () => "auto" as const,
@@ -226,10 +228,7 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
     ...(yield* OpenResponses.lowerConversation(updates.request, adapter)),
     ...OpenResponses.lowerGeneration(request, { ...options, reasoningEffort: updates.effort }),
     context_management: management?.map((edit) => ({ type: edit.type, compact_threshold: edit.compactThreshold })),
-    tools:
-      request.tools.length === 0
-        ? undefined
-        : yield* Effect.forEach(request.tools, (tool) => lowerToolEntry(tool, request.model)),
+    tools: request.tools.length === 0 ? undefined : yield* lowerTools(request),
     tool_choice:
       request.tools.length === 0
         ? undefined
@@ -344,7 +343,10 @@ export const transport = channelTransport({
 })
 
 export const route = Route.make({
-  compact: { endpoint: ResponsesCompaction.make(adapter), trigger: ResponsesCheckpoint.make(checkpointBody) },
+  compact: {
+    endpoint: ResponsesCompaction.make(adapter, lowerTools),
+    trigger: ResponsesCheckpoint.make(checkpointBody),
+  },
   id: ADAPTER,
   provider: "openai",
   providerMetadataKey: "openai",
