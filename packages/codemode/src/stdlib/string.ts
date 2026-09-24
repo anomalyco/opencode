@@ -4,17 +4,20 @@ import { checkArrayLength, checkStringLength } from "../interpreter/limits.js"
 import { invalidData, IteratorSymbol, rangeError, typeError } from "../interpreter/model.js"
 import {
   define,
+  get,
   hidden,
   Arr,
   hostIterator,
+  Obj,
   RegExpObj,
   record,
+  coerceToInteger,
   coerceToNumber,
   coerceToString,
   type Value,
 } from "../interpreter/objects.js"
 import { containsOpaqueReference, typeofValue } from "../interpreter/references.js"
-import { applyCollectionCallback, isSupportedCallback } from "../interpreter/callback.js"
+import { applyCollectionCallback, isSupportedCallback, toPrimitiveString } from "../interpreter/callback.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
 import { matchToValue, toHostRegex } from "./regexp.js"
 import { coercion } from "./value.js"
@@ -98,6 +101,29 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
   methods(builtins, string, [
     codeUnits("fromCharCode", String.fromCharCode),
     codeUnits("fromCodePoint", String.fromCodePoint),
+    [
+      "raw",
+      1,
+      (_, args) => {
+        const template = args[0]
+        const raw = template instanceof Obj ? get(template, "raw") : undefined
+        if (!(raw instanceof Obj)) throw typeError("String.raw expects a template object with a raw array.")
+        const count = Math.max(0, coerceToInteger(get(raw, "length")))
+        checkArrayLength(count)
+        // Each literal is followed by its substitution, except the last literal, or when substitutions run out.
+        const parts = Array.from({ length: count }, (_, index) =>
+          index + 1 < count && index + 1 < args.length ? [get(raw, index), args[index + 1]] : [get(raw, index)],
+        ).flat()
+        return Effect.map(
+          Effect.forEach(parts, (part) => toPrimitiveString(ctx, part)),
+          (strings) => {
+            const output = strings.join("")
+            checkStringLength(output.length)
+            return output
+          },
+        )
+      },
+    ],
   ])
 
   const self = (thisValue: Value, name: string): string => {

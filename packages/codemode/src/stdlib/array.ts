@@ -125,24 +125,6 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
 
   const self = (thisValue: Value, name: string) => receiver(Arr, thisValue, `Array.prototype.${name}`)
   const optNumber = (value: Value): number | undefined => (value === undefined ? undefined : coerceToInteger(value))
-  // Callback methods fix the iteration length while reading existing elements live.
-  const iterate = (
-    name: string,
-    length: number,
-    body: (
-      target: Array<Value>,
-      receiver: Arr,
-      apply: (args: Array<Value>) => Effect.Effect<Value, unknown, R>,
-      args: Array<Value>,
-    ) => Effect.Effect<Value, unknown, R>,
-  ): Method => [
-    name,
-    length,
-    (thisValue, args) => {
-      const target = self(thisValue, name)
-      return body(target.items, target, applyCollectionCallback(ctx, args[0], `Array.${name}`), args)
-    },
-  ]
 
   methods(builtins, proto, [
     [
@@ -177,7 +159,8 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
       1,
       (thisValue, args) => {
         const target = self(thisValue, "lastIndexOf").items
-        return args[1] === undefined ? target.lastIndexOf(args[0]) : target.lastIndexOf(args[0], optNumber(args[1]))
+        // An explicit undefined is a fromIndex of 0, unlike omitting it.
+        return args.length < 2 ? target.lastIndexOf(args[0]) : target.lastIndexOf(args[0], optNumber(args[1]))
       },
     ],
     ["at", 1, (thisValue, args) => self(thisValue, "at").items.at(optNumber(args[0]) ?? 0)],
@@ -349,6 +332,60 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
             .map(([index, item]) => wrap([index, item])),
         ),
     ],
+    [
+      "flatMap",
+      1,
+      (thisValue, args) => {
+        const target = self(thisValue, "flatMap")
+        const apply = applyCollectionCallback(ctx, args[0], "Array.flatMap")
+        return Effect.gen(function* () {
+          const length = target.items.length
+          const values: Array<Value> = []
+          for (let index = 0; index < length; index += 1) {
+            if (!(index in target.items)) continue
+            const mapped = yield* apply([target.items[index], index, target])
+            if (mapped instanceof Arr) values.push(...mapped.items)
+            else values.push(mapped)
+          }
+          return wrap(values)
+        })
+      },
+    ],
+    ...callbackMethods(ctx, "Array", self, (target) => target.items, wrap),
+  ])
+  define(proto, IteratorSymbol, get(proto, "values"), hidden)
+  return array
+}
+
+/**
+ * The callback methods Array and Uint8Array share. They fix the iteration length while reading existing elements
+ * live; `wrap` builds the collection `map` and `filter` return.
+ */
+export const callbackMethods = <R, T extends Obj>(
+  ctx: Interpreter<R>,
+  label: string,
+  self: (thisValue: Value, name: string) => T,
+  elements: (target: T) => ArrayLike<Value>,
+  wrap: (values: Array<Value>) => Value,
+): Array<Method> => {
+  const iterate = (
+    name: string,
+    length: number,
+    body: (
+      target: ArrayLike<Value>,
+      receiver: T,
+      apply: (args: Array<Value>) => Effect.Effect<Value, unknown, R>,
+      args: Array<Value>,
+    ) => Effect.Effect<Value, unknown, R>,
+  ): Method => [
+    name,
+    length,
+    (thisValue, args) => {
+      const target = self(thisValue, name)
+      return body(elements(target), target, applyCollectionCallback(ctx, args[0], `${label}.${name}`), args)
+    },
+  ]
+  return [
     iterate("map", 1, (target, receiver, apply) =>
       Effect.gen(function* () {
         const length = target.length
@@ -357,19 +394,6 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
         for (let index = 0; index < length; index += 1) {
           if (!(index in target)) continue
           values[index] = yield* apply([target[index], index, receiver])
-        }
-        return wrap(values)
-      }),
-    ),
-    iterate("flatMap", 1, (target, receiver, apply) =>
-      Effect.gen(function* () {
-        const length = target.length
-        const values: Array<Value> = []
-        for (let index = 0; index < length; index += 1) {
-          if (!(index in target)) continue
-          const mapped = yield* apply([target[index], index, receiver])
-          if (mapped instanceof Arr) values.push(...mapped.items)
-          else values.push(mapped)
         }
         return wrap(values)
       }),
@@ -459,7 +483,7 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
         if (args.length < 2) {
           while (start < length && !(start in target)) start += 1
           if (start === length) {
-            throw typeError("Array.reduce of an empty array with no initial value.")
+            throw typeError(`${label}.reduce of an empty array with no initial value.`)
           }
           accumulator = target[start]
           start += 1
@@ -478,7 +502,7 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
         if (args.length < 2) {
           while (start >= 0 && !(start in target)) start -= 1
           if (start < 0) {
-            throw typeError("Array.reduceRight of an empty array with no initial value.")
+            throw typeError(`${label}.reduceRight of an empty array with no initial value.`)
           }
           accumulator = target[start]
           start -= 1
@@ -490,7 +514,5 @@ export const arrayGlobal = <R>(ctx: Interpreter<R>) => {
         return accumulator
       }),
     ),
-  ])
-  define(proto, IteratorSymbol, get(proto, "values"), hidden)
-  return array
+  ]
 }

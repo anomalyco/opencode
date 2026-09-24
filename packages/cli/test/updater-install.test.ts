@@ -4,7 +4,7 @@ import { AppProcess } from "@opencode/util/process"
 import { expect, spyOn, test } from "bun:test"
 import { Effect, FileSystem, PlatformError, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
-import { existsSync } from "node:fs"
+import { existsSync, readdirSync, readFileSync } from "node:fs"
 import path from "node:path"
 import { Updater } from "../src/services/updater"
 import { testEffect } from "../../core/test/lib/effect"
@@ -25,10 +25,13 @@ function fixture(
     const fs = yield* FileSystem.FileSystem
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "opencode-updater-" })
-    const executable = path.join(root, "package", "bin", "opencode")
+    const execPath = process.execPath
+    const modules = path.join(root, "node_modules")
+    const executable = path.join(modules, "@opencode", "cli", "bin", "opencode")
     yield* fs.makeDirectory(path.dirname(executable), { recursive: true })
+    yield* fs.writeFileString(executable, "binary")
     yield* fs.writeFileString(
-      path.join(root, "package", "package.json"),
+      path.join(modules, "@opencode", "cli", "package.json"),
       JSON.stringify({ name, bin: { opencode: "bin/opencode" } }),
     )
     // The updater uses global fetch; scope this replacement to each install test.
@@ -70,7 +73,7 @@ function fixture(
                 }),
               )
             : fs.remove(target, options),
-        realPath: (input) => (input === process.execPath ? Effect.succeed(executable) : fs.realPath(input)),
+        realPath: (input) => (input === execPath ? Effect.succeed(executable) : fs.realPath(input)),
       }),
       Effect.provideService(
         AppProcess.Service,
@@ -96,9 +99,12 @@ function fixture(
         }),
       ),
     )
-    return { updater, commands, global, fs }
+    return { updater, commands, global, fs, executable }
   })
 }
+
+const windows = process.platform === "win32" ? it.live : it.live.skip
+const unix = process.platform === "win32" ? it.live.skip : it.live
 
 const installs = [
   { method: "npm", command: ["npm", "install", "--global", "--force", "@opencode/cli@2.3.4-beta.1"] },
@@ -265,6 +271,120 @@ it.live("vp detection ignores no-match output that repeats the package name", ()
       stdout: Buffer.from(command.command === "vp" ? "No global packages matching '@opencode/cli'." : ""),
     }))
     expect(yield* test.updater.method()).toBeUndefined()
+  }),
+)
+
+// Links are named opencode-upgrade-<pid>-<random>.exe; read them from inside the installer run.
+const links = (directory: string) =>
+  existsSync(directory) ? readdirSync(directory).filter((name) => name.startsWith("opencode-")) : []
+const upgradeLinks = (directory: string) =>
+  links(directory).filter((name) => name.startsWith(`opencode-upgrade-${process.pid}-`))
+
+windows("windows keeps a second link to the running binary in the cache while the installer runs", () =>
+  Effect.gen(function* () {
+    const layout = { executable: "", cache: "" }
+    const test = yield* fixture(() => {
+      expect(readFileSync(layout.executable, "utf8")).toBe("binary")
+      const held = upgradeLinks(layout.cache)
+      expect(held).toHaveLength(1)
+      expect(readFileSync(path.join(layout.cache, held[0]), "utf8")).toBe("binary")
+      return {}
+    })
+    layout.executable = test.executable
+    layout.cache = test.global.cache
+    yield* test.fs.makeDirectory(test.global.cache, { recursive: true })
+    // pid 999999999 does not exist; pid 4 is System, alive but not openable (EPERM).
+    yield* test.fs.writeFileString(path.join(test.global.cache, "opencode-upgrade-999999999-dead.exe"), "exited")
+    yield* test.fs.writeFileString(path.join(test.global.cache, "opencode-service-4-aa.exe"), "inaccessible")
+    yield* test.updater.upgrade("bun", "2.3.4")
+    expect(test.commands).toHaveLength(1)
+    // The installed path never disappears; the extra link is released and only dead ones are swept.
+    expect(yield* test.fs.readFileString(test.executable)).toBe("binary")
+    expect(links(test.global.cache)).toEqual(["opencode-service-4-aa.exe"])
+  }),
+)
+
+windows("windows releases the link when the installer fails", () =>
+  Effect.gen(function* () {
+    const layout = { cache: "" }
+    const test = yield* fixture(() => {
+      expect(upgradeLinks(layout.cache)).toHaveLength(1)
+      return { exitCode: 1, stderr: Buffer.from("registry denied access") }
+    })
+    layout.cache = test.global.cache
+    const error = yield* test.updater.upgrade("npm", "2.3.4").pipe(Effect.flip)
+    expect(error.message).toBe("registry denied access")
+    expect(yield* test.fs.readFileString(test.executable)).toBe("binary")
+    expect(links(test.global.cache)).toEqual([])
+  }),
+)
+
+windows("windows keeps the uninstall link in the temporary directory, not the removed cache", () =>
+  Effect.gen(function* () {
+    const layout = { tmp: "" }
+    const test = yield* fixture(() => {
+      expect(upgradeLinks(layout.tmp)).toHaveLength(1)
+      return {}
+    })
+    layout.tmp = test.global.tmp
+    yield* test.fs.makeDirectory(test.global.cache, { recursive: true })
+    const removal = test.updater.removal("bun")
+    if (!removal) return yield* Effect.die("Expected bun removal command")
+    yield* removal.run
+    expect(test.commands).toEqual([["bun", "remove", "--global", "@opencode/cli"]])
+    expect(links(test.global.cache)).toEqual([])
+    expect(links(test.global.tmp)).toEqual([])
+  }),
+)
+
+windows("windows links the curl binary before the installer replaces it", () =>
+  Effect.gen(function* () {
+    const layout = { executable: "", cache: "" }
+    const test = yield* fixture((command) => {
+      if (command.command === "bash") {
+        expect(readFileSync(layout.executable, "utf8")).toBe("binary")
+        expect(upgradeLinks(layout.cache)).toHaveLength(1)
+      }
+      return {}
+    })
+    layout.executable = path.join(test.global.home, ".opencode", "bin", "opencode.exe")
+    layout.cache = test.global.cache
+    yield* test.fs.makeDirectory(path.dirname(layout.executable), { recursive: true })
+    yield* test.fs.writeFileString(layout.executable, "binary")
+    const original = process.execPath
+    process.execPath = layout.executable
+    yield* Effect.addFinalizer(() => Effect.sync(() => (process.execPath = original)))
+    expect(yield* test.updater.method()).toBe("curl")
+    yield* test.updater.upgrade("curl", "2.3.4")
+    expect(test.commands.map((command) => command[0])).toEqual(["curl", "bash"])
+    expect(yield* test.fs.readFileString(layout.executable)).toBe("binary")
+    expect(links(test.global.cache)).toEqual([])
+  }),
+)
+
+windows("windows leaves a source checkout's runtime alone", () =>
+  Effect.gen(function* () {
+    const layout = { cache: "" }
+    const test = yield* fixture(() => {
+      expect(links(layout.cache)).toEqual([])
+      return {}
+    }, "not-opencode")
+    layout.cache = test.global.cache
+    yield* test.updater.upgrade("bun", "2.3.4")
+    expect(test.commands).toHaveLength(1)
+  }),
+)
+
+unix("other platforms never link the running binary", () =>
+  Effect.gen(function* () {
+    const layout = { cache: "" }
+    const test = yield* fixture(() => {
+      expect(links(layout.cache)).toEqual([])
+      return {}
+    })
+    layout.cache = test.global.cache
+    yield* test.updater.upgrade("bun", "2.3.4")
+    expect(yield* test.fs.readFileString(test.executable)).toBe("binary")
   }),
 )
 

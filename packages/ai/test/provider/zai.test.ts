@@ -158,6 +158,38 @@ it.effect("ZAI lowers effort using the selected native API without inventing thi
   }),
 )
 
+it.effect("ZAI Coding Chat sends PDFs from tool results as file parts", () =>
+  Effect.gen(function* () {
+    const prepared = yield* compileRequest(
+      LLM.request({
+        model: ZAICodingPlan.configure({ apiKey: "fixture" }).chat("glm-5.3-flash"),
+        messages: [
+          Message.user("Read the report."),
+          Message.assistant({ type: "tool-call", id: "call_pdf", name: "read", input: {} }),
+          Message.tool({
+            id: "call_pdf",
+            name: "read",
+            resultType: "content",
+            result: [
+              {
+                type: "file",
+                mime: "application/pdf",
+                uri: "data:application/pdf;base64,JVBERi0=",
+                name: "report.pdf",
+              },
+            ],
+          }),
+        ],
+      }),
+    )
+
+    expect(prepared.body.messages.at(-1)).toEqual({
+      role: "user",
+      content: [{ type: "file", file: { filename: "report.pdf", file_data: "data:application/pdf;base64,JVBERi0=" } }],
+    })
+  }),
+)
+
 it.effect("ZAI rejects invalid typed thinking options before execution", () =>
   Effect.gen(function* () {
     const model = ZAI.configure({ apiKey: "fixture" })

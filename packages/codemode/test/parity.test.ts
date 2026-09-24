@@ -964,7 +964,7 @@ describe("coercion parity: unknown static members read as undefined", () => {
     expect(await value(`return typeof Math.sum`)).toBe("undefined")
     expect(await value(`return RegExp.quote === undefined`)).toBe(true)
     expect(await value(`return Number.range === undefined`)).toBe(true)
-    expect(await value(`return String.raw === undefined`)).toBe(true)
+    expect(await value(`return String.dedent === undefined`)).toBe(true)
     expect(await value(`return isFinite.something === undefined`)).toBe(true)
     expect(await value(`return console.group === undefined`)).toBe(true)
     expect(await value(`return Date.moment === undefined`)).toBe(true)
@@ -1077,5 +1077,104 @@ describe("functions are objects", () => {
         return [fn.count, Object.keys(fn), "count" in fn, "name" in fn, name, count, renamed, delete fn.count, fn.count]
       `),
     ).toEqual([3, ["count"], true, true, "fn", 3, true, true, null])
+  })
+})
+
+describe("tagged templates", () => {
+  test("the tag receives the cooked strings, their raw forms, and the substitutions in order", async () => {
+    expect(
+      await value(`
+        const tag = (strings, ...values) => [strings, strings.raw, values, Object.keys(strings)]
+        return tag\`a\${1}b\\n\${2}c\`
+      `),
+    ).toEqual([
+      ["a", "b\n", "c"],
+      ["a", "b\\n", "c"],
+      [1, 2],
+      ["0", "1", "2"],
+    ])
+  })
+
+  test("an invalid escape cooks to undefined and keeps its raw text", async () => {
+    expect(await value(`return ((strings) => [strings[0] === undefined, strings.raw[0]])\`\\unicode\``)).toEqual([
+      true,
+      "\\unicode",
+    ])
+  })
+
+  test("each site has one template object; different sites differ", async () => {
+    expect(
+      await value(`
+        const seen = []
+        const tag = (strings) => { seen.push(strings) }
+        for (let i = 0; i < 2; i++) tag\`x\${i}\`
+        tag\`x\${0}\`
+        return [seen[0] === seen[1], seen[0] === seen[2]]
+      `),
+    ).toEqual([true, false])
+  })
+
+  test("the tag is read like a callee: members, chained tags, async tags, and the not-a-function error", async () => {
+    expect(
+      await value(`
+        const o = { tag: (strings) => strings[0].toUpperCase() }
+        const chain = () => chain
+        const asyncTag = async (strings, value) => strings[0] + value
+        let failure
+        try { (1)\`x\` } catch (error) { failure = error instanceof TypeError }
+        return [o.tag\`abc\`, typeof chain\`a\`\`b\`, await asyncTag\`n=\${1}\`, failure]
+      `),
+    ).toEqual(["ABC", "function", "n=1", true])
+  })
+
+  test("raw is read-only", async () => {
+    expect(await value(`try { ((strings) => { strings.raw = 1 })\`a\` } catch (error) { return error.name }`)).toBe(
+      "TypeError",
+    )
+  })
+})
+
+describe("String.raw", () => {
+  test("joins the raw strings with the substitutions", async () => {
+    expect(await value(`return [String.raw\`a\\n\${1}b\`, String.raw({ raw: ["x", "y", "z"] }, 1, 2, 3)]`)).toEqual([
+      "a\\n1b",
+      "x1y2z",
+    ])
+  })
+
+  test("extra substitutions are dropped, missing ones are skipped, and a program object's toString is used", async () => {
+    expect(
+      await value(`
+        const shout = { toString() { return "!" } }
+        return [String.raw({ raw: ["x", "y"] }, 1, 2), String.raw({ raw: ["x", "y", "z"] }, shout), String.raw({ raw: { length: 0 } })]
+      `),
+    ).toEqual(["x1y", "x!yz", ""])
+  })
+
+  test("a template without a raw array is a TypeError", async () => {
+    const failure = await error(`String.raw(1)`)
+    expect(failure.message).toContain("String.raw expects a template object with a raw array")
+  })
+})
+
+describe("sloppy duplicate parameters and for...in targets", () => {
+  test("a repeated parameter name binds the last argument", async () => {
+    expect(await value(`function f(a, b, a) { return [a, b] } return [f(1, 2, 3), f(1)]`)).toEqual([
+      [3, 2],
+      [null, null],
+    ])
+  })
+
+  test("for...in assigns to any target: members, computed members, and patterns", async () => {
+    expect(
+      await value(`
+        const x = {}, seen = [], a = []
+        let i = 0, first
+        for (x.y in { p: 1, q: 2 }) seen.push(x.y)
+        for (a[i++] in { p: 1, q: 2 });
+        for ([first] in { ab: 1 });
+        return [seen, x.y, a, first]
+      `),
+    ).toEqual([["p", "q"], "q", ["p", "q"], "a"])
   })
 })

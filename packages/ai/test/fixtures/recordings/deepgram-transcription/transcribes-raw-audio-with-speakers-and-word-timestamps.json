@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:deepgram-transcription",
+      "provider:deepgram",
+      "protocol:deepgram-transcription"
+    ],
+    "name": "deepgram-transcription/transcribes-raw-audio-with-speakers-and-word-timestamps",
+    "recordedAt": "2026-09-23T12:32:18.578Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&detect_language=true&diarize_model=latest&utterances=true",
+        "headers": {
+          "content-type": "audio/mpeg"
+        },
+        "body": "[audio]"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"metadata\":{\"transaction_key\":\"deprecated\",\"request_id\":\"01a0ce40-a44f-73b0-9d99-cdfc4f184268\",\"sha256\":\"95495edaebf6b10b2877de8c7b9eb7372de315c105fa8e73ed656ef2ec28ca02\",\"created\":\"2026-09-23T12:32:18.036Z\",\"duration\":1.5411875,\"channels\":1,\"models\":[\"2187e11a-3532-4498-b076-81fa530bdd49\"],\"model_info\":{\"2187e11a-3532-4498-b076-81fa530bdd49\":{\"name\":\"general-nova-3\",\"version\":\"2025-07-31.0\",\"arch\":\"nova-3\"}},\"diarize_info\":{\"model_uuid\":\"6946b038-8264-4505-acf7-9822c009fecb\",\"arch\":\"v2\"}},\"results\":{\"channels\":[{\"alternatives\":[{\"transcript\":\"Hello from OpenCode.\",\"confidence\":0.96972656,\"words\":[{\"word\":\"hello\",\"start\":0.16,\"end\":0.64,\"confidence\":0.9892578,\"speaker\":0,\"speaker_confidence\":0.98,\"punctuated_word\":\"Hello\"},{\"word\":\"from\",\"start\":0.64,\"end\":0.88,\"confidence\":0.96972656,\"speaker\":0,\"speaker_confidence\":0.98,\"punctuated_word\":\"from\"},{\"word\":\"opencode\",\"start\":0.88,\"end\":1.4399999,\"confidence\":0.9472656,\"speaker\":0,\"speaker_confidence\":0.98,\"punctuated_word\":\"OpenCode.\"}],\"paragraphs\":{\"transcript\":\"\\nSpeaker 0: Hello from OpenCode.\",\"paragraphs\":[{\"sentences\":[{\"text\":\"Hello from OpenCode.\",\"start\":0.16,\"end\":1.4399999}],\"speaker\":0,\"num_words\":3,\"start\":0.16,\"end\":1.4399999}]}}],\"detected_language\":\"en\",\"language_confidence\":0.9998003}],\"utterances\":[{\"start\":0.16,\"end\":1.4399999,\"confidence\":0.96875,\"channel\":0,\"transcript\":\"Hello from OpenCode.\",\"words\":[{\"word\":\"hello\",\"start\":0.16,\"end\":0.64,\"confidence\":0.9892578,\"speaker\":0,\"speaker_confidence\":0.98,\"punctuated_word\":\"Hello\"},{\"word\":\"from\",\"start\":0.64,\"end\":0.88,\"confidence\":0.96972656,\"speaker\":0,\"speaker_confidence\":0.98,\"punctuated_word\":\"from\"},{\"word\":\"opencode\",\"start\":0.88,\"end\":1.4399999,\"confidence\":0.9472656,\"speaker\":0,\"speaker_confidence\":0.98,\"punctuated_word\":\"OpenCode.\"}],\"speaker\":0,\"id\":\"43d717d5-ca00-48c1-a39c-381be0b1dad2\"}]}}"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.deepgram.com/v1/listen?model=nova-3&smart_format=true&detect_language=true&diarize_model=latest&utterances=true",
+        "headers": {
+          "content-type": "audio/mpeg"
+        },
+        "body": "[audio]"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"metadata\":{\"transaction_key\":\"deprecated\",\"request_id\":\"01a0ce40-a609-78c2-8a9d-806e3ff8db0b\",\"sha256\":\"95495edaebf6b10b2877de8c7b9eb7372de315c105fa8e73ed656ef2ec28ca02\",\"created\":\"2026-09-23T12:32:18.478Z\",\"duration\":1.5411875,\"channels\":1,\"models\":[\"2187e11a-3532-4498-b076-81fa530bdd49\"],\"model_info\":{\"2187e11a-3532-4498-b076-81fa530bdd49\":{\"name\":\"general-nova-3\",\"version\":\"2025-07-31.0\",\"arch\":\"nova-3\"}},\"diarize_info\":{\"model_uuid\":\"6946b038-8264-4505-acf7-9822c009fecb\",\"arch\":\"v2\"}},\"results\":{\"channels\":[{\"alternatives\":[{\"transcript\":\"Hello from OpenCode.\",\"confidence\":0.96972656,\"words\":[{\"word\":\"hello\",\"start\":0.16,\"end\":0.64,\"confidence\":0.9892578,\"speaker\":0,\"speaker_confidence\":0.98,\"punctuated_word\":\"Hello\"},{\"word\":\"from\",\"start\":0.64,\"end\":0.88,\"confidence\":0.96972656,\"speaker\":0,\"speaker_confidence\":0.98,\"punctuated_word\":\"from\"},{\"word\":\"opencode\",\"start\":0.88,\"end\":1.4399999,\"confidence\":0.9472656,\"speaker\":0,\"speaker_confidence\":0.98,\"punctuated_word\":\"OpenCode.\"}],\"paragraphs\":{\"transcript\":\"\\nSpeaker 0: Hello from OpenCode.\",\"paragraphs\":[{\"sentences\":[{\"text\":\"Hello from OpenCode.\",\"start\":0.16,\"end\":1.4399999}],\"speaker\":0,\"num_words\":3,\"start\":0.16,\"end\":1.4399999}]}}],\"detected_language\":\"en\",\"language_confidence\":0.9998003}],\"utterances\":[{\"start\":0.16,\"end\":1.4399999,\"confidence\":0.96875,\"channel\":0,\"transcript\":\"Hello from OpenCode.\",\"words\":[{\"word\":\"hello\",\"start\":0.16,\"end\":0.64,\"confidence\":0.9892578,\"speaker\":0,\"speaker_confidence\":0.98,\"punctuated_word\":\"Hello\"},{\"word\":\"from\",\"start\":0.64,\"end\":0.88,\"confidence\":0.96972656,\"speaker\":0,\"speaker_confidence\":0.98,\"punctuated_word\":\"from\"},{\"word\":\"opencode\",\"start\":0.88,\"end\":1.4399999,\"confidence\":0.9472656,\"speaker\":0,\"speaker_confidence\":0.98,\"punctuated_word\":\"OpenCode.\"}],\"speaker\":0,\"id\":\"6f46ea75-616b-4209-b644-aae3e8f1e3c0\"}]}}"
+      }
+    }
+  ]
+}

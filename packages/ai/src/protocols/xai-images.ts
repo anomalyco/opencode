@@ -4,7 +4,7 @@ import { ImageModel, ImageResponse, type ImageRequestFor } from "../image.js"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderID, mergeJsonRecords, type AIError } from "../schema/index.js"
+import { ProviderID, mergeJsonRecords } from "../schema/index.js"
 import { ProviderShared, optionalNull } from "./shared.js"
 import { MediaInput } from "./utils/media-input.js"
 
@@ -58,15 +58,12 @@ const nativeOptions = (options: XAIImageOptions | undefined) => {
 
 const isEdit = (request: Request) => (request.images?.length ?? 0) > 0
 
-const reference = (asset: Media.Asset): Effect.Effect<Record<string, unknown>, AIError> => {
-  const inline = asset.inline()
-  if (inline) return Effect.succeed({ url: inline.dataUrl, type: "image_url" as const })
-  const url = ProviderShared.mediaUrl(asset)
-  if (url) return Effect.succeed({ url, type: "image_url" as const })
-  const id = MediaInput.refID(asset, PROVIDER)
-  if (id) return Effect.succeed({ file_id: id })
-  return Effect.fail(ProviderShared.invalidRequest(`${NAME} accepts image URLs, data URLs, bytes, and xAI file IDs`))
-}
+const reference = (asset: Media.Asset) =>
+  ProviderShared.mediaReference(asset, PROVIDER, NAME).pipe(
+    Effect.map((item) =>
+      item.type === "ref" ? { file_id: item.value } : { url: item.value, type: "image_url" as const },
+    ),
+  )
 
 const fromRequest = Effect.fn("XAIImages.fromRequest")(function* (request: Request) {
   const references = yield* Effect.forEach(request.images ?? [], reference)

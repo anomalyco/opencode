@@ -22,7 +22,8 @@ import {
 import { classifyProviderFailure } from "../provider-error.js"
 import { Media } from "../media.js"
 import { JsonObject, knownString, lenient, optionalArray, optionalNull, ProviderShared } from "./shared.js"
-import { GeminiToolSchema } from "./utils/gemini-tool-schema.js"
+import { GeminiGenerateContent } from "./utils/gemini-generate-content.js"
+import { GeminiJsonSchema } from "./utils/gemini-json-schema.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolSchemaProjection } from "./utils/tool-schema.js"
 
@@ -132,7 +133,7 @@ const GeminiSystemInstruction = Schema.Struct({
 const GeminiFunctionDeclaration = Schema.Struct({
   name: Schema.String,
   description: Schema.String,
-  parameters: Schema.optional(JsonObject),
+  parametersJsonSchema: JsonObject,
 })
 
 const GeminiTool = Schema.Struct({
@@ -266,35 +267,14 @@ interface ParserState {
 }
 
 // =============================================================================
-// Tool Schema Conversion
-// =============================================================================
-// Tool-schema conversion has two distinct concerns:
-//
-// 1. Sanitize — fix common authoring mistakes Gemini rejects: integer/number
-//    enums (must be strings), `required` entries that don't match a property,
-//    untyped arrays (`items` must be present), and `properties`/`required`
-//    keys on non-object scalars. Mirrors OpenCode's historical Gemini rules.
-//
-// 2. Project — lossy mapping from JSON Schema to Gemini's schema dialect:
-//    drop empty root parameter schemas while preserving nested empty objects,
-//    expand type arrays into `anyOf`, derive `nullable: true` from null members,
-//    coerce `const` to `[const]` enum, recurse properties/items, and propagate
-//    only an allowlisted set of keys (description, required, format, type,
-//    nullable, enum, properties, items, allOf, anyOf, oneOf, minLength).
-//    Anything outside the allowlist (e.g. `additionalProperties`, `$ref`) is
-//    silently dropped.
-//
-// Sanitize runs first, then project. The implementation lives in
-// `utils/gemini-tool-schema` so this protocol keeps the same shape as the other
-// provider protocols.
-
-// =============================================================================
 // Request Lowering
 // =============================================================================
+// Tool schemas go in `parametersJsonSchema`, which accepts standard JSON Schema.
+// `utils/gemini-json-schema` rewrites only the few shapes Gemini still rejects.
 const lowerTool = (tool: ToolDefinition, inputSchema: JsonSchema) => ({
   name: tool.name,
   description: tool.description,
-  parameters: GeminiToolSchema.convert(inputSchema),
+  parametersJsonSchema: GeminiJsonSchema.normalize(inputSchema),
 })
 
 const lowerToolConfig = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
@@ -305,14 +285,9 @@ const lowerToolConfig = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
     tool: (name) => ({ functionCallingConfig: { mode: "ANY" as const, allowedFunctionNames: [name] } }),
   })
 
-// Gemini does not fetch public URLs; inline payloads and Gemini Files references are the accepted inputs.
 const lowerContentPart = Effect.fn("Gemini.lowerContentPart")(function* (part: TextPart | MediaPart) {
   if (part.type === "text") return { text: part.text }
-  const source = part.media.source
-  if (source.type === "ref" && source.provider === "google")
-    return { fileData: { mimeType: part.media.mediaType, fileUri: source.id } }
-  const media = yield* ProviderShared.requireInlineMedia("Gemini", part.media)
-  return { inlineData: { mimeType: media.mime, data: media.base64 } }
+  return yield* GeminiGenerateContent.mediaPart("Gemini", part.media)
 })
 
 const providerMetadata = (key: string, metadata: Record<string, unknown>): ProviderMetadata => ({ [key]: metadata })
