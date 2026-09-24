@@ -31,9 +31,7 @@ story("renders every tool error outcome without leaking hidden tools", async ({ 
   const timeline = await mount("current-session-research-agents--agent-research", { args: { scenario: "failures" } })
   const names = ["shell", "edit", "write", "patch", "webfetch", "websearch", "subagent", "skill", "mcp_probe"]
   const group = timeline.locator(`[data-timeline-part-ids="${names.map((name) => `tool_error_${name}`).join(",")}"]`)
-  const usage = group.locator('[data-component="context-tool-group-trigger"] [data-slot="context-tool-group-usage"]')
-  await expect(usage.locator('[data-slot="context-tool-group-prefix"]')).toHaveText("Used")
-  await expect(usage.locator('[data-slot="context-tool-group-count"]')).toHaveText(String(names.length))
+  await expect(group.getByRole("button")).toHaveAccessibleName(/^Used 9 /)
   await group.getByRole("button").click()
   await expect(timeline.locator('[data-kind="tool-error-card"]')).toHaveCount(names.length + 1)
   const dismissed = timeline.locator('[data-timeline-part-id="tool_error_question_dismissed"]')
@@ -93,9 +91,7 @@ story("labels skill tools from IDs and result metadata", async ({ mount }) => {
   const timeline = await mount("current-session-research-agents--agent-research", { args: { scenario: "skills" } })
   const group = timeline.locator('[data-timeline-part-ids="tool_skill_id,tool_skill_name"]')
   await expect(group.getByRole("button")).toHaveAccessibleName("Used 2 Skill")
-  await expect(
-    group.locator('[data-component="context-tool-group-trigger"] [data-slot="basic-tool-tool-title"]'),
-  ).toHaveText("Skill")
+  await expect(group.locator('[data-slot="context-tool-group-title"]')).toHaveText("Used 2 Skill")
   await group.getByRole("button").click()
   const loaded = group.locator('[data-component="tool-loaded-item"]')
   await expect(loaded).toHaveCount(1)
@@ -118,9 +114,7 @@ story("groups every collapsed tool until visible text separates the stack", asyn
   )
   await expect(group).toBeVisible()
   await expect(group.getByRole("button")).toHaveAccessibleName("Used 4 Glob, Grep, Shell, List")
-  await expect(
-    group.locator('[data-component="context-tool-group-trigger"] [data-slot="basic-tool-tool-title"]'),
-  ).toHaveText("Glob, Grep, Shell, List")
+  await expect(group.locator('[data-slot="context-tool-group-title"]')).toHaveText("Used 4 Glob, Grep, Shell, List")
   await expect(timeline.locator('[data-timeline-row="AssistantPart"]')).toHaveCount(3)
   await expect(timeline.locator('[data-timeline-spacing="content"]')).toHaveCount(2)
   await expect(timeline.locator('[data-timeline-spacing="content"]').nth(0)).toHaveCSS("padding-top", "16px")
@@ -130,8 +124,7 @@ story("groups every collapsed tool until visible text separates the stack", asyn
 story("combines adjacent edit calls and repeated files into one group", async ({ mount }) => {
   const timeline = await mount("current-session-file-changes--changing-files", { args: { scenario: "repeated" } })
   const group = timeline.locator('[data-timeline-part-ids="tool_grouped_edit_first,tool_grouped_edit_second"]')
-  await expect(group.locator('[data-slot="basic-tool-tool-title"]')).toContainText("Edit")
-  await expect(group.getByText("1 file", { exact: true })).toBeVisible()
   await expect(group.locator('[data-slot="apply-patch-filename"]')).toHaveText(["first.ts"])
+  await expect(group.locator('[data-scope="apply-patch"] button')).toContainText("+2")
   await expect(group.locator('[data-scope="apply-patch"] button')).toHaveAttribute("aria-expanded", "true")
 })

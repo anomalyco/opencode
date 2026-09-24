@@ -606,43 +606,17 @@
   cursor: default;
 
   [data-slot="context-tool-group-title"] {
-    display: flex;
-    align-items: center;
-    gap: 0;
-    flex-shrink: 1;
+    flex: 0 1 auto;
     min-width: 0;
-  }
-
-  [data-slot="context-tool-group-usage"] {
-    flex-shrink: 0;
-    display: flex;
-    align-items: center;
-    gap: 0;
-    color: var(--v2-text-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--v2-text-text-base);
     font-family: var(--v2-font-family-sans);
     font-size: 13px;
     font-weight: 440;
     line-height: var(--line-height-compact);
     letter-spacing: -0.04px;
-
-    & > [data-slot="context-tool-group-prefix"],
-    & > [data-slot="context-tool-group-count"] {
-      white-space: pre;
-    }
-  }
-
-  [data-slot="context-tool-group-count"] {
-    color: var(--v2-text-text-base);
-  }
-
-  [data-slot="context-tool-group-prefix"] {
-    flex-shrink: 0;
-  }
-
-  [data-slot="basic-tool-tool-title"] {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   [data-slot="collapsible-arrow"] {

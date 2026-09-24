@@ -26,13 +26,16 @@ export function MigrationStatus(props: { server: ServerReadyData }) {
         total: progress.denominator,
       })
     }
-    if (progress.numerator === undefined) return language.t("toast.migration.progress.working")
+    if (progress.numerator === undefined) return language.tDynamic("toast.migration.progress.working", progress.label)
     if (progress.denominator === undefined)
-      return language.t("toast.migration.progress.working.current", { current: progress.numerator })
-    return language.t("toast.migration.progress.working.progress", {
-      current: progress.numerator,
-      total: progress.denominator,
-    })
+      return language.tDynamic("toast.migration.progress.working.current", `${progress.label} ${progress.numerator}`, {
+        current: progress.numerator,
+      })
+    return language.tDynamic(
+      "toast.migration.progress.working.progress",
+      `${progress.label} ${progress.numerator}/${progress.denominator}`,
+      { current: progress.numerator, total: progress.denominator },
+    )
   }
 
   const hide = () => {

@@ -269,7 +269,7 @@ export const dict = {
 
   "provider.disconnect.toast.disconnected.title": "{{provider}} disconnected",
   "provider.disconnect.toast.disconnected.description": "{{provider}} models are no longer available.",
-  "provider.disconnect.toast.noCredentials.description": "No removable credentials found for {{provider}}.",
+  "provider.disconnect.toast.noCredentials.description": "No removable credentials found for {{provider}}",
   "provider.disconnect.toast.failed.description": "Failed to disconnect {{provider}}.",
 
   "model.tag.free": "Free",
@@ -804,8 +804,8 @@ export const dict = {
   "session.timeline.notice.cancelled": "{{actor}} cancelled",
   "session.error.serverConnection": "Can't connect to this server",
   "session.review.filesChanged": "Files Changed {{count}}",
-  "session.review.filesChangedCount.one": "{{count}} file changed",
-  "session.review.filesChangedCount.other": "{{count}} files changed",
+  "session.review.filesChangedCount.one": "Files Changed {{count}}",
+  "session.review.filesChangedCount.other": "Files Changed {{count}}",
   "session.review.change.one": "Change",
   "session.review.change.other": "Changes",
   "session.review.loadingChanges": "Loading changes…",

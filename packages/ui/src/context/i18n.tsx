@@ -73,8 +73,17 @@ export function createUiI18n(source: UiI18nSource): UiI18n {
     ...source,
     tDynamic: (key, value, params) =>
       source.locale().toLowerCase().split("-")[0] === "en" ? resolveTemplate(value, params) : source.t(key, params),
-    list: (items) => new Intl.ListFormat(source.locale(), { style: "long", type: "conjunction" }).format(items),
-    listSeparator: (index, count) => localizedListSeparator(source.locale(), index, count),
+    // English tool labels intentionally use comma-only lists; the animated count labels use the same punctuation.
+    list: (items) =>
+      source.locale().toLowerCase().split("-")[0] === "en"
+        ? items.join(", ")
+        : new Intl.ListFormat(source.locale(), { style: "long", type: "conjunction" }).format(items),
+    listSeparator: (index, count) =>
+      source.locale().toLowerCase().split("-")[0] === "en"
+        ? index > 0 && index < count
+          ? ","
+          : ""
+        : localizedListSeparator(source.locale(), index, count),
   }
 }
 

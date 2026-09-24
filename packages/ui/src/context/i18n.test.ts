@@ -56,7 +56,9 @@ describe("localizedListSeparator", () => {
   })
 
   test("formats a complete localized list", () => {
-    expect(i18n("en", "").list(["Read", "Search", "List"])).toBe("Read, Search, and List")
+    expect(i18n("en", "").list(["Read", "Search", "List"])).toBe("Read, Search, List")
+    expect(i18n("en-US", "").list(["Read", "Search"])).toBe("Read, Search")
+    expect(i18n("en", "").listSeparator(2, 3)).toBe(",")
     expect(i18n("de", "").list(["Lesen", "Suchen"])).toBe("Lesen und Suchen")
   })
 })

@@ -251,6 +251,12 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     const plural = (key: PluralKey, count: number, params?: Record<string, string | number | boolean>) =>
       pluralForm(key, pluralCategory(intl(), count), { ...params, count })
 
+    const tDynamic = <Key extends Extract<keyof Dictionary, string>>(
+      key: TranslationKey<Key>,
+      source: string,
+      params?: Record<string, string | number | boolean>,
+    ) => (intl().toLowerCase().split("-")[0] === "en" ? resolveTemplate(source, params) : t(key, params))
+
     const rich = <Key extends Extract<keyof Dictionary, string>>(
       key: TranslationKey<Key>,
       params: Record<string, JSX.Element>,
@@ -288,6 +294,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       locales: LOCALES,
       label,
       t,
+      tDynamic,
       plural,
       pluralForm,
       rich,
