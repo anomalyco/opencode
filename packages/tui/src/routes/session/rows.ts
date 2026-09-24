@@ -9,13 +9,17 @@ import {
   completePrevious,
   groupRefs,
   hasPart,
+  messagePath,
   partitionPending,
+  partPath,
   projectEntries,
   type AppendPart,
   type CacheUsage,
   type PartRef,
   type ProjectionEntry,
   type SessionRow,
+  type Verbosity,
+  defaultVerbosity,
 } from "./grouping/session"
 export type { CacheUsage, PartRef, SessionRow } from "./grouping/session"
 
@@ -46,6 +50,7 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
   const [rows, setRows] = createStore<SessionRow[]>([])
   const revertBoundary = () => data.session.get(sessionID())?.revert?.messageID
   const turnTokens = () => Boolean(config.data.debug?.turn_tokens)
+  const verbosity = () => config.data.session?.verbosity ?? defaultVerbosity
 
   function reduce() {
     const messages = data.session.message.list(sessionID())
@@ -60,6 +65,7 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
       boundary ? visible.filter((message) => message.id < boundary) : visible,
       inputs,
       turnTokens(),
+      verbosity(),
     )
     partitionPending(rows, pendingPermissions())
     const position = rows.findIndex((row) => row.type === "message" && inputs.has(row.messageID))
@@ -165,7 +171,7 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
     ),
   )
 
-  createEffect(on(turnTokens, () => setRows(reconcile(reduce())), { defer: true }))
+  createEffect(on([turnTokens, verbosity], () => setRows(reconcile(reduce())), { defer: true }))
 
   const appendMessage = (messageID: string) =>
     setRows(
@@ -184,7 +190,7 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
     setRows(
       produce((draft) => {
         if (!hasPart(draft, ref)) {
-          append(draft, ref, part, queuedStart(draft))
+          append(draft, ref, part, queuedStart(draft), verbosity())
           return
         }
         if (part.type !== "reasoning" || part.time?.completed === undefined) return
@@ -304,7 +310,12 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
   return rows
 }
 
-export function reduceSessionRows(messages: SessionMessageInfo[], inputs = new Set<string>(), turnTokens = false) {
+export function reduceSessionRows(
+  messages: SessionMessageInfo[],
+  inputs = new Set<string>(),
+  turnTokens = false,
+  verbosity: Verbosity = defaultVerbosity,
+) {
   const isInput = (message: SessionMessageInfo) => inputs.has(message.id)
   const pendingCompactions = messages.filter((message) => message.type === "compaction" && message.status === "running")
   const pending = new Set([...pendingCompactions.map((message) => message.id), ...inputs])
@@ -341,7 +352,11 @@ export function reduceSessionRows(messages: SessionMessageInfo[], inputs = new S
       }
       if (message.type === "synthetic" && !message.description?.trim()) return rows
       if (message.type === "compaction" && message.status === "completed" && usage) usage.previousTurnCache = undefined
-      rows.push({ entry: { type: "message", messageID: message.id }, closesPrevious: !pending.has(message.id) })
+      rows.push({
+        entry: { type: "message", messageID: message.id },
+        path: messagePath(message, verbosity),
+        closesPrevious: !pending.has(message.id),
+      })
       return rows
     }
     usage?.steps.push(message)
@@ -349,7 +364,11 @@ export function reduceSessionRows(messages: SessionMessageInfo[], inputs = new S
     message.content.forEach((part) => {
       const partID = part.type === "tool" ? part.id : `${part.type}:${ordinals[part.type]++}`
       if ((part.type === "text" || part.type === "reasoning") && !part.text.trim()) return
-      rows.push({ entry: { type: "part", ref: { messageID: message.id, partID } }, part })
+      rows.push({
+        entry: { type: "part", ref: { messageID: message.id, partID } },
+        part,
+        path: partPath(part, verbosity),
+      })
     })
     const terminal = (message.finish && !["tool-calls", "unknown"].includes(message.finish)) || message.error
     if (terminal || message.retry) {
