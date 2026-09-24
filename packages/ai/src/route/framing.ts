@@ -1,7 +1,6 @@
 import { Effect, Stream } from "effect"
 import { makeParser, type Event } from "effect/unstable/encoding/Sse"
-import type { AIError } from "../schema/index.js"
-import { eventError } from "./errors.js"
+import { AIError, InvalidProviderOutputError } from "../schema/index.js"
 
 /**
  * Decode a streaming HTTP response body into provider-protocol frames.
@@ -54,7 +53,15 @@ export const sseFraming = (
       (state, chunk) =>
         Effect.gen(function* () {
           const error = state.parser.feed(chunk)
-          if (error) return yield* eventError("sse", error.message, chunk, error)
+          if (error)
+            return yield* new AIError({
+              reason: new InvalidProviderOutputError({
+                route: "sse",
+                message: error.message,
+                body: chunk,
+                cause: error,
+              }),
+            })
           return [state, state.output.splice(0)] as const
         }),
     ),

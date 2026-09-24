@@ -2,13 +2,20 @@ import { Effect, Schema, Stream } from "effect"
 import { Headers, HttpClientRequest, type HttpClientResponse } from "effect/unstable/http"
 import { Auth, type AuthInput } from "./auth.js"
 import { Endpoint } from "./endpoint.js"
-import { invalidRequest, unsupportedOperation } from "./errors.js"
 import { RequestExecutorService, type Interface } from "./executor-service.js"
 import { RequestExecutor } from "./executor.js"
 import { MediaProtocol } from "./media-protocol.js"
 import { Generation, resultEvents, type AwaitOptions, type Observation } from "../generation.js"
 import type { Media } from "../media.js"
-import { AIError, AIErrorReason, HttpOptions, ProviderID, mergeHttpOptions } from "../schema/index.js"
+import {
+  AIError,
+  AIErrorReason,
+  HttpOptions,
+  InvalidRequestError,
+  ProviderID,
+  UnsupportedOperationError,
+  mergeHttpOptions,
+} from "../schema/index.js"
 import { encodeJson } from "../utils/json.js"
 import { sanitizeSurrogates } from "../utils/sanitize.js"
 
@@ -185,7 +192,15 @@ export const queued = <Request extends MediaRequest, Response, Token>(
     execute: Execute,
   ) {
     const token = yield* decodeToken(raw).pipe(
-      Effect.mapError((cause) => invalidRequest(`${protocol.id} cannot resume a generation from this token`, cause)),
+      Effect.mapError(
+        (cause) =>
+          new AIError({
+            reason: new InvalidRequestError({
+              message: `${protocol.id} cannot resume a generation from this token`,
+              cause,
+            }),
+          }),
+      ),
     )
     const route = generationRoute(token, transport.http(model), execute)
     return new Generation(route, encodeToken(token), yield* route.status)
@@ -258,11 +273,13 @@ export const dispatch = <Event, Response>(input: {
   readonly responseEvents: (response: Response) => ReadonlyArray<Event>
 }) => {
   const notQueued = (route: { readonly provider: ProviderID; readonly id: string }, operation: string) =>
-    unsupportedOperation({
-      operation: `${input.modality}.${operation}`,
-      provider: route.provider,
-      route: route.id,
-      message: `${route.provider}/${route.id} is not a queued route; use generate or stream`,
+    new AIError({
+      reason: new UnsupportedOperationError({
+        operation: `${input.modality}.${operation}`,
+        provider: route.provider,
+        route: route.id,
+        message: `${route.provider}/${route.id} is not a queued route; use generate or stream`,
+      }),
     })
   const start = <Request extends MediaRequest>(route: AnyRoute<Request, Event, Response>, request: Request) => {
     if (route.kind !== "queued") return Effect.fail(notQueued(route, "start"))
@@ -429,11 +446,13 @@ const rejectUnsupported = <Request extends object>(
   })
   if (present.length === 0) return Effect.void
   return Effect.fail(
-    unsupportedOperation({
-      operation: `media.${present[0]}`,
-      provider,
-      route,
-      message: `${provider}/${route} does not support ${present.join(", ")}`,
+    new AIError({
+      reason: new UnsupportedOperationError({
+        operation: `media.${present[0]}`,
+        provider,
+        route,
+        message: `${provider}/${route} does not support ${present.join(", ")}`,
+      }),
     }),
   )
 }

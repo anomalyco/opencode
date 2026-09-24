@@ -11,8 +11,8 @@ import {
   InvalidRequestError,
   ProviderID,
   ProviderInternalError,
+  UnsupportedOperationError,
 } from "../schema/index.js"
-import { eventError, unsupportedOperation } from "./errors.js"
 
 // ---------------------------------------------------------------------------
 // Bodies
@@ -189,6 +189,8 @@ const context = (response: HttpClientResponse.HttpClientResponse) =>
 /** One protocol's route id, display name, and provider, with the decoders and errors that carry them. */
 export const identity = (input: { readonly id: string; readonly name: string; readonly provider: string }) => {
   const provider = ProviderID.make(input.provider)
+  const frameError = (message: string, body?: string, cause?: unknown) =>
+    new AIError({ reason: new InvalidProviderOutputError({ route: input.id, message, body, cause }) })
 
   /**
    * Read a text body while retaining the original payload and HTTP context on every downstream error. `invalid` is a
@@ -255,11 +257,11 @@ export const identity = (input: { readonly id: string; readonly name: string; re
       const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(schema))
       return (frame: string) =>
         decode(frame).pipe(
-          Effect.mapError((cause) => eventError(input.id, `${input.name} sent an invalid stream event`, frame, cause)),
+          Effect.mapError((cause) => frameError(`${input.name} sent an invalid stream event`, frame, cause)),
         )
     },
     /** A stream-time failure; the frame stays on `reason.body`. */
-    frameError: (message: string, body?: string, cause?: unknown) => eventError(input.id, message, body, cause),
+    frameError,
     incomplete: () =>
       new AIError({
         reason: new InvalidProviderOutputError({
@@ -269,7 +271,7 @@ export const identity = (input: { readonly id: string; readonly name: string; re
         }),
       }),
     unsupported: (operation: string, message: string) =>
-      unsupportedOperation({ operation, provider, route: input.id, message }),
+      new AIError({ reason: new UnsupportedOperationError({ operation, provider, route: input.id, message }) }),
   }
 }
 

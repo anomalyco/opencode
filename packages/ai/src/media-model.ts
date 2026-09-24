@@ -1,9 +1,8 @@
 import { Effect } from "effect"
 import { Endpoint } from "./route/endpoint.js"
-import { invalidRequest } from "./route/errors.js"
 import { MediaRoute } from "./route/media.js"
 import type { MediaProtocol } from "./route/media-protocol.js"
-import { type AIError, HttpOptions, ModelID, ProviderID } from "./schema/index.js"
+import { AIError, HttpOptions, InvalidRequestError, ModelID, ProviderID } from "./schema/index.js"
 
 /**
  * What every media model carries: ids, the configured route, and deployment `http` overlays. Modality classes
@@ -89,5 +88,11 @@ const isQueuedInput = <Request extends MediaRoute.MediaRequest, Event, Response,
 export const tryRequest = <A>(make: () => A): Effect.Effect<A, AIError> =>
   Effect.try({
     try: make,
-    catch: (error) => invalidRequest(error instanceof Error ? error.message : String(error), error),
+    catch: (error) =>
+      new AIError({
+        reason: new InvalidRequestError({
+          message: error instanceof Error ? error.message : String(error),
+          cause: error,
+        }),
+      }),
   })

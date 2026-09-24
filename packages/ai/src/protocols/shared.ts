@@ -3,6 +3,9 @@ import { Effect, Option, Schema } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
 import { Media } from "../media.js"
 import {
+  InvalidProviderOutputError,
+  InvalidRequestError,
+  UnsupportedOperationError,
   AIError,
   LLMRequest,
   Message,
@@ -15,10 +18,9 @@ import {
   type ToolEntry,
   type ToolResultPart,
 } from "../schema/index.js"
-import { eventError, invalidRequest, unsupportedOperation } from "../route/errors.js"
 import { Json, decodeJson, encodeJson } from "../utils/json.js"
 import { isRecord } from "../utils/record.js"
-export { Json, decodeJson, encodeJson, eventError, invalidRequest, isRecord, unsupportedOperation }
+export { Json, decodeJson, encodeJson, isRecord }
 
 const isJson = Schema.is(Schema.Json)
 export const JsonObject = Schema.Record(Schema.String, Schema.Unknown)
@@ -107,6 +109,11 @@ export const sumTokens = (...values: ReadonlyArray<number | undefined>): number 
   if (values.every((value) => value === undefined)) return undefined
   return values.reduce((acc: number, value) => acc + (value ?? 0), 0)
 }
+
+export const eventError = (route: string, message: string, body?: string, cause?: unknown) =>
+  new AIError({
+    reason: new InvalidProviderOutputError({ route, message, body, cause }),
+  })
 
 export const parseJson = (route: string, input: string, message: string) =>
   Effect.try({
@@ -240,6 +247,37 @@ export const errorText = (error: unknown) => {
   if (error === undefined) return "undefined"
   return "Unknown stream error"
 }
+
+/**
+ * Canonical invalid-request constructor shared by protocol lowering.
+ */
+export const invalidRequest = (message: string, cause?: unknown) =>
+  new AIError({
+    reason: new InvalidRequestError({ message, cause }),
+  })
+
+/**
+ * Canonical constructor for operations the selected route does not implement.
+ * Prefer this over `invalidRequest` when the failure is a missing route
+ * capability rather than a malformed caller input, so consumers can branch on
+ * `reason._tag` plus `reason.operation` instead of matching message text.
+ */
+export const unsupportedOperation = (input: {
+  readonly operation: string
+  readonly message: string
+  readonly provider?: ProviderID
+  readonly route?: string
+  readonly cause?: unknown
+}) =>
+  new AIError({
+    reason: new UnsupportedOperationError({
+      operation: input.operation,
+      message: input.message,
+      provider: input.provider,
+      route: input.route,
+      cause: input.cause,
+    }),
+  })
 
 /**
  * Lower namespaces to flat definitions for protocols without a native
