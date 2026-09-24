@@ -9,8 +9,8 @@ export type IntegrationChoice = {
   connected: boolean
 }
 
-export function selectIntegration(choices: IntegrationChoice[], kind = "integration") {
-  return new AutocompletePrompt<IntegrationChoice>({
+export async function selectIntegration(choices: IntegrationChoice[], kind = "integration") {
+  const result = await new AutocompletePrompt<IntegrationChoice>({
     options: choices,
     filter: (search, choice) =>
       [choice.label, choice.value, choice.category].some((value) => value.toLowerCase().includes(search.toLowerCase())),
@@ -58,4 +58,6 @@ export function selectIntegration(choices: IntegrationChoice[], kind = "integrat
       ].join("\n")
     },
   }).prompt()
+  if (typeof result === "string" || typeof result === "symbol") return result
+  throw new Error(`No ${kind} selected`)
 }
