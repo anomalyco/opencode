@@ -8,7 +8,7 @@ import type { ProviderPackage } from "../provider-package.js"
 import { SystemOne } from "../experimental/system-one.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { newBreakpoints, ttlBucket } from "../protocols/utils/cache.js"
-import { isRecord } from "../protocols/shared.js"
+import { isRecord, ProviderShared } from "../protocols/shared.js"
 
 export const id = ProviderID.make("openrouter")
 const baseURL = "https://openrouter.ai/api/v1"
@@ -123,7 +123,7 @@ export const protocol = Protocol.make({
           return {
             ...body,
             messages,
-            ...bodyOptions(request.providerOptions),
+            ...bodyOptions(request.providerOptions, request.generation?.maxTokens),
           } as OpenRouterBody
         }),
       ),
@@ -143,7 +143,14 @@ const cacheControl = () => {
   }
 }
 
-const bodyOptions = (input: unknown) => {
+// OpenRouter forwards `reasoning.max_tokens` as the upstream thinking budget. Upstreams such as Anthropic and Alibaba
+// reject one that is not below the output limit; 1,024 is Anthropic's minimum budget.
+const fitReasoning = (reasoning: Record<string, unknown>, maxTokens: number | undefined) =>
+  typeof reasoning.max_tokens === "number"
+    ? { ...reasoning, max_tokens: ProviderShared.fitThinkingBudget(reasoning.max_tokens, maxTokens, 1_024) }
+    : reasoning
+
+const bodyOptions = (input: unknown, maxTokens: number | undefined) => {
   const openrouter = isRecord(input) ? input : {}
   const { usage, models, provider, plugins, web_search_options, debug, user, reasoning, promptCacheKey, ...options } =
     openrouter
@@ -162,7 +169,7 @@ const bodyOptions = (input: unknown) => {
     ...(isRecord(web_search_options) ? { web_search_options } : {}),
     ...(isRecord(debug) ? { debug } : {}),
     ...(typeof user === "string" ? { user } : {}),
-    ...(isRecord(reasoning) ? { reasoning } : {}),
+    ...(isRecord(reasoning) ? { reasoning: fitReasoning(reasoning, maxTokens) } : {}),
   }
 }
 

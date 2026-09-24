@@ -152,6 +152,27 @@ describe("OpenRouter", () => {
     }),
   )
 
+  it.effect("fits the reasoning budget to half the output limit", () =>
+    Effect.gen(function* () {
+      const reasoning = (maxTokens: number | undefined, value: Record<string, unknown>) =>
+        compileRequest(
+          LLM.request({
+            model: OpenRouter.configure({ apiKey: "test-key" }).model("qwen/qwen3.8-flash"),
+            cache: "none",
+            prompt: "Hello",
+            ...(maxTokens === undefined ? {} : { generation: { maxTokens } }),
+            providerOptions: { reasoning: value },
+          }),
+        ).pipe(Effect.map((prepared) => prepared.body.reasoning))
+
+      expect(yield* reasoning(32_000, { max_tokens: 131_071 })).toEqual({ max_tokens: 16_000 })
+      expect(yield* reasoning(131_072, { max_tokens: 65_536 })).toEqual({ max_tokens: 65_536 })
+      expect(yield* reasoning(1_500, { max_tokens: 65_536 })).toEqual({ max_tokens: 1_024 })
+      expect(yield* reasoning(undefined, { max_tokens: 131_071 })).toEqual({ max_tokens: 131_071 })
+      expect(yield* reasoning(32_000, { effort: "high" })).toEqual({ effort: "high" })
+    }),
+  )
+
   it.effect("applies OpenRouter payload options from the model helper", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
