@@ -140,7 +140,7 @@ portability matrix.
 
 Editing is not a separate function; `images`/`mask` on the request select the edit path in the route (OpenAI `/images/edits`, Gemini multimodal parts, xAI `/images/edits`). Routes that cannot honor `mask` fail with `Unsupported`.
 
-`ImageRoute` is the inline | stream | queued union, dispatched on `route.kind`. `Image.stream` on a streaming route emits `image-partial` previews before each `image`; on a queued route it emits `generation-queued` / `generation-progress` observations, then the result's `image` and `finish` events.
+`ImageRoute` is the inline | stream | queued union, dispatched on `route.kind`, like every modality route. `Image.stream` on a streaming route emits `image-partial` previews before each `image`; on a queued route it emits `generation-queued` / `generation-progress` observations, then the result's `image` and `finish` events.
 
 #### Video
 
@@ -215,7 +215,7 @@ const request = Speech.request({
 })
 
 const response = yield* Speech.generate(request)   // SpeechResponse: audio: Media.Asset, timestamps?, usage?, providerMetadata?
-yield* Speech.stream(request)                      // Stream<SpeechEvent>: audio-delta { chunk } | timestamps { items } | finish { audio, usage? }
+yield* Speech.stream(request)                      // Stream<SpeechEvent>: generation-queued | generation-progress | audio-delta { chunk } | timestamps { items } | finish { audio, usage? }
 ```
 
 Execution is `MediaProtocol.stream` for every provider: one request whose body is framed and folded by a `step`
@@ -420,7 +420,7 @@ Existing facades gain per-modality selectors; the modality routes each facade pr
 
 New facades follow the existing one-file-per-provider rule. The facade selector is the public path for media models; modality-specific package entrypoints (for example `@opencode/ai/providers/openai/images`) are deferred until Core has a modality-aware model resolver.
 
-`ImageModel<Options>` gives typed `providerOptions` per model; `VideoModel`, `SpeechModel`, and `TranscriptionModel` follow the same generic. They share an internal `MediaModel` base class (ids, route, `http` overlays) that is not part of the public exports; `Generation` and the promise client work with the concrete modality models.
+`ImageModel<Options>` gives typed `providerOptions` per model; `VideoModel`, `SpeechModel`, and `TranscriptionModel` follow the same generic. As with `LanguageModel`, the route type does not carry `Options`, so `ImageModel<OpenAIImageOptions>` is an `ImageModel` and client methods take plain `ImageRequestFor`. They share an internal `MediaModel` base class (ids, route, `http` overlays) that is not part of the public exports; `Generation` and the promise client work with the concrete modality models.
 
 ### Routes and protocols
 

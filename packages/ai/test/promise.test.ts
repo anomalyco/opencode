@@ -127,6 +127,10 @@ describe("AI promise client", () => {
     expect(image.image).toBeInstanceOf(Media.Asset)
     expect(image.image.mediaType).toBe("image/png")
     expect(await ai.run(image.image.bytes())).toEqual(Uint8Array.from([1, 2, 3]))
+    const requested = await ai.image.generate(
+      ai.image.request({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" }),
+    )
+    expect(requested.image.mediaType).toBe("image/png")
 
     const deltas: Array<string> = []
     for await (const event of ai.llm.stream(request)) {
@@ -148,6 +152,7 @@ describe("AI promise client", () => {
     expect(seen).toEqual([
       "https://openai.test/v1/chat/completions",
       "https://openai.test/v1/chat/completions",
+      "https://openai.test/v1/images/generations",
       "https://openai.test/v1/images/generations",
       "https://openai.test/v1/chat/completions",
       "https://openai.test/v1/chat/completions",
@@ -277,9 +282,14 @@ describe("AI promise client", () => {
     expect(failure).toBeInstanceOf(AIError)
     expect(failure instanceof AIError && failure.reason.http?.status).toBe(404)
 
-    const invalid = await ai.llm
+    const invalidLLM = await ai.llm
       // @ts-expect-error Invalid input must reject with AIError instead of throwing synchronously.
       .generate({ model: openai.responses("gpt-5"), messages: [{ role: "bogus" }] })
+      .catch((error: unknown) => error)
+    expect(invalidLLM instanceof AIError && invalidLLM.reason._tag).toBe("InvalidRequest")
+
+    const invalid = await ai.image
+      .generate({ model: openai.image("gpt-image-2"), prompt: "A lighthouse", n: 1.5 })
       .catch((error: unknown) => error)
     expect(invalid instanceof AIError && invalid.reason._tag).toBe("InvalidRequest")
 

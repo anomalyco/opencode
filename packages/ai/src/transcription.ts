@@ -1,9 +1,8 @@
 import { Effect, Schema, Stream } from "effect"
 import { Generation, ProgressEvent, QueuedEvent, type AwaitOptions } from "./generation.js"
 import { Media } from "./media.js"
-import { MediaModel, composeAnyRoute, tryRequest } from "./media-model.js"
+import { MediaModel, composeRoute, tryRequest } from "./media-model.js"
 import { MediaRoute } from "./route/media.js"
-import type { MediaProtocol } from "./route/media-protocol.js"
 import { AIError, HttpOptions, MediaUsage, ProviderMetadata } from "./schema/index.js"
 import { TranscriptionClient, Service } from "./transcription-client.js"
 
@@ -11,88 +10,47 @@ import { TranscriptionClient, Service } from "./transcription-client.js"
 // Model
 // ---------------------------------------------------------------------------
 
-export type TranscriptionOptions = Record<string, unknown>
+export type TranscriptionOptions = MediaModel.Options
 
-export type TranscriptionRoute<Options extends TranscriptionOptions = TranscriptionOptions> = MediaRoute.AnyRoute<
-  TranscriptionRequestFor<Options>,
-  TranscriptionEvent,
-  TranscriptionResponse
->
+export type TranscriptionRoute = MediaRoute.AnyRoute<TranscriptionRequestFor, TranscriptionEvent, TranscriptionResponse>
 
 export class TranscriptionModel<Options extends TranscriptionOptions = TranscriptionOptions> extends MediaModel<
-  TranscriptionRoute<Options>,
+  TranscriptionRoute,
   Options
 > {
   declare protected readonly _TranscriptionModel: void
 
-  static make<Options extends TranscriptionOptions = TranscriptionOptions>(
-    input: MediaModel.Input<TranscriptionRoute<Options>>,
-  ) {
-    return new TranscriptionModel<Options>(input)
-  }
-
   /** The number of type arguments selects the kind: `<Options>`, `<Options, Frame, State>`, or `<Options, Token>`. */
   static fromRoute<Options extends TranscriptionOptions>(
-    route: TranscriptionModel.InlineRouteInput<Options>,
+    route: MediaModel.InlineRouteInput<TranscriptionRequestFor<Options>, TranscriptionResponse>,
     input: MediaRoute.ModelInput,
   ): TranscriptionModel<Options>
   static fromRoute<Options extends TranscriptionOptions, Frame, State>(
-    route: TranscriptionModel.StreamRouteInput<Options, Frame, State>,
+    route: MediaModel.StreamRouteInput<TranscriptionRequestFor<Options>, TranscriptionEvent, Frame, State>,
     input: MediaRoute.ModelInput,
   ): TranscriptionModel<Options>
   static fromRoute<Options extends TranscriptionOptions, Token>(
-    route: TranscriptionModel.QueuedRouteInput<Options, Token>,
+    route: MediaModel.QueuedRouteInput<TranscriptionRequestFor<Options>, TranscriptionResponse, Token>,
     input: MediaRoute.ModelInput,
   ): TranscriptionModel<Options>
   static fromRoute<Options extends TranscriptionOptions, Frame, State, Token>(
-    route: TranscriptionModel.RouteInput<Options, Frame, State, Token>,
+    route: MediaModel.AnyRouteInput<
+      TranscriptionRequestFor<Options>,
+      TranscriptionEvent,
+      TranscriptionResponse,
+      Frame,
+      State,
+      Token
+    >,
     input: MediaRoute.ModelInput,
   ) {
     return new TranscriptionModel<Options>({
       id: input.id,
       provider: route.protocol.provider,
       http: input.http,
-      route: composeAnyRoute(route, input, collectResponse),
+      route: composeRoute(route, input, collectResponse) as TranscriptionRoute,
     })
   }
-}
-
-export namespace TranscriptionModel {
-  export type InlineRouteInput<Options extends TranscriptionOptions = TranscriptionOptions> = MediaModel.RouteInput<
-    TranscriptionRequestFor<Options>,
-    MediaProtocol.Inline<TranscriptionRequestFor<Options>, TranscriptionResponse>
-  >
-
-  export type StreamRouteInput<
-    Options extends TranscriptionOptions = TranscriptionOptions,
-    Frame = unknown,
-    State = unknown,
-  > = MediaModel.RouteInput<
-    MediaProtocol.Addressed<TranscriptionRequestFor<Options>>,
-    MediaProtocol.Streamed<TranscriptionRequestFor<Options>, TranscriptionEvent, Frame, State>
-  >
-
-  export type QueuedRouteInput<
-    Options extends TranscriptionOptions = TranscriptionOptions,
-    Token = unknown,
-  > = MediaModel.RouteInput<
-    TranscriptionRequestFor<Options>,
-    MediaProtocol.Queued<TranscriptionRequestFor<Options>, TranscriptionResponse, Token>
-  >
-
-  export type RouteInput<
-    Options extends TranscriptionOptions = TranscriptionOptions,
-    Frame = unknown,
-    State = unknown,
-    Token = unknown,
-  > = MediaModel.AnyRouteInput<
-    TranscriptionRequestFor<Options>,
-    TranscriptionEvent,
-    TranscriptionResponse,
-    Frame,
-    State,
-    Token
-  >
 }
 
 export const TranscriptionModelSchema = Schema.declare(
@@ -212,10 +170,6 @@ export const TranscriptionEvent = Object.assign(transcriptionEventTagged, {
 })
 export type TranscriptionEvent = Schema.Schema.Type<typeof transcriptionEventTagged>
 
-export const responseEvents = (response: TranscriptionResponse): ReadonlyArray<TranscriptionEvent> => [
-  TranscriptionFinishEvent.make({ ...response }),
-]
-
 const collectResponse = (events: ReadonlyArray<TranscriptionEvent>): Effect.Effect<TranscriptionResponse> => {
   const finish = events.find(TranscriptionEvent.is.finish)
   // Every transcription protocol's `finish` emits the terminal event or fails, so a completed stream always has one.
@@ -243,11 +197,7 @@ export function request(input: TranscriptionRequest | TranscriptionRequestInput)
 const requestEffect = (input: TranscriptionRequest | TranscriptionRequestInput) => tryRequest(() => request(input))
 
 export function generate<const Model extends TranscriptionModel>(
-  input: TranscriptionRequestInput<Model>,
-  options?: AwaitOptions,
-): Effect.Effect<TranscriptionResponse, AIError, Service>
-export function generate(
-  input: TranscriptionRequest,
+  input: TranscriptionRequest | TranscriptionRequestInput<Model>,
   options?: AwaitOptions,
 ): Effect.Effect<TranscriptionResponse, AIError, Service>
 export function generate(input: TranscriptionRequest | TranscriptionRequestInput, options?: AwaitOptions) {
@@ -255,11 +205,7 @@ export function generate(input: TranscriptionRequest | TranscriptionRequestInput
 }
 
 export function stream<const Model extends TranscriptionModel>(
-  input: TranscriptionRequestInput<Model>,
-  options?: AwaitOptions,
-): Stream.Stream<TranscriptionEvent, AIError, Service>
-export function stream(
-  input: TranscriptionRequest,
+  input: TranscriptionRequest | TranscriptionRequestInput<Model>,
   options?: AwaitOptions,
 ): Stream.Stream<TranscriptionEvent, AIError, Service>
 export function stream(input: TranscriptionRequest | TranscriptionRequestInput, options?: AwaitOptions) {
@@ -268,15 +214,14 @@ export function stream(input: TranscriptionRequest | TranscriptionRequestInput, 
 
 /** Inline and streaming routes fail with `UnsupportedOperation`. */
 export function start<const Model extends TranscriptionModel>(
-  input: TranscriptionRequestInput<Model>,
+  input: TranscriptionRequest | TranscriptionRequestInput<Model>,
 ): Effect.Effect<Generation<TranscriptionResponse>, AIError, Service>
-export function start(input: TranscriptionRequest): Effect.Effect<Generation<TranscriptionResponse>, AIError, Service>
 export function start(input: TranscriptionRequest | TranscriptionRequestInput) {
   return requestEffect(input).pipe(Effect.flatMap((request) => TranscriptionClient.start(request)))
 }
 
-export const resume = <Options extends TranscriptionOptions>(
-  model: TranscriptionModel<Options>,
+export const resume = (
+  model: TranscriptionModel,
   token: unknown,
 ): Effect.Effect<Generation<TranscriptionResponse>, AIError, Service> => TranscriptionClient.resume(model, token)
 
