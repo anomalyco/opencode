@@ -60,7 +60,7 @@ describe("tool schema projections", () => {
     })
   })
 
-  it.effect("selects Gemini schema handling from the model name unless compatibility is explicit", () =>
+  it.effect("selects tool schema handling from the model name unless compatibility is explicit", () =>
     Effect.gen(function* () {
       const route = OpenAIChat.route.with({
         endpoint: { baseURL: "https://api.openai.test/v1/" },
@@ -80,6 +80,7 @@ describe("tool schema projections", () => {
           }),
         ).pipe(Effect.map((prepared) => prepared.body.tools?.[0]?.function.parameters))
       const gemini = { ...original, required: ["mode"] }
+      const moonshot = { ...original, properties: { mode: { type: "string", enum: ["fast", "safe"] } } }
 
       expect(yield* parameters(route.model({ id: "google/Gemini-3.8-Flash" }))).toEqual(gemini)
       expect(
@@ -87,7 +88,8 @@ describe("tool schema projections", () => {
       ).toEqual(gemini)
       expect(
         yield* parameters(route.model({ id: "google/gemini-3.8-flash", compatibility: { toolSchema: "moonshot" } })),
-      ).toEqual({ ...original, properties: { mode: { type: "string", enum: ["fast", "safe"] } } })
+      ).toEqual(moonshot)
+      expect(yield* parameters(route.model({ id: "moonshotai/Kimi-K3" }))).toEqual(moonshot)
       expect(yield* parameters(route.model({ id: "gpt-6-luna" }))).toEqual(original)
     }),
   )

@@ -48,10 +48,15 @@ const responses = openAI
 
 const gemini = GeminiJsonSchema.normalize
 
-// An explicit compatibility setting wins. Otherwise a Gemini model name selects Gemini's rules,
-// so Gemini reached through gateways and OpenAI-compatible endpoints gets the same schema handling.
+// An explicit compatibility setting wins. Otherwise the model name selects the model family's
+// rules, so models reached through gateways and OpenAI-compatible endpoints get the same handling.
+const MODEL_NAMES = [
+  [/gemini/i, "gemini"],
+  [/kimi/i, "moonshot"],
+] as const
+
 const modelCompatibility = (schema: JsonSchema, model: LanguageModel): JsonSchema => {
-  switch (model.compatibility?.toolSchema ?? (/gemini/i.test(model.id) ? "gemini" : undefined)) {
+  switch (model.compatibility?.toolSchema ?? MODEL_NAMES.find(([name]) => name.test(model.id))?.[1]) {
     case "gemini":
       return gemini(schema)
     case "moonshot":
