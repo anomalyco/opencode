@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { Schema } from "effect"
-import { CacheHint, LLM, LLMResponse, ToolEntry, ToolNamespace } from "../src/index.js"
+import { Effect, Schema, Stream } from "effect"
+import { CacheHint, LLM, LLMEvent, LLMResponse, ToolEntry, ToolNamespace } from "../src/index.js"
+import { OpenAI } from "../src/providers.js"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
 import * as OpenAIResponses from "../src/protocols/openai-responses.js"
 import {
@@ -13,6 +14,8 @@ import {
   ToolDefinition,
   ToolResultPart,
 } from "../src/schema/index.js"
+import { fixedResponse } from "./lib/http.js"
+import { sseEvents } from "./lib/sse.js"
 
 const chatRoute = OpenAIChat.route
 const responsesRoute = OpenAIResponses.route
@@ -238,6 +241,26 @@ describe("llm constructors", () => {
     })
     expect(request.system).toEqual([{ type: "text", text: "Initial operator prompt." }])
     expect(request.messages.map((message) => message.role)).toEqual(["user", "system"])
+  })
+
+  test("generates and streams from input or a prebuilt request", async () => {
+    const model = OpenAI.configure({ apiKey: "test", baseURL: "https://openai.test/v1" }).chat("gpt-4o-mini")
+    const layer = fixedResponse(
+      sseEvents({ choices: [{ delta: { content: "Hello" } }] }, { choices: [{ delta: {}, finish_reason: "stop" }] }),
+    )
+    const input = { model, prompt: "Say hello." }
+    const request = LLM.request(input)
+    const generated = await Effect.runPromise(LLM.generate(input).pipe(Effect.provide(layer)))
+    const generatedFromRequest = await Effect.runPromise(LLM.generate(request).pipe(Effect.provide(layer)))
+    expect(generated.text).toBe("Hello")
+    expect(generatedFromRequest.text).toBe(generated.text)
+
+    const streamed = await Effect.runPromise(LLM.stream(input).pipe(Stream.runCollect, Effect.provide(layer)))
+    const streamedFromRequest = await Effect.runPromise(
+      LLM.stream(request).pipe(Stream.runCollect, Effect.provide(layer)),
+    )
+    expect(Array.from(streamed).some(LLMEvent.is.textDelta)).toBe(true)
+    expect(streamedFromRequest).toEqual(streamed)
   })
 
   test("extracts output text from response events", () => {
