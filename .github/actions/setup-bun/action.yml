@@ -59,7 +59,16 @@ runs:
         # e.g. ./patches/ for standard-openapi
         # https://github.com/oven-sh/bun/issues/28147
         if [ "$RUNNER_OS" = "Windows" ]; then
-          bun install --linker hoisted ${{ inputs.install-flags }}
+          if bun install --linker hoisted ${{ inputs.install-flags }}; then
+            exit 0
+          fi
+          if [ "$GITHUB_REPOSITORY" != "internetisalie/opencode" ]; then
+            exit 1
+          fi
+          # A fresh Windows install can fail while renaming a patched package
+          # into Bun's cache. Retry once from a clean cache on this fork.
+          bun pm cache rm
+          bun install --linker hoisted --force ${{ inputs.install-flags }}
         else
           bun install ${{ inputs.install-flags }}
         fi
