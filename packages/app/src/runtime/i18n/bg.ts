@@ -1212,8 +1212,6 @@ export const dict = {
   "settings.general.row.terminalPlacement.description": "Изберете къде да се отваря терминалът в сесиите",
   "settings.general.row.terminalPlacement.side": "Отстрани",
   "settings.general.row.terminalPlacement.bottom": "Отдолу",
-  "settings.general.row.showProjectIcon.title": "Икона на проекта",
-  "settings.general.row.showProjectIcon.description": "Показване на иконата на проекта в заглавката на сесията",
   "session.location.unavailable": "Местоположението на сесията не е достъпно",
   "session.location.description": "Изберете друга директория, за да продължите тази сесия.",
   "session.location.choose": "Изберете директория",
@@ -1307,9 +1305,6 @@ export const dict = {
   "settings.about.typeset": "Набор в Inter и IBM Plex Mono",
   "settings.about.tagline": "AI не може да създаде страхотен софтуер без вас",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
-  "settings.appearance.row.projectName.title": "Показване на имена на проекти",
-  "settings.appearance.row.projectName.description":
-    "Показване на имената на проекти във вертикални раздели и чекмеджето за раздели на мобилни устройства",
   "project.settings.title": "Редактиране на проект",
   "settings.timeline.title": "Хронология",
   "settings.timeline.detail": "Подробности за времевата линия",
@@ -1495,9 +1490,6 @@ export const dict = {
   "settings.timeline.visibility.label": "Видимост на {{activity}}",
   "settings.timeline.grouped.label": "{{activity}} е групирано",
   "settings.timeline.collapsed.label": "{{activity}} е свито",
-  "settings.general.row.browserPane.title": "Браузър",
-  "settings.general.row.browserPane.description":
-    "Разрешете на агентите да отварят и управляват вграден браузър за разработка.",
   "session.new.workspace.search.empty": "Няма съответстващи работни дървета",
   "settings.workspaces.description": "Преглед на работните дървета и управление на дисковото пространство",
   "settings.workspaces.empty.description": "Създадените в OpenCode работни дървета ще се показват тук",

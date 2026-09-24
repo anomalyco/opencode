@@ -79,7 +79,6 @@ const generalSchema = Persistence.struct({
   showFileTree: Schema.Boolean,
   showNavigation: Schema.Boolean,
   showSearch: Schema.Boolean,
-  showProjectIcon: Schema.Boolean,
   showTerminal: Schema.Boolean,
   timelineDetail: Persistence.struct({
     shell: activitySchema,
@@ -94,7 +93,6 @@ const generalSchema = Persistence.struct({
   mobileDiffWrap: Schema.Boolean,
   terminalPlacement: Schema.Literals(["side", "bottom"]),
   followUpBehavior: Schema.Literals(["queue", "steer"]),
-  experimentalBrowser: Schema.Boolean,
 })
 
 const appearanceSchema = Persistence.struct({
@@ -103,7 +101,6 @@ const appearanceSchema = Persistence.struct({
   sans: Schema.String,
   terminal: Schema.String,
   tabLayout: Schema.Literals(["horizontal", "vertical"]),
-  showProjectName: Schema.Boolean,
 })
 
 const permissionsSchema = Persistence.struct({
@@ -243,7 +240,6 @@ export const defaultSettings: Settings = {
     showFileTree: false,
     showNavigation: false,
     showSearch: false,
-    showProjectIcon: false,
     showTerminal: false,
     timelineDetail: { ...timelinePresets[2].value },
     showCustomAgents: false,
@@ -251,10 +247,9 @@ export const defaultSettings: Settings = {
     mobileDiffWrap: true,
     terminalPlacement: "side",
     followUpBehavior: "steer",
-    experimentalBrowser: false,
   },
   sessionSummary: { projectExpanded: true, serverExpanded: true },
-  appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal", showProjectName: false },
+  appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal" },
   keybinds: {},
   permissions: { autoApprove: false },
   workspaces: { defaultDestination: "last-used", lastUsed: {} },
@@ -321,10 +316,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setShowSearch(value: boolean) {
           setStore("general", "showSearch", value)
         },
-        showProjectIcon: withFallback(() => store.general?.showProjectIcon, defaultSettings.general.showProjectIcon),
-        setShowProjectIcon(value: boolean) {
-          setStore("general", "showProjectIcon", value)
-        },
         showTerminal: withFallback(() => store.general?.showTerminal, defaultSettings.general.showTerminal),
         setShowTerminal(value: boolean) {
           setStore("general", "showTerminal", value)
@@ -358,13 +349,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         followUpBehavior: withFallback(() => store.general?.followUpBehavior, defaultSettings.general.followUpBehavior),
         setFollowUpBehavior(value: FollowUpBehavior) {
           setStore("general", "followUpBehavior", value)
-        },
-        experimentalBrowser: withFallback(
-          () => store.general?.experimentalBrowser,
-          defaultSettings.general.experimentalBrowser,
-        ),
-        setExperimentalBrowser(value: boolean) {
-          setStore("general", "experimentalBrowser", value)
         },
       },
       sessionSummary: {
@@ -408,13 +392,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         tabLayout: withFallback(() => store.appearance?.tabLayout, defaultSettings.appearance.tabLayout),
         setTabLayout(value: TabLayout) {
           setStore("appearance", "tabLayout", value)
-        },
-        showProjectName: withFallback(
-          () => store.appearance?.showProjectName,
-          defaultSettings.appearance.showProjectName,
-        ),
-        setShowProjectName(value: boolean) {
-          setStore("appearance", "showProjectName", value)
         },
       },
       keybinds: {

@@ -31,7 +31,10 @@ for (const open of [true, false]) {
       const original = await patch.elementHandle()
       for (const count of [3, 4]) {
         await root.getByRole("button", { name: "Append tool call", exact: true }).click()
-        await expect(group.locator('[data-slot="context-tool-group-title"]')).toHaveText(`Used ${count} Shell, Patch`)
+        await expect(group.locator('[data-component="context-tool-group-trigger"]')).toHaveAttribute(
+          "aria-label",
+          `Used ${count} Shell, Patch`,
+        )
         await expect(trigger).toHaveAccessibleName(`Used ${count} Shell, Patch`)
         await expect(diff).toBeVisible()
         await root

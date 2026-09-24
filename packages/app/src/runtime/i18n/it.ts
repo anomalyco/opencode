@@ -152,9 +152,6 @@ export const dict = {
   "settings.timeline.visibility.label": "Visibilità {{activity}}",
   "settings.timeline.grouped.label": "{{activity}} raggruppato",
   "settings.timeline.collapsed.label": "{{activity}} è crollato",
-  "settings.general.row.browserPane.title": "Navigatore",
-  "settings.general.row.browserPane.description":
-    "Consenti agli agenti di aprire e controllare un browser di sviluppo in-app.",
   "session.new.workspace.search.empty": "Nessun spazio di lavoro corrispondente",
   "settings.workspaces.description": "Esamina gli spazi di lavoro e gestisci l'utilizzo del disco",
   "settings.workspaces.empty.description": "Gli spazi di lavoro creati in OpenCode appariranno qui",
@@ -276,9 +273,6 @@ export const dict = {
   "settings.about.typeset": "Composto in Inter e IBM Plex Mono",
   "settings.about.tagline": "L’IA non può creare software eccellente senza di te",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
-  "settings.appearance.row.projectName.title": "Mostra nomi dei progetti",
-  "settings.appearance.row.projectName.description":
-    "Mostra i nomi dei progetti nelle schede verticali e nel pannello delle schede per dispositivi mobili",
   "project.settings.title": "Modifica progetto",
   "settings.timeline.title": "Sequenza temporale",
   "settings.timeline.detail": "Dettaglio della sequenza temporale",
@@ -1572,8 +1566,6 @@ export const dict = {
   "settings.general.row.terminalPlacement.description": "Scegli dove si apre il terminale nelle sessioni",
   "settings.general.row.terminalPlacement.side": "Laterale",
   "settings.general.row.terminalPlacement.bottom": "In basso",
-  "settings.general.row.showProjectIcon.title": "Icona del progetto",
-  "settings.general.row.showProjectIcon.description": "Mostra l'icona del progetto nell'intestazione della sessione",
   "command.debugBar.toggle": "Mostra o nascondi la barra di debug",
   "command.session.location.cycle": "Cambia la posizione della sessione",
   "dialog.provider.anthropic.note": "Accesso diretto ai modelli Claude tramite chiave API",

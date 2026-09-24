@@ -102,6 +102,7 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       synchronous iterators, and confined synchronous generators. Abrupt completion invokes the iterator's optional `return()`.
 - [x] `for...in` over own keys of plain objects, arrays, strings, and tool references. `null`, `undefined`, and other
       non-objects iterate nothing. An un-awaited promise throws rather than iterating.
+- [ ] `for...in` over inherited enumerable keys (`Object.create(proto)`), and skipping keys deleted during the loop.
 - [x] Unlabeled `break` and `continue`.
 - [x] `try`, `catch`, optional catch bindings, and `finally`.
 - [x] `throw` with arbitrary values.
@@ -154,6 +155,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Redeclaring a function in the same scope, or alongside a `var`, is allowed: the last declaration wins.
 - [x] Generator functions have their own `prototype` (inheriting the shared generator prototype), so
       `g() instanceof g` holds. Plain functions have none, since they cannot construct.
+- [ ] `GeneratorFunction.prototype`: every function, generator or not, inherits directly from `Function.prototype`,
+      and a generator whose `prototype` was replaced by a non-object still creates from the shared generator prototype.
 - [x] Generator and async generator functions bind parameters (defaults, destructuring) at the call and defer only the
       body to the first `next()`, so a bad argument throws synchronously from the call site, as in JS.
 - [x] Synchronous and async generator declarations/expressions, `yield`, and `yield*`, including lazy bodies,
@@ -207,11 +210,16 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       non-reference (`delete 0`, `delete f()`) evaluates the operand and is `true`; `delete x` on a variable throws.
 - [x] Coercion helpers and template interpolation accept functions and namespaces: `String(fn)` and `${fn}` give
       `"[object Function]"` rather than the source text, `isNaN(fn)` is `true`.
-- [ ] Operators other than `===`/`!==`, `switch` discriminants and cases, and `Object.is` applied to a function,
-      promise, generator, tool reference, or any object holding one anywhere inside; JavaScript compares by identity or
-      coerces (`fn == null` is `false`, `fn + ""` is its source text), the interpreter throws
-      `TypeError: Binary operators require data values.` The check walks both operands' whole object graphs, so
-      `rows == null` on a large array is slow where `rows === null` is not.
+- [x] `==` and `!=` follow IsLooselyEqual: objects (including functions and tool references) compare by identity, a
+      nullish operand never coerces the other side, and a data object facing a primitive coerces through its built-in
+      primitive form (`fn == null` is `false`, `fn == fn` is `true`, `[1] == 1` and `[1, 2] == "1,2"` are `true`).
+      `switch` matches cases with `===`, so `switch (fn) { case fn: }` selects, and `Object.is` compares any two
+      values. Operators inspect only their direct operands, so `rows == null` on a large array costs the same as
+      `rows === null`, and an object merely holding a function inside (`[fn] + ""`, `-[fn]`) coerces like any other
+      data object (`"[object Function]"`, `NaN`).
+- [ ] Coercing a function, promise, generator, or tool reference itself: `fn + ""`, `-fn`, `fn++`, and `fn == 1`
+      throw `TypeError: Binary operators require data values.` (or the unary/update form) where JavaScript would use
+      the source text or `NaN`.
 - [ ] ToPrimitive on program objects: operators, `Number`/`String`, `Error(message)`, `parseInt` radix, multi-argument
       `Date` construction and `Date.UTC`, and numeric built-in arguments (`Math.max`, `at`, `indexOf` start) should call
       the object's own `valueOf`/`toString` in spec order and surface their throws. Today they use the built-in form
@@ -290,9 +298,27 @@ reject }` object.
 - [x] Every value has a real prototype chain built fresh for each run: `Object.prototype`, `Array.prototype`,
       `String.prototype`, `Error.prototype` → `TypeError.prototype`, and so on hold the built-in methods as
       non-enumerable properties, and each constructor's `prototype` points at it (`[].constructor === Array`,
-      `Object.getPrototypeOf` is not exposed). Programs may read and even overwrite these prototypes; the change is
-      confined to that run. `__proto__` is an ordinary own data key, so `o.__proto__ = x` never changes the chain, and
-      `Object.groupBy` results have no prototype at all, as in JS.
+      `Object.getPrototypeOf([]) === Array.prototype`). Programs may read and even overwrite these prototypes; the
+      change is confined to that run. `__proto__` is an ordinary own data key, so `o.__proto__ = x` never changes the
+      chain, and `Object.groupBy` results have no prototype at all, as in JS.
+- [x] `Object.getPrototypeOf`: the prototype of an object, or the built-in prototype for a string, number, or boolean
+      (`Object.getPrototypeOf("a") === String.prototype`); `null`, `undefined`, and the two confined symbols throw a
+      `TypeError`.
+- [x] `Object.create(proto)` with an object or `null` prototype; any other prototype is a `TypeError`
+      (`Object prototype may only be an Object or null`). Inherited reads, `in`, `hasOwnProperty`, and own-only
+      `Object.keys` follow the chain as in JS, but `for...in` still enumerates own keys only. A second `properties`
+      argument other than `undefined` throws a `TypeError`: property descriptors are not supported (there is no
+      `Object.defineProperty` either).
+- [x] `Object.freeze`, `Object.seal`, and `Object.preventExtensions`, with `isFrozen`, `isSealed`, and `isExtensible`.
+      Each returns its argument and passes primitives through (`Object.freeze(1) === 1`, `Object.isFrozen(1)`).
+      Programs run as strict code, so violations throw `TypeError`: `Cannot assign to read only property 'a'`,
+      `Cannot add property b, object is not extensible`, and `Cannot delete property 'a'`. Arrays enforce the same
+      rules for index writes, `length`, and the mutating methods (`Object.freeze([1]).push(2)` throws; a sealed array's
+      `pop()` throws; a non-extensible array's `pop()`, `sort()`, and `splice(0, 1, x)` work). The mutating methods are
+      checked once up front, so a `fill` or `sort` that would land on a hole of a non-extensible array succeeds here
+      where JS throws. Maps, Sets, and Dates freeze their properties only, not their contents, as in JS.
+      `Object.freeze(new Uint8Array(1))` and `seal` throw `TypeError` like JS (`preventExtensions` and empty typed
+      arrays are fine). Functions are objects and freeze like any other value.
 - [x] Circular references are rejected when created (`o.self = o`, `array.push(array)`), not at serialization as in JS.
 - [x] `Object.is` for supported data values.
 - [x] `Object.groupBy` over finite collections and custom synchronous iterators/generators, with string-key coercion
@@ -320,8 +346,8 @@ reject }` object.
 - [x] `keys`, `values`, `entries`, and `[Symbol.iterator]` (the same function as `values`) return live iterator objects
       with `next()` and `[Symbol.iterator]`, as in JS. Iterator objects are opaque references: they print as
       `[opaque reference]`, serialize to `{}`, and cannot be passed to extensions. Every built-in collection iterator
-      shares one prototype. JavaScript gives each collection its own; the difference is not observable here because
-      `Object.getPrototypeOf` is not exposed.
+      shares one prototype, where JavaScript gives each collection its own; `Object.getPrototypeOf` shows the
+      difference.
 - [x] `length`, numeric indexing, index assignment, spread, and `for...of`.
 - [x] The `thisArg` argument of `Array.from` is accepted and ignored, like JS arrows.
 - [x] `Array.prototype.toSpliced`.
@@ -513,6 +539,12 @@ with a hint to encode as text first (`TextDecoder`, `toBase64`, `toHex`).
 - [x] `atob` and `btoa` with forgiving-base64 decoding and WebIDL string conversion; invalid input throws a
       `TypeError`, since there is no `DOMException`.
 - [x] `crypto.randomUUID()` and `crypto.getRandomValues(uint8Array)`.
+- [x] `structuredClone(value)` deep-copies primitives, plain objects (own enumerable string keys onto a plain object;
+      the prototype is not kept), arrays (holes and extra keys kept), Map, Set, Date, RegExp (`lastIndex` reset to 0),
+      Uint8Array, and errors (standard `name`, `message`, `cause`, and `stack`; other names become `Error`, extra
+      fields drop). Shared references stay shared in the copy, and the copy is extensible even when the source was
+      frozen. Functions, symbols, promises, iterators, URL, Headers, and tool references cannot be cloned; without a
+      `DOMException`, the failure is a `TypeError` whose message starts with `DataCloneError:`.
 - [x] `TextEncoder` and `TextDecoder` for UTF-8 only: any other label is a `RangeError`. `TextDecoder` accepts the
       `fatal` and `ignoreBOM` options; `decode` takes a Uint8Array or nothing.
 - [x] `new Headers()` from records, synchronous iterables of pairs, and Headers, wrapping the host's `Headers`: names
@@ -564,6 +596,8 @@ Nothing is exposed unless a host provides it; extension calls are not tool calls
       non-enumerable: an extension Error carries it, and this JSON form does not. Errors have no `stack`; the diagnostic
       carries a 1-based line and column in the submitted source instead.
 - [x] `instanceof` against any constructor with a `prototype`, including every built-in and `Function`.
+- [ ] The derived error constructors inheriting from `Error`: `Object.getPrototypeOf(TypeError)` is
+      `Function.prototype` here, while `TypeError.prototype` does inherit from `Error.prototype`.
 - [x] Catchable user throws, runtime failures raised during interpreted evaluation, awaited tool failures, and awaited
       tool-call-limit failures; parse/compile failures, cooperative timeout, and output bounding remain outside program
       `catch`.

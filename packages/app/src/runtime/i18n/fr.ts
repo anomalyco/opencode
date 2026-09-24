@@ -153,9 +153,6 @@ export const dict = {
   "settings.timeline.visibility.label": "Visibilité {{activity}}",
   "settings.timeline.grouped.label": "{{activity}} groupé",
   "settings.timeline.collapsed.label": "{{activity}} effondré",
-  "settings.general.row.browserPane.title": "Navigateur",
-  "settings.general.row.browserPane.description":
-    "Autorisez les agents à ouvrir et à contrôler un navigateur de développement intégré à l'application.",
   "session.new.workspace.search.empty": "Aucun espace de travail correspondant",
   "settings.workspaces.description": "Examiner les espaces de travail et gérer l'utilisation du disque",
   "settings.workspaces.empty.description": "Les espaces de travail créés dans OpenCode apparaîtront ici",
@@ -278,9 +275,6 @@ export const dict = {
   "settings.about.typeset": "Composé en Inter et IBM Plex Mono",
   "settings.about.tagline": "L’IA ne peut pas créer d’excellents logiciels sans vous",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
-  "settings.appearance.row.projectName.title": "Afficher le nom des projets",
-  "settings.appearance.row.projectName.description":
-    "Afficher le nom des projets dans les onglets verticaux et le tiroir d’onglets mobile",
   "project.settings.title": "Modifier le projet",
   "settings.timeline.title": "Chronologie",
   "settings.timeline.detail": "Niveau de détail de la chronologie",
@@ -1596,8 +1590,6 @@ export const dict = {
   "settings.general.row.terminalPlacement.description": "Choisissez où le terminal s'ouvre dans les sessions",
   "settings.general.row.terminalPlacement.side": "Côté",
   "settings.general.row.terminalPlacement.bottom": "Bas",
-  "settings.general.row.showProjectIcon.title": "Icône du projet",
-  "settings.general.row.showProjectIcon.description": "Afficher l'icône du projet dans l'en-tête de la session",
   "command.debugBar.toggle": "Afficher ou masquer la barre de débogage",
   "command.session.location.cycle": "Changer l’emplacement de la session",
   "dialog.provider.anthropic.note": "Accès direct aux modèles Claude avec une clé API",

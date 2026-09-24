@@ -152,9 +152,6 @@ export const dict = {
   "settings.timeline.visibility.label": "Visibilidad {{activity}}",
   "settings.timeline.grouped.label": "{{activity}} agrupado",
   "settings.timeline.collapsed.label": "{{activity}} colapsó",
-  "settings.general.row.browserPane.title": "Navegador",
-  "settings.general.row.browserPane.description":
-    "Permita que los agentes abran y controlen un navegador de desarrollo en la aplicación.",
   "session.new.workspace.search.empty": "No hay espacios de trabajo coincidentes",
   "settings.workspaces.description": "Revisar espacios de trabajo y administrar el uso del disco",
   "settings.workspaces.empty.description": "Los espacios de trabajo creados en OpenCode aparecerán aquí",
@@ -276,9 +273,6 @@ export const dict = {
   "settings.about.typeset": "Compuesto con Inter e IBM Plex Mono",
   "settings.about.tagline": "La IA no puede crear software excelente sin ti",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
-  "settings.appearance.row.projectName.title": "Mostrar nombres de proyectos",
-  "settings.appearance.row.projectName.description":
-    "Mostrar nombres de proyectos en las pestañas verticales y el panel de pestañas móvil",
   "project.settings.title": "Editar proyecto",
   "settings.timeline.title": "Cronología",
   "settings.timeline.detail": "Detalle de la cronología",
@@ -1657,8 +1651,6 @@ export const dict = {
   "settings.general.row.terminalPlacement.description": "Elige dónde se abre el terminal en las sesiones",
   "settings.general.row.terminalPlacement.side": "Lateral",
   "settings.general.row.terminalPlacement.bottom": "Inferior",
-  "settings.general.row.showProjectIcon.title": "Icono del proyecto",
-  "settings.general.row.showProjectIcon.description": "Mostrar el icono del proyecto en el encabezado de la sesión",
   "command.debugBar.toggle": "Alternar barra de depuración",
   "command.session.location.cycle": "Cambiar la ubicación de la sesión",
   "dialog.provider.anthropic.note": "Acceso directo a los modelos Claude mediante una clave de API",

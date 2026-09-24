@@ -1210,8 +1210,6 @@ export const dict = {
   "settings.general.row.terminalPlacement.description": "Odaberite gdje se terminal otvara u sesijama",
   "settings.general.row.terminalPlacement.side": "Sa strane",
   "settings.general.row.terminalPlacement.bottom": "Pri dnu",
-  "settings.general.row.showProjectIcon.title": "Ikona projekta",
-  "settings.general.row.showProjectIcon.description": "Prikaži ikonu projekta u zaglavlju sesije",
   "session.location.unavailable": "Lokacija sesije nije dostupna",
   "session.location.description": "Odaberite drugi direktorij za nastavak ove sesije.",
   "session.location.choose": "Odaberi direktorij",
@@ -1306,9 +1304,6 @@ export const dict = {
   "settings.about.typeset": "Označeno u Inter i IBM Plex Mono",
   "settings.about.tagline": "AI ne može izgraditi odličan softver, bez vas",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
-  "settings.appearance.row.projectName.title": "Prikaži nazive projekata",
-  "settings.appearance.row.projectName.description":
-    "Prikaži nazive projekata u okomitim karticama i ladici mobilnih kartica",
   "project.settings.title": "Uredi projekt",
   "settings.timeline.title": "Vremenska linija",
   "settings.timeline.detail": "Detalj vremenske trake",
@@ -1499,9 +1494,6 @@ export const dict = {
   "settings.timeline.visibility.label": "Vidljivost aktivnosti {{activity}}",
   "settings.timeline.grouped.label": "Aktivnost {{activity}} je grupirana",
   "settings.timeline.collapsed.label": "Aktivnost {{activity}} je sažeta",
-  "settings.general.row.browserPane.title": "Preglednik",
-  "settings.general.row.browserPane.description":
-    "Dozvoli agentima da otvore i upravljaju razvojnim preglednikom unutar aplikacije.",
   "session.new.workspace.search.empty": "Nema odgovarajućih radnih stabala",
   "settings.workspaces.description": "Pregledajte radno stabloove i upravljajte korištenjem diska",
   "settings.workspaces.empty.description": "Worktreeovi kreirani u OpenCode-u pojavit će se ovdje",

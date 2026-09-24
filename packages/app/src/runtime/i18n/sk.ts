@@ -1227,8 +1227,6 @@ export const dict = {
   "settings.general.row.terminalPlacement.description": "Vyberte, kde sa má terminál v reláciách otvárať",
   "settings.general.row.terminalPlacement.side": "Na boku",
   "settings.general.row.terminalPlacement.bottom": "Dole",
-  "settings.general.row.showProjectIcon.title": "Ikona projektu",
-  "settings.general.row.showProjectIcon.description": "Zobraziť ikonu projektu v hlavičke relácie",
   "session.location.unavailable": "Umiestnenie relácie nie je dostupné",
   "session.location.description": "Ak chcete pokračovať v tejto relácii, vyberte iný adresár.",
   "session.location.choose": "Vybrať adresár",
@@ -1322,9 +1320,6 @@ export const dict = {
   "settings.about.typeset": "typová súprava v Inter a IBM Plex Mono",
   "settings.about.tagline": "AI nedokáže vytvoriť skvelý softvér bez vás",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
-  "settings.appearance.row.projectName.title": "Zobraziť názvy projektov",
-  "settings.appearance.row.projectName.description":
-    "Zobrazenie názvov projektov na vertikálnych kartách a na zásuvke mobilných kariet",
   "project.settings.title": "Upraviť projekt",
   "settings.timeline.title": "Časová os",
   "settings.timeline.detail": "Detail časovej osi",
@@ -1506,9 +1501,6 @@ export const dict = {
   "settings.timeline.visibility.label": "Viditeľnosť {{activity}}",
   "settings.timeline.grouped.label": "{{activity}} zoskupené",
   "settings.timeline.collapsed.label": "{{activity}} zbalené",
-  "settings.general.row.browserPane.title": "Webový prehliadač",
-  "settings.general.row.browserPane.description":
-    "Povoliť agentom otvárať a ovládať zabudovaný vývojový webový prehliadač.",
   "session.new.workspace.search.empty": "Žiadne zodpovedajúce worktree",
   "settings.workspaces.description": "Prehliadnite worktree a spravujte využitie disku",
   "settings.workspaces.empty.description": "Worktree vytvorené v OpenCode sa tu zobrazia",

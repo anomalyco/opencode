@@ -1303,8 +1303,6 @@ export const dict = {
   "settings.general.row.terminalPlacement.description": "Выберите, где открывать терминал в сеансах",
   "settings.general.row.terminalPlacement.side": "Сбоку",
   "settings.general.row.terminalPlacement.bottom": "Снизу",
-  "settings.general.row.showProjectIcon.title": "Значок проекта",
-  "settings.general.row.showProjectIcon.description": "Показывать значок проекта в заголовке сеанса",
   "session.location.unavailable": "Расположение сессии недоступно",
   "session.location.description": "Выберите другой каталог, чтобы продолжить эту сессию.",
   "session.location.choose": "Выбрать каталог",
@@ -1402,9 +1400,6 @@ export const dict = {
   "settings.about.typeset": "Набор в Inter и IBM Plex Mono",
   "settings.about.tagline": "AI не сможет создать отличное программное обеспечение без вас",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
-  "settings.appearance.row.projectName.title": "Показать названия проектов",
-  "settings.appearance.row.projectName.description":
-    "Показывать названия проектов на вертикальных вкладках и в панели мобильных вкладок.",
   "project.settings.title": "Редактировать проект",
   "settings.timeline.title": "Хронология",
   "settings.timeline.detail": "Подробности временной шкалы",
@@ -1599,9 +1594,6 @@ export const dict = {
   "settings.timeline.visibility.label": "Видимость {{activity}}",
   "settings.timeline.grouped.label": "{{activity}} сгруппировано",
   "settings.timeline.collapsed.label": "{{activity}} свернуто",
-  "settings.general.row.browserPane.title": "Браузер",
-  "settings.general.row.browserPane.description":
-    "Разрешить агентам открывать и управлять встроенным браузером для разработки.",
   "session.new.workspace.search.empty": "Совпадающих рабочих деревьев нет",
   "settings.workspaces.description": "Просмотрите рабочие деревья и управляйте использованием диска",
   "settings.workspaces.empty.description": "Рабочие деревья, созданные в OpenCode, появятся здесь",

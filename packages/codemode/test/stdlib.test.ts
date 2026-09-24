@@ -1535,8 +1535,8 @@ describe("stdlib integration", () => {
     ).toEqual([true, false, true, false])
   })
 
-  test("Object.is rejects opaque runtime references", async () => {
-    expect((await error(`return Object.is(Math.max, Math.max)`)).kind).toBe("InvalidDataValue")
+  test("Object.is compares opaque runtime references by identity", async () => {
+    expect(await value(`return [Object.is(Math.max, Math.max), Object.is(Math.max, Math.min)]`)).toEqual([true, false])
   })
 
   test("Object values and entries accept arrays", async () => {

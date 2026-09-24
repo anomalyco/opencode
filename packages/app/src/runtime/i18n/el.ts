@@ -1214,8 +1214,6 @@ export const dict = {
   "settings.general.row.terminalPlacement.description": "Επιλέξτε πού ανοίγει το τερματικό στις συνεδρίες",
   "settings.general.row.terminalPlacement.side": "Στο πλάι",
   "settings.general.row.terminalPlacement.bottom": "Κάτω",
-  "settings.general.row.showProjectIcon.title": "Εικονίδιο έργου",
-  "settings.general.row.showProjectIcon.description": "Εμφάνιση του εικονιδίου έργου στην κεφαλίδα της συνεδρίας",
   "session.location.unavailable": "Η τοποθεσία της συνεδρίας δεν είναι διαθέσιμη",
   "session.location.description": "Επιλέξτε άλλον κατάλογο για να συνεχίσετε αυτή τη συνεδρία.",
   "session.location.choose": "Επιλογή καταλόγου",
@@ -1310,9 +1308,6 @@ export const dict = {
   "settings.about.typeset": "Δακτυλογράφηση σε Inter και IBM Plex Mono",
   "settings.about.tagline": "Το AI δεν μπορεί να δημιουργήσει εξαιρετικό λογισμικό, χωρίς εσάς",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
-  "settings.appearance.row.projectName.title": "Εμφάνιση ονομάτων έργων",
-  "settings.appearance.row.projectName.description":
-    "Εμφάνιση ονομάτων έργων σε κάθετες καρτέλες και στο συρτάρι καρτελών για κινητά",
   "project.settings.title": "Επεξεργασία έργου",
   "settings.timeline.title": "Χρονολόγιο",
   "settings.timeline.detail": "Λεπτομέρειες χρονολογίου",
@@ -1498,9 +1493,6 @@ export const dict = {
   "settings.timeline.visibility.label": "{{activity}} ορατότητα",
   "settings.timeline.grouped.label": "{{activity}} ομαδοποιημένα",
   "settings.timeline.collapsed.label": "Το {{activity}} κατέρρευσε",
-  "settings.general.row.browserPane.title": "Πρόγραμμα περιήγησης",
-  "settings.general.row.browserPane.description":
-    "Επιτρέψτε στους πράκτορες να ανοίγουν και να ελέγχουν ένα πρόγραμμα περιήγησης ανάπτυξης εντός εφαρμογής.",
   "session.new.workspace.search.empty": "Δεν υπάρχουν δέντρα εργασίας που να ταιριάζουν",
   "settings.workspaces.description": "Ελέγξτε τα δέντρα εργασίας και διαχειριστείτε τη χρήση του δίσκου",
   "settings.workspaces.empty.description": "Τα δέντρα εργασίας που δημιουργήθηκαν στο OpenCode θα εμφανιστούν εδώ",

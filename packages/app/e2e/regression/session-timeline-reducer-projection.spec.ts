@@ -48,7 +48,10 @@ test("expands a mixed collapsed tool stack without expanding its individual call
   const summary = group.getByRole("button", { name: "Used 4 Shell, Agent, Patch", exact: true })
   await expect(summary).toHaveAttribute("aria-expanded", "false")
   await expect(summary).toHaveCSS("height", "28px")
-  await expect(summary.locator('[data-slot="context-tool-group-title"]')).toHaveText("Used 4 Shell, Agent, Patch")
+  await expect(summary.locator('[data-component="context-tool-group-trigger"]')).toHaveAttribute(
+    "aria-label",
+    "Used 4 Shell, Agent, Patch",
+  )
   await expect(summary.locator('[data-component="tag"]')).toHaveCount(0)
   await summary.click()
   await expect(summary).toHaveAttribute("aria-expanded", "true")
@@ -76,7 +79,10 @@ test("leaves tools expanded by settings outside the collapsed stack", async ({ p
   await expect(page.locator('[data-timeline-part-id="prt_expanded_shell"]')).toBeVisible()
   const group = page.locator('[data-timeline-part-ids="prt_collapsed_patch,prt_collapsed_read"]')
   await expect(group.getByRole("button", { name: "Used 2 Patch, Read", exact: true })).toBeVisible()
-  await expect(group.locator('[data-slot="context-tool-group-title"]')).toHaveText("Used 2 Patch, Read")
+  await expect(group.locator('[data-component="context-tool-group-trigger"]')).toHaveAttribute(
+    "aria-label",
+    "Used 2 Patch, Read",
+  )
   await expect(page.locator('[data-timeline-spacing="tool"]')).toHaveCSS("padding-top", "8px")
 })
 

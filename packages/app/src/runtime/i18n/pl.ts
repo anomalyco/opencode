@@ -1227,8 +1227,6 @@ export const dict = {
   "settings.general.row.terminalPlacement.description": "Wybierz, gdzie terminal ma się otwierać w sesjach",
   "settings.general.row.terminalPlacement.side": "Z boku",
   "settings.general.row.terminalPlacement.bottom": "Na dole",
-  "settings.general.row.showProjectIcon.title": "Ikona projektu",
-  "settings.general.row.showProjectIcon.description": "Pokaż ikonę projektu w nagłówku sesji",
   "session.location.unavailable": "Lokalizacja sesji jest niedostępna",
   "session.location.description": "Wybierz inny katalog, aby kontynuować tę sesję.",
   "session.location.choose": "Wybierz katalog",
@@ -1325,9 +1323,6 @@ export const dict = {
   "settings.about.typeset": "Zestaw w Inter i IBM Plex Mono",
   "settings.about.tagline": "AI nie może zbudować świetnego oprogramowania bez Ciebie",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
-  "settings.appearance.row.projectName.title": "Pokaż nazwy projektów",
-  "settings.appearance.row.projectName.description":
-    "Wyświetlaj nazwy projektów w zakładkach pionowych i szufladzie zakładek mobilnych",
   "project.settings.title": "Edytuj projekt",
   "settings.timeline.title": "Oś czasu",
   "settings.timeline.detail": "Szczegóły osi czasu",
@@ -1520,9 +1515,6 @@ export const dict = {
   "settings.timeline.visibility.label": "Widoczność {{activity}}",
   "settings.timeline.grouped.label": "{{activity}} pogrupowane",
   "settings.timeline.collapsed.label": "{{activity}} zwinięte",
-  "settings.general.row.browserPane.title": "Przeglądarka",
-  "settings.general.row.browserPane.description":
-    "Zezwól agentom na otwieranie i kontrolowanie przeglądarki do programowania w aplikacji.",
   "session.new.workspace.search.empty": "Brak pasujących drzew pracy",
   "settings.workspaces.description": "Przeglądaj drzewa pracy i zarządzaj wykorzystaniem dysku",
   "settings.workspaces.empty.description": "Drzewa pracy utworzone w OpenCode pojawią się tutaj",

@@ -37,11 +37,6 @@ for (const direction of ["ltr", "rtl"] as const) {
           "opencode.global.dat:language",
           JSON.stringify({ locale: direction === "rtl" ? "ar" : "en" }),
         )
-        const settings = JSON.parse(localStorage.getItem("settings.v3") ?? "{}")
-        localStorage.setItem(
-          "settings.v3",
-          JSON.stringify({ ...settings, general: { ...settings.general, showProjectIcon: false } }),
-        )
       }, direction)
       await page.setViewportSize({ width: workspace ? 900 : 1440, height: 900 })
       await page.goto(stressSessionHref(fixture.targetID))

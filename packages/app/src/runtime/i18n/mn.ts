@@ -1208,8 +1208,6 @@ export const dict = {
   "settings.general.row.terminalPlacement.description": "Сессүүдэд терминал хаана нээгдэхийг сонгоно уу",
   "settings.general.row.terminalPlacement.side": "Хажууд",
   "settings.general.row.terminalPlacement.bottom": "Доор",
-  "settings.general.row.showProjectIcon.title": "Төслийн дүрс",
-  "settings.general.row.showProjectIcon.description": "Сессийн толгой хэсэгт төслийн дүрсийг харуулах",
   "session.location.unavailable": "Сессийн байршил боломжгүй байна",
   "session.location.description": "Энэ сессийг үргэлжлүүлэхийн тулд өөр директор сонгоно уу.",
   "session.location.choose": "Директор сонгох",
@@ -1302,9 +1300,6 @@ export const dict = {
   "settings.about.typeset": "Inter болон IBM Plex Mono үсгийн хэвээр өрсөн",
   "settings.about.tagline": "Тангүйгээр AI гайхалтай програм хангамж бүтээж чадахгүй",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
-  "settings.appearance.row.projectName.title": "Төслийн нэрсийг харуулах",
-  "settings.appearance.row.projectName.description":
-    "Төслийн нэрсийг босоо табууд болон мобайл табын шургуулгад харуулах",
   "project.settings.title": "Төслийг засах",
   "settings.timeline.title": "Цагийн шугам",
   "settings.timeline.detail": "Цагийн шугамын дэлгэрэнгүй",
@@ -1486,9 +1481,6 @@ export const dict = {
   "settings.timeline.visibility.label": "{{activity}} харагдах байдал",
   "settings.timeline.grouped.label": "{{activity}} бүлэглэв",
   "settings.timeline.collapsed.label": "{{activity}} нурсан",
-  "settings.general.row.browserPane.title": "Хөтөч",
-  "settings.general.row.browserPane.description":
-    "Агентуудад апп дотроо хөгжүүлэлтийн хөтчийг нээж, удирдахыг зөвшөөрнө үү.",
   "session.new.workspace.search.empty": "Тохирох ажиллах мод байхгүй",
   "settings.workspaces.description": "Ажлын модыг шалгаж, дискний хэрэглээг удирдах",
   "settings.workspaces.empty.description": "OpenCode-д үүсгэсэн Worktrees энд харагдана",

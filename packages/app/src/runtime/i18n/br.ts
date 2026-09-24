@@ -150,9 +150,6 @@ export const dict = {
   "settings.timeline.visibility.label": "Visibilidade {{activity}}",
   "settings.timeline.grouped.label": "{{activity}} agrupado",
   "settings.timeline.collapsed.label": "{{activity}} entrou em colapso",
-  "settings.general.row.browserPane.title": "Navegador",
-  "settings.general.row.browserPane.description":
-    "Permita que os agentes abram e controlem um navegador de desenvolvimento no aplicativo.",
   "session.new.workspace.search.empty": "Nenhuma espaço de trabalho correspondente",
   "settings.workspaces.description": "Revise as espaços de trabalho e gerencie o uso do disco",
   "settings.workspaces.empty.description": "As espaços de trabalho criadas em OpenCode aparecerão aqui",
@@ -274,9 +271,6 @@ export const dict = {
   "settings.about.typeset": "Composto em Inter e IBM Plex Mono",
   "settings.about.tagline": "A IA não consegue criar um ótimo software sem você",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
-  "settings.appearance.row.projectName.title": "Mostrar nomes dos projetos",
-  "settings.appearance.row.projectName.description":
-    "Mostrar nomes dos projetos nas abas verticais e no painel de abas para dispositivos móveis",
   "project.settings.title": "Editar projeto",
   "settings.timeline.title": "Linha do tempo",
   "settings.timeline.detail": "Detalhamento da linha do tempo",
@@ -1572,8 +1566,6 @@ export const dict = {
   "settings.general.row.terminalPlacement.description": "Escolha onde o terminal será aberto nas sessões",
   "settings.general.row.terminalPlacement.side": "Lateral",
   "settings.general.row.terminalPlacement.bottom": "Inferior",
-  "settings.general.row.showProjectIcon.title": "Ícone do projeto",
-  "settings.general.row.showProjectIcon.description": "Mostrar o ícone do projeto no cabeçalho da sessão",
   "command.debugBar.toggle": "Alternar barra de depuração",
   "command.session.location.cycle": "Alternar local da sessão",
   "dialog.provider.anthropic.note": "Acesso direto aos modelos Claude por chave de API",

@@ -1211,8 +1211,6 @@ export const dict = {
   "settings.general.row.terminalPlacement.description": "Válassza ki, hol nyíljon meg a terminál a munkamenetekben",
   "settings.general.row.terminalPlacement.side": "Oldalt",
   "settings.general.row.terminalPlacement.bottom": "Alul",
-  "settings.general.row.showProjectIcon.title": "Projektikon",
-  "settings.general.row.showProjectIcon.description": "A projektikon megjelenítése a munkamenet fejlécében",
   "session.location.unavailable": "A munkamenet helye nem érhető el",
   "session.location.description": "Válasszon másik könyvtárat a munkamenet folytatásához.",
   "session.location.choose": "Könyvtár kiválasztása",
@@ -1305,9 +1303,6 @@ export const dict = {
   "settings.about.typeset": "Betűkészlet Inter és IBM Plex Mono nyelven",
   "settings.about.tagline": "Az AI nem tud nagyszerű szoftvert készíteni nélküled",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
-  "settings.appearance.row.projectName.title": "Projektnevek megjelenítése",
-  "settings.appearance.row.projectName.description":
-    "A projektnevek megjelenítése a függőleges lapokon és a mobillap-fiókban",
   "project.settings.title": "Projekt szerkesztése",
   "settings.timeline.title": "Idővonal",
   "settings.timeline.detail": "Idővonal részletei",
@@ -1483,9 +1478,6 @@ export const dict = {
   "settings.timeline.visibility.label": "{{activity}} láthatóság",
   "settings.timeline.grouped.label": "{{activity}} csoportosított",
   "settings.timeline.collapsed.label": "{{activity}} összeomlott",
-  "settings.general.row.browserPane.title": "Böngésző",
-  "settings.general.row.browserPane.description":
-    "Lehetővé teszi az ügynökök számára egy alkalmazáson belüli fejlesztői böngésző megnyitását és vezérlését.",
   "session.new.workspace.search.empty": "Nincs megfelelő munkafa",
   "settings.workspaces.description": "A munkafák áttekintése és a lemezhasználat kezelése",
   "settings.workspaces.empty.description": "A OpenCode-ben létrehozott munkafák itt jelennek meg",

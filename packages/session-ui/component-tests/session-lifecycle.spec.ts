@@ -18,7 +18,10 @@ for (const tool of ["shell", "execute", "subagent"]) {
       for (const action of [undefined, "Complete input", "Run command", "Complete command"]) {
         if (action) await timeline.getByRole("button", { name: action, exact: true }).click()
         await expect(group).toHaveAttribute("data-timeline-part-ids", "tool_context_lifecycle,tool_shell_lifecycle")
-        await expect(group.locator('[data-slot="context-tool-group-title"]')).toHaveText(`Used 2 Read, ${title}`)
+        await expect(group.locator('[data-component="context-tool-group-trigger"]')).toHaveAttribute(
+          "aria-label",
+          `Used 2 Read, ${title}`,
+        )
         await expect(timeline.locator('[data-timeline-row="AssistantPart"]')).toHaveCount(1)
         await expect(trigger).toHaveAttribute("aria-expanded", String(open))
         expect(await original!.evaluate((node) => node.isConnected)).toBe(true)
@@ -138,7 +141,10 @@ for (const open of [false, true]) {
         "aria-expanded",
         String(open),
       )
-      await expect(group.locator('[data-slot="context-tool-group-title"]')).toHaveText("Used 1 Shell")
+      await expect(group.locator('[data-component="context-tool-group-trigger"]')).toHaveAttribute(
+        "aria-label",
+        "Used 1 Shell",
+      )
       await expect(timeline.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
       await expect(used).toHaveAttribute("aria-expanded", "true")
       if (!open) await thought.click()
@@ -186,7 +192,7 @@ for (const locale of ["de", "ar"] as const) {
     const group = timeline.locator('[data-timeline-part-ids="tool_context_read,tool_context_glob"]')
     const label = locale === "de" ? "2 Lesen und Glob verwendet" : "استُخدمت 2 أداتان: \u2068قراءة وGlob\u2069"
     await expect(group.getByRole("button")).toHaveAccessibleName(label)
-    await expect(group.locator('[data-slot="context-tool-group-title"]')).toHaveText(label)
+    await expect(group.locator('[data-component="context-tool-group-trigger"]')).toHaveAttribute("aria-label", label)
     await expect(page.locator("html")).toHaveAttribute("lang", locale)
   })
 }

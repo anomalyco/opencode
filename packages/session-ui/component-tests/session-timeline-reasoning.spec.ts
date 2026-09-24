@@ -52,7 +52,10 @@ for (const mode of ["hidden", "compact", "full"] as const) {
         const trigger = group.locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
         await expect(trigger).toHaveText(/^Used\s*1\s*Skill$/)
         await expect(trigger).toHaveAttribute("aria-expanded", "false")
-        await expect(group.locator('[data-slot="context-tool-group-title"]')).toHaveText("Used 1 Skill")
+        await expect(group.locator('[data-component="context-tool-group-trigger"]')).toHaveAttribute(
+          "aria-label",
+          "Used 1 Skill",
+        )
         await expect(timeline.getByText("Inspecting stability", { exact: true })).toBeHidden()
         await trigger.click()
         await expect(trigger).toHaveAttribute("aria-expanded", "true")

@@ -1213,8 +1213,6 @@ export const dict = {
   "settings.general.row.terminalPlacement.description": "Trieu on s'obre el terminal a les sessions",
   "settings.general.row.terminalPlacement.side": "Al costat",
   "settings.general.row.terminalPlacement.bottom": "A baix",
-  "settings.general.row.showProjectIcon.title": "Icona del projecte",
-  "settings.general.row.showProjectIcon.description": "Mostra la icona del projecte a la capçalera de la sessió",
   "session.location.unavailable": "La ubicació de la sessió no està disponible",
   "session.location.description": "Trieu un altre directori per continuar aquesta sessió.",
   "session.location.choose": "Tria un directori",
@@ -1309,9 +1307,6 @@ export const dict = {
   "settings.about.typeset": "Tipografia en Inter i IBM Plex Mono",
   "settings.about.tagline": "La IA no pot crear un gran programari sense tu",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
-  "settings.appearance.row.projectName.title": "Mostra els noms dels projectes",
-  "settings.appearance.row.projectName.description":
-    "Mostra els noms dels projectes a les pestanyes verticals i al calaix de pestanyes mòbils",
   "project.settings.title": "Modifica el projecte",
   "settings.timeline.title": "Cronologia",
   "settings.timeline.detail": "Detall de la cronologia",
@@ -1490,9 +1485,6 @@ export const dict = {
   "settings.timeline.visibility.label": "{{activity}} visibilitat",
   "settings.timeline.grouped.label": "{{activity}} agrupat",
   "settings.timeline.collapsed.label": "{{activity}} col·lapsat",
-  "settings.general.row.browserPane.title": "Navegador",
-  "settings.general.row.browserPane.description":
-    "Permet als agents que obrin i controlin un navegador de desenvolupament dins de l'aplicació.",
   "session.new.workspace.search.empty": "No hi ha arbres de treball coincidents",
   "settings.workspaces.description": "Reviseu els arbres de treball i gestioneu l'ús del disc",
   "settings.workspaces.empty.description": "Els arbres de treball creats a OpenCode apareixeran aquí",

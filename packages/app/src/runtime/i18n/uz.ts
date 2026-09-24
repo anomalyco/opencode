@@ -1212,8 +1212,6 @@ export const dict = {
   "settings.general.row.terminalPlacement.description": "Sessiyalarda terminal qayerda ochilishini tanlang",
   "settings.general.row.terminalPlacement.side": "Yon tomonda",
   "settings.general.row.terminalPlacement.bottom": "Pastda",
-  "settings.general.row.showProjectIcon.title": "Loyiha belgisi",
-  "settings.general.row.showProjectIcon.description": "Sessiya sarlavhasida loyiha belgisini ko‘rsatish",
   "session.location.unavailable": "Sessiya joylashuvi mavjud emas",
   "session.location.description": "Bu sessiyani davom ettirish uchun boshqa katalogni tanlang.",
   "session.location.choose": "Katalogni tanlash",
@@ -1306,9 +1304,6 @@ export const dict = {
   "settings.about.typeset": "Inter va IBM Plex Mono shriftlarida terilgan",
   "settings.about.tagline": "Sizsiz AI ajoyib dasturiy ta’minot yarata olmaydi",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
-  "settings.appearance.row.projectName.title": "Loyiha nomlarini ko‘rsatish",
-  "settings.appearance.row.projectName.description":
-    "Loyiha nomlarini vertikal varaqlar va mobil varaqlar tortmasida ko‘rsatish",
   "project.settings.title": "Loyihani tahrirlash",
   "settings.timeline.title": "Vaqt jadvali",
   "settings.timeline.detail": "Vaqt jadvali tafsilotlari",
@@ -1496,9 +1491,6 @@ export const dict = {
   "settings.timeline.visibility.label": "{{activity}} koʻrinish",
   "settings.timeline.grouped.label": "{{activity}} guruhlangan",
   "settings.timeline.collapsed.label": "{{activity}} yopildi",
-  "settings.general.row.browserPane.title": "Brauzer",
-  "settings.general.row.browserPane.description":
-    "Agentlarga ilova ichidagi ishlab chiqish brauzerini ochish va boshqarishga ruxsat bering.",
   "session.new.workspace.search.empty": "Mos keladigan ishchi daraxtlar yo'q",
   "settings.workspaces.description": "Ish daraxtlarini ko'rib chiqing va diskdan foydalanishni boshqaring",
   "settings.workspaces.empty.description": "OpenCode-da yaratilgan ishchi daraxtlar bu erda paydo bo'ladi",

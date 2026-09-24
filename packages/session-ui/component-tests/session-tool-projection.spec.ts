@@ -91,7 +91,10 @@ story("labels skill tools from IDs and result metadata", async ({ mount }) => {
   const timeline = await mount("current-session-research-agents--agent-research", { args: { scenario: "skills" } })
   const group = timeline.locator('[data-timeline-part-ids="tool_skill_id,tool_skill_name"]')
   await expect(group.getByRole("button")).toHaveAccessibleName("Used 2 Skill")
-  await expect(group.locator('[data-slot="context-tool-group-title"]')).toHaveText("Used 2 Skill")
+  await expect(group.locator('[data-component="context-tool-group-trigger"]')).toHaveAttribute(
+    "aria-label",
+    "Used 2 Skill",
+  )
   await group.getByRole("button").click()
   const loaded = group.locator('[data-component="tool-loaded-item"]')
   await expect(loaded).toHaveCount(1)
@@ -114,7 +117,10 @@ story("groups every collapsed tool until visible text separates the stack", asyn
   )
   await expect(group).toBeVisible()
   await expect(group.getByRole("button")).toHaveAccessibleName("Used 4 Glob, Grep, Shell, List")
-  await expect(group.locator('[data-slot="context-tool-group-title"]')).toHaveText("Used 4 Glob, Grep, Shell, List")
+  await expect(group.locator('[data-component="context-tool-group-trigger"]')).toHaveAttribute(
+    "aria-label",
+    "Used 4 Glob, Grep, Shell, List",
+  )
   await expect(timeline.locator('[data-timeline-row="AssistantPart"]')).toHaveCount(3)
   await expect(timeline.locator('[data-timeline-spacing="content"]')).toHaveCount(2)
   await expect(timeline.locator('[data-timeline-spacing="content"]').nth(0)).toHaveCSS("padding-top", "16px")

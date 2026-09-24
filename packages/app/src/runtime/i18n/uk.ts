@@ -1331,8 +1331,6 @@ export const dict = {
   "settings.general.row.terminalPlacement.description": "Виберіть, де відкриватиметься термінал у сеансах",
   "settings.general.row.terminalPlacement.side": "Збоку",
   "settings.general.row.terminalPlacement.bottom": "Знизу",
-  "settings.general.row.showProjectIcon.title": "Піктограма проєкту",
-  "settings.general.row.showProjectIcon.description": "Показувати піктограму проєкту в заголовку сеансу",
   "session.location.unavailable": "Розташування сесії недоступне",
   "session.location.description": "Виберіть інший каталог, щоб продовжити цю сесію.",
   "session.location.choose": "Вибрати каталог",
@@ -1425,9 +1423,6 @@ export const dict = {
   "settings.about.typeset": "Набір на Inter та IBM Plex Mono",
   "settings.about.tagline": "AI не може створити чудове програмне забезпечення без вас",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
-  "settings.appearance.row.projectName.title": "Показати назви проектів",
-  "settings.appearance.row.projectName.description":
-    "Показувати назви проектів у вертикальних вкладках і панелі мобільних вкладок",
   "project.settings.title": "Редагувати проект",
   "settings.timeline.title": "Хронологія",
   "settings.timeline.detail": "Деталі часової шкали",
@@ -1607,9 +1602,6 @@ export const dict = {
   "settings.timeline.visibility.label": "Видимість {{activity}}",
   "settings.timeline.grouped.label": "{{activity}} згруповано",
   "settings.timeline.collapsed.label": "{{activity}} згорнуте",
-  "settings.general.row.browserPane.title": "Веббраузер",
-  "settings.general.row.browserPane.description":
-    "Дозволити агентам відкривати та керувати вбудованим веббраузером для розробки.",
   "session.new.workspace.search.empty": "Немає підходящих робочих дерев",
   "settings.workspaces.description": "Перегляньте робочі дерева та керуйте використанням диска",
   "settings.workspaces.empty.description": "Робочі дерева, створені в OpenCode, з’являться тут",
