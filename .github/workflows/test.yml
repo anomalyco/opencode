@@ -28,9 +28,9 @@ jobs:
       matrix:
         settings:
           - name: linux
-            host: blacksmith-4vcpu-ubuntu-2404
+            host: ${{ github.repository == 'internetisalie/opencode' && 'ubuntu-24.04' || 'blacksmith-4vcpu-ubuntu-2404' }}
           - name: windows
-            host: blacksmith-4vcpu-windows-2025
+            host: ${{ github.repository == 'internetisalie/opencode' && 'windows-2025' || 'blacksmith-4vcpu-windows-2025' }}
     runs-on: ${{ matrix.settings.host }}
     defaults:
       run:
@@ -86,9 +86,9 @@ jobs:
       matrix:
         settings:
           - name: linux
-            host: blacksmith-4vcpu-ubuntu-2404
+            host: ${{ github.repository == 'internetisalie/opencode' && 'ubuntu-24.04' || 'blacksmith-4vcpu-ubuntu-2404' }}
           - name: windows
-            host: blacksmith-4vcpu-windows-2025
+            host: ${{ github.repository == 'internetisalie/opencode' && 'windows-2025' || 'blacksmith-4vcpu-windows-2025' }}
     runs-on: ${{ matrix.settings.host }}
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
