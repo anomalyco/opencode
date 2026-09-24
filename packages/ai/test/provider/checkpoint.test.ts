@@ -22,21 +22,22 @@ testEffect(
       expect(body).toMatchObject({
         model: "fixture",
         stream: true,
-        store: false,
+        store: true,
         instructions: "Keep the context",
-        parallel_tool_calls: true,
+        parallel_tool_calls: false,
         prompt_cache_key: "session-key",
         service_tier: "priority",
         reasoning: { effort: "high", summary: "auto" },
+        context_management: [{ type: "compaction" }],
+        max_tool_calls: 1,
+        tool_choice: "required",
+        text: { verbosity: "high", format: { type: "json_object" } },
         prompt_cache_retention: "24h",
         prompt_cache_options: { mode: "session", ttl: "1h" },
         input: [{ role: "user", content: [{ type: "input_text", text: "hello" }] }, { type: "compaction_trigger" }],
       })
       expect(body.tools).toHaveLength(1)
       expect(body.tools[0].name).toBe("lookup")
-      expect(body.tool_choice).toBeUndefined()
-      expect(body.context_management).toBeUndefined()
-      expect(body.text).toBeUndefined()
       expect(body.max_output_tokens).toBeUndefined()
       expect(body.previous_response_id).toBeUndefined()
       return respond(
@@ -57,7 +58,7 @@ testEffect(
       )
     }),
   ),
-).effect("trigger uses normal request preparation, configured deployment, and supplied subscription headers", () =>
+).effect("trigger keeps request controls, configured deployment, and supplied subscription headers", () =>
   Effect.gen(function* () {
     const calls: string[] = []
     const input = LLM.request({
@@ -73,6 +74,9 @@ testEffect(
         reasoningEffort: "high",
         reasoningSummary: "auto",
         contextManagement: [{ type: "compaction" }],
+        parallelToolCalls: false,
+        maxToolCalls: 1,
+        textVerbosity: "low",
       },
       http: {
         headers: { "chatgpt-account-id": "fixture-account", "x-codex-beta-features": "remote_compaction_v2" },
@@ -83,7 +87,7 @@ testEffect(
           prompt_cache_options: { mode: "session", ttl: "1h" },
           store: true,
           stream: false,
-          text: { format: { type: "json_object" } },
+          text: { verbosity: "high", format: { type: "json_object" } },
           tool_choice: "required",
         },
       },
@@ -117,7 +121,7 @@ testEffect(
 testEffect(
   dynamicResponse(({ text, respond }) =>
     Effect.sync(() => {
-      expect(JSON.parse(text).text).toEqual({ verbosity: "low" })
+      expect(JSON.parse(text).text).toEqual({ verbosity: "low", format: { type: "json_object" } })
       return respond(sseEvents({ type: "response.completed", response: { id: "resp_1", output: [checkpoint] } }), {
         headers: { "content-type": "text/event-stream" },
       })
@@ -138,17 +142,20 @@ testEffect(
 testEffect(
   dynamicResponse(({ text, respond }) =>
     Effect.sync(() => {
-      expect(JSON.parse(text).text).toEqual({ verbosity: "high" })
+      const body = JSON.parse(text)
+      expect(body.text).toEqual({ verbosity: "high", format: { type: "json_object" } })
+      expect(body.max_output_tokens).toBe(20_000)
       return respond(sseEvents({ type: "response.completed", response: { id: "resp_1", output: [checkpoint] } }), {
         headers: { "content-type": "text/event-stream" },
       })
     }),
   ),
-).effect("keeps the effective body-overlay verbosity without generation formatting", () =>
+).effect("keeps the effective body-overlay verbosity and text formatting", () =>
   LLMClient.compact(
     LLM.request({
       model: OpenAI.configure({ apiKey: "fixture" }).responses("gpt-5.5"),
       prompt: "Hello.",
+      generation: { maxTokens: 20_000 },
       providerOptions: { textVerbosity: "low" },
       http: { body: { text: { verbosity: "high", format: { type: "json_object" } } } },
     }),

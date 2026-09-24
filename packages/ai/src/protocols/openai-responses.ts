@@ -140,15 +140,18 @@ export type OpenAIResponsesBody = Schema.Schema.Type<typeof OpenAIResponsesBody>
 
 /** Request control, never conversation content. */
 export const CompactionTrigger = Schema.Struct({ type: Schema.Literal("compaction_trigger") })
-const CheckpointBody = Schema.Struct({
-  ...OpenAIResponsesBody.fields,
-  input: Schema.Array(Schema.Union([OpenAIResponsesInputItem, CompactionTrigger])),
-  store: Schema.Literal(false),
-  prompt_cache_retention: optionalNull(Schema.String),
-  prompt_cache_options: optionalNull(
-    Schema.Struct({ mode: Schema.optional(Schema.String), ttl: Schema.optional(Schema.String) }),
-  ),
-})
+const CheckpointBody = Schema.StructWithRest(
+  Schema.Struct({
+    ...OpenAIResponsesBody.fields,
+    input: Schema.Array(Schema.Union([OpenAIResponsesInputItem, CompactionTrigger])),
+    text: Schema.optional(JsonObject),
+    prompt_cache_retention: optionalNull(Schema.String),
+    prompt_cache_options: optionalNull(
+      Schema.Struct({ mode: Schema.optional(Schema.String), ttl: Schema.optional(Schema.String) }),
+    ),
+  }),
+  [JsonObject],
+)
 
 const adapter = {
   id: ADAPTER,
@@ -238,7 +241,7 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
 const checkpointBody = {
   schema: CheckpointBody,
   from: Effect.fn("OpenAIResponses.checkpointBody")(function* (request: LLMRequest) {
-    const native = yield* fromRequest(LLMRequest.update(request, { toolChoice: undefined }))
+    const native = yield* fromRequest(request)
     const overlay = request.http?.body
     // Complete history is required for stateless replay and SSE recovery. Raw input overrides bypass that contract.
     if (
@@ -254,17 +257,11 @@ const checkpointBody = {
       ...merged,
       input: [...native.input, { type: "compaction_trigger" }],
       stream: true,
-      store: false,
-      parallel_tool_calls: true,
-      tool_choice: undefined,
-      context_management: undefined,
-      // Keep verbosity for cache reuse, but drop generation-only formatting from the overlay.
-      text:
-        ProviderShared.isRecord(merged?.text) && merged.text.verbosity !== undefined
-          ? { verbosity: merged.text.verbosity }
-          : undefined,
-      max_output_tokens: undefined,
-      max_tool_calls: undefined,
+      // The trigger rejects a configured max_output_tokens below 20,000.
+      max_output_tokens:
+        typeof merged?.max_output_tokens === "number" && merged.max_output_tokens < 20_000
+          ? undefined
+          : merged?.max_output_tokens,
     })
   }),
 }

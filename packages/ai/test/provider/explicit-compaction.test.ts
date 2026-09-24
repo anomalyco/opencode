@@ -110,11 +110,16 @@ for (const model of [
     dynamicResponse(({ request, text, respond }) =>
       Effect.sync(() => {
         expect(new URL(request.url).pathname).toEndWith("/responses/compact")
-        expect(JSON.parse(text)).toEqual({ model: "fixture", input: [item], instructions: "Keep the context" })
+        expect(JSON.parse(text)).toEqual({
+          model: "fixture",
+          input: [item],
+          instructions: "Keep the context",
+          include: ["reasoning.encrypted_content"],
+        })
         return respond(JSON.stringify({ object: "response.compaction", output: [checkpoint] }))
       }),
     ),
-  ).effect(`${model.provider} compacts provider-specific history without lowering generation settings`, () =>
+  ).effect(`${model.provider} compacts provider-specific history despite unrelated invalid generation settings`, () =>
     Effect.gen(function* () {
       const request = LLM.request({
         model,
@@ -255,6 +260,10 @@ for (const overlay of [undefined, { service_tier: "priority", prompt_cache_key: 
           model: "fixture",
           input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "hello" }] }],
           service_tier: overlay?.service_tier ?? "flex",
+          reasoning: { effort: "low" },
+          text: { verbosity: "low", format: { type: "json_object" } },
+          include: ["reasoning.encrypted_content"],
+          parallel_tool_calls: false,
           prompt_cache_key: overlay?.prompt_cache_key ?? "affinity",
           prompt_cache_retention: "24h",
           prompt_cache_options: { mode: "explicit", ttl: "30m" },
@@ -268,12 +277,19 @@ for (const overlay of [undefined, { service_tier: "priority", prompt_cache_key: 
         model: OpenAI.configure({ apiKey: "test" }).responses("fixture"),
         prompt: "hello",
         promptCacheKey: "affinity",
-        providerOptions: { serviceTier: "flex" },
+        providerOptions: {
+          serviceTier: "flex",
+          reasoningEffort: "low",
+          textVerbosity: "low",
+          include: ["reasoning.encrypted_content"],
+          parallelToolCalls: false,
+        },
         generation: { maxTokens: 100 },
         http: {
           body: {
             stream: true,
             store: false,
+            text: { format: { type: "json_object" } },
             prompt_cache_retention: "24h",
             prompt_cache_options: { mode: "explicit", ttl: "30m" },
             ...overlay,
@@ -396,6 +412,8 @@ for (const model of [
             model: model.id,
             input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "original" }] }],
             instructions: "system",
+            include: ["reasoning.encrypted_content"],
+            ...(model.id === "gpt-5.3-codex" ? { reasoning: { effort: "medium", summary: "auto" } } : {}),
           })
           return respond(
             JSON.stringify({
@@ -407,7 +425,10 @@ for (const model of [
           )
         }
         expect(new URL(request.url).pathname.endsWith("/responses")).toBe(true)
-        expect(body.input).toEqual([...output, { type: "message", role: "user", content: [{ type: "input_text", text: "continue" }] }])
+        expect(body.input).toEqual([
+          ...output,
+          { type: "message", role: "user", content: [{ type: "input_text", text: "continue" }] },
+        ])
         return respond(sseEvents({ type: "response.completed", response: { id: "resp_1", output: [] } }), {
           headers: { "content-type": "text/event-stream" },
         })
