@@ -11,9 +11,10 @@ for (const reasoningDefaultOpen of [false, true]) {
       const second = group.locator('[data-timeline-part-id="reasoning_second"]')
       await expect(used).toHaveAttribute("aria-expanded", "true")
       await expect(used).toHaveAccessibleName("Used 4 Read, Skill")
-      await expect(
-        group.locator('[data-component="context-tool-group-trigger"] [data-slot="basic-tool-tool-title"]'),
-      ).toHaveText("Read, Skill")
+      await expect(group.locator('[data-component="context-tool-group-trigger"]')).toHaveAttribute(
+        "aria-label",
+        "Used 4 Read, Skill",
+      )
       await expect(group.locator('[data-slot="context-tool-group-item"]')).toHaveText([
         /Read.*group\.ts/,
         /Thought/,
@@ -35,9 +36,10 @@ for (const reasoningDefaultOpen of [false, true]) {
       await first.getByRole("button", { name: "Thought", exact: true }).click()
       await root.getByRole("button", { name: "Append follow-up read", exact: true }).click()
       await expect(used).toHaveAccessibleName("Used 5 Read, Skill")
-      await expect(
-        group.locator('[data-component="context-tool-group-trigger"] [data-slot="basic-tool-tool-title"]'),
-      ).toHaveText("Read, Skill")
+      await expect(group.locator('[data-component="context-tool-group-trigger"]')).toHaveAttribute(
+        "aria-label",
+        "Used 5 Read, Skill",
+      )
       await expect(group.locator('[data-slot="context-tool-group-item"]')).toHaveText([
         /Read.*group\.ts/,
         /Thought/,
@@ -78,6 +80,8 @@ story("summarizes subagents as Agent while retaining their card titles", async (
   await expect(prefix).toHaveText("Used")
   await expect(count).toHaveText("4")
   await expect(title).toHaveText("Shell, Read, Agent")
+  await expect(title).toHaveCSS("white-space", "nowrap")
+  await expect(title).toHaveCSS("text-overflow", "ellipsis")
   expect(await prefix.evaluate((node) => node.textContent)).toBe("Used")
   expect(await count.evaluate((node) => node.textContent)).toBe("4")
   expect(await prefix.locator("..").evaluate((node) => getComputedStyle(node).columnGap)).toBe("4px")
@@ -104,7 +108,7 @@ for (const width of [840, 390]) {
     const group = root.locator('[data-component="collapsed-tool-group"]')
     const trigger = group.getByRole("button", { name: "Used 4 Shell, Read, Agent", exact: true })
     const header = group.locator('[data-component="context-tool-group-trigger"]')
-    await expect(header.locator('[data-slot="basic-tool-tool-title"]')).toHaveText("Shell, Read, Agent")
+    await expect(header).toHaveAttribute("aria-label", "Used 4 Shell, Read, Agent")
     await expect(header.locator('[data-component="tag"]')).toHaveCount(0)
     await expect(trigger).toHaveAttribute("aria-expanded", "true")
     for (const action of ["click", "Enter", "Space"] as const) {

@@ -114,7 +114,7 @@ describe("Google Vertex providers", () => {
     }),
   )
 
-  it.effect("strips function call ids Vertex does not accept from lowered bodies", () =>
+  it.effect("preserves function call ids in lowered Vertex bodies", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
@@ -142,15 +142,14 @@ describe("Google Vertex providers", () => {
         }),
       )
 
-      expect(JSON.stringify(prepared.body.contents)).not.toContain('"id"')
       expect(prepared.body.contents).toMatchObject([
-        { role: "model", parts: [{ functionCall: { id: undefined, name: "lookup", args: { query: "weather" } } }] },
+        { role: "model", parts: [{ functionCall: { id: "call_1", name: "lookup", args: { query: "weather" } } }] },
         {
           role: "user",
           parts: [
             {
               functionResponse: {
-                id: undefined,
+                id: "call_1",
                 name: "lookup",
                 response: { name: "lookup", content: "sunny" },
               },
@@ -235,12 +234,23 @@ describe("Google Vertex providers", () => {
           parts: [
             { text: "Thinking.", thought: true, thoughtSignature: "reasoning_sig" },
             { text: "Checking.", thoughtSignature: "text_sig" },
-            { functionCall: { name: "lookup", args: { query: "weather" } }, thoughtSignature: "tool_sig" },
+            {
+              functionCall: { id: "provider_call_1", name: "lookup", args: { query: "weather" } },
+              thoughtSignature: "tool_sig",
+            },
           ],
         },
         {
           role: "user",
-          parts: [{ functionResponse: { name: "lookup", response: { name: "lookup", content: "sunny" } } }],
+          parts: [
+            {
+              functionResponse: {
+                id: "provider_call_1",
+                name: "lookup",
+                response: { name: "lookup", content: "sunny" },
+              },
+            },
+          ],
         },
       ])
     }),
@@ -330,6 +340,34 @@ describe("Google Vertex providers", () => {
       )
 
       expect(response.text).toBe("Hello.")
+    }),
+  )
+
+  // Captured from xai/grok-4.6 on Vertex: one keepalive every 15s until the first token.
+  it.effect("ignores keepalives sent as data while a partner model reasons", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLM.request({
+          model: GoogleVertexChat.configure({
+            accessToken: "vertex-token",
+            location: "global",
+            project: "vertex-project",
+          }).model("xai/grok-4.6"),
+          prompt: "Say hello.",
+        }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            `data: : keepalive\n\ndata: : keepalive\n\n${sseEvents(
+              deltaChunk({ role: "assistant", content: "Hello." }),
+              finishChunk("stop"),
+            )}`,
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Hello.")
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "stop" })
     }),
   )
 

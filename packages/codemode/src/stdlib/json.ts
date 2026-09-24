@@ -3,10 +3,10 @@ import { methods } from "../interpreter/native.js"
 import { applyCollectionCallback } from "../interpreter/callback.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
 import { checkStringLength } from "../interpreter/limits.js"
-import { syntaxError, typeError } from "../interpreter/model.js"
+import { syntaxError } from "../interpreter/model.js"
 import { typeofValue } from "../interpreter/references.js"
 import { fromJson, toJson } from "../data.js"
-import { get, keys, Arr, Obj, record, remove, set } from "../interpreter/objects.js"
+import { get, keys, Arr, Obj, coerceToString, record, remove, set, type Value } from "../interpreter/objects.js"
 
 export const jsonGlobal = <R>(ctx: Interpreter<R>) => {
   const json = new Obj(ctx.builtins.Object)
@@ -17,9 +17,8 @@ export const jsonGlobal = <R>(ctx: Interpreter<R>) => {
   return json
 }
 
-const parse = <R>(ctx: Interpreter<R>, args: Array<unknown>): Effect.Effect<unknown, unknown, R> => {
-  const text = args[0]
-  if (typeof text !== "string") throw typeError("JSON.parse expects a string.")
+const parse = <R>(ctx: Interpreter<R>, args: Array<Value>): Effect.Effect<Value, unknown, R> => {
+  const text = coerceToString(args[0])
 
   const parsed = (() => {
     try {
@@ -31,7 +30,7 @@ const parse = <R>(ctx: Interpreter<R>, args: Array<unknown>): Effect.Effect<unkn
   if (typeofValue(args[1]) !== "function") return Effect.succeed(parsed)
 
   const apply = applyCollectionCallback(ctx, args[1], "JSON.parse")
-  const visit = (holder: Obj, key: string): Effect.Effect<unknown, unknown, R> =>
+  const visit = (holder: Obj, key: string): Effect.Effect<Value, unknown, R> =>
     Effect.gen(function* () {
       const value = get(holder, key)
       if (value instanceof Obj) {
@@ -46,7 +45,7 @@ const parse = <R>(ctx: Interpreter<R>, args: Array<unknown>): Effect.Effect<unkn
   return visit(record(ctx.builtins.Object, { "": parsed }), "")
 }
 
-const stringify = <R>(ctx: Interpreter<R>, args: Array<unknown>): Effect.Effect<unknown, unknown, R> => {
+const stringify = <R>(ctx: Interpreter<R>, args: Array<Value>): Effect.Effect<Value, unknown, R> => {
   const space = args[2]
   const indent = typeof space === "number" || typeof space === "string" ? space : undefined
   const replacer = args[1]

@@ -1,5 +1,5 @@
 import { createSimpleContext } from "@opencode/ui/context"
-import { Accessor, createEffect, createMemo, createResource, createRoot, getOwner } from "solid-js"
+import { Accessor, batch, createEffect, createMemo, createResource, createRoot, getOwner } from "solid-js"
 import { createServerProjects, RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServers } from "./registry"
 import { pathKey } from "@/workspaces/path-key"
 import { useServerHealth } from "@/runtime/server/health"
@@ -83,21 +83,40 @@ function createGlobalModels() {
     recent: [],
     variant: {},
   })
-  const [recent] = createResource(
-    async () => {
-      const value = store.recent
-      await ready.promise
-      return value
-    },
-    (value) => value,
-    { initialValue: [] },
-  )
+  // Suspend readers only until persisted state loads. Refetching on every change would put the
+  // session route into its Suspense fallback, detaching the screen and resetting the timeline scroll.
+  const [loaded] = createResource(async () => {
+    await ready.promise
+    return true
+  })
 
   return {
     store,
     set: setStore,
     ready,
-    recent: () => recent()!,
+    recent: () => {
+      loaded()
+      return store.recent
+    },
+    // Marks models visible in the picker regardless of the "latest per family" default.
+    show(models: ReadonlyArray<{ providerID: string; modelID: string }>) {
+      const seen = new Map(store.user.map((item, index) => [`${item.providerID}:${item.modelID}`, index]))
+      batch(() => {
+        for (const model of models) {
+          const index = seen.get(`${model.providerID}:${model.modelID}`)
+          if (index !== undefined) {
+            setStore("user", index, "visibility", "show")
+            continue
+          }
+          seen.set(`${model.providerID}:${model.modelID}`, store.user.length)
+          setStore("user", store.user.length, {
+            providerID: model.providerID,
+            modelID: model.modelID,
+            visibility: "show",
+          })
+        }
+      })
+    },
   }
 }
 

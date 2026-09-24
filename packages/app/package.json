@@ -1,6 +1,6 @@
 {
   "name": "@opencode/app",
-  "version": "2.0.12",
+  "version": "2.0.15",
   "description": "",
   "type": "module",
   "exports": {
@@ -91,6 +91,7 @@
     "remeda": "catalog:",
     "solid-js": "catalog:",
     "solid-presence": "0.2.0",
-    "tailwindcss": "4.3.3"
+    "tailwindcss": "4.3.3",
+    "uqr": "0.1.3"
   }
 }

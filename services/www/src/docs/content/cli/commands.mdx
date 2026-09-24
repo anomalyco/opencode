@@ -362,13 +362,15 @@ $ opencode serve --help
 
 ## pair
 
-Shows server pairing information, including URLs, credentials, and a QR code.
+Shows server pairing information, including URLs, credentials, and a QR code. The
+QR code contains a direct link to the advertised server, with credentials in the
+URL fragment.
 
 ```bash
 $ opencode pair
 ```
 
-Advertise an external URL in the QR code.
+Advertise an external URL in the QR code and link.
 
 ```bash
 $ opencode pair --url https://dev.example.com

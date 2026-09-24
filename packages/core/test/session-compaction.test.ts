@@ -397,7 +397,7 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
     ])
 
     expect(requests).toHaveLength(1)
-    expect(requests[0]?.promptCacheKey).toBe(sessionID)
+    expect(requests[0]?.promptCacheKey).toBe(parentID)
     expect(requests[0]?.http?.headers).toEqual({
       "x-session-affinity": sessionID,
       "X-Session-Id": sessionID,

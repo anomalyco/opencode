@@ -378,7 +378,7 @@ export function getToolInfo(
         title: i18n.t("ui.tool.patch"),
         subtitle:
           Array.isArray(input.files) && input.files.length
-            ? `${input.files.length} ${i18n.plural("ui.common.file", input.files.length)}`
+            ? i18n.plural("ui.common.fileCount", input.files.length)
             : undefined,
       }
     case "todowrite":
@@ -514,7 +514,7 @@ export function CurrentContextToolGroup(props: {
     () => props.busy || tools().some((tool) => tool.state.status === "streaming" || tool.state.status === "running"),
   )
   const names = createMemo(() =>
-    [
+    i18n.list([
       ...new Set(
         props.parts.flatMap((part) => {
           if (part.type !== "tool" && part.type !== "shell") return []
@@ -530,7 +530,7 @@ export function CurrentContextToolGroup(props: {
           ]
         }),
       ),
-    ].join(", "),
+    ]),
   )
   const label = createMemo(() => {
     const thoughts = props.parts.filter((part) => part.type === "reasoning").length

@@ -1,7 +1,8 @@
 import { constructor, constants, methods } from "../interpreter/native.js"
+import { coerceToNumber, coerceToString, type Value } from "../interpreter/objects.js"
 import { rangeError, typeError } from "../interpreter/model.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
-import { coercion, coerceToString } from "./value.js"
+import { coercion } from "./value.js"
 
 export const numberGlobal = <R>(ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
@@ -29,39 +30,27 @@ export const numberGlobal = <R>(ctx: Interpreter<R>) => {
       "parseInt",
       2,
       (_, args) => {
-        const radix = args[1]
-        if (radix !== undefined && typeof radix !== "number") {
-          throw typeError("Number.parseInt expects a numeric radix.")
-        }
-        return parseInt(coerceToString(args[0]), radix)
+        return parseInt(coerceToString(args[0]), coerceToNumber(args[1]))
       },
     ],
     ["parseFloat", 1, (_, args) => parseFloat(coerceToString(args[0]))],
   ])
 
-  const self = (thisValue: unknown, name: string): number => {
+  const self = (thisValue: Value, name: string): number => {
     if (typeof thisValue === "number") return thisValue
     throw typeError(`Number.prototype.${name} requires that 'this' be a Number.`)
   }
-  const optNum = (name: string, arg: unknown): number | undefined => {
-    if (arg === undefined) return undefined
-    if (typeof arg !== "number") throw typeError(`Number.${name} expects a number argument.`)
-    return arg
-  }
+  const optNum = (arg: Value): number | undefined => (arg === undefined ? undefined : coerceToNumber(arg))
   methods(builtins, builtins.Number, [
-    ["toFixed", 1, (thisValue, args) => self(thisValue, "toFixed").toFixed(optNum("toFixed", args[0]))],
+    ["toFixed", 1, (thisValue, args) => self(thisValue, "toFixed").toFixed(optNum(args[0]))],
     ["toLocaleString", 0, (thisValue) => self(thisValue, "toLocaleString").toLocaleString("en-US")],
-    [
-      "toExponential",
-      1,
-      (thisValue, args) => self(thisValue, "toExponential").toExponential(optNum("toExponential", args[0])),
-    ],
+    ["toExponential", 1, (thisValue, args) => self(thisValue, "toExponential").toExponential(optNum(args[0]))],
     [
       "toPrecision",
       1,
       (thisValue, args) => {
         const value = self(thisValue, "toPrecision")
-        const digits = optNum("toPrecision", args[0])
+        const digits = optNum(args[0])
         return digits === undefined ? value.toString() : value.toPrecision(digits)
       },
     ],
@@ -70,7 +59,7 @@ export const numberGlobal = <R>(ctx: Interpreter<R>) => {
       1,
       (thisValue, args) => {
         const value = self(thisValue, "toString")
-        const radix = optNum("toString", args[0])
+        const radix = optNum(args[0])
         if (radix !== undefined && (radix < 2 || radix > 36)) {
           throw rangeError("Number.toString radix must be between 2 and 36.")
         }
@@ -89,7 +78,7 @@ export const booleanGlobal = <R>(ctx: Interpreter<R>) => {
     length: 1,
     call: coercion(ctx, "Boolean").call,
   })
-  const self = (thisValue: unknown, name: string): boolean => {
+  const self = (thisValue: Value, name: string): boolean => {
     if (typeof thisValue === "boolean") return thisValue
     throw typeError(`Boolean.prototype.${name} requires that 'this' be a Boolean.`)
   }

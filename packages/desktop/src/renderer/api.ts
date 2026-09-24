@@ -134,6 +134,7 @@ export const api: ElectronAPI = {
   getPathForFile: (file) => window.electron.getPathForFile(file),
   saveFile: (opts, content) => invoke("FilesSaveFile", { options: opts, content }),
   openExternal: (url) => send("FilesOpenExternal", { url }),
+  openBrowser: (url) => invoke("FilesOpenBrowser", { url }),
   openLocalFile: (url) => send("FilesOpenLocalFile", { url }),
   openPath: (path, app) => invoke("FilesOpenPath", { path, application: app }).then((value) => value ?? undefined),
   revealPath: (path) => invoke("FilesRevealPath", { path }),
@@ -161,4 +162,7 @@ export const api: ElectronAPI = {
   setForceFocus: (enabled) => invoke("AppSetForceFocus", { enabled }),
   recordFatalRendererError: (error) => invoke("AppRecordFatalRendererError", { error }),
   setNativeTranslations: (bundle) => invoke("AppSetNativeTranslations", { value: bundle }),
+  pairInfo: () => invoke("AppPairInfo").then(mutable),
+  getKeepScreenActive: () => invoke("AppGetKeepScreenActive"),
+  setKeepScreenActive: (enabled) => invoke("AppSetKeepScreenActive", { enabled }),
 }

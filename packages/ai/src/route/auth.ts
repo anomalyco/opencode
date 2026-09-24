@@ -16,7 +16,7 @@ type Secret = string | Redacted.Redacted | Config.Config<string | Redacted.Redac
 
 export interface AuthInput {
   readonly request: { readonly http?: HttpOptions }
-  readonly method: "POST" | "GET"
+  readonly method: "POST" | "GET" | "PUT" | "DELETE"
   readonly url: string
   readonly body: string
   readonly headers: Headers.Headers
@@ -130,6 +130,16 @@ export function bearerHeader(name: string, source: Secret | Credential): Definit
 export function bearerHeader(name: string, source?: Secret | Credential) {
   const render = (input: Secret | Credential) =>
     fromCredential(credentialInput(input), (secret) => ({ [name]: `Bearer ${secret}` }))
+  if (source === undefined) return render
+  return render(source)
+}
+
+/** `Authorization: <scheme> <secret>` for providers whose scheme is not `Bearer`, such as fal's `Key`. */
+export function scheme(name: string): (source: Secret | Credential) => Definition
+export function scheme(name: string, source: Secret | Credential): Definition
+export function scheme(name: string, source?: Secret | Credential) {
+  const render = (input: Secret | Credential) =>
+    fromCredential(credentialInput(input), (secret) => ({ authorization: `${name} ${secret}` }))
   if (source === undefined) return render
   return render(source)
 }

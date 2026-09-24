@@ -14,7 +14,17 @@ $ opencode pair
   URLs      http://127.0.0.1:49374
   Username  opencode
   Password  ********
+
+  Scan to pair
+
+  █▀▀▀▀▀█ ...
+
+  Link      http://127.0.0.1:49374/connect#...
 ```
+
+The QR code and link open the advertised server directly. Connection credentials
+stay in the URL fragment and are saved by the `/connect` page before it starts
+authenticated requests.
 
 By default the server runs on port 49374 and listens only on localhost. You can
 change this config with the `opencode service` command.
@@ -65,7 +75,6 @@ Use it when you want to:
 - Run under a supervisor like systemd, Docker, or another environment that expects
   a foreground process.
 - Keep a dedicated server instead of the shared background service.
-
 
 Connect a client to it with `--server`:
 

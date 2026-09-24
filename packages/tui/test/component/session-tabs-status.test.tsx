@@ -33,7 +33,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
     const [status, setStatus] = createSignal<SessionTabsStatus>(EMPTY_SESSION_TAB_STATUS)
     const [active, setActive] = createSignal("second")
     const [newTab, setNewTab] = createSignal(false)
-    const settings: Info = { tabs: { enabled: true } }
+    const settings: Info = { tabs: { mode: "on" } }
     const copied: string[] = []
     let config!: ReturnType<typeof useConfig>
     let theme!: ReturnType<typeof useTheme>

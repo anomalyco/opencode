@@ -319,7 +319,7 @@ it.effect("keeps near-expiry keys usable and requires a new login after expiry",
         expires: (yield* Clock.currentTimeMillis) + 120_000,
       }),
     })
-    const connection = { type: "credential" as const, id: saved.id, label: saved.label }
+    const connection = { type: "credential" as const, method: "oauth" as const, id: saved.id, label: saved.label }
     expect(yield* test.integrations.connection.resolve(connection)).toEqual(saved.value)
     yield* TestClock.adjust("2 minutes")
     const error = yield* test.integrations.connection.resolve(connection).pipe(Effect.flip)

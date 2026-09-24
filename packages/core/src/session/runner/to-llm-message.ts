@@ -1,4 +1,5 @@
 import {
+  Media,
   Message,
   ReasoningEfforts,
   ToolCallPart,
@@ -17,8 +18,7 @@ const imageMimes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"
 
 const media = (file: FileAttachment): ContentPart => ({
   type: "media",
-  mediaType: file.mime,
-  data: file.data,
+  media: Media.base64(file.data, file.mime),
   filename: file.name,
   metadata: file.description === undefined ? undefined : { description: file.description },
 })

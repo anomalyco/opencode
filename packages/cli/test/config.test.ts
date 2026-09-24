@@ -78,7 +78,7 @@ test("merges inline CLI config content over the global config", async () => {
   await Bun.write(
     file,
     JSON.stringify({
-      tabs: { enabled: true, scope: "global" },
+      tabs: { mode: "on", scope: "global" },
       keybinds: { "app.exit": "ctrl+q" },
       plugins: ["global"],
       animations: true,
@@ -105,7 +105,7 @@ test("merges inline CLI config content over the global config", async () => {
       }),
     )
 
-    expect(result.loaded.tabs).toEqual({ enabled: false, scope: "global" })
+    expect(result.loaded.tabs).toEqual({ mode: "off", scope: "global" })
     expect(result.loaded.keybinds).toEqual({ "app.exit": "ctrl+q", "help.show": false })
     expect(result.loaded.plugins).toEqual(["inline"])
     expect(result.updated).toMatchObject({ animations: false, mouse: false })
@@ -114,6 +114,26 @@ test("merges inline CLI config content over the global config", async () => {
     if (previous === undefined) delete process.env.OPENCODE_CLI_CONFIG_CONTENT
     else process.env.OPENCODE_CLI_CONFIG_CONTENT = previous
   }
+})
+
+test("reads the legacy tabs toggle without rewriting it", async () => {
+  await using directory = await tmpdir()
+  const file = path.join(directory.path, "cli.json")
+  await Bun.write(file, JSON.stringify({ tabs: { enabled: false } }))
+
+  const config = await run(
+    directory.path,
+    Effect.gen(function* () {
+      const service = yield* Config.Service
+      expect((yield* service.get()).tabs).toEqual({ mode: "off" })
+      return yield* service.update((draft) => {
+        draft.animations = false
+      })
+    }),
+  )
+
+  expect(config.tabs).toEqual({ mode: "off" })
+  expect(await Bun.file(file).json()).toEqual({ tabs: { enabled: false }, animations: false })
 })
 
 test("migrates tui and kv config into cli.json", async () => {

@@ -2,11 +2,10 @@ import type { RGBA } from "@opentui/core"
 import type {
   ActionState,
   ActionVariant,
-  BaseHue,
   FeedbackKind,
-  HueAlias,
   HueStep,
   MarkdownToken,
+  SemanticHue,
   SurfaceName,
   SyntaxToken,
 } from "./schema.js"
@@ -14,8 +13,8 @@ import type {
 export type ResolvedActionState = "base" | ActionState
 export type ResolvedFormfieldState = ResolvedActionState
 export type HueScale = Readonly<Record<HueStep, RGBA>>
-export type Hue = Readonly<Record<BaseHue | HueAlias, HueScale>>
-export type HueSource = Readonly<{ hue: BaseHue | HueAlias; step: HueStep }>
+export type Hue = Readonly<Record<SemanticHue, HueScale>>
+export type HueSource = Readonly<{ hue: string; step: HueStep }>
 export type Categorical = readonly HueScale[]
 export type ActionStates = Readonly<Partial<Record<ActionState, boolean>>>
 export type StatefulColor = Readonly<Record<ResolvedActionState, RGBA>> & {

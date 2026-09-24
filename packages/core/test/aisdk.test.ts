@@ -7,6 +7,7 @@ import { toSessionError } from "@opencode/core/session/to-session-error"
 import { Model } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import {
+  Media,
   LLM,
   AIError,
   CompactionPart,
@@ -23,6 +24,7 @@ import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { compileRequest } from "@opencode/ai/route/client"
 import { expect } from "bun:test"
 import { Effect, Layer } from "effect"
+import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(AISDK.locationLayer)
@@ -383,6 +385,90 @@ it.effect("routes AI Gateway model options by upstream prefix", () =>
   }),
 )
 
+it.effect("closes the open AI SDK reasoning part when the next one starts", () =>
+  Effect.gen(function* () {
+    // AI SDK OpenAI Responses can start summary part 1 before part 0 ends, then end both at item completion (#50662).
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = {
+        languageModel: () =>
+          streamModel([
+            { type: "reasoning-start", id: "rs_1:0", providerMetadata: { gateway: { generationId: "gen_1" } } },
+            { type: "reasoning-start", id: "rs_1:1" },
+            { type: "reasoning-delta", id: "rs_1:1", delta: "Second summary" },
+            { type: "reasoning-end", id: "rs_1:0", providerMetadata: { gateway: { encrypted: "late" } } },
+            { type: "reasoning-end", id: "rs_1:1", providerMetadata: { gateway: { encrypted: "final" } } },
+            { type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage },
+          ]),
+      }
+    })
+
+    const resolved = yield* aisdk.model(model("@ai-sdk/gateway"))
+    const response = yield* LLMClient.generate(LLM.request({ model: resolved, prompt: "Think" })).pipe(
+      Effect.provide(client),
+    )
+
+    expect(response.events.filter((event) => event.type.startsWith("reasoning-"))).toEqual([
+      { type: "reasoning-start", id: "rs_1:0", providerMetadata: { gateway: { generationId: "gen_1" } } },
+      { type: "reasoning-end", id: "rs_1:0" },
+      { type: "reasoning-start", id: "rs_1:1", providerMetadata: undefined },
+      { type: "reasoning-delta", id: "rs_1:1", text: "Second summary", providerMetadata: undefined },
+      { type: "reasoning-end", id: "rs_1:1", providerMetadata: { gateway: { encrypted: "final" } } },
+    ])
+  }),
+)
+
+it.effect("normalizes repeated, reopened, and overlapping AI SDK fragment boundaries", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = {
+        languageModel: () =>
+          streamModel([
+            // Older xAI Responses repeat the start for every summary part.
+            { type: "reasoning-start", id: "rs_1" },
+            { type: "reasoning-start", id: "rs_1" },
+            { type: "reasoning-delta", id: "rs_1", delta: "First" },
+            { type: "reasoning-end", id: "rs_1" },
+            // xAI Chat keeps streaming an ended reasoning id after an empty tool_calls chunk.
+            { type: "reasoning-delta", id: "rs_1", delta: "Second" },
+            { type: "reasoning-end", id: "rs_1" },
+            // xAI Responses ends every message item only when the stream flushes.
+            { type: "text-start", id: "msg_1" },
+            { type: "text-delta", id: "msg_1", delta: "One" },
+            { type: "text-start", id: "msg_2" },
+            { type: "text-delta", id: "msg_2", delta: "Two" },
+            { type: "text-end", id: "msg_1" },
+            { type: "text-end", id: "msg_2" },
+            { type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage },
+          ]),
+      }
+    })
+
+    const resolved = yield* aisdk.model(model("@ai-sdk/gateway"))
+    const response = yield* LLMClient.generate(LLM.request({ model: resolved, prompt: "Think" })).pipe(
+      Effect.provide(client),
+    )
+
+    expect(
+      response.events.filter((event) => event.type.startsWith("reasoning-") || event.type.startsWith("text-")),
+    ).toMatchObject([
+      { type: "reasoning-start", id: "rs_1" },
+      { type: "reasoning-delta", id: "rs_1", text: "First" },
+      { type: "reasoning-end", id: "rs_1" },
+      { type: "reasoning-start", id: "rs_1" },
+      { type: "reasoning-delta", id: "rs_1", text: "Second" },
+      { type: "reasoning-end", id: "rs_1" },
+      { type: "text-start", id: "msg_1" },
+      { type: "text-delta", id: "msg_1", text: "One" },
+      { type: "text-end", id: "msg_1" },
+      { type: "text-start", id: "msg_2" },
+      { type: "text-delta", id: "msg_2", text: "Two" },
+      { type: "text-end", id: "msg_2" },
+    ])
+  }),
+)
+
 it.effect("projects replay metadata onto AI SDK prompt parts", () =>
   Effect.gen(function* () {
     const aisdk = yield* AISDK.Service
@@ -460,23 +546,13 @@ it.effect("normalizes file data across AI SDK prompt parts", () =>
         model: resolved,
         messages: [
           Message.user([
-            { type: "media", mediaType: "image/png", data: bytes, filename: "bytes.png" },
-            { type: "media", mediaType: "image/png", data: "AAAA", filename: "base64.png" },
-            {
-              type: "media",
-              mediaType: "image/png",
-              data: "data:image/png;charset=utf-8;base64,AQID",
-              filename: "inline.png",
-            },
-            { type: "media", mediaType: "image/png", data: "https://example.com/image.png" },
-            { type: "media", mediaType: "image/png", data: "s3://bucket/image.png" },
+            { type: "media", media: Media.bytes(bytes, "image/png"), filename: "bytes.png" },
+            { type: "media", media: Media.base64("AAAA", "image/png"), filename: "base64.png" },
+            { type: "media", media: Media.fromDataUrl("data:image/png;charset=utf-8;base64,AQID"), filename: "inline.png" },
+            { type: "media", media: Media.url("https://example.com/image.png", { mediaType: "image/png" }) },
+            { type: "media", media: Media.base64("s3://bucket/image.png", "image/png") },
           ]),
-          Message.assistant({
-            type: "media",
-            mediaType: "application/pdf",
-            data: "http://example.com/document.pdf",
-            filename: "document.pdf",
-          }),
+          Message.assistant({ type: "media", media: Media.url("http://example.com/document.pdf", { mediaType: "application/pdf" }), filename: "document.pdf" }),
           Message.tool({
             id: "call_1",
             name: "screenshot",
@@ -593,6 +669,100 @@ it.effect("does not treat SSE comment heartbeats as model progress", () =>
       _tag: "Failure",
       failure: { message: expect.stringContaining("SSE read timed out") },
     })
+  }),
+)
+
+const chatChunk = (text: string) =>
+  `data: ${JSON.stringify({
+    id: "response-1",
+    object: "chat.completion.chunk",
+    created: 0,
+    model: "api-model",
+    choices: [{ index: 0, delta: { content: text }, finish_reason: "stop" }],
+  })}\n\ndata: [DONE]\n\n`
+
+const compatibleModel = Effect.fn(function* (customFetch: typeof fetch) {
+  const aisdk = yield* AISDK.Service
+  yield* aisdk.hook.sdk((event) => {
+    event.sdk = createOpenAICompatible({
+      ...event.options,
+      name: String(event.options.name),
+      baseURL: String(event.options.baseURL),
+    })
+  })
+  return yield* aisdk.model(
+    model("@ai-sdk/openai-compatible", { apiKey: "test", baseURL: "https://example.test/v1", fetch: customFetch }),
+  )
+})
+
+it.effect("routes AI SDK requests and responses through HTTP hook middleware", () =>
+  Effect.gen(function* () {
+    const sent: Array<{ url: string; headers: Headers; body: string }> = []
+    const resolved = yield* compatibleModel(
+      Object.assign(
+        async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+          sent.push({
+            url: String(input),
+            headers: new Headers(init?.headers),
+            body: new TextDecoder().decode(init?.body as ArrayBuffer),
+          })
+          return new Response(chatChunk("upstream"), { headers: { "content-type": "text/event-stream" } })
+        },
+        { preconnect: fetch.preconnect },
+      ),
+    )
+    const seen: string[] = []
+    const response = yield* LLMClient.generate(LLM.request({ model: resolved, prompt: "Hello" }), {
+      http: (request, handler) =>
+        Effect.gen(function* () {
+          // Read the body twice the way session hooks do, to prove it is not a single-use stream.
+          const first = yield* HttpClientRequest.toWeb(request)
+          const second = yield* HttpClientRequest.toWeb(request)
+          seen.push(`${request.method} ${request.url}`)
+          seen.push(yield* Effect.promise(() => first.text()))
+          seen.push(yield* Effect.promise(() => second.text()))
+          const upstream = yield* handler(HttpClientRequest.setHeader(request, "x-hook", "applied"))
+          seen.push(`status ${upstream.status}`)
+          return HttpClientResponse.fromWeb(
+            upstream.request,
+            new Response(chatChunk("rewritten"), { headers: { "content-type": "text/event-stream" } }),
+          )
+        }),
+    }).pipe(Effect.provide(client))
+
+    expect(sent).toHaveLength(1)
+    expect(sent[0]?.url).toBe("https://example.test/v1/chat/completions")
+    expect(sent[0]?.headers.get("x-hook")).toBe("applied")
+    expect(sent[0]?.headers.get("authorization")).toBe("Bearer test")
+    expect(JSON.parse(sent[0]?.body ?? "")).toMatchObject({ model: "api-model" })
+    expect(seen).toEqual([
+      "POST https://example.test/v1/chat/completions",
+      sent[0]?.body,
+      sent[0]?.body,
+      "status 200",
+    ])
+    expect(response.events.filter(LLMEvent.is.textDelta).map((event) => event.text)).toEqual(["rewritten"])
+  }),
+)
+
+it.effect("sends AI SDK requests directly when no HTTP hook middleware is attached", () =>
+  Effect.gen(function* () {
+    const bodies: unknown[] = []
+    const resolved = yield* compatibleModel(
+      Object.assign(
+        async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+          bodies.push(init?.body)
+          return new Response(chatChunk("upstream"), { headers: { "content-type": "text/event-stream" } })
+        },
+        { preconnect: fetch.preconnect },
+      ),
+    )
+    const response = yield* LLMClient.generate(LLM.request({ model: resolved, prompt: "Hello" })).pipe(
+      Effect.provide(client),
+    )
+    expect(bodies).toHaveLength(1)
+    expect(typeof bodies[0]).toBe("string")
+    expect(response.events.filter(LLMEvent.is.textDelta).map((event) => event.text)).toEqual(["upstream"])
   }),
 )
 

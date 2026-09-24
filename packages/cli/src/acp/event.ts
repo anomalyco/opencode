@@ -4,6 +4,7 @@ import type {
   OpenCodeClient,
   SessionMessageAssistant,
   SessionMessageInfo,
+  SessionStructuredError,
 } from "@opencode/client/promise"
 import type { ACPConnection } from "./connection"
 import { partsToContentChunks, type ReplayPart } from "./content"
@@ -40,6 +41,13 @@ export type TurnStart =
 
 export const ChildSessionUpdatesCapability = "opencode/child-session-updates"
 export const ChildSessionUpdateMethod = "opencode/session/child_update"
+const RetryMeta = "opencode/retry"
+
+type RetryStatus = {
+  readonly attempt: number
+  readonly nextRetryAt: string
+  readonly error: SessionStructuredError
+}
 
 type ChildSessionUpdateBase = {
   readonly rootSessionId: string
@@ -97,6 +105,7 @@ export async function streamTurn(input: {
   let finish: SessionMessageAssistant["finish"]
   let executionError: { readonly type: string; readonly message: string } | undefined
   const tools = new Map<string, ToolState>()
+  const retries = new Map<string, RetryStatus>()
   const children = new Map<string, ChildSession>()
   const openChildren = new Set<string>()
   let handedOff = false
@@ -188,6 +197,18 @@ export async function streamTurn(input: {
 
       if (event.type === "session.step.started") {
         if (!child) assistantMessageID = event.data.assistantMessageID
+        if (retries.delete(eventSessionID))
+          await send({ sessionUpdate: "session_info_update", _meta: { [RetryMeta]: null } })
+        continue
+      }
+      if (event.type === "session.retry.scheduled") {
+        const retry = {
+          attempt: event.data.attempt,
+          nextRetryAt: new Date(event.data.at).toISOString(),
+          error: event.data.error,
+        }
+        retries.set(eventSessionID, retry)
+        await send({ sessionUpdate: "session_info_update", _meta: { [RetryMeta]: retry } })
         continue
       }
       if (event.type === "session.text.delta") {
@@ -381,6 +402,7 @@ export async function streamTurn(input: {
       terminal,
       control.cancelled,
       finish,
+      retries.get(input.sessionID),
     )
   } catch (error) {
     streamController.abort()
@@ -560,6 +582,7 @@ function response(
   terminal: "succeeded" | "failed" | "interrupted",
   cancelled: boolean,
   finish: SessionMessageAssistant["finish"],
+  retry?: RetryStatus,
 ): PromptResponse {
   const error = assistant?.error ?? executionError
   if (error?.type === "provider.auth") throw new ACPError.AuthRequiredError()
@@ -582,7 +605,8 @@ function response(
       }
     : undefined
   const stopReason = resolveStopReason({ terminal, cancelled, finish, error: error?.type })
-  return { stopReason, ...(usage ? { usage } : {}), _meta: {} }
+  // Only an interrupt during backoff leaves a retry pending. Interruption clears the projected retry, so report it here.
+  return { stopReason, ...(usage ? { usage } : {}), _meta: retry ? { [RetryMeta]: retry } : {} }
 }
 
 function resolveStopReason(input: {

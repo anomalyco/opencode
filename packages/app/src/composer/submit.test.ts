@@ -54,14 +54,17 @@ function submitInput(
   mode: "normal" | "shell" = "normal",
   commands: () => readonly { name: string }[] | undefined = () => [],
   history: string[] = [],
+  clientCommand?: (text: string) => (() => void | Promise<void>) | undefined,
 ) {
   return createComposerSubmit({
     adapter,
     mode: () => mode,
     commands,
+    clientCommand,
     editor: () => undefined,
     queueScroll() {},
-    addToHistory: (prompt) => history.push(`add:${prompt.map((part) => ("content" in part ? part.content : part.type)).join("")}`),
+    addToHistory: (prompt) =>
+      history.push(`add:${prompt.map((part) => ("content" in part ? part.content : part.type)).join("")}`),
     removeFromHistory: (prompt) =>
       history.push(`remove:${prompt.map((part) => ("content" in part ? part.content : part.type)).join("")}`),
     resetHistory() {},
@@ -118,6 +121,61 @@ function session(input: {
 }
 
 describe("Composer submission", () => {
+  test("runs a client argument command without admitting it to the session", async () => {
+    const state = createMemoryComposerState().capture()
+    state.set([
+      { type: "text", content: "/btw why this approach?", start: 0, end: 23 },
+      {
+        type: "image",
+        id: "attachment",
+        filename: "diagram.png",
+        mime: "image/png",
+        blob: { id: "attachment", url: "data:image/png;base64,YQ==" },
+      },
+    ])
+    state.context.add({ type: "file", path: "src/retry.ts" })
+    const calls: string[] = []
+    const target = session({
+      calls,
+      prompt: async () => {
+        throw new Error("client command must not call prompt")
+      },
+    })
+    const adapter: ActiveComposerAdapter = {
+      kind: "active-session",
+      state,
+      ready: () => true,
+      controls,
+      working: () => false,
+      session: () => target,
+      interrupt: async () => undefined,
+      submitted() {},
+      setEditor() {},
+    }
+
+    const history: string[] = []
+    await submitInput(adapter, undefined, "normal", undefined, history, (text) => {
+      expect(text).toBe("/btw why this approach?")
+      return () => {
+        calls.push("btw")
+      }
+    }).submit(new Event("submit"))
+
+    expect(calls).toEqual(["btw"])
+    expect(history).toEqual([])
+    expect(state.current()).toEqual([
+      { type: "text", content: "", start: 0, end: 0 },
+      {
+        type: "image",
+        id: "attachment",
+        filename: "diagram.png",
+        mime: "image/png",
+        blob: { id: "attachment", url: "data:image/png;base64,YQ==" },
+      },
+    ])
+    expect(state.context.items()).toHaveLength(1)
+  })
+
   test("applies the captured agent and model before a custom command without passing over its overrides", async () => {
     const state = createMemoryComposerState({ prompt: "/review changes" }).capture()
     const calls: string[] = []
@@ -625,12 +683,7 @@ describe("Composer submission", () => {
       },
     }
 
-    await submitInput(
-      adapter,
-      undefined,
-      "normal",
-      () => catalog,
-    ).submit(new Event("submit"))
+    await submitInput(adapter, undefined, "normal", () => catalog).submit(new Event("submit"))
 
     expect(await sent.promise).toBe("command")
     expect(requests).toEqual([

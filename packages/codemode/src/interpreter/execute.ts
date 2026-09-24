@@ -4,6 +4,7 @@ import type { DataValue, Diagnostic, ResolvedExecutionLimits, Result } from "../
 import { toBoundary } from "../data.js"
 import { ToolRuntime } from "../tool-runtime.js"
 import { normalizeError } from "./errors.js"
+import type { Value } from "./objects.js"
 import { createBuiltins } from "./intrinsics.js"
 import { Pending } from "./promises.js"
 import { Interpreter } from "./interpreter.js"
@@ -13,7 +14,7 @@ export const executeProgram = <R>(
   prepared: ToolRuntime.Prepared<R>,
   limits: ResolvedExecutionLimits,
   hooks: ToolRuntime.Hooks<R>,
-  globals?: (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, unknown]>,
+  globals?: (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value]>,
 ): Effect.Effect<Result, never, R> => {
   if (code.trim().length === 0) {
     return Effect.succeed({

@@ -16,7 +16,7 @@ import PROMPT_ANTHROPIC from "./system-prompt/anthropic.txt"
 export const OpenAIPlugin = make("opencode.prompt.openai", (model) => {
   const id = model.id.toLowerCase()
   if (!id.includes("gpt")) return undefined
-  return id.includes("gpt-6") ? PROMPT_ASTRA : PROMPT_GPT
+  return id.includes("astra") ? PROMPT_ASTRA : PROMPT_GPT
 })
 
 export const AnthropicPlugin = make(

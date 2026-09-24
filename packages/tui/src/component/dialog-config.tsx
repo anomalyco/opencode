@@ -121,12 +121,11 @@ export const settings: Setting[] = [
     keywords: ["approve", "accept", "permission requests"],
   },
   {
-    title: "Enabled",
+    title: "Mode",
     category: "Tabs",
-    path: ["tabs", "enabled"],
-    default: true,
-    values: [false, true],
-    labels: ["off", "on"],
+    path: ["tabs", "mode"],
+    default: "auto",
+    values: ["off", "on", "auto"],
   },
   {
     title: "Scope",

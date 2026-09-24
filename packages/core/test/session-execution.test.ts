@@ -278,6 +278,7 @@ describe("SessionExecution lifecycle", () => {
           sessionID,
           text: "The server restarted while you were working. Continue from where you left off without repeating completed work.",
           description: "Continuing after restart",
+          metadata: { notice: "restart" },
         })),
       )
       // Drains completed naturally, so claims are released and counters reset.
@@ -507,7 +508,7 @@ describe("SessionRestart background recovery", () => {
         run: Deferred.await(complete),
       })
       yield* jobs.background("call-completed-shell")
-      yield* Deferred.succeed(complete, "(no output)\n\nCommand exited with code 7.")
+      yield* Deferred.succeed(complete, "Exited with code 7")
       yield* jobs.wait({ id: "call-completed-shell" })
 
       const scope = yield* Scope.make()
@@ -529,7 +530,7 @@ describe("SessionRestart background recovery", () => {
         {
           type: "synthetic",
           payload: {
-            text: '<shell id="call-completed-shell" state="completed" command="exit 7">\n(no output)\n\nCommand exited with code 7.\n</shell>',
+            text: '<shell id="call-completed-shell" state="completed" command="exit 7">\nExited with code 7\n</shell>',
           },
         },
       ])
