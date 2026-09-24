@@ -1,6 +1,5 @@
-import { Effect, JsonSchema, Schema, Stream } from "effect"
-import { tryRequest } from "./media-model.js"
-import { LLMClient, Service, type StreamOptions } from "./route/client.js"
+import { Effect, JsonSchema, Schema } from "effect"
+import { LLMClient, Service } from "./route/client.js"
 import {
   GenerationOptions,
   HttpOptions,
@@ -36,20 +35,9 @@ export type RequestInput<SelectedLanguageModel extends LanguageModel = LanguageM
   readonly http?: HttpOptions.Input
 }
 
-export const generate = <const SelectedLanguageModel extends LanguageModel>(
-  input: RequestInput<SelectedLanguageModel> | LLMRequest,
-  options?: StreamOptions,
-): Effect.Effect<LLMResponse, AIError, Service> =>
-  requestEffect(input).pipe(Effect.flatMap((request) => LLMClient.generate(request, options)))
+export const generate = LLMClient.generate
 
-export const stream = <const SelectedLanguageModel extends LanguageModel>(
-  input: RequestInput<SelectedLanguageModel> | LLMRequest,
-  options?: StreamOptions,
-): Stream.Stream<LLMEvent, AIError, Service> =>
-  Stream.unwrap(requestEffect(input).pipe(Effect.map((request) => LLMClient.stream(request, options))))
-
-const requestEffect = (input: RequestInput | LLMRequest) =>
-  input instanceof LLMRequest ? Effect.succeed(input) : tryRequest(() => request(input))
+export const stream = LLMClient.stream
 
 export const request = <const SelectedLanguageModel extends LanguageModel>(
   input: RequestInput<SelectedLanguageModel>,

@@ -9,13 +9,15 @@ import { OpenAI } from "@opencode/ai/providers"
 
 const openai = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY })
 
+const request = LLM.request({
+  model: openai.responses("gpt-4o-mini"), // `.chat(...)` selects the Chat Completions API instead
+  system: "You are concise.",
+  prompt: "Say hello in one short sentence.",
+  generation: { maxTokens: 40 },
+})
+
 const program = Effect.gen(function* () {
-  const response = yield* LLM.generate({
-    model: openai.responses("gpt-4o-mini"), // `.chat(...)` selects the Chat Completions API instead
-    system: "You are concise.",
-    prompt: "Say hello in one short sentence.",
-    generation: { maxTokens: 40 },
-  })
+  const response = yield* LLM.generate(request)
   console.log(response.text)
 })
 
@@ -23,8 +25,7 @@ const program = Effect.gen(function* () {
 await Effect.runPromise(program.pipe(Effect.provide(AIClient.layer)))
 ```
 
-Run `LLM.stream(...)` instead of `generate` when you want incremental `LLMEvent`s. Both accept request input or a
-prebuilt `LLM.request(...)`. The event stream is provider-neutral — same shape across OpenAI Chat, OpenAI Responses,
+Run `LLM.stream(request)` instead of `generate` when you want incremental `LLMEvent`s. The event stream is provider-neutral — same shape across OpenAI Chat, OpenAI Responses,
 Anthropic Messages, Gemini, Bedrock Converse, and any OpenAI-compatible deployment.
 
 The same configured facade names image, video, speech, and transcription models. `Image.generate` resolves the
@@ -935,7 +936,7 @@ const transcript = await generation.await({ poll: { interval: 3_000 } })
 ## Public API
 
 - **`LLM.request({...})`** — build a provider-neutral `LLMRequest`. Accepts ergonomic inputs (`system: string`, `prompt: string`) that normalize into the canonical Schema classes.
-- **`LLM.generate` / `LLM.stream`** — run request input or an `LLMRequest` through `LLMClient` for one-import use.
+- **`LLM.generate` / `LLM.stream`** — re-exported from `LLMClient` for one-import use.
 - **`Message.user(...)` / `Message.assistant(...)` / `Message.tool(...)`** — message constructors from the canonical schema model.
 - **`LanguageModel.make(...)` / `ToolCallPart.make(...)` / `ToolResultPart.make(...)` / `ToolDefinition.make(...)`** — model and tool-related constructors from the canonical schema model.
 - **`LLMEvent.is.*`** — typed guards (`is.textDelta`, `is.toolCall`, `is.finish`, …) for filtering streams.

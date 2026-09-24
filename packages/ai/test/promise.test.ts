@@ -266,6 +266,12 @@ describe("AI promise client", () => {
     expect(failure).toBeInstanceOf(AIError)
     expect(failure instanceof AIError && failure.reason.http?.status).toBe(404)
 
+    const invalid = await ai.llm
+      // @ts-expect-error Invalid input must reject with AIError, not throw synchronously.
+      .generate({ model: openai.responses("gpt-5"), messages: [{ role: "bogus" }] })
+      .catch((error: unknown) => error)
+    expect(invalid instanceof AIError && invalid.reason._tag).toBe("InvalidRequest")
+
     const controller = new AbortController()
     controller.abort()
     const aborted = await ai.llm
