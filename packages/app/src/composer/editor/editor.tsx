@@ -777,11 +777,13 @@ export function ComposerEditorPopover(props: {
   const [store, setStore] = createStore({ maxHeight: COMPOSER_SUGGESTION_MAX_HEIGHT })
   const resize = (height: number) =>
     setStore("maxHeight", composerSuggestionMaxHeight(height, props.search !== undefined))
-  createEffect(() => resize(props.boundary?.()?.clientHeight ?? COMPOSER_SUGGESTION_MAX_HEIGHT * 2))
-  createResizeObserver(
-    props.boundary ?? (() => undefined),
-    (rect) => resize(rect.height),
-  )
+  // A detached boundary (e.g. the previous session's timeline while the next one loads) measures 0px.
+  const boundary = () => {
+    const element = props.boundary?.()
+    return element?.isConnected ? element : undefined
+  }
+  createEffect(() => resize(boundary()?.clientHeight ?? COMPOSER_SUGGESTION_MAX_HEIGHT * 2))
+  createResizeObserver(boundary, (rect) => resize(rect.height))
 
   return (
     <div

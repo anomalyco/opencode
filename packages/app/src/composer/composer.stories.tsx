@@ -296,6 +296,13 @@ function ConstrainedCommandSuggestionsStory() {
 
 export const ConstrainedCommandSuggestions = { render: () => <ConstrainedCommandSuggestionsStory /> }
 
+export const DetachedCommandSuggestionBoundary = {
+  render: () => {
+    const detached = document.createElement("div")
+    return <ComposerStory suggestions="command" manySuggestions suggestionBoundary={() => detached} />
+  },
+}
+
 export const RunningAndStopping = { render: () => <ComposerStory working stopping label="Session is running" /> }
 
 export const SteeringFollowUp = {

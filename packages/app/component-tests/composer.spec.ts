@@ -151,6 +151,11 @@ story("grows suggestions while preserving visible timeline context", async ({ mo
   await expect(suggestions).toHaveCSS("max-height", "306px")
 })
 
+story("ignores a detached suggestion boundary", async ({ mount }) => {
+  const component = await mount("opencode-composer-flow--detached-command-suggestion-boundary")
+  await expect(component.locator('[data-component="composer-suggestions"]')).toHaveCSS("max-height", "306px")
+})
+
 // ThemeProvider writes resolved token values into a <style> block, so toggling data-color-scheme by hand
 // leaves every --v2-* variable at its previous value. Switch themes through the Storybook global instead.
 for (const [theme, background] of [
