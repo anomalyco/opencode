@@ -389,7 +389,8 @@ for await (const event of generation.events({ poll: { interval: 10_000 } })) { â
 const video = await generation.await({ poll: { interval: 10_000 }, signal })
 const resumed = await ai.video.resume(model, JSON.parse(saved)) // persist provider + model ID with the token
 
-const text = await ai.llm.generate({ model, prompt })
+const request = ai.llm.request({ model, prompt })
+const text = await ai.llm.generate(request)
 for await (const event of ai.llm.stream(request)) { â€¦ }
 
 await ai.dispose()

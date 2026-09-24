@@ -4,10 +4,8 @@ import type { AwaitOptions, Event, Generation, Snapshot } from "./generation.js"
 import { Image, ImageModel, ImageRequest, type ImageOptions, type ImageRequestInput } from "./image.js"
 import { LLM } from "./index.js"
 import { Media } from "./media.js"
-import { tryRequest } from "./media-model.js"
 import { RequestExecutor } from "./route/executor.js"
-import { AIError, InvalidRequestError, LanguageModel, LLMRequest } from "./schema/index.js"
-import type { RequestInput } from "./llm.js"
+import { AIError, InvalidRequestError, type LLMRequest } from "./schema/index.js"
 import { Speech, SpeechModel, SpeechRequest, type SpeechRequestInput } from "./speech.js"
 import {
   Transcription,
@@ -94,8 +92,6 @@ export const make = (options: Options = {}) => {
   })
 
   // The typed `generate`/`stream` overloads take a concrete input or a request, not the union; normalize once here.
-  const llmRequest = (input: RequestInput | LLMRequest) =>
-    input instanceof LLMRequest ? Effect.succeed(input) : tryRequest(() => LLM.request(input))
   const imageRequest = (input: ImageRequestInput | ImageRequest) =>
     input instanceof ImageRequest ? input : Image.request(input)
   const videoRequest = (input: VideoRequestInput | VideoRequest) =>
@@ -145,10 +141,8 @@ export const make = (options: Options = {}) => {
     },
     llm: {
       request: LLM.request,
-      generate: <const Model extends LanguageModel>(input: RequestInput<Model> | LLMRequest, options?: RunOptions) =>
-        run(Effect.flatMap(llmRequest(input), LLM.generate), options),
-      stream: <const Model extends LanguageModel>(input: RequestInput<Model> | LLMRequest, options?: RunOptions) =>
-        iterate(Stream.unwrap(Effect.map(llmRequest(input), LLM.stream)), options),
+      generate: (request: LLMRequest, options?: RunOptions) => run(LLM.generate(request), options),
+      stream: (request: LLMRequest, options?: RunOptions) => iterate(LLM.stream(request), options),
     },
     image: {
       request: Image.request,

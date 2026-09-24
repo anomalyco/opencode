@@ -6,6 +6,7 @@ import {
   type LanguageModelProviderOptions,
   type ProviderOptions,
 } from "../src/index.js"
+import { ai } from "../src/promise.js"
 import { OpenAIChat } from "../src/protocols.js"
 
 interface ExampleOptions {
@@ -71,3 +72,6 @@ void (true satisfies GenerateRequirements)
 void (true satisfies StreamClientRequirements)
 void (true satisfies GenerateObjectRequirements)
 void (true satisfies GenerateDynamicObjectRequirements)
+
+// @ts-expect-error The promise client runs an LLMRequest, not request input.
+void ai.llm.generate({ model, prompt: "Hello" })

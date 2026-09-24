@@ -72,10 +72,11 @@ helpers; `ai.file` and `ai.write` load `node:fs/promises` on first use, so no Ef
 import { AI } from "@opencode/ai/promise"
 
 const ai = AI.make()
-const text = await ai.llm.generate({ model: openai.responses("gpt-4o-mini"), prompt: "Say hello." })
+const request = ai.llm.request({ model: openai.responses("gpt-4o-mini"), prompt: "Say hello." })
+const text = await ai.llm.generate(request)
 const generated = await ai.image.generate({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" })
 await ai.write(generated.image, "./lighthouse.png") // also ai.file(path), ai.bytes(asset), ai.base64(asset), ai.materialize(asset)
-for await (const event of ai.llm.stream({ model: openai.responses("gpt-4o-mini"), prompt: "Stream hello." })) {
+for await (const event of ai.llm.stream(request)) {
   // LLMEvent
 }
 await ai.dispose()

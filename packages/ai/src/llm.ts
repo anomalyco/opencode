@@ -35,6 +35,7 @@ export type RequestInput<SelectedLanguageModel extends LanguageModel = LanguageM
   readonly http?: HttpOptions.Input
 }
 
+/** Run an `LLMRequest` built with `LLM.request(...)`. */
 export const generate = LLMClient.generate
 
 export const stream = LLMClient.stream
