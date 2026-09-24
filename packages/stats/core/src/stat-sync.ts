@@ -54,7 +54,7 @@ export const syncStats: (options?: {
     const rows = yield* Effect.forEach(
       queries,
       (query, index) =>
-        r2Sql.query(query).pipe(
+        r2Sql.query(query, ["dimension", "tier", "provider", "model", "country"]).pipe(
           Effect.tap((rows) =>
             Effect.logInfo(
               `stats query complete ${JSON.stringify({ index, total: queries.length, rows: rows.length })}`,

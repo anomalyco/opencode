@@ -3,7 +3,7 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
-  "go.promo.deepseek": "DeepSeek V4.1 Flash får firedoblet brugsgrænse i en begrænset periode",
+  "go.promo.spaceBunny": "Space Bunny Free, en ny anonym model, er tilgængelig i en begrænset periode",
   "go.graph.bonus": "{{count}}× forbrug",
   "nav.github": "GitHub",
   "nav.docs": "Dokumentation",
