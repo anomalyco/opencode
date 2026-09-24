@@ -68,7 +68,6 @@ testEffect(
       promptCacheKey: "session-key",
       tools: [{ name: "lookup", description: "Lookup", inputSchema: { type: "object", properties: {} } }],
       toolChoice: { type: "tool", name: "lookup" },
-      generation: { maxTokens: 1 },
       providerOptions: {
         store: true,
         reasoningEffort: "high",
@@ -86,7 +85,6 @@ testEffect(
           prompt_cache_retention: "24h",
           prompt_cache_options: { mode: "session", ttl: "1h" },
           store: true,
-          stream: false,
           text: { verbosity: "high", format: { type: "json_object" } },
           tool_choice: "required",
         },
@@ -163,6 +161,30 @@ testEffect(
   ),
 )
 
+testEffect(
+  dynamicResponse(({ text, respond }) =>
+    Effect.sync(() => {
+      expect(JSON.parse(text).max_output_tokens).toBe(128)
+      return respond(JSON.stringify({ error: { message: "max_output_tokens must be at least 20000" } }), {
+        status: 400,
+        headers: { "content-type": "application/json" },
+      })
+    }),
+  ),
+).effect("passes configured output limits through and leaves rejection to the provider", () =>
+  Effect.gen(function* () {
+    const error = yield* LLMClient.compact(
+      LLM.request({
+        model: OpenAI.configure({ apiKey: "fixture" }).responses("gpt-5.5"),
+        prompt: "Hello.",
+        generation: { maxTokens: 128 },
+      }),
+      trigger,
+    ).pipe(Effect.flip)
+    expect(error.message).toContain("at least 20000")
+  }),
+)
+
 const idless = { type: "compaction", encrypted_content: "opaque" }
 testEffect(
   fixedResponse(
@@ -233,7 +255,7 @@ testEffect(fixedResponse(sseEvents({ type: "response.output_item.done", item: ch
       expect(error.reason._tag).toBe("InvalidProviderOutput")
     }),
 )
-for (const body of [{ input: [] }, { previous_response_id: "stale" }]) {
+for (const body of [{ input: [] }, { previous_response_id: "stale" }, { stream: false }]) {
   testEffect(dynamicResponse(() => Effect.die("Must reject before sending"))).effect(
     `rejects caller-supplied ${Object.keys(body)[0]} before sending trigger`,
     () =>

@@ -7,7 +7,6 @@ import { Protocol } from "../route/protocol.js"
 import { HttpTransport } from "../route/transport/index.js"
 import {
   LLMRequest,
-  mergeJsonRecords,
   type JsonSchema,
   type LanguageModel,
   type ToolDefinition,
@@ -140,18 +139,10 @@ export type OpenAIResponsesBody = Schema.Schema.Type<typeof OpenAIResponsesBody>
 
 /** Request control, never conversation content. */
 export const CompactionTrigger = Schema.Struct({ type: Schema.Literal("compaction_trigger") })
-const CheckpointBody = Schema.StructWithRest(
-  Schema.Struct({
-    ...OpenAIResponsesBody.fields,
-    input: Schema.Array(Schema.Union([OpenAIResponsesInputItem, CompactionTrigger])),
-    text: Schema.optional(JsonObject),
-    prompt_cache_retention: optionalNull(Schema.String),
-    prompt_cache_options: optionalNull(
-      Schema.Struct({ mode: Schema.optional(Schema.String), ttl: Schema.optional(Schema.String) }),
-    ),
-  }),
-  [JsonObject],
-)
+const CheckpointBody = Schema.Struct({
+  ...OpenAIResponsesBody.fields,
+  input: Schema.Array(Schema.Union([OpenAIResponsesInputItem, CompactionTrigger])),
+})
 
 const adapter = {
   id: ADAPTER,
@@ -240,7 +231,6 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
 const checkpointBody = {
   schema: CheckpointBody,
   from: Effect.fn("OpenAIResponses.checkpointBody")(function* (request: LLMRequest) {
-    const native = yield* fromRequest(request)
     const overlay = request.http?.body
     // Complete history is required for stateless replay and SSE recovery. Raw input overrides bypass that contract.
     if (
@@ -251,17 +241,13 @@ const checkpointBody = {
       return yield* ProviderShared.invalidRequest(
         "Trigger compaction requires complete canonical history, not an input or continuation override",
       )
-    const merged = mergeJsonRecords(native, overlay)
-    return yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(CheckpointBody))({
-      ...merged,
-      input: [...native.input, { type: "compaction_trigger" }],
-      stream: true,
-      // The trigger rejects a configured max_output_tokens below 20,000.
-      max_output_tokens:
-        typeof merged?.max_output_tokens === "number" && merged.max_output_tokens < 20_000
-          ? undefined
-          : merged?.max_output_tokens,
-    })
+    if (overlay?.stream !== undefined && overlay.stream !== true)
+      return yield* ProviderShared.invalidRequest("Trigger compaction requires a streamed response")
+    const native = yield* fromRequest(request)
+    return {
+      ...native,
+      input: [...native.input, { type: "compaction_trigger" as const }],
+    }
   }),
 }
 
