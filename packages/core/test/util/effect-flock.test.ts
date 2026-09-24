@@ -4,6 +4,7 @@ import fs from "fs/promises"
 import path from "path"
 import os from "os"
 import { Cause, Effect, Exit } from "effect"
+import { TestClock } from "effect/testing"
 import { testEffect } from "../lib/effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -193,6 +194,38 @@ describe("util.effect-flock", () => {
       )
       yield* Effect.promise(() => fs.rm(tmp, { recursive: true, force: true }))
     }),
+  )
+
+  it.effect(
+    "refreshes the heartbeat while a lock is held",
+    Effect.gen(function* () {
+      const flock = yield* EffectFlock.Service
+      const tmp = yield* Effect.promise(() => fs.mkdtemp(path.join(os.tmpdir(), "eflock-test-")))
+      const dir = path.join(tmp, "locks")
+      const key = "eflock:heartbeat"
+      const lockDir = lock(dir, key)
+      const heartbeat = path.join(lockDir, "heartbeat")
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* flock.acquire(key, dir)
+          yield* Effect.promise(async () => {
+            const old = new Date(Date.now() - 120_000)
+            await fs.utimes(heartbeat, old, old)
+            await fs.utimes(path.join(lockDir, "meta.json"), old, old)
+            await fs.utimes(lockDir, old, old)
+            await sleep(1_000)
+          })
+          yield* TestClock.adjust("20 seconds")
+          yield* Effect.promise(() => sleep(50))
+
+          const heartbeatMtime = yield* Effect.promise(() => fs.stat(heartbeat).then((info) => info.mtimeMs))
+          expect(Date.now() - heartbeatMtime).toBeLessThan(500)
+        }),
+      )
+      yield* Effect.promise(() => fs.rm(tmp, { recursive: true, force: true }))
+    }),
+    15_000,
   )
 
   it.live(
