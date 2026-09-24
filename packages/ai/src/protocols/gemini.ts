@@ -10,7 +10,6 @@ import {
   LLMEvent,
   Usage,
   type FinishReason,
-  type JsonSchema,
   type LLMRequest,
   type MediaPart,
   type ProviderMetadata,
@@ -25,7 +24,6 @@ import { JsonObject, knownString, lenient, optionalArray, optionalNull, Provider
 import { GeminiGenerateContent } from "./utils/gemini-generate-content.js"
 import { GeminiJsonSchema } from "./utils/gemini-json-schema.js"
 import { Lifecycle } from "./utils/lifecycle.js"
-import { ToolSchemaProjection } from "./utils/tool-schema.js"
 
 const ADAPTER = "gemini"
 // Google documents this sentinel for replaying Gemini 3 function calls after their original signature was lost.
@@ -270,11 +268,12 @@ interface ParserState {
 // Request Lowering
 // =============================================================================
 // Tool schemas go in `parametersJsonSchema`, which accepts standard JSON Schema.
-// `utils/gemini-json-schema` rewrites only the few shapes Gemini still rejects.
-const lowerTool = (tool: ToolDefinition, inputSchema: JsonSchema) => ({
+// `utils/gemini-json-schema` rewrites only the few shapes Gemini still rejects. This
+// protocol always applies it, including for tuned endpoints whose IDs do not name Gemini.
+const lowerTool = (tool: ToolDefinition) => ({
   name: tool.name,
   description: tool.description,
-  parametersJsonSchema: GeminiJsonSchema.normalize(inputSchema),
+  parametersJsonSchema: GeminiJsonSchema.normalize(tool.inputSchema),
 })
 
 const lowerToolConfig = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
@@ -444,7 +443,6 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
   const hasTools = flattened.tools.length > 0
   const generation = request.generation
   const options = yield* decodeOptions(request.providerOptions ?? {})
-  const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   const generationConfig = {
     maxOutputTokens: generation?.maxTokens,
     temperature: generation?.temperature,
@@ -470,9 +468,7 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
     tools: hasTools
       ? [
           {
-            functionDeclarations: flattened.tools.map((tool) =>
-              lowerTool(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility)),
-            ),
+            functionDeclarations: flattened.tools.map(lowerTool),
           },
         ]
       : undefined,

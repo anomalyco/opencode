@@ -11,7 +11,7 @@ import {
   type FinishReasonDetails,
   type JsonSchema,
   type LLMRequest,
-  type LanguageModelToolSchemaCompatibility,
+  type LanguageModel,
   type ProviderMetadata,
   type ReasoningPart,
   type ToolCallPart,
@@ -230,13 +230,13 @@ const lowerToolSpec = (tool: ToolDefinition, inputSchema: JsonSchema): BedrockTo
 })
 
 const lowerTools = (
-  compatibility: LanguageModelToolSchemaCompatibility | undefined,
+  model: LanguageModel,
   breakpoints: BedrockCache.Breakpoints,
   tools: ReadonlyArray<ToolDefinition>,
 ): BedrockTool[] => {
   const result: BedrockTool[] = []
   for (const tool of tools) {
-    result.push(lowerToolSpec(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, compatibility)))
+    result.push(lowerToolSpec(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, model)))
     const cachePoint = BedrockCache.block(breakpoints, tool.cache)
     if (cachePoint) result.push(cachePoint)
   }
@@ -440,7 +440,7 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
   const toolConfig = (() => {
     if (flattened.tools.length === 0) return undefined
     return {
-      tools: lowerTools(request.model.compatibility?.toolSchema, breakpoints, flattened.tools),
+      tools: lowerTools(request.model, breakpoints, flattened.tools),
       // Converse has no native "none". Keep definitions stable for prompt
       // caching and omit only the unsupported choice.
       toolChoice,

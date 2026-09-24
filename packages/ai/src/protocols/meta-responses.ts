@@ -107,7 +107,7 @@ const fromRequest = Effect.fn("MetaResponses.fromRequest")(function* (request: L
                 return yield* OpenResponses.lowerTool(
                   NAME,
                   tool,
-                  ToolSchemaProjection.modelCompatibility(tool.inputSchema, request.model.compatibility?.toolSchema),
+                  ToolSchemaProjection.modelCompatibility(tool.inputSchema, request.model),
                 )
               return yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(NativeTool))(tool.native.meta)
             }),

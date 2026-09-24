@@ -755,6 +755,39 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("normalizes tool schemas for tuned endpoints whose IDs do not name Gemini", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: Gemini.route
+            .with({
+              endpoint: { baseURL: "https://generativelanguage.test/v1beta/" },
+              auth: Auth.header("x-goog-api-key", "test"),
+            })
+            .model({ id: "projects/p/locations/global/endpoints/123" }),
+          prompt: "Use the tool.",
+          tools: [
+            {
+              name: "lookup",
+              description: "Lookup data",
+              inputSchema: {
+                type: "object",
+                required: ["query", "missing"],
+                properties: { query: { type: "string" } },
+              },
+            },
+          ],
+        }),
+      )
+
+      expect(prepared.body.tools?.[0]?.functionDeclarations[0]?.parametersJsonSchema).toEqual({
+        type: "object",
+        required: ["query"],
+        properties: { query: { type: "string" } },
+      })
+    }),
+  )
+
   it.effect("preserves nested empty object tool schemas", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(

@@ -1,6 +1,6 @@
-import type { JsonSchema, LanguageModelToolSchemaCompatibility } from "../../schema/index.js"
+import type { JsonSchema, LanguageModel } from "../../schema/index.js"
 import { isRecord } from "../../utils/record.js"
-import { GeminiToolSchema } from "./gemini-tool-schema.js"
+import { GeminiJsonSchema } from "./gemini-json-schema.js"
 
 const tupleItemsSchema = (items: ReadonlyArray<unknown>) => {
   const projected = items.map(moonshotNode)
@@ -46,18 +46,18 @@ const moonshot = (schema: JsonSchema): JsonSchema => {
 const openAI = (schema: JsonSchema): JsonSchema => schema
 const responses = openAI
 
-const gemini = (schema: JsonSchema): JsonSchema => GeminiToolSchema.convert(schema) ?? {}
+const gemini = GeminiJsonSchema.normalize
 
-const modelCompatibility = (
-  schema: JsonSchema,
-  compatibility: LanguageModelToolSchemaCompatibility | undefined,
-): JsonSchema => {
-  if (compatibility === undefined) return schema
-  switch (compatibility) {
+// An explicit compatibility setting wins. Otherwise a Gemini model name selects Gemini's rules,
+// so Gemini reached through gateways and OpenAI-compatible endpoints gets the same schema handling.
+const modelCompatibility = (schema: JsonSchema, model: LanguageModel): JsonSchema => {
+  switch (model.compatibility?.toolSchema ?? (/gemini/i.test(model.id) ? "gemini" : undefined)) {
     case "gemini":
       return gemini(schema)
     case "moonshot":
       return moonshot(schema)
+    case undefined:
+      return schema
   }
 }
 

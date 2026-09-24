@@ -5,7 +5,14 @@ import { Auth } from "../route/auth.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import { HttpTransport } from "../route/transport/index.js"
-import { LLMRequest, mergeJsonRecords, type JsonSchema, type ToolDefinition, type ToolEntry } from "../schema/index.js"
+import {
+  LLMRequest,
+  mergeJsonRecords,
+  type JsonSchema,
+  type LanguageModel,
+  type ToolDefinition,
+  type ToolEntry,
+} from "../schema/index.js"
 import { resolveEffortUpdates } from "../effort-updates.js"
 import { OpenResponses } from "./open-responses.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
@@ -170,12 +177,9 @@ const lowerTool = Effect.fn("OpenAIResponses.lowerTool")(function* (tool: ToolDe
 
 // Native namespaces hold only function tools, so deeper levels flatten into
 // the leaf names the same way non-native protocols flatten the whole tree.
-const lowerToolEntry = Effect.fn("OpenAIResponses.lowerToolEntry")(function* (
-  tool: ToolEntry,
-  compatibility: Parameters<typeof ToolSchemaProjection.modelCompatibility>[1],
-) {
+const lowerToolEntry = Effect.fn("OpenAIResponses.lowerToolEntry")(function* (tool: ToolEntry, model: LanguageModel) {
   if (tool.type === "tool")
-    return yield* lowerTool(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, compatibility))
+    return yield* lowerTool(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, model))
   // OpenAI requires a namespace description; fall back to a generic one so a
   // missing description never blocks the request.
   return {
@@ -183,7 +187,7 @@ const lowerToolEntry = Effect.fn("OpenAIResponses.lowerToolEntry")(function* (
     name: tool.name,
     description: tool.description ?? `Tools in the ${tool.name} namespace.`,
     tools: yield* Effect.forEach(ProviderShared.flattenTools(tool.tools), (leaf) =>
-      OpenResponses.lowerTool(NAME, leaf, ToolSchemaProjection.modelCompatibility(leaf.inputSchema, compatibility)),
+      OpenResponses.lowerTool(NAME, leaf, ToolSchemaProjection.modelCompatibility(leaf.inputSchema, model)),
     ),
   }
 })
@@ -207,7 +211,6 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
   )(request.providerOptions?.contextManagement)
   const options = OpenResponsesOptions.resolve(request)
   const updates = resolveEffortUpdates(request, options.reasoningEffort)
-  const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   return yield* decodeBody({
     ...(yield* OpenResponses.lowerConversation(updates.request, adapter)),
     ...OpenResponses.lowerGeneration(request, { ...options, reasoningEffort: updates.effort }),
@@ -215,7 +218,7 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
     tools:
       request.tools.length === 0
         ? undefined
-        : yield* Effect.forEach(request.tools, (tool) => lowerToolEntry(tool, toolSchemaCompatibility)),
+        : yield* Effect.forEach(request.tools, (tool) => lowerToolEntry(tool, request.model)),
     tool_choice:
       request.tools.length === 0
         ? undefined
