@@ -1,4 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { realpath } from "fs/promises"
 import path from "path"
 import { Effect, Layer, Context, Schema } from "effect"
 import { NamedError } from "@opencode-ai/core/util/error"
@@ -23,6 +24,8 @@ const AGENTS_EXTERNAL_DIR = ".agents"
 const EXTERNAL_SKILL_PATTERN = "skills/**/SKILL.md"
 const OPENCODE_SKILL_PATTERN = "{skill,skills}/**/SKILL.md"
 const SKILL_PATTERN = "**/SKILL.md"
+// Trailing /** makes glob skip the directory instead of stat-ing every file inside it.
+const SKIP = ["**/node_modules/**", "**/.git/**", "**/dist/**", "**/.cache/**"]
 
 // Built-in skill that ships with opencode. The model's intuition for what an
 // opencode.json should look like is often wrong, and opencode hard-fails on
@@ -92,6 +95,7 @@ type DiscoveryState = {
 type ScanState = {
   matches: Set<string>
   dirs: Set<string>
+  seen: Set<string>
 }
 
 export interface Interface {
@@ -139,12 +143,28 @@ const add = Effect.fnUntraced(function* (state: State, match: string, events: Ev
   }
 })
 
+const canonical = (input: string) =>
+  Effect.tryPromise({
+    try: () => realpath(input),
+    catch: (cause) => cause,
+  }).pipe(Effect.catch(() => Effect.succeed(input)))
+
 const scan = Effect.fnUntraced(function* (
   state: ScanState,
   root: string,
   pattern: string,
   opts?: { dot?: boolean; scope?: string },
 ) {
+  const real = yield* canonical(root)
+  if (state.seen.has(real)) return
+  const realSkills = yield* Effect.tryPromise({
+    try: () => realpath(path.join(root, "skills")),
+    catch: (cause) => cause,
+  }).pipe(Effect.catch(() => Effect.succeed(undefined)))
+  if (pattern === EXTERNAL_SKILL_PATTERN && realSkills && state.seen.has(realSkills)) return
+  state.seen.add(real)
+  if (pattern === EXTERNAL_SKILL_PATTERN && realSkills) state.seen.add(realSkills)
+
   const matches = yield* Effect.tryPromise({
     try: () =>
       Glob.scan(pattern, {
@@ -153,6 +173,7 @@ const scan = Effect.fnUntraced(function* (
         include: "file",
         symlink: true,
         dot: opts?.dot,
+        ignore: SKIP,
       }),
     catch: (error) => error,
   }).pipe(
@@ -165,6 +186,9 @@ const scan = Effect.fnUntraced(function* (
   )
 
   for (const match of matches) {
+    const file = yield* canonical(match)
+    if (state.seen.has(file)) continue
+    state.seen.add(file)
     state.matches.add(match)
     state.dirs.add(path.dirname(match))
   }
@@ -180,7 +204,7 @@ const discoverSkills = Effect.fnUntraced(function* (
   directory: string,
   worktree: string,
 ) {
-  const state: ScanState = { matches: new Set(), dirs: new Set() }
+  const state: ScanState = { matches: new Set(), dirs: new Set(), seen: new Set() }
 
   const externalDirs: string[] = []
   if (!disableExternalSkills) {
