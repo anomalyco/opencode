@@ -55,6 +55,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
   const timing = ensureTiming(options)
   const contenders = new Set<ServiceContender>()
   let timeouts: { readonly info: Info; readonly count: number } | undefined
+  let lastFailure: Error | undefined
   let announced = false
   let lastSpawn = 0
   let spawnDelay = timing.spawnDelay
@@ -116,13 +117,14 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
 
     const finished = [...contenders].filter(contenderFinished)
     const failure = finished.map(contenderFailure).find((error): error is Error => error !== undefined)
+    if (failure !== undefined) lastFailure = failure
     if (finished.some((item) => item.child.exitCode === 0)) {
       spawnDelay = Math.min(spawnDelay * 2, timing.maxSpawnDelay)
     }
     finished.forEach((item) => contenders.delete(item))
-    if (failure !== undefined && contenders.size === 0) return yield* Effect.fail(failure)
+    if (lastFailure !== undefined && contenders.size === 0) return yield* Effect.fail(lastFailure)
     // Keep one candidate plus one lock probe so a pre-lock stall cannot block recovery.
-    if (contenders.size < 2 && Date.now() - lastSpawn >= spawnDelay) {
+    if (lastFailure === undefined && contenders.size < 2 && Date.now() - lastSpawn >= spawnDelay) {
       yield* announce("missing")
       contenders.add(yield* spawnContender)
       lastSpawn = Date.now()
@@ -137,8 +139,10 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     }),
     Effect.ensuring(Effect.sync(() => contenders.forEach((contender) => contender.release()))),
   )
-  if (Option.isNone(found))
+  if (Option.isNone(found)) {
+    if (lastFailure !== undefined) return yield* Effect.fail(lastFailure)
     return yield* Effect.fail(new Error("Timed out waiting for the background service to start"))
+  }
   return found.value.endpoint
 })
 
@@ -202,10 +206,7 @@ const probe = Effect.fnUntraced(function* (info: Info) {
   return (yield* probeResult(info)).service
 })
 
-const probeResult = Effect.fnUntraced(function* (
-  info: Info,
-  timeout = defaultEnsureTiming.requestTimeout,
-) {
+const probeResult = Effect.fnUntraced(function* (info: Info, timeout = defaultEnsureTiming.requestTimeout) {
   const endpoint = {
     url: info.url,
     auth:
