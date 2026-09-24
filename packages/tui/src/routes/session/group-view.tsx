@@ -141,7 +141,7 @@ function GroupContent(props: GroupProps) {
           <Show when={grouped()} fallback={children("normal")}>
             <Show when={tools().length > 0}>
               <InlineToolRow
-                icon={completed() ? "→" : "✱"}
+                icon={completed() ? (expanded() ? "↓" : "→") : "✱"}
                 color={hover() ? theme.text.base : theme.text.muted}
                 complete={completed()}
                 pending={label()}
