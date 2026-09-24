@@ -57,6 +57,8 @@ interface Input {
   readonly recoverContinuation: boolean
   /** The runner owns compaction policy; the attempt invokes it only before durable output. */
   readonly recoverOverflow: Effect.Effect<boolean>
+  /** Step-scoped so the stall watchdog counts silence that began in an earlier attempt. */
+  readonly stall: { lastEventAt: number | undefined }
 }
 
 const TOOLS_INTERRUPTED = { type: "aborted", message: "Tool execution interrupted" } as const
@@ -66,6 +68,8 @@ const DOOM_LOOP_THRESHOLD = 3
 const DOOM_LOOP_MESSAGES = 16
 const DOOM_LOOP_MARKER = { doomLoop: "warn" } as const
 const DOOM_LOOP_STOP = "Doom loop repeated after warning. Stopping this turn."
+const STALL_TIMEOUT_MS = 90 * 1000
+const STALL_CHECK_INTERVAL_MS = 5 * 1000
 const doomLoopWarning = (name: string) =>
   `Doom loop detected: the same ${name} tool call was repeated with identical input. Do not repeat it — change your approach, arguments, or use a different tool. The turn continues after this warning.`
 
@@ -172,6 +176,7 @@ export const make = Effect.gen(function* () {
     const providerStream = llm.stream(input.prepared.request, input.prepared.options).pipe(
       Stream.runForEach((event) =>
         Effect.gen(function* () {
+          input.stall.lastEventAt = yield* Clock.currentTimeMillis
           if (overflowFailure || publisher.hasProviderError()) return
           if (
             LLMEvent.is.providerError(event) &&
@@ -200,10 +205,32 @@ export const make = Effect.gen(function* () {
       Effect.ensuring(publisher.flush()),
     )
 
+    // The fork's stall watchdog: a provider stream that goes silent — no events, no error —
+    // never fails on its own, so the step hangs until the user stops it. Silence before the
+    // first event is a slow time to first token, and silence while a tool call is pending is a
+    // long local or hosted execution idling the stream by design; neither counts as a stall.
+    // The failure shares the incomplete-stream classification, so recovery reuses the
+    // established retry and continuation paths instead of the fork's TransientTurnError.
+    const watchdog = Effect.gen(function* () {
+      while (true) {
+        yield* Effect.sleep(STALL_CHECK_INTERVAL_MS)
+        const last = input.stall.lastEventAt
+        if (last === undefined) continue
+        if (publisher.hasPendingTools()) continue
+        if ((yield* Clock.currentTimeMillis) - last >= STALL_TIMEOUT_MS)
+          return yield* new AIError({
+            reason: new InvalidProviderOutputError({
+              message: "The provider response went silent without completing.",
+              classification: "incomplete-stream",
+            }),
+          })
+      }
+    })
+
     // Keep the final tool and Step events uninterruptible, even when the work itself is cancelled.
     return yield* Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
-        const stream = yield* restore(providerStream).pipe(Effect.exit)
+        const stream = yield* restore(Effect.raceFirst(providerStream, watchdog)).pipe(Effect.exit)
         const streamFailure = Option.getOrUndefined(Exit.findErrorOption(stream))
         const streamInterrupted = Exit.hasInterrupts(stream)
         if (!overflowFailure && publisher.hasStarted()) yield* publisher.streamed()

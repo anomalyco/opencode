@@ -125,6 +125,7 @@ for (const fixture of [
             Effect.succeed(retry ? { retry: true, attempt: 2, delay: 0 } : { retry: false }),
           recoverContinuation: true,
           recoverOverflow: Effect.succeed(false),
+          stall: { lastEventAt: undefined },
         })
         .pipe(Effect.exit)
       expect(Exit.isSuccess(result)).toBe(fixture.finish === "stop")

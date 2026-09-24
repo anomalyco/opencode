@@ -208,6 +208,9 @@ const layer = Layer.effect(
       const sessionID = first.session.id
       let assistantMessageID = SessionMessage.ID.create()
       const retry = yield* SessionRunnerRetry.make(bus, sessionID)
+      // Stream activity persists across this step's attempts so the stall watchdog also sees
+      // silence that began in an earlier attempt.
+      const stall = { lastEventAt: undefined }
       let initial: SessionContext.Loaded | undefined = first
       let recoverOverflow = true
       let recoverContinuation = true
@@ -267,6 +270,7 @@ const layer = Layer.effect(
                   .pipe(Effect.map((result) => result.status === "completed"))
               : Effect.succeed(false),
           ),
+          stall,
         })
         const completed = yield* SessionStep.Outcome.$match(outcome, {
           Completed: (outcome) => Effect.succeed(outcome.needsContinuation),
