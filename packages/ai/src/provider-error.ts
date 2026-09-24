@@ -80,7 +80,13 @@ const SERVER_CODES = new Set([
   "slow_down",
   "serviceunavailableexception",
 ])
-const INVALID_REQUEST_CODES = new Set(["invalid_prompt", "invalid_request_error", "validationexception"])
+// `invalid_request` is the Vercel AI Gateway's code for an upstream request rejection.
+const INVALID_REQUEST_CODES = new Set([
+  "invalid_prompt",
+  "invalid_request",
+  "invalid_request_error",
+  "validationexception",
+])
 // Azure OpenAI reports `content_filter` with `innererror.code` ResponsibleAIPolicyViolation.
 // OpenRouter tags provider failures with a typed `error_type`; its Responses skin also
 // emits `image_content_policy_violation` as the native code.

@@ -1461,3 +1461,19 @@ describe("structuredClone", () => {
     expect((await error(`structuredClone()`)).message).toContain("structuredClone requires 1 argument")
   })
 })
+
+describe("error constructor prototype chain", () => {
+  test("derived error constructors extend Error and inherit its statics", async () => {
+    expect(
+      await value(`
+        const derived = [TypeError, RangeError, SyntaxError, ReferenceError, EvalError, URIError, AggregateError]
+        return [
+          derived.every((ctor) => Object.getPrototypeOf(ctor) === Error),
+          Object.getPrototypeOf(Error) === Function.prototype,
+          TypeError.isError(new RangeError("x")),
+          new TypeError("x") instanceof Error,
+        ]
+      `),
+    ).toEqual([true, true, true, true])
+  })
+})

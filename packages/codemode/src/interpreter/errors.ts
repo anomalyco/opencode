@@ -180,6 +180,9 @@ export const errorGlobal = <R>(type: ErrorType, ctx: Interpreter<R>) => {
       ["toString", 0, (thisValue) => errorToString(receiver(Obj, thisValue, "Error.prototype.toString"))],
     ])
     methods(builtins, ctor, [["isError", 1, (_, args) => args[0] instanceof ErrorObj]])
+    return ctor
   }
+  // Derived constructors extend Error itself, so its statics are inherited. The globals table creates Error first.
+  ctor.proto = get(builtins.Error, "constructor") as Obj
   return ctor
 }

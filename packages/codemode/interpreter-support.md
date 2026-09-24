@@ -596,8 +596,8 @@ Nothing is exposed unless a host provides it; extension calls are not tool calls
       non-enumerable: an extension Error carries it, and this JSON form does not. Errors have no `stack`; the diagnostic
       carries a 1-based line and column in the submitted source instead.
 - [x] `instanceof` against any constructor with a `prototype`, including every built-in and `Function`.
-- [ ] The derived error constructors inheriting from `Error`: `Object.getPrototypeOf(TypeError)` is
-      `Function.prototype` here, while `TypeError.prototype` does inherit from `Error.prototype`.
+- [x] Derived error constructors extend `Error` itself: `Object.getPrototypeOf(TypeError) === Error`, so
+      `TypeError.isError` is inherited, and `TypeError.prototype` inherits from `Error.prototype`.
 - [x] Catchable user throws, runtime failures raised during interpreted evaluation, awaited tool failures, and awaited
       tool-call-limit failures; parse/compile failures, cooperative timeout, and output bounding remain outside program
       `catch`.

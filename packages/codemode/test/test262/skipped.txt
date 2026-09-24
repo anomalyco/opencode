@@ -207,12 +207,6 @@ language/expressions/equals/S11.9.1_A7.8.js  # #1: ({valueOf: function() {return
 language/expressions/equals/S11.9.1_A7.9.js  # #1: (true == {valueOf: function() {return 1}}) === true
 language/expressions/equals/S9.1_A1_T3.js  # #1: var object = {valueOf: function() {return 1}, toString: function() {return 0}}; object + "" ===
 built-ins/Object/freeze/throws-when-false.js  # Unknown identifier 'Proxy'.
-built-ins/Object/getPrototypeOf/15.2.3.2-2-12.js  # Object.getPrototypeOf(EvalError) Expected SameValue(«», «Error») to be true
-built-ins/Object/getPrototypeOf/15.2.3.2-2-13.js  # Object.getPrototypeOf(RangeError) Expected SameValue(«», «Error») to be true
-built-ins/Object/getPrototypeOf/15.2.3.2-2-14.js  # Object.getPrototypeOf(ReferenceError) Expected SameValue(«», «Error») to be true
-built-ins/Object/getPrototypeOf/15.2.3.2-2-15.js  # Object.getPrototypeOf(SyntaxError) Expected SameValue(«», «Error») to be true
-built-ins/Object/getPrototypeOf/15.2.3.2-2-16.js  # Object.getPrototypeOf(TypeError) Expected SameValue(«», «Error») to be true
-built-ins/Object/getPrototypeOf/15.2.3.2-2-17.js  # Object.getPrototypeOf(URIError) Expected SameValue(«», «Error») to be true
 built-ins/Object/getPrototypeOf/15.2.3.2-2-2.js  # … cannot be constructed: user-defined constructors and classes are not supported.
 built-ins/Object/isExtensible/15.2.3.13-2-24.js  # … cannot be constructed: user-defined constructors and classes are not supported.
 built-ins/Object/isExtensible/15.2.3.13-2-25.js  # … cannot be constructed: user-defined constructors and classes are not supported.

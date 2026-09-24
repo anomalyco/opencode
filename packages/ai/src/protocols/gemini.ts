@@ -11,7 +11,6 @@ import {
   Usage,
   type FinishReason,
   type LLMRequest,
-  type LanguageModel,
   type MediaPart,
   type ProviderMetadata,
   type ProviderOptions,
@@ -24,11 +23,12 @@ import { Media } from "../media.js"
 import { JsonObject, knownString, lenient, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { GeminiGenerateContent } from "./utils/gemini-generate-content.js"
 import { Lifecycle } from "./utils/lifecycle.js"
-import { ToolSchemaProjection } from "./utils/tool-schema.js"
 
 const ADAPTER = "gemini"
 // Google documents this sentinel for replaying Gemini 3 function calls after their original signature was lost.
 const SKIP_THOUGHT_SIGNATURE_VALIDATOR = "skip_thought_signature_validator"
+// Gemini 2.5 rejects a budget under the model's minimum: 512 on Flash-Lite, the highest, and 128 on Pro.
+const MIN_THINKING_BUDGET = 512
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 // Gemini 3 rejects replayed function calls without a thought signature. Google's SDKs avoid that in normal chats by
@@ -268,12 +268,11 @@ interface ParserState {
 // =============================================================================
 // Request Lowering
 // =============================================================================
-// Tool schemas go in `parametersJsonSchema`, which accepts standard JSON Schema. Gemini's schema
-// rules are this API's default, including for tuned endpoints whose IDs do not name Gemini.
-const lowerTool = (tool: ToolDefinition, model: LanguageModel) => ({
+// Tool schemas go in `parametersJsonSchema`, which accepts standard JSON Schema.
+const lowerTool = (tool: ToolDefinition) => ({
   name: tool.name,
   description: tool.description,
-  parametersJsonSchema: ToolSchemaProjection.modelCompatibility(tool.inputSchema, model, "gemini"),
+  parametersJsonSchema: tool.inputSchema,
 })
 
 const lowerToolConfig = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
@@ -452,10 +451,22 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
     presencePenalty: generation?.presencePenalty,
     seed: generation?.seed,
     stopSequences: generation?.stop,
+    // Gemini accepts a budget above `maxOutputTokens`, but thinking then leaves the answer empty.
     thinkingConfig:
       options.thinkingConfig === undefined
         ? undefined
-        : { ...options.thinkingConfig, includeThoughts: options.thinkingConfig.includeThoughts ?? true },
+        : {
+            ...options.thinkingConfig,
+            includeThoughts: options.thinkingConfig.includeThoughts ?? true,
+            thinkingBudget:
+              options.thinkingConfig.thinkingBudget === undefined
+                ? undefined
+                : ProviderShared.fitThinkingBudget(
+                    options.thinkingConfig.thinkingBudget,
+                    generation?.maxTokens,
+                    MIN_THINKING_BUDGET,
+                  ),
+          },
   }
 
   return {
@@ -468,7 +479,7 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
     tools: hasTools
       ? [
           {
-            functionDeclarations: flattened.tools.map((tool) => lowerTool(tool, request.model)),
+            functionDeclarations: flattened.tools.map(lowerTool),
           },
         ]
       : undefined,
@@ -804,6 +815,8 @@ export const protocol = Protocol.make({
     schema: GeminiBody,
     from: fromRequest,
   },
+  // Gemini's schema rules are this API's default, including for tuned endpoints whose IDs do not name Gemini.
+  sanitizer: "gemini",
   stream: {
     event: Protocol.jsonEvent(GeminiEvent),
     initial: (request) => ({

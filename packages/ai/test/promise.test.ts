@@ -116,8 +116,12 @@ describe("AI promise client", () => {
     const seen: Array<string> = []
     const ai = AI.make({ layer: executor(seen) })
 
-    const text = await ai.llm.generate({ model: openai.chat("gpt-4o-mini"), prompt: "Say hello." })
+    const request = ai.llm.request({ model: openai.chat("gpt-4o-mini"), prompt: "Say hello." })
+    const text = await ai.llm.generate(request)
     expect(text.text).toBe("Hello world")
+    expect((await ai.llm.generate({ model: openai.chat("gpt-4o-mini"), prompt: "Say hello." })).text).toBe(
+      "Hello world",
+    )
 
     const image = await ai.image.generate({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" })
     expect(image.image).toBeInstanceOf(Media.Asset)
@@ -125,10 +129,15 @@ describe("AI promise client", () => {
     expect(await ai.run(image.image.bytes())).toEqual(Uint8Array.from([1, 2, 3]))
 
     const deltas: Array<string> = []
-    for await (const event of ai.llm.stream({ model: openai.chat("gpt-4o-mini"), prompt: "Say hello." })) {
+    for await (const event of ai.llm.stream(request)) {
       if (LLMEvent.is.textDelta(event)) deltas.push(event.text)
     }
     expect(deltas).toEqual(["Hello", " world"])
+    const directDeltas: Array<string> = []
+    for await (const event of ai.llm.stream({ model: openai.chat("gpt-4o-mini"), prompt: "Say hello." })) {
+      if (LLMEvent.is.textDelta(event)) directDeltas.push(event.text)
+    }
+    expect(directDeltas).toEqual(deltas)
 
     const imageEvents: Array<string> = []
     for await (const event of ai.image.stream({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" })) {
@@ -138,7 +147,9 @@ describe("AI promise client", () => {
 
     expect(seen).toEqual([
       "https://openai.test/v1/chat/completions",
+      "https://openai.test/v1/chat/completions",
       "https://openai.test/v1/images/generations",
+      "https://openai.test/v1/chat/completions",
       "https://openai.test/v1/chat/completions",
       "https://openai.test/v1/images/generations",
     ])
@@ -260,14 +271,14 @@ describe("AI promise client", () => {
     const ai = AI.make({ layer: executor([]) })
 
     const failure = await ai.llm
-      .generate({ model: openai.responses("gpt-5"), prompt: "Hello" })
+      .generate(ai.llm.request({ model: openai.responses("gpt-5"), prompt: "Hello" }))
       .then(() => undefined)
       .catch((error: unknown) => error)
     expect(failure).toBeInstanceOf(AIError)
     expect(failure instanceof AIError && failure.reason.http?.status).toBe(404)
 
     const invalid = await ai.llm
-      // @ts-expect-error Invalid input must reject with AIError, not throw synchronously.
+      // @ts-expect-error Invalid input must reject with AIError instead of throwing synchronously.
       .generate({ model: openai.responses("gpt-5"), messages: [{ role: "bogus" }] })
       .catch((error: unknown) => error)
     expect(invalid instanceof AIError && invalid.reason._tag).toBe("InvalidRequest")
@@ -275,7 +286,7 @@ describe("AI promise client", () => {
     const controller = new AbortController()
     controller.abort()
     const aborted = await ai.llm
-      .generate({ model: openai.chat("gpt-4o-mini"), prompt: "Hello" }, { signal: controller.signal })
+      .generate(ai.llm.request({ model: openai.chat("gpt-4o-mini"), prompt: "Hello" }), { signal: controller.signal })
       .then(() => "completed")
       .catch(() => "aborted")
     expect(aborted).toBe("aborted")

@@ -17,7 +17,6 @@ import {
   type FinishReason,
   type FinishReasonDetails,
   type CacheHint,
-  type JsonSchema,
   type LLMRequest,
   type MediaPart,
   type ReasoningPart,
@@ -29,7 +28,6 @@ import { classifyProviderFailure } from "../provider-error.js"
 import { isRecord, JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { OpenAIOptions } from "./utils/openai-options.js"
 import { Lifecycle } from "./utils/lifecycle.js"
-import { ToolSchemaProjection } from "./utils/tool-schema.js"
 import { ToolStream } from "./utils/tool-stream.js"
 
 const ADAPTER = "openai-chat"
@@ -330,17 +328,12 @@ interface LoweringOptions {
   readonly toolCallID?: (id: string) => string
 }
 
-const lowerTool = (
-  tool: ToolDefinition,
-  inputSchema: JsonSchema,
-  options: LoweringOptions,
-  supportsStrictMode: boolean,
-): OpenAIChatTool => ({
+const lowerTool = (tool: ToolDefinition, options: LoweringOptions, supportsStrictMode: boolean): OpenAIChatTool => ({
   type: "function",
   function: {
     name: tool.name,
     description: tool.description,
-    parameters: inputSchema,
+    parameters: tool.inputSchema,
     ...(supportsStrictMode ? { strict: false } : {}),
   },
   cache_control: options.cacheControl?.(tool.cache),
@@ -825,14 +818,7 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
         ? hasHistory
           ? []
           : undefined
-        : flattened.tools.map((tool) =>
-            lowerTool(
-              tool,
-              ToolSchemaProjection.modelCompatibility(tool.inputSchema, request.model),
-              options,
-              supportsStrictMode,
-            ),
-          ),
+        : flattened.tools.map((tool) => lowerTool(tool, options, supportsStrictMode)),
     tool_choice: hasActiveTools && request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined,
     stream: true as const,
     ...(supportsUsageInStreaming ? { stream_options: { include_usage: true } } : {}),

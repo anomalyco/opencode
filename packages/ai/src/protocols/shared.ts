@@ -110,6 +110,14 @@ export const sumTokens = (...values: ReadonlyArray<number | undefined>): number 
   return values.reduce((acc: number, value) => acc + (value ?? 0), 0)
 }
 
+/**
+ * Caps an explicit thinking budget at half the output limit. Thinking counts against the output limit, so a budget
+ * near it leaves the answer, a tool call, or a summary without room. Smaller budgets, special values such as `-1` and
+ * `0`, and requests without an output limit pass through unchanged.
+ */
+export const fitThinkingBudget = (budget: number, maxTokens: number | undefined, minimum = 1) =>
+  maxTokens === undefined || budget <= maxTokens / 2 ? budget : Math.max(minimum, Math.floor(maxTokens / 2))
+
 export const eventError = (route: string, message: string, body?: string, cause?: unknown) =>
   new AIError({
     reason: new InvalidProviderOutputError({ route, message, body, cause }),

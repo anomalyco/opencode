@@ -1555,7 +1555,7 @@ describe("ShellTool", () => {
               {
                 id: settled.metadata?.shellID,
                 status: "completed",
-                output: "Exited with code 7",
+                output: "(no output)\n\nExited with code 7",
               },
             ])
           }),

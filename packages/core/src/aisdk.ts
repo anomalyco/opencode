@@ -24,7 +24,6 @@ import {
   ProviderMetadata,
   TransportError,
   ToolResultValue,
-  UnknownProviderError,
   type ContentPart,
   type LLMRequest,
   type Media,
@@ -367,6 +366,8 @@ function modelFromLanguage(info: RuntimeInfo, language: LanguageModelV3) {
     provider: ProviderID.make(providerID),
     providerMetadataKey: optionKey,
     protocol: "ai-sdk",
+    // AI SDK providers convert tool schemas themselves, so model-family sanitizers stay off here.
+    sanitizer: "none",
     endpoint: Endpoint.path("/", { baseURL: "https://ai-sdk.local" }),
     auth: Auth.none,
     transport: {
@@ -936,14 +937,17 @@ function llmError(error: unknown, operation: "request" | "read") {
         code: network.code,
       }),
     })
-  return new AIError({
-    reason: new UnknownProviderError({
-      message: unknownErrorMessage(error),
-      body: errorBody(error),
-      cause: error,
-    }),
+  return RequestExecutor.httpFailure({
+    message: unknownErrorMessage(error),
+    data: errorValue(error) ?? error,
+    responseBody: errorBody(error),
+    cause: error,
   })
 }
+
+// AI SDK stream errors can arrive as plain objects. A gateway's type validation error keeps the provider's error
+// response in `value`, which carries the message and codes.
+const errorValue = (error: unknown) => (ProviderShared.isRecord(error) ? error.value : undefined)
 
 // Runtime-generated network failure shapes. The codes mirror the AI SDK's own
 // Bun network error list in handleFetchError; the messages are undici's fetch
@@ -1032,7 +1036,15 @@ const decodeProviderError = Schema.decodeUnknownOption(
 )
 
 function unknownErrorMessage(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error)
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : ([error, errorValue(error)]
+            .map((value) => Option.getOrUndefined(decodeProviderError(value)))
+            .flatMap((decoded) => [decoded?.error?.message, decoded?.message])
+            .find((value) => value?.trim()) ?? "")
   return message.trim() === "" ? "Provider request failed" : message
 }
 

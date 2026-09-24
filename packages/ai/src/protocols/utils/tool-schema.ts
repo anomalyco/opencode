@@ -1,4 +1,4 @@
-import type { JsonSchema, LanguageModel, LanguageModelSanitizerCompatibility } from "../../schema/index.js"
+import { ToolDefinition, type JsonSchema, type LanguageModel, type LLMRequest } from "../../schema/index.js"
 import { isRecord } from "../../utils/record.js"
 import { GeminiJsonSchema } from "./gemini-json-schema.js"
 
@@ -70,13 +70,13 @@ const objectRoot = (schema: JsonSchema): JsonSchema => {
 // Otherwise the protocol's own default applies (the Gemini API always uses Gemini's rules), then the
 // model name selects the family's rules so models reached through gateways and OpenAI-compatible
 // endpoints get the same handling.
-const modelCompatibility = (
-  schema: JsonSchema,
-  model: LanguageModel,
-  protocolDefault?: LanguageModelSanitizerCompatibility,
-): JsonSchema => {
+const modelCompatibility = (schema: JsonSchema, model: LanguageModel): JsonSchema => {
   const root = objectRoot(schema)
-  switch (model.compatibility?.sanitizer ?? protocolDefault ?? MODEL_NAMES.find(([name]) => name.test(model.id))?.[1]) {
+  switch (
+    model.compatibility?.sanitizer ??
+    model.route.sanitizer ??
+    MODEL_NAMES.find(([name]) => name.test(model.id))?.[1]
+  ) {
     case "gemini":
       return gemini(root)
     case "moonshot":
@@ -87,10 +87,18 @@ const modelCompatibility = (
   }
 }
 
+// Applied once to every request before any protocol builds its body, including tools in namespaces.
+const tools = (entries: LLMRequest["tools"], model: LanguageModel): LLMRequest["tools"] =>
+  entries.map((tool) =>
+    tool.type === "tool"
+      ? new ToolDefinition({ ...tool, inputSchema: modelCompatibility(tool.inputSchema, model) })
+      : { ...tool, tools: tools(tool.tools, model) },
+  )
+
 export const ToolSchemaProjection = {
   gemini,
-  modelCompatibility,
   moonshot,
   openAI,
   responses,
+  tools,
 } as const

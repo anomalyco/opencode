@@ -5,19 +5,12 @@ import { Auth } from "../route/auth.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import { HttpTransport } from "../route/transport/index.js"
-import {
-  LLMRequest,
-  type JsonSchema,
-  type LanguageModel,
-  type ToolDefinition,
-  type ToolEntry,
-} from "../schema/index.js"
+import { LLMRequest, type ToolDefinition, type ToolEntry } from "../schema/index.js"
 import { resolveEffortUpdates } from "../effort-updates.js"
 import { OpenResponses } from "./open-responses.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
-import { ToolSchemaProjection } from "./utils/tool-schema.js"
 import { OpenResponsesChannel } from "./open-responses-channel.js"
 import { ResponsesCompaction } from "./utils/responses-compaction.js"
 import { ResponsesCheckpoint } from "./utils/responses-checkpoint.js"
@@ -168,20 +161,19 @@ const nativeImageTool = (tool: ToolDefinition) => {
   return Schema.is(OpenAIResponsesImageGenerationTool)(native) ? native : undefined
 }
 
-const lowerTool = Effect.fn("OpenAIResponses.lowerTool")(function* (tool: ToolDefinition, inputSchema: JsonSchema) {
+const lowerTool = Effect.fn("OpenAIResponses.lowerTool")(function* (tool: ToolDefinition) {
   const native = nativeImageToolInput(tool)
   if (native !== undefined) {
     if (Schema.is(OpenAIResponsesImageGenerationTool)(native)) return native
     return yield* ProviderShared.invalidRequest("OpenAI Responses image generation tool options are invalid")
   }
-  return yield* OpenResponses.lowerTool(NAME, tool, inputSchema)
+  return yield* OpenResponses.lowerTool(NAME, tool)
 })
 
 // Native namespaces hold only function tools, so deeper levels flatten into
 // the leaf names the same way non-native protocols flatten the whole tree.
-const lowerToolEntry = Effect.fn("OpenAIResponses.lowerToolEntry")(function* (tool: ToolEntry, model: LanguageModel) {
-  if (tool.type === "tool")
-    return yield* lowerTool(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, model))
+const lowerToolEntry = Effect.fn("OpenAIResponses.lowerToolEntry")(function* (tool: ToolEntry) {
+  if (tool.type === "tool") return yield* lowerTool(tool)
   // OpenAI requires a namespace description; fall back to a generic one so a
   // missing description never blocks the request.
   return {
@@ -189,12 +181,12 @@ const lowerToolEntry = Effect.fn("OpenAIResponses.lowerToolEntry")(function* (to
     name: tool.name,
     description: tool.description ?? `Tools in the ${tool.name} namespace.`,
     tools: yield* Effect.forEach(ProviderShared.flattenTools(tool.tools), (leaf) =>
-      OpenResponses.lowerTool(NAME, leaf, ToolSchemaProjection.modelCompatibility(leaf.inputSchema, model)),
+      OpenResponses.lowerTool(NAME, leaf),
     ),
   }
 })
 
-const lowerTools = (request: LLMRequest) => Effect.forEach(request.tools, (tool) => lowerToolEntry(tool, request.model))
+const lowerTools = (request: LLMRequest) => Effect.forEach(request.tools, lowerToolEntry)
 
 const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>, tools: ReadonlyArray<ToolEntry>) =>
   ProviderShared.matchToolChoice(NAME, toolChoice, {

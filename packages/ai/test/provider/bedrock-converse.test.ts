@@ -244,6 +244,29 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("fits a Claude thinking budget below maxTokens", () =>
+    Effect.gen(function* () {
+      const fields = (maxTokens: number, budgetTokens: number, topK?: number) =>
+        compileRequest(
+          LLMRequest.update(baseRequest, {
+            model: AmazonBedrock.model("us.anthropic.claude-haiku-4-5-20251001-v1:0", {
+              baseURL: "https://bedrock-runtime.test",
+              apiKey: "test-bearer",
+              thinking: { type: "enabled", budgetTokens },
+            }),
+            generation: GenerationOptions.make({ maxTokens, topK }),
+          }),
+        ).pipe(Effect.map((prepared) => prepared.body.additionalModelRequestFields))
+
+      expect(yield* fields(64_000, 31_999)).toEqual({ thinking: { type: "enabled", budget_tokens: 31_999 } })
+      expect(yield* fields(20_000, 31_999, 40)).toEqual({
+        top_k: 40,
+        thinking: { type: "enabled", budget_tokens: 10_000 },
+      })
+      expect(yield* fields(1_500, 31_999)).toEqual({ thinking: { type: "enabled", budget_tokens: 1_024 } })
+    }),
+  )
+
   it.effect("omits additionalModelRequestFields when topK is unset", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(baseRequest)

@@ -90,6 +90,23 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("fits the thinking budget to half the output limit", () =>
+    Effect.gen(function* () {
+      const thinkingBudget = (budget: number, maxTokens = 32_000) =>
+        compileRequest(
+          LLMRequest.update(request, {
+            generation: { maxTokens },
+            providerOptions: { thinkingConfig: { thinkingBudget: budget } },
+          }),
+        ).pipe(Effect.map((prepared) => prepared.body.generationConfig?.thinkingConfig?.thinkingBudget))
+
+      expect(yield* thinkingBudget(32_768)).toBe(16_000)
+      expect(yield* thinkingBudget(8_000)).toBe(8_000)
+      expect(yield* thinkingBudget(-1)).toBe(-1)
+      expect(yield* thinkingBudget(8_192, 1_000)).toBe(512)
+    }),
+  )
+
   it.effect("forwards standard Gemini generation options", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
