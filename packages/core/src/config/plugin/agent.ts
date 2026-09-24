@@ -112,6 +112,7 @@ export const Plugin = define({
               Object.assign(agent.request.headers, item.request.headers ?? {})
               Object.assign(agent.request.body, item.request.body ?? {})
             }
+            if (item.cache !== undefined) agent.cache = item.cache
             if (item.system !== undefined) agent.system = item.system
             if (item.description !== undefined) agent.description = item.description
             if (item.mode !== undefined) agent.mode = item.mode

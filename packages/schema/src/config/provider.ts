@@ -1,6 +1,7 @@
 export * as ConfigProvider from "./provider.js"
 
 import { Schema } from "effect"
+import { CachePolicy } from "../cache.js"
 import { Money } from "../money.js"
 import { Capabilities, Compatibility, Family, ID, VariantID } from "../model.js"
 import { Provider } from "../provider.js"
@@ -72,6 +73,7 @@ class Model extends Schema.Class<Model>("Config.Model")({
   compatibility: Compatibility.pipe(optional),
   package: Schema.String.pipe(optional),
   ...ModelOverlays,
+  cache: CachePolicy.Policy.pipe(optional),
   capabilities: Capabilities.pipe(optional),
   variants: Schema.Struct({
     id: VariantID,
@@ -88,5 +90,6 @@ export class Info extends Schema.Class<Info>("Config.Provider")({
   env: Schema.String.pipe(Schema.Array, optional),
   package: Schema.String.pipe(optional),
   ...Overlays,
+  cache: CachePolicy.Policy.pipe(optional),
   models: Schema.Record(Schema.String, Model).pipe(optional),
 }) {}

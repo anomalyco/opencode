@@ -122,6 +122,8 @@ export interface Resolved {
   readonly compaction?: Provider.Compaction
   /** Provider transport policy; omitted means HTTP. */
   readonly transport?: Provider.Transport
+  /** Prompt-cache policy from the catalog/config; omitted keeps the provider default. */
+  readonly cache?: Info["cache"]
   /** Milliseconds without streamed data before a WebSocket exchange fails. */
   readonly chunkTimeout?: number
 }
@@ -391,6 +393,7 @@ export const layer = Layer.effect(
         compaction: runtimeInfo.settings?.compaction,
         transport: provider?.settings?.transport,
         chunkTimeout: provider?.settings?.chunkTimeout,
+        cache: selectedVariant.cache,
       }
     })
     return Service.of({

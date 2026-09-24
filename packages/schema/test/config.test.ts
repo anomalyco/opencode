@@ -104,3 +104,46 @@ describe("Config.Entry", () => {
     expect(encoded.info.providers?.custom).not.toHaveProperty("canonical")
   })
 })
+
+describe("prompt cache policy", () => {
+  const decode = Schema.decodeUnknownSync(Config.Info)
+
+  test("accepts provider, model, and agent cache policies and round-trips them", () => {
+    const input = {
+      agents: { build: { cache: { ttlSeconds: 3600 } } },
+      providers: {
+        anthropic: {
+          cache: { ttlSeconds: 3600, system: true },
+          models: {
+            "claude-opus-5-5": { cache: "none" },
+            "claude-haiku-4-5": { cache: { ttlSeconds: 300, messages: { tail: 2 } } },
+          },
+        },
+      },
+    }
+
+    const decoded = decode(input)
+    expect(decoded.agents?.build?.cache).toEqual({ ttlSeconds: 3600 })
+    expect(decoded.providers?.anthropic?.cache).toEqual({ ttlSeconds: 3600, system: true })
+    expect(decoded.providers?.anthropic?.models?.["claude-opus-5-5"]?.cache).toBe("none")
+    expect(decoded.providers?.anthropic?.models?.["claude-haiku-4-5"]?.cache).toEqual({
+      ttlSeconds: 300,
+      messages: { tail: 2 },
+    })
+
+    const encoded = Schema.encodeSync(Config.Info)(decoded)
+    expect(encoded.agents?.build?.cache).toEqual({ ttlSeconds: 3600 })
+    expect(encoded.providers?.anthropic?.cache).toEqual({ ttlSeconds: 3600, system: true })
+    expect(encoded.providers?.anthropic?.models?.["claude-opus-5-5"]?.cache).toBe("none")
+    expect(encoded.providers?.anthropic?.models?.["claude-haiku-4-5"]?.cache).toEqual({
+      ttlSeconds: 300,
+      messages: { tail: 2 },
+    })
+  })
+
+  test("rejects malformed cache policies", () => {
+    expect(() => decode({ agents: { build: { cache: "always" } } })).toThrow()
+    expect(() => decode({ agents: { build: { cache: { ttlSeconds: "1h" } } } })).toThrow()
+    expect(() => decode({ providers: { anthropic: { cache: { messages: "last" } } } })).toThrow()
+  })
+})

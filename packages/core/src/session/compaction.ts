@@ -483,6 +483,7 @@ export const layer = Layer.effect(
         session: context.session,
         agent: context.agent.id,
         model: context.model,
+        cache: context.agent.info.cache ?? context.model.cache,
         tools: context.tools,
         system: transcript.system,
         messages: [

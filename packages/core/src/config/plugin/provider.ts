@@ -117,6 +117,7 @@ export const Plugin = define({
             if (config.settings !== undefined) model.settings = Provider.mergeOverlay(model.settings, config.settings)
             if (config.headers !== undefined) model.headers = Provider.mergeHeaders(model.headers, config.headers)
             if (config.body !== undefined) model.body = Provider.mergeOverlay(model.body, config.body)
+            if (config.cache !== undefined) model.cache = config.cache
             if (config.capabilities !== undefined) {
               model.capabilities = {
                 tools: config.capabilities.tools,
@@ -162,6 +163,16 @@ export const Plugin = define({
                 }),
               ]
             })
+        }
+        // A provider-level policy is the default for every model of that provider;
+        // a model-level policy (set above) wins.
+        if (item.cache !== undefined) {
+          for (const model of models.list(providerID)) {
+            if (model.cache === undefined)
+              models.update(providerID, model.id, (entry) => {
+                entry.cache = item.cache
+              })
+          }
         }
       }
     })

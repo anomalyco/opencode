@@ -67,6 +67,7 @@ export const layer = Layer.effect(
         session: input.session,
         agent: input.agent.id,
         model: input.model,
+        cache: input.agent.cache ?? input.model.cache,
         system: input.agent.system ? [SystemPart.make(input.agent.system)] : [],
         messages: [Message.user(input.text)],
       })

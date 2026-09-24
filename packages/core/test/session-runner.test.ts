@@ -206,6 +206,7 @@ const makeRunnerState = (compaction?: SessionRunnerModel.Resolved["compaction"])
   return {
     currentModel: model,
     compaction,
+    cache: undefined as SessionRunnerModel.Resolved["cache"],
     modelResolveHook: Effect.void,
     systemBaseline: "Initial context",
     systemRemoved: false,
@@ -326,6 +327,7 @@ const layer = Layer.unwrap(
               limit: modelLimits.get(String(selected.id)) ?? defaultModelLimit,
               variant: session.model?.variant,
               compaction: state.compaction,
+              cache: state.cache,
             })
           }),
         ),
@@ -985,6 +987,15 @@ describe("SessionRunnerLLM", () => {
 
     expect(s.requests).toHaveLength(1)
     expect((yield* s.session.get(sessionID)).title).toBe("Manual title")
+  })
+
+  scenario("forwards the resolved prompt-cache policy to the provider request", function* (s) {
+    s.cache = { ttlSeconds: 3600 }
+    yield* s.admit("Cache this prefix")
+    yield* s.llm.push(TestLLM.text("Cached answer", "text-cache"))
+    yield* s.resume
+
+    expect(s.requests[0]?.cache).toEqual({ ttlSeconds: 3600 })
   })
 
   scenario("coalesces title generation while a request is active", function* (s) {

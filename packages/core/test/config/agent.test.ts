@@ -404,6 +404,26 @@ permissions:
     }),
   )
 
+  it.effect("applies an agent cache policy override", () =>
+    Effect.gen(function* () {
+      const agents = yield* Agent.Service
+      const entries = [
+        new Document({
+          type: "document",
+          info: decode({ agents: { reviewer: { cache: { ttlSeconds: 3600 } } } }),
+        }),
+      ]
+
+      yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
+        Effect.provide(Config.testLayer(entries)),
+      )
+
+      const reviewer = yield* agents.get(Agent.ID.make("reviewer"))
+      if (!reviewer) throw new Error("expected configured reviewer agent")
+      expect(reviewer.cache).toEqual({ ttlSeconds: 3600 })
+    }),
+  )
+
   it.effect("removes a built-in agent disabled by configuration", () =>
     Effect.gen(function* () {
       const agents = yield* Agent.Service

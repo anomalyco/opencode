@@ -1,6 +1,7 @@
 export * as Agent from "./agent.js"
 
 import { Schema } from "effect"
+import { CachePolicy } from "./cache.js"
 import { ephemeral, inventory } from "./event.js"
 import { optional } from "./schema.js"
 import { Model } from "./model.js"
@@ -25,6 +26,7 @@ export const Info = Schema.Struct({
   name: Name,
   model: Model.Ref.pipe(optional),
   request: Provider.Request,
+  cache: CachePolicy.Policy.pipe(optional),
   system: Schema.String.pipe(optional),
   description: Schema.String.pipe(optional),
   mode: Schema.Literals(["subagent", "primary", "all"]),

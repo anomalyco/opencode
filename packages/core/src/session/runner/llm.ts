@@ -236,6 +236,7 @@ const layer = Layer.effect(
           session: loaded.session,
           agent: loaded.agent.id,
           model: loaded.model,
+          cache: loaded.agent.info.cache ?? loaded.model.cache,
           tools: loaded.tools,
           system: transcript.system,
           messages: stepLimitReached

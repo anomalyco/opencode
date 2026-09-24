@@ -1,6 +1,7 @@
 export * as Model from "./model.js"
 
 import { Schema } from "effect"
+import { CachePolicy } from "./cache.js"
 import { optional, statics } from "./schema.js"
 import { Provider } from "./provider.js"
 import { Money } from "./money.js"
@@ -126,6 +127,7 @@ export const Info = Schema.Struct({
   compatibility: Compatibility.pipe(optional),
   package: Provider.Package.pipe(optional),
   ...Overlays,
+  cache: CachePolicy.Policy.pipe(optional),
   capabilities: Capabilities,
   variants: Schema.Array(Variant),
   time: Schema.Struct({

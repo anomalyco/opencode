@@ -21,6 +21,7 @@ import type {
   SessionTitle,
 } from "@opencode/plugin/effect/session"
 import type { Agent } from "@opencode/schema/agent"
+import type { CachePolicy } from "@opencode/schema/cache"
 import type { Model } from "@opencode/schema/model"
 import type { Content } from "@opencode/schema/tool"
 import { Cause, Context, Effect, Layer, Result, Stream } from "effect"
@@ -67,6 +68,8 @@ export interface Input {
   readonly system: Array<SystemPart>
   readonly messages: Array<Message>
   readonly toolChoice?: LLM.RequestInput["toolChoice"]
+  /** Resolved prompt-cache policy (agent overrides model); omitted keeps the provider default. */
+  readonly cache?: CachePolicy.Policy
   /** Only the durable runner may use a stateful WebSocket. */
   readonly webSocket?: "session"
 }
@@ -250,6 +253,7 @@ export const layer = Layer.effect(
         },
         // TODO: Persist cache lineage so nested forks reuse the root session's cache key.
         promptCacheKey: /^ses_[0-9a-f]{64}$/.test(affinity) ? affinity.slice(4) : affinity,
+        cache: input.cache,
         system: shaped.system,
         messages: boundImages(unsupportedParts(shaped.messages, model.capabilities)),
         tools: Array.from(hooked, ([name, t]) => ({ ...t, name })),

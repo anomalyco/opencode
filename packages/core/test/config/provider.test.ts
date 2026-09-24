@@ -106,6 +106,37 @@ describe("ConfigProviderPlugin.Plugin", () => {
     }),
   )
 
+  it.effect("applies the provider cache policy to its models and lets a model override it", () =>
+    Effect.gen(function* () {
+      const models = yield* Model.Service
+      yield* addPlugin([
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              cached: {
+                package: "@opencode/ai/providers/openai/chat",
+                cache: { ttlSeconds: 3600 },
+                models: {
+                  inherited: {},
+                  overridden: { cache: { ttlSeconds: 300 } },
+                  disabled: { cache: "none" },
+                },
+              },
+            },
+          }),
+        }),
+      ])
+      const provider = Provider.ID.make("cached")
+      const inherited = required(yield* models.get(provider, Model.ID.make("inherited")))
+      const overridden = required(yield* models.get(provider, Model.ID.make("overridden")))
+      const disabled = required(yield* models.get(provider, Model.ID.make("disabled")))
+      expect(inherited.cache).toEqual({ ttlSeconds: 3600 })
+      expect(overridden.cache).toEqual({ ttlSeconds: 300 })
+      expect(disabled.cache).toBe("none")
+    }),
+  )
+
   for (const builtin of [
     { id: "openai", model: "gpt-5.6-sol", package: "@opencode/ai/providers/openai/responses", plugin: OpenAIPlugin },
     { id: "xai", model: "grok-4.6", package: "@opencode/ai/providers/xai", plugin: XAIPlugin },
