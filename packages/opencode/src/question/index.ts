@@ -36,11 +36,17 @@ export class NotFoundError extends Schema.TaggedErrorClass<NotFoundError>()("Que
 
 interface PendingEntry {
   info: Request
-  deferred: Deferred.Deferred<ReadonlyArray<Answer>, RejectedError>
+  deferred: Deferred.Deferred<Resolution, RejectedError>
 }
 
 interface State {
   pending: Map<QuestionID, PendingEntry>
+}
+
+/** Answers returned to the asking tool, plus an optional agent to continue the session with. */
+export interface Resolution {
+  readonly answers: ReadonlyArray<Answer>
+  readonly agent?: string
 }
 
 // Service
@@ -50,10 +56,11 @@ export interface Interface {
     sessionID: SessionID
     questions: ReadonlyArray<Info>
     tool?: Tool
-  }) => Effect.Effect<ReadonlyArray<Answer>, RejectedError>
+  }) => Effect.Effect<Resolution, RejectedError>
   readonly reply: (input: {
     requestID: QuestionID
     answers: ReadonlyArray<Answer>
+    agent?: string
   }) => Effect.Effect<void, NotFoundError>
   readonly reject: (requestID: QuestionID) => Effect.Effect<void, NotFoundError>
   readonly list: () => Effect.Effect<ReadonlyArray<Request>>
@@ -93,7 +100,7 @@ const layer = Layer.effect(
       const id = QuestionID.ascending()
       yield* Effect.logInfo("asking", { id, questions: input.questions.length })
 
-      const deferred = yield* Deferred.make<ReadonlyArray<Answer>, RejectedError>()
+      const deferred = yield* Deferred.make<Resolution, RejectedError>()
       const info: Request = {
         id,
         sessionID: input.sessionID,
@@ -114,6 +121,7 @@ const layer = Layer.effect(
     const reply = Effect.fn("Question.reply")(function* (input: {
       requestID: QuestionID
       answers: ReadonlyArray<Answer>
+      agent?: string
     }) {
       const pending = (yield* InstanceState.get(state)).pending
       const existing = pending.get(input.requestID)
@@ -122,13 +130,13 @@ const layer = Layer.effect(
         return yield* new NotFoundError({ requestID: input.requestID })
       }
       pending.delete(input.requestID)
-      yield* Effect.logInfo("replied", { requestID: input.requestID, answers: input.answers })
+      yield* Effect.logInfo("replied", { requestID: input.requestID, answers: input.answers, agent: input.agent })
       yield* events.publish(Event.Replied, {
         sessionID: existing.info.sessionID,
         requestID: existing.info.id,
         answers: input.answers.map((a) => [...a]),
       })
-      yield* Deferred.succeed(existing.deferred, input.answers)
+      yield* Deferred.succeed(existing.deferred, { answers: input.answers, agent: input.agent })
     })
 
     const reject = Effect.fn("Question.reject")(function* (requestID: QuestionID) {

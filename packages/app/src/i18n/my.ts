@@ -749,6 +749,7 @@ export const dict = {
   "session.question.progress": "{{total}} မေးခွန်းများ၏ {{current}}",
   "session.question.minimize": "မေးခွန်းကို လျှော့ပါ။",
   "session.question.restore": "မေးခွန်းကို ပြန်ယူပါ။",
+  "session.question.build": "ဖြေဆိုပြီး Build အေးဂျင့်ဖြင့် ဆက်လုပ်ပါ။",
   "session.question.pending.one": "{{count}} ဆိုင်းငံ့မေးခွန်း",
   "session.question.pending.other": "{{count}} ဆိုင်းငံ့မေးခွန်းများ",
   "session.followupDock.summary.one": "{{count}} တန်းစီနေသည့် မက်ဆေ့ဂျ်",

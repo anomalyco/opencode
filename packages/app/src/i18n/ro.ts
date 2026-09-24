@@ -743,6 +743,7 @@ export const dict = {
   "session.question.progress": "{{current}} din {{total}} întrebări",
   "session.question.minimize": "Minimizează întrebarea",
   "session.question.restore": "Restaurează întrebarea",
+  "session.question.build": "Răspunde și continuă cu agentul Build",
   "session.question.pending.one": "{{count}} întrebare în așteptare",
   "session.question.pending.other": "{{count}} întrebări în așteptare",
   "session.question.pending.few": "{{count}} întrebări în așteptare",

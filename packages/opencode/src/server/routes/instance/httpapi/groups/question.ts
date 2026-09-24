@@ -13,6 +13,9 @@ const ReplyPayload = Schema.Struct({
   answers: Schema.Array(Question.Answer).annotate({
     description: "User answers in order of questions (each answer is an array of selected labels)",
   }),
+  agent: Schema.optional(Schema.String).annotate({
+    description: "Agent to continue the session with after the answers are submitted",
+  }),
 })
 
 export const QuestionApi = HttpApi.make("question")

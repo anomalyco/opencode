@@ -749,6 +749,7 @@ export const dict = {
   "session.question.progress": "{{current}} από {{total}} ερωτήσεις",
   "session.question.minimize": "Ελαχιστοποίηση ερώτησης",
   "session.question.restore": "Ερώτηση επαναφοράς",
+  "session.question.build": "Απαντήστε και συνεχίστε με τον πράκτορα Build",
   "session.question.pending.one": "{{count}} ερώτηση σε εκκρεμότητα",
   "session.question.pending.other": "{{count}} ερωτήσεις σε εκκρεμότητα",
   "session.followupDock.summary.one": "{{count}} μήνυμα στην ουρά",
