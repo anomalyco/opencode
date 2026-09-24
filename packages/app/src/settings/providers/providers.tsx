@@ -150,7 +150,8 @@ export const SettingsProviders: Component<{
     const items = providers
       .popular()
       .filter((p) => {
-        if (p.id !== CONSOLE_INTEGRATION || !console) return !connectedIDs.has(p.id)
+        // Go signs in through the same Console account, so it follows the Console row.
+        if (!CONSOLE_PROVIDERS.has(p.id) || !console) return !connectedIDs.has(p.id)
         return console.connections.find((connection) => connection.type === "credential")?.method !== "oauth"
       })
       .slice()
