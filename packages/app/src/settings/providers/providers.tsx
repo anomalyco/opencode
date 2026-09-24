@@ -254,7 +254,7 @@ export const SettingsProviders: Component<{
 
                             <div class="settings-provider-main">
                               <span class="settings-provider-name truncate">
-                                {item.id === "opencode" ? language.t("provider.connect.opencode.name") : item.name}
+                                {item.name}
                               </span>
                               <Badge>{type(item)}</Badge>
                             </div>
@@ -271,10 +271,7 @@ export const SettingsProviders: Component<{
                               size="normal"
                               variant="ghost-muted"
                               onClick={() =>
-                                void disconnect(
-                                  item,
-                                  item.id === "opencode" ? language.t("provider.connect.opencode.name") : item.name,
-                                )
+                                void disconnect(item, item.name)
                               }
                             >
                               {language.t("common.disconnect")}
@@ -372,7 +369,7 @@ export const SettingsProviders: Component<{
                     <div class="settings-provider-copy">
                       <div class="settings-provider-main">
                         <span class="settings-provider-name">
-                          {item.id === "opencode" ? language.t("provider.connect.opencode.name") : item.name}
+                          {item.name}
                         </span>
                         <Show when={item.id === "opencode" || item.id === "opencode-go"}>
                           <Badge>{language.t("dialog.provider.tag.recommended")}</Badge>
