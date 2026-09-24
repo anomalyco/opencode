@@ -181,6 +181,10 @@ export const dict = {
   "command.session.unshare.description": "Sluta dela den här sessionen",
   "command.session.export": "Exportera session",
   "command.session.export.description": "Exportera hela sessionsutskriften som JSON",
+  "command.session.thinking": "Toggle reasoning",
+  "command.session.thinking.description": "Show or hide model reasoning in the session",
+  "toast.session.thinking.on": "Reasoning shown",
+  "toast.session.thinking.off": "Reasoning hidden",
 
   "palette.search.placeholder": "Sök efter filer, kommandon och sessioner",
   "palette.search.placeholder.home": "Sök bland kommandon och sessioner",
