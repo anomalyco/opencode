@@ -102,7 +102,13 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
     const server = servers().find((entry) => entry.name === name)
     if (!server) return
     if (server.status.status === "needs_auth" && server.integrationID) {
-      dialog.replace(() => <DialogIntegration integrationID={server.integrationID} autoConnect />)
+      dialog.replace(() => (
+        <DialogIntegration
+          integrationID={server.integrationID}
+          autoConnect
+          onConnected={() => dialog.replace(() => <DialogMcp initialServer={server.name} />)}
+        />
+      ))
       return
     }
     if (!statusError(server.status)) return
@@ -140,6 +146,7 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
           <DialogSelect
             title="MCP servers"
             options={options()}
+            focusTarget={props.initialServer}
             preserveSelection
             onMove={(option) => setFocused(option.value as string)}
             onSelect={(option) => select(option.value as string)}
