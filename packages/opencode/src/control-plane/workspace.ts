@@ -486,6 +486,8 @@ const layer = Layer.effect(
           }),
         ),
       )
+      // Another start may have installed a listener while target() was pending.
+      if (yield* FiberMap.has(syncFibers, space.id)) return
       if (target?.type === "local") {
         setStatus(space.id, (yield* fs.existsSafe(target.directory)) ? "connected" : "error")
         return

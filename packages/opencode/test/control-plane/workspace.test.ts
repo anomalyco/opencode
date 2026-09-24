@@ -1278,6 +1278,76 @@ describe("workspace sync state", () => {
     })
   })
 
+  it.live("concurrent starts keep the first listener while target resolution is pending", () => {
+    let connections = 0
+    return Effect.gen(function* () {
+      yield* HttpServer.serveEffect()(
+        Effect.gen(function* () {
+          const req = yield* HttpServerRequest.HttpServerRequest
+          const pathname = new URL(req.url, "http://localhost").pathname
+          if (pathname === "/concurrent/global/event") {
+            connections += 1
+            return HttpServerResponse.fromWeb(eventStreamResponse())
+          }
+          if (pathname === "/concurrent/sync/history") return HttpServerResponse.fromWeb(Response.json([]))
+          return HttpServerResponse.text("unexpected", { status: 500 })
+        }),
+      )
+      const url = yield* serverUrl()
+      yield* provideTmpdirInstance(
+        () =>
+          Effect.gen(function* () {
+            const workspace = yield* Workspace.Service
+            const instance = yield* requireInstance
+            const type = unique("remote-concurrent-start")
+            const info = workspaceInfo(instance.project.id, type)
+            let calls = 0
+            let releaseFirst = () => {}
+            let releaseSecond = () => {}
+            yield* insertWorkspace(info)
+            registerAdapter(
+              instance.project.id,
+              type,
+              recordedAdapter({
+                target() {
+                  calls += 1
+                  const target: Target = { type: "remote", url: `${url}/concurrent` }
+                  if (calls === 1)
+                    return new Promise<Target>((resolve) => {
+                      releaseFirst = () => resolve(target)
+                    })
+                  if (calls === 2)
+                    return new Promise<Target>((resolve) => {
+                      releaseSecond = () => resolve(target)
+                    })
+                  return target
+                },
+              }).adapter,
+            )
+
+            yield* workspace.startWorkspaceSyncing(instance.project.id)
+            yield* workspace.startWorkspaceSyncing(instance.project.id)
+            yield* eventuallyEffect(Effect.sync(() => expect(calls).toBe(2)))
+            releaseFirst()
+            yield* eventuallyEffect(
+              Effect.gen(function* () {
+                expect(calls).toBe(3)
+                expect((yield* workspace.status()).find((item) => item.workspaceID === info.id)?.status).toBe(
+                  "connected",
+                )
+              }),
+            )
+            releaseSecond()
+            yield* Effect.sleep("50 millis")
+            expect(calls).toBe(3)
+            expect(connections).toBe(1)
+            yield* workspace.remove(info.id)
+          }),
+        { git: true },
+      )
+    })
+  })
+
   it.live("remote event stream failure reconnects and replays history", () => {
     let stream: ReadableStreamDefaultController<Uint8Array> | undefined
     let connections = 0
