@@ -22,6 +22,7 @@ import { useStorage } from "../context/storage"
 import { useSessionTabs } from "../context/session-tabs"
 import { useOptionalPanel } from "../context/panel"
 import { abbreviateHome } from "../util/path-format"
+import { useLocal } from "../context/local"
 
 export type Dispose = () => Promise<void>
 
@@ -52,6 +53,7 @@ export type Registry = {
 // The host services a plugin context adapts. Collected once by the provider
 // (hooks must run during component setup) and shared by every activation.
 export function usePluginHost() {
+  const local = useLocal()
   return {
     renderer: useRenderer(),
     client: useClient(),
@@ -70,6 +72,18 @@ export function usePluginHost() {
     storage: useStorage(),
     sessionTabs: useSessionTabs(),
     panel: useOptionalPanel(),
+    local,
+  }
+}
+
+export function usePluginDataSelection() {
+  const local = useLocal()
+  return {
+    model: () => local.model.current(),
+    agent: () => {
+      const current = local.agent.current()
+      return current ? { id: current.id } : undefined
+    },
   }
 }
 
@@ -85,6 +99,7 @@ export function createPluginContext(input: {
 }): Context {
   const host = input.host
   input.owned.push(async () => host.panel?.release(input.id))
+  const selection = usePluginDataSelection()
   let context: Context
   let claims = 0
   // Every dialog and registered render is wrapped so plugin components can
@@ -139,7 +154,13 @@ export function createPluginContext(input: {
     app: { version: host.app.version, channel: host.app.channel },
     renderer: host.renderer,
     client: host.client.api,
-    data: host.data,
+    data: {
+      ...host.data,
+      selection: {
+        model: selection.model,
+        agent: selection.agent,
+      },
+    },
     attention: host.attention,
     get theme() {
       return host.themes.currentTokens()

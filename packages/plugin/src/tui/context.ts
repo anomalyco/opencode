@@ -99,6 +99,20 @@ export interface Data {
       cancel(input: SessionFormCancelInput, location?: LocationRef): Promise<void>
     }
   }
+  readonly selection: {
+    /**
+     * The model the prompt input is currently set to for the active route.
+     * Updates live on every model cycle / favorite change. Reactive when
+     * read inside a Solid computation.
+     */
+    model(): { providerID: string; modelID: string } | undefined
+    /**
+     * The agent the prompt input is currently set to for the active route.
+     * Updates live on every agent switch. Reactive when read inside a Solid
+     * computation.
+     */
+    agent(): { id: string } | undefined
+  }
   readonly project: {
     list(): Project[]
     get(projectID: string): Project | undefined
