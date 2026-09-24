@@ -53,7 +53,7 @@ const MODEL_NAMES = [
   [/kimi/i, "moonshot"],
 ] as const
 
-// An explicit `sanitizer` wins, and `false` opts out. Otherwise the protocol's own default
+// An explicit `sanitizer` wins, and `none` opts out. Otherwise the protocol's own default
 // applies (the Gemini API always uses Gemini's rules), then the model name selects the family's rules
 // so models reached through gateways and OpenAI-compatible endpoints get the same handling.
 const modelCompatibility = (
@@ -66,7 +66,7 @@ const modelCompatibility = (
       return gemini(schema)
     case "moonshot":
       return moonshot(schema)
-    case false:
+    case "none":
     case undefined:
       return schema
   }
