@@ -51,6 +51,7 @@ type AppDockEvent =
       }
     }
   | { type: "tab-opened"; payload: { tabID: string; generation: number; url: string } }
+  | { type: "tab-selected"; payload: TabIdentity }
   | { type: "tab-crashed"; payload: { identity: TabIdentity; reason: "crashed" | "killed" | "oom" } }
   | { type: "tab-recovered"; payload: { tabID: string; generation: number; url: string } }
   | { type: "download"; payload: Download }
@@ -215,6 +216,7 @@ export function AppsPanel() {
   }
   const restoreProfile = async (profileID: string, generation: number, snapshot: AppDockManifest) => {
     const saved = (snapshot.tabs[profileID] ?? []).filter((tab) => isHTTPS(tab.url))
+    await api()?.appDockClose()
     setTabs([])
     setActive(undefined)
     setURL("https://opencode.ai")
@@ -273,12 +275,21 @@ export function AppsPanel() {
     const unsubscribeEvent = api()?.appDockEvent((event) => {
       if (event.type === "state") applyState(event.payload)
       if (event.type === "tab-opened") {
+        setFullscreen(false)
         const tab = event.payload
         const next = tabs().some((item) => sameTab(item, tab)) ? tabs() : [...tabs(), tab]
         setTabs(next)
         if (!switching()) void saveTabs(next)
         setActive(tab)
         setURL(tab.url)
+      }
+      if (event.type === "tab-selected") {
+        setFullscreen(false)
+        const tab = tabs().find((item) => sameTab(item, event.payload))
+        if (tab) {
+          setActive(tab)
+          setURL(tab.url)
+        }
       }
       if (event.type === "tab-crashed") {
         const { identity, reason } = event.payload
@@ -399,7 +410,7 @@ export function AppsPanel() {
         return
       }
       const tab = await api()!.appDockOpen(url(), bounds(host), profile())
-      const next = [...tabs(), tab]
+      const next = tabs().some((item) => sameTab(item, tab)) ? tabs() : [...tabs(), tab]
       setTabs(next)
       void saveTabs(next)
       setActive(tab)
@@ -411,7 +422,7 @@ export function AppsPanel() {
     if (!host || !api()) return
     try {
       const tab = await api()!.appDockOpen("https://opencode.ai", bounds(host), profile())
-      const next = [...tabs(), tab]
+      const next = tabs().some((item) => sameTab(item, tab)) ? tabs() : [...tabs(), tab]
       setTabs(next)
       void saveTabs(next)
       setActive(tab)
@@ -425,7 +436,7 @@ export function AppsPanel() {
     const items = tabs()
     const index = items.findIndex((tab) => sameTab(tab, requested))
     if (index < 0) return
-    const next = items[index + 1] ?? items[index - 1]
+    const next = items[index - 1] ?? items[index + 1]
     await api()?.appDockCloseTab(requested.tabID)
     const remaining = tabs().filter((tab) => !sameTab(tab, requested))
     setTabs(remaining)
@@ -442,11 +453,11 @@ export function AppsPanel() {
     if (index < 0 || (scope === "others" ? items.length < 2 : index === visual.length - 1)) return
     await api()?.appDockCloseTabs(tab.tabID, scope, scope === "right" ? visual.map((item) => item.tabID) : undefined)
     const closed = scope === "others" ? items.filter((item) => !sameTab(item, tab)) : visual.slice(index + 1)
-    const remaining = items.filter((item) => !closed.some((item) => sameTab(item, tab)))
+    const remaining = items.filter((candidate) => !closed.some((closedTab) => sameTab(candidate, closedTab)))
     setTabs(remaining)
     void saveTabs(remaining)
     if (!remaining.some((item) => sameTab(item, active()))) {
-      const next = remaining.at(-1)
+      const next = remaining.find((candidate) => sameTab(candidate, tab)) ?? remaining.at(-1)
       setActive(next)
       setURL(next?.url ?? "https://opencode.ai")
       if (next && host) await api()?.appDockSelect(next.tabID, bounds(host))
@@ -461,7 +472,7 @@ export function AppsPanel() {
     if (!host || !capability("appDockOpen")) return
     try {
       const copy = await api()!.appDockOpen(tab.url, bounds(host), profile())
-      const next = [...tabs(), copy]
+      const next = tabs().some((item) => sameTab(item, copy)) ? tabs() : [...tabs(), copy]
       setTabs(next)
       void saveTabs(next)
       selectTab(copy)
@@ -498,13 +509,16 @@ export function AppsPanel() {
     const generation = ++restoreGeneration
     setLibraryOpen(undefined)
     void (async () => {
-      await api()?.appDockHide()
-      if (disposed || generation !== restoreGeneration) return
-      const snapshot = await updateManifest((current) => ({ ...current, activeProfileID: next }))
-      if (!snapshot || disposed || generation !== restoreGeneration) return
-      setProfile(snapshot.activeProfileID)
-      await restoreProfile(snapshot.activeProfileID, generation, snapshot)
-      if (generation === restoreGeneration) setSwitching(false)
+      try {
+        const snapshot = await updateManifest((current) => ({ ...current, activeProfileID: next }))
+        if (!snapshot || disposed || generation !== restoreGeneration) return
+        setProfile(snapshot.activeProfileID)
+        await restoreProfile(snapshot.activeProfileID, generation, snapshot)
+      } catch (cause) {
+        if (!disposed && generation === restoreGeneration) setError(cause instanceof Error ? cause.message : "Could not switch App Dock profile")
+      } finally {
+        if (generation === restoreGeneration) setSwitching(false)
+      }
     })()
   }
   const activeTab = () => tabs().find((tab) => sameTab(tab, active()))
@@ -565,7 +579,7 @@ export function AppsPanel() {
     setURL(entry.url)
     if (!host || !api()) return
     const tab = await api()!.appDockOpen(entry.url, bounds(host), profile())
-    const next = [...tabs(), tab]
+    const next = tabs().some((item) => sameTab(item, tab)) ? tabs() : [...tabs(), tab]
     setTabs(next)
     void saveTabs(next)
     setActive(tab)

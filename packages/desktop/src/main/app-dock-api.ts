@@ -13,6 +13,7 @@ export interface AppDockAPI {
   click(senderID: number, tabID: string, ref: number): Promise<unknown>
   type(senderID: number, tabID: string, ref: number, text: string): Promise<unknown>
   close(senderID: number, win: BrowserWindow, tabID?: string): void
+  closeAll(senderID: number, win: BrowserWindow): void
   closeTabs(senderID: number, tabID: string, scope: "others" | "right", order?: string[]): void
   list(senderID: number): AppDockState[]
   deleteStorage(storageKey: string, win?: BrowserWindow): Promise<void>

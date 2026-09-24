@@ -51,6 +51,7 @@ export type AppDockDownload = AppDockIdentity & {
 export type AppDockEvent =
   | Readonly<{ type: "state"; payload: AppDockState }>
   | Readonly<{ type: "tab-opened"; payload: AppDockTab }>
+  | Readonly<{ type: "tab-selected"; payload: AppDockIdentity }>
   | Readonly<{
       type: "tab-crashed"
       payload: { identity: AppDockIdentity; reason: "crashed" | "killed" | "oom" }
@@ -92,7 +93,9 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
   const retiredStorageKeys = new Set<string>()
   const tabs = new Map<number, Map<string, AppDockRecord>>()
   const readQueues = new Map<string, Promise<unknown>>()
+  const navigationQueues = new Map<string, Promise<unknown>>()
   const refTargets = new Map<string, Map<number, { x: number; y: number; width: number; height: number; tag: string; name: string; href?: string; url: string }>>()
+  const blockedNavigationVersions = new Map<string, number>()
   const fullscreenOwner = new Map<number, string>()
   const fullscreenWindowListeners = new Map<number, () => void>()
   const tabByContents = new Map<number, { senderID: number; tabID: string; generation: number }>()
@@ -102,10 +105,13 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
   >()
   const terminalDownloads = new Map<string, number>()
   const active = new Map<number, string>()
-  const layoutBounds = new Map<number, DockBounds>()
+      const layoutBounds = new Map<number, DockBounds>()
   let lastLayoutBounds: DockBounds | undefined
   const inactive = new Map<string, { senderID: number; tabID: string }>()
+  const refNamespaces = new Map<string, number>()
+  const committedNavigations = new Set<string>()
   let generation = 0
+  let refNamespace = 0
   const MAX_INACTIVE_TABS = 20
   const APP_DOCK_EXECUTION_TIMEOUT_MS = 10_000
   const MAX_PROGRESSING_DOWNLOADS_PER_PROFILE = 8
@@ -127,7 +133,14 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
     const record = tabs.get(senderID)?.get(tabID)
     if (!record) return
     refTargets.delete(`${senderID}:${tabID}`)
-    if (fullscreenOwner.get(senderID) === tabID) fullscreenOwner.delete(senderID)
+    blockedNavigationVersions.delete(`${senderID}:${tabID}`)
+    refNamespaces.delete(`${senderID}:${tabID}`)
+    committedNavigations.delete(`${senderID}:${tabID}`)
+    if (fullscreenOwner.get(senderID) === tabID) {
+      fullscreenOwner.delete(senderID)
+      void record.view.webContents.executeJavaScript("void document.exitFullscreen?.(); true", true).catch(() => undefined)
+      if (!record.win.isDestroyed() && record.win.isFullScreen()) record.win.setFullScreen(false)
+    }
     if (!record.win.isDestroyed()) record.win.contentView.removeChildView(record.view)
     inactive.delete(`${senderID}:${tabID}`)
     tabByContents.delete(record.view.webContents.id)
@@ -166,16 +179,21 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
     win.on("leave-full-screen", listener)
     fullscreenWindowListeners.set(senderID, listener)
   }
+  const clearSender = (senderID: number, win?: BrowserWindow) => {
+    const listener = fullscreenWindowListeners.get(senderID)
+    if (listener && win && !win.isDestroyed()) win.removeListener("leave-full-screen", listener)
+    fullscreenWindowListeners.delete(senderID)
+    active.delete(senderID)
+    layoutBounds.delete(senderID)
+  }
   const close = (senderID: number, win?: BrowserWindow, tabID?: string) => {
     const senderTabs = tabs.get(senderID)
     if (!senderTabs) return
     let ids: string[]
-    if (tabID) {
-      ids = [tabID]
-    } else {
-      // Close only the active tab when no tabID specified
+    if (tabID) ids = [tabID]
+    else {
       const activeTabID = active.get(senderID)
-      ids = activeTabID ? [activeTabID] : [senderTabs.keys().next().value].filter((id): id is string => id !== undefined)
+      ids = activeTabID ? [activeTabID] : []
     }
     const closingActive = ids.some((id) => active.get(senderID) === id)
     const closedIndex = [...senderTabs.keys()].indexOf(ids[0]!)
@@ -183,6 +201,7 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
     const remaining = tabs.get(senderID)
     if (!remaining || remaining.size === 0) {
       tabs.delete(senderID)
+      clearSender(senderID, win)
       return
     }
     if (closingActive && !active.has(senderID)) {
@@ -192,13 +211,22 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
       if (nextTabID && next) {
         if (win && !win.isDestroyed()) {
           win.contentView.addChildView(next.view)
+          next.view.setBounds(layoutBounds.get(senderID) ?? next.view.getBounds())
           next.view.setVisible(true)
           next.view.webContents.setBackgroundThrottling(false)
         }
         inactive.delete(`${senderID}:${nextTabID}`)
         active.set(senderID, nextTabID)
+        next.notify(Object.freeze({ type: "tab-selected", payload: identity(nextTabID, next.generation) }))
       }
     }
+  }
+  const closeAll = (senderID: number, win: BrowserWindow) => {
+    const senderTabs = tabs.get(senderID)
+    if (!senderTabs) return
+    ;[...senderTabs.keys()].forEach((tabID) => remove(senderID, tabID))
+    tabs.delete(senderID)
+    clearSender(senderID, win)
   }
   const evictOldestInactive = (senderID?: number) => {
     for (const oldest of inactive.values()) {
@@ -227,6 +255,7 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
     if (!validBounds(bounds)) throw new Error("Invalid App Dock bounds")
     const id = replacement?.tabID ?? randomUUID()
     const tabGeneration = ++generation
+    refNamespaces.set(`${senderID}:${id}`, ++refNamespace)
     let target: string
     try {
       target = appDockURL(address)
@@ -382,8 +411,20 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
         }),
       )
     })
-    listen("did-navigate", (_event, navigatedURL) => update({ url: navigatedURL }))
-    listen("did-navigate-in-page", (_event, navigatedURL) => update({ url: navigatedURL }))
+    listen("did-navigate", (_event, navigatedURL) => {
+      const key = `${senderID}:${id}`
+      refTargets.delete(key)
+      if (committedNavigations.has(key)) refNamespaces.set(key, ++refNamespace)
+      else committedNavigations.add(key)
+      update({ url: navigatedURL })
+    })
+    listen("did-navigate-in-page", (_event, navigatedURL) => {
+      const key = `${senderID}:${id}`
+      refTargets.delete(key)
+      if (committedNavigations.has(key)) refNamespaces.set(key, ++refNamespace)
+      else committedNavigations.add(key)
+      update({ url: navigatedURL })
+    })
     let crashed = false
     const reportCrash = (reason: "crashed" | "killed" | "oom") => {
       if (crashed || !isCurrent(senderID, id, tabGeneration)) return
@@ -428,6 +469,8 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
     listen("will-navigate", (event, url) => {
       if (URL.canParse(url) && new URL(url).protocol === "https:") return
       event.preventDefault()
+      const key = `${senderID}:${id}`
+      blockedNavigationVersions.set(key, (blockedNavigationVersions.get(key) ?? 0) + 1)
       if (!isCurrent(senderID, id, tabGeneration)) return
       notify(
         Object.freeze({
@@ -439,6 +482,8 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
     listen("will-redirect", (event, url) => {
       if (URL.canParse(url) && new URL(url).protocol === "https:") return
       event.preventDefault()
+      const key = `${senderID}:${id}`
+      blockedNavigationVersions.set(key, (blockedNavigationVersions.get(key) ?? 0) + 1)
       if (!isCurrent(senderID, id, tabGeneration)) return
       notify(
         Object.freeze({
@@ -457,8 +502,10 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
           if (fullscreen) break
           await new Promise((resolve) => setTimeout(resolve, 50))
         }
-        if (!fullscreen || !isCurrent(senderID, id, tabGeneration) || win.isDestroyed()) {
-          if (!win.isDestroyed() && win.isFullScreen()) win.setFullScreen(false)
+        if (!fullscreen || !isCurrent(senderID, id, tabGeneration) || active.get(senderID) !== id || win.isDestroyed() || (fullscreenOwner.has(senderID) && fullscreenOwner.get(senderID) !== id)) {
+          if (fullscreenOwner.has(senderID) && fullscreenOwner.get(senderID) !== id)
+            void view.webContents.executeJavaScript("void document.exitFullscreen?.(); true", true).catch(() => undefined)
+          if (!win.isDestroyed() && win.isFullScreen() && (!fullscreenOwner.has(senderID) || fullscreenOwner.get(senderID) === id)) win.setFullScreen(false)
           return
         }
         fullscreenOwner.set(senderID, id)
@@ -482,8 +529,8 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
           if (!fullscreen) break
           await new Promise((resolve) => setTimeout(resolve, 50))
         }
-        if (fullscreen) return
-        if (fullscreenOwner.get(senderID) === id) fullscreenOwner.delete(senderID)
+        if (fullscreen || !isCurrent(senderID, id, tabGeneration) || fullscreenOwner.get(senderID) !== id) return
+        fullscreenOwner.delete(senderID)
         if (!win.isDestroyed() && win.isFullScreen()) win.setFullScreen(false)
         notify(
           Object.freeze({
@@ -500,6 +547,13 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
     tabs.set(senderID, senderTabs)
     installFullscreenWindowBridge(senderID, win)
     if (replacement?.selected ?? true) {
+      const fullscreenTabID = fullscreenOwner.get(senderID)
+      if (fullscreenTabID && fullscreenTabID !== id) {
+        const fullscreenRecord = senderTabs.get(fullscreenTabID)
+        fullscreenOwner.delete(senderID)
+        if (fullscreenRecord) void fullscreenRecord.view.webContents.executeJavaScript("void document.exitFullscreen?.(); true", true).catch(() => undefined)
+        if (!win.isDestroyed() && win.isFullScreen()) win.setFullScreen(false)
+      }
       win.contentView.addChildView(view)
       view.setVisible(true)
       view.webContents.setBackgroundThrottling(false)
@@ -535,6 +589,14 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
       if (tabID) tabs.get(senderID)?.get(tabID)?.view.setBounds(bounds)
     },
     hide(senderID: number, _win: BrowserWindow) {
+      const fullscreenTabID = fullscreenOwner.get(senderID)
+      const fullscreenRecord = fullscreenTabID ? tabs.get(senderID)?.get(fullscreenTabID) : undefined
+      if (fullscreenRecord) {
+        void fullscreenRecord.view.webContents.executeJavaScript("void document.exitFullscreen?.(); true", true).catch(() => undefined)
+        fullscreenRecord.notify(Object.freeze({ type: "fullscreen", payload: Object.freeze({ identity: identity(fullscreenTabID!, fullscreenRecord.generation), enabled: false }) }))
+      }
+      fullscreenOwner.delete(senderID)
+      if (fullscreenRecord && !fullscreenRecord.win.isDestroyed() && fullscreenRecord.win.isFullScreen()) fullscreenRecord.win.setFullScreen(false)
       while (active.has(senderID) && inactive.size >= MAX_INACTIVE_TABS) {
         if (!evictOldestInactive()) throw new Error("App Dock tab limit reached")
       }
@@ -550,6 +612,13 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
       lastLayoutBounds = bounds
       const record = tabs.get(senderID)?.get(tabID)
       if (!record) throw new Error("Unknown App Dock tab")
+      const fullscreenTabID = fullscreenOwner.get(senderID)
+      if (fullscreenTabID && fullscreenTabID !== tabID) {
+        const fullscreenRecord = tabs.get(senderID)?.get(fullscreenTabID)
+        fullscreenOwner.delete(senderID)
+        if (fullscreenRecord) void fullscreenRecord.view.webContents.executeJavaScript("void document.exitFullscreen?.(); true", true).catch(() => undefined)
+        if (!win.isDestroyed() && win.isFullScreen()) win.setFullScreen(false)
+      }
       for (const [id, other] of tabs.get(senderID) ?? []) {
         if (id === tabID) {
           win.contentView.addChildView(other.view)
@@ -562,6 +631,7 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
       }
       record.view.setBounds(bounds)
       active.set(senderID, tabID)
+      record.notify(Object.freeze({ type: "tab-selected", payload: identity(tabID, record.generation) }))
     },
     activate(senderID: number, win: BrowserWindow, tabID: string) {
       const record = tabs.get(senderID)?.get(tabID)
@@ -583,46 +653,57 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
       this.select(senderID, win, tabID, bounds)
     },
     async navigate(senderID: number, tabID: string, address: string): Promise<{ ok: boolean; url: string }> {
-      const record = tabs.get(senderID)?.get(tabID)
-      if (!record) throw new Error("Unknown App Dock tab")
-      refTargets.delete(`${senderID}:${tabID}`)
-      let target: string
-      try {
-        target = appDockURL(address)
-      } catch {
-        if (isCurrent(senderID, tabID, record.generation)) {
-          record.notify(
-            Object.freeze({
-              type: "navigation-error",
-              payload: Object.freeze({ identity: identity(tabID, record.generation), code: "blocked", url: address }),
-            }),
-          )
+      const key = `${senderID}:${tabID}`
+      const previous = navigationQueues.get(key)
+      const navigation = (previous ? previous.catch(() => undefined) : Promise.resolve()).then(async () => {
+        const record = tabs.get(senderID)?.get(tabID)
+        if (!record) throw new Error("Unknown App Dock tab")
+        refTargets.delete(key)
+        refNamespaces.set(key, ++refNamespace)
+        let target: string
+        try {
+          target = appDockURL(address)
+        } catch {
+          if (isCurrent(senderID, tabID, record.generation)) {
+            record.notify(
+              Object.freeze({
+                type: "navigation-error",
+                payload: Object.freeze({ identity: identity(tabID, record.generation), code: "blocked", url: address }),
+              }),
+            )
+          }
+          throw new Error("App Dock only supports HTTPS URLs")
         }
-        throw new Error("App Dock only supports HTTPS URLs")
-      }
-      let navigationTimer: NodeJS.Timeout | undefined
-      try {
-        await Promise.race([
-          record.view.webContents.loadURL(target),
-          new Promise<never>((_, reject) => {
-            navigationTimer = setTimeout(() => reject(new Error("navigation timeout")), 10_000)
-          }),
-        ])
-      } catch (error) {
-        if (isCurrent(senderID, tabID, record.generation)) {
-          record.notify(
-            Object.freeze({
-              type: "navigation-error",
-              payload: Object.freeze({ identity: identity(tabID, record.generation), code: "failed", url: target }),
+        let navigationTimer: NodeJS.Timeout | undefined
+        try {
+          await Promise.race([
+            record.view.webContents.loadURL(target),
+            new Promise<never>((_, reject) => {
+              navigationTimer = setTimeout(() => reject(new Error("navigation timeout")), 10_000)
             }),
-          )
+          ])
+        } catch (error) {
+          if (isCurrent(senderID, tabID, record.generation)) {
+            record.notify(
+              Object.freeze({
+                type: "navigation-error",
+                payload: Object.freeze({ identity: identity(tabID, record.generation), code: "failed", url: target }),
+              }),
+            )
+          }
+          throw new Error("Navigation failed: " + (error instanceof Error ? error.message : String(error)))
+        } finally {
+          if (navigationTimer) clearTimeout(navigationTimer)
         }
-        throw new Error("Navigation failed: " + (error instanceof Error ? error.message : String(error)))
+        if (!isCurrent(senderID, tabID, record.generation)) throw new Error("App Dock tab changed during navigation")
+        return { ok: true, url: record.view.webContents.getURL() || target }
+      })
+      navigationQueues.set(key, navigation)
+      try {
+        return await navigation
       } finally {
-        if (navigationTimer) clearTimeout(navigationTimer)
+        if (navigationQueues.get(key) === navigation) navigationQueues.delete(key)
       }
-      if (!isCurrent(senderID, tabID, record.generation)) throw new Error("App Dock tab changed during navigation")
-      return { ok: true, url: record.view.webContents.getURL() || target }
     },
     async recover(senderID: number, tabID: string) {
       const record = tabs.get(senderID)?.get(tabID)
@@ -654,20 +735,32 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
       return tab
     },
     async command(senderID: number, tabID: string, command: "back" | "forward" | "reload"): Promise<{ ok: boolean; navigated: boolean }> {
-      const record = tabs.get(senderID)?.get(tabID)
-      if (!record) throw new Error("Unknown App Dock tab")
-      let navigated = false
-      if (command === "back" && record.view.webContents.canGoBack()) {
-        await record.view.webContents.goBack()
-        navigated = true
-      } else if (command === "forward" && record.view.webContents.canGoForward()) {
-        await record.view.webContents.goForward()
-        navigated = true
-      } else if (command === "reload") {
-        await record.view.webContents.reload()
-        navigated = true
+      const key = `${senderID}:${tabID}`
+      const previous = navigationQueues.get(key)
+      const queued = (previous ? previous.catch(() => undefined) : Promise.resolve()).then(async () => {
+        const record = tabs.get(senderID)?.get(tabID)
+        if (!record) throw new Error("Unknown App Dock tab")
+        refNamespaces.set(key, ++refNamespace)
+        refTargets.delete(key)
+        let navigated = false
+        if (command === "back" && record.view.webContents.canGoBack()) {
+          await record.view.webContents.goBack()
+          navigated = true
+        } else if (command === "forward" && record.view.webContents.canGoForward()) {
+          await record.view.webContents.goForward()
+          navigated = true
+        } else if (command === "reload") {
+          await record.view.webContents.reload()
+          navigated = true
+        }
+        return { ok: true, navigated }
+      })
+      navigationQueues.set(key, queued)
+      try {
+        return await queued
+      } finally {
+        if (navigationQueues.get(key) === queued) navigationQueues.delete(key)
       }
-      return { ok: true, navigated }
     },
     find(senderID: number, tabID: string, text: string, forward: boolean, notify: (result: AppDockFindResult) => void) {
       const record = tabs.get(senderID)?.get(tabID)
@@ -708,12 +801,20 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
       const record = tabs.get(senderID)?.get(tabID)
       if (!record) throw new Error("Unknown App Dock tab")
       if (!enabled) {
-        fullscreenOwner.delete(senderID)
-        if (!win.isDestroyed()) win.setFullScreen(false)
+        if (fullscreenOwner.get(senderID) === tabID) {
+          fullscreenOwner.delete(senderID)
+          if (!win.isDestroyed()) win.setFullScreen(false)
+        }
         await record.view.webContents.executeJavaScript("void document.exitFullscreen?.(); true", true).catch(() => undefined)
       }
-      if (enabled) win.setFullScreen(true)
+      if (enabled) {
+        const owner = fullscreenOwner.get(senderID)
+        if (active.get(senderID) !== tabID || (owner && owner !== tabID)) return
+        fullscreenOwner.set(senderID, tabID)
+        win.setFullScreen(true)
+      }
       await new Promise((resolve) => setTimeout(resolve, 100))
+      if (!isCurrent(senderID, tabID, record.generation)) return
       record.notify(
         Object.freeze({
           type: "fullscreen",
@@ -791,11 +892,13 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
     },
     read(senderID: number, tabID: string, budget: number, maxText: number) {
       const key = `${senderID}:${tabID}`
-      const flightKey = `${key}:${budget}:${maxText}`
+      const namespace = refNamespaces.get(key) ?? 1
+      const flightKey = `${key}:${namespace}:${budget}:${maxText}`
       const pending = readQueues.get(flightKey)
       if (pending) return pending
-      const current = this.execute(senderID, tabID, buildSnapshotScript({ budget, maxText }))
+      const current = this.execute(senderID, tabID, buildSnapshotScript({ budget, maxText, namespace }))
         .then((snapshot) => {
+          if (refNamespaces.get(key) !== namespace) throw new Error("App Dock page changed during read; retry")
           if (snapshot && typeof snapshot === "object" && "items" in snapshot && Array.isArray(snapshot.items) && "url" in snapshot) {
             const targets = new Map<number, { x: number; y: number; width: number; height: number; tag: string; name: string; href?: string; url: string }>()
             for (const item of snapshot.items) {
@@ -842,22 +945,19 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
       const win = record?.win
       if (!view || !win) throw new Error("Unknown App Dock tab")
       const beforeURL = view.webContents.getURL()
-      const cached = refTargets.get(`${senderID}:${tabID}`)?.get(ref)
-      let point
-      try {
-        point = await this.execute(senderID, tabID, buildElementPointScript(ref))
-      } catch (error) {
-        if (!cached || cached.url !== beforeURL) throw error
-        point = { ok: true as const, x: cached.x + cached.width / 2, y: cached.y + cached.height / 2, tag: cached.tag, name: cached.name, href: cached.href }
-      }
+      const key = `${senderID}:${tabID}`
+      const refNamespaceAtStart = refNamespaces.get(key) ?? 0
+      const blockedNavigationVersion = blockedNavigationVersions.get(key) ?? 0
+      const point = await this.execute(senderID, tabID, buildElementPointScript(ref, refNamespaceAtStart))
       if (!point || typeof point !== "object" || !("ok" in point) || point.ok !== true) return point
+      if (refNamespaces.get(key) !== refNamespaceAtStart)
+        return { ok: false, ref, trusted: false, error: "Element ref became stale; re-read the page" }
       const target = point as { ok: true; x: number; y: number; tag: string; name?: string; href?: string }
       const isLinkControl = target.tag === "a" || Boolean(target.href)
       const pageFullscreen = await this.execute(senderID, tabID, "Boolean(document.fullscreenElement)").catch(() => false)
       const requiresUserGesture = pageFullscreen || /full\s*screen|fullscreen|tela inteira/i.test(target.name ?? "")
       let navigationBlocked = false
-      const waitForNavigation = () => isLinkControl
-        ? new Promise<void>((resolve) => {
+      const waitForNavigation = () => new Promise<void>((resolve) => {
             let timer: NodeJS.Timeout | undefined
             const finish = () => {
               view.webContents.removeListener("did-navigate", finish)
@@ -881,17 +981,18 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
             view.webContents.once("did-navigate-in-page", finish)
             view.webContents.on("will-redirect", blockedRedirect)
             view.webContents.on("will-navigate", blockedNavigate)
-            timer = setTimeout(finish, 2_000)
-          })
-        : Promise.resolve()
+               timer = setTimeout(finish, isLinkControl ? 2_000 : 250)
+            })
       const navigationDone = waitForNavigation()
       if (!win.isFocused()) win.focus()
       view.webContents.focus()
       const requiresNativeInput = isLinkControl || requiresUserGesture
       if (!requiresNativeInput) {
-        const activated = await this.execute(senderID, tabID, buildClickScript(ref))
+        const activated = await this.execute(senderID, tabID, buildClickScript(ref, refNamespaceAtStart))
+        if (!activated || typeof activated !== "object" || !("ok" in activated) || activated.ok !== true) return activated
         await navigationDone
         const url = view.webContents.getURL() || beforeURL
+        navigationBlocked ||= (blockedNavigationVersions.get(`${senderID}:${tabID}`) ?? 0) > blockedNavigationVersion
         if (navigationBlocked) return { ok: false, ref, trusted: false, url, navigation: "blocked", error: "Navigation blocked" }
         return {
           ...(activated && typeof activated === "object" ? activated : {}),
@@ -918,6 +1019,8 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
       const scaleY = viewportHeight > 1 ? viewBounds.height / viewportHeight : 1
       const inputX = target.x * scaleX
       const inputY = target.y * scaleY
+      if (refNamespaces.get(key) !== refNamespaceAtStart)
+        return { ok: false, ref, trusted: false, error: "Element target became stale; re-read the page" }
       view.webContents.sendInputEvent({ type: "mouseMove", x: inputX, y: inputY })
       view.webContents.sendInputEvent({ type: "mouseDown", x: inputX, y: inputY, button: "left", clickCount: 1 })
       view.webContents.sendInputEvent({ type: "mouseUp", x: inputX, y: inputY, button: "left", clickCount: 1 })
@@ -941,7 +1044,7 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
             entered = await this.execute(senderID, tabID, "Boolean(document.fullscreenElement)").catch(() => false)
           }
           if (!entered) {
-            entryFallback = await view.webContents.executeJavaScript(buildClickScript(ref), true).catch((error: unknown) => ({
+            entryFallback = await view.webContents.executeJavaScript(buildClickScript(ref, refNamespaceAtStart), true).catch((error: unknown) => ({
               ok: false,
               error: error instanceof Error ? error.message : String(error),
             }))
@@ -959,7 +1062,7 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
             stillDocumentFullscreen = await this.execute(senderID, tabID, "Boolean(document.fullscreenElement)").catch(() => true)
           }
           if (stillDocumentFullscreen) {
-            domFallback = await view.webContents.executeJavaScript(buildClickScript(ref), true).catch((error: unknown) => ({
+            domFallback = await view.webContents.executeJavaScript(buildClickScript(ref, refNamespaceAtStart), true).catch((error: unknown) => ({
               ok: false,
               error: error instanceof Error ? error.message : String(error),
             }))
@@ -1009,9 +1112,14 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
       await navigationDone
       let url = view.webContents.getURL() || beforeURL
       let trusted = true
-      if (isLinkControl && url === beforeURL) {
+      if (!navigationBlocked && isLinkControl && url === beforeURL) {
         const fallbackNavigation = waitForNavigation()
-        await this.execute(senderID, tabID, buildClickScript(ref)).catch(() => undefined)
+          const fallback = await this.execute(senderID, tabID, buildClickScript(ref, refNamespaceAtStart)).catch((error: unknown) => ({
+          ok: false,
+          error: error instanceof Error ? error.message : String(error),
+        }))
+        if (!fallback || typeof fallback !== "object" || !("ok" in fallback) || fallback.ok !== true)
+          return { ok: false, ref, trusted: false, url, navigation: "unchanged", error: (fallback as { error?: string })?.error ?? "Click failed" }
         await fallbackNavigation
         url = view.webContents.getURL() || beforeURL
         trusted = false
@@ -1030,14 +1138,14 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
       }
     },
     async type(senderID: number, tabID: string, ref: number, text: string) {
-      const focus = await this.execute(senderID, tabID, buildFocusScript(ref))
+      const namespace = refNamespaces.get(`${senderID}:${tabID}`) ?? 0
+      const focus = await this.execute(senderID, tabID, buildFocusScript(ref, namespace))
       if (!focus || typeof focus !== "object" || !("ok" in focus) || focus.ok !== true) return focus
       const view = tabs.get(senderID)?.get(tabID)?.view
       if (!view) throw new Error("Unknown App Dock tab")
-      const domResult = await this.execute(senderID, tabID, buildTypeScript(ref, text))
-      if (!domResult || typeof domResult !== "object" || !("ok" in domResult) || domResult.ok !== true)
-        await view.webContents.insertText(text)
-      const observed = await this.execute(senderID, tabID, buildReadElementScript(ref))
+      const domResult = await this.execute(senderID, tabID, buildTypeScript(ref, text, namespace))
+      if (!domResult || typeof domResult !== "object" || !("ok" in domResult) || domResult.ok !== true) return domResult
+      const observed = await this.execute(senderID, tabID, buildReadElementScript(ref, namespace))
       if (!observed || typeof observed !== "object" || !("ok" in observed) || observed.ok !== true)
         return { ok: false, ref, text, error: "Input value could not be verified" }
       const value = String((observed as { value?: unknown }).value ?? "")
@@ -1045,6 +1153,7 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
       return { ok: true, ref, text, value, trusted: true }
     },
     close,
+    closeAll,
     closeTabs(senderID: number, tabID: string, scope: "others" | "right", order?: string[]) {
       const senderTabs = tabs.get(senderID)
       if (!senderTabs) throw new Error("Unknown App Dock tab")
@@ -1067,8 +1176,13 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
       const ordered = order ?? ids
       const target = ordered.indexOf(tabID)
       const closing = scope === "others" ? ids.filter((id) => id !== tabID) : ordered.slice(target + 1)
+      const currentActive = active.get(senderID)
       closing.forEach((id) => remove(senderID, id))
       if (senderTabs.size === 0) tabs.delete(senderID)
+      else if (!currentActive || closing.includes(currentActive)) {
+        const bounds = layoutBounds.get(senderID) ?? targetRecord.view.getBounds()
+        this.select(senderID, targetRecord.win, tabID, bounds)
+      }
     },
     scroll(senderID: number, tabID: string, direction: "up" | "down" | "top" | "bottom", amount?: number) {
       const record = tabs.get(senderID)?.get(tabID)
@@ -1081,12 +1195,12 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
     hover(senderID: number, tabID: string, ref: number) {
       const record = tabs.get(senderID)?.get(tabID)
       if (!record) throw new Error("Unknown App Dock tab")
-      return this.execute(senderID, tabID, buildHoverScript(ref))
+      return this.execute(senderID, tabID, buildHoverScript(ref, refNamespaces.get(`${senderID}:${tabID}`) ?? 0))
     },
     drag(senderID: number, tabID: string, fromRef: number, toRef: number) {
       const record = tabs.get(senderID)?.get(tabID)
       if (!record) throw new Error("Unknown App Dock tab")
-      return this.execute(senderID, tabID, buildDragScript(fromRef, toRef))
+      return this.execute(senderID, tabID, buildDragScript(fromRef, toRef, refNamespaces.get(`${senderID}:${tabID}`) ?? 0))
     },
     clickAt(senderID: number, tabID: string, x: number, y: number) {
       const record = tabs.get(senderID)?.get(tabID)
@@ -1095,23 +1209,41 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
       if (bounds.width <= 1 || bounds.height <= 1)
         return Promise.resolve({ ok: false, error: "App Dock tab viewport is not ready; retry after layout", retryable: true })
       const beforeURL = record.view.webContents.getURL()
-      return this.execute(senderID, tabID, buildClickAtProbeScript(x, y)).then(async (result) => {
+      const key = `${senderID}:${tabID}`
+      const refNamespaceAtStart = refNamespaces.get(key) ?? 0
+      const blockedNavigationVersion = blockedNavigationVersions.get(key) ?? 0
+      return this.execute(senderID, tabID, buildClickAtProbeScript(x, y, refNamespaceAtStart)).then(async (result) => {
         if (!result || typeof result !== "object" || !("ok" in result) || result.ok !== true) return result
         const target = result as { ok: true; tag?: string; href?: string; ref?: number }
-        const waitForNavigation = () => target.href
-          ? new Promise<void>((resolve) => {
-              let timer: NodeJS.Timeout | undefined
-              const finish = () => {
-                record.view.webContents.removeListener("did-navigate", finish)
-                record.view.webContents.removeListener("did-navigate-in-page", finish)
-                if (timer) clearTimeout(timer)
-                resolve()
-              }
-              record.view.webContents.once("did-navigate", finish)
-              record.view.webContents.once("did-navigate-in-page", finish)
-              timer = setTimeout(finish, 2_000)
-            })
-          : Promise.resolve()
+        if (refNamespaces.get(key) !== refNamespaceAtStart)
+          return { ok: false, error: "Element target became stale; re-read the page" }
+        let observedBlocked = false
+        const waitForNavigation = () => new Promise<void>((resolve) => {
+               let timer: NodeJS.Timeout | undefined
+               const finish = () => {
+                 record.view.webContents.removeListener("did-navigate", finish)
+                 record.view.webContents.removeListener("did-navigate-in-page", finish)
+                 record.view.webContents.removeListener("will-redirect", blockedRedirect)
+                 record.view.webContents.removeListener("will-navigate", blockedNavigate)
+                 if (timer) clearTimeout(timer)
+                 resolve()
+               }
+               const blockedRedirect = (_event: unknown, url: string) => {
+                 if (URL.canParse(url) && new URL(url).protocol === "https:") return
+                 observedBlocked = true
+                 finish()
+               }
+               const blockedNavigate = (_event: unknown, url: string) => {
+                 if (URL.canParse(url) && new URL(url).protocol === "https:") return
+                 observedBlocked = true
+                 finish()
+               }
+               record.view.webContents.once("did-navigate", finish)
+               record.view.webContents.once("did-navigate-in-page", finish)
+               record.view.webContents.on("will-redirect", blockedRedirect)
+               record.view.webContents.on("will-navigate", blockedNavigate)
+               timer = setTimeout(finish, target.href ? 2_000 : 250)
+             })
         const navigationDone = waitForNavigation()
         if (!record.win.isFocused()) record.win.focus()
         record.view.webContents.focus()
@@ -1123,6 +1255,8 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
         const scaleY = viewportHeight > 1 ? viewBounds.height / viewportHeight : 1
         const inputX = x * scaleX
         const inputY = y * scaleY
+        if (refNamespaces.get(key) !== refNamespaceAtStart)
+          return { ok: false, error: "Element target became stale; re-read the page" }
         record.view.webContents.sendInputEvent({ type: "mouseMove", x: inputX, y: inputY })
         record.view.webContents.sendInputEvent({ type: "mouseDown", x: inputX, y: inputY, button: "left", clickCount: 1 })
         record.view.webContents.sendInputEvent({ type: "mouseUp", x: inputX, y: inputY, button: "left", clickCount: 1 })
@@ -1131,13 +1265,21 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
         const nativeClick = await this.execute(senderID, tabID, "(() => { const probe = window.__opencodeDockClickProbe; if (!probe) return false; const fired = probe.fired(); probe.cleanup(); delete window.__opencodeDockClickProbe; return fired })()")
         let url = record.view.webContents.getURL() || beforeURL
         let trusted = true
-        if ((!nativeClick || (target.href && url === beforeURL)) && typeof target.ref === "number") {
+        let navigationBlocked = observedBlocked || (blockedNavigationVersions.get(`${senderID}:${tabID}`) ?? 0) > blockedNavigationVersion
+        if (!navigationBlocked && url === beforeURL && !nativeClick && typeof target.ref === "number") {
           const fallbackNavigation = waitForNavigation()
-          await this.execute(senderID, tabID, buildClickScript(target.ref)).catch(() => undefined)
+          const fallback = await this.execute(senderID, tabID, buildClickScript(target.ref, refNamespaceAtStart)).catch((error: unknown) => ({
+            ok: false,
+            error: error instanceof Error ? error.message : String(error),
+          }))
+          if (!fallback || typeof fallback !== "object" || !("ok" in fallback) || fallback.ok !== true)
+            return { ok: false, ref: target.ref, trusted: false, url, navigation: "unchanged", error: (fallback as { error?: string })?.error ?? "Click failed" }
           await fallbackNavigation
           url = record.view.webContents.getURL() || beforeURL
           trusted = false
         }
+        navigationBlocked ||= (blockedNavigationVersions.get(`${senderID}:${tabID}`) ?? 0) > blockedNavigationVersion
+        if (navigationBlocked) return { ok: false, ref: target.ref, trusted, url, navigation: "blocked", error: "Navigation blocked" }
         return {
           ...result,
           trusted,
@@ -1268,10 +1410,11 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
       record.view.webContents.focus()
       const keyCode = appDockKeyCode(key)
       if (type === "keyDown" && keyCode === "ESC") {
+        const owner = fullscreenOwner.get(senderID)
+        if (owner && owner !== tabID) return { ok: false, type, key, error: "Fullscreen is owned by another tab" }
         await record.view.webContents
           .executeJavaScript("Boolean(document.fullscreenElement) ? (document.exitFullscreen?.(), true) : false", true)
           .catch(() => false)
-        if (fullscreenOwner.get(senderID) === tabID) fullscreenOwner.delete(senderID)
       }
       record.view.webContents.sendInputEvent({ type, keyCode })
       if (type === "keyDown" && keyCode === "ESC") {
@@ -1283,6 +1426,7 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
             .catch(() => false)
           if (!fullscreen) {
             if (record.win.isFullScreen()) record.win.setFullScreen(false)
+            if (fullscreenOwner.get(senderID) === tabID) fullscreenOwner.delete(senderID)
             return { ok: true, type, key }
           }
         }
@@ -1292,6 +1436,7 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
           .catch(() => false)
         if (!fullscreen) {
           if (record.win.isFullScreen()) record.win.setFullScreen(false)
+          if (fullscreenOwner.get(senderID) === tabID) fullscreenOwner.delete(senderID)
           return { ok: true, type, key }
         }
         return { ok: false, type, key, error: "Fullscreen exit was not observed" }

@@ -11,6 +11,7 @@ import { getLastFocusedWindow } from "./windows"
 
 let appDock: AppDock | undefined
 let dockWindow: BrowserWindow | undefined
+const dockDestroyHooks = new Set<number>()
 
 export function registerAppDockBridge(instance: AppDock) {
   appDock = instance
@@ -68,6 +69,10 @@ const dockNumber = (value: unknown, name: string, min: number, max: number) => {
   if (typeof value !== "number" || !Number.isFinite(value)) throw new Error(`Invalid App Dock ${name}`)
   return Math.max(min, Math.min(max, Math.round(value)))
 }
+const dockRef = (value: unknown, name: string) => {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) throw new Error(`Invalid App Dock ${name}`)
+  return value
+}
 
 const dockBridgeStorageKey = (senderID: number) => `dock-bridge-${senderID}-default`
 
@@ -114,12 +119,12 @@ async function dispatch(op: string, args: Record<string, unknown>): Promise<unkn
     }
     case "click": {
       const tabID = resolveTabID(dock, senderID, args)
-      const ref = dockNumber(args.ref, "element ref", 1, 1_000_000)
+      const ref = dockRef(args.ref, "element ref")
       return dock.click(senderID, tabID, ref)
     }
     case "type": {
       const tabID = resolveTabID(dock, senderID, args)
-      const ref = dockNumber(args.ref, "element ref", 1, 1_000_000)
+      const ref = dockRef(args.ref, "element ref")
       const text = dockString(args.text, "text")
       return dock.type(senderID, tabID, ref, text)
     }
@@ -147,6 +152,13 @@ async function dispatch(op: string, args: Record<string, unknown>): Promise<unkn
         },
         { storageKey: dockBridgeStorageKey(senderID) },
       )
+      if (!dockDestroyHooks.has(senderID)) {
+        dockDestroyHooks.add(senderID)
+        win.webContents.once("destroyed", () => {
+          dockDestroyHooks.delete(senderID)
+          appDock?.closeAll(senderID, win)
+        })
+      }
       return tab
     }
     case "close": {
@@ -166,13 +178,13 @@ async function dispatch(op: string, args: Record<string, unknown>): Promise<unkn
     }
     case "hover": {
       const tabID = resolveTabID(dock, senderID, args)
-      const ref = dockNumber(args.ref, "element ref", 1, 1_000_000)
+      const ref = dockRef(args.ref, "element ref")
       return dock.hover(senderID, tabID, ref)
     }
     case "drag": {
       const tabID = resolveTabID(dock, senderID, args)
-      const fromRef = dockNumber(args.fromRef, "from ref", 1, 1_000_000)
-      const toRef = dockNumber(args.toRef, "to ref", 1, 1_000_000)
+      const fromRef = dockRef(args.fromRef, "from ref")
+      const toRef = dockRef(args.toRef, "to ref")
       return dock.drag(senderID, tabID, fromRef, toRef)
     }
     case "clickAt": {

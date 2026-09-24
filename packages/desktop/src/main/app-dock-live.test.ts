@@ -11,7 +11,8 @@ import { createRequire } from "node:module"
 import { randomUUID } from "node:crypto"
 
 type Case = { id: string; status: "pass"; detail: string }
-const required = ["L01", "L02", "L03", "L04", "L05", "L06", "L07", "L08", "L09", "L10", "L11", "L12"]
+const required = ["L01", "L02", "L03", "L04", "L05", "L06", "L07", "L08", "L09", "L10", "L11", "L12", "L15"]
+const expectedCases = new Set([...required, "L13", "L14"])
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 const root = resolve(scriptDir, "../..")
 const desktopMain = resolve(root, "src/main")
@@ -33,8 +34,13 @@ async function fixture() {
     ["req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", key, "-out", cert, "-subj", "/CN=127.0.0.1", "-days", "1"],
     { stdio: "ignore" },
   )
-  const body = `<!doctype html><title>live fixture</title><button id=inc>Increment</button><output id=count>0</output><a id=next href="/next">Next page</a><label for=name>Name</label><input id=name type=text placeholder="your name"><div id=host></div><div id=hiddenHost aria-hidden="true"></div><script>document.getElementById('inc').addEventListener('click',()=>{const c=document.getElementById('count');c.textContent=String(Number(c.textContent||0)+1)});document.getElementById('name').addEventListener('drop',()=>{document.title='drop-ok'});document.getElementById('host').attachShadow({mode:'open'}).innerHTML='<input id=shadowName placeholder="shadow name">';document.getElementById('hiddenHost').attachShadow({mode:'open'}).innerHTML='<input placeholder="hidden shadow">'</script>`
+  const body = `<!doctype html><title>live fixture</title><button id=inc>Increment</button><output id=count>0</output><a id=next href="/next">Next page</a><a id=blocked href="/redirect-http">Blocked redirect</a><label for=name>Name</label><input id=name type=text placeholder="your name"><div id=host></div><div id=hiddenHost aria-hidden="true"></div><script>document.getElementById('inc').addEventListener('click',()=>{const c=document.getElementById('count');c.textContent=String(Number(c.textContent||0)+1)});document.getElementById('name').addEventListener('drop',()=>{document.title='drop-ok'});document.getElementById('host').attachShadow({mode:'open'}).innerHTML='<input id=shadowName placeholder="shadow name">';document.getElementById('hiddenHost').attachShadow({mode:'open'}).innerHTML='<input placeholder="hidden shadow">'</script>`
   const server = createHttpsServer({ key: await readFile(key), cert: await readFile(cert) }, (req: IncomingMessage, res: ServerResponse) => {
+    if (req.url === "/redirect-http") {
+      res.writeHead(302, { location: "http://127.0.0.1/blocked" })
+      res.end()
+      return
+    }
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" })
     res.end(req.url === "/next" ? body.replace("live fixture", "next fixture") : body)
   })
@@ -111,15 +117,20 @@ async function child() {
     const rpc = async (op: string, args: Record<string, unknown> = {}) =>
       new Promise<unknown>((resolveRPC, rejectRPC) => {
         const id = randomUUID()
+        const timer = setTimeout(() => rejectRPC(new Error(`RPC timeout: ${op}`)), 15_000)
         const handled = handleDockRPC({ type: "dock.rpc", id, op, args }, (message) => {
           if (message.id !== id) return
+          clearTimeout(timer)
            if (message.ok) {
              resolveRPC(message.value)
            } else {
              rejectRPC(new Error(message.error?.message ?? "App Dock RPC failed"))
            }
         })
-        if (!handled) rejectRPC(new Error(`Unhandled App Dock RPC: ${op}`))
+        if (!handled) {
+          clearTimeout(timer)
+          rejectRPC(new Error(`Unhandled App Dock RPC: ${op}`))
+        }
       })
     const openedRaw = await rpc("open", { address: site.base })
     check(!!openedRaw && typeof openedRaw === "object" && "tabID" in openedRaw, "dock_open returned no tab")
@@ -149,7 +160,10 @@ async function child() {
     const incRef = snapshot!.items.find((item) => !!item && typeof item === "object" && "name" in item && item.name === "Increment")
     check(incRef && typeof incRef === "object" && "ref" in incRef && typeof incRef.ref === "number", "Increment ref missing")
     const clickResult = await rpc("click", { ref: incRef.ref })
-    check(clickResult && typeof clickResult === "object" && "ok" in clickResult && clickResult.ok === true, "click failed")
+    check(
+      clickResult && typeof clickResult === "object" && "ok" in clickResult && clickResult.ok === true,
+      `click failed: ${JSON.stringify(clickResult)}`,
+    )
     const afterClick = await rpc("read", {})
     check(afterClick && typeof afterClick === "object" && "text" in afterClick && typeof afterClick.text === "string" && afterClick.text.includes("1"), "counter not incremented")
     pass("L05", "dock_click mutates live page through RPC")
@@ -157,7 +171,10 @@ async function child() {
     const inputRef = snapshot.items.find((item) => !!item && typeof item === "object" && "tag" in item && item.tag === "input")
     check(inputRef && typeof inputRef === "object" && "ref" in inputRef && typeof inputRef.ref === "number", "input ref missing")
     const typeResult = await rpc("type", { ref: inputRef.ref, text: "Ada" })
-    check(typeResult && typeof typeResult === "object" && "ok" in typeResult && typeResult.ok === true, "type failed")
+    check(
+      typeResult && typeof typeResult === "object" && "ok" in typeResult && typeResult.ok === true,
+      `type failed: ${JSON.stringify(typeResult)}`,
+    )
     const afterType = await rpc("read", {})
     check(afterType && typeof afterType === "object" && "items" in afterType && Array.isArray(afterType.items) && afterType.items.some((i) => !!i && typeof i === "object" && "value" in i && i.value === "Ada"), "typed value not reflected")
     pass("L06", "dock_type sets input value through RPC")
@@ -261,12 +278,33 @@ async function child() {
 
     const linkRef = shadowSnap.items.find((item) => item.name === "Next page")?.ref
     check(typeof linkRef === "number", "fixture link ref missing")
-    await rpc("click", { ref: linkRef })
+    const linkClick = await rpc("click", { ref: linkRef })
     const nextPage = await rpc("read", {})
+    check(linkClick && typeof linkClick === "object" && "ok" in linkClick && linkClick.ok === true, `same-origin click failed: ${JSON.stringify(linkClick)}`)
     check(nextPage && typeof nextPage === "object" && "url" in nextPage && nextPage.url.endsWith("/next"), "link navigation was not observed")
     pass("L13", "dock_click observes deterministic same-origin link navigation")
 
-    outcome = cases.length === required.length + 2 && required.every((id) => cases.some((item: Case) => item.id === id)) ? 0 : 1
+    const blockedSnap = await rpc("read", {})
+    const blockedItems = blockedSnap && typeof blockedSnap === "object" && "items" in blockedSnap && Array.isArray(blockedSnap.items)
+      ? blockedSnap.items.filter((item): item is Record<string, unknown> => !!item && typeof item === "object")
+      : []
+    const blockedTarget = blockedItems.find((item) => item.name === "Blocked redirect")
+    check(
+      blockedTarget && typeof blockedTarget.x === "number" && typeof blockedTarget.y === "number" &&
+        typeof blockedTarget.width === "number" && typeof blockedTarget.height === "number",
+      "blocked redirect target missing",
+    )
+    const blockedClick = await rpc("clickAt", { x: blockedTarget.x + blockedTarget.width / 2, y: blockedTarget.y + blockedTarget.height / 2 })
+    check(
+      blockedClick && typeof blockedClick === "object" && "ok" in blockedClick && blockedClick.ok === false &&
+        "navigation" in blockedClick && blockedClick.navigation === "blocked",
+      `HTTP redirect was not reported as blocked: ${JSON.stringify(blockedClick)}`,
+    )
+    const afterBlocked = await rpc("read", {})
+    check(afterBlocked && typeof afterBlocked === "object" && "url" in afterBlocked && afterBlocked.url.endsWith("/next"), "blocked redirect changed page URL")
+    pass("L15", "dock_click reports blocked HTTP redirects")
+
+    outcome = cases.length === expectedCases.size && new Set(cases.map((item) => item.id)).size === expectedCases.size && cases.every((item) => expectedCases.has(item.id)) ? 0 : 1
   } finally {
     const report = { version: 1, cases }
     await mkdir(dirname(artifact), { recursive: true })
@@ -325,8 +363,9 @@ async function parent() {
     check(
       report.version === 1 &&
         Array.isArray(report.cases) &&
-        report.cases.length === required.length + 2 &&
-        required.every((id) => report.cases.some((item: Case) => item.id === id && item.status === "pass")),
+        report.cases.length === expectedCases.size &&
+        new Set(report.cases.map((item: Case) => item.id)).size === expectedCases.size &&
+        report.cases.every((item: Case) => expectedCases.has(item.id) && item.status === "pass"),
       "invalid app-dock-live artifact",
     )
   } finally {

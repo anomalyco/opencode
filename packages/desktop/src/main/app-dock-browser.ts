@@ -1,18 +1,20 @@
 const registryKey = "__opencodeDockRefs"
 
-const registryExpr = `(() => {
+const registryExpr = (namespaceExpression = `window[${JSON.stringify(registryKey)}]?.namespace ?? 0`) => `(() => {
   const key = ${JSON.stringify(registryKey)}
+  const namespace = ${namespaceExpression}
   if (window[key]) return window[key]
   const refs = new WeakMap()
   const byRef = new Map()
   const registry = {
-    refs,
-    byRef,
-    next: 1,
+     refs,
+     byRef,
+     namespace,
+     next: namespace * 4096 + 1,
     refFor(el) {
       const ref = refs.get(el)
       if (ref !== undefined) return ref
-      const assigned = registry.next++
+       const assigned = registry.next++
       refs.set(el, assigned)
       byRef.set(assigned, el)
       if (byRef.size > 4096) {
@@ -27,20 +29,24 @@ const registryExpr = `(() => {
       return el
     },
   }
-  Object.defineProperty(window, key, { value: registry, configurable: false, enumerable: false })
+   Object.defineProperty(window, key, { value: registry, configurable: true, enumerable: false })
   return registry
 })()`
 
 type SnapshotOptions = {
   budget?: number
   maxText?: number
+  namespace?: number
 }
 
 export function buildSnapshotScript(options: SnapshotOptions = {}) {
   const budget = Math.max(1, Math.min(Math.round(options.budget ?? 100) || 100, 500))
   const maxText = Math.max(0, Math.min(Math.round(options.maxText ?? 1500) || 1500, 20000))
+  const namespace = Number.isSafeInteger(options.namespace) && (options.namespace ?? 0) > 0 ? options.namespace : 1
   return `(() => {
-  const registry = ${registryExpr}
+  window.__opencodeDockRefNamespace = ${namespace}
+  if (window[${JSON.stringify(registryKey)}] && window[${JSON.stringify(registryKey)}].namespace !== ${namespace}) delete window[${JSON.stringify(registryKey)}]
+  const registry = ${registryExpr(String(namespace))}
   const budget = ${budget}
   const maxText = ${maxText}
   const state = { url: location.href, title: document.title, viewport: { width: innerWidth, height: innerHeight }, items: [], text: "", truncated: false }
@@ -120,13 +126,20 @@ export function buildSnapshotScript(options: SnapshotOptions = {}) {
   }
   const selector = "a[href], button, input, textarea, select, option, summary, [contenteditable], [role], [onclick], [tabindex], [aria-label], [aria-labelledby]"
   const elements = []
-  const collect = (root) => {
+  const maxShadowDepth = 32
+  let traversalTruncated = false
+  const collect = (root, depth = 0) => {
     for (const el of root.querySelectorAll(selector)) {
       elements.push(el)
       if (elements.length > budget) return true
     }
     for (const host of root.querySelectorAll("*")) {
-      if (host.shadowRoot && collect(host.shadowRoot)) return true
+      if (!host.shadowRoot) continue
+      if (depth >= maxShadowDepth) {
+        traversalTruncated = true
+        continue
+      }
+      if (collect(host.shadowRoot, depth + 1)) return true
     }
     return false
   }
@@ -137,7 +150,7 @@ export function buildSnapshotScript(options: SnapshotOptions = {}) {
     if (inert(el) || !visible(el)) continue
     accepted.push(el)
   }
-  state.truncated = elements.length > budget
+  state.truncated = elements.length > budget || traversalTruncated
   state.items = accepted.map((el) => {
     const target = el.closest && el.closest("a[href]") ? el.closest("a[href]") : el
     const rect = target.getBoundingClientRect()
@@ -162,14 +175,18 @@ export function buildSnapshotScript(options: SnapshotOptions = {}) {
 })()`
 }
 
-export function buildClickScript(ref: number) {
+export function buildClickScript(ref: number, expectedNamespace?: number) {
   return `(() => {
-  const registry = ${registryExpr}
+  const registry = ${registryExpr(expectedNamespace === undefined ? undefined : String(expectedNamespace))}
+  if (${expectedNamespace === undefined ? "false" : `registry.namespace !== ${expectedNamespace}`}) return { ok: false, error: "Element ref ${ref} became stale; re-read the page" }
   const el = registry.resolve(${ref})
   if (!el) return { ok: false, error: "Element ref ${ref} is gone; re-read the page" }
   if (!el.isConnected) return { ok: false, error: "Element ref ${ref} is disconnected from DOM" }
   const link = el.closest && el.closest("a[href]")
   const clickTarget = link || el
+  const hidden = (node) => { for (let depth = 0; node && depth < 64; depth++) { const style = getComputedStyle(node); if (node.getAttribute?.("aria-hidden") === "true" || node.getAttribute?.("aria-disabled") === "true" || node.hasAttribute?.("hidden") || node.hasAttribute?.("inert") || node.inert === true || (node.tagName === "FIELDSET" && node.disabled === true) || style.display === "none" || style.visibility === "hidden" || parseFloat(style.opacity) === 0 || style.pointerEvents === "none") return true; const root = node.getRootNode?.(); node = node.parentElement || (root instanceof ShadowRoot ? root.host : null) } return false }
+  if (hidden(clickTarget)) return { ok: false, error: "Element ref ${ref} is inert" }
+  if (clickTarget.disabled === true) return { ok: false, error: "Element ref ${ref} is disabled" }
 
   // Check if element is visible and clickable
   const style = getComputedStyle(clickTarget)
@@ -191,9 +208,10 @@ export function buildClickScript(ref: number) {
 })()`
 }
 
-export function buildElementPointScript(ref: number) {
+export function buildElementPointScript(ref: number, expectedNamespace?: number) {
   return `(async () => {
-  const registry = ${registryExpr}
+  const registry = ${registryExpr()}
+  if (${expectedNamespace === undefined ? "false" : `registry.namespace !== ${expectedNamespace}`}) return { ok: false, error: "Element ref ${ref} became stale; re-read the page" }
   const el = registry.resolve(${ref})
   if (!el) return { ok: false, error: "Element ref ${ref} is gone; re-read the page" }
   if (!el.isConnected) return { ok: false, error: "Element ref ${ref} is disconnected from DOM" }
@@ -201,15 +219,22 @@ export function buildElementPointScript(ref: number) {
   await new Promise(r => setTimeout(r, 50))
   const link = el.closest && el.closest("a[href]")
   const target = link || el
+  const hidden = (node) => { for (let depth = 0; node && depth < 64; depth++) { const style = getComputedStyle(node); if (node.getAttribute?.("aria-hidden") === "true" || node.getAttribute?.("aria-disabled") === "true" || node.hasAttribute?.("hidden") || node.hasAttribute?.("inert") || node.inert === true || (node.tagName === "FIELDSET" && node.disabled === true) || style.display === "none" || style.visibility === "hidden" || parseFloat(style.opacity) === 0 || style.pointerEvents === "none") return true; const root = node.getRootNode?.(); node = node.parentElement || (root instanceof ShadowRoot ? root.host : null) } return false }
+  if (hidden(target)) return { ok: false, error: "Element ref ${ref} is inert" }
+  if (target.disabled === true) return { ok: false, error: "Element ref ${ref} is disabled" }
+  const targetStyle = getComputedStyle(target)
+  if (targetStyle.display === "none" || targetStyle.visibility === "hidden" || parseFloat(targetStyle.opacity) === 0)
+    return { ok: false, error: "Element ref ${ref} is not visible" }
   const targetRect = target.getBoundingClientRect()
   if (targetRect.width <= 0 || targetRect.height <= 0) return { ok: false, error: "Element ref ${ref} has zero size" }
   return { ok: true, x: targetRect.left + targetRect.width / 2, y: targetRect.top + targetRect.height / 2, tag: target.tagName.toLowerCase(), name: (target.getAttribute("aria-label") || target.textContent || "").trim().slice(0, 200), href: target.href || "" }
 })()`
 }
 
-export function buildFocusScript(ref: number) {
+export function buildFocusScript(ref: number, expectedNamespace?: number) {
   return `(async () => {
-  const registry = ${registryExpr}
+   const registry = ${registryExpr()}
+   if (${expectedNamespace === undefined ? "false" : `registry.namespace !== ${expectedNamespace}`}) return { ok: false, error: "Element ref ${ref} became stale; re-read the page" }
   const el = registry.resolve(${ref})
   if (!el) return { ok: false, error: "Element ref ${ref} is gone; re-read the page" }
   if (!el.isConnected) return { ok: false, error: "Element ref ${ref} is disconnected from DOM" }
@@ -218,9 +243,10 @@ export function buildFocusScript(ref: number) {
 })()`
 }
 
-export function buildReadElementScript(ref: number) {
+export function buildReadElementScript(ref: number, expectedNamespace?: number) {
   return `(async () => {
-  const registry = ${registryExpr}
+   const registry = ${registryExpr()}
+   if (${expectedNamespace === undefined ? "false" : `registry.namespace !== ${expectedNamespace}`}) return { ok: false, error: "Element ref ${ref} became stale; re-read the page" }
   const el = registry.resolve(${ref})
   if (!el) return { ok: false, error: "Element ref ${ref} is gone; re-read the page" }
   const value = el.value !== undefined ? String(el.value) : el.textContent || ""
@@ -228,9 +254,10 @@ export function buildReadElementScript(ref: number) {
 })()`
 }
 
-export function buildTypeScript(ref: number, text: string) {
+export function buildTypeScript(ref: number, text: string, expectedNamespace?: number) {
   return `(async () => {
-  const registry = ${registryExpr}
+   const registry = ${registryExpr()}
+   if (${expectedNamespace === undefined ? "false" : `registry.namespace !== ${expectedNamespace}`}) return { ok: false, error: "Element ref ${ref} became stale; re-read the page" }
   const el = registry.resolve(${ref})
   if (!el) return { ok: false, error: "Element ref ${ref} is gone; re-read the page" }
   if (!el.isConnected) return { ok: false, error: "Element ref ${ref} is disconnected from DOM" }
@@ -274,9 +301,10 @@ export function buildScrollScript(direction: "up" | "down" | "top" | "bottom", a
 })()`
 }
 
-export function buildHoverScript(ref: number) {
+export function buildHoverScript(ref: number, expectedNamespace?: number) {
   return `(async () => {
-  const registry = ${registryExpr}
+   const registry = ${registryExpr()}
+   if (${expectedNamespace === undefined ? "false" : `registry.namespace !== ${expectedNamespace}`}) return { ok: false, error: "Element ref ${ref} became stale; re-read the page" }
   const el = registry.resolve(${ref})
   if (!el) return { ok: false, error: "Element ref ${ref} is gone" }
   el.dispatchEvent(new PointerEvent("pointerover", { bubbles: true }))
@@ -286,9 +314,10 @@ export function buildHoverScript(ref: number) {
 })()`
 }
 
-export function buildDragScript(fromRef: number, toRef: number) {
+export function buildDragScript(fromRef: number, toRef: number, expectedNamespace?: number) {
   return `(async () => {
-  const registry = ${registryExpr}
+   const registry = ${registryExpr()}
+   if (${expectedNamespace === undefined ? "false" : `registry.namespace !== ${expectedNamespace}`}) return { ok: false, error: "Element refs became stale; re-read the page" }
   const from = registry.resolve(${fromRef})
   const to = registry.resolve(${toRef})
   if (!from || !to) return { ok: false, error: "Element ref gone" }
@@ -305,7 +334,7 @@ export function buildDragScript(fromRef: number, toRef: number) {
 export function buildClickAtScript(x: number, y: number) {
   return `(async () => {
   const hit = document.elementFromPoint(${x}, ${y})
-  const registry = ${registryExpr}
+   const registry = ${registryExpr()}
   const selector = "a[href],button,input,select,textarea,summary,[role=button],[onclick],[tabindex]"
   const el = hit && (hit.matches?.(selector) ? hit : hit.closest?.(selector))
   if (!el) return { ok: false, error: "No element at coordinates" }
@@ -314,14 +343,18 @@ export function buildClickAtScript(x: number, y: number) {
 })()`
 }
 
-export function buildClickAtProbeScript(x: number, y: number) {
+export function buildClickAtProbeScript(x: number, y: number, expectedNamespace?: number) {
   return `(async () => {
   const hit = document.elementFromPoint(${x}, ${y})
-  const registry = ${registryExpr}
+  const registry = ${registryExpr(expectedNamespace === undefined ? undefined : String(expectedNamespace))}
+  if (${expectedNamespace === undefined ? "false" : `registry.namespace !== ${expectedNamespace}`}) return { ok: false, error: "Coordinate target became stale; re-read the page" }
   const selector = "a[href],button,input,select,textarea,summary,[role=button],[onclick],[tabindex]"
   const el = hit && (hit.matches?.(selector) ? hit : hit.closest?.(selector))
   if (!el) return { ok: false, error: "No element at coordinates" }
   if (!(el instanceof HTMLElement)) return { ok: false, error: "No interactive element at coordinates" }
+  if (el.disabled === true) return { ok: false, error: "Element at coordinates is disabled" }
+  const hidden = (node) => { for (let depth = 0; node && depth < 64; depth++) { const style = getComputedStyle(node); if (node.getAttribute?.("aria-hidden") === "true" || node.getAttribute?.("aria-disabled") === "true" || node.hasAttribute?.("hidden") || node.hasAttribute?.("inert") || node.inert === true || (node.tagName === "FIELDSET" && node.disabled === true) || style.display === "none" || style.visibility === "hidden" || parseFloat(style.opacity) === 0 || style.pointerEvents === "none") return true; const root = node.getRootNode?.(); node = node.parentElement || (root instanceof ShadowRoot ? root.host : null) } return false }
+  if (hidden(el)) return { ok: false, error: "Element at coordinates is inert" }
   const ref = registry.refFor(el)
   const key = "__opencodeDockClickProbe"
   const previous = window[key]
