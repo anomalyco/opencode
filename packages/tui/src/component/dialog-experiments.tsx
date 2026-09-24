@@ -13,7 +13,14 @@ type Experiment = {
 // In-flight features anyone can opt into. Each entry is temporary: an
 // experiment either graduates (delete the entry, make the behavior
 // unconditional) or dies (delete the entry and the branch it gated).
-export const experiments: Experiment[] = []
+export const experiments: Experiment[] = [
+  {
+    id: "paged_output",
+    title: "Paged output",
+    description:
+      "Fill the transcript a page at a time while streaming and flip to a fresh page when it is full, instead of scrolling line by line",
+  },
+]
 
 export function DialogExperiments() {
   const config = useConfig()
