@@ -394,7 +394,7 @@ export const SettingsGeneral: Component = () => {
           </div>
         </SettingsRow>
 
-        <Show when={mobile() && import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"}>
+        <Show when={mobile()}>
           <SettingsRow
             title={language.t("settings.general.row.mobileTitlebarBottom.title")}
             description={language.t("settings.general.row.mobileTitlebarBottom.description")}

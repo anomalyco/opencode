@@ -18,7 +18,6 @@ function index(input: Partial<Parameters<typeof settingsSearchIndex>[0]> = {}) {
     servers,
     desktop: false,
     browser: false,
-    dev: false,
     mobile: false,
     translate: (key) => strings[key],
     ...input,
@@ -49,7 +48,7 @@ describe("settings search index", () => {
     expect(rankSettings("font", items, root)).toHaveLength(3)
   })
 
-  test("only advertises settings supported by this platform and channel", () => {
+  test("only advertises settings supported by this platform", () => {
     const targets = (input: Parameters<typeof index>[0]) => index(input).map((item) => item.view.target)
     expect(targets({})).not.toContain("settings-pinch-zoom")
     expect(targets({})).not.toContain("settings-experimental-browser")
@@ -57,9 +56,9 @@ describe("settings search index", () => {
     expect(targets({})).toContain("settings-tab-layout")
     expect(targets({ desktop: true })).toContain("settings-pinch-zoom")
     expect(targets({ browser: true })).not.toContain("settings-experimental-browser")
-    expect(targets({ dev: true })).not.toContain("settings-show-project-icon")
-    expect(targets({ dev: true })).not.toContain("settings-mobile-titlebar-bottom")
-    expect(targets({ dev: true, mobile: true })).toContain("settings-mobile-titlebar-bottom")
+    expect(targets({})).not.toContain("settings-show-project-icon")
+    expect(targets({})).not.toContain("settings-mobile-titlebar-bottom")
+    expect(targets({ mobile: true })).toContain("settings-mobile-titlebar-bottom")
   })
 
   test("uses section labels and stable identities independent of translated text", () => {
