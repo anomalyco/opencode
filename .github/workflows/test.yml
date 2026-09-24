@@ -63,6 +63,11 @@ jobs:
             turbo-${{ runner.os }}-${{ hashFiles('turbo.json', '**/package.json') }}-
             turbo-${{ runner.os }}-
 
+      - name: Warm up ripgrep on fork Windows runner
+        if: runner.os == 'Windows' && github.repository == 'internetisalie/opencode'
+        working-directory: packages/core
+        run: bun test test/ripgrep.test.ts --timeout 30000
+
       - name: Run unit tests
         timeout-minutes: 20
         run: GITHUB_ACTIONS=false bun turbo test
@@ -137,6 +142,7 @@ jobs:
         run: bun --cwd packages/app test:e2e:local
         env:
           CI: true
+          PLAYWRIGHT_WORKERS: ${{ runner.os == 'Windows' && github.repository == 'internetisalie/opencode' && '2' || '5' }}
         timeout-minutes: 30
 
       - name: Upload Playwright artifacts
