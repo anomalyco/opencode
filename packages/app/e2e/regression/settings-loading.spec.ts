@@ -244,12 +244,13 @@ test("project settings open as a nested autosaving view", async ({ page }) => {
   await startup.blur()
   expect((await scriptSaved).postDataJSON()).toEqual({ commands: { start: "bun install" } })
 
+  const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
   await settings.getByRole("tab", { name: "Worktrees", exact: true }).click()
   await expect(settings.getByRole("heading", { name: "Worktrees", exact: true })).toBeVisible()
   await expect(page).toHaveURL(
     (url) =>
       url.pathname === "/settings" &&
-      url.searchParams.get("server") === "http://127.0.0.1:4096" &&
+      url.searchParams.get("server") === server &&
       url.searchParams.get("project") === directory &&
       url.searchParams.get("tab") === "workspaces",
   )
