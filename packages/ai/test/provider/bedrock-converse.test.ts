@@ -225,6 +225,25 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("omits maxTokens only for Nova 2 at high reasoning effort", () =>
+    Effect.gen(function* () {
+      const inferenceConfig = (modelID: string, maxReasoningEffort: string) =>
+        compileRequest(
+          LLMRequest.update(baseRequest, {
+            model: AmazonBedrock.model(modelID, {
+              baseURL: "https://bedrock-runtime.test",
+              apiKey: "test-bearer",
+              body: { additionalModelRequestFields: { reasoningConfig: { type: "enabled", maxReasoningEffort } } },
+            }),
+          }),
+        ).pipe(Effect.map((prepared) => prepared.body.inferenceConfig))
+
+      expect(yield* inferenceConfig("us.amazon.nova-2-lite-v1:0", "high")).toEqual({ temperature: 0 })
+      expect(yield* inferenceConfig("us.amazon.nova-2-lite-v1:0", "low")).toEqual({ maxTokens: 64, temperature: 0 })
+      expect(yield* inferenceConfig("us.xai.grok-4.6", "high")).toEqual({ maxTokens: 64, temperature: 0 })
+    }),
+  )
+
   it.effect("omits additionalModelRequestFields when topK is unset", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(baseRequest)

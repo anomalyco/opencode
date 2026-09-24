@@ -430,10 +430,23 @@ const lowerSystem = (breakpoints: BedrockCache.Breakpoints, system: ReadonlyArra
   return content.length === 0 ? undefined : content
 }
 
+// Nova 2 rejects `maxTokens` at high reasoning effort, where its output can exceed the field's maximum. Other models
+// that take `reasoningConfig`, such as Grok on Bedrock, accept it.
+const isNova2 = (model: LanguageModel) => /\bamazon\.nova-2-/.test(model.id)
+const isHighReasoningEffort = Schema.is(
+  Schema.Struct({
+    additionalModelRequestFields: Schema.Struct({
+      reasoningConfig: Schema.Struct({ maxReasoningEffort: Schema.Literal("high") }),
+    }),
+  }),
+)
+
 const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request: LLMRequest) {
   const toolChoice = request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined
   const flattened = ProviderShared.flattenToolRequest(request)
   const generation = request.generation
+  const maxTokens =
+    isNova2(request.model) && isHighReasoningEffort(request.http?.body) ? undefined : generation?.maxTokens
   // Bedrock-Claude shares Anthropic's 4-breakpoint cap. Spend the budget in
   // tools → system → messages order to favour the highest-impact prefixes.
   const breakpoints = BedrockCache.breakpoints(request.model.id)
@@ -455,14 +468,14 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
   }
   const inferenceConfig = (() => {
     if (
-      generation?.maxTokens === undefined &&
+      maxTokens === undefined &&
       generation?.temperature === undefined &&
       generation?.topP === undefined &&
       (generation?.stop === undefined || generation.stop.length === 0)
     )
       return undefined
     return {
-      maxTokens: generation?.maxTokens,
+      maxTokens,
       temperature: generation?.temperature,
       topP: generation?.topP,
       stopSequences: generation?.stop,
