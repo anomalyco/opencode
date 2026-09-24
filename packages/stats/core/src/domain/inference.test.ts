@@ -57,6 +57,17 @@ describe("inference stat normalization", () => {
     expect(statProvider("unknown", "", "custom-provider")).toBe("custom-provider")
   })
 
+  test("attributes hy4 preview traffic to Tencent instead of the unknown provider", () => {
+    expect(modelAuthor("hy4-preview")).toBe("tencent")
+    expect(toModelAggregate(aggregate("hy4-preview", "opencode"))).toMatchObject([
+      { model: "hy4-preview", provider: "tencent" },
+    ])
+    expect(toProviderAggregate(aggregate("hy4-preview", "opencode"))).toMatchObject([{ provider: "tencent" }])
+    expect(toGeoAggregate({ ...aggregate("hy4-preview", "opencode"), country: "US" })).toMatchObject([
+      { model: "hy4-preview", provider: "tencent" },
+    ])
+  })
+
   test("maps oversized model ids to unknown before aggregation", () => {
     expect(statModel("x".repeat(256), "")).toBe("x".repeat(256))
     expect(statModel("x".repeat(257), "")).toBe("unknown")
