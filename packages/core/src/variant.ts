@@ -378,7 +378,7 @@ const bedrockConverse: Protocol = (model, support) => {
             output_config: { effort },
           })
         if (id.includes("openai.gpt-oss")) return fields({ reasoning_effort: effort })
-        if (id.includes("openai.")) return fields({ reasoning: { effort } })
+        if (id.includes("openai.") || id.includes("xai.")) return fields({ reasoning: { effort } })
         return fields({ reasoningConfig: { type: "enabled", maxReasoningEffort: effort } })
       })
     case "toggle":
