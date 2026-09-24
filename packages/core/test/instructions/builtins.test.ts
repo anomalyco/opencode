@@ -46,7 +46,6 @@ describe("InstructionBuiltIns", () => {
         [
           "Here is some useful information about the environment you are running in:",
           "<env>",
-          `  Current conversation session ID: ${sessionID}`,
           `  Working directory: ${directory}`,
           `  Workspace root folder: ${projectDirectory}`,
           "  Is directory a git repo: yes",
@@ -55,6 +54,8 @@ describe("InstructionBuiltIns", () => {
           "</env>",
           "",
           `Today's date: ${localDate(timestamp)}`,
+          "",
+          `Current conversation session ID: ${sessionID}`,
         ].join("\n"),
       )
     }),

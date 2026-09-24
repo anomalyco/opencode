@@ -28,7 +28,6 @@ const layer = Layer.effect(
               read: Effect.sync(() =>
                 [
                   "<env>",
-                  `  Current conversation session ID: ${sessionID}`,
                   `  Working directory: ${location.directory}`,
                   `  Workspace root folder: ${location.project.directory}`,
                   `  Is directory a git repo: ${location.vcs?.type === "git" ? "yes" : "no"}`,
@@ -51,6 +50,17 @@ const layer = Layer.effect(
               render: {
                 initial: (date) => `Today's date: ${date}`,
                 changed: (_previous, date) => `Today's date is now: ${date}`,
+              },
+            }),
+            // The session ID is unique per session; keeping it out of the shared
+            // prefix lets provider prompt caches match across sessions.
+            Instructions.make({
+              key: Instructions.Key.make("core/session"),
+              codec: Schema.toCodecJson(Schema.String),
+              read: Effect.sync(() => sessionID),
+              render: {
+                initial: (id) => `Current conversation session ID: ${id}`,
+                changed: (_previous, id) => `Current conversation session ID: ${id}`,
               },
             }),
           ]),
