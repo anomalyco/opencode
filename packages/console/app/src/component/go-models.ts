@@ -36,6 +36,7 @@ export const goModels = [
     fresh: true,
   },
   { id: "longcat-2.0", name: "LongCat-2.0", requests: 11400, allowance: 60 },
+  { id: "deepseek-v4-flash", name: "DeepSeek V4 Flash", requests: 13000, allowance: 30 },
   {
     id: "mimo-v2.6-flash",
     name: "MiMo-V2.6-Flash",
