@@ -228,7 +228,9 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         }),
         Spec.make("auth", {
           description: "Authenticate with an OAuth-capable remote MCP server",
-          params: { name: Argument.string("name").pipe(Argument.withDescription("Name of the MCP server")) },
+          params: {
+            name: Argument.string("name").pipe(Argument.withDescription("Name of the MCP server"), Argument.optional),
+          },
         }),
         Spec.make("logout", {
           description: "Remove stored OAuth credentials for an MCP server",
