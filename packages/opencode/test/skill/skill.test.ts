@@ -582,4 +582,45 @@ description: A skill in the .opencode/skills directory.
       { git: true },
     ),
   )
+
+  it.live("skips dependency directories and a skills symlink", () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const skillFile = (name: string, description: string) => `---
+name: ${name}
+description: ${description}
+---
+
+# ${name}
+`
+          yield* Effect.promise(async () => {
+            await Bun.write(
+              path.join(dir, ".agents", "skills", "kept", "SKILL.md"),
+              skillFile("kept", "A skill that should load."),
+            )
+            await Bun.write(
+              path.join(dir, ".agents", "skills", "kept", "nested", "SKILL.md"),
+              skillFile("nested", "A nested skill that should load."),
+            )
+            await Bun.write(
+              path.join(dir, ".agents", "skills", "kept", "node_modules", "pkg", "SKILL.md"),
+              skillFile("vendored", "A dependency skill that should not load."),
+            )
+            await Bun.write(
+              path.join(dir, ".agents", "skills", "kept", ".git", "SKILL.md"),
+              skillFile("git-skill", "A git skill that should not load."),
+            )
+            await fs.mkdir(path.join(dir, ".claude"), { recursive: true })
+            await fs.symlink(path.join(dir, ".agents", "skills"), path.join(dir, ".claude", "skills"))
+          })
+
+          const skill = yield* Skill.Service
+          const list = (yield* skill.all()).filter((item) => item.location !== "<built-in>")
+          expect(list.map((item) => item.name).toSorted()).toEqual(["kept", "nested"])
+          expect((yield* skill.dirs()).length).toBe(2)
+        }),
+      { git: true },
+    ),
+  )
 })
