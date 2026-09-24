@@ -101,8 +101,11 @@ export const SettingsModels: Component<{
   })
   const searching = () => list.filter().length > 0
   const expanded = (key: string) => searching() || !store.collapsed[key]
-  const providerName = (provider: ModelItem["provider"]) =>
-    provider.id === "opencode" ? language.t("provider.connect.opencode.freeName") : provider.name
+  // Only the keyless catalog is free; a Zen key or Console account keeps the provider's own name.
+  const providerName = (group: ModelGroup) =>
+    group.category === "opencode" && group.items.every((item) => !item.cost?.input)
+      ? language.t("provider.connect.opencode.freeName")
+      : group.items[0].provider.name
   const setProviderVisibility = (providerID: string, visible: boolean) =>
     models
       .list()
@@ -254,7 +257,7 @@ export const SettingsModels: Component<{
                                   provider={group().items[0].provider}
                                   class="settings-models-provider-icon shrink-0"
                                 />
-                                <bdi class="settings-models-group-title">{providerName(group().items[0].provider)}</bdi>
+                                <bdi class="settings-models-group-title">{providerName(group())}</bdi>
                               </span>
                             </button>
                           </h3>

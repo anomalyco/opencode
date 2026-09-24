@@ -49,7 +49,7 @@ describe("auth command", () => {
               name: "Anthropic",
               methods: [],
               connections: [
-                { type: "credential", id: "cred_test", label: "default" },
+                { type: "credential", method: "key", id: "cred_test", label: "default" },
                 { type: "env", name: "ANTHROPIC_API_KEY" },
               ],
             },
@@ -67,7 +67,7 @@ describe("auth command", () => {
         id: "anthropic",
         name: "Anthropic",
         connections: [
-          { type: "credential", id: "cred_test", label: "default" },
+          { type: "credential", method: "key", id: "cred_test", label: "default" },
           { type: "env", name: "ANTHROPIC_API_KEY" },
         ],
       },
@@ -267,7 +267,7 @@ describe("auth command", () => {
               id: "anthropic",
               name: "Anthropic",
               methods: [{ type: "key" }],
-              connections: [{ type: "credential", id: "cred_test", label: "default" }],
+              connections: [{ type: "credential", method: "key", id: "cred_test", label: "default" }],
             },
           ]),
         )

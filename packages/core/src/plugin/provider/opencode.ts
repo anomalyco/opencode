@@ -3,6 +3,7 @@ import type { Scope } from "effect"
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import { define } from "@opencode/plugin/effect/plugin"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { App } from "../../app.js"
 import { Bus } from "../../bus.js"
 import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
@@ -122,7 +123,10 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
   id: "opencode.provider.opencode",
   effect: Effect.fn(function* (ctx) {
     const bus = yield* Bus.Service
-    const http = yield* HttpClient.HttpClient
+    const client = yield* HttpClient.HttpClient
+    // Every request here goes to the Console, which reads the User-Agent to tell which OpenCode a member runs
+    // and whether it evaluates the policies it is being sent.
+    const http = HttpClient.mapRequest(client, HttpClientRequest.setHeader("User-Agent", App.useragent(ctx.app)))
     const managed = yield* ManagedPolicy.Service
     const loading = Semaphore.makeUnsafe(1)
     type ActiveConnection = Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
@@ -165,7 +169,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
 
     yield* ctx.integration.transform((editor) => {
       editor.update("opencode", (integration) => {
-        integration.name = "OpenCode"
+        integration.name = "OpenCode Console"
       })
       editor.method.update(oauth(http))
       editor.method.update({ integrationID: "opencode", method: { type: "key", label: "API key (service account)" } })

@@ -88,8 +88,11 @@ const ModelList: Component<{
     })
   })
   const expanded = (provider: string) => store.search.length > 0 || !store.collapsed[provider]
-  const providerName = (provider: ModelItem["provider"]) =>
-    provider.id === "opencode" ? language.t("provider.connect.opencode.freeName") : provider.name
+  // Only the keyless catalog is free; a Zen key or Console account keeps the provider's own name.
+  const providerName = (group: ModelGroup) =>
+    group.category === "opencode" && group.items.every((item) => !item.cost?.input)
+      ? language.t("provider.connect.opencode.freeName")
+      : group.items[0].provider.name
   const managedIDs = createMemo(() => new Set(consoleGroup()?.providers.map((provider) => provider.id) ?? []))
   const visibleModels = () =>
     models().filter(
@@ -243,7 +246,7 @@ const ModelList: Component<{
                                 <span class="settings-models-group-label">
                                   <ProviderModelIcon provider={group().items[0].provider} class="shrink-0" />
                                   <bdi class="settings-models-group-title">
-                                    {providerName(group().items[0].provider)}
+                                    {providerName(group())}
                                   </bdi>
                                 </span>
                               </button>

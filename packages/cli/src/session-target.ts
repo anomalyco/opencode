@@ -1,5 +1,6 @@
 import type { LocationGetOutput, ModelRef, OpenCodeClient, SessionInfo } from "@opencode/client/promise"
 import { Model } from "@opencode/schema/model"
+import { errorMessage } from "./util/error"
 
 const SESSION_PAGE_LIMIT = 50
 
@@ -24,7 +25,7 @@ export class SessionTargetMutationError extends Error {
   override readonly name = "SessionTargetMutationError"
 
   constructor(cause: unknown) {
-    super(cause instanceof Error ? cause.message : "Session target mutation failed", { cause })
+    super(errorMessage(cause), { cause })
   }
 }
 
@@ -125,11 +126,9 @@ async function selectSession(input: {
   if (!selected) return { session: undefined, location }
   return {
     session: input.fork
-      ? await input.client.session
-          .fork({ sessionID: selected.id }, ...requestOptions(input.signal))
-          .catch((error) => {
-            throw new SessionTargetMutationError(error)
-          })
+      ? await input.client.session.fork({ sessionID: selected.id }, ...requestOptions(input.signal)).catch((error) => {
+          throw new SessionTargetMutationError(error)
+        })
       : selected,
   }
 }
@@ -156,11 +155,7 @@ async function latestSession(
   return latestSession(client, location, page.cursor.next, signal)
 }
 
-function resolveLocation(
-  client: OpenCodeClient,
-  location?: { directory?: string },
-  signal?: AbortSignal,
-) {
+function resolveLocation(client: OpenCodeClient, location?: { directory?: string }, signal?: AbortSignal) {
   if (!location && !signal) return client.location.get()
   if (!location) return client.location.get(undefined, { signal })
   return client.location.get({ location }, ...requestOptions(signal))

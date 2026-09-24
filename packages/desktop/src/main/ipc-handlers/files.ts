@@ -20,10 +20,9 @@ export const fileHandlers = FileRpcs.toLayer(
           )
           .pipe(Effect.orDie),
       FilesReadPickedFile: ({ token, path }, context) =>
-        files.readPickedFile(sender(handoff, context).id, token, path).pipe(
-          Effect.map((buffer) => new Uint8Array(buffer)),
-          Effect.orDie,
-        ),
+        files
+          .readPickedFile(sender(handoff, context).id, token, path)
+          .pipe(Effect.map((buffer) => new Uint8Array(buffer)), Effect.orDie),
       FilesReleasePickedFiles: ({ token }, context) =>
         Effect.sync(() => files.releasePickedFiles(sender(handoff, context).id, token)),
       FilesSaveFile: ({ options, content }) => files.saveFile(options, content).pipe(Effect.orDie),

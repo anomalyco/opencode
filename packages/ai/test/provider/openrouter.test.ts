@@ -315,10 +315,9 @@ describe("OpenRouter", () => {
     }),
   )
 
-  it.effect("preserves opaque and duplicate continuation details", () =>
+  it.effect("drops unrecognized details and preserves duplicate continuation details", () =>
     Effect.gen(function* () {
       const details = [
-        { type: "reasoning.future", format: "provider-v2", state: { opaque: true } },
         { type: "reasoning.encrypted", id: "state", data: "opaque" },
         { type: "reasoning.encrypted", id: "state", data: "opaque" },
       ]
@@ -330,7 +329,15 @@ describe("OpenRouter", () => {
             Message.assistant({
               type: "reasoning",
               text: "Thinking",
-              providerMetadata: { openrouter: { reasoningField: "reasoning", reasoningDetails: details } },
+              providerMetadata: {
+                openrouter: {
+                  reasoningField: "reasoning",
+                  reasoningDetails: [
+                    { type: "reasoning.future", format: "provider-v2", state: { opaque: true } },
+                    ...details,
+                  ],
+                },
+              },
             }),
           ],
         }),

@@ -27,8 +27,8 @@ export function output(result: Result): Output {
 }
 
 export function notice(output: Pick<Output, "exit" | "timeout">) {
-  if (output.timeout) return "Command timed out before completion."
-  if (output.exit !== undefined) return `Command exited with code ${output.exit}.`
+  if (output.timeout) return "Timed out before completion"
+  if (output.exit !== undefined && output.exit !== 0) return `Exited with code ${output.exit}`
 }
 
 export function metadata(output: Output) {
@@ -62,12 +62,16 @@ export function notification(input: {
 export function userNotification(result: Result) {
   const captured = output(result)
   const status =
-    result.info.status === "killed" ? "Command cancelled." : (notice(captured) ?? "Command exited with code unknown.")
+    result.info.status === "killed"
+      ? "Cancelled"
+      : captured.exit === 0
+        ? undefined
+        : (notice(captured) ?? "Exited with code unknown")
   const message = notification({
     shellID: result.info.id,
     command: result.info.command,
     state: result.info.status === "killed" ? "cancelled" : "completed",
-    text: `${captured.output}\n\n${status}`,
+    text: [captured.output, status].filter((item) => item !== undefined && item !== "").join("\n\n"),
     output: captured,
   })
   return { ...message, text: `The following shell command was executed by the user:\n${message.text}` }

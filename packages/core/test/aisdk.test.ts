@@ -7,6 +7,7 @@ import { toSessionError } from "@opencode/core/session/to-session-error"
 import { Model } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import {
+  Media,
   LLM,
   AIError,
   CompactionPart,
@@ -384,6 +385,90 @@ it.effect("routes AI Gateway model options by upstream prefix", () =>
   }),
 )
 
+it.effect("closes the open AI SDK reasoning part when the next one starts", () =>
+  Effect.gen(function* () {
+    // AI SDK OpenAI Responses can start summary part 1 before part 0 ends, then end both at item completion (#50662).
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = {
+        languageModel: () =>
+          streamModel([
+            { type: "reasoning-start", id: "rs_1:0", providerMetadata: { gateway: { generationId: "gen_1" } } },
+            { type: "reasoning-start", id: "rs_1:1" },
+            { type: "reasoning-delta", id: "rs_1:1", delta: "Second summary" },
+            { type: "reasoning-end", id: "rs_1:0", providerMetadata: { gateway: { encrypted: "late" } } },
+            { type: "reasoning-end", id: "rs_1:1", providerMetadata: { gateway: { encrypted: "final" } } },
+            { type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage },
+          ]),
+      }
+    })
+
+    const resolved = yield* aisdk.model(model("@ai-sdk/gateway"))
+    const response = yield* LLMClient.generate(LLM.request({ model: resolved, prompt: "Think" })).pipe(
+      Effect.provide(client),
+    )
+
+    expect(response.events.filter((event) => event.type.startsWith("reasoning-"))).toEqual([
+      { type: "reasoning-start", id: "rs_1:0", providerMetadata: { gateway: { generationId: "gen_1" } } },
+      { type: "reasoning-end", id: "rs_1:0" },
+      { type: "reasoning-start", id: "rs_1:1", providerMetadata: undefined },
+      { type: "reasoning-delta", id: "rs_1:1", text: "Second summary", providerMetadata: undefined },
+      { type: "reasoning-end", id: "rs_1:1", providerMetadata: { gateway: { encrypted: "final" } } },
+    ])
+  }),
+)
+
+it.effect("normalizes repeated, reopened, and overlapping AI SDK fragment boundaries", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = {
+        languageModel: () =>
+          streamModel([
+            // Older xAI Responses repeat the start for every summary part.
+            { type: "reasoning-start", id: "rs_1" },
+            { type: "reasoning-start", id: "rs_1" },
+            { type: "reasoning-delta", id: "rs_1", delta: "First" },
+            { type: "reasoning-end", id: "rs_1" },
+            // xAI Chat keeps streaming an ended reasoning id after an empty tool_calls chunk.
+            { type: "reasoning-delta", id: "rs_1", delta: "Second" },
+            { type: "reasoning-end", id: "rs_1" },
+            // xAI Responses ends every message item only when the stream flushes.
+            { type: "text-start", id: "msg_1" },
+            { type: "text-delta", id: "msg_1", delta: "One" },
+            { type: "text-start", id: "msg_2" },
+            { type: "text-delta", id: "msg_2", delta: "Two" },
+            { type: "text-end", id: "msg_1" },
+            { type: "text-end", id: "msg_2" },
+            { type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage },
+          ]),
+      }
+    })
+
+    const resolved = yield* aisdk.model(model("@ai-sdk/gateway"))
+    const response = yield* LLMClient.generate(LLM.request({ model: resolved, prompt: "Think" })).pipe(
+      Effect.provide(client),
+    )
+
+    expect(
+      response.events.filter((event) => event.type.startsWith("reasoning-") || event.type.startsWith("text-")),
+    ).toMatchObject([
+      { type: "reasoning-start", id: "rs_1" },
+      { type: "reasoning-delta", id: "rs_1", text: "First" },
+      { type: "reasoning-end", id: "rs_1" },
+      { type: "reasoning-start", id: "rs_1" },
+      { type: "reasoning-delta", id: "rs_1", text: "Second" },
+      { type: "reasoning-end", id: "rs_1" },
+      { type: "text-start", id: "msg_1" },
+      { type: "text-delta", id: "msg_1", text: "One" },
+      { type: "text-end", id: "msg_1" },
+      { type: "text-start", id: "msg_2" },
+      { type: "text-delta", id: "msg_2", text: "Two" },
+      { type: "text-end", id: "msg_2" },
+    ])
+  }),
+)
+
 it.effect("projects replay metadata onto AI SDK prompt parts", () =>
   Effect.gen(function* () {
     const aisdk = yield* AISDK.Service
@@ -461,23 +546,13 @@ it.effect("normalizes file data across AI SDK prompt parts", () =>
         model: resolved,
         messages: [
           Message.user([
-            { type: "media", mediaType: "image/png", data: bytes, filename: "bytes.png" },
-            { type: "media", mediaType: "image/png", data: "AAAA", filename: "base64.png" },
-            {
-              type: "media",
-              mediaType: "image/png",
-              data: "data:image/png;charset=utf-8;base64,AQID",
-              filename: "inline.png",
-            },
-            { type: "media", mediaType: "image/png", data: "https://example.com/image.png" },
-            { type: "media", mediaType: "image/png", data: "s3://bucket/image.png" },
+            { type: "media", media: Media.bytes(bytes, "image/png"), filename: "bytes.png" },
+            { type: "media", media: Media.base64("AAAA", "image/png"), filename: "base64.png" },
+            { type: "media", media: Media.fromDataUrl("data:image/png;charset=utf-8;base64,AQID"), filename: "inline.png" },
+            { type: "media", media: Media.url("https://example.com/image.png", { mediaType: "image/png" }) },
+            { type: "media", media: Media.base64("s3://bucket/image.png", "image/png") },
           ]),
-          Message.assistant({
-            type: "media",
-            mediaType: "application/pdf",
-            data: "http://example.com/document.pdf",
-            filename: "document.pdf",
-          }),
+          Message.assistant({ type: "media", media: Media.url("http://example.com/document.pdf", { mediaType: "application/pdf" }), filename: "document.pdf" }),
           Message.tool({
             id: "call_1",
             name: "screenshot",

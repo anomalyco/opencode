@@ -243,6 +243,16 @@ function McpMenu(props: ServiceMenuProps) {
                 aria-busy={props.mcp?.pending ?? toggle.isPending}
                 onChange={change}
                 onClick={(event: MouseEvent) => {
+                  if (
+                    !(event.target instanceof Element) ||
+                    event.target.closest('[data-slot="switch-control"], [data-slot="switch-input"]')
+                  )
+                    return
+                  // Outside the switch itself, a row that requires sign-in starts sign-in instead of toggling.
+                  if (!preview() && server().status.status === "needs_auth") {
+                    event.preventDefault()
+                    return change(true)
+                  }
                   if (event.target === event.currentTarget) change(!enabled())
                 }}
                 title={preview() ? server().name : (error() ?? server().name)}

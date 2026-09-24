@@ -180,7 +180,7 @@ function NewSessionTips(props: {
   const providers = useProviders(() => sdk().directory)
   const integrations = useIntegrations(() => sdk().directory)
   const [providerState, setProviderState, , providerReady] = persisted(
-    Persist.global("new-session.provider-tip-v3"),
+    Persist.global("new-session.provider-tip"),
     ProviderTipSchema,
     { dismissedAt: 0 },
   )

@@ -87,6 +87,7 @@ export const dict = {
   "command.project.index": "Switch to project {{index}}",
   "command.project.copyID": "Copy Project ID",
   "command.provider.connect": "Connect provider",
+  "command.provider.connect.description": "Sign in to OpenCode Go, OpenCode Console, or another model provider",
   "command.server.switch": "Switch server",
   "command.settings.open": "Open settings",
   "command.session.previous": "Previous session",
@@ -196,9 +197,7 @@ export const dict = {
   "provider.connect.title": "Connect {{provider}}",
   "provider.connect.opencode.name": "OpenCode Console",
   "provider.connect.opencode.freeName": "OpenCode Free",
-  "provider.connect.opencode.errorTitle": "Connect to OpenCode",
   "provider.connect.console.title": "Connecting to OpenCode Console",
-  "provider.connect.console.name": "OpenCode Console",
   "provider.connect.console.instructions":
     "Continue in your browser. Confirm the code shown there matches the one below.",
   "provider.connect.console.deviceCode": "Device code",
@@ -218,26 +217,15 @@ export const dict = {
   "provider.connect.models.description": "Choose a model to start with. You can switch models anytime.",
   "provider.connect.models.available": "Available models",
   "provider.connect.models.list": "Models available from {{provider}}",
-  "provider.connect.console.retry": "Try again",
-  "provider.connect.console.refreshing": "OpenCode connected. Loading your models...",
   "provider.connect.console.refreshFailed":
     "Your account is connected, but we couldn't load your models. Try again to refresh them.",
   "provider.connect.console.connected": "OpenCode connected",
-  "provider.connect.console.ready": "Your models are ready.",
   "provider.connect.console.noModels":
     "Your account is connected, but this Console workspace has no available models. Check its setup in Console, then refresh.",
   "provider.connect.console.refresh": "Refresh models",
-  "provider.connect.console.model": "Model",
-  "provider.connect.console.start": "Start coding",
-  "provider.connect.console.done": "Done",
-  "provider.connect.console.continue": "Continue in the browser",
   "provider.connect.console.openingBrowser": "Opening browser…",
   "provider.connect.console.serviceAccount": "Service account?",
   "provider.connect.console.useApiKey": "Use API key",
-  "provider.connect.console.otherMethods": "Other methods",
-  "provider.connect.console.serviceKey": "API key (service account)",
-  "provider.connect.console.serviceKeyDescription": "Connect using a service-account API key from OpenCode Console.",
-  "provider.connect.console.intro": "Sign in with your OpenCode Console account to use the available models.",
   "provider.connect.remote.title": "Connecting on “{{server}}”",
   "provider.connect.remote.description":
     "Your OpenCode credentials will be stored on this server. Models will be available through this server.",
@@ -275,6 +263,17 @@ export const dict = {
   "provider.connect.oauth.auto.visit.suffix":
     " and enter the code below to connect your account and use {{provider}} models in OpenCode.",
   "provider.connect.oauth.auto.confirmationCode": "Confirmation code",
+  "provider.connect.oauth.auto.confirmationCode.description":
+    "Check that your browser shows the same code before you authorize.",
+  "provider.connect.oauth.auto.description":
+    "Your browser opens so you can sign in to {{provider}}. Come back here when you are done.",
+  "provider.connect.oauth.code.description":
+    "Your browser opens so you can sign in to {{provider}}. Paste the authorization code it gives you below.",
+  "provider.connect.oauth.openBrowser": "Open browser",
+  "provider.connect.oauth.expired": "Authorization expired",
+  "provider.connect.console.apiKey.description":
+    "Paste an API key for a service account. You create service accounts in the OpenCode Console under Keys.",
+  "provider.connect.console.apiKey.link": "Open the Console",
   "provider.connect.toast.connected.title": "{{provider}} connected",
   "provider.connect.toast.connected.description": "{{provider}} models are now available to use.",
 
@@ -352,6 +351,7 @@ export const dict = {
   "common.connect": "Connect",
   "common.disconnect": "Disconnect",
   "common.continue": "Continue",
+  "common.retry": "Try again",
   "common.submit": "Submit",
   "common.save": "Save",
   "common.saving": "Saving…",
@@ -1419,6 +1419,7 @@ export const dict = {
   "settings.providers.tag.environment": "Environment",
   "settings.providers.tag.config": "Config",
   "settings.providers.tag.custom": "Custom",
+  "settings.providers.tag.account": "Account",
   "settings.providers.tag.other": "Other",
   "settings.models.title": "Models",
   "settings.models.description": "Choose which models appear in model picker",

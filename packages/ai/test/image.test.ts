@@ -1,10 +1,13 @@
 import { describe, expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Stream } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { Image, ImageClient, ImageInput } from "../src/index.js"
-import { Google, OpenAI, XAI, ZAI } from "../src/providers.js"
+import { Image, ImageClient, Media } from "../src/index.js"
+import { BlackForestLabs, Fal, Google, OpenAI, Replicate, Stability, XAI, ZAI } from "../src/providers.js"
 import { it } from "./lib/effect.js"
-import { dynamicResponse } from "./lib/http.js"
+import { dynamicResponse, json } from "./lib/http.js"
+
+const layer = (handler: Parameters<typeof dynamicResponse>[0]) =>
+  ImageClient.layer.pipe(Layer.provideMerge(dynamicResponse(handler)))
 
 describe("Image", () => {
   for (const provider of [OpenAI, Google, XAI, ZAI]) {
@@ -48,11 +51,11 @@ describe("Image", () => {
           http: { body: { deployment: "test" }, headers: { "x-default": "yes" } },
         }).image("gpt-image-2"),
         prompt: "A robot tending a rooftop garden",
-        options: {
-          n: 2,
-          size: "2048x2048",
+        n: 2,
+        size: "2048x2048",
+        format: "jpeg",
+        providerOptions: {
           quality: "future-quality",
-          outputFormat: "jpeg",
           output_format: "avif",
           outputCompression: 30,
           output_compression: 40,
@@ -68,14 +71,19 @@ describe("Image", () => {
       })
 
       expect(response.images).toHaveLength(2)
-      expect(response.image?.mediaType).toBe("image/webp")
-      expect(response.image?.data).toEqual(Uint8Array.from([1, 2, 3]))
-      expect(response.image?.providerMetadata).toEqual({ openai: { revisedPrompt: "A precise robot" } })
-      expect(response.usage?.totalTokens).toBe(12)
+      expect(response.image.mediaType).toBe("image/webp")
+      expect(response.image.source).toEqual({
+        type: "bytes",
+        data: Uint8Array.from([1, 2, 3]),
+        mediaType: "image/webp",
+      })
+      expect(yield* response.image.bytes()).toEqual(Uint8Array.from([1, 2, 3]))
+      expect(response.image.providerMetadata).toEqual({ openai: { revisedPrompt: "A precise robot" } })
+      expect(response.usage).toMatchObject({ type: "tokens", total: 12 })
     }).pipe(
       Effect.provide(
         ImageClient.layer.pipe(
-          Layer.provide(
+          Layer.provideMerge(
             dynamicResponse((input) =>
               Effect.gen(function* () {
                 const request = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
@@ -113,6 +121,32 @@ describe("Image", () => {
     ),
   )
 
+  it.effect("sends only model and prompt by default and decodes OpenAI bytes as png", () =>
+    Effect.gen(function* () {
+      const openai = OpenAI.configure({ apiKey: "test", baseURL: "https://openai.test/v1" })
+      expect(openai.image("gpt-image-2").route.id).toBe("openai-images")
+      const response = yield* Image.generate({ model: openai.image("gpt-image-2"), prompt: "A lighthouse" }).pipe(
+        Effect.provide(
+          ImageClient.layer.pipe(
+            Layer.provide(
+              dynamicResponse((input) =>
+                Effect.gen(function* () {
+                  const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+                  expect(web.url).toBe("https://openai.test/v1/images/generations")
+                  expect(JSON.parse(input.text)).toEqual({ model: "gpt-image-2", prompt: "A lighthouse" })
+                  return input.respond(JSON.stringify({ data: [{ b64_json: "AQID" }] }), {
+                    headers: { "content-type": "application/json" },
+                  })
+                }),
+              ),
+            ),
+          ),
+        ),
+      )
+      expect(response.image.source).toEqual({ type: "bytes", data: Uint8Array.from([1, 2, 3]), mediaType: "image/png" })
+    }),
+  )
+
   it.effect("preserves native snake_case and unknown request options", () =>
     Image.generate({
       model: OpenAI.configure({
@@ -120,8 +154,8 @@ describe("Image", () => {
         baseURL: "https://api.openai.test/v1",
       }).image("future-image-model"),
       prompt: "A lighthouse in fog",
-      options: {
-        outputFormat: "jpeg",
+      format: "jpeg",
+      providerOptions: {
         output_format: "avif",
         outputCompression: 30,
         output_compression: 40,
@@ -130,7 +164,7 @@ describe("Image", () => {
     }).pipe(
       Effect.tap((response) =>
         Effect.sync(() => {
-          expect(response.image?.mediaType).toBe("image/avif")
+          expect(response.image.mediaType).toBe("image/avif")
         }),
       ),
       Effect.provide(
@@ -160,12 +194,9 @@ describe("Image", () => {
     Image.generate({
       model: OpenAI.configure({ apiKey: "test", baseURL: "https://api.openai.test/v1" }).image("future-model"),
       prompt: "Combine these images",
-      images: [
-        ImageInput.bytes(Uint8Array.from([1, 2, 3]), "image/png"),
-        ImageInput.url("data:image/jpeg;base64,BAUG"),
-      ],
-      options: {
-        mask: ImageInput.bytes(Uint8Array.from([7, 8, 9]), "image/png"),
+      images: [Media.bytes(Uint8Array.from([1, 2, 3]), "image/png"), Media.fromDataUrl("data:image/jpeg;base64,BAUG")],
+      mask: Media.bytes(Uint8Array.from([7, 8, 9]), "image/png"),
+      providerOptions: {
         quality: "high",
         future_option: true,
       },
@@ -203,8 +234,8 @@ describe("Image", () => {
     Image.generate({
       model: OpenAI.configure({ apiKey: "test", baseURL: "https://api.openai.test/v1" }).image("future-model"),
       prompt: "Combine these images",
-      images: [ImageInput.url("https://example.test/source.png"), ImageInput.file("file_123")],
-      options: { mask: ImageInput.file("file_mask") },
+      images: [Media.url("https://example.test/source.png"), Media.ref("openai", "file_123")],
+      mask: Media.ref("openai", "file_mask"),
       http: { body: { future_option: true } },
     }).pipe(
       Effect.provide(
@@ -235,9 +266,9 @@ describe("Image", () => {
       model: XAI.configure({ apiKey: "test", baseURL: "https://api.xai.test/v1" }).image("future-model"),
       prompt: "Combine these images",
       images: [
-        ImageInput.bytes(Uint8Array.from([1, 2, 3]), "image/png"),
-        ImageInput.url("https://example.test/source.jpg"),
-        ImageInput.file("file_123"),
+        Media.bytes(Uint8Array.from([1, 2, 3]), "image/png"),
+        Media.url("https://example.test/source.jpg"),
+        Media.ref("xai", "file_123"),
       ],
     }).pipe(
       Effect.provide(
@@ -269,7 +300,7 @@ describe("Image", () => {
     Image.generate({
       model: XAI.configure({ apiKey: "test", baseURL: "https://api.xai.test/v1" }).image("future-model"),
       prompt: "Edit this image",
-      images: [ImageInput.file("file_123")],
+      images: [Media.ref("xai", "file_123")],
     }).pipe(
       Effect.provide(
         ImageClient.layer.pipe(
@@ -297,9 +328,9 @@ describe("Image", () => {
       model: Google.configure({ apiKey: "test", baseURL: "https://google.test/v1beta" }).image("future-model"),
       prompt: "Combine these images",
       images: [
-        ImageInput.bytes(Uint8Array.from([1, 2, 3]), "image/png"),
-        ImageInput.url("data:image/jpeg;base64,BAUG"),
-        ImageInput.fileUri("https://generativelanguage.googleapis.com/v1beta/files/123", "image/webp"),
+        Media.bytes(Uint8Array.from([1, 2, 3]), "image/png"),
+        Media.fromDataUrl("data:image/jpeg;base64,BAUG"),
+        Media.ref("google", "https://generativelanguage.googleapis.com/v1beta/files/123", "image/webp"),
       ],
     }).pipe(
       Effect.provide(
@@ -338,18 +369,20 @@ describe("Image", () => {
         Image.generate({
           model: Google.configure({ apiKey: "test" }).image("model"),
           prompt: "edit",
-          images: [ImageInput.url("https://example.test/image.png")],
+          images: [Media.url("https://example.test/image.png")],
         }),
         Image.generate({
           model: ZAI.configure({ apiKey: "test" }).image("model"),
           prompt: "edit",
-          images: [ImageInput.bytes(Uint8Array.from([1]), "image/png")],
+          images: [Media.bytes(Uint8Array.from([1]), "image/png")],
         }),
       ]
       yield* Effect.forEach(cases, (program) =>
         program.pipe(
           Effect.flip,
-          Effect.tap((error) => Effect.sync(() => expect(error.reason._tag).toBe("InvalidRequest"))),
+          Effect.tap((error) =>
+            Effect.sync(() => expect(["InvalidRequest", "UnsupportedOperation"]).toContain(error.reason._tag)),
+          ),
         ),
       )
     }).pipe(
@@ -371,10 +404,10 @@ describe("Image", () => {
           http: { body: { labels: { deployment: "test" } }, query: { api: "v1" } },
         }).image("any-model-id"),
         prompt: "A robot tending a rooftop garden",
-        options: {
-          aspectRatio: "16:9",
+        aspectRatio: "16:9",
+        seed: 42,
+        providerOptions: {
           imageSize: "2K",
-          seed: 42,
           thinkingLevel: "HIGH",
           includeThoughts: true,
           futureOption: true,
@@ -397,7 +430,7 @@ describe("Image", () => {
       })
 
       expect(response.images).toHaveLength(3)
-      expect(response.images.map((image) => image.data)).toEqual([
+      expect(yield* Effect.forEach(response.images, (image) => image.bytes())).toEqual([
         Uint8Array.from([1, 2, 3]),
         Uint8Array.from([4, 5, 6]),
         Uint8Array.from([7, 8, 9]),
@@ -408,10 +441,12 @@ describe("Image", () => {
         google: { candidateIndex: 0, partIndex: 3, finishReason: "STOP" },
       })
       expect(response.images[2].providerMetadata).toMatchObject({ google: { candidateIndex: 7, partIndex: 0 } })
-      expect(response.usage?.inputTokens).toBe(5)
-      expect(response.usage?.outputTokens).toBe(10)
-      expect(response.usage?.reasoningTokens).toBe(3)
-      expect(response.usage?.providerMetadata).toMatchObject({ google: { serviceTier: "STANDARD" } })
+      expect(response.usage).toMatchObject({
+        type: "tokens",
+        input: 5,
+        output: 10,
+        details: { reasoningTokens: 3, google: { serviceTier: "STANDARD" } },
+      })
       expect(response.providerMetadata).toEqual({
         google: {
           modelVersion: "gemini-3.1-flash-image",
@@ -469,7 +504,7 @@ describe("Image", () => {
     }).pipe(
       Effect.provide(
         ImageClient.layer.pipe(
-          Layer.provide(
+          Layer.provideMerge(
             dynamicResponse((input) =>
               Effect.gen(function* () {
                 const request = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
@@ -549,6 +584,69 @@ describe("Image", () => {
     ),
   )
 
+  it.effect("surfaces filtered Google candidates as notices next to the returned image", () =>
+    Image.generate({
+      model: Google.configure({ apiKey: "test", baseURL: "https://generativelanguage.test/v1beta" }).image(
+        "gemini-3.1-flash-image",
+      ),
+      prompt: "A robot tending a rooftop garden",
+    }).pipe(
+      Effect.tap((response) =>
+        Effect.sync(() => {
+          expect(response.images).toHaveLength(1)
+          expect(response.notices).toEqual([
+            {
+              type: "filtered",
+              message: "Google Images reported prompt feedback",
+              providerMetadata: { google: { promptFeedback: { blockReason: "OTHER" } } },
+            },
+            {
+              type: "filtered",
+              message: "Google Images candidate 1 finished with IMAGE_SAFETY: Blocked.",
+              providerMetadata: {
+                google: {
+                  candidateIndex: 1,
+                  finishReason: "IMAGE_SAFETY",
+                  finishMessage: "Blocked.",
+                  safetyRatings: [{ category: "HARM_CATEGORY_DANGEROUS_CONTENT", blocked: true }],
+                },
+              },
+            },
+          ])
+        }),
+      ),
+      Effect.provide(
+        ImageClient.layer.pipe(
+          Layer.provide(
+            dynamicResponse((input) =>
+              Effect.succeed(
+                input.respond(
+                  JSON.stringify({
+                    promptFeedback: { blockReason: "OTHER" },
+                    candidates: [
+                      {
+                        content: { parts: [{ inlineData: { mimeType: "image/png", data: "AQID" } }] },
+                        finishReason: "STOP",
+                      },
+                      {
+                        index: 1,
+                        content: { parts: [{ text: "blocked" }] },
+                        finishReason: "IMAGE_SAFETY",
+                        finishMessage: "Blocked.",
+                        safetyRatings: [{ category: "HARM_CATEGORY_DANGEROUS_CONTENT", blocked: true }],
+                      },
+                    ],
+                  }),
+                  { headers: { "content-type": "application/json" } },
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  )
+
   it.effect("includes Google diagnostics when no final image is returned", () =>
     Image.generate({
       model: Google.configure({ apiKey: "test", baseURL: "https://generativelanguage.test/v1beta" }).image(
@@ -597,6 +695,82 @@ describe("Image", () => {
               ),
             ),
           ),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("rejects what a route cannot honor before sending anything", () =>
+    Effect.gen(function* () {
+      const openai = OpenAI.configure({ apiKey: "test" })
+      const replicate = Replicate.configure({ apiKey: "test" }).image("black-forest-labs/flux-schnell")
+      const prompt = "A lighthouse"
+      const errors = yield* Effect.all(
+        [
+          Image.start({ model: Google.configure({ apiKey: "test" }).image("gemini-3.1-flash-image"), prompt }),
+          Image.start({
+            model: BlackForestLabs.configure({ apiKey: "test" }).image("flux-2-pro"),
+            prompt,
+            aspectRatio: "16:9",
+          }),
+          Image.start({
+            model: Fal.configure({ apiKey: "test" }).image("fal-ai/nano-banana-2"),
+            prompt,
+            size: "512x512",
+          }),
+          Stream.runCollect(Image.stream({ model: openai.image("dall-e-3"), prompt })),
+          Stream.runCollect(Image.stream({ model: openai.image("gpt-image-2"), prompt, n: 2 })),
+          Image.start({ model: replicate, prompt, seed: 7 }),
+          Image.start({
+            model: replicate,
+            prompt,
+            providerOptions: { image: Media.bytes(new Uint8Array(300 * 1024), "image/png") },
+          }),
+          Image.start({ model: Stability.configure({ apiKey: "test" }).upscale(), prompt }),
+        ].map((effect) => Effect.flip(effect)),
+      )
+      expect(errors.map((error) => [error.reason._tag, "operation" in error.reason && error.reason.operation])).toEqual(
+        [
+          ["UnsupportedOperation", "image.start"],
+          ["UnsupportedOperation", "media.aspectRatio"],
+          ["UnsupportedOperation", "media.size"],
+          ["UnsupportedOperation", "media.stream"],
+          ["UnsupportedOperation", "media.n"],
+          ["UnsupportedOperation", "media.seed"],
+          ["InvalidRequest", false],
+          ["InvalidRequest", false],
+        ],
+      )
+    }).pipe(Effect.provide(layer(() => Effect.die("an unsupported request reached the network")))),
+  )
+
+  const moderated = { id: "req_1", status: "Content Moderated" }
+  const prediction = {
+    id: "p_1",
+    status: "succeeded",
+    output: { text: "not an image" },
+    urls: { get: "https://replicate.test/p_1", cancel: "https://replicate.test/p_1/cancel" },
+  }
+  it.effect("classifies terminal outcomes the recordings never saw", () =>
+    Effect.gen(function* () {
+      const bfl = yield* Image.resume(BlackForestLabs.configure({ apiKey: "test" }).image("flux-2-pro"), {
+        id: "req_1",
+        pollingURL: "https://bfl.test/v1/get_result?id=req_1",
+      }).pipe(
+        Effect.flatMap((generation) => generation.await()),
+        Effect.flip,
+      )
+      const replicate = yield* Image.generate({
+        model: Replicate.configure({ apiKey: "test", baseURL: "https://replicate.test" }).image("owner/model"),
+        prompt: "A lighthouse",
+      }).pipe(Effect.flip)
+
+      expect(bfl.reason).toMatchObject({ _tag: "ContentPolicy", body: JSON.stringify(moderated) })
+      expect(replicate.reason).toMatchObject({ _tag: "InvalidProviderOutput", body: JSON.stringify(prediction) })
+    }).pipe(
+      Effect.provide(
+        layer((input) =>
+          Effect.succeed(json(input, input.request.url.startsWith("https://bfl.test") ? moderated : prediction)),
         ),
       ),
     ),

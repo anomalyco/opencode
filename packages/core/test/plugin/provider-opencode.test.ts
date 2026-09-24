@@ -6,6 +6,7 @@ import { Money } from "@opencode/schema/money"
 import { Effect, Layer, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { App } from "@opencode/core/app"
 import { Config } from "@opencode/core/config"
 import { ConfigPolicyPlugin } from "@opencode/core/config/plugin/policy"
 import { Credential } from "@opencode/core/credential"
@@ -38,11 +39,13 @@ const noRemoteConfig = HttpClient.make((request) =>
 function consoleServer(orgID: string | null | undefined, unavailable = false) {
   const config: { authorization: string | null; orgID: string | null }[] = []
   const requests: string[] = []
+  const agents: (string | null)[] = []
   const server = Bun.serve({
     port: 0,
     fetch: async (request) => {
       const path = new URL(request.url).pathname
       requests.push(path)
+      agents.push(request.headers.get("user-agent"))
       if (path === "/auth/device/code") {
         expect(await request.json()).toEqual({ client_id: "opencode-cli", supports_org_scope: true })
         return Response.json({
@@ -74,7 +77,7 @@ function consoleServer(orgID: string | null | undefined, unavailable = false) {
       return new Response("Not found", { status: 404 })
     },
   })
-  return { server, config, requests }
+  return { server, config, requests, agents }
 }
 
 function required<T>(value: T | undefined): T {
@@ -284,7 +287,7 @@ describe("OpencodePlugin", () => {
       () =>
         Effect.acquireUseRelease(
           Effect.sync(() => consoleServer(scenario.orgID, scenario.unavailable)),
-          ({ server, config, requests }) =>
+          ({ server, config, requests, agents }) =>
             Effect.gen(function* () {
               const credentials = yield* Credential.Service
               const initial = yield* credentials.create({
@@ -320,10 +323,17 @@ describe("OpencodePlugin", () => {
               expect(config).toEqual([{ authorization: "Bearer access", orgID: scenario.orgID ?? "org-a" }])
               const integrations = yield* Integration.Service
               expect(
-                yield* integrations.connection.resolve({ type: "credential", id: initial.id, label: initial.label }),
+                yield* integrations.connection.resolve({
+                  type: "credential",
+                  method: "oauth",
+                  id: initial.id,
+                  label: initial.label,
+                }),
               ).toEqual(stored.value)
               expect(requests).toEqual(["/auth/device/token", "/api/v2/config"])
-            }),
+              // The refresh and the config fetch both say which OpenCode is asking.
+              expect(agents).toEqual(["opencode/beta/1.2.3/test", "opencode/beta/1.2.3/test"])
+            }).pipe(Effect.provideService(App.Metadata, App.make({ name: "test", version: "1.2.3", channel: "beta" }))),
           ({ server }) => Effect.promise(() => server.stop(true)),
         ),
     )

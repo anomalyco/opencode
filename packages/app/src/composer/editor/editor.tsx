@@ -7,6 +7,7 @@ import {
   onCleanup,
   onMount,
   Show,
+  Suspense,
   type JSX,
 } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -504,7 +505,9 @@ export function ComposerAttachments(props: {
   const i18n = useI18n()
   const percent = (upload: Upload) => (upload.size === 0 ? 100 : Math.floor((upload.loaded / upload.size) * 100))
   return (
-    <Show when={props.attachments.length > 0 || (props.uploads?.length ?? 0) > 0 || (props.comments?.length ?? 0) > 0}>
+    <Show
+      when={props.attachments.length > 0 || (props.uploads?.length ?? 0) > 0 || (props.comments?.length ?? 0) > 0}
+    >
       <div data-component="composer-attachments" data-slot="composer-attachments" class="relative">
         <div
           data-slot="composer-attachments-scroll"
@@ -559,12 +562,15 @@ export function ComposerAttachments(props: {
                       const [url] = createResource(() => image().blob, resolveBlobUrl)
                       return (
                         <>
-                          <img
-                            src={url() ?? ""}
-                            alt={attachment.filename}
-                            class="w-[58px] h-[46px] rounded-[6px] object-cover"
-                            onClick={() => props.onAttachmentClick?.(attachment)}
-                          />
+                          {/* Keep loading local; the route boundary would detach the screen and drop editor focus. */}
+                          <Suspense fallback={<div class="w-[58px] h-[46px]" />}>
+                            <img
+                              src={url() ?? ""}
+                              alt={attachment.filename}
+                              class="w-[58px] h-[46px] rounded-[6px] object-cover"
+                              onClick={() => props.onAttachmentClick?.(attachment)}
+                            />
+                          </Suspense>
                           <div class="absolute inset-0 rounded-[6px] shadow-[inset_0_0_0_0.5px_var(--v2-border-border-base)] pointer-events-none" />
                         </>
                       )

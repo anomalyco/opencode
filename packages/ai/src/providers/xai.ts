@@ -6,6 +6,7 @@ import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenResponsesChannel } from "../protocols/open-responses-channel.js"
 import { XAIResponses } from "../protocols/xai-responses.js"
 import { XAIImages } from "../protocols/xai-images.js"
+import { XAIVideo } from "../protocols/xai-video.js"
 import type { OpenAIOptionsInput } from "./openai-options.js"
 import type { ProviderPackage } from "../provider-package.js"
 
@@ -27,6 +28,7 @@ export type Settings = ProviderPackage.Settings &
   }
 
 export type { XAIImageOptions } from "../protocols/xai-images.js"
+export type { XAIVideoOptions } from "../protocols/xai-video.js"
 
 const RESPONSES_WEBSOCKET_ROTATE_AFTER_MS = 24 * 60 * 1000
 
@@ -87,20 +89,20 @@ export const configure = (input: LanguageModelOptions = {}) => {
   const chatRoute = configuredChatRoute(input)
   const responses = (modelID: string | ModelID) => responsesRoute.model<XAIProviderOptionsInput>({ id: modelID })
   const chat = (modelID: string | ModelID) => chatRoute.model<XAIProviderOptionsInput>({ id: modelID })
-  const image = (modelID: string | ModelID) =>
-    XAIImages.model({
-      id: modelID,
-      auth: auth(input),
-      baseURL: input.baseURL ?? baseURL,
-      headers: input.headers,
-      http: input.http === undefined ? undefined : HttpOptions.make(input.http),
-    })
+  const media = (modelID: string | ModelID) => ({
+    id: modelID,
+    auth: auth(input),
+    baseURL: input.baseURL ?? baseURL,
+    headers: input.headers,
+    http: input.http === undefined ? undefined : HttpOptions.make(input.http),
+  })
   return {
     id,
     model: responses,
     responses,
     chat,
-    image,
+    image: (modelID: string | ModelID) => XAIImages.model(media(modelID)),
+    video: (modelID: string | ModelID) => XAIVideo.model(media(modelID)),
     configure,
   }
 }
@@ -121,3 +123,4 @@ export const model: ProviderPackage.Definition<
 export const responses = provider.responses
 export const chat = provider.chat
 export const image = provider.image
+export const video = provider.video

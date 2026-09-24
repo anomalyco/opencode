@@ -292,7 +292,10 @@ export function make(options: ClientOptions) {
   const fetch = options.fetch ?? globalThis.fetch
 
   const prepare = (descriptor: RequestDescriptor, requestOptions?: RequestOptions) => {
-    const url = new URL(descriptor.path, options.baseUrl)
+    // A leading slash would replace any path prefix on baseUrl, so join relative to it.
+    const baseUrl = new URL(options.baseUrl)
+    if (!baseUrl.pathname.endsWith("/")) baseUrl.pathname += "/"
+    const url = new URL(descriptor.path.slice(1), baseUrl)
     for (const [key, value] of Object.entries(descriptor.query ?? {})) appendQuery(url.searchParams, key, value)
     const headers = new Headers(options.headers)
     for (const [key, value] of Object.entries(descriptor.headers ?? {})) {
@@ -327,11 +330,12 @@ export function make(options: ClientOptions) {
   }
 
   const responseError = async (response: Response, descriptor: RequestDescriptor): Promise<never> => {
-    if (descriptor.declaredStatuses.includes(response.status)) throw await json(response)
+    if (descriptor.declaredStatuses.includes(response.status))
+      throw declared((await json(response)) as DeclaredErrorBody)
     try {
       await response.body?.cancel()
     } catch {}
-    throw new ClientError("UnexpectedStatus", { cause: { status: response.status } })
+    throw new ClientError("UnexpectedStatus", { cause: { status: response.status }, detail: String(response.status) })
   }
 
   const request = async <A>(descriptor: RequestDescriptor, requestOptions?: RequestOptions): Promise<A> => {
@@ -355,7 +359,7 @@ export function make(options: ClientOptions) {
         try {
           await response.body?.cancel()
         } catch {}
-        throw new ClientError("UnsupportedContentType")
+        throw new ClientError("UnsupportedContentType", { detail: response.headers.get("content-type") })
       }
       if (response.body === null) throw new ClientError("MalformedResponse")
       const reader = response.body.getReader()
@@ -662,7 +666,7 @@ export function make(options: ClientOptions) {
           {
             method: "PATCH",
             path: `/api/session/${encodeURIComponent(input.sessionID)}`,
-            body: { title: input["title"], permissions: input["permissions"] },
+            body: { title: input["title"], metadata: input["metadata"], permissions: input["permissions"] },
             successStatus: 204,
             declaredStatuses: [400, 401, 404],
             empty: true,
@@ -2181,7 +2185,7 @@ async function json(response: Response): Promise<unknown> {
     try {
       await response.body?.cancel()
     } catch {}
-    throw new ClientError("UnsupportedContentType")
+    throw new ClientError("UnsupportedContentType", { detail: response.headers.get("content-type") })
   }
   let text: string
   try {
@@ -2195,6 +2199,19 @@ async function json(response: Response): Promise<unknown> {
   } catch (cause) {
     throw new ClientError("MalformedResponse", { cause })
   }
+}
+
+type DeclaredErrorBody = {
+  readonly _tag?: string
+  readonly message?: string
+  readonly data?: { readonly message?: string }
+}
+
+/** Throw declared error bodies as Errors. The body's fields stay on the error, so narrowing on `_tag` or `name` still works. */
+function declared(body: DeclaredErrorBody) {
+  const error = Object.assign(new Error(body.message ?? body.data?.message), body)
+  if (body._tag) error.name = body._tag
+  return error
 }
 
 function isContentType(response: Response, expected: string) {

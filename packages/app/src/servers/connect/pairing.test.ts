@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { decodePairingCode, decodePairingUrl, pairingUrl } from "./pairing"
+import { decodePairingCode, decodePairingScan, decodePairingUrl, pairingUrl } from "./pairing"
 
 describe("pairing URL", () => {
   test("pairs with the current origin using credentials without server URLs", () => {
@@ -46,5 +46,50 @@ describe("pairing URL", () => {
 
   test("rejects an invalid fragment", () => {
     expect(decodePairingUrl("#not-a-pairing-code")).toBeUndefined()
+  })
+})
+
+describe("pairing scan", () => {
+  const info = {
+    urls: ["http://192.168.1.2:49374", "http://127.0.0.1:49374"],
+    username: "opencode" as const,
+    password: "a+b & café",
+  }
+
+  test("decodes the raw JSON code", () => {
+    expect(decodePairingScan(JSON.stringify(info))).toEqual({ urls: info.urls, password: info.password })
+  })
+
+  test("decodes a direct /connect URL", () => {
+    expect(
+      decodePairingScan(pairingUrl({ username: info.username, password: info.password }, "http://192.168.1.2:49374")),
+    ).toEqual({
+      urls: ["http://192.168.1.2:49374"],
+      password: info.password,
+    })
+  })
+
+  test("keeps accepting /connect URLs with query data", () => {
+    expect(
+      decodePairingScan(`http://192.168.1.2:49374/connect?data=${encodeURIComponent(JSON.stringify(info))}`),
+    ).toEqual({
+      urls: info.urls,
+      password: info.password,
+    })
+  })
+
+  test("falls back to the URL origin when the payload omits server URLs", () => {
+    const origin = "https://opencode.example.com:49709"
+    expect(decodePairingScan(pairingUrl({ username: "opencode", password: "secret" }, origin))).toEqual({
+      urls: [origin],
+      password: "secret",
+    })
+  })
+
+  test("rejects URLs without pairing data and non-http schemes", () => {
+    expect(decodePairingScan("http://192.168.1.2:49374/connect")).toBeUndefined()
+    expect(decodePairingScan("https://example.com/?data=invalid")).toBeUndefined()
+    expect(decodePairingScan("opencode-ios://connect?password=secret")).toBeUndefined()
+    expect(decodePairingScan("not a code")).toBeUndefined()
   })
 })

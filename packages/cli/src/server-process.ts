@@ -12,6 +12,7 @@ import { PersistentPty } from "@opencode/schema/persistent-pty"
 import { HttpServer } from "effect/unstable/http"
 import { Env } from "./env"
 import { ServiceConfig } from "./services/service-config"
+import { RetainedImage } from "./services/retained-image"
 import { ServiceRegistration } from "./services/service-registration"
 import { WebUi } from "./services/web-ui"
 import { databasePath } from "./database-path"
@@ -64,6 +65,9 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           ? yield* Service.incumbent({ ...serviceOptions, url: serviceURL(hostname, port) })
           : undefined
       if (incumbent !== undefined) return
+      // Keep a package-manager or curl install replaceable while the service runs; Desktop updates its own copy.
+      if (options.mode === "service" && process.platform === "win32" && RetainedImage.installed(global.home))
+        yield* RetainedImage.retain(global.cache, "service")
       const { start } = yield* Effect.promise(() => import("@opencode/server/process"))
       const environmentPassword = yield* Env.password
       // Keep the lease credential out of the environment inherited by tools.

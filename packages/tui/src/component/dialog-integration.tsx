@@ -24,6 +24,7 @@ import { DialogPrompt } from "../ui/dialog-prompt"
 import { DialogSelect } from "../ui/dialog-select"
 import { Link } from "../ui/link"
 import { useToast } from "../ui/toast"
+import { errorMessage } from "../util/error"
 import { formLabel, formToggleMultiselect, formValidateValue, type FormAnswerField } from "../util/form"
 
 const INTEGRATION_PRIORITY: Record<string, number> = {
@@ -113,9 +114,7 @@ export function DialogIntegration(
         category,
         disabled: methods.length === 0 && credentials.length === 0,
         gutter:
-          integration.connections.length > 0
-            ? () => <text fg={theme.text.feedback.success.base}>✓</text>
-            : undefined,
+          integration.connections.length > 0 ? () => <text fg={theme.text.feedback.success.base}>✓</text> : undefined,
         onSelect: () => {
           if (credentials.length) return manageConnections(integration, methods, location, dialog, props.onConnected)
           return selectMethod(integration, methods, location, dialog, props.onConnected)
@@ -195,9 +194,7 @@ function manageConnections(
                 fg: confirming ? theme.text.action.destructive.focused : undefined,
                 onSelect: () => {
                   if (credentialConnections(current() ?? integration)[0]?.id === connection.id) return
-                  void client.api.credential
-                    .activate({ credentialID: connection.id })
-                    .catch(toast.error)
+                  void client.api.credential.activate({ credentialID: connection.id }).catch(toast.error)
                 },
               }
             }),
@@ -308,7 +305,13 @@ async function beginKey(
     : undefined
   if (answer === null) return
   dialog.replace(() => (
-    <KeyMethod integration={integration} method={method} location={location} answer={answer} onConnected={onConnected} />
+    <KeyMethod
+      integration={integration}
+      method={method}
+      location={location}
+      answer={answer}
+      onConnected={onConnected}
+    />
   ))
 }
 
@@ -353,7 +356,7 @@ function CommandStarting(props: {
       })
       .catch((cause) => {
         if (closed) return
-        toast.show({ variant: "error", message: message(cause) })
+        toast.show({ variant: "error", message: errorMessage(cause) })
         dialog.clear()
       })
   })
@@ -406,7 +409,7 @@ function CommandPending(props: {
       })
       .catch((cause) => {
         settled = true
-        toast.show({ variant: "error", message: message(cause) })
+        toast.show({ variant: "error", message: errorMessage(cause) })
         dialog.clear()
       })
   }
@@ -484,7 +487,7 @@ function KeyMethod(props: {
             ...(props.answer ? { answer: props.answer } : {}),
           })
           .then(() => connected(props.integration, props.location, data, dialog, toast, props.onConnected))
-          .catch((cause) => setError(message(cause)))
+          .catch((cause) => setError(errorMessage(cause)))
       }}
       description={() => (
         <Show when={error()}>{(value) => <text fg={theme.text.feedback.error.base}>{value()}</text>}</Show>
@@ -556,7 +559,7 @@ function OAuthStarting(props: {
         ))
       })
       .catch((cause) => {
-        toast.show({ variant: "error", message: message(cause) })
+        toast.show({ variant: "error", message: errorMessage(cause) })
         dialog.clear()
       })
   })
@@ -633,7 +636,7 @@ function OAuthAuto(props: {
       })
       .catch((cause) => {
         settled = true
-        toast.show({ variant: "error", message: message(cause) })
+        toast.show({ variant: "error", message: errorMessage(cause) })
         dialog.clear()
       })
   }
@@ -702,7 +705,7 @@ function OAuthCode(props: {
             settled = true
             return connected(props.integration, props.location, data, dialog, toast, props.onConnected)
           })
-          .catch((cause) => setError(message(cause)))
+          .catch((cause) => setError(errorMessage(cause)))
       }}
       description={() => (
         <box gap={1}>
@@ -1030,9 +1033,4 @@ function providerID(data: ReturnType<typeof useData>, location: LocationRef, int
 
 function locationQuery(location: LocationRef) {
   return { directory: location.directory }
-}
-
-function message(cause: unknown) {
-  if (cause instanceof Error) return cause.message
-  return "Authentication failed"
 }

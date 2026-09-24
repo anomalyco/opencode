@@ -5,7 +5,7 @@ import { useData } from "../../../context/data"
 import { useClient } from "../../../context/client"
 import { useTheme } from "../../../context/theme"
 import { Keymap } from "../../../context/keymap"
-import { useComposerTab } from "./index"
+import { useComposerTab } from "./context"
 import { useDialog } from "../../../ui/dialog"
 import { DialogShellOutput } from "../../../component/dialog-shell-output"
 

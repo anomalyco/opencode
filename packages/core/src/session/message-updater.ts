@@ -131,6 +131,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
           )
         }),
       "session.renamed": () => Effect.void,
+      "session.metadata.updated": () => Effect.void,
       "session.permissions": () => Effect.void,
       "session.deleted": () => Effect.void,
       "session.forked": () => Effect.void,
