@@ -276,3 +276,47 @@ test("spells Chat Completions variants for hosting providers", () => {
     { id: "xhigh", settings: { reasoningEffort: "xhigh" } },
   ])
 })
+
+test("spells GitLab Duo variants for gitlab-ai-provider routes", () => {
+  const pkg = Provider.aisdk("gitlab-ai-provider")
+  const gitlab = (id: string, output?: number) => model(pkg, id, output, "gitlab")
+
+  expect(
+    resolve(gitlab("duo-chat-opus-5-5"), [{ type: "effort", values: ["low", "medium", "high", "xhigh", "max"] }]),
+  ).toEqual(
+    ["low", "medium", "high", "xhigh", "max"].map((effort) => ({
+      id: effort,
+      settings: { thinking: { type: "adaptive", effort } },
+    })),
+  )
+
+  expect(
+    resolve(gitlab("duo-chat-sonnet-5"), [{ type: "toggle" }, { type: "effort", values: ["low", "max"] }]),
+  ).toEqual([
+    { id: "none", settings: { thinking: { type: "disabled" } } },
+    { id: "low", settings: { thinking: { type: "adaptive", effort: "low" } } },
+    { id: "max", settings: { thinking: { type: "adaptive", effort: "max" } } },
+  ])
+
+  expect(resolve(gitlab("duo-chat-fable-5-1"), [{ type: "toggle" }, { type: "effort", values: ["high"] }])).toEqual([
+    { id: "high", settings: { thinking: { type: "adaptive", effort: "high" } } },
+  ])
+
+  expect(resolve(gitlab("duo-chat-opus-4-5", 64_000), [{ type: "effort" }])).toEqual([
+    { id: "high", settings: { thinking: { type: "enabled", budgetTokens: 16_000 } } },
+    { id: "max", settings: { thinking: { type: "enabled", budgetTokens: 31_999 } } },
+  ])
+
+  expect(resolve(gitlab("duo-chat-gpt-6-sol"), [{ type: "effort", values: ["none", "low", "max"] }])).toEqual([
+    { id: "none", settings: { reasoningEffort: "none" } },
+    { id: "low", settings: { reasoningEffort: "low" } },
+    { id: "max", settings: { reasoningEffort: "max" } },
+  ])
+
+  expect(resolve(gitlab("duo-chat-gpt-5-3-codex"), [{ type: "effort", values: ["low"] }])).toEqual([
+    { id: "low", settings: { reasoningEffort: "low" } },
+  ])
+
+  expect(resolve(gitlab("duo-chat-gpt-5-4"), [])).toEqual([])
+  expect(resolve(gitlab("duo-workflow-opus-5-5"), [{ type: "effort" }])).toEqual([])
+})

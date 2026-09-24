@@ -517,6 +517,43 @@ const sapAICore: Protocol = (model, support) => {
   }
 }
 
+// gitlab-ai-provider reads `providerOptions.gitlab.thinking` (Anthropic) and
+// `providerOptions.gitlab.reasoningEffort` (OpenAI Chat and Responses). Its adaptive
+// thinking config carries the effort inline and always requests summarized display.
+const gitlabAnthropic: Protocol = (model, support) => {
+  const info = claudeInfo(model)
+  const disabled: Overlay = { settings: { thinking: { type: "disabled" } } }
+  const adaptive = (effort: string): Overlay => ({ settings: { thinking: { type: "adaptive", effort } } })
+  switch (support.type) {
+    case "effort": {
+      if (info.manual) return gitlabAnthropic(model, { type: "budget_tokens", min: 1024 })
+      const defaults = info.major === 4 && info.minor === 6 ? [...EFFORTS, "max"] : [...EFFORTS, "xhigh", "max"]
+      return efforts(support.values ?? defaults, (effort) => (effort === "none" ? disabled : adaptive(effort)))
+    }
+    case "toggle": {
+      if (info.always) return []
+      const thinking = info.manual ? manualThinking(model) : adaptive("high")
+      if (!thinking) return []
+      return toggle(disabled, thinking)
+    }
+    case "budget_tokens":
+      return budgets(
+        model,
+        support,
+        (tokens) => ({ settings: { thinking: { type: "enabled", budgetTokens: tokens } } }),
+        ANTHROPIC_OUTPUT_TOKEN_MAX,
+      )
+  }
+}
+
+const gitlab: Protocol = (model, support) => {
+  const id = modelID(model).toLowerCase()
+  if (id.startsWith("duo-workflow")) return []
+  if (claudeInfo(model).family) return gitlabAnthropic(model, support)
+  if (id.includes("gpt") || id.includes("codex")) return openaiChat(model, support)
+  return []
+}
+
 const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/openai": openaiResponses,
   "@opencode/ai/providers/azure/responses": openaiResponses,
@@ -566,4 +603,5 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   [Provider.aisdk("@ai-sdk/gateway")]: vercelGateway,
   [Provider.aisdk("@jerome-benoit/sap-ai-provider-v2")]: sapAICore,
   [Provider.aisdk("@ai-sdk/cohere")]: cohere,
+  [Provider.aisdk("gitlab-ai-provider")]: gitlab,
 }
