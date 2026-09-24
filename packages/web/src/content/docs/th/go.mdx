@@ -55,6 +55,7 @@ OpenCode Go ทำงานเหมือนกับผู้ให้บร�
 - **GLM-5.3**
 - **GLM-5.2**
 - **GLM-5.1**
+- **GPT 6 Luna**
 - **GPT 5.6 Luna**
 - **Kimi K3**
 - **Kimi K2.7 Code**
@@ -178,6 +179,8 @@ OpenCode Go ออกแบบมาสำหรับ [OpenCode](https://openco
 | Grok 4.7 (> 200K tokens)                | $4.00  | $12.00 | $1.00       | -            | **$15**                                                  |
 | Grok 4.6 (≤ 200K tokens)                | $2.00  | $6.00  | $0.50       | -            | **$15**                                                  |
 | Grok 4.6 (> 200K tokens)                | $4.00  | $12.00 | $1.00       | -            | **$15**                                                  |
+| GPT 6 Luna (≤ 272K tokens)              | $0.10  | $0.50  | $0.01       | $0.125       | **$15**                                                  |
+| GPT 6 Luna (> 272K tokens)              | $0.20  | $0.75  | $0.02       | $0.25        | **$15**                                                  |
 | GPT 5.6 Luna (≤ 272K tokens)            | $0.20  | $1.20  | $0.02       | $0.25        | **$15**                                                  |
 | GPT 5.6 Luna (> 272K tokens)            | $0.40  | $1.80  | $0.04       | $0.50        | **$15**                                                  |
 
@@ -223,6 +226,7 @@ OpenCode Go ออกแบบมาสำหรับ [OpenCode](https://openco
 | Space Bunny Free                                             | ไม่จำกัด                  | ไม่จำกัด                   | ไม่จำกัด                    |
 | Grok 4.7                                                     | 169                       | 423                        | 845                         |
 | Grok 4.6                                                     | 169                       | 423                        | 845                         |
+| GPT 6 Luna                                                   | 4,230                     | 10,560                     | 21,130                      |
 | GPT 5.6 Luna                                                 | 2,050                     | 5,100                      | 10,250                      |
 
 การประมาณการใช้จำนวน token ต่อ request ดังต่อไปนี้ การใช้งานจริงอาจแตกต่างกัน
@@ -230,6 +234,7 @@ OpenCode Go ออกแบบมาสำหรับ [OpenCode](https://openco
 - Grok 4.7/4.6 — 390 input, 32,500 cached, 120 output tokens ต่อ request
 - GLM-5.3-Flash — 1,000 input, 55,000 cached, 200 output tokens ต่อ request
 - GLM-5.3/5.2/5.1 — 700 input, 52,000 cached, 150 output tokens ต่อ request
+- GPT 6 Luna — 1,000 input, 50,000 cached, 220 output tokens ต่อ request
 - GPT 5.6 Luna — 1,000 input, 50,000 cached, 220 output tokens ต่อ request
 - Kimi K3 — 1,050 input, 76,500 cached, 300 output tokens ต่อ request
 - Kimi K2.7/K2.6 — 870 input, 55,000 cached, 200 output tokens ต่อ request
@@ -290,6 +295,7 @@ OpenCode Go ออกแบบมาสำหรับ [OpenCode](https://openco
 | ---------------------------- | ---------------------------- | ------------------------------------------------ | --------------------------- |
 | Grok 4.7                     | grok-4.7                     | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | Grok 4.6                     | grok-4.6                     | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
+| GPT 6 Luna                   | gpt-6-luna                   | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GPT 5.6 Luna                 | gpt-5.6-luna                 | `https://opencode.ai/zen/go/v1/responses`        | `@ai-sdk/openai`            |
 | GLM-5.3-Flash                | glm-5.3-flash                | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | GLM-5.3                      | glm-5.3                      | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
@@ -341,6 +347,7 @@ https://opencode.ai/zen/go/v1/models
 | ---------------------------- | ----------- | ------------------ |
 | Grok 4.7                     | ไม่นำไปใช้  | 30 วัน             |
 | Grok 4.6                     | ไม่นำไปใช้  | 30 วัน             |
+| GPT 6 Luna                   | ไม่นำไปใช้  | 30 วัน             |
 | GPT 5.6 Luna                 | ไม่นำไปใช้  | 30 วัน             |
 | GLM-5.3-Flash                | ไม่นำไปใช้  | 0 วัน              |
 | GLM-5.3                      | ไม่นำไปใช้  | 0 วัน              |
@@ -372,7 +379,7 @@ https://opencode.ai/zen/go/v1/models
 | Space Bunny Free             | ไม่นำไปใช้  | 0 วัน              |
 
 - **Grok 4.7/4.6:** ZDR ปิดใช้งานฟีเจอร์ API สำคัญที่ต้องอาศัยข้อมูลที่จัดเก็บไว้ ซึ่งรวมถึง Responses API แบบมีสถานะ, Files and Collections และ Batch API [ดูข้อมูลเพิ่มเติม](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr)
-- **GPT 5.6 Luna:** ระบบจะสร้างบันทึกการตรวจสอบการใช้งานในทางที่ผิดสำหรับการใช้งานฟีเจอร์ API ทั้งหมด และเก็บรักษาไว้นานสูงสุด 30 วัน [ดูข้อมูลเพิ่มเติม](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring)
+- **GPT 6 Luna / GPT 5.6 Luna:** ระบบจะสร้างบันทึกการตรวจสอบการใช้งานในทางที่ผิดสำหรับการใช้งานฟีเจอร์ API ทั้งหมด และเก็บรักษาไว้นานสูงสุด 30 วัน [ดูข้อมูลเพิ่มเติม](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring)
 - **Muse Spark 1.3 Contributor:** ราคาของ token ลดลงอย่างมาก โดยแลกกับการอนุญาตให้นำพรอมต์และผลลัพธ์ที่สร้างขึ้นของคุณไปใช้ฝึกโมเดล Meta ในอนาคต การให้บริการจำกัดเฉพาะภูมิภาคที่ได้รับอนุญาตตาม[นโยบายการใช้งานตามพื้นที่ทางภูมิศาสตร์](https://ai.developer.meta.com/legal/geographic-use-policy)ของ Meta [ดูข้อมูลเพิ่มเติม](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier)
 - **Muse Spark 1.2 Contributor:** ราคาของ token ลดลงอย่างมาก โดยแลกกับการอนุญาตให้นำพรอมต์และผลลัพธ์ที่สร้างขึ้นของคุณไปใช้ฝึกโมเดล Meta ในอนาคต การให้บริการจำกัดเฉพาะภูมิภาคที่ได้รับอนุญาตตาม[นโยบายการใช้งานตามพื้นที่ทางภูมิศาสตร์](https://ai.developer.meta.com/legal/geographic-use-policy)ของ Meta [ดูข้อมูลเพิ่มเติม](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier)
 - **DeepSeek:** ข้อตกลง ZDR จะต่ออายุทุกเดือน ข้อตกลงปัจจุบันมีผลใช้ถึงวันที่ 30 กันยายน 2026
