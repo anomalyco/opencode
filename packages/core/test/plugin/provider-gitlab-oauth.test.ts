@@ -285,16 +285,11 @@ describe("GitLabPlugin OAuth", () => {
     }),
   )
 
-  it.effect("falls back to the opencode-gitlab-auth application for credentials without a client ID", () =>
+  it.effect("refreshes credentials without a client ID with the opencode-gitlab-auth application", () =>
     withEnv({ GITLAB_OAUTH_CLIENT_ID: undefined }, () =>
       Effect.gen(function* () {
         const test = yield* fixture()
-        test.replies.push(
-          new Response(JSON.stringify({ error: "invalid_grant", error_description: "The provided grant is invalid" }), {
-            status: 400,
-          }),
-          renewal(),
-        )
+        test.replies.push(renewal())
         const saved = yield* test.credentials.create({
           integrationID,
           value: expired({ instanceUrl: "https://gitlab.com" }),
@@ -302,12 +297,9 @@ describe("GitLabPlugin OAuth", () => {
         const resolved = yield* test.integrations.connection.resolve(connectionOf(saved))
         if (resolved?.type !== "oauth") throw new Error("Expected OAuth credential")
         expect(resolved.access).toBe("renewed-access")
-        // The working application is recorded so later refreshes skip the fallback.
         expect(resolved.metadata).toEqual({ instanceUrl: "https://gitlab.com", clientID: legacyClientID })
         const requests = yield* tokenRequests(test.requests)
-        expect(requests.map((request) => request.form.client_id)).toEqual([bundledClientID, legacyClientID])
-        const refresh = saved.value.type === "oauth" ? saved.value.refresh : ""
-        expect(requests.map((request) => request.form.refresh_token)).toEqual([refresh, refresh])
+        expect(requests.map((request) => request.form.client_id)).toEqual([legacyClientID])
       }),
     ),
   )
@@ -329,7 +321,9 @@ describe("GitLabPlugin OAuth", () => {
   it.effect("reports a revoked refresh token with a sign-in-again hint instead of authorization-code hints", () =>
     Effect.gen(function* () {
       const test = yield* fixture()
-      test.replies.push(new Response(JSON.stringify({ error: "invalid_grant" }), { status: 400 }))
+      // Rejections are not shared, so discovery and this resolve may each send one refresh.
+      const revoked = () => new Response(JSON.stringify({ error: "invalid_grant" }), { status: 400 })
+      test.replies.push(revoked(), revoked())
       const saved = yield* test.credentials.create({
         integrationID,
         value: expired({ instanceUrl: "https://gitlab.com", clientID: bundledClientID }),
@@ -338,7 +332,6 @@ describe("GitLabPlugin OAuth", () => {
       expect(error.message).toContain("refresh token was revoked, expired")
       expect(error.message).toContain("Sign in to GitLab again")
       expect(error.message).not.toContain("authorization code")
-      expect(yield* tokenRequests(test.requests)).toHaveLength(1)
     }),
   )
 

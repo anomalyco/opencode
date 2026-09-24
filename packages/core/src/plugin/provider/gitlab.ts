@@ -45,9 +45,9 @@ const decodeError = Schema.decodeUnknownOption(
 const discoveryTimeout = "10 seconds"
 // GitLab rotates the refresh token on every refresh, so concurrent refreshes of the same
 // credential (e.g. discovery in several Locations plus a request) must share one exchange.
-// Settled outcomes are kept briefly: a caller that read the credential just before the
+// Successful refreshes are kept briefly: a caller that read the credential just before the
 // rotated one was stored would otherwise spend the already-used refresh token again.
-const refreshing = new Map<string, { attempt: Deferred.Deferred<Credential.OAuth, TokenError>; until: number }>()
+const refreshing = new Map<string, { attempt: Deferred.Deferred<Credential.OAuth, Error>; until: number }>()
 const refreshRetention = 60_000
 
 export const GitLabPlugin = define({
@@ -129,36 +129,36 @@ export const GitLabPlugin = define({
           id: methodID,
           type: "oauth",
           label: "Login with GitLab (OAuth)",
-          form: Form.Fields.make([instanceUrlField()]),
+          form: Form.Fields.make([
+            {
+              type: "string",
+              key: "instanceUrl",
+              title: "GitLab instance URL",
+              description: "Leave the default to use gitlab.com, or enter your self-managed GitLab URL.",
+              placeholder: resolveDefaultInstanceUrl(),
+              default: resolveDefaultInstanceUrl(),
+              pattern: "^https?://\\S+$",
+            },
+          ]),
         },
         label: (value) => new URL(credentialInstanceUrl(value.metadata)).host,
         refresh: (value) => {
           const instanceUrl = credentialInstanceUrl(value.metadata)
-          const refreshWith = (clientID: string) =>
+          // Refresh with the application that issued the token. Credentials without a recorded
+          // client ID were issued by opencode-gitlab-auth, using GITLAB_OAUTH_CLIENT_ID or its default.
+          const clientID =
+            (typeof value.metadata?.clientID === "string" ? value.metadata.clientID : undefined) ||
+            process.env.GITLAB_OAUTH_CLIENT_ID?.trim() ||
+            legacyClientID
+          return singleFlight(
+            `${instanceUrl}\0${value.refresh}`,
             exchange(
               http,
               instanceUrl,
               clientID,
               { grant_type: "refresh_token", refresh_token: value.refresh, redirect_uri: redirectURI },
               describeRefreshFailure,
-            ).pipe(Effect.flatMap((tokens) => credential(instanceUrl, clientID, tokens)))
-          // A recorded client ID is the application that issued the token; always refresh with it.
-          const pinned =
-            (typeof value.metadata?.clientID === "string" ? value.metadata.clientID : undefined) ||
-            process.env.GITLAB_OAUTH_CLIENT_ID?.trim()
-          // Credentials without a recorded client ID may come from opencode-gitlab-auth, whose
-          // application differs from the bundled one. A rejected refresh does not consume the
-          // refresh token, so retrying with the legacy application is safe.
-          return singleFlight(
-            `${instanceUrl}\0${value.refresh}`,
-            pinned
-              ? refreshWith(pinned)
-              : refreshWith(bundledClientID).pipe(
-                  Effect.catchIf(
-                    (error) => error.rejected,
-                    () => refreshWith(legacyClientID),
-                  ),
-                ),
+            ).pipe(Effect.flatMap((tokens) => credential(instanceUrl, clientID, tokens))),
           )
         },
         authorize: (answer) =>
@@ -167,14 +167,15 @@ export const GitLabPlugin = define({
             // disagree if the environment changes mid-flow.
             const override = process.env.GITLAB_OAUTH_CLIENT_ID?.trim()
             const clientID = override || bundledClientID
-            const instanceUrl = normalizeInstanceUrl(
-              typeof answer.instanceUrl === "string" ? answer.instanceUrl : undefined,
+            const url = new URL(
+              (typeof answer.instanceUrl === "string" ? answer.instanceUrl.trim() : "") || resolveDefaultInstanceUrl(),
             )
-            const host = new URL(instanceUrl).host
-            if (!override && host !== gitlabComHost)
+            // Keep the path so instances served under a relative URL root (e.g. /gitlab) work.
+            const instanceUrl = `${url.origin}${url.pathname.replace(/\/+$/, "")}`
+            if (!override && url.host !== gitlabComHost)
               return yield* Effect.fail(
                 new Error(
-                  `The bundled GitLab OAuth application only exists on ${gitlabComHost}. To sign in to ${host},` +
+                  `The bundled GitLab OAuth application only exists on ${gitlabComHost}. To sign in to ${url.host},` +
                     ` register an OAuth application there with redirect URI ${redirectURI} and the \`${oauthScope}\`` +
                     ` scope (not marked "Confidential"), then set GITLAB_OAUTH_CLIENT_ID to its application ID.`,
                 ),
@@ -346,37 +347,8 @@ export const GitLabPlugin = define({
   }),
 } satisfies PluginInternal.InternalPlugin)
 
-class TokenError extends Error {
-  /** GitLab rejected the grant or client, as opposed to a transport or server failure. */
-  readonly rejected: boolean
-
-  constructor(message: string, rejected: boolean) {
-    super(message)
-    this.rejected = rejected
-  }
-}
-
 function resolveDefaultInstanceUrl() {
   return process.env.GITLAB_INSTANCE_URL ?? "https://gitlab.com"
-}
-
-// Keep the path so instances served under a relative URL root (e.g. /gitlab) work.
-function normalizeInstanceUrl(value: string | undefined) {
-  const url = new URL(value?.trim() || resolveDefaultInstanceUrl())
-  return `${url.origin}${url.pathname.replace(/\/+$/, "")}`
-}
-
-function instanceUrlField() {
-  const placeholder = resolveDefaultInstanceUrl()
-  return {
-    type: "string" as const,
-    key: "instanceUrl",
-    title: "GitLab instance URL",
-    description: "Leave the default to use gitlab.com, or enter your self-managed GitLab URL.",
-    placeholder,
-    default: placeholder,
-    pattern: "^https?://\\S+$",
-  }
 }
 
 function credentialInstanceUrl(metadata: Readonly<Record<string, unknown>> | undefined) {
@@ -437,15 +409,15 @@ function exchange(
           HttpClientRequest.bodyUrlParams({ ...body, client_id: clientID }),
         ),
       )
-      .pipe(Effect.mapError(() => new TokenError("GitLab token exchange request failed", false)))
+      .pipe(Effect.mapError(() => new Error("GitLab token exchange request failed")))
     if (response.status < 200 || response.status >= 300) {
       const parsed = Option.getOrUndefined(decodeError(yield* response.text.pipe(Effect.orElseSucceed(() => ""))))
       const detail = parsed?.error_description || parsed?.error || `HTTP ${response.status}`
       const rejected = parsed?.error === "invalid_grant" || parsed?.error === "invalid_client"
-      return yield* Effect.fail(new TokenError(rejected ? describe(detail, clientID) : detail, rejected))
+      return yield* Effect.fail(new Error(rejected ? describe(detail, clientID) : detail))
     }
     return yield* HttpClientResponse.schemaBodyJson(Token)(response).pipe(
-      Effect.mapError(() => new TokenError("Invalid GitLab token response", false)),
+      Effect.mapError(() => new Error("Invalid GitLab token response")),
     )
   })
 }
@@ -463,9 +435,9 @@ function credential(instanceUrl: string, clientID: string, tokens: typeof Token.
   )
 }
 
-// Joins refreshes of the same refresh token onto one exchange. Successes and rejections are
-// final for that token, so they are retained; transport failures and interrupts are retried.
-function singleFlight(key: string, effect: Effect.Effect<Credential.OAuth, TokenError>) {
+// Joins refreshes of the same refresh token onto one exchange. Successes are retained so callers
+// still holding the rotated token reuse the result; failures are dropped so the next caller retries.
+function singleFlight(key: string, effect: Effect.Effect<Credential.OAuth, Error>) {
   return Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis
     refreshing.forEach((entry, entryKey) => {
@@ -473,15 +445,13 @@ function singleFlight(key: string, effect: Effect.Effect<Credential.OAuth, Token
     })
     const existing = refreshing.get(key)
     if (existing) return yield* Deferred.await(existing.attempt)
-    const attempt = Deferred.makeUnsafe<Credential.OAuth, TokenError>()
+    const attempt = Deferred.makeUnsafe<Credential.OAuth, Error>()
     refreshing.set(key, { attempt, until: Number.POSITIVE_INFINITY })
     return yield* effect.pipe(
       Effect.onExit((exit) =>
         Effect.map(Clock.currentTimeMillis, (settledAt) => {
-          const final = Exit.isSuccess(exit) || Option.exists(Exit.findErrorOption(exit), (error) => error.rejected)
-          const owned = refreshing.get(key)?.attempt === attempt
-          if (owned && final) refreshing.set(key, { attempt, until: settledAt + refreshRetention })
-          if (owned && !final) refreshing.delete(key)
+          if (Exit.isSuccess(exit)) refreshing.set(key, { attempt, until: settledAt + refreshRetention })
+          if (Exit.isFailure(exit)) refreshing.delete(key)
           Deferred.doneUnsafe(attempt, exit)
         }),
       ),
