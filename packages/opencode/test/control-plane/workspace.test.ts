@@ -1278,6 +1278,140 @@ describe("workspace sync state", () => {
     })
   })
 
+  it.live("remote event stream failure reconnects and replays history", () => {
+    let stream: ReadableStreamDefaultController<Uint8Array> | undefined
+    let connections = 0
+    let histories = 0
+    return Effect.gen(function* () {
+      yield* HttpServer.serveEffect()(
+        Effect.gen(function* () {
+          const req = yield* HttpServerRequest.HttpServerRequest
+          const url = new URL(req.url, "http://localhost")
+          if (url.pathname === "/reconnect/global/event") {
+            connections += 1
+            if (connections > 1) return HttpServerResponse.fromWeb(eventStreamResponse())
+            return HttpServerResponse.fromWeb(
+              new Response(
+                new ReadableStream<Uint8Array>({
+                  start(controller) {
+                    stream = controller
+                    controller.enqueue(new TextEncoder().encode(":\n\n"))
+                  },
+                }),
+                { status: 200, headers: { "content-type": "text/event-stream" } },
+              ),
+            )
+          }
+          if (url.pathname === "/reconnect/sync/history") {
+            histories += 1
+            return HttpServerResponse.fromWeb(Response.json([]))
+          }
+          return HttpServerResponse.text("unexpected", { status: 500 })
+        }),
+      )
+      const url = yield* serverUrl()
+      yield* provideTmpdirInstance(
+        () =>
+          Effect.gen(function* () {
+            const workspace = yield* Workspace.Service
+            const sessionSvc = yield* SessionNs.Service
+            const instance = yield* requireInstance
+            const type = unique("remote-reconnect")
+            const info = workspaceInfo(instance.project.id, type)
+            yield* insertWorkspace(info)
+            registerAdapter(instance.project.id, type, remoteAdapter(`${url}/reconnect`).adapter)
+            yield* attachSessionToWorkspace((yield* sessionSvc.create({})).id, info.id)
+
+            yield* workspace.startWorkspaceSyncing(instance.project.id)
+            yield* eventuallyEffect(
+              Effect.gen(function* () {
+                expect((yield* workspace.status()).find((item) => item.workspaceID === info.id)?.status).toBe(
+                  "connected",
+                )
+                expect(histories).toBe(1)
+              }),
+            )
+
+            expect(stream).toBeDefined()
+            stream?.error(new Error("remote proxy restarted"))
+
+            yield* eventuallyEffect(
+              Effect.gen(function* () {
+                expect(connections).toBe(2)
+                expect(histories).toBe(2)
+                expect((yield* workspace.status()).find((item) => item.workspaceID === info.id)?.status).toBe(
+                  "connected",
+                )
+              }),
+              4000,
+            )
+            expect(yield* workspace.isSyncing(info.id)).toBe(true)
+            yield* workspace.remove(info.id)
+          }),
+        { git: true },
+      )
+    })
+  })
+
+  it.live("remote target failure retries until the proxy is available", () => {
+    let attempts = 0
+    let histories = 0
+    return Effect.gen(function* () {
+      yield* HttpServer.serveEffect()(
+        Effect.gen(function* () {
+          const req = yield* HttpServerRequest.HttpServerRequest
+          const url = new URL(req.url, "http://localhost")
+          if (url.pathname === "/target-recovery/global/event")
+            return HttpServerResponse.fromWeb(eventStreamResponse())
+          if (url.pathname === "/target-recovery/sync/history") {
+            histories += 1
+            return HttpServerResponse.fromWeb(Response.json([]))
+          }
+          return HttpServerResponse.text("unexpected", { status: 500 })
+        }),
+      )
+      const url = yield* serverUrl()
+      yield* provideTmpdirInstance(
+        () =>
+          Effect.gen(function* () {
+            const workspace = yield* Workspace.Service
+            const sessionSvc = yield* SessionNs.Service
+            const instance = yield* requireInstance
+            const type = unique("remote-target-recovery")
+            const info = workspaceInfo(instance.project.id, type)
+            yield* insertWorkspace(info)
+            registerAdapter(
+              instance.project.id,
+              type,
+              recordedAdapter({
+                target() {
+                  attempts += 1
+                  if (attempts < 3) throw new Error("proxy unavailable")
+                  return { type: "remote", url: `${url}/target-recovery` }
+                },
+              }).adapter,
+            )
+            yield* attachSessionToWorkspace((yield* sessionSvc.create({})).id, info.id)
+
+            yield* workspace.startWorkspaceSyncing(instance.project.id)
+            yield* eventuallyEffect(
+              Effect.gen(function* () {
+                expect(attempts).toBeGreaterThanOrEqual(3)
+                expect(histories).toBe(1)
+                expect((yield* workspace.status()).find((item) => item.workspaceID === info.id)?.status).toBe(
+                  "connected",
+                )
+              }),
+              4000,
+            )
+            expect(yield* workspace.isSyncing(info.id)).toBe(true)
+            yield* workspace.remove(info.id)
+          }),
+        { git: true },
+      )
+    })
+  })
+
   it.live("remote connection HTTP failures set error and clear syncing", () =>
     Effect.gen(function* () {
       yield* HttpServer.serveEffect()(

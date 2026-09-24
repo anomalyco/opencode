@@ -1,6 +1,6 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
-import { Context, Effect, FiberMap, Iterable, Layer, Schema, Stream } from "effect"
+import { Cause, Context, Effect, FiberMap, Iterable, Layer, Schema, Stream } from "effect"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientError, HttpClientRequest } from "effect/unstable/http"
 import { Database } from "@opencode-ai/core/database/database"
@@ -364,28 +364,46 @@ const layer = Layer.effect(
     })
 
     const syncWorkspaceLoop = Effect.fn("Workspace.syncWorkspaceLoop")(function* (space: Info) {
-      const target = yield* WorkspaceAdapterRuntime.target(space)
-
-      if (target.type === "local") return
-
       let attempt = 0
 
       while (true) {
         setStatus(space.id, "connecting")
 
-        const stream = yield* connectSSE(target.url, target.headers).pipe(
-          Effect.tap(() => syncHistory(space, target.url, target.headers)),
-          Effect.catch((err) =>
+        const target = yield* WorkspaceAdapterRuntime.target(space).pipe(
+          Effect.catchCause((cause) =>
             Effect.gen(function* () {
+              if (Cause.hasInterrupts(cause)) return yield* Effect.failCause(cause)
               setStatus(space.id, "error")
-              yield* Effect.logWarning("failed to connect to global sync", {
-                workspace: space.name,
-                error: errorData(err),
+              yield* Effect.logWarning("failed to resolve workspace target", {
+                workspaceID: space.id,
+                error: errorData(Cause.squash(cause)),
               })
               return null
             }),
           ),
         )
+
+        if (target?.type === "local") {
+          setStatus(space.id, (yield* fs.existsSafe(target.directory)) ? "connected" : "error")
+          return
+        }
+
+        const stream = target
+          ? yield* connectSSE(target.url, target.headers).pipe(
+              Effect.tap(() => syncHistory(space, target.url, target.headers)),
+              Effect.catchCause((cause) =>
+                Effect.gen(function* () {
+                  if (Cause.hasInterrupts(cause)) return yield* Effect.failCause(cause)
+                  setStatus(space.id, "error")
+                  yield* Effect.logWarning("failed to connect to global sync", {
+                    workspace: space.name,
+                    error: errorData(Cause.squash(cause)),
+                  })
+                  return null
+                }),
+              ),
+            )
+          : null
 
         if (stream) {
           attempt = 0
@@ -426,6 +444,15 @@ const layer = Layer.effect(
                 })
               }
             }),
+          ).pipe(
+            Effect.catchCause((cause) =>
+              Cause.hasInterrupts(cause)
+                ? Effect.failCause(cause)
+                : Effect.logWarning("workspace event stream ended with an error", {
+                    workspaceID: space.id,
+                    error: errorData(Cause.squash(cause)),
+                  }),
+            ),
           )
 
           setStatus(space.id, "disconnected")
@@ -442,24 +469,24 @@ const layer = Layer.effect(
       if (!flags.experimentalWorkspaces) return
 
       const target = yield* WorkspaceAdapterRuntime.target(space).pipe(
-        Effect.catch((error) =>
+        Effect.catchCause((cause) =>
           Effect.gen(function* () {
+            if (Cause.hasInterrupts(cause)) return yield* Effect.failCause(cause)
             setStatus(space.id, "error")
             yield* Effect.logWarning("workspace target failed", {
               workspaceID: space.id,
-              error: errorData(error),
+              error: errorData(Cause.squash(cause)),
             })
             return null
           }),
         ),
       )
-      if (!target) return
-
-      if (target.type === "local") {
+      if (target?.type === "local") {
         setStatus(space.id, (yield* fs.existsSafe(target.directory)) ? "connected" : "error")
         return
       }
 
+      // A remote target may be unavailable while its proxy restarts; the listener retries resolution.
       const exists = yield* FiberMap.has(syncFibers, space.id)
       if (exists && connections.get(space.id)?.status !== "error") return
 
