@@ -1600,7 +1600,15 @@ function assertPortable(schema: Schema.Top, path: string, portable: Map<SchemaAS
     if (!annotationsPortable(ast.annotations)) return false
     if (!checksPortable(ast.checks) || ("encodingChecks" in ast && !checksPortable(ast.encodingChecks))) return false
     if (SchemaAST.isDeclaration(ast)) {
-      return typeof ast.annotations?.toCode === "function" && ast.typeParameters.every(visit)
+      const representation = ast.annotations?.representation
+      const supported =
+        typeof ast.annotations?.toCode === "function" ||
+        (typeof representation === "object" &&
+          representation !== null &&
+          "id" in representation &&
+          representation.id === "effect/schema/Json") ||
+        (ast.annotations?.["~constructor"] !== undefined && ast.typeParameters[0] !== undefined)
+      return supported && ast.typeParameters.every(visit)
     }
     if (ast.encoding !== undefined && ast.annotations?.toCode === undefined) return false
     if (SchemaAST.isSuspend(ast)) return visit(ast.thunk())
@@ -1638,9 +1646,8 @@ function checksPortable(checks: SchemaAST.Checks | undefined): boolean {
       ? !check.aborted &&
         check.annotations?.representation !== undefined &&
         serializable(check.annotations.representation) &&
-        typeof check.annotations.arbitrary === "object" &&
-        check.annotations.arbitrary !== null &&
-        "constraint" in check.annotations.arbitrary
+        typeof check.annotations.arbitraryConstraint === "object" &&
+        check.annotations.arbitraryConstraint !== null
       : checksPortable(check.checks),
   )
 }
@@ -1679,6 +1686,7 @@ function annotationsPortable(annotations: Schema.Annotations.Annotations | undef
         "toCodec",
         "toCodecJson",
         "toCodecStringTree",
+        "toCodecArbitrary",
         "toArbitrary",
         "toFormatter",
         "toEquivalence",

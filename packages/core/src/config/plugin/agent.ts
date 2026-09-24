@@ -196,11 +196,11 @@ function decode(file: { directory: string; filepath: string; primary: boolean },
   const agent = legacy
     ? Option.getOrUndefined(
         Option.map(
-          decodeLegacyAgent({ name, ...markdown.data, prompt: body }, { errors: "all", propertyOrder: "original" }),
+          decodeLegacyAgent({ name, ...markdown.data, prompt: body }, { errors: "all" }),
           ConfigMigrateV1.migrateAgent,
         ),
       )
-    : Option.getOrUndefined(decodeAgent({ ...data, system: body }, { errors: "all", propertyOrder: "original" }))
+    : Option.getOrUndefined(decodeAgent({ ...data, system: body }, { errors: "all" }))
   if (!agent) return
   const info = Option.getOrUndefined(
     decodeConfig({

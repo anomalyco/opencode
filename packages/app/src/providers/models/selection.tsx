@@ -45,7 +45,7 @@ const Current = Persistence.struct({ session: SessionsSchema })
 
 export const ModelSelectionSchema = Persistence.migrate(
   Current,
-  Schema.Struct({
+  Persistence.legacy({
     session: Persistence.optional(Schema.Record(Schema.String, Schema.Unknown)),
     pick: Persistence.optional(Schema.Record(Schema.String, Schema.Unknown)),
   }).pipe(

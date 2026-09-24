@@ -4,6 +4,7 @@ import { Service, type Info } from "@opencode/client/effect/service"
 import path from "node:path"
 import { Effect, FileSystem, Schedule, Schema } from "effect"
 import { HttpServer } from "effect/unstable/http"
+import { NetAddress } from "effect/unstable/net"
 import { OPENCODE_VERSION } from "../version"
 
 const infoJson = Schema.fromJsonString(Service.Info)
@@ -11,7 +12,7 @@ const encodeInfo = Schema.encodeEffect(infoJson)
 const decodeInfo = Schema.decodeUnknownEffect(infoJson)
 
 export const register = Effect.fnUntraced(function* (options: {
-  readonly address: HttpServer.Address
+  readonly address: NetAddress.SocketAddress
   readonly password: string
   readonly id: string
   readonly file: string

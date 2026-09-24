@@ -2,7 +2,7 @@ import path from "path"
 import fs from "fs/promises"
 import { describe, expect, test } from "bun:test"
 import { Effect, Fiber, Layer, Logger, Schema, Stream } from "effect"
-import { FastCheck } from "effect/testing"
+import { Arbitrary } from "effect/unstable/arbitrary"
 import { Config } from "@opencode/core/config"
 import { Directory, Document, Event, Info } from "@opencode/schema/config"
 import { ConfigModel } from "@opencode/schema/config/model"
@@ -632,17 +632,22 @@ describe("Config", () => {
   })
 
   test("migrates arbitrary v1 configuration into valid v2 configuration", () => {
-    FastCheck.assert(
-      FastCheck.property(Schema.toArbitrary(ConfigV1.Info)(FastCheck), (info) => {
-        const parsed = Schema.decodeUnknownSync(ConfigV1.Info)(
-          Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(
-            Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(info),
-          ),
-        )
-        Schema.decodeUnknownSync(Info)(ConfigMigrateV1.migrate(parsed), { errors: "all" })
-      }),
-      { numRuns: 100 },
+    const result = Effect.runSync(
+      Arbitrary.checkEffect(
+        Arbitrary.schema(ConfigV1.Info),
+        (info) => {
+          const parsed = Schema.decodeUnknownSync(ConfigV1.Info)(
+            Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(
+              Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(info),
+            ),
+          )
+          Schema.decodeUnknownSync(Info)(ConfigMigrateV1.migrate(parsed), { errors: "all" })
+          return true
+        },
+        { runs: 100 },
+      ),
     )
+    expect(Arbitrary.formatCheckFailure(result)).toBeUndefined()
   }, 30_000)
 
   test("migrates the v1 experimental subagent depth", () => {

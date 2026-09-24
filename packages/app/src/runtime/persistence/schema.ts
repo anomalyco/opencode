@@ -23,19 +23,23 @@ export function withInitial<S extends Schema.ConstraintCodec<object, unknown>>(
   initial: NoInfer<S["Type"]>,
 ) {
   const schema = isMigrated(definition) ? definition.current : definition
-  const read = isMigrated(definition)
-    ? SchemaParser.decodeUnknownResult(definition.read, { onExcessProperty: "preserve" })
-    : Result.succeed<unknown>
+  const read = isMigrated(definition) ? SchemaParser.decodeUnknownResult(definition.read) : Result.succeed<unknown>
   const encode = Schema.encodeUnknownSync(schema)
   return Schema.Unknown.pipe(
     Schema.decode<Schema.Unknown>({
-      decode: SchemaGetter.transformOrFail((value) =>
+      decode: SchemaGetter.transformEffect((value) =>
         Effect.fromResult(Result.map(read(value), (stored) => merge(initial, recover(schema.ast, stored, initial)))),
       ),
       encode: SchemaGetter.transform((value) => encode(value)),
     }),
     Schema.decodeTo(Schema.toType(schema)),
   )
+}
+
+// A legacy read shape declares only the fields it migrates. Decoding strips unknown keys, so every
+// struct level in a `migrate` read schema must stay open for the current fields it does not name.
+export function legacy<const Fields extends Schema.Struct.Fields>(fields: Fields) {
+  return Schema.StructWithRest(Schema.Struct(fields), [Schema.Record(Schema.String, Schema.Unknown)])
 }
 
 // Object-level codecs own their recovery. Plain structs can recover fields independently.

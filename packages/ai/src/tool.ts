@@ -6,6 +6,7 @@ import type {
   ToolOutput as ToolOutputType,
 } from "./schema/index.js"
 import { ToolDefinition, ToolFailure, ToolOutput } from "./schema/index.js"
+import { isRecord } from "./utils/record.js"
 
 /**
  * Schema constraint for tool parameters / success values: no decoding or
@@ -200,7 +201,7 @@ export function make(config: TypedToolConfig | DynamicToolConfig): AnyTool {
     _definition: new ToolDefinition({
       name: "",
       description: config.description,
-      inputSchema: toJsonSchema(config.parameters),
+      inputSchema: toInputJsonSchema(config.parameters),
       outputSchema: toJsonSchema(config.success),
     }),
   }
@@ -230,8 +231,33 @@ export const toDefinitions = (tools: Tools): ReadonlyArray<ToolDefinitionClass> 
       }),
   )
 
+const toInputJsonSchema = (schema: Schema.Top): JsonSchema.JsonSchema => {
+  // Effect represents Struct({}) as any non-null value; tool parameters must
+  // instead describe an object. Inline named empty inputs so providers such as
+  // Gemini can recognize a no-argument tool, while retaining schema annotations.
+  if (
+    schema.ast._tag !== "Objects" ||
+    schema.ast.propertySignatures.length !== 0 ||
+    schema.ast.indexSignatures.length !== 0 ||
+    schema.ast.encoding !== undefined ||
+    schema.ast.checks !== undefined
+  )
+    return toJsonSchema(schema)
+
+  const json = Schema.toJsonSchemaDocument(schema, {
+    onExcessProperty: "error",
+    referencePolicy: () => undefined,
+  }).schema
+  if (isRecord(json.not) && json.not.type === "null" && Object.keys(json.not).length === 1) {
+    const normalized: JsonSchema.JsonSchema = { type: "object", properties: {}, additionalProperties: false, ...json }
+    delete normalized.not
+    return normalized
+  }
+  return toJsonSchema(schema)
+}
+
 const toJsonSchema = (schema: Schema.Top): JsonSchema.JsonSchema => {
-  const document = Schema.toJsonSchemaDocument(schema)
+  const document = Schema.toJsonSchemaDocument(schema, { onExcessProperty: "error" })
   if (Object.keys(document.definitions).length === 0) return document.schema
   return { ...document.schema, $defs: document.definitions }
 }

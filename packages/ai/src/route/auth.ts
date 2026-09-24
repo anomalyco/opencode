@@ -89,7 +89,7 @@ export const optional = (secret: Secret | undefined, source = "optional value") 
     ? credential(Effect.fail(new MissingCredentialError(source)))
     : credentialFromSecret(secret, source)
 
-export const config = (name: string) => credentialFromSecret(Config.redacted(name), name)
+export const config = (name: string) => credentialFromSecret(Config.Redacted(name), name)
 
 export const effect = (load: Effect.Effect<Redacted.Redacted, CredentialError>) => credential(load)
 

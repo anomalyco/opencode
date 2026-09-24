@@ -1,7 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { CodeMode, Tool } from "../src/index.js"
-import { inputTypeScript, jsonSchemaToTypeScript, outputTypeScript } from "../src/tool-schema.js"
+import {
+  decodeInput,
+  inputProperties,
+  inputTypeScript,
+  jsonSchemaToTypeScript,
+  outputTypeScript,
+} from "../src/tool-schema.js"
 
 // A raw JSON Schema tool in the shape an MCP adapter produces: render-only input schema
 // whose property descriptions and constraints must surface as JSDoc in pretty signatures.
@@ -525,6 +531,34 @@ describe("pretty signature rendering", () => {
 })
 
 describe("JSON Schema definition scope", () => {
+  test.each(["Lookup Input", "café", "A/B~C% D#E"])(
+    "resolves Effect definition %s in signatures and input metadata",
+    (identifier) => {
+      const tool = Tool.make({
+        description: "Named tool",
+        input: Schema.Struct({ city: Schema.String }).annotate({ identifier }),
+        output: Schema.Struct({ city: Schema.String }).annotate({ identifier }),
+        execute: (input) => Effect.succeed(input),
+      })
+      expect(inputTypeScript(tool)).toBe("{ city: string }")
+      expect(outputTypeScript(tool)).toBe("{ city: string }")
+      expect(inputProperties(tool)).toEqual([{ name: "city", description: undefined, required: true }])
+    },
+  )
+
+  test.each(["#/$defs/%", "#/$defs/A~2B", "#/$defs/Missing", "#/$defs/Loop", "https://example.test/schema"])(
+    "keeps malformed, unresolved, and recursive reference %s unknown",
+    ($ref) => {
+      const tool = Tool.make({
+        description: "Unresolved tool",
+        input: { $ref, $defs: { Loop: { $ref: "#/$defs/Loop" } } },
+        execute: () => Effect.succeed(null),
+      })
+      expect(inputTypeScript(tool)).toBe("unknown")
+      expect(inputProperties(tool)).toEqual([])
+    },
+  )
+
   test.each(["definitions", "$defs"])("resolves root %s and lets $defs take precedence", (key) => {
     const schema = { $ref: `#/${key}/Value`, [key]: { Value: { type: "string" } } }
     expect(jsonSchemaToTypeScript(schema)).toBe("string")
@@ -612,14 +646,51 @@ describe("non-identifier property names render as quoted keys", () => {
       input: Schema.Struct({ "foo-bar": Schema.String, plain: Schema.optionalKey(Schema.Number) }),
       execute: () => Effect.succeed(null),
     })
-    expect(inputTypeScript(tool)).toBe('{ "foo-bar": string; plain?: number | "Infinity" | "-Infinity" | "NaN" }')
-    expect(inputTypeScript(tool, true)).toBe(
-      ["{", '  "foo-bar": string,', '  plain?: number | "Infinity" | "-Infinity" | "NaN",', "}"].join("\n"),
-    )
+    expect(inputTypeScript(tool)).toBe('{ "foo-bar": string; plain?: number }')
+    expect(inputTypeScript(tool, true)).toBe(["{", '  "foo-bar": string,', "  plain?: number,", "}"].join("\n"))
   })
 })
 
 describe("union schemas render every alternative", () => {
+  test("Effect numbers advertise the numeric values accepted by the input decoder", () => {
+    const tool = Tool.make({
+      description: "Numeric tool",
+      input: Schema.Struct({ amount: Schema.Number }),
+      output: Schema.Number,
+      execute: (input) => Effect.succeed(input.amount),
+    })
+    expect(inputTypeScript(tool)).toBe("{ amount: number }")
+    expect(inputTypeScript(tool, true)).toBe("{\n  amount: number,\n}")
+    expect(outputTypeScript(tool)).toBe("number")
+    expect(outputTypeScript(tool, true)).toBe("number")
+    expect(decodeInput(tool, { amount: 42 })).toEqual({ amount: 42 })
+    for (const amount of ["NaN", "Infinity", "-Infinity"]) {
+      expect(() => decodeInput(tool, { amount })).toThrow("Expected number")
+    }
+  })
+
+  test("keeps unrelated and partial grouped string enums alongside numbers", () => {
+    expect(
+      jsonSchemaToTypeScript({
+        anyOf: [{ type: "number" }, { type: "string", enum: ["NaN", "Infinity", "unknown"] }],
+      }),
+    ).toBe('number | "NaN" | "Infinity" | "unknown"')
+    expect(
+      jsonSchemaToTypeScript({
+        anyOf: [{ type: "number" }, { type: "string", enum: ["NaN", "Infinity"] }],
+      }),
+    ).toBe('number | "NaN" | "Infinity"')
+    const tool = Tool.make({
+      description: "Number or status",
+      input: Schema.Union([Schema.Number, Schema.Literal("unknown")]),
+      output: Schema.Union([Schema.Number, Schema.Literal("unknown")]),
+      execute: (input) => Effect.succeed(input),
+    })
+    expect(inputTypeScript(tool)).toContain('"unknown"')
+    expect(outputTypeScript(tool)).toContain('"unknown"')
+    expect(decodeInput(tool, "unknown")).toBe("unknown")
+  })
+
   test("anyOf with a number branch keeps sibling alternatives", () => {
     const schema = {
       anyOf: [{ type: "string" }, { type: "number" }],

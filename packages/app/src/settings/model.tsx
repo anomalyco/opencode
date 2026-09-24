@@ -185,9 +185,9 @@ function legacyTimelineActivity(value: boolean | "hidden" | "compact" | "full" |
 
 export const settingsPersistence = Persistence.migrate(
   settingsSchema,
-  Schema.Struct({
+  Persistence.legacy({
     general: Persistence.optional(
-      Schema.Struct({
+      Persistence.legacy({
         // Keep invalid explicit values distinct from absent values so legacy preferences cannot replace them.
         timelineDetail: Schema.optional(
           Schema.NullOr(

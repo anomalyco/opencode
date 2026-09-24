@@ -48,10 +48,9 @@ const proxy = (value: string, environment: Environment = process.env) => {
   )
 }
 
-const constructorOptions = (input: string | Array<string> | undefined): WebSocketOptions => {
+const constructorOptions = (input: Socket.WebSocketConstructorOptions | undefined): WebSocketOptions => {
   if (typeof input === "string" || Array.isArray(input)) return { protocols: input }
-  // AI routes pass handshake options through Effect's browser-shaped constructor.
-  return (input ?? {}) as WebSocketOptions
+  return { headers: input?.headers === undefined ? undefined : Headers.fromInput(input.headers) }
 }
 
 const proxyAgent = (url: string, selectedProxy: string | undefined) => {

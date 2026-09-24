@@ -176,16 +176,16 @@ export const layoutSchema = Persistence.struct({
 
 export const layoutPersistence = Persistence.migrate(
   layoutSchema,
-  Schema.Struct({
+  Persistence.legacy({
     sidebar: Persistence.optional(
-      Schema.Struct({
+      Persistence.legacy({
         workspaces: Persistence.optional(Schema.Union([Schema.Boolean, Schema.Record(Schema.String, Schema.Boolean)])),
         workspacesDefault: Persistence.optional(Schema.Boolean),
       }),
     ),
-    review: Persistence.optional(Schema.Struct({ panelOpened: Persistence.optional(Schema.Boolean) })),
+    review: Persistence.optional(Persistence.legacy({ panelOpened: Persistence.optional(Schema.Boolean) })),
     fileTree: Persistence.optional(
-      Schema.Struct({
+      Persistence.legacy({
         opened: Persistence.optional(Schema.Boolean),
         width: Persistence.optional(Schema.Finite),
         tab: Persistence.optional(Schema.Literals(["changes", "all"])),

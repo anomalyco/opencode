@@ -42,7 +42,7 @@ export type Result =
     }
   | { readonly type: "rejected"; readonly diagnostics: readonly Diagnostic[] }
 
-const options = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
+const options = { errors: "all", onExcessProperty: "ignore" } as const
 const unsupportedTopLevel = ["logLevel", "server", "subagent_depth", "layout"] as const
 const unsupportedExperimental = [
   "disable_paste_summary",

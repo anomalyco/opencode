@@ -13,7 +13,7 @@ import { ConfigProviderOptionsV1 } from "./provider-options.js"
 import { Provider } from "../../provider.js"
 import { Model } from "../../model.js"
 
-const decodeOptions = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
+const decodeOptions = { errors: "all", onExcessProperty: "ignore" } as const
 const decodeInfo = Schema.decodeUnknownSync(Schema.fromJsonString(Info), decodeOptions)
 const encodeInfo = Schema.encodeSync(Info)
 const decodeAgent = Schema.decodeUnknownSync(Schema.fromJsonString(ConfigAgent.Info), decodeOptions)

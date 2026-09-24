@@ -12,8 +12,8 @@ registerShutdownSignalHandlers()
 const ServerLive = NodeHttpServer.layerConfig(
   () => createServer(),
   Config.all({
-    port: Config.number("PORT").pipe(Config.withDefault(3000)),
-    host: Config.string("HOST").pipe(Config.withDefault("0.0.0.0")),
+    port: Config.Number("PORT").pipe(Config.withDefault(3000)),
+    host: Config.String("HOST").pipe(Config.withDefault("0.0.0.0")),
   }),
 )
 

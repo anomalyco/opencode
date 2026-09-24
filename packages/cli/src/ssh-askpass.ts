@@ -1,5 +1,6 @@
 import { NodeSocket } from "@effect/platform-node"
 import { Effect, Schema, Stdio, Stream } from "effect"
+import { Socket } from "effect/unstable/socket"
 
 const Response = Schema.fromJsonString(Schema.Struct({ value: Schema.NullOr(Schema.String) }))
 const Port = Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(65535))
@@ -10,16 +11,15 @@ export const askpass = Effect.gen(function* () {
   const port = yield* Schema.decodeUnknownEffect(Port)(process.env.OPENCODE_SSH_ASKPASS_PORT)
   const stdio = yield* Stdio.Stdio
   const socket = yield* NodeSocket.makeNet({ host: "127.0.0.1", port })
-  const write = yield* socket.writer
+  const writer = yield* socket.writer
   const response = { text: "" }
   yield* Effect.all(
     [
-      socket.runString((text) =>
-        Effect.sync(() => {
-          response.text += text
-        }),
-      ),
-      write(
+      Effect.gen(function* () {
+        const pull = yield* Socket.readerString(socket)
+        while (true) response.text += (yield* pull).join("")
+      }).pipe(Effect.catchReason("SocketError", "SocketCloseError", () => Effect.void)),
+      writer.write(
         JSON.stringify({
           token: process.env.OPENCODE_SSH_ASKPASS_TOKEN,
           text: process.argv.slice(2).join(" "),

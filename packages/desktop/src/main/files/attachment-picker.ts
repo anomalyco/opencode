@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { Effect, FileSystem } from "effect"
+import { ByteSize, Effect, FileSystem } from "effect"
 import { nativeT } from "../native/translations"
 
 export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
@@ -43,7 +43,7 @@ export function readAttachment(filePath: string, maxBytes = MAX_ATTACHMENT_BYTES
       const fs = yield* FileSystem.FileSystem
       const file = yield* fs.open(filePath, { flag: "r" })
       const info = yield* file.stat
-      if (info.size > FileSystem.Size(maxBytes))
+      if (info.size > ByteSize.bytes(maxBytes))
         throw new Error(nativeT("desktop.picker.error.sizeLimit", { limit: MAX_ATTACHMENT_BYTES / 1024 / 1024 }))
 
       const bytes = new Uint8Array(Number(info.size))

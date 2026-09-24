@@ -124,7 +124,7 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
           if (!Number.isSafeInteger(cursor) || cursor < 0) return HttpServerResponse.empty({ status: 400 })
 
           const socket = yield* Effect.orDie(ctx.request.upgrade)
-          const write = yield* socket.writer
+          const writer = yield* socket.writer
           const outbox = yield* Queue.unbounded<string | Uint8Array | Socket.CloseEvent>()
           const input = yield* Semaphore.make(1)
           let attachment: PersistentPty.Attachment | undefined
@@ -187,41 +187,52 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
           const drain = Effect.gen(function* () {
             while (true) {
               const item = yield* Queue.take(outbox)
-              yield* write(item)
+              yield* writer.write(item)
               if (item instanceof Socket.CloseEvent) return
             }
           })
 
           yield* runPtySocket(
             drain,
-            socket.runRaw(
-              (message) =>
-                input.withPermit(
-                  Effect.suspend(() => {
-                    if (!attachment) return Effect.void
-                    const data = typeof message === "string" ? Buffer.from(message) : message
-                    if (!framedInput)
-                      return pty
-                        .input(
-                          ctx.params.ptyID,
-                          attachmentID,
-                          attachment.info.size.cols,
-                          attachment.info.size.rows,
-                          data,
-                        )
-                        .pipe(Effect.ignore)
-                    if (data.byteLength < 5) return Effect.void
-                    const view = new DataView(data.buffer, data.byteOffset, data.byteLength)
-                    const type = data[0]
-                    const cols = view.getUint16(1)
-                    const rows = view.getUint16(3)
-                    if ((type !== 0 && type !== 1) || cols === 0 || rows === 0) return Effect.void
-                    if (type === 0) return pty.control(ctx.params.ptyID, attachmentID, cols, rows).pipe(Effect.ignore)
-                    return pty.input(ctx.params.ptyID, attachmentID, cols, rows, data.subarray(5)).pipe(Effect.ignore)
-                  }),
-                ),
-              { onOpen },
-            ),
+            Effect.gen(function* () {
+              const reader = yield* socket.reader
+              yield* onOpen
+              while (true) {
+                const messages = yield* reader.pull
+                yield* Effect.forEach(
+                  messages,
+                  (message) =>
+                    input.withPermit(
+                      Effect.suspend(() => {
+                        if (!attachment) return Effect.void
+                        const data = typeof message === "string" ? Buffer.from(message) : message
+                        if (!framedInput)
+                          return pty
+                            .input(
+                              ctx.params.ptyID,
+                              attachmentID,
+                              attachment.info.size.cols,
+                              attachment.info.size.rows,
+                              data,
+                            )
+                            .pipe(Effect.ignore)
+                        if (data.byteLength < 5) return Effect.void
+                        const view = new DataView(data.buffer, data.byteOffset, data.byteLength)
+                        const type = data[0]
+                        const cols = view.getUint16(1)
+                        const rows = view.getUint16(3)
+                        if ((type !== 0 && type !== 1) || cols === 0 || rows === 0) return Effect.void
+                        if (type === 0)
+                          return pty.control(ctx.params.ptyID, attachmentID, cols, rows).pipe(Effect.ignore)
+                        return pty
+                          .input(ctx.params.ptyID, attachmentID, cols, rows, data.subarray(5))
+                          .pipe(Effect.ignore)
+                      }),
+                    ),
+                  { discard: true },
+                )
+              }
+            }),
             () => attachment?.detach(),
           ).pipe(
             Effect.catchReason("SocketError", "SocketCloseError", () => Effect.void),

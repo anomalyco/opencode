@@ -337,7 +337,7 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
 
 const freePort = Effect.gen(function* () {
   const server = yield* NodeSocketServer.make({ host: "127.0.0.1", port: 0 })
-  if (server.address._tag !== "TcpAddress") return yield* Effect.fail(new SshFailure("connection"))
+  if (server.address._tag === "UnixPathAddress") return yield* Effect.fail(new SshFailure("connection"))
   return server.address.port
 }).pipe(Effect.scoped)
 

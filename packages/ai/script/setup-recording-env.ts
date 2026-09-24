@@ -383,7 +383,7 @@ const readEnvFile = Effect.fn("RecordingEnv.readFile")(function* () {
 })
 
 const readConfigString = (provider: ConfigProvider.ConfigProvider, name: string) =>
-  Config.string(name)
+  Config.String(name)
     .parse(provider)
     .pipe(
       Effect.match({

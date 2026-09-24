@@ -53,7 +53,7 @@ const State = Persistence.struct({
 export function serverState(canonicalLocalServer: () => string | undefined = () => undefined) {
   return Persistence.migrate(
     State,
-    Schema.Struct({ projects: Projects, lastProject: LastProject }).pipe(
+    Persistence.legacy({ projects: Projects, lastProject: LastProject }).pipe(
       Schema.decode({
         decode: SchemaGetter.transform((value) => {
           const canonical = canonicalLocalServer()

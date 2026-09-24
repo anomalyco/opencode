@@ -1473,6 +1473,19 @@ describe("HttpApiCodegen.generate", () => {
     )
   })
 
+  test("emits schema classes with native arbitrary constraints structurally", () => {
+    class Attempt extends Schema.Class<Attempt>("Attempt")({
+      count: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+    }) {}
+    const output = emitPromise(
+      compileContract(api(HttpApiEndpoint.get("get", "/session", { success: Attempt }))),
+    )
+    const types = output.files.find((file) => file.path === "types.ts")?.content
+
+    expect(types).toContain('export type Attempt = { readonly "count": number }')
+    expect(types).toContain("export type SessionGetOutput = Attempt")
+  })
+
   test("rejects spoofed and aborted validation checks", () => {
     const Spoofed = Schema.Number.check(
       Schema.makeFilter(() => "always fails", { meta: { _tag: "isFinite" }, arbitrary: {} }),

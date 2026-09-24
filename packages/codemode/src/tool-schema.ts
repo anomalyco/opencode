@@ -1,4 +1,4 @@
-import { JsonPointer, Schema } from "effect"
+import { JsonPointer, Schema, SchemaAST } from "effect"
 import type { Tool, JsonSchema, SchemaType } from "./tool.js"
 
 const isEffectSchema = (schema: SchemaType): schema is Schema.Decoder<unknown> & Schema.Top => Schema.isSchema(schema)
@@ -12,8 +12,14 @@ const renderKey = (name: string): string => (identifierSegment.test(name) ? name
 const effectNumberSentinel = (schema: JsonSchema) =>
   schema.type === "string" &&
   Array.isArray(schema.enum) &&
-  schema.enum.length === 1 &&
-  (schema.enum[0] === "NaN" || schema.enum[0] === "Infinity" || schema.enum[0] === "-Infinity")
+  (schema.enum.length === 1 ||
+    (schema.enum.length === 3 && ["NaN", "Infinity", "-Infinity"].every((value) => schema.enum?.includes(value)))) &&
+  schema.enum.every((value) => value === "NaN" || value === "Infinity" || value === "-Infinity")
+
+const definitionName = (ref: string): string | undefined => {
+  const tokens = JsonPointer.parseUriFragment(ref)
+  return tokens?.length === 2 && (tokens[0] === "$defs" || tokens[0] === "definitions") ? tokens[1] : undefined
+}
 
 const intersection = (members: ReadonlyArray<string>): string => {
   const concrete = members.filter((member) => member !== "unknown")
@@ -38,8 +44,7 @@ const hasUnresolvedRef = (
   if (visited.has(schema)) return false
   const nextVisited = new Set([...visited, schema])
   if (schema.$ref !== undefined) {
-    const segment = schema.$ref.match(/^#\/(?:\$defs|definitions)\/([^/]+)$/)?.[1]
-    const name = segment === undefined ? undefined : JsonPointer.unescapeToken(segment)
+    const name = definitionName(schema.$ref)
     if (name === undefined || definitions[name] === undefined || seen.has(name)) return true
     if (hasUnresolvedRef(definitions[name], definitions, new Set([...seen, name]), nextVisited)) return true
   }
@@ -130,8 +135,7 @@ const renderSchema = (
       ? ctx
       : { ...ctx, definitions: { ...ctx.definitions, ...(schema.definitions ?? {}), ...(schema.$defs ?? {}) } }
   if (schema.$ref) {
-    const segment = schema.$ref.match(/^#\/(?:\$defs|definitions)\/([^/]+)$/)?.[1]
-    const name = segment === undefined ? undefined : JsonPointer.unescapeToken(segment)
+    const name = definitionName(schema.$ref)
     if (!name || !nested.definitions[name] || seen.has(name)) return "unknown"
     return intersection([
       renderSchema(nested.definitions[name], nested, depth, new Set([...seen, name])),
@@ -203,7 +207,7 @@ const renderSchema = (
 export const toTypeScript = (schema: Schema.Top, decoded = false, pretty = false): string => {
   try {
     const visible = decoded ? Schema.toType(schema) : schema
-    const document = Schema.toJsonSchemaDocument(visible) as {
+    const document = Schema.toJsonSchemaDocument(visible, { onExcessProperty: "error" }) as {
       readonly schema: JsonSchema
       readonly definitions?: Readonly<Record<string, JsonSchema>>
     }
@@ -230,7 +234,7 @@ export type InputProperty = {
 export const inputProperties = <R>(tool: Tool<R>): Array<InputProperty> => {
   try {
     const document = isEffectSchema(tool.input)
-      ? (Schema.toJsonSchemaDocument(tool.input) as {
+      ? (Schema.toJsonSchemaDocument(tool.input, { onExcessProperty: "error" }) as {
           readonly schema: JsonSchema
           readonly definitions?: Readonly<Record<string, JsonSchema>>
         })
@@ -241,8 +245,7 @@ export const inputProperties = <R>(tool: Tool<R>): Array<InputProperty> => {
     const definitions = document.definitions ?? {}
     let schema = document.schema
     if (schema.$ref !== undefined) {
-      const segment = schema.$ref.match(/^#\/(?:\$defs|definitions)\/([^/]+)$/)?.[1]
-      const name = segment === undefined ? undefined : JsonPointer.unescapeToken(segment)
+      const name = definitionName(schema.$ref)
       const resolved = name === undefined ? undefined : definitions[name]
       if (resolved === undefined) return []
       schema = resolved
@@ -261,10 +264,16 @@ export const inputProperties = <R>(tool: Tool<R>): Array<InputProperty> => {
 export const inputTypeScript = <R>(tool: Tool<R>, pretty = false): string =>
   isEffectSchema(tool.input) ? toTypeScript(tool.input, false, pretty) : jsonSchemaToTypeScript(tool.input, pretty)
 
-// Empty object schemas render as `{}` in compact form; anything with properties,
-// an index signature, or union members renders differently, so equality is a
-// conservative emptiness test for both Effect and JSON Schema inputs.
-export const isEmptyInput = <R>(tool: Tool<R>): boolean => inputTypeScript(tool) === "{}"
+// Effect 4.0 models an empty Struct as a non-nullish object, so inspect its AST.
+// Raw JSON Schema inputs retain the compact `{}` rendering check.
+export const isEmptyInput = <R>(tool: Tool<R>): boolean => {
+  if (!isEffectSchema(tool.input)) return inputTypeScript(tool) === "{}"
+  return (
+    SchemaAST.isObjects(tool.input.ast) &&
+    tool.input.ast.propertySignatures.length === 0 &&
+    tool.input.ast.indexSignatures.length === 0
+  )
+}
 
 export const outputTypeScript = <R>(tool: Tool<R>, pretty = false): string =>
   tool.output === undefined

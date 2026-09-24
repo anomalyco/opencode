@@ -188,14 +188,15 @@ smoke(
       const first = Schema.decodeUnknownSync(PersistentPty.Info)(
         (yield* request(base, "POST", `/api/experimental/session/${sessionID}/terminal`, {
           command: "/usr/bin/env",
-          args: ["/bin/sh", "-c", "stty -echo; printf terminal-one; cat"],
+          // Exercise transport bursts without macOS's 1024-byte canonical line buffer limit.
+          args: ["/bin/sh", "-c", "stty -echo -icanon min 1 time 0; printf terminal-one; cat"],
           cwd: process.cwd(),
           title: "first",
           env: {},
         })).data,
       )
       expect(first.command).toBe("/usr/bin/env")
-      expect(first.args).toEqual(["/bin/sh", "-c", "stty -echo; printf terminal-one; cat"])
+      expect(first.args).toEqual(["/bin/sh", "-c", "stty -echo -icanon min 1 time 0; printf terminal-one; cat"])
       expect(first.cwd).toBe(process.cwd())
       expect(yield* Effect.promise(() => events.next("persistent-pty.added"))).toMatchObject({
         data: { sessionID, terminal: { id: first.id } },
@@ -570,7 +571,13 @@ async function verifySharedControl(base: string, ptyID: string) {
     second.socket.send(inputFrame(70, 20, "from-second\n"))
     await waitForSocketOutput([first, second], "from-second")
 
-    await waitForForegroundProcess([first, second], "cat")
+    // opencode-pty v0.1.13 uses /proc on Linux and returns None on other platforms:
+    // https://github.com/anomalyco/opencode-pty/blob/v0.1.13/src/service.rs#L1091-L1128
+    if (process.platform === "linux") await waitForForegroundProcess([first, second], "cat")
+    if (process.platform !== "linux") {
+      expect(first.foregroundProcess).toBeNull()
+      expect(second.foregroundProcess).toBeNull()
+    }
 
     for (const character of "printf abc | rev\n") second.socket.send(inputFrame(70, 20, character))
     await waitForSocketOutput([first, second], "printf abc | rev")
@@ -578,12 +585,36 @@ async function verifySharedControl(base: string, ptyID: string) {
     second.socket.send(inputFrame(70, 20, "x".repeat(1024)))
     second.socket.send(inputFrame(70, 20, "after-burst\n"))
     await waitForSocketOutput([first, second], "after-burst")
+    expect(first.output).toContain("x".repeat(1024) + "after-burst")
+    expect(second.output).toContain("x".repeat(1024) + "after-burst")
     expect(first.closed).toBeFalse()
     expect(second.closed).toBeFalse()
     expect(first.resizes).toBeGreaterThan(0)
     expect(second.resizes).toBeGreaterThan(0)
     expect(first.output).not.toContain("\0")
     expect(second.output).not.toContain("\0")
+    expect(first.size).toEqual({ cols: 70, rows: 20 })
+    expect(second.size).toEqual({ cols: 70, rows: 20 })
+
+    await waitForController(first, "second")
+    second.socket.close()
+    // Promotion is emitted by the daemon only after the server detaches the closed socket.
+    await waitForController(first, "first")
+    expect(second.closed).toBeTrue()
+    first.socket.send(inputFrame(70, 20, "after-detach\n"))
+    await waitForSocketOutput([first], "after-detach")
+
+    const replay = await openTerminalSocket(base, ptyID, "replay", "observer")
+    try {
+      // openTerminalSocket resolves at replay_complete, before any new input is sent.
+      expect(replay.output).toContain("from-first")
+      expect(replay.output).toContain("from-second")
+      expect(replay.output).toContain("after-detach")
+      first.socket.send(inputFrame(70, 20, "after-replay\n"))
+      await waitForSocketOutput([first, replay], "after-replay")
+    } finally {
+      replay.socket.close()
+    }
   } finally {
     first.socket.close()
     second.socket.close()
@@ -615,6 +646,8 @@ async function openTerminalSocket(
     output: "",
     closed: false,
     resizes: 0,
+    size: undefined as { cols: number; rows: number } | undefined,
+    controller: undefined as string | undefined,
     foregroundProcess: null as string | null,
   }
   state.socket.binaryType = "arraybuffer"
@@ -636,6 +669,12 @@ async function openTerminalSocket(
           return
         }
         state.resizes++
+        if (typeof message.cols === "number" && typeof message.rows === "number")
+          state.size = { cols: message.cols, rows: message.rows }
+        return
+      }
+      if (message.type === "controller_changed") {
+        state.controller = typeof message.attachmentID === "string" ? message.attachmentID : undefined
         return
       }
       if (message.type === "foreground_process_changed") {
@@ -666,6 +705,15 @@ async function openTerminalSocket(
     })
   })
   return state
+}
+
+async function waitForController(socket: { controller: string | undefined; closed: boolean }, expected: string) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (socket.controller === expected) return
+    if (socket.closed) throw new Error("Persistent PTY observer disconnected")
+    await Bun.sleep(20)
+  }
+  throw new Error(`Persistent PTY controller did not become ${expected}: ${socket.controller}`)
 }
 
 async function waitForForegroundProcess(

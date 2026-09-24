@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { Deferred, Effect, Exit, Fiber, FiberSet, Layer } from "effect"
 import { Socket } from "effect/unstable/socket"
 import { existsSync } from "node:fs"
 import { HttpRecorder } from "../src"
@@ -7,9 +7,57 @@ import { layerSocketWithMode } from "../src/websocket/recorder"
 import { failureText, readCassette, seedCassetteDirectory, tempDirectory, withEnvironment } from "./support"
 
 const unavailableSocket = Socket.make({
-  runRaw: () => Effect.die(new Error("unexpected live WebSocket run")),
-  writer: Effect.succeed(() => Effect.die(new Error("unexpected live WebSocket write"))),
+  reader: Effect.die(new Error("unexpected live WebSocket run")),
+  writer: Effect.succeed({
+    write: () => Effect.die(new Error("unexpected live WebSocket write")),
+    writeAll: () => Effect.die(new Error("unexpected live WebSocket write")),
+  }),
 })
+
+const runRaw = <E, R>(
+  socket: Socket.Socket,
+  handler: (message: string | Uint8Array) => Effect.Effect<unknown, E, R> | void,
+  onOpen?: Effect.Effect<void, E, R>,
+) =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const handlers = yield* FiberSet.make<unknown, E>()
+      const run = yield* FiberSet.runtime(handlers)<R>()
+      const reader = yield* socket.reader
+      if (onOpen) yield* onOpen
+      yield* Effect.gen(function* () {
+        while (true) {
+          const messages = yield* reader.pull
+          messages.forEach((message) =>
+            run(
+              Effect.suspend(() => {
+                const result = handler(message)
+                return Effect.isEffect(result) ? Effect.asVoid(result) : Effect.void
+              }),
+            ),
+          )
+        }
+      }).pipe(
+        Effect.catchIf(
+          (error) => Socket.SocketError.is(error) && error.reason._tag === "SocketCloseError",
+          () => Effect.void,
+        ),
+        Effect.raceFirst(FiberSet.join(handlers)),
+      )
+      yield* FiberSet.awaitEmpty(handlers).pipe(Effect.raceFirst(FiberSet.join(handlers)))
+    }),
+  )
+
+const runString = <E, R>(
+  socket: Socket.Socket,
+  handler: (message: string) => Effect.Effect<unknown, E, R> | void,
+  onOpen?: Effect.Effect<void, E, R>,
+) =>
+  runRaw(
+    socket,
+    (message) => handler(typeof message === "string" ? message : new TextDecoder().decode(message)),
+    onOpen,
+  )
 
 class EchoWebSocket extends EventTarget {
   readonly protocol = ""
@@ -53,12 +101,13 @@ describe("WebSocket", () => {
         Effect.gen(function* () {
           const socket = yield* Socket.makeWebSocket("wss://echo.example.test/one", {
             protocols: ["echo.v1"],
-            closeCodeIsError: () => false,
           })
-          const write = yield* socket.writer
-          yield* socket.runString(() => write(new Socket.CloseEvent(1000, "complete")).pipe(Effect.orDie), {
-            onOpen: write("hello").pipe(Effect.orDie),
-          })
+          const writer = yield* socket.writer
+          yield* runString(
+            socket,
+            () => writer.write(new Socket.CloseEvent(1000, "complete")).pipe(Effect.orDie),
+            writer.write("hello").pipe(Effect.orDie),
+          )
         }).pipe(Effect.scoped, Effect.provide(recorder)),
       ),
     )
@@ -141,17 +190,15 @@ describe("WebSocket", () => {
       Effect.gen(function* () {
         const socket = yield* Socket.makeWebSocket("wss://events.example.test/workspaces/one", {
           protocols: ["events.v1"],
-          closeCodeIsError: () => false,
         })
-        const write = yield* socket.writer
+        const writer = yield* socket.writer
         const received: string[] = []
-        yield* socket.runString(
+        yield* runString(
+          socket,
           (message) => {
             received.push(message)
           },
-          {
-            onOpen: write('{"type":"subscribe"}').pipe(Effect.orDie),
-          },
+          writer.write('{"type":"subscribe"}').pipe(Effect.orDie),
         )
         return received
       }).pipe(Effect.scoped, Effect.provide(recorder)),
@@ -187,7 +234,7 @@ describe("WebSocket", () => {
     const exit = await Effect.runPromise(
       Effect.gen(function* () {
         const socket = yield* Socket.makeWebSocket("wss://events.example.test/workspaces/two")
-        yield* socket.runString(() => {})
+        yield* runString<never, never>(socket, () => {})
       }).pipe(Effect.scoped, Effect.exit, Effect.provide(recorder)),
     )
 
@@ -200,23 +247,28 @@ describe("WebSocket", () => {
       type: "response.completed",
       token: "server-secret",
     })
+    let sent = false
     const upstream = Socket.make({
-      runRaw: (handler, options) =>
-        Effect.gen(function* () {
-          if (options?.onOpen) yield* options.onOpen
-          const result = handler(response)
-          if (Effect.isEffect(result)) yield* result
+      reader: Effect.succeed({
+        pull: Effect.suspend(() => {
+          if (sent) return Effect.fail(new Socket.SocketError({ reason: new Socket.SocketCloseError({ code: 1000 }) }))
+          sent = true
+          return Effect.succeed([response])
         }),
-      writer: Effect.succeed(() => Effect.void),
+        upgrade: Socket.SocketUpgradeError.unsupported,
+      }),
+      writer: Effect.succeed({ write: () => Effect.void, writeAll: () => Effect.void }),
     })
 
     await Effect.runPromise(
       Effect.gen(function* () {
         const socket = yield* Socket.Socket
-        const write = yield* socket.writer
-        yield* socket.runRaw(() => {}, {
-          onOpen: write(JSON.stringify({ type: "response.create", token: "client-secret" })).pipe(Effect.orDie),
-        })
+        const writer = yield* socket.writer
+        yield* runRaw(
+          socket,
+          () => {},
+          writer.write(JSON.stringify({ type: "response.create", token: "client-secret" })).pipe(Effect.orDie),
+        )
       }).pipe(
         Effect.scoped,
         Effect.provide(
@@ -279,14 +331,14 @@ describe("WebSocket", () => {
     await Effect.runPromise(
       Effect.gen(function* () {
         const socket = yield* Socket.Socket
-        const write = yield* socket.writer
-        yield* socket.runRaw((message) =>
+        const writer = yield* socket.writer
+        yield* runRaw(socket, (message) =>
           Effect.gen(function* () {
             if (typeof message !== "string") return
             received.push(message)
             const event: unknown = JSON.parse(message)
             if (typeof event !== "object" || event === null || !("type" in event)) return
-            if (event.type === "session.created") yield* write('{"prompt":"hello","type":"response.create"}')
+            if (event.type === "session.created") yield* writer.write('{"prompt":"hello","type":"response.create"}')
           }),
         )
       }).pipe(
@@ -343,21 +395,21 @@ describe("WebSocket", () => {
     await Effect.runPromise(
       Effect.gen(function* () {
         const socket = yield* Socket.Socket
-        const write = yield* socket.writer
-        yield* socket.runString((message) =>
+        const writer = yield* socket.writer
+        yield* runString(socket, (message) =>
           Effect.gen(function* () {
             received.push(message)
             const event: unknown = JSON.parse(message)
             if (typeof event !== "object" || event === null) return
             if ("type" in event && event.type === "session.created") {
-              yield* write('{"prompt":"first","type":"response.create"}')
+              yield* writer.write('{"prompt":"first","type":"response.create"}')
               return
             }
             if ("id" in event && event.id === "first") {
-              yield* write('{"prompt":"second","type":"response.create"}')
+              yield* writer.write('{"prompt":"second","type":"response.create"}')
               return
             }
-            yield* write(new Socket.CloseEvent(1000, "done"))
+            yield* writer.write(new Socket.CloseEvent(1000, "done"))
           }),
         )
       }).pipe(
@@ -393,7 +445,7 @@ describe("WebSocket", () => {
       Effect.gen(function* () {
         const socket = yield* Socket.Socket
         const second = yield* Deferred.make<void>()
-        yield* socket.runString((message) =>
+        yield* runString(socket, (message) =>
           message === "first" ? Deferred.await(second) : Deferred.succeed(second, undefined),
         )
       }).pipe(
@@ -420,23 +472,21 @@ describe("WebSocket", () => {
         const socket = yield* Socket.Socket
         const started = yield* Deferred.make<void>()
         const release = yield* Deferred.make<void>()
-        const first = yield* socket
-          .runString((message) =>
-            Effect.gen(function* () {
-              received.push(message)
-              yield* Deferred.succeed(started, undefined)
-              yield* Deferred.await(release)
-            }),
-          )
-          .pipe(Effect.forkChild)
+        const first = yield* runString(socket, (message) =>
+          Effect.gen(function* () {
+            received.push(message)
+            yield* Deferred.succeed(started, undefined)
+            yield* Deferred.await(release)
+          }),
+        ).pipe(Effect.forkChild)
         yield* Deferred.await(started)
 
-        const concurrent = yield* Effect.exit(socket.runString(() => Effect.void))
+        const concurrent = yield* Effect.exit(runString(socket, () => Effect.void))
         expect(failureText(concurrent)).toContain("Concurrent runs")
 
         yield* Deferred.succeed(release, undefined)
         yield* Fiber.join(first)
-        yield* socket.runString((message) => Effect.sync(() => received.push(message)))
+        yield* runString(socket, (message) => Effect.sync(() => received.push(message)))
       }).pipe(
         Effect.scoped,
         Effect.provide(
@@ -462,11 +512,9 @@ describe("WebSocket", () => {
     const exit = await Effect.runPromise(
       Effect.gen(function* () {
         const socket = yield* Socket.Socket
-        const write = yield* socket.writer
+        const writer = yield* socket.writer
         return yield* Effect.exit(
-          socket.runRaw(() => {}, {
-            onOpen: write(new Socket.CloseEvent(1000)).pipe(Effect.orDie),
-          }),
+          runRaw(socket, () => {}, writer.write(new Socket.CloseEvent(1000)).pipe(Effect.orDie)),
         )
       }).pipe(
         Effect.scoped,
@@ -486,7 +534,7 @@ describe("WebSocket", () => {
     const exit = await Effect.runPromise(
       Effect.gen(function* () {
         const socket = yield* Socket.Socket
-        return yield* Effect.exit(socket.runRaw(() => {}))
+        return yield* Effect.exit(runRaw<never, never>(socket, () => {}))
       }).pipe(
         Effect.scoped,
         Effect.provide(
@@ -495,8 +543,8 @@ describe("WebSocket", () => {
               Layer.succeed(
                 Socket.Socket,
                 Socket.make({
-                  runRaw: () => Effect.die(new Error("connection failed")),
-                  writer: Effect.succeed(() => Effect.void),
+                  reader: Effect.die(new Error("connection failed")),
+                  writer: Effect.succeed({ write: () => Effect.void, writeAll: () => Effect.void }),
                 }),
               ),
             ),
@@ -534,13 +582,14 @@ describe("WebSocket", () => {
     await Effect.runPromise(
       Effect.gen(function* () {
         const socket = yield* Socket.Socket
-        const write = yield* socket.writer
-        const run = socket.runRaw(
+        const writer = yield* socket.writer
+        const run = runRaw(
+          socket,
           (message) => {
             if (typeof message === "string") throw new Error("Expected a binary WebSocket frame")
             received.push([...message])
           },
-          { onOpen: write(new Uint8Array([1, 2])).pipe(Effect.orDie) },
+          writer.write(new Uint8Array([1, 2])).pipe(Effect.orDie),
         )
         yield* run
         yield* run

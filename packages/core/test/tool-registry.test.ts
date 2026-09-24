@@ -1042,7 +1042,7 @@ describe("Tool", () => {
               value: Schema.Boolean.pipe(
                 Schema.decodeTo(Schema.String, {
                   decode: SchemaGetter.transform((value) => String(value)),
-                  encode: SchemaGetter.transformOrFail((value) =>
+                  encode: SchemaGetter.transformEffect((value) =>
                     value === "valid"
                       ? Effect.succeed(true)
                       : Effect.fail(new SchemaIssue.InvalidValue({ message: "invalid output" }, value)),

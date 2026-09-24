@@ -1,5 +1,5 @@
 import { expect } from "bun:test"
-import { NodeServices, NodeSocketServer } from "@effect/platform-node"
+import { NodeServices } from "@effect/platform-node"
 import { Deferred, Effect, Fiber, FileSystem, Layer, Path, Stream } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
@@ -228,17 +228,18 @@ it.live(
     const path = yield* Path.Path
     const config = path.join(yield* fs.makeTempDirectoryScoped({ prefix: "ssh-handshake-test-" }), "config")
     yield* fs.writeFileString(config, "")
-    const connected = yield* Deferred.make<void>()
-    const closed = yield* Deferred.make<void>()
-    const server = yield* NodeSocketServer.make({ host: "127.0.0.1", port: 0 })
-    if (server.address._tag !== "TcpAddress") return yield* Effect.die("missing port")
-    yield* server
-      .run((socket) =>
-        socket
-          .run(() => Effect.void, { onOpen: Deferred.succeed(connected, undefined).pipe(Effect.asVoid) })
-          .pipe(Effect.ensuring(Deferred.succeed(closed, undefined)), Effect.ignore),
-      )
-      .pipe(Effect.forkScoped({ startImmediately: true }))
+    const connected = Promise.withResolvers<void>()
+    const closed = Promise.withResolvers<void>()
+    const server = Bun.listen({
+      hostname: "127.0.0.1",
+      port: 0,
+      socket: {
+        open: () => connected.resolve(),
+        data: () => {},
+        close: () => closed.resolve(),
+      },
+    })
+    yield* Effect.addFinalizer(() => Effect.sync(() => server.stop(true)))
     const controller = yield* createSshController({
       configs: [],
       binary: "unused",
@@ -246,15 +247,16 @@ it.live(
       save: () => Effect.die("must not save"),
     })
     yield* controller.start(
-      { id: "fixture", target: `ssh -F ${quote(config)} -p ${server.address.port} 127.0.0.1`, name: "" },
+      { id: "fixture", target: `ssh -F ${quote(config)} -p ${server.port} 127.0.0.1`, name: "" },
       1,
     )
-    yield* Deferred.await(connected)
-    const waiting = yield* controller.resolve("fixture").pipe(Effect.forkScoped)
+    yield* Effect.promise(() => connected.promise)
+    const waiting = yield* controller.resolve("fixture").pipe(Effect.forkScoped({ startImmediately: true }))
     yield* controller.disconnect("fixture")
-    yield* Deferred.await(closed)
+    yield* Effect.promise(() => closed.promise)
     expect(yield* Fiber.join(waiting)).toBeNull()
     expect((yield* controller.state()).servers[0]?.stage).toBe("disconnected")
+    yield* controller.close
     return undefined
   }).pipe(Effect.timeout("10 seconds")),
 )

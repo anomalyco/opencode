@@ -32,7 +32,7 @@ describe("persistence schemas", () => {
 
   test("legacy migration observes missing fields before initial defaults are applied", () => {
     const current = Persistence.struct({ mode: Schema.Literals(["compact", "full"]), enabled: Schema.Boolean })
-    const stored = Schema.Struct({
+    const stored = Persistence.legacy({
       mode: Schema.optional(Schema.Unknown),
       expanded: Schema.optional(Schema.Boolean),
     }).pipe(
@@ -51,6 +51,38 @@ describe("persistence schemas", () => {
     expect(decode({ expanded: true, mode: "compact" })).toEqual({ mode: "compact", enabled: true })
     expect(decode({ expanded: true, mode: "invalid" })).toEqual({ mode: "compact", enabled: true })
     expect(Schema.encodeSync(schema)(decode({ expanded: true }))).toEqual({ mode: "full", enabled: true })
+  })
+
+  test("legacy read shapes carry unknown nested fields through to the current schema", () => {
+    const current = Persistence.struct({
+      general: Persistence.struct({
+        mode: Schema.Literals(["compact", "full"]),
+        theme: Schema.String,
+        nested: Persistence.struct({ keep: Schema.Boolean }),
+      }),
+      other: Persistence.struct({ flag: Schema.Boolean }),
+    })
+    const stored = Persistence.legacy({
+      general: Persistence.optional(Persistence.legacy({ expanded: Persistence.optional(Schema.Boolean) })),
+    }).pipe(
+      Schema.decode({
+        decode: SchemaGetter.transform((value) => {
+          const general = value.general
+          if (!general || general.expanded === undefined) return value
+          return { ...value, general: { ...general, mode: general.expanded ? "full" : "compact" } }
+        }),
+        encode: SchemaGetter.passthrough(),
+      }),
+    )
+    const schema = Persistence.withInitial(Persistence.migrate(current, stored), {
+      general: { mode: "compact", theme: "light", nested: { keep: false } },
+      other: { flag: false },
+    })
+    const decode = Schema.decodeUnknownSync(schema)
+    expect(decode({ general: { expanded: true, theme: "dark", nested: { keep: true } }, other: { flag: true } })).toEqual({
+      general: { mode: "full", theme: "dark", nested: { keep: true } },
+      other: { flag: true },
+    })
   })
 
   test("initial merging preserves field codecs and replaces arrays rather than merging indexes", () => {
