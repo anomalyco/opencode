@@ -223,6 +223,7 @@ export const dict = {
   "provider.connect.console.connected": "OpenCode connected",
   "provider.connect.console.noModels":
     "Your account is connected, but this Console workspace has no available models. Check its setup in Console, then refresh.",
+  "provider.connect.console.modelsLoading": "Your models are still loading. Refresh to check again.",
   "provider.connect.console.refresh": "Refresh models",
   "provider.connect.console.openingBrowser": "Opening browser…",
   "provider.connect.console.serviceAccount": "Service account?",

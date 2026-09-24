@@ -381,6 +381,8 @@ function ProviderConnection(props: {
     firstConnection: undefined as boolean | undefined,
     models: false,
     noModels: false,
+    // The workspace providers had not loaded when the wait ran out.
+    catalogPending: false,
     selectedModel: "",
     collapsed: {} as Record<string, boolean>,
   })
@@ -405,6 +407,10 @@ function ProviderConnection(props: {
       global.models.show(
         connectionModels().map((model) => ({ providerID: model.providerID, modelID: model.id })),
       )
+      if (state.catalogPending) {
+        setState("noModels", true)
+        return
+      }
       if (state.firstConnection) {
         const first = connectionGroups()[0]?.models[0]
         if (first) {
@@ -469,6 +475,7 @@ function ProviderConnection(props: {
         () => undefined,
       )
     }
+    setState("catalogPending", !loaded())
     return active()
   }
   const connectionGroupName = (name: string) => {
@@ -933,12 +940,18 @@ function ProviderConnection(props: {
             <Icon name="circle-check" />
             {language.t("provider.connect.console.connected")}
           </p>
-          <p>{language.t("provider.connect.console.noModels")}</p>
+          <p>
+            {language.t(
+              state.catalogPending ? "provider.connect.console.modelsLoading" : "provider.connect.console.noModels",
+            )}
+          </p>
         </div>
         <div class="flex flex-wrap items-center gap-2">
-          <Button onClick={() => platform.openExternal("https://opencode.ai/console")}>
-            {language.t("provider.connect.console.openAgain")}
-          </Button>
+          <Show when={!state.catalogPending}>
+            <Button onClick={() => platform.openExternal("https://opencode.ai/console")}>
+              {language.t("provider.connect.console.openAgain")}
+            </Button>
+          </Show>
           <Button
             disabled={controller.auth.state() === "refreshing"}
             aria-busy={controller.auth.state() === "refreshing"}
