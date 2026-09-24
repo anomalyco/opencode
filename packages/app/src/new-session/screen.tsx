@@ -44,7 +44,7 @@ export default function NewSessionPage(props: { draftId: string }) {
   const composer = createNewSessionComposerAdapter({
     draftID: props.draftId,
     worktree: workspace.selection.value,
-    branch: workspace.bar.branch,
+    branch: workspace.bar.createBranch,
     submitted: workspace.selection.remember,
     mcp,
   })

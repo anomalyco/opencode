@@ -49,7 +49,8 @@ export function createNewSessionComposerAdapter(props: {
     async start(selection, submission, message) {
       const draftID = props.draftID
       const currentDirectory = location().directory
-      const projectDirectory = data.location.info({ directory: currentDirectory })?.project.canonical ?? currentDirectory
+      const project = data.location.info({ directory: currentDirectory })?.project
+      const projectDirectory = project?.canonical ?? currentDirectory
       const worktree = props.worktree()
       const branch = props.branch()
       const mcp = props.mcp.capture()
@@ -61,6 +62,7 @@ export function createNewSessionComposerAdapter(props: {
       await pending?.ready
       const sessionDirectory = await resolveSessionDirectory({
         projectDirectory,
+        sourceDirectory: project?.directory ?? currentDirectory,
         worktree,
         branch,
         data,
@@ -198,6 +200,7 @@ function createMessageHandoff(key: string, sessionID: string, event: ServerSDK["
 
 async function resolveSessionDirectory(input: {
   projectDirectory: string
+  sourceDirectory: string
   worktree: string
   branch?: string
   data: ReturnType<typeof useData>
@@ -211,6 +214,7 @@ async function resolveSessionDirectory(input: {
     api: input.serverSDK.api,
     data: input.data,
     directory: input.projectDirectory,
+    from: input.sourceDirectory,
     project: input.data.location.info({ directory: input.projectDirectory })?.project,
     branch: input.branch,
   }).catch((error) => {

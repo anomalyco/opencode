@@ -48,6 +48,7 @@ export function NewSessionSummary(props: {
                   workspaces={props.workspace.project.workspaces()}
                   branches={props.workspace.project.branches()}
                   branch={props.workspace.bar.branch()}
+                  createBranch={props.workspace.bar.createBranch()}
                   onChange={props.workspace.selection.set}
                   onCreate={props.workspace.selection.create}
                   onSearch={props.workspace.project.searchBranches}

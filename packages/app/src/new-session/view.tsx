@@ -138,6 +138,7 @@ export function NewSessionView(props: {
                       workspaces={props.workspace.project.workspaces()}
                       branches={props.workspace.project.branches()}
                       branch={props.workspace.bar.branch()}
+                      createBranch={props.workspace.bar.createBranch()}
                       onboarding={onboardingReady() && !onboarding.used}
                       onChange={select}
                       onCreate={props.workspace.selection.create}
