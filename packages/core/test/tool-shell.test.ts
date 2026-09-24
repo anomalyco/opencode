@@ -398,7 +398,7 @@ describe("ShellTool scanner permissions", () => {
           expect(denied.requests).toEqual([])
           expect(denied.exit).toMatchObject({
             _tag: "Success",
-            value: { status: "error", error: { message: expect.stringContaining("Permission denied: shell") } },
+            value: { status: "error", error: { message: 'Permission denied: shell (denied by rule "cat")' } },
           })
           expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(false)
         }),
