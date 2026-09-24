@@ -7,7 +7,6 @@ import {
   createSignal,
   createUniqueId,
   onCleanup,
-  type Setter,
   splitProps,
 } from "solid-js"
 import { isServer, render } from "solid-js/web"
@@ -37,6 +36,8 @@ import {
 import { inlineCodeKind } from "./markdown-inline-code-kind"
 import { renderMermaidSvg } from "./markdown-mermaid"
 import { createMarkdownRenderer } from "./markdown-solid"
+import { disposeCopyButtons, setCopyButtonState, setCopyState, setupCodeCopy } from "./markdown-code-copy"
+import type { CopyButtonState, CopyLabels } from "./markdown-code-copy"
 import { useMarkdown, type OpenMarkdownLocalFile, type ReadMarkdownImage } from "../context/markdown"
 import { createMarkdownImages } from "./markdown-image"
 import { createImagePreview } from "./image-preview"
@@ -100,19 +101,6 @@ async function code(text: string, language: string | undefined, key: string, com
   }
 }
 
-type CopyLabels = {
-  copy: string
-  copied: string
-}
-
-type CopyButtonState = {
-  setLabels: Setter<CopyLabels>
-  setCopied: Setter<boolean>
-  dispose: () => void
-}
-
-const copyButtonState = new WeakMap<HTMLElement, CopyButtonState>()
-
 const urlPattern = /^https?:\/\/[^\s<>()`"']+$/
 
 function codeUrl(text: string) {
@@ -139,7 +127,7 @@ function createCopyButton(labels: CopyLabels) {
     return <MarkdownCopyButton labels={labelState()} copied={copied()} />
   }, host)
   state.dispose = dispose
-  copyButtonState.set(host, state as CopyButtonState)
+  setCopyButtonState(host, state as CopyButtonState)
   return host
 }
 
@@ -161,32 +149,6 @@ function MarkdownCopyButton(props: { labels: CopyLabels; copied: boolean }) {
       />
     </Tooltip>
   )
-}
-
-function setCopyState(host: HTMLElement, labels: CopyLabels, copied: boolean) {
-  const state = copyButtonState.get(host)
-  state?.setLabels(labels)
-  state?.setCopied(copied)
-  if (copied) {
-    host.setAttribute("data-copied", "true")
-    return
-  }
-  host.removeAttribute("data-copied")
-}
-
-function disposeCopyButton(host: HTMLElement) {
-  copyButtonState.get(host)?.dispose()
-  copyButtonState.delete(host)
-}
-
-function disposeCopyButtons(root: Element) {
-  const hosts = [
-    ...(root instanceof HTMLElement && root.getAttribute("data-slot") === "markdown-copy-button" ? [root] : []),
-    ...Array.from(root.querySelectorAll('[data-slot="markdown-copy-button"]')).filter(
-      (el): el is HTMLElement => el instanceof HTMLElement,
-    ),
-  ]
-  hosts.forEach(disposeCopyButton)
 }
 
 function disposeRenderedMarkdown(root: Element) {
@@ -332,51 +294,6 @@ function setupLocalLinks(root: HTMLDivElement, open: () => OpenMarkdownLocalFile
   return () => {
     root.removeEventListener("click", handleClick)
     root.removeEventListener("keydown", handleKeyDown)
-  }
-}
-
-function setupCodeCopy(root: HTMLDivElement, getLabels: () => CopyLabels) {
-  const timeouts = new Map<HTMLElement, ReturnType<typeof setTimeout>>()
-
-  const updateLabel = (button: HTMLElement) => {
-    const labels = getLabels()
-    const copied = button.getAttribute("data-copied") === "true"
-    setCopyState(button, labels, copied)
-  }
-
-  const handleClick = async (event: MouseEvent) => {
-    const target = event.target
-    if (!(target instanceof Element)) return
-
-    const button = target.closest('[data-slot="markdown-copy-button"]')
-    if (!(button instanceof HTMLElement)) return
-    const code = button.closest('[data-component="markdown-code"]')?.querySelector("code")
-    const content = code?.textContent ?? ""
-    if (!content) return
-    const clipboard = navigator?.clipboard
-    if (!clipboard) return
-    await clipboard.writeText(content)
-    const labels = getLabels()
-    setCopyState(button, labels, true)
-    const existing = timeouts.get(button)
-    if (existing) clearTimeout(existing)
-    const timeout = setTimeout(() => setCopyState(button, labels, false), 2000)
-    timeouts.set(button, timeout)
-  }
-
-  const buttons = Array.from(root.querySelectorAll('[data-slot="markdown-copy-button"]'))
-  for (const button of buttons) {
-    if (button instanceof HTMLElement) updateLabel(button)
-  }
-
-  root.addEventListener("click", handleClick)
-
-  return () => {
-    root.removeEventListener("click", handleClick)
-    for (const timeout of timeouts.values()) {
-      clearTimeout(timeout)
-    }
-    disposeCopyButtons(root)
   }
 }
 
