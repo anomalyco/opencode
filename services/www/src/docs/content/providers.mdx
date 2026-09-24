@@ -151,7 +151,8 @@ disable it.
 }
 ```
 
-A request that exceeds either limit fails with a transport error and follows the normal retry policy.
+A request that exceeds either limit fails with a transport error. OpenCode retries a timed-out request up to three
+times before giving up.
 
 ## Packages
 
