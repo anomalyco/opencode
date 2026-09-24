@@ -15,7 +15,7 @@ import { uriGlobal, urlGlobal, urlSearchParamsGlobal } from "../stdlib/url.js"
 import { headersGlobal } from "../stdlib/headers.js"
 import { iteratorGlobals } from "../stdlib/iterator.js"
 import { coercion } from "../stdlib/value.js"
-import { base64Global, cryptoGlobal } from "../stdlib/web.js"
+import { base64Global, cryptoGlobal, structuredCloneGlobal } from "../stdlib/web.js"
 import { ToolReference } from "../tool-runtime.js"
 import { errorGlobal } from "./errors.js"
 import { errorTypes } from "./intrinsics.js"
@@ -95,6 +95,7 @@ const table: Record<string, Factory> = {
   atob: (ctx) => base64Global(ctx, "atob"),
   btoa: (ctx) => base64Global(ctx, "btoa"),
   crypto: (ctx) => cryptoGlobal(ctx),
+  structuredClone: (ctx) => structuredCloneGlobal(ctx),
   ...Object.fromEntries(errorTypes.map((type) => [type, <R>(ctx: Interpreter<R>) => errorGlobal(type, ctx)])),
 }
 

@@ -11,7 +11,6 @@ export interface Snapshot {
   /** Normalized 0..1 when the provider reports progress. */
   readonly progress?: number
   readonly position?: number
-  readonly expiresAt?: number
 }
 
 /**
@@ -22,15 +21,11 @@ export interface Route<Response> {
   readonly status: Effect.Effect<Snapshot, AIError>
   readonly result: Effect.Effect<Response, AIError>
   readonly cancel?: Effect.Effect<void, AIError>
-  /** Provider polling hint (e.g. `openai-poll-after-ms`) that overrides the default interval for the next poll. */
-  readonly pollHint?: (snapshot: Snapshot) => Duration.Duration | undefined
 }
 
 export interface Poll {
   readonly interval?: Duration.Input
   readonly timeout?: Duration.Input
-  /** Full override of the polling schedule; `interval` and `pollHint` are ignored when supplied. */
-  readonly schedule?: Schedule.Schedule<unknown, Snapshot>
 }
 
 export interface AwaitOptions {
@@ -63,7 +58,6 @@ export class Generation<Response> {
   readonly status: Status
   readonly progress?: number
   readonly position?: number
-  readonly expiresAt?: number
 
   constructor(
     readonly route: Route<Response>,
@@ -75,7 +69,6 @@ export class Generation<Response> {
     this.status = snapshot.status
     this.progress = snapshot.progress
     this.position = snapshot.position
-    this.expiresAt = snapshot.expiresAt
   }
 
   get snapshot(): Snapshot {
@@ -84,7 +77,6 @@ export class Generation<Response> {
       status: this.status,
       progress: this.progress,
       position: this.position,
-      expiresAt: this.expiresAt,
     }
   }
 
@@ -168,15 +160,8 @@ export class Generation<Response> {
     )
   }
 
-  private schedule(poll: Poll | undefined): Schedule.Schedule<unknown, Generation<Response>> {
-    if (poll?.schedule) return poll.schedule.pipe(Schedule.setInputType<Generation<Response>>())
-    const interval = poll?.interval ?? DEFAULT_POLL_INTERVAL
-    const pollHint = this.route.pollHint
-    const spaced = Schedule.spaced(interval).pipe(Schedule.setInputType<Generation<Response>>())
-    if (!pollHint) return spaced
-    return spaced.pipe(
-      Schedule.modifyDelay((metadata) => Effect.succeed(pollHint(metadata.input.snapshot) ?? interval)),
-    )
+  private schedule(poll: Poll | undefined) {
+    return Schedule.spaced(poll?.interval ?? DEFAULT_POLL_INTERVAL)
   }
 }
 

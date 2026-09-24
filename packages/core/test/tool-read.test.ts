@@ -577,7 +577,10 @@ describe("ReadTool", () => {
     Effect.gen(function* () {
       const registry = yield* Tool.Service
       for (const [error, message] of [
-        [new ReadToolFileSystem.OffsetOutOfRangeError({ offset: 10 }), "Offset 10 is out of range"],
+        [
+          new ReadToolFileSystem.OffsetOutOfRangeError({ offset: 10, lines: 3 }),
+          "Offset 10 is out of range for this file (3 lines)",
+        ],
         [
           new ReadToolFileSystem.PathKindError({ resource: "socket", expected: "a file" }),
           "Path is not a file: socket",

@@ -116,7 +116,7 @@ import { isRecord } from "../../util/record"
 import { createHistoryPrepend } from "./history"
 import { context, use, type PendingAction } from "./render-context"
 import { INLINE_TOOL_ICON_WIDTH, InlineToolRow, ReasoningPart, TextPart, toolDisplay } from "./message-parts"
-import type { SessionEntry } from "./grouping/session"
+import { defaultVerbosity, type GroupKind, type SessionEntry } from "./grouping/session"
 import { SessionGroupView } from "./group-view"
 import { useEntryAnchor } from "./anchor-view"
 import { containsAnchor, createTimelineAnchors } from "./anchors"
@@ -234,6 +234,13 @@ export function Session(props: {
   const markdownMode = createMemo(() => config.session?.markdown ?? "rendered")
   const diffWrapMode = createMemo(() => config.diffs?.wrap ?? "word")
   const groupExploration = createMemo(() => config.session?.grouping !== "none")
+  const verbosity = createMemo(() => config.session?.verbosity ?? defaultVerbosity)
+  // High opens exploration and instruction summaries by default; everything else starts collapsed.
+  const groupExpanded = (groupID: string, kind: GroupKind) =>
+    sessionTabs.groupExpanded(sessionID, groupID) ??
+    (verbosity() === "high" && (kind === "exploration" || kind === "instructions"))
+  const groupedKind = (kind: GroupKind) =>
+    kind === "reasoning" ? thinkingMode() === "hide" : kind === "exploration" ? groupExploration() : true
 
   Keymap.createLayer(() => ({
     priority: 10,
@@ -395,8 +402,8 @@ export function Session(props: {
   const weights = createMemo(() =>
     rows.map((row) =>
       rowWeight(row, {
-        expanded: (groupID) => sessionTabs.groupExpanded(sessionID, groupID) ?? false,
-        grouped: (kind) => (kind === "reasoning" ? thinkingMode() === "hide" : groupExploration()),
+        expanded: groupExpanded,
+        grouped: groupedKind,
       }),
     ),
   )
@@ -1046,6 +1053,21 @@ export function Session(props: {
       },
     },
     {
+      title: `Verbosity: ${Locale.titlecase(verbosity())}`,
+      id: "session.verbosity.cycle",
+      group: "Session",
+      run: () => {
+        const levels = ["low", "medium", "high"] as const
+        const next = levels[(levels.indexOf(verbosity()) + 1) % levels.length]
+        void configState
+          .update((draft) => {
+            draft.session = { ...draft.session, verbosity: next }
+          })
+          .catch(toast.error)
+        dialog.clear()
+      },
+    },
+    {
       title: "Jump to last user message",
       id: "session.messages_last_user",
       group: "Session",
@@ -1302,7 +1324,7 @@ export function Session(props: {
     <context.Provider
       value={{
         anchors,
-        groupExpanded: (groupID) => sessionTabs.groupExpanded(sessionID, groupID),
+        groupExpanded,
         setGroupExpanded: (groupID, expanded) => {
           sessionTabs.setGroupExpanded(sessionID, groupID, expanded)
           afterLayout(saveScrollAnchor)
@@ -2584,6 +2606,7 @@ function InlineTool(props: {
   children: JSX.Element
   part: SessionMessageAssistantTool
   onClick?: () => void
+  onErrorClick?: () => void
 }) {
   const theme = useTheme()
   const renderer = useRenderer()
@@ -2633,6 +2656,7 @@ function InlineTool(props: {
       onMouseUp={() => {
         if (renderer.getSelection()?.getSelectedText()) return
         if (failed()) {
+          if (props.onErrorClick) return props.onErrorClick()
           setErrorExpanded((value) => !value)
           return
         }
@@ -3176,6 +3200,7 @@ function Execute(props: ToolProps) {
   const hasRuntimeError = createMemo(() => props.metadata.error === true || props.part.state.status === "error")
   const outputPreview = createMemo(() => collapseToolOutput(output(), 4, 4 * Math.max(20, ctx.width - 6)).output)
   const showOutput = createMemo(() => output() && hasRuntimeError())
+  const openDetails = () => dialog.replace(() => <DialogExecute part={props.part} />)
 
   return (
     <>
@@ -3186,7 +3211,8 @@ function Execute(props: ToolProps) {
         pending="execute"
         complete={true}
         part={props.part}
-        onClick={() => dialog.replace(() => <DialogExecute part={props.part} />)}
+        onClick={openDetails}
+        onErrorClick={openDetails}
       >
         execute
       </InlineTool>

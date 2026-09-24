@@ -416,6 +416,66 @@ describe("GithubCopilotPlugin", () => {
     }),
   )
 
+  it.effect("uses responses for Grok, Gemini, and MAI Code models", () =>
+    Effect.gen(function* () {
+      const aisdk = yield* AISDK.Service
+      const calls: string[] = []
+      yield* addPlugin()
+      yield* aisdk.runLanguage({
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("github-copilot"), Model.ID.make("grok-4.5")),
+          modelID: Model.ID.make("grok-4.5"),
+          package: "aisdk:test-provider",
+        }),
+        sdk: fakeSelectorSdk(calls),
+        options: {},
+      })
+      yield* aisdk.runLanguage({
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("github-copilot"), Model.ID.make("grok-4.6")),
+          modelID: Model.ID.make("grok-4.6"),
+          package: "aisdk:test-provider",
+        }),
+        sdk: fakeSelectorSdk(calls),
+        options: {},
+      })
+      yield* aisdk.runLanguage({
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("github-copilot"), Model.ID.make("gemini-3.5-flash")),
+          modelID: Model.ID.make("gemini-3.5-flash"),
+          package: "aisdk:test-provider",
+        }),
+        sdk: fakeSelectorSdk(calls),
+        options: {},
+      })
+      yield* aisdk.runLanguage({
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("github-copilot"), Model.ID.make("mai-code-1.1-flash")),
+          modelID: Model.ID.make("mai-code-1.1-flash"),
+          package: "aisdk:test-provider",
+        }),
+        sdk: fakeSelectorSdk(calls),
+        options: {},
+      })
+      yield* aisdk.runLanguage({
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("github-copilot"), Model.ID.make("gpt-4o")),
+          modelID: Model.ID.make("gpt-4o"),
+          package: "aisdk:test-provider",
+        }),
+        sdk: fakeSelectorSdk(calls),
+        options: {},
+      })
+      expect(calls).toEqual([
+        "responses:grok-4.5",
+        "responses:grok-4.6",
+        "responses:gemini-3.5-flash",
+        "responses:mai-code-1.1-flash",
+        "chat:gpt-4o",
+      ])
+    }),
+  )
+
   it.effect("uses advertised Copilot endpoint metadata before model ID fallbacks", () =>
     Effect.gen(function* () {
       const aisdk = yield* AISDK.Service

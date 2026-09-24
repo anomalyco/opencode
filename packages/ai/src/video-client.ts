@@ -29,7 +29,9 @@ export interface Interface {
   ) => Stream.Stream<VideoEvent, AIError>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/VideoClient") {}
+export class VideoClientService extends Context.Service<VideoClientService, Interface>()("@opencode/VideoClient") {}
+export const Service = VideoClientService
+export type Service = VideoClientService
 
 export const start = <Options extends VideoOptions>(
   request: VideoRequestFor<Options>,

@@ -1,5 +1,5 @@
-import { Route, useNavigate, useParams } from "@solidjs/router"
-import { createMemo, lazy, onMount, Show, Suspense, type ParentProps } from "solid-js"
+import { Route, useParams } from "@solidjs/router"
+import { createMemo, lazy, Show, Suspense, type ParentProps } from "solid-js"
 import { Home } from "@/home/route"
 import { ServerProvider } from "@/runtime/server/current"
 import { useGlobal } from "@/runtime/server/runtime"
@@ -10,7 +10,6 @@ import { LayoutProvider } from "@/shell/state/layout"
 import { SettingsSurfaceProvider } from "@/settings/surface"
 import Shell from "@/shell/shell"
 import { requireServerKey } from "./session"
-import { decodePairingUrl } from "@/servers/connect/pairing"
 import { DesktopPairingCommand } from "@/shell/commands/desktop"
 
 export const File = lazy(() => import("@opencode/session-ui/file").then((module) => ({ default: module.File })))
@@ -28,7 +27,6 @@ export function preloadRoute(url: string) {
   const pathname = url.split(/[?#]/, 1)[0]
   if (pathname === "/new-session") return DraftRoute.preload().then(() => undefined)
   if (pathname === "/settings") return SettingsScreen.preload().then(() => undefined)
-  if (pathname === "/connect") return ConnectServerScreen.preload().then(() => undefined)
   if (/^\/server\/[^/]+\/session\/[^/]+$/.test(pathname))
     return TargetSessionRouteContent.preload().then(() => undefined)
   return Promise.resolve()
@@ -36,48 +34,29 @@ export function preloadRoute(url: string) {
 
 export function AppRoutes() {
   return (
-    <>
-      <Route path="/connect" component={ConnectRoute} />
-      <Route component={AppLayout}>
-        <Route path="/" component={Home} />
-        <Route path="/settings" component={SettingsScreen} />
-        <Route
-          path="/server/:serverKey/session/:id"
-          component={() => (
-            <SessionRouteFrame>
-              <Suspense
-                fallback={
-                  <div class="flex min-h-0 flex-1 px-2 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
-                    <SessionPanelFrame raised />
-                  </div>
-                }
-              >
-                <TargetServerRoute>
-                  <TargetSessionRouteContent />
-                </TargetServerRoute>
-              </Suspense>
-            </SessionRouteFrame>
-          )}
-        />
-        <Route path="/new-session" component={DraftRoute} />
-      </Route>
-    </>
-  )
-}
-
-function ConnectRoute() {
-  const navigate = useNavigate()
-  const servers = useServers()
-  const pairing = decodePairingUrl(location.search, location.origin) ?? decodePairingUrl(location.hash, location.origin)
-  onMount(() => {
-    if (!pairing) return
-    servers.add({ type: "http", http: { url: pairing.urls[0], password: pairing.password } })
-    navigate("/", { replace: true })
-  })
-  return (
-    <Show when={!pairing}>
-      <ConnectServerScreen onConnect={() => navigate("/", { replace: true })} />
-    </Show>
+    <Route component={AppLayout}>
+      <Route path="/" component={Home} />
+      <Route path="/settings" component={SettingsScreen} />
+      <Route
+        path="/server/:serverKey/session/:id"
+        component={() => (
+          <SessionRouteFrame>
+            <Suspense
+              fallback={
+                <div class="flex min-h-0 flex-1 px-2 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
+                  <SessionPanelFrame raised />
+                </div>
+              }
+            >
+              <TargetServerRoute>
+                <TargetSessionRouteContent />
+              </TargetServerRoute>
+            </Suspense>
+          </SessionRouteFrame>
+        )}
+      />
+      <Route path="/new-session" component={DraftRoute} />
+    </Route>
   )
 }
 
@@ -97,8 +76,15 @@ function TargetServerRoute(props: ParentProps) {
 
 function AppLayout(props: ParentProps) {
   const servers = useServers()
+  const global = useGlobal()
+  // A lone server that rejects our credentials (e.g. the web app before pairing) has nothing else to show.
+  const signedOut = () => {
+    const only = servers.list.length === 1 ? servers.list[0] : undefined
+    if (only?.type !== "http") return
+    return global.servers.health[ServerConnection.key(only)]?.unauthorized ? only : undefined
+  }
   return (
-    <Show when={servers.list.length > 0} fallback={<ConnectServerScreen />}>
+    <Show when={servers.list.length > 0 && !signedOut()} fallback={<ConnectServerScreen url={signedOut()?.http.url} />}>
       <LayoutProvider>
         <SettingsSurfaceProvider>
           <DesktopPairingCommand />

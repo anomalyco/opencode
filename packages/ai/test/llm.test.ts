@@ -149,7 +149,7 @@ describe("llm constructors", () => {
     const updated = LanguageModel.update(base, {
       route: responsesRoute,
       defaults: { generation: { maxTokens: 20 } },
-      compatibility: { toolSchema: "gemini", requireFinishReason: false },
+      compatibility: { sanitizer: "gemini", requireFinishReason: false },
     })
     const updatedInput = LanguageModel.input(updated)
 
@@ -157,7 +157,7 @@ describe("llm constructors", () => {
     expect(String(updated.id)).toBe("fake-model")
     expect(updated.route).toBe(responsesRoute)
     expect(updated.defaults?.generation).toEqual({ maxTokens: 20 })
-    expect(updated.compatibility).toEqual({ toolSchema: "gemini", requireFinishReason: false })
+    expect(updated.compatibility).toEqual({ sanitizer: "gemini", requireFinishReason: false })
     expect(updatedInput.defaults).toBe(updated.defaults)
     expect(updatedInput.compatibility).toBe(updated.compatibility)
     expect(String(updatedInput.provider)).toBe("fake")
@@ -172,14 +172,14 @@ describe("llm constructors", () => {
         providerOptions: { parallelToolCalls: false },
         http: { body: { extra_body: true } },
       },
-      compatibility: { toolSchema: "moonshot" },
+      compatibility: { sanitizer: "moonshot" },
     })
     const request = LLM.request({ model, prompt: "Say hello." })
 
     expect(request.model.defaults?.generation).toEqual({ maxTokens: 1_024, stop: ["END"] })
     expect(request.model.defaults?.providerOptions).toEqual({ parallelToolCalls: false })
     expect(request.model.defaults?.http).toEqual({ body: { extra_body: true } })
-    expect(request.model.compatibility).toEqual({ toolSchema: "moonshot" })
+    expect(request.model.compatibility).toEqual({ sanitizer: "moonshot" })
     expect(request.generation).toBeUndefined()
     expect(request.providerOptions).toBeUndefined()
     expect(request.http).toBeUndefined()

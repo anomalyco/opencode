@@ -6,7 +6,7 @@ import { OpenResponses } from "./open-responses.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
 import { ToolSchemaProjection } from "./utils/tool-schema.js"
-import { MetaImage } from "./utils/meta-image.js"
+import { detectMediaType } from "../utils/media-type.js"
 
 const ADAPTER = "meta-responses"
 const NAME = "Meta Responses"
@@ -107,7 +107,7 @@ const fromRequest = Effect.fn("MetaResponses.fromRequest")(function* (request: L
                 return yield* OpenResponses.lowerTool(
                   NAME,
                   tool,
-                  ToolSchemaProjection.modelCompatibility(tool.inputSchema, request.model.compatibility?.toolSchema),
+                  ToolSchemaProjection.modelCompatibility(tool.inputSchema, request.model),
                 )
               return yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(NativeTool))(tool.native.meta)
             }),
@@ -151,7 +151,11 @@ const HOSTED_TOOLS = {
           ),
         ),
       )
-      const mime = MetaImage.mediaType(data, item.output_format)
+      // Responses image items can omit output_format, including when PNG/JPEG was requested.
+      const mime =
+        item.output_format === undefined
+          ? (detectMediaType(data) ?? "application/octet-stream")
+          : `image/${item.output_format}`
       return {
         type: "content" as const,
         value: [{ type: "file" as const, uri: `data:${mime};base64,${item.result}`, mime }],

@@ -2,7 +2,7 @@ import { Effect, Schema, Stream } from "effect"
 import { Framing } from "../route/framing.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderID, mergeJsonRecords, type MediaUsage } from "../schema/index.js"
+import { mergeJsonRecords, type MediaUsage } from "../schema/index.js"
 import {
   TranscriptionFinishEvent,
   TranscriptionModel,
@@ -16,9 +16,7 @@ import { mediaTypeExtension } from "../utils/media-type.js"
 import { ProviderShared } from "./shared.js"
 import { MediaInput } from "./utils/media-input.js"
 
-const ADAPTER = "openai-transcription"
-const NAME = "OpenAI Transcription"
-const PROVIDER = ProviderID.make("openai")
+const route = MediaProtocol.identity({ id: "openai-transcription", name: "OpenAI Transcription", provider: "openai" })
 export const DEFAULT_BASE_URL = "https://api.openai.com/v1"
 export const PATH = "/audio/transcriptions"
 
@@ -85,8 +83,8 @@ const Event = Schema.Union([
 const Transcript = Schema.Struct(transcriptFields)
 type Transcript = Schema.Schema.Type<typeof Transcript>
 
-const decodeEvent = MediaProtocol.decodeFrame(ADAPTER, NAME, Event)
-const decodeTranscript = MediaProtocol.decodeFrame(ADAPTER, NAME, Transcript)
+const decodeEvent = route.decodeFrame(Event)
+const decodeTranscript = route.decodeFrame(Transcript)
 
 type Frame = string | { readonly document: string }
 
@@ -120,24 +118,21 @@ const capabilities = (model: string): Capabilities => {
   return TRANSCRIBE
 }
 
-const unsupported = (operation: string, message: string) =>
-  Effect.fail(ProviderShared.unsupportedOperation({ operation, provider: PROVIDER, route: ADAPTER, message }))
-
 const validate = (request: MediaProtocol.Addressed<Request>, model: Capabilities) => {
   const id = request.model.id
   if (request.mode === "stream" && !model.stream)
-    return unsupported("media.stream", `${id} does not stream; use Transcription.generate`)
+    return Effect.fail(route.unsupported("media.stream", `${id} does not stream; use Transcription.generate`))
   if (request.diarize === true && !model.diarize)
-    return unsupported("media.diarize", `${id} does not diarize; use gpt-4o-transcribe-diarize`)
+    return Effect.fail(route.unsupported("media.diarize", `${id} does not diarize; use gpt-4o-transcribe-diarize`))
   if (request.prompt !== undefined && model.diarize)
-    return unsupported("media.prompt", `${id} does not accept a prompt`)
+    return Effect.fail(route.unsupported("media.prompt", `${id} does not accept a prompt`))
   if (
     request.timestamps === undefined ||
     request.timestamps === "none" ||
     model.timestamps.includes(request.timestamps)
   )
     return Effect.void
-  return unsupported("media.timestamps", `${id} does not return ${request.timestamps} timestamps`)
+  return Effect.fail(route.unsupported("media.timestamps", `${id} does not return ${request.timestamps} timestamps`))
 }
 
 const RESERVED_FORM_FIELDS = new Set([
@@ -150,11 +145,6 @@ const RESERVED_FORM_FIELDS = new Set([
   "stream",
 ])
 
-const appendField = (form: FormData, key: string, value: unknown) => {
-  if (Array.isArray(value)) return value.forEach((item) => form.append(`${key}[]`, String(item)))
-  form.append(key, typeof value === "object" && value !== null ? ProviderShared.encodeJson(value) : String(value))
-}
-
 const fromRequest = Effect.fn("OpenAITranscription.fromRequest")(function* (request: MediaProtocol.Addressed<Request>) {
   const model = capabilities(request.model.id)
   yield* validate(request, model)
@@ -162,18 +152,18 @@ const fromRequest = Effect.fn("OpenAITranscription.fromRequest")(function* (requ
   const extension = mediaTypeExtension(request.audio.mediaType)
   if (extension === undefined)
     return yield* ProviderShared.invalidRequest(
-      `${NAME} cannot name a ${request.audio.mediaType} upload; send mp3, mp4, m4a, wav, webm, ogg, or flac audio`,
+      `${route.name} cannot name a ${request.audio.mediaType} upload; send mp3, mp4, m4a, wav, webm, ogg, or flac audio`,
     )
-  const audio = yield* MediaInput.inlineBytes(ADAPTER, request.audio)
+  const audio = yield* MediaInput.inlineBytes(route.id, request.audio)
   const responseFormat = model.diarize
     ? "diarized_json"
     : request.timestamps === undefined || request.timestamps === "none"
       ? undefined
       : "verbose_json"
-  const native = Object.entries(mergeJsonRecords(request.providerOptions, request.http?.body) ?? {}).filter(
-    ([key]) => !RESERVED_FORM_FIELDS.has(key),
-  )
-  const fields = mergeJsonRecords(
+  const form = new FormData()
+  form.append("file", MediaInput.blob(audio, request.audio.mediaType), `audio.${extension}`)
+  MediaInput.appendFields(
+    form,
     {
       model: request.model.id,
       language: model.languageField === "language" ? request.language : undefined,
@@ -185,11 +175,12 @@ const fromRequest = Effect.fn("OpenAITranscription.fromRequest")(function* (requ
       chunking_strategy: model.diarize ? "auto" : undefined,
       stream: request.mode === "stream" ? true : undefined,
     },
-    Object.fromEntries(native),
+    {
+      overlay: mergeJsonRecords(request.providerOptions, request.http?.body),
+      reserved: RESERVED_FORM_FIELDS,
+      repeatArrays: true,
+    },
   )
-  const form = new FormData()
-  form.append("file", MediaInput.blob(audio, request.audio.mediaType), `audio.${extension}`)
-  Object.entries(fields ?? {}).forEach(([key, value]) => appendField(form, key, value))
   return MediaProtocol.multipart(form)
 })
 
@@ -233,7 +224,7 @@ const usage = (value: Transcript["usage"]): MediaUsage | undefined => {
 
 const finish = (state: State) => {
   const transcript = state.transcript
-  if (transcript === undefined) return Effect.fail(MediaProtocol.incomplete(ADAPTER))
+  if (transcript === undefined) return Effect.fail(route.incomplete())
   const segments = transcript.segments?.map(segment) ?? state.segments
   return Effect.succeed([
     TranscriptionFinishEvent.make({
@@ -251,9 +242,7 @@ const finish = (state: State) => {
 // 7. Protocol and route
 // ---------------------------------------------------------------------------
 
-export const protocol = MediaProtocol.stream<Request, TranscriptionEvent, Frame, State>({
-  id: ADAPTER,
-  name: NAME,
+export const protocol = MediaProtocol.stream<Request, TranscriptionEvent, Frame, State>(route, {
   unsupported: ["speakers"],
   body: { from: fromRequest },
   frames: (bytes, context) =>
@@ -267,7 +256,7 @@ export const protocol = MediaProtocol.stream<Request, TranscriptionEvent, Frame,
 
 export const model = (input: MediaRoute.ModelInput) =>
   TranscriptionModel.fromRoute<OpenAITranscriptionOptions, Frame, State>(
-    { id: ADAPTER, provider: PROVIDER, protocol, baseURL: DEFAULT_BASE_URL, path: PATH },
+    { protocol, baseURL: DEFAULT_BASE_URL, path: PATH },
     input,
   )
 

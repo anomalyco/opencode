@@ -1,11 +1,17 @@
 import { usePlatform } from "@/runtime/platform/platform"
 import { ServerConnection } from "@/runtime/server/registry"
 import { authTokenFromCredentials } from "./api"
-import { ClientError, OpenCode } from "@opencode/client"
+import { ClientError, isUnauthorizedError, OpenCode } from "@opencode/client"
 import { Accessor, createEffect, onCleanup } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 
-export type ServerHealth = { healthy: boolean; version?: string; incompatible?: boolean; checking?: boolean }
+export type ServerHealth = {
+  healthy: boolean
+  version?: string
+  incompatible?: boolean
+  checking?: boolean
+  unauthorized?: boolean
+}
 
 interface CheckServerHealthOptions {
   timeoutMs?: number
@@ -100,7 +106,7 @@ export async function checkServerHealth(
       .catch((error) => ({ error }))
     if ("data" in current) return current.data
     if (signal?.aborted) return { healthy: false }
-
+    if (isUnauthorizedError(current.error)) return { healthy: false, unauthorized: true }
     return next(count, current.error)
   }
   return attempt(0).finally(() => timeout?.clear?.())

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "2.0.15",
+  "version": "2.0.16",
   "name": "@opencode/core",
   "type": "module",
   "license": "MIT",
@@ -127,7 +127,7 @@
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "fuzzysort": "3.1.0",
-    "gitlab-ai-provider": "6.16.0",
+    "gitlab-ai-provider": "6.18.0",
     "google-auth-library": "10.5.0",
     "gray-matter": "4.0.3",
     "htmlparser2": "8.0.2",

@@ -1,7 +1,7 @@
 import { Effect, Schema, SchemaGetter } from "effect"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderID, mergeJsonRecords } from "../schema/index.js"
+import { mergeJsonRecords, type OpenString } from "../schema/index.js"
 import {
   TranscriptionFinishEvent,
   TranscriptionModel,
@@ -12,12 +12,9 @@ import {
   type TranscriptionWord,
   type TranscriptionEvent,
 } from "../transcription.js"
-import { ProviderShared } from "./shared.js"
 import { GeminiGenerateContent } from "./utils/gemini-generate-content.js"
 
-const ADAPTER = "google-transcription"
-const NAME = "Google Transcription"
-const PROVIDER = ProviderID.make("google")
+const route = MediaProtocol.identity({ id: "google-transcription", name: "Google Transcription", provider: "google" })
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 // ---------------------------------------------------------------------------
@@ -30,7 +27,7 @@ export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1bet
  */
 export type GoogleTranscriptionOptions = {
   readonly audioTranscriptionConfig?: {
-    readonly mode?: "VERBATIM" | "SMART" | (string & {})
+    readonly mode?: OpenString<"VERBATIM" | "SMART">
     readonly customVocabulary?: ReadonlyArray<string>
     readonly languageCodes?: ReadonlyArray<string>
   }
@@ -64,9 +61,7 @@ const AudioTranscription = Schema.Struct({
   ),
 })
 
-const decodeChunk = MediaProtocol.decodeFrame(
-  ADAPTER,
-  NAME,
+const decodeChunk = route.decodeFrame(
   GeminiGenerateContent.chunk(Schema.Struct({ audioTranscription: Schema.optional(AudioTranscription) })),
 )
 
@@ -87,16 +82,14 @@ interface State extends GeminiGenerateContent.Metadata {
 const fromRequest = Effect.fn("GoogleTranscription.fromRequest")(function* (request: MediaProtocol.Addressed<Request>) {
   // General Gemini models ignore `audioTranscriptionConfig` and answer the audio conversationally.
   if (!request.model.id.includes("transcribe"))
-    return yield* ProviderShared.unsupportedOperation({
-      operation: "transcription.model",
-      provider: PROVIDER,
-      route: ADAPTER,
-      message: `${request.model.id} is not a transcription model; use a transcribe model such as gemini-3.5-transcribe`,
-    })
+    return yield* route.unsupported(
+      "transcription.model",
+      `${request.model.id} is not a transcription model; use a transcribe model such as gemini-3.5-transcribe`,
+    )
   return MediaProtocol.json(
     mergeJsonRecords(
       {
-        contents: [{ role: "user", parts: [yield* GeminiGenerateContent.mediaPart(ADAPTER, request.audio)] }],
+        contents: [{ role: "user", parts: [yield* GeminiGenerateContent.mediaPart(route.id, request.audio)] }],
         generationConfig: mergeJsonRecords(
           {
             audioTranscriptionConfig: {
@@ -147,7 +140,7 @@ const turn = (part: Schema.Schema.Type<typeof AudioTranscription>) => {
 
 const step = Effect.fn("GoogleTranscription.step")(function* (state: State, frame: string) {
   const chunk = yield* decodeChunk(frame)
-  const blocked = GeminiGenerateContent.blocked(NAME, chunk, frame)
+  const blocked = GeminiGenerateContent.blocked(route.name, chunk, frame)
   if (blocked !== undefined) return yield* blocked
   const turns = (chunk.candidates?.[0]?.content?.parts ?? []).flatMap((part) =>
     part.audioTranscription === undefined ? [] : [turn(part.audioTranscription)],
@@ -169,7 +162,7 @@ const step = Effect.fn("GoogleTranscription.step")(function* (state: State, fram
 })
 
 const finish = (state: State) => {
-  if (state.finishReason === undefined) return Effect.fail(MediaProtocol.incomplete(ADAPTER))
+  if (state.finishReason === undefined) return Effect.fail(route.incomplete())
   return Effect.succeed([
     TranscriptionFinishEvent.make({
       text: state.text,
@@ -185,9 +178,7 @@ const finish = (state: State) => {
 // 7. Protocol and route
 // ---------------------------------------------------------------------------
 
-export const protocol = MediaProtocol.stream<Request, TranscriptionEvent, string, State>({
-  id: ADAPTER,
-  name: NAME,
+export const protocol = MediaProtocol.stream<Request, TranscriptionEvent, string, State>(route, {
   unsupported: ["prompt", "speakers"],
   body: { from: fromRequest },
   frames: (bytes, context) => GeminiGenerateContent.frames(bytes, context.request.mode),
@@ -199,8 +190,6 @@ export const protocol = MediaProtocol.stream<Request, TranscriptionEvent, string
 export const model = (input: MediaRoute.ModelInput) =>
   TranscriptionModel.fromRoute<GoogleTranscriptionOptions, string, State>(
     {
-      id: ADAPTER,
-      provider: PROVIDER,
       protocol,
       baseURL: DEFAULT_BASE_URL,
       path: ({ request }) => GeminiGenerateContent.path(request.model.id, request.mode),

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { groupID } from "../../../src/routes/session/anchors"
-import type { SessionEntry, SessionRow } from "../../../src/routes/session/grouping/session"
+import type { GroupKind, SessionEntry, SessionRow } from "../../../src/routes/session/grouping/session"
 import { groupEntries } from "../../../src/routes/session/grouping/tree"
 import { rowsAfter, rowsBefore, rowWeight } from "../../../src/routes/session/mount-budget"
 
@@ -9,15 +9,15 @@ const read = (index: number): SessionEntry => ({
   ref: { messageID: `m${index}`, partID: `read-${index}` },
 })
 
-function group(size: number, path: readonly ("exploration" | "reasoning")[] = ["exploration"]): SessionRow {
+function group(size: number, path: readonly GroupKind[] = ["exploration"]): SessionRow {
   const [node] = groupEntries(
     Array.from({ length: size }, (_, index) => read(index)),
     () => path,
   )
   if (node.type !== "group") throw new Error("Expected group")
-  return node.kind === "reasoning"
-    ? { ...node, kind: "reasoning", completed: true }
-    : { ...node, kind: "exploration", pending: [], completed: true }
+  return node.kind === "reasoning" || node.kind === "instructions"
+    ? { ...node, kind: node.kind, completed: true }
+    : { ...node, kind: node.kind, pending: [], completed: true }
 }
 
 const collapsed = { expanded: () => false, grouped: () => true }

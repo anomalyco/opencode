@@ -50,7 +50,7 @@ export class TranscriptionModel<Options extends TranscriptionOptions = Transcrip
   ) {
     return new TranscriptionModel<Options>({
       id: input.id,
-      provider: route.provider,
+      provider: route.protocol.provider,
       http: input.http,
       route: composeAnyRoute(route, input, collectResponse),
     })
@@ -236,7 +236,7 @@ export function request(input: TranscriptionRequest | TranscriptionRequestInput)
   if (input instanceof TranscriptionRequest) return input
   return new TranscriptionRequest({
     ...input,
-    http: input.http === undefined ? undefined : HttpOptions.make(input.http),
+    http: HttpOptions.make(input.http),
   })
 }
 

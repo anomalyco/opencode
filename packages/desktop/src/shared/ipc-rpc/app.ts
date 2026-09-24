@@ -7,8 +7,6 @@ const ServerReadyData = Schema.Struct({
 
 export const PairingInfo = Schema.Struct({
   urls: Schema.Array(Schema.String),
-  username: Schema.Literal("opencode"),
-  password: Schema.String,
 })
 
 export const AppAwaitInitialization = Rpc.make("AppAwaitInitialization", { success: ServerReadyData })
@@ -60,6 +58,7 @@ export const AppSetNativeTranslations = Rpc.make("AppSetNativeTranslations", {
 })
 export const AppRelaunch = Rpc.make("AppRelaunch")
 export const AppPairInfo = Rpc.make("AppPairInfo", { success: PairingInfo, error: Schema.String })
+export const AppPairCode = Rpc.make("AppPairCode", { success: Schema.String, error: Schema.String })
 export const AppGetKeepScreenActive = Rpc.make("AppGetKeepScreenActive", { success: Schema.Boolean })
 export const AppSetKeepScreenActive = Rpc.make("AppSetKeepScreenActive", {
   payload: { enabled: Schema.Boolean },
@@ -82,6 +81,7 @@ export const AppRpcs = RpcGroup.make(
   AppSetNativeTranslations,
   AppRelaunch,
   AppPairInfo,
+  AppPairCode,
   AppGetKeepScreenActive,
   AppSetKeepScreenActive,
 )

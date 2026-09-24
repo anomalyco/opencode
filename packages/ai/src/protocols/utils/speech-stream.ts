@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { Media } from "../../media.js"
-import { MediaProtocol } from "../../route/media-protocol.js"
-import type { AIError, MediaUsage, ProviderID, ProviderMetadata } from "../../schema/index.js"
+import type { MediaProtocol } from "../../route/media-protocol.js"
+import type { AIError, MediaUsage, ProviderMetadata } from "../../schema/index.js"
 import {
   SpeechAudioDeltaEvent,
   SpeechFinishEvent,
@@ -10,7 +10,6 @@ import {
   type SpeechVoice,
 } from "../../speech.js"
 import { concatBytes } from "../../utils/bytes.js"
-import { ProviderShared } from "../shared.js"
 
 export interface Audio {
   /** Appended in place: the route creates fresh state for each response through `initial`. */
@@ -78,12 +77,9 @@ export const sampleRate = (mediaType: string | undefined) => {
   return rate === undefined ? undefined : Number(rate)
 }
 
-export const unsupportedFormat = (provider: ProviderID, route: string, message: string) =>
-  ProviderShared.unsupportedOperation({ operation: "media.format", provider, route, message })
-
 /** A declared `mediaType` wins over sniffing: headerless PCM can start with bytes that look like an MPEG frame sync. */
 export const finish = (
-  route: string,
+  route: MediaProtocol.Identity,
   state: Audio,
   output: {
     readonly mediaType: string | undefined
@@ -95,10 +91,7 @@ export const finish = (
 ): Effect.Effect<ReadonlyArray<SpeechEvent>, AIError> => {
   if (state.chunks.length === 0)
     return Effect.fail(
-      MediaProtocol.frameError(
-        route,
-        `The provider returned no audio${output.detail === undefined ? "" : ` (${output.detail})`}`,
-      ),
+      route.frameError(`The provider returned no audio${output.detail === undefined ? "" : ` (${output.detail})`}`),
     )
   return Effect.succeed([
     SpeechFinishEvent.make({

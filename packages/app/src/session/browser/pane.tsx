@@ -41,6 +41,12 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
   canvas.width = canvas.height = 1
   const paint = canvas.getContext("2d", { willReadFrequently: true })
   const scheme = () => store.address.match(/^https?:\/\//i)?.[0] ?? ""
+  const error = () => {
+    const value = props.browser.error()
+    if (value === "browser.pane.replaced") return language.t("session.browser.replaced")
+    if (value === "browser.pane.unsupported") return language.t("session.browser.unsupported")
+    return value
+  }
 
   command.register("browser.navigation", () => [
     {
@@ -281,9 +287,13 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
           </div>
         </form>
       </div>
-      <Show when={props.browser.error() && !failed()}>
-        <div class="shrink-0 px-3 py-1.5 text-12-regular text-text-danger-base border-b border-v2-border-border-muted">
-          {props.browser.error()}
+      <Show when={error() && !failed()}>
+        <div
+          class="shrink-0 px-3 py-1.5 text-12-regular text-text-danger-base border-b border-v2-border-border-muted"
+          role="alert"
+          aria-live="assertive"
+        >
+          {error()}
         </div>
       </Show>
       <div ref={surface} class="min-h-0 flex-1 bg-v2-background-bg-base flex items-center justify-center">

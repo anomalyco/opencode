@@ -13,6 +13,7 @@ import {
   UnknownProviderError,
   Usage,
   type FinishReasonDetails,
+  type JsonSchema,
   type LLMRequest,
   type MediaPart,
   type ToolCallPart,
@@ -22,6 +23,7 @@ import { classifyProviderFailure } from "../provider-error.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { MistralToolID } from "./utils/mistral-tool-id.js"
+import { ToolSchemaProjection } from "./utils/tool-schema.js"
 import { ToolStream } from "./utils/tool-stream.js"
 
 const ADAPTER = "mistral-chat"
@@ -366,9 +368,9 @@ const lowerMessages = Effect.fn("MistralChat.lowerMessages")(function* (request:
   return messages
 })
 
-const lowerTool = (tool: ToolDefinition): MistralTool => ({
+const lowerTool = (tool: ToolDefinition, inputSchema: JsonSchema): MistralTool => ({
   type: "function",
-  function: { name: tool.name, description: tool.description, parameters: tool.inputSchema, strict: false },
+  function: { name: tool.name, description: tool.description, parameters: inputSchema, strict: false },
 })
 
 export const fromRequest = Effect.fn("MistralChat.fromRequest")(function* (request: LLMRequest) {
@@ -394,7 +396,12 @@ export const fromRequest = Effect.fn("MistralChat.fromRequest")(function* (reque
   return {
     model: request.model.id,
     messages: yield* lowerMessages(flattened.request),
-    tools: flattened.tools.length > 0 ? flattened.tools.map(lowerTool) : undefined,
+    tools:
+      flattened.tools.length > 0
+        ? flattened.tools.map((tool) =>
+            lowerTool(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, request.model)),
+          )
+        : undefined,
     tool_choice: toolChoice,
     stream: true as const,
     max_tokens: request.generation?.maxTokens,

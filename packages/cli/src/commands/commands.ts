@@ -495,10 +495,10 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
       },
     }),
     Spec.make("pair", {
-      description: "Show server pairing information",
+      description: "Print one-time links to connect a browser or app",
       params: {
         url: Flag.string("url").pipe(
-          Flag.withDescription("Advertise an external HTTP(S) server URL in the pairing QR code"),
+          Flag.withDescription("Use an external HTTP(S) server URL in pairing links"),
           Flag.mapTryCatch(
             (value) => {
               const url = new URL(value)

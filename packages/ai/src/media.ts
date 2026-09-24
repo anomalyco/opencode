@@ -6,7 +6,7 @@ import { ProviderID } from "./schema/ids.js"
 import { AIError, HttpContext, InvalidProviderOutputError, InvalidRequestError } from "./schema/errors.js"
 import { ProviderMetadata } from "./schema/options.js"
 import { Service } from "./route/executor-service.js"
-import { detectMediaType, extensionMediaType } from "./utils/media-type.js"
+import { detectMediaType, fileMediaType } from "./utils/media-type.js"
 
 export { detectMediaType } from "./utils/media-type.js"
 
@@ -309,7 +309,7 @@ export const file = (path: string, options?: AssetOptions): Effect.Effect<Asset,
     const data = yield* fs
       .readFile(path)
       .pipe(Effect.mapError((cause) => invalid(`Failed to read media file ${path}`, cause)))
-    return bytes(data, detectMediaType(data) ?? extensionMediaType(path), options)
+    return bytes(data, fileMediaType(data, path), options)
   })
 
 /** Materialize an asset and write its bytes through `FileSystem`. */

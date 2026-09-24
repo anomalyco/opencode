@@ -5,12 +5,10 @@ import { ImageModel, ImageResponse, type ImageRequestFor } from "../image.js"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderID, mergeJsonRecords, type AIError } from "../schema/index.js"
+import { mergeJsonRecords, type AIError } from "../schema/index.js"
 import { ProviderShared, optionalNull } from "./shared.js"
 
-const ADAPTER = "replicate-images"
-const NAME = "Replicate"
-const PROVIDER = ProviderID.make("replicate")
+const route = MediaProtocol.identity({ id: "replicate-images", name: "Replicate", provider: "replicate" })
 export const DEFAULT_BASE_URL = "https://api.replicate.com"
 const OUTPUT_RETENTION = Duration.hours(1)
 const MAX_DATA_URL_BYTES = 256 * 1024
@@ -71,9 +69,11 @@ const inlineSize = (source: Media.Source) => {
 const fileInput = (asset: Media.Asset) => {
   if (inlineSize(asset.source) > MAX_DATA_URL_BYTES)
     return Effect.fail(
-      ProviderShared.invalidRequest(`${NAME} data URL inputs are limited to 256 KB; pass a larger file by https URL`),
+      ProviderShared.invalidRequest(
+        `${route.name} data URL inputs are limited to 256 KB; pass a larger file by https URL`,
+      ),
     )
-  return ProviderShared.mediaReference(asset, undefined, NAME).pipe(Effect.map((reference) => reference.value))
+  return ProviderShared.mediaReference(asset, undefined, route.name).pipe(Effect.map((reference) => reference.value))
 }
 
 const inputValue = (value: unknown): Effect.Effect<unknown, AIError> => {
@@ -98,7 +98,7 @@ const fromRequest = Effect.fn("ReplicateImages.fromRequest")(function* (request:
 // 6. Response decoding
 // ---------------------------------------------------------------------------
 
-const decodePrediction = MediaProtocol.decodeJson(ADAPTER, NAME, Prediction)
+const decodePrediction = route.decodeJson(Prediction)
 
 const decodeStart = Effect.fn("ReplicateImages.decodeStart")(function* (
   response: HttpClientResponse.HttpClientResponse,
@@ -130,15 +130,16 @@ const decodeResult = Effect.fn("ReplicateImages.decodeResult")(function* (
   if (status === "failed" || status === "cancelled" || status === "expired")
     return yield* output.ended(
       status,
-      `${NAME} prediction ${context.token.id} ${prediction.status}${typeof prediction.error === "string" ? `: ${prediction.error}` : ""}`,
+      `${route.name} prediction ${context.token.id} ${prediction.status}${typeof prediction.error === "string" ? `: ${prediction.error}` : ""}`,
     )
-  if (status !== "completed") return yield* output.invalid(`${NAME} prediction ${context.token.id} has not finished`)
+  if (status !== "completed")
+    return yield* output.invalid(`${route.name} prediction ${context.token.id} has not finished`)
   if (prediction.data_removed === true)
-    return yield* output.ended("expired", `${NAME} removed the output of prediction ${context.token.id}`)
+    return yield* output.ended("expired", `${route.name} removed the output of prediction ${context.token.id}`)
   if (!isOutput(prediction.output))
-    return yield* output.invalid(`${NAME} prediction ${context.token.id} returned output that is not image URLs`)
+    return yield* output.invalid(`${route.name} prediction ${context.token.id} returned output that is not image URLs`)
   const urls = typeof prediction.output === "string" ? [prediction.output] : prediction.output
-  if (urls.length === 0) return yield* output.invalid(`${NAME} prediction ${context.token.id} returned no images`)
+  if (urls.length === 0) return yield* output.invalid(`${route.name} prediction ${context.token.id} returned no images`)
   const predictTime = prediction.metrics?.predict_time ?? undefined
   const completedAt = prediction.completed_at ?? undefined
   const expiresAt =
@@ -154,9 +155,7 @@ const decodeResult = Effect.fn("ReplicateImages.decodeResult")(function* (
 // 7. Protocol and route
 // ---------------------------------------------------------------------------
 
-export const protocol = MediaProtocol.queued<Request, ImageResponse, Token>({
-  id: ADAPTER,
-  name: NAME,
+export const protocol = MediaProtocol.queued<Request, ImageResponse, Token>(route, {
   token: Token,
   unsupported: ["images", "mask", "n", "size", "aspectRatio", "seed", "format"],
   start: { body: { from: fromRequest }, decode: decodeStart },
@@ -168,8 +167,6 @@ export const protocol = MediaProtocol.queued<Request, ImageResponse, Token>({
 export const model = (input: MediaRoute.ModelInput) =>
   ImageModel.fromRoute<ReplicateImageOptions, Token>(
     {
-      id: ADAPTER,
-      provider: PROVIDER,
       protocol,
       baseURL: DEFAULT_BASE_URL,
       path: ({ request }) =>

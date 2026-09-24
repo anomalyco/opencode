@@ -133,6 +133,35 @@ describe("Video / Google Veo", () => {
     }),
   )
 
+  it.effect("hands the asset the auth header that overwrote a deployment header", () =>
+    Effect.gen(function* () {
+      const generation = yield* Video.start({
+        model: Google.configure({
+          apiKey: "test",
+          baseURL: "https://google.test/v1beta",
+          headers: { "x-goog-api-key": "stale" },
+        }).video("veo-3.1-generate-preview"),
+        prompt: "A kite",
+      })
+      const response = yield* generation.result()
+      expect(response.video.headers).toEqual({ "x-goog-api-key": "test" })
+    }).pipe(
+      Effect.provide(
+        layer((input) =>
+          input.request.method === "POST"
+            ? Effect.succeed(json(input, { name: operation }))
+            : Effect.succeed(
+                json(input, {
+                  name: operation,
+                  done: true,
+                  response: { generateVideoResponse: { generatedSamples: [{ video: { uri: fileUri } }] } },
+                }),
+              ),
+        ),
+      ),
+    ),
+  )
+
   it.effect("surfaces an operation error as a failed generation with the provider body", () =>
     Effect.gen(function* () {
       const failure = {
@@ -533,6 +562,7 @@ describe("Video / fal", () => {
         "InvalidRequest",
       ])
       expect(errors[1].message).toContain("end_image_url")
+      expect(errors[4].message).toContain("; got fal:handle")
     }).pipe(Effect.provide(layer(() => Effect.die("unsupported input reached the network")))),
   )
 })

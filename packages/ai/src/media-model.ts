@@ -34,8 +34,6 @@ export namespace MediaModel {
 
   /** A protocol plus its canonical start path; `ModelInput.baseURL` overrides `baseURL` per deployment. */
   export interface RouteInput<Request extends MediaRoute.MediaRequest, Protocol> {
-    readonly id: string
-    readonly provider: string | ProviderID
     readonly protocol: Protocol
     readonly path: Endpoint.EndpointPart<MediaProtocol.Body, Request>
     readonly baseURL?: string
@@ -56,8 +54,6 @@ export const composeRoute = <Request extends MediaRoute.MediaRequest, Protocol, 
   input: MediaRoute.ModelInput,
 ): Route =>
   compose({
-    id: route.id,
-    provider: route.provider,
     protocol: route.protocol,
     endpoint: Endpoint.path(route.path, { baseURL: input.baseURL ?? route.baseURL }),
     auth: input.auth,

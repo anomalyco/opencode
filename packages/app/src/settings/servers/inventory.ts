@@ -74,6 +74,14 @@ export function settingsServers(
   ]
 }
 
+// A restored settings route must not be redirected against a partial list: WSL and SSH servers load asynchronously.
+export function useSettingsServersLoaded() {
+  const servers = useServers()
+  const wsl = useWslServers()
+  const ssh = useSsh()
+  return () => servers.hydrated() && !wsl.isLoading && !ssh.loading
+}
+
 export function useSettingsServers() {
   const servers = useServers()
   const wsl = useWslServers()

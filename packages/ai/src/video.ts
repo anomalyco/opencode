@@ -4,7 +4,7 @@ import { Media } from "./media.js"
 import { MediaModel, composeRoute, tryRequest } from "./media-model.js"
 import { MediaRoute } from "./route/media.js"
 import type { MediaProtocol } from "./route/media-protocol.js"
-import { AIError, HttpOptions, MediaUsage, ProviderMetadata } from "./schema/index.js"
+import { AIError, HttpOptions, MediaUsage, ProviderMetadata, type OpenString } from "./schema/index.js"
 import { VideoClient, Service } from "./video-client.js"
 
 // ---------------------------------------------------------------------------
@@ -32,7 +32,7 @@ export class VideoModel<Options extends VideoOptions = VideoOptions> extends Med
   ) {
     return new VideoModel<Options>({
       id: input.id,
-      provider: route.provider,
+      provider: route.protocol.provider,
       http: input.http,
       route: composeRoute(MediaRoute.queued, route, input),
     })
@@ -57,7 +57,7 @@ export const VideoModelSchema = Schema.declare((value): value is VideoModel => v
 export type VideoAspectRatio = Media.AspectRatio
 export const VideoAspectRatio = Media.AspectRatio
 
-export type VideoResolution = "480p" | "720p" | "1080p" | "4k" | (string & {})
+export type VideoResolution = OpenString<"480p" | "720p" | "1080p" | "4k">
 
 /** Pinned frames. Routes that accept only a first frame fail typed when `last` is present. */
 export const VideoFrames = Schema.Struct({
@@ -171,7 +171,7 @@ export function request(input: VideoRequest | VideoRequestInput) {
   if (input instanceof VideoRequest) return input
   return new VideoRequest({
     ...input,
-    http: input.http === undefined ? undefined : HttpOptions.make(input.http),
+    http: HttpOptions.make(input.http),
   })
 }
 

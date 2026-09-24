@@ -6,6 +6,7 @@ import { ChildProcess } from "effect/unstable/process"
 import { produce } from "immer"
 import { Shell } from "@opencode/schema/shell"
 import { AppProcess } from "@opencode/util/process"
+import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { makeGlobalNode, makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Bus } from "./bus.js"
@@ -345,12 +346,13 @@ const layer = () =>
                   }),
               )
 
-              const finish = (status: Info["status"], exit?: number, beforeWait = Effect.void) =>
+              const finish = (status: Info["status"], exit?: number, beforeWait = Effect.void, signal?: string) =>
                 Effect.gen(function* () {
                   if (command.info.status !== "running") return
                   command.info = produce(command.info, (draft) => {
                     draft.status = status
                     if (exit !== undefined) draft.exit = exit
+                    if (signal !== undefined) draft.signal = signal
                     draft.time.completed = Date.now()
                   })
                   yield* beforeWait
@@ -401,7 +403,14 @@ const layer = () =>
               runFork(
                 handle.exitCode.pipe(
                   Effect.flatMap((code) => finish("exited", code)),
-                  Effect.catch(() => finish("exited")),
+                  Effect.catch((error) =>
+                    finish(
+                      "exited",
+                      undefined,
+                      Effect.void,
+                      error.cause instanceof CrossSpawnSpawner.KilledBySignal ? error.cause.signal : undefined,
+                    ),
+                  ),
                 ),
               )
 

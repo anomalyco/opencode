@@ -196,8 +196,20 @@ describe("OpenAI Responses route", () => {
           name: "crm",
           description: "Customer management",
           tools: [
-            { type: "function", name: "lookup", description: "Look up a customer", parameters: {}, strict: false },
-            { type: "function", name: "orders", description: "List customer orders", parameters: {}, strict: false },
+            {
+              type: "function",
+              name: "lookup",
+              description: "Look up a customer",
+              parameters: { type: "object" },
+              strict: false,
+            },
+            {
+              type: "function",
+              name: "orders",
+              description: "List customer orders",
+              parameters: { type: "object" },
+              strict: false,
+            },
           ],
         },
       ])
@@ -232,7 +244,15 @@ describe("OpenAI Responses route", () => {
           type: "namespace",
           name: "crm",
           description: "Customer management",
-          tools: [{ type: "function", name: "orders_list", description: "List orders", parameters: {}, strict: false }],
+          tools: [
+            {
+              type: "function",
+              name: "orders_list",
+              description: "List orders",
+              parameters: { type: "object" },
+              strict: false,
+            },
+          ],
         },
       ])
     }),
