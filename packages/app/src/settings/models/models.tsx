@@ -28,7 +28,6 @@ export const SettingsModels: Component<{
   provider?: string
   onReveal?: () => void
 }> = (props) => {
-
   const language = useLanguage()
   const models = useModels()
   const serverSdk = useServerSDK()

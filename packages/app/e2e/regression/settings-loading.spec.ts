@@ -67,8 +67,7 @@ test("an inventory event updates the open all-project worktree list", async ({ p
   await settings.getByRole("tab", { name: "Worktrees", exact: true }).click()
   await expect(settings.getByText(sandboxes[0], { exact: true })).toBeVisible()
   const listed = page.waitForResponse(
-    (response) =>
-      new URL(response.url()).pathname === "/api/worktree" && response.request().method() === "GET",
+    (response) => new URL(response.url()).pathname === "/api/worktree" && response.request().method() === "GET",
   )
   inventory.push({ directory: discovered, strategy: "git" })
   events.push({
@@ -112,6 +111,36 @@ test("settings page survives refresh", async ({ page }) => {
   await expect(settings).toBeVisible()
   await expect(appearance).toHaveAttribute("aria-selected", "true")
   await expect(page).toHaveURL("/settings?tab=appearance")
+})
+
+test("another server's settings page survives refresh", async ({ page }) => {
+  const remote = "http://127.0.0.1:4097"
+  await page.addInitScript(
+    (input) => {
+      localStorage.setItem(
+        "opencode.global.dat:server",
+        JSON.stringify({
+          list: [{ type: "http", http: { url: input.remote } }],
+          projects: { local: [{ worktree: input.directory, expanded: true }] },
+        }),
+      )
+    },
+    { directory, remote },
+  )
+  const settings = page.getByTestId("settings-screen")
+  const url = (value: URL) =>
+    value.pathname === "/settings" &&
+    value.searchParams.get("server") === remote &&
+    value.searchParams.get("tab") === "providers"
+
+  await page.goto(`/settings?server=${encodeURIComponent(remote)}&tab=providers`)
+  await expect(settings.getByRole("heading", { name: "Providers", exact: true })).toBeVisible()
+  await expect(page).toHaveURL(url)
+
+  await page.reload()
+
+  await expect(settings.getByRole("heading", { name: "Providers", exact: true })).toBeVisible()
+  await expect(page).toHaveURL(url)
 })
 
 test("single-server settings expose scoped pages without a server picker", async ({ page }) => {
@@ -161,22 +190,23 @@ test("project settings open as a nested autosaving view", async ({ page }) => {
     .getByRole("button", { name: "More options", exact: true })
   await expect(projectOptions).toHaveCSS("width", "28px")
   await expect
-    .poll(async () =>
-      new Set(
-        await Promise.all(
-          [
-            settings.getByRole("button", { name: "Back to projects", exact: true }),
-            settings.getByRole("heading", { name: "Settings demo", exact: true }),
-            projectIcon,
-            projectOptions,
-          ].map((item) =>
-            item.evaluate((element) => {
-              const bounds = element.getBoundingClientRect()
-              return Math.round(bounds.top + bounds.height / 2)
-            }),
+    .poll(
+      async () =>
+        new Set(
+          await Promise.all(
+            [
+              settings.getByRole("button", { name: "Back to projects", exact: true }),
+              settings.getByRole("heading", { name: "Settings demo", exact: true }),
+              projectIcon,
+              projectOptions,
+            ].map((item) =>
+              item.evaluate((element) => {
+                const bounds = element.getBoundingClientRect()
+                return Math.round(bounds.top + bounds.height / 2)
+              }),
+            ),
           ),
-        ),
-      ).size,
+        ).size,
     )
     .toBe(1)
   await expect

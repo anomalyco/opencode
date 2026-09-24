@@ -22,7 +22,8 @@ import { SettingsPairing } from "./pairing/pairing"
 import { SettingsProviders } from "./providers/providers"
 import { SettingsModels } from "./models/models"
 import { SettingsServerGeneral } from "./servers/servers"
-import { useSettingsServers, type SettingsServer } from "./servers/inventory"
+import { useSettingsServers, useSettingsServersLoaded, type SettingsServer } from "./servers/inventory"
+import { isSshConnecting } from "@/servers/ssh/types"
 import { SettingsWorkspaces } from "./workspaces/workspaces"
 import { useWorkspacesPrefetch } from "./workspaces/queries"
 import { SettingsProjects } from "./workspaces/projects"
@@ -33,6 +34,7 @@ import { SettingsNavigation, type SettingsNavGroup } from "./navigation"
 import { SettingsProjectGeneral } from "./workspaces/project"
 import { ProjectSettingsExtensions } from "./workspaces/project-extensions"
 import { useSettingsSurface } from "./surface"
+import { settingsViewRedirect } from "./route"
 import { pageIcons } from "./pages"
 import { revealSettingsSearch } from "./search-reveal"
 import "@/settings/settings.css"
@@ -73,6 +75,7 @@ export function SettingsScreen() {
   const surface = useSettingsSurface()
   const dialog = useDialog()
   const servers = useSettingsServers()
+  const loaded = useSettingsServersLoaded()
   const global = useGlobal()
   let root: HTMLDivElement | undefined
   let viewType = surface.view().type
@@ -130,19 +133,18 @@ export function SettingsScreen() {
     return server.connection && project(server.connection, view.project)
   })
   createEffect(() => {
-    const view = surface.view()
-    if (view.type === "root") return
-    const target = targetServer()
-    if (!target) {
-      surface.back()
-      return
-    }
-    if (view.type === "project" && !target.connection) surface.replaceServer(target.key)
-  })
-  createEffect(() => {
-    const view = surface.view()
-    if (view.type !== "server" || servers().length !== 1) return
-    surface.open(view.tab === "general" ? "servers" : view.tab)
+    const next = settingsViewRedirect({
+      view: surface.view(),
+      loaded: loaded(),
+      servers: servers().map((item) => ({
+        key: item.key,
+        connected: !!item.connection,
+        starting: item.wsl?.runtime.kind === "starting" || (!!item.ssh && isSshConnecting(item.ssh.stage)),
+      })),
+    })
+    if (next?.type === "back") surface.back()
+    if (next?.type === "server") surface.replaceServer(next.server)
+    if (next?.type === "root") surface.open(next.tab)
   })
 
   return (
@@ -189,6 +191,7 @@ function RootSettings() {
   const tabs = useTabs()
   const servers = useServerCollectionController()
   const inventory = useSettingsServers()
+  const loaded = useSettingsServersLoaded()
   const platform = usePlatform()
   const [state, setState] = createStore({
     worktreeFilterReset: 0,
@@ -257,7 +260,7 @@ function RootSettings() {
 
   createEffect(() => {
     const view = surface.view()
-    if (view.type !== "root" || !multiple()) return
+    if (view.type !== "root" || !loaded() || !multiple()) return
     if (["projects", "workspaces", "providers", "models", "extensions", "servers"].includes(view.tab))
       surface.open("general")
   })

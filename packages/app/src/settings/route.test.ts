@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { parseSettingsView, settingsViewUrl, type SettingsView } from "./route"
+import { parseSettingsView, settingsViewRedirect, settingsViewUrl, type SettingsView } from "./route"
 
 describe("settings route", () => {
   test("keeps root preferences at the canonical route", () => {
@@ -46,6 +46,60 @@ describe("settings route", () => {
       target: "settings-plugin",
       searchActivation: 2,
     })
+  })
+
+  test("keeps a restored server page until the server lists load", () => {
+    const view: SettingsView = { type: "server", server: "wsl:Debian", tab: "models" }
+    const local = { key: "local", connected: true, starting: false }
+    const wsl = { key: "wsl:Debian", connected: false, starting: true }
+
+    expect(settingsViewRedirect({ view, loaded: false, servers: [local] })).toBeUndefined()
+    expect(settingsViewRedirect({ view, loaded: true, servers: [local, wsl] })).toBeUndefined()
+    expect(settingsViewRedirect({ view, loaded: true, servers: [local] })).toEqual({ type: "back" })
+  })
+
+  test("keeps a project page while its server starts", () => {
+    const view: SettingsView = {
+      type: "project",
+      server: "wsl:Debian",
+      project: "/work",
+      parent: "server",
+      tab: "general",
+    }
+    const local = { key: "local", connected: true, starting: false }
+
+    expect(
+      settingsViewRedirect({
+        view,
+        loaded: true,
+        servers: [local, { key: "wsl:Debian", connected: false, starting: true }],
+      }),
+    ).toBeUndefined()
+    expect(
+      settingsViewRedirect({
+        view,
+        loaded: true,
+        servers: [local, { key: "wsl:Debian", connected: false, starting: false }],
+      }),
+    ).toEqual({ type: "server", server: "wsl:Debian" })
+  })
+
+  test("moves a single server's page to the root settings", () => {
+    const local = { key: "local", connected: true, starting: false }
+    expect(
+      settingsViewRedirect({
+        view: { type: "server", server: "local", tab: "general" },
+        loaded: true,
+        servers: [local],
+      }),
+    ).toEqual({ type: "root", tab: "servers" })
+    expect(
+      settingsViewRedirect({
+        view: { type: "server", server: "local", tab: "models" },
+        loaded: true,
+        servers: [local],
+      }),
+    ).toEqual({ type: "root", tab: "models" })
   })
 
   test("falls back for invalid scope and tab combinations", () => {

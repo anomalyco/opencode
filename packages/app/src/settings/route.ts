@@ -109,6 +109,25 @@ export function settingsViewUrl(view: SettingsView) {
   return search ? `/settings?${search}` : "/settings"
 }
 
+type RedirectServer = { key: string; connected: boolean; starting: boolean }
+
+/** Where a server or project view must go when its server is gone, unreachable, or the only one. */
+export function settingsViewRedirect(input: {
+  view: SettingsView
+  /** False while the saved, WSL, and SSH server lists load; a restored route waits for them. */
+  loaded: boolean
+  servers: readonly RedirectServer[]
+}): { type: "back" } | { type: "server"; server: string } | { type: "root"; tab: SettingsRootTab } | undefined {
+  const view = input.view
+  if (view.type === "root" || !input.loaded) return
+  const server = input.servers.find((item) => item.key === view.server)
+  if (!server) return { type: "back" }
+  // A starting WSL or SSH server connects shortly; only an unavailable one leaves the project page.
+  if (view.type === "project" && !server.connected && !server.starting) return { type: "server", server: server.key }
+  if (view.type === "server" && input.servers.length === 1)
+    return { type: "root", tab: view.tab === "general" ? "servers" : view.tab }
+}
+
 export function isRootTab(value: string): value is SettingsRootTab {
   return Object.hasOwn(rootTabs, value)
 }
