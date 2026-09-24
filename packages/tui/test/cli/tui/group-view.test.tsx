@@ -118,11 +118,13 @@ test("retains nested expansion state and registers exact headers and parts", asy
   const b: AnchorTarget = { type: "part", ref: { messageID: "b", partID: "read-b" } }
   try {
     await app.waitForFrame((frame) => frame.includes("Explored"))
+    expect(app.captureCharFrame()).toContain("→ Explored")
     expect(app.captureCharFrame()).not.toContain("Target B")
     expect(anchors.get(b)).toBeUndefined()
     expect(anchors.get(nested)).toBeUndefined()
     await app.mockMouse.click(4, anchors.get(outer)?.node.y ?? -1)
     await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("↓ Explored")
     expect(app.captureCharFrame()).not.toContain("Target B")
     expect(expanded[outerID]).toBe(true)
     expect(anchors.get(outer)).toBeDefined()
