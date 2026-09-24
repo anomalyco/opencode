@@ -193,7 +193,7 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
   const featured = ["opencode-go", "opencode", "anthropic", "openai", "google", "openrouter", "vercel"]
   const custom = () => ({ id: CUSTOM_ID, name: language.t("dialog.provider.custom.label") })
   // Only a stored credential hides a provider: environment and config connections can still be
-  // replaced by a sign-in. OpenCode Zen and Go stay until a Console account (not a key) is connected.
+  // replaced by a sign-in. OpenCode Zen stays until a Console account (not a key) is connected.
   const consoleAccount = createMemo(() =>
     integrations
       .list()
@@ -208,7 +208,7 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
       ...integrations
         .list()
         .filter((integration) =>
-          CONSOLE_PROVIDERS.has(integration.id)
+          integration.id === CONSOLE_INTEGRATION
             ? !consoleAccount()
             : !integration.connections.some((connection) => connection.type === "credential"),
         ),
