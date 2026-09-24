@@ -110,12 +110,13 @@ def chatgpt(session_id: str, prompt: str, *, full_prompt: str, reset: bool, syst
         state["conversation_url"] = None
 
     client = ChatGPTClient(client_session_id=state["client_session_id"])
-    reset = reset or state.get("in_flight") or state.get("system_hash") != system_hash
+    reset = reset or state.get("in_flight") or state.get("system_hash") != system_hash or not state.get("conversation_url")
     if reset and state.get("in_flight"):
         stop_chatgpt(session_id)
     if reset:
         client.new_conversation()
         state["conversation_url"] = None
+        prompt = full_prompt
     elif state.get("conversation_url"):
         try:
             client.open_conversation(state["conversation_url"])
@@ -196,7 +197,7 @@ def main() -> int:
             emit("done")
             return 0
         state = load_state(session_path(provider, session_id))
-        has_remote_session = bool(state.get("client_session_id")) if provider == "chatgpt-web" else bool(state.get("session_id"))
+        has_remote_session = bool(state.get("conversation_url")) if provider == "chatgpt-web" else bool(state.get("session_id"))
         reset = reset or state.get("in_flight") is True or not has_remote_session or state.get("system_hash") != system_hash
         if reset:
             prompt = full_prompt

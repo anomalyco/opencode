@@ -27,6 +27,17 @@ const globTool: LanguageModelV3FunctionTool = {
 }
 
 describe("provider.web-service", () => {
+  test("protects ChatGPT tool arguments from Markdown rendering", () => {
+    const options = {
+      prompt: [{ role: "user", content: [{ type: "text", text: "Write a Python file" }] }],
+    } satisfies Pick<LanguageModelV3CallOptions, "prompt">
+    const prompts = WebService.buildRequestPrompts(options, [readTool], "chatgpt-web")
+    expect(prompts.prompt).toContain("````text\n<opencode_tool_call>")
+    expect(prompts.prompt).toContain("Prefer forward slashes")
+    expect(prompts.fullPrompt).toContain("Never emit tool envelopes as ordinary Markdown")
+    expect(WebService.buildRequestPrompts(options, [readTool], "deepseek-web").prompt).not.toContain("````text")
+  })
+
   test("advertises tool support and optional DeepSeek thinking", () => {
     const providers = WebService.providers()
     const chatgpt = providers.find((item) => item.id === "chatgpt-web")?.models.current
@@ -56,6 +67,19 @@ describe("provider.web-service", () => {
       text: "",
       calls: [{ toolName: "read", input: { filePath: "src/app.ts" } }],
     })
+  })
+
+  test("preserves code and JSON escapes extracted from a ChatGPT code block", () => {
+    const input = {
+      filePath: "G:/temp/rename_images.py",
+      content: 'def main():\n    if __name__ == "__main__":\n        print(__file__, "C:\\\\temp")\n',
+    }
+    expect(
+      WebService.parseWebReply(
+        `<opencode_tool_call>${JSON.stringify({ name: "write", arguments: input })}</opencode_tool_call>`,
+        [{ ...readTool, name: "write" }],
+      ),
+    ).toEqual({ type: "tool-calls", text: "", calls: [{ toolName: "write", input }] })
   })
 
   test("repairs tool names with the wrong casing", () => {
@@ -93,7 +117,7 @@ describe("provider.web-service", () => {
     })
   })
 
-  test("routes the screenshot's invalid Windows path to the invalid tool and keeps the valid glob call", () => {
+  test("repairs unescaped Windows paths and keeps other calls", () => {
     const reply = [
       "I'll look at the project structure and key files to understand it.",
       String.raw`<opencode_tool_call>{"name":"read","arguments":{"filePath":"G:\chen\Study\chat-api"}}</opencode_tool_call>`,
@@ -104,13 +128,24 @@ describe("provider.web-service", () => {
     expect(result.type).toBe("tool-calls")
     if (result.type !== "tool-calls") return
     expect(result.text).toContain("I'll look at the project structure")
-    expect(result.calls[0]).toMatchObject({
-      toolName: "invalid",
-      input: { tool: "unknown", error: expect.stringContaining("valid JSON") },
-    })
+    expect(result.calls[0]).toEqual({ toolName: "read", input: { filePath: "G:\\chen\\Study\\chat-api" } })
     expect(result.calls[1]).toEqual({
       toolName: "glob",
       input: { pattern: "*.{md,json,toml,yaml,yml,txt}" },
+    })
+  })
+
+  test("repairs Windows separators that form valid JSON escapes without changing escaped paths", () => {
+    const reply = [
+      String.raw`<opencode_tool_call>{"name":"read","arguments":{"filePath":"G:\temp\new"}}</opencode_tool_call>`,
+      String.raw`<opencode_tool_call>{"name":"read","arguments":{"filePath":"G:\\temp\\new"}}</opencode_tool_call>`,
+    ].join("\n")
+    expect(WebService.parseWebReply(reply, [readTool])).toMatchObject({
+      type: "tool-calls",
+      calls: [
+        { toolName: "read", input: { filePath: "G:\\temp\\new" } },
+        { toolName: "read", input: { filePath: "G:\\temp\\new" } },
+      ],
     })
   })
 

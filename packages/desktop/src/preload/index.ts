@@ -133,6 +133,9 @@ const api: ElectronAPI = {
   setForceFocus: (enabled) => ipcRenderer.invoke("set-force-focus", enabled),
   recordFatalRendererError: (error) => ipcRenderer.invoke("record-fatal-renderer-error", error),
   setNativeTranslations: (bundle) => ipcRenderer.invoke("set-native-translations", bundle),
+  getChatGPTWebBridgeSettings: () => ipcRenderer.invoke("get-chatgpt-web-bridge-settings"),
+  regenerateChatGPTWebBridgeKey: () => ipcRenderer.invoke("regenerate-chatgpt-web-bridge-key"),
+  activateChatGPTWebModel: () => ipcRenderer.invoke("activate-chatgpt-web-model"),
 }
 
 contextBridge.exposeInMainWorld("api", api)

@@ -36,12 +36,40 @@ const ChatGPTSelectors = {
   turns() {
     return [...document.querySelectorAll('[data-message-author-role][data-message-id]')];
   },
-  answerBody(turn) {
-    return turn?.querySelector('.markdown') || turn?.querySelector('[data-message-content]') || null;
+  answerText(turn) {
+    if (!turn) return '';
+    const markdown = [...turn.querySelectorAll('.markdown')];
+    const blocks = markdown.length ? markdown : [...turn.querySelectorAll('[data-message-content]')];
+    return blocks.filter(block => !blocks.some(parent => parent !== block && parent.contains(block)))
+      .map(block => this.markdownText(block).replace(/\r\n/g, '\n').trimEnd()).join('\n\n');
+  },
+  markdownText(block) {
+    // Read fenced payloads verbatim, excluding language labels and copy buttons.
+    // innerText collapses spaces; rendered prose has already lost Markdown escapes.
+    if (block.tagName === 'PRE') {
+      const code = block.querySelector('code');
+      return code ? code.textContent : block.textContent;
+    }
+    if (!block.querySelector('pre')) return block.innerText;
+    return [...block.childNodes].map(node => {
+      if (node.nodeType === 3) return node.textContent;
+      if (node.nodeType !== 1) return '';
+      return this.markdownText(node);
+    }).join('\n\n');
+  },
+  validateToolText(turn) {
+    // A rendered paragraph cannot be inverted reliably into the original JSON.
+    // Fail closed instead of executing code whose whitespace or escapes changed.
+    const copy = turn.cloneNode(true);
+    copy.querySelectorAll('pre').forEach(node => node.remove());
+    if (/<\/?opencode_tool_call>|<\/?[|｜]DSML[|｜]/.test(copy.textContent))
+      throw new Error('UNSAFE_TOOL_TEXT: 工具指令未放在代码块中，Markdown 可能已损坏参数。请重试并要求使用代码块。');
   },
   completed(turn) {
-    const wrapper = turn?.parentElement?.parentElement;
+    if (turn?.querySelector('.streaming-animation')) return false;
+    const wrapper = turn?.closest('article, [data-testid^="conversation-turn-"]');
     return !!wrapper && [...wrapper.querySelectorAll('button')].some(button =>
-      /^(复制回复|Copy response|Copy answer)$/i.test(button.getAttribute('aria-label') || ''));
+      button.getAttribute('data-testid') === 'copy-turn-action-button' ||
+      /^(复制|复制回复|复制回答|Copy|Copy response|Copy answer)$/i.test(button.getAttribute('aria-label') || ''));
   },
 };

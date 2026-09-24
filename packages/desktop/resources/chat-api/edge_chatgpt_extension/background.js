@@ -1,8 +1,16 @@
 /* Routes jobs only to the dedicated tab. Other ChatGPT tabs cannot take over. */
 let polling = false;
 let managedTabId = null;
+let managedWindowId = null;
+let tabQueue = Promise.resolve();
 let managedEpoch = null;
 let activeChatJob = null;
+let bridgeConnected = false;
+let retryTimer = null;
+
+const DISCOVERY_PORT = 17384;
+const RETRY_DELAY = 5000;
+const BOOTSTRAP_URL = 'https://chatgpt.com/#opencode-bridge';
 
 chrome.action.onClicked.addListener(() => chrome.runtime.openOptionsPage());
 
@@ -24,6 +32,10 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     void run();
     reply({ok: true});
     return;
+  }
+  if (message.type === 'status') {
+    void config().then(value => reply({ok: true, configured: !!value, connected: bridgeConnected}));
+    return true;
   }
   if (message.type === 'event') {
     if (sender.tab?.id !== managedTabId || sender.frameId !== 0 ||
@@ -59,6 +71,18 @@ async function config() {
   return (await chrome.storage.local.get('bridgeConfig')).bridgeConfig;
 }
 
+async function discoverConfig() {
+  const response = await fetch('http://127.0.0.1:' + DISCOVERY_PORT + '/extension/config', {
+    signal: AbortSignal.timeout(5000),
+  });
+  const data = await response.json();
+  if (!response.ok || !data.ok || data.port !== DISCOVERY_PORT ||
+      typeof data.key !== 'string' || data.key.length < 32) {
+    throw new Error('本机桥接配置无效');
+  }
+  await chrome.storage.local.set({bridgeConfig: {port: data.port, key: data.key}});
+}
+
 async function api(path, options = {}) {
   const current = await config();
   if (!current) throw new Error('扩展尚未连接本机桥接');
@@ -83,15 +107,16 @@ async function ping(tabId) {
   return result;
 }
 
-async function waitForTab(tabId) {
+async function waitForTab(tabId, expectedURL) {
   const end = Date.now() + 30000;
   while (Date.now() < end) {
     try {
       const health = await ping(tabId);
-      if (health.state === 'READY') {
+      if (health.state === 'READY' && (!expectedURL || health.url === expectedURL)) {
         await new Promise(resolve => setTimeout(resolve, 700));
         const settled = await ping(tabId);
-        if (settled.state === 'READY' && settled.page_epoch === health.page_epoch) return settled;
+        if (settled.state === 'READY' && settled.page_epoch === health.page_epoch &&
+            settled.url === health.url) return settled;
       }
       if (['GENERATING', 'LOGIN_REQUIRED', 'CHALLENGE_REQUIRED'].includes(health.state)) return health;
     }
@@ -101,34 +126,63 @@ async function waitForTab(tabId) {
   throw new Error('PAGE_LOADING: 专用 ChatGPT 页面未就绪');
 }
 
-async function managedTab({fresh = false, requireExisting = false} = {}) {
-  if (managedTabId === null) {
-    const saved = await chrome.storage.session.get('managedTabId');
-    managedTabId = Number.isInteger(saved.managedTabId) ? saved.managedTabId : null;
-  }
-  if (!fresh && managedTabId !== null) {
-    let tab;
-    try {
-      tab = await chrome.tabs.get(managedTabId);
-    } catch {
-      if (requireExisting) throw new Error('SESSION_LOST: 正在生成的专用标签页已关闭');
-    }
-    if (tab?.url?.startsWith('https://chatgpt.com/'))
-      return {id: managedTabId, health: await waitForTab(managedTabId)};
-  }
-  if (requireExisting) throw new Error('SESSION_LOST: 找不到正在生成的专用标签页');
-  const old = managedTabId;
-  const tab = await chrome.tabs.create({url: 'https://chatgpt.com/', active: false});
-  managedTabId = tab.id;
-  managedEpoch = null;
-  await chrome.storage.session.set({managedTabId: tab.id});
-  const health = await waitForTab(tab.id);
-  if (fresh && old !== null && old !== tab.id) await chrome.tabs.remove(old).catch(() => {});
-  return {id: tab.id, health};
+function managedTab(options = {}) {
+  const result = tabQueue.then(() => resolveManagedTab(options));
+  tabQueue = result.catch(() => {});
+  return result;
 }
+
+async function resolveManagedTab({fresh = false, requireExisting = false, focus = false} = {}) {
+  if (managedTabId === null) {
+    const saved = await chrome.storage.session.get(['managedTabId', 'managedWindowId']);
+    managedTabId = Number.isInteger(saved.managedTabId) ? saved.managedTabId : null;
+    managedWindowId = Number.isInteger(saved.managedWindowId) ? saved.managedWindowId : null;
+  }
+  let tab = managedTabId !== null
+    ? await chrome.tabs.get(managedTabId).catch(() => null) : null;
+  if (requireExisting && !tab?.url?.startsWith('https://chatgpt.com/'))
+    throw new Error('SESSION_LOST: 找不到正在生成的专用标签页');
+  // Adopt only a desktop bootstrap tab, never an unrelated personal chat.
+  const bootstrap = await chrome.tabs.query({url: 'https://chatgpt.com/*'});
+  if (!tab) tab = bootstrap.find(item => item.url === BOOTSTRAP_URL);
+  if (!tab) {
+    const window = managedWindowId !== null
+      ? await chrome.windows.get(managedWindowId).catch(() => null) : null;
+    if (window) tab = await chrome.tabs.create({windowId: window.id, url: 'https://chatgpt.com/', active: true});
+    if (!window) {
+      const created = await chrome.windows.create({url: 'https://chatgpt.com/', focused: true});
+      tab = created.tabs[0];
+    }
+  }
+  managedTabId = tab.id;
+  managedWindowId = tab.windowId;
+  await chrome.storage.session.set({managedTabId, managedWindowId});
+  await Promise.all(bootstrap
+    .filter(item => item.url === BOOTSTRAP_URL && item.id !== tab.id)
+    .map(extra => chrome.tabs.remove(extra.id).catch(() => {})));
+  if (focus) {
+    await chrome.tabs.update(tab.id, {active: true});
+    await chrome.windows.update(tab.windowId, {focused: true});
+    return {id: tab.id};
+  }
+  if (fresh || !tab.url?.startsWith('https://chatgpt.com/')) {
+    managedEpoch = null;
+    await chrome.tabs.update(tab.id, {url: 'https://chatgpt.com/'});
+    return {id: tab.id, health: await waitForTab(tab.id, 'https://chatgpt.com/')};
+  }
+  return {id: tab.id, health: await waitForTab(tab.id)};
+}
+
+chrome.tabs.onUpdated.addListener((tabId, change) => {
+  if (change.url === BOOTSTRAP_URL) void managedTab({focus: true}).catch(() => {});
+});
 
 async function dispatch(job) {
   try {
+    if (job.operation === 'activate') {
+      await managedTab({focus: true});
+      return;
+    }
     if (job.operation === 'new') {
       if (activeChatJob) throw new Error('BUSY: 正在生成回答');
       const tab = await managedTab({fresh: true});
@@ -145,7 +199,7 @@ async function dispatch(job) {
       let tab = await managedTab();
       if (tab.health.url !== target.href) {
         await chrome.tabs.update(tab.id, {url: target.href});
-        tab = {id: tab.id, health: await waitForTab(tab.id)};
+        tab = {id: tab.id, health: await waitForTab(tab.id, target.href)};
       }
       if (tab.health.state !== 'READY' || tab.health.url !== target.href)
         throw new Error('SESSION_LOST: 网页会话尚未恢复');
@@ -157,6 +211,7 @@ async function dispatch(job) {
     const result = await chrome.tabs.sendMessage(tab.id, {type: 'job', job: {...job, page_epoch: managedEpoch}});
     if (!result?.ok) throw new Error(result?.error || '页面拒绝了命令');
   } catch (error) {
+    if (job.operation === 'activate') return;
     if (activeChatJob === job.id) activeChatJob = null;
     const message = String(error.message || error);
     const code = /^[A-Z_]+:/.test(message) ? message.split(':', 1)[0] : 'PAGE_ERROR';
@@ -168,12 +223,23 @@ async function run() {
   if (polling) return;
   polling = true;
   try {
+    await discoverConfig();
     while (await config()) {
       const {job} = await api('/next', {timeout: 12000});
+      bridgeConnected = true;
       if (job) void dispatch(job);
     }
-  } catch { /* Alarm or options page reconnects after bridge restart. */ }
-  finally { polling = false; }
+  } catch {
+    bridgeConnected = false;
+  } finally {
+    polling = false;
+    if (retryTimer) clearTimeout(retryTimer);
+    retryTimer = setTimeout(() => {
+      retryTimer = null;
+      void run();
+    }, RETRY_DELAY);
+  }
 }
 
+chrome.runtime.onInstalled.addListener(() => void run());
 void run();

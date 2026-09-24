@@ -894,6 +894,13 @@ export const dict = {
   "settings.general.section.sounds": "音效",
   "settings.general.section.feed": "动态",
   "settings.general.section.display": "显示",
+  "settings.general.section.chatgptBridge": "ChatGPT 网页桥接",
+  "settings.general.row.chatgptBridge.title": "本机连接参数",
+  "settings.general.row.chatgptBridge.description":
+    "选择网页模型时，桌面端会启动桥接并在独立 Edge 窗口中打开 ChatGPT。扩展会自动读取这些参数，未连接时每 5 秒重试。",
+  "settings.general.row.chatgptBridge.address": "桥接地址",
+  "settings.general.row.chatgptBridge.key": "桥接密钥",
+  "settings.general.row.chatgptBridge.rotate": "重新生成密钥",
   "settings.general.row.language.title": "语言",
   "settings.general.row.language.description": "更改 OpenCode 的显示语言",
   "settings.general.row.shell.title": "终端 Shell",

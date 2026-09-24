@@ -7,12 +7,14 @@ import { useSDK } from "@/context/sdk"
 import { useSync } from "@/context/sync"
 import { useProviders } from "@/hooks/use-providers"
 import { resolveDefaultModel } from "@/hooks/provider-catalog"
+import { usePlatform } from "@/context/platform"
 
 export function createPromptModelSelection(input: { agent: () => { model?: ModelKey; variant?: string } | undefined }) {
   const sdk = useSDK()
   const sync = useSync()
   const models = useModels()
   const prompt = usePrompt()
+  const platform = usePlatform()
   const providers = useProviders(() => sdk().directory)
   const connected = createMemo(() => new Set(providers.connected().map((item) => item.id)))
 
@@ -65,6 +67,7 @@ export function createPromptModelSelection(input: { agent: () => { model?: Model
       if (next) selection.set({ providerID: next.provider.id, modelID: next.id })
     },
     set(item: ModelKey | undefined, options?: { recent?: boolean }) {
+      if (item?.providerID === "chatgpt-web") void platform.activateChatGPTWebModel?.().catch(() => undefined)
       startTransition(() =>
         batch(() => {
           prompt.model.set(item ? { ...item, variant: prompt.model.current()?.variant } : undefined)

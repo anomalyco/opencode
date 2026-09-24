@@ -10,7 +10,11 @@ class ChatGPTDomAdapter {
     if (/just a moment|verify you are human|稍等片刻|验证您是人类/i.test(document.title) ||
         document.querySelector('iframe[src*="challenges.cloudflare.com"]')) return 'CHALLENGE_REQUIRED';
     try {
-      if (ChatGPTSelectors.editor()) return this.active ? 'GENERATING' : 'READY';
+      if (this.active || ChatGPTSelectors.stop()) return 'GENERATING';
+      if (document.readyState !== 'complete') return 'LOADING';
+      const editor = ChatGPTSelectors.editor();
+      if (editor && !editor.disabled && editor.getAttribute('aria-disabled') !== 'true' &&
+          editor.getAttribute('aria-busy') !== 'true') return 'READY';
     } catch { return 'DOM_CHANGED'; }
     if ([...document.querySelectorAll('a[href*="/auth/login"],a[href*="/auth/signup"]')]
         .some(ChatGPTSelectors.visible)) return 'LOGIN_REQUIRED';
@@ -19,14 +23,22 @@ class ChatGPTDomAdapter {
 
   health() {
     return {state: this.state(), page_epoch: this.pageEpoch, url: location.href,
-            adapter_version: '0.2.4'};
+            adapter_version: '0.2.8'};
   }
 
   async waitForReady(timeout = 25000) {
     const end = Date.now() + timeout;
+    let readySince = null;
+    let readyEditor = null;
     while (Date.now() < end) {
       const state = this.state();
-      if (state === 'READY') return;
+      const editor = state === 'READY' ? ChatGPTSelectors.editor() : null;
+      if (!editor || editor !== readyEditor) readySince = null;
+      readyEditor = editor;
+      if (editor) {
+        readySince ??= Date.now();
+        if (Date.now() - readySince >= 700) return;
+      }
       if (state === 'LOGIN_REQUIRED' || state === 'CHALLENGE_REQUIRED')
         throw new Error(state + ': 请在专用 Edge 标签页完成网页操作');
       await this.pause(120);
@@ -92,11 +104,12 @@ class ChatGPTDomAdapter {
     } else if (!document.execCommand('insertText', false, text)) {
       throw new Error('INPUT_REJECTED: 富文本编辑器未接受输入');
     }
-    const expected = text.replace(/\r\n/g, '\n');
+    // ProseMirror uses NBSP to preserve spaces at the start and end of a line.
+    const expected = text.replace(/\r\n/g, '\n').replace(/\u00a0/g, ' ');
     const deadline = Date.now() + 2000;
     while (Date.now() < deadline) {
       const currentEditor = ChatGPTSelectors.editor() || editor;
-      const actual = this.editorText(currentEditor).replace(/\r\n/g, '\n');
+      const actual = this.editorText(currentEditor).replace(/\r\n/g, '\n').replace(/\u00a0/g, ' ');
       if (actual === expected) return;
       await this.pause(50);
     }
@@ -157,6 +170,7 @@ class ChatGPTDomAdapter {
       const firstDeadline = Date.now() + 60000;
       let lastProgress = Date.now();
       let stableSince = Date.now();
+      let completionSince = null;
       while (Date.now() < totalDeadline) {
         if (location.pathname !== startURL && startURL !== '/' && !startURL.startsWith('/?'))
           throw new Error('SESSION_LOST: 会话页面发生切换');
@@ -166,9 +180,9 @@ class ChatGPTDomAdapter {
         const following = turns.slice(userIndex + 1);
         if (following.some(e => e.getAttribute('data-message-author-role') === 'user'))
           throw new Error('PAGE_INTERFERED: 页面出现另一条用户消息');
-        const answer = following.find(e => e.getAttribute('data-message-author-role') === 'assistant');
-        const body = ChatGPTSelectors.answerBody(answer);
-        const current = body ? body.innerText.replace(/\r\n/g, '\n').trimEnd() : '';
+        const answers = following.filter(e => e.getAttribute('data-message-author-role') === 'assistant');
+        const answer = answers.at(-1);
+        const current = answers.map(turn => ChatGPTSelectors.answerText(turn)).filter(Boolean).join('\n\n');
         if (current !== ctx.lastText) {
           if (current.startsWith(ctx.lastText)) {
             const delta = current.slice(ctx.lastText.length);
@@ -180,13 +194,16 @@ class ChatGPTDomAdapter {
           lastProgress = stableSince = Date.now();
         }
         const stopped = !ChatGPTSelectors.stop();
+        const complete = answer && ctx.lastText && stopped && ChatGPTSelectors.completed(answer);
+        completionSince = complete ? completionSince ?? Date.now() : null;
         if (ctx.stopRequested && stopped) {
           await emit({type: 'chat.cancelled', revision: ctx.revision, partial_text: ctx.lastText.slice(-2000)});
           terminal = true;
           return;
         }
-        if (answer && ctx.lastText && stopped && ChatGPTSelectors.completed(answer) &&
-            Date.now() - stableSince >= 600) {
+        if (completionSince && Date.now() - completionSince >= 1500 &&
+            Date.now() - stableSince >= 1500) {
+          answers.forEach(turn => ChatGPTSelectors.validateToolText(turn));
           await emit({type: 'chat.completed', revision: ctx.revision, url: location.href,
                       ...(await this.digest(ctx.lastText))});
           terminal = true;

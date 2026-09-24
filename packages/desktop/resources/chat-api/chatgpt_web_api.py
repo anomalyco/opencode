@@ -127,7 +127,7 @@ class ChatGPTClient:
             ChatGPTClient.new_conversation(self)
         text = ""
         revision = 0
-        revised = False
+        emitted = ""
         finished = False
         try:
             stream = self._bridge().stream("chat", text=prompt, client_session_id=self.client_session_id)
@@ -145,8 +145,6 @@ class ChatGPTClient:
                     if not isinstance(piece, str):
                         raise ChatGPTError("回答增量格式无效", code="BAD_EVENT", partial_text=text)
                     text += piece
-                    if on_text and not revised:
-                        on_text(piece)
                 elif event_type == "chat.snapshot":
                     new_revision = event.get("revision")
                     if not isinstance(new_revision, int) or new_revision != revision + 1:
@@ -155,9 +153,6 @@ class ChatGPTClient:
                     snapshot = event.get("text")
                     if not isinstance(snapshot, str):
                         raise ChatGPTError("回答快照格式无效", code="BAD_EVENT", partial_text=text)
-                    revised = revised or (on_text is not None and not snapshot.startswith(text))
-                    if on_text and not revised and len(snapshot) > len(text):
-                        on_text(snapshot[len(text):])
                     text = snapshot
                 elif event_type == "chat.error":
                     raise ChatGPTError(event.get("message") or event.get("code") or "网页对话失败",
@@ -174,13 +169,22 @@ class ChatGPTClient:
                         raise ChatGPTError("网页返回空回答", code="EMPTY_OUTPUT")
                     self.conversation_id = event.get("url")
                     finished = True
+                if on_text and event_type in {"chat.delta", "chat.snapshot", "chat.completed"}:
+                    # The active paragraph can be replaced during DOM rendering. Keep it
+                    # pending; the SDK stream can only append already published text.
+                    boundary = text.rfind("\n\n")
+                    stable = text if finished else text[:boundary + 2] if boundary >= 0 else ""
+                    if not text.startswith(emitted):
+                        if finished:
+                            raise ChatGPTError("已发送的回复发生修订，无法追加最终文本",
+                                               code="STREAM_REVISED", partial_text=text)
+                    elif stable.startswith(emitted) and len(stable) > len(emitted):
+                        on_text(stable[len(emitted):])
+                        emitted = stable
                 if on_event:
                     on_event(event)
             if not finished:
                 raise ChatGPTError("对话没有可信终态", code="UNKNOWN", partial_text=text)
-            if revised:
-                raise ChatGPTError("回复发生非追加修订，请使用 on_event 获取最终快照",
-                                   code="STREAM_REVISED", partial_text=text)
             return text
         except BridgeError as exc:
             raise ChatGPTError(str(exc), code=exc.code, partial_text=text) from exc

@@ -26,7 +26,7 @@ class ChatGPTRecoveryTest(unittest.TestCase):
                 def new_conversation(self):
                     pass
 
-                def chat(self, prompt, *, on_event):
+                def chat(self, prompt, *, on_text, on_event):
                     requests.append(prompt)
                     return "你好 😀"
 
@@ -88,7 +88,7 @@ class ChatGPTRecoveryTest(unittest.TestCase):
                 def new_conversation(self):
                     calls.append("new")
 
-                def chat(self, prompt, *, on_event):
+                def chat(self, prompt, *, on_text, on_event):
                     calls.append(prompt)
                     on_event({"type": "chat.completed", "url": "https://chatgpt.com/c/new"})
                     return "最终答复"
@@ -110,6 +110,46 @@ class ChatGPTRecoveryTest(unittest.TestCase):
             self.assertEqual(calls, ["new", "compressed full context"])
             self.assertEqual(web_model_worker.load_state(state_file)["conversation_url"], "https://chatgpt.com/c/new")
             emit.assert_called_once_with("result", text="最终答复")
+
+    def test_client_id_without_conversation_sends_full_context(self):
+        with tempfile.TemporaryDirectory() as directory:
+            state_file = Path(directory) / "session.json"
+            state_file.write_text(
+                '{"client_session_id":"client-1","system_hash":"system-hash","in_flight":false}',
+                encoding="utf-8",
+            )
+            calls = []
+
+            class ChatGPTClient:
+                def __init__(self, **_kwargs):
+                    pass
+
+                def new_conversation(self):
+                    calls.append("new")
+
+                def chat(self, prompt, *, on_text, on_event):
+                    calls.append(prompt)
+                    on_event({"type": "chat.completed", "url": "https://chatgpt.com/c/new"})
+                    return "最终答复"
+
+            with (
+                patch.dict(
+                    sys.modules,
+                    {"chatgpt_web_api": types.SimpleNamespace(ChatGPTClient=ChatGPTClient, ChatGPTError=RuntimeError)},
+                ),
+                patch.object(web_model_worker, "session_path", return_value=state_file),
+                patch.object(web_model_worker, "emit"),
+            ):
+                web_model_worker.chatgpt(
+                    "session-1",
+                    "增量输入",
+                    full_prompt="完整上下文",
+                    reset=False,
+                    system_hash="system-hash",
+                )
+
+            self.assertEqual(calls, ["new", "完整上下文"])
+            self.assertEqual(web_model_worker.load_state(state_file)["conversation_url"], "https://chatgpt.com/c/new")
 
     def test_uncertain_request_without_id_still_attempts_page_stop(self):
         with tempfile.TemporaryDirectory() as directory:

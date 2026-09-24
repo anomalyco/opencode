@@ -23,7 +23,15 @@ import requests
 STATE_FILE = Path(
     os.environ.get(
         "OPENCODE_CHAT_API_STATE_FILE",
-        str(Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "chat-api" / "edge-dom-bridge.json"),
+        str(
+            Path(
+                os.environ.get(
+                    "OPENCODE_WEB_SERVICE_STATE_DIR",
+                    str(Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "chat-api"),
+                )
+            )
+            / "edge-dom-bridge.json"
+        ),
     )
 )
 CONNECTION_FILE = STATE_FILE.with_name("edge-dom-bridge-connection.json")
@@ -107,6 +115,14 @@ class Broker:
         self.last_poll = 0.0
         self.active_chat = None
         self.owner_session = None
+        self.activation_pending = False
+
+    def activate(self):
+        with self.lock:
+            if not self.activation_pending:
+                self.activation_pending = True
+                self.jobs.put({"operation": "activate"})
+            return time.monotonic() - self.last_poll < 15
 
     def expire_abandoned_chat(self):
         """Release an orphan only after the page's maximum generation window."""
@@ -157,6 +173,9 @@ class Broker:
         except queue.Empty:
             return None
         with self.lock:
+            if job.get("operation") == "activate":
+                self.activation_pending = False
+                return job
             return job if job["id"] in self.pending else None
 
     def publish(self, job_id, event):
@@ -202,10 +221,18 @@ def make_handler(broker):
         def log_message(self, *args):
             pass
 
-        def allowed(self, authenticated=True):
+        def allowed(self, authenticated=True, extension_only=False):
             origin = self.headers.get("Origin")
-            trusted = origin is None or bool(re.fullmatch(r"chrome-extension://[a-p]{32}", origin))
+            extension = bool(origin and re.fullmatch(r"chrome-extension://[a-p]{32}", origin))
+            trusted = origin is None or extension
             if self.headers.get("Host") != f"127.0.0.1:{self.server.server_port}" or not trusted:
+                self.send_error(403)
+                return False
+            # Edge extension service-worker fetches can omit Origin even with
+            # host permission. Fetch Metadata still distinguishes them from
+            # ordinary cross-origin page requests.
+            extension_fetch = origin is None and self.headers.get("Sec-Fetch-Site") == "none"
+            if extension_only and not (extension or extension_fetch):
                 self.send_error(403)
                 return False
             if authenticated and not hmac.compare_digest(self.headers.get("X-Chat-Bridge-Key", ""), broker.key):
@@ -247,9 +274,14 @@ def make_handler(broker):
             self.end_headers()
 
         def do_GET(self):
+            parsed = urlsplit(self.path)
+            if parsed.path == "/extension/config":
+                if not self.allowed(authenticated=False, extension_only=True):
+                    return
+                self.respond({"ok": True, "port": self.server.server_port, "key": broker.key})
+                return
             if not self.allowed():
                 return
-            parsed = urlsplit(self.path)
             try:
                 if parsed.path == "/next":
                     self.respond({"ok": True, "job": broker.next_job()})
@@ -270,7 +302,9 @@ def make_handler(broker):
                 return
             try:
                 data = self.read_json()
-                if self.path == "/start":
+                if self.path == "/activate":
+                    self.respond({"ok": True, "connected": broker.activate()})
+                elif self.path == "/start":
                     self.respond({"ok": True, "id": broker.start(data)})
                 elif self.path == "/event":
                     broker.publish(data["id"], data["event"])
@@ -308,9 +342,7 @@ def main():
     if os.name != "nt":
         CONNECTION_FILE.chmod(0o600)
     STATE_FILE.write_text(json.dumps(state), encoding="utf-8")
-    print(json.dumps({"state_file": str(STATE_FILE), "port": server.server_port}), flush=True)
-    print("Extension connection configuration (local capability only):", flush=True)
-    print(json.dumps(state), flush=True)
+    print(json.dumps({"type": "ready", "port": server.server_port}), flush=True)
     try:
         server.serve_forever()
     finally:

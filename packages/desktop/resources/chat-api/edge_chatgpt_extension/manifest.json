@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Local Chat API Bridge",
-  "version": "0.2.4",
+  "version": "0.2.9",
   "description": "Connect the local chat client to a dedicated ChatGPT page via visible DOM controls.",
   "permissions": ["storage", "alarms", "tabs"],
   "host_permissions": ["http://127.0.0.1/*", "https://chatgpt.com/*"],

@@ -24,6 +24,11 @@ import type { UpdaterController } from "./updater-controller"
 import { createUpdaterSubscriptions } from "./updater-subscriptions"
 import { createDesktopDraftStore } from "./draft-store"
 import { nativeT } from "./native-translations"
+import {
+  activateChatGPTWebModel,
+  getChatGPTWebBridgeSettings,
+  regenerateChatGPTWebBridgeKey,
+} from "./chatgpt-web-bridge"
 
 const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
@@ -64,6 +69,9 @@ export function registerIpcHandlers(deps: Deps) {
 
   ipcMain.handle("kill-sidecar", () => deps.killSidecar())
   ipcMain.handle("await-initialization", () => deps.awaitInitialization())
+  ipcMain.handle("get-chatgpt-web-bridge-settings", () => getChatGPTWebBridgeSettings())
+  ipcMain.handle("regenerate-chatgpt-web-bridge-key", () => regenerateChatGPTWebBridgeKey())
+  ipcMain.handle("activate-chatgpt-web-model", () => activateChatGPTWebModel())
   ipcMain.handle("consume-initial-deep-links", () => deps.consumeInitialDeepLinks())
   ipcMain.handle("get-default-server-url", () => deps.getDefaultServerUrl())
   ipcMain.handle("set-default-server-url", (_event: IpcMainInvokeEvent, url: string | null) =>

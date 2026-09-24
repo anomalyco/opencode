@@ -1,4 +1,4 @@
-import { Component, Show, createMemo, createResource, onMount, type JSX } from "solid-js"
+import { Component, Show, createMemo, createResource, createSignal, onMount, type JSX } from "solid-js"
 import { Button } from "@opencode-ai/ui/button"
 import { Icon } from "@opencode-ai/ui/icon"
 import { Select } from "@opencode-ai/ui/select"
@@ -11,7 +11,7 @@ import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useParams } from "@solidjs/router"
 import { useLanguage } from "@/context/language"
 import { usePermission } from "@/context/permission"
-import { usePlatform, type DisplayBackend } from "@/context/platform"
+import { usePlatform, type ChatGPTWebBridgeSettings, type DisplayBackend } from "@/context/platform"
 import { useServerSync } from "@/context/server-sync"
 import { useServerSDK } from "@/context/server-sdk"
 import { useUpdaterAction } from "./updater-action"
@@ -31,6 +31,7 @@ import { decode64 } from "@/utils/base64"
 import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
 import { ExternalLink } from "./external-link"
 import { SettingsList } from "./settings-list"
+import { showToast } from "@/utils/toast"
 
 let demoSoundState = {
   cleanup: undefined as (() => void) | undefined,
@@ -120,6 +121,11 @@ export const SettingsGeneral: Component = () => {
     permission.disableAutoAccept(params.id, value)
   }
   const desktop = createMemo(() => platform.platform === "desktop")
+  const [bridgeSettings, { mutate: setBridgeSettings }] = createResource(
+    () => (desktop() && platform.getChatGPTWebBridgeSettings ? true : false),
+    () => platform.getChatGPTWebBridgeSettings?.() ?? Promise.resolve(undefined),
+  )
+  const [rotatingBridgeKey, setRotatingBridgeKey] = createSignal(false)
 
   const themeOptions = createMemo<ThemeOption[]>(() => theme.ids().map((id) => ({ id, name: theme.name(id) })))
 
@@ -195,6 +201,54 @@ export const SettingsGeneral: Component = () => {
       void refetchDisplayBackend()
     })
   }
+
+  const rotateBridgeKey = () => {
+    if (!platform.regenerateChatGPTWebBridgeKey) return
+    setRotatingBridgeKey(true)
+    void platform
+      .regenerateChatGPTWebBridgeKey()
+      .then((value) => setBridgeSettings(value))
+      .catch((error) => showToast({ title: language.t("common.requestFailed"), description: String(error) }))
+      .finally(() => setRotatingBridgeKey(false))
+  }
+
+  const ChatGPTBridgeSection = (props: { settings: ChatGPTWebBridgeSettings }) => (
+    <div class="flex flex-col gap-1">
+      <h3 class="text-14-medium text-text-strong pb-2">{language.t("settings.general.section.chatgptBridge")}</h3>
+      <SettingsList>
+        <SettingsRow
+          title={language.t("settings.general.row.chatgptBridge.title")}
+          description={language.t("settings.general.row.chatgptBridge.description")}
+        >
+          <div class="flex w-full flex-col gap-2 sm:w-[320px]">
+            <TextField
+              label={language.t("settings.general.row.chatgptBridge.address")}
+              hideLabel
+              type="text"
+              value={`http://${props.settings.host}:${props.settings.port}`}
+              readOnly
+              copyable
+              spellcheck={false}
+              autocomplete="off"
+            />
+            <TextField
+              label={language.t("settings.general.row.chatgptBridge.key")}
+              hideLabel
+              type="password"
+              value={props.settings.key}
+              readOnly
+              copyable
+              spellcheck={false}
+              autocomplete="off"
+            />
+            <Button size="small" variant="secondary" disabled={rotatingBridgeKey()} onClick={rotateBridgeKey}>
+              {language.t("settings.general.row.chatgptBridge.rotate")}
+            </Button>
+          </div>
+        </SettingsRow>
+      </SettingsList>
+    </div>
+  )
 
   const onPinchZoomChange = (checked: boolean) => {
     setPinchZoom(checked)
@@ -757,6 +811,10 @@ export const SettingsGeneral: Component = () => {
         </Show>
 
         <GeneralSection />
+
+        <Show when={desktop() ? bridgeSettings.latest : undefined} keyed>
+          {(value) => <ChatGPTBridgeSection settings={value} />}
+        </Show>
 
         <AppearanceSection />
 

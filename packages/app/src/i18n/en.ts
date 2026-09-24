@@ -904,6 +904,14 @@ export const dict = {
   "settings.general.section.sounds": "Sound effects",
   "settings.general.section.feed": "Feed",
   "settings.general.section.display": "Display",
+  "settings.general.section.chatgptBridge": "ChatGPT web bridge",
+
+  "settings.general.row.chatgptBridge.title": "Local connection parameters",
+  "settings.general.row.chatgptBridge.description":
+    "The desktop app starts the bridge and opens ChatGPT in a separate Edge window when you select the web model. The extension reads these parameters automatically and retries every 5 seconds until connected.",
+  "settings.general.row.chatgptBridge.address": "Bridge address",
+  "settings.general.row.chatgptBridge.key": "Bridge key",
+  "settings.general.row.chatgptBridge.rotate": "Regenerate key",
 
   "settings.general.row.language.title": "Language",
   "settings.general.row.language.description": "Change the display language for OpenCode",

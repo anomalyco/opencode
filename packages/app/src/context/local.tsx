@@ -14,6 +14,7 @@ import { useSDK } from "./sdk"
 import { useSync } from "./sync"
 import { useServerSDK } from "./server-sdk"
 import { ScopedKey, type ServerScope } from "@/utils/server-scope"
+import { usePlatform } from "./platform"
 
 export type ModelKey = { providerID: string; modelID: string; variant?: string }
 
@@ -63,6 +64,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const sdk = useSDK()
     const sync = useSync()
     const serverSDK = useServerSDK()
+    const platform = usePlatform()
     const providers = useProviders(() => sdk().directory)
     const models = useModels()
     const settings = useSettings()
@@ -240,6 +242,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       return models.find(item)
     }
 
+    createEffect((previous) => {
+      const item = current()
+      const selected = item?.provider.id === "chatgpt-web" ? item.id : undefined
+      if (selected && selected !== previous) void platform.activateChatGPTWebModel?.().catch(() => undefined)
+      return selected
+    }, undefined)
+
     const configured = () => {
       const item = agent.current()
       const model = current()
@@ -299,6 +308,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         model.set({ providerID: entry.provider.id, modelID: entry.id })
       },
       set(item: ModelKey | undefined, options?: { recent?: boolean }) {
+        if (item?.providerID === "chatgpt-web") void platform.activateChatGPTWebModel?.().catch(() => undefined)
         startTransition(() =>
           batch(() => {
             setStore("last", {

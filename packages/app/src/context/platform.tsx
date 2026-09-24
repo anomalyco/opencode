@@ -17,6 +17,7 @@ type OpenAttachmentPickerOptions = {
   defaultPath?: string
 }
 type SaveFilePickerOptions = { title?: string; defaultPath?: string }
+export type ChatGPTWebBridgeSettings = { host: "127.0.0.1"; port: number; key: string }
 type PlatformName = "web" | "desktop"
 type DesktopOS = "macos" | "windows" | "linux"
 
@@ -121,6 +122,15 @@ type PlatformBase = {
 
   /** Record a fatal renderer error in platform logs (desktop only) */
   recordFatalRendererError?(error: FatalRendererErrorLog): Promise<void>
+
+  /** Start the local ChatGPT web bridge and open its dedicated browser window. */
+  activateChatGPTWebModel?(): Promise<void>
+
+  /** Read the desktop-managed local ChatGPT bridge connection parameters. */
+  getChatGPTWebBridgeSettings?(): Promise<ChatGPTWebBridgeSettings>
+
+  /** Rotate the local ChatGPT bridge key and restart its process if it is active. */
+  regenerateChatGPTWebBridgeKey?(): Promise<ChatGPTWebBridgeSettings>
 }
 
 export type Platform = PlatformBase &

@@ -49,6 +49,7 @@ import { migrate } from "./migrate"
 import { cleanupStoreFiles } from "./store-cleanup"
 import { startBackgroundCli } from "./background-cli"
 import { setNativeTranslations } from "./native-translations"
+import { stopChatGPTWebBridge } from "./chatgpt-web-bridge"
 
 const APP_NAMES: Record<string, string> = {
   dev: "OpenCode Dev",
@@ -166,8 +167,10 @@ const main = Effect.gen(function* () {
   )
   const stopSidecars = async () => {
     await killSidecar()
+    await stopChatGPTWebBridge()
     wslServers.stopAll()
   }
+  app.once("will-quit", () => void stopChatGPTWebBridge())
   const relaunch = () => {
     setAppQuitting()
     void stopSidecars().finally(() => {

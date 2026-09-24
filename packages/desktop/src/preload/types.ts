@@ -42,6 +42,12 @@ export type FatalRendererError = {
   os?: string
 }
 
+export type ChatGPTWebBridgeSettings = {
+  host: "127.0.0.1"
+  port: number
+  key: string
+}
+
 export type ElectronAPI = {
   killSidecar: () => Promise<void>
   installCli: () => Promise<string>
@@ -113,4 +119,7 @@ export type ElectronAPI = {
   setForceFocus: (enabled: boolean) => Promise<void>
   recordFatalRendererError: (error: FatalRendererError) => Promise<void>
   setNativeTranslations: (bundle: DesktopNativeBundle) => Promise<void>
+  getChatGPTWebBridgeSettings: () => Promise<ChatGPTWebBridgeSettings>
+  regenerateChatGPTWebBridgeKey: () => Promise<ChatGPTWebBridgeSettings>
+  activateChatGPTWebModel: () => Promise<void>
 }

@@ -211,6 +211,9 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
     openExternal(url: string) {
       window.api.openExternal(url)
     },
+    activateChatGPTWebModel: () => window.api.activateChatGPTWebModel(),
+    getChatGPTWebBridgeSettings: () => window.api.getChatGPTWebBridgeSettings(),
+    regenerateChatGPTWebBridgeKey: () => window.api.regenerateChatGPTWebBridgeKey(),
     openLocalFile(url: string) {
       window.api.openLocalFile(url)
     },
