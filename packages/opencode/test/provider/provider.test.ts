@@ -76,6 +76,29 @@ const providerLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
 
 const list = Provider.use.list()
 
+test("normalizes GPT-5 chat token limits for OpenAI-compatible SDKs", () => {
+  const init = {
+    method: "POST",
+    body: JSON.stringify({ model: "azure/gpt-5.4", max_tokens: 32_000, stream: true }),
+  }
+  const result = Provider.normalizeOpenAIChatTokenLimit("@ai-sdk/openai-compatible", init)
+
+  expect(JSON.parse(String(result.body))).toEqual({
+    model: "azure/gpt-5.4",
+    max_completion_tokens: 32_000,
+    stream: true,
+  })
+})
+
+test("preserves legacy token limits for non-GPT-5 models", () => {
+  const init = {
+    method: "POST",
+    body: JSON.stringify({ model: "gpt-4o-mini", max_tokens: 16_000, stream: true }),
+  }
+
+  expect(Provider.normalizeOpenAIChatTokenLimit("@ai-sdk/openai-compatible", init)).toBe(init)
+})
+
 const paid = (providers: Record<string, { models: Record<string, { cost: { input: number } }> }>) => {
   const item = providers[ProviderV2.ID.make("opencode")]
   expect(item).toBeDefined()

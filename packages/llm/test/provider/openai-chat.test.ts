@@ -51,6 +51,21 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("uses max_completion_tokens for prefixed GPT-5 model ids", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          model: model.route.model({ id: "azure/gpt-5.4" }),
+          prompt: "Say hello.",
+          generation: { maxTokens: 20 },
+        }),
+      )
+
+      expect(prepared.body.max_tokens).toBeUndefined()
+      expect(prepared.body.max_completion_tokens).toBe(20)
+    }),
+  )
+
   it.effect("lowers chronological system updates to escaped user wrappers in order", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
