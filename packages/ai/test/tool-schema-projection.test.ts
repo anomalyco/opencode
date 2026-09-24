@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { LLM } from "../src/index.js"
 import { OpenAIChat } from "../src/protocols.js"
 import { ToolSchemaProjection } from "../src/protocols/utils/tool-schema.js"
+import { Tool, toDefinitions } from "../src/tool.js"
 import { Auth } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
 import { it } from "./lib/effect.js"
@@ -59,6 +60,56 @@ describe("tool schema projections", () => {
       $defs: { Mode: { type: "string", enum: ["fast"] } },
     })
   })
+
+  it.effect("declares every tool schema root as an object", () =>
+    Effect.gen(function* () {
+      const route = OpenAIChat.route.with({
+        endpoint: { baseURL: "https://api.openai.test/v1/" },
+        auth: Auth.bearer("test"),
+      })
+      const parameters = (inputSchema: Record<string, unknown>, model = route.model({ id: "gpt-6-luna" })) =>
+        compileRequest(
+          LLM.request({
+            model,
+            prompt: "Use the tool.",
+            tools: [{ name: "lookup", description: "Lookup data.", inputSchema }],
+          }),
+        ).pipe(Effect.map((prepared) => prepared.body.tools?.[0]?.function.parameters))
+      const parameterless = toDefinitions({
+        lookup: Tool.make({
+          description: "Lookup data.",
+          parameters: Schema.Struct({}).annotate({ description: "No input." }),
+          success: Schema.String,
+        }),
+      })[0].inputSchema
+      const union = {
+        anyOf: [
+          { type: "object", properties: { a: { type: "string" } } },
+          { type: "object", properties: { b: { type: "string" } } },
+        ],
+      }
+      const exclusive = { oneOf: [{ type: "object" }, { type: "object", required: ["a"] }] }
+      const object = { type: "object", properties: {} }
+
+      expect(yield* parameters(parameterless)).toEqual({ type: "object", description: "No input." })
+      expect(yield* parameters({})).toEqual({ type: "object" })
+      expect(yield* parameters({ description: "Query", properties: { q: { type: "string" } } })).toEqual({
+        type: "object",
+        description: "Query",
+        properties: { q: { type: "string" } },
+      })
+      expect(yield* parameters(union)).toEqual({ type: "object", ...union })
+      expect(yield* parameters(exclusive)).toEqual({ type: "object", ...exclusive })
+      expect(yield* parameters(object)).toEqual(object)
+      expect(yield* parameters({}, route.model({ id: "gpt-6-luna", compatibility: { sanitizer: "none" } }))).toEqual({
+        type: "object",
+      })
+      expect(yield* parameters({ properties: { mode: { enum: ["fast"] } } }, route.model({ id: "kimi-k3" }))).toEqual({
+        type: "object",
+        properties: { mode: { type: "string", enum: ["fast"] } },
+      })
+    }),
+  )
 
   it.effect("selects tool schema handling from the model name unless compatibility is explicit", () =>
     Effect.gen(function* () {
