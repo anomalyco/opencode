@@ -126,7 +126,10 @@ export namespace RipgrepBinary {
       )
 
       return Service.of({
-        filepath: filepath.pipe(Effect.tapError(() => invalidate)),
+        filepath: filepath.pipe(
+          Effect.tapError((cause) => Effect.logError("ripgrep binary resolution failed", { cause })),
+          Effect.tapError(() => invalidate),
+        ),
       })
     }),
   )
