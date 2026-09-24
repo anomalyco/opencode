@@ -200,6 +200,65 @@ test("a low activity group with nothing finished stays collapsed behind a status
   }
 })
 
+test("an exploration group shows ✗ when one of its tools failed", async () => {
+  const config = createTuiResolvedConfig({ animations: false })
+  const message: SessionMessageAssistant = {
+    id: "a",
+    type: "assistant",
+    agent: "build",
+    model: { providerID: "fixture", id: "fixture" },
+    time: { created: 0, completed: 2 },
+    content: [
+      {
+        type: "tool",
+        id: "ok",
+        name: "read",
+        time: { created: 0, completed: 1 },
+        state: { status: "completed", input: { path: "a" }, content: [{ type: "text", text: "a" }], metadata: {} },
+      },
+      {
+        type: "tool",
+        id: "missing",
+        name: "read",
+        time: { created: 0, completed: 1 },
+        state: {
+          status: "error",
+          input: { path: "b" },
+          error: { type: "tool.execution", message: "File not found: b" },
+          metadata: {},
+        },
+      },
+    ],
+  }
+  const app = await mount({
+    row: {
+      type: "group",
+      kind: "exploration",
+      size: 2,
+      completed: true,
+      pending: [],
+      children: ["ok", "missing"].map((partID) => ({
+        type: "entry" as const,
+        size: 1,
+        entry: { type: "part" as const, ref: { messageID: "a", partID } },
+      })),
+    },
+    anchors: createTimelineAnchors(),
+    config,
+    expanded: () => false,
+    setExpanded: () => {},
+    message: () => message,
+    entry: () => <text>entry</text>,
+  })
+  try {
+    app.renderer.start()
+    await app.waitForFrame((frame) => frame.includes("Explored"))
+    expect(app.captureCharFrame()).toContain("✗ Explored: 2 reads")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 function mount(input: {
   row: SessionGroup
   anchors: ReturnType<typeof createTimelineAnchors>
