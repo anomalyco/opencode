@@ -6,16 +6,13 @@
       {
         "type": "media",
         "mediaType": "image/png",
-        "data": " AQID ",
+        "data": "AQID",
         "filename": "attachment.png",
         "cache": { "type": "ephemeral" },
         "metadata": { "attachment": "original" },
         "providerMetadata": { "openai": { "detail": "high" } }
       },
-      { "type": "media", "mediaType": "image/png", "data": "data:image/jpeg;base64,BAUG" },
-      { "type": "media", "mediaType": "image/png", "data": "data:;base64,BwgJ" },
-      { "type": "media", "mediaType": "image/png", "data": " https://example.com/image.png " },
-      { "type": "media", "mediaType": "image/png", "data": "http://example.com/image.png" }
+      { "type": "media", "mediaType": "image/jpeg", "data": "BAUG" }
     ]
   },
   {

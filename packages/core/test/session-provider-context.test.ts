@@ -67,10 +67,7 @@ test("reads pre-2.0.15 checkpoint media without rewriting the stored payload", a
       metadata: { attachment: "original" },
       providerMetadata: { openai: { detail: "high" } },
     },
-    { media: { source: { type: "base64", data: "BAUG", mediaType: "image/jpeg" } } },
-    { media: { source: { type: "base64", data: "BwgJ", mediaType: "image/png" } } },
-    { media: { source: { type: "url", url: "https://example.com/image.png", mediaType: "image/png" } } },
-    { media: { source: { type: "url", url: "http://example.com/image.png", mediaType: "image/png" } } },
+    { type: "media", media: { source: { type: "base64", data: "BAUG", mediaType: "image/jpeg" } } },
   ])
   expect(decoded[1]?.content).toMatchObject(legacyMedia[1]?.content ?? [])
   expect(JSON.stringify(legacyContext)).toBe(before)

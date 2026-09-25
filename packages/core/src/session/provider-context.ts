@@ -57,7 +57,10 @@ export const encode = (provenance: Provenance, replacement: ReadonlyArray<Messag
 export const decode = (context: Info) => Schema.decodeUnknownSync(messages)(upgradeLegacyMedia(context.messages))
 export const validate = (context: Info) => Schema.decodeUnknownEffect(messages)(upgradeLegacyMedia(context.messages))
 
-/** Before 2.0.15, version-1 checkpoints stored mediaType/data directly on media parts. */
+/**
+ * Before 2.0.15, version-1 checkpoints stored mediaType/data directly on media parts. Core only built
+ * those parts from prompt attachments, whose data the Prompt schema guarantees is base64.
+ */
 function upgradeLegacyMedia(input: Info["messages"]) {
   if (!Array.isArray(input)) return input
   return input.map((message: unknown) => {
@@ -74,12 +77,7 @@ function upgradeLegacyMedia(input: Info["messages"]) {
         )
           return part
         const { mediaType, data, ...rest } = part
-        const value = data.trim()
-        const dataUrl = /^data:([^;,]+)?;base64,(.*)$/s.exec(value)
-        const source = /^https?:\/\//i.test(value)
-          ? { type: "url", url: value, mediaType }
-          : { type: "base64", data: dataUrl ? dataUrl[2] : value, mediaType: dataUrl?.[1] ?? mediaType }
-        return { ...rest, media: { source } }
+        return { ...rest, media: { source: { type: "base64", data, mediaType } } }
       }),
     }
   })
