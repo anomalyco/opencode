@@ -2,6 +2,7 @@
 
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime"
 import * as NodeServices from "@effect/platform-node/NodeServices"
+import { Global } from "@opencode-ai/core/global"
 import * as Effect from "effect/Effect"
 import { Commands } from "./commands/commands"
 import { Runtime } from "./framework/runtime"
@@ -26,6 +27,7 @@ const Handlers = Runtime.handlers(Commands, {
 
 Runtime.run(Commands, Handlers, { version: "local" }).pipe(
   Effect.provide(Daemon.layer),
+  Effect.provide(Global.layerWith({})),
   Effect.provide(NodeServices.layer),
   Effect.scoped,
   NodeRuntime.runMain,

@@ -8,7 +8,6 @@ export default Runtime.handler(
   Commands.commands.service.commands.restart,
   Effect.fn("cli.service.restart")(function* () {
     const daemon = yield* Daemon.Service
-    yield* daemon.stop()
-    process.stdout.write((yield* daemon.start()) + EOL)
+    process.stdout.write((yield* daemon.restart()) + EOL)
   }),
 )
