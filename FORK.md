@@ -18,6 +18,7 @@ Releases are tagged `v<upstream-version>-neumark.<N>` off `web-ui-title` and pub
 | `v1.18.31-neumark.5` | Home page fallback project for workspace-bound sessions (`27449d3`) |
 | `v1.18.31-neumark.6` | Workspace `extra.origin`: sessions belong to their origin directory (`2c0e29c`) |
 | `v1.18.31-neumark.7` | First release off the rebased (linear) history; first dual-arch release — adds `opencode-linux-arm64.tar.gz`; binary code identical to `.6` (delta is this doc + history shape) |
+| `v1.18.32-neumark.1` | Second rebase onto upstream `dev` (base `34aa4274`, upstream 1.18.32); no new fork features — binary delta is upstream changes only |
 
 Commit hashes above are the ones the tags pin (pre-rebase history); the equivalent post-rebase commits are `240eb50`, `a2a088a`, `97d3063`, `46a088c`, `d6c987c`, `5d3cb26`.
 
