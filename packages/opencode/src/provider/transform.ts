@@ -352,6 +352,14 @@ function normalizeMessages(
     })
   }
 
+  // SAP AI Core Orchestration API requires conversations to end with a user message
+  // and does not support assistant message prefill.
+  if (model.providerID === "sap-ai-core" || model.api.npm === "@jerome-benoit/sap-ai-provider-v2") {
+    while (msgs.length > 0 && msgs[msgs.length - 1].role === "assistant") {
+      msgs = msgs.slice(0, -1)
+    }
+  }
+
   return msgs
 }
 
