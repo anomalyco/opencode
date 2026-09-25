@@ -21,11 +21,27 @@ function blobUrl(id: string, blob: Blob) {
   return url
 }
 
-async function blobID(blob: Blob) {
-  const id = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await blob.arrayBuffer())))
+const hex = (bytes: Uint8Array) =>
+  Array.from(bytes)
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("")
-  return id
+
+function randomID() {
+  const bytes = new Uint8Array(32)
+  crypto.getRandomValues(bytes)
+  return hex(bytes)
+}
+
+async function blobID(blob: Blob) {
+  // crypto.subtle is undefined on insecure (http) origins; getRandomValues works everywhere.
+  if (crypto.subtle?.digest) {
+    try {
+      return hex(new Uint8Array(await crypto.subtle.digest("SHA-256", await blob.arrayBuffer())))
+    } catch {
+      // fall through to the random fallback below
+    }
+  }
+  return randomID()
 }
 
 export async function createBlobReference(blob: Blob): Promise<BlobReference> {
