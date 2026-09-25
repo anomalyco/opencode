@@ -50,6 +50,17 @@ export const childSessionOnPath = (sessions: SessionInfo[] | undefined, rootID: 
 export const displayName = (project: { name?: string; worktree: string }) =>
   project.name || getFilename(project.worktree) || project.worktree
 
+type ProjectAppearance = {
+  name?: string
+  worktree: string
+  icon?: { color?: string; url?: string; override?: string }
+}
+
+function withProjectAppearance<T extends ProjectAppearance>(metadata: T, appearance?: ProjectAppearance) {
+  if (!appearance || appearance === metadata) return metadata
+  return { ...metadata, name: displayName(appearance), icon: appearance.icon }
+}
+
 export function toggleHomeProjectSelection(
   current: HomeProjectSelection | undefined,
   server: ServerConnection.Key,
@@ -97,12 +108,10 @@ export function getProjectAvatarSource(id?: string, icon?: { color?: string; url
 export function projectForSession<T extends { id?: string; worktree: string; sandboxes?: string[] }>(
   session: SessionInfo,
   projects: T[],
-  byID: Map<string, T> = new Map(projects.flatMap((project) => (project.id ? [[project.id, project] as const] : []))),
 ) {
-  const direct = byID.get(session.projectID)
-  if (direct) {
-    const matching = projects.filter((project) => project.id === session.projectID)
-    if (matching.length === 1) return direct
+  const matching = projects.filter((project) => project.id === session.projectID)
+  if (matching.length === 1) return matching[0]
+  if (matching.length > 1) {
     const directory = pathKey(session.location.directory)
     const exact =
       matching.find((project) => pathKey(project.worktree) === directory) ??
@@ -111,7 +120,7 @@ export function projectForSession<T extends { id?: string; worktree: string; san
     return (
       matching
         .filter((project) => isProjectDirectory(project, session.location.directory))
-        .sort((a, b) => b.worktree.length - a.worktree.length)[0] ?? direct
+        .sort((a, b) => b.worktree.length - a.worktree.length)[0] ?? matching.at(-1)
     )
   }
   const directory = pathKey(session.location.directory)
@@ -129,11 +138,29 @@ export function resolveProjectForSession<
   U extends { id?: string; worktree: string; sandboxes?: string[] },
 >(session: SessionInfo, opened: T[], stored: U[]) {
   const current = projectForSession(session, opened)
-  if (current?.id === session.projectID) return current
+  if (current?.id === session.projectID) {
+    const unresolved = opened.find(
+      (project) => !project.id && pathKey(project.worktree) === pathKey(session.location.directory),
+    )
+    if (!unresolved) return current
+    const canonical = projectForSession(session, stored)
+    if (canonical?.id === session.projectID && pathKey(canonical.worktree) === pathKey(unresolved.worktree))
+      return unresolved
+    return current
+  }
   const synced = projectForSession(session, stored)
   if (synced?.id !== session.projectID) return current ?? synced
   if (current && !current.id && pathKey(current.worktree) === pathKey(session.location.directory)) return current
   return synced
+}
+
+export function resolveSessionDetailsProject<
+  T extends ProjectAppearance & { id?: string; sandboxes?: string[] },
+  U extends ProjectAppearance & { id?: string; sandboxes?: string[] },
+>(session: SessionInfo, opened: T[], stored: U[]) {
+  const metadata = projectForSession(session, stored)
+  if (!metadata) return
+  return withProjectAppearance(metadata, resolveProjectForSession(session, opened, stored))
 }
 
 export const errorMessage = (err: unknown, fallback: string) => {

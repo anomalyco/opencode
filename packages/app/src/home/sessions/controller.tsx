@@ -292,6 +292,7 @@ export function createHomeSessionsController(home: HomeController) {
           sessions: () => [result],
           projectDirectories,
           projects: home.project.list,
+          resolveProject: ctx.projects.forSession,
         })[0]
       },
       create: home.project.openNewSession,

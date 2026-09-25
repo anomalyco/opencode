@@ -14,6 +14,7 @@ import {
   latestRootSession,
   projectForSession,
   resolveProjectForSession,
+  resolveSessionDetailsProject,
   sortedRootSessions,
   toggleHomeProjectSelection,
 } from "./helpers"
@@ -239,6 +240,53 @@ describe("layout workspace helpers", () => {
     const current = session({ id: "child", projectID: synced.id, directory: child.worktree })
 
     expect(resolveProjectForSession(current, [documents, child], [synced])).toBe(child)
+  })
+
+  test("prefers an unresolved exact project only when stored ID confirms its canonical directory", () => {
+    const parent = { id: "shared", worktree: "/documents", icon: { override: "parent-icon" } }
+    const nested = { worktree: "/documents/project", icon: { override: "nested-icon" } }
+    const stored = { id: "shared", worktree: nested.worktree, icon: { override: "stored-icon" } }
+    const current = session({ id: "nested", projectID: stored.id, directory: nested.worktree })
+
+    expect(resolveProjectForSession(current, [parent, nested], [stored])).toBe(nested)
+    expect(resolveProjectForSession(current, [parent, nested], [{ ...stored, worktree: parent.worktree }])).toBe(parent)
+  })
+
+  test("merges opened appearance without changing canonical workspace metadata", () => {
+    const metadata = {
+      id: "project",
+      worktree: "/repo",
+      name: "Repo",
+      icon: { url: "server-icon" },
+      sandboxes: ["/repo/workspace"],
+      worktrees: [{ directory: "/repo/workspace" }],
+      vcs: "git",
+    }
+    const opened = { id: metadata.id, worktree: "/repo/workspace", icon: { override: "workspace-icon" } }
+    const current = session({ id: "workspace", projectID: metadata.id, directory: opened.worktree })
+
+    const merged = resolveSessionDetailsProject(current, [opened], [metadata])
+    if (!merged) throw new Error("Expected session details project")
+    expect(merged.id).toBe(metadata.id)
+    expect(merged.worktree).toBe(metadata.worktree)
+    expect(merged.worktrees).toBe(metadata.worktrees)
+    expect(merged.sandboxes).toBe(metadata.sandboxes)
+    expect(merged.vcs).toBe(metadata.vcs)
+    expect(merged.name).toBe("workspace")
+    expect(Object.entries(merged.icon ?? {})).toEqual(Object.entries(opened.icon))
+    expect(resolveSessionDetailsProject(current, [], [metadata])).toBe(metadata)
+  })
+
+  test("nested details keep child metadata and the pending opened child's icon", () => {
+    const documents = { id: "documents", worktree: "/documents", icon: { override: "parent-icon" } }
+    const opened = { worktree: "/documents/project", icon: { override: "child-icon" } }
+    const stored = { id: "child", worktree: opened.worktree, icon: { override: "server-icon" }, sandboxes: [] }
+    const current = session({ id: "child", projectID: stored.id, directory: opened.worktree })
+
+    const details = resolveSessionDetailsProject(current, [documents, opened], [stored])
+    expect(details?.id).toBe(stored.id)
+    expect(details?.worktree).toBe(stored.worktree)
+    expect(details?.icon?.override).toBe("child-icon")
   })
 
   test("formats fallback project display name", () => {

@@ -14,8 +14,6 @@ import { createStore } from "solid-js/store"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
 import { MessageTimeline } from "@/session/timeline/message-timeline"
 import { useServer } from "@/runtime/server/current"
-import { projectForSession } from "@/shell/layout/helpers"
-import { ProjectIcon } from "@/shell/layout/project-icon"
 import { ComposerDropzone } from "@/composer/dropzone"
 import type { SessionModel } from "@/session/model"
 import { SESSION_PANEL_WIDTH_MIN } from "@/session/session-panel-width"
@@ -67,11 +65,7 @@ function SessionScreenContent(props: { session: SessionModel; browser: ReturnTyp
   const server = useServer()
   const detailsProject = createMemo(() => {
     const info = session.data.info()
-    return info ? projectForSession(info, server.ctx.sync.data.project) : undefined
-  })
-  const detailsAvatarProject = createMemo(() => {
-    const info = session.data.info()
-    return info ? server.ctx.projects.forSession(info) : undefined
+    return info ? server.ctx.projects.detailsForSession(info) : undefined
   })
   const isDesktop = session.isDesktop
   const btw = createSessionBtw(session)
@@ -206,7 +200,6 @@ function SessionScreenContent(props: { session: SessionModel; browser: ReturnTyp
                       <SessionSummaryPanel
                         mobile
                         project={project()}
-                        avatar={<ProjectIcon project={detailsAvatarProject() ?? project()} />}
                         directory={session.workspace.directory()}
                         local={!session.workspace.current()}
                         branch={

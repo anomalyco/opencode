@@ -1,5 +1,5 @@
 import { Icon } from "@opencode/ui/icon"
-import { createUniqueId, Show, type ParentProps, type JSX } from "solid-js"
+import { createUniqueId, Show, type ParentProps } from "solid-js"
 import type { Project } from "@/runtime/server/types"
 import { useSettings } from "@/settings/model"
 import { displayName } from "@/shell/layout/helpers"
@@ -9,7 +9,6 @@ import "./summary.css"
 export function ProjectSummaryCard(
   props: ParentProps<{
     project: Pick<Project, "name" | "worktree" | "icon"> & { id?: string }
-    avatar?: JSX.Element
   }>,
 ) {
   const settings = useSettings()
@@ -25,7 +24,7 @@ export function ProjectSummaryCard(
         aria-controls={contentID}
         onClick={() => settings.sessionSummary.setProjectExpanded(!expanded())}
       >
-        {props.avatar ?? <ProjectIcon project={props.project} />}
+        <ProjectIcon project={props.project} />
         <span dir="auto" class="session-summary-label">
           {displayName(props.project)}
         </span>
