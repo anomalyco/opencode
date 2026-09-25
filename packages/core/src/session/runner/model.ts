@@ -5,6 +5,7 @@ import { LanguageModel } from "@opencode/ai"
 import { Model } from "@opencode/schema/model"
 import { Provider } from "@opencode/schema/provider"
 import { Context, Effect, Layer, Schema } from "effect"
+import { Agent } from "../../agent.js"
 import { ModelResolver } from "../../model-resolver.js"
 import { SessionSchema } from "../schema.js"
 
@@ -55,6 +56,23 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionRunnerModel") {}
 
+// "default" is the stored sentinel for an unset variant, not a catalog id.
+export function requestVariant(
+  requested: Model.Ref | undefined,
+  selected: { readonly providerID: Provider.ID; readonly id: Model.ID },
+  agentModel: Model.Ref | undefined,
+) {
+  if (requested?.variant && requested.variant !== "default") return requested.variant
+  if (
+    agentModel?.variant &&
+    agentModel.variant !== "default" &&
+    agentModel.providerID === selected.providerID &&
+    agentModel.id === selected.id
+  )
+    return agentModel.variant
+  return requested?.variant
+}
+
 /** Builds a Resolved whose catalog identity mirrors the route model. Test or embedding seam. */
 export const resolved = (
   model: LanguageModel,
@@ -84,13 +102,15 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const resolver = yield* ModelResolver.Service
+    const agents = yield* Agent.Service
     return Service.of({
       resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session, available) {
+        const agent = yield* agents.resolve(session.agent)
         // Location plugins populate and filter the catalog asynchronously during layer startup.
         if (!session.model) {
-          const resolved = yield* resolver.resolve()
-          if (resolved) return resolved
-          return yield* new ModelNotSelectedError({ sessionID: session.id })
+          const selected = yield* resolver.select()
+          if (!selected) return yield* new ModelNotSelectedError({ sessionID: session.id })
+          return yield* resolver.resolveModel(selected, requestVariant(undefined, selected, agent?.model))
         }
         const selected = (yield* available()).find(
           (model) => model.providerID === session.model?.providerID && model.id === session.model.id,
@@ -100,10 +120,10 @@ const layer = Layer.effect(
             providerID: session.model.providerID,
             modelID: session.model.id,
           })
-        return yield* resolver.resolveModel(selected, session.model.variant)
+        return yield* resolver.resolveModel(selected, requestVariant(session.model, selected, agent?.model))
       }),
     })
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [ModelResolver.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [ModelResolver.node, Agent.node] })

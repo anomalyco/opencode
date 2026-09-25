@@ -127,6 +127,7 @@ export interface Resolved {
 }
 
 export interface Interface {
+  readonly select: (requested?: Ref) => Effect.Effect<Info | undefined>
   readonly resolve: (requested?: Ref) => Effect.Effect<Resolved | undefined, Error>
   readonly resolveModel: (model: Info, variant?: VariantID) => Effect.Effect<Resolved, Error>
 }
@@ -393,19 +394,22 @@ export const layer = Layer.effect(
         chunkTimeout: provider?.settings?.chunkTimeout,
       }
     })
+    const select = Effect.fn("ModelResolver.select")(function* (requested?: Ref) {
+      if (requested) return yield* models.get(requested.providerID, requested.id)
+      return yield* models
+        .default()
+        .pipe(
+          Effect.flatMap((model) =>
+            model && hasPackage(model)
+              ? Effect.succeed(model)
+              : Effect.map(models.available(), (items) => items.find(hasPackage)),
+          ),
+        )
+    })
     return Service.of({
+      select,
       resolve: Effect.fn("ModelResolver.resolve")(function* (requested) {
-        const selected = requested
-          ? yield* models.get(requested.providerID, requested.id)
-          : yield* models
-              .default()
-              .pipe(
-                Effect.flatMap((model) =>
-                  model && hasPackage(model)
-                    ? Effect.succeed(model)
-                    : Effect.map(models.available(), (models) => models.find(hasPackage)),
-                ),
-              )
+        const selected = yield* select(requested)
         if (!selected) return undefined
         return yield* load(selected, requested?.variant)
       }),
