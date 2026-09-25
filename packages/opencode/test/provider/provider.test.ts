@@ -2116,3 +2116,40 @@ it.effect("opencode loader keeps paid models when auth exists", () =>
     expect(keyedCount).toBeGreaterThan(0)
   }).pipe(provideMultiInstance),
 )
+
+it.instance(
+  "NanoGPT registers the compatible SDK metadata extractor",
+  () =>
+    Effect.gen(function* () {
+      const provider = yield* Provider.Service
+      const model = yield* provider.getModel(ProviderV2.ID.make("nano-gpt"), ModelV2.ID.make("test-model"))
+      const language = yield* provider.getLanguage(model)
+      const config = (
+        language as {
+          config?: { metadataExtractor?: { extractMetadata: (input: { parsedBody: unknown }) => Promise<unknown> } }
+        }
+      ).config
+      expect(config?.metadataExtractor).toBeDefined()
+      const metadata = yield* Effect.promise(() =>
+        config!.metadataExtractor!.extractMetadata({
+          parsedBody: {
+            usage: { cache_creation_input_tokens: 50 },
+            x_nanogpt_pricing: { amount: 0.01, currency: "USD" },
+          },
+        }),
+      )
+      expect(metadata).toEqual({ nanogpt: { cacheCreationInputTokens: 50, costUSD: 0.01 } })
+    }),
+  {
+    config: {
+      provider: {
+        "nano-gpt": {
+          npm: "@ai-sdk/openai-compatible",
+          api: "https://example.invalid/v1",
+          options: { apiKey: "test-key" },
+          models: { "test-model": { name: "Test model" } },
+        },
+      },
+    },
+  },
+)

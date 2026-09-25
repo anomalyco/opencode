@@ -343,9 +343,23 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
   const reasoningTokens = safe(input.usage.reasoningTokens ?? 0)
 
   const cacheReadInputTokens = safe(input.usage.cacheReadInputTokens ?? 0)
+  const nanogpt = input.model.providerID === "nano-gpt" ? input.metadata?.["nanogpt"] : undefined
+  const writes = nanogpt?.["cacheCreationInputTokens"]
+  const nanogptWrites =
+    typeof writes === "number" &&
+    Number.isSafeInteger(writes) &&
+    writes >= 0 &&
+    writes <= inputTokens - cacheReadInputTokens
+      ? writes
+      : undefined
+  const costUSD = nanogpt?.["costUSD"]
+  const nanogptCost = typeof costUSD === "number" && Number.isFinite(costUSD) && costUSD >= 0 ? costUSD : undefined
+
   const cacheWriteInputTokens = safe(
     Number(
-      input.usage.cacheWriteInputTokens ??
+      // Compatible SDKs can normalize unsupported cache writes to zero.
+      nanogptWrites ??
+        input.usage.cacheWriteInputTokens ??
         input.metadata?.["anthropic"]?.["cacheCreationInputTokens"] ??
         // google-vertex-anthropic returns metadata under "vertex" key
         // (AnthropicMessagesLanguageModel custom provider key from 'vertex.anthropic.messages')
@@ -387,7 +401,8 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
   const totalNanoAiu = input.metadata?.["copilot"]?.["totalNanoAiu"]
   return {
     cost:
-      typeof totalNanoAiu === "number" && Number.isFinite(totalNanoAiu) && totalNanoAiu >= 0
+      nanogptCost ??
+      (typeof totalNanoAiu === "number" && Number.isFinite(totalNanoAiu) && totalNanoAiu >= 0
         ? new Decimal(totalNanoAiu).div(100_000_000_000).toNumber()
         : safe(
             new Decimal(0)
@@ -399,7 +414,7 @@ export const getUsage = (input: { model: Provider.Model; usage: Usage; metadata?
               // charge reasoning tokens at the same rate as output tokens
               .add(new Decimal(tokens.reasoning).mul(finite(costInfo?.output ?? 0)).div(1_000_000))
               .toNumber(),
-          ),
+          )),
     tokens,
   }
 }
