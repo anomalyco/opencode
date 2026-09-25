@@ -399,6 +399,14 @@ const UtilityCompletion = Schema.Struct({
 })
 const decodeUtilityCompletion = Schema.decodeUnknownEffect(Schema.fromJsonString(UtilityCompletion))
 
+// This issues its own /chat/completions call instead of steering core's title request.
+// The `session.title` hook exposes `model` read-only, so pointing core at another model
+// would mean widening that contract and re-resolving inside SessionModelRequest; rewriting
+// the body in `http.request` is worse still, since the endpoint (/responses for GPT-5,
+// /v1/messages for Claude) is fixed before that hook runs and gpt-4o-mini only serves
+// /chat/completions. Utility titles are Copilot-specific, stateless, non-streaming, and
+// free, so a small request here costs less than a core seam. Trade-offs: no session
+// usage record for the title step (the call bills nothing) and no `http.*` hook visibility.
 export function utilityTitle(
   input: { baseURL: string; token: string; model: string; app: App.Info; fetch?: Fetch },
   request: Pick<SessionTitle, "sessionID" | "system" | "messages" | "options">,
