@@ -5,9 +5,11 @@ import { useLanguage } from "~/context/language"
 import { goModels } from "./go-models"
 
 // Compress the request range, with the same domain in both views.
-const max = Math.max(...goModels.map((model) => model.requests))
+const max = Math.max(...goModels.map((model) => model.requests).filter(Number.isFinite))
 const position = (requests: number) =>
-  4 + Math.pow(Math.log10(Math.max(requests / 100, 1)) / Math.log10(max / 100), 2.2) * 96
+  Number.isFinite(requests)
+    ? 4 + Math.pow(Math.log10(Math.max(requests / 100, 1)) / Math.log10(max / 100), 2.2) * 78
+    : 100
 const ticks = [100, 1000, 10000, 40000]
 
 export function LimitsGraph(props: { href: string }) {
@@ -16,7 +18,7 @@ export function LimitsGraph(props: { href: string }) {
   const id = createUniqueId()
   const [expanded, setExpanded] = createSignal(false)
   const [visible, setVisible] = createSignal(false)
-  const models = createMemo(() => goModels.filter((model) => expanded() || model.featured || model.fresh))
+  const models = createMemo(() => goModels.filter((model) => expanded() || model.featured))
   const format = createMemo(() => new Intl.NumberFormat(language.tag(language.locale())))
   const compact = createMemo(
     () => new Intl.NumberFormat(language.tag(language.locale()), { notation: "compact", maximumFractionDigits: 1 }),
@@ -74,7 +76,13 @@ export function LimitsGraph(props: { href: string }) {
         <div role="rowgroup" data-slot="rows">
           <For each={models()}>
             {(model, index) => (
-              <div role="row" data-slot="model-row" data-model={model.id} style={{ "--delay": `${index() * 30}ms` }}>
+              <div
+                role="row"
+                data-slot="model-row"
+                data-model={model.id}
+                data-infinite={!Number.isFinite(model.requests) ? "" : undefined}
+                style={{ "--delay": `${index() * 30}ms` }}
+              >
                 <div role="rowheader" data-slot="model">
                   <bdi>{model.name}</bdi>
                   <Show when={model.fresh}>
@@ -82,6 +90,9 @@ export function LimitsGraph(props: { href: string }) {
                   </Show>
                   <Show when={model.bonus}>
                     <span data-slot="badge">{i18n.t("go.graph.bonus", { count: model.bonus! })}</span>
+                  </Show>
+                  <Show when={model.limitedTime}>
+                    <span data-slot="badge">{i18n.t("go.graph.limitedTime")}</span>
                   </Show>
                   <Show when={model.regions}>
                     <a
@@ -117,11 +128,13 @@ export function LimitsGraph(props: { href: string }) {
                     <s>{currency().format(model.baseAllowance!)}</s>{" "}
                   </Show>
                   <bdi>
-                    <For each={currency().formatToParts(model.allowance)}>
-                      {(part) => (
-                        <span data-slot={part.type === "currency" ? "currency" : undefined}>{part.value}</span>
-                      )}
-                    </For>
+                    <Show when={Number.isFinite(model.allowance)} fallback="∞">
+                      <For each={currency().formatToParts(model.allowance)}>
+                        {(part) => (
+                          <span data-slot={part.type === "currency" ? "currency" : undefined}>{part.value}</span>
+                        )}
+                      </For>
+                    </Show>
                   </bdi>
                 </div>
               </div>
