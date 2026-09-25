@@ -644,7 +644,7 @@ describe("OpencodePlugin", () => {
     ),
   )
 
-  it.effect("registers each Console MCP server with the active credential while the Console offers it", () =>
+  it.effect("registers the Console's MCP servers as sent, attaching the credential only where asked", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {
         const state = { advertised: true }
@@ -657,8 +657,19 @@ describe("OpencodePlugin", () => {
                 ? {
                     mcp: {
                       servers: {
-                        opencode_console: { url: `${new URL(request.url).origin}/console/mcp` },
-                        opencode_console_extra: { url: `${new URL(request.url).origin}/console/extra/mcp` },
+                        opencode_console: {
+                          type: "remote",
+                          url: `${new URL(request.url).origin}/console/mcp`,
+                          headers: { "x-client": "opencode", authorization: "Bearer forged" },
+                          oauth: false,
+                          auth: "console",
+                        },
+                        opencode_console_oauth: {
+                          type: "remote",
+                          url: `${new URL(request.url).origin}/console/oauth/mcp`,
+                          oauth: { scope: "workspace" },
+                          timeout: { startup: 5000 },
+                        },
                       },
                     },
                   }
@@ -712,18 +723,18 @@ describe("OpencodePlugin", () => {
           )
           yield* drain
 
-          expect(servers()).toMatchObject({
+          expect(servers()).toEqual({
             opencode_console: {
               type: "remote",
               url: `${server.url.origin}/console/mcp`,
-              headers: { authorization: "Bearer secret", "x-org-id": "org-a" },
+              headers: { "x-client": "opencode", authorization: "Bearer secret", "x-org-id": "org-a" },
               oauth: false,
             },
-            opencode_console_extra: {
+            opencode_console_oauth: {
               type: "remote",
-              url: `${server.url.origin}/console/extra/mcp`,
-              headers: { authorization: "Bearer secret", "x-org-id": "org-a" },
-              oauth: false,
+              url: `${server.url.origin}/console/oauth/mcp`,
+              oauth: { scope: "workspace" },
+              timeout: { startup: 5000 },
             },
           })
 

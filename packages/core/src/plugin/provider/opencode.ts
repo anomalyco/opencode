@@ -13,6 +13,7 @@ import { Provider } from "../../provider.js"
 import { WebSearch } from "../../websearch.js"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
 import { ConfigProvider } from "@opencode/schema/config/provider"
+import { Mcp } from "@opencode/schema/mcp"
 import { Money } from "@opencode/schema/money"
 
 const defaultServer = "https://opencode.ai/console"
@@ -23,9 +24,14 @@ const RemoteResponse = Schema.Struct({
   websearch: Schema.Struct({
     providerID: WebSearch.ID,
   }).pipe(Schema.optional),
-  // Console-hosted MCP servers by name; the client attaches its own Console credential to each.
+  // MCP servers by name, in the same shape as a remote server in local config. Only remote servers are
+  // accepted so the Console can never make the client run a command. `auth: "console"` asks the client
+  // to attach its own Console credential to that server's requests.
   mcp: Schema.Struct({
-    servers: Schema.Record(Schema.String, Schema.Struct({ url: Schema.String })),
+    servers: Schema.Record(
+      Schema.String,
+      Schema.Struct({ ...Mcp.RemoteConfig.fields, auth: Schema.Literal("console").pipe(Schema.optional) }),
+    ),
   }).pipe(Schema.optional),
   // Organization policy compiled for the authenticated caller; omitted when there is none.
   experimental: Schema.Struct({
@@ -139,7 +145,9 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
       connection: ActiveConnection
       organization: string | undefined
       // Console MCP servers carry the credential in their headers, so a rotated token changes the snapshot.
-      mcp: { servers: Record<string, { url: string }>; headers: Record<string, string> } | undefined
+      mcp:
+        | { servers: NonNullable<typeof RemoteResponse.Type.mcp>["servers"]; headers: Record<string, string> }
+        | undefined
     } = { config: undefined, connection: undefined, organization: undefined, mcp: undefined }
 
     const load = Effect.fn("OpencodePlugin.load")(function* () {
@@ -351,7 +359,8 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
       for (const [name, server] of Object.entries(mcp.servers)) {
         // A server the user configured under the same name wins.
         if (editor.get(name)) continue
-        editor.set(name, { type: "remote", url: server.url, headers: { ...mcp.headers }, oauth: false })
+        const { auth, ...config } = server
+        editor.set(name, auth === "console" ? { ...config, headers: { ...config.headers, ...mcp.headers } } : config)
       }
     })
 
