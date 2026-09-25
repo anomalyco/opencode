@@ -72,6 +72,15 @@ interface ProcessorContext extends Input {
   needsCompaction: boolean
   currentText: SessionV1.TextPart | undefined
   reasoningMap: Record<string, SessionV1.ReasoningPart>
+  // Sticky once a tool has started executing. A retry replays the same request,
+  // so the model re-emits the same call and a side-effecting tool would run a
+  // second time. Deleting the part cannot undo what already touched the disk,
+  // so this is the one failure the turn must not replay.
+  executed: boolean
+  // Parts written by the attempt currently in flight. A retry removes them
+  // first, otherwise the truncated output from the failed attempt stays in the
+  // transcript alongside its replacement.
+  attemptParts: SessionV1.Part["id"][]
 }
 
 type StreamEvent = LLMEvent
@@ -111,6 +120,8 @@ const layer = Layer.effect(
         needsCompaction: false,
         currentText: undefined,
         reasoningMap: {},
+        executed: false,
+        attemptParts: [],
       }
       let aborted = false
 
@@ -243,6 +254,7 @@ const layer = Layer.effect(
           state: { status: "pending", input: {}, raw: "" },
           metadata: input.providerExecuted ? { providerExecuted: true } : undefined,
         } satisfies SessionV1.ToolPart)
+        ctx.attemptParts.push(part.id)
         ctx.toolcalls[input.id] = {
           done: yield* Deferred.make<void>(),
           partID: part.id,
@@ -288,6 +300,7 @@ const layer = Layer.effect(
               time: { start: Date.now() },
               metadata: value.providerMetadata,
             }
+            ctx.attemptParts.push(ctx.reasoningMap[value.id].id)
             yield* session.updatePart(ctx.reasoningMap[value.id])
             return
 
@@ -334,6 +347,8 @@ const layer = Layer.effect(
             }
             yield* ensureToolCall(value)
             const input = isRecord(value.input) ? value.input : { value: value.input }
+            // The call is about to execute, so the turn can no longer be replayed.
+            ctx.executed = true
             yield* updateToolCall(value.id, (match) => ({
               ...match,
               tool: value.name,
@@ -507,6 +522,7 @@ const layer = Layer.effect(
               time: { start: Date.now() },
               metadata: value.providerMetadata,
             }
+            ctx.attemptParts.push(ctx.currentText.id)
             yield* session.updatePart(ctx.currentText)
             return
 
@@ -648,6 +664,17 @@ const layer = Layer.effect(
 
         return yield* Effect.gen(function* () {
           yield* Effect.gen(function* () {
+            // Drop whatever the previous attempt managed to write. The request is
+            // replayed unchanged, so leaving those parts behind would show the
+            // truncated output followed by the full replacement.
+            yield* Effect.forEach(ctx.attemptParts, (partID) =>
+              session.removePart({
+                sessionID: ctx.assistantMessage.sessionID,
+                messageID: ctx.assistantMessage.id,
+                partID,
+              }),
+            )
+            ctx.attemptParts = []
             ctx.currentText = undefined
             ctx.reasoningMap = {}
             yield* status.set(ctx.sessionID, { type: "busy" })
@@ -671,8 +698,8 @@ const layer = Layer.effect(
               (cause) => !Cause.hasInterruptsOnly(cause),
               (cause) => Effect.fail(Cause.squash(cause)),
             ),
-            Effect.retry(
-              SessionRetry.policy({
+            Effect.retry({
+              schedule: SessionRetry.policy({
                 provider: input.model.providerID,
                 parse,
                 set: (info) => {
@@ -685,7 +712,10 @@ const layer = Layer.effect(
                   })
                 },
               }),
-            ),
+              // Text and reasoning written by a failed attempt are removed before
+              // the next one, but a tool that already ran cannot be undone.
+              while: () => !ctx.executed,
+            }),
             Effect.catch(halt),
             Effect.ensuring(cleanup()),
           )
