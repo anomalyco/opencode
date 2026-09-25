@@ -13,7 +13,7 @@ import {
 } from "@opentui/core"
 import type { JSX } from "@opentui/solid"
 import { useRenderer } from "@opentui/solid"
-import { createMemo, createSignal, For, onCleanup, Show, splitProps } from "solid-js"
+import { batch, createMemo, createSignal, For, onCleanup, Show, splitProps } from "solid-js"
 import { splitAddedPatch, splitPatchHunks, type AddedPatchChunk } from "../util/diff"
 import { stringWidth } from "../util/string-width"
 
@@ -23,7 +23,7 @@ export interface PatchDiffRef {
 
 // Smaller patches render fine as a single DiffRenderable; only split files large enough to stall the TUI.
 const VIRTUAL_MIN_LINES = 3000
-const VIRTUAL_CHUNK_LINES = 384
+const VIRTUAL_CHUNK_LINES = 128
 
 type Props = Omit<JSX.IntrinsicElements["diff"], "diff" | "lineNumberBg" | "ref"> & {
   diff: string
@@ -131,7 +131,7 @@ export function PatchDiff(props: Props) {
 }
 
 // Chunks render without wrapping so each one is exactly `rows` tall. Offscreen chunks become fixed-height
-// placeholders, and the visible chunk follows directly from the scroll offset.
+// placeholders, and the chunks overlapping the viewport (plus one on each side) follow from the scroll offset.
 function VirtualAddedPatch(props: {
   chunks: readonly AddedPatchChunk[]
   scroll: () => ScrollBoxRenderable | undefined
@@ -141,7 +141,8 @@ function VirtualAddedPatch(props: {
   registerRoot: (root: BoxRenderable) => void
 }) {
   const renderer = useRenderer()
-  const [visible, setVisible] = createSignal(0)
+  const [first, setFirst] = createSignal(0)
+  const [last, setLast] = createSignal(0)
   // A chunk is not valid source on its own (a slice of a JSON object parses as an error), so highlight
   // the whole file once and give each chunk its slice of the result.
   const contents = createMemo(() => props.chunks.map((chunk) => chunk.lines.map((line) => line.slice(1)).join("\n")))
@@ -183,8 +184,10 @@ function VirtualAddedPatch(props: {
           if (!scroll) return
           // ScrollBox's scroll position is not a Solid signal; observe it during the render pass.
           const top = scroll.scrollTop - (root.y - scroll.content.y)
-          if (top + scroll.viewport.height < 0 || top > lineCount(props.chunks)) return setVisible(-1)
-          setVisible(Math.min(props.chunks.length - 1, Math.max(0, Math.floor(top / VIRTUAL_CHUNK_LINES))))
+          batch(() => {
+            setFirst(Math.floor(top / VIRTUAL_CHUNK_LINES))
+            setLast(Math.floor((top + scroll.viewport.height) / VIRTUAL_CHUNK_LINES))
+          })
         }
         renderer.registerLifecyclePass(root)
         onCleanup(() => renderer.unregisterLifecyclePass(root))
@@ -192,7 +195,7 @@ function VirtualAddedPatch(props: {
     >
       <For each={props.chunks}>
         {(chunk, index) => (
-          <Show when={visible() >= 0 && Math.abs(index() - visible()) <= 1} fallback={<box height={chunk.rows} />}>
+          <Show when={index() >= first() - 1 && index() <= last() + 1} fallback={<box height={chunk.rows} />}>
             <diff
               {...props.diffProps}
               ref={(node: DiffRenderable) => {
