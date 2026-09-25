@@ -99,10 +99,14 @@ const step = Effect.fn("GoogleSpeech.step")(function* (state: State, frame: stri
     part.inlineData === undefined ? [] : [part.inlineData],
   )
   const next: State = { ...GeminiGenerateContent.track(state, chunk), mimeType: state.mimeType ?? audio[0]?.mimeType }
-  return [next, audio.flatMap((part) => SpeechStream.delta(next, part.data)[1])] as const
+  const events = audio.flatMap((part) => SpeechStream.delta(next, part.data)[1])
+  const withheld = next.chunks.length === 0 ? GeminiGenerateContent.withheld(route.name, chunk, frame) : undefined
+  if (withheld !== undefined) return yield* withheld
+  return [next, events] as const
 })
 
 const finish = (state: State, context: MediaProtocol.ResponseContext<Request>) => {
+  if (state.finishReason === undefined) return Effect.fail(route.incomplete())
   const sampleRate = SpeechStream.sampleRate(state.mimeType) ?? DEFAULT_SAMPLE_RATE
   const output =
     state.mimeType?.split(";")[0]?.toLowerCase() === "audio/wav"
@@ -115,8 +119,9 @@ const finish = (state: State, context: MediaProtocol.ResponseContext<Request>) =
   return SpeechStream.finish(route, state, {
     ...output,
     usage: GeminiGenerateContent.usage(state.usage),
+    notices: GeminiGenerateContent.notices(route.name, state),
     providerMetadata: GeminiGenerateContent.providerMetadata(state),
-    detail: state.finishReason === undefined ? undefined : `finish reason: ${state.finishReason}`,
+    detail: `finish reason: ${state.finishReason}`,
   })
 }
 
