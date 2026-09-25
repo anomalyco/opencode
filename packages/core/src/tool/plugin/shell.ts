@@ -131,15 +131,18 @@ export const Plugin = {
         }),
       )
       yield* access.authorizeExternal([target, ...directories], context)
-      if (parsed.commands.length > 0)
-        yield* permission.assert({
-          action: name,
-          resources: parsed.commands.map((command) => command.resource),
-          save: parsed.commands.map((command) => command.save),
-          sessionID: context.sessionID,
-          agent: context.agent,
-          source,
-        })
+      // A command the scanner finds no commands in still runs, so fall back to the raw
+      // invocation rather than skipping the check. A bare redirect is the clearest case:
+      // `> file` parses to zero commands but truncates the file when the shell runs it.
+      const scanned = parsed.commands.length > 0
+      yield* permission.assert({
+        action: name,
+        resources: scanned ? parsed.commands.map((command) => command.resource) : [invocation.command],
+        save: scanned ? parsed.commands.map((command) => command.save) : [invocation.command],
+        sessionID: context.sessionID,
+        agent: context.agent,
+        source,
+      })
       // Approval can outlive the directory, so validate immediately before spawning.
       const workdir = yield* Environment.typeFollowing(environment.files, target.absolute).pipe(
         Effect.catchTag("Environment.NotFound", () =>

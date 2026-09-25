@@ -707,3 +707,36 @@ describe("shell scanner permission impact", () => {
     }
   }
 })
+
+describe("permission.shell scanner gaps", () => {
+  for (const portable of [false, true]) {
+    for (const command of ["> victim.txt", ">> victim.txt"]) {
+      it.effect(`denies ${JSON.stringify(command)} the scanner finds no commands in (portable=${portable})`, () =>
+        Effect.gen(function* () {
+          // A bare redirect is valid POSIX and truncates or creates the file, but both
+          // scanners report zero commands for it. Falling back to the raw invocation keeps
+          // it inside the permission check instead of running unchecked.
+          const parsed = yield* ShellParse.scan(command, "/bin/bash", "/project", { portable })
+          expect(parsed.commands.length).toBe(0)
+
+          yield* setup([{ action: "*", resource: "*", effect: "deny" }])
+          const service = yield* Permission.Service
+          const scanned = parsed.commands.length > 0
+          const result = yield* service.ask(
+            assertion({
+              action: "shell",
+              resources: scanned ? parsed.commands.map((entry) => entry.resource) : [command],
+              save: scanned ? parsed.commands.map((entry) => entry.save) : [command],
+            }),
+          )
+          expect(result.effect).toBe("deny")
+
+          // Without that fallback the resource list is empty, and an empty list evaluates
+          // to allow under a deny-all ruleset - the fail-open this guards against.
+          const empty = yield* service.ask(assertion({ action: "shell", resources: [], save: [] }))
+          expect(empty.effect).toBe("allow")
+        }),
+      )
+    }
+  }
+})
