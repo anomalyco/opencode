@@ -33,21 +33,16 @@ const escapeRegexHint =
   'To match special characters like ( ) [ ] { } + * ? . literally, escape them with a backslash (e.g. "\\\\(") or test for them with String.includes instead.'
 
 export const toHostRegex = (arg: Value, method: string, extraFlags = ""): RegExp => {
-  // Native parity: an undefined pattern behaves as an empty pattern.
-  if (arg === undefined) return new RegExp("", extraFlags)
   if (arg instanceof RegExpObj) return arg.regex
-  if (typeof arg === "string") {
-    try {
-      return new RegExp(arg, extraFlags)
-    } catch (error) {
-      throw syntaxError(
-        `String.${method} received the string ${JSON.stringify(arg)}, which is not a valid regular expression pattern (${regexFailureReason(error)}). ${escapeRegexHint}`,
-      )
-    }
+  // Anything else is a pattern string, as `new RegExp(arg)` would read it: undefined is the empty pattern.
+  const source = arg === undefined ? "" : coerceToString(arg)
+  try {
+    return new RegExp(source, extraFlags)
+  } catch (error) {
+    throw syntaxError(
+      `String.${method} received the string ${JSON.stringify(source)}, which is not a valid regular expression pattern (${regexFailureReason(error)}). ${escapeRegexHint}`,
+    )
   }
-  throw typeError(
-    `String.${method} expects a regular expression (a /pattern/flags literal or new RegExp(...)) or a string pattern, not ${arg === null ? "null" : typeof arg}.`,
-  )
 }
 
 export const matchToValue = (builtins: Builtins, match: RegExpMatchArray): Arr => {

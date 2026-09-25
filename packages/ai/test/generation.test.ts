@@ -23,15 +23,14 @@ const scriptedRoute = (statuses: ReadonlyArray<GenerationStatus>, result: string
       progress: count / statuses.length,
     })
     const route: GenerationRoute<string> = {
-      status: () => Ref.updateAndGet(polls, (count) => count + 1).pipe(Effect.map(snapshot)),
-      result: (token) =>
-        Effect.gen(function* () {
-          const count = yield* Ref.get(polls)
-          const status = snapshot(count).status
-          if (status === "completed") return `${result}:${String(token)}`
-          return yield* new AIError({ reason: new InvalidProviderOutputError({ message: `Generation ended ${status}` }) })
-        }),
-      cancel: () => Ref.set(cancelled, true),
+      status: Ref.updateAndGet(polls, (count) => count + 1).pipe(Effect.map(snapshot)),
+      result: Effect.gen(function* () {
+        const count = yield* Ref.get(polls)
+        const status = snapshot(count).status
+        if (status === "completed") return result
+        return yield* new AIError({ reason: new InvalidProviderOutputError({ message: `Generation ended ${status}` }) })
+      }),
+      cancel: Ref.set(cancelled, true),
     }
     return { route, polls, cancelled }
   })
@@ -47,7 +46,7 @@ describe("Generation", () => {
       yield* TestClock.adjust("3 seconds")
       const result = yield* Fiber.join(fiber)
 
-      expect(result).toBe("done:[object Object]")
+      expect(result).toBe("done")
       expect(yield* Ref.get(scripted.polls)).toBe(3)
     }),
   )
@@ -57,7 +56,7 @@ describe("Generation", () => {
       const scripted = yield* scriptedRoute(["completed"], "done")
       yield* Ref.set(scripted.polls, 1)
       const generation = new Generation(scripted.route, "t", { id: "gen_1", status: "completed" })
-      expect(yield* generation.await()).toBe("done:t")
+      expect(yield* generation.await()).toBe("done")
       expect(yield* Ref.get(scripted.polls)).toBe(1)
     }),
   )
@@ -80,6 +79,24 @@ describe("Generation", () => {
     }),
   )
 
+  it.effect("fails an event stream at the deadline even when a status poll hangs", () =>
+    Effect.gen(function* () {
+      const route: GenerationRoute<string> = {
+        status: Effect.never,
+        result: Effect.succeed("never"),
+      }
+      const generation = new Generation(route, "t", { id: "gen_1", status: "queued" })
+
+      const fiber = yield* Effect.forkChild(
+        generation.events({ poll: { interval: "1 second", timeout: "5 seconds" } }).pipe(Stream.runCollect, Effect.flip),
+      )
+      yield* TestClock.adjust("6 seconds")
+      const error = yield* Fiber.join(fiber)
+
+      expect(error.reason._tag).toBe("Timeout")
+    }),
+  )
+
   it.effect("surfaces the route failure body for failed generations", () =>
     Effect.gen(function* () {
       const scripted = yield* scriptedRoute(["running", "failed"], "unused")
@@ -99,7 +116,9 @@ describe("Generation", () => {
       const scripted = yield* scriptedRoute(["queued", "running", "completed"], "done")
       const generation = new Generation(scripted.route, "t", { id: "gen_1", status: "queued" })
 
-      const fiber = yield* Effect.forkChild(generation.events({ poll: { interval: "1 second" } }).pipe(Stream.runCollect))
+      const fiber = yield* Effect.forkChild(
+        generation.events({ poll: { interval: "1 second" } }).pipe(Stream.runCollect),
+      )
       yield* TestClock.adjust("3 seconds")
       const events = Array.from(yield* Fiber.join(fiber))
 

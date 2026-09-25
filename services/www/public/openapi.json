@@ -1556,6 +1556,16 @@
                       }
                     ]
                   },
+                  "metadata": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Session.Metadata"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
                   "permissions": {
                     "anyOf": [
                       {
@@ -16308,9 +16318,13 @@
           "updated": {
             "type": "integer",
             "minimum": 0
+          },
+          "active": {
+            "type": "integer",
+            "minimum": 0
           }
         },
-        "required": ["created", "updated"],
+        "required": ["created", "updated", "active"],
         "additionalProperties": false
       },
       "Project.Vcs": {

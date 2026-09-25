@@ -29,7 +29,7 @@ import { useCheckServerHealth } from "@/runtime/server/health"
 import { usePlatform } from "@/runtime/platform/platform"
 import { isMixedContent } from "./browser"
 import { createCameraAvailability } from "./camera"
-import { decodePairingCode } from "./pairing"
+import type { Pairing } from "./pairing"
 import "@/settings/settings.css"
 
 const PairingScanner = lazy(() => import("./scanner").then((module) => ({ default: module.PairingScanner })))
@@ -117,16 +117,10 @@ export const DialogServer: Component<{
                 invalid={!!form.state.error()}
                 disabled={form.state.busy()}
                 autofocus
-                list="dialog-server-addresses"
                 aria-describedby={form.state.error() ? "dialog-server-error" : undefined}
                 onInput={(event) => form.change.value(event.currentTarget.value)}
                 onKeyDown={keyDown}
               />
-              <datalist id="dialog-server-addresses">
-                {form.state.urls().map((url) => (
-                  <option value={url} />
-                ))}
-              </datalist>
               <Show when={form.state.error()}>
                 <span id="dialog-server-error" class="settings-server-dialog-error" role="alert">
                   {form.state.error()}
@@ -213,7 +207,6 @@ function createFormController(options: { onSelect?: (server: ServerConnection.Ht
     mode: "list" as FormMode,
     originalUrl: undefined as string | undefined,
     values: { url: "", name: "", password: "" },
-    urls: [] as string[],
     scanning: false,
     error: "",
     status: undefined as boolean | undefined,
@@ -227,7 +220,6 @@ function createFormController(options: { onSelect?: (server: ServerConnection.Ht
       mode: "list",
       originalUrl: undefined,
       values: { url: "", name: "", password: "" },
-      urls: [],
       scanning: false,
       error: "",
       status: undefined,
@@ -333,11 +325,10 @@ function createFormController(options: { onSelect?: (server: ServerConnection.Ht
     setStore("error", "")
     request.mutate()
   }
-  const pair = (pairing: NonNullable<ReturnType<typeof decodePairingCode>>) => {
+  const pair = (pairing: Pairing) => {
     healthPreview.cancel()
     setStore({
-      values: { ...store.values, url: pairing.urls[0], password: pairing.password },
-      urls: pairing.urls,
+      values: { ...store.values, url: pairing.url, password: pairing.password },
       scanning: false,
       error: "",
     })
@@ -359,7 +350,6 @@ function createFormController(options: { onSelect?: (server: ServerConnection.Ht
       value: () => store.values.url,
       name: () => store.values.name,
       password: () => store.values.password,
-      urls: () => store.urls,
       scanning: () => store.scanning,
       error: () => store.error,
       status: () => store.status,

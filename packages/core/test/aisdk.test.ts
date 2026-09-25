@@ -13,6 +13,7 @@ import {
   CompactionPart,
   ProviderID,
   HttpContext,
+  InvalidRequestError,
   LLMEvent,
   Message,
   RateLimitError,
@@ -374,6 +375,18 @@ it.effect("routes AI Gateway model options by upstream prefix", () =>
       bedrock: { reasoningConfig: { type: "enabled" } },
     })
 
+    const openai = yield* aisdk.model({
+      ...model("@ai-sdk/gateway", { gateway: { order: ["openai"] } }),
+      modelID: Model.ID.make("openai/gpt-5.5"),
+    })
+    const openaiPrepared = yield* compileRequest(
+      LLM.request({ model: openai, prompt: "Hello", providerOptions: { textVerbosity: "low" } }),
+    )
+    expect(openaiPrepared.body.providerOptions).toEqual({
+      gateway: { order: ["openai"] },
+      openai: { textVerbosity: "low" },
+    })
+
     const fallback = yield* aisdk.model({
       ...model("@ai-sdk/gateway", { reasoningEffort: "high" }),
       modelID: Model.ID.make("deepseek/deepseek-v4"),
@@ -382,6 +395,90 @@ it.effect("routes AI Gateway model options by upstream prefix", () =>
     expect(fallbackPrepared.body.providerOptions).toEqual({
       deepseek: { reasoningEffort: "high" },
     })
+  }),
+)
+
+it.effect("closes the open AI SDK reasoning part when the next one starts", () =>
+  Effect.gen(function* () {
+    // AI SDK OpenAI Responses can start summary part 1 before part 0 ends, then end both at item completion (#50662).
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = {
+        languageModel: () =>
+          streamModel([
+            { type: "reasoning-start", id: "rs_1:0", providerMetadata: { gateway: { generationId: "gen_1" } } },
+            { type: "reasoning-start", id: "rs_1:1" },
+            { type: "reasoning-delta", id: "rs_1:1", delta: "Second summary" },
+            { type: "reasoning-end", id: "rs_1:0", providerMetadata: { gateway: { encrypted: "late" } } },
+            { type: "reasoning-end", id: "rs_1:1", providerMetadata: { gateway: { encrypted: "final" } } },
+            { type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage },
+          ]),
+      }
+    })
+
+    const resolved = yield* aisdk.model(model("@ai-sdk/gateway"))
+    const response = yield* LLMClient.generate(LLM.request({ model: resolved, prompt: "Think" })).pipe(
+      Effect.provide(client),
+    )
+
+    expect(response.events.filter((event) => event.type.startsWith("reasoning-"))).toEqual([
+      { type: "reasoning-start", id: "rs_1:0", providerMetadata: { gateway: { generationId: "gen_1" } } },
+      { type: "reasoning-end", id: "rs_1:0" },
+      { type: "reasoning-start", id: "rs_1:1", providerMetadata: undefined },
+      { type: "reasoning-delta", id: "rs_1:1", text: "Second summary", providerMetadata: undefined },
+      { type: "reasoning-end", id: "rs_1:1", providerMetadata: { gateway: { encrypted: "final" } } },
+    ])
+  }),
+)
+
+it.effect("normalizes repeated, reopened, and overlapping AI SDK fragment boundaries", () =>
+  Effect.gen(function* () {
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = {
+        languageModel: () =>
+          streamModel([
+            // Older xAI Responses repeat the start for every summary part.
+            { type: "reasoning-start", id: "rs_1" },
+            { type: "reasoning-start", id: "rs_1" },
+            { type: "reasoning-delta", id: "rs_1", delta: "First" },
+            { type: "reasoning-end", id: "rs_1" },
+            // xAI Chat keeps streaming an ended reasoning id after an empty tool_calls chunk.
+            { type: "reasoning-delta", id: "rs_1", delta: "Second" },
+            { type: "reasoning-end", id: "rs_1" },
+            // xAI Responses ends every message item only when the stream flushes.
+            { type: "text-start", id: "msg_1" },
+            { type: "text-delta", id: "msg_1", delta: "One" },
+            { type: "text-start", id: "msg_2" },
+            { type: "text-delta", id: "msg_2", delta: "Two" },
+            { type: "text-end", id: "msg_1" },
+            { type: "text-end", id: "msg_2" },
+            { type: "finish", finishReason: { unified: "stop", raw: "stop" }, usage },
+          ]),
+      }
+    })
+
+    const resolved = yield* aisdk.model(model("@ai-sdk/gateway"))
+    const response = yield* LLMClient.generate(LLM.request({ model: resolved, prompt: "Think" })).pipe(
+      Effect.provide(client),
+    )
+
+    expect(
+      response.events.filter((event) => event.type.startsWith("reasoning-") || event.type.startsWith("text-")),
+    ).toMatchObject([
+      { type: "reasoning-start", id: "rs_1" },
+      { type: "reasoning-delta", id: "rs_1", text: "First" },
+      { type: "reasoning-end", id: "rs_1" },
+      { type: "reasoning-start", id: "rs_1" },
+      { type: "reasoning-delta", id: "rs_1", text: "Second" },
+      { type: "reasoning-end", id: "rs_1" },
+      { type: "text-start", id: "msg_1" },
+      { type: "text-delta", id: "msg_1", text: "One" },
+      { type: "text-end", id: "msg_1" },
+      { type: "text-start", id: "msg_2" },
+      { type: "text-delta", id: "msg_2", text: "Two" },
+      { type: "text-end", id: "msg_2" },
+    ])
   }),
 )
 
@@ -798,6 +895,23 @@ Object.values({
     }),
   )
 })
+
+// Shapes the Vercel AI Gateway streams when the upstream rejects a request.
+Object.entries({
+  "type validation": {
+    name: "AI_TypeValidationError",
+    value: { error: { type: "invalid_request_error", message: "Bad max_tokens" } },
+  },
+  invalid_request: { code: "invalid_request", message: "Bad max_tokens" },
+}).forEach(([shape, failure]) =>
+  it.effect(`reads gateway ${shape} stream errors as invalid requests`, () =>
+    Effect.gen(function* () {
+      const error = yield* streamFailure(failure, true)
+      expect(error.message).toBe("Bad max_tokens")
+      expect(error.reason).toBeInstanceOf(InvalidRequestError)
+    }),
+  ),
+)
 
 it.effect("does not copy Error request internals into the provider body", () =>
   Effect.gen(function* () {

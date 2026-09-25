@@ -41,8 +41,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] A trailing comma after a rest parameter is a syntax error, with or without `"use strict"`.
 - [x] A program that begins with `"use strict"` rejects `yield` as an identifier and duplicate parameter names at
       parse time. Without it, `yield` is an ordinary binding.
-- [ ] Duplicate parameter names in non-strict code throw when the function is called, instead of binding the last
-      parameter as JavaScript does.
+- [x] Duplicate parameter names in non-strict code bind the last parameter, as in JS (`function f(a, a)` called
+      with `(1, 2)` sees `a === 2`).
 
 ## Values and literals
 
@@ -52,12 +52,15 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Object literals with shorthand, computed string/number keys, and spread following ToObject: data objects and
       arrays copy own enumerable keys, strings copy index keys, and other values contribute nothing.
 - [x] Template literals with interpolation.
+- [x] Tagged templates: a tag applied to a template literal is called as `tag(strings, ...values)`, with the tag read
+      like a callee so a member tag keeps its receiver. `strings` is an array of the cooked text with a read-only `raw`
+      array of the source text; an invalid escape such as `\unicode` cooks to `undefined`. One template object per
+      site, as in JS, but it is not frozen: `strings[0] = "x"` succeeds here where JS throws.
 - [x] Regular-expression literals.
 - [x] `NaN` and `Infinity` globals.
 - [ ] BigInt literals and in-interpreter BigInt arithmetic; BigInt remains invalid at JSON-like host boundaries.
 - [ ] Arbitrary Symbol primitive values and symbol-keyed properties. The confined `Symbol.iterator` and
       `Symbol.asyncIterator` keys are available only for the iterator protocols.
-- [ ] Tagged-template calls.
 - [ ] Getter and setter definitions in object literals.
 
 ## Bindings and destructuring
@@ -82,11 +85,13 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Array binding and assignment destructuring from strings, Maps, Sets, URLSearchParams, custom synchronous
       iterators, and synchronous generators, including stepwise elisions/rest and `IteratorClose` on early completion
       or binding/default failure.
-- [ ] Object destructuring from primitives follows ToObject (`const { length } = "abc"`, `const {} = 1`); non-object
-      sources are rejected.
+- [x] Object destructuring from primitives follows ToObject: `const { length } = "abc"` is `3`, `const { toFixed } = 1`
+      finds the built-in, `const {} = 1` is a no-op, and a rest element copies a string's indexes (`{ 1: "y", 2: "z" }`).
+      Only `null` and `undefined` sources throw (`Cannot destructure null as it is null.`).
 - [x] Destructuring reads through the prototype chain like member access: `const { constructor } = error` and
       `const { slice } = values` find the inherited built-in.
-- [ ] Member expressions as `for...in` targets (`for (x.y in obj)`).
+- [x] Any assignment target as a `for...in` head, like `for...of`: `for (x.y in obj)`, `for (a[i++] in obj)`, and
+      destructuring patterns.
 
 ## Statements and control flow
 
@@ -98,6 +103,7 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       synchronous iterators, and confined synchronous generators. Abrupt completion invokes the iterator's optional `return()`.
 - [x] `for...in` over own keys of plain objects, arrays, strings, and tool references. `null`, `undefined`, and other
       non-objects iterate nothing. An un-awaited promise throws rather than iterating.
+- [ ] `for...in` over inherited enumerable keys (`Object.create(proto)`), and skipping keys deleted during the loop.
 - [x] Unlabeled `break` and `continue`.
 - [x] `try`, `catch`, optional catch bindings, and `finally`.
 - [x] `throw` with arbitrary values.
@@ -125,7 +131,7 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Built-in method references as callbacks, such as `values.map(Math.abs)`, `records.map(JSON.stringify)`,
       `items.forEach(console.log)`, and `Promise.resolve(-1).then(Math.abs)`. Extra callback arguments a built-in
       does not consume are ignored, like JS, and consumed arguments coerce, like JS (`"3.7".replace(/\d\.\d/,
-    Math.floor)` is `"3"`). A detached method loses its receiver, as in JS: `values.filter("abc".includes)` is a `TypeError`
+Math.floor)` is `"3"`). A detached method loses its receiver, as in JS: `values.filter("abc".includes)` is a `TypeError`
       because `includes` is called without a string `this`.
 - [x] Constructors work as callbacks with JS call semantics: `Error` types construct (`messages.map(Error)`),
       and new-requiring constructors (`Map`, `Set`, `URL`, `URLSearchParams`, `Headers`, `Promise`) throw a `TypeError`,
@@ -134,11 +140,25 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       arrow function.
 - [x] Promise-returning string replacers are coerced synchronously to `"[object Promise]"`, like JavaScript; they are
       not automatically awaited.
-- [x] The optional `thisArg` of iteration methods is accepted and ignored: CodeMode functions have no `this`, so
-      ignoring it matches JS arrow-function semantics exactly.
-- [ ] `this` in non-arrow CodeMode functions and callbacks.
+- [x] `this` in non-arrow functions is the call's receiver: `obj.m()` and `obj["m"]()` see `obj`, a bare or detached
+      call (`f()`, `const m = obj.m; m()`, `(0, obj.m)()`) sees `undefined`, as in strict JS. Arrows read the enclosing
+      function's `this`. Program code has no receiver, so top-level `this` is `undefined`, as in a module.
+- [x] `arguments` in non-arrow functions: an unmapped ordinary object with the call's arguments as indexed
+      properties and a hidden `length`; iterable, so spread, `for...of`, and `Array.from` work. It is not an Array
+      (`JSON.stringify` gives `{"0":1}`, `String` gives `[object Arguments]`). A parameter named `arguments` shadows
+      it; arrows read the enclosing function's; it is only created for functions whose body mentions it. `callee`
+      and `caller` are absent rather than poisoned.
+- [ ] Array methods on `arguments` and other array-likes (`Array.prototype.slice.call(arguments, 1)`); use
+      `[...arguments]` or a rest parameter meanwhile.
+- [x] `Function.prototype.call`, `apply`, and `bind` on program functions and built-ins:
+      `Array.prototype.push.call(arr, 1)`, `Math.max.apply(null, values)`, `fn.bind(obj, first)`. `apply` accepts an
+      array, an array-like object (its `length` clamped and capped like `Array.from`), or `null`/`undefined`. A
+      bound function is named `bound f`, has its remaining `length`, and is not constructible.
+- [x] `JSON.parse` revivers and `JSON.stringify` function replacers see the holder object as `this`.
+- [x] The optional `thisArg` of the Array, Uint8Array, and `Array.from` callback methods and of Map, Set,
+      URLSearchParams, and Headers `forEach` is the callback's `this`: `[1, 2].forEach(function () { this.n++ }, c)`
+      increments `c.n` twice. Arrows ignore it, as in JS; `reduce`/`reduceRight` take an initial value instead.
 - [ ] User-defined constructor calls.
-- [ ] `Function.prototype.call`, `apply`, and `bind` for CodeMode functions.
 - [ ] Classes and private fields.
 - [x] Functions are objects: they hold own properties (`fn.count = 1`), enumerate them, and expose read-only `name`
       and `length`. Names follow JavaScript's NamedEvaluation: declarations, named expressions, bindings,
@@ -150,6 +170,8 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Redeclaring a function in the same scope, or alongside a `var`, is allowed: the last declaration wins.
 - [x] Generator functions have their own `prototype` (inheriting the shared generator prototype), so
       `g() instanceof g` holds. Plain functions have none, since they cannot construct.
+- [ ] `GeneratorFunction.prototype`: every function, generator or not, inherits directly from `Function.prototype`,
+      and a generator whose `prototype` was replaced by a non-object still creates from the shared generator prototype.
 - [x] Generator and async generator functions bind parameters (defaults, destructuring) at the call and defer only the
       body to the first `next()`, so a bad argument throws synchronously from the call site, as in JS.
 - [x] Synchronous and async generator declarations/expressions, `yield`, and `yield*`, including lazy bodies,
@@ -171,7 +193,7 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       yielded promises; mixed async request queues; sync and async `yield*` forwarding; malformed methods/results;
       and declaration, expression, and object-method forms with closure and parameter behavior. The adapted suite
       deliberately skips Test262 variants whose observation mechanism requires unsupported getter definitions,
-      proxies, prototype inspection or mutation, non-arrow `this`, classes, or arbitrary symbols. It also skips tests
+      proxies, prototype inspection or mutation, classes, or arbitrary symbols. It also skips tests
       asserting exact promise reaction-turn counts beyond the observable ordering guarantee documented below. These
       are interpreter-surface boundaries, not claims that the corresponding full Test262 families pass unchanged.
 
@@ -201,12 +223,38 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       creates a hole without changing its length. Deleting a non-configurable property (`length`) or
       assigning a read-only one (`Math.PI`, `fn.name`) throws a `TypeError`, as in strict mode. `delete` of a
       non-reference (`delete 0`, `delete f()`) evaluates the operand and is `true`; `delete x` on a variable throws.
-- [ ] Operators, `switch` discriminants, template interpolation, and coercion helpers such as `String` and `isNaN`
-      applied to functions and namespaces; JavaScript coerces them, the interpreter rejects non-data operands.
-- [ ] ToPrimitive on object operands: operators, `Error(message)`, `Date` arguments, and `parseInt` radix should call
-      `valueOf`/`toString` in spec order and surface their throws.
-- [x] Property keys follow ToPropertyKey: `x[null]`, `x[true]`, and objects (via their built-in string form) become
-      string keys.
+- [x] Coercion helpers and template interpolation accept functions and namespaces: `String(fn)` and `${fn}` give
+      `"[object Function]"` rather than the source text, `isNaN(fn)` is `true`.
+- [x] `==` and `!=` follow IsLooselyEqual: objects (including functions and tool references) compare by identity, a
+      nullish operand never coerces the other side, and a data object facing a primitive converts through its own
+      `valueOf`/`toString` (default hint) (`fn == null` is `false`, `fn == fn` is `true`, `[1] == 1` and `[1, 2] == "1,2"` are `true`).
+      `switch` matches cases with `===`, so `switch (fn) { case fn: }` selects, and `Object.is` compares any two
+      values. Operators inspect only their direct operands, so `rows == null` on a large array costs the same as
+      `rows === null`, and an object merely holding a function inside (`[fn] + ""`, `-[fn]`) coerces like any other
+      data object (`"[object Function]"`, `NaN`).
+- [ ] Coercing a function, promise, generator, or tool reference itself: `fn + ""`, `-fn`, `fn++`, and `fn == 1`
+      throw `TypeError: Binary operators require data values.` (or the unary/update form) where JavaScript would use
+      the source text or `NaN`.
+- [x] ToPrimitive on program objects: `+ - * / % **`, the relational and bitwise operators, unary `+ - ~`, `++`/`--`,
+      compound assignment, `${x}`, `Number`/`String`/`isNaN`/`isFinite`, `parseInt`/`parseFloat` (text and radix),
+      `Math.*` arguments, `Error(message)`, and `Array.prototype.join`/`toString` elements call the object's own
+      `valueOf`/`toString` in spec order (both operands left then right, `+` with the default hint) and surface their
+      throws: `{ valueOf() { return 7 } } * 2` is `14`, `` `${{ toString() { return "x" } }}` `` is `"x"`, and
+      `[1, 2]` with `arr.toString = () => "x"` makes `arr + ""` `"x"`. Dates keep their `Symbol.toPrimitive`
+      behavior (`date + 1` concatenates, `date - date` subtracts).
+- [x] String and Number method arguments convert through ToPrimitive in spec order, receiver first: search strings,
+      separators, fills, and replacements with the string hint, indexes, counts, digits, and radixes with the number
+      hint (`"abc".indexOf({ toString() { return "b" } })` is `1`, `(255).toString({ valueOf() { return 16 } })` is
+      `"ff"`, `String.prototype.trim.call({ toString() { return " a " } })` is `"a"`). Only consumed positions
+      convert; a RegExp pattern is used as is, and `includes`/`startsWith`/`endsWith` reject one before converting.
+- [ ] ToPrimitive elsewhere: `Error.prototype.toString` on an object `message` and numeric arguments of the Array and
+      Uint8Array methods (`at`, `indexOf` start, `slice`) still use the built-in form (`NaN`, `"[object Object]"`) and
+      ignore own methods.
+- [x] Property keys follow ToPropertyKey: `x[null]` and `x[true]` become string keys, and a data object key
+      converts through its own `toString`/`valueOf` (string hint) exactly once per access, in reads, writes,
+      compound assignment, `++`, `delete`, `in`, object literals, and destructuring:
+      `o[{ toString() { return "id" } }] += 1` updates `o.id`. A nullish base throws before the key converts, as
+      in JS. Opaque values (functions, promises, tool references) keep their built-in string form.
 
 ## Promises and tools
 
@@ -249,7 +297,7 @@ reject }` object.
 - [x] Recursive assimilation of objects with an own callable `then` field across `Promise.resolve`, combinators,
       constructors, reactions, `finally`, `await`, and async returns. Thenable methods run deferred, receive
       first-call-wins resolve/reject functions, and ignore throws after settlement. Inherited/accessor `then` fields
-      and a JavaScript `this` receiver remain outside the supported object/function model.
+      remain outside the supported object model.
 - [x] Dotted tool names are canonicalized into namespace paths; a path can be both callable and a namespace, and the
       last tool supplied for a canonical path wins.
 - [x] Tool path segments may be named `constructor`, `prototype`, or `__proto__` because paths use inert Map keys.
@@ -267,8 +315,9 @@ reject }` object.
 - [x] `Object()` and `new Object()` return `{}` for nullish arguments and pass objects through unchanged;
       primitive wrapper objects (`Object(1)`) are rejected explicitly.
 - [x] Computed property names and object spread. Any value works as a key (ToPropertyKey): strings, numbers, and the
-      two confined symbols as themselves, everything else as its string form (`o[null]` is `o["null"]`, `o[{}]` is
-      `o["[object Object]"]`), in reads, writes, literals, `in`, and destructuring.
+      two confined symbols as themselves, data objects through their own `toString` (`o[[1, 2]]` is `o["1,2"]`), and
+      everything else as its string form (`o[null]` is `o["null"]`), in reads, writes, literals, `in`, and
+      destructuring.
 - [x] `Object.keys`, `Object.values`, `Object.entries`, `Object.hasOwn`, `Object.assign`, and `Object.fromEntries`, with
       synchronous iterator support for `fromEntries`. Sources follow ToObject: strings enumerate by index, other
       primitives and wrappers contribute nothing, and `null`/`undefined` throw. `Object.assign` accepts array
@@ -278,9 +327,27 @@ reject }` object.
 - [x] Every value has a real prototype chain built fresh for each run: `Object.prototype`, `Array.prototype`,
       `String.prototype`, `Error.prototype` → `TypeError.prototype`, and so on hold the built-in methods as
       non-enumerable properties, and each constructor's `prototype` points at it (`[].constructor === Array`,
-      `Object.getPrototypeOf` is not exposed). Programs may read and even overwrite these prototypes; the change is
-      confined to that run. `__proto__` is an ordinary own data key, so `o.__proto__ = x` never changes the chain, and
-      `Object.groupBy` results have no prototype at all, as in JS.
+      `Object.getPrototypeOf([]) === Array.prototype`). Programs may read and even overwrite these prototypes; the
+      change is confined to that run. `__proto__` is an ordinary own data key, so `o.__proto__ = x` never changes the
+      chain, and `Object.groupBy` results have no prototype at all, as in JS.
+- [x] `Object.getPrototypeOf`: the prototype of an object, or the built-in prototype for a string, number, or boolean
+      (`Object.getPrototypeOf("a") === String.prototype`); `null`, `undefined`, and the two confined symbols throw a
+      `TypeError`.
+- [x] `Object.create(proto)` with an object or `null` prototype; any other prototype is a `TypeError`
+      (`Object prototype may only be an Object or null`). Inherited reads, `in`, `hasOwnProperty`, and own-only
+      `Object.keys` follow the chain as in JS, but `for...in` still enumerates own keys only. A second `properties`
+      argument other than `undefined` throws a `TypeError`: property descriptors are not supported (there is no
+      `Object.defineProperty` either).
+- [x] `Object.freeze`, `Object.seal`, and `Object.preventExtensions`, with `isFrozen`, `isSealed`, and `isExtensible`.
+      Each returns its argument and passes primitives through (`Object.freeze(1) === 1`, `Object.isFrozen(1)`).
+      Programs run as strict code, so violations throw `TypeError`: `Cannot assign to read only property 'a'`,
+      `Cannot add property b, object is not extensible`, and `Cannot delete property 'a'`. Arrays enforce the same
+      rules for index writes, `length`, and the mutating methods (`Object.freeze([1]).push(2)` throws; a sealed array's
+      `pop()` throws; a non-extensible array's `pop()`, `sort()`, and `splice(0, 1, x)` work). The mutating methods are
+      checked once up front, so a `fill` or `sort` that would land on a hole of a non-extensible array succeeds here
+      where JS throws. Maps, Sets, and Dates freeze their properties only, not their contents, as in JS.
+      `Object.freeze(new Uint8Array(1))` and `seal` throw `TypeError` like JS (`preventExtensions` and empty typed
+      arrays are fine). Functions are objects and freeze like any other value.
 - [x] Circular references are rejected when created (`o.self = o`, `array.push(array)`), not at serialization as in JS.
 - [x] `Object.is` for supported data values.
 - [x] `Object.groupBy` over finite collections and custom synchronous iterators/generators, with string-key coercion
@@ -298,7 +365,8 @@ reject }` object.
       `(value, index)` arguments and stepwise synchronous iterator consumption.
 - [x] Iteration/transformation: `map`, `filter`, `flatMap`, and `forEach`.
 - [x] Searching/tests: `find`, `findIndex`, `findLast`, `findLastIndex`, `some`, `every`, `includes`, `indexOf`, and
-      `lastIndexOf`.
+      `lastIndexOf`. An explicit `undefined` fromIndex counts as present: `[1, 2, 1].lastIndexOf(1, undefined)` is `0`
+      while `lastIndexOf(1)` is `2`.
 - [x] Aggregation: `reduce` and `reduceRight`.
 - [x] Ordering: `sort`, `toSorted`, `reverse`, and `toReversed`.
 - [x] Access/copying: `at`, `slice`, `concat`, `flat`, `with`, `join`, and `toLocaleString` (each element's
@@ -307,10 +375,9 @@ reject }` object.
 - [x] `keys`, `values`, `entries`, and `[Symbol.iterator]` (the same function as `values`) return live iterator objects
       with `next()` and `[Symbol.iterator]`, as in JS. Iterator objects are opaque references: they print as
       `[opaque reference]`, serialize to `{}`, and cannot be passed to extensions. Every built-in collection iterator
-      shares one prototype. JavaScript gives each collection its own; the difference is not observable here because
-      `Object.getPrototypeOf` is not exposed.
+      shares one prototype, where JavaScript gives each collection its own; `Object.getPrototypeOf` shows the
+      difference.
 - [x] `length`, numeric indexing, index assignment, spread, and `for...of`.
-- [x] The `thisArg` argument of `Array.from` is accepted and ignored, like JS arrows.
 - [x] `Array.prototype.toSpliced`.
 - [x] Canonical array/string index parsing: keys such as `"01"` are ordinary properties rather than aliases of index
       `1`.
@@ -323,8 +390,9 @@ reject }` object.
       `flat(1.9)`, `with(1.5, v)`, `Math.max("3", "2")`, `parseInt("11", "2")`, `(1.5).toFixed("2")`,
       `String.fromCharCode("65")`, and the Uint8Array equivalents. `join(sep)` and `JSON.parse(text)` apply ToString
       (`join(null)` is `"1null2"`, `JSON.parse(123)` is `123`). `Array.from({ length: "2" })` applies ToLength; a
-      promise source still throws with an `await` hint rather than JS's silent `[]`. A program object's own
-      `valueOf`/`toString` is not consulted yet (see ToPrimitive above).
+      promise source still throws with an `await` hint rather than JS's silent `[]`. `join`, `Math.*`, `parseInt`,
+      and the String and Number methods consult a program object's own `valueOf`/`toString`; the array methods do not
+      yet (see ToPrimitive above).
 
 ## Strings
 
@@ -341,12 +409,15 @@ reject }` object.
 - [x] Static `String.fromCharCode` and `String.fromCodePoint`.
 - [x] Native argument coercion for supported String methods; for example, `includes(1)` and `slice("1")` coerce like
       native JS, `split(undefined)` returns the whole string, and `includes`/`startsWith`/`endsWith` reject regular
-      expressions with a native-style `TypeError`. Opaque runtime references still reject as data errors, and
-      `repeat` still requires a finite non-negative count.
-- [x] Native no-argument parity for `match()`, `matchAll()`, and `search()`; all behave as an empty pattern. Present
-      arguments must still be a regular expression or string pattern.
-- [ ] `String.raw`.
-- [ ] `match`, `search`, and `split` accept any value and coerce it (objects via `toString`), like JavaScript.
+      expressions with a native-style `TypeError`. Data objects convert through their own `toString`/`valueOf` (see
+      ToPrimitive above). Opaque runtime references still reject as data errors, and `repeat` still requires a finite
+      non-negative count.
+- [x] Native no-argument parity for `match()`, `matchAll()`, and `search()`; all behave as an empty pattern.
+- [x] `String.raw`, on a template object or any `{ raw }` object; raw strings and substitutions coerce through their own
+      `toString`.
+- [x] `match`, `matchAll`, `search`, and `split` read any non-RegExp argument as a pattern string, as `new RegExp(arg)`
+      would: `"a1b".match(1)` matches `/1/`, `search(null)` looks for `"null"`, `undefined` is the empty pattern, and
+      an object supplies its own `toString`.
 
 ## Numbers and Math
 
@@ -378,9 +449,9 @@ reject }` object.
 - [x] `JSON.parse` and `JSON.stringify` for supported data objects.
 - [x] Numeric/string indentation for `JSON.stringify`.
 - [x] `JSON.parse` reviver callbacks, including postorder traversal, deletion through `undefined`, and root replacement.
-      Revivers receive `(key, value)` but no `this` holder because CodeMode functions intentionally have no `this`.
+      Revivers receive `(key, value)` with the holder as `this`.
 - [x] `JSON.stringify` function and array replacers. Function replacers receive `(key, value)` in preorder, including
-      the root, but no `this` holder. Array replacers preserve requested property order, deduplicate names, coerce
+      the root, with the holder as `this`. Array replacers preserve requested property order, deduplicate names, coerce
       number primitives, and ignore non-string/non-number entries. Primitive wrapper entries remain unsupported.
 - [x] Captured `console.log`, `console.info`, `console.debug`, `console.warn`, and `console.error`. An Error prints as
       `Error.prototype.toString` would show it (`Error: boom`), wherever it appears in the logged value.
@@ -400,14 +471,15 @@ reject }` object.
 - [x] `getTimezoneOffset`, arithmetic, relational comparison, and `instanceof Date`.
 - [x] Date values serialize to ISO strings; invalid dates serialize to `null`.
 - [x] Local and UTC Date setters, including native argument coercion, mutation, rollover, invalid-Date recovery, and
-      `TimeClip` behavior.
+      `TimeClip` behavior. On an invalid Date every setter but `setTime` and `set(UTC)FullYear` answers `NaN` without
+      writing, so a time set inside an argument's `valueOf` survives.
 - [x] `Date.prototype.toUTCString` and its `toGMTString` alias.
 - [x] `toDateString` and `toTimeString` in the host's local timezone.
 - [x] `toLocaleString`, `toLocaleDateString`, and `toLocaleTimeString` always format as `en-US` in UTC
       (`"1/1/1970, 12:00:00 AM"`) so output does not depend on the host.
 - [x] Native one-argument Date coercion for supported values, including booleans, null, arrays, and plain objects.
-- [ ] Date setters and multi-argument construction coerce object arguments through `valueOf`/`toString` and surface
-      their throws.
+- [x] Date setters, construction, and `Date.UTC` coerce object arguments through their own `valueOf`/`toString` in
+      argument order and surface their throws; only the first seven components are converted.
 - [x] Native Date loose-equality and default primitive-coercion semantics, using CodeMode's deterministic ISO string
       representation for the string primitive.
 - [x] Native `RangeError` branding for invalid `toISOString()` calls.
@@ -454,6 +526,11 @@ reject }` object.
 - [x] Map and Set values serialize to `{}` at host/JSON boundaries.
 - [x] Set composition and relation methods: `union`, `intersection`, `difference`, `symmetricDifference`, `isSubsetOf`,
       `isSupersetOf`, and `isDisjointFrom`, including supported Set-like operands.
+- [x] `WeakMap` (`get`, `set`, `has`, `delete`, `getOrInsert`, `getOrInsertComputed`) and `WeakSet` (`add`, `has`,
+      `delete`), constructed from iterables. Keys must be program objects: a primitive or tool reference throws
+      `Invalid value used as weak map key`, while `has`/`delete`/`get` with one answer `false`/`undefined`. Entries are
+      held by a host weak collection, so nothing is retained past the key's own lifetime. As in JS they have no `size`,
+      iteration, or `clear`, `structuredClone` rejects them, and they serialize to `{}` at host boundaries.
 
 ## URL and URI helpers
 
@@ -480,11 +557,16 @@ with a hint to encode as text first (`TextDecoder`, `toBase64`, `toHex`).
       cannot be deleted. `length` is a prototype accessor, so `Object.keys` lists only indexes.
 - [x] `at`, `slice`, `subarray` (a view on the same bytes), `set`, `fill`, `reverse`, `indexOf`, `lastIndexOf`,
       `includes`, `join`, `toString`, `toBase64`, `toHex`, and live `keys`, `values`, `entries`, and `[Symbol.iterator]`
-      iterators.
+      iterators. Start indexes coerce as for arrays, and `lastIndexOf(x, undefined)` searches from index 0 while
+      `lastIndexOf(x)` searches from the end, as in JS.
 - [x] Spread, destructuring, `for...of`, `yield*`, `Array.from`, and `new Set(bytes)`. `Array.isArray` is false.
 - [x] String coercion joins with commas; `JSON.stringify` gives `{"0":1,...}`; `console.log` prints
       `Uint8Array(n) [...]`.
-- [ ] Callback methods (`forEach`, `map`, `filter`, `find`, `reduce`, ...); use `Array.from(bytes, fn)` meanwhile.
+- [x] Callback methods `forEach`, `map`, `filter`, `find`, `findIndex`, `findLast`, `findLastIndex`, `some`, `every`,
+      `reduce`, and `reduceRight`, sharing the Array implementations; the callback receives `(byte, index, bytes)`.
+      `map` and `filter` return new Uint8Arrays with results clamped like index writes (`map((b) => b * 100)` on
+      `[1, 2, 3]` is `[100, 200, 44]`); `reduce` on an empty Uint8Array without an initial value is a `TypeError`.
+- [x] `sort` in place, numeric ascending by default (`[10, 9, 1]` sorts to `[1, 9, 10]`) or by comparator.
 - [ ] `ArrayBuffer`, `DataView`, and other typed arrays.
 
 ## Web platform helpers
@@ -492,6 +574,12 @@ with a hint to encode as text first (`TextDecoder`, `toBase64`, `toHex`).
 - [x] `atob` and `btoa` with forgiving-base64 decoding and WebIDL string conversion; invalid input throws a
       `TypeError`, since there is no `DOMException`.
 - [x] `crypto.randomUUID()` and `crypto.getRandomValues(uint8Array)`.
+- [x] `structuredClone(value)` deep-copies primitives, plain objects (own enumerable string keys onto a plain object;
+      the prototype is not kept), arrays (holes and extra keys kept), Map, Set, Date, RegExp (`lastIndex` reset to 0),
+      Uint8Array, and errors (standard `name`, `message`, `cause`, and `stack`; other names become `Error`, extra
+      fields drop). Shared references stay shared in the copy, and the copy is extensible even when the source was
+      frozen. Functions, symbols, promises, iterators, URL, Headers, and tool references cannot be cloned; without a
+      `DOMException`, the failure is a `TypeError` whose message starts with `DataCloneError:`.
 - [x] `TextEncoder` and `TextDecoder` for UTF-8 only: any other label is a `RangeError`. `TextDecoder` accepts the
       `fatal` and `ignoreBOM` options; `decode` takes a Uint8Array or nothing.
 - [x] `new Headers()` from records, synchronous iterables of pairs, and Headers, wrapping the host's `Headers`: names
@@ -543,6 +631,8 @@ Nothing is exposed unless a host provides it; extension calls are not tool calls
       non-enumerable: an extension Error carries it, and this JSON form does not. Errors have no `stack`; the diagnostic
       carries a 1-based line and column in the submitted source instead.
 - [x] `instanceof` against any constructor with a `prototype`, including every built-in and `Function`.
+- [x] Derived error constructors extend `Error` itself: `Object.getPrototypeOf(TypeError) === Error`, so
+      `TypeError.isError` is inherited, and `TypeError.prototype` inherits from `Error.prototype`.
 - [x] Catchable user throws, runtime failures raised during interpreted evaluation, awaited tool failures, and awaited
       tool-call-limit failures; parse/compile failures, cooperative timeout, and output bounding remain outside program
       `catch`.

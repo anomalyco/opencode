@@ -11,6 +11,7 @@ import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useCommand } from "@/shell/commands/command"
+import type { Browser } from "@opencode/plugin-browser/rpc"
 import type { createSessionBrowser } from "./model"
 
 export function SessionBrowserPane(props: { browser: ReturnType<typeof createSessionBrowser>; visible: boolean }) {
@@ -30,6 +31,8 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
     // A submitted navigation the browser has not reported yet; keeps the empty state hidden meanwhile.
     navigating: false,
     visible: typeof document === "undefined" || document.visibilityState === "visible",
+    // A still of the page shown in the DOM while floating content covers the hidden native view.
+    snapshot: undefined as { tabID: Browser.TabID; url: string } | undefined,
   })
   const empty = () => !address() && !state()?.loading && !store.navigating
   let surface: HTMLDivElement | undefined
@@ -37,10 +40,18 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
   let frame: number | undefined
   let layout: string | undefined
   let until = 0
+  let capturing: Browser.TabID | undefined
+  let release: ReturnType<typeof setTimeout> | undefined
   const canvas = document.createElement("canvas")
   canvas.width = canvas.height = 1
   const paint = canvas.getContext("2d", { willReadFrequently: true })
   const scheme = () => store.address.match(/^https?:\/\//i)?.[0] ?? ""
+  const error = () => {
+    const value = props.browser.error()
+    if (value === "browser.pane.replaced") return language.t("session.browser.replaced")
+    if (value === "browser.pane.unsupported") return language.t("session.browser.unsupported")
+    return value
+  }
 
   command.register("browser.navigation", () => [
     {
@@ -63,6 +74,45 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
       const r = el.getBoundingClientRect()
       return r.width > 0 && r.left < rect.right && r.right > rect.left && r.top < rect.bottom && r.bottom > rect.top
     })
+  const replaceSnapshot = (next?: { tabID: Browser.TabID; url: string }) => {
+    if (store.snapshot?.url) URL.revokeObjectURL(store.snapshot.url)
+    setStore("snapshot", next)
+  }
+  // Keep the page on screen as a still under the floating content. The native view
+  // stays visible until the still has decoded, so the pane never flashes blank.
+  const freeze = (tabID: Browser.TabID) => {
+    clearTimeout(release)
+    release = undefined
+    if (store.snapshot?.tabID === tabID || capturing === tabID) return
+    capturing = tabID
+    void (registration()?.capture(tabID) ?? Promise.resolve(null))
+      .catch(() => null)
+      .then(async (blob) => {
+        const url = blob ? URL.createObjectURL(blob) : ""
+        if (url) {
+          const image = new Image()
+          image.src = url
+          await image.decode().catch(() => undefined)
+        }
+        if (capturing !== tabID) {
+          if (url) URL.revokeObjectURL(url)
+          return
+        }
+        capturing = undefined
+        // A failed capture still hides the page; the pane shows its background as before.
+        replaceSnapshot({ tabID, url })
+        schedule()
+      })
+  }
+  const thaw = () => {
+    capturing = undefined
+    if (!store.snapshot || release !== undefined) return
+    // Keep the still under the native view until the view has painted again.
+    release = setTimeout(() => {
+      release = undefined
+      replaceSnapshot()
+    }, 150)
+  }
   const measure = () => {
     if (!surface) return
     const tab = state()
@@ -78,7 +128,11 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
     const bottom = Math.round(rect.bottom * zoom)
     // The desktop page hides blank and loading documents itself; only hide here
     // while the pane shows its own empty or failed state over the surface.
-    const visible = props.visible && store.visible && !empty() && !failed() && !dialog.active && !covered(rect)
+    const shown = props.visible && store.visible && !empty() && !failed() && !dialog.active
+    const cover = covered(rect)
+    if (shown && cover) freeze(tab.id)
+    if (!cover) thaw()
+    const visible = shown && !(cover && store.snapshot?.tabID === tab.id)
     // The cutout exposes the app backdrop outside the rounded Review card,
     // not the browser surface inside it.
     const color = getComputedStyle(
@@ -180,6 +234,9 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
   createEventListener(document, "visibilitychange", () => setStore("visible", document.visibilityState === "visible"))
   onCleanup(() => {
     if (frame !== undefined) cancelAnimationFrame(frame)
+    clearTimeout(release)
+    capturing = undefined
+    replaceSnapshot()
   })
 
   return (
@@ -281,12 +338,26 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
           </div>
         </form>
       </div>
-      <Show when={props.browser.error() && !failed()}>
-        <div class="shrink-0 px-3 py-1.5 text-12-regular text-text-danger-base border-b border-v2-border-border-muted">
-          {props.browser.error()}
+      <Show when={error() && !failed()}>
+        <div
+          class="shrink-0 px-3 py-1.5 text-12-regular text-text-danger-base border-b border-v2-border-border-muted"
+          role="alert"
+          aria-live="assertive"
+        >
+          {error()}
         </div>
       </Show>
-      <div ref={surface} class="min-h-0 flex-1 bg-v2-background-bg-base flex items-center justify-center">
+      <div ref={surface} class="relative min-h-0 flex-1 bg-v2-background-bg-base flex items-center justify-center">
+        <Show when={store.snapshot?.tabID === state()?.id && !empty() && !failed() && store.snapshot?.url}>
+          {(url) => (
+            <img
+              src={url()}
+              alt=""
+              draggable={false}
+              class="absolute inset-0 size-full pointer-events-none select-none"
+            />
+          )}
+        </Show>
         <Show when={(empty() || failed()) && !props.browser.suspended()}>
           {/* Add the 40px toolbar to the file empty state's 160px bottom padding to align their centers. */}
           <div

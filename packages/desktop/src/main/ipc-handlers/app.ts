@@ -76,6 +76,7 @@ export const appHandlers = AppRpcs.toLayer(
         }),
       AppRelaunch: () => Effect.sync(lifecycle.relaunch),
       AppPairInfo: () => pair(pairing.info),
+      AppPairCode: () => pair(pairing.code),
       AppGetKeepScreenActive: () => Effect.sync(screenActivity.get),
       AppSetKeepScreenActive: ({ enabled }) =>
         Effect.try(() => screenActivity.set(enabled)).pipe(Effect.mapError(String)),

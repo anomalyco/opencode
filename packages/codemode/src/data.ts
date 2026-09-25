@@ -24,7 +24,7 @@ import { typeofValue } from "./interpreter/references.js"
 
 export type Json = Schema.Json
 
-type Replacer<R> = (args: Array<Value>) => Effect.Effect<Value, unknown, R>
+type Replacer<R> = (args: Array<Value>, holder: Obj) => Effect.Effect<Value, unknown, R>
 
 /**
  * What `JSON.stringify` would serialize for a program value, as host JSON: `toJSON` is honored, functions and
@@ -60,7 +60,7 @@ const walk = <R>(
       const settled = raw instanceof PromiseObj ? yield* ctx.await(raw) : raw
       const toJSON = settled instanceof Obj ? get(settled, "toJSON") : undefined
       const own = toJSON instanceof Callable ? yield* ctx.call(toJSON, settled, [key]) : settled
-      const value = replacer === undefined ? own : yield* replacer([key, own])
+      const value = replacer === undefined ? own : yield* replacer([key, own], holder)
       if (value === undefined || typeofValue(value) === "function") return undefined
       if (typeof value === "number") return Number.isFinite(value) ? value : null
       if (value === null || typeof value === "string" || typeof value === "boolean") return value

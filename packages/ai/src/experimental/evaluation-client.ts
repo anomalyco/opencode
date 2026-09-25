@@ -86,7 +86,7 @@ export const layer: Layer.Layer<Service, never, RequestExecutor.Service> = Layer
     })
   }),
 )
-export const fetchLayer = layer.pipe(Layer.provide(RequestExecutor.fetchLayer))
+export const fetchLayer = layer.pipe(Layer.provideMerge(RequestExecutor.fetchLayer))
 
 export const EvaluationClient = {
   Service,

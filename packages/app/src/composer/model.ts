@@ -164,32 +164,6 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         },
       })),
   )
-  const resources = createMemo(() =>
-    (data.location.mcp.resource.list({ directory: sdk().directory }) ?? []).map((resource) => ({
-      id: `resource:${resource.server}:${resource.uri}`,
-      kind: "resource" as const,
-      label: `@${resource.name}`,
-      path: resource.uri,
-      description: resource.description,
-      mention: {
-        type: "file" as const,
-        path: resource.uri,
-        content: `@${resource.name}`,
-        start: 0,
-        end: 0,
-        mime: resource.mimeType ?? "text/plain",
-        filename: resource.name,
-        url: resource.uri,
-        source: {
-          type: "resource" as const,
-          text: { value: `@${resource.name}`, start: 0, end: resource.name.length + 1 },
-          clientName: resource.server,
-          uri: resource.uri,
-        },
-      },
-      resource,
-    })),
-  )
   const skills = createMemo(() => data.location.skill.list({ directory: sdk().directory }) ?? [])
   const context = createMemo<ComposerSuggestion[]>(() => [
     ...references(),
@@ -216,7 +190,6 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         label: `@${agent.name}`,
         mention: { type: "agent" as const, name: agent.name, content: `@${agent.name}`, start: 0, end: 0 },
       })),
-    ...resources(),
     ...recent().map((path) => ({
       id: `file:${path}`,
       kind: "file" as const,

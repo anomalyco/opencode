@@ -113,19 +113,19 @@ export const configure = (input: Config = {}) => {
         supportsStore: false,
         supportsStrictMode: false,
         supportsPromptCacheKey: true,
-        toolSchema: "moonshot",
+        sanitizer: "moonshot",
         reasoningField: "reasoning_content",
       },
     })
   const messages = (modelID: string | ModelID) =>
     messagesRoute.with(defaults).model<MessagesOptionsInput>({
       id: modelID,
-      compatibility: { requireSignature: false, toolSchema: "moonshot" },
+      compatibility: { requireSignature: false, sanitizer: "moonshot" },
     })
   const responses = (modelID: string | ModelID) =>
     responsesRoute
       .with(defaults)
-      .model<ResponsesOptionsInput>({ id: modelID, compatibility: { toolSchema: "moonshot" } })
+      .model<ResponsesOptionsInput>({ id: modelID, compatibility: { sanitizer: "moonshot" } })
   return { id, model: chat, chat, messages, responses, configure }
 }
 

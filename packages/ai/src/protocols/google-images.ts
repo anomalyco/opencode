@@ -1,28 +1,24 @@
 import { Effect, Schema } from "effect"
 import type { HttpClientResponse } from "effect/unstable/http"
 import { ImageModel, ImageResponse, type ImageRequestFor } from "../image.js"
-import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderID, mergeJsonRecords, type AIError } from "../schema/index.js"
+import { mergeJsonRecords, type OpenString } from "../schema/index.js"
 import { ProviderShared } from "./shared.js"
+import { GeminiGenerateContent } from "./utils/gemini-generate-content.js"
 import { MediaInput } from "./utils/media-input.js"
 
-const ADAPTER = "google-images"
-const NAME = "Google Images"
-const PROVIDER = ProviderID.make("google")
+const route = MediaProtocol.identity({ id: "google-images", name: "Google Images", provider: "google" })
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
 // ---------------------------------------------------------------------------
 // 1. Public model input
 // ---------------------------------------------------------------------------
 
-export type GoogleImageString<Known extends string> = Known | (string & {})
-
 /** Provider-native options. Common fields (`aspectRatio`, `seed`, `images`) live on the request. */
 export type GoogleImageOptions = {
-  readonly imageSize?: GoogleImageString<"1K" | "2K" | "4K">
-  readonly thinkingLevel?: GoogleImageString<"MINIMAL" | "LOW" | "MEDIUM" | "HIGH">
+  readonly imageSize?: OpenString<"1K" | "2K" | "4K">
+  readonly thinkingLevel?: OpenString<"MINIMAL" | "LOW" | "MEDIUM" | "HIGH">
   readonly includeThoughts?: boolean
 } & Record<string, unknown>
 
@@ -102,34 +98,15 @@ const generationConfig = (request: Request) => {
   )
 }
 
-// Gemini does not fetch public URLs; inline payloads or Gemini Files references are the only accepted inputs.
-const imagePart = (asset: Media.Asset): Effect.Effect<Record<string, unknown>, AIError> => {
-  const inline = asset.inline()
-  if (inline) return Effect.succeed({ inlineData: { mimeType: inline.mime, data: inline.base64 } })
-  const id = MediaInput.refID(asset, PROVIDER)
-  if (id) return Effect.succeed({ fileData: { mimeType: asset.mediaType, fileUri: id } })
-  if (asset.source.type === "ref")
-    return Effect.fail(
-      ProviderShared.invalidRequest(
-        "Google generateContent requires Gemini file references rather than other providers' file IDs",
-      ),
-    )
-  return Effect.fail(
-    ProviderShared.invalidRequest(
-      "Google generateContent does not fetch public image URLs; use bytes, a data URL, or a Gemini file reference",
-    ),
-  )
-}
-
 const fromRequest = Effect.fn("GoogleImages.fromRequest")(function* (request: Request) {
   if (request.n !== undefined && request.n > 1)
-    return yield* ProviderShared.unsupportedOperation({
-      operation: "image.n",
-      provider: PROVIDER,
-      route: ADAPTER,
-      message: `${NAME} generates one image per request; call it once per image instead of n=${request.n}`,
-    })
-  const parts = yield* Effect.forEach(request.images ?? [], imagePart)
+    return yield* route.unsupported(
+      "image.n",
+      `${route.name} generates one image per request; call it once per image instead of n=${request.n}`,
+    )
+  const parts = yield* Effect.forEach(request.images ?? [], (image) =>
+    GeminiGenerateContent.mediaPart(route.name, image),
+  )
   return MediaProtocol.json(
     mergeJsonRecords(
       {
@@ -145,10 +122,12 @@ const fromRequest = Effect.fn("GoogleImages.fromRequest")(function* (request: Re
 // 6. Response decoding
 // ---------------------------------------------------------------------------
 
+const decodeDocument = route.decodeJson(GoogleImageResponse)
+
 const decodeResponse = Effect.fn("GoogleImages.decodeResponse")(function* (
   response: HttpClientResponse.HttpClientResponse,
 ) {
-  const output = yield* MediaProtocol.decodeJson(ADAPTER, NAME, GoogleImageResponse)(response)
+  const output = yield* decodeDocument(response)
   const decoded = output.value
   const candidates = decoded.candidates ?? []
   const candidateMetadata = candidates.map((candidate, candidateIndex) => ({
@@ -188,7 +167,7 @@ const decodeResponse = Effect.fn("GoogleImages.decodeResponse")(function* (
   const images = yield* Effect.forEach(encoded, (item) =>
     MediaInput.decodedAsset(
       output.invalid,
-      `${NAME} candidate ${item.candidateIndex} part ${item.partIndex}`,
+      `${route.name} candidate ${item.candidateIndex} part ${item.partIndex}`,
       item.inlineData.data,
       item.inlineData.mimeType,
       {
@@ -211,7 +190,7 @@ const decodeResponse = Effect.fn("GoogleImages.decodeResponse")(function* (
       candidate.finishReason === undefined ? [] : [candidate.finishReason],
     )
     return yield* output.invalid(
-      `${NAME} returned no final images${
+      `${route.name} returned no final images${
         finishReasons.length === 0 ? "" : ` (finish reasons: ${finishReasons.join(", ")})`
       }; inspect body for prompt feedback and candidate details`,
     )
@@ -223,7 +202,7 @@ const decodeResponse = Effect.fn("GoogleImages.decodeResponse")(function* (
       : [
           {
             type: "filtered" as const,
-            message: `${NAME} reported prompt feedback`,
+            message: `${route.name} reported prompt feedback`,
             providerMetadata: { google: { promptFeedback: decoded.promptFeedback } },
           },
         ]),
@@ -233,7 +212,7 @@ const decodeResponse = Effect.fn("GoogleImages.decodeResponse")(function* (
         : [
             {
               type: "filtered" as const,
-              message: `${NAME} candidate ${candidate.index ?? index} finished with ${candidate.finishReason}${
+              message: `${route.name} candidate ${candidate.index ?? index} finished with ${candidate.finishReason}${
                 candidate.finishMessage === undefined ? "" : `: ${candidate.finishMessage}`
               }`,
               providerMetadata: {
@@ -283,9 +262,7 @@ const decodeResponse = Effect.fn("GoogleImages.decodeResponse")(function* (
 // 7. Protocol and route
 // ---------------------------------------------------------------------------
 
-export const protocol = MediaProtocol.inline<Request, ImageResponse>({
-  id: ADAPTER,
-  name: NAME,
+export const protocol = MediaProtocol.inline<Request, ImageResponse>(route, {
   unsupported: ["mask", "size", "format"],
   body: { from: fromRequest },
   response: { decode: decodeResponse },
@@ -294,8 +271,6 @@ export const protocol = MediaProtocol.inline<Request, ImageResponse>({
 export const model = (input: MediaRoute.ModelInput) =>
   ImageModel.fromRoute<GoogleImageOptions>(
     {
-      id: ADAPTER,
-      provider: PROVIDER,
       protocol,
       baseURL: DEFAULT_BASE_URL,
       path: ({ request }) => `/models/${request.model.id}:generateContent`,

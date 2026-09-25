@@ -16,6 +16,8 @@ import {
   PromiseObj,
   SetObj,
   type Value,
+  WeakMapObj,
+  WeakSetObj,
 } from "../interpreter/objects.js"
 import { describeValue, isOpaque } from "../interpreter/references.js"
 import {
@@ -188,7 +190,7 @@ export const mapGlobal = <R>(ctx: Interpreter<R>) => {
         const target = self(thisValue, "forEach")
         const apply = applyCollectionCallback(ctx, args[0], "Map.forEach")
         return Effect.gen(function* () {
-          for (const [key, item] of target.map.entries()) yield* apply([item, key, target])
+          for (const [key, item] of target.map.entries()) yield* apply([item, key, target], args[1])
           return undefined
         })
       },
@@ -386,7 +388,7 @@ export const setGlobal = <R>(ctx: Interpreter<R>) => {
         const target = self(thisValue, "forEach")
         const apply = applyCollectionCallback(ctx, args[0], "Set.forEach")
         return Effect.gen(function* () {
-          for (const item of target.set.values()) yield* apply([item, item, target])
+          for (const item of target.set.values()) yield* apply([item, item, target], args[1])
           return undefined
         })
       },
@@ -401,4 +403,135 @@ export const setGlobal = <R>(ctx: Interpreter<R>) => {
   ])
   define(proto, IteratorSymbol, get(proto, "values"), hidden)
   return set
+}
+
+// CanBeHeldWeakly: only program objects; tool references are rebuilt on every access, so they could never be found again.
+const weakKey = (value: Value, label: string) => {
+  if (value instanceof Obj) return value
+  throw typeError(`Invalid value used ${label}: ${describeValue(value)} cannot be held weakly.`)
+}
+
+export const weakMapGlobal = <R>(ctx: Interpreter<R>) => {
+  const builtins = ctx.builtins
+  const proto = builtins.WeakMap
+  const weakMap = constructor<R>(builtins, proto, {
+    name: "WeakMap",
+    call: requiresNew("WeakMap"),
+    construct: (args, newTarget) => {
+      const target = new WeakMapObj(prototypeFrom(newTarget, proto))
+      if (args[0] === undefined || args[0] === null) return Effect.succeed(target)
+      return Effect.gen(function* () {
+        const cursor = yield* ctx.iterate(args[0]!)
+        if (cursor === undefined) {
+          throw typeError(
+            `new WeakMap(...) expects an iterable of [key, value] pairs, received ${describeValue(args[0])}.`,
+          )
+        }
+        while (true) {
+          const step = yield* cursor.next
+          if (step.done) return target
+          yield* preserveConsumerError(
+            cursor.close,
+            Effect.sync(() => {
+              if (!(step.value instanceof Obj)) {
+                throw typeError("new WeakMap(...) expects [key, value] pairs as entry objects.")
+              }
+              target.map.set(weakKey(getOwn(step.value, 0), "as weak map key"), getOwn(step.value, 1))
+            }),
+          )
+        }
+      })
+    },
+  })
+  const self = (thisValue: Value, name: string) => receiver(WeakMapObj, thisValue, `WeakMap.prototype.${name}`).map
+  // Lookups pass any key through: the host collection answers false for a non-object, as the spec requires.
+  const key = (value: Value) => weakKey(value, "as weak map key")
+  methods(builtins, proto, [
+    [
+      "get",
+      1,
+      (thisValue, args) => {
+        const target = self(thisValue, "get")
+        return args[0] instanceof Obj ? target.get(args[0]) : undefined
+      },
+    ],
+    ["has", 1, (thisValue, args) => self(thisValue, "has").has(args[0] as Obj)],
+    ["delete", 1, (thisValue, args) => self(thisValue, "delete").delete(args[0] as Obj)],
+    [
+      "set",
+      2,
+      (thisValue, args) => {
+        self(thisValue, "set").set(key(args[0]), args[1])
+        return thisValue
+      },
+    ],
+    [
+      "getOrInsert",
+      2,
+      (thisValue, args) => {
+        const target = self(thisValue, "getOrInsert")
+        const k = key(args[0])
+        if (!target.has(k)) target.set(k, args[1])
+        return target.get(k)
+      },
+    ],
+    [
+      "getOrInsertComputed",
+      2,
+      (thisValue, args) => {
+        const target = self(thisValue, "getOrInsertComputed")
+        const k = key(args[0])
+        const apply = applyCollectionCallback(ctx, args[1], "WeakMap.getOrInsertComputed")
+        if (target.has(k)) return target.get(k)
+        return Effect.map(apply([k]), (value) => {
+          target.set(k, value)
+          return value
+        })
+      },
+    ],
+  ])
+  return weakMap
+}
+
+export const weakSetGlobal = <R>(ctx: Interpreter<R>) => {
+  const builtins = ctx.builtins
+  const proto = builtins.WeakSet
+  const weakSet = constructor<R>(builtins, proto, {
+    name: "WeakSet",
+    call: requiresNew("WeakSet"),
+    construct: (args, newTarget) => {
+      const target = new WeakSetObj(prototypeFrom(newTarget, proto))
+      if (args[0] === undefined || args[0] === null) return Effect.succeed(target)
+      return Effect.gen(function* () {
+        const cursor = yield* ctx.iterate(args[0]!)
+        if (cursor === undefined) {
+          throw typeError(`new WeakSet(...) expects a synchronous iterable, received ${describeValue(args[0])}.`)
+        }
+        while (true) {
+          const step = yield* cursor.next
+          if (step.done) return target
+          yield* preserveConsumerError(
+            cursor.close,
+            Effect.sync(() => {
+              target.set.add(weakKey(step.value, "in weak set"))
+            }),
+          )
+        }
+      })
+    },
+  })
+  const self = (thisValue: Value, name: string) => receiver(WeakSetObj, thisValue, `WeakSet.prototype.${name}`).set
+  methods(builtins, proto, [
+    ["has", 1, (thisValue, args) => self(thisValue, "has").has(args[0] as Obj)],
+    ["delete", 1, (thisValue, args) => self(thisValue, "delete").delete(args[0] as Obj)],
+    [
+      "add",
+      1,
+      (thisValue, args) => {
+        self(thisValue, "add").add(weakKey(args[0], "in weak set"))
+        return thisValue
+      },
+    ],
+  ])
+  return weakSet
 }

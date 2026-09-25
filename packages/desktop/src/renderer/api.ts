@@ -50,6 +50,8 @@ export const api: ElectronAPI = {
   browserPane: {
     request: (request) => invoke("BrowserPane", { request }),
     send: (request) => send("BrowserPane", { request }),
+    capture: (bindingID, tabID) =>
+      invoke("BrowserPaneCapture", { bindingID, tabID }).then((data) => (data ? toArrayBuffer(data) : null)),
     onEvent: (callback) => listen("BrowserPaneEvent", (value) => callback(value)),
   },
   wslServers: {
@@ -134,6 +136,7 @@ export const api: ElectronAPI = {
   getPathForFile: (file) => window.electron.getPathForFile(file),
   saveFile: (opts, content) => invoke("FilesSaveFile", { options: opts, content }),
   openExternal: (url) => send("FilesOpenExternal", { url }),
+  openBrowser: (url) => invoke("FilesOpenBrowser", { url }),
   openLocalFile: (url) => send("FilesOpenLocalFile", { url }),
   openPath: (path, app) => invoke("FilesOpenPath", { path, application: app }).then((value) => value ?? undefined),
   revealPath: (path) => invoke("FilesRevealPath", { path }),
@@ -162,6 +165,7 @@ export const api: ElectronAPI = {
   recordFatalRendererError: (error) => invoke("AppRecordFatalRendererError", { error }),
   setNativeTranslations: (bundle) => invoke("AppSetNativeTranslations", { value: bundle }),
   pairInfo: () => invoke("AppPairInfo").then(mutable),
+  pairCode: () => invoke("AppPairCode"),
   getKeepScreenActive: () => invoke("AppGetKeepScreenActive"),
   setKeepScreenActive: (enabled) => invoke("AppSetKeepScreenActive", { enabled }),
 }

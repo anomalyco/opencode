@@ -1,4 +1,4 @@
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { Tool } from "@opencode/schema/tool"
 import { Route } from "../route/client.js"
 import { Auth } from "../route/auth.js"
@@ -17,7 +17,6 @@ import {
   type FinishReason,
   type FinishReasonDetails,
   type CacheHint,
-  type JsonSchema,
   type LLMRequest,
   type MediaPart,
   type ReasoningPart,
@@ -29,7 +28,6 @@ import { classifyProviderFailure } from "../provider-error.js"
 import { isRecord, JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { OpenAIOptions } from "./utils/openai-options.js"
 import { Lifecycle } from "./utils/lifecycle.js"
-import { ToolSchemaProjection } from "./utils/tool-schema.js"
 import { ToolStream } from "./utils/tool-stream.js"
 
 const ADAPTER = "openai-chat"
@@ -76,6 +74,44 @@ const OpenAIChatAssistantToolCall = Schema.Struct({
 })
 type OpenAIChatAssistantToolCall = Schema.Schema.Type<typeof OpenAIChatAssistantToolCall>
 
+// `reasoning_details` carries two dialects. OpenRouter's `reasoning.*` entries
+// must be replayed unmodified (`index` included), so they keep every field they
+// arrived with. Kimi's OpenAI-compatible surface streams preserved thinking as
+// bare `summary` / `encrypted` entries keyed by a stream-only `index`; Kimi does
+// not document this publicly, so the handling follows Kimi Code (Kimi's own
+// client): merge summary deltas by `index`, replay without `index`, and always
+// send `reasoning_content` alongside. Anything else is dropped at the boundary.
+const OpenRouterDetailFields = {
+  id: Schema.optional(Schema.NullOr(Schema.String)),
+  format: Schema.optional(Schema.String),
+  index: Schema.optional(Schema.Number),
+  signature: Schema.optional(Schema.NullOr(Schema.String)),
+}
+const ReasoningDetail = Schema.Union([
+  Schema.StructWithRest(
+    Schema.Struct({ type: Schema.Literal("reasoning.text"), text: Schema.optional(Schema.String), ...OpenRouterDetailFields }),
+    [Schema.Record(Schema.String, Schema.Unknown)],
+  ),
+  Schema.StructWithRest(
+    Schema.Struct({
+      type: Schema.Literal("reasoning.summary"),
+      summary: Schema.optional(Schema.String),
+      ...OpenRouterDetailFields,
+    }),
+    [Schema.Record(Schema.String, Schema.Unknown)],
+  ),
+  Schema.StructWithRest(
+    Schema.Struct({ type: Schema.Literal("reasoning.encrypted"), data: Schema.String, ...OpenRouterDetailFields }),
+    [Schema.Record(Schema.String, Schema.Unknown)],
+  ),
+  Schema.Struct({ type: Schema.Literal("summary"), summary: Schema.String, index: Schema.optional(Schema.Number) }),
+  Schema.Struct({ type: Schema.Literal("encrypted"), encrypted: Schema.String, index: Schema.optional(Schema.Number) }),
+])
+type ReasoningDetail = Schema.Schema.Type<typeof ReasoningDetail>
+const decodeReasoningDetail = Schema.decodeUnknownOption(ReasoningDetail)
+const knownReasoningDetails = (details: ReadonlyArray<unknown>) =>
+  details.flatMap((detail) => Option.toArray(decodeReasoningDetail(detail)))
+
 // Intentionally omit Gemini's provider-specific `extra_content.google.thought_signature`
 // extension until direct Google OpenAI-compatible routing is supported here:
 // https://github.com/vercel/ai/issues/11590
@@ -91,6 +127,10 @@ const OpenAIChatUserContent = Schema.Union([
   Schema.Struct({
     type: Schema.Literal("image_url"),
     image_url: Schema.Struct({ url: Schema.String }),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("file"),
+    file: Schema.Struct({ filename: Schema.String, file_data: Schema.String }),
   }),
 ])
 
@@ -265,7 +305,9 @@ export interface ParserState {
   readonly finishReason?: FinishReasonDetails
   readonly lifecycle: Lifecycle.State
   readonly reasoningField?: string
-  readonly reasoningDetails: Array<unknown>
+  /** A scalar reasoning field (`reasoning_content`, ...) has carried text in this stream. */
+  readonly reasoningTextObserved: boolean
+  readonly reasoningDetails: Array<ReasoningDetail>
   readonly reasoningDetailsObserved: boolean
   readonly reasoningEmitted: boolean
   readonly latestToolIndex?: number
@@ -286,17 +328,12 @@ interface LoweringOptions {
   readonly toolCallID?: (id: string) => string
 }
 
-const lowerTool = (
-  tool: ToolDefinition,
-  inputSchema: JsonSchema,
-  options: LoweringOptions,
-  supportsStrictMode: boolean,
-): OpenAIChatTool => ({
+const lowerTool = (tool: ToolDefinition, options: LoweringOptions, supportsStrictMode: boolean): OpenAIChatTool => ({
   type: "function",
   function: {
     name: tool.name,
     description: tool.description,
-    parameters: inputSchema,
+    parameters: tool.inputSchema,
     ...(supportsStrictMode ? { strict: false } : {}),
   },
   cache_control: options.cacheControl?.(tool.cache),
@@ -320,6 +357,15 @@ const lowerToolCall = (part: ToolCallPart, options: LoweringOptions): OpenAIChat
 })
 
 const lowerMedia = Effect.fn("OpenAIChat.lowerMedia")(function* (part: MediaPart) {
+  // Chat Completions accepts PDFs, and no other documents, as inline `file` parts; file URLs are not supported.
+  if (part.media.mediaType.toLowerCase() === "application/pdf")
+    return {
+      type: "file" as const,
+      file: {
+        filename: part.filename ?? "document.pdf",
+        file_data: (yield* ProviderShared.requireInlineMedia("OpenAI Chat", part.media)).dataUrl,
+      },
+    }
   if (part.media.kind !== "image")
     return yield* ProviderShared.invalidRequest(`OpenAI Chat does not support media type ${part.media.mediaType}`)
   const url =
@@ -341,9 +387,20 @@ const reasoningDetails = (parts: ReadonlyArray<ReasoningPart>, native: unknown, 
     return Array.isArray(details) ? details : []
   })
   if (parts.some((part) => Array.isArray(part.providerMetadata?.[providerMetadataKey]?.reasoningDetails)))
-    return observed
-  if (isRecord(native) && Array.isArray(native.reasoning_details)) return native.reasoning_details
+    return knownReasoningDetails(observed).map(lowerReasoningDetail)
+  if (isRecord(native) && Array.isArray(native.reasoning_details))
+    return knownReasoningDetails(native.reasoning_details).map(lowerReasoningDetail)
 }
+
+// Kimi rejects its stream-only `index` on requests
+// ("the reasoning_details ... must not contain streaming index").
+const lowerReasoningDetail = (detail: ReasoningDetail) => {
+  if (detail.type === "summary") return { type: detail.type, summary: detail.summary }
+  if (detail.type === "encrypted") return { type: detail.type, encrypted: detail.encrypted }
+  return detail
+}
+
+const isKimiDetail = (detail: { readonly type: string }) => detail.type === "summary" || detail.type === "encrypted"
 
 const lowerUserMessage = Effect.fn("OpenAIChat.lowerUserMessage")(function* (
   message: OpenAIChatRequestMessage,
@@ -410,6 +467,9 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
     if (observedField !== undefined) return observedField
     if (nativeReasoning !== undefined) return "reasoning_content"
     if (!fullyStructured || requireReasoning) return "reasoning_content"
+    // Kimi always expects `reasoning_content` on replayed assistant messages,
+    // even when thinking arrived only through structured details.
+    if (details?.some(isKimiDetail)) return "reasoning_content"
   })()
   const reasoningText = (() => {
     if (configuredField !== undefined)
@@ -435,7 +495,7 @@ const lowerToolMessages = Effect.fn("OpenAIChat.lowerToolMessages")(function* (
   options: LoweringOptions,
 ) {
   const messages: OpenAIChatMessage[] = []
-  const images: Array<Schema.Schema.Type<typeof OpenAIChatUserContent>> = []
+  const attachments: Array<Schema.Schema.Type<typeof OpenAIChatUserContent>> = []
   for (const part of message.content) {
     if (!ProviderShared.supportsContent(part, ["tool-result"]))
       return yield* ProviderShared.unsupportedContent("OpenAI Chat", "tool", ["tool-result"])
@@ -457,9 +517,9 @@ const lowerToolMessages = Effect.fn("OpenAIChat.lowerToolMessages")(function* (
       cache_control: options.cacheControl?.(part.cache),
     })
     const files = content.filter((item) => item.type === "file")
-    images.push(...(yield* Effect.forEach(files, (item) => lowerMedia(ProviderShared.toolFileMedia(item)))))
+    attachments.push(...(yield* Effect.forEach(files, (item) => lowerMedia(ProviderShared.toolFileMedia(item)))))
   }
-  return { messages, images }
+  return { messages, attachments }
 })
 
 const lowerMessage = Effect.fn("OpenAIChat.lowerMessage")(function* (
@@ -520,21 +580,21 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
     if (requireAssistantAfterTool && messages.at(-1)?.role === "tool")
       messages.push({ role: "assistant", content: "Done." })
   }
-  const pendingImages: Array<Schema.Schema.Type<typeof OpenAIChatUserContent>> = []
-  const flushImages = () => {
-    if (pendingImages.length === 0) return
+  const pendingAttachments: Array<Schema.Schema.Type<typeof OpenAIChatUserContent>> = []
+  const flushAttachments = () => {
+    if (pendingAttachments.length === 0) return
     bridgeTools()
-    messages.push({ role: "user", content: pendingImages.splice(0) })
+    messages.push({ role: "user", content: pendingAttachments.splice(0) })
   }
   for (const message of request.messages) {
     if (message.role === "user") bridgeTools()
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("OpenAI Chat", message)
-      if (pendingImages.length > 0) {
+      if (pendingAttachments.length > 0) {
         messages.push({
           role: "user",
           content: [
-            ...pendingImages.splice(0),
+            ...pendingAttachments.splice(0),
             { type: "text", text: part.text, cache_control: options.cacheControl?.(part.cache) },
           ],
         })
@@ -578,13 +638,13 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
     if (message.role === "tool") {
       const lowered = yield* lowerToolMessages(message, lowering)
       messages.push(...lowered.messages)
-      pendingImages.push(...lowered.images)
+      pendingAttachments.push(...lowered.attachments)
       continue
     }
-    flushImages()
+    flushAttachments()
     messages.push(...(yield* lowerMessage(message, reasoningField, requireReasoning, lowering)))
   }
-  flushImages()
+  flushAttachments()
   return messages
 })
 
@@ -736,7 +796,6 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
       `OpenAI Chat reasoning field conflicts with reserved field ${reasoningField}`,
     )
   const generation = request.generation
-  const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   const flattened = ProviderShared.flattenToolRequest(request)
   const provider = String(request.model.provider)
   const baseURL = request.model.route.endpoint.baseURL
@@ -759,14 +818,7 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
         ? hasHistory
           ? []
           : undefined
-        : flattened.tools.map((tool) =>
-            lowerTool(
-              tool,
-              ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility),
-              options,
-              supportsStrictMode,
-            ),
-          ),
+        : flattened.tools.map((tool) => lowerTool(tool, options, supportsStrictMode)),
     tool_choice: hasActiveTools && request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined,
     stream: true as const,
     ...(supportsUsageInStreaming ? { stream_options: { include_usage: true } } : {}),
@@ -881,44 +933,74 @@ const reasoningDelta = (
   return undefined
 }
 
-const detailText = (details: ReadonlyArray<unknown>) => {
+const detailText = (details: ReadonlyArray<ReasoningDetail>, hideKimiSummary: boolean) => {
   const text = details.flatMap((detail) => {
-    if (!isRecord(detail)) return []
-    if (detail.type === "reasoning.text" && typeof detail.text === "string" && detail.text) return [detail.text]
-    if (detail.type === "reasoning.summary" && typeof detail.summary === "string" && detail.summary)
-      return [detail.summary]
+    if (detail.type === "reasoning.text") return detail.text ? [detail.text] : []
+    if (detail.type === "reasoning.summary") return detail.summary ? [detail.summary] : []
+    // Kimi streams the full thinking through `reasoning_content` and a separate
+    // summary through details; show the summary only when nothing else does.
+    if (detail.type === "summary") return detail.summary && !hideKimiSummary ? [detail.summary] : []
     return []
   })
   if (text.length > 0) return text.join("")
 }
 
-const appendReasoningDetails = (result: Array<unknown>, details: ReadonlyArray<unknown>) => {
+const appendReasoningDetails = (result: Array<ReasoningDetail>, details: ReadonlyArray<ReasoningDetail>) => {
   for (const detail of details) {
     const previous = result.at(-1)
-    if (
-      !isRecord(previous) ||
-      previous.type !== "reasoning.text" ||
-      !isRecord(detail) ||
-      detail.type !== "reasoning.text" ||
-      conflictingReasoningTextDetails(previous, detail)
-    ) {
+    const merged = previous === undefined ? undefined : mergeReasoningDetails(previous, detail)
+    if (merged === undefined) {
       result.push(detail)
       continue
     }
-    result[result.length - 1] = {
-      ...previous,
-      ...Object.fromEntries(Object.entries(detail).filter((entry) => entry[1] !== undefined)),
-      text: `${typeof previous.text === "string" ? previous.text : ""}${typeof detail.text === "string" ? detail.text : ""}`,
-      signature: mergeDetailValue(previous.signature, detail.signature),
-      format: mergeDetailValue(previous.format, detail.format),
-    }
+    result[result.length - 1] = merged
   }
 }
 
-const mergeDetailValue = (previous: unknown, current: unknown) =>
+// Consecutive text or summary deltas of the same kind accumulate into one
+// entry; encrypted entries are opaque and never merge.
+const mergeReasoningDetails = (previous: ReasoningDetail, detail: ReasoningDetail): ReasoningDetail | undefined => {
+  if (conflictingReasoningDetails(previous, detail)) return undefined
+  if (previous.type === "reasoning.text" && detail.type === "reasoning.text")
+    return {
+      ...previous,
+      ...detail,
+      text: `${previous.text ?? ""}${detail.text ?? ""}`,
+      ...mergeDetailIdentity(previous, detail),
+    }
+  if (previous.type === "reasoning.summary" && detail.type === "reasoning.summary")
+    return {
+      ...previous,
+      ...detail,
+      summary: `${previous.summary ?? ""}${detail.summary ?? ""}`,
+      ...mergeDetailIdentity(previous, detail),
+    }
+  if (previous.type === "summary" && detail.type === "summary")
+    return { ...previous, ...detail, summary: previous.summary + detail.summary }
+}
+
+type DetailIdentity = {
+  readonly id?: string | null
+  readonly index?: number
+  readonly format?: string
+  readonly signature?: string | null
+}
+
+// The first non-empty signature and format win; a later delta may carry the
+// signature for text that streamed earlier.
+const mergeDetailIdentity = (previous: DetailIdentity, current: DetailIdentity) => {
+  const signature = mergeDetailValue(previous.signature, current.signature)
+  const format = mergeDetailValue(previous.format, current.format)
+  return {
+    ...(signature === undefined ? {} : { signature }),
+    ...(format === undefined ? {} : { format }),
+  }
+}
+
+const mergeDetailValue = <T>(previous: T | undefined, current: T | undefined) =>
   previous || current || (previous !== undefined ? previous : current)
 
-const conflictingReasoningTextDetails = (previous: Record<string, unknown>, current: Record<string, unknown>) =>
+const conflictingReasoningDetails = (previous: DetailIdentity, current: DetailIdentity) =>
   conflictingDetailValue(previous.id, current.id) ||
   conflictingDetailValue(previous.index, current.index) ||
   conflictingDetailValue(previous.format, current.format) ||
@@ -930,7 +1012,7 @@ const conflictingDetailValue = (previous: unknown, current: unknown) =>
 const reasoningMetadata = (
   providerMetadataKey: string,
   field: ParserState["reasoningField"],
-  details?: ReadonlyArray<unknown>,
+  details?: ReadonlyArray<ReasoningDetail>,
 ) => ({
   [providerMetadataKey]: {
     ...(field ? { reasoningField: field } : {}),
@@ -993,11 +1075,16 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     }
 
     const reasoningField = state.reasoningField ?? reasoning?.field
-    const detailDelta = Array.isArray(delta?.reasoning_details) ? delta.reasoning_details : undefined
+    const reasoningTextObserved = state.reasoningTextObserved || reasoning !== undefined
+    const detailDelta = Array.isArray(delta?.reasoning_details)
+      ? knownReasoningDetails(delta.reasoning_details)
+      : undefined
     if (detailDelta !== undefined) appendReasoningDetails(state.reasoningDetails, detailDelta)
     const reasoningDetailsObserved = state.reasoningDetailsObserved || detailDelta !== undefined
     const deltaMetadata = reasoningMetadata(state.providerMetadataKey, reasoningField)
-    const text = detailDelta?.length ? (detailText(detailDelta) ?? reasoning?.text) : reasoning?.text
+    const text = detailDelta?.length
+      ? (detailText(detailDelta, reasoningTextObserved) ?? reasoning?.text)
+      : reasoning?.text
     if (text !== undefined) lifecycle = Lifecycle.reasoningDelta(lifecycle, events, "reasoning-0", text, deltaMetadata)
     else if (
       reasoningDetailsObserved &&
@@ -1093,6 +1180,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         finishReason,
         lifecycle,
         reasoningField,
+        reasoningTextObserved,
         reasoningDetails: state.reasoningDetails,
         reasoningDetailsObserved,
         reasoningEmitted,
@@ -1173,6 +1261,7 @@ export const protocol = Protocol.make({
       toolCallEvents: [],
       lifecycle: Lifecycle.initial(),
       reasoningField: request.model.compatibility?.reasoningField,
+      reasoningTextObserved: false,
       reasoningDetails: [],
       reasoningDetailsObserved: false,
       reasoningEmitted: false,

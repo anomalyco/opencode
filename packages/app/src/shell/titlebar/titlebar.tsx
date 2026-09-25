@@ -29,10 +29,10 @@ import { MobileDrawer, MobileDrawerContent, MobileDrawerLabel, MobileDrawerTrigg
 import { sessionTabTitle } from "./tab-title"
 import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
-import { projectForSession } from "@/shell/layout/helpers"
 import { useSettingsDialog } from "@/settings/command"
 import { updaterAction } from "@/shell/updates/action"
 import type { UpdaterState } from "@/shell/updates/types"
+import { rootSession } from "@/shell/routes/session"
 import devIcon from "../../../../desktop/icons/dev/64x64.png"
 import betaIcon from "../../../../desktop/icons/beta/64x64.png"
 
@@ -185,7 +185,7 @@ export function Titlebar(props: {
               const route = layout.route()
               return route.type === "session" && !!tabs.pendingSession(route.server, route.sessionId)
             })
-            const [loadedSession] = createResource(
+            const [resolvedSession] = createResource(
               () => {
                 const route = layout.route()
                 if (route.type !== "session") return undefined
@@ -193,7 +193,23 @@ export function Titlebar(props: {
                 const conn = global.servers.list().find((item) => ServerConnection.key(item) === route.server)
                 return conn ? { route, ctx: global.ensureServerCtx(conn) } : undefined
               },
-              ({ route, ctx }) => ctx.sdk.api.session.get({ sessionID: route.sessionId }).catch(() => {}),
+              async ({ route, ctx }) => {
+                const info = await ctx.sdk.api.session
+                  .get({ sessionID: route.sessionId })
+                  .catch(() => ctx.data.session.get(route.sessionId))
+                if (!info) return
+                ctx.data.session.remember(info)
+                const rootID = await rootSession(info, async (id) => {
+                  const cached = ctx.data.session.get(id)
+                  if (cached) return cached
+                  const ancestor = await ctx.sdk.api.session.get({ sessionID: id })
+                  ctx.data.session.remember(ancestor)
+                  return ancestor
+                })
+                  .then((root) => root.id)
+                  .catch(() => ctx.data.session.root(info.id))
+                return { info, rootID }
+              },
             )
             const session = createMemo(() => {
               const route = layout.route()
@@ -202,8 +218,8 @@ export function Titlebar(props: {
               const conn = global.servers.list().find((item) => ServerConnection.key(item) === route.server)
               const cached = conn ? global.ensureServerCtx(conn).data.session.get(route.sessionId) : undefined
               if (cached) return cached
-              const loaded = loadedSession()
-              return loaded?.id === route.sessionId ? loaded : undefined
+              const resolved = resolvedSession()
+              return resolved?.info.id === route.sessionId ? resolved.info : undefined
             })
 
             const matchRoute = (route: LayoutRoute) => {
@@ -221,7 +237,8 @@ export function Titlebar(props: {
                 if (main) return main
                 const s = session()
                 if (s?.parentID) {
-                  const parentID = s.parentID
+                  const resolved = resolvedSession()
+                  const parentID = resolved?.info.id === s.id ? resolved.rootID : s.parentID
                   const parent = tabsStore.find(
                     (item) => item.type === "session" && item.server === route.server && item.sessionId === parentID,
                   )
@@ -256,7 +273,9 @@ export function Titlebar(props: {
                 }
                 const s = session()
                 if (!s) return
-                const sessionId = s.parentID ?? s.id
+                const resolved = resolvedSession()
+                if (s.parentID && resolved?.info.id !== s.id) return
+                const sessionId = resolved?.info.id === s.id ? resolved.rootID : s.id
                 const next = { server: route.server, sessionId }
                 tabsStoreActions.addSessionTab(next)
               }
@@ -421,7 +440,7 @@ export function Titlebar(props: {
               const value = session()
               if (!tab || !value) return
               const conn = global.servers.list().find((item) => ServerConnection.key(item) === tab.server)
-              return projectForSession(value, conn ? global.ensureServerCtx(conn).projects.list() : [])
+              return conn ? global.ensureServerCtx(conn).projects.forSession(value) : undefined
             })
             const currentTitle = () => {
               const tab = currentTab()

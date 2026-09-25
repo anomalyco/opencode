@@ -32,7 +32,9 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { State } from "@opencode/core/state"
 import { McpTool } from "@opencode/core/tool/mcp"
+import { McpResourceTools } from "@opencode/core/tool/plugin/mcp-resource"
 import { Tool } from "@opencode/core/tool"
+import { ToolOutput } from "@opencode/core/tool-output"
 import {
   Context,
   Deferred,
@@ -58,7 +60,14 @@ import { imagePassthrough } from "./lib/image"
 import { location } from "./fixture/location"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { hostEnvironmentLayer, recordingEnvironmentLayer } from "./fixture/environment"
-import { codeModeListings, executeTool, toolDefinitions, toolIdentity, waitForTool } from "./lib/tool"
+import {
+  codeModeListings,
+  executeTool,
+  registerToolPlugin,
+  toolDefinitions,
+  toolIdentity,
+  waitForTool,
+} from "./lib/tool"
 
 let assertion: Deferred.Deferred<Permission.AssertInput> | undefined
 let decision: Effect.Effect<void, Permission.Error> = Effect.void
@@ -98,6 +107,9 @@ function resourceServer(
           { uri: "docs://logo", blob: "aGVsbG8=", mimeType: "image/png" },
         ] as Array<{ uri: string; text: string; mimeType?: string } | { uri: string; blob: string; mimeType?: string }>,
         resourceLists: 0,
+        resourceReads: [] as string[],
+        templatesUnsupported: false,
+        missing: [] as string[],
         templateLists: 0,
         toolLists: 0,
         toolCalls: [] as Array<{
@@ -194,10 +206,15 @@ function resourceServer(
           })
           protocol.setRequestHandler("resources/templates/list", (request) => {
             state.templateLists += 1
+            if (state.templatesUnsupported) return Promise.reject(new Error("Method not found"))
             const page = state.templatePages?.[request.params?.cursor ?? "initial"]
             return Promise.resolve({ resourceTemplates: page?.items ?? state.templates, nextCursor: page?.nextCursor })
           })
-          protocol.setRequestHandler("resources/read", () => Promise.resolve({ contents: state.contents }))
+          protocol.setRequestHandler("resources/read", (request) => {
+            state.resourceReads.push(request.params.uri)
+            if (state.missing.includes(request.params.uri)) return Promise.reject(new Error("Resource not found"))
+            return Promise.resolve({ contents: state.contents })
+          })
         }
         return protocol
       }
@@ -1392,6 +1409,152 @@ test("loads and reads MCP resources", async () => {
   )
 })
 
+it.live("discovers and reads MCP resources through Code Mode", () =>
+  Effect.gen(function* () {
+    assertion = yield* Deferred.make<Permission.AssertInput>()
+    decision = Effect.void
+    const server = yield* resourceServer()
+    server.state.resourcePages = {
+      initial: { items: [{ name: "Readme", uri: "docs://readme" }], nextCursor: "resources-2" },
+      "resources-2": { items: [{ name: "Guide", uri: "docs://guide" }] },
+    }
+    server.state.templatePages = {
+      initial: { items: [{ name: "File", uriTemplate: "docs://{path}" }], nextCursor: "templates-2" },
+      "templates-2": { items: [{ name: "Issue", uriTemplate: "issue://{id}" }] },
+    }
+
+    yield* Effect.gen(function* () {
+      const mcp = yield* Mcp.Service
+      yield* settled(mcp)
+      yield* registerToolPlugin(McpResourceTools.Plugin).pipe(Effect.provide(permissions))
+      const tools = yield* Tool.Service
+      const snapshot = yield* tools.snapshot()
+      const sessionID = Session.ID.make("ses_resource_tools")
+      const run = (code: string) =>
+        snapshot.execute({
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call_resource", name: "execute", input: { code } },
+        })
+
+      // The SDK walks every page, so one call returns the full catalog.
+      const listed = yield* run('return await tools.opencode.list_mcp_resources({ server: "resources" })')
+      expect(JSON.parse(listed.output.output)).toEqual({
+        resources: [
+          { server: "resources", name: "Guide", uri: "docs://guide" },
+          { server: "resources", name: "Readme", uri: "docs://readme" },
+        ],
+        templates: [
+          { server: "resources", name: "File", uriTemplate: "docs://{path}" },
+          { server: "resources", name: "Issue", uriTemplate: "issue://{id}" },
+        ],
+      })
+      expect(server.state.resourceReads).toEqual([])
+
+      // Omitting the server lists every server, so the model can find which one owns a URI.
+      assertion = yield* Deferred.make<Permission.AssertInput>()
+      const everywhere = yield* run("return await tools.opencode.list_mcp_resources({})")
+      expect(yield* Deferred.await(assertion)).toMatchObject({
+        action: "opencode_list_mcp_resources",
+        resources: ["resources"],
+        save: ["resources"],
+      })
+      expect(JSON.parse(everywhere.output.output)).toEqual({
+        resources: [
+          { server: "resources", name: "Guide", uri: "docs://guide" },
+          { server: "resources", name: "Readme", uri: "docs://readme" },
+        ],
+        templates: [
+          { server: "resources", name: "File", uriTemplate: "docs://{path}" },
+          { server: "resources", name: "Issue", uriTemplate: "issue://{id}" },
+        ],
+      })
+
+      // A server may declare resources without implementing template listing.
+      server.state.templatesUnsupported = true
+      const untemplated = yield* run('return await tools.opencode.list_mcp_resources({ server: "resources" })')
+      expect(JSON.parse(untemplated.output.output)).toEqual({
+        resources: [
+          { server: "resources", name: "Guide", uri: "docs://guide" },
+          { server: "resources", name: "Readme", uri: "docs://readme" },
+        ],
+        templates: [],
+      })
+      server.state.templatesUnsupported = false
+
+      assertion = yield* Deferred.make<Permission.AssertInput>()
+      const read = yield* run(
+        'const resource = await tools.opencode.read_mcp_resource({ server: "resources", uri: "docs://readme" }); return resource.contents.filter(part => part.type === "text").map(part => part.text).join("\\n")',
+      )
+      expect(read.content).toEqual([
+        { type: "text", text: "hello" },
+        { type: "file", uri: "data:image/png;base64,aGVsbG8=", mime: "image/png" },
+      ])
+      expect(read.metadata?.toolCalls).toMatchObject([
+        {
+          tool: "opencode.read_mcp_resource",
+          status: "completed",
+          input: { server: "resources", uri: "docs://readme" },
+        },
+      ])
+      expect(server.state.resourceReads).toEqual(["docs://readme"])
+      expect(yield* Deferred.await(assertion)).toEqual({
+        action: "opencode_read_mcp_resource",
+        resources: ["resources:docs://readme"],
+        save: ["resources:*"],
+        metadata: { server: "resources", uri: "docs://readme" },
+        sessionID,
+        agent: toolIdentity.agent,
+        source: { type: "tool", messageID: toolIdentity.messageID, id: "call_resource" },
+      })
+
+      server.state.contents = [{ uri: "docs://readme", text: "line\n".repeat(20_000), mimeType: "text/plain" }]
+      const large = yield* run(
+        'const resource = await tools.opencode.read_mcp_resource({ server: "resources", uri: "docs://readme" }); return resource.contents[0].text',
+      )
+      const bounded = yield* ToolOutput.Service.use((output) => output.truncate(large)).pipe(
+        Effect.provide(AppNodeBuilder.build(ToolOutput.node)),
+      )
+      expect(bounded.metadata?.truncated).toBe(true)
+      expect(bounded.content[0]).toMatchObject({ type: "text" })
+      const outputPath = bounded.metadata?.outputPath
+      expect(typeof outputPath).toBe("string")
+      if (typeof outputPath !== "string") throw new Error("Missing full resource output")
+      expect(yield* Effect.promise(() => Bun.file(outputPath).text())).toBe("line\n".repeat(20_000))
+
+      // An empty contents array means the resource exists without content, not that it is missing.
+      server.state.contents = []
+      const empty = yield* run(
+        'return await tools.opencode.read_mcp_resource({ server: "resources", uri: "docs://empty" })',
+      )
+      expect(empty.metadata?.error).toBeUndefined()
+      expect(JSON.parse(empty.output.output)).toEqual({ server: "resources", uri: "docs://empty", contents: [] })
+      server.state.missing = ["docs://gone"]
+      const gone = yield* run(
+        'return await tools.opencode.read_mcp_resource({ server: "resources", uri: "docs://gone" })',
+      )
+      expect(gone.metadata?.error).toBe(true)
+      expect(gone.output.output).toContain("Unable to read MCP resource resources:docs://gone")
+      expect(gone.output.output).toContain("Resource not found")
+      const missing = yield* run(
+        'return await tools.opencode.read_mcp_resource({ server: "missing", uri: "docs://readme" })',
+      )
+      expect(missing.metadata?.error).toBe(true)
+      expect(missing.output.output).toContain("MCP server not found: missing")
+
+      const reads = server.state.resourceReads.length
+      decision = Effect.fail(
+        new Permission.BlockedError({ rules: [], permission: "opencode_read_mcp_resource", resources: ["*"] }),
+      )
+      const denied = yield* run(
+        'return await tools.opencode.read_mcp_resource({ server: "resources", uri: "docs://denied" })',
+      )
+      expect(denied.metadata?.error).toBe(true)
+      expect(server.state.resourceReads).toHaveLength(reads)
+    }).pipe(Effect.provide(resourceMcpLayer(server.url)))
+  }),
+)
+
 test("adds, disconnects, and reconnects MCP servers at runtime", async () => {
   const published: string[] = []
   await Effect.runPromise(
@@ -1954,7 +2117,7 @@ testEffect(Layer.empty).live("isolates invalid MCP tools and preserves plugin tr
       }) satisfies Mcp.Tool
     const healthy = [tool("demo", "search"), tool("other", "lookup")]
     const namespace = tool("x".repeat(65), "lookup")
-    const catalog = yield* Ref.make([tool("demo", "x".repeat(65)), ...healthy, namespace])
+    const catalog = yield* Ref.make([tool("demo", "x".repeat(129)), ...healthy, namespace])
 
     yield* Effect.gen(function* () {
       const registry = yield* Tool.Service
@@ -1983,7 +2146,7 @@ testEffect(Layer.empty).live("isolates invalid MCP tools and preserves plugin tr
         editor.remove("repaired_lookup")
       })
 
-      yield* Ref.set(catalog, [tool("demo", "y".repeat(65)), ...healthy, tool("demo", "added"), namespace])
+      yield* Ref.set(catalog, [tool("demo", "y".repeat(129)), ...healthy, tool("demo", "added"), namespace])
       yield* bus.publish(McpEvent.ToolsChanged, { server: "demo" })
       yield* waitForTool(registry, "demo_added")
       expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual([

@@ -43,6 +43,9 @@ function fixture() {
           async command(command) {
             call.commands.push(command)
           },
+          async capture() {
+            return null
+          },
           close() {
             call.closed = true
           },

@@ -46,6 +46,10 @@ export function createDesktopPlatform(
                 .catch(() => undefined)
           },
           command: (command) => ready.then(() => api.browserPane.request({ type: "command", bindingID, command })),
+          capture: (tabID) =>
+            ready
+              .then(() => api.browserPane.capture(bindingID, tabID))
+              .then((data) => data && new Blob([data], { type: "image/jpeg" })),
           close() {
             if (closed) return
             closed = true
@@ -91,6 +95,7 @@ export function createDesktopPlatform(
     },
     pair: {
       info: () => api.pairInfo(),
+      code: () => api.pairCode(),
     },
   }
 }

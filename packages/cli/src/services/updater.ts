@@ -6,6 +6,7 @@ import { ChildProcess } from "effect/unstable/process"
 import { parse, type ParseError } from "jsonc-parser"
 import path from "node:path"
 import { stripVTControlCharacters } from "node:util"
+import { RetainedImage } from "./retained-image"
 import { action, parseReleaseVersion, type Policy } from "./updater-action"
 import { errorMessage } from "../util/error"
 
@@ -166,14 +167,15 @@ const make = Effect.gen(function* () {
       )
   })
 
+  const curlBinary = path.resolve(
+    global.home,
+    ".opencode",
+    "bin",
+    process.platform === "win32" ? "opencode.exe" : "opencode",
+  )
+
   const method = Effect.fnUntraced(function* () {
-    const binary = path.join(
-      global.home,
-      ".opencode",
-      "bin",
-      process.platform === "win32" ? "opencode.exe" : "opencode",
-    )
-    if (path.resolve(process.execPath) === path.resolve(binary)) return "curl"
+    if (path.resolve(process.execPath) === curlBinary) return "curl"
     const executable = yield* fs.realPath(process.execPath).pipe(Effect.orElseSucceed(() => process.execPath))
     if (
       ["opencode-beta", "opencode-v2"].some((name) =>
@@ -220,8 +222,12 @@ const make = Effect.gen(function* () {
     const command = commands[method]
     return {
       command,
-      run: exec(command, "5 minutes").pipe(
-        Effect.flatMap((result) => (result.code === 0 ? Effect.void : Effect.fail(new Error(resultDetail(result))))),
+      run: retaining(
+        method,
+        exec(command, "5 minutes").pipe(
+          Effect.flatMap((result) => (result.code === 0 ? Effect.void : Effect.fail(new Error(resultDetail(result))))),
+        ),
+        global.tmp,
       ),
     }
   }
@@ -287,6 +293,19 @@ const make = Effect.gen(function* () {
     Effect.acquireRelease(fs.makeTempDirectory({ directory: global.cache, prefix }), (directory) =>
       fs.remove(directory, { recursive: true, force: true }).pipe(Effect.ignore),
     )
+
+  // On Windows the installer must delete or replace the running binary, which only works
+  // while another link to it exists (see RetainedImage). Upgrades keep that link in the
+  // cache; uninstall has already removed the cache, so it uses the temporary directory.
+  const retaining = <A, E, R>(method: Method, effect: Effect.Effect<A, E, R>, directory = global.cache) => {
+    if (process.platform !== "win32" || method === "brew") return effect
+    // Only the installed binary is at stake; source checkouts run inside bun or node.
+    const owned = method === "curl" ? path.resolve(process.execPath) === curlBinary : installedPackage !== undefined
+    if (!owned) return effect
+    return Effect.scoped(RetainedImage.retain(directory, "upgrade").pipe(Effect.andThen(effect))).pipe(
+      Effect.provideService(FileSystem.FileSystem, fs),
+    )
+  }
 
   const runUpgrade = (input: {
     readonly method: Method
@@ -355,11 +374,14 @@ const make = Effect.gen(function* () {
           // Bun does not prune old versions from its shared package cache.
           yield* fs.makeDirectory(global.cache, { recursive: true })
           const cache = yield* temporaryDirectory("update-")
-          return yield* runUpgrade({
+          return yield* retaining(
             method,
-            command: ["bun", "install", "--global", "--trust", "--cache-dir", cache, target],
-            displayCommand: ["bun", "install", "--global", "--trust", target],
-          })
+            runUpgrade({
+              method,
+              command: ["bun", "install", "--global", "--trust", "--cache-dir", cache, target],
+              displayCommand: ["bun", "install", "--global", "--trust", target],
+            }),
+          )
         }
         if (method === "curl") {
           yield* fs.makeDirectory(global.cache, { recursive: true })
@@ -372,15 +394,18 @@ const make = Effect.gen(function* () {
             title: "Could not download the OpenCode installer",
             retry: "Check your network, then run opencode upgrade again.",
           })
-          return yield* runUpgrade({
+          return yield* retaining(
             method,
-            command: ["bash", installer, "--version", version, "--no-modify-path"],
-            displayCommand: ["opencode", "upgrade", version, "--method", "curl"],
-            title: "The OpenCode installer failed",
-          })
+            runUpgrade({
+              method,
+              command: ["bash", installer, "--version", version, "--no-modify-path"],
+              displayCommand: ["opencode", "upgrade", version, "--method", "curl"],
+              title: "The OpenCode installer failed",
+            }),
+          )
         }
         if (method === "brew") return yield* runUpgrade({ method, command: ["brew", "upgrade", packageName] })
-        return yield* runUpgrade({ method, command: commands[method] })
+        return yield* retaining(method, runUpgrade({ method, command: commands[method] }))
       }),
     ).pipe(
       Effect.mapError((cause) =>

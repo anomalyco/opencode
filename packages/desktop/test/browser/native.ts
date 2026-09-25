@@ -333,6 +333,11 @@ async function main() {
     await call("tabs.focus", { tabID: second.id })
     pane.layout(win, "suite", { tabID: second.id, visible: true, bounds: { x: 0, y: 0, width: 1000, height: 700 } })
     const snap = await call("snapshot", { tabID, boxes: true })
+    const still = await until(() => pane.capture(win, "suite", second.id))
+    assert(still)
+    assert.deepEqual(Array.from(still.subarray(0, 2)), [0xff, 0xd8], "The shown page captures as a JPEG still")
+    assert.equal(await pane.capture(win, "suite", tabID), null, "A hidden page has no still to show")
+    console.log("PASS browser pane still capture")
     const ref = (text: string) => {
       const match = snap.content
         .split("\n")

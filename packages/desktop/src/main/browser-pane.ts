@@ -288,6 +288,9 @@ export function createBrowserPane(storage: StateStore) {
       page.layout(bounds, value.background, value.radius)
       page.setVisible(true)
     },
+    async capture(win: BrowserWindow, bindingID: string, tabID: Browser.TabID) {
+      return (await owned(win, bindingID).pages.get(tabID)?.capture()) ?? null
+    },
     async command(win: BrowserWindow, bindingID: string, command: BrowserPaneCommand) {
       const entry = owned(win, bindingID)
       await execute(entry, { action: command, files: [] }, new AbortController().signal)

@@ -2,13 +2,11 @@ export {
   ActionState,
   type ActionStateKey,
   ActionVariant,
-  BaseHue,
   BaseThemeDefinition,
   CategoricalDefinition,
   FeedbackKind,
   FormfieldState,
   type FormfieldStateKey,
-  HueAlias,
   HueName,
   HueStep,
   MarkdownDefinition,
@@ -24,6 +22,7 @@ export {
   type FormfieldColorDefinition,
   type HueDefinition,
   type Mode,
+  type SemanticHue,
   type StatefulColorDefinition,
   type TextDefinition,
   type ThemeTokensDefinition,
@@ -42,10 +41,9 @@ export type {
   ResolvedThemeTokens,
   StatefulColor,
 } from "./types.js"
-export { DEFAULT_CATEGORICAL } from "./categorical.js"
 export { rgbToOklch } from "./color.js"
 export { expandTheme } from "./expand.js"
 export { migrateV1 } from "./v1-migrate.js"
-export { resolveTheme, resolveThemeDocument, themeDecodeError } from "./resolve.js"
+export { parseThemeDocument, resolveTheme, resolveThemeDocument, themeDecodeError } from "./resolve.js"
 export { selectTheme, selectThemeMode, supportsThemeMode, themeModes } from "./select.js"
 export { generateSyntax } from "./syntax.js"

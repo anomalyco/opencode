@@ -58,6 +58,27 @@ story("hides the native view immediately while the pane stays mounted", async ({
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
 })
 
+story("keeps a still of the page under floating content that covers it", async ({ page }, testInfo) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const still = root.locator("#browser-panel img")
+  await root.getByRole("button", { name: "Hold capture", exact: true }).click()
+  await root.getByRole("button", { name: "Toggle popover", exact: true }).click()
+  await expect(root.getByText("Captures: 1", { exact: true })).toBeVisible()
+  // The native page stays up until its still is ready, so the pane never shows blank.
+  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+  await expect(still).toHaveCount(0)
+
+  await root.getByRole("button", { name: "Release capture", exact: true }).click()
+  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "false")
+  await expect(still).toBeVisible()
+  await page.screenshot({ path: testInfo.outputPath("covered.png") })
+
+  await root.getByRole("button", { name: "Toggle popover", exact: true }).click()
+  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+  await expect(still).toHaveCount(0)
+  await expect(root.getByText("Captures: 1", { exact: true })).toBeVisible()
+})
+
 story("shows the empty state over a blank native page and restores navigation", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Blank page", exact: true }).click()

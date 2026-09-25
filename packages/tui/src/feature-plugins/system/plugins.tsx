@@ -7,6 +7,7 @@ import { Spinner } from "../../component/spinner"
 import { usePlugin } from "../../plugin/context"
 import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
 import { useDialog } from "../../ui/dialog"
+import { errorMessage } from "../../util/error"
 
 const id = "opencode.plugins"
 
@@ -134,7 +135,7 @@ export function PluginsDialog(props: {
       .catch((cause) => {
         props.context.ui.toast.show({
           variant: "error",
-          message: cause instanceof Error ? cause.message : String(cause),
+          message: errorMessage(cause),
         })
       })
       .finally(() => setLocked(false))
@@ -152,7 +153,7 @@ export function PluginsDialog(props: {
       .catch((cause) => {
         props.context.ui.toast.show({
           variant: "error",
-          message: cause instanceof Error ? cause.message : String(cause),
+          message: errorMessage(cause),
         })
       })
       .finally(() => setPending((keys) => keys.filter((key) => key !== entry.key)))
@@ -173,7 +174,7 @@ export function PluginsDialog(props: {
       .catch((cause) => {
         props.context.ui.toast.show({
           variant: "error",
-          message: cause instanceof Error ? cause.message : String(cause),
+          message: errorMessage(cause),
         })
       })
       .finally(() => setChecking(false))

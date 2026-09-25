@@ -362,6 +362,7 @@ it.live("manual and automatic endpoint compaction keep the provider replacement 
     expect(JSON.stringify(replacement)).not.toContain("Original user")
     expect(fixture.state.calls).toBe(2)
     expect(fixture.headers[0]?.get("x-http-hook")).toBe("compaction")
+    expect(fixture.bodies[0]).toMatchObject({ tools: [expect.objectContaining({ name: "read" })] })
     expect(fixture.bodies[0]).not.toHaveProperty("context_management")
   }),
 )
