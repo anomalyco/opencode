@@ -122,10 +122,7 @@ const getData = query(async (shareID) => {
 }, "getShareData")
 
 export default function () {
-  getRequestEvent()?.response.headers.set(
-    "Cache-Control",
-    "public, max-age=30, s-maxage=300, stale-while-revalidate=86400",
-  )
+  getRequestEvent()?.response.headers.set("Cache-Control", "private, no-store")
 
   const params = useParams()
   const data = createAsync(async () => {
