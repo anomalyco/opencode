@@ -16,6 +16,8 @@ export interface PatchDiffRef {
   readonly hunks: () => readonly (DiffRenderable | BoxRenderable)[]
 }
 
+// Smaller patches render fine as a single DiffRenderable; only split files large enough to stall the TUI.
+const VIRTUAL_MIN_LINES = 1000
 const VIRTUAL_CHUNK_LINES = 128
 
 type Props = Omit<JSX.IntrinsicElements["diff"], "diff" | "lineNumberBg" | "ref"> & {
@@ -23,21 +25,23 @@ type Props = Omit<JSX.IntrinsicElements["diff"], "diff" | "lineNumberBg" | "ref"
   hunkFg: ColorInput
   lineNumberBg: ColorInput
   ref?: (value: PatchDiffRef) => void
-  virtualScroll?: () => ScrollBoxRenderable | undefined
+  scroll?: () => ScrollBoxRenderable | undefined
   viewportWidth?: number
 }
 
 export function PatchDiff(props: Props) {
-  const [local, diffProps] = splitProps(props, [
-    "diff",
-    "hunkFg",
-    "lineNumberBg",
-    "ref",
-    "virtualScroll",
-    "viewportWidth",
-  ])
+  const [local, diffProps] = splitProps(props, ["diff", "hunkFg", "lineNumberBg", "ref", "scroll", "viewportWidth"])
   const hunks = createMemo(() => splitPatchHunks(local.diff))
-  const chunks = createMemo(() => local.virtualScroll && splitAddedPatch(local.diff, VIRTUAL_CHUNK_LINES))
+  const chunks = createMemo(() => {
+    if (!local.scroll) return
+    const result = splitAddedPatch(local.diff, VIRTUAL_CHUNK_LINES)
+    return result && lineCount(result) > VIRTUAL_MIN_LINES ? result : undefined
+  })
+  // Virtual chunks mount independently, so size the gutter for the whole file rather than the mounted chunks.
+  const minDigits = createMemo(() => {
+    const items = chunks()
+    return items ? String(lineCount(items)).length : 0
+  })
   const nodes = new Map<number, DiffRenderable>()
   let virtualRoot: BoxRenderable | undefined
   local.ref?.({
@@ -66,10 +70,11 @@ export function PatchDiff(props: Props) {
       const maxAfter = Math.max(...after)
       if (!maxDigits && attempt < 2) return syncGutters(attempt + 1)
       if (!maxDigits) return
+      const width = Math.max(maxDigits, minDigits())
       sides.forEach((side) => {
         const index = sides.indexOf(side)
         const signs = new Map([...side.getLineSigns()].filter(([line]) => line >= 0))
-        signs.set(-1, { after: " ".repeat(maxAfter + maxDigits - digits[index]) })
+        signs.set(-1, { after: " ".repeat(maxAfter + width - digits[index]) })
         side.setLineNumbers(lineNumbers[index])
         side.setLineSigns(signs)
       })
@@ -111,7 +116,8 @@ export function PatchDiff(props: Props) {
         <VirtualAddedPatch
           chunks={items()}
           width={local.viewportWidth ?? 80}
-          scroll={local.virtualScroll!}
+          digits={minDigits()}
+          scroll={local.scroll!}
           diffProps={diffProps}
           lineNumberBg={local.lineNumberBg}
           register={register}
@@ -125,6 +131,7 @@ export function PatchDiff(props: Props) {
 function VirtualAddedPatch(props: {
   chunks: readonly AddedPatchChunk[]
   width: number
+  digits: number
   scroll: () => ScrollBoxRenderable | undefined
   diffProps: Omit<JSX.IntrinsicElements["diff"], "diff" | "lineNumberBg" | "ref">
   lineNumberBg: ColorInput
@@ -142,27 +149,28 @@ function VirtualAddedPatch(props: {
   // Offscreen chunks need heights for scroll jumps before OpenTUI has measured them.
   // Replace those estimates with actual rendered heights as chunks enter the viewport.
   const estimates = createMemo(() => {
-    const codeWidth = Math.max(
-      1,
-      props.width - String(props.chunks.reduce((count, chunk) => count + chunk.rows, 0)).length - 5,
-    )
+    const codeWidth = Math.max(1, props.width - props.digits - 5)
     return props.chunks.map((chunk) =>
       chunk.lines.reduce((height, line) => height + Math.max(1, Math.ceil(stringWidth(line.slice(1)) / codeWidth)), 0),
     )
   })
   const heights = createMemo(() => estimates().map((estimate, index) => measured().get(index) ?? estimate))
+  let root: BoxRenderable | undefined
+  // Viewport top relative to this patch, in rows.
+  const viewportTop = (scroll: ScrollBoxRenderable, root: BoxRenderable) =>
+    scroll.scrollTop - (root.y - scroll.content.y)
 
   return (
     <box
       width="100%"
-      ref={(root: BoxRenderable) => {
-        props.registerRoot(root)
-        root.onLifecyclePass = () => {
+      ref={(node: BoxRenderable) => {
+        root = node
+        props.registerRoot(node)
+        node.onLifecyclePass = () => {
           const scroll = props.scroll()
           if (!scroll) return
           // ScrollBox's scroll position is not a Solid signal; observe it during the render pass.
-          const offset = root.y - scroll.content.y
-          const top = scroll.scrollTop - offset
+          const top = viewportTop(scroll, node)
           const sizes = heights()
           if (top + scroll.viewport.height < 0 || top > sizes.reduce((sum, height) => sum + height, 0)) {
             setVisible(-1)
@@ -172,8 +180,8 @@ function VirtualAddedPatch(props: {
           const index = sizes.findIndex((height) => (position += height) > top)
           setVisible(index < 0 ? sizes.length - 1 : index)
         }
-        renderer.registerLifecyclePass(root)
-        onCleanup(() => renderer.unregisterLifecyclePass(root))
+        renderer.registerLifecyclePass(node)
+        onCleanup(() => renderer.unregisterLifecyclePass(node))
       }}
     >
       <For each={props.chunks}>
@@ -189,10 +197,16 @@ function VirtualAddedPatch(props: {
                 node.onSizeChange = () => {
                   if (node.height <= 0 || measured().get(index()) === node.height) return
                   const scroll = props.scroll()
+                  const sizes = heights()
+                  const delta = node.height - sizes[index()]
+                  const bottom = sizes.slice(0, index() + 1).reduce((sum, height) => sum + height, 0)
+                  const above = scroll && root && bottom <= viewportTop(scroll, root)
                   const atEnd = scroll && scroll.scrollTop >= scroll.scrollHeight - scroll.viewport.height - 1
                   setMeasured((known) => new Map(known).set(index(), node.height))
                   // Keep G pinned to the end when a newly mounted chunk changes total height.
                   if (atEnd) requestAnimationFrame(() => scroll.scrollTo(Infinity))
+                  // A chunk fully above the viewport grew or shrank; shift by the same amount so visible rows stay put.
+                  if (!atEnd && above && delta) scroll.scrollTo(scroll.scrollTop + delta)
                 }
               }}
               diff={chunk.patch}
@@ -203,4 +217,8 @@ function VirtualAddedPatch(props: {
       </For>
     </box>
   )
+}
+
+function lineCount(chunks: readonly AddedPatchChunk[]) {
+  return chunks.reduce((count, chunk) => count + chunk.rows, 0)
 }

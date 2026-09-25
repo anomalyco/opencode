@@ -2107,6 +2107,62 @@ test.each([80, 160])("virtualizes a large added file at %i columns without losin
   }
 })
 
+test("keeps the line-number gutter the same width across virtual chunks", async () => {
+  const additions = Array.from({ length: 2000 }, (_, index) => `+line-${String(index + 1).padStart(4, "0")}`)
+  const viewer = await renderDiffViewer(
+    [
+      {
+        file: "wide.txt",
+        status: "added",
+        additions: additions.length,
+        deletions: 0,
+        patch: `--- /dev/null\n+++ b/wide.txt\n@@ -0,0 +1,${additions.length} @@\n${additions.join("\n")}`,
+      },
+    ],
+    { width: 120, height: 24 },
+  )
+  const column = (text: string) =>
+    viewer.app
+      .captureCharFrame()
+      .split("\n")
+      .find((line) => line.includes(text))
+      ?.indexOf(text)
+  try {
+    await viewer.app.flush()
+    const top = column("line-0001")
+    viewer.commands.get("diff.last")!.run()
+    await viewer.app.flush()
+    if (!viewer.app.captureCharFrame().includes("line-2000")) {
+      await viewer.app.waitForFrame((frame) => frame.includes("line-2000"))
+    }
+    expect(top).toBeDefined()
+    expect(column("line-2000")).toBe(top)
+  } finally {
+    viewer.app.renderer.destroy()
+  }
+})
+
+test("does not virtualize added files at or below the size threshold", async () => {
+  const additions = Array.from({ length: 1000 }, (_, index) => `+small line ${index}`)
+  const viewer = await renderDiffViewer(
+    [
+      {
+        file: "small.txt",
+        status: "added",
+        additions: additions.length,
+        deletions: 0,
+        patch: `--- /dev/null\n+++ b/small.txt\n@@ -0,0 +1,${additions.length} @@\n${additions.join("\n")}`,
+      },
+    ],
+    { width: 120, height: 24 },
+  )
+  try {
+    expect(findDiffs(viewer.app.renderer.root)).toHaveLength(1)
+  } finally {
+    viewer.app.renderer.destroy()
+  }
+})
+
 test("file navigation and review still work after a virtualized patch", async () => {
   const additions = Array.from({ length: 2200 }, (_, index) => `+added line ${index}`)
   const viewer = await renderDiffViewer(

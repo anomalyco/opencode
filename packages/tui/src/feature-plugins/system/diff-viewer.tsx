@@ -1024,11 +1024,7 @@ export function DiffViewerContent(props: {
                                         onCleanup(() => patchDiffByFileIndex.delete(entry.fileIndex))
                                       }}
                                       diff={patch()}
-                                      virtualScroll={
-                                        entry.file.status === "added" && entry.file.additions > 1000
-                                          ? () => scroll
-                                          : undefined
-                                      }
+                                      scroll={() => scroll}
                                       viewportWidth={patchPaneWidth()}
                                       hunkFg={theme.diff.text.hunkHeader}
                                       view={entry.file.status === "modified" ? view() : "unified"}
