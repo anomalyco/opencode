@@ -35,3 +35,33 @@ test("createStorage degrades gracefully when fs.watch throws (e.g. ENOSPC)", asy
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test("createStorage disables live-reload when an active watcher emits an error", async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), "storage-test-"))
+  const watcher = fs.watch(dir)
+  const close = spyOn(watcher, "close")
+  const log = spyOn(console, "error").mockImplementation(() => undefined)
+  spyOn(fs, "watch").mockReturnValue(watcher)
+
+  let result: ReturnType<typeof createStorage> | undefined
+  try {
+    result = createStorage(dir, "next")
+    const [store, update] = result.storage.store("kv", { initial: { count: 0 } })
+
+    expect(() => watcher.emit("error", new Error("watch failed"))).not.toThrow()
+    expect(close).toHaveBeenCalledTimes(1)
+    expect(log).toHaveBeenCalledTimes(1)
+
+    await update((draft) => {
+      draft.count = 1
+    })
+    expect(store.count).toBe(1)
+    result.close()
+    expect(close).toHaveBeenCalledTimes(1)
+  } finally {
+    result?.close()
+    watcher.close()
+    log.mockRestore()
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

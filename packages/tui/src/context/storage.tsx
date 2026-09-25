@@ -110,14 +110,20 @@ export function createStorage(root: string, channel: string) {
     },
   }
 
-  let reload: ReturnType<typeof setTimeout> | undefined
+  let reloadTimer: ReturnType<typeof setTimeout> | undefined
   let watcher: ReturnType<typeof watch> | undefined
   try {
     watcher = watch(directory, () => {
-      clearTimeout(reload)
+      clearTimeout(reloadTimer)
       // Atomic writes notify for the temporary file before its final rename, and some
       // platforms coalesce the rename event. Reload after the event burst has settled.
-      reload = setTimeout(() => entries.forEach((entry) => entry.reload()), 50)
+      reloadTimer = setTimeout(() => entries.forEach((entry) => entry.reload()), 50)
+    })
+    watcher.on("error", (error) => {
+      clearTimeout(reloadTimer)
+      watcher?.close()
+      watcher = undefined
+      console.error("Storage directory watcher failed, live-reload disabled", { directory, error })
     })
   } catch (error) {
     // fs.watch throws synchronously (e.g. ENOSPC when the inotify watch limit is
@@ -128,7 +134,7 @@ export function createStorage(root: string, channel: string) {
   return {
     storage,
     close: () => {
-      clearTimeout(reload)
+      clearTimeout(reloadTimer)
       watcher?.close()
     },
   }
