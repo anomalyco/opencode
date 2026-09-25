@@ -1,17 +1,17 @@
 #!/usr/bin/env bun
 /**
  * fixes:apply — upgrade the patched opencode binary to a newer upstream tag,
- * re-applying our compaction-anchor fix, then verify it survived bundling
+ * re-applying every ordered local fix, then verify they survived bundling
  * before staging it for OpenChamber.
  *
  *   bun run fixes:apply              # newest upstream v1.x tag
  *   bun run fixes:apply v1.18.33     # a specific tag
  *   bun run fixes:apply 1.18.33      # same, without the v
  *
- * The fix commit is IMMUTABLE. Every run creates a fresh build/<version>
- * branch from the target tag and cherry-picks the fix onto it, so an upgrade
- * can never rewrite or lose the fix, and a failed upgrade leaves the repo
- * exactly as it was found.
+ * Fix commits are IMMUTABLE. Every run creates a fresh build/<version>
+ * branch from the target tag and cherry-picks every manifest fix in order, so
+ * an upgrade can never rewrite or lose one, and a failed upgrade leaves the
+ * repo exactly as it was found.
  */
 import { spawnSync } from "node:child_process"
 import { existsSync, readFileSync, copyFileSync, readdirSync } from "node:fs"
@@ -28,6 +28,8 @@ const fail = (m) => {
   console.error(`\nFAILED: ${m}`)
   process.exit(2)
 }
+const fixes = manifest.fixes ?? (manifest.fix ? [manifest.fix] : [])
+if (!fixes.length) fail("manifest contains no local fixes")
 
 function git(args, opts = {}) {
   const r = spawnSync("git", args, { cwd: ROOT, encoding: "utf8", ...opts })
@@ -60,8 +62,7 @@ function binaryHasMarkers(file, markers) {
   return markers.map((m) => ({ marker: m, found: hay.includes(m) }))
 }
 
-console.log(`\n=== fixes:apply — opencode ${manifest.fix.id} ===`)
-const fix = manifest.fix
+console.log(`\n=== fixes:apply — opencode ${fixes.map((fix) => fix.id).join(", ")} ===`)
 const startBranch = gitOrFail(["branch", "--show-current"], "reading current branch")
 
 // ---------------------------------------------------------------- 1. resolve target
@@ -95,10 +96,12 @@ if (git(["cat-file", "-e", `${tag}^{commit}`]).code !== 0) {
   gitOrFail(["fetch", "origin", "--tags", "--quiet"], "fetching upstream tags")
 }
 if (git(["cat-file", "-e", `${tag}^{commit}`]).code !== 0) fail(`tag does not exist: ${tag}`)
-if (git(["cat-file", "-e", `${fix.commit}^{commit}`]).code !== 0) {
-  fail(`fix commit is missing from this repo: ${fix.commit}`)
+for (const fix of fixes) {
+  if (git(["cat-file", "-e", `${fix.commit}^{commit}`]).code !== 0) {
+    fail(`fix commit is missing from this repo: ${fix.commit}`)
+  }
+  ok(`${fix.id} commit present: ${fix.commit.slice(0, 10)}`)
 }
-ok(`fix commit present: ${fix.commit.slice(0, 10)}`)
 
 const dirty = git(["status", "--porcelain"])
   .out.split("\n")
@@ -117,43 +120,46 @@ const buildBranch = `${manifest.buildBranchPrefix}${version}`
 gitOrFail(["checkout", "-B", buildBranch, tag], `creating ${buildBranch}`)
 ok(`on ${buildBranch}`)
 
-// ---------------------------------------------------------------- 4. re-apply the fix
+// ---------------------------------------------------------------- 4. re-apply every fix
 step++
-console.log(`\n[${step}] re-apply the fix`)
-let applied = false
-const cp = git(["cherry-pick", "--no-gpg-sign", fix.commit])
-if (cp.code === 0) {
-  ok("cherry-pick clean")
-  applied = true
-} else {
-  git(["cherry-pick", "--abort"])
-  info("cherry-pick conflicted — trying the patch with 3-way merge")
-  const patchPath = join(ROOT, fix.patch)
-  if (!existsSync(patchPath)) {
-    gitOrFail(["checkout", startBranch], "restoring branch")
-    fail(`both cherry-pick and patch failed, and ${fix.patch} does not exist. Upstream moved the same code — resolve by hand.`)
-  }
-  const ap = git(["apply", "--3way", patchPath])
-  if (ap.code === 0) {
-    gitOrFail(["add", "-A"], "staging patched files")
-    const c = git(["commit", "-q", "--no-gpg-sign", "-m", `${fix.title} (patch application)`])
-    if (c.code !== 0) {
-      gitOrFail(["checkout", startBranch], "restoring branch")
-      fail("patch applied but commit failed")
-    }
-    ok("patch applied with 3-way merge")
+console.log(`\n[${step}] re-apply every fix in manifest order`)
+for (const fix of fixes) {
+  console.log(`\n  ${fix.id}`)
+  let applied = false
+  const cp = git(["cherry-pick", "--no-gpg-sign", fix.commit])
+  if (cp.code === 0) {
+    ok("cherry-pick clean")
     applied = true
+  } else {
+    git(["cherry-pick", "--abort"])
+    info("cherry-pick conflicted — trying the patch with 3-way merge")
+    const patchPath = join(ROOT, fix.patch)
+    if (!existsSync(patchPath)) {
+      gitOrFail(["checkout", startBranch], "restoring branch")
+      fail(`both cherry-pick and patch failed, and ${fix.patch} does not exist. Upstream moved the same code — resolve by hand.`)
+    }
+    const ap = git(["apply", "--3way", patchPath])
+    if (ap.code === 0) {
+      gitOrFail(["add", "-A"], "staging patched files")
+      const c = git(["commit", "-q", "--no-gpg-sign", "-m", `${fix.title} (patch application)`])
+      if (c.code !== 0) {
+        gitOrFail(["checkout", startBranch], "restoring branch")
+        fail("patch applied but commit failed")
+      }
+      ok("patch applied with 3-way merge")
+      applied = true
+    }
   }
-}
 
-if (!applied) {
-  git(["checkout", "--", "."])
-  git(["checkout", startBranch], "restoring branch")
-  fail(
-    `CONFLICT: upstream moved the same code as the fix at ${tag}.\n` +
-      `  Nothing was changed — you are back on ${startBranch}.\n` +
-      `  Rebase ${fix.commit.slice(0, 10)} by hand, then update manifest.fix.commit.`,
-  )
+  if (!applied) {
+    git(["checkout", "--", "."])
+    git(["checkout", startBranch], "restoring branch")
+    fail(
+      `CONFLICT: upstream moved the same code as ${fix.id} at ${tag}.\n` +
+        `  Nothing was changed — you are back on ${startBranch}.\n` +
+        `  Rebase ${fix.commit.slice(0, 10)} by hand, then update manifest.fixes.`,
+    )
+  }
 }
 
 // ---------------------------------------------------------------- 5. build
@@ -177,10 +183,11 @@ ok("build succeeded")
 const artifact = join(ROOT, manifest.build.cwd, manifest.build.artifact)
 if (!existsSync(artifact)) fail(`built artifact missing: ${artifact}`)
 
-// ---------------------------------------------------------------- 6. run the fix's tests
+// ---------------------------------------------------------------- 6. run all unique fix tests
 step++
-console.log(`\n[${step}] run ${fix.tests}`)
-const t = spawnSync("bun", ["test", `test/${fix.tests.replace(/^test\//, "")}`, "--timeout", "30000"], {
+const tests = [...new Set(fixes.map((fix) => fix.tests))]
+console.log(`\n[${step}] run ${tests.join(", ")}`)
+const t = spawnSync("bun", ["test", ...tests, "--timeout", "30000"], {
   cwd: buildDir,
   encoding: "utf8",
   stdio: ["ignore", "pipe", "pipe"],
@@ -197,22 +204,24 @@ info(`${passed} pass, ${skipped} skip, ${failed} fail`)
 if (t.status !== 0 || failed > 0 || passed === 0) {
   console.error(tOut.slice(-4000))
   gitOrFail(["checkout", startBranch], "restoring branch")
-  fail("the fix's tests did not pass on this base — refusing to stage a binary")
+  fail("the local fixes' tests did not pass on this base — refusing to stage a binary")
 }
 ok("tests pass")
 
 // ---------------------------------------------------------------- 7. verify markers in the artifact
 step++
 console.log(`\n[${step}] verify fix markers inside the built binary`)
-const results = binaryHasMarkers(artifact, fix.markers)
+const results = fixes.flatMap((fix) =>
+  binaryHasMarkers(artifact, fix.markers).map((result) => ({ ...result, fix: fix.id })),
+)
 for (const r of results) {
-  if (r.found) ok(`marker present: ${r.marker}`)
-  else console.error(`        MISSING: ${r.marker}`)
+  if (r.found) ok(`${r.fix}: marker present: ${r.marker}`)
+  else console.error(`        MISSING (${r.fix}): ${r.marker}`)
 }
 const missing = results.filter((r) => !r.found)
 if (missing.length) {
   gitOrFail(["checkout", startBranch], "restoring branch")
-  fail(`binary is missing ${missing.length} marker(s) — the fix did not survive bundling. Not staging.`)
+  fail(`binary is missing ${missing.length} marker(s) — one or more fixes did not survive bundling. Not staging.`)
 }
 
 // ---------------------------------------------------------------- 8. stage
@@ -257,6 +266,6 @@ console.log(`\n[${step}] restore working branch`)
 gitOrFail(["checkout", startBranch], `returning to ${startBranch}`)
 ok(`back on ${startBranch} (build kept on ${buildBranch} for inspection)`)
 
-console.log(`\nAll steps passed. ${manifest.fix.id} is applied and verified for opencode ${version}.`)
+console.log(`\nAll steps passed. ${fixes.map((fix) => fix.id).join(", ")} applied and verified for opencode ${version}.`)
 console.log(`${manifest.restartNote}`)
-console.log(`Rollback: \`bun run fixes:apply ${fix.base}\`, or delete ${stagePath} to fall back to the bundled binary.`)
+console.log(`Rollback: \`bun run fixes:apply ${fixes[0].base}\`, or delete ${stagePath} to fall back to the bundled binary.`)
