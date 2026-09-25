@@ -97,6 +97,26 @@ describe("Generation", () => {
     }),
   )
 
+  it.effect("fails an event stream at the deadline when the poll interval is longer than the timeout", () =>
+    Effect.gen(function* () {
+      const scripted = yield* scriptedRoute(["running"], "never")
+      const generation = new Generation(scripted.route, "t", { id: "gen_1", status: "queued" })
+
+      const fiber = yield* Effect.forkChild(
+        generation
+          .events({ poll: { interval: "30 seconds", timeout: "10 seconds" } })
+          .pipe(Stream.runCollect, Effect.flip),
+      )
+      yield* TestClock.adjust("9 seconds")
+      expect(fiber.pollUnsafe()).toBeUndefined()
+      yield* TestClock.adjust("1 second")
+      const error = yield* Fiber.join(fiber)
+
+      expect(error.reason._tag).toBe("Timeout")
+      expect(yield* Ref.get(scripted.polls)).toBe(1)
+    }),
+  )
+
   it.effect("surfaces the route failure body for failed generations", () =>
     Effect.gen(function* () {
       const scripted = yield* scriptedRoute(["running", "failed"], "unused")
