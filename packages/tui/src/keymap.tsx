@@ -213,6 +213,14 @@ export function formatKeyBindings(bindings: Parameters<typeof formatCommandBindi
 
 export function registerOpencodeKeymap(keymap: OpenTuiKeymap, renderer: CliRenderer, config: ResolvedKeymapConfig) {
   const modeStack = createOpencodeModeStack(keymap)
+  // Terminal control responses (e.g. DSR `ESC[0n`) parse to a key with no name; the keymap throws on those.
+  const offUnnamedKeys = keymap.intercept(
+    "key",
+    (ctx) => {
+      if (!ctx.event.name) ctx.consume()
+    },
+    { priority: Infinity },
+  )
   const offCommaBindings = registerCommaBindings(keymap)
   const offAliasExpander = registerKeyAliases(keymap)
   const offBaseLayout = registerBaseLayoutFallback(keymap)
@@ -239,6 +247,7 @@ export function registerOpencodeKeymap(keymap: OpenTuiKeymap, renderer: CliRende
     offAliasExpander()
     offBaseLayout()
     offCommaBindings()
+    offUnnamedKeys()
     modeStack.dispose()
   }
 }

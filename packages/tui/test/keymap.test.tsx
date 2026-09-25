@@ -1,4 +1,5 @@
 /** @jsxImportSource @opentui/solid */
+import type { TextareaRenderable } from "@opentui/core"
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import { createBindingLookup } from "@opentui/keymap/extras"
 import { testRender, useRenderer } from "@opentui/solid"
@@ -135,6 +136,41 @@ test("mode-less bindings stay active when opencode mode changes", async () => {
         "model.list": 0,
       },
     })
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("terminal control responses with no key name are dropped before matching", async () => {
+  const errors: string[] = []
+  const refs: { textarea?: TextareaRenderable } = {}
+
+  function Harness() {
+    const renderer = useRenderer()
+    const keymap = createDefaultOpenTuiKeymap(renderer)
+    const offKeymap = registerOpencodeKeymap(keymap, renderer, createResolvedKeymapConfig())
+    keymap.on("error", (event) => errors.push(event.code))
+    onCleanup(offKeymap)
+
+    return (
+      <OpencodeKeymapProvider keymap={keymap}>
+        <textarea
+          ref={(ref: TextareaRenderable) => {
+            refs.textarea = ref
+            ref.focus()
+          }}
+        />
+      </OpencodeKeymapProvider>
+    )
+  }
+
+  const app = await testRender(() => <Harness />)
+  try {
+    await app.mockInput.typeText("ab")
+    app.mockInput.pressKey("\x1b[0n")
+    await app.mockInput.typeText("c")
+    expect(errors).toEqual([])
+    expect(refs.textarea?.plainText).toBe("abc")
   } finally {
     app.renderer.destroy()
   }
