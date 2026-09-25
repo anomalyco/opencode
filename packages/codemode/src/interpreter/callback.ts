@@ -67,21 +67,24 @@ export const toPrimitiveNumber = <R>(ctx: Interpreter<R>, value: Value) =>
   Effect.map(toPrimitive(ctx, value, "number"), coerceToNumber)
 
 /**
- * Runs a synchronous native body on its arguments after ToPrimitive, in order, with one hint for all positions or
- * one per position. Primitive arguments skip the Effect entirely.
+ * Runs a native body on its arguments after ToPrimitive, in order, with one hint for all positions or one per
+ * position. Primitive arguments skip the Effect entirely.
  */
 export const withPrimitives = <R>(
   ctx: Interpreter<R>,
   hints: Hint | ReadonlyArray<Hint>,
   values: Array<Value>,
-  body: (primitives: Array<Value>) => Value,
+  body: (primitives: Array<Value>) => Value | Effect.Effect<Value, unknown, R>,
 ): Value | Effect.Effect<Value, unknown, R> => {
   if (!values.some((value) => value instanceof Obj)) return body(values)
-  return Effect.map(
+  return Effect.flatMap(
     Effect.forEach(values, (value, index) =>
       toPrimitive(ctx, value, typeof hints === "string" ? hints : hints[index]!),
     ),
-    body,
+    (primitives) => {
+      const result = body(primitives)
+      return Effect.isEffect(result) ? result : Effect.succeed(result)
+    },
   )
 }
 

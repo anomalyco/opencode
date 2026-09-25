@@ -1,7 +1,8 @@
-import { constructor, constants, methods } from "../interpreter/native.js"
+import { constructor, constants, type Method, methods } from "../interpreter/native.js"
 import { coerceToNumber, type Value } from "../interpreter/objects.js"
 import { rangeError, typeError } from "../interpreter/model.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
+import { withPrimitives } from "../interpreter/callback.js"
 import { coerce, coercion } from "./value.js"
 
 export const numberGlobal = <R>(ctx: Interpreter<R>) => {
@@ -34,32 +35,28 @@ export const numberGlobal = <R>(ctx: Interpreter<R>) => {
     if (typeof thisValue === "number") return thisValue
     throw typeError(`Number.prototype.${name} requires that 'this' be a Number.`)
   }
-  const optNum = (arg: Value): number | undefined => (arg === undefined ? undefined : coerceToNumber(arg))
+  // The receiver is checked first, then the one argument converts through ToPrimitive with the number hint.
+  const formatting = (name: string, op: (value: number, digits: number | undefined) => string): Method => [
+    name,
+    1,
+    (thisValue, args) => {
+      const value = self(thisValue, name)
+      return withPrimitives(ctx, "number", [args[0]], ([digits]) =>
+        op(value, digits === undefined ? undefined : coerceToNumber(digits)),
+      )
+    },
+  ]
   methods(builtins, builtins.Number, [
-    ["toFixed", 1, (thisValue, args) => self(thisValue, "toFixed").toFixed(optNum(args[0]))],
+    formatting("toFixed", (value, digits) => value.toFixed(digits)),
     ["toLocaleString", 0, (thisValue) => self(thisValue, "toLocaleString").toLocaleString("en-US")],
-    ["toExponential", 1, (thisValue, args) => self(thisValue, "toExponential").toExponential(optNum(args[0]))],
-    [
-      "toPrecision",
-      1,
-      (thisValue, args) => {
-        const value = self(thisValue, "toPrecision")
-        const digits = optNum(args[0])
-        return digits === undefined ? value.toString() : value.toPrecision(digits)
-      },
-    ],
-    [
-      "toString",
-      1,
-      (thisValue, args) => {
-        const value = self(thisValue, "toString")
-        const radix = optNum(args[0])
-        if (radix !== undefined && (radix < 2 || radix > 36)) {
-          throw rangeError("Number.toString radix must be between 2 and 36.")
-        }
-        return value.toString(radix)
-      },
-    ],
+    formatting("toExponential", (value, digits) => value.toExponential(digits)),
+    formatting("toPrecision", (value, digits) => (digits === undefined ? value.toString() : value.toPrecision(digits))),
+    formatting("toString", (value, radix) => {
+      if (radix !== undefined && (radix < 2 || radix > 36)) {
+        throw rangeError("Number.toString radix must be between 2 and 36.")
+      }
+      return value.toString(radix)
+    }),
     ["valueOf", 0, (thisValue) => self(thisValue, "valueOf")],
   ])
   return number

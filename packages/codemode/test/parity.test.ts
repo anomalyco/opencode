@@ -1842,3 +1842,97 @@ describe("computed property keys convert through the object's own toString", () 
     )
   })
 })
+
+describe("String and Number method arguments convert through ToPrimitive", () => {
+  test("string positions use the string hint and numeric positions the number hint", async () => {
+    expect(
+      await value(`
+        const s = { toString() { return "b" } }
+        const n = { valueOf() { return 1 } }
+        return [
+          "abc".indexOf(s), "abc".lastIndexOf(s), "abc".includes(s), "abc".startsWith(s, n), "abc".endsWith(s, 2),
+          "abc".charAt(n), "abc".at({ valueOf() { return -1 } }), "abc".slice(n), "abc".substring(n, 2),
+          "abc".charCodeAt(n), "a".padStart({ valueOf() { return 3 } }, s), "x".padEnd(3, s), "ab".repeat({ valueOf() { return 2 } }),
+          "a".concat(s, { valueOf() { return 1 }, toString() { return "T" } }), "b".localeCompare(s),
+          (1.005).toFixed({ valueOf() { return 2 } }), (255).toString({ valueOf() { return 16 } }),
+          (1234.5678).toPrecision({ valueOf() { return 6 } }), (12345).toExponential({ valueOf() { return 2 } }),
+        ]
+      `),
+    ).toEqual([
+      1,
+      1,
+      true,
+      true,
+      true,
+      "b",
+      "c",
+      "bc",
+      "b",
+      98,
+      "bba",
+      "xbb",
+      "abab",
+      "abT",
+      0,
+      "1.00",
+      "ff",
+      "1234.57",
+      "1.23e+4",
+    ])
+  })
+
+  test("split, replace, match, and search convert a plain pattern but keep a RegExp as is", async () => {
+    expect(
+      await value(`
+        const s = { toString() { return "b" } }
+        return [
+          "abc".split(s), "abc".split(/b/, { valueOf() { return 1 } }), "abc".split(undefined, { valueOf() { return undefined } }),
+          "abc".replace(s, "X"), "abc".replace(/b/, { toString() { return "R" } }), "abc".replaceAll(s, s),
+          "abc".replace(s, (m) => m.toUpperCase()), "abc".match(s)[0], "abcb".matchAll(s).length, "abc".search(s),
+        ]
+      `),
+    ).toEqual([["a", "c"], ["a"], [], "aXc", "aRc", "abc", "aBc", "b", 2, 1])
+    expect((await error(`"abc".includes(/b/)`)).message).toContain("cannot take a regular expression")
+  })
+
+  test("the receiver converts first, then each consumed argument, in spec order; extra arguments are untouched", async () => {
+    expect(
+      await value(`
+        const log = []
+        const observer = (name, string, number) => ({
+          toString() { log.push("toString:" + name); return string },
+          valueOf() { log.push("valueOf:" + name); return number },
+        })
+        const padded = String.prototype.padStart.call(observer("receiver", {}, "abc"), observer("maxLength", 11, {}), observer("fillString", {}, "def"))
+        const extra = "abc".indexOf("b", 1, { valueOf() { throw new Error("extra argument converted") } })
+        return [padded, log, extra, String.prototype.trim.call({ toString() { return " abc " } })]
+      `),
+    ).toEqual([
+      "defdefdeabc",
+      [
+        "toString:receiver",
+        "valueOf:receiver",
+        "valueOf:maxLength",
+        "toString:maxLength",
+        "toString:fillString",
+        "valueOf:fillString",
+      ],
+      1,
+      "abc",
+    ])
+  })
+
+  test("conversion failures surface and opaque arguments still reject", async () => {
+    expect((await error(`"abc".indexOf({ toString() { throw new RangeError("intostr") } })`)).message).toContain(
+      "intostr",
+    )
+    expect((await error(`(1).toString({ valueOf() { throw new SyntaxError("poison") } })`)).message).toContain("poison")
+    expect((await error(`(1).toFixed({ toString() { return {} }, valueOf() { return {} } })`)).message).toContain(
+      "Cannot convert object to primitive value",
+    )
+    expect((await error(`"abc".indexOf(tools.nowhere)`)).message).toContain("expects argument 1 to be a data value")
+    expect((await error(`"abc".indexOf(Promise.resolve("b"))`)).message).toContain(
+      "expects argument 1 to be a data value",
+    )
+  })
+})

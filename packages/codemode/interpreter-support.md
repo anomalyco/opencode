@@ -242,9 +242,14 @@ Math.floor)` is `"3"`). A detached method loses its receiver, as in JS: `values.
       throws: `{ valueOf() { return 7 } } * 2` is `14`, `` `${{ toString() { return "x" } }}` `` is `"x"`, and
       `[1, 2]` with `arr.toString = () => "x"` makes `arr + ""` `"x"`. Dates keep their `Symbol.toPrimitive`
       behavior (`date + 1` concatenates, `date - date` subtracts).
-- [ ] ToPrimitive elsewhere: `Error.prototype.toString` on an object `message` and numeric built-in arguments outside
-      `Math` and `Date` (`at`, `indexOf` start, `toFixed` digits) still use the built-in form (`NaN`,
-      `"[object Object]"`) and ignore own methods.
+- [x] String and Number method arguments convert through ToPrimitive in spec order, receiver first: search strings,
+      separators, fills, and replacements with the string hint, indexes, counts, digits, and radixes with the number
+      hint (`"abc".indexOf({ toString() { return "b" } })` is `1`, `(255).toString({ valueOf() { return 16 } })` is
+      `"ff"`, `String.prototype.trim.call({ toString() { return " a " } })` is `"a"`). Only consumed positions
+      convert; a RegExp pattern is used as is, and `includes`/`startsWith`/`endsWith` reject one before converting.
+- [ ] ToPrimitive elsewhere: `Error.prototype.toString` on an object `message` and numeric arguments of the Array and
+      Uint8Array methods (`at`, `indexOf` start, `slice`) still use the built-in form (`NaN`, `"[object Object]"`) and
+      ignore own methods.
 - [x] Property keys follow ToPropertyKey: `x[null]` and `x[true]` become string keys, and a data object key
       converts through its own `toString`/`valueOf` (string hint) exactly once per access, in reads, writes,
       compound assignment, `++`, `delete`, `in`, object literals, and destructuring:
@@ -385,9 +390,9 @@ reject }` object.
       `flat(1.9)`, `with(1.5, v)`, `Math.max("3", "2")`, `parseInt("11", "2")`, `(1.5).toFixed("2")`,
       `String.fromCharCode("65")`, and the Uint8Array equivalents. `join(sep)` and `JSON.parse(text)` apply ToString
       (`join(null)` is `"1null2"`, `JSON.parse(123)` is `123`). `Array.from({ length: "2" })` applies ToLength; a
-      promise source still throws with an `await` hint rather than JS's silent `[]`. `join`, `Math.*`, and
-      `parseInt` consult a program object's own `valueOf`/`toString`; the array and number methods do not yet (see
-      ToPrimitive above).
+      promise source still throws with an `await` hint rather than JS's silent `[]`. `join`, `Math.*`, `parseInt`,
+      and the String and Number methods consult a program object's own `valueOf`/`toString`; the array methods do not
+      yet (see ToPrimitive above).
 
 ## Strings
 
@@ -404,14 +409,15 @@ reject }` object.
 - [x] Static `String.fromCharCode` and `String.fromCodePoint`.
 - [x] Native argument coercion for supported String methods; for example, `includes(1)` and `slice("1")` coerce like
       native JS, `split(undefined)` returns the whole string, and `includes`/`startsWith`/`endsWith` reject regular
-      expressions with a native-style `TypeError`. Opaque runtime references still reject as data errors, and
-      `repeat` still requires a finite non-negative count.
+      expressions with a native-style `TypeError`. Data objects convert through their own `toString`/`valueOf` (see
+      ToPrimitive above). Opaque runtime references still reject as data errors, and `repeat` still requires a finite
+      non-negative count.
 - [x] Native no-argument parity for `match()`, `matchAll()`, and `search()`; all behave as an empty pattern.
 - [x] `String.raw`, on a template object or any `{ raw }` object; raw strings and substitutions coerce through their own
       `toString`.
 - [x] `match`, `matchAll`, `search`, and `split` read any non-RegExp argument as a pattern string, as `new RegExp(arg)`
-      would: `"a1b".match(1)` matches `/1/`, `search(null)` looks for `"null"`, and `undefined` is the empty pattern.
-      Objects use their built-in string form until ToPrimitive lands.
+      would: `"a1b".match(1)` matches `/1/`, `search(null)` looks for `"null"`, `undefined` is the empty pattern, and
+      an object supplies its own `toString`.
 
 ## Numbers and Math
 
