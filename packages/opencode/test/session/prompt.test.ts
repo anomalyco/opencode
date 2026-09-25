@@ -368,13 +368,13 @@ const succeedVoid = (deferred: Deferred.Deferred<void>) => {
   Effect.runSync(Deferred.succeed(deferred, void 0).pipe(Effect.ignore))
 }
 
-const user = Effect.fn("test.user")(function* (sessionID: SessionID, text: string) {
+const user = Effect.fn("test.user")(function* (sessionID: SessionID, text: string, agent = "build") {
   const session = yield* Session.Service
   const msg = yield* session.updateMessage({
     id: MessageID.ascending(),
     role: "user",
     sessionID,
-    agent: "build",
+    agent,
     model: ref,
     time: { created: Date.now() },
   })
@@ -443,6 +443,46 @@ const boot = Effect.fn("test.boot")(function* (input?: { title?: string }) {
 })
 
 // Loop semantics
+
+it.instance("keeps exactly one current legacy mode reminder across plan and build transitions", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    const turns = ["plan", "plan", "build", "build", "plan"]
+
+    for (const [index, agent] of turns.entries()) {
+      yield* user(chat.id, `turn ${index}`, agent)
+      yield* llm.text(`answer ${index}`)
+      yield* prompt.loop({ sessionID: chat.id })
+    }
+
+    const inputs = yield* llm.inputs
+    const messages = inputs.map(
+      (input) =>
+        (input as { messages: Array<{ role: string; content: string | Array<{ type: string; text?: string }> }> })
+          .messages,
+    )
+    const text = (content: string | Array<{ type: string; text?: string }>) =>
+      typeof content === "string"
+        ? content
+        : content.flatMap((part) => (part.type === "text" && part.text ? [part.text] : [])).join("\n")
+    const count = (items: (typeof messages)[number], value: string) =>
+      items.reduce((total, message) => total + text(message.content).split(value).length - 1, 0)
+    const plan = "# Plan Mode - System Reminder"
+    const build = "Your operational mode has changed from plan to build."
+
+    expect(messages).toHaveLength(5)
+    expect(messages.map((items) => [count(items, plan), count(items, build)])).toEqual([
+      [1, 0],
+      [1, 0],
+      [0, 1],
+      [0, 1],
+      [1, 0],
+    ])
+  }),
+)
 
 noLLMServer.instance(
   "loop exits immediately when last assistant has stop finish",
