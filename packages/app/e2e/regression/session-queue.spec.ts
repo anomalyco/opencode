@@ -282,7 +282,7 @@ test("Undo appends to an existing draft and restores inline attachments", async 
   await view.input.fill("my draft")
   await view.rows.getByRole("button", { name: "Undo" }).click()
   await expect(view.rows).toHaveCount(0)
-  await expect(view.input).toHaveText("my draft\nqueued with image")
+  await expect(view.input).toHaveText("my draft\n\nqueued with image")
   await expect(view.input).toBeFocused()
   await expect(view.composer.getByRole("img", { name: "shot.png" })).toBeVisible()
   expect(mock.changes).toEqual([{ inboxID: "inb_seed_1", action: "cancel" }])

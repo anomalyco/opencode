@@ -122,11 +122,11 @@ describe("promptAppend", () => {
     )
 
     expect(output).toEqual({
-      text: "日本\n@a.ts /x",
+      text: "日本\n\n@a.ts /x",
       parts: [
         { type: "agent", name: "plan", source: { start: 0, end: 4, value: "日本" } },
-        { type: "file", url: "file:///a.ts", source: { type: "file", text: { start: 5, end: 10, value: "@a.ts" } } },
-        { type: "skill", id: "x", source: { start: 11, end: 13, value: "/x" } },
+        { type: "file", url: "file:///a.ts", source: { type: "file", text: { start: 6, end: 11, value: "@a.ts" } } },
+        { type: "skill", id: "x", source: { start: 12, end: 14, value: "/x" } },
       ],
     })
     expect(promptAppend(prompt(""), prompt("next"))).toEqual(prompt("next"))

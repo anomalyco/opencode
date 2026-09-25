@@ -15,12 +15,12 @@ export function promptLength(prompt: Prompt) {
   return prompt.reduce((length, part) => length + ("content" in part ? part.content.length : 0), 0)
 }
 
-export function appendPrompt(prompt: Prompt, following: Prompt, separator = "\n\n"): Prompt {
+export function appendPrompt(prompt: Prompt, following: Prompt): Prompt {
   const start = promptLength(prompt)
-  const offset = start + separator.length
+  const offset = start + 2
   return [
     ...clonePrompt(prompt),
-    { type: "text", content: separator, start, end: offset },
+    { type: "text", content: "\n\n", start, end: offset },
     ...clonePrompt(following).map((part) =>
       isAttachment(part) ? part : { ...part, start: part.start + offset, end: part.end + offset },
     ),

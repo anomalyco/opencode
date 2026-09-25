@@ -1341,7 +1341,7 @@ test("undo appends a pending prompt to the draft", async () => {
     app.mockInput.pressEnter()
     await Bun.sleep(0)
     await app.renderOnce()
-    expect(submitted).toMatchObject([{ text: "existing draft\nlook at main.ts" }])
+    expect(submitted).toMatchObject([{ text: "existing draft\n\nlook at main.ts" }])
     expect(submitted[0].messageID).toBeUndefined()
   } finally {
     app.cleanup()

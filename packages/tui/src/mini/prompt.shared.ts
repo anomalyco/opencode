@@ -38,7 +38,7 @@ export function promptCopy(prompt: RunPrompt): RunPrompt {
 
 // Part ranges are textarea offsets, so shift by display width rather than string length.
 export function promptAppend(prompt: RunPrompt, following: RunPrompt): RunPrompt {
-  const text = prompt.text ? `${prompt.text}\n` : ""
+  const text = prompt.text ? `${prompt.text}\n\n` : ""
   const offset = promptOffsetWidth(text)
   const shift = <T extends { start: number; end: number }>(range: T) => ({
     ...range,

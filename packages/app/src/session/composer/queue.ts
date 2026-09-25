@@ -60,7 +60,7 @@ export function createSessionQueue(input: {
         await server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: change.item.id })
         const draft = input.draft.current()
         const prompt = promptLength(draft)
-          ? appendPrompt(draft, change.prompt, "\n")
+          ? appendPrompt(draft, change.prompt)
           : [...change.prompt, ...draft.filter(isAttachment)]
         input.draft.set(prompt, promptLength(prompt))
         input.restoreFocus(promptLength(prompt))

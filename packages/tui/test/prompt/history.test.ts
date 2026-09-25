@@ -76,13 +76,13 @@ describe("prompt history", () => {
     )
 
     expect(output).toEqual({
-      text: "日本\n@a.ts [Pasted]",
-      files: [{ uri: "file:///a.ts", mention: { start: 5, end: 10, text: "@a.ts" } }],
+      text: "日本\n\n@a.ts [Pasted]",
+      files: [{ uri: "file:///a.ts", mention: { start: 6, end: 11, text: "@a.ts" } }],
       agents: [{ name: "build", mention: undefined }],
       skills: [],
       pasted: [
         { text: "long", source: { start: 0, end: 4, text: "日本" } },
-        { text: "more", source: { start: 11, end: 19, text: "[Pasted]" } },
+        { text: "more", source: { start: 12, end: 20, text: "[Pasted]" } },
       ],
     })
     expect(appendPrompt(entry(""), entry("next")).text).toBe("next")

@@ -31,7 +31,7 @@ export const emptyPrompt = (): PromptInfo => ({ text: "", files: [], agents: [],
 
 // Part ranges are textarea offsets, so shift by display width rather than string length.
 export function appendPrompt(prompt: PromptInfo, following: PromptInfo): PromptInfo {
-  const text = prompt.text ? `${prompt.text}\n` : ""
+  const text = prompt.text ? `${prompt.text}\n\n` : ""
   const offset = promptOffsetWidth(text)
   const shift = <T extends { start: number; end: number }>(range: T, by: number) => ({
     ...range,
