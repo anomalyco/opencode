@@ -1025,7 +1025,6 @@ export function DiffViewerContent(props: {
                                       }}
                                       diff={patch()}
                                       scroll={() => scroll}
-                                      viewportWidth={patchPaneWidth()}
                                       hunkFg={theme.diff.text.hunkHeader}
                                       view={entry.file.status === "modified" ? view() : "unified"}
                                       filetype={filetype(entry.file.file)}

@@ -10,7 +10,11 @@ export interface AddedPatchChunk {
   readonly rows: number
 }
 
-/** Only a complete, single-hunk new-file patch can be split without changing diff semantics. */
+/**
+ * Splits a new-file patch into chunks of `size` lines, each a valid patch with its own `@@ -0,0 +start,count @@`
+ * header. Returns undefined for anything else: patches with context or removed lines would need old and new line
+ * numbers recomputed at every cut, so they are not split.
+ */
 export function splitAddedPatch(patch: string, size: number): AddedPatchChunk[] | undefined {
   const header = /^@@ -0,0 \+1,(\d+) @@[^\n]*\n/m.exec(patch)
   if (!header) return

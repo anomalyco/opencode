@@ -13,7 +13,7 @@ import {
 } from "@opentui/core"
 import type { JSX } from "@opentui/solid"
 import { useRenderer } from "@opentui/solid"
-import { createEffect, createMemo, createSignal, For, onCleanup, Show, splitProps } from "solid-js"
+import { createMemo, createSignal, For, onCleanup, Show, splitProps } from "solid-js"
 import { splitAddedPatch, splitPatchHunks, type AddedPatchChunk } from "../util/diff"
 import { stringWidth } from "../util/string-width"
 
@@ -31,11 +31,10 @@ type Props = Omit<JSX.IntrinsicElements["diff"], "diff" | "lineNumberBg" | "ref"
   lineNumberBg: ColorInput
   ref?: (value: PatchDiffRef) => void
   scroll?: () => ScrollBoxRenderable | undefined
-  viewportWidth?: number
 }
 
 export function PatchDiff(props: Props) {
-  const [local, diffProps] = splitProps(props, ["diff", "hunkFg", "lineNumberBg", "ref", "scroll", "viewportWidth"])
+  const [local, diffProps] = splitProps(props, ["diff", "hunkFg", "lineNumberBg", "ref", "scroll"])
   const hunks = createMemo(() => splitPatchHunks(local.diff))
   const chunks = createMemo(() => {
     if (!local.scroll) return
@@ -120,8 +119,6 @@ export function PatchDiff(props: Props) {
       {(items) => (
         <VirtualAddedPatch
           chunks={items()}
-          width={local.viewportWidth ?? 80}
-          digits={minDigits()}
           scroll={local.scroll!}
           diffProps={diffProps}
           lineNumberBg={local.lineNumberBg}
@@ -133,10 +130,10 @@ export function PatchDiff(props: Props) {
   )
 }
 
+// Chunks render without wrapping so each one is exactly `rows` tall. Offscreen chunks become fixed-height
+// placeholders, and the visible chunk follows directly from the scroll offset.
 function VirtualAddedPatch(props: {
   chunks: readonly AddedPatchChunk[]
-  width: number
-  digits: number
   scroll: () => ScrollBoxRenderable | undefined
   diffProps: Omit<JSX.IntrinsicElements["diff"], "diff" | "lineNumberBg" | "ref">
   lineNumberBg: ColorInput
@@ -145,21 +142,6 @@ function VirtualAddedPatch(props: {
 }) {
   const renderer = useRenderer()
   const [visible, setVisible] = createSignal(0)
-  const [measured, setMeasured] = createSignal<ReadonlyMap<number, number>>(new Map())
-  createEffect(() => {
-    props.width
-    props.chunks
-    setMeasured(new Map())
-  })
-  // Offscreen chunks need heights for scroll jumps before OpenTUI has measured them.
-  // Replace those estimates with actual rendered heights as chunks enter the viewport.
-  const estimates = createMemo(() => {
-    const codeWidth = Math.max(1, props.width - props.digits - 5)
-    return props.chunks.map((chunk) =>
-      chunk.lines.reduce((height, line) => height + Math.max(1, Math.ceil(stringWidth(line.slice(1)) / codeWidth)), 0),
-    )
-  })
-  const heights = createMemo(() => estimates().map((estimate, index) => measured().get(index) ?? estimate))
   // A chunk is not valid source on its own (a slice of a JSON object parses as an error), so highlight
   // the whole file once and give each chunk its slice of the result.
   const contents = createMemo(() => props.chunks.map((chunk) => chunk.lines.map((line) => line.slice(1)).join("\n")))
@@ -169,11 +151,13 @@ function VirtualAddedPatch(props: {
   const fileHighlights = createMemo(() => {
     const filetype = props.diffProps.filetype
     if (!filetype) return
-    return getTreeSitterClient()
-      .highlightOnce(contents().join("\n"), filetype)
-      .then((result) => result.highlights)
-      // Rejects when the renderer tears down the client mid-parse; chunks then keep their own highlights.
-      .catch(() => undefined)
+    return (
+      getTreeSitterClient()
+        .highlightOnce(contents().join("\n"), filetype)
+        .then((result) => result.highlights)
+        // Rejects when the renderer tears down the client mid-parse; chunks then keep their own highlights.
+        .catch(() => undefined)
+    )
   })
   const chunkHighlights =
     (index: number): OnHighlightCallback =>
@@ -188,65 +172,40 @@ function VirtualAddedPatch(props: {
           : [],
       )
     }
-  let root: BoxRenderable | undefined
-  // Viewport top relative to this patch, in rows.
-  const viewportTop = (scroll: ScrollBoxRenderable, root: BoxRenderable) =>
-    scroll.scrollTop - (root.y - scroll.content.y)
 
   return (
     <box
       width="100%"
-      ref={(node: BoxRenderable) => {
-        root = node
-        props.registerRoot(node)
-        node.onLifecyclePass = () => {
+      ref={(root: BoxRenderable) => {
+        props.registerRoot(root)
+        root.onLifecyclePass = () => {
           const scroll = props.scroll()
           if (!scroll) return
           // ScrollBox's scroll position is not a Solid signal; observe it during the render pass.
-          const top = viewportTop(scroll, node)
-          const sizes = heights()
-          if (top + scroll.viewport.height < 0 || top > sizes.reduce((sum, height) => sum + height, 0)) {
-            setVisible(-1)
-            return
-          }
-          let position = 0
-          const index = sizes.findIndex((height) => (position += height) > top)
-          setVisible(index < 0 ? sizes.length - 1 : index)
+          const top = scroll.scrollTop - (root.y - scroll.content.y)
+          if (top + scroll.viewport.height < 0 || top > lineCount(props.chunks)) return setVisible(-1)
+          setVisible(Math.min(props.chunks.length - 1, Math.max(0, Math.floor(top / VIRTUAL_CHUNK_LINES))))
         }
-        renderer.registerLifecyclePass(node)
-        onCleanup(() => renderer.unregisterLifecyclePass(node))
+        renderer.registerLifecyclePass(root)
+        onCleanup(() => renderer.unregisterLifecyclePass(root))
       }}
     >
       <For each={props.chunks}>
         {(chunk, index) => (
-          <Show
-            when={visible() >= 0 && Math.abs(index() - visible()) <= 2}
-            fallback={<box height={heights()[index()]} />}
-          >
+          <Show when={visible() >= 0 && Math.abs(index() - visible()) <= 1} fallback={<box height={chunk.rows} />}>
             <diff
               {...props.diffProps}
               ref={(node: DiffRenderable) => {
                 props.register(index(), node)
-                const highlight = chunkHighlights(index())
-                node.onSizeChange = () => {
-                  // DiffRenderable creates its CodeRenderable after ref runs; setting onHighlight re-highlights.
+                // DiffRenderable creates its CodeRenderable after ref runs; setting onHighlight re-highlights.
+                queueMicrotask(() => {
                   const code = findCode(node)
-                  if (code) code.onHighlight = highlight
-                  if (node.height <= 0 || measured().get(index()) === node.height) return
-                  const scroll = props.scroll()
-                  const sizes = heights()
-                  const delta = node.height - sizes[index()]
-                  const bottom = sizes.slice(0, index() + 1).reduce((sum, height) => sum + height, 0)
-                  const above = scroll && root && bottom <= viewportTop(scroll, root)
-                  const atEnd = scroll && scroll.scrollTop >= scroll.scrollHeight - scroll.viewport.height - 1
-                  setMeasured((known) => new Map(known).set(index(), node.height))
-                  // Keep G pinned to the end when a newly mounted chunk changes total height.
-                  if (atEnd) requestAnimationFrame(() => scroll.scrollTo(Infinity))
-                  // A chunk fully above the viewport grew or shrank; shift by the same amount so visible rows stay put.
-                  if (!atEnd && above && delta) scroll.scrollTo(scroll.scrollTop + delta)
-                }
+                  if (code) code.onHighlight = chunkHighlights(index())
+                })
               }}
               diff={chunk.patch}
+              wrapMode="none"
+              height={chunk.rows}
               lineNumberBg={props.lineNumberBg}
             />
           </Show>
