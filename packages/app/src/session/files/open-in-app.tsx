@@ -167,7 +167,6 @@ export function useOpenInApp(input: { path: () => string }) {
   })
 
   const [prefs, setPrefs] = persisted(Persist.global("open.app"), OpenAppPreferences, { app: "finder" })
-  const [menu, setMenu] = createStore({ open: false })
   const [openRequest, setOpenRequest] = createStore({
     app: undefined as OpenApp | undefined,
   })
@@ -225,13 +224,13 @@ export function useOpenInApp(input: { path: () => string }) {
     opening,
     current,
     options,
-    menu,
-    setMenu,
     openPath,
     selectApp,
     copyPath,
   }
 }
+
+export type OpenInAppState = ReturnType<typeof useOpenInApp>
 
 function checkAppExists(platform: ReturnType<typeof usePlatform>, app: string) {
   const cached = appExistence.get(app)

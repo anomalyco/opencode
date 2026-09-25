@@ -1,5 +1,4 @@
 import { SessionReviewEmptyChangesV2 } from "@opencode/session-ui/v2/session-review-empty-changes-v2"
-import { SessionReviewV2SidebarToggle } from "@opencode/session-ui/v2/session-review-v2"
 import { Select } from "@opencode/ui/select"
 import { Tabs } from "@opencode/ui/tabs"
 import { Icon } from "@opencode/ui/icon"
@@ -9,6 +8,8 @@ import { For, Match, Show, Suspense, Switch, lazy, createEffect, onCleanup, type
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
+import { useWorkspaceLocation } from "@/workspaces/location"
+import { useOpenInApp, type OpenInAppState } from "@/session/files/open-in-app"
 import { SessionSidePanel } from "../files/session-side-panel"
 import { ReviewPanel } from "./panel"
 import { SessionReviewTab } from "./review-tab"
@@ -132,6 +133,9 @@ export function SessionDesktopReview(props: {
   btw: SessionBtwModel
   present?: boolean
 }) {
+  const location = useWorkspaceLocation()
+  const openInApp = useOpenInApp({ path: () => location().directory })
+
   return (
     <Suspense>
       <SessionSidePanel
@@ -141,14 +145,8 @@ export function SessionDesktopReview(props: {
         hasReview={props.review.hasChanges()}
         reviewHasFocusableContent={props.review.hasChanges() || props.review.panelState.sidebarOpened()}
         reviewCount={props.review.count()}
-        reviewPanel={() => <ReviewPanelContent review={props.review} />}
-        reviewSidebarToggle={(disabled) => (
-          <SessionReviewV2SidebarToggle
-            opened={props.review.panelState.sidebarOpened()}
-            disabled={disabled}
-            onToggle={props.review.panelState.toggleSidebar}
-          />
-        )}
+        reviewPanel={() => <ReviewPanelContent review={props.review} openInApp={openInApp} />}
+        openInApp={openInApp}
         fileBrowserState={props.review.panelState}
         activeDiff={props.review.activeFile()}
         focusReviewDiff={props.review.focusFile}
@@ -200,12 +198,14 @@ function ReviewContent(props: { review: SessionReviewModel }) {
   )
 }
 
-function ReviewPanelContent(props: { review: SessionReviewModel }) {
+function ReviewPanelContent(props: { review: SessionReviewModel; openInApp: OpenInAppState }) {
   return (
     <div class="flex flex-col h-full overflow-hidden bg-v2-background-bg-base contain-strict">
       <Show when={props.review.panelRendered()}>
         <ReviewPanel
+          openInApp={props.openInApp}
           title={<ReviewTitle review={props.review} />}
+          collapsedTitle={<ReviewTitle review={props.review} />}
           empty={<ReviewPanelEmpty review={props.review} />}
           diffs={props.review.diffs()}
           diffsReady={props.review.ready()}
@@ -238,14 +238,26 @@ function ReviewTitle(props: { review: SessionReviewModel }) {
   }
   return (
     <Show when={props.review.canReview()}>
-      <Select
-        options={props.review.options()}
-        current={props.review.mode()}
-        label={label}
-        placement="bottom-start"
-        gutter={6}
-        onSelect={(option) => option && props.review.setMode(option)}
-      />
+      <Show
+        when={props.review.options().length === 1}
+        fallback={
+          <Select
+            options={props.review.options()}
+            current={props.review.mode()}
+            label={label}
+            placement="bottom-start"
+            gutter={6}
+            onSelect={(option) => option && props.review.setMode(option)}
+          />
+        }
+      >
+        <span
+          data-slot="session-review-source-label"
+          class="inline-flex h-6 items-center ps-2 pe-1 text-[13px] leading-[var(--line-height-compact)] font-[530] tracking-[-0.04px] text-v2-text-text-base"
+        >
+          {label(props.review.options()[0]!)}
+        </span>
+      </Show>
     </Show>
   )
 }
