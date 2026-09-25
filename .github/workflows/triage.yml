@@ -6,6 +6,7 @@ on:
 
 jobs:
   triage:
+    if: github.repository == 'anomalyco/opencode'
     runs-on: blacksmith-4vcpu-ubuntu-2404
     permissions:
       contents: read
