@@ -137,6 +137,11 @@ export interface Queued<Request, Response, Token> {
   readonly cancel?: {
     readonly method: AuthInput["method"]
     readonly path: (token: Token) => string
+    /**
+     * Fetch a fresh status first and skip the call for terminal generations, for providers whose cancel endpoint
+     * destroys finished work (Runway's `DELETE /v1/tasks/{id}` deletes completed tasks and their outputs).
+     */
+    readonly activeOnly?: boolean
   }
 }
 

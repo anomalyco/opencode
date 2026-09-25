@@ -171,7 +171,7 @@ export const protocol = MediaProtocol.queued<Request, VideoResponse, Token>(rout
   start: { body: { from: fromRequest }, decode: decodeStart },
   status: { path: taskPath, decode: decodeStatus },
   result: { path: taskPath, decode: decodeResult },
-  cancel: { method: "DELETE", path: taskPath },
+  cancel: { method: "DELETE", path: taskPath, activeOnly: true },
 })
 
 const startPath = (request: Request) => {

@@ -576,7 +576,7 @@ describe("Video / Runway", () => {
   const model = runway.video("gen4.5")
   const taskUrl = "https://runway.test/v1/tasks/task_1"
 
-  it.effect("submits image_to_video with the API version header, polls the task, and reports credits", () =>
+  it.effect("submits image_to_video, polls the task, reports credits, and keeps the finished task on cancel", () =>
     Effect.gen(function* () {
       const calls: Array<Call> = []
       const program = Effect.gen(function* () {
@@ -624,7 +624,7 @@ describe("Video / Runway", () => {
                 return json(input, { id: "task_1", estimatedCost: { credits: 25 } })
               }
               expect(call.url).toBe(taskUrl)
-              if (call.method === "DELETE") return input.respond(null, { status: 204 })
+              if (call.method === "DELETE") return yield* Effect.die("cancel deleted a finished Runway task")
               if (nth === 1) return json(input, { id: "task_1", status: "PENDING", estimatedCost: { credits: 25 } })
               if (nth === 2) return json(input, { id: "task_1", status: "THROTTLED", estimatedCost: { credits: 25 } })
               if (nth === 3) return json(input, { id: "task_1", status: "RUNNING", progress: 0.5 })
@@ -652,6 +652,32 @@ describe("Video / Runway", () => {
         `GET ${taskUrl}`,
         `GET ${taskUrl}`,
         `GET ${taskUrl}`,
+        `GET ${taskUrl}`,
+        `GET ${taskUrl}`,
+      ])
+    }),
+  )
+
+  it.effect("cancels a task that is still running", () =>
+    Effect.gen(function* () {
+      const calls: Array<Call> = []
+      yield* Effect.gen(function* () {
+        const generation = yield* Video.start({ model, prompt: "x" })
+        yield* generation.cancel()
+      }).pipe(
+        Effect.provide(
+          layer((input) =>
+            Effect.gen(function* () {
+              const { call } = yield* observe(calls, input)
+              if (call.method === "POST") return json(input, { id: "task_1" })
+              if (call.method === "DELETE") return input.respond(null, { status: 204 })
+              return json(input, { id: "task_1", status: "RUNNING", progress: 0.2 })
+            }),
+          ),
+        ),
+      )
+      expect(calls.map((call) => `${call.method} ${call.url}`)).toEqual([
+        "POST https://runway.test/v1/text_to_video",
         `GET ${taskUrl}`,
         `DELETE ${taskUrl}`,
       ])

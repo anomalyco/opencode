@@ -53,6 +53,8 @@ export type Event = Observation | { readonly type: "generation-finished"; readon
 
 const TERMINAL: ReadonlySet<Status> = new Set(["completed", "failed", "cancelled", "expired"])
 
+export const isTerminal = (status: Status) => TERMINAL.has(status)
+
 export class Generation<Response> {
   readonly id: string
   readonly status: Status
@@ -81,7 +83,7 @@ export class Generation<Response> {
   }
 
   get terminal() {
-    return TERMINAL.has(this.status)
+    return isTerminal(this.status)
   }
 
   refresh(): Effect.Effect<Generation<Response>, AIError> {
