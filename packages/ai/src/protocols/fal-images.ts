@@ -49,7 +49,7 @@ const QueueResult = Schema.StructWithRest(
 // ---------------------------------------------------------------------------
 
 const sizing = (model: string) => {
-  if (/^fal-ai\/(nano-banana|flux-pro\/v1\.1-ultra)/.test(model)) return "aspect_ratio"
+  if (/^fal-ai\/(nano-banana|flux-pro\/(v1\.1-ultra|kontext))/.test(model)) return "aspect_ratio"
   if (model.startsWith("fal-ai/flux")) return "image_size"
   return undefined
 }
@@ -63,20 +63,24 @@ const validate = (request: Request) => {
     return Effect.fail(route.unsupported("media.size", `${id} sizes by aspectRatio`))
   if (request.aspectRatio !== undefined && field === "image_size")
     return Effect.fail(route.unsupported("media.aspectRatio", `${id} sizes by size (image_size)`))
-  if ((request.images?.length ?? 0) > 1 && !isEdit(id))
+  if ((request.images?.length ?? 0) > 1 && !takesImageList(id))
     return Effect.fail(
-      route.unsupported("media.images", `${id} takes one image_url; use an /edit endpoint for several images`),
+      route.unsupported(
+        "media.images",
+        `${id} takes one image_url; use an /edit or /multi endpoint for several images`,
+      ),
     )
   return Effect.void
 }
 
-// `/edit` endpoints take an `image_urls` list; image-to-image, fill, and Ultra take one `image_url` (beside `mask_url`).
-const isEdit = (model: string) => model.endsWith("/edit")
+// `/edit` and `/multi` (Kontext) endpoints take an `image_urls` list; image-to-image, fill, and Ultra take one
+// `image_url` (beside `mask_url`).
+const takesImageList = (model: string) => model.endsWith("/edit") || model.endsWith("/multi")
 
 const fromRequest = Effect.fn("FalImages.fromRequest")(function* (request: Request) {
   yield* validate(request)
   const images = yield* Effect.forEach(request.images ?? [], (image) => FalQueue.mediaUrl(image, route.name))
-  const edit = isEdit(request.model.id)
+  const list = takesImageList(request.model.id)
   return MediaProtocol.json(
     mergeJsonRecords(
       {
@@ -86,8 +90,8 @@ const fromRequest = Effect.fn("FalImages.fromRequest")(function* (request: Reque
         image_size: request.size === undefined ? undefined : MediaInput.dimensions(request.size),
         aspect_ratio: request.aspectRatio,
         output_format: request.format,
-        image_urls: edit && images.length > 0 ? images : undefined,
-        image_url: edit ? undefined : images[0],
+        image_urls: list && images.length > 0 ? images : undefined,
+        image_url: list ? undefined : images[0],
         mask_url: request.mask === undefined ? undefined : yield* FalQueue.mediaUrl(request.mask, route.name),
       },
       request.providerOptions,
@@ -112,12 +116,14 @@ const decodeResult = Effect.fn("FalImages.decodeResult")(function* (
   // With the safety checker on, flagged images come back blacked out rather than omitted.
   const flagged = (has_nsfw_concepts ?? []).flatMap((value, index) => (value ? [index] : []))
   return new ImageResponse({
-    images: images.map((image) =>
-      Media.url(image.url, {
-        mediaType: image.content_type ?? undefined,
-        info: { width: image.width ?? undefined, height: image.height ?? undefined },
-      }),
-    ),
+    images: images.map((image) => {
+      const info = { width: image.width ?? undefined, height: image.height ?? undefined }
+      // `sync_mode: true` returns data URIs instead of hosted URLs.
+      return (
+        Media.parseDataUrl(image.url, { info }) ??
+        Media.url(image.url, { mediaType: image.content_type ?? undefined, info })
+      )
+    }),
     notices:
       flagged.length === 0
         ? undefined

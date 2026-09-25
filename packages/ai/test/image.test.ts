@@ -761,6 +761,80 @@ describe("Image", () => {
     }).pipe(Effect.provide(layer(() => Effect.die("an unsupported request reached the network")))),
   )
 
+  const falToken = {
+    requestID: "r1",
+    statusURL: "https://queue.fal.test/fal-ai/flux/requests/r1/status",
+    responseURL: "https://queue.fal.test/fal-ai/flux/requests/r1",
+    cancelURL: "https://queue.fal.test/fal-ai/flux/requests/r1/cancel",
+  }
+  const falSubmitted = {
+    request_id: falToken.requestID,
+    status_url: falToken.statusURL,
+    response_url: falToken.responseURL,
+    cancel_url: falToken.cancelURL,
+  }
+  const bodies: Array<unknown> = []
+  it.effect("sizes fal Kontext by aspect ratio and sends several images to /multi", () =>
+    Effect.gen(function* () {
+      const fal = Fal.configure({ apiKey: "test", baseURL: "https://queue.fal.test" })
+      const images = [Media.url("https://example.test/a.png"), Media.url("https://example.test/b.png")]
+      const rejected = yield* Image.start({
+        model: fal.image("fal-ai/flux-pro/kontext"),
+        prompt: "A lighthouse",
+        size: "512x512",
+      }).pipe(Effect.flip)
+      yield* Image.start({
+        model: fal.image("fal-ai/flux-pro/kontext"),
+        prompt: "A lighthouse",
+        images: images.slice(0, 1),
+        aspectRatio: "16:9",
+      })
+      yield* Image.start({ model: fal.image("fal-ai/flux-pro/kontext/max/multi"), prompt: "A lighthouse", images })
+
+      expect(rejected.reason).toMatchObject({ _tag: "UnsupportedOperation", operation: "media.size" })
+      expect(bodies).toEqual([
+        { prompt: "A lighthouse", aspect_ratio: "16:9", image_url: "https://example.test/a.png" },
+        { prompt: "A lighthouse", image_urls: ["https://example.test/a.png", "https://example.test/b.png"] },
+      ])
+    }).pipe(
+      Effect.provide(
+        layer((input) => {
+          bodies.push(JSON.parse(input.text))
+          return Effect.succeed(json(input, falSubmitted))
+        }),
+      ),
+    ),
+  )
+
+  it.effect("decodes fal sync_mode data URIs as inline images", () =>
+    Effect.gen(function* () {
+      const generation = yield* Image.resume(Fal.configure({ apiKey: "test" }).image("fal-ai/flux/schnell"), falToken)
+      const response = yield* generation.await()
+
+      expect(response.images.map((image) => image.source)).toEqual([
+        { type: "base64", data: "AQID", mediaType: "image/png" },
+        { type: "url", url: "https://v3.fal.media/out.jpg", mediaType: "image/jpeg" },
+      ])
+      expect(response.image.info).toEqual({ width: 512, height: 512 })
+      expect(yield* response.image.bytes()).toEqual(Uint8Array.from([1, 2, 3]))
+    }).pipe(
+      Effect.provide(
+        layer((input) =>
+          Effect.succeed(
+            input.request.url === falToken.statusURL
+              ? json(input, { status: "COMPLETED" })
+              : json(input, {
+                  images: [
+                    { url: "data:image/png;base64,AQID", width: 512, height: 512, content_type: "image/png" },
+                    { url: "https://v3.fal.media/out.jpg", width: 512, height: 512, content_type: "image/jpeg" },
+                  ],
+                }),
+          ),
+        ),
+      ),
+    ),
+  )
+
   const moderated = { id: "req_1", status: "Content Moderated" }
   const prediction = {
     id: "p_1",

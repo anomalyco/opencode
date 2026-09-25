@@ -475,18 +475,18 @@ const program = Effect.gen(function* () {
 Common fields are portable in shape, not in support. Unsupported fields fail with a typed `AIError` before any network
 call rather than being dropped, so check this table before swapping only the `model`:
 
-| Provider              | `n` | `size`    | `aspectRatio` | `seed` | `format` | `images`                  | `mask`              |
-| --------------------- | --- | --------- | ------------- | ------ | -------- | ------------------------- | ------------------- |
-| OpenAI                | ✓¹  | ✓         | ✗             | ✗      | ✓        | ✓                         | ✓                   |
-| Google (Gemini)       | 1   | ✗         | ✓             | ✓      | ✗        | ✓ (no public URLs)        | ✗                   |
-| xAI                   | ✓   | ✗         | ✓             | ✗      | ✗        | ✓                         | ✗                   |
-| Z.ai                  | ✗   | ✓         | ✗             | ✗      | ✗        | ✗                         | ✗                   |
-| Meta                  | ✓   | ✓ (hint)  | ✗             | ✗      | ✓        | ✓                         | ✗                   |
-| Black Forest Labs     | 1   | per model | per model     | ✓      | ✓        | per model (1–8)           | `flux-pro-1.0-fill` |
-| fal                   | ✓   | per model | per model     | ✓      | ✓        | 1 (several on `/edit`)    | ✓                   |
-| Replicate             | ✗   | ✗         | ✗             | ✗      | ✗        | ✗ (use `providerOptions`) | ✗                   |
-| Stability `image`     | 1   | ✗         | ✓             | ✓      | ✓        | 1 (not on `core`)         | ✗                   |
-| Stability `upscale()` | ✗   | ✗         | ✗             | ✓      | ✓        | exactly 1 (required)      | ✗                   |
+| Provider              | `n` | `size`    | `aspectRatio` | `seed` | `format` | `images`                         | `mask`              |
+| --------------------- | --- | --------- | ------------- | ------ | -------- | -------------------------------- | ------------------- |
+| OpenAI                | ✓¹  | ✓         | ✗             | ✗      | ✓        | ✓                                | ✓                   |
+| Google (Gemini)       | 1   | ✗         | ✓             | ✓      | ✗        | ✓ (no public URLs)               | ✗                   |
+| xAI                   | ✓   | ✗         | ✓             | ✗      | ✗        | ✓                                | ✗                   |
+| Z.ai                  | ✗   | ✓         | ✗             | ✗      | ✗        | ✗                                | ✗                   |
+| Meta                  | ✓   | ✓ (hint)  | ✗             | ✗      | ✓        | ✓                                | ✗                   |
+| Black Forest Labs     | 1   | per model | per model     | ✓      | ✓        | per model (1–8)                  | `flux-pro-1.0-fill` |
+| fal                   | ✓   | per model | per model     | ✓      | ✓        | 1 (several on `/edit`, `/multi`) | ✓                   |
+| Replicate             | ✗   | ✗         | ✗             | ✗      | ✗        | ✗ (use `providerOptions`)        | ✗                   |
+| Stability `image`     | 1   | ✗         | ✓             | ✓      | ✓        | 1 (not on `core`)                | ✗                   |
+| Stability `upscale()` | ✗   | ✗         | ✗             | ✓      | ✓        | exactly 1 (required)             | ✗                   |
 
 ✓ lowers natively; ✗ fails whenever the field is set (including `n: 1`); `1` means `n > 1` fails. ¹ `Image.stream` on OpenAI generates one image. fal
 rejects `size` and `aspectRatio` together; which one a fal or BFL model takes depends on the model.
