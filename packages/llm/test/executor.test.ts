@@ -264,8 +264,30 @@ describe("RequestExecutor", () => {
       ),
     ),
   )
+  ;[408, 409].forEach((status) => {
+    it.effect(`retries HTTP ${status} before returning a successful response`, () =>
+      Effect.gen(function* () {
+        const attempts = yield* Ref.make(0)
+        yield* Effect.gen(function* () {
+          const executor = yield* RequestExecutor.Service
+          const response = yield* executor.execute(request)
 
-  it.effect("marks 504 and 529 status responses retryable", () =>
+          expect(response.status).toBe(200)
+          expect(yield* response.text).toBe("ok")
+          expect(yield* Ref.get(attempts)).toBe(2)
+        }).pipe(
+          Effect.provide(
+            countedResponsesLayer(attempts, [
+              new Response("transient failure", { status, headers: { "retry-after-ms": "0" } }),
+              new Response("ok", { status: 200 }),
+            ]),
+          ),
+        )
+      }),
+    )
+  })
+
+  it.effect("marks 408, 409, 504 and 529 status responses retryable", () =>
     Effect.gen(function* () {
       const failWith = (status: number) =>
         Effect.gen(function* () {
@@ -290,6 +312,8 @@ describe("RequestExecutor", () => {
           ),
         )
 
+      yield* failWith(408)
+      yield* failWith(409)
       yield* failWith(504)
       yield* failWith(529)
     }),
