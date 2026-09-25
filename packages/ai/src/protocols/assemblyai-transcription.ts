@@ -110,8 +110,11 @@ const fromRequest = Effect.fn("AssemblyAITranscription.fromRequest")(function* (
         language_code: request.language,
         language_detection: request.language === undefined ? true : undefined,
         prompt: request.prompt,
-        // Turn-level `utterances`, the only segments AssemblyAI returns, require speaker labels.
-        speaker_labels: request.diarize === true || request.timestamps === "segment" ? true : undefined,
+        // Turn-level `utterances`, the only segments AssemblyAI returns, and `speakers_expected` require speaker labels.
+        speaker_labels:
+          request.diarize === true || request.timestamps === "segment" || request.speakers !== undefined
+            ? true
+            : undefined,
         speakers_expected: request.speakers,
       },
       request.providerOptions,

@@ -5,7 +5,7 @@ import { HttpClientRequest } from "effect/unstable/http"
 import { Media, Transcription, TranscriptionClient } from "../src/index.js"
 import { AssemblyAI, Deepgram, Google, OpenAI } from "../src/providers.js"
 import { it } from "./lib/effect.js"
-import { dynamicResponse } from "./lib/http.js"
+import { dynamicResponse, json, observe, type Call } from "./lib/http.js"
 
 const layer = (handler: Parameters<typeof dynamicResponse>[0]) =>
   TranscriptionClient.layer.pipe(Layer.provideMerge(dynamicResponse(handler)))
@@ -170,5 +170,25 @@ describe("Transcription", () => {
         })
         expect(failure.reason).toMatchObject({ _tag: "ProviderInternal", body: failed })
       }),
+  )
+
+  it.effect("enables AssemblyAI speaker labels when only an expected speaker count is given", () =>
+    Effect.gen(function* () {
+      const calls: Array<Call> = []
+      yield* Transcription.start({ model: assemblyai, audio: Media.url("https://a.test/call.mp3"), speakers: 2 }).pipe(
+        Effect.provide(
+          layer((input) => observe(calls, input).pipe(Effect.as(json(input, { id: "tr_1", status: "queued" })))),
+        ),
+      )
+      expect(calls.map((call) => JSON.parse(call.body))).toEqual([
+        {
+          audio_url: "https://a.test/call.mp3",
+          speech_models: ["universal-3-5-pro"],
+          language_detection: true,
+          speaker_labels: true,
+          speakers_expected: 2,
+        },
+      ])
+    }),
   )
 })
