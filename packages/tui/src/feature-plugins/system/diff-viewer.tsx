@@ -9,7 +9,7 @@ import {
   type ScrollBoxRenderable,
 } from "@opentui/core"
 import { LANGUAGE_EXTENSIONS } from "../../util/filetype"
-import { useBindings, useCommandShortcut } from "../../keymap"
+import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut } from "../../keymap"
 import { useTheme } from "../../context/theme"
 import { useTerminalDimensions } from "@opentui/solid"
 import path from "path"
@@ -735,6 +735,7 @@ function DiffViewer(props: { api: TuiPluginApi }) {
   }
 
   useBindings(() => ({
+    mode: OPENCODE_BASE_MODE,
     commands,
     bindings: [
       { key: "j,down", cmd: "diff.down", desc: "Move diff viewer down" },
