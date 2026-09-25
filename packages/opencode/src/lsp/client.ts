@@ -170,8 +170,17 @@ export async function create(input: {
     }
     updatePushDiagnostics(filePath, params.diagnostics)
   })
-  connection.onRequest("window/workDoneProgress/create", (params) => {
-    return null
+
+  const inFlightProgress = new Set<unknown>()
+  connection.onNotification("$/progress", (params: { token?: unknown; kind?: string }) => {
+    if (params?.kind === "begin") {
+      inFlightProgress.add(params.token)
+    } else if (params?.kind === "end") {
+      inFlightProgress.delete(params.token)
+    }
+  })
+  connection.onRequest("window/workDoneProgress/create", (params: { token: unknown }) => {
+    return params.token
   })
   connection.onRequest("workspace/configuration", async (params) => {
     const items = (params as { items?: { section?: string }[] }).items ?? []
@@ -461,6 +470,22 @@ export async function create(input: {
     })
   }
 
+  function awaitProgress(timeoutMs: number): Promise<void> {
+    if (timeoutMs <= 0) return Promise.resolve()
+    if (inFlightProgress.size === 0) return Promise.resolve()
+    return new Promise<void>((resolve) => {
+      const start = Date.now()
+      const tick = () => {
+        if (inFlightProgress.size === 0 || Date.now() - start >= timeoutMs) {
+          resolve()
+          return
+        }
+        setTimeout(tick, 50)
+      }
+      tick()
+    })
+  }
+
   function waitForFreshPush(request: { path: string; version: number; after: number; timeout: number }) {
     if (request.timeout <= 0) return Promise.resolve(false)
     return new Promise<boolean>((resolve) => {
@@ -617,6 +642,9 @@ export async function create(input: {
           },
         })
         files[request.path] = { version: 0, text }
+        if (input.serverID === "typescript") {
+          await awaitProgress(5_000)
+        }
         return 0
       },
     },
