@@ -444,6 +444,34 @@ const boot = Effect.fn("test.boot")(function* (input?: { title?: string }) {
 
 // Loop semantics
 
+it.instance("default compaction reuses the normal system and tools", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const { prompt, chat } = yield* boot()
+    const compact = yield* SessionCompaction.Service
+    yield* user(chat.id, "cache prefix message")
+    yield* llm.text("normal response")
+    yield* prompt.loop({ sessionID: chat.id })
+
+    yield* compact.create({ sessionID: chat.id, agent: "build", model: ref, auto: false })
+    yield* llm.text("compacted summary")
+    yield* prompt.loop({ sessionID: chat.id })
+
+    const inputs = yield* llm.inputs
+    expect(inputs).toHaveLength(2)
+    expect(inputs[1]?.tools).toEqual(inputs[0]?.tools)
+    const normalMessages = Array.isArray(inputs[0]?.messages) ? inputs[0].messages : []
+    const compactMessages = Array.isArray(inputs[1]?.messages) ? inputs[1].messages : []
+    const system = (message: unknown) =>
+      typeof message === "object" && message !== null && "role" in message && message.role === "system"
+    expect(compactMessages.find(system)).toEqual(normalMessages.find(system))
+    expect(JSON.stringify(compactMessages)).toContain("cache prefix message")
+    expect(JSON.stringify(compactMessages)).toContain("normal response")
+    expect(JSON.stringify(compactMessages)).toContain("Create a new anchored summary")
+    expect(JSON.stringify(compactMessages)).not.toContain("[User]: cache prefix message")
+  }),
+)
+
 noLLMServer.instance(
   "loop exits immediately when last assistant has stop finish",
   () =>
