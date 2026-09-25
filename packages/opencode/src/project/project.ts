@@ -235,11 +235,12 @@ const layer = Layer.effect(
       const result: Info = {
         ...existing,
         worktree: projectID === ProjectV2.ID.global ? worktree : existing.worktree,
-        vcs: data.vcs?.type ?? fakeVcs,
+        vcs: data.associated ? existing.vcs : (data.vcs?.type ?? fakeVcs),
         time: { ...existing.time, updated: Date.now() },
       }
       if (
         projectID !== ProjectV2.ID.global &&
+        !data.associated &&
         data.directory !== result.worktree &&
         !result.sandboxes.includes(data.directory)
       )

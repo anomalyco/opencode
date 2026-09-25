@@ -32,6 +32,7 @@ export interface Resolved {
   readonly id: ID
   readonly directory: AbsolutePath
   readonly vcs?: Vcs
+  readonly associated?: boolean
 }
 
 export const AssociateInput = Schema.Struct({
@@ -80,17 +81,16 @@ const layer = Layer.effect(
     })
 
     const associate = Effect.fn("Project.associate")(function* (input: AssociateInput) {
-      yield* projectDirectories.create({
+      yield* projectDirectories.associate({
         projectID: input.projectID,
         directory: input.directory,
         strategy: input.strategy,
-        behavior: "replace",
       })
       return yield* projectDirectories.list(input.projectID)
     })
 
     const dissociate = Effect.fn("Project.dissociate")(function* (input: DissociateInput) {
-      yield* projectDirectories.remove({ projectID: input.projectID, directory: input.directory })
+      yield* projectDirectories.dissociate({ projectID: input.projectID, directory: input.directory })
       return yield* projectDirectories.list(input.projectID)
     })
 
@@ -142,15 +142,12 @@ const layer = Layer.effect(
     const resolve = Effect.fn("Project.resolve")(function* (input: AbsolutePath) {
       const repo = yield* git.repo.discover(input)
       if (!repo) {
-        // A directory outside any repository still belongs to a project when one has
-        // been explicitly associated with it. Without this, every session run from a
-        // parent directory holding several checkouts is attributed to `global` and is
-        // invisible to any project-scoped view.
+        // An exact, explicit association gives a non-repository directory a project.
         //
         // Deliberately a fallback: git discovery still wins where it succeeds, so an
         // association can never silently re-home a directory that is a worktree.
         const owner = yield* projectDirectories.ownerOf(input)
-        if (owner) return { id: owner, directory: input, vcs: undefined }
+        if (owner) return { id: owner, directory: input, vcs: undefined, associated: true }
         return { id: ID.global, directory: AbsolutePath.make(path.parse(input).root), vcs: undefined }
       }
 

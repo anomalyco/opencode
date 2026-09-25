@@ -6,7 +6,7 @@ import { Effect, Schema } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Database } from "@opencode-ai/core/database/database"
-import { ProjectTable } from "@opencode-ai/core/project/sql"
+import { ProjectDirectoryTable, ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Hash } from "@opencode-ai/core/util/hash"
@@ -262,6 +262,7 @@ describe("ProjectV2.resolve with an associated directory", () => {
       expect(result.id).toBe(associatedID)
       expect(result.directory).toBe(directory)
       expect(result.vcs).toBeUndefined()
+      expect(result.associated).toBe(true)
     }),
   )
 
@@ -297,6 +298,51 @@ describe("ProjectV2.resolve with an associated directory", () => {
 
       expect(yield* project.dissociate({ projectID: associatedID, directory })).toEqual([])
       expect((yield* project.resolve(directory)).id).toBe(ProjectV2.ID.make("global"))
+    }),
+  )
+
+  itDb.live("ignores an implicit directory record and transfers an explicit association", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmp()
+      const directory = yield* real(dir.path)
+      const project = yield* ProjectV2.Service
+      const oldID = ProjectV2.ID.make("old-project")
+      yield* seedProject(oldID, directory)
+      yield* seedProject(associatedID, directory)
+
+      yield* Database.Service.use(({ db }) =>
+        db
+          .insert(ProjectDirectoryTable)
+          .values({ project_id: oldID, directory })
+          .run()
+          .pipe(Effect.orDie),
+      )
+      expect((yield* project.resolve(directory)).id).toBe(ProjectV2.ID.global)
+
+      yield* project.associate({ projectID: oldID, directory })
+      expect((yield* project.resolve(directory)).id).toBe(oldID)
+
+      yield* project.associate({ projectID: associatedID, directory })
+      expect((yield* project.resolve(directory)).id).toBe(associatedID)
+      expect(yield* project.directories({ projectID: oldID })).toEqual([])
+
+      yield* project.dissociate({ projectID: associatedID, directory })
+      expect((yield* project.resolve(directory)).id).toBe(ProjectV2.ID.global)
+    }),
+  )
+
+  itDb.live("matches only the associated directory, not its descendants", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmp()
+      const directory = yield* real(dir.path)
+      const nested = AbsolutePath.make(path.join(directory, "inputs"))
+      yield* Effect.promise(() => fs.mkdir(nested))
+      const project = yield* ProjectV2.Service
+      yield* seedProject(associatedID, directory)
+      yield* project.associate({ projectID: associatedID, directory })
+
+      expect((yield* project.resolve(directory)).id).toBe(associatedID)
+      expect((yield* project.resolve(nested)).id).toBe(ProjectV2.ID.global)
     }),
   )
 })

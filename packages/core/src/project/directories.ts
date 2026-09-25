@@ -58,6 +58,8 @@ export interface Interface {
    * worktree and therefore resolves to no project of its own.
    */
   readonly ownerOf: (directory: AbsolutePath) => Effect.Effect<ProjectSchema.ID | undefined>
+  readonly associate: (input: { projectID: ProjectSchema.ID; directory: AbsolutePath; strategy?: string }) => Effect.Effect<void>
+  readonly dissociate: (input: { projectID: ProjectSchema.ID; directory: AbsolutePath }) => Effect.Effect<void>
   readonly create: (input: CreateInput, tx?: Transaction) => Effect.Effect<boolean>
   readonly remove: (input: RemoveInput, tx?: Transaction) => Effect.Effect<boolean>
 }
@@ -153,16 +155,64 @@ const layer = Layer.effect(
     })
 
     const ownerOf = Effect.fn("ProjectDirectories.ownerOf")(function* (directory: AbsolutePath) {
-      // A directory may in principle be associated with more than one project; the
-      // oldest association wins so that the answer is stable across calls.
       const row = yield* db
         .select({ projectID: ProjectDirectoryTable.project_id })
         .from(ProjectDirectoryTable)
-        .where(eq(ProjectDirectoryTable.directory, directory))
-        .orderBy(asc(ProjectDirectoryTable.time_created), asc(ProjectDirectoryTable.project_id))
+        .where(and(eq(ProjectDirectoryTable.directory, directory), eq(ProjectDirectoryTable.type, "association")))
         .get()
         .pipe(Effect.orDie)
       return row?.projectID
+    })
+
+    const associate = Effect.fn("ProjectDirectories.associate")(function* (input: {
+      projectID: ProjectSchema.ID
+      directory: AbsolutePath
+      strategy?: string
+    }) {
+      yield* db.transaction((tx) =>
+        Effect.gen(function* () {
+          yield* tx
+            .delete(ProjectDirectoryTable)
+            .where(
+              and(
+                eq(ProjectDirectoryTable.directory, input.directory),
+                eq(ProjectDirectoryTable.type, "association"),
+                ne(ProjectDirectoryTable.project_id, input.projectID),
+              ),
+            )
+            .run()
+          yield* tx
+            .insert(ProjectDirectoryTable)
+            .values({
+              project_id: input.projectID,
+              directory: input.directory,
+              type: "association",
+              strategy: input.strategy,
+            })
+            .onConflictDoUpdate({
+              target: [ProjectDirectoryTable.project_id, ProjectDirectoryTable.directory],
+              set: { type: "association", strategy: input.strategy ?? null },
+            })
+            .run()
+        }),
+      ).pipe(Effect.orDie)
+    })
+
+    const dissociate = Effect.fn("ProjectDirectories.dissociate")(function* (input: {
+      projectID: ProjectSchema.ID
+      directory: AbsolutePath
+    }) {
+      yield* db
+        .delete(ProjectDirectoryTable)
+        .where(
+          and(
+            eq(ProjectDirectoryTable.project_id, input.projectID),
+            eq(ProjectDirectoryTable.directory, input.directory),
+            eq(ProjectDirectoryTable.type, "association"),
+          ),
+        )
+        .run()
+        .pipe(Effect.orDie)
     })
 
     return Service.of({
@@ -170,6 +220,8 @@ const layer = Layer.effect(
       get,
       contains,
       ownerOf,
+      associate,
+      dissociate,
       create,
       remove,
     })

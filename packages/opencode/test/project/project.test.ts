@@ -5,7 +5,7 @@ import path from "path"
 import { tmpdirScoped } from "../fixture/fixture"
 import { GlobalBus } from "../../src/bus/global"
 import { Database } from "@opencode-ai/core/database/database"
-import { ProjectTable } from "@opencode-ai/core/project/sql"
+import { ProjectDirectoryTable, ProjectTable } from "@opencode-ai/core/project/sql"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
 import { eq } from "drizzle-orm"
@@ -15,6 +15,7 @@ import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { Cause, Effect, Exit, Layer, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { ProjectV2 } from "@opencode-ai/core/project"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -147,6 +148,50 @@ describe("Project.fromDirectory", () => {
       const tmp = yield* tmpdirScoped()
       const result = yield* project.fromDirectory(tmp)
       expect(result.project.id).toBe(ProjectV2.ID.global)
+    }),
+  )
+
+  it.live("keeps the owning Git project intact when opening an associated workspace", () =>
+    Effect.gen(function* () {
+      const { db } = yield* Database.Service
+      const projects = yield* Project.Service
+      const checkout = yield* tmpdirScoped({ git: true })
+      const workspace = yield* tmpdirScoped()
+      const owner = (yield* projects.fromDirectory(checkout)).project
+      const global = (yield* projects.fromDirectory(workspace)).project
+      const sessionID = crypto.randomUUID() as SessionID
+
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: global.id,
+          slug: sessionID,
+          directory: workspace,
+          title: "before association",
+          version: "0.0.0-test",
+          time_created: Date.now(),
+          time_updated: Date.now(),
+        })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(ProjectDirectoryTable)
+        .values({ project_id: owner.id, directory: AbsolutePath.make(workspace), type: "association" })
+        .run()
+        .pipe(Effect.orDie)
+
+      const opened = (yield* projects.fromDirectory(workspace)).project
+      const stored = yield* projects.get(owner.id)
+      const session = yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie)
+
+      expect(opened.id).toBe(owner.id)
+      expect(opened.worktree).toBe(checkout)
+      expect(opened.vcs).toBe("git")
+      expect(opened.sandboxes).not.toContain(workspace)
+      expect(stored?.worktree).toBe(checkout)
+      expect(stored?.vcs).toBe("git")
+      expect(session?.project_id).toBe(owner.id)
     }),
   )
 

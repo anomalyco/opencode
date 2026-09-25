@@ -6,7 +6,7 @@ import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "e
 import { ProjectNotFoundError } from "../errors"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
-import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware/workspace-routing"
+import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery, WorkspaceRoutingQueryFields } from "../middleware/workspace-routing"
 import { described } from "./metadata"
 
 const root = "/project"
@@ -89,20 +89,19 @@ export const ProjectApi = HttpApi.make("project")
             identifier: "project.directoryCreate",
             summary: "Associate a directory with a project",
             description:
-              "Associate a local absolute directory with a project. Use for a directory that is not itself a git worktree — sessions run there resolve to this project instead of `global`. Git discovery still takes precedence where it succeeds.",
+              "Associate this exact local absolute directory with a project. Non-Git sessions run at this directory resolve to the project instead of `global`; subdirectories are not included. Git discovery still takes precedence where it succeeds.",
           }),
         ),
         HttpApiEndpoint.delete("directoryRemove", `${root}/:projectID/directories`, {
           params: { projectID: ProjectV2.ID },
-          query: WorkspaceRoutingQuery,
-          payload: DirectoryPayload,
+          query: Schema.Struct({ ...WorkspaceRoutingQueryFields, directory: AbsolutePath }),
           success: described(ProjectV2.Directories, "Project directories after the removal"),
           error: [HttpApiError.BadRequest, ProjectNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "project.directoryRemove",
             summary: "Remove a directory association",
-            description: "Remove a local absolute directory's association with a project.",
+            description: "Remove the exact directory's explicit association with a project. Pass the directory as a query parameter.",
           }),
         ),
       )
