@@ -78,8 +78,11 @@ describe("Image", () => {
         mediaType: "image/webp",
       })
       expect(yield* response.image.bytes()).toEqual(Uint8Array.from([1, 2, 3]))
-      expect(response.image.providerMetadata).toEqual({ openai: { revisedPrompt: "A precise robot" } })
+      expect(response.image.info).toEqual({ format: "webp", width: 2048, height: 2048 })
       expect(response.usage).toMatchObject({ type: "tokens", total: 12 })
+      expect(response.providerMetadata).toEqual({
+        openai: { outputFormat: "webp", size: "2048x2048", quality: "high", background: "opaque" },
+      })
     }).pipe(
       Effect.provide(
         ImageClient.layer.pipe(
@@ -107,8 +110,11 @@ describe("Image", () => {
                 })
                 return input.respond(
                   JSON.stringify({
-                    data: [{ b64_json: "AQID", revised_prompt: "A precise robot" }, { b64_json: "BAUG" }],
+                    data: [{ b64_json: "AQID" }, { b64_json: "BAUG" }],
                     output_format: "webp",
+                    size: "2048x2048",
+                    quality: "high",
+                    background: "opaque",
                     usage: { input_tokens: 4, output_tokens: 8, total_tokens: 12 },
                   }),
                   { headers: { "content-type": "application/json" } },
@@ -144,6 +150,7 @@ describe("Image", () => {
         ),
       )
       expect(response.image.source).toEqual({ type: "bytes", data: Uint8Array.from([1, 2, 3]), mediaType: "image/png" })
+      expect(response.image.info).toEqual({ format: "png" })
     }),
   )
 
@@ -735,7 +742,6 @@ describe("Image", () => {
             prompt,
             size: "512x512",
           }),
-          Stream.runCollect(Image.stream({ model: openai.image("dall-e-3"), prompt })),
           Stream.runCollect(Image.stream({ model: openai.image("gpt-image-2"), prompt, n: 2 })),
           Image.start({ model: replicate, prompt, seed: 7 }),
           Image.start({
@@ -751,7 +757,6 @@ describe("Image", () => {
           ["UnsupportedOperation", "image.start"],
           ["UnsupportedOperation", "media.aspectRatio"],
           ["UnsupportedOperation", "media.size"],
-          ["UnsupportedOperation", "media.stream"],
           ["UnsupportedOperation", "media.n"],
           ["UnsupportedOperation", "media.seed"],
           ["InvalidRequest", false],

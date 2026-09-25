@@ -1,7 +1,6 @@
-import { Effect, Schema } from "effect"
+import { Duration, Effect, Schema } from "effect"
 import type { HttpClientResponse } from "effect/unstable/http"
 import { ImageModel, ImageResponse, type ImageRequestFor } from "../image.js"
-import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
 import { mergeJsonRecords, type OpenString } from "../schema/index.js"
@@ -9,6 +8,7 @@ import { mergeJsonRecords, type OpenString } from "../schema/index.js"
 const route = MediaProtocol.identity({ id: "zai-images", name: "Z.ai Images", provider: "zai" })
 export const DEFAULT_BASE_URL = "https://api.z.ai/api/paas/v4"
 export const PATH = "/images/generations"
+const OUTPUT_RETENTION = Duration.days(30)
 
 // ---------------------------------------------------------------------------
 // 1. Public model input
@@ -76,7 +76,7 @@ const decodeResponse = Effect.fn("ZAIImages.decodeResponse")(function* (
   const filters = decoded.content_filter ?? []
   return new ImageResponse({
     // Z.ai returns only URLs and no content type; the media type resolves when the asset is materialized.
-    images: decoded.data.map((item) => Media.url(item.url)),
+    images: yield* Effect.forEach(decoded.data, (item) => MediaProtocol.expiringUrl(item.url, OUTPUT_RETENTION)),
     // Z.ai reports applied content filters alongside a successful result; surface them instead of dropping them.
     notices:
       filters.length === 0

@@ -621,8 +621,7 @@ persist the bytes promptly if they must remain available.
 ### Partial images
 
 OpenAI's GPT image models stream previews. `Image.stream` sends `stream: true` with `partialImages` (0–3, default 2)
-and emits `image-partial` events before each final `image`; `Image.generate` keeps the plain JSON request.
-`dall-e-*` models do not stream and fail typed:
+and emits `image-partial` events before each final `image`; `Image.generate` keeps the plain JSON request:
 
 ```ts
 import { Stream } from "effect"
