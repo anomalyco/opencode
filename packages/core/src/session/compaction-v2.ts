@@ -1,18 +1,24 @@
 export * as SessionCompaction from "./compaction-v2.js"
 
 import {
-  type AIError,
+  AIError,
   type ContentPart,
+  InvalidProviderOutputError,
+  InvalidRequestError,
   isContextOverflowFailure,
   LLMClient,
+  LLMEvent,
   LLMRequest,
-  type Message,
+  Message,
   type ToolEntry,
+  UnknownProviderError,
+  type Usage,
 } from "@opencode/ai"
 import type { StreamOptions } from "@opencode/ai/route"
+import type { SessionCompactionResult } from "@opencode/plugin/effect/session"
 import type { SessionError } from "@opencode/schema/session-error"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { Context, Effect, Layer, Result } from "effect"
+import { Context, Effect, Layer, Result, Stream } from "effect"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
 import { llmClient } from "../effect/app-node-platform.js"
@@ -20,12 +26,14 @@ import { State } from "../state.js"
 import { Token } from "../util/token.js"
 import type { SessionContext } from "./context.js"
 import { SessionEvent } from "./event.js"
+import { SessionHistory } from "./history.js"
 import type { SessionMessage } from "./message.js"
 import { SessionModelRequest } from "./model-request.js"
 import { SessionProviderContext } from "./provider-context.js"
 import { SessionRunnerRetry } from "./runner/retry.js"
+import { toLLMMessages } from "./runner/to-llm-message.js"
 import { toSessionError } from "./to-session-error.js"
-import type { SessionUsage } from "./usage.js"
+import { SessionUsage } from "./usage.js"
 
 export type Settings = {
   auto: boolean
@@ -69,18 +77,28 @@ type Result = {
 
 type Failure = {
   readonly error: SessionError.Error
-  readonly overflow: boolean
   readonly usage?: SessionUsage.Recorded
 }
 
 type Prepared = Effect.Success<ReturnType<SessionModelRequest.Interface["compaction"]>>
 
-/** `send` is one attempt at whatever version of the request the loop hands it; it fails with `AIError` for anything the provider rejected. */
+/**
+ * `send` is one attempt at whatever version of the request the loop hands it. It fails with `AIError` for what
+ * the provider rejected, which the loop may retry, and with a `Failure` for a reply that cannot be used.
+ */
 type Mechanism = {
   readonly prepared: Prepared
+  /** Kept verbatim beside the result; the compaction message shows it while running. */
+  readonly recent: string
   /** Tokens `send` adds to every request it is handed, such as the summary prompt. */
   readonly overhead: number
-  readonly send: (request: LLMRequest, options: StreamOptions) => Effect.Effect<Result, AIError>
+  readonly send: (request: LLMRequest, options: StreamOptions) => Effect.Effect<Result, AIError | Failure>
+}
+
+type Streamed = {
+  readonly text: string
+  readonly providerState?: SessionMessage.ProviderState
+  readonly usage?: SessionUsage.Recorded
 }
 
 const MAX_REJECTIONS = 3
@@ -190,9 +208,26 @@ export const layer = Layer.effect(
       const max = ceiling(context.model.limit, settings.buffer)
       if (trigger.reason === "auto" && !due(context, max)) return { status: "skipped" }
 
-      const mechanism = yield* context.model.compaction?.type === "native"
-        ? compactNatively(trigger)
-        : summarize(trigger, settings)
+      const built = yield* Effect.result(
+        context.model.compaction?.type === "native" ? compactNatively(context, settings) : summarize(context, settings),
+      )
+      if (Result.isFailure(built)) return yield* publish(trigger, built.failure)
+      const mechanism = built.success
+      // The runner opened the manual compaction's message when it delivered the `/compact` item.
+      if (trigger.reason !== "manual") {
+        yield* bus.publish(SessionEvent.Compaction.Started, {
+          sessionID: context.session.id,
+          reason: "auto",
+          recent: mechanism.recent,
+        })
+      }
+      const supplied = mechanism.prepared.event.result
+      if (supplied) return yield* publish(trigger, yield* fromHook(context, supplied, mechanism.recent))
+
+      // Each pass sends the least-changed version of the request estimated to fit `target`: as-is, lightened, then
+      // flattened. A "too long" rejection means the estimate ran low, so the next target is 70% of the rejected
+      // request's estimate, and the third rejection gives up. Anything else transient resends the same version
+      // under the session's retry policy.
       const policy = yield* SessionRunnerRetry.policy(context.session.id)
       let target = max - mechanism.overhead
       let rejections = 0
@@ -205,18 +240,18 @@ export const layer = Layer.effect(
               type: "compaction.failed",
               message: "The summary input cannot be reduced further without losing the latest exchange or checkpoint",
             },
-            overflow: true,
           })
         }
 
         const outcome = yield* Effect.result(mechanism.send(request, mechanism.prepared.options))
         if (Result.isSuccess(outcome)) return yield* publish(trigger, outcome.success)
         const cause = outcome.failure
+        if (!(cause instanceof AIError)) return yield* publish(trigger, cause)
         const error = toSessionError(cause)
 
         if (isContextOverflowFailure(cause)) {
           rejections++
-          if (rejections === MAX_REJECTIONS) return yield* publish(trigger, { error, overflow: true })
+          if (rejections === MAX_REJECTIONS) return yield* publish(trigger, { error })
           target = Math.floor(estimateRequest(request) * 0.7)
           continue
         }
@@ -229,7 +264,7 @@ export const layer = Layer.effect(
           hook: mechanism.prepared.retry,
           retry: SessionRunnerRetry.isRetryable(cause),
         })
-        if (!decision.retry) return yield* publish(trigger, { error, overflow: false })
+        if (!decision.retry) return yield* publish(trigger, { error })
         yield* Effect.sleep(decision.delay)
       }
     })
@@ -265,11 +300,221 @@ export const layer = Layer.effect(
       throw new Error(`not implemented: flatten(${request.messages.length}, ${context.session.id}, ${target})`)
     }
 
-    const compactNatively = (trigger: Trigger): Effect.Effect<Mechanism> =>
-      Effect.die(`not implemented: compactNatively(${trigger.reason})`)
+    /** A text summary of the older conversation; the newest `keep` tokens stay verbatim beside it. */
+    const summarize = Effect.fnUntraced(function* (
+      context: SessionContext.Loaded,
+      settings: Settings,
+    ): Effect.fn.Return<Mechanism, Failure> {
+      const split = splitConversation(context.messages, settings.keep)
+      if (!split) {
+        return yield* Effect.fail<Failure>({
+          error: { type: "compaction.unavailable", message: "Nothing to compact yet" },
+        })
+      }
 
-    const summarize = (trigger: Trigger, settings: Settings): Effect.Effect<Mechanism> =>
-      Effect.die(`not implemented: summarize(${trigger.reason}, ${settings.keep})`)
+      const [oldest] = split.older
+      const previous = oldest?.type === "compaction" && oldest.status === "completed" ? oldest : undefined
+      const prompt = buildPrompt(previous !== undefined, previous?.summary.includes(LEGACY_HEADING) ?? false)
+      const headings = SUMMARY_TEMPLATE.split("\n").filter((line) => line.startsWith("##"))
+      const filled = (text: string) => text.split("\n").some((line) => headings.includes(line.trim()))
+
+      return {
+        prepared: yield* prepare(context, split.older),
+        recent: split.recent,
+        overhead: Token.estimate(prompt) + Token.estimate(NUDGE),
+        // Hooks saw the request without the summary prompt, so it is appended here. A reply that ignores the
+        // template gets one reminder before it counts as a failure.
+        send: (request, options) =>
+          Effect.gen(function* () {
+            const prompted = LLMRequest.update(request, { messages: [...request.messages, Message.user(prompt)] })
+            const reply = yield* stream(context, prompted, options)
+            if (filled(reply.text)) return { ...reply, recent: split.recent }
+
+            const nudged = LLMRequest.update(prompted, { messages: [...prompted.messages, Message.user(NUDGE)] })
+            const retry = yield* stream(context, nudged, options)
+            const usage = reply.usage && retry.usage ? SessionUsage.add(reply.usage, retry.usage) : retry.usage
+            if (filled(retry.text)) return { ...retry, usage, recent: split.recent }
+            return yield* Effect.fail<Failure>({
+              error: {
+                type: "compaction.failed",
+                message: retry.text.trim()
+                  ? "Compaction summary did not match the required template"
+                  : "Compaction produced no summary",
+              },
+              usage,
+            })
+          }),
+      }
+    })
+
+    const stream = (context: SessionContext.Loaded, request: LLMRequest, options: StreamOptions) => {
+      const sessionID = context.session.id
+      const metadataKey = context.model.model.route.providerMetadataKey ?? context.model.model.provider
+      const unusable = (streamed: Streamed, error: SessionError.Error) =>
+        Effect.fail<Failure>({ error, usage: streamed.usage })
+
+      return llm.stream(request, options).pipe(
+        Stream.runFoldEffect(
+          (): Streamed => ({ text: "" }),
+          (streamed, event): Effect.Effect<Streamed, AIError | Failure> => {
+            if (LLMEvent.is.providerError(event)) {
+              if (event.classification !== "context-overflow")
+                return unusable(streamed, { type: "provider.error", message: event.message })
+              return Effect.fail(
+                new AIError({
+                  reason: new InvalidRequestError({ message: event.message, classification: "context-overflow" }),
+                }),
+              )
+            }
+
+            if (LLMEvent.is.textDelta(event)) {
+              return bus
+                .publish(SessionEvent.Compaction.Delta, { sessionID, text: event.text })
+                .pipe(Effect.as({ ...streamed, text: streamed.text + event.text }))
+            }
+
+            if (LLMEvent.is.stepFinish(event)) {
+              const usage = SessionUsage.record(event.usage, context.model.cost)
+              return spend(sessionID, usage).pipe(
+                Effect.as({
+                  ...streamed,
+                  providerState: event.providerMetadata?.[metadataKey],
+                  usage: streamed.usage ? SessionUsage.add(streamed.usage, usage) : usage,
+                }),
+              )
+            }
+
+            if (!LLMEvent.is.finish(event)) return Effect.succeed(streamed)
+            switch (event.reason.normalized) {
+              case "unknown":
+                return Effect.fail(
+                  new AIError({
+                    reason: new InvalidProviderOutputError({
+                      message: "The provider response ended with an unknown finish reason.",
+                      classification: "incomplete-stream",
+                    }),
+                  }),
+                )
+              case "error":
+                return Effect.fail(
+                  new AIError({ reason: new UnknownProviderError({ message: "Compaction generation failed" }) }),
+                )
+              case "length":
+                return unusable(streamed, {
+                  type: "compaction.failed",
+                  message: "Compaction summary reached the output token limit",
+                })
+              case "content-filter":
+                return unusable(streamed, {
+                  type: "provider.content-filter",
+                  message: "Compaction summary was blocked by the provider",
+                })
+              default:
+                return Effect.succeed(streamed)
+            }
+          },
+        ),
+      )
+    }
+
+    /**
+     * The provider compacts its own window into an opaque replacement, which only replays on the endpoint that
+     * made it. A checkpoint mechanism returns just the compacted item, so the newest real user messages are
+     * carried in front of it; an endpoint mechanism returns the whole replacement window.
+     */
+    const compactNatively = Effect.fnUntraced(function* (
+      context: SessionContext.Loaded,
+      settings: Settings,
+    ): Effect.fn.Return<Mechanism, Failure> {
+      const unsupported = (message: string) =>
+        Effect.fail<Failure>({ error: { type: "provider.unsupported-operation", message } })
+      const prepared = yield* prepare(context, context.messages, "session")
+
+      // History is selected before request hooks, so a hook that reroutes the request cannot be honored here.
+      const provenance = SessionProviderContext.provenance(context.model)
+      if (!provenance) return yield* unsupported("Provider compaction requires a stable, configured endpoint")
+      const routed = SessionProviderContext.provenance({ model: prepared.request.model, ref: context.model.ref })
+      if (!SessionProviderContext.compatible(provenance, routed)) {
+        return yield* unsupported(
+          "Provider compaction requires the endpoint in provider/model settings, not a model.request rewrite",
+        )
+      }
+
+      const install = (replacement: ReadonlyArray<Message>, usage: Usage | undefined) => {
+        const recorded = usage && SessionUsage.record(usage, context.model.cost)
+        return spend(context.session.id, recorded).pipe(
+          Effect.as<Result>({
+            text: "",
+            recent: "",
+            providerContext: SessionProviderContext.encode(provenance, replacement),
+            usage: recorded,
+          }),
+        )
+      }
+
+      return {
+        prepared,
+        recent: "",
+        overhead: 0,
+        send: (request, options) => {
+          if (LLMClient.canCompact(request, { mechanism: "trigger" })) {
+            return Effect.gen(function* () {
+              const originals = yield* SessionHistory.load(db, context.session.id, "local").pipe(Effect.orDie)
+              const retained = recentUserMessages(originals, context.model, settings.keep)
+              const response = yield* llm.compact(request, { ...options, mechanism: "trigger" })
+              return yield* install([...retained, Message.assistant(response.checkpoint)], response.usage)
+            })
+          }
+          if (LLMClient.canCompact(request)) {
+            return llm
+              .compact(request, { mechanism: "endpoint", http: options.http })
+              .pipe(Effect.flatMap((response) => install(response.replacement, response.usage)))
+          }
+          return unsupported(
+            `No plugin provides native compaction for ${request.model.provider}/${request.model.route.id}`,
+          )
+        },
+      }
+    })
+
+    /** The conversation as the runner would send it, after request hooks. */
+    const prepare = (
+      context: SessionContext.Loaded,
+      messages: ReadonlyArray<SessionMessage.Info>,
+      webSocket?: "session",
+    ) => {
+      const base = transcript(context, messages)
+      return requests.compaction({
+        session: context.session,
+        agent: context.agent.id,
+        model: context.model,
+        tools: context.tools,
+        system: base.system,
+        messages: base.messages,
+        webSocket,
+      })
+    }
+
+    /** A request hook supplied the summary itself, so no model call happens. */
+    const fromHook = (context: SessionContext.Loaded, supplied: SessionCompactionResult, recent: string) => {
+      const usage = supplied.tokens && {
+        tokens: supplied.tokens,
+        cost: SessionUsage.calculateCost(context.model.cost, supplied.tokens),
+      }
+      return spend(context.session.id, usage).pipe(
+        Effect.as<Result>({
+          text: supplied.summary,
+          recent,
+          providerState: supplied.providerState,
+          usage,
+          metadata: supplied.metadata,
+        }),
+      )
+    }
+
+    /** Each model call records its usage as it finishes, so failed and interrupted compactions are billed too. */
+    const spend = (sessionID: SessionContext.Loaded["session"]["id"], usage: SessionUsage.Recorded | undefined) =>
+      usage ? bus.publish(SessionEvent.UsageRecorded, { sessionID, source: "compaction", ...usage }) : Effect.void
 
     const publish = Effect.fnUntraced(function* (
       trigger: Trigger,
@@ -278,9 +523,6 @@ export const layer = Layer.effect(
       const context = trigger.context
       const sessionID = context.session.id
       const reason = trigger.reason === "manual" ? "manual" : "auto"
-
-      if (outcome.usage)
-        yield* bus.publish(SessionEvent.UsageRecorded, { sessionID, source: "compaction", ...outcome.usage })
 
       if ("error" in outcome) {
         yield* bus.publish(SessionEvent.Compaction.Failed, {
@@ -310,15 +552,18 @@ export const layer = Layer.effect(
       return { status: "completed" }
     })
 
-    const INTERRUPTED: Failure = {
-      error: { type: "compaction.interrupted", message: "Compaction was interrupted" },
-      overflow: false,
-    }
-
     return Service.of({
       transform: state.transform,
       reload: state.reload,
-      compact: (trigger) => compact(trigger).pipe(Effect.onInterrupt(() => publish(trigger, INTERRUPTED))),
+      // A manual compaction settles through its `/compact` inbox item, which the runner owns.
+      compact: (trigger) =>
+        compact(trigger).pipe(
+          Effect.onInterrupt(() =>
+            trigger.reason === "manual"
+              ? Effect.void
+              : publish(trigger, { error: { type: "compaction.interrupted", message: "Compaction was interrupted" } }),
+          ),
+        ),
     })
   }),
 )
@@ -329,16 +574,168 @@ export const node = makeLocationNode({
   deps: [Bus.node, Database.node, llmClient, SessionModelRequest.node],
 })
 
-export const estimateContext = (context: SessionContext.Loaded) => {
-  const anchorIndex = context.messages.findLastIndex((message) => hasMeasuredPrompt(message, context.model.ref))
-  const anchor = context.messages[anchorIndex]
-  const base = SessionModelRequest.baseTranscript({
+const transcript = (context: SessionContext.Loaded, messages: ReadonlyArray<SessionMessage.Info>) =>
+  SessionModelRequest.baseTranscript({
     agent: context.agent.info,
     model: context.model,
     tools: context.tools,
     initial: context.initial,
-    messages: context.messages.slice(Math.max(0, anchorIndex)),
+    messages,
   })
+
+/**
+ * `older` gets summarized; `recent`, the newest messages within `keep` tokens, is kept verbatim as text beside
+ * the summary. Undefined when there is nothing to compact.
+ */
+const splitConversation = (messages: ReadonlyArray<SessionMessage.Info>, keep: number) => {
+  const entries = messages.flatMap((message, index) => {
+    const text = messageToText(message)
+    return text ? [{ message, text, index }] : []
+  })
+  if (entries.length === 0) return undefined
+
+  const [oldest] = messages
+  const previous = oldest?.type === "compaction" && oldest.status === "completed" ? oldest : undefined
+  const recent = entries.slice(recentStart(entries, keep, previous))
+  return {
+    older: messages.slice(0, recent[0]?.index ?? messages.length),
+    recent: recent.map((entry) => entry.text).join("\n\n"),
+  }
+}
+
+const recentStart = (
+  entries: ReadonlyArray<{ readonly message: SessionMessage.Info; readonly text: string }>,
+  keep: number,
+  previous: SessionMessage.CompactionCompleted | undefined,
+) => {
+  // Drop the oldest entries until the rest fit the allowance, but always keep the newest one.
+  const dropped = Math.min(
+    oldestToDrop(entries, (entry) => Token.estimate(entry.text), keep),
+    entries.length - 1,
+  )
+
+  // Start at a user message so an assistant's tool calls and results stay together.
+  const userBoundary = entries.findLastIndex((entry, index) => index <= dropped && entry.message.type === "user")
+  if (userBoundary > 0) return userBoundary
+
+  // Everything fits. Keep only the latest exchange so there is an older part left to summarize.
+  const latestUser = entries.findLastIndex((entry) => entry.message.type === "user")
+  if (latestUser > 0) return latestUser
+
+  // One exchange, nothing older. Summarize it all and keep nothing, unless a previous summary already
+  // kept recent text, in which case keep everything and summarize only the summary before it.
+  return previous?.recent ? 0 : entries.length
+}
+
+const oldestToDrop = <T>(items: ReadonlyArray<T>, size: (item: T) => number, budget: number) => {
+  let total = 0
+  let start = items.length
+  while (start > 0) {
+    const next = total + size(items[start - 1])
+    if (next > budget) break
+    total = next
+    start--
+  }
+  return start
+}
+
+/** One message as the recent, verbatim part of a summary shows it. Empty for messages that part leaves out. */
+const messageToText = (message: SessionMessage.Info): string => {
+  switch (message.type) {
+    // Earlier summaries and instruction updates are handled outside the recent part.
+    case "compaction":
+    case "system":
+      return ""
+
+    case "user": {
+      const skills =
+        message.skills?.flatMap((skill) =>
+          skill.text === undefined ? [] : [`[Skill activated: ${skill.name}]\n${skill.text}`],
+        ) ?? []
+      const files =
+        message.files?.map((file) => {
+          const name = file.name ?? (file.source.type === "uri" ? file.source.uri : "inline attachment")
+          return `[Attached ${file.mime}: ${name}]`
+        }) ?? []
+      return [...skills, `[User]: ${message.text}`, ...files].join("\n")
+    }
+
+    case "location-switched":
+      return `[User]: The working directory has been changed to ${message.location.directory}.`
+
+    case "assistant":
+      return message.content
+        .flatMap((part) => {
+          if (part.type === "text") return [`[Assistant]: ${part.text}`]
+          if (part.type === "reasoning") return part.text ? [`[Assistant reasoning]: ${part.text}`] : []
+
+          const input = typeof part.state.input === "string" ? part.state.input : JSON.stringify(part.state.input)
+          const call = `[Assistant tool call]: ${part.name}(${input})`
+          if (part.state.status === "completed") {
+            return [call, `[Tool result]: ${truncateToolOutput(serializeToolContent(part.state.content))}`]
+          }
+          if (part.state.status === "error") return [call, `[Tool error]: ${part.state.error.message}`]
+          return [call]
+        })
+        .join("\n")
+
+    case "synthetic":
+      return `[Synthetic context]: ${message.text}`
+
+    case "skill":
+      return `[Skill activated: ${message.name}]\n${message.text}`
+
+    case "shell":
+      if (message.metadata?.background === true) return ""
+      return `[Shell]: ${message.command}\n${truncateToolOutput(message.output?.output ?? "")}`
+
+    default:
+      return ""
+  }
+}
+
+const truncateToolOutput = (value: string) => {
+  if (value.length <= TOOL_OUTPUT_MAX_CHARS) return value
+
+  // Count code points so a surrogate pair is never split.
+  let end = 0
+  let kept = 0
+  for (const char of value) {
+    if (kept === TOOL_OUTPUT_MAX_CHARS) break
+    end += char.length
+    kept++
+  }
+  if (end === value.length) return value
+  return `${value.slice(0, end)}\n[truncated]`
+}
+
+const serializeToolContent = (content: ReadonlyArray<SessionMessage.ToolStateCompleted["content"][number]>) =>
+  content
+    .map((item) => {
+      if (item.type === "text") return item.text
+      return `[Attached ${item.mime}${item.name === undefined ? "" : `: ${item.name}`}]`
+    })
+    .join("\n")
+
+/** The newest whole, real user messages within `keep` tokens: no synthetic guidance, no half of an attachment. */
+export const recentUserMessages = (
+  messages: ReadonlyArray<SessionMessage.Info>,
+  model: Pick<SessionContext.Loaded["model"], "ref" | "capabilities">,
+  keep: number,
+) => {
+  const users = messages
+    .filter((message) => message.type === "user")
+    .map((message) => ({ ...message, skills: undefined }))
+  const sendable = SessionModelRequest.boundImages(
+    SessionModelRequest.unsupportedParts(toLLMMessages(users, model.ref), model.capabilities),
+  )
+  return sendable.slice(oldestToDrop(sendable, estimateMessage, keep))
+}
+
+export const estimateContext = (context: SessionContext.Loaded) => {
+  const anchorIndex = context.messages.findLastIndex((message) => hasMeasuredPrompt(message, context.model.ref))
+  const anchor = context.messages[anchorIndex]
+  const base = transcript(context, context.messages.slice(Math.max(0, anchorIndex)))
   // The anchor's usage covers its own output, but not its local tool results, which the provider never saw.
   const unmeasured = SessionModelRequest.unsupportedParts(base.messages, context.model.capabilities).filter(
     (message) => message.role !== "assistant" || message.id !== anchor?.id,
