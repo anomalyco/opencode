@@ -7,6 +7,7 @@ import {
   DESKTOP_NATIVE_LOCALES,
   DESKTOP_NATIVE_LOCALE_TAGS,
   detectDesktopNativeLocale,
+  systemPrefersRtl,
   DESKTOP_NATIVE_MAX_PAYLOAD_BYTES,
   formatDesktopNativeMessage,
   parseDesktopNativeBundle,
@@ -132,6 +133,37 @@ describe("desktop native locale detection", () => {
     expect(detectDesktopNativeLocale(["no"])).toBe("no")
     expect(detectDesktopNativeLocale(["nb-NO"])).toBe("no")
     expect(detectDesktopNativeLocale(["nn-NO"])).toBe("no")
+  })
+
+  test("Hebrew system language falls back to English UI", () => {
+    expect(detectDesktopNativeLocale(["he-IL"])).toBe("en")
+    expect(detectDesktopNativeLocale(["iw-IL", "en"])).toBe("en")
+  })
+})
+
+describe("system RTL detection", () => {
+  test("Hebrew and Arabic systems prefer RTL", () => {
+    expect(systemPrefersRtl(["he-IL"])).toBe(true)
+    expect(systemPrefersRtl(["he"])).toBe(true)
+    expect(systemPrefersRtl(["iw-IL"])).toBe(true)
+    expect(systemPrefersRtl(["ar-EG"])).toBe(true)
+    expect(systemPrefersRtl(["ar"])).toBe(true)
+    expect(systemPrefersRtl(["fa-IR"])).toBe(true)
+    expect(systemPrefersRtl(["ur-PK"])).toBe(true)
+  })
+
+  test("LTR systems do not prefer RTL", () => {
+    expect(systemPrefersRtl(["en-US"])).toBe(false)
+    expect(systemPrefersRtl(["fr-FR"])).toBe(false)
+    expect(systemPrefersRtl(["de-DE", "en"])).toBe(false)
+    expect(systemPrefersRtl([])).toBe(false)
+  })
+
+  test("follows preference order and normalizes tags", () => {
+    expect(systemPrefersRtl(["en-US", "he-IL"])).toBe(true)
+    expect(systemPrefersRtl(["HE-il"])).toBe(true)
+    expect(systemPrefersRtl(["he_IL"])).toBe(true)
+    expect(systemPrefersRtl(["not_a_locale"])).toBe(false)
   })
 })
 

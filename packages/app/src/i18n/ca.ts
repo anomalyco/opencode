@@ -115,6 +115,7 @@ export const dict = {
   "theme.scheme.light": "Llum",
   "theme.scheme.dark": "Fosc",
   "command.sidebar.toggle": "Canvia la barra lateral",
+  "command.direction.toggle": "Toggle layout direction",
   "command.project.open": "Projecte obert",
   "command.project.previous": "Projecte anterior",
   "command.project.next": "Projecte següent",

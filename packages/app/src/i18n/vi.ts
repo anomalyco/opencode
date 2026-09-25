@@ -120,6 +120,7 @@ export const dict = {
   "theme.scheme.light": "Sáng",
   "theme.scheme.dark": "Tối",
   "command.sidebar.toggle": "Bật/tắt thanh bên",
+  "command.direction.toggle": "Toggle layout direction",
   "command.project.open": "Mở dự án",
   "command.project.previous": "Dự án trước đó",
   "command.project.next": "Dự án tiếp theo",
