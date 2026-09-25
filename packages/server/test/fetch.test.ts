@@ -5,7 +5,9 @@ import path from "node:path"
 import { Agent } from "@opencode/schema/agent"
 import { Integration } from "@opencode/schema/integration"
 import { ServerInfo } from "@opencode/protocol/groups/server"
-import { Effect, Schedule, Schema } from "effect"
+import { FSUtil } from "@opencode/util/fs-util"
+import { NodeFileSystem } from "@effect/platform-node"
+import { Context, Effect, Layer, Schedule, Schema } from "effect"
 import { tmpdir, tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { ServerFetch } from "../src/fetch"
@@ -105,7 +107,9 @@ it.live("serves the HttpApi and enforces Basic auth like the Node server", () =>
       ),
     )
     expect(response.status).toBe(200)
-    const body = yield* Effect.promise(() => response.json()).pipe(Effect.flatMap(Schema.decodeUnknownEffect(ServerInfo)))
+    const body = yield* Effect.promise(() => response.json()).pipe(
+      Effect.flatMap(Schema.decodeUnknownEffect(ServerInfo)),
+    )
     expect(body.version).toBe("test-version")
     expect(body.paths.tmp).toEndWith("opencode")
   }),
@@ -143,6 +147,49 @@ it.live("reports a missing project directory and recovers when it returns", () =
 
     yield* Effect.promise(() => fs.mkdir(missing))
     expect((yield* Effect.promise(() => request("/api/integration"))).status).toBe(200)
+  }),
+)
+
+it.live("checks a directory once per location boot, not on every request", () =>
+  Effect.gen(function* () {
+    const directory = yield* tmpdirScoped()
+    const checked: string[] = []
+    const filesystem = FSUtil.layer.pipe(
+      Layer.provide(NodeFileSystem.layer),
+      Layer.flatMap((context) => {
+        const fs = Context.get(context, FSUtil.Service)
+        return Layer.succeed(
+          FSUtil.Service,
+          FSUtil.Service.of({
+            ...fs,
+            realPath: (input) => {
+              if (input === directory.path) checked.push(input)
+              return fs.realPath(input)
+            },
+          }),
+        )
+      }),
+    )
+    const handler = yield* ServerFetch.make(options, { overrides: [FSUtil.node.replace(filesystem)] })
+    const request = (endpoint: string, method = "GET") =>
+      handler(
+        new Request(`http://opencode.local${endpoint}`, {
+          method,
+          headers: { "x-opencode-directory": encodeURIComponent(directory.path) },
+        }),
+      )
+
+    expect((yield* Effect.promise(() => request("/api/location"))).status).toBe(200)
+    const afterBoot = checked.length
+    expect(afterBoot).toBeGreaterThan(0)
+    expect((yield* Effect.promise(() => request("/api/location"))).status).toBe(200)
+    expect(checked).toHaveLength(afterBoot)
+
+    expect((yield* Effect.promise(() => request("/api/location/reload", "POST"))).status).toBe(204)
+    const afterReload = checked.length
+    expect(afterReload).toBeGreaterThan(afterBoot)
+    expect((yield* Effect.promise(() => request("/api/location"))).status).toBe(200)
+    expect(checked).toHaveLength(afterReload)
   }),
 )
 

@@ -41,8 +41,6 @@ export const ServerOptions = Schema.Struct({
     Schema.Struct({
       filewatcher: Schema.optional(Schema.Boolean),
       fff: Schema.optional(Schema.Boolean),
-      // Hosts without a local project filesystem (e.g. workerd) opt out of the request-time directory probe.
-      directoryCheck: Schema.optional(Schema.Boolean),
     }),
   ),
 })

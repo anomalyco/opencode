@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { PlatformError } from "effect"
-import { isPermissionDenied } from "../src/location"
+import { isPermissionDenied } from "../../core/src/location-services"
 
 // Reproduces the error macOS returns when privacy settings block a folder.
 const macPrivacyDenied = () =>
