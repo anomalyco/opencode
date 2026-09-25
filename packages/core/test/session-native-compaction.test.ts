@@ -495,8 +495,8 @@ test("retained user budget counts attachments and drops whole oldest messages", 
     ...user("x".repeat(63_000 * 4)),
     files: [{ mime: "image/png", data: "aGVsbG8=", source: { type: "inline" as const } }],
   }
-  expect(SessionCompaction.retainUsers([user("old"), newest], model, 64_000)).toEqual([])
+  expect(SessionCompaction.recentUserMessages([user("old"), newest], model, 64_000)).toEqual([])
   expect(
-    SessionCompaction.retainUsers([user("x".repeat(63_000 * 4)), { ...newest, text: "new" }], model, 64_000),
+    SessionCompaction.recentUserMessages([user("x".repeat(63_000 * 4)), { ...newest, text: "new" }], model, 64_000),
   ).toHaveLength(1)
 })

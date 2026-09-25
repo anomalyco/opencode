@@ -42,8 +42,8 @@ const DEFAULT_BUFFER = 20_000
 const DEFAULT_KEEP_TOKENS = 15_000
 const OUTPUT_TOKEN_MAX = 32_000
 const TOOL_OUTPUT_MAX_CHARS = 2_000
-const FALLBACK_TOOL_CHARS = 1_000
-const FALLBACK_OVERFLOW_RETRIES = 3
+const SHRUNK_TOOL_OUTPUT_CHARS = 1_000
+const MAX_SHRINK_ATTEMPTS = 3
 const IMAGE_TOKEN_ESTIMATE = 1_500
 const PDF_TOKEN_ESTIMATE = 2_000
 
@@ -77,7 +77,7 @@ export type Editor = {
 export type AutoInput = {
   readonly context: SessionContext.Loaded
   readonly prepare: SessionModelRequest.Interface["compaction"]
-  /** Known overflow must recover from durable history, not submit the overflowing native window again. */
+  /** The loaded messages were just rejected as too long. Compact from the original messages, not from them. */
   readonly overflow?: boolean
 }
 
@@ -101,7 +101,8 @@ export type ManualInput = {
   readonly prepare: SessionModelRequest.Interface["compaction"]
 }
 
-type ExecuteInput = AutoInput & {
+/** One compaction to perform, however it was requested. */
+type Job = AutoInput & {
   readonly reason: SessionMessage.Compaction["reason"]
   readonly inputID?: SessionMessage.ID
   readonly started?: boolean
@@ -198,7 +199,7 @@ export const buildPrompt = (update: boolean, legacy = false) => {
 const NUDGE =
   "The previous response did not fill in the required summary template. Do not call tools. Return the summary as text using the exact section headings from the template."
 
-/** Checkpoints written with the previous template carry this catch-all heading. */
+/** Summaries written with the previous template carry this catch-all heading. */
 const LEGACY_HEADING = "## Additional Context"
 
 const SUMMARY_HEADINGS = SUMMARY_TEMPLATE.split("\n").filter((line) => line.startsWith("##"))
@@ -207,10 +208,10 @@ const hasSummarySection = (text: string) => text.split("\n").some((line) => SUMM
 
 // Message text
 
-/** The text form of one message in the retained tail. Empty for messages the tail does not show. */
-const serializeRecentMessage = (message: SessionMessage.Info): string => {
+/** One message as the recent, verbatim part of a summary shows it. Empty for messages that part leaves out. */
+const messageToText = (message: SessionMessage.Info): string => {
   switch (message.type) {
-    // Checkpoints and instruction updates are handled outside the serialized tail.
+    // Earlier summaries and instruction updates are handled outside the recent part.
     case "compaction":
     case "system":
       return ""
@@ -293,8 +294,8 @@ const toolResultText = (result: ToolResultPart["result"]) => {
 
 // Prompt size
 
-/** The base request without any conversation, as the runner would send it. */
-const transcript = (context: SessionContext.Loaded, messages: readonly SessionMessage.Info[]) =>
+/** The request the runner would send for these messages: system prompt, instructions, and conversation. */
+const baseRequest = (context: SessionContext.Loaded, messages: readonly SessionMessage.Info[]) =>
   SessionModelRequest.baseTranscript({
     agent: context.agent.info,
     model: context.model,
@@ -303,46 +304,49 @@ const transcript = (context: SessionContext.Loaded, messages: readonly SessionMe
     messages,
   })
 
-/** The token size of the whole prompt these messages would produce. */
+/** How many tokens the prompt built from these messages would take. */
 export const estimateTokens = (input: RequiredInput) => {
   const model = input.context.model
-  const anchorIndex = input.messages.findLastIndex(hasInputUsage)
+  const anchorIndex = input.messages.findLastIndex(hasMeasuredPrompt)
   const anchor = input.messages[anchorIndex]
 
-  // Everything from the anchor onward is unmeasured, apart from the anchor's own provider-bound parts.
-  // Its local tool results are kept: the provider never saw them.
+  // The anchor's usage measured everything up to and including its own output. Everything after it is
+  // estimated, and so are the anchor's local tool results, which the provider never saw.
   const unmeasured = SessionModelRequest.unsupportedParts(
     toLLMMessages(input.messages.slice(Math.max(0, anchorIndex)), model.ref),
     model.capabilities,
   ).filter((message) => message.role !== "assistant" || message.id !== anchor?.id)
-  const added = unmeasured.reduce((sum, message) => sum + estimateMessage(message), 0)
+  const estimated = unmeasured.reduce((sum, message) => sum + estimateMessage(message), 0)
 
   if (anchor?.type === "assistant" && anchor.tokens) {
     const tokens = anchor.tokens
-    return added + tokens.input + tokens.cache.read + tokens.cache.write + tokens.output + tokens.reasoning
+    return estimated + tokens.input + tokens.cache.read + tokens.cache.write + tokens.output + tokens.reasoning
   }
 
-  // Without a measured response, only the fixed prompt is known to be there.
-  return added + estimateFixed(transcript(input.context, []).system, input.context.tools)
+  // Nothing measured yet: the system prompt and tools are the only other known part of the prompt.
+  return estimated + estimateSystemAndTools(baseRequest(input.context, []).system, input.context.tools)
 }
 
-/** The newest such message anchors the estimate: its provider-reported usage covers everything before it. */
-const hasInputUsage = (message: SessionMessage.Info) =>
+/** A completed assistant response whose provider-reported usage tells us the real size of the prompt it saw. */
+const hasMeasuredPrompt = (message: SessionMessage.Info) =>
   message.type === "assistant" &&
   !message.error &&
   message.tokens !== undefined &&
   message.tokens.input + message.tokens.cache.read + message.tokens.cache.write > 0
 
-/** The prompt size that starts automatic compaction and bounds a reduced summary request. */
-const promptCeiling = (limit: SessionRunnerModel.Resolved["limit"], buffer: number) => {
+/** The prompt size that starts automatic compaction, and the most a shrunk summary request may use. */
+const maxPromptTokens = (limit: SessionRunnerModel.Resolved["limit"], buffer: number) => {
   const outputReserve = Math.min(limit.output, OUTPUT_TOKEN_MAX)
   const contextCeiling = limit.context - Math.max(outputReserve, buffer)
   if (limit.input === undefined) return contextCeiling
   return Math.min(contextCeiling, limit.input - buffer)
 }
 
-/** System prompt and tool definitions: sent with every request but outside the message history. */
-const estimateFixed = (system: ReadonlyArray<{ readonly text: string }>, tools: SessionContext.Loaded["tools"]) => {
+/** Sent with every request but outside the conversation. */
+const estimateSystemAndTools = (
+  system: ReadonlyArray<{ readonly text: string }>,
+  tools: SessionContext.Loaded["tools"],
+) => {
   const systemTokens = system.reduce((sum, part) => sum + Token.estimate(part.text), 0)
   const toolTokens = tools.definitions.reduce(
     (sum, tool) => sum + Token.estimate(tool.name + tool.description + JSON.stringify(tool.inputSchema)),
@@ -354,7 +358,7 @@ const estimateFixed = (system: ReadonlyArray<{ readonly text: string }>, tools: 
 const estimateMessage = (message: Message) => message.content.reduce((sum, part) => sum + estimatePart(part), 0)
 
 const estimatePart = (part: ContentPart): number => {
-  // Encrypted checkpoints have no locally measurable token size.
+  // A native compaction is an opaque blob with no locally measurable size.
   if (part.type === "compaction") return Token.estimate(part.text ?? "")
   if (part.type === "effort") return 0
   if (part.type === "text" || part.type === "reasoning") return Token.estimate(part.text)
@@ -378,53 +382,54 @@ const estimateMedia = (mime: string) => {
   return 0
 }
 
-// History selection
+// Splitting the conversation
 
 /**
- * Split the history into the older prefix to summarize and the newest exchanges kept as text beside the summary.
- * Undefined when there is no conversation to compact.
+ * Split the conversation into `older`, which gets summarized, and `recent`, which is kept verbatim as text
+ * beside the summary. Undefined when there is nothing to compact.
  */
-const splitHistory = (messages: readonly SessionMessage.Info[], keepTokens: number) => {
+const splitConversation = (messages: readonly SessionMessage.Info[], keepTokens: number) => {
   const entries = messages.flatMap((message, index) => {
-    const text = serializeRecentMessage(message)
+    const text = messageToText(message)
     return text ? [{ message, text, index }] : []
   })
   if (entries.length === 0) return undefined
 
-  const tail = entries.slice(findTailStart(entries, keepTokens, lastCheckpoint(messages)))
-  const tailStart = tail[0]?.index ?? messages.length
+  const recent = entries.slice(recentStart(entries, keepTokens, lastCompaction(messages)))
+  const firstRecentMessage = recent[0]?.index ?? messages.length
   return {
-    messages: messages.slice(0, tailStart),
-    recent: tail.map((entry) => entry.text).join("\n\n"),
+    older: messages.slice(0, firstRecentMessage),
+    recent: recent.map((entry) => entry.text).join("\n\n"),
   }
 }
 
-/** Index into `entries` where the retained tail begins. */
-const findTailStart = (
+/** Index into `entries` where the recent part begins. */
+const recentStart = (
   entries: ReadonlyArray<{ readonly message: SessionMessage.Info; readonly text: string }>,
   keepTokens: number,
   previous: SessionMessage.CompactionCompleted | undefined,
 ) => {
-  // Keep at least the newest entry, even if it exceeds the allowance.
-  const fitted = Math.min(
-    fitNewest(entries, (entry) => Token.estimate(entry.text), keepTokens),
+  // Drop the oldest entries until the rest fit the allowance, but always keep the newest one.
+  const dropped = Math.min(
+    oldestToDrop(entries, (entry) => Token.estimate(entry.text), keepTokens),
     entries.length - 1,
   )
 
-  // Start at a user boundary so an assistant's tool calls and results stay together.
-  const boundary = entries.findLastIndex((entry, index) => index <= fitted && entry.message.type === "user")
-  if (boundary > 0) return boundary
+  // Start at a user message so an assistant's tool calls and results stay together.
+  const userBoundary = entries.findLastIndex((entry, index) => index <= dropped && entry.message.type === "user")
+  if (userBoundary > 0) return userBoundary
 
-  // If everything fits, retain only the latest exchange to leave an older prefix to summarize.
+  // Everything fits. Keep only the latest exchange so there is an older part left to summarize.
   const latestUser = entries.findLastIndex((entry) => entry.message.type === "user")
   if (latestUser > 0) return latestUser
 
-  // Without an older retained tail to summarize, summarize everything and retain nothing.
+  // One exchange, nothing older. Summarize it all and keep nothing, unless a previous summary already
+  // kept recent text, in which case keep everything and summarize only the summary before it.
   return previous?.recent ? 0 : entries.length
 }
 
-/** Index of the oldest item in the newest run whose sizes total at most `budget`. */
-const fitNewest = <T>(items: readonly T[], size: (item: T) => number, budget: number) => {
+/** How many of the oldest items to drop so the newest ones total at most `budget`. */
+const oldestToDrop = <T>(items: readonly T[], size: (item: T) => number, budget: number) => {
   let total = 0
   let start = items.length
   while (start > 0) {
@@ -436,14 +441,14 @@ const fitNewest = <T>(items: readonly T[], size: (item: T) => number, budget: nu
   return start
 }
 
-const lastCheckpoint = (messages: readonly SessionMessage.Info[]) =>
+const lastCompaction = (messages: readonly SessionMessage.Info[]) =>
   messages.findLast(
     (message): message is SessionMessage.CompactionCompleted =>
       message.type === "compaction" && message.status === "completed",
   )
 
-/** Keep whole, real user messages, never synthetic guidance or half an attachment/tool exchange. */
-export const retainUsers = (
+/** The newest whole, real user messages within the allowance: no synthetic guidance, no half of an attachment or tool exchange. */
+export const recentUserMessages = (
   messages: readonly SessionMessage.Info[],
   model: Pick<SessionRunnerModel.Resolved, "ref" | "capabilities">,
   keepTokens: number,
@@ -451,16 +456,16 @@ export const retainUsers = (
   const users = messages
     .filter((message) => message.type === "user")
     .map((message) => ({ ...message, skills: undefined }))
-  const bound = SessionModelRequest.boundImages(
+  const sendable = SessionModelRequest.boundImages(
     SessionModelRequest.unsupportedParts(toLLMMessages(users, model.ref), model.capabilities),
   )
-  return bound.slice(fitNewest(bound, estimateMessage, keepTokens))
+  return sendable.slice(oldestToDrop(sendable, estimateMessage, keepTokens))
 }
 
-// Overflow fallback
+// Shrinking the conversation to text
 
-/** Flatten provider-bound history into text so a reduced summary request carries no tool pairs or reasoning signatures. */
-const serializeFallback = (messages: readonly Message[]) =>
+/** The conversation as plain text entries, so a shrunk summary request carries no tool pairs or reasoning signatures. */
+const conversationToText = (messages: readonly Message[]) =>
   messages.flatMap((message) => {
     const parts = message.content.flatMap((part) => {
       if (part.type === "text" || part.type === "reasoning") return part.text ? [part.text] : []
@@ -471,7 +476,7 @@ const serializeFallback = (messages: readonly Message[]) =>
       }
       if (part.type === "tool-call") return [`[Tool call ${part.name}(${JSON.stringify(part.input)})]`]
       if (part.type === "tool-result") {
-        const output = truncateToolOutput(toolResultText(part.result), FALLBACK_TOOL_CHARS)
+        const output = truncateToolOutput(toolResultText(part.result), SHRUNK_TOOL_OUTPUT_CHARS)
         return [`[Tool result ${part.name}]: ${output}`]
       }
       return []
@@ -480,14 +485,14 @@ const serializeFallback = (messages: readonly Message[]) =>
     return [{ role: message.role, text: `[${message.role}]: ${parts.join("\n")}` }]
   })
 
-/** Retain a prior checkpoint and the newest complete exchanges that fit the summary input budget. */
-const fitFallback = (entries: ReturnType<typeof serializeFallback>, budget: number) => {
-  // A prior checkpoint leads the history and is always kept.
-  const checkpoint = entries[0]?.text.includes("<conversation-checkpoint>") ? entries[0].text : undefined
-  const header = checkpoint ? `${checkpoint}\n\n` : ""
+/** Keep an earlier summary and as many of the newest exchanges as fit the budget, oldest dropped first. */
+const keepNewestExchanges = (entries: ReturnType<typeof conversationToText>, budget: number) => {
+  // An earlier summary leads the conversation and is always kept.
+  const summary = entries[0]?.text.includes("<conversation-checkpoint>") ? entries[0].text : undefined
+  const header = summary ? `${summary}\n\n` : ""
 
-  // Each user message and the work that followed it form one exchange, dropped whole or not at all.
-  const exchanges = entries.slice(checkpoint ? 1 : 0).reduce<string[]>((groups, entry) => {
+  // A user message and everything that followed it form one exchange, kept or dropped whole.
+  const exchanges = entries.slice(summary ? 1 : 0).reduce<string[]>((groups, entry) => {
     if (entry.role === "user" || groups.length === 0) groups.push(entry.text)
     else groups[groups.length - 1] += `\n\n${entry.text}`
     return groups
@@ -495,7 +500,7 @@ const fitFallback = (entries: ReturnType<typeof serializeFallback>, budget: numb
 
   const allowance = budget - Token.estimate(header)
   if (allowance <= 0) return undefined
-  const omitted = fitNewest(exchanges, Token.estimate, allowance)
+  const omitted = oldestToDrop(exchanges, Token.estimate, allowance)
   if (exchanges.length > 0 && omitted === exchanges.length) return undefined
 
   const note = omitted ? `[${omitted} older exchanges omitted from this summary input]\n\n` : ""
@@ -504,14 +509,23 @@ const fitFallback = (entries: ReturnType<typeof serializeFallback>, budget: numb
 
 // Service
 
-type Envelope = Pick<SessionEvent.Compaction.Failed["data"], "sessionID" | "reason" | "inputID">
+type EventTarget = Pick<SessionEvent.Compaction.Failed["data"], "sessionID" | "reason" | "inputID">
 
-/** One summary attempt: text so far plus the first failure, if any, and whether it was a context overflow. */
-type Summary = {
+/** What one summary request produced: the text so far, the first failure if any, and whether it overflowed. */
+type Attempt = {
   readonly text: string
   readonly overflow: boolean
   readonly failure?: SessionError.Error
   readonly providerState?: SessionMessage.ProviderState
+}
+
+/** What every attempt at one summary shares. Usage accumulates across attempts so an interruption can account for it. */
+type Run = {
+  readonly job: Job
+  readonly prompt: string
+  readonly recent: string
+  readonly retries: ReturnType<typeof SessionRunnerRetry.transient>
+  readonly usage: Ref.Ref<SessionUsage.Recorded | undefined>
 }
 
 export const layer = Layer.effect(
@@ -538,29 +552,34 @@ export const layer = Layer.effect(
 
     // Events
 
-    const envelope = (input: ExecuteInput): Envelope => ({
-      sessionID: input.context.session.id,
-      reason: input.reason,
-      inputID: input.inputID,
+    const eventTarget = (job: Job): EventTarget => ({
+      sessionID: job.context.session.id,
+      reason: job.reason,
+      inputID: job.inputID,
     })
 
-    const recordUsage = (sessionID: SessionSchema.ID, usage: SessionUsage.Recorded | undefined) => {
+    const publishUsage = (sessionID: SessionSchema.ID, usage: SessionUsage.Recorded | undefined) => {
       if (!usage) return Effect.void
       return bus.publish(SessionEvent.UsageRecorded, { sessionID, source: "compaction", ...usage })
     }
 
-    const failed = Effect.fnUntraced(function* (
-      target: Envelope,
+    const publishStarted = (job: Job, recent: string) => {
+      if (job.started) return Effect.void
+      return bus.publish(SessionEvent.Compaction.Started, { ...eventTarget(job), recent })
+    }
+
+    const publishFailed = Effect.fnUntraced(function* (
+      target: EventTarget,
       error: SessionError.Error,
       usage?: SessionUsage.Recorded,
     ) {
-      yield* recordUsage(target.sessionID, usage)
+      yield* publishUsage(target.sessionID, usage)
       yield* bus.publish(SessionEvent.Compaction.Failed, { ...target, error, ...usage })
       return { status: "failed" as const, error }
     })
 
-    const ended = Effect.fnUntraced(function* (
-      input: ExecuteInput,
+    const publishEnded = Effect.fnUntraced(function* (
+      job: Job,
       result: {
         readonly text: string
         readonly recent: string
@@ -570,13 +589,13 @@ export const layer = Layer.effect(
         readonly metadata?: Record<string, unknown>
       },
     ) {
-      const context = input.context
-      yield* recordUsage(context.session.id, result.usage)
+      const context = job.context
+      yield* publishUsage(context.session.id, result.usage)
       yield* bus.publish(
         SessionEvent.Compaction.Ended,
         {
           sessionID: context.session.id,
-          reason: input.reason,
+          reason: job.reason,
           model: context.model.ref,
           providerState: result.providerState,
           providerContext: result.providerContext,
@@ -589,199 +608,210 @@ export const layer = Layer.effect(
       return { status: "completed" as const }
     })
 
-    const started = (input: ExecuteInput, recent: string) => {
-      if (input.started) return Effect.void
-      return bus.publish(SessionEvent.Compaction.Started, { ...envelope(input), recent })
-    }
-
-    /** A hook answered the request itself. */
-    const supplied = (input: ExecuteInput, result: SessionCompactionResult, recent: string) =>
-      ended(input, {
+    /** A request hook produced the summary itself, so no model call happens. */
+    const publishHookResult = (job: Job, result: SessionCompactionResult, recent: string) =>
+      publishEnded(job, {
         text: result.summary,
         recent,
         providerState: result.providerState,
         usage: result.tokens && {
           tokens: result.tokens,
-          cost: SessionUsage.calculateCost(input.context.model.cost, result.tokens),
+          cost: SessionUsage.calculateCost(job.context.model.cost, result.tokens),
         },
         metadata: result.metadata,
       })
 
-    // Manual controls settle through the inbox; only automatic work needs a durable interruption record.
-    const interrupted = Effect.fnUntraced(function* (input: ExecuteInput, usage?: SessionUsage.Recorded) {
-      yield* recordUsage(input.context.session.id, usage)
-      if (input.reason !== "auto") return
-      yield* failed(envelope(input), { type: "compaction.interrupted", message: "Compaction was interrupted" })
+    // Manual compactions settle through the inbox; only automatic ones need a durable interruption record.
+    const publishInterrupted = Effect.fnUntraced(function* (job: Job, usage?: SessionUsage.Recorded) {
+      yield* publishUsage(job.context.session.id, usage)
+      if (job.reason !== "auto") return
+      yield* publishFailed(eventTarget(job), { type: "compaction.interrupted", message: "Compaction was interrupted" })
     })
 
     // Requests
 
-    const prepare = (
-      input: ExecuteInput,
+    /** Run the request hooks over a system prompt and messages. */
+    const prepareRequest = (
+      job: Job,
       request: Pick<SessionModelRequest.Input, "system" | "messages">,
       webSocket?: "session",
     ) =>
-      input.prepare({
-        session: input.context.session,
-        agent: input.context.agent.id,
-        model: input.context.model,
-        tools: input.context.tools,
+      job.prepare({
+        session: job.context.session,
+        agent: job.context.agent.id,
+        model: job.context.model,
+        tools: job.context.tools,
         system: request.system,
         messages: request.messages,
         webSocket,
       })
 
-    /** The conversation as the runner would send it, plus any pending instruction update. */
-    const compactionRequest = (
-      input: ExecuteInput,
-      messages: readonly SessionMessage.Info[],
-      webSocket?: "session",
-    ) => {
-      const base = transcript(input.context, messages)
-      const update = input.instructionUpdate ? [Message.system(input.instructionUpdate)] : []
-      return prepare(input, { system: base.system, messages: [...base.messages, ...update] }, webSocket)
+    /** The conversation as the runner would send it, plus any instruction update waiting to be delivered. */
+    const conversationRequest = (job: Job, messages: readonly SessionMessage.Info[], webSocket?: "session") => {
+      const base = baseRequest(job.context, messages)
+      const update = job.instructionUpdate ? [Message.system(job.instructionUpdate)] : []
+      return prepareRequest(job, { system: base.system, messages: [...base.messages, ...update] }, webSocket)
     }
 
-    const retry = Effect.fnUntraced(function* (input: ExecuteInput, hook: SessionModelRequest.Prepared["retry"]) {
-      const policy = yield* SessionRunnerRetry.policy(input.context.session.id)
+    const retryPolicy = Effect.fnUntraced(function* (job: Job, hook: SessionModelRequest.Prepared["retry"]) {
+      const policy = yield* SessionRunnerRetry.policy(job.context.session.id)
       return SessionRunnerRetry.transient(policy, {
-        agent: input.context.agent.id,
-        model: input.context.model.ref,
+        agent: job.context.agent.id,
+        model: job.context.model.ref,
         hook,
       })
     })
 
-    /** Every stored message since the last local summary, with native windows expanded back to what they replaced. */
-    const durableHistory = (sessionID: SessionSchema.ID) =>
+    /**
+     * Every message since the last summary, with native compactions replaced by the messages they stand for.
+     * A native compaction is an opaque blob: it cannot be summarized or shrunk, but its originals can.
+     */
+    const originalMessages = (sessionID: SessionSchema.ID) =>
       SessionHistory.load(db, sessionID, "local").pipe(Effect.orDie)
 
-    // Local summary
+    // Summary
 
-    const summarize = Effect.fn("SessionCompaction.summarize")(function* (input: ExecuteInput) {
-      const context = input.context
-      // A known overflow cannot resubmit the loaded window; start again from durable history.
-      const messages = input.overflow ? yield* durableHistory(context.session.id) : context.messages
-      const history = splitHistory(messages, state.get().tokens)
-      if (!history) {
-        return yield* failed(envelope(input), { type: "compaction.unavailable", message: "Nothing to compact yet" })
-      }
-      yield* started(input, history.recent)
-
-      const previous = lastCheckpoint(history.messages)
-      const prompt = buildPrompt(previous !== undefined, previous?.summary.includes(LEGACY_HEADING) ?? false)
-      const prepared = yield* compactionRequest(input, history.messages)
-      if (prepared.event.result) return yield* supplied(input, prepared.event.result, history.recent)
-
-      // Every attempt shares one retry allowance and one usage total, so an interruption can still account for it.
-      const transient = yield* retry(input, prepared.retry)
-      const usage = yield* Ref.make<SessionUsage.Recorded | undefined>(undefined)
-
-      // Hooks see the transcript alone; the summary prompt is appended after they run.
-      const generate = Effect.fnUntraced(function* (request: LLMRequest, options: StreamOptions) {
-        const prompted = LLMRequest.update(request, { messages: [...request.messages, Message.user(prompt)] })
-        const first = yield* stream(input, prompted, options, transient, usage)
-        if (first.failure || hasSummarySection(first.text)) return first
-
-        const nudged = LLMRequest.update(prompted, { messages: [...prompted.messages, Message.user(NUDGE)] })
-        return yield* stream(input, nudged, options, transient, usage)
-      })
-
-      const finish = Effect.fnUntraced(function* (result: Summary, omitted: number) {
-        const total = yield* Ref.get(usage)
-        if (result.failure || !hasSummarySection(result.text)) {
-          const message = result.text.trim()
-            ? "Compaction summary did not match the required template"
-            : "Compaction produced no summary"
-          return yield* failed(envelope(input), result.failure ?? { type: "compaction.failed", message }, total)
-        }
-
-        const note = omitted
-          ? `\n\n[${omitted} older exchanges were omitted from the summary input; original session history is retained.]`
-          : ""
-        return yield* ended(input, {
-          text: result.text + note,
-          recent: history.recent,
-          providerState: result.providerState,
-          usage: total,
+    const summarize = Effect.fn("SessionCompaction.summarize")(function* (job: Job) {
+      const context = job.context
+      const messages = job.overflow ? yield* originalMessages(context.session.id) : context.messages
+      const split = splitConversation(messages, state.get().tokens)
+      if (!split) {
+        return yield* publishFailed(eventTarget(job), {
+          type: "compaction.unavailable",
+          message: "Nothing to compact yet",
         })
-      })
+      }
+      yield* publishStarted(job, split.recent)
 
-      // The room the conversation has once the fixed prompt and summary instructions are counted.
+      const previous = lastCompaction(split.older)
+      const prompt = buildPrompt(previous !== undefined, previous?.summary.includes(LEGACY_HEADING) ?? false)
+      const prepared = yield* conversationRequest(job, split.older)
+      if (prepared.event.result) return yield* publishHookResult(job, prepared.event.result, split.recent)
+
+      const run: Run = {
+        job,
+        prompt,
+        recent: split.recent,
+        retries: yield* retryPolicy(job, prepared.retry),
+        usage: yield* Ref.make<SessionUsage.Recorded | undefined>(undefined),
+      }
+
+      // How much conversation fits once the system prompt, tools, and summary instructions are counted.
       const limit = context.model.limit
-      const fixed = estimateFixed(prepared.request.system, context.tools) + Token.estimate(prompt)
-      const budget = limit.context > 0 ? promptCeiling(limit, state.get().buffer) - fixed : undefined
+      const fixed = estimateSystemAndTools(prepared.request.system, context.tools) + Token.estimate(prompt)
+      const budget = limit.context > 0 ? maxPromptTokens(limit, state.get().buffer) - fixed : undefined
 
-      // A prefix that cannot fit the window at all skips the normal request and starts from the reduced text.
+      // Skip the normal request when the conversation cannot fit the window at all.
       const window = Math.min(limit.context, limit.input ?? Number.POSITIVE_INFINITY)
-      const size = estimateTokens({ messages: history.messages, context }) + Token.estimate(prompt)
-      const oversized = budget !== undefined && budget > 0 && size > window
+      const size = estimateTokens({ messages: split.older, context }) + Token.estimate(prompt)
+      const tooBig = budget !== undefined && budget > 0 && size > window
+      if (!tooBig) {
+        const attempt = yield* generate(run, prepared.request, prepared.options)
+        if (!attempt.overflow) return yield* finish(run, attempt, 0)
+      }
+      return yield* shrinkAndRetry(run, prepared, budget)
+    })
 
-      const normal = oversized ? undefined : yield* generate(prepared.request, prepared.options)
-      if (normal && !normal.overflow) return yield* finish(normal, 0)
-
-      // Flatten the history to text and drop the oldest exchanges until the provider accepts the request.
-      const entries = serializeFallback(prepared.request.messages)
-      const system = transcript(context, []).system
+    /** The summary request overflowed. Flatten the conversation to text and drop the oldest exchanges until it fits. */
+    const shrinkAndRetry = Effect.fnUntraced(function* (
+      run: Run,
+      prepared: Effect.Success<ReturnType<SessionModelRequest.Interface["compaction"]>>,
+      budget: number | undefined,
+    ) {
+      const job = run.job
+      const entries = conversationToText(prepared.request.messages)
+      const system = baseRequest(job.context, []).system
       let allowance = budget ?? Token.estimate(entries.map((entry) => entry.text).join("\n\n"))
       let previousText: string | undefined
+
       for (let attempt = 1; ; attempt++) {
-        const fitted = fitFallback(entries, allowance)
-        if (!fitted || fitted.text === previousText) {
-          return yield* failed(
-            envelope(input),
+        const kept = keepNewestExchanges(entries, allowance)
+        if (!kept || kept.text === previousText) {
+          return yield* publishFailed(
+            eventTarget(job),
             {
               type: "compaction.failed",
               message: "The summary input cannot be reduced further without losing the latest exchange or checkpoint",
             },
-            yield* Ref.get(usage),
+            yield* Ref.get(run.usage),
           )
         }
 
-        const reduced = yield* prepare(input, { system, messages: [Message.user(fitted.text)] })
+        const reduced = yield* prepareRequest(job, { system, messages: [Message.user(kept.text)] })
         if (reduced.event.result) {
-          yield* recordUsage(context.session.id, yield* Ref.get(usage))
-          return yield* supplied(input, reduced.event.result, history.recent)
+          yield* publishUsage(job.context.session.id, yield* Ref.get(run.usage))
+          return yield* publishHookResult(job, reduced.event.result, run.recent)
         }
 
-        const result = yield* generate(reduced.request, reduced.options)
-        if (!result.overflow || attempt === FALLBACK_OVERFLOW_RETRIES) return yield* finish(result, fitted.omitted)
+        const result = yield* generate(run, reduced.request, reduced.options)
+        if (!result.overflow || attempt === MAX_SHRINK_ATTEMPTS) return yield* finish(run, result, kept.omitted)
         allowance = Math.floor(allowance / 2)
-        previousText = fitted.text
+        previousText = kept.text
       }
     })
 
-    /** One summary request, folded into the text it produced. Usage accumulates in `usage` across attempts. */
-    const stream = (
-      input: ExecuteInput,
-      request: LLMRequest,
-      options: StreamOptions,
-      transient: ReturnType<typeof SessionRunnerRetry.transient>,
-      usage: Ref.Ref<SessionUsage.Recorded | undefined>,
-    ) => {
-      const context = input.context
+    /** Ask for the summary, and once more with a reminder if the model ignored the template. */
+    const generate = Effect.fnUntraced(function* (run: Run, request: LLMRequest, options: StreamOptions) {
+      // Hooks saw the request without the summary prompt; it is appended after they ran.
+      const prompted = LLMRequest.update(request, { messages: [...request.messages, Message.user(run.prompt)] })
+      const first = yield* stream(run, prompted, options)
+      if (first.failure || hasSummarySection(first.text)) return first
+
+      const nudged = LLMRequest.update(prompted, { messages: [...prompted.messages, Message.user(NUDGE)] })
+      return yield* stream(run, nudged, options)
+    })
+
+    /** Publish the summary, or the failure if there is no usable one. */
+    const finish = Effect.fnUntraced(function* (run: Run, attempt: Attempt, omitted: number) {
+      const usage = yield* Ref.get(run.usage)
+      if (attempt.failure || !hasSummarySection(attempt.text)) {
+        const message = attempt.text.trim()
+          ? "Compaction summary did not match the required template"
+          : "Compaction produced no summary"
+        return yield* publishFailed(
+          eventTarget(run.job),
+          attempt.failure ?? { type: "compaction.failed", message },
+          usage,
+        )
+      }
+
+      const note = omitted
+        ? `\n\n[${omitted} older exchanges were omitted from the summary input; original session history is retained.]`
+        : ""
+      return yield* publishEnded(run.job, {
+        text: attempt.text + note,
+        recent: run.recent,
+        providerState: attempt.providerState,
+        usage,
+      })
+    })
+
+    /** One model call, folded into what it produced. */
+    const stream = (run: Run, request: LLMRequest, options: StreamOptions) => {
+      const context = run.job.context
       const metadataKey = context.model.model.route.providerMetadataKey ?? context.model.model.provider
 
-      const step = (summary: Summary, event: LLMEvent): Effect.Effect<Summary, AIError> => {
+      const step = (attempt: Attempt, event: LLMEvent): Effect.Effect<Attempt, AIError> => {
         if (LLMEvent.is.providerError(event)) {
           const overflow = event.classification === "context-overflow"
           const type = overflow ? "provider.invalid-request" : "provider.error"
-          return Effect.succeed({ ...summary, overflow, failure: { type, message: event.message } })
+          return Effect.succeed({ ...attempt, overflow, failure: { type, message: event.message } })
         }
 
         if (LLMEvent.is.textDelta(event)) {
           return bus
             .publish(SessionEvent.Compaction.Delta, { sessionID: context.session.id, text: event.text })
-            .pipe(Effect.as({ ...summary, text: summary.text + event.text }))
+            .pipe(Effect.as({ ...attempt, text: attempt.text + event.text }))
         }
 
         if (LLMEvent.is.stepFinish(event)) {
-          return Ref.update(usage, (total) => {
+          return Ref.update(run.usage, (total) => {
             const recorded = SessionUsage.record(event.usage, context.model.cost)
             return total ? SessionUsage.add(total, recorded) : recorded
-          }).pipe(Effect.as({ ...summary, providerState: event.providerMetadata?.[metadataKey] }))
+          }).pipe(Effect.as({ ...attempt, providerState: event.providerMetadata?.[metadataKey] }))
         }
 
-        if (!LLMEvent.is.finish(event)) return Effect.succeed(summary)
+        if (!LLMEvent.is.finish(event)) return Effect.succeed(attempt)
         switch (event.reason.normalized) {
           case "unknown":
             return Effect.fail(
@@ -798,59 +828,62 @@ export const layer = Layer.effect(
             )
           case "length":
             return Effect.succeed({
-              ...summary,
+              ...attempt,
               failure: { type: "compaction.failed", message: "Compaction summary reached the output token limit" },
             })
           case "content-filter":
             return Effect.succeed({
-              ...summary,
+              ...attempt,
               failure: { type: "provider.content-filter", message: "Compaction summary was blocked by the provider" },
             })
           default:
-            return Effect.succeed(summary)
+            return Effect.succeed(attempt)
         }
       }
 
       return llm.stream(request, options).pipe(
-        Stream.runFoldEffect((): Summary => ({ text: "", overflow: false }), step),
-        transient,
+        Stream.runFoldEffect((): Attempt => ({ text: "", overflow: false }), step),
+        run.retries,
         Effect.catchTag("AI.Error", (error) =>
-          Effect.succeed<Summary>({
+          Effect.succeed<Attempt>({
             text: "",
             overflow: isContextOverflowFailure(error),
             failure: toSessionError(error),
           }),
         ),
-        Effect.onInterrupt(() => Ref.get(usage).pipe(Effect.flatMap((total) => interrupted(input, total)))),
+        Effect.onInterrupt(() =>
+          Ref.get(run.usage).pipe(Effect.flatMap((usage) => publishInterrupted(run.job, usage))),
+        ),
       )
     }
 
-    // Provider checkpoint
+    // Native compaction
 
-    const native = Effect.fn("SessionCompaction.native")(function* (input: ExecuteInput) {
-      const context = input.context
-      const reject = (message: string) => failed(envelope(input), { type: "provider.unsupported-operation", message })
+    const nativeCompaction = Effect.fn("SessionCompaction.native")(function* (job: Job) {
+      const context = job.context
+      const unsupported = (message: string) =>
+        publishFailed(eventTarget(job), { type: "provider.unsupported-operation", message })
 
-      const prepared = yield* compactionRequest(input, context.messages, "session")
+      const prepared = yield* conversationRequest(job, context.messages, "session")
       if (prepared.event.result) {
-        yield* started(input, "")
-        return yield* supplied(input, prepared.event.result, "")
+        yield* publishStarted(job, "")
+        return yield* publishHookResult(job, prepared.event.result, "")
       }
       const request = prepared.request
 
+      // The result only works on the exact endpoint that made it, so that endpoint must be known up front.
+      // History is selected before request hooks, so a hook that reroutes the request cannot be honored here.
       const provenance = SessionProviderContext.provenance(context.model)
-      if (!provenance) return yield* reject("Provider compaction requires a stable, configured endpoint")
-      // History is selected before request hooks. Until that interface can select on the final route,
-      // require routing in the catalog; never install a checkpoint that the next request would skip.
+      if (!provenance) return yield* unsupported("Provider compaction requires a stable, configured endpoint")
       const routed = SessionProviderContext.provenance({ model: request.model, ref: context.model.ref })
       if (!SessionProviderContext.compatible(provenance, routed)) {
-        return yield* reject(
+        return yield* unsupported(
           "Provider compaction requires the endpoint in provider/model settings, not a model.request rewrite",
         )
       }
 
-      const retained = durableHistory(context.session.id).pipe(
-        Effect.map((messages) => retainUsers(messages, context.model, state.get().tokens)),
+      const retained = originalMessages(context.session.id).pipe(
+        Effect.map((messages) => recentUserMessages(messages, context.model, state.get().tokens)),
       )
       const strategy = state
         .get()
@@ -858,78 +891,79 @@ export const layer = Layer.effect(
         .map((strategy) => strategy({ request, options: prepared.options, retained }))
         .find((effect) => effect !== undefined)
       if (!strategy) {
-        return yield* reject(
+        return yield* unsupported(
           `No plugin provides native compaction for ${request.model.provider}/${request.model.route.id}`,
         )
       }
 
-      const transient = yield* retry(input, prepared.retry)
-      yield* started(input, "")
+      const retries = yield* retryPolicy(job, prepared.retry)
+      yield* publishStarted(job, "")
 
-      // Transient provider failures retry like any other request; only a known automatic overflow permits
-      // local recovery, and nothing is installed until the provider returns a checkpoint.
-      const install = (result: NativeResult) =>
-        ended(input, {
+      const onResult = (result: NativeResult) =>
+        publishEnded(job, {
           text: "",
           recent: "",
           providerContext: SessionProviderContext.encode(provenance, result.replacement),
           usage: result.usage && SessionUsage.record(result.usage, context.model.cost),
         })
-      const recover = (cause: AIError): Effect.Effect<Outcome> => {
-        if (input.reason !== "auto" || !isContextOverflowFailure(cause))
-          return failed(envelope(input), toSessionError(cause))
-        return summarize({ ...input, overflow: true, started: true }).pipe(
+      // Only an automatic compaction may fall back to a summary when the provider rejects the window as too long.
+      const onError = (cause: AIError): Effect.Effect<Outcome> => {
+        if (job.reason !== "auto" || !isContextOverflowFailure(cause)) {
+          return publishFailed(eventTarget(job), toSessionError(cause))
+        }
+        return summarize({ ...job, overflow: true, started: true }).pipe(
           Effect.map((result) => (result.status === "completed" ? { ...result, recoveredOverflow: true } : result)),
         )
       }
+      // Nothing is installed until the provider returns, so the install itself must not be interrupted.
       return yield* Effect.uninterruptibleMask((restore) =>
-        restore(strategy.pipe(transient)).pipe(Effect.flatMap(install)),
+        restore(strategy.pipe(retries)).pipe(Effect.flatMap(onResult)),
       ).pipe(
-        Effect.onInterrupt(() => interrupted(input)),
-        Effect.catchTag("AI.Error", recover),
+        Effect.onInterrupt(() => publishInterrupted(job)),
+        Effect.catchTag("AI.Error", onError),
       )
     })
 
     // Entry points
 
-    const run = (input: ExecuteInput) =>
-      input.context.model.compaction?.type === "native" ? native(input) : summarize(input)
+    const runCompaction = (job: Job) =>
+      job.context.model.compaction?.type === "native" ? nativeCompaction(job) : summarize(job)
 
     const compact = Effect.fn("SessionCompaction.compact")(function* (input: AutoInput): Effect.fn.Return<Outcome> {
-      const request = { ...input, reason: "auto" as const }
-      // A known overflow skips the native mechanism: the loaded window is what overflowed.
-      return yield* input.overflow ? summarize(request) : run(request)
+      const job = { ...input, reason: "auto" as const }
+      // The loaded messages were just rejected as too long; a native compaction of them would be too.
+      return yield* input.overflow ? summarize(job) : runCompaction(job)
     })
 
     const required = (input: RequiredInput) => {
       const config = state.get()
       if (!config.auto) return false
 
-      // Run the completed checkpoint before considering another automatic compaction.
+      // A compaction just completed; let the runner rebuild the request from it first.
       const last = input.messages.at(-1)
       if (last?.type === "compaction" && last.status === "completed") return false
 
-      // Native usage describes the compaction operation, not the replacement's size. Wait for
-      // a primary response to anchor the new window, including after restart or new admission.
-      const anchorIndex = input.messages.findLastIndex(hasInputUsage)
-      const checkpointIndex = input.messages.findLastIndex(SessionProviderContext.isCheckpoint)
-      if (anchorIndex < checkpointIndex) return false
+      // After a native compaction, wait for a response to it before estimating: the usage recorded by the
+      // compaction itself describes that operation, not the size of the window it produced.
+      const measuredIndex = input.messages.findLastIndex(hasMeasuredPrompt)
+      const nativeIndex = input.messages.findLastIndex(SessionProviderContext.isCheckpoint)
+      if (measuredIndex < nativeIndex) return false
 
       const limit = input.context.model.limit
       if (limit.context <= 0) return false
-      return estimateTokens(input) >= promptCeiling(limit, config.buffer)
+      return estimateTokens(input) >= maxPromptTokens(limit, config.buffer)
     }
 
     const compactManual = Effect.fn("SessionCompaction.compactManual")(function* (input: ManualInput) {
-      const target: Envelope = { sessionID: input.session.id, reason: "manual", inputID: input.inputID }
-      if (splitHistory(input.messages, state.get().tokens) === undefined) {
-        return yield* failed(target, { type: "compaction.unavailable", message: "Nothing to compact yet" })
+      const target: EventTarget = { sessionID: input.session.id, reason: "manual", inputID: input.inputID }
+      if (splitConversation(input.messages, state.get().tokens) === undefined) {
+        return yield* publishFailed(target, { type: "compaction.unavailable", message: "Nothing to compact yet" })
       }
       return yield* input.resolveContext(input.session).pipe(
         Effect.matchEffect({
-          onFailure: (cause) => failed(target, toSessionError(cause)),
+          onFailure: (cause) => publishFailed(target, toSessionError(cause)),
           onSuccess: (context) =>
-            run({
+            runCompaction({
               context,
               instructionUpdate: context.instructionUpdate,
               prepare: input.prepare,
