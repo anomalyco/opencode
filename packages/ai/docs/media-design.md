@@ -281,7 +281,7 @@ const request = Transcription.request({
   language: "en",                                  // provider-native passthrough
   timestamps: "segment",                           // none | segment | word
   diarize: true,
-  speakers: 2,                                     // expected count, hint only (AssemblyAI)
+  speakers: 2,                                     // exact speaker count (AssemblyAI only)
   providerOptions: { known_speaker_names: ["agent"] },
 })
 
@@ -314,7 +314,8 @@ Settled rules:
   word offsets, so segment timestamps and diarization also request word offsets there.
 - **Diarization.** `diarize` means segments (and words, where the provider labels them) carry `speaker`. Labels are
   provider-native strings — OpenAI `A` or a known speaker name, Deepgram `0`, Gemini `spk:0`, AssemblyAI `A` — with no
-  cross-provider speaker model. `speakers` is a hint; only AssemblyAI (`speakers_expected`) accepts it.
+  cross-provider speaker model. `speakers` is the exact number of speakers to label, which AssemblyAI (`speakers_expected`, the only route that
+  accepts it) treats as a constraint rather than a hint.
 - **Language** is passed through (`language`, OpenAI `gpt-transcribe` `languages[]`, Gemini `languageCodes`,
   AssemblyAI `language_code`). `response.language` is the provider's own value, lowercased but not normalized: an
   ISO code on most routes (AssemblyAI's detection returns `en`), `english` from whisper-1. Deepgram and AssemblyAI
