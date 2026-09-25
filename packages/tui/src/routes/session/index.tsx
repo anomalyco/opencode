@@ -1691,9 +1691,9 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
       <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={3} marginTop={1} flexShrink={0}>
         <markdown
           syntaxStyle={syntax()}
-          streaming={true}
-          internalBlockMode="top-level"
           content={props.part.text.trim()}
+          streaming={props.message.time.completed === undefined}
+          internalBlockMode="top-level"
           tableOptions={{ style: "grid" }}
           conceal={ctx.conceal()}
           fg={theme.markdownText}
