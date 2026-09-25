@@ -6,7 +6,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Context, Effect, Layer } from "effect"
 import * as Stream from "effect/Stream"
-import { streamText, wrapLanguageModel, type ModelMessage, type Tool } from "ai"
+import { streamText, wrapLanguageModel, type ModelMessage, type Tool, type ToolCallRepairFunction } from "ai"
 import type { LLMEvent } from "@opencode-ai/llm"
 import { LLMClient } from "@opencode-ai/llm/route"
 import type { LLMClientService } from "@opencode-ai/llm/route"
@@ -58,6 +58,28 @@ export interface Interface {
 export class Service extends Context.Service<Service, Interface>()("@opencode/LLM") {}
 
 export const use = serviceUse(Service)
+
+export function repairToolCall(tools: Record<string, Tool>): ToolCallRepairFunction<Record<string, Tool>> {
+  return async (failed) => {
+    if (failed.toolCall.providerExecuted) return null
+
+    const lower = failed.toolCall.toolName.toLowerCase()
+    if (lower !== failed.toolCall.toolName && tools[lower]) {
+      return {
+        ...failed.toolCall,
+        toolName: lower,
+      }
+    }
+    return {
+      ...failed.toolCall,
+      input: JSON.stringify({
+        tool: failed.toolCall.toolName,
+        error: failed.error.message,
+      }),
+      toolName: "invalid",
+    }
+  }
+}
 
 const live: Layer.Layer<
   Service,
@@ -293,23 +315,7 @@ const live: Layer.Layer<
           },
           // Copilot returns the authoritative billed amount only in provider-specific response fields.
           includeRawChunks: input.model.providerID.includes("github-copilot"),
-          async experimental_repairToolCall(failed) {
-            const lower = failed.toolCall.toolName.toLowerCase()
-            if (lower !== failed.toolCall.toolName && prepared.tools[lower]) {
-              return {
-                ...failed.toolCall,
-                toolName: lower,
-              }
-            }
-            return {
-              ...failed.toolCall,
-              input: JSON.stringify({
-                tool: failed.toolCall.toolName,
-                error: failed.error.message,
-              }),
-              toolName: "invalid",
-            }
-          },
+          experimental_repairToolCall: repairToolCall(prepared.tools),
           temperature: prepared.params.temperature,
           topP: prepared.params.topP,
           topK: prepared.params.topK,
