@@ -34,10 +34,20 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       shadowable by program declarations like other globals.
 - [x] Cooperative timeout, an optional total tool-call limit, output bounding, and unrestricted tool-call concurrency.
 - [x] The timeout fires between interpreter steps, so one built-in is bounded in what it may build: strings up to
-      2^24 characters (`repeat`, `pad*`, `concat`, `join`, `+`, template literals, `JSON.stringify`), arrays up to
-      10,000,000 elements (`Array(n)`, `length =`, `Array.from`, `split`, `matchAll`, `concat`, `flat`; below the JS
-      maximum of 2^32 - 1), and 10,000 pending promises at once. Exceeding one throws a `RangeError`. A single regular
-      expression match can still run long on a pathological pattern; the host regex engine has no interrupt hook.
+      2^24 characters (`repeat`, `pad*`, `concat`, `join`, `+`, template literals, `JSON.stringify`, `replace` and
+      `replaceAll` with a string replacement (checked before the host builds the result), `encodeURI*`, `btoa`,
+      `Uint8Array` `toString`/`toBase64`/`toHex`, `URLSearchParams.toString`), arrays up to 10,000,000 elements
+      (`Array(n)`, `length =`, `Array.from`, spread, rest, `split`, `matchAll`, `concat`, `flat`; below the JS maximum
+      of 2^32 - 1), 250,000 arguments to one call (spread arguments, `apply`, bound arguments), and 10,000 pending
+      promises at once. Exceeding one throws a `RangeError`. A replacement whose quick bound is too big is measured
+      first: the check is exact for a global replacement without `$`, and otherwise charges each `$` token the longest
+      group of its match (a whole subject for `` $` `` and `$'`), so a result near the cap may still be rejected.
+      `encodeURI*` and `Uint8Array.toString` are checked after the host builds the string (at most nine times a capped
+      input). Unhandled rejections from un-awaited promises are reported individually up to 100, each message cut at
+      4,096 characters, with one summary warning counting the rest that were never handled.
+- [ ] A single regular expression match can still run long on a pathological pattern (`/a*a*a*a*b/` on a 1 KB
+      subject): the host regex engine has no interrupt hook and no subject-length cap helps beyond quadratic patterns,
+      so this needs a step-counted regex engine of our own.
 - [x] A trailing comma after a rest parameter is a syntax error, with or without `"use strict"`.
 - [x] A program that begins with `"use strict"` rejects `yield` as an identifier and duplicate parameter names at
       parse time. Without it, `yield` is an ordinary binding.
@@ -124,8 +134,11 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Closures, recursion, default parameters, rest parameters, and destructured parameters.
 - [x] A call depth limit of 10000: deeper nesting throws a catchable `RangeError: Maximum call stack size exceeded`
       at the overflowing call instead of running until the timeout. Callbacks invoked by built-ins count below the
-      call that invoked the built-in, and a resumed `await` starts from depth 0 as in JS, so long async chains such
-      as recursive pagination are unaffected.
+      call that invoked the built-in, and built-ins invoking one another count toward the same limit, so a cycle
+      through built-ins alone (`String(a)` on a 100,000-deep nested array runs `toString` → `join` → `toString`)
+      bottoms out too. A resumed `await` starts from depth 0 as in JS, so long async chains such as recursive pagination are
+      unaffected. A thenable that keeps resolving with another thenable loops in constant memory until the timeout, as
+      in JS.
 - [x] Expression and block function bodies.
 - [x] User callbacks for the supported Array, Map, Set, URLSearchParams, sort, string-replacement, and `Array.from`
       mapper APIs, with one shared acceptance rule everywhere including promise reactions.

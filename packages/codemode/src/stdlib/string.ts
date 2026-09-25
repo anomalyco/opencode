@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import { constructor, fn, type Impl, type Method, methods } from "../interpreter/native.js"
-import { checkArrayLength, checkStringLength } from "../interpreter/limits.js"
+import { checkArrayLength, checkStringLength, MAX_STRING_LENGTH } from "../interpreter/limits.js"
 import { invalidData, IteratorSymbol, rangeError, typeError } from "../interpreter/model.js"
 import {
   define,
@@ -34,6 +34,45 @@ const requireDataArgument = (name: string, index: number, arg: Value): Value => 
     throw invalidData(`String.${name} expects argument ${index + 1} to be a data value.`)
   }
   return arg
+}
+
+// The host builds a replaced string in one synchronous step, so bound its length first: the unmatched text plus, per
+// match, the replacement, a whole subject per `` $` `` or `$'`, and the match's longest group per `$` token. Groups lie
+// inside their match, so they sum to at most the subject, unless a positive lookaround captures past it. Matches are
+// only measured when the bound for "every position matches" is too big; the measured bound is exact without `$`.
+const checkReplacementLength = (subject: string, search: RegExp | string, replacement: string, all: boolean): void => {
+  const tokens = (token: string) => countOccurrences(replacement, token)
+  const perMatch = replacement.length + (tokens("$`") + tokens("$'")) * subject.length
+  const bound = (matches: { count: number; matched: number; reach: number }) =>
+    subject.length - matches.matched + matches.count * perMatch + tokens("$") * matches.reach
+  const lookaround = typeof search !== "string" && /\(\?<?=/.test(search.source)
+  const reach = lookaround ? (subject.length + 1) * subject.length : subject.length
+  if (bound({ count: subject.length + 1, matched: 0, reach }) <= MAX_STRING_LENGTH) return
+  if (!all) return checkStringLength(bound({ count: 1, matched: 0, reach: subject.length }))
+  if (typeof search === "string") {
+    const count = countOccurrences(subject, search)
+    return checkStringLength(bound({ count, matched: count * search.length, reach: count * search.length }))
+  }
+  // matchAll steps past an empty match by code point under `u` and `v`; the copy starts at 0 whatever the program's
+  // `lastIndex` is, as a global `replace` does.
+  const matches = subject.matchAll(new RegExp(search)).reduce(
+    (total, match) => ({
+      count: total.count + 1,
+      matched: total.matched + match[0].length,
+      reach: total.reach + match.reduce((longest, group) => Math.max(longest, group?.length ?? 0), 0),
+    }),
+    { count: 0, matched: 0, reach: 0 },
+  )
+  checkStringLength(bound(matches))
+}
+
+const countOccurrences = (subject: string, needle: string): number => {
+  if (needle === "") return subject.length + 1
+  let count = 0
+  for (let index = subject.indexOf(needle); index !== -1; index = subject.indexOf(needle, index + needle.length)) {
+    count += 1
+  }
+  return count
 }
 
 const replaceAllNeedsGlobal = (pattern: RegExp) => {
@@ -208,10 +247,13 @@ export const stringGlobal = <R>(ctx: Interpreter<R>) => {
             const regex = pattern.regex
             const text = str(name, primitives, 1)
             if (name === "replaceAll") replaceAllNeedsGlobal(regex)
+            checkReplacementLength(value, regex, text, regex.global)
             return name === "replace" ? value.replace(regex, text) : value.replaceAll(regex, text)
           }
-          if (name === "replace") return value.replace(str(name, primitives, 0), str(name, primitives, 1))
-          return value.replaceAll(str(name, primitives, 0), str(name, primitives, 1))
+          const needle = str(name, primitives, 0)
+          const text = str(name, primitives, 1)
+          checkReplacementLength(value, needle, text, name === "replaceAll")
+          return name === "replace" ? value.replace(needle, text) : value.replaceAll(needle, text)
         },
       )
     })

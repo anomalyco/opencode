@@ -64,6 +64,7 @@ const arrayFrom = <R>(ctx: Interpreter<R>, args: Array<Value>): Effect.Effect<Va
           ? step.value
           : yield* preserveConsumerError(cursor.close, apply([step.value, index], args[2])),
       )
+      checkArrayLength(values.length)
       index += 1
     }
   })

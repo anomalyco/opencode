@@ -1,4 +1,5 @@
 import { fn, methods } from "../interpreter/native.js"
+import { checkStringLength } from "../interpreter/limits.js"
 import { typeError } from "../interpreter/model.js"
 import {
   define,
@@ -32,6 +33,7 @@ export const base64Global = <R>(ctx: Interpreter<R>, name: "atob" | "btoa") =>
   fn<R>(ctx.builtins, name, 1, (_, args) => {
     if (args.length === 0) throw typeError(`${name} requires 1 argument (a string)`)
     const input = coerceToString(args[0])
+    if (name === "btoa") checkStringLength(Math.ceil(input.length / 3) * 4)
     try {
       return name === "atob" ? atob(input) : btoa(input)
     } catch {

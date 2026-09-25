@@ -63,7 +63,7 @@ import {
   typeError,
   unsupportedSyntax,
 } from "./model.js"
-import { checkStringLength } from "./limits.js"
+import { checkArgumentCount, checkArrayLength, checkStringLength } from "./limits.js"
 import { locate, materialize } from "./errors.js"
 import { type Builtins, primitivePrototype } from "./intrinsics.js"
 import { globals } from "./globals.js"
@@ -319,7 +319,7 @@ export class Interpreter<R> {
   readonly logs: Array<string>
   /** Template objects by site: a tag sees the same `strings` array every time its literal is evaluated, as in JS. */
   readonly templates = new WeakMap<TaggedTemplateExpression, Arr>()
-  private readonly root: Frame<R>
+  readonly root: Frame<R>
 
   constructor(options: {
     readonly tools: ToolRuntime<R>
@@ -1281,6 +1281,7 @@ class Frame<R> {
             const next = yield* cursor.next
             done = next.done
             if (!done) rest.push(next.value)
+            checkArrayLength(rest.length)
           }
           yield* consume(element.argument, new Arr(self.ctx.builtins.Array, rest), element)
           return
@@ -1728,15 +1729,19 @@ class Frame<R> {
   }
 
   // Built-ins throw without a location, synchronously or inside their Effect; the call site supplies it. A built-in
-  // reached through `ctx.call` runs on the root frame, so the deeper of the frame and the enclosing site counts.
+  // reached through `ctx.call` runs on the root frame, so the deeper of the frame and the enclosing site counts. There
+  // it was invoked by another built-in, and those hops are counted too, so a cycle through built-ins alone
+  // (toString → join → toString) bottoms out without changing the depth of program calls.
   private native(body: () => Effect.Effect<Value, unknown, R>, node?: AstNode): Effect.Effect<Value, unknown, R> {
-    return Effect.flatMap(CallSite, (site) =>
-      Effect.provideService(
+    return Effect.flatMap(CallSite, (site) => {
+      const natives = this === this.ctx.root ? site.natives + 1 : 0
+      if (natives > MAX_CALL_DEPTH) throw rangeError("Maximum call stack size exceeded", node)
+      return Effect.provideService(
         Effect.catchDefect(Effect.suspend(body), (defect) => Effect.die(locate(defect, node))),
         CallSite,
-        { node, depth: Math.max(this.depth, site.depth) },
-      ),
-    )
+        { node, depth: Math.max(this.depth, site.depth), natives },
+      )
+    })
   }
 
   private evaluateCallArguments(
@@ -1754,6 +1759,7 @@ class Frame<R> {
             const step = yield* cursor.next
             if (step.done) break
             args.push(step.value)
+            checkArgumentCount(args.length)
           }
         } else {
           args.push(yield* self.evaluateExpression(argNode))
@@ -2113,6 +2119,7 @@ class Frame<R> {
             const step = yield* cursor.next
             if (step.done) break
             values.push(step.value)
+            checkArrayLength(values.length)
           }
         } else {
           values.push(yield* self.evaluateExpression(element))
