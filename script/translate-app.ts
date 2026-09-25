@@ -72,6 +72,7 @@ const languages = {
   tg: "Tajik",
   tk: "Turkmen",
   uz: "Uzbek (Latin)",
+  gl: "Galician",
   zh: "Simplified Chinese",
   zht: "Traditional Chinese",
 } as const satisfies Record<Locale, string>
