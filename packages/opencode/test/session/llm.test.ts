@@ -757,53 +757,69 @@ describe("session.llm.stream", () => {
   const opencodeFixture = { providerID: "opencode-test", modelID: vivgridFixture.modelID }
 
   it.instance(
-    "sends the parent session header for opencode providers",
+    "sends standard session headers for opencode providers",
     () =>
       Effect.gen(function* () {
         const fixture = loadFixture(vivgridFixture.providerID, vivgridFixture.modelID)
-        const request = waitRequest(
-          "/chat/completions",
-          new Response(createChatStream("Hello"), {
-            status: 200,
-            headers: { "Content-Type": "text/event-stream" },
-          }),
-        )
         const resolved = yield* Provider.use.getModel(
           ProviderV2.ID.make(opencodeFixture.providerID),
           ModelV2.ID.make(opencodeFixture.modelID),
         )
-        const sessionID = SessionID.make("session-child")
-        const parentSessionID = SessionID.make("session-parent")
+        const sessionIDs = [
+          "ses_f284fb1e8ffemqmO9VQExSXs3v",
+          "ses_40aa69983fba_free-0925-big-pickle",
+          "ses_40aa69983fba_free-0925-big-pickle",
+          "ses_40aa69983fba_free-0925-big-pickle-other",
+        ]
+        const parentSessionID = SessionID.make("ses_40aa69983fba_free-parent")
         const agent = {
           name: "test",
           mode: "primary",
           options: {},
           permission: [{ permission: "*", pattern: "*", action: "allow" }],
         } satisfies Agent.Info
-        const user = {
-          id: MessageID.make("msg_user-parent-header"),
-          sessionID,
-          role: "user",
-          time: { created: Date.now() },
-          agent: agent.name,
-          model: {
-            providerID: ProviderV2.ID.make(opencodeFixture.providerID),
-            modelID: resolved.id,
-          },
-        } satisfies SessionV1.User
+        const captures = []
+        for (const [index, sessionID] of sessionIDs.entries()) {
+          const request = waitRequest(
+            "/chat/completions",
+            new Response(createChatStream("Hello"), {
+              status: 200,
+              headers: { "Content-Type": "text/event-stream" },
+            }),
+          )
+          const user = {
+            id: MessageID.make(`msg_user-parent-header-${index}`),
+            sessionID: SessionID.make(sessionID),
+            role: "user",
+            time: { created: Date.now() },
+            agent: agent.name,
+            model: {
+              providerID: ProviderV2.ID.make(opencodeFixture.providerID),
+              modelID: resolved.id,
+            },
+          } satisfies SessionV1.User
 
-        yield* drain({
-          user,
-          sessionID,
-          parentSessionID,
-          model: resolved,
-          agent,
-          system: ["You are a helpful assistant."],
-          messages: [{ role: "user", content: "Hello" }],
-          tools: {},
-        })
+          yield* drain({
+            user,
+            sessionID: SessionID.make(sessionID),
+            parentSessionID,
+            model: resolved,
+            agent,
+            system: ["You are a helpful assistant."],
+            messages: [{ role: "user", content: "Hello" }],
+            tools: {},
+          })
+          captures.push(yield* Effect.promise(() => request))
+        }
 
-        expect((yield* Effect.promise(() => request)).headers.get("x-parent-session-id")).toBe(parentSessionID)
+        const sessionHeaders = captures.map((capture) => capture.headers.get("x-opencode-session"))
+        expect(sessionHeaders[0]).toBe(sessionIDs[0])
+        expect(sessionHeaders[1]).toMatch(/^ses_[0-9a-f]{12}[0-9A-Za-z]{14}$/)
+        expect(sessionHeaders[2]).toMatch(/^ses_[0-9a-f]{12}[0-9A-Za-z]{14}$/)
+        expect(sessionHeaders[3]).toMatch(/^ses_[0-9a-f]{12}[0-9A-Za-z]{14}$/)
+        expect(sessionHeaders[1]).toBe(sessionHeaders[2])
+        expect(sessionHeaders[1]).not.toBe(sessionHeaders[3])
+        expect(captures[1].headers.get("x-parent-session-id")).toBe(parentSessionID)
       }),
     {
       config: () => {
@@ -840,7 +856,7 @@ describe("session.llm.stream", () => {
           ProviderV2.ID.make(vivgridFixture.providerID),
           ModelV2.ID.make(fixture.model.id),
         )
-        const sessionID = SessionID.make("session-test-1")
+        const sessionID = SessionID.make("ses_40aa69983fba_free-0925-big-pickle")
         const agent = {
           name: "test",
           mode: "primary",
@@ -874,6 +890,7 @@ describe("session.llm.stream", () => {
         const headers = capture.headers
         const url = capture.url
 
+        expect(headers.get("x-session-affinity")).toBe(sessionID)
         expect(url.pathname.startsWith("/v1/")).toBe(true)
         expect(url.pathname.endsWith("/chat/completions")).toBe(true)
         expect(headers.get("Authorization")).toBe("Bearer test-key")
