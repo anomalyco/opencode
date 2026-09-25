@@ -12,6 +12,7 @@ import { getLastFocusedWindow } from "./windows"
 let appDock: AppDock | undefined
 let dockWindow: BrowserWindow | undefined
 const dockDestroyHooks = new Set<number>()
+let profileContext = (senderID: number) => ({ profileID: "default", storageKey: `dock-bridge-${senderID}-default` })
 
 export function registerAppDockBridge(instance: AppDock) {
   appDock = instance
@@ -19,6 +20,10 @@ export function registerAppDockBridge(instance: AppDock) {
 
 export function registerAppDockWindow(win: BrowserWindow) {
   dockWindow = win
+}
+
+export function registerAppDockProfileResolver(resolver: () => { profileID: string; storageKey: string }) {
+  profileContext = () => resolver()
 }
 
 const dockWindowFor = (): BrowserWindow | null => {
@@ -73,8 +78,6 @@ const dockRef = (value: unknown, name: string) => {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1) throw new Error(`Invalid App Dock ${name}`)
   return value
 }
-
-const dockBridgeStorageKey = (senderID: number) => `dock-bridge-${senderID}-default`
 
 const dockSender = () => {
   const win = dockWindowFor()
@@ -142,6 +145,7 @@ async function dispatch(op: string, args: Record<string, unknown>): Promise<unkn
     }
     case "open": {
       const address = dockString(args.address, "address")
+      const profile = profileContext(senderID)
       const tab = await dock.open(
         senderID,
         win,
@@ -150,7 +154,7 @@ async function dispatch(op: string, args: Record<string, unknown>): Promise<unkn
         (event) => {
           if (!win.isDestroyed()) win.webContents.send("app-dock-event", event)
         },
-        { storageKey: dockBridgeStorageKey(senderID) },
+        { storageKey: profile.storageKey },
       )
       if (!dockDestroyHooks.has(senderID)) {
         dockDestroyHooks.add(senderID)
@@ -159,6 +163,7 @@ async function dispatch(op: string, args: Record<string, unknown>): Promise<unkn
           appDock?.closeAll(senderID, win)
         })
       }
+      win.webContents.send("app-dock-event", { type: "tab-opened", payload: tab })
       return tab
     }
     case "close": {

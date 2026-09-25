@@ -38,7 +38,7 @@ import {
   type DockBounds,
 } from "./app-dock"
 import { AppDockProfileRegistry } from "./app-dock-profile-registry"
-import { registerAppDockBridge } from "./app-dock-rpc"
+import { registerAppDockBridge, registerAppDockProfileResolver } from "./app-dock-rpc"
 
 const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
@@ -265,6 +265,10 @@ export function registerIpcHandlers(deps: Deps) {
   const appDockProfiles = AppDockProfileRegistry.load(app.getPath("userData"))
   const appDockDestroyHooks = new Set<number>()
   appDockProfiles.ensureActive("default")
+  registerAppDockProfileResolver(() => {
+    const profileID = appDockProfiles.manifest().activeProfileID || "default"
+    return { profileID, storageKey: appDockProfiles.ensureActive(profileID).storageKey }
+  })
   const drafts = createDesktopDraftStore(join(app.getPath("userData"), "drafts.sqlite"))
   const updaterSubscriptions = createUpdaterSubscriptions()
   app.once("will-quit", updaterSubscriptions.clear)
@@ -351,6 +355,15 @@ export function registerIpcHandlers(deps: Deps) {
   })
   ipcMain.handle("app-dock-close", (event: IpcMainInvokeEvent) => {
     appDock.closeAll(event.sender.id, appDockSender(event))
+  })
+  ipcMain.handle("app-dock-list", (event: IpcMainInvokeEvent) => {
+    appDockSender(event)
+    return appDock.list(event.sender.id).map((tab) => ({
+      tabID: tab.tabID,
+      generation: tab.generation,
+      url: tab.url,
+      active: (tab as typeof tab & { active: boolean }).active,
+    }))
   })
   ipcMain.handle("app-dock-close-tab", (event: IpcMainInvokeEvent, tabID: unknown) => {
     appDock.close(event.sender.id, appDockSender(event), appDockID(tabID, "tab"))

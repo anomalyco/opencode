@@ -333,9 +333,14 @@ export function buildDragScript(fromRef: number, toRef: number, expectedNamespac
 
 export function buildClickAtScript(x: number, y: number) {
   return `(async () => {
-  const hit = document.elementFromPoint(${x}, ${y})
-   const registry = ${registryExpr()}
   const selector = "a[href],button,input,select,textarea,summary,[role=button],[onclick],[tabindex]"
+  const deepHit = (root) => {
+    const candidates = [...root.querySelectorAll(selector)].filter((candidate) => { const rect = candidate.getBoundingClientRect(); return ${x} >= rect.left && ${x} <= rect.right && ${y} >= rect.top && ${y} <= rect.bottom })
+    const hit = root === document ? document.elementFromPoint(${x}, ${y}) : (root.elementFromPoint?.(${x}, ${y}) || (candidates.length === 1 ? candidates[0] : null))
+    return hit?.shadowRoot ? (deepHit(hit.shadowRoot) || hit) : hit
+  }
+  const hit = deepHit(document)
+   const registry = ${registryExpr()}
   const el = hit && (hit.matches?.(selector) ? hit : hit.closest?.(selector))
   if (!el) return { ok: false, error: "No element at coordinates" }
   if (!(el instanceof HTMLElement)) return { ok: false, error: "No interactive element at coordinates" }
@@ -345,10 +350,15 @@ export function buildClickAtScript(x: number, y: number) {
 
 export function buildClickAtProbeScript(x: number, y: number, expectedNamespace?: number) {
   return `(async () => {
-  const hit = document.elementFromPoint(${x}, ${y})
+  const selector = "a[href],button,input,select,textarea,summary,[role=button],[onclick],[tabindex]"
+  const deepHit = (root) => {
+    const candidates = [...root.querySelectorAll(selector)].filter((candidate) => { const rect = candidate.getBoundingClientRect(); return ${x} >= rect.left && ${x} <= rect.right && ${y} >= rect.top && ${y} <= rect.bottom })
+    const hit = root === document ? document.elementFromPoint(${x}, ${y}) : (root.elementFromPoint?.(${x}, ${y}) || (candidates.length === 1 ? candidates[0] : null))
+    return hit?.shadowRoot ? (deepHit(hit.shadowRoot) || hit) : hit
+  }
+  const hit = deepHit(document)
   const registry = ${registryExpr(expectedNamespace === undefined ? undefined : String(expectedNamespace))}
   if (${expectedNamespace === undefined ? "false" : `registry.namespace !== ${expectedNamespace}`}) return { ok: false, error: "Coordinate target became stale; re-read the page" }
-  const selector = "a[href],button,input,select,textarea,summary,[role=button],[onclick],[tabindex]"
   const el = hit && (hit.matches?.(selector) ? hit : hit.closest?.(selector))
   if (!el) return { ok: false, error: "No element at coordinates" }
   if (!(el instanceof HTMLElement)) return { ok: false, error: "No interactive element at coordinates" }
@@ -362,7 +372,7 @@ export function buildClickAtProbeScript(x: number, y: number, expectedNamespace?
   let fired = false
   const listener = (event) => {
     const target = event.target
-    if (target === el || (target instanceof Node && el.contains(target))) fired = true
+     if (target === el || (target instanceof Node && el.contains(target)) || event.composedPath?.().includes(el)) fired = true
   }
   document.addEventListener("click", listener, true)
   window[key] = { fired: () => fired, cleanup: () => document.removeEventListener("click", listener, true) }

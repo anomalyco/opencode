@@ -102,6 +102,7 @@ export type ElectronAPI = {
     bounds: { x: number; y: number; width: number; height: number },
     profile?: string,
   ) => Promise<{ tabID: string; generation: number; url: string }>
+  appDockList: () => Promise<Array<{ tabID: string; generation: number; url: string; active: boolean }>>
   appDockDeleteProfile: (profileID: string) => Promise<void>
   appDockResize: (bounds: { x: number; y: number; width: number; height: number }) => Promise<void>
   appDockHide: () => Promise<void>

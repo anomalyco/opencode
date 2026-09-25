@@ -97,6 +97,7 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
   const refTargets = new Map<string, Map<number, { x: number; y: number; width: number; height: number; tag: string; name: string; href?: string; url: string }>>()
   const blockedNavigationVersions = new Map<string, number>()
   const fullscreenOwner = new Map<number, string>()
+  const fullscreenEpoch = new Map<number, number>()
   const fullscreenWindowListeners = new Map<number, () => void>()
   const tabByContents = new Map<number, { senderID: number; tabID: string; generation: number }>()
   const downloads = new Map<
@@ -138,6 +139,7 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
     committedNavigations.delete(`${senderID}:${tabID}`)
     if (fullscreenOwner.get(senderID) === tabID) {
       fullscreenOwner.delete(senderID)
+      fullscreenEpoch.set(senderID, (fullscreenEpoch.get(senderID) ?? 0) + 1)
       void record.view.webContents.executeJavaScript("void document.exitFullscreen?.(); true", true).catch(() => undefined)
       if (!record.win.isDestroyed() && record.win.isFullScreen()) record.win.setFullScreen(false)
     }
@@ -167,11 +169,22 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
       const tabID = fullscreenOwner.get(senderID)
       const record = tabID && tabs.get(senderID)?.get(tabID)
       if (!record || win.isDestroyed()) return
+      const epoch = (fullscreenEpoch.get(senderID) ?? 0) + 1
+      fullscreenEpoch.set(senderID, epoch)
       void record.view.webContents
         .executeJavaScript("Boolean(document.fullscreenElement)", true)
         .then((documentFullscreen) => {
-          if (!documentFullscreen) return
+          if (fullscreenEpoch.get(senderID) !== epoch || !isCurrent(senderID, tabID, record.generation)) return
+          if (!documentFullscreen) {
+            if (fullscreenOwner.get(senderID) === tabID) {
+              fullscreenOwner.delete(senderID)
+              fullscreenEpoch.set(senderID, (fullscreenEpoch.get(senderID) ?? 0) + 1)
+            }
+            record.notify(Object.freeze({ type: "fullscreen", payload: Object.freeze({ identity: identity(tabID, record.generation), enabled: false }) }))
+            return
+          }
           if (!win.isFullScreen()) win.setFullScreen(true)
+          if (fullscreenEpoch.get(senderID) !== epoch) return
           return record.view.webContents.executeJavaScript("void document.exitFullscreen?.(); true", true)
         })
         .catch(() => undefined)
@@ -183,6 +196,7 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
     const listener = fullscreenWindowListeners.get(senderID)
     if (listener && win && !win.isDestroyed()) win.removeListener("leave-full-screen", listener)
     fullscreenWindowListeners.delete(senderID)
+    fullscreenEpoch.delete(senderID)
     active.delete(senderID)
     layoutBounds.delete(senderID)
   }
@@ -494,6 +508,8 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
     })
     listen("enter-html-full-screen", () => {
       if (!isCurrent(senderID, id, tabGeneration)) return
+      const epoch = (fullscreenEpoch.get(senderID) ?? 0) + 1
+      fullscreenEpoch.set(senderID, epoch)
       void (async () => {
         const deadline = Date.now() + 3_000
         let fullscreen = false
@@ -502,9 +518,9 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
           if (fullscreen) break
           await new Promise((resolve) => setTimeout(resolve, 50))
         }
-        if (!fullscreen || !isCurrent(senderID, id, tabGeneration) || active.get(senderID) !== id || win.isDestroyed() || (fullscreenOwner.has(senderID) && fullscreenOwner.get(senderID) !== id)) {
-          if (fullscreenOwner.has(senderID) && fullscreenOwner.get(senderID) !== id)
-            void view.webContents.executeJavaScript("void document.exitFullscreen?.(); true", true).catch(() => undefined)
+        if (!fullscreen || fullscreenEpoch.get(senderID) !== epoch || !isCurrent(senderID, id, tabGeneration) || active.get(senderID) !== id || win.isDestroyed() || (fullscreenOwner.has(senderID) && fullscreenOwner.get(senderID) !== id)) {
+          if (fullscreenEpoch.get(senderID) !== epoch) return
+          void view.webContents.executeJavaScript("void document.exitFullscreen?.(); true", true).catch(() => undefined)
           if (!win.isDestroyed() && win.isFullScreen() && (!fullscreenOwner.has(senderID) || fullscreenOwner.get(senderID) === id)) win.setFullScreen(false)
           return
         }
@@ -520,7 +536,10 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
     })
     listen("leave-html-full-screen", () => {
       if (!isCurrent(senderID, id, tabGeneration)) return
+      const epoch = (fullscreenEpoch.get(senderID) ?? 0) + 1
+      fullscreenEpoch.set(senderID, epoch)
       void (async () => {
+        if (fullscreenEpoch.get(senderID) !== epoch) return
         await view.webContents.executeJavaScript("void document.exitFullscreen?.(); true", true).catch(() => undefined)
         const deadline = Date.now() + 3_000
         let fullscreen = true
@@ -529,8 +548,9 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
           if (!fullscreen) break
           await new Promise((resolve) => setTimeout(resolve, 50))
         }
-        if (fullscreen || !isCurrent(senderID, id, tabGeneration) || fullscreenOwner.get(senderID) !== id) return
+        if (fullscreen || fullscreenEpoch.get(senderID) !== epoch || !isCurrent(senderID, id, tabGeneration) || fullscreenOwner.get(senderID) !== id) return
         fullscreenOwner.delete(senderID)
+        fullscreenEpoch.set(senderID, (fullscreenEpoch.get(senderID) ?? 0) + 1)
         if (!win.isDestroyed() && win.isFullScreen()) win.setFullScreen(false)
         notify(
           Object.freeze({
@@ -551,6 +571,7 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
       if (fullscreenTabID && fullscreenTabID !== id) {
         const fullscreenRecord = senderTabs.get(fullscreenTabID)
         fullscreenOwner.delete(senderID)
+        fullscreenEpoch.set(senderID, (fullscreenEpoch.get(senderID) ?? 0) + 1)
         if (fullscreenRecord) void fullscreenRecord.view.webContents.executeJavaScript("void document.exitFullscreen?.(); true", true).catch(() => undefined)
         if (!win.isDestroyed() && win.isFullScreen()) win.setFullScreen(false)
       }
@@ -596,6 +617,7 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
         fullscreenRecord.notify(Object.freeze({ type: "fullscreen", payload: Object.freeze({ identity: identity(fullscreenTabID!, fullscreenRecord.generation), enabled: false }) }))
       }
       fullscreenOwner.delete(senderID)
+      fullscreenEpoch.set(senderID, (fullscreenEpoch.get(senderID) ?? 0) + 1)
       if (fullscreenRecord && !fullscreenRecord.win.isDestroyed() && fullscreenRecord.win.isFullScreen()) fullscreenRecord.win.setFullScreen(false)
       while (active.has(senderID) && inactive.size >= MAX_INACTIVE_TABS) {
         if (!evictOldestInactive()) throw new Error("App Dock tab limit reached")
@@ -616,6 +638,7 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
       if (fullscreenTabID && fullscreenTabID !== tabID) {
         const fullscreenRecord = tabs.get(senderID)?.get(fullscreenTabID)
         fullscreenOwner.delete(senderID)
+        fullscreenEpoch.set(senderID, (fullscreenEpoch.get(senderID) ?? 0) + 1)
         if (fullscreenRecord) void fullscreenRecord.view.webContents.executeJavaScript("void document.exitFullscreen?.(); true", true).catch(() => undefined)
         if (!win.isDestroyed() && win.isFullScreen()) win.setFullScreen(false)
       }
@@ -654,12 +677,14 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
     },
     async navigate(senderID: number, tabID: string, address: string): Promise<{ ok: boolean; url: string }> {
       const key = `${senderID}:${tabID}`
+      const requested = tabs.get(senderID)?.get(tabID)
+      if (!requested) throw new Error("Unknown App Dock tab")
+      const requestedGeneration = requested.generation
       const previous = navigationQueues.get(key)
       const navigation = (previous ? previous.catch(() => undefined) : Promise.resolve()).then(async () => {
         const record = tabs.get(senderID)?.get(tabID)
-        if (!record) throw new Error("Unknown App Dock tab")
+        if (!record || record.generation !== requestedGeneration) throw new Error("App Dock tab changed during navigation")
         refTargets.delete(key)
-        refNamespaces.set(key, ++refNamespace)
         let target: string
         try {
           target = appDockURL(address)
@@ -679,7 +704,10 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
           await Promise.race([
             record.view.webContents.loadURL(target),
             new Promise<never>((_, reject) => {
-              navigationTimer = setTimeout(() => reject(new Error("navigation timeout")), 10_000)
+              navigationTimer = setTimeout(() => {
+                if (!record.view.webContents.isDestroyed() && isCurrent(senderID, tabID, record.generation)) record.view.webContents.stop()
+                reject(new Error("navigation timeout"))
+              }, 10_000)
             }),
           ])
         } catch (error) {
@@ -696,6 +724,7 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
           if (navigationTimer) clearTimeout(navigationTimer)
         }
         if (!isCurrent(senderID, tabID, record.generation)) throw new Error("App Dock tab changed during navigation")
+        refNamespaces.set(key, ++refNamespace)
         return { ok: true, url: record.view.webContents.getURL() || target }
       })
       navigationQueues.set(key, navigation)
@@ -736,11 +765,13 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
     },
     async command(senderID: number, tabID: string, command: "back" | "forward" | "reload"): Promise<{ ok: boolean; navigated: boolean }> {
       const key = `${senderID}:${tabID}`
+      const requested = tabs.get(senderID)?.get(tabID)
+      if (!requested) throw new Error("Unknown App Dock tab")
+      const requestedGeneration = requested.generation
       const previous = navigationQueues.get(key)
       const queued = (previous ? previous.catch(() => undefined) : Promise.resolve()).then(async () => {
         const record = tabs.get(senderID)?.get(tabID)
-        if (!record) throw new Error("Unknown App Dock tab")
-        refNamespaces.set(key, ++refNamespace)
+        if (!record || record.generation !== requestedGeneration) throw new Error("App Dock tab changed during navigation")
         refTargets.delete(key)
         let navigated = false
         if (command === "back" && record.view.webContents.canGoBack()) {
@@ -753,6 +784,8 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
           await record.view.webContents.reload()
           navigated = true
         }
+        if (!isCurrent(senderID, tabID, requestedGeneration)) throw new Error("App Dock tab changed during navigation")
+        if (navigated) refNamespaces.set(key, ++refNamespace)
         return { ok: true, navigated }
       })
       navigationQueues.set(key, queued)
@@ -800,10 +833,14 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
     async fullscreen(senderID: number, win: BrowserWindow, tabID: string, enabled: boolean) {
       const record = tabs.get(senderID)?.get(tabID)
       if (!record) throw new Error("Unknown App Dock tab")
+      const epoch = (fullscreenEpoch.get(senderID) ?? 0) + 1
+      fullscreenEpoch.set(senderID, epoch)
       if (!enabled) {
         if (fullscreenOwner.get(senderID) === tabID) {
           fullscreenOwner.delete(senderID)
+          fullscreenEpoch.set(senderID, (fullscreenEpoch.get(senderID) ?? 0) + 1)
           if (!win.isDestroyed()) win.setFullScreen(false)
+          record.notify(Object.freeze({ type: "fullscreen", payload: Object.freeze({ identity: identity(tabID, record.generation), enabled: false }) }))
         }
         await record.view.webContents.executeJavaScript("void document.exitFullscreen?.(); true", true).catch(() => undefined)
       }
@@ -814,7 +851,7 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
         win.setFullScreen(true)
       }
       await new Promise((resolve) => setTimeout(resolve, 100))
-      if (!isCurrent(senderID, tabID, record.generation)) return
+      if (!isCurrent(senderID, tabID, record.generation) || fullscreenEpoch.get(senderID) !== epoch) return
       record.notify(
         Object.freeze({
           type: "fullscreen",
@@ -1409,9 +1446,12 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
       if (!record.win.isFocused()) record.win.focus()
       record.view.webContents.focus()
       const keyCode = appDockKeyCode(key)
+      let fullscreenEpochAtStart = fullscreenEpoch.get(senderID) ?? 0
       if (type === "keyDown" && keyCode === "ESC") {
         const owner = fullscreenOwner.get(senderID)
         if (owner && owner !== tabID) return { ok: false, type, key, error: "Fullscreen is owned by another tab" }
+        fullscreenEpochAtStart = (fullscreenEpoch.get(senderID) ?? 0) + 1
+        fullscreenEpoch.set(senderID, fullscreenEpochAtStart)
         await record.view.webContents
           .executeJavaScript("Boolean(document.fullscreenElement) ? (document.exitFullscreen?.(), true) : false", true)
           .catch(() => false)
@@ -1425,8 +1465,12 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
             .executeJavaScript("Boolean(document.fullscreenElement)", true)
             .catch(() => false)
           if (!fullscreen) {
+            if (fullscreenEpoch.get(senderID) !== fullscreenEpochAtStart) return { ok: true, type, key }
             if (record.win.isFullScreen()) record.win.setFullScreen(false)
-            if (fullscreenOwner.get(senderID) === tabID) fullscreenOwner.delete(senderID)
+            if (fullscreenOwner.get(senderID) === tabID) {
+              fullscreenOwner.delete(senderID)
+              fullscreenEpoch.set(senderID, (fullscreenEpoch.get(senderID) ?? 0) + 1)
+            }
             return { ok: true, type, key }
           }
         }
@@ -1435,8 +1479,12 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
           .executeJavaScript("Boolean(document.fullscreenElement)", true)
           .catch(() => false)
         if (!fullscreen) {
+          if (fullscreenEpoch.get(senderID) !== fullscreenEpochAtStart) return { ok: true, type, key }
           if (record.win.isFullScreen()) record.win.setFullScreen(false)
-          if (fullscreenOwner.get(senderID) === tabID) fullscreenOwner.delete(senderID)
+          if (fullscreenOwner.get(senderID) === tabID) {
+            fullscreenOwner.delete(senderID)
+            fullscreenEpoch.set(senderID, (fullscreenEpoch.get(senderID) ?? 0) + 1)
+          }
           return { ok: true, type, key }
         }
         return { ok: false, type, key, error: "Fullscreen exit was not observed" }
