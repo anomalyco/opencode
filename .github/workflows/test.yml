@@ -22,16 +22,12 @@ env:
 
 jobs:
   unit:
-    name: unit (${{ matrix.settings.name }})
+    name: unit (${{ matrix.platform }})
     strategy:
       fail-fast: false
       matrix:
-        settings:
-          - name: linux
-            host: ${{ github.repository == 'internetisalie/opencode' && 'ubuntu-24.04' || 'blacksmith-4vcpu-ubuntu-2404' }}
-          - name: windows
-            host: ${{ github.repository == 'internetisalie/opencode' && 'windows-2025' || 'blacksmith-4vcpu-windows-2025' }}
-    runs-on: ${{ matrix.settings.host }}
+        platform: ${{ fromJSON(github.repository == 'internetisalie/opencode' && '["linux"]' || '["linux","windows"]') }}
+    runs-on: ${{ matrix.platform == 'linux' && (github.repository == 'internetisalie/opencode' && 'ubuntu-24.04' || 'blacksmith-4vcpu-ubuntu-2404') || 'blacksmith-4vcpu-windows-2025' }}
     defaults:
       run:
         shell: bash
@@ -63,11 +59,6 @@ jobs:
             turbo-${{ runner.os }}-${{ hashFiles('turbo.json', '**/package.json') }}-
             turbo-${{ runner.os }}-
 
-      - name: Warm up ripgrep on fork Windows runner
-        if: runner.os == 'Windows' && github.repository == 'internetisalie/opencode'
-        working-directory: packages/core
-        run: bun test test/ripgrep.test.ts --timeout 30000
-
       - name: Run unit tests
         timeout-minutes: 20
         run: GITHUB_ACTIONS=false bun turbo test
@@ -85,16 +76,12 @@ jobs:
         run: bun run test:httpapi
 
   e2e:
-    name: e2e (${{ matrix.settings.name }})
+    name: e2e (${{ matrix.platform }})
     strategy:
       fail-fast: false
       matrix:
-        settings:
-          - name: linux
-            host: ${{ github.repository == 'internetisalie/opencode' && 'ubuntu-24.04' || 'blacksmith-4vcpu-ubuntu-2404' }}
-          - name: windows
-            host: ${{ github.repository == 'internetisalie/opencode' && 'windows-2025' || 'blacksmith-4vcpu-windows-2025' }}
-    runs-on: ${{ matrix.settings.host }}
+        platform: ${{ fromJSON(github.repository == 'internetisalie/opencode' && '["linux"]' || '["linux","windows"]') }}
+    runs-on: ${{ matrix.platform == 'linux' && (github.repository == 'internetisalie/opencode' && 'ubuntu-24.04' || 'blacksmith-4vcpu-ubuntu-2404') || 'blacksmith-4vcpu-windows-2025' }}
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
     defaults:
@@ -142,7 +129,6 @@ jobs:
         run: bun --cwd packages/app test:e2e:local
         env:
           CI: true
-          PLAYWRIGHT_WORKERS: ${{ runner.os == 'Windows' && github.repository == 'internetisalie/opencode' && '2' || '5' }}
         timeout-minutes: 30
 
       - name: Upload Playwright artifacts
