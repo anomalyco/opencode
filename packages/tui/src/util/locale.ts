@@ -58,14 +58,18 @@ export function duration(input: number) {
   return `${days}d ${hours}h`
 }
 
+const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" })
+
+// `len` counts UTF-16 code units, same as `string.length` for ASCII callers.
+// A cluster that does not fit is dropped whole so a Thai vowel or tone mark stays on its base.
 export function truncate(str: string, len: number): string {
   if (str.length <= len) return str
-  return str.slice(0, len - 1) + "…"
+  return takeGraphemePrefix(str, len - 1) + "…"
 }
 
 export function truncateLeft(str: string, len: number): string {
   if (str.length <= len) return str
-  return "…" + str.slice(-(len - 1))
+  return "…" + takeGraphemeSuffix(str, len - 1)
 }
 
 export function truncateMiddle(str: string, maxLength: number = 35): string {
@@ -75,7 +79,30 @@ export function truncateMiddle(str: string, maxLength: number = 35): string {
   const keepStart = Math.ceil((maxLength - ellipsis.length) / 2)
   const keepEnd = Math.floor((maxLength - ellipsis.length) / 2)
 
-  return str.slice(0, keepStart) + ellipsis + str.slice(-keepEnd)
+  return takeGraphemePrefix(str, keepStart) + ellipsis + takeGraphemeSuffix(str, keepEnd)
+}
+
+function takeGraphemePrefix(str: string, budget: number) {
+  if (budget <= 0) return str.slice(0, budget)
+
+  let size = 0
+  for (const part of graphemes.segment(str)) {
+    if (size + part.segment.length > budget) break
+    size += part.segment.length
+  }
+  return str.slice(0, size)
+}
+
+function takeGraphemeSuffix(str: string, budget: number) {
+  // `slice(-0)` is `slice(0)`. A 1-wide truncateLeft stays "…" plus the whole ASCII string.
+  if (budget <= 0) return str.slice(-budget)
+
+  let size = 0
+  for (const part of [...graphemes.segment(str)].reverse()) {
+    if (size + part.segment.length > budget) break
+    size += part.segment.length
+  }
+  return str.slice(str.length - size)
 }
 
 export function pluralize(count: number, singular: string, plural: string): string {
