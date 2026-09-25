@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { which } from "@opencode-ai/core/util/which"
+import { preferWindowsSpawnPath, resolveWindowsSpawnFile, which } from "@opencode-ai/core/util/which"
 import { tmpdir } from "../fixture/tmpdir"
 
 async function cmd(dir: string, name: string, exec = true) {
@@ -96,5 +96,35 @@ describe("util.which", () => {
     const file = await cmd(bin, "mixed")
 
     same(which("mixed", envPath(bin)), file)
+  })
+
+  test("prefers spawnable Windows shims over PowerShell", () => {
+    const ps1 = path.join("C:", "nvm4w", "nodejs", "npm.ps1")
+    const cmd = path.join("C:", "nvm4w", "nodejs", "npm.cmd")
+    expect(preferWindowsSpawnPath([ps1, cmd])).toBe(cmd)
+    expect(preferWindowsSpawnPath([cmd, ps1])).toBe(cmd)
+    expect(preferWindowsSpawnPath([ps1])).toBe(ps1)
+  })
+
+  test("leaves non-Windows spawn files unchanged", () => {
+    if (process.platform === "win32") return
+    expect(resolveWindowsSpawnFile("npm")).toBe("npm")
+    expect(resolveWindowsSpawnFile("npx.ps1")).toBe("npx.ps1")
+  })
+
+  test("prefers sibling .cmd when PATHEXT lists .PS1 first", async () => {
+    if (process.platform !== "win32") return
+
+    await using tmp = await tmpdir()
+    const bin = path.join(tmp.path, "bin")
+    await fs.mkdir(bin)
+    const ps1 = path.join(bin, "npm.ps1")
+    const file = path.join(bin, "npm.cmd")
+    await fs.writeFile(ps1, "Write-Host ps1\r\n")
+    await fs.writeFile(file, "@echo off\r\necho cmd\r\n")
+
+    same(which("npm", { PATH: bin, PATHEXT: ".PS1;.CMD" }), file)
+    same(resolveWindowsSpawnFile("npm", { PATH: bin, PATHEXT: ".PS1;.CMD" }), file)
+    same(resolveWindowsSpawnFile(ps1), file)
   })
 })
