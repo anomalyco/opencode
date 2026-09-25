@@ -28,7 +28,8 @@ export function todayTimeOrDateTime(input: number): string {
 }
 
 export function number(num: number): string {
-  if (num >= 1000000) {
+  // 999,950 and up round to 1000.0K at one decimal place, so roll over to M there
+  if (num >= 999950) {
     return (num / 1000000).toFixed(1) + "M"
   } else if (num >= 1000) {
     return (num / 1000).toFixed(1) + "K"
