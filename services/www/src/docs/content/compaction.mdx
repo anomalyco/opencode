@@ -2,15 +2,27 @@
 title: "Compaction"
 ---
 
-Compaction gives a long session more context space by replacing its older
-conversation with a generated checkpoint. Earlier messages stay stored and
-visible, but future model requests start from the latest checkpoint.
+Compaction makes room in a long session by replacing older conversation with a
+summary, so the session can keep going past the model's context limit.
+
+## How it works
+
+When a session approaches the model's context limit, OpenCode summarizes
+everything except the most recent conversation, about 15,000 tokens by default.
+Once the summary is ready, it is placed in front of that recent conversation and
+the session continues from there.
+
+```text
+before   [ system prompt ][ older conversation ............ ][ recent 15k ][ pending work ]
+after    [ system prompt ][ summary ][ recent 15k ][ pending work ]
+```
+
+The model sees the summary as past conversation. Later compactions update the
+same summary rather than starting over.
 
 ## Start
 
-Automatic compaction is on by default. When a session approaches the model's
-context limit, OpenCode summarizes the older conversation, keeps about 15,000
-tokens of recent messages beside the summary, and continues the pending work.
+Automatic compaction is on by default:
 
 ```jsonc title="opencode.jsonc"
 {
@@ -23,11 +35,11 @@ tokens of recent messages beside the summary, and continues the pending work.
 ```
 
 Compaction is lossy. Increase `keep.tokens` when exact recent details matter,
-or request a checkpoint yourself before the automatic one.
+or request compaction yourself before the automatic one.
 
 ## Manual
 
-Request a checkpoint at any time, even for a short history:
+Request compaction at any time, even for a short history:
 
 ```sh
 curl -X POST http://localhost:4096/api/session/ses_example/compact \
@@ -79,8 +91,9 @@ Add `compaction` to any [OpenCode configuration file](/config):
 
 ## Providers
 
-By default OpenCode writes the summary itself with the session's model. Some
-providers can produce a checkpoint natively; opt in per provider or model:
+By default OpenCode writes the summary itself, using the session's model. Some
+providers can compact the conversation on their side instead. Enable it per
+provider or model with `settings.compaction`:
 
 ```jsonc title="opencode.jsonc"
 {
@@ -96,18 +109,29 @@ providers can produce a checkpoint natively; opt in per provider or model:
 }
 ```
 
-A model setting overrides the provider setting.
+A model setting overrides the provider setting. `native` uses the provider's
+compaction; `summary` uses OpenCode's own.
+
+With native compaction, OpenCode sends the conversation to the provider's
+compaction endpoint. The provider returns an opaque, encrypted item that stands
+in for the older conversation. Your recent messages and attachments, up to
+`keep.tokens`, are kept alongside it:
+
+```text
+before   [ older conversation ........................ ][ recent user messages ]
+after    [ encrypted checkpoint + recent user messages ]
+```
 
 | Topic | Behavior |
 | --- | --- |
-| Support | OpenAI Responses models support native compaction. Support varies by deployment and model. |
-| Content | A native checkpoint is stored as the provider returns it. Recent user messages and attachments are kept up to `keep.tokens`. |
-| Portability | A native checkpoint only works with the same provider, model, and endpoint. Switching models continues from the stored conversation instead. |
-| Fallback | If the provider rejects an automatic native checkpoint as too long, OpenCode writes a local summary instead. |
+| Support | OpenAI Responses models. Support varies by deployment and model. |
+| Threshold | Same `auto` and `buffer` settings as summary compaction. Manual requests work too. |
+| Portability | An encrypted checkpoint only works with the same provider, model, and endpoint. If you switch models, the session continues from the original conversation instead. |
+| Fallback | If the provider rejects an automatic compaction as too long, OpenCode writes a summary itself. |
 
-## Checkpoints
+## Summaries
 
-A local checkpoint is a structured summary of the older conversation:
+The summary is structured so another agent could pick the work up from it:
 
 ```md
 ## Objective
@@ -119,14 +143,12 @@ Finish the authentication migration.
 ```
 
 It covers the objective and requirements, decisions, completed and active work,
-blockers and next moves, and relevant files. The newest conversation up to
-`keep.tokens` is kept alongside it, with long tool output shortened and
-attachment data replaced by a descriptor.
+blockers and next moves, and relevant files. In the recent conversation kept
+beside it, long tool output is shortened and attachment data is replaced by a
+short description.
 
-Later checkpoints update the previous summary rather than starting over. The
-model sees a completed checkpoint as past conversation, not as new instructions.
-After a checkpoint, the current versions of your instruction files become the
-baseline for the session; see [Instructions](/instructions).
+After compaction, the current versions of your instruction files become the
+session's baseline; see [Instructions](/instructions).
 
 ## Limits
 
@@ -145,7 +167,7 @@ For example, compaction cannot help here:
 
 ## Migration
 
-V1 used tail-turn and pruning behavior. V2 uses checkpoints and
+V1 used tail-turn and pruning behavior. V2 uses summaries and
 `compaction.keep.tokens`:
 
 ```jsonc
