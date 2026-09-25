@@ -7,6 +7,8 @@ import { For, Match, Switch, Show, createMemo } from "solid-js"
 
 export type DialogStatusProps = {}
 
+const cli = process.env.OPENCODE_CLI_NAME ?? "opencode"
+
 export function DialogStatus() {
   const sync = useSync()
   const { theme } = useTheme()
@@ -80,7 +82,7 @@ export function DialogStatus() {
                       <Match when={item.status === "failed" && item}>{(val) => val().error}</Match>
                       <Match when={item.status === "disabled"}>Disabled in configuration</Match>
                       <Match when={(item.status as string) === "needs_auth"}>
-                        Needs authentication (run: opencode mcp auth {key})
+                        Needs authentication (run: {cli} mcp auth {key})
                       </Match>
                       <Match when={(item.status as string) === "needs_client_registration" && item}>
                         {(val) => (val() as { error: string }).error}
