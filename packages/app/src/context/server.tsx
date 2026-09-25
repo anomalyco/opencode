@@ -34,8 +34,9 @@ export function serverName(conn?: ServerConnection.Any, ignoreDisplayName = fals
 }
 
 function isLocalHost(url: string) {
-  const host = url.replace(/^https?:\/\//, "").split(":")[0]
-  if (host === "localhost" || host === "127.0.0.1") return "local"
+  if (!URL.canParse(url)) return false
+  const host = new URL(url).hostname.toLowerCase()
+  return host === "localhost" || host === "127.0.0.1" || host === "[::1]"
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -239,7 +240,7 @@ export namespace ServerConnection {
 
   export const builtin = (conn: Any) => conn.type === "sidecar" && conn.variant === "base"
   export const local = (conn?: Any) =>
-    !!conn && (builtin(conn) || (conn.type === "http" && isLocalHost(conn.http.url) === "local"))
+    !!conn && (builtin(conn) || (conn.type === "http" && isLocalHost(conn.http.url)))
 }
 
 export function nextServerAfterRemoval(
