@@ -13,6 +13,7 @@ import {
   homeSessionServerStatus,
   latestRootSession,
   projectForSession,
+  resolveProjectForSession,
   sortedRootSessions,
   toggleHomeProjectSelection,
 } from "./helpers"
@@ -205,6 +206,39 @@ describe("layout workspace helpers", () => {
     expect(
       projectForSession(session({ id: "nested", projectID: "owner", directory: overlap.worktree }), [owner, overlap]),
     ).toBe(owner)
+  })
+
+  test("prefers the nested opened project over an ancestor while its ID is loading", () => {
+    const documents = { id: "documents", worktree: "/documents", icon: { override: "documents-icon" } }
+    const child = { worktree: "/documents/project", icon: { override: "child-icon" } }
+    const current = session({ id: "child", projectID: "child", directory: child.worktree })
+
+    expect(projectForSession(current, [documents, child])).toBe(child)
+  })
+
+  test("prefers an opened directory over an ancestor's sandbox pointing at that directory", () => {
+    const documents = { id: "shared", worktree: "/documents", sandboxes: ["/documents/project"] }
+    const child = { id: "shared", worktree: "/documents/project" }
+    const current = session({ id: "child", projectID: "shared", directory: child.worktree })
+
+    expect(projectForSession(current, [documents, child])).toBe(child)
+  })
+
+  test("does not use an opened ancestor when the session's project is only in stored metadata", () => {
+    const documents = { id: "documents", worktree: "/documents", icon: { override: "documents-icon" } }
+    const child = { id: "child", worktree: "/documents/project", icon: { override: "child-icon" } }
+    const current = session({ id: "child", projectID: "child", directory: child.worktree })
+
+    expect(resolveProjectForSession(current, [documents], [child])).toBe(child)
+  })
+
+  test("keeps the exact opened project's enriched icon while its ID is loading", () => {
+    const documents = { id: "documents", worktree: "/documents", icon: { override: "documents-icon" } }
+    const child = { worktree: "/documents/project", icon: { override: "child-local-icon" } }
+    const synced = { id: "child", worktree: child.worktree, icon: { override: "child-server-icon" } }
+    const current = session({ id: "child", projectID: synced.id, directory: child.worktree })
+
+    expect(resolveProjectForSession(current, [documents, child], [synced])).toBe(child)
   })
 
   test("formats fallback project display name", () => {

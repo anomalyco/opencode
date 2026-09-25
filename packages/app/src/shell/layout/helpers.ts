@@ -104,10 +104,9 @@ export function projectForSession<T extends { id?: string; worktree: string; san
     const matching = projects.filter((project) => project.id === session.projectID)
     if (matching.length === 1) return direct
     const directory = pathKey(session.location.directory)
-    const exact = matching.find(
-      (project) =>
-        pathKey(project.worktree) === directory || project.sandboxes?.some((sandbox) => pathKey(sandbox) === directory),
-    )
+    const exact =
+      matching.find((project) => pathKey(project.worktree) === directory) ??
+      matching.find((project) => project.sandboxes?.some((sandbox) => pathKey(sandbox) === directory))
     if (exact) return exact
     return (
       matching
@@ -115,7 +114,26 @@ export function projectForSession<T extends { id?: string; worktree: string; san
         .sort((a, b) => b.worktree.length - a.worktree.length)[0] ?? direct
     )
   }
-  return projects.find((project) => isProjectDirectory(project, session.location.directory))
+  const directory = pathKey(session.location.directory)
+  const exact =
+    projects.find((project) => pathKey(project.worktree) === directory) ??
+    projects.find((project) => project.sandboxes?.some((sandbox) => pathKey(sandbox) === directory))
+  if (exact) return exact
+  return projects
+    .filter((project) => isProjectDirectory(project, session.location.directory))
+    .sort((a, b) => b.worktree.length - a.worktree.length)[0]
+}
+
+export function resolveProjectForSession<
+  T extends { id?: string; worktree: string; sandboxes?: string[] },
+  U extends { id?: string; worktree: string; sandboxes?: string[] },
+>(session: SessionInfo, opened: T[], stored: U[]) {
+  const current = projectForSession(session, opened)
+  if (current?.id === session.projectID) return current
+  const synced = projectForSession(session, stored)
+  if (synced?.id !== session.projectID) return current ?? synced
+  if (current && !current.id && pathKey(current.worktree) === pathKey(session.location.directory)) return current
+  return synced
 }
 
 export const errorMessage = (err: unknown, fallback: string) => {

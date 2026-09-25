@@ -19,7 +19,7 @@ import { formatServerError } from "./errors"
 import { useSettings } from "@/settings/model"
 import { timelinePreset } from "@opencode/session-ui/timeline/detail"
 import type { SessionInfo } from "@opencode/client/promise"
-import { projectForSession } from "@/shell/layout/helpers"
+import { resolveProjectForSession } from "@/shell/layout/helpers"
 
 export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext({
   name: "Global",
@@ -183,10 +183,9 @@ function createServerController(
 
   const projectsList = createMemo(() => projects.list().map(enrich))
   const forSession = (session: SessionInfo) => {
-    const opened = projectForSession(session, projectsList())
-    if (opened) return opened
-    const stored = projectForSession(session, sync.data.project)
-    return stored ? { ...stored, expanded: false } : undefined
+    const project = resolveProjectForSession(session, projectsList(), sync.data.project)
+    if (!project) return
+    return "expanded" in project ? project : { ...project, expanded: false }
   }
   const recentlyClosedList = createMemo(() => {
     const known = new Set(sync.data.project.map((project) => pathKey(project.worktree)))
