@@ -98,7 +98,7 @@ await rename(registration + ".tmp", registration)
 
 async function shutdown(signal?: NodeJS.Signals) {
   if (signal !== undefined) await writeFile(registration + ".signal", signal)
-  // A lingering server removes its registration first and keeps its port while it winds down.
+  // A lingering server unregisters on SIGTERM but keeps running, and holds its port, until killed.
   if (mode === "lingering") {
     await rm(registration, { force: true })
     await writeFile(registration + ".unregistered", "")

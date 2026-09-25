@@ -3,7 +3,7 @@ import { expect, test } from "bun:test"
 import { Effect, FileSystem } from "effect"
 import { writeFile } from "node:fs/promises"
 import { Service, type EnsureReason } from "../src/effect/service"
-import { serviceFixture } from "./fixture/service-fixture"
+import { expectPortAvailable, serviceFixture } from "./fixture/service-fixture"
 import { accelerate } from "./fixture/service-timing"
 
 const ensure = accelerate(Service.ensure)
@@ -162,7 +162,7 @@ test("signals an unresponsive registered service process", async () => {
   expect(await Bun.file(registration).exists()).toBe(false)
 })
 
-test("stop outlives a server that unregisters before releasing its port", async () => {
+test("stop escalates when the registration disappears before the process exits", async () => {
   await using fixture = await serviceFixture()
   const registration = fixture.registration
   const existing = fixture.spawn("lingering", "5000")
@@ -173,10 +173,25 @@ test("stop outlives a server that unregisters before releasing its port", async 
 
   expect(await Bun.file(registration + ".signal").text()).toBe("SIGTERM")
   expect(() => process.kill(original.pid, 0)).toThrow()
-  await expectPortAvailable(Number(new URL(original.url).port))
+  await expectPortAvailable(original.url)
   expect(await Bun.file(registration).exists()).toBe(false)
   await existing.exited
 }, 15_000)
+
+test.skipIf(process.platform === "win32")(
+  "stop fails when the process survives SIGKILL",
+  async () => {
+    await using fixture = await serviceFixture()
+    const registration = fixture.registration
+    fixture.spawnUnreaped("lingering", "60000")
+    await fixture.waitForFile()
+    const original = await Bun.file(registration).json()
+
+    await expect(run(stop({ file: registration }))).rejects.toThrow(`Server process ${original.pid} is still running`)
+    expect(await Bun.file(registration + ".signal").text()).toBe("SIGTERM")
+  },
+  15_000,
+)
 
 test("stop waits for the original process while preserving a newly registered successor", async () => {
   await using fixture = await serviceFixture()
@@ -184,6 +199,7 @@ test("stop waits for the original process while preserving a newly registered su
   const existing = fixture.spawn("lingering", "15000")
   await fixture.waitForFile()
   const original = await Bun.file(registration).json()
+  // Default timing keeps the grace period open long enough for the successor to register first.
   const stopping = run(Service.stop({ file: registration }))
 
   try {
@@ -197,7 +213,7 @@ test("stop waits for the original process while preserving a newly registered su
     await stopping
 
     expect(() => process.kill(original.pid, 0)).toThrow()
-    await expectPortAvailable(Number(new URL(original.url).port))
+    await expectPortAvailable(original.url)
     expect(await Bun.file(registration).json()).toEqual(replacement)
     expect(await status(replacement.url)).toMatchObject({ pid: successor.pid })
     expect(successor.exitCode).toBe(null)
@@ -347,9 +363,4 @@ function run<A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>) {
 
 async function status(url: string) {
   return fetch(new URL("/api/info", url), { signal: AbortSignal.timeout(1_000) }).then((response) => response.json())
-}
-
-async function expectPortAvailable(port: number) {
-  const server = Bun.serve({ port, fetch: () => new Response() })
-  await server.stop(true)
 }

@@ -250,8 +250,8 @@ async function terminate(info: Info, options: { readonly file?: string }, timing
   const current = await read(options.file)
   if (current === undefined || !same(current, info)) return
   signal(info.pid, "SIGTERM")
-  // A gracefully stopping server may remove its registration before it releases its port, so only
-  // the exact process we signalled can tell us when it is safe for a restart to continue.
+  // The registration can disappear or change hands before this process exits. Only the PID we
+  // signalled can tell us whether it has stopped, so escalate based on that process.
   if (!(await waitUntilStopped(info.pid, timing))) {
     signal(info.pid, "SIGKILL")
     if (!(await waitUntilStopped(info.pid, timing))) throw new Error(`Server process ${info.pid} is still running`)
