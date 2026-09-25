@@ -318,6 +318,7 @@ export const SettingsProviders: Component<{
             <Menu.Group>
               <Menu.GroupLabel>{language.t("settings.providers.account.group")}</Menu.GroupLabel>
               <Menu.RadioGroup
+                class="settings-provider-account-list"
                 value={active()?.id}
                 onChange={(credentialID) => {
                   const account = accounts().find((item) => item.id === credentialID)
@@ -337,21 +338,23 @@ export const SettingsProviders: Component<{
             <Menu.Item disabled={state.credentialID !== undefined} onSelect={() => connect(menuProps.provider.id)}>
               {language.t("settings.providers.account.add")}
             </Menu.Item>
-            <Menu.Separator />
-            <Menu.Group>
-              <Menu.GroupLabel>{language.t("settings.providers.account.remove")}</Menu.GroupLabel>
-              <For each={accounts()}>
-                {(account) => (
-                  <Menu.Item
-                    disabled={state.credentialID !== undefined}
-                    badge={account.id === active()?.id ? language.t("settings.providers.account.active") : undefined}
-                    onSelect={() => void remove(menuProps.provider, name(), account)}
-                  >
-                    <span class="settings-provider-account-label">{account.label}</span>
-                  </Menu.Item>
-                )}
-              </For>
-            </Menu.Group>
+            <Menu.Sub placement="left-start">
+              <Menu.SubTrigger disabled={state.credentialID !== undefined || accounts().length === 0}>
+                {language.t("settings.providers.account.remove")}
+              </Menu.SubTrigger>
+              <Menu.SubContent class="settings-provider-account-submenu">
+                <For each={accounts()}>
+                  {(account) => (
+                    <Menu.Item
+                      badge={account.id === active()?.id ? language.t("settings.providers.account.active") : undefined}
+                      onSelect={() => void remove(menuProps.provider, name(), account)}
+                    >
+                      <span class="settings-provider-account-label">{account.label}</span>
+                    </Menu.Item>
+                  )}
+                </For>
+              </Menu.SubContent>
+            </Menu.Sub>
           </Menu.Content>
         </Menu.Portal>
       </Menu>

@@ -901,6 +901,16 @@
 
 .settings-provider-account-menu[data-component="menu-v2-content"] {
   width: min(260px, calc(100vw - 32px));
+  overflow: visible;
+}
+
+.settings-provider-account-list {
+  max-height: min(240px, calc(var(--kb-popper-content-available-height) - 120px));
+  overflow-y: auto;
+}
+
+.settings-provider-account-submenu[data-component="menu-v2-content"] {
+  width: min(260px, calc(100vw - 32px));
   max-height: min(360px, var(--kb-popper-content-available-height));
   overflow-y: auto;
 }
