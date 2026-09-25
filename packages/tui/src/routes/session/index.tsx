@@ -650,7 +650,6 @@ export function Session(props: {
           {
             command: "queued_prompt.move_back",
             title: "move back",
-            side: "right",
             onTrigger: (option) => {
               const target = prompt()
               const queued = queuedPrompts().find((item) => item.id === option.value)
