@@ -1781,3 +1781,64 @@ describe("iteration callbacks receive thisArg", () => {
     ).toBe("function")
   })
 })
+
+describe("computed property keys convert through the object's own toString", () => {
+  test("reads, writes, compound assignment, in, delete, literals, and destructuring share one conversion", async () => {
+    expect(
+      await value(`
+        const key = { toString() { return "id" } }
+        const o = {}
+        o[key] = 1
+        o[key] += 1
+        const literal = { [key]: "lit" }
+        const had = key in o
+        delete literal[key]
+        return [o.id, had, (({ [key]: v }) => v)(o), literal, o[[1, 2]] === undefined]
+      `),
+    ).toEqual([2, true, 2, {}, true])
+    expect(
+      await value(`
+        const seen = []
+        const base = { x: 1 }
+        base[{ toString() { seen.push(1); return "" } }] ^= 0
+        base[{ toString() { seen.push(2); return "x" } }]++
+        return [seen, base[""], base.x]
+      `),
+    ).toEqual([[1, 2], 0, 2])
+  })
+
+  test("valueOf is the fallback, a symbol result stays a symbol, and conversion failures surface", async () => {
+    expect(
+      await value(`
+        const o = { 7: "seven" }
+        const sym = { toString() { return Symbol.iterator } }
+        o[sym] = 1
+        return [o[{ valueOf() { return 7 }, toString: undefined }], typeof o[Symbol.iterator], Object.keys(o)]
+      `),
+    ).toEqual(["seven", "number", ["7"]])
+    expect((await error(`({})[{ toString() { throw new RangeError("bad key") } }]`)).message).toContain("bad key")
+    expect((await error(`({})[{ toString() { return {} }, valueOf() { return {} } }]`)).message).toContain(
+      "Cannot convert object to primitive value",
+    )
+    expect((await error(`const key = { toString() { return "a" } }; key in 5`)).message).toContain(
+      "requires a data object on the right-hand side",
+    )
+  })
+
+  test("a nullish base throws before the key converts, as ToObject precedes ToPropertyKey", async () => {
+    const failure = await error(`const base = null; base[{ toString() { throw new RangeError("key evaluated") } }]`)
+    expect(failure.message).toContain("Cannot read properties of null")
+  })
+
+  test("opaque values keep their built-in key form and a tool reference toString is never called", async () => {
+    expect(
+      await value(`
+        const o = { "[object Function]": 1, "[object Promise]": 2 }
+        return [o[() => 1], o[Promise.resolve("k")]]
+      `),
+    ).toEqual([1, 2])
+    expect((await error(`({})[{ toString: tools.nowhere }] = 1`)).message).toContain(
+      "Cannot convert object to primitive value",
+    )
+  })
+})

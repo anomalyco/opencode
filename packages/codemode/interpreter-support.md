@@ -131,7 +131,7 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Built-in method references as callbacks, such as `values.map(Math.abs)`, `records.map(JSON.stringify)`,
       `items.forEach(console.log)`, and `Promise.resolve(-1).then(Math.abs)`. Extra callback arguments a built-in
       does not consume are ignored, like JS, and consumed arguments coerce, like JS (`"3.7".replace(/\d\.\d/,
-  Math.floor)` is `"3"`). A detached method loses its receiver, as in JS: `values.filter("abc".includes)` is a `TypeError`
+Math.floor)` is `"3"`). A detached method loses its receiver, as in JS: `values.filter("abc".includes)` is a `TypeError`
       because `includes` is called without a string `this`.
 - [x] Constructors work as callbacks with JS call semantics: `Error` types construct (`messages.map(Error)`),
       and new-requiring constructors (`Map`, `Set`, `URL`, `URLSearchParams`, `Headers`, `Promise`) throw a `TypeError`,
@@ -245,8 +245,11 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [ ] ToPrimitive elsewhere: `Error.prototype.toString` on an object `message` and numeric built-in arguments outside
       `Math` and `Date` (`at`, `indexOf` start, `toFixed` digits) still use the built-in form (`NaN`,
       `"[object Object]"`) and ignore own methods.
-- [x] Property keys follow ToPropertyKey: `x[null]`, `x[true]`, and objects (via their built-in string form) become
-      string keys.
+- [x] Property keys follow ToPropertyKey: `x[null]` and `x[true]` become string keys, and a data object key
+      converts through its own `toString`/`valueOf` (string hint) exactly once per access, in reads, writes,
+      compound assignment, `++`, `delete`, `in`, object literals, and destructuring:
+      `o[{ toString() { return "id" } }] += 1` updates `o.id`. A nullish base throws before the key converts, as
+      in JS. Opaque values (functions, promises, tool references) keep their built-in string form.
 
 ## Promises and tools
 
@@ -307,8 +310,9 @@ reject }` object.
 - [x] `Object()` and `new Object()` return `{}` for nullish arguments and pass objects through unchanged;
       primitive wrapper objects (`Object(1)`) are rejected explicitly.
 - [x] Computed property names and object spread. Any value works as a key (ToPropertyKey): strings, numbers, and the
-      two confined symbols as themselves, everything else as its string form (`o[null]` is `o["null"]`, `o[{}]` is
-      `o["[object Object]"]`), in reads, writes, literals, `in`, and destructuring.
+      two confined symbols as themselves, data objects through their own `toString` (`o[[1, 2]]` is `o["1,2"]`), and
+      everything else as its string form (`o[null]` is `o["null"]`), in reads, writes, literals, `in`, and
+      destructuring.
 - [x] `Object.keys`, `Object.values`, `Object.entries`, `Object.hasOwn`, `Object.assign`, and `Object.fromEntries`, with
       synchronous iterator support for `fromEntries`. Sources follow ToObject: strings enumerate by index, other
       primitives and wrappers contribute nothing, and `null`/`undefined` throw. `Object.assign` accepts array

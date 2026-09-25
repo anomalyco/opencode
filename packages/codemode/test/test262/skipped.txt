@@ -1,6 +1,5 @@
 built-ins/AggregateError/message-undefined-no-prop.js  # explicit Expected SameValue(«true», «false») to be true
 built-ins/Array/S15.4.5.2_A3_T3.js  # RangeError: Invalid array length
-built-ins/Array/S15.4_A1.1_T9.js  # The value of x[0] is expected to be 0 Expected SameValue(«undefined», «0») to be true
 built-ins/Array/from/Array.from_forwards-length-for-array-likes.js  # TypeError: Cannot read properties of undefined (reading '…').
 built-ins/Array/from/elements-deleted-after.js  # TypeError: Cannot read properties of undefined (reading '…').
 built-ins/Array/from/iter-cstm-ctor-err.js  # Array.from.call(C, items) throws a Test262Error exception Expected a Test262Error but got a TypeErro
@@ -1607,7 +1606,6 @@ language/expressions/new/spread-sngl-iter.js  # TypeError: The called value cann
 language/expressions/new/spread-sngl-literal.js  # TypeError: The called value cannot be constructed: user-defined constructors and classes are not sup
 language/expressions/object/__proto__-duplicate-computed.js  # prototype is defined Expected SameValue(«object», «object») to be true
 language/expressions/object/accessor-name-literal-string-line-continuation.js  # TypeError: Only init object properties are supported.
-language/expressions/object/computed-property-name-topropertykey-before-value-evaluation.js  # Expected SameValue(«undefined», «"ok"») to be true
 language/expressions/object/dstr/async-gen-meth-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/expressions/object/dstr/async-gen-meth-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/expressions/object/dstr/async-gen-meth-dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
