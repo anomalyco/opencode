@@ -351,10 +351,49 @@ describe("OpenAI Responses effort updates", () => {
     }),
   )
 
+  it.effect("lowers markers for GPT-6 Sol without changing the top-level effort", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({ model: openai("gpt-6-sol"), messages: conversation, providerOptions: { reasoningEffort: "low" } }),
+      )
+
+      expect(prepared.body.reasoning).toEqual({ effort: "high" })
+      expect(prepared.body.input).toEqual([
+        { type: "message", role: "user", content: [{ type: "input_text", text: "Before." }] },
+        { type: "configuration_update", reasoning: { effort: "low" } },
+        { type: "message", role: "user", content: [{ type: "input_text", text: "After." }] },
+      ])
+    }),
+  )
+
+  it.effect("strips markers when the body overlay selects pro reasoning mode", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenAI.configure({ apiKey: "fixture", http: { body: { reasoning: { mode: "pro" } } } }).responses(
+            "gpt-6-sol",
+          ),
+          messages: conversation,
+          providerOptions: { reasoningEffort: "low" },
+        }),
+      )
+
+      expect(updates(prepared.body)).toEqual([])
+      expect(prepared.body.reasoning).toEqual({ effort: "low" })
+    }),
+  )
+
   for (const [id, supported] of [
     ["gpt-6-astra", true],
     ["openai/gpt-6-astra", true],
+    ["gpt-6-sol", true],
+    ["openai/gpt-6-sol", true],
+    ["gpt-6-luna", true],
+    ["openai/gpt-6-luna", true],
     ["gpt-6-astra-2026-09-01", false],
+    ["gpt-6-sol-pro", false],
+    ["gpt-6-luna-pro", false],
+    ["gpt-6-sol-fast", false],
     ["gpt-5.6-sol", false],
   ] as const) {
     it.effect(`${supported ? "lowers" : "strips"} markers for ${id}`, () =>
