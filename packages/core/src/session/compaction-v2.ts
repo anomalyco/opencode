@@ -526,7 +526,7 @@ export const layer = Layer.effect(
               .pipe(Effect.flatMap((response) => install(response.replacement, response.usage)))
           }
           return unsupported(
-            `No plugin provides native compaction for ${request.model.provider}/${request.model.route.id}`,
+            `Native compaction is not supported for ${request.model.provider}/${request.model.route.id}`,
           )
         },
       }
