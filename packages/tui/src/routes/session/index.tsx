@@ -648,8 +648,8 @@ export function Session(props: {
             },
           },
           {
-            command: "queued_prompt.move_back",
-            title: "move back",
+            command: "queued_prompt.undo",
+            title: "undo",
             onTrigger: (option) => {
               const target = prompt()
               const queued = queuedPrompts().find((item) => item.id === option.value)
@@ -662,11 +662,11 @@ export function Session(props: {
                 current.skills?.length ||
                 current.pasted.length
               ) {
-                toast.show({ message: "Clear or stash your draft before moving a prompt back", variant: "error" })
+                toast.show({ message: "Clear or stash your draft before undoing a queued prompt", variant: "error" })
                 return
               }
-              void mutatePending("cancel", queued.id, "move back").then((moved) => {
-                if (!moved) return
+              void mutatePending("cancel", queued.id, "undo").then((undone) => {
+                if (!undone) return
                 target.setMode("normal")
                 target.set({ ...projectedPromptInput(queued.payload), pasted: [] })
                 dialog.clear()

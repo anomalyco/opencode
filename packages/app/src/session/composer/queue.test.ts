@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionInboxInfo } from "@opencode/client/promise"
-import { queuedPromptAttachments, queuedPromptMoveBackDraft, queuedPromptRows } from "./queue"
+import { queuedPromptAttachments, queuedPromptUndoDraft, queuedPromptRows } from "./queue"
 
 const queued = [
   {
@@ -105,7 +105,7 @@ describe("queuedPromptAttachments", () => {
   })
 })
 
-describe("queuedPromptMoveBackDraft", () => {
+describe("queuedPromptUndoDraft", () => {
   test("keeps full text, structured mentions, and inline images", () => {
     const item = {
       ...queued[0],
@@ -124,7 +124,7 @@ describe("queuedPromptMoveBackDraft", () => {
         agents: [{ name: "build", mention: { start: 22, end: 28, text: "@build" } }],
       },
     } satisfies SessionInboxInfo
-    expect(queuedPromptMoveBackDraft(item)).toMatchObject([
+    expect(queuedPromptUndoDraft(item)).toMatchObject([
       { type: "text", content: "inspect " },
       { type: "file", content: "@main.ts", url: "data:text/plain;base64,aGk=" },
       { type: "text", content: " with " },
@@ -141,6 +141,6 @@ describe("queuedPromptMoveBackDraft", () => {
         files: [{ data: "aGk=", mime: "text/plain", source: { type: "uri" as const, uri: "file:///repo/main.ts" } }],
       },
     } satisfies SessionInboxInfo
-    expect(queuedPromptMoveBackDraft(item)).toBeUndefined()
+    expect(queuedPromptUndoDraft(item)).toBeUndefined()
   })
 })

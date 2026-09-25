@@ -227,7 +227,7 @@ export function ActiveSessionComposerRegion(props: {
             <Composer
               model={props.model.composer}
               borderUnderlay
-              readOnly={props.model.queue.movingBack()}
+              readOnly={props.model.queue.undoing()}
               suggestionBoundary={props.suggestionBoundary}
             />
           </div>

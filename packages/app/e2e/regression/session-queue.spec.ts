@@ -239,7 +239,7 @@ test("editing restores the existing draft and replaces only the original queue p
   expect(mock.log[0]).toBe("prompt:queue")
 })
 
-test("Move Back cancels only the selected queued prompt and focuses the restored input", async ({ page }) => {
+test("Undo cancels only the selected queued prompt and focuses the restored input", async ({ page }) => {
   const mock = createQueueMock(["first queued prompt", "second queued prompt", "third queued prompt"])
   const view = await openSession(page, mock)
   await expect(view.rows).toHaveCount(3)
@@ -251,13 +251,13 @@ test("Move Back cancels only the selected queued prompt and focuses the restored
     await actions.evaluateAll((buttons) =>
       buttons.map((button) => button.getAttribute("aria-label") ?? button.textContent?.trim()),
     ),
-  ).toEqual(["Steer", "Move Back", "Remove"])
-  const moveBack = row.getByRole("button", { name: "Move Back" })
-  await expect(moveBack).toHaveText("")
-  await expect(moveBack.locator("svg use")).toHaveAttribute("href", "#opencode-v2-icon-arrow-down-to-line")
-  await moveBack.hover()
-  await expect(page.getByRole("tooltip")).toHaveText("Move Back")
-  await moveBack.click()
+  ).toEqual(["Steer", "Undo", "Remove"])
+  const undo = row.getByRole("button", { name: "Undo" })
+  await expect(undo).toHaveText("")
+  await expect(undo.locator("svg use")).toHaveAttribute("href", "#opencode-v2-icon-arrow-down-to-line")
+  await undo.hover()
+  await expect(page.getByRole("tooltip")).toHaveText("Undo")
+  await undo.click()
   await expect(view.rows.locator('[data-action="session-queue-edit"]')).toHaveText([
     "first queued prompt",
     "third queued prompt",
@@ -268,7 +268,7 @@ test("Move Back cancels only the selected queued prompt and focuses the restored
   expect(mock.prompts).toEqual([])
 })
 
-test("Move Back preserves an existing draft and restores inline attachments", async ({ page }) => {
+test("Undo preserves an existing draft and restores inline attachments", async ({ page }) => {
   const mock = createQueueMock(["queued with image"])
   mock.rows[0].payload.files = [
     {
@@ -280,12 +280,12 @@ test("Move Back preserves an existing draft and restores inline attachments", as
   ]
   const view = await openSession(page, mock)
   await view.input.fill("my draft")
-  await view.rows.getByRole("button", { name: "Move Back" }).click()
+  await view.rows.getByRole("button", { name: "Undo" }).click()
   await expect(view.input).toHaveText("my draft")
   expect(mock.changes).toEqual([])
 
   await view.input.fill("")
-  await view.rows.getByRole("button", { name: "Move Back" }).click()
+  await view.rows.getByRole("button", { name: "Undo" }).click()
   await expect(view.rows).toHaveCount(0)
   await expect(view.input).toHaveText("queued with image")
   await expect(view.input).toBeFocused()
@@ -293,24 +293,24 @@ test("Move Back preserves an existing draft and restores inline attachments", as
   expect(mock.changes).toEqual([{ inboxID: "inb_seed_1", action: "cancel" }])
 })
 
-test("Move Back stays usable with a long queue on a narrow screen", async ({ page }, testInfo) => {
+test("Undo stays usable with a long queue on a narrow screen", async ({ page }, testInfo) => {
   await page.setViewportSize({ width: 390, height: 844 })
   const text = "Review the detailed error report and check every step of the retry path ".repeat(4)
   const mock = createQueueMock([text, ...Array.from({ length: 6 }, (_, index) => `queued follow-up ${index + 1}`)])
   const view = await openSession(page, mock)
   await expect(view.rows).toHaveCount(7)
   const row = view.rows.filter({ hasText: text })
-  await row.getByRole("button", { name: "Move Back" }).hover()
-  await expect(page.getByRole("tooltip")).toHaveText("Move Back")
-  await page.screenshot({ path: testInfo.outputPath("move-back-narrow-queue.png") })
-  await row.getByRole("button", { name: "Move Back" }).click()
+  await row.getByRole("button", { name: "Undo" }).hover()
+  await expect(page.getByRole("tooltip")).toHaveText("Undo")
+  await page.screenshot({ path: testInfo.outputPath("undo-narrow-queue.png") })
+  await row.getByRole("button", { name: "Undo" }).click()
   await expect(view.rows).toHaveCount(6)
   await expect(view.input).toHaveText(text)
   await expect(view.input).toBeFocused()
   expect(mock.changes).toEqual([{ inboxID: "inb_seed_1", action: "cancel" }])
 })
 
-test("Move Back preserves mentioned file and agent references on resubmission", async ({ page }) => {
+test("Undo preserves mentioned file and agent references on resubmission", async ({ page }) => {
   const mock = createQueueMock(["inspect @main.ts with @build"])
   mock.rows[0].payload.files = [
     {
@@ -323,7 +323,7 @@ test("Move Back preserves mentioned file and agent references on resubmission", 
   ]
   mock.rows[0].payload.agents = [{ name: "build", mention: { start: 22, end: 28, text: "@build" } }]
   const view = await openSession(page, mock)
-  await view.rows.getByRole("button", { name: "Move Back" }).click()
+  await view.rows.getByRole("button", { name: "Undo" }).click()
   await expect(view.input).toHaveText("inspect @main.ts with @build")
   await view.input.press("Enter")
   await expect.poll(() => mock.prompts.length).toBe(1)
@@ -333,13 +333,13 @@ test("Move Back preserves mentioned file and agent references on resubmission", 
   expect(mock.prompts[0].agents).toMatchObject([{ name: "build", mention: { text: "@build" } }])
 })
 
-test("Move Back does not discard hidden file context", async ({ page }) => {
+test("Undo does not discard hidden file context", async ({ page }) => {
   const mock = createQueueMock(["inspect this file"])
   mock.rows[0].payload.files = [
     { data: "aGk=", mime: "text/plain", source: { type: "uri", uri: "file:///repo/main.ts" }, name: "main.ts" },
   ]
   const view = await openSession(page, mock)
-  await view.rows.getByRole("button", { name: "Move Back" }).click()
+  await view.rows.getByRole("button", { name: "Undo" }).click()
   await expect(page.getByText("Edit this prompt in the queue to preserve its file context")).toBeVisible()
   await expect(view.rows).toHaveCount(1)
   await expect(view.input).toHaveText("")

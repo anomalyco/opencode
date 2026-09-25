@@ -797,13 +797,13 @@ export function RunFooterView(props: RunFooterViewProps) {
                               )
                                 closePanel()
                             }}
-                            onMoveBack={async (item) => {
+                            onUndo={async (item) => {
                               const current = composer.current()
                               if (current.text.length || current.parts.length) {
-                                props.onStatus("clear your draft before moving a prompt back")
+                                props.onStatus("clear your draft before undoing a queued prompt")
                                 return
                               }
-                              if (!(await queuedPromptAction("cancel", item.messageID, "move back"))) return
+                              if (!(await queuedPromptAction("cancel", item.messageID, "undo"))) return
                               closePanel()
                               composer.replacePrompt({ ...item.prompt, messageID: undefined })
                             }}

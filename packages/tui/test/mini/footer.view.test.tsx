@@ -1275,7 +1275,7 @@ test.each(["queue", "steer"] as const)("direct footer toggles and deletes pendin
     expect(frame).toContain("Pending prompts")
     expect(frame).toContain("follow up")
     expect(frame).toContain(delivery === "queue" ? "queued" : "steering")
-    expect(frame).toContain(`enter ${delivery === "queue" ? "steer" : "queue"} · ctrl+d delete · ctrl+u move back`)
+    expect(frame).toContain(`enter ${delivery === "queue" ? "steer" : "queue"} · ctrl+d delete · ctrl+u undo`)
     expect(frame).not.toContain("┌")
     expect(frame).not.toContain("┃")
     expectPaletteList(list, 0)
@@ -1301,7 +1301,7 @@ test.each(["queue", "steer"] as const)("direct footer toggles and deletes pendin
   }
 })
 
-test("move back restores a pending prompt without overwriting a draft", async () => {
+test("undo restores a pending prompt without overwriting a draft", async () => {
   const actions: string[] = []
   const statuses: string[] = []
   const submitted: RunPrompt[] = []
@@ -1334,7 +1334,7 @@ test("move back restores a pending prompt without overwriting a draft", async ()
     await app.renderOnce()
     app.mockInput.pressKey("u", { ctrl: true })
     await app.renderOnce()
-    expect(statuses.at(-1)).toBe("clear your draft before moving a prompt back")
+    expect(statuses.at(-1)).toBe("clear your draft before undoing a queued prompt")
     expect(actions).toEqual([])
     app.mockInput.pressKey("ESCAPE")
     await app.renderOnce()
@@ -1360,7 +1360,7 @@ test("move back restores a pending prompt without overwriting a draft", async ()
   }
 })
 
-test("move back leaves the queue and input alone when cancellation fails", async () => {
+test("undo leaves the queue and input alone when cancellation fails", async () => {
   const statuses: string[] = []
   const app = await renderFooter({
     queuedPrompts: [{ messageID: "m-1", prompt: { text: "still queued", parts: [] }, delivery: "queue" }],
@@ -1377,7 +1377,7 @@ test("move back leaves the queue and input alone when cancellation fails", async
     app.mockInput.pressKey("u", { ctrl: true })
     await Bun.sleep(0)
     await app.renderOnce()
-    expect(statuses.at(-1)).toContain("failed to move back pending prompt: cancel failed")
+    expect(statuses.at(-1)).toContain("failed to undo pending prompt: cancel failed")
     expect(app.captureCharFrame()).toContain("Pending prompts")
     app.mockInput.pressKey("ESCAPE")
     await app.renderOnce()
@@ -1387,7 +1387,7 @@ test("move back leaves the queue and input alone when cancellation fails", async
   }
 })
 
-test("move back retains mentioned files when the prompt is sent again", async () => {
+test("undo retains mentioned files when the prompt is sent again", async () => {
   const submitted: RunPrompt[] = []
   const app = await renderFooter({
     queuedPrompts: [

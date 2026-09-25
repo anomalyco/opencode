@@ -175,16 +175,16 @@ function SessionQueueRow(props: { queue: SessionQueueView; id: string; index: nu
                   {props.queue.working() ? language.t("session.queue.steer") : language.t("session.queue.send")}
                 </Button>
               </Tooltip>
-              <Tooltip placement="top" value={language.t("session.queue.moveBack")}>
+              <Tooltip placement="top" value={language.t("session.queue.undo")}>
                 <IconButton
-                  data-action="session-queue-move-back"
+                  data-action="session-queue-undo"
                   type="button"
                   size="small"
                   variant="ghost-muted"
                   icon={<Icon name="arrow-down-to-line" />}
                   disabled={props.queue.busy()}
-                  aria-label={language.t("session.queue.moveBack")}
-                  onClick={() => props.queue.moveBack(props.id)}
+                  aria-label={language.t("session.queue.undo")}
+                  onClick={() => props.queue.undo(props.id)}
                 />
               </Tooltip>
             </Show>

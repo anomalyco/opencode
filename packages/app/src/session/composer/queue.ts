@@ -43,7 +43,7 @@ export function createSessionQueue(input: {
     mutationFn: async (
       change:
         | { type: "reorder"; inboxIDs: string[] }
-        | { type: "move-back"; item: QueuedPrompt; prompt: Prompt }
+        | { type: "undo"; item: QueuedPrompt; prompt: Prompt }
         | {
             type: "edit"
             inboxIDs: string[]
@@ -56,7 +56,7 @@ export function createSessionQueue(input: {
           },
     ) => {
       if (change.type === "reorder") return rewrite(change.inboxIDs)
-      if (change.type === "move-back") {
+      if (change.type === "undo") {
         await server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: change.item.id })
         input.draft.mode.set("normal")
         input.draft.set(change.prompt, promptLength(change.prompt))
@@ -148,7 +148,7 @@ export function createSessionQueue(input: {
     if (state.editing?.id === id) cancelEdit()
     return server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: id }).catch(() => notify())
   }
-  const moveBack = (id: string) => {
+  const undo = (id: string) => {
     if (mutation.isPending || state.editing) return
     const item = queued().find((entry) => entry.id === id)
     if (!item) return
@@ -157,15 +157,15 @@ export function createSessionQueue(input: {
       input.draft.mode.current() !== "normal" ||
       input.draft.retry.current()
     ) {
-      showToast({ title: language.t("session.queue.moveBackDraft") })
+      showToast({ title: language.t("session.queue.undoDraft") })
       return
     }
-    const prompt = queuedPromptMoveBackDraft(item)
+    const prompt = queuedPromptUndoDraft(item)
     if (!prompt) {
-      showToast({ title: language.t("session.queue.moveBackUnavailable") })
+      showToast({ title: language.t("session.queue.undoUnavailable") })
       return
     }
-    mutation.mutate({ type: "move-back", item, prompt })
+    mutation.mutate({ type: "undo", item, prompt })
   }
   const reorder = (inboxIDs: string[]) => {
     if (mutation.isPending) return Promise.resolve()
@@ -254,11 +254,11 @@ export function createSessionQueue(input: {
     editFirst,
     rows,
     busy: () => mutation.isPending,
-    movingBack: () => mutation.isPending && mutation.variables?.type === "move-back",
+    undoing: () => mutation.isPending && mutation.variables?.type === "undo",
     working: input.working,
     steer,
     remove,
-    moveBack,
+    undo,
     edit,
     reorder,
   }
@@ -269,7 +269,7 @@ export type SessionQueue = ReturnType<typeof createSessionQueue>
 // The slice of the queue the panel renders and drives.
 export type SessionQueueView = Pick<
   SessionQueue,
-  "rows" | "editing" | "working" | "busy" | "steer" | "remove" | "moveBack" | "edit" | "reorder"
+  "rows" | "editing" | "working" | "busy" | "steer" | "remove" | "undo" | "edit" | "reorder"
 >
 
 export function queuedPromptRows(items: QueuedPrompt[], replacement?: { original: string; replacement: string }) {
@@ -321,7 +321,7 @@ export function queuedPromptAttachments(item: QueuedPrompt): (ImageAttachmentPar
 // Use the full model-visible text so comment notes and path references remain
 // in the draft. Convert mentioned files, agents, and skills back into editor
 // parts; a detached draft cannot represent non-mentioned file context.
-export function queuedPromptMoveBackDraft(item: QueuedPrompt): Prompt | undefined {
+export function queuedPromptUndoDraft(item: QueuedPrompt): Prompt | undefined {
   if (
     item.payload.files?.some((file) => !isComposerAttachment(file) && !file.mention) ||
     item.payload.agents?.some((agent) => !agent.mention) ||
