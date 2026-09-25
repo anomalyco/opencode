@@ -1,0 +1,35 @@
+name: opencode
+arch: "${NFPM_ARCH}"
+platform: linux
+version: "${VERSION}"
+maintainer: "OpenCode <opencode@sst.dev>"
+description: "The open source AI coding agent for the terminal"
+homepage: "https://opencode.ai"
+license: "MIT"
+vendor: "Anomaly"
+section: "devel"
+priority: "optional"
+
+depends:
+  - ripgrep
+
+contents:
+  - src: "${BINARY_PATH}"
+    dst: /usr/bin/opencode
+    file_info:
+      mode: 0755
+
+  - src: "${COMPLETIONS_DIR}/opencode.bash"
+    dst: /usr/share/bash-completion/completions/opencode
+    file_info:
+      mode: 0644
+
+  - src: "${COMPLETIONS_DIR}/opencode.zsh"
+    dst: /usr/share/zsh/site-functions/_opencode
+    file_info:
+      mode: 0644
+
+  - src: "${COMPLETIONS_DIR}/opencode.fish"
+    dst: /usr/share/fish/vendor_completions.d/opencode.fish
+    file_info:
+      mode: 0644
