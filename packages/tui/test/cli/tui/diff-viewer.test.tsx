@@ -2142,6 +2142,49 @@ test("keeps the line-number gutter the same width across virtual chunks", async 
   }
 })
 
+test("highlights virtual chunks with whole-file syntax context", async () => {
+  const additions = Array.from({ length: 1200 }, (_, index) => {
+    if (index === 120) return "+/*"
+    if (index === 159) return "+*/"
+    if (index > 120 && index < 159) return `+  comment ${index}`
+    return `+const value${index} = ${index}`
+  })
+  const viewer = await renderDiffViewer(
+    [
+      {
+        file: "big.ts",
+        status: "added",
+        additions: additions.length,
+        deletions: 0,
+        patch: `--- /dev/null\n+++ b/big.ts\n@@ -0,0 +1,${additions.length} @@\n${additions.join("\n")}`,
+      },
+    ],
+    { width: 120, height: 40 },
+  )
+  const color = (text: string) =>
+    viewer.app
+      .captureSpans()
+      .lines.flatMap((line) => line.spans)
+      .find((span) => span.text.includes(text))?.fg
+  try {
+    findScrollBox(viewer.app.renderer.root)!.scrollTo(110)
+    await viewer.app.flush()
+    // The comment starts in the first chunk and ends in the second; wait until it is highlighted.
+    for (let attempt = 0; attempt < 100 && `${color("comment 125")}` === `${color("value115")}`; attempt++) {
+      await Bun.sleep(20)
+      await viewer.app.flush()
+    }
+    expect(`${color("comment 125")}`).not.toBe(`${color("value115")}`)
+    for (let attempt = 0; attempt < 100 && `${color("comment 135")}` !== `${color("comment 125")}`; attempt++) {
+      await Bun.sleep(20)
+      await viewer.app.flush()
+    }
+    expect(`${color("comment 135")}`).toBe(`${color("comment 125")}`)
+  } finally {
+    viewer.app.renderer.destroy()
+  }
+})
+
 test("does not virtualize added files at or below the size threshold", async () => {
   const additions = Array.from({ length: 1000 }, (_, index) => `+small line ${index}`)
   const viewer = await renderDiffViewer(

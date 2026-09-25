@@ -1,10 +1,15 @@
 /** @jsxImportSource @opentui/solid */
 import {
   BoxRenderable,
+  CodeRenderable,
   DiffRenderable,
+  getTreeSitterClient,
   LineNumberRenderable,
   type ColorInput,
+  type OnHighlightCallback,
+  type Renderable,
   type ScrollBoxRenderable,
+  type SimpleHighlight,
 } from "@opentui/core"
 import type { JSX } from "@opentui/solid"
 import { useRenderer } from "@opentui/solid"
@@ -155,6 +160,32 @@ function VirtualAddedPatch(props: {
     )
   })
   const heights = createMemo(() => estimates().map((estimate, index) => measured().get(index) ?? estimate))
+  // A chunk is not valid source on its own (a slice of a JSON object parses as an error), so highlight
+  // the whole file once and give each chunk its slice of the result.
+  const contents = createMemo(() => props.chunks.map((chunk) => chunk.lines.map((line) => line.slice(1)).join("\n")))
+  const offsets = createMemo(() =>
+    contents().map((_, index, all) => all.slice(0, index).reduce((sum, content) => sum + content.length + 1, 0)),
+  )
+  const fileHighlights = createMemo(() => {
+    const filetype = props.diffProps.filetype
+    if (!filetype) return
+    return getTreeSitterClient()
+      .highlightOnce(contents().join("\n"), filetype)
+      .then((result) => result.highlights)
+  })
+  const chunkHighlights =
+    (index: number): OnHighlightCallback =>
+    async () => {
+      const all = await fileHighlights()
+      if (!all) return
+      const start = offsets()[index]
+      const end = start + contents()[index].length
+      return all.flatMap((highlight): SimpleHighlight[] =>
+        highlight[0] < end && highlight[1] > start
+          ? [[Math.max(highlight[0], start) - start, Math.min(highlight[1], end) - start, highlight[2], highlight[3]]]
+          : [],
+      )
+    }
   let root: BoxRenderable | undefined
   // Viewport top relative to this patch, in rows.
   const viewportTop = (scroll: ScrollBoxRenderable, root: BoxRenderable) =>
@@ -194,7 +225,11 @@ function VirtualAddedPatch(props: {
               {...props.diffProps}
               ref={(node: DiffRenderable) => {
                 props.register(index(), node)
+                const highlight = chunkHighlights(index())
                 node.onSizeChange = () => {
+                  // DiffRenderable creates its CodeRenderable after ref runs; setting onHighlight re-highlights.
+                  const code = findCode(node)
+                  if (code) code.onHighlight = highlight
                   if (node.height <= 0 || measured().get(index()) === node.height) return
                   const scroll = props.scroll()
                   const sizes = heights()
@@ -217,6 +252,11 @@ function VirtualAddedPatch(props: {
       </For>
     </box>
   )
+}
+
+function findCode(node: Renderable): CodeRenderable | undefined {
+  if (node instanceof CodeRenderable) return node
+  return node.getChildren().reduce<CodeRenderable | undefined>((found, child) => found ?? findCode(child), undefined)
 }
 
 function lineCount(chunks: readonly AddedPatchChunk[]) {
