@@ -72,7 +72,13 @@ import { sessionEpilogue } from "../../util/presentation"
 import { setPreLayoutSiblingMargin } from "../../util/layout"
 import { useTuiConfig } from "../../config"
 import { useClipboard } from "../../context/clipboard"
-import { nextThinkingMode, reasoningSummary, useThinkingMode, type ThinkingMode } from "../../context/thinking"
+import {
+  nextThinkingMode,
+  reasoningHeaderColor,
+  reasoningSummary,
+  useThinkingMode,
+  type ThinkingMode,
+} from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
 import { collapseToolOutput } from "../../util/collapse-tool-output"
 import { usePluginRuntime } from "../../plugin/runtime"
@@ -1589,6 +1595,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
   // Collapsed by default in hide mode: a single line throughout, so the
   // layout never shifts. Click to open the full markdown block, click to close.
   const [expanded, setExpanded] = createSignal(false)
+  const [hover, setHover] = createSignal(false)
 
   const content = createMemo(() => {
     // OpenRouter encrypts some reasoning blocks; drop the placeholder.
@@ -1620,10 +1627,11 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
         flexDirection="column"
         flexShrink={0}
       >
-        <box onMouseUp={toggle}>
+        <box onMouseUp={toggle} onMouseOver={() => setHover(true)} onMouseOut={() => setHover(false)}>
           <ReasoningHeader
             toggleable={inMinimal() && !opaque()}
             open={!inMinimal() || expanded()}
+            hover={hover()}
             done={isDone()}
             title={summary().title}
             duration={isDone() ? Locale.duration(duration()) : undefined}
@@ -1651,6 +1659,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
 function ReasoningHeader(props: {
   toggleable: boolean
   open: boolean
+  hover: boolean
   done: boolean
   title: string | null
   duration?: string
@@ -1658,9 +1667,13 @@ function ReasoningHeader(props: {
 }) {
   const { theme } = useTheme()
   const fg = () =>
-    props.open
-      ? RGBA.fromValues(theme.warning.r, theme.warning.g, theme.warning.b, theme.thinkingOpacity)
-      : theme.warning
+    reasoningHeaderColor({
+      done: props.done,
+      open: props.open,
+      hover: props.hover,
+      warning: theme.warning,
+      thinkingOpacity: theme.thinkingOpacity,
+    })
   const completed = () => {
     if (props.encrypted) return `Thought${props.duration ? ` · ${props.duration}` : ""}`
     const detail = [props.title, props.duration].filter(Boolean).join(" · ")
