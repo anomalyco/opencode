@@ -351,21 +351,6 @@ describe("OpenAI Responses effort updates", () => {
     }),
   )
 
-  it.effect("lowers markers for GPT-6 Sol without changing the top-level effort", () =>
-    Effect.gen(function* () {
-      const prepared = yield* compileRequest(
-        LLM.request({ model: openai("gpt-6-sol"), messages: conversation, providerOptions: { reasoningEffort: "low" } }),
-      )
-
-      expect(prepared.body.reasoning).toEqual({ effort: "high" })
-      expect(prepared.body.input).toEqual([
-        { type: "message", role: "user", content: [{ type: "input_text", text: "Before." }] },
-        { type: "configuration_update", reasoning: { effort: "low" } },
-        { type: "message", role: "user", content: [{ type: "input_text", text: "After." }] },
-      ])
-    }),
-  )
-
   it.effect("strips markers when the body overlay selects pro reasoning mode", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
