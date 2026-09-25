@@ -393,15 +393,13 @@ it.live("only known automatic native overflow falls back locally and failed reco
     fixture.state.overflow = true
     fixture.state.localFailure = true
     expect(yield* fixture.automatic).toMatchObject({ status: "failed" })
-    expect(fixture.state.calls).toBe(6)
+    expect(fixture.state.calls).toBe(5)
     expect(yield* fixture.checkpoint).toEqual(installed)
     expect(JSON.stringify(fixture.bodies[4])).toContain("Original durable request")
     expect(JSON.stringify(fixture.bodies[4])).not.toContain("encrypted_1")
-    expect(JSON.stringify(fixture.bodies[5])).toContain("Original durable request")
-    expect(JSON.stringify(fixture.bodies[5])).not.toContain("encrypted_1")
     fixture.state.localFailure = false
     expect(yield* fixture.automatic).toEqual({ status: "completed", recoveredOverflow: true })
-    expect(fixture.state.calls).toBe(8)
+    expect(fixture.state.calls).toBe(7)
     expect((yield* fixture.load).messages).toContainEqual(
       expect.objectContaining({ type: "compaction", summary: "## Objective\n- Recovered locally" }),
     )

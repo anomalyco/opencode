@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { GenerationOptions, LLMClient, LLMEvent, LanguageModel, ToolDefinition, type LLMRequest } from "@opencode/ai"
+import { LLMClient, LLMEvent, LanguageModel, ToolDefinition, type LLMRequest } from "@opencode/ai"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -153,7 +153,7 @@ test("compaction prompts prohibit task execution", () => {
     expect(SessionCompaction.buildPrompt(update)).toContain("Do not continue the task or call tools")
 })
 
-it.effect("auto compaction uses 90% by default and a configured buffer instead", () =>
+it.effect("auto compaction estimates current content against the buffered prompt ceiling", () =>
   Effect.gen(function* () {
     const compaction = yield* SessionCompaction.Service
     const session = Session.Info.make({
@@ -205,22 +205,23 @@ it.effect("auto compaction uses 90% by default and a configured buffer instead",
     }
 
     const inputLimited = { context: 400_000, input: 272_000, output: 128_000 }
-    expect(compaction.required(input(244_799, inputLimited))).toBe(false)
-    expect(compaction.required(input(244_800, inputLimited))).toBe(true)
+    expect(compaction.required(input(251_999, inputLimited))).toBe(false)
+    expect(compaction.required(input(252_000, inputLimited))).toBe(true)
     const native = (tokens: number, limit: { context: number; input?: number; output: number } = inputLimited) => {
       const selected = input(tokens, limit)
       return { ...selected, resolved: { ...selected.resolved, compaction: { type: "native" as const } } }
     }
-    expect(compaction.required(native(244_800))).toBe(true)
+    expect(compaction.required(native(251_999))).toBe(false)
+    expect(compaction.required(native(252_000))).toBe(true)
     expect(compaction.required(native(1_000_000, { context: 0, input: undefined, output: 0 }))).toBe(false)
 
     const contextLimited = { context: 100_000, output: 10_000 }
-    expect(compaction.required(input(89_999, contextLimited))).toBe(false)
-    expect(compaction.required(input(90_000, contextLimited))).toBe(true)
+    expect(compaction.required(input(79_999, contextLimited))).toBe(false)
+    expect(compaction.required(input(80_000, contextLimited))).toBe(true)
 
-    const smallWindow = { context: 32_000, output: 32_000 }
-    expect(compaction.required(input(28_799, smallWindow))).toBe(false)
-    expect(compaction.required(input(28_800, smallWindow))).toBe(true)
+    const outputLimited = { context: 100_000, output: 30_000 }
+    expect(compaction.required(input(69_999, outputLimited))).toBe(false)
+    expect(compaction.required(input(70_000, outputLimited))).toBe(true)
 
     const assistant = input(79_000, contextLimited).messages[0]
     const tool = SessionMessage.AssistantTool.make({
@@ -232,9 +233,7 @@ it.effect("auto compaction uses 90% by default and a configured buffer instead",
     })
     const grown = { ...input(79_000, contextLimited), messages: [{ ...assistant, content: [tool] }] }
     expect(SessionCompaction.estimateTokens(grown)).toBe(80_000)
-    expect(compaction.required(grown)).toBe(false)
-    const near = input(89_000, contextLimited)
-    expect(compaction.required({ ...near, messages: [{ ...near.messages[0], content: [tool] }] })).toBe(true)
+    expect(compaction.required(grown)).toBe(true)
 
     const interrupted = { ...assistant, id: SessionMessage.ID.create(), tokens: undefined }
     expect(SessionCompaction.estimateTokens({ ...grown, messages: [...grown.messages, interrupted] })).toBe(80_001)
@@ -286,13 +285,6 @@ it.effect("auto compaction uses 90% by default and a configured buffer instead",
       time: { created: 0, completed: 0 },
     })
     expect(compaction.required({ ...grown, messages: [checkpoint] })).toBe(false)
-
-    yield* compaction.transform((editor) => editor.configure({ buffer: 5_000 }))
-    expect(compaction.required(input(94_999, contextLimited))).toBe(false)
-    expect(compaction.required(input(95_000, contextLimited))).toBe(true)
-    yield* compaction.transform((editor) => editor.configure({ buffer: 0 }))
-    expect(compaction.required(input(99_999, contextLimited))).toBe(false)
-    expect(compaction.required(input(100_000, contextLimited))).toBe(true)
   }),
 )
 
@@ -415,7 +407,7 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
       "x-opencode-session": sessionID,
       "x-opencode-client": "opencode",
     })
-    expect(requests[0]?.generation).toEqual(GenerationOptions.make({ maxTokens: 32_000 }))
+    expect(requests[0]?.generation).toBeUndefined()
     expect(JSON.stringify(requests[0]?.messages)).toContain("Manual compaction should include this short conversation.")
     expect(JSON.stringify(requests[0]?.messages)).toContain("Use Effect services and generators.")
     expect(JSON.stringify(requests[0]?.messages)).toContain("User shell pwd completed: /project")

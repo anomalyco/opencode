@@ -172,5 +172,5 @@ const input = (tokens: number) => {
     },
   }
 }
-const bufferedInput = input(82_000)
+const bufferedInput = input(85_000)
 const nearInput = input(95_000)

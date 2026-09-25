@@ -244,11 +244,6 @@ const layer = Layer.effect(
           // Keep tool definitions on the final Step to preserve the provider's cached prefix.
           toolChoice: stepLimitReached ? "none" : undefined,
           webSocket: "session",
-          inputTokens: SessionCompaction.estimatePrompt({
-            messages: loaded.messages,
-            resolved: loaded.model,
-            context: loaded,
-          }),
         })
         const outcome = yield* steps.attempt({
           isLocationClosed: lifecycle.isClosed,

@@ -78,20 +78,17 @@ Reusing that ID for another record returns a conflict.
 ## Automatic
 
 Before each model call, OpenCode estimates the final size of the system prompt,
-messages, and advertised tools. By default it starts compaction at 90% of the
-smaller context or input limit. A configured `buffer` replaces that percentage
-with an absolute number of tokens to reserve:
+messages, and advertised tools. It starts compaction at this ceiling:
 
 ```text
-usable window = min(context limit, input limit if present)
-compact when estimated tokens >= (buffer configured ? usable window - buffer : floor(90% of usable window))
+estimated tokens >= min(input limit - buffer, context limit - max(output reserve, buffer))
 ```
 
-For example, with a 200,000-token context and a 128,000-token input limit,
-the default threshold is 115,200 tokens:
+For example, with a 128,000-token input limit and the default 20,000-token
+buffer, the input-limit side of the ceiling is 108,000 tokens.
 
 ```text
-128,000 × 90% = 115,200
+128,000 - 20,000 = 108,000
 ```
 
 The estimate follows these rules:
@@ -100,15 +97,10 @@ The estimate follows these rules:
   newer content are then added.
 - Without provider usage, OpenCode estimates text, media, instructions, and
   tools locally.
-- Without a separate input limit, the context limit sets the threshold.
+- The reserved model output is capped at 32,000 tokens.
+- A model without an input limit is constrained by its context limit instead.
 - A successful checkpoint rebuilds the same pending model step. It does not
   promote the input again or spend another agent step.
-
-Compaction normally sends the existing conversation for summarization. If it
-cannot fit the selected model, OpenCode retries within the same input threshold
-with a shorter text version:
-old tool results and media are reduced first, then older exchanges are omitted
-if needed. The original messages remain in session history.
 
 OpenCode also recognizes provider errors classified as context overflow. If no
 assistant output or other retry evidence was produced, it can compact and retry
@@ -140,11 +132,11 @@ Add `compaction` to any [OpenCode configuration file](/config):
 | --- | ---: | --- |
 | `auto` | `true` | Enables preflight checks and one provider-overflow recovery attempt. It does not control manual compaction. |
 | `keep.tokens` | `15000` | Approximate recent serialized context retained beside a local summary, or real user input retained for a provider checkpoint. |
-| `buffer` | unset | Replaces the 90% threshold with `usable window - buffer`. Set it to reserve a fixed number of tokens. |
+| `buffer` | `20000` | Safety margin below an explicit input limit. Without one, it is the minimum context reserve; a larger model output allowance wins. |
 
 `keep.tokens` and `buffer` accept non-negative integers. Larger
 `keep.tokens` preserves more recent detail but leaves less room for new work;
-larger `buffer` starts automatic compaction earlier when configured.
+larger `buffer` starts automatic compaction earlier.
 
 ## Providers
 
@@ -169,7 +161,7 @@ A model setting overrides the provider setting.
 
 | Topic | Provider behavior |
 | --- | --- |
-| Threshold | OpenCode starts at 90% of the smaller context or input limit, unless `buffer` replaces it with a fixed reserve. |
+| Threshold | OpenCode uses the model's usable input ceiling configured by its context, input, and output limits plus the global compaction buffer. |
 | Scheduling | Checkpoints run at normal safe step boundaries. `compaction.auto: false` disables all new automatic work. |
 | Usage | After a native checkpoint is installed, automatic checks wait for fresh model usage because encrypted checkpoint bytes cannot provide a meaningful token count. |
 | OpenAI | Responses routes use a streamed compaction trigger when supported; endpoint-only routes use the standalone compaction endpoint. Deployment and model support vary. |

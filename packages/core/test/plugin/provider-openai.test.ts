@@ -216,31 +216,6 @@ describe("OpenAIPlugin", () => {
     }),
   )
 
-  it.effect("omits the default output limit from OpenAI steps and compaction", () =>
-    Effect.gen(function* () {
-      yield* addPlugin()
-      const hooks = yield* PluginHooks.Service
-      const maxTokens = (providerID: Provider.ID) =>
-        Effect.gen(function* () {
-          const draft = {
-            sessionID: Session.ID.make("ses_test"),
-            model: Model.Ref.make({ providerID, id: Model.ID.make("gpt-5.5") }),
-            system: [],
-            messages: [],
-            options: { maxTokens: 128_000 },
-          }
-          const events = [
-            yield* hooks.trigger("session", "context", { ...draft, agent: Agent.ID.make("build"), tools: {} }),
-            yield* hooks.trigger("session", "compaction", { ...draft, agent: Agent.ID.make("build"), tools: {} }),
-          ]
-          return events.map((event) => event.options.maxTokens)
-        })
-
-      expect(yield* maxTokens(Provider.ID.openai)).toEqual([undefined, undefined])
-      expect(yield* maxTokens(Provider.ID.azure)).toEqual([128_000, 128_000])
-    }),
-  )
-
   it.effect("selects WebSocket only from explicit policy", () =>
     Effect.gen(function* () {
       const credentials = yield* Credential.Service

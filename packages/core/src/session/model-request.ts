@@ -44,14 +44,6 @@ const IMAGE_BYTES_TARGET = 15 * 1024 * 1024 // 15 MiB
 const IMAGE_REMOVED =
   "[This image was removed to reduce the request size and is no longer visible. Do not make claims about its contents from memory. If needed, retrieve it again with an available tool or ask the user to attach it again.]"
 const GENERATION_KEYS = new Set(Object.keys(GenerationOptions.fields))
-// Default output limit caps per request kind. Titles and generate have none and keep the provider default, because
-// their reasoning is hard to budget.
-const OUTPUT_TOKEN_CAPS: Partial<Record<SessionRequestKind, number>> = { primary: 256_000, compaction: 32_000 }
-// Used when the catalog has no output limit for the model.
-const OUTPUT_TOKEN_FALLBACK = 32_000
-// Prompt text is estimated at about 4 characters per token, which can run low on dense text such as code.
-const ESTIMATE_ERROR = 0.15
-const OUTPUT_TOKEN_MIN = 1_024
 
 /** Tool errors, plus the user declining a permission or dismissing a question. */
 export type ExecuteError = Tool.Error | Permission.DeclinedError | QuestionTool.CancelledError
@@ -77,16 +69,6 @@ export interface Input {
   readonly toolChoice?: LLM.RequestInput["toolChoice"]
   /** Only the durable runner may use a stateful WebSocket. */
   readonly webSocket?: "session"
-  /** Prompt size, measured by the provider or estimated. The default output limit leaves room for it. */
-  readonly inputTokens?: { readonly measured: number; readonly estimated: number }
-}
-
-/** The default output limit: the catalog limit, capped, and fitted to the room the prompt leaves in the context window. */
-export const outputLimit = (limit: Model.Info["limit"], cap: number, inputTokens?: Input["inputTokens"]) => {
-  const requested = Math.min(limit.output > 0 ? limit.output : OUTPUT_TOKEN_FALLBACK, cap)
-  if (inputTokens === undefined || limit.context <= 0) return requested
-  const room = limit.context - inputTokens.measured - Math.ceil(inputTokens.estimated * (1 + ESTIMATE_ERROR))
-  return Math.min(requested, Math.max(OUTPUT_TOKEN_MIN, room))
 }
 
 export const baseTranscript = (input: {
@@ -236,16 +218,8 @@ export const layer = Layer.effect(
       const given = new Map(
         tools.definitions.map((t) => [{ description: t.description, input: { ...t.inputSchema } }, t] as const),
       )
-      // Hooks see the default output limit and may change or remove it.
-      const cap = OUTPUT_TOKEN_CAPS[kind]
       const shaped = yield* shape(
-        {
-          sessionID: session.id,
-          model: model.ref,
-          system: input.system,
-          messages: input.messages,
-          options: cap === undefined ? {} : { maxTokens: outputLimit(model.limit, cap, input.inputTokens) },
-        },
+        { sessionID: session.id, model: model.ref, system: input.system, messages: input.messages, options: {} },
         Object.fromEntries(Array.from(given, ([d, t]) => [t.name, d])),
       )
       // Match by identity first, then by key. Entries matching neither were invented by a
