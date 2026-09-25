@@ -51,6 +51,7 @@ const source = {
   "ui.lineComment.editorLabel.prefix": "Commenting on ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Add comment",
+  "ui.lineComment.add": "Add comment",
   "ui.lineComment.contextPlaceholder": "Add context for this change",
   "ui.lineComment.submit": "Comment",
   "ui.lineComment.cancel": "Cancel",

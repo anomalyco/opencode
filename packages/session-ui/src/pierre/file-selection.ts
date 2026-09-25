@@ -73,6 +73,19 @@ export function readShadowLineSelection(opts: {
   const startSide = opts.sideForNode?.(startNode)
   const endSide = opts.sideForNode?.(endNode)
   const side = startSide ?? endSide
+  const anchorTop = findElement(selection.anchorNode)
+    ?.closest("[data-line], [data-alt-line]")
+    ?.getBoundingClientRect().top
+  const focusElement = findElement(selection.focusNode)
+  const focusTop = focusElement?.closest("[data-line], [data-alt-line]")?.getBoundingClientRect().top
+  const code = focusElement?.closest("[data-code]")
+  const gutterRight = code?.firstElementChild?.getBoundingClientRect().right
+  const direction =
+    anchorTop === undefined || focusTop === undefined || anchorTop === focusTop
+      ? ("same" as const)
+      : focusTop < anchorTop
+        ? ("up" as const)
+        : ("down" as const)
 
   const range: SelectedLineRange = { start, end }
   if (side) range.side = side
@@ -81,5 +94,7 @@ export function readShadowLineSelection(opts: {
   return {
     range,
     text: opts.preserveTextSelection && domRange ? toRange(domRange).cloneRange() : undefined,
+    direction,
+    gutterRight,
   }
 }
