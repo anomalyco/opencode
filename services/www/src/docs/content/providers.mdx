@@ -268,6 +268,10 @@ choose **Microsoft Entra ID (Azure CLI)** when connecting Azure.
 az login
 ```
 
+With this method you can leave the resource name empty. OpenCode then looks up the Azure OpenAI and Foundry resources
+of your Azure CLI session while connecting. It uses the resource when there is only one, and otherwise asks you to
+connect again and choose from the resources it found. The lookup only runs while connecting, never at startup.
+
 For a resource in another tenant or subscription, select both explicitly.
 
 ```bash
@@ -278,8 +282,27 @@ az account set --subscription NAME_OR_ID
 Instead of configuration, `AZURE_RESOURCE_NAME` supplies the resource name to the OpenCode server. The legacy
 `AZURE_COGNITIVE_SERVICES_RESOURCE_NAME` variable also works.
 
-OpenCode does not query Azure management APIs or discover deployments. If a deployment does not match its catalog
-model name, map an OpenCode model ID to the deployment with `modelID`.
+### Deployments
+
+Azure serves a model only through a deployment, so OpenCode lists the deployments of your resource and shows those
+instead of the whole Azure catalog. The list loads in the background after startup and after connecting, then refreshes
+every five minutes, so a new deployment appears without a restart.
+
+- Before the first successful list for a connection, the whole catalog stays available.
+- A temporary refresh failure keeps that connection's last complete inventory.
+- Switching accounts hides the previous account's inventory until the new connection is loaded.
+- Deployments inherit limits, costs, and capabilities from their catalog models.
+
+Deployment names are their model IDs. A name matching its catalog model, ignoring case, keeps the catalog ID;
+other names appear as IDs such as `azure/gpt-production`. These IDs stay stable when other deployments are added or
+removed.
+
+OpenCode first tries the resource's legacy deployment inventory with an API key or Entra ID. With the Azure CLI it
+falls back to the Azure management API, which needs read access to the resource. Discovery reads every page before
+publishing the list. A custom `settings.baseURL` keeps the catalog.
+
+Configure a deployment explicitly when its model is not in the catalog, such as a fine-tuned model, or to map a model ID
+to a deployment yourself. Explicitly configured models are always kept.
 
 ```jsonc title="opencode.jsonc"
 {
