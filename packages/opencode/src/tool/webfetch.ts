@@ -107,12 +107,24 @@ export const WebFetchTool = Tool.define(
           const mime = contentType.split(";")[0]?.trim().toLowerCase() || ""
           const title = `${params.url} (${contentType})`
 
+          // A non-200 success (202 Accepted, 204 No Content, ...) often carries a throttle
+          // or interstitial page instead of the requested content. Only `output` reaches the
+          // model, so the status has to be stated there for it to adapt.
+          const statusNotice =
+            response.status === 200
+              ? ""
+              : `[HTTP ${response.status} — response may be a throttle or interstitial page, not the requested content]\n\n`
+
+          const result = (output: string) => ({
+            output: statusNotice + output,
+            title,
+            metadata: { status: response.status },
+          })
+
           if (isImageAttachment(mime)) {
             const base64Content = Buffer.from(arrayBuffer).toString("base64")
             return {
-              title,
-              output: "Image fetched successfully",
-              metadata: {},
+              ...result("Image fetched successfully"),
               attachments: [
                 {
                   type: "file" as const,
@@ -130,25 +142,21 @@ export const WebFetchTool = Tool.define(
             case "markdown":
               if (contentType.includes("text/html")) {
                 const markdown = convertHTMLToMarkdown(content)
-                return {
-                  output: markdown,
-                  title,
-                  metadata: {},
-                }
+                return result(markdown)
               }
-              return { output: content, title, metadata: {} }
+              return result(content)
 
             case "text":
               if (contentType.includes("text/html")) {
-                return { output: extractTextFromHTML(content), title, metadata: {} }
+                return result(extractTextFromHTML(content))
               }
-              return { output: content, title, metadata: {} }
+              return result(content)
 
             case "html":
-              return { output: content, title, metadata: {} }
+              return result(content)
 
             default:
-              return { output: content, title, metadata: {} }
+              return result(content)
           }
         }).pipe(Effect.orDie),
     }
