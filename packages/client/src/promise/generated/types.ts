@@ -2130,7 +2130,7 @@ export type ConfigEntry =
                 settings?: ConfigModelSettings
                 headers?: { [x: string]: string }
                 body?: { [x: string]: JsonValue }
-                capabilities?: ModelCapabilities
+                capabilities?: { tools?: boolean; input?: Array<string>; output?: Array<string> }
                 variants?: Array<{
                   id: string
                   settings?: ConfigModelSettings
