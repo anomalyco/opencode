@@ -613,4 +613,46 @@ describe("applyDirectoryEvent", () => {
     expect(pushes).toEqual(["/tmp"])
     expect(lspLoads).toBe(1)
   })
+
+  test("handles session.error by setting session status to idle and updating assistant error", () => {
+    const errors: Array<string | undefined> = []
+    const assistantMsg = {
+      id: "msg_2",
+      sessionID: "s1",
+      role: "assistant",
+      time: { created: 2 },
+      modelID: "gpt",
+      providerID: "openai",
+    } as Message
+    const [store, setStore] = createStore(
+      baseState({
+        session_status: { s1: { type: "busy" } },
+        message: { s1: [userMessage("msg_1", "s1"), assistantMsg] },
+      }),
+    )
+
+    applyDirectoryEvent({
+      event: {
+        type: "session.error",
+        properties: {
+          sessionID: "s1",
+          error: { name: "ProviderAuthError", data: { message: "Invalid API key" } },
+        },
+      },
+      store,
+      setStore,
+      push: () => undefined,
+      directory: "/tmp",
+      loadLsp: () => undefined,
+      notifyError: (message) => errors.push(message),
+    })
+
+    expect(store.session_status.s1).toEqual({ type: "idle" })
+    const lastMsg = store.message.s1[1]
+    expect(lastMsg?.role === "assistant" ? lastMsg.error : undefined).toEqual({
+      name: "UnknownError",
+      data: { message: "Invalid API key" },
+    })
+    expect(errors).toEqual(["Invalid API key"])
+  })
 })
