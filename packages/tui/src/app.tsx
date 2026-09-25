@@ -48,6 +48,7 @@ import { DialogThemeList } from "./component/dialog-theme-list"
 import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
+import { SessionHistoryRail } from "./component/session-rail"
 import { DialogWorkspaceList } from "./component/dialog-workspace-list"
 import { DialogConsoleOrg } from "./component/dialog-console-org"
 import { ThemeProvider, useTheme } from "./context/theme"
@@ -92,6 +93,7 @@ registerOpencodeSpinner()
 const appGlobalBindingCommands = [
   "session.list",
   "session.new",
+  "session.rail.focus",
   "session.quick_switch.1",
   "session.quick_switch.2",
   "session.quick_switch.3",
@@ -558,6 +560,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     if (workspace?.type !== "worktree" || !workspace.directory) return
     return workspace
   })
+  const [railFocused, setRailFocused] = createSignal(false)
   const appCommands = createMemo(() =>
     [
       {
@@ -592,6 +595,14 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
             type: "home",
           })
           dialog.clear()
+        },
+      },
+      {
+        name: "session.rail.focus",
+        title: "Focus session history rail",
+        category: "Session",
+        run: () => {
+          setRailFocused(true)
         },
       },
       {
@@ -1110,18 +1121,25 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         <TimeToFirstDraw />
       </Show>
       <Show when={ready()}>
-        <box flexGrow={1} minHeight={0} flexDirection="column">
-          <Switch>
-            <Match when={route.data.type === "home"}>
-              <Home />
-            </Match>
-            <Match when={route.data.type === "session"}>
-              <Show when={route.data.type === "session" ? route.data.sessionID : undefined} keyed>
-                {(_) => <Session />}
-              </Show>
-            </Match>
-          </Switch>
-          {plugin()}
+        <box flexGrow={1} minHeight={0} flexDirection="row">
+          <SessionHistoryRail
+            focused={railFocused}
+            onFocus={() => setRailFocused(true)}
+            onUnfocus={() => setRailFocused(false)}
+          />
+          <box flexGrow={1} minHeight={0} flexDirection="column">
+            <Switch>
+              <Match when={route.data.type === "home"}>
+                <Home />
+              </Match>
+              <Match when={route.data.type === "session"}>
+                <Show when={route.data.type === "session" ? route.data.sessionID : undefined} keyed>
+                  {(_) => <Session />}
+                </Show>
+              </Match>
+            </Switch>
+            {plugin()}
+          </box>
         </box>
         <box flexShrink={0}>
           <pluginRuntime.Slot name="app_bottom" />
