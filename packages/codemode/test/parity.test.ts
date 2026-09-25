@@ -1737,3 +1737,47 @@ describe("Date components convert through ToPrimitive", () => {
     ).toEqual([true, 0, true])
   })
 })
+
+describe("iteration callbacks receive thisArg", () => {
+  test("Array, Array.from, Map, Set, URLSearchParams, Headers, and Uint8Array pass it as this", async () => {
+    expect(
+      await value(`
+        const c = { n: 0 }
+        const count = function () { this.n++ }
+        ;[1, 2].forEach(count, c)
+        ;[1].map(count, c)
+        ;[1].filter(count, c)
+        ;[1].find(count, c)
+        ;[1].findIndex(count, c)
+        ;[1].findLast(count, c)
+        ;[1].findLastIndex(count, c)
+        ;[1].some(count, c)
+        ;[1].every(count, c)
+        ;[1].flatMap(count, c)
+        Array.from([1], count, c)
+        Array.from({ length: 1 }, count, c)
+        new Map([[1, 1]]).forEach(count, c)
+        new Set([1]).forEach(count, c)
+        new URLSearchParams("a=1").forEach(count, c)
+        new Headers({ a: "1" }).forEach(count, c)
+        new Uint8Array([1]).forEach(count, c)
+        return c.n
+      `),
+    ).toBe(18)
+    expect(await value(`return [1, 2].map(function (x) { return x + this.v }, { v: 10 })`)).toEqual([11, 12])
+  })
+
+  test("arrows keep their lexical this, reduce takes an initial value instead, and opaque values are only bound", async () => {
+    expect(await value(`return [1].map(() => typeof this, { v: 1 })`)).toEqual(["undefined"])
+    expect(
+      await value(`return [1, 2].reduce(function (a, b) { return a + b + (this === undefined ? 0 : 100) }, 0)`),
+    ).toBe(3)
+    expect(
+      await value(`
+        let seen
+        ;[1].forEach(function () { seen = this }, tools.nowhere)
+        return typeof seen
+      `),
+    ).toBe("function")
+  })
+})
