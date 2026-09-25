@@ -381,6 +381,41 @@ describe("EditTool", () => {
     ),
   )
 
+  it.live("rejects an edit whose strings differ only in line ending style", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "crlf.txt")
+        return Effect.promise(() => fs.writeFile(target, "before\r\nrest\r\n")).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              executeTool(
+                registry,
+                call({ path: "crlf.txt", oldString: "before\r\nrest", newString: "before\nrest" }),
+              ),
+            ),
+          ),
+          Effect.andThen((result) =>
+            Effect.promise(() => fs.readFile(target, "utf8")).pipe(
+              Effect.tap((content) =>
+                Effect.sync(() => {
+                  expect(result).toEqual({
+                    type: "error",
+                    value: "No changes to apply: oldString and newString are identical.",
+                  })
+                  expect(content).toBe("before\r\nrest\r\n")
+                  expect(writes).toHaveLength(0)
+                }),
+              ),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   it.live("rejects an in-place content change after matching but before conditional commit", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
