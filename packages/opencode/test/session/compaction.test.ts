@@ -197,8 +197,10 @@ function createCompactionMarker(sessionID: SessionID) {
 function fake(
   input: Parameters<SessionProcessorModule.SessionProcessor.Interface["create"]>[0],
   result: "continue" | "compact",
+  terminal = true,
 ) {
   const msg = input.assistantMessage
+  if (result === "continue" && terminal) msg.finish = "end_turn"
   return {
     get message() {
       return msg
@@ -209,11 +211,11 @@ function fake(
   } satisfies SessionProcessorModule.SessionProcessor.Handle
 }
 
-function processorLayer(result: "continue" | "compact") {
+function processorLayer(result: "continue" | "compact", terminal = true) {
   return Layer.succeed(
     SessionProcessorModule.SessionProcessor.Service,
     SessionProcessorModule.SessionProcessor.Service.of({
-      create: Effect.fn("TestSessionProcessor.create")((input) => Effect.succeed(fake(input, result))),
+      create: Effect.fn("TestSessionProcessor.create")((input) => Effect.succeed(fake(input, result, terminal))),
     }),
   )
 }
@@ -247,6 +249,7 @@ const itCompaction = testEffect(compactionEnv)
 
 type CompactionProcessOptions = {
   result?: "continue" | "compact"
+  terminal?: boolean
   llm?: Layer.Layer<LLM.Service>
   plugin?: Layer.Layer<Plugin.Service>
   provider?: ReturnType<typeof wide>
@@ -266,7 +269,7 @@ function compactionProcessLayer(options?: CompactionProcessOptions) {
   if (!options?.llm) {
     return AppNodeBuilder.build(compactionTestNode, [
       ...replacements,
-      [SessionProcessorModule.SessionProcessor.node, processorLayer(options?.result ?? "continue")],
+      [SessionProcessorModule.SessionProcessor.node, processorLayer(options?.result ?? "continue", options?.terminal ?? true)],
       ...(options?.plugin ? ([[Plugin.node, options.plugin]] as const) : []),
       ...(options?.config ? ([[Config.node, options.config]] as const) : []),
     ])
@@ -843,7 +846,7 @@ describe("session.compaction.process", () => {
     }),
   )
 
-  it.instance(
+  itCompaction.instance(
     "publishes compacted event on continue",
     Effect.gen(function* () {
       const events = yield* EventV2Bridge.Service
@@ -851,14 +854,12 @@ describe("session.compaction.process", () => {
       const session = yield* ssn.create({})
       const msg = yield* createUserMessage(session.id, "hello")
       const msgs = yield* ssn.messages({ sessionID: session.id })
-      const done = yield* Deferred.make<void, Error>()
       const seen: string[] = []
       const unsub = yield* events.listen((evt) => {
         seen.push(evt.type)
         if (evt.type !== SessionCompaction.Event.Compacted.type) return Effect.void
         if ((evt.data as typeof SessionCompaction.Event.Compacted.data.Type).sessionID !== session.id)
           return Effect.void
-        Deferred.doneUnsafe(done, Effect.void)
         return Effect.void
       })
       yield* Effect.addFinalizer(() => unsub)
@@ -870,11 +871,10 @@ describe("session.compaction.process", () => {
         auto: false,
       })
 
-      yield* Deferred.await(done).pipe(Effect.timeout("500 millis"))
       expect(result).toBe("continue")
       expect(seen).toContain(SessionCompaction.Event.Compacted.type)
       expect(seen.filter((type) => type.startsWith("session.next."))).toEqual([])
-    }),
+    }).pipe(withCompaction({ plugin: autocontinue(false) })),
   )
 
   itCompaction.instance(
@@ -902,10 +902,10 @@ describe("session.compaction.process", () => {
         expect(summary.info.finish).toBe("error")
         expect(JSON.stringify(summary.info.error)).toContain("Session too large to compact")
       }
-    }).pipe(withCompaction({ result: "compact" })),
+    }).pipe(withCompaction({ result: "compact", plugin: autocontinue(false) })),
   )
 
-  it.instance(
+  itCompaction.instance(
     "adds synthetic continue prompt when auto is enabled",
     Effect.gen(function* () {
       const ssn = yield* SessionNs.Service
@@ -933,7 +933,7 @@ describe("session.compaction.process", () => {
       if (last?.parts[0]?.type === "text") {
         expect(last.parts[0].text).toContain("Continue if you have next steps")
       }
-    }),
+    }).pipe(withCompaction({ plugin: autocontinue(true) })),
   )
 
   itCompaction.instance(
@@ -1814,6 +1814,34 @@ describe("session.compaction.process", () => {
         expect(after.some((m) => m.info.id === typed.id)).toBe(true)
       }).pipe(withCompaction({ llm: stub.llmLayer }))
     },
+    { git: true },
+  )
+
+  itCompaction.instance(
+    "stops when the summary stream ends without a terminal finish",
+    () =>
+      Effect.gen(function* () {
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        yield* createUserMessage(session.id, "work before compaction")
+        const marker = yield* createCompactionMarker(session.id)
+        const messages = yield* ssn.messages({ sessionID: session.id })
+
+        const result = yield* SessionCompaction.use.process({
+          parentID: marker.id,
+          messages,
+          sessionID: session.id,
+          auto: false,
+        })
+
+        expect(result).toBe("stop")
+        const summary = (yield* ssn.messages({ sessionID: session.id })).findLast(
+          (message): message is SessionV1.WithParts & { info: SessionV1.Assistant } =>
+            message.info.role === "assistant" && message.info.summary === true,
+        )
+        expect(summary?.info.finish).toBe("error")
+        expect(summary?.info.error).toBeDefined()
+      }).pipe(withCompaction({ terminal: false, plugin: autocontinue(false) })),
     { git: true },
   )
 })

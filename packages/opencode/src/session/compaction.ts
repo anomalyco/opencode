@@ -6,6 +6,7 @@ import { SessionID, MessageID, PartID } from "./schema"
 import { Provider } from "@/provider/provider"
 import { MessageV2 } from "./message-v2"
 import { Token } from "@/util/token"
+import { NamedError } from "@opencode-ai/core/util/error"
 import { SessionProcessor } from "./processor"
 import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
@@ -493,6 +494,15 @@ const layer = Layer.effect(
           message: replay
             ? "Conversation history too large to compact - exceeds model context limit"
             : "Session too large to compact - context exceeds model limit even after stripping media",
+        }).toObject()
+        processor.message.finish = "error"
+        yield* session.updateMessage(processor.message)
+        return "stop"
+      }
+
+      if (result === "stop" || processor.message.error || processor.message.finish === undefined) {
+        processor.message.error ??= new NamedError.Unknown({
+          message: "Compaction stream ended without a terminal finish",
         }).toObject()
         processor.message.finish = "error"
         yield* session.updateMessage(processor.message)
