@@ -16,6 +16,7 @@ import { AbsolutePath } from "./schema.js"
 import { ConfigVariable } from "./config/variable.js"
 import { ConfigNormalize } from "./config/normalize.js"
 import { ConfigDiscovery } from "./config/discovery.js"
+import { ConfigManaged } from "./config/managed.js"
 import { ConfigWatch } from "./config/watch.js"
 import { WellKnown } from "./wellknown.js"
 
@@ -40,6 +41,8 @@ export interface Interface {
   readonly changes: () => Stream.Stream<Watcher.Update>
   /** Updates supported global config fields while preserving unrelated JSONC content. */
   readonly update?: (patch: Patch) => Effect.Effect<void, FSUtil.Error>
+  /** Paths admin-managed documents load from; the policy plugin ranks their statements above authored ones. */
+  readonly managed?: readonly AbsolutePath[]
 }
 
 export const Options = Schema.Struct({
@@ -49,6 +52,14 @@ export const Options = Schema.Struct({
   global: Schema.optional(Schema.Boolean),
   file: Schema.optional(Schema.String),
   content: Schema.optional(Schema.String),
+  // Defaults to the platform's system-managed locations. Hosts and tests set
+  // this explicitly; `{}` disables managed configuration.
+  managed: Schema.optional(
+    Schema.Struct({
+      directory: Schema.optional(Schema.String),
+      preferences: Schema.optional(Schema.Array(Schema.String)),
+    }),
+  ),
 })
 export type Options = typeof Options.Type
 
@@ -70,6 +81,7 @@ export const testLayer = (
     claude: [],
     agents: [],
   },
+  managed: readonly AbsolutePath[] = [],
 ) =>
   Layer.effectContext(
     Effect.gen(function* () {
@@ -79,6 +91,7 @@ export const testLayer = (
         entries: () => Ref.get(entries),
         compatibility: () => Effect.succeed(compatibility),
         changes: () => Stream.fromPubSub(updates),
+        managed,
         setEntries: (next) => Ref.set(entries, next),
         emitChange: (update) => PubSub.publish(updates, update).pipe(Effect.asVoid),
       })
@@ -191,6 +204,21 @@ export const layer = (options?: Options) =>
         ]
       })
 
+      const managedPaths = options?.managed ?? ConfigManaged.systemPaths()
+      // Managed documents rank above every other source so users and
+      // repositories cannot override administrator-enforced settings.
+      const loadManaged = Effect.fn("Config.loadManaged")(function* () {
+        const managed = yield* ConfigManaged.sources(managedPaths)
+        return yield* Effect.forEach(managed, (source) =>
+          ConfigVariable.substitute({ type: "path", path: source.path, text: source.text }).pipe(
+            Effect.flatMap((text) => parseInfo(text, source.path)),
+            Effect.map((info) =>
+              info ? new Document({ type: "document", path: AbsolutePath.make(source.path), info }) : undefined,
+            ),
+          ),
+        ).pipe(Effect.map((documents) => documents.filter((document) => document !== undefined)))
+      })
+
       const load = Effect.fn("Config.load")(function* (sources: ConfigDiscovery.Sources) {
         const direct = yield* Effect.forEach(sources.direct, (filepath) => loadFile(filepath)).pipe(
           Effect.orDie,
@@ -234,6 +262,7 @@ export const layer = (options?: Options) =>
           ...direct,
           ...projectSupplementary,
           ...content,
+          ...(yield* loadManaged().pipe(Effect.orDie)),
         ]
       })
 
@@ -359,6 +388,7 @@ export const layer = (options?: Options) =>
           }),
         changes: () => Stream.fromPubSub(updates),
         update,
+        managed: ConfigManaged.candidates(managedPaths).map((file) => AbsolutePath.make(file)),
       })
     }),
   )
