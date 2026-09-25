@@ -5,6 +5,7 @@ import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { Config } from "../../config"
 import { Context, Effect, Fiber, FileSystem, Option, Queue } from "effect"
+import { ClientError } from "@opencode/client/promise"
 import { ServerConnection } from "../../services/server-connection"
 import { Updater } from "../../services/updater"
 import { UpdatePreflight } from "../../services/update-preflight"
@@ -19,6 +20,7 @@ export default Runtime.handler(Commands, (input) =>
     if (requestedDirectory !== undefined) process.chdir(requestedDirectory)
     const preflight = UpdatePreflight.make()
     yield* Effect.addFinalizer(() => Effect.promise(() => preflight.close()))
+    const replaced: { version?: string } = {}
     const serviceStarts = yield* Queue.unbounded<{
       readonly reason: "missing" | "version-mismatch"
       readonly previousVersion?: string
@@ -33,6 +35,7 @@ export default Runtime.handler(Commands, (input) =>
       standalone: input.standalone,
       mismatch: "replace",
       onStart: (reason, previousVersion) => {
+        if (reason === "version-mismatch") replaced.version = previousVersion
         Queue.offerUnsafe(serviceStarts, { reason, previousVersion })
         if (reason === "version-mismatch" && preflight.begin(previousVersion)) return
         process.stderr.write(
@@ -42,9 +45,13 @@ export default Runtime.handler(Commands, (input) =>
         )
       },
     }).pipe(
-      Effect.tapError(() =>
-        Effect.promise(() => preflight.fail("OpenCode update could not start the new background service")),
-      ),
+      Effect.catch((error) => {
+        const shown = showConnectError(error, replaced.version, preflight)
+        if (shown) return shown
+        return Effect.promise(() => preflight.fail("OpenCode update could not start the new background service")).pipe(
+          Effect.andThen(Effect.fail(error)),
+        )
+      }),
     )
     const updater = yield* Updater.Service
     let installing: string | undefined
@@ -124,6 +131,34 @@ export default Runtime.handler(Commands, (input) =>
                 : Effect.logInfo(message, tags)
         runFork(effect)
       },
-    }).pipe(Effect.provide(LayerNode.compile(Global.node)))
+    }).pipe(
+      Effect.provide(LayerNode.compile(Global.node)),
+      Effect.catch((error) => showConnectError(error, replaced.version, preflight) ?? Effect.fail(error)),
+    )
   }),
 )
+
+function showConnectError(
+  error: unknown,
+  previousVersion: string | undefined,
+  preflight: ReturnType<typeof UpdatePreflight.make>,
+) {
+  if (previousVersion === undefined && !isTransport(error)) return undefined
+  const detail = errorText(error)
+  const message = previousVersion
+    ? `Version mismatch: background server ${previousVersion}, this client ${OPENCODE_VERSION}. ${detail}`
+    : detail
+  process.stderr.write(message + "\n")
+  return Effect.promise(() => preflight.fail(message)).pipe(Effect.andThen(Effect.sync(() => process.exit(1))))
+}
+
+function isTransport(error: unknown): boolean {
+  if (error instanceof ClientError) return error.reason === "Transport"
+  return error instanceof Error && isTransport(error.cause)
+}
+
+function errorText(error: unknown): string {
+  if (error instanceof Error && error.cause instanceof Error) return errorText(error.cause)
+  if (error instanceof Error) return error.message
+  return String(error)
+}
