@@ -90,8 +90,8 @@ ok(`target ${tag} (version ${version})`)
 // ---------------------------------------------------------------- 2. preflight
 step++
 console.log(`\n[${step}] preflight`)
-if (!git(["cat-file", "-e", `${tag}^{commit}`]).code === 0) {
-  // tag may not be fetched yet if an explicit arg was passed
+if (git(["cat-file", "-e", `${tag}^{commit}`]).code !== 0) {
+  // the tag may not be fetched yet when an explicit version was passed
   gitOrFail(["fetch", "origin", "--tags", "--quiet"], "fetching upstream tags")
 }
 if (git(["cat-file", "-e", `${tag}^{commit}`]).code !== 0) fail(`tag does not exist: ${tag}`)
@@ -186,9 +186,15 @@ const t = spawnSync("bun", ["test", `test/${fix.tests.replace(/^test\//, "")}`, 
   stdio: ["ignore", "pipe", "pipe"],
 })
 const tOut = `${t.stdout || ""}\n${t.stderr || ""}`
-const summary = (tOut.match(/^\s*\d+ pass.*$/m) || tOut.match(/^\s*\d+ fail.*$/m) || [""])[0]
-info(summary.trim() || "(no summary line)")
-if (t.status !== 0 || /\b\d+ fail\b/.test(tOut)) {
+const countOf = (word) => {
+  const m = tOut.match(new RegExp(`^\\s*(\\d+) ${word}\\s*$`, "m"))
+  return m ? Number(m[1]) : 0
+}
+const passed = countOf("pass")
+const skipped = countOf("skip")
+const failed = countOf("fail")
+info(`${passed} pass, ${skipped} skip, ${failed} fail`)
+if (t.status !== 0 || failed > 0 || passed === 0) {
   console.error(tOut.slice(-4000))
   gitOrFail(["checkout", startBranch], "restoring branch")
   fail("the fix's tests did not pass on this base — refusing to stage a binary")
