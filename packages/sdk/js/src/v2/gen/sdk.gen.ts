@@ -177,6 +177,10 @@ import type {
   QuestionV2Reply,
   SessionAbortErrors,
   SessionAbortResponses,
+  SessionAttachmentRemoveErrors,
+  SessionAttachmentRemoveResponses,
+  SessionAttachmentUploadErrors,
+  SessionAttachmentUploadResponses,
   SessionChildrenErrors,
   SessionChildrenResponses,
   SessionCommandErrors,
@@ -3359,6 +3363,91 @@ export class Provider extends HeyApiClient {
   }
 }
 
+export class Attachment extends HeyApiClient {
+  /**
+   * Upload text attachment
+   *
+   * Upload a short-lived text attachment for a prompt in this session.
+   */
+  public upload<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      directory?: string
+      workspace?: string
+      filename?: string
+      content?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "filename" },
+            { in: "body", key: "content" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      SessionAttachmentUploadResponses,
+      SessionAttachmentUploadErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/attachment",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Remove text attachment
+   *
+   * Remove an unused uploaded text attachment from this session.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      sessionID: string
+      attachmentID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "sessionID" },
+            { in: "path", key: "attachmentID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      SessionAttachmentRemoveResponses,
+      SessionAttachmentRemoveErrors,
+      ThrowOnError
+    >({
+      url: "/session/{sessionID}/attachment/{attachmentID}",
+      ...options,
+      ...params,
+    })
+  }
+}
+
 export class Session2 extends HeyApiClient {
   /**
    * List sessions
@@ -4324,6 +4413,11 @@ export class Session2 extends HeyApiClient {
       ...options,
       ...params,
     })
+  }
+
+  private _attachment?: Attachment
+  get attachment(): Attachment {
+    return (this._attachment ??= new Attachment({ client: this.client }))
   }
 }
 
