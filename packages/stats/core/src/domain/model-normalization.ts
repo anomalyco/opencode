@@ -6,6 +6,7 @@ export const MODEL_AUTHOR_RULES = [
   { match: "gpt", author: "openai" },
   { match: "grok", author: "xai" },
   { match: "hy3", author: "tencent" },
+  { match: "hy4", author: "tencent" },
   { match: "kimi", author: "moonshot" },
   { match: "mimo", author: "xiaomi" },
   { match: "minimax", author: "minimax" },
@@ -14,8 +15,15 @@ export const MODEL_AUTHOR_RULES = [
   { match: "qwen", author: "qwen" },
 ] as const
 export const EXCLUDED_MODELS = new Set(["alpha-gpt-next"])
+export const STEALTH_MODELS = new Set(["omen-alpha", "space-bunny", "union-alpha"])
 export const FREE_MODELS = new Set(["gpt-5-nano", "grok-code", "big-pickle"])
+export const MODEL_NAME_MAX_LENGTH = 256
 export const MODEL_NAME_ALIASES: Record<string, string> = {
+  "deepseek-flash": "deepseek-v4.1-flash",
+  "deepseek-v4-flash-0731": "deepseek-v4-flash",
+  "deepseek-v4-flash-dsv4-flash-final-rnaovd": "deepseek-v4-flash",
+  "opencode-go/union-alpha": "union-alpha",
+  "opencode/union-alpha": "union-alpha",
   "ox-alpha": "glm-5.3-flash",
   "x-preview-f": "glm-5.3-flash",
   "xiaomi/mimo-v2.5": "mimo-v2.5",
@@ -37,7 +45,8 @@ export function modelAuthor(value: string | undefined) {
 export function statModel(model: string | undefined, providerModel: string | undefined) {
   const normalized = normalizeInferenceModel(model)
   const resolved = normalized === "big-pickle" ? normalizeInferenceModel(providerModel?.split("/").at(-1)) : normalized
-  return MODEL_NAME_ALIASES[resolved.toLowerCase()] ?? resolved
+  const value = MODEL_NAME_ALIASES[resolved.toLowerCase()] ?? resolved
+  return value.length > MODEL_NAME_MAX_LENGTH ? "unknown" : value
 }
 
 export function statProvider(
@@ -45,7 +54,10 @@ export function statProvider(
   providerModel: string | undefined,
   provider: string | undefined,
 ) {
-  const modelAuthorValue = modelAuthor(statModel(model, providerModel))
+  const normalized = statModel(model, providerModel)
+  if (STEALTH_MODELS.has(normalized)) return "unknown"
+
+  const modelAuthorValue = modelAuthor(normalized)
   if (!modelAuthorValue) return undefined
 
   const providerModelAuthor = modelAuthor(providerModel)

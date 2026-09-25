@@ -289,10 +289,16 @@ describe("plugin.codex", () => {
     const provider = {
       models: {
         ...Object.fromEntries(
-          ["gpt-5.4", "gpt-5.5", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.7-pro"].map((id) => [
-            id,
-            { id, api: { id }, limit, cost: {}, options: {} },
-          ]),
+          [
+            "gpt-5.4",
+            "gpt-5.5",
+            "gpt-5.6-sol",
+            "gpt-5.6-terra",
+            "gpt-5.6-luna",
+            "gpt-5.7-pro",
+            "gpt-6-sol",
+            "gpt-6-luna",
+          ].map((id) => [id, { id, api: { id }, limit, cost: {}, options: {} }]),
         ),
         "gpt-5.4-pro": {
           id: "gpt-5.4-pro",
@@ -318,12 +324,49 @@ describe("plugin.codex", () => {
     expect(models["gpt-5.6-sol"]?.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
     expect(models["gpt-5.6-terra"]?.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
     expect(models["gpt-5.6-luna"]?.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
+    expect(models["gpt-6-sol"]).toBeDefined()
+    expect(models["gpt-6-luna"]).toBeDefined()
     expect(models["gpt-5.4-pro"]).toBeUndefined()
     expect(models["gpt-5.7-pro"]).toBeDefined()
     expect(models["gpt-5.6-sol-high"]).toBeDefined()
     expect(await hooks.provider!.models!(provider as never, { auth: { type: "api" } } as never)).toBe(
       provider.models as never,
     )
+  })
+
+  test.each([
+    ["gpt-6-astra", true],
+    ["gpt-6", true],
+    ["gpt-6.0-astra", true],
+    ["gpt-7", true],
+    ["gpt-10", true],
+    ["gpt-5.5-astra", true],
+    ["gpt-5.9", true],
+    ["gpt-5.10", true],
+    ["gpt-5.10-astra", true],
+    ["gpt-5.40", true],
+    ["gpt-5", false],
+    ["gpt-5.4-astra", false],
+    ["gpt-5.04-astra", false],
+    ["gpt-4.1", false],
+    ["gpt-4.99", false],
+    ["gpt-5.5-pro", false],
+    ["gpt-5.6", false],
+    ["gpt-6garbage", true],
+    ["gpt-6.", true],
+    ["gpt-6.1.2", true],
+    ["not-a-gpt-model", false],
+  ])("filters OAuth model %s by GPT major and minor versions", async (id, allowed) => {
+    const hooks = await CodexAuthPlugin({} as never)
+    const provider = {
+      models: {
+        [id]: { id, api: { id }, limit: {}, cost: {}, options: {} },
+      },
+    }
+
+    const models = await hooks.provider!.models!(provider as never, { auth: { type: "oauth" } } as never)
+
+    expect(Object.keys(models)).toEqual(allowed ? [id] : [])
   })
 
   test("deduplicates concurrent Codex token refreshes", async () => {
