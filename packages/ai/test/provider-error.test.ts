@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { isContextOverflow } from "../src/index.js"
-import { classifyProviderFailure } from "../src/provider-error.js"
+import { classifyProviderFailure, retryHintMs } from "../src/provider-error.js"
 
 describe("provider error classification", () => {
   test("classifies provider token limit messages as context overflow", () => {
@@ -368,5 +368,67 @@ describe("provider error rawBody classification", () => {
     expect(
       classifyProviderFailure({ message: "Request failed", rawBody: '{"error":{"code":"insufficient_quota"}}' })._tag,
     ).toBe("QuotaExceeded")
+  })
+})
+
+describe("retry hints", () => {
+  test("extracts Google RetryInfo retryDelay from response bodies", () => {
+    const body = JSON.stringify({
+      error: {
+        code: 429,
+        message: "You exceeded your current quota. Please retry in 38.601658672s.",
+        status: "RESOURCE_EXHAUSTED",
+        details: [{ "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: "38.601s" }],
+      },
+    })
+    expect(retryHintMs(body)).toBe(38_601)
+  })
+
+  test("extracts retry hints from message text", () => {
+    expect(retryHintMs("You exceeded your current quota. Please retry in 38.601658672s.")).toBe(38_602)
+    expect(retryHintMs("Too many requests, please try again in 26 seconds")).toBe(26_000)
+    expect(retryHintMs("retrying in 5s")).toBe(5_000)
+  })
+
+  test("returns undefined without a scheduled retry", () => {
+    expect(retryHintMs("You exceeded your current quota, please check your plan and billing details.")).toBeUndefined()
+    expect(
+      retryHintMs(
+        "You exceeded your current quota. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits",
+      ),
+    ).toBeUndefined()
+    // Minutes-only hints are a deliberate scope cut: Google renders seconds.
+    expect(retryHintMs("Please try again in 5 minutes")).toBeUndefined()
+    expect(retryHintMs("Rate limit exceeded, please slow down your request rate")).toBeUndefined()
+    expect(retryHintMs("")).toBeUndefined()
+  })
+
+  test("attaches scheduled retry delays to quota and rate-limit failures", () => {
+    const quota = classifyProviderFailure({
+      message: "You exceeded your current quota. Quota exceeded for metric: generate_content_free_tier_requests.",
+      status: 429,
+      rawBody: JSON.stringify({
+        error: {
+          code: 429,
+          status: "RESOURCE_EXHAUSTED",
+          details: [{ "@type": "type.googleapis.com/google.rpc.RetryInfo", retryDelay: "38.601s" }],
+        },
+      }),
+    })
+    expect(quota._tag).toBe("QuotaExceeded")
+    expect(quota).toMatchObject({ retryAfterMs: 38_601 })
+
+    const rateLimit = classifyProviderFailure({ message: "Too many requests. Please retry in 2.5s.", status: 429 })
+    expect(rateLimit._tag).toBe("RateLimit")
+    expect(rateLimit).toMatchObject({ retryAfterMs: 2_500 })
+
+    const billing = classifyProviderFailure({
+      message: "You exceeded your current quota, please check your plan and billing details.",
+      status: 429,
+      rawBody:
+        '{"error":{"message":"You exceeded your current quota, please check your plan and billing details.","type":"insufficient_quota","code":"insufficient_quota"}}',
+    })
+    expect(billing._tag).toBe("QuotaExceeded")
+    expect(billing).toMatchObject({ retryAfterMs: undefined })
   })
 })
