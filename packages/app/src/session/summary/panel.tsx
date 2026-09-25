@@ -16,7 +16,6 @@ export function SessionSummaryPanel(props: {
   shown?: boolean
   mobile?: boolean
   project: Project
-  avatarProject?: Pick<Project, "name" | "worktree" | "icon"> & { id?: string }
   avatar?: JSX.Element
   directory: string
   local: boolean
@@ -45,7 +44,7 @@ export function SessionSummaryPanel(props: {
   return (
     <div data-component="session-summary-panel" data-mobile={props.mobile || undefined}>
       <div>
-        <ProjectSummaryCard project={props.project} avatarProject={props.avatarProject} avatar={props.avatar}>
+        <ProjectSummaryCard project={props.project} avatar={props.avatar}>
           <SessionWorkspaceMenu
             eligible={props.moveEligible}
             sessionID={props.sessionID}

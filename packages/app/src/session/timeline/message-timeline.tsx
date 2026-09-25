@@ -32,6 +32,7 @@ import { createTimelineController, type TimelineController, type TimelineSession
 import { createTimelineVirtualizer } from "./virtualizer"
 import { containsDirectory, isWorkspaceDirectory } from "@/workspaces/paths"
 import { projectForSession } from "@/shell/layout/helpers"
+import { ProjectIcon } from "@/shell/layout/project-icon"
 import { parseCommentNote, readPromptPresentation } from "@/composer/comment-note"
 import { useCommand } from "@/shell/commands/command"
 import { SessionAncestorTrail, SessionProjectMenu, SessionTitleHeader } from "../session-identity-header"
@@ -535,7 +536,7 @@ function MessageTimelineView(
                             <SessionSummaryPanel
                               shown={summaryOpen()}
                               project={project()}
-                              avatarProject={avatarProject()}
+                              avatar={<ProjectIcon project={avatarProject() ?? project()} />}
                               directory={sessionDirectory()}
                               local={!workspaceSession()}
                               branch={data.location.vcs.info({ directory: sdk().directory })?.branch.current}
