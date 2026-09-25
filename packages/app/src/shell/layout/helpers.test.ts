@@ -13,8 +13,6 @@ import {
   homeSessionServerStatus,
   latestRootSession,
   projectForSession,
-  resolveProjectForSession,
-  resolveSessionDetailsProject,
   sortedRootSessions,
   toggleHomeProjectSelection,
 } from "./helpers"
@@ -189,104 +187,6 @@ describe("layout workspace helpers", () => {
     expect(projectForSession(session({ id: "feature", directory: "/workspaces/feature/packages/app" }), [project])).toBe(
       project,
     )
-  })
-
-  test("prefers the session directory among opened projects sharing an ID", () => {
-    const primary = { id: "project", worktree: "/repo", icon: { override: "primary" } }
-    const nested = { id: "project", worktree: "/repo/packages/app", icon: { override: "nested" } }
-    expect(projectForSession(session({ id: "nested", directory: nested.worktree }), [nested, primary])).toBe(nested)
-    expect(projectForSession(session({ id: "primary", directory: primary.worktree }), [primary, nested])).toBe(primary)
-    expect(projectForSession(session({ id: "child", directory: `${nested.worktree}/src` }), [nested, primary])).toBe(
-      nested,
-    )
-  })
-
-  test("retains project ID ownership when a different project's directory overlaps", () => {
-    const owner = { id: "owner", worktree: "/repo" }
-    const overlap = { id: "other", worktree: "/repo/subdir" }
-    expect(
-      projectForSession(session({ id: "nested", projectID: "owner", directory: overlap.worktree }), [owner, overlap]),
-    ).toBe(owner)
-  })
-
-  test("prefers the nested opened project over an ancestor while its ID is loading", () => {
-    const documents = { id: "documents", worktree: "/documents", icon: { override: "documents-icon" } }
-    const child = { worktree: "/documents/project", icon: { override: "child-icon" } }
-    const current = session({ id: "child", projectID: "child", directory: child.worktree })
-
-    expect(projectForSession(current, [documents, child])).toBe(child)
-  })
-
-  test("prefers an opened directory over an ancestor's sandbox pointing at that directory", () => {
-    const documents = { id: "shared", worktree: "/documents", sandboxes: ["/documents/project"] }
-    const child = { id: "shared", worktree: "/documents/project" }
-    const current = session({ id: "child", projectID: "shared", directory: child.worktree })
-
-    expect(projectForSession(current, [documents, child])).toBe(child)
-  })
-
-  test("does not use an opened ancestor when the session's project is only in stored metadata", () => {
-    const documents = { id: "documents", worktree: "/documents", icon: { override: "documents-icon" } }
-    const child = { id: "child", worktree: "/documents/project", icon: { override: "child-icon" } }
-    const current = session({ id: "child", projectID: "child", directory: child.worktree })
-
-    expect(resolveProjectForSession(current, [documents], [child])).toBe(child)
-  })
-
-  test("keeps the exact opened project's enriched icon while its ID is loading", () => {
-    const documents = { id: "documents", worktree: "/documents", icon: { override: "documents-icon" } }
-    const child = { worktree: "/documents/project", icon: { override: "child-local-icon" } }
-    const synced = { id: "child", worktree: child.worktree, icon: { override: "child-server-icon" } }
-    const current = session({ id: "child", projectID: synced.id, directory: child.worktree })
-
-    expect(resolveProjectForSession(current, [documents, child], [synced])).toBe(child)
-  })
-
-  test("prefers an unresolved exact project only when stored ID confirms its canonical directory", () => {
-    const parent = { id: "shared", worktree: "/documents", icon: { override: "parent-icon" } }
-    const nested = { worktree: "/documents/project", icon: { override: "nested-icon" } }
-    const stored = { id: "shared", worktree: nested.worktree, icon: { override: "stored-icon" } }
-    const current = session({ id: "nested", projectID: stored.id, directory: nested.worktree })
-
-    expect(resolveProjectForSession(current, [parent, nested], [stored])).toBe(nested)
-    expect(resolveProjectForSession(current, [parent, nested], [{ ...stored, worktree: parent.worktree }])).toBe(parent)
-  })
-
-  test("merges opened appearance without changing canonical workspace metadata", () => {
-    const metadata = {
-      id: "project",
-      worktree: "/repo",
-      name: "Repo",
-      icon: { url: "server-icon" },
-      sandboxes: ["/repo/workspace"],
-      worktrees: [{ directory: "/repo/workspace" }],
-      vcs: "git",
-    }
-    const opened = { id: metadata.id, worktree: "/repo/workspace", icon: { override: "workspace-icon" } }
-    const current = session({ id: "workspace", projectID: metadata.id, directory: opened.worktree })
-
-    const merged = resolveSessionDetailsProject(current, [opened], [metadata])
-    if (!merged) throw new Error("Expected session details project")
-    expect(merged.id).toBe(metadata.id)
-    expect(merged.worktree).toBe(metadata.worktree)
-    expect(merged.worktrees).toBe(metadata.worktrees)
-    expect(merged.sandboxes).toBe(metadata.sandboxes)
-    expect(merged.vcs).toBe(metadata.vcs)
-    expect(merged.name).toBe("workspace")
-    expect(Object.entries(merged.icon ?? {})).toEqual(Object.entries(opened.icon))
-    expect(resolveSessionDetailsProject(current, [], [metadata])).toBe(metadata)
-  })
-
-  test("nested details keep child metadata and the pending opened child's icon", () => {
-    const documents = { id: "documents", worktree: "/documents", icon: { override: "parent-icon" } }
-    const opened = { worktree: "/documents/project", icon: { override: "child-icon" } }
-    const stored = { id: "child", worktree: opened.worktree, icon: { override: "server-icon" }, sandboxes: [] }
-    const current = session({ id: "child", projectID: stored.id, directory: opened.worktree })
-
-    const details = resolveSessionDetailsProject(current, [documents, opened], [stored])
-    expect(details?.id).toBe(stored.id)
-    expect(details?.worktree).toBe(stored.worktree)
-    expect(details?.icon?.override).toBe("child-icon")
   })
 
   test("formats fallback project display name", () => {

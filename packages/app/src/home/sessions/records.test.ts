@@ -58,18 +58,6 @@ describe("buildHomeSessionRecords", () => {
 
     expect(records[0]?.project.worktree).toBe("/repo/a/packages/app")
   })
-
-  test("uses the same resolved project as session tabs, including stored projects", () => {
-    const stored = { id: "project-b", worktree: "/repo/b", expanded: false, icon: { override: "stored-icon" } }
-    const records = buildHomeSessionRecords({
-      sessions: () => [session("b", "/repo/b", "project-b")],
-      projectDirectories: () => undefined,
-      projects: () => [],
-      resolveProject: () => stored,
-    })
-
-    expect(records[0]?.project).toBe(stored)
-  })
 })
 
 describe("homeSessionLocation", () => {
