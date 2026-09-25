@@ -31,9 +31,12 @@ import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/l
 import { Reference } from "@opencode-ai/core/reference"
 import { Location } from "@opencode-ai/core/location"
 import { PluginV2 } from "@opencode-ai/core/plugin"
+import { Advisor } from "@opencode-ai/schema/advisor"
+import { ConfigAdvisor } from "@opencode-ai/core/config/advisor"
 
 export const Info = Schema.Struct({
   name: Schema.String,
+  advisor: Schema.optional(Advisor.Input),
   description: Schema.optional(Schema.String),
   mode: Schema.Literals(["subagent", "primary", "all"]),
   native: Schema.optional(Schema.Boolean),
@@ -289,6 +292,7 @@ const layer = Layer.effect(
           item.hidden = value.hidden ?? item.hidden
           item.name = value.name ?? item.name
           item.steps = value.steps ?? item.steps
+          if (value.advisor !== undefined) item.advisor = ConfigAdvisor.merge(item.advisor, value.advisor)
           item.options = mergeDeep(item.options, value.options ?? {})
           item.permission = Permission.merge(item.permission, Permission.fromConfig(value.permission ?? {}))
         }

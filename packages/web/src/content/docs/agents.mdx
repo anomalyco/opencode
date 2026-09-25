@@ -370,6 +370,44 @@ The model ID in your OpenCode config uses the format `provider/model-id`. For ex
 
 ---
 
+### Advisor
+
+Use the `advisor` config to let an agent consult Anthropic's server-side [advisor tool](https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/advisor-tool) (`advisor_20260301`). The executor model can pause mid-turn, ask a stronger model for advice, and continue with the answer in its context. Anthropic runs the consultation; OpenCode never sees a second request.
+
+```json title="opencode.json"
+{
+  "agent": {
+    "build": {
+      "model": "anthropic/claude-sonnet-4-6",
+      "advisor": {
+        "model": "claude-opus-4-6",
+        "maxUses": 1
+      },
+      "permission": {
+        "advisor": "allow"
+      }
+    }
+  }
+}
+```
+
+- `model` is the bare Anthropic model ID of the advisor, not `provider/model-id`. It must exist in the same `anthropic` provider configuration as the executor.
+- `maxUses` is the maximum number of consultations **per API request**. A turn with several tool-calling steps can consult again on each step, so the agent's [`steps`](#max-steps) limit is the real cap for a turn. Keep both low, as advisor tokens are billed at the advisor model's rate.
+- Both fields are required once all config layers are merged. You can set `model` in your global config and `maxUses` in a project config, but if the merged result is still missing one of them the agent reports a configuration error instead of running.
+- Set `advisor: false` to turn it off for an agent whose config layers would otherwise enable it. Subagents do not pick up the advisor from the primary agent that invoked them; configure each agent explicitly.
+
+The advisor is a tool, so it is governed by [permissions](#permissions) under the key `advisor`. Agents allow tools by default, so a configured advisor runs unless you set `advisor: "deny"`. `ask` is not supported because the consultation happens inside the provider's response and cannot pause for approval; if your agent uses a catch-all `"*": "ask"`, grant `advisor: "allow"` explicitly. A tool of your own named `advisor` conflicts with it and is rejected.
+
+:::note
+The advisor is only available on the direct Anthropic Messages API with API-key authentication. Bedrock, Vertex, OAuth-authenticated Anthropic accounts, proxies, and other providers are not supported. The agent also needs the SDK-backed (V1) session runtime; running it under the native V2 runtime fails with a clear error instead of dropping the advisor.
+:::
+
+Each consultation appears in the session as an **Advisor** tool part holding the advice, an encrypted marker, or the provider's error code. The receiving step records where in the response the advice arrived, so later turns replay it to Anthropic at its original position. Only completed consultations are replayed. If you cancel a turn or OpenCode restarts while a consultation is pending, the pending call is recorded as abandoned and is never resumed; the next turn sees a plain text marker instead. If you later switch the same session to a different model, to OAuth authentication, or to a proxy, earlier advice is replayed as plain text so the session keeps working.
+
+Advisor tokens are added to the session's cost using the advisor model's pricing and are included once in the totals you see in the TUI and clients. They are not counted toward the executor's context size. When the advisor model has no pricing in your provider configuration, OpenCode shows a notice that the displayed cost is partial rather than silently understating it.
+
+---
+
 ### Tools (deprecated)
 
 `tools` is **deprecated**. Prefer the agent's [`permission`](#permissions) field for new configs, updates and more fine-grained control.

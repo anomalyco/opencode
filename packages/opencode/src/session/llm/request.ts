@@ -10,10 +10,13 @@ import type { Provider } from "@/provider/provider"
 import { ProviderTransform } from "@/provider/transform"
 import { SystemPrompt } from "../system"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
-import { Effect, Record } from "effect"
+import { Effect, Record, Schema } from "effect"
 import { jsonSchema, tool as aiTool, type ModelMessage, type Tool } from "ai"
 import type { Plugin } from "@/plugin"
 import { mergeDeep } from "remeda"
+import { ConfigAdvisor } from "@opencode-ai/core/config/advisor"
+import { SessionAdvisor } from "../advisor"
+import { isRecord } from "@/util/record"
 
 const USER_AGENT = `opencode/${InstallationVersion}`
 
@@ -27,6 +30,8 @@ type PrepareInput = {
   readonly system: string[]
   readonly messages: ModelMessage[]
   readonly small?: boolean
+  readonly purpose?: "foreground" | "final" | "helper"
+  readonly toolChoice?: "auto" | "required" | "none"
   readonly tools: Record<string, Tool>
   readonly provider: Provider.Info
   readonly auth: Auth.Info | undefined
@@ -36,6 +41,7 @@ type PrepareInput = {
 }
 
 export type Prepared = {
+  readonly requiresSdk: boolean
   readonly system: string[]
   readonly messages: ModelMessage[]
   readonly tools: Record<string, Tool>
@@ -98,7 +104,7 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
   }
   if (isOpenaiOauth) options.instructions = system.join("\n")
 
-  const messages =
+  const projected =
     isOpenaiOauth || input.isWorkflow
       ? input.messages
       : [
@@ -146,6 +152,43 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
   )
 
   const tools = resolveTools(input)
+  const settings =
+    input.purpose === "foreground" && !input.small ? ConfigAdvisor.tryResolve(input.agent.advisor) : undefined
+  const action = Permission.evaluate("advisor", "*", input.agent.permission, input.permission ?? []).action
+  if (settings && action === "ask")
+    throw new Error("Native advisor requires an explicit allow or deny permission; ask is not supported.")
+  const enabled =
+    settings !== undefined && action === "allow" && input.user.tools?.advisor !== false && input.toolChoice !== "none"
+  let messages = projected
+  let history = SessionAdvisor.native(messages)
+  if (enabled || history) {
+    const baseURL =
+      typeof input.provider.options.baseURL === "string" && input.provider.options.baseURL
+        ? input.provider.options.baseURL
+        : input.model.api.url || SessionAdvisor.endpoint
+    const key = input.auth?.type === "api" ? input.auth.key : (input.provider.options.apiKey ?? input.provider.key)
+    const direct =
+      input.model.api.npm === "@ai-sdk/anthropic" && baseURL.replace(/\/+$/, "") === SessionAdvisor.endpoint
+    const apiKey = input.auth?.type !== "oauth" && typeof key === "string" && key.trim() !== ""
+    if (enabled && !direct) throw new Error("Native advisor requires the direct Anthropic Messages API.")
+    if (enabled && !apiKey) throw new Error("Native advisor requires Anthropic API-key authentication.")
+    if (!direct || !apiKey) {
+      // History-only: the route or credentials changed since the consultation. Keep the session usable by
+      // replaying the advice as text instead of failing every request that still carries native blocks.
+      messages = SessionAdvisor.demote(messages)
+      history = false
+    }
+  }
+  const requiresSdk = enabled || history
+  if (enabled && settings) {
+    if (Object.hasOwn(tools, "advisor")) throw new Error("A configured tool already uses the native advisor name.")
+    if (!Object.values(input.provider.models).some((model) => model.api.id === settings.model)) {
+      throw new Error(`Advisor model is not configured for this provider: ${settings.model}`)
+    }
+    const { anthropic } = yield* Effect.promise(() => import("@ai-sdk/anthropic"))
+    // Pinned provider/core SDKs use different schema types; protocol tests cover this boundary.
+    tools.advisor = anthropic.tools.advisor_20260301(settings) as Tool
+  }
   // Codex parity: OpenAI Responses-family providers hardcode `strict: false`
   // on every function tool so MCP-sourced and dynamic schemas that don't
   // satisfy OpenAI's structured-outputs constraints still register.
@@ -178,7 +221,8 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
     ? (yield* InstanceState.context).project.id
     : undefined
 
-  return {
+  const prepared: Prepared = {
+    requiresSdk,
     system,
     messages,
     tools: Object.fromEntries(Object.entries(tools).toSorted(([a], [b]) => a.localeCompare(b))),
@@ -203,6 +247,23 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
       ...headers,
     },
   }
+  if (requiresSdk) {
+    const betas = new Set<string>()
+    const providerHeaders = isRecord(input.provider.options.headers) ? input.provider.options.headers : {}
+    for (const [name, value] of [...Object.entries(providerHeaders), ...Object.entries(prepared.headers)]) {
+      if (name.toLowerCase() !== "anthropic-beta" || typeof value !== "string") continue
+      for (const beta of value
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean))
+        betas.add(beta)
+    }
+    betas.add("advisor-tool-2026-03-01")
+    for (const name of Object.keys(prepared.headers))
+      if (name.toLowerCase() === "anthropic-beta") delete prepared.headers[name]
+    prepared.headers["anthropic-beta"] = [...betas].join(",")
+  }
+  return prepared
 })
 
 function resolveTools(input: Pick<PrepareInput, "tools" | "agent" | "permission" | "user">) {

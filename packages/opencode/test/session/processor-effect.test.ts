@@ -26,6 +26,7 @@ import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { LLMEvent } from "@opencode-ai/llm"
+import { SessionAdvisor } from "../../src/session/advisor"
 
 const summary = Layer.succeed(
   SessionSummary.Service,
@@ -208,6 +209,282 @@ const providerErrorLLM = Layer.succeed(
 )
 const providerErrorEnv = LayerNode.compile(root, [...replacements, [LLM.node, providerErrorLLM]])
 const itProviderError = testEffect(providerErrorEnv)
+
+const advisorUsage = {
+  anthropic: {
+    usage: {
+      iterations: [
+        {
+          type: "advisor_message",
+          model: "claude-opus-4-6",
+          input_tokens: 1000,
+          output_tokens: 200,
+          cache_read_input_tokens: 3000,
+          cache_creation_input_tokens: 500,
+        },
+      ],
+    },
+  },
+}
+
+const advisorLLM = Layer.effect(
+  LLM.Service,
+  Effect.sync(() => {
+    let request = 0
+    return LLM.Service.of({
+      stream: () =>
+        Stream.fromIterable<LLMEvent>(
+          request++ === 0
+            ? [
+                LLMEvent.stepStart({ index: 0 }),
+                LLMEvent.toolCall({ id: "srv_previous", name: "advisor", input: {}, providerExecuted: true }),
+                LLMEvent.stepFinish({
+                  index: 0,
+                  reason: "stop",
+                  providerMetadata: { opencode: { rawFinishReason: "pause_turn" } },
+                }),
+                LLMEvent.finish({ reason: "stop" }),
+              ]
+            : [
+                LLMEvent.stepStart({ index: 0 }),
+                LLMEvent.toolResult({
+                  id: "srv_previous",
+                  name: "advisor",
+                  providerExecuted: true,
+                  result: {
+                    type: "json",
+                    value: { type: "advisor_redacted_result", encryptedContent: "opaque-fixture" },
+                  },
+                }),
+                LLMEvent.textStart({ id: "after-advice" }),
+                LLMEvent.textDelta({ id: "after-advice", text: "Continue." }),
+                LLMEvent.textEnd({ id: "after-advice" }),
+                LLMEvent.stepFinish({ index: 0, reason: "stop", providerMetadata: advisorUsage }),
+                LLMEvent.stepFinish({ index: 0, reason: "stop", providerMetadata: advisorUsage }),
+                LLMEvent.finish({ reason: "stop" }),
+              ],
+        ),
+    })
+  }),
+)
+const itAdvisor = testEffect(LayerNode.compile(root, [...replacements, [LLM.node, advisorLLM]]))
+
+const advisorFailureLLM = Layer.effect(
+  LLM.Service,
+  Effect.sync(() => {
+    let request = 0
+    return LLM.Service.of({
+      stream: () =>
+        request++ === 0
+          ? Stream.concat(
+              Stream.make(
+                LLMEvent.stepStart({ index: 0 }),
+                LLMEvent.toolCall({ id: "srv_failed", name: "advisor", input: {}, providerExecuted: true }),
+              ),
+              Stream.fail(new Error("ECONNRESET")),
+            )
+          : Stream.make(LLMEvent.stepFinish({ index: 0, reason: "stop" }), LLMEvent.finish({ reason: "stop" })),
+    })
+  }),
+)
+const itAdvisorFailure = testEffect(LayerNode.compile(root, [...replacements, [LLM.node, advisorFailureLLM]]))
+
+itAdvisorFailure.live(
+  "does not retry after persisting a native advisor call",
+  () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const { processors, session, provider } = yield* boot()
+          const chat = yield* session.create({})
+          const parent = yield* user(chat.id, "Inspect fixture")
+          const message = yield* assistant(chat.id, parent.id, path.resolve(dir))
+          const model = yield* provider.getModel(ref.providerID, ref.modelID)
+          const handle = yield* processors.create({ assistantMessage: message, sessionID: chat.id, model })
+          const outcome = yield* handle.process({
+            user: { id: parent.id, sessionID: chat.id, role: "user", time: parent.time, agent: "build", model: ref },
+            sessionID: chat.id,
+            model,
+            agent: { ...agent(), advisor: { model: "claude-opus-4-6", maxUses: 3 } },
+            purpose: "foreground",
+            system: [],
+            messages: [],
+            tools: {},
+          })
+          expect(outcome).toBe("stop")
+          expect(handle.message.error).toBeDefined()
+          expect((yield* MessageV2.parts(message.id)).find((part) => part.type === "tool")).toMatchObject({
+            metadata: { opencodeAdvisor: { state: "abandoned" } },
+          })
+        }),
+      { config: cfg },
+    ),
+  30000,
+)
+
+// First request: advisor call with pause_turn. Second request (the resumption that replays the pending
+// call): the response starts and then drops before the result arrives. Any retry would re-run the paid
+// consultation server-side, so the processor must not retry once the resumption stream has started.
+const advisorResumptionFailureLLM = Layer.effect(
+  LLM.Service,
+  Effect.sync(() => {
+    let request = 0
+    return LLM.Service.of({
+      stream: () => {
+        request++
+        if (request === 1)
+          return Stream.make(
+            LLMEvent.stepStart({ index: 0 }),
+            LLMEvent.toolCall({ id: "srv_carried", name: "advisor", input: {}, providerExecuted: true }),
+            LLMEvent.stepFinish({
+              index: 0,
+              reason: "stop",
+              providerMetadata: { opencode: { rawFinishReason: "pause_turn" } },
+            }),
+            LLMEvent.finish({ reason: "stop" }),
+          )
+        if (request === 2)
+          return Stream.concat(Stream.make(LLMEvent.stepStart({ index: 0 })), Stream.fail(new Error("ECONNRESET")))
+        return Stream.make(LLMEvent.stepFinish({ index: 0, reason: "stop" }), LLMEvent.finish({ reason: "stop" }))
+      },
+    })
+  }),
+)
+const itAdvisorResumptionFailure = testEffect(
+  LayerNode.compile(root, [...replacements, [LLM.node, advisorResumptionFailureLLM]]),
+)
+
+itAdvisorResumptionFailure.live(
+  "does not retry a resumption request that carries a pending advisor call",
+  () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const { processors, session, provider } = yield* boot()
+          const chat = yield* session.create({})
+          const parent = yield* user(chat.id, "Inspect fixture")
+          const first = yield* assistant(chat.id, parent.id, path.resolve(dir))
+          const model = yield* provider.getModel(ref.providerID, ref.modelID)
+          const run: SessionAdvisor.Run = { pending: new Map(), pauseResumptions: 0 }
+          const request = {
+            user: { id: parent.id, sessionID: chat.id, role: "user", time: parent.time, agent: "build", model: ref },
+            sessionID: chat.id,
+            model,
+            agent: { ...agent(), advisor: { model: "claude-opus-4-6", maxUses: 3 } },
+            purpose: "foreground",
+            system: [],
+            messages: [],
+            tools: {},
+          } satisfies LLM.StreamInput
+          const firstHandle = yield* processors.create({
+            assistantMessage: first,
+            sessionID: chat.id,
+            model,
+            advisorRun: run,
+          })
+          yield* firstHandle.process(request)
+          expect(run.pending.has("srv_carried")).toBe(true)
+
+          const second = yield* assistant(chat.id, parent.id, path.resolve(dir))
+          const secondHandle = yield* processors.create({
+            assistantMessage: second,
+            sessionID: chat.id,
+            model,
+            advisorRun: run,
+          })
+          const outcome = yield* secondHandle.process(request)
+          // A retry would have reached the third (successful) scripted response and cleared the error.
+          expect(outcome).toBe("stop")
+          expect(secondHandle.message.error).toBeDefined()
+          expect(run.pending.has("srv_carried")).toBe(true)
+        }),
+      { config: cfg },
+    ),
+  30000,
+)
+
+itAdvisor.live("settles advisor work from a previous processor without moving its result", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "Inspect fixture")
+        const first = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const model = yield* provider.getModel(ref.providerID, ref.modelID)
+        const run: SessionAdvisor.Run = { pending: new Map(), pauseResumptions: 0 }
+        const request = {
+          user: { id: parent.id, sessionID: chat.id, role: "user", time: parent.time, agent: "build", model: ref },
+          sessionID: chat.id,
+          model,
+          agent: { ...agent(), advisor: { model: "claude-opus-4-6", maxUses: 3 } },
+          purpose: "foreground",
+          system: [],
+          messages: [],
+          tools: {},
+        } satisfies LLM.StreamInput
+        const firstHandle = yield* processors.create({
+          assistantMessage: first,
+          sessionID: chat.id,
+          model,
+          advisorRun: run,
+        })
+        yield* firstHandle.process(request)
+        const firstParts = yield* MessageV2.parts(first.id)
+        const pending = firstParts.find((part) => part.type === "tool")
+        expect(pending).toMatchObject({ state: { status: "running" } })
+        expect(run.pending.has("srv_previous")).toBe(true)
+
+        const second = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const secondHandle = yield* processors.create({
+          assistantMessage: second,
+          sessionID: chat.id,
+          model,
+          advisorRun: run,
+        })
+        yield* secondHandle.process(request)
+        const completed = (yield* MessageV2.parts(first.id)).find((part) => part.type === "tool")
+        expect(completed).toMatchObject({
+          state: { status: "completed" },
+          metadata: {
+            opencodeAdvisor: {
+              state: "completed",
+              result: { type: "advisor_redacted_result", encryptedContent: "opaque-fixture" },
+            },
+          },
+        })
+        expect(run.pending.size).toBe(0)
+        const receiving = (yield* MessageV2.parts(second.id)).find((part) => part.type === "step-finish")
+        if (receiving?.type !== "step-finish") throw new Error("Missing receiving response")
+        expect(SessionAdvisor.response(receiving)?.entries[0]).toEqual({
+          type: "advisor-result",
+          callID: "srv_previous",
+        })
+        expect(SessionAdvisor.response(receiving)?.usage).toMatchObject({ complete: true, cost: 0.014625 })
+        expect((yield* session.get(chat.id)).cost).toBeCloseTo(0.014625, 12)
+        expect((yield* MessageV2.parts(second.id)).filter((part) => part.type === "step-finish")).toHaveLength(1)
+      }),
+    {
+      config: {
+        ...cfg,
+        provider: {
+          test: {
+            ...cfg.provider.test,
+            models: {
+              ...cfg.provider.test.models,
+              "claude-opus-4-6": {
+                ...cfg.provider.test.models["test-model"],
+                id: "claude-opus-4-6",
+                name: "Advisor",
+                cost: { input: 5, output: 25, cache_read: 0.5, cache_write: 6.25 },
+              },
+            },
+          },
+        },
+      },
+    },
+  ),
+)
 
 const fragmentFailureLLM = Layer.succeed(
   LLM.Service,

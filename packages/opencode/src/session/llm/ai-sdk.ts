@@ -3,6 +3,7 @@ import { Effect, Schema } from "effect"
 import { type streamText } from "ai"
 import { errorMessage } from "@/util/error"
 import { ProviderError } from "@/provider/error"
+import { SessionAdvisor } from "../advisor"
 
 type Result = Awaited<ReturnType<typeof streamText>>
 type AISDKEvent = Result["fullStream"] extends AsyncIterable<infer T> ? T : never
@@ -90,11 +91,18 @@ export function toLLMEvents(
         return Effect.fail(new ProviderError.ResponseStreamError("Provider finish_reason: network_error"))
       return Effect.sync(() => {
         const original = providerMetadata(event.providerMetadata)
-        const metadata =
-          state.copilotTotalNanoAiu === undefined
+        const withReason =
+          event.rawFinishReason !== "pause_turn"
             ? original
             : {
                 ...original,
+                opencode: { ...original?.opencode, rawFinishReason: event.rawFinishReason },
+              }
+        const metadata =
+          state.copilotTotalNanoAiu === undefined
+            ? withReason
+            : {
+                ...withReason,
                 copilot: {
                   ...original?.copilot,
                   totalNanoAiu: state.copilotTotalNanoAiu,
@@ -236,7 +244,7 @@ export function toLLMEvents(
 
     case "tool-result":
       return Effect.sync(() => {
-        const name = state.toolNames[event.toolCallId] ?? "unknown"
+        const name = event.toolName ?? state.toolNames[event.toolCallId] ?? "unknown"
         delete state.toolNames[event.toolCallId]
         return [
           LLMEvent.toolResult({
@@ -253,6 +261,22 @@ export function toLLMEvents(
       return Effect.sync(() => {
         const name = state.toolNames[event.toolCallId] ?? ("toolName" in event ? event.toolName : "unknown")
         delete state.toolNames[event.toolCallId]
+        if (
+          name === "advisor" &&
+          event.providerExecuted &&
+          Schema.is(SessionAdvisor.Result)(event.error) &&
+          event.error.type === "advisor_tool_result_error"
+        ) {
+          return [
+            LLMEvent.toolResult({
+              id: event.toolCallId,
+              name,
+              result: { type: "error", value: event.error },
+              providerExecuted: true,
+              providerMetadata: providerMetadata(event.providerMetadata),
+            }),
+          ]
+        }
         return [
           LLMEvent.toolError({
             id: event.toolCallId,
