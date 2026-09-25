@@ -1,4 +1,4 @@
-import { CliRenderEvents, SyntaxStyle, type TerminalColors } from "@opentui/core"
+import { CliRenderEvents, RGBA, SyntaxStyle, type TerminalColors } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
 import {
   generateSyntax,
@@ -33,6 +33,31 @@ import { DevTools } from "../devtools"
 import { configDirectories } from "../util/config-directories"
 
 const themePerformance = DevTools.register({ id: "theme-performance", title: "Theme performance" })
+
+export type TransparencyPolicy = "auto" | "on" | "off"
+
+function withAlpha(color: RGBA, alpha: number) {
+  return RGBA.fromValues(color.r, color.g, color.b, alpha)
+}
+
+function withTransparency(theme: ResolvedTheme, policy: TransparencyPolicy): ResolvedTheme {
+  if (policy === "auto") return theme
+  const alpha = policy === "on" ? 0 : 1
+  const wrap = (current: ResolvedTheme): ResolvedTheme => ({
+    ...current,
+    background: {
+      ...current.background,
+      base: withAlpha(current.background.base, alpha),
+      raised: {
+        base: withAlpha(current.background.raised.base, alpha),
+        high: withAlpha(current.background.raised.high, alpha),
+        max: withAlpha(current.background.raised.max, alpha),
+      },
+    },
+    surface: (name: SurfaceName) => wrap(current.surface(name)),
+  })
+  return wrap(theme)
+}
 export type ThemeError = { name: string; error: Error }
 type ThemeErrorHandler = (event: ThemeError) => void
 
@@ -319,7 +344,12 @@ const themeContext = createSimpleContext({
     })
     const modes = () => selected().modes
     const mode = () => selected().mode
-    const tokens = () => selected().theme
+    const tokens = () => {
+      const theme = selected().theme
+      const policy = configState.data.theme?.transparency
+      if (policy === "on" || policy === "off") return withTransparency(theme, policy)
+      return theme
+    }
     tokens()
     themePerformance.set("Init", `${(performance.now() - initStarted).toFixed(2)} ms`)
     const current = createComponentTheme(tokens)

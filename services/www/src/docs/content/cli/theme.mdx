@@ -40,6 +40,31 @@ Use `system` to follow your terminal's appearance, or lock the theme to light or
 
 This maps to the `mode` field inside `theme` in your CLI config. If a custom theme provides only one mode, OpenCode uses that mode when the other is requested.
 
+## Transparency
+
+Terminals like Warp, Ghostty, iTerm2, and WezTerm can show blur or opacity behind OpenCode. The `system` theme only makes the main background transparent, so panels and dialogs can still look like solid boxes.
+
+Press `Ctrl+P`, select **Open settings**, then set **Transparency** under Appearance:
+
+| Value | Behavior |
+| --- | --- |
+| `auto` | Respect each theme as authored. This is the default. |
+| `on` | Force main, raised, and dialog surfaces to transparent for any theme. |
+| `off` | Force opaque surfaces, even for transparent custom themes. |
+
+This maps to the `transparency` field inside `theme` in your CLI config:
+
+```json title="~/.config/opencode/cli.json"
+{
+  "$schema": "https://opencode.ai/v2/cli.json",
+  "theme": {
+    "name": "system",
+    "mode": "system",
+    "transparency": "on"
+  }
+}
+```
+
 ## Adding a Theme
 
 To add a theme you downloaded or received from someone else, copy its JSON file into the global themes directory:

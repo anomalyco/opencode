@@ -70,6 +70,9 @@ export const Info = Schema.Struct({
       mode: Schema.optional(Schema.Literals(["system", "dark", "light"])).annotate({
         description: "Color mode; 'system' follows the terminal",
       }),
+      transparency: Schema.optional(Schema.Literals(["auto", "on", "off"])).annotate({
+        description: "Force transparent terminal backgrounds; 'auto' respects the theme",
+      }),
     }),
   ).annotate({ description: "Color theme settings" }),
   keybinds: Schema.optional(TuiKeybind.KeybindOverrides).annotate({ description: "Custom key bindings" }),
