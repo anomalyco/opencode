@@ -536,6 +536,8 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/azure/responses": openaiResponses,
   "@opencode/ai/providers/amazon-bedrock/mantle/chat": openaiResponses,
   "@opencode/ai/providers/amazon-bedrock/mantle/responses": openaiResponses,
+  "@opencode/ai/providers/amazon-bedrock/chat": openaiChat,
+  "@opencode/ai/providers/amazon-bedrock/responses": openaiResponses,
   "@opencode/ai/providers/alibaba/responses": openaiResponses,
   "@opencode/ai/providers/meta/responses": openaiResponses,
   "@opencode/ai/providers/minimax/responses": openaiResponses,
@@ -562,6 +564,7 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/zai-coding-plan/chat": zaiChat,
 
   "@opencode/ai/providers/anthropic": anthropicMessages,
+  "@opencode/ai/providers/amazon-bedrock/messages": anthropicMessages,
   "@opencode/ai/providers/google-vertex/messages": anthropicMessages,
   "@opencode/ai/providers/alibaba/messages": alibabaMessages,
   "@opencode/ai/providers/meta/messages": anthropicMessages,
@@ -573,6 +576,7 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/google-vertex": gemini,
 
   "@opencode/ai/providers/amazon-bedrock": bedrockConverse,
+  "@opencode/ai/providers/amazon-bedrock/converse": bedrockConverse,
   "@opencode/ai/providers/openrouter": openrouter,
 
   [Provider.aisdk("venice-ai-sdk-provider")]: openaiChat,

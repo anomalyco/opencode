@@ -17,6 +17,10 @@ describe("provider package entrypoints", () => {
       import("@opencode/ai/providers/openai-compatible"),
       import("@opencode/ai/providers/openai-compatible/responses"),
       import("@opencode/ai/providers/amazon-bedrock"),
+      import("@opencode/ai/providers/amazon-bedrock/converse"),
+      import("@opencode/ai/providers/amazon-bedrock/chat"),
+      import("@opencode/ai/providers/amazon-bedrock/messages"),
+      import("@opencode/ai/providers/amazon-bedrock/responses"),
       import("@opencode/ai/providers/azure"),
       import("@opencode/ai/providers/azure/responses"),
       import("@opencode/ai/providers/azure/chat"),
@@ -62,10 +66,11 @@ describe("provider package entrypoints", () => {
 
     for (const module of modules) expect(module.model).toBeFunction()
     expect(modules[0].model).toBe(modules[1].model)
-    expect(modules[8].model).toBe(modules[9].model)
+    expect(modules[7].model).toBe(modules[8].model)
     expect(modules[12].model).toBe(modules[13].model)
-    expect(modules[19].model).toBe(modules[21].model)
-    expect(modules[19].model).not.toBe(modules[20].model)
+    expect(modules[16].model).toBe(modules[17].model)
+    expect(modules[23].model).toBe(modules[25].model)
+    expect(modules[23].model).not.toBe(modules[24].model)
   })
 
   test("maps Alibaba API entrypoints onto explicit regional routes", async () => {
