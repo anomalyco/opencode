@@ -1,3 +1,22 @@
+built-ins/AggregateError/message-undefined-no-prop.js  # explicit Expected SameValue(«true», «false») to be true
+built-ins/Array/S15.4.5.2_A3_T3.js  # RangeError: Invalid array length
+built-ins/Array/S15.4_A1.1_T9.js  # The value of x[0] is expected to be 0 Expected SameValue(«undefined», «0») to be true
+built-ins/Array/from/Array.from_forwards-length-for-array-likes.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/from/calling-from-valid-2.js  # The value of calls[0].thisArg is expected to equal the value of thisArg Expected SameValue(«undefine
+built-ins/Array/from/elements-deleted-after.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/from/iter-cstm-ctor-err.js  # Array.from.call(C, items) throws a Test262Error exception Expected a Test262Error but got a TypeErro
+built-ins/Array/from/iter-cstm-ctor.js  # TypeError: The right-hand side of '…' has no '…' object.
+built-ins/Array/from/iter-map-fn-this-arg.js  # The value of thisVals[0] is expected to equal the value of thisVal Expected SameValue(«undefined», «
+built-ins/Array/from/source-array-boundary.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Array/from/source-object-constructor.js  # The value of Array.from.call(Object, []).constructor is expected to equal the value of Object Expect
+built-ins/Array/isArray/15.4.3.2-2-1.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/isArray/15.4.3.2-2-2.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/Array/length/15.4.5.1-3.d-3.js  # RangeError: Invalid array length
+built-ins/Array/length/S15.4.2.2_A2.1_T1.js  # RangeError: Invalid array length.
+built-ins/Array/length/S15.4.5.1_A1.3_T2.js  # RangeError: Invalid array length
+built-ins/Array/of/construct-this-with-the-number-of-arguments.js  # The value of len is expected to be 0 Expected SameValue(«undefined», «0») to be true
+built-ins/Array/of/return-a-custom-instance.js  # TypeError: The right-hand side of '…' has no '…' object.
+built-ins/Array/of/return-abrupt-from-contructor.js  # Array.of.call(T) throws a Test262Error exception Expected a Test262Error to be thrown but no excepti
 built-ins/Array/prototype/at/index-argument-tointeger.js  # Array.at expects index to be a number.
 built-ins/Array/prototype/concat/S15.4.4.4_A2_T1.js  # Array.prototype.concat called on incompatible receiver a data object.
 built-ins/Array/prototype/concat/S15.4.4.4_A2_T2.js  # Array.prototype.concat called on incompatible receiver a data object.
@@ -13,11 +32,13 @@ built-ins/Array/prototype/copyWithin/return-abrupt-from-end.js  # Expected a Tes
 built-ins/Array/prototype/copyWithin/return-abrupt-from-start.js  # Expected a Test262Error but got a TypeError
 built-ins/Array/prototype/copyWithin/return-abrupt-from-target.js  # Expected a Test262Error but got a TypeError
 built-ins/Array/prototype/copyWithin/return-this.js  # TypeError: Array.prototype.copyWithin called on incompatible receiver a data object.
+built-ins/Array/prototype/entries/returns-iterator-from-object.js  # TypeError: Array.prototype.entries called on incompatible receiver a data object.
 built-ins/Array/prototype/every/15.4.4.16-1-10.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
 built-ins/Array/prototype/every/15.4.4.16-1-11.js  # TypeError: Array.prototype.every called on incompatible receiver a Date.
 built-ins/Array/prototype/every/15.4.4.16-1-12.js  # TypeError: Array.prototype.every called on incompatible receiver a RegExp.
 built-ins/Array/prototype/every/15.4.4.16-1-13.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
 built-ins/Array/prototype/every/15.4.4.16-1-14.js  # TypeError: Array.prototype.every called on incompatible receiver an Error.
+built-ins/Array/prototype/every/15.4.4.16-1-15.js  # TypeError: Array.prototype.every called on incompatible receiver an Arguments.
 built-ins/Array/prototype/every/15.4.4.16-1-3.js  # TypeError: Array.prototype.every called on incompatible receiver a boolean.
 built-ins/Array/prototype/every/15.4.4.16-1-5.js  # TypeError: Array.prototype.every called on incompatible receiver a number.
 built-ins/Array/prototype/every/15.4.4.16-1-7.js  # TypeError: Array.prototype.every called on incompatible receiver a string.
@@ -71,6 +92,9 @@ built-ins/Array/prototype/every/15.4.4.16-5-9.js  # [11].every(callbackfn, objFu
 built-ins/Array/prototype/every/15.4.4.16-7-6.js  # res Expected SameValue(«true», «false») to be true
 built-ins/Array/prototype/every/15.4.4.16-7-8.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
 built-ins/Array/prototype/every/15.4.4.16-7-c-i-1.js  # TypeError: Array.prototype.every called on incompatible receiver a data object.
+built-ins/Array/prototype/every/15.4.4.16-7-c-i-25.js  # TypeError: Array.prototype.every called on incompatible receiver an Arguments.
+built-ins/Array/prototype/every/15.4.4.16-7-c-i-26.js  # TypeError: Array.prototype.every called on incompatible receiver an Arguments.
+built-ins/Array/prototype/every/15.4.4.16-7-c-i-27.js  # TypeError: Array.prototype.every called on incompatible receiver an Arguments.
 built-ins/Array/prototype/every/15.4.4.16-7-c-i-3.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
 built-ins/Array/prototype/every/15.4.4.16-7-c-i-7.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
 built-ins/Array/prototype/every/15.4.4.16-7-c-i-8.js  # [, , , ].every(callbackfn) Expected SameValue(«true», «false») to be true
@@ -109,12 +133,14 @@ built-ins/Array/prototype/filter/15.4.4.20-1-11.js  # TypeError: Array.prototype
 built-ins/Array/prototype/filter/15.4.4.20-1-12.js  # TypeError: Array.prototype.filter called on incompatible receiver a RegExp.
 built-ins/Array/prototype/filter/15.4.4.20-1-13.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
 built-ins/Array/prototype/filter/15.4.4.20-1-14.js  # TypeError: Array.prototype.filter called on incompatible receiver an Error.
+built-ins/Array/prototype/filter/15.4.4.20-1-15.js  # TypeError: Array.prototype.filter called on incompatible receiver an Arguments.
 built-ins/Array/prototype/filter/15.4.4.20-1-3.js  # TypeError: Array.prototype.filter called on incompatible receiver a boolean.
 built-ins/Array/prototype/filter/15.4.4.20-1-5.js  # TypeError: Array.prototype.filter called on incompatible receiver a number.
 built-ins/Array/prototype/filter/15.4.4.20-1-7.js  # TypeError: Array.prototype.filter called on incompatible receiver a string.
 built-ins/Array/prototype/filter/15.4.4.20-10-3.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/filter/15.4.4.20-2-1.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
 built-ins/Array/prototype/filter/15.4.4.20-2-14.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-2-17.js  # TypeError: Array.prototype.filter called on incompatible receiver an Arguments.
 built-ins/Array/prototype/filter/15.4.4.20-2-19.js  # TypeError: Array.prototype.filter called on incompatible receiver a function.
 built-ins/Array/prototype/filter/15.4.4.20-2-3.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
 built-ins/Array/prototype/filter/15.4.4.20-2-6.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
@@ -168,6 +194,9 @@ built-ins/Array/prototype/filter/15.4.4.20-6-8.js  # … cannot be constructed: 
 built-ins/Array/prototype/filter/15.4.4.20-9-6.js  # resArr.length Expected SameValue(«3», «4») to be true
 built-ins/Array/prototype/filter/15.4.4.20-9-8.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
 built-ins/Array/prototype/filter/15.4.4.20-9-c-i-1.js  # TypeError: Array.prototype.filter called on incompatible receiver a data object.
+built-ins/Array/prototype/filter/15.4.4.20-9-c-i-25.js  # TypeError: Array.prototype.filter called on incompatible receiver an Arguments.
+built-ins/Array/prototype/filter/15.4.4.20-9-c-i-26.js  # TypeError: Array.prototype.filter called on incompatible receiver an Arguments.
+built-ins/Array/prototype/filter/15.4.4.20-9-c-i-27.js  # TypeError: Array.prototype.filter called on incompatible receiver an Arguments.
 built-ins/Array/prototype/filter/15.4.4.20-9-c-i-3.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
 built-ins/Array/prototype/filter/15.4.4.20-9-c-i-7.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
 built-ins/Array/prototype/filter/15.4.4.20-9-c-i-8.js  # newArr.length Expected SameValue(«0», «1») to be true
@@ -207,15 +236,14 @@ built-ins/Array/prototype/findLastIndex/predicate-call-this-strict.js  # Expecte
 built-ins/Array/prototype/flat/array-like-objects.js  # TypeError: Array.prototype.flat called on incompatible receiver a data object.
 built-ins/Array/prototype/flat/call-with-boolean.js  # TypeError: Array.prototype.flat called on incompatible receiver a boolean.
 built-ins/Array/prototype/flat/non-object-ctor-throws.js  # null value Expected a TypeError to be thrown but no exception was thrown at all
-built-ins/Array/prototype/flat/proxy-access-count.js  # ReferenceError: Unknown identifier '…'.
 built-ins/Array/prototype/flatMap/call-with-boolean.js  # TypeError: Array.prototype.flatMap called on incompatible receiver a boolean.
-built-ins/Array/prototype/flatMap/proxy-access-count.js  # ReferenceError: Unknown identifier '…'.
 built-ins/Array/prototype/flatMap/thisArg-argument.js  # Actual [undefined] and expected ["TestString"] should have the same contents. The value of actual is
 built-ins/Array/prototype/forEach/15.4.4.18-1-10.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
 built-ins/Array/prototype/forEach/15.4.4.18-1-11.js  # TypeError: Array.prototype.forEach called on incompatible receiver a Date.
 built-ins/Array/prototype/forEach/15.4.4.18-1-12.js  # TypeError: Array.prototype.forEach called on incompatible receiver a RegExp.
 built-ins/Array/prototype/forEach/15.4.4.18-1-13.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
 built-ins/Array/prototype/forEach/15.4.4.18-1-14.js  # TypeError: Array.prototype.forEach called on incompatible receiver an Error.
+built-ins/Array/prototype/forEach/15.4.4.18-1-15.js  # TypeError: Array.prototype.forEach called on incompatible receiver an Arguments.
 built-ins/Array/prototype/forEach/15.4.4.18-1-3.js  # TypeError: Array.prototype.forEach called on incompatible receiver a boolean.
 built-ins/Array/prototype/forEach/15.4.4.18-1-5.js  # TypeError: Array.prototype.forEach called on incompatible receiver a number.
 built-ins/Array/prototype/forEach/15.4.4.18-1-7.js  # TypeError: Array.prototype.forEach called on incompatible receiver a string.
@@ -267,6 +295,9 @@ built-ins/Array/prototype/forEach/15.4.4.18-5-9.js  # result !== true
 built-ins/Array/prototype/forEach/15.4.4.18-7-5.js  # callCnt Expected SameValue(«4», «5») to be true
 built-ins/Array/prototype/forEach/15.4.4.18-7-8.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
 built-ins/Array/prototype/forEach/15.4.4.18-7-c-i-1.js  # TypeError: Array.prototype.forEach called on incompatible receiver a data object.
+built-ins/Array/prototype/forEach/15.4.4.18-7-c-i-25.js  # TypeError: Array.prototype.forEach called on incompatible receiver an Arguments.
+built-ins/Array/prototype/forEach/15.4.4.18-7-c-i-26.js  # TypeError: Array.prototype.forEach called on incompatible receiver an Arguments.
+built-ins/Array/prototype/forEach/15.4.4.18-7-c-i-27.js  # TypeError: Array.prototype.forEach called on incompatible receiver an Arguments.
 built-ins/Array/prototype/forEach/15.4.4.18-7-c-i-3.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
 built-ins/Array/prototype/forEach/15.4.4.18-7-c-i-7.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
 built-ins/Array/prototype/forEach/15.4.4.18-7-c-i-8.js  # testResult !== true
@@ -302,6 +333,7 @@ built-ins/Array/prototype/indexOf/15.4.4.14-1-11.js  # TypeError: Array.prototyp
 built-ins/Array/prototype/indexOf/15.4.4.14-1-12.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a RegExp.
 built-ins/Array/prototype/indexOf/15.4.4.14-1-13.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
 built-ins/Array/prototype/indexOf/15.4.4.14-1-14.js  # TypeError: Array.prototype.indexOf called on incompatible receiver an Error.
+built-ins/Array/prototype/indexOf/15.4.4.14-1-15.js  # TypeError: Array.prototype.indexOf called on incompatible receiver an Arguments.
 built-ins/Array/prototype/indexOf/15.4.4.14-1-3.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a boolean.
 built-ins/Array/prototype/indexOf/15.4.4.14-1-5.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a number.
 built-ins/Array/prototype/indexOf/15.4.4.14-1-7.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a string.
@@ -358,6 +390,9 @@ built-ins/Array/prototype/indexOf/15.4.4.14-9-a-3.js  # Array.indexOf expects st
 built-ins/Array/prototype/indexOf/15.4.4.14-9-a-5.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
 built-ins/Array/prototype/indexOf/15.4.4.14-9-a-6.js  # Array.indexOf expects start index to be a number.
 built-ins/Array/prototype/indexOf/15.4.4.14-9-b-i-1.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/indexOf/15.4.4.14-9-b-i-25.js  # TypeError: Array.prototype.indexOf called on incompatible receiver an Arguments.
+built-ins/Array/prototype/indexOf/15.4.4.14-9-b-i-26.js  # TypeError: Array.prototype.indexOf called on incompatible receiver an Arguments.
+built-ins/Array/prototype/indexOf/15.4.4.14-9-b-i-27.js  # TypeError: Array.prototype.indexOf called on incompatible receiver an Arguments.
 built-ins/Array/prototype/indexOf/15.4.4.14-9-b-i-4.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
 built-ins/Array/prototype/indexOf/15.4.4.14-9-b-i-7.js  # [, , , ].indexOf(true) Expected SameValue(«-1», «0») to be true
 built-ins/Array/prototype/indexOf/15.4.4.14-9-b-i-8.js  # TypeError: Array.prototype.indexOf called on incompatible receiver a data object.
@@ -368,11 +403,13 @@ built-ins/Array/prototype/join/S15.4.4.5_A2_T4.js  # Array.prototype.join called
 built-ins/Array/prototype/join/S15.4.4.5_A4_T3.js  # Array.prototype.join called on incompatible receiver a data object.
 built-ins/Array/prototype/join/S15.4.4.5_A5_T1.js  # #1: Array.prototype[1] = 1; x = [0]; x.length = 2; x.join() === "0,1". Actual: 0,
 built-ins/Array/prototype/join/call-with-boolean.js  # TypeError: Array.prototype.join called on incompatible receiver a boolean.
+built-ins/Array/prototype/keys/returns-iterator-from-object.js  # TypeError: Array.prototype.keys called on incompatible receiver a data object.
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-1-10.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-1-11.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a Date.
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-1-12.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a RegExp.
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-1-13.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-1-14.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver an Error.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-1-15.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver an Arguments.
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-1-3.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a boolean.
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-1-5.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a number.
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-1-7.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a string.
@@ -427,6 +464,9 @@ built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-a-2.js  # TypeError: Array.pro
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-a-3.js  # Array.lastIndexOf expects start index to be a number.
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-a-5.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-b-i-1.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-b-i-25.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver an Arguments.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-b-i-26.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver an Arguments.
+built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-b-i-27.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver an Arguments.
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-b-i-4.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-b-i-7.js  # [, , , ].lastIndexOf(true) Expected SameValue(«-1», «0») to be true
 built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-b-i-8.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver a data object.
@@ -437,11 +477,13 @@ built-ins/Array/prototype/map/15.4.4.19-1-11.js  # TypeError: Array.prototype.ma
 built-ins/Array/prototype/map/15.4.4.19-1-12.js  # TypeError: Array.prototype.map called on incompatible receiver a RegExp.
 built-ins/Array/prototype/map/15.4.4.19-1-13.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
 built-ins/Array/prototype/map/15.4.4.19-1-14.js  # TypeError: Array.prototype.map called on incompatible receiver an Error.
+built-ins/Array/prototype/map/15.4.4.19-1-15.js  # TypeError: Array.prototype.map called on incompatible receiver an Arguments.
 built-ins/Array/prototype/map/15.4.4.19-1-3.js  # TypeError: Array.prototype.map called on incompatible receiver a boolean.
 built-ins/Array/prototype/map/15.4.4.19-1-5.js  # TypeError: Array.prototype.map called on incompatible receiver a number.
 built-ins/Array/prototype/map/15.4.4.19-1-7.js  # TypeError: Array.prototype.map called on incompatible receiver a string.
 built-ins/Array/prototype/map/15.4.4.19-2-1.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
 built-ins/Array/prototype/map/15.4.4.19-2-14.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-2-17.js  # TypeError: Array.prototype.map called on incompatible receiver an Arguments.
 built-ins/Array/prototype/map/15.4.4.19-2-19.js  # TypeError: Array.prototype.map called on incompatible receiver a function.
 built-ins/Array/prototype/map/15.4.4.19-2-3.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
 built-ins/Array/prototype/map/15.4.4.19-2-6.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
@@ -490,6 +532,9 @@ built-ins/Array/prototype/map/15.4.4.19-5-9.js  # testResult[0] Expected SameVal
 built-ins/Array/prototype/map/15.4.4.19-8-6.js  # resArr[4] Expected SameValue(«undefined», «1») to be true
 built-ins/Array/prototype/map/15.4.4.19-8-8.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
 built-ins/Array/prototype/map/15.4.4.19-8-c-i-1.js  # TypeError: Array.prototype.map called on incompatible receiver a data object.
+built-ins/Array/prototype/map/15.4.4.19-8-c-i-25.js  # TypeError: Array.prototype.map called on incompatible receiver an Arguments.
+built-ins/Array/prototype/map/15.4.4.19-8-c-i-26.js  # TypeError: Array.prototype.map called on incompatible receiver an Arguments.
+built-ins/Array/prototype/map/15.4.4.19-8-c-i-27.js  # TypeError: Array.prototype.map called on incompatible receiver an Arguments.
 built-ins/Array/prototype/map/15.4.4.19-8-c-i-3.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
 built-ins/Array/prototype/map/15.4.4.19-8-c-i-7.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
 built-ins/Array/prototype/map/15.4.4.19-8-c-i-8.js  # newArr[1] Expected SameValue(«13», «true») to be true
@@ -545,6 +590,7 @@ built-ins/Array/prototype/reduce/15.4.4.21-1-11.js  # TypeError: Array.prototype
 built-ins/Array/prototype/reduce/15.4.4.21-1-12.js  # TypeError: Array.prototype.reduce called on incompatible receiver a RegExp.
 built-ins/Array/prototype/reduce/15.4.4.21-1-13.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
 built-ins/Array/prototype/reduce/15.4.4.21-1-14.js  # TypeError: Array.prototype.reduce called on incompatible receiver an Error.
+built-ins/Array/prototype/reduce/15.4.4.21-1-15.js  # TypeError: Array.prototype.reduce called on incompatible receiver an Arguments.
 built-ins/Array/prototype/reduce/15.4.4.21-1-3.js  # TypeError: Array.prototype.reduce called on incompatible receiver a boolean.
 built-ins/Array/prototype/reduce/15.4.4.21-1-5.js  # TypeError: Array.prototype.reduce called on incompatible receiver a number.
 built-ins/Array/prototype/reduce/15.4.4.21-1-7.js  # TypeError: Array.prototype.reduce called on incompatible receiver a string.
@@ -598,6 +644,9 @@ built-ins/Array/prototype/reduce/15.4.4.21-7-7.js  # … cannot be constructed: 
 built-ins/Array/prototype/reduce/15.4.4.21-7-8.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/reduce/15.4.4.21-7-9.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-1.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-25.js  # TypeError: Array.prototype.reduce called on incompatible receiver an Arguments.
+built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-26.js  # TypeError: Array.prototype.reduce called on incompatible receiver an Arguments.
+built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-27.js  # TypeError: Array.prototype.reduce called on incompatible receiver an Arguments.
 built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-29.js  # TypeError: Array.prototype.reduce called on incompatible receiver a function.
 built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-3.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
 built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-7.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
@@ -605,6 +654,9 @@ built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-8.js  # Array.reduce of an 
 built-ins/Array/prototype/reduce/15.4.4.21-8-c-4.js  # Array.reduce of an empty array with no initial value.
 built-ins/Array/prototype/reduce/15.4.4.21-9-6.js  # res Expected SameValue(«"123"», «"1235"») to be true
 built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-1.js  # TypeError: Array.prototype.reduce called on incompatible receiver a data object.
+built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-25.js  # TypeError: Array.prototype.reduce called on incompatible receiver an Arguments.
+built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-26.js  # TypeError: Array.prototype.reduce called on incompatible receiver an Arguments.
+built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-27.js  # TypeError: Array.prototype.reduce called on incompatible receiver an Arguments.
 built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-29.js  # TypeError: Array.prototype.reduce called on incompatible receiver a function.
 built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-3.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
 built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-7.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
@@ -633,6 +685,7 @@ built-ins/Array/prototype/reduceRight/15.4.4.22-1-11.js  # TypeError: Array.prot
 built-ins/Array/prototype/reduceRight/15.4.4.22-1-12.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a RegExp.
 built-ins/Array/prototype/reduceRight/15.4.4.22-1-13.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
 built-ins/Array/prototype/reduceRight/15.4.4.22-1-14.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver an Error.
+built-ins/Array/prototype/reduceRight/15.4.4.22-1-15.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver an Arguments.
 built-ins/Array/prototype/reduceRight/15.4.4.22-1-3.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a boolean.
 built-ins/Array/prototype/reduceRight/15.4.4.22-1-5.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a number.
 built-ins/Array/prototype/reduceRight/15.4.4.22-1-7.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a string.
@@ -642,6 +695,7 @@ built-ins/Array/prototype/reduceRight/15.4.4.22-10-6.js  # … cannot be constru
 built-ins/Array/prototype/reduceRight/15.4.4.22-10-7.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/reduceRight/15.4.4.22-2-1.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
 built-ins/Array/prototype/reduceRight/15.4.4.22-2-14.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-2-17.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver an Arguments.
 built-ins/Array/prototype/reduceRight/15.4.4.22-2-19.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a function.
 built-ins/Array/prototype/reduceRight/15.4.4.22-2-3.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
 built-ins/Array/prototype/reduceRight/15.4.4.22-2-6.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
@@ -684,6 +738,9 @@ built-ins/Array/prototype/reduceRight/15.4.4.22-7-7.js  # … cannot be construc
 built-ins/Array/prototype/reduceRight/15.4.4.22-7-8.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/reduceRight/15.4.4.22-7-9.js  # … cannot be constructed: user-defined constructors and classes are not supported. Call it as a funct
 built-ins/Array/prototype/reduceRight/15.4.4.22-8-b-iii-1-1.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-8-b-iii-1-25.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver an Arguments.
+built-ins/Array/prototype/reduceRight/15.4.4.22-8-b-iii-1-26.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver an Arguments.
+built-ins/Array/prototype/reduceRight/15.4.4.22-8-b-iii-1-27.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver an Arguments.
 built-ins/Array/prototype/reduceRight/15.4.4.22-8-b-iii-1-29.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a function.
 built-ins/Array/prototype/reduceRight/15.4.4.22-8-b-iii-1-3.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
 built-ins/Array/prototype/reduceRight/15.4.4.22-8-b-iii-1-7.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
@@ -691,6 +748,9 @@ built-ins/Array/prototype/reduceRight/15.4.4.22-8-b-iii-1-8.js  # Array.reduceRi
 built-ins/Array/prototype/reduceRight/15.4.4.22-8-c-4.js  # Array.reduceRight of an empty array with no initial value.
 built-ins/Array/prototype/reduceRight/15.4.4.22-9-6.js  # res Expected SameValue(«"91"», «"151"») to be true
 built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-i-1.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a data object.
+built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-i-25.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver an Arguments.
+built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-i-26.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver an Arguments.
+built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-i-27.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver an Arguments.
 built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-i-29.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver a function.
 built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-i-3.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
 built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-i-7.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
@@ -740,13 +800,13 @@ built-ins/Array/prototype/slice/S15.4.4.10_A3_T3.js  # Array.prototype.slice cal
 built-ins/Array/prototype/slice/S15.4.4.10_A4_T1.js  # #3: Array.prototype[1] = 1; x = [0]; x.length = 2; var arr = x.slice(); arr.hasOwnProperty('…') === 
 built-ins/Array/prototype/slice/call-with-boolean.js  # TypeError: Array.prototype.slice called on incompatible receiver a boolean.
 built-ins/Array/prototype/slice/create-ctor-non-object.js  # null value Expected a TypeError to be thrown but no exception was thrown at all
-built-ins/Array/prototype/slice/length-exceeding-integer-limit-proxied-array.js  # ReferenceError: Unknown identifier '…'.
 built-ins/Array/prototype/slice/length-exceeding-integer-limit.js  # TypeError: Array.prototype.slice called on incompatible receiver a data object.
 built-ins/Array/prototype/some/15.4.4.17-1-10.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
 built-ins/Array/prototype/some/15.4.4.17-1-11.js  # TypeError: Array.prototype.some called on incompatible receiver a Date.
 built-ins/Array/prototype/some/15.4.4.17-1-12.js  # TypeError: Array.prototype.some called on incompatible receiver a RegExp.
 built-ins/Array/prototype/some/15.4.4.17-1-13.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
 built-ins/Array/prototype/some/15.4.4.17-1-14.js  # TypeError: Array.prototype.some called on incompatible receiver an Error.
+built-ins/Array/prototype/some/15.4.4.17-1-15.js  # TypeError: Array.prototype.some called on incompatible receiver an Arguments.
 built-ins/Array/prototype/some/15.4.4.17-1-3.js  # TypeError: Array.prototype.some called on incompatible receiver a boolean.
 built-ins/Array/prototype/some/15.4.4.17-1-5.js  # TypeError: Array.prototype.some called on incompatible receiver a number.
 built-ins/Array/prototype/some/15.4.4.17-1-7.js  # TypeError: Array.prototype.some called on incompatible receiver a string.
@@ -802,6 +862,9 @@ built-ins/Array/prototype/some/15.4.4.17-5-9.js  # [11].some(callbackfn, objFunc
 built-ins/Array/prototype/some/15.4.4.17-7-6.js  # res Expected SameValue(«false», «true») to be true
 built-ins/Array/prototype/some/15.4.4.17-7-8.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
 built-ins/Array/prototype/some/15.4.4.17-7-c-i-1.js  # TypeError: Array.prototype.some called on incompatible receiver a data object.
+built-ins/Array/prototype/some/15.4.4.17-7-c-i-25.js  # TypeError: Array.prototype.some called on incompatible receiver an Arguments.
+built-ins/Array/prototype/some/15.4.4.17-7-c-i-26.js  # TypeError: Array.prototype.some called on incompatible receiver an Arguments.
+built-ins/Array/prototype/some/15.4.4.17-7-c-i-27.js  # TypeError: Array.prototype.some called on incompatible receiver an Arguments.
 built-ins/Array/prototype/some/15.4.4.17-7-c-i-3.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
 built-ins/Array/prototype/some/15.4.4.17-7-c-i-7.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
 built-ins/Array/prototype/some/15.4.4.17-7-c-i-8.js  # [, ].some(callbackfn) !== true
@@ -854,16 +917,19 @@ built-ins/Array/prototype/splice/length-and-deleteCount-exceeding-integer-limit.
 built-ins/Array/prototype/splice/length-exceeding-integer-limit-shrink-array.js  # TypeError: Array.prototype.splice called on incompatible receiver a data object.
 built-ins/Array/prototype/splice/length-near-integer-limit-grow-array.js  # TypeError: Array.prototype.splice called on incompatible receiver a data object.
 built-ins/Array/prototype/toLocaleString/S15.4.4.3_A3_T1.js  # #1: var n = 0; var obj = {toLocaleString: function() {n++}}; Array.prototype[1] = obj; x = [obj]; x.
+built-ins/Array/prototype/toReversed/frozen-this-value.js  # TypeError: Array.prototype.toReversed called on incompatible receiver a data object.
 built-ins/Array/prototype/toReversed/holes-not-preserved.js  # Actual [4, undefined, 2, undefined, 0] and expected [4, 3, 2, undefined, 0] should have the same con
 built-ins/Array/prototype/toReversed/length-casted-to-zero.js  # TypeError: Array.prototype.toReversed called on incompatible receiver a data object.
 built-ins/Array/prototype/toReversed/length-exceeding-array-length-limit.js  # TypeError: Only init object properties are supported.
 built-ins/Array/prototype/toReversed/length-tolength.js  # TypeError: Array.prototype.toReversed called on incompatible receiver a data object.
 built-ins/Array/prototype/toReversed/this-value-boolean.js  # TypeError: Array.prototype.toReversed called on incompatible receiver a boolean.
+built-ins/Array/prototype/toSorted/frozen-this-value.js  # TypeError: Array.prototype.toSorted called on incompatible receiver a data object.
 built-ins/Array/prototype/toSorted/holes-not-preserved.js  # Actual [1, 3, 4, undefined, undefined] and expected [1, 2, 3, 4, undefined] should have the same con
 built-ins/Array/prototype/toSorted/length-casted-to-zero.js  # TypeError: Array.prototype.toSorted called on incompatible receiver a data object.
 built-ins/Array/prototype/toSorted/length-exceeding-array-length-limit.js  # TypeError: Only init object properties are supported.
 built-ins/Array/prototype/toSorted/length-tolength.js  # TypeError: Array.prototype.toSorted called on incompatible receiver a data object.
 built-ins/Array/prototype/toSorted/this-value-boolean.js  # TypeError: Array.prototype.toSorted called on incompatible receiver a boolean.
+built-ins/Array/prototype/toSpliced/frozen-this-value.js  # TypeError: Array.prototype.toSpliced called on incompatible receiver a data object.
 built-ins/Array/prototype/toSpliced/holes-not-preserved.js  # Actual [0, undefined, 2, undefined, 4] and expected [0, undefined, 2, 3, 4] should have the same con
 built-ins/Array/prototype/toSpliced/length-casted-to-zero.js  # TypeError: Array.prototype.toSpliced called on incompatible receiver a data object.
 built-ins/Array/prototype/toSpliced/length-clamped-to-2pow53minus1.js  # TypeError: Array.prototype.toSpliced called on incompatible receiver a data object.
@@ -880,9 +946,54 @@ built-ins/Array/prototype/unshift/S15.4.4.13_A4_T2.js  # #3: Array.prototype[0] 
 built-ins/Array/prototype/unshift/call-with-boolean.js  # TypeError: Array.prototype.unshift called on incompatible receiver a boolean.
 built-ins/Array/prototype/unshift/clamps-to-integer-limit.js  # TypeError: Array.prototype.unshift called on incompatible receiver a data object.
 built-ins/Array/prototype/unshift/length-near-integer-limit.js  # TypeError: Only init object properties are supported.
+built-ins/Array/prototype/values/returns-iterator-from-object.js  # TypeError: Array.prototype.values called on incompatible receiver a data object.
 built-ins/Array/prototype/with/length-exceeding-array-length-limit.js  # TypeError: Only init object properties are supported.
 built-ins/Array/prototype/with/length-tolength.js  # TypeError: Array.prototype.with called on incompatible receiver a data object.
 built-ins/Array/prototype/with/this-value-boolean.js  # TypeError: Array.prototype.with called on incompatible receiver a boolean.
+built-ins/ArrayIteratorPrototype/Symbol.toStringTag/value-from-to-string.js  # Expected SameValue(«"[object Array Iterator]"», «"[object Iterator]"») to be true
+built-ins/AsyncFunction/AsyncFunction-construct.js  # TypeError: The Function constructor is not supported; write the function inline.
+built-ins/AsyncFunction/AsyncFunctionPrototype-is-not-callable.js  # Expected SameValue(«"function"», «"object"») to be true
+built-ins/AsyncFunction/instance-construct-throws.js  # TypeError: The Function constructor is not supported; write the function inline.
+built-ins/AsyncGeneratorFunction/has-instance.js  # TypeError: The Function constructor is not supported; write the function inline.
+built-ins/AsyncGeneratorFunction/instance-await-expr-in-param.js  # TypeError: The Function constructor is not supported; write the function inline.
+built-ins/AsyncGeneratorFunction/instance-construct-throws.js  # TypeError: The Function constructor is not supported; write the function inline.
+built-ins/AsyncGeneratorFunction/instance-yield-expr-in-param.js  # TypeError: The Function constructor is not supported; write the function inline.
+built-ins/AsyncGeneratorFunction/invoked-as-constructor-no-arguments.js  # TypeError: The Function constructor is not supported; write the function inline.
+built-ins/AsyncGeneratorFunction/invoked-as-function-multiple-arguments.js  # TypeError: The Function constructor is not supported; write the function inline.
+built-ins/AsyncGeneratorFunction/invoked-as-function-no-arguments.js  # TypeError: The Function constructor is not supported; write the function inline.
+built-ins/AsyncGeneratorFunction/invoked-as-function-single-argument.js  # TypeError: The Function constructor is not supported; write the function inline.
+built-ins/AsyncGeneratorFunction/prototype/not-callable.js  # Expected SameValue(«"function"», «"object"») to be true
+built-ins/AsyncGeneratorPrototype/next/this-val-not-async-generator.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/AsyncGeneratorPrototype/return/this-val-not-async-generator.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/AsyncGeneratorPrototype/throw/this-val-not-async-generator.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Boolean/prototype/S15.6.3.1_A1.js  # TypeError: Boolean.prototype.valueOf requires that '…' be a Boolean.
+built-ins/Date/S15.9.3.1_A4_T0.js  # `new Date(new PoisonedValueOf(1))` throws a Test262Error exception Expected a Test262Error but got a
+built-ins/Date/S15.9.3.1_A4_T1.js  # `new Date(new PoisonedValueOf(1), new PoisonedValueOf(2))` throws a Test262Error exception Expected 
+built-ins/Date/S15.9.3.1_A4_T2.js  # `new Date(new PoisonedValueOf(1), new PoisonedValueOf(2), new PoisonedValueOf(3))` throws a Test262E
+built-ins/Date/S15.9.3.1_A4_T3.js  # `new Date(new PoisonedValueOf(1), new PoisonedValueOf(2), new PoisonedValueOf(3), new PoisonedValueO
+built-ins/Date/S15.9.3.1_A4_T4.js  # `new Date(new PoisonedValueOf(1), new PoisonedValueOf(2), new PoisonedValueOf(3), new PoisonedValueO
+built-ins/Date/S15.9.3.1_A4_T5.js  # `new Date(new PoisonedValueOf(1), new PoisonedValueOf(2), new PoisonedValueOf(3), new PoisonedValueO
+built-ins/Date/S15.9.3.1_A4_T6.js  # `new Date(new PoisonedValueOf(1), new PoisonedValueOf(2), new PoisonedValueOf(3), new PoisonedValueO
+built-ins/Date/prototype/toJSON/invoke-result.js  # TypeError: Date.prototype.toJSON called on incompatible receiver a data object.
+built-ins/Date/prototype/toJSON/to-primitive-value-of.js  # TypeError: Date.prototype.toJSON called on incompatible receiver a data object.
+built-ins/Date/prototype/toString/format.js  # Expected SameValue(«null», «null») to be false
+built-ins/Date/prototype/toString/negative-year.js  # Date.prototype.toString serializes year -1 to "-0001" Expected SameValue(«undefined», «"-0001"») to 
+built-ins/Error/prototype/toString/tostring-message-throws-toprimitive.js  # ToPrimitive(msg) called by ToString(msg) throws TypeError Expected a TypeError to be thrown but no e
+built-ins/Function/15.3.5-1gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Function/15.3.5-2gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Function/15.3.5.4_2-1gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Function/15.3.5.4_2-21gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Function/15.3.5.4_2-22gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Function/15.3.5.4_2-23gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Function/15.3.5.4_2-24gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Function/15.3.5.4_2-25gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Function/15.3.5.4_2-26gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Function/15.3.5.4_2-27gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Function/15.3.5.4_2-28gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Function/15.3.5.4_2-29gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Function/15.3.5.4_2-3gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Function/15.3.5.4_2-5gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Function/S10.1.1_A1_T3.js  # TypeError: The called value cannot be constructed: user-defined constructors and classes are not sup
 built-ins/Function/prototype/bind/15.3.4.5-2-6.js  # TypeError: Object(number) wrapper objects are not supported; use the primitive value directly.
 built-ins/Function/prototype/bind/15.3.4.5-20-2.js  # Expected a TypeError to be thrown but no exception was thrown at all
 built-ins/Function/prototype/bind/15.3.4.5-20-3.js  # Expected a TypeError to be thrown but no exception was thrown at all
@@ -890,6 +1001,17 @@ built-ins/Function/prototype/bind/15.3.4.5-21-2.js  # Expected a TypeError to be
 built-ins/Function/prototype/bind/15.3.4.5-21-3.js  # Expected a TypeError to be thrown but no exception was thrown at all
 built-ins/Function/prototype/bind/S15.3.4.5_A1.js  # baz() throws a TypeError exception Expected a TypeError to be thrown but no exception was thrown at 
 built-ins/Function/prototype/bind/S15.3.4.5_A2.js  # baz() throws a TypeError exception Expected a TypeError to be thrown but no exception was thrown at 
+built-ins/GeneratorFunction/has-instance.js  # TypeError: The Function constructor is not supported; write the function inline.
+built-ins/GeneratorFunction/instance-construct-throws.js  # TypeError: The Function constructor is not supported; write the function inline.
+built-ins/GeneratorFunction/instance-restricted-properties.js  # TypeError: The Function constructor is not supported; write the function inline.
+built-ins/GeneratorFunction/instance-yield-expr-in-param.js  # TypeError: The Function constructor is not supported; write the function inline.
+built-ins/GeneratorFunction/invoked-as-constructor-no-arguments.js  # TypeError: The Function constructor is not supported; write the function inline.
+built-ins/GeneratorFunction/invoked-as-function-multiple-arguments.js  # TypeError: The Function constructor is not supported; write the function inline.
+built-ins/GeneratorFunction/invoked-as-function-no-arguments.js  # TypeError: The Function constructor is not supported; write the function inline.
+built-ins/GeneratorFunction/invoked-as-function-single-argument.js  # TypeError: The Function constructor is not supported; write the function inline.
+built-ins/GeneratorFunction/prototype/not-callable.js  # Expected SameValue(«"function"», «"object"») to be true
+built-ins/GeneratorPrototype/throw/from-state-completed.js  # Expected a E but got a TypeError
+built-ins/GeneratorPrototype/throw/from-state-suspended-start.js  # Expected a E but got a TypeError
 built-ins/Iterator/from/return-method-returns-iterator-result.js  # Iterator next must be a function.
 built-ins/Iterator/prototype/Symbol.iterator/is-function.js  # every built-in collection iterator shares one prototype, so its parent is Object.prototype
 built-ins/Iterator/prototype/drop/limit-tonumber-throws.js  # Expected a Test262Error but got a RangeError
@@ -900,24 +1022,737 @@ built-ins/Iterator/prototype/flatMap/this-non-callable-next.js  # TypeError: Ite
 built-ins/Iterator/prototype/map/this-non-callable-next.js  # TypeError: Iterator next must be a function.
 built-ins/Iterator/prototype/take/limit-tonumber-throws.js  # Expected a Test262Error but got a RangeError
 built-ins/Iterator/prototype/take/limit-tonumber.js  # Iterator.prototype.take expects a non-negative count, received NaN.
-built-ins/Object/is/not-same-value-x-y-object.js  # Object(number) wrapper objects are not supported; use the primitive value directly.
-built-ins/Object/is/same-value-x-y-object.js  # Object(number) wrapper objects are not supported; use the primitive value directly.
-built-ins/Object/freeze/throws-when-false.js  # Unknown identifier 'Proxy'.
+built-ins/Iterator/prototype/take/this-non-callable-next.js  # TypeError: Iterator next must be a function.
+built-ins/JSON/parse/reviver-call-args-after-forward-modification.js  # TypeError: Object destructuring requires a data object or array value, received undefined.
+built-ins/JSON/parse/text-object.js  # SyntaxError: JSON.parse received invalid JSON: JSON Parse error: Unexpected identifier "object"
+built-ins/JSON/rawJSON/basic.js  # TypeError: JSON.rawJSON is not a function.
+built-ins/JSON/rawJSON/illegal-empty-and-start-end-chars.js  # Expected a SyntaxError but got a TypeError
+built-ins/JSON/stringify/value-array-circular.js  # TypeError: Array.push result contains a circular value.
+built-ins/Map/iterable-calls-set.js  # `Map.prototype.set` called twice. Expected SameValue(«0», «2») to be true
+built-ins/Map/iterator-close-after-set-failure.js  # TimeoutExceeded: Execution timed out after 5000ms.
+built-ins/Map/iterator-close-failure-after-set-failure.js  # TimeoutExceeded: Execution timed out after 5000ms.
+built-ins/Map/map-iterable-throws-when-set-is-not-callable.js  # Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Map/prototype/forEach/second-parameter-as-callback-context.js  # Expected SameValue(«undefined», «object») to be true
+built-ins/Math/sumPrecise/takes-iterable.js  # Expected SameValue(«4», «3») to be true
+built-ins/Number/prototype/S15.7.3.1_A2_T1.js  # Number.prototype.toString() must return "[object Number]" Expected SameValue(«"[object Object]"», «"
+built-ins/Number/prototype/S15.7.3.1_A2_T2.js  # Number.prototype.toString() must return "[object Number]" Expected SameValue(«"[object Object]"», «"
+built-ins/Number/prototype/S15.7.3.1_A3.js  # TypeError: Number.prototype.valueOf requires that '…' be a Number.
+built-ins/Number/prototype/S15.7.4_A1.js  # TypeError: Number.prototype.valueOf requires that '…' be a Number.
+built-ins/Number/prototype/toExponential/return-abrupt-tointeger-fractiondigits.js  # valueOf Expected a Test262Error to be thrown but no exception was thrown at all
+built-ins/Number/prototype/toExponential/this-is-0-fractiondigits-is-0.js  # TypeError: Number.prototype.toExponential requires that '…' be a Number.
+built-ins/Number/prototype/toFixed/S15.7.4.5_A1.1_T01.js  # TypeError: Number.prototype.toFixed requires that '…' be a Number.
+built-ins/Number/prototype/toFixed/toFixed-tonumber-throws-typeerror-toprimitive.js  # TypeError is thrown when _fractionDigits_ cannot be converted to a primitive Expected a TypeError to
+built-ins/Number/prototype/toPrecision/return-abrupt-tointeger-precision.js  # valueOf Expected a Test262Error but got a TypeError
+built-ins/Number/prototype/toPrecision/this-is-0-precision-is-1.js  # TypeError: Number.prototype.toPrecision requires that '…' be a Number.
+built-ins/Number/prototype/toString/numeric-literal-tostring-radix-poisoned.js  # Expected a Test262Error but got a RangeError
+built-ins/Object/S15.2.1.1_A2_T1.js  # TypeError: Object(boolean) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.1.1_A2_T13.js  # TypeError: Object(boolean) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.1.1_A2_T2.js  # TypeError: Object(number) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.1.1_A2_T3.js  # TypeError: Object(string) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.1.1_A2_T5.js  # TypeError: Object(number) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.1.1_A2_T6.js  # TypeError: Object(number) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.1.1_A2_T7.js  # TypeError: Object(string) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.1.1_A3_T3.js  # TypeError: Object(number) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.2.1_A3_T1.js  # TypeError: Object(string) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.2.1_A3_T2.js  # TypeError: Object(string) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.2.1_A4_T1.js  # TypeError: Object(boolean) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.2.1_A4_T2.js  # TypeError: Object(boolean) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.2.1_A4_T3.js  # TypeError: Object(boolean) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.2.1_A5_T1.js  # TypeError: Object(number) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.2.1_A5_T2.js  # TypeError: Object(number) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.2.1_A5_T3.js  # TypeError: Object(number) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2.2.1_A6_T3.js  # TypeError: Object(number) wrapper objects are not supported; use the primitive value directly.
+built-ins/Object/S15.2_A1.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Object/S9.9_A6.js  # TypeError: MyObject cannot be constructed: user-defined constructors and classes are not supported. 
+built-ins/Object/assign/OnlyOneArgument.js  # TypeError: Object.assign expects a data object or array target, received a string.
+built-ins/Object/assign/Target-Boolean.js  # TypeError: Object.assign expects a data object or array target, received a boolean.
+built-ins/Object/assign/Target-Number.js  # TypeError: Object.assign expects a data object or array target, received a number.
+built-ins/Object/assign/Target-String.js  # TypeError: Object.assign expects a data object or array target, received a string.
+built-ins/Object/create/15.2.3.5-2-1.js  # TypeError: base cannot be constructed: user-defined constructors and classes are not supported. Call
+built-ins/Object/create/15.2.3.5-3-1.js  # TypeError: base cannot be constructed: user-defined constructors and classes are not supported. Call
+built-ins/Object/create/15.2.3.5-4-1.js  # TypeError: base cannot be constructed: user-defined constructors and classes are not supported. Call
+built-ins/Object/create/15.2.3.5-4-102.js  # TypeError: ConstructFun cannot be constructed: user-defined constructors and classes are not support
+built-ins/Object/create/15.2.3.5-4-112.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-113.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-117.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-118.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-119.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-120.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-121.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-122.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-124.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Object/create/15.2.3.5-4-127.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-133.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-134.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-136.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-137.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-138.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-142.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-143.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-144.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-145.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-146.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-147.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-149.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-150.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-152.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-153.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-154.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-155.js  # TypeError: ConstructFun cannot be constructed: user-defined constructors and classes are not support
+built-ins/Object/create/15.2.3.5-4-156.js  # TypeError: ConstructFun cannot be constructed: user-defined constructors and classes are not support
+built-ins/Object/create/15.2.3.5-4-16.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-165.js  # TypeError: Func cannot be constructed: user-defined constructors and classes are not supported. Call
+built-ins/Object/create/15.2.3.5-4-166.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-170.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-171.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-172.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-173.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-174.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-175.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-177.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Object/create/15.2.3.5-4-178.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-18.js  # TypeError: ConstructFun cannot be constructed: user-defined constructors and classes are not support
+built-ins/Object/create/15.2.3.5-4-180.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-181.js  # TypeError: ConstructFun cannot be constructed: user-defined constructors and classes are not support
+built-ins/Object/create/15.2.3.5-4-182.js  # TypeError: ConstructFun cannot be constructed: user-defined constructors and classes are not support
+built-ins/Object/create/15.2.3.5-4-191.js  # TypeError: Func cannot be constructed: user-defined constructors and classes are not supported. Call
+built-ins/Object/create/15.2.3.5-4-192.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-196.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-197.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-198.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-199.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-200.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-201.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-203.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Object/create/15.2.3.5-4-206.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-212.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-213.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-215.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-216.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-217.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-22.js  # TypeError: ConstructFun cannot be constructed: user-defined constructors and classes are not support
+built-ins/Object/create/15.2.3.5-4-221.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-222.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-223.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-224.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-225.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-226.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-228.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-229.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-231.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-232.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-233.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-234.js  # TypeError: ConstructFun cannot be constructed: user-defined constructors and classes are not support
+built-ins/Object/create/15.2.3.5-4-244.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-245.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-249.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-250.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-251.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-252.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-253.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-254.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-256.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Object/create/15.2.3.5-4-257.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-263.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-266.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-268.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-269.js  # TypeError: ConstructFun cannot be constructed: user-defined constructors and classes are not support
+built-ins/Object/create/15.2.3.5-4-270.js  # TypeError: ConstructFun cannot be constructed: user-defined constructors and classes are not support
+built-ins/Object/create/15.2.3.5-4-279.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-28.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-280.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-284.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-285.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-286.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-287.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-288.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-289.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-29.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-291.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Object/create/15.2.3.5-4-298.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-305.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-306.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-308.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-310.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-312.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-314.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-316.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-33.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-34.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-35.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-36.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-38.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-39.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-46.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-47.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-48.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-49.js  # TypeError: ConstructFun cannot be constructed: user-defined constructors and classes are not support
+built-ins/Object/create/15.2.3.5-4-59.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-60.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-64.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-65.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-66.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-67.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-68.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-69.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-71.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Object/create/15.2.3.5-4-72.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-73.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-74.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-75.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-76.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-77.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-78.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-79.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-80.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-81.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-82.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-83.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-84.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-85.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-89.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-90.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-91.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-92.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-93.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-94.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-96.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-97.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/create/15.2.3.5-4-99.js  # TypeError: Object.create property descriptors are not supported; assign the fields after creating th
+built-ins/Object/entries/inherited-properties-omitted.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Object/fromEntries/evaluation-order.js  # TypeError: Only init object properties are supported.
+built-ins/Object/fromEntries/iterator-closed-for-throwing-entry-key-accessor.js  # Expected a DummyError but got a TypeError
+built-ins/Object/fromEntries/iterator-closed-for-throwing-entry-key-tostring.js  # Expected a DummyError but got a TypeError
+built-ins/Object/fromEntries/iterator-closed-for-throwing-entry-value-accessor.js  # Expected a DummyError but got a TypeError
+built-ins/Object/fromEntries/iterator-not-closed-for-throwing-next.js  # Expected a DummyError but got a TypeError
 built-ins/Object/getPrototypeOf/15.2.3.2-2-2.js  # … cannot be constructed: user-defined constructors and classes are not supported.
+built-ins/Object/getPrototypeOf/15.2.3.2-2-30.js  # TypeError: Object.getPrototypeOf cannot convert undefined to an object.
+built-ins/Object/isExtensible/15.2.3.13-2-1.js  # Expected true but got false
 built-ins/Object/isExtensible/15.2.3.13-2-24.js  # … cannot be constructed: user-defined constructors and classes are not supported.
 built-ins/Object/isExtensible/15.2.3.13-2-25.js  # … cannot be constructed: user-defined constructors and classes are not supported.
 built-ins/Object/isExtensible/15.2.3.13-2-26.js  # … cannot be constructed: user-defined constructors and classes are not supported.
 built-ins/Object/isExtensible/15.2.3.13-2-27.js  # … cannot be constructed: user-defined constructors and classes are not supported.
+built-ins/Object/isExtensible/15.2.3.13-2-29.js  # Object.isExtensible(this) !== true
+built-ins/Object/isFrozen/15.2.3.12-3-1.js  # Expected true but got false
+built-ins/Object/isSealed/15.2.3.11-4-1.js  # Expected true but got false
 built-ins/Object/preventExtensions/15.2.3.10-3-24.js  # … cannot be constructed: user-defined constructors and classes are not supported.
-built-ins/Object/preventExtensions/throws-when-false.js  # Unknown identifier 'Proxy'.
-built-ins/Iterator/prototype/take/this-non-callable-next.js  # TypeError: Iterator next must be a function.
+built-ins/Object/prototype/hasOwnProperty/S15.2.4.5_A1_T3.js  # TypeError: FACTORY cannot be constructed: user-defined constructors and classes are not supported. C
+built-ins/Object/prototype/isPrototypeOf/this-value-is-in-prototype-chain-of-arg.js  # TypeError: USER_FACTORY cannot be constructed: user-defined constructors and classes are not support
+built-ins/Object/prototype/propertyIsEnumerable/S15.2.4.7_A1_T1.js  # TypeError: AVISFACTORY cannot be constructed: user-defined constructors and classes are not supporte
+built-ins/Object/prototype/valueOf/15.2.4.4-1.js  # typeof Object.prototype.valueOf.call(true) Expected SameValue(«"boolean"», «"object"») to be true
+built-ins/Object/prototype/valueOf/15.2.4.4-2.js  # typeof Object.prototype.valueOf.call(false) Expected SameValue(«"boolean"», «"object"») to be true
+built-ins/Object/seal/seal-arrowfunction.js  # TypeError: The Function constructor is not supported; write the function inline.
+built-ins/Object/seal/seal-asyncarrowfunction.js  # TypeError: The Function constructor is not supported; write the function inline.
+built-ins/Object/seal/seal-asyncfunction.js  # TypeError: The Function constructor is not supported; write the function inline.
+built-ins/Object/seal/seal-asyncgeneratorfunction.js  # TypeError: The Function constructor is not supported; write the function inline.
+built-ins/Object/seal/seal-generatorfunction.js  # TypeError: The Function constructor is not supported; write the function inline.
+built-ins/Object/seal/seal-promise.js  # TimeoutExceeded: Execution timed out after 5000ms.
+built-ins/Object/seal/seal-uint8array.js  # TypeError: A Uint8Array cannot cross to the host; pass text instead, e.g. `new TextDecoder().decode(
+built-ins/Object/values/inherited-properties-omitted.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Promise/all/S25.4.4.1_A4.1_T1.js  # Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Promise/all/call-resolve-element-after-return.js  # callCount after call to all() Expected SameValue(«0», «1») to be true
+built-ins/Promise/all/call-resolve-element-items.js  # callCount after call to all() Expected SameValue(«0», «1») to be true
+built-ins/Promise/all/call-resolve-element.js  # callCount after call to all() Expected SameValue(«0», «1») to be true
+built-ins/Promise/all/capability-resolve-throws-reject.js  # "Promise incorrectly fulfilled."
+built-ins/Promise/all/ctx-ctor-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+built-ins/Promise/all/invoke-resolve-error-close.js  # Expected SameValue(«0», «1») to be true
+built-ins/Promise/all/invoke-resolve-error-reject.js  # The promise should not be fulfilled.
+built-ins/Promise/all/invoke-resolve-on-promises-every-iteration-of-promise.js  # `then` invoked once for every iterated promise Expected SameValue(«0», «3») to be true
+built-ins/Promise/all/invoke-resolve-on-values-every-iteration-of-promise.js  # `Promise.resolve` invoked once for every iterated value Expected SameValue(«0», «3») to be true
+built-ins/Promise/all/invoke-resolve-return.js  # new `then` method invoked exactly once Expected SameValue(«0», «1») to be true
+built-ins/Promise/all/invoke-resolve.js  # `resolve` invoked once for each iterated value Expected SameValue(«0», «3») to be true
+built-ins/Promise/all/invoke-then.js  # `then` invoked once for every iterated value Expected SameValue(«0», «3») to be true
+built-ins/Promise/all/new-resolve-function.js  # p1.then call count Expected SameValue(«0», «1») to be true
+built-ins/Promise/all/resolve-before-loop-exit-from-same.js  # TypeError: p1OnFulfilled is not a function.
+built-ins/Promise/all/resolve-before-loop-exit.js  # callCount after call to all() Expected SameValue(«0», «1») to be true
+built-ins/Promise/all/resolve-element-function-extensible.js  # Expected true but got false
+built-ins/Promise/all/resolve-element-function-nonconstructor.js  # TypeError: Object.prototype.hasOwnProperty called on incompatible receiver undefined.
+built-ins/Promise/all/resolve-from-same-thenable.js  # TypeError: p1OnFulfilled is not a function.
+built-ins/Promise/all/resolve-not-callable-reject-with-typeerror.js  # "The promise should not be resolved."
+built-ins/Promise/all/resolve-thenable.js  # "The promise should be resolved with the expected value."
+built-ins/Promise/all/same-reject-function.js  # p1.then call count Expected SameValue(«0», «1») to be true
+built-ins/Promise/allKeyed/ctx-ctor-throws.js  # Expected a Test262Error but got a TypeError
+built-ins/Promise/allKeyed/extensible.js  # Expected true but got false
+built-ins/Promise/allKeyed/invoke-resolve-custom.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Promise/allKeyed/invoke-resolve-return.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Promise/allKeyed/resolve-from-same-thenable.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Promise/allSettled/capability-resolve-throws-reject.js  # "Promise incorrectly fulfilled."
+built-ins/Promise/allSettled/ctx-ctor-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+built-ins/Promise/allSettled/invoke-resolve-error-close.js  # Expected SameValue(«0», «1») to be true
+built-ins/Promise/allSettled/invoke-resolve-error-reject.js  # The promise should not be fulfilled.
+built-ins/Promise/allSettled/invoke-resolve-on-promises-every-iteration-of-promise.js  # `then` invoked once for every iterated promise Expected SameValue(«0», «3») to be true
+built-ins/Promise/allSettled/invoke-resolve-on-values-every-iteration-of-promise.js  # `Promise.resolve` invoked once for every iterated value Expected SameValue(«0», «3») to be true
+built-ins/Promise/allSettled/invoke-resolve-return.js  # new `then` method invoked exactly once Expected SameValue(«0», «1») to be true
+built-ins/Promise/allSettled/invoke-resolve.js  # `resolve` invoked once for each iterated value Expected SameValue(«0», «3») to be true
+built-ins/Promise/allSettled/invoke-then-error-close.js  # Expected SameValue(«0», «1») to be true
+built-ins/Promise/allSettled/invoke-then-error-reject.js  # $DONE was never called
+built-ins/Promise/allSettled/invoke-then.js  # `then` invoked once for every iterated value Expected SameValue(«0», «3») to be true
+built-ins/Promise/allSettled/new-reject-function.js  # p1.then call count Expected SameValue(«0», «1») to be true
+built-ins/Promise/allSettled/new-resolve-function.js  # p1.then call count Expected SameValue(«0», «1») to be true
+built-ins/Promise/allSettled/reject-element-function-extensible.js  # Expected true but got false
+built-ins/Promise/allSettled/reject-element-function-multiple-calls.js  # rejectCallCount after call to allSettled() Expected SameValue(«0», «1») to be true
+built-ins/Promise/allSettled/reject-element-function-nonconstructor.js  # TypeError: Object.prototype.hasOwnProperty called on incompatible receiver undefined.
+built-ins/Promise/allSettled/resolve-element-function-extensible.js  # Expected true but got false
+built-ins/Promise/allSettled/resolve-element-function-nonconstructor.js  # TypeError: Object.prototype.hasOwnProperty called on incompatible receiver undefined.
+built-ins/Promise/allSettled/resolve-not-callable-reject-with-typeerror.js  # "The promise should not be resolved."
+built-ins/Promise/allSettled/resolve-thenable.js  # Expected SameValue(«[]», «object») to be true
+built-ins/Promise/allSettledKeyed/ctx-ctor-throws.js  # Expected a Test262Error but got a TypeError
+built-ins/Promise/allSettledKeyed/extensible.js  # Expected true but got false
+built-ins/Promise/allSettledKeyed/invoke-resolve-custom.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Promise/allSettledKeyed/invoke-resolve-return.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Promise/allSettledKeyed/reject-from-same-thenable.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Promise/allSettledKeyed/resolve-from-same-thenable.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Promise/any/call-reject-element-after-return.js  # callCount after call to any() Expected SameValue(«0», «1») to be true
+built-ins/Promise/any/call-reject-element-items.js  # callCount after call to any() Expected SameValue(«0», «1») to be true
+built-ins/Promise/any/capability-reject-throws-no-close.js  # Expected SameValue(«2», «5») to be true
+built-ins/Promise/any/capability-resolve-throws-no-close.js  # Expected SameValue(«2», «5») to be true
+built-ins/Promise/any/capability-resolve-throws-reject.js  # "Promise incorrectly fulfilled."
+built-ins/Promise/any/ctx-ctor-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+built-ins/Promise/any/invoke-resolve-error-reject.js  # "The promise should be rejected, but was resolved"
+built-ins/Promise/any/invoke-resolve-on-promises-every-iteration-of-promise.js  # `then` invoked once for every iterated promise Expected SameValue(«0», «3») to be true
+built-ins/Promise/any/invoke-resolve-on-values-every-iteration-of-promise.js  # `Promise.resolve` invoked once for every iterated value Expected SameValue(«0», «3») to be true
+built-ins/Promise/any/invoke-resolve-return.js  # new `then` method invoked exactly once Expected SameValue(«0», «1») to be true
+built-ins/Promise/any/invoke-then-error-reject.js  # "The promise should be rejected, but was resolved"
+built-ins/Promise/any/invoke-then-on-promises-every-iteration.js  # `then` invoked once for every iterated value Expected SameValue(«0», «3») to be true
+built-ins/Promise/any/invoke-then.js  # $DONE was never called
+built-ins/Promise/any/new-reject-function.js  # p1.then call count Expected SameValue(«0», «1») to be true
+built-ins/Promise/any/reject-element-function-extensible.js  # Expected true but got false
+built-ins/Promise/any/reject-element-function-nonconstructor.js  # TypeError: Object.prototype.hasOwnProperty called on incompatible receiver undefined.
+built-ins/Promise/any/reject-from-same-thenable.js  # TypeError: p1OnRejected is not a function.
+built-ins/Promise/any/resolve-before-loop-exit-from-same.js  # TypeError: p1OnRejected is not a function.
+built-ins/Promise/any/resolve-before-loop-exit.js  # callCount after call to any() Expected SameValue(«0», «1») to be true
+built-ins/Promise/any/resolve-not-callable-reject-with-typeerror.js  # "The promise should not be resolved."
+built-ins/Promise/executor-function-extensible.js  # Expected true but got false
+built-ins/Promise/prototype/catch/invokes-then.js  # TypeError: Promise.prototype.catch called on incompatible receiver a data object.
+built-ins/Promise/prototype/catch/this-value-then-throws.js  # Expected a Test262Error but got a TypeError
+built-ins/Promise/prototype/finally/invokes-then-with-non-function.js  # Invokes `then` method exactly once Expected SameValue(«0», «1») to be true
+built-ins/Promise/prototype/finally/this-value-then-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+built-ins/Promise/prototype/finally/this-value-thenable.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/Promise/prototype/then/S25.4.5.3_A2.1_T2.js  # TypeError: ZeroArgConstructor cannot be constructed: user-defined constructors and classes are not s
+built-ins/Promise/prototype/then/ctor-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Promise/prototype/then/resolve-pending-fulfilled-prms-cstm-then.js  # "The promise should be fulfilled with the resolution value of the provided promise."
+built-ins/Promise/prototype/then/resolve-pending-rejected-prms-cstm-then.js  # "The promise should be fulfilled with the resolution value of the provided promise."
+built-ins/Promise/prototype/then/resolve-settled-fulfilled-prms-cstm-then.js  # "The promise should be fulfilled with the resolution value of the provided promise."
+built-ins/Promise/prototype/then/resolve-settled-rejected-prms-cstm-then.js  # "The promise should be fulfilled with the resolution value of the provided promise."
+built-ins/Promise/race/S25.4.4.3_A3.1_T1.js  # Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Promise/race/S25.4.4.3_A3.1_T2.js  # Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Promise/race/S25.4.4.3_A5.1_T1.js  # Never settles.
+built-ins/Promise/race/ctx-ctor-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+built-ins/Promise/race/invoke-resolve-error-close.js  # Expected SameValue(«0», «1») to be true
+built-ins/Promise/race/invoke-resolve-error-reject.js  # $DONE was never called
+built-ins/Promise/race/invoke-resolve-on-promises-every-iteration-of-promise.js  # `then` invoked once for every item in iterable arg Expected SameValue(«0», «3») to be true
+built-ins/Promise/race/invoke-resolve-on-values-every-iteration-of-promise.js  # `Promise.resolve` invoked once for every item in iterable arg Expected SameValue(«0», «3») to be tru
+built-ins/Promise/race/invoke-resolve-return.js  # new `then` method invoked exactly once Expected SameValue(«0», «1») to be true
+built-ins/Promise/race/invoke-resolve.js  # `resolve` invoked once for each iterated value Expected SameValue(«0», «3») to be true
+built-ins/Promise/race/invoke-then-error-close.js  # Expected SameValue(«0», «1») to be true
+built-ins/Promise/race/invoke-then-error-reject.js  # $DONE was never called
+built-ins/Promise/race/invoke-then.js  # `then` invoked once for every iterated value Expected SameValue(«0», «3») to be true
+built-ins/Promise/race/resolve-prms-cstm-then.js  # "The promise should be resolved with the correct value."
+built-ins/Promise/race/resolve-self.js  # TypeError: resolve is not a function.
+built-ins/Promise/race/same-reject-function.js  # p1.then call count Expected SameValue(«0», «1») to be true
+built-ins/Promise/race/same-resolve-function.js  # p1.then call count Expected SameValue(«0», «1») to be true
+built-ins/Promise/reject/S25.4.4.4_A3.1_T1.js  # Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Promise/reject/capability-invocation-error.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+built-ins/Promise/reject/capability-invocation.js  # Expected SameValue(«"undefined"», «"object"») to be true
+built-ins/Promise/reject/ctx-ctor-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+built-ins/Promise/resolve-prms-cstm-then-deferred.js  # "The promise should be fulfilled with the provided value."
+built-ins/Promise/resolve-prms-cstm-then-immed.js  # "The promise should be fulfilled with the provided value."
+built-ins/Promise/resolve/arg-uniq-ctor.js  # Expected SameValue(«true», «false») to be true
+built-ins/Promise/resolve/capability-invocation-error.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+built-ins/Promise/resolve/ctx-ctor-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+built-ins/Promise/resolve/resolve-from-promise-capability.js  # callCount after call to resolve() Expected SameValue(«0», «1») to be true
+built-ins/Promise/resolve/resolve-self.js  # $DONE was never called
+built-ins/Promise/try/ctx-ctor-throws.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+built-ins/Promise/withResolvers/resolvers.js  # Expected SameValue(«"resolve"», «""») to be true
+built-ins/RegExp/S15.10.3.1_A1_T1.js  # The value of __instance.indicator is expected to be 1 Expected SameValue(«undefined», «1») to be tru
+built-ins/RegExp/S15.10.3.1_A1_T2.js  # The value of __instance.indicator is expected to be 1 Expected SameValue(«undefined», «1») to be tru
+built-ins/RegExp/S15.10.3.1_A1_T3.js  # The value of __instance.indicator is expected to be 1 Expected SameValue(«undefined», «1») to be tru
+built-ins/RegExp/S15.10.3.1_A1_T4.js  # The value of __instance.indicator is expected to be 1 Expected SameValue(«undefined», «1») to be tru
+built-ins/RegExp/S15.10.3.1_A1_T5.js  # The value of __instance.indicator is expected to be 1 Expected SameValue(«undefined», «1») to be tru
+built-ins/RegExp/S15.10.3.1_A3_T2.js  # The value of __instance.source is expected to be "[a-c]*" Expected SameValue(«"[object Object]"», «"
+built-ins/RegExp/S15.10.4.1_A8_T12.js  # The value of e is expected to be "invalof" Expected SameValue(«SyntaxError: RegExp flags must be a s
+built-ins/RegExp/S15.10.4.1_A8_T13.js  # The value of e is expected to be "intostr" Expected SameValue(«SyntaxError: RegExp flags must be a s
+built-ins/RegExp/S15.10.4.1_A8_T4.js  # SyntaxError: RegExp flags must be a string of flag characters (e.g. "g", "gi"), not object.
+built-ins/RegExp/S15.10.4.1_A8_T6.js  # The value of e is expected to be "intostr" Expected SameValue(«Test262Error: #1.1: new RegExp({toStr
+built-ins/RegExp/S15.10.4.1_A8_T7.js  # The value of e is expected to be "invalof" Expected SameValue(«Test262Error: #1.1: new RegExp({toStr
+built-ins/RegExp/S15.10.4.1_A8_T8.js  # The value of e is expected to be "intostr" Expected SameValue(«SyntaxError: new RegExp(...) received
+built-ins/RegExp/named-groups/unicode-match.js  # Actual object and expected object should have the same contents. 
+built-ins/RegExp/prototype/exec/S15.10.6.2_A1_T12.js  # The result of evaluating (__executed instanceof Array) is expected to be true Expected SameValue(«fa
+built-ins/RegExp/prototype/exec/S15.10.6.2_A1_T15.js  # The result of evaluating (__executed instanceof Array) is expected to be true Expected SameValue(«fa
+built-ins/RegExp/prototype/exec/S15.10.6.2_A1_T4.js  # The result of evaluating (__executed instanceof Array) is expected to be true Expected SameValue(«fa
+built-ins/RegExp/prototype/exec/S15.10.6.2_A1_T5.js  # The value of __executed.input is expected to equal the value of __expected.input Expected SameValue(
+built-ins/RegExp/prototype/exec/S15.10.6.2_A1_T7.js  # The value of e is expected to be "intostr" Expected SameValue(«Test262Error: #1.1: /[a-z]/.exec({toS
+built-ins/RegExp/prototype/exec/S15.10.6.2_A1_T8.js  # The value of e is expected to be "invalof" Expected SameValue(«Test262Error: #1.1: /[a-z]/.exec({toS
+built-ins/RegExp/prototype/exec/S15.10.6.2_A4_T10.js  # The value of __executed.index is expected to equal the value of __expected.index Expected SameValue(
+built-ins/RegExp/prototype/exec/S15.10.6.2_A4_T11.js  # The value of e is expected to be "intoint" Expected SameValue(«Test262Error: #5.1: __obj = {valueOf:
+built-ins/RegExp/prototype/exec/S15.10.6.2_A4_T12.js  # The value of __executed.index is expected to equal the value of __expected.index Expected SameValue(
+built-ins/RegExp/prototype/exec/failure-g-lastindex-reset.js  # Expected SameValue(«["a"]», «null») to be true
+built-ins/RegExp/prototype/exec/failure-lastindex-access.js  # Expected SameValue(«NaN», «object») to be true
+built-ins/RegExp/prototype/exec/success-g-lastindex-no-access.js  # Expected SameValue(«0», «1») to be true
+built-ins/RegExp/prototype/exec/success-lastindex-access.js  # Expected SameValue(«NaN», «object») to be true
+built-ins/RegExp/prototype/test/S15.10.6.3_A1_T7.js  # The value of e is expected to be "intostr" Expected SameValue(«Test262Error: #1.1: /[a-z]/.test({toS
+built-ins/RegExp/prototype/test/S15.10.6.3_A1_T8.js  # The value of e is expected to be "invalof" Expected SameValue(«Test262Error: #1.1: /[a-z]/.test({toS
+built-ins/Set/prototype/difference/size-is-a-number.js  # TypeError: BigInt literals are not supported.
+built-ins/Set/prototype/forEach/this-arg-explicit.js  # `this` is `thisArg` Expected SameValue(«undefined», «object») to be true
+built-ins/Set/prototype/intersection/size-is-a-number.js  # TypeError: BigInt literals are not supported.
+built-ins/Set/prototype/isDisjointFrom/set-like-iter-return.js  # Expected SameValue(«4», «1») to be true
+built-ins/Set/prototype/isDisjointFrom/size-is-a-number.js  # TypeError: BigInt literals are not supported.
+built-ins/Set/prototype/isSubsetOf/size-is-a-number.js  # TypeError: BigInt literals are not supported.
+built-ins/Set/prototype/isSupersetOf/set-like-iter-return.js  # Expected SameValue(«4», «1») to be true
+built-ins/Set/prototype/isSupersetOf/size-is-a-number.js  # TypeError: BigInt literals are not supported.
+built-ins/Set/prototype/keys/keys.js  # The value of `Set.prototype.keys` is `Set.prototype.values` Expected SameValue(«keys», «values») to 
+built-ins/Set/prototype/symmetricDifference/size-is-a-number.js  # TypeError: BigInt literals are not supported.
+built-ins/Set/prototype/union/size-is-a-number.js  # TypeError: BigInt literals are not supported.
+built-ins/Set/set-iterable-calls-add.js  # `Set.prototype.add` called twice. Expected SameValue(«0», «2») to be true
+built-ins/Set/set-iterable-throws-when-add-is-not-callable.js  # Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/Set/set-iterator-close-after-add-failure.js  # TimeoutExceeded: Execution timed out after 5000ms.
+built-ins/Set/set-iterator-next-failure.js  # Expected a MyError but got a TypeError
+built-ins/String/S15.5.1.1_A1_T9.js  # #2: toString=function(){return "__THIS__";}; __str = String(this); __str === "__THIS__". Actual: __s
+built-ins/String/fromCharCode/S9.7_A3.1_T4.js  # #1: var object = {valueOf: function() {return 1}}; String.fromCharCode(object).charCodeAt(0) === 1. 
+built-ins/String/fromCharCode/touint16-tonumber-throws-valueof.js  # ToNumber throws when its argument's ToPrimitive step calls a throwing valueOf, and String.fromCharCo
+built-ins/String/fromCodePoint/to-number-conversions.js  # RangeError: Arguments contain a value that is out of range of code points
+built-ins/String/prototype/S15.5.4_A1.js  # #1: delete String.prototype.toString; String.prototype.toString() === "[object "+"String"+"]". Actua
+built-ins/String/prototype/S15.5.4_A2.js  # #1: String.prototype =="". Actual: String.prototype ==[object Object]
+built-ins/String/prototype/S15.5.4_A3.js  # #2: delete String.prototype.toString; String.prototype.toString() == "[object "+"String"+"]". Actual
+built-ins/String/prototype/Symbol.iterator/this-val-to-str-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+built-ins/String/prototype/at/index-argument-tointeger.js  # TypeError: String.at expects argument 1 to be a data value.
+built-ins/String/prototype/at/index-non-numeric-argument-tointeger.js  # TypeError: String.at expects argument 1 to be a data value.
+built-ins/String/prototype/charAt/S15.5.4.4_A1_T10.js  # TypeError: String.charAt expects argument 1 to be a data value.
+built-ins/String/prototype/charAt/S15.5.4.4_A2.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/String/prototype/charAt/S15.5.4.4_A5.js  # #1.1: Exception === '…'. Actual: exception ===[object Error]
+built-ins/String/prototype/charAt/pos-coerce-err.js  # Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/String/prototype/charCodeAt/S15.5.4.5_A1_T10.js  # TypeError: String.charCodeAt expects argument 1 to be a data value.
+built-ins/String/prototype/charCodeAt/S15.5.4.5_A2.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/String/prototype/charCodeAt/S15.5.4.5_A4.js  # #1.1: Exception === '…'. Actual: exception ===[object Error]
+built-ins/String/prototype/charCodeAt/pos-coerce-err.js  # Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/String/prototype/codePointAt/return-abrupt-from-object-pos-to-integer.js  # Expected a Test262Error but got a TypeError
+built-ins/String/prototype/codePointAt/return-abrupt-from-this.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+built-ins/String/prototype/concat/S15.5.4.6_A1_T10.js  # TypeError: String.concat expects argument 1 to be a data value.
+built-ins/String/prototype/concat/S15.5.4.6_A4_T1.js  # #1: var x; __instance = {toString:function(){return "one"}}; __instance.concat = String.prototype.co
+built-ins/String/prototype/concat/S15.5.4.6_A4_T2.js  # #1: e === "intostring". Actual: TypeError: String.concat expects argument 1 to be a data value.
+built-ins/String/prototype/constructor/S15.5.4.1_A1_T2.js  # TypeError: new __constr(...) is not supported; call __constr(...) without new instead.
+built-ins/String/prototype/endsWith/return-abrupt-from-position.js  # Expected a Test262Error but got a TypeError
+built-ins/String/prototype/endsWith/return-abrupt-from-searchstring.js  # Expected a Test262Error but got a TypeError
+built-ins/String/prototype/endsWith/return-abrupt-from-this.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+built-ins/String/prototype/includes/return-abrupt-from-position.js  # Expected a Test262Error but got a TypeError
+built-ins/String/prototype/includes/return-abrupt-from-searchstring.js  # Expected a Test262Error but got a TypeError
+built-ins/String/prototype/includes/return-abrupt-from-this.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+built-ins/String/prototype/indexOf/S15.5.4.7_A1_T10.js  # TypeError: String.indexOf expects argument 1 to be a data value.
+built-ins/String/prototype/indexOf/S15.5.4.7_A4_T1.js  # #1.1: Exception === "intointeger". Actual: TypeError: String.indexOf expects argument 1 to be a data
+built-ins/String/prototype/indexOf/S15.5.4.7_A4_T3.js  # TypeError: String.indexOf expects argument 1 to be a data value.
+built-ins/String/prototype/isWellFormed/to-string.js  # coerces the receiver to a string Expected a Test262Error to be thrown but no exception was thrown at
+built-ins/String/prototype/lastIndexOf/S15.5.4.8_A1_T10.js  # TypeError: String.lastIndexOf expects argument 1 to be a data value.
+built-ins/String/prototype/lastIndexOf/S15.5.4.8_A4_T1.js  # #1.1: Exception === "intointeger". Actual: TypeError: String.lastIndexOf expects argument 1 to be a 
+built-ins/String/prototype/lastIndexOf/S15.5.4.8_A4_T3.js  # TypeError: String.lastIndexOf expects argument 1 to be a data value.
+built-ins/String/prototype/match/S15.5.4.10_A1_T10.js  # TypeError: Cannot read properties of null (reading '…').
+built-ins/String/prototype/match/S15.5.4.10_A1_T11.js  # #1.1: Exception === "intostr". Actual: [object Error]
+built-ins/String/prototype/match/S15.5.4.10_A1_T13.js  # TypeError: Cannot read properties of null (reading '…').
+built-ins/String/prototype/normalize/return-abrupt-from-form.js  # Expected a Test262Error but got a TypeError
+built-ins/String/prototype/normalize/return-abrupt-from-this.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+built-ins/String/prototype/normalize/return-normalized-string-from-coerced-form.js  # TypeError: String.normalize expects argument 1 to be a data value.
+built-ins/String/prototype/padEnd/exception-not-object-coercible.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+built-ins/String/prototype/padEnd/observable-operations.js  # TypeError: String.padEnd expects argument 1 to be a data value.
+built-ins/String/prototype/padStart/exception-not-object-coercible.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+built-ins/String/prototype/padStart/observable-operations.js  # TypeError: String.padStart expects argument 1 to be a data value.
+built-ins/String/prototype/repeat/count-coerced-to-zero-returns-empty-string.js  # RangeError: String.repeat expects a finite non-negative count.
+built-ins/String/prototype/repeat/return-abrupt-from-count.js  # Expected a Test262Error but got a TypeError
+built-ins/String/prototype/repeat/return-abrupt-from-this.js  # Expected a Test262Error but got a RangeError
+built-ins/String/prototype/replace/S15.5.4.11_A1_T10.js  # TypeError: String.replace expects argument 1 to be a data value.
+built-ins/String/prototype/replace/S15.5.4.11_A1_T11.js  # #1.1: Exception === "insearchValue". Actual: TypeError: String.replace expects argument 1 to be a da
+built-ins/String/prototype/replace/S15.5.4.11_A1_T13.js  # #1.1: Exception === "inreplaceValue". Actual: TypeError: String.replace expects argument 1 to be a d
+built-ins/String/prototype/replace/replaceValue-evaluation-order-regexp-object.js  # Expected SameValue(«0», «1») to be true
+built-ins/String/prototype/replace/replaceValue-evaluation-order.js  # TypeError: String.replace expects argument 2 to be a data value.
+built-ins/String/prototype/replace/tostring-this-throws-toprimitive.js  # String.prototype.replace should throw a TypeError in its ToPrimitive step. Expected a TypeError to b
+built-ins/String/prototype/search/S15.5.4.12_A1_T10.js  # #1: var __obj = {toString:function(){return "AB";}}; var __str = "ssABBABABAB"; __str.search(__obj) 
+built-ins/String/prototype/search/S15.5.4.12_A1_T11.js  # #1.1: Exception === "intostr". Actual: [object Error]
+built-ins/String/prototype/search/S15.5.4.12_A1_T13.js  # #1: var __obj = {toString:function(){return {};},valueOf:function(){return 1;}}; "ABB\u0041B\u0031AB
+built-ins/String/prototype/slice/S15.5.4.13_A1_T10.js  # TypeError: String.slice expects argument 1 to be a data value.
+built-ins/String/prototype/slice/S15.5.4.13_A1_T11.js  # #1.1: Exception === "instart". Actual: TypeError: String.slice expects argument 1 to be a data value
+built-ins/String/prototype/slice/S15.5.4.13_A1_T13.js  # #1.1: Exception === "inend". Actual: TypeError: String.slice expects argument 1 to be a data value.
+built-ins/String/prototype/slice/S15.5.4.13_A3_T3.js  # #1: __instance = function(){}; __instance.slice = String.prototype.slice; __instance.slice(-Infinity
+built-ins/String/prototype/slice/S15.5.4.13_A3_T4.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/String/prototype/slice/this-value-tostring-throws-toprimitive.js  # String.prototype.slice throws in its toprimitive step. Expected a TypeError to be thrown but no exce
+built-ins/String/prototype/split/instance-is-function.js  # __split[0].substring(0, 8) must return "function" Expected SameValue(«"[object "», «"function"») to 
+built-ins/String/prototype/split/instance-is-math.js  # The value of __split[0] is "[object Math]" Expected SameValue(«"[object Object]"», «"[object Math]"»
+built-ins/String/prototype/split/separator-override-tostring-limit-override-valueof-throws.js  # The value of `e` is "intointeger" Expected SameValue(«TypeError: String.split expects argument 2 to 
+built-ins/String/prototype/split/separator-override-tostring-limit-override-valueof-tostring.js  # TypeError: String.split expects argument 2 to be a data value.
+built-ins/String/prototype/split/separator-override-tostring-limit-override-valueof.js  # TypeError: String.split expects argument 2 to be a data value.
+built-ins/String/prototype/split/separator-tostring-error.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/String/prototype/split/separator-undef-limit-custom.js  # TypeError: String.split expects argument 2 to be a data value.
+built-ins/String/prototype/split/separator-undef-limit-zero.js  # TypeError: String.split expects argument 2 to be a data value.
+built-ins/String/prototype/split/transferred-to-custom.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/String/prototype/split/valueOf-is-called-for-limit-argument.js  # Expected a Test262Error but got a TypeError
+built-ins/String/prototype/startsWith/return-abrupt-from-position.js  # Expected a Test262Error but got a TypeError
+built-ins/String/prototype/startsWith/return-abrupt-from-searchstring.js  # Expected a Test262Error but got a TypeError
+built-ins/String/prototype/startsWith/return-abrupt-from-this.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+built-ins/String/prototype/substring/S15.5.4.15_A1_T10.js  # TypeError: String.substring expects argument 1 to be a data value.
+built-ins/String/prototype/substring/S15.5.4.15_A1_T11.js  # #1.1: Exception === "instart". Actual: TypeError: String.substring expects argument 1 to be a data v
+built-ins/String/prototype/substring/S15.5.4.15_A1_T13.js  # #1.1: Exception === "inend". Actual: TypeError: String.substring expects argument 1 to be a data val
+built-ins/String/prototype/substring/S15.5.4.15_A3_T10.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/String/prototype/substring/S15.5.4.15_A3_T7.js  # #1: __instance = function(){}; __instance.substring = String.prototype.substring;  __instance.substr
+built-ins/String/prototype/substring/this-value-tostring-throws-toprimitive.js  # String.prototype.substring throws in its toprimitive step. Expected a TypeError to be thrown but no 
+built-ins/String/prototype/toLocaleLowerCase/S15.5.4.17_A1_T10.js  # #1: var __obj = {toString:function(){return "AB";}}; __obj.toLocaleLowerCase = String.prototype.toLo
+built-ins/String/prototype/toLocaleLowerCase/S15.5.4.17_A1_T11.js  # #1.1: Exception === "intostr". Actual: [object Error]
+built-ins/String/prototype/toLocaleLowerCase/S15.5.4.17_A1_T12.js  # #1.1: Exception === "intostr". Actual: [object Error]
+built-ins/String/prototype/toLocaleLowerCase/S15.5.4.17_A1_T13.js  # #1: var __obj = {toString:function(){return {};},valueOf:function(){return 1;}}; __obj.toLocaleLower
+built-ins/String/prototype/toLocaleUpperCase/S15.5.4.19_A1_T10.js  # #1: var __obj = {toString:function(){return "Ab";}}; __obj.toLocaleUpperCase = String.prototype.toLo
+built-ins/String/prototype/toLocaleUpperCase/S15.5.4.19_A1_T11.js  # #1.1: Exception === "intostr". Actual: [object Error]
+built-ins/String/prototype/toLocaleUpperCase/S15.5.4.19_A1_T12.js  # #1.1: Exception === "intostr". Actual: [object Error]
+built-ins/String/prototype/toLocaleUpperCase/S15.5.4.19_A1_T13.js  # #1: var __obj = {toString:function(){return {};},valueOf:function(){return 1;}}; __obj.toLocaleUpper
+built-ins/String/prototype/toLowerCase/S15.5.4.16_A1_T10.js  # #1: var __obj = {toString:function(){return "AB";}}; __obj.toLowerCase = String.prototype.toLowerCas
+built-ins/String/prototype/toLowerCase/S15.5.4.16_A1_T11.js  # #1.1: Exception === "intostr". Actual: [object Error]
+built-ins/String/prototype/toLowerCase/S15.5.4.16_A1_T12.js  # #1.1: Exception === "intostr". Actual: [object Error]
+built-ins/String/prototype/toLowerCase/S15.5.4.16_A1_T13.js  # #1: var __obj = {toString:function(){return {};},valueOf:function(){return 1;}}; __obj.toLowerCase =
+built-ins/String/prototype/toLowerCase/this-value-tostring-throws-toprimitive.js  # String.prototype.toLowerCase throws in its toprimitive step. Expected a TypeError to be thrown but n
+built-ins/String/prototype/toUpperCase/S15.5.4.18_A1_T10.js  # #1: var __obj = {toString:function(){return "Ab";}}; __obj.toUpperCase = String.prototype.toUpperCas
+built-ins/String/prototype/toUpperCase/S15.5.4.18_A1_T11.js  # #1.1: Exception === "intostr". Actual: [object Error]
+built-ins/String/prototype/toUpperCase/S15.5.4.18_A1_T12.js  # #1.1: Exception === "intostr". Actual: [object Error]
+built-ins/String/prototype/toUpperCase/S15.5.4.18_A1_T13.js  # #1: var __obj = {toString:function(){return {};},valueOf:function(){return 1;}}; __obj.toUpperCase =
+built-ins/String/prototype/toWellFormed/to-string.js  # coerces the receiver to a string Expected a Test262Error to be thrown but no exception was thrown at
+built-ins/String/prototype/trim/15.5.4.20-2-38.js  # String.prototype.trim.call(obj) Expected SameValue(«"[object Object]"», «"abc"») to be true
+built-ins/String/prototype/trim/15.5.4.20-2-40.js  # String.prototype.trim.call(obj) Expected SameValue(«"[object Object]"», «"abc"») to be true
+built-ins/String/prototype/trim/15.5.4.20-2-41.js  # String.prototype.trim.call(obj) Expected SameValue(«"[object Object]"», «"abc"») to be true
+built-ins/String/prototype/trim/15.5.4.20-2-42.js  # Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/String/prototype/trim/15.5.4.20-2-43.js  # TypeError: Con cannot be constructed: user-defined constructors and classes are not supported. Call 
+built-ins/decodeURI/S15.1.3.1_A1.10_T1.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURI/S15.1.3.1_A1.11_T1.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURI/S15.1.3.1_A1.11_T2.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURI/S15.1.3.1_A1.12_T1.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURI/S15.1.3.1_A1.12_T2.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURI/S15.1.3.1_A1.12_T3.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURI/S15.1.3.1_A1.2_T1.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURI/S15.1.3.1_A1.2_T2.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURI/S15.1.3.1_A5.5.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/decodeURI/S15.1.3.1_A6_T1.js  # #2: var object = {valueOf: function() {return ""}, toString: function() {return "%5E"}}; decodeURI(o
+built-ins/decodeURIComponent/S15.1.3.2_A1.10_T1.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURIComponent/S15.1.3.2_A1.11_T1.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURIComponent/S15.1.3.2_A1.11_T2.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURIComponent/S15.1.3.2_A1.12_T1.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURIComponent/S15.1.3.2_A1.12_T2.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURIComponent/S15.1.3.2_A1.12_T3.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURIComponent/S15.1.3.2_A1.2_T1.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURIComponent/S15.1.3.2_A1.2_T2.js  # Execution exceeded the maximum nesting depth.
+built-ins/decodeURIComponent/S15.1.3.2_A5.5.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/decodeURIComponent/S15.1.3.2_A6_T1.js  # #2: var object = {valueOf: function() {return ""}, toString: function() {return "%5E"}}; decodeURICo
+built-ins/encodeURI/S15.1.3.3_A5.5.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/encodeURI/S15.1.3.3_A6_T1.js  # #2: var object = {valueOf: function() {return ""}, toString: function() {return "^"}}; encodeURI(obj
+built-ins/encodeURIComponent/S15.1.3.4_A5.5.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/encodeURIComponent/S15.1.3.4_A6_T1.js  # #2: var object = {valueOf: function() {return ""}, toString: function() {return "^"}}; encodeURIComp
+built-ins/global/10.2.1.1.3-4-22.js  # TypeError: Cannot assign to constant '…'.
+built-ins/global/10.2.1.1.3-4-27.js  # TypeError: Cannot assign to constant '…'.
+built-ins/parseFloat/S15.1.2.3_A7.5.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/parseInt/S15.1.2.2_A9.5.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/undefined/15.1.1.3-2.js  # TypeError: Cannot read properties of undefined (reading '…').
 language/arguments-object/10.6-13-c-1-s.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/arguments-object/10.6-14-c-4-s.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/arguments-object/10.6-2gs.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/arguments-object/S10.6_A3_T1.js  # #1: arguments object doesn't exists
+language/comments/S7.4_A1_T1.js  # TypeError: Cannot read properties of undefined (reading '…').
+language/comments/S7.4_A2_T1.js  # TypeError: Cannot read properties of undefined (reading '…').
+language/expressions/addition/S11.6.1_A2.2_T3.js  # TypeError: Binary operators require data values.
+language/expressions/addition/S11.6.1_A3.2_T1.2.js  # TypeError: Binary operators require data values.
+language/expressions/arrow-function/ArrowFunction_restricted-properties.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/arrow-function/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/arrow-function/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
+language/expressions/arrow-function/dstr/dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/arrow-function/dstr/dflt-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
+language/expressions/arrow-function/lexical-this.js  # TypeError: F cannot be constructed: user-defined constructors and classes are not supported. Call it
+language/expressions/assignment/dstr/array-elem-iter-rtrn-close-err.js  # TypeError: Iterator next must be a function.
+language/expressions/assignment/dstr/array-elem-iter-thrw-close-err.js  # Expected SameValue(«1», «0») to be true
+language/expressions/assignment/dstr/array-elem-iter-thrw-close.js  # Expected SameValue(«1», «0») to be true
+language/expressions/assignment/dstr/array-elem-trlg-iter-list-thrw-close-err.js  # Expected SameValue(«1», «0») to be true
+language/expressions/assignment/dstr/array-elem-trlg-iter-list-thrw-close.js  # Expected SameValue(«1», «0») to be true
+language/expressions/assignment/dstr/array-elem-trlg-iter-rest-rtrn-close-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
+language/expressions/assignment/dstr/array-elem-trlg-iter-rest-rtrn-close-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/assignment/dstr/array-elem-trlg-iter-rest-rtrn-close.js  # Expected SameValue(«11», «1») to be true
+language/expressions/assignment/dstr/array-elem-trlg-iter-rest-thrw-close-err.js  # Expected SameValue(«11», «1») to be true
+language/expressions/assignment/dstr/array-elem-trlg-iter-rest-thrw-close.js  # Expected SameValue(«11», «1») to be true
+language/expressions/assignment/dstr/array-rest-iter-rtrn-close-err.js  # TypeError: Iterator next must be a function.
+language/expressions/assignment/dstr/array-rest-iter-rtrn-close-null.js  # TypeError: Iterator next must be a function.
+language/expressions/assignment/dstr/array-rest-iter-rtrn-close.js  # Test262Error
+language/expressions/assignment/dstr/array-rest-iter-thrw-close-err.js  # Expected SameValue(«11», «0») to be true
+language/expressions/assignment/dstr/array-rest-iter-thrw-close.js  # Expected SameValue(«11», «0») to be true
+language/expressions/assignment/dstr/array-rest-lref-err.js  # Expected SameValue(«1», «0») to be true
+language/expressions/assignment/target-member-computed-reference-null.js  # Expected a DummyError but got a TypeError
+language/expressions/assignment/target-member-computed-reference-undefined.js  # Expected a DummyError but got a TypeError
+language/expressions/assignment/target-member-computed-reference.js  # Expected a DummyError but got a TypeError
+language/expressions/assignment/target-member-identifier-reference-null.js  # Expected SameValue(«0», «1») to be true
+language/expressions/assignment/target-member-identifier-reference-undefined.js  # Expected SameValue(«0», «1») to be true
+language/expressions/assignmenttargettype/simple-basic-identifierreference-await.js  # Unexpected token (12:6)
+language/expressions/async-generator/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
+language/expressions/async-generator/dstr/dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/dflt-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
+language/expressions/async-generator/dstr/named-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
+language/expressions/async-generator/dstr/named-dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/async-generator/dstr/named-dflt-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
+language/expressions/await/await-in-global.js  # Unexpected token (13:22)
+language/expressions/await/await-in-nested-function.js  # Unexpected token (21:22)
+language/expressions/await/await-in-nested-generator.js  # Unexpected token (22:22)
+language/expressions/bitwise-and/S11.10.1_A3_T1.5.js  # TypeError: Binary operators require data values.
+language/expressions/bitwise-not/S11.4.8_A3_T5.js  # TypeError: Unary operators require data values.
+language/expressions/bitwise-or/S11.10.3_A3_T1.5.js  # TypeError: Binary operators require data values.
+language/expressions/bitwise-xor/S11.10.2_A3_T1.5.js  # TypeError: Binary operators require data values.
+language/expressions/compound-assignment/S11.13.2_A7.10_T1.js  # Expected a DummyError but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.10_T2.js  # Expected a DummyError but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.10_T3.js  # Expected a DummyError but got a Test262Error
+language/expressions/compound-assignment/S11.13.2_A7.11_T1.js  # Expected a DummyError but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.11_T2.js  # Expected a DummyError but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.11_T3.js  # Expected a DummyError but got a Test262Error
+language/expressions/compound-assignment/S11.13.2_A7.1_T1.js  # Expected a DummyError but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.1_T2.js  # Expected a DummyError but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.1_T3.js  # Expected a DummyError but got a Test262Error
+language/expressions/compound-assignment/S11.13.2_A7.2_T1.js  # Expected a DummyError but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.2_T2.js  # Expected a DummyError but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.2_T3.js  # Expected a DummyError but got a Test262Error
+language/expressions/compound-assignment/S11.13.2_A7.3_T1.js  # Expected a DummyError but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.3_T2.js  # Expected a DummyError but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.3_T3.js  # Expected a DummyError but got a Test262Error
+language/expressions/compound-assignment/S11.13.2_A7.4_T1.js  # Expected a DummyError but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.4_T2.js  # Expected a DummyError but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.4_T3.js  # Expected a DummyError but got a Test262Error
+language/expressions/compound-assignment/S11.13.2_A7.5_T1.js  # Expected a DummyError but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.5_T2.js  # Expected a DummyError but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.5_T3.js  # Expected a DummyError but got a Test262Error
+language/expressions/compound-assignment/S11.13.2_A7.6_T1.js  # Expected a DummyError but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.6_T2.js  # Expected a DummyError but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.6_T3.js  # Expected a DummyError but got a Test262Error
+language/expressions/compound-assignment/S11.13.2_A7.7_T1.js  # Expected a DummyError but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.7_T2.js  # Expected a DummyError but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.7_T3.js  # Expected a DummyError but got a Test262Error
+language/expressions/compound-assignment/S11.13.2_A7.8_T1.js  # Expected a DummyError but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.8_T2.js  # Expected a DummyError but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.8_T3.js  # Expected a DummyError but got a Test262Error
+language/expressions/compound-assignment/S11.13.2_A7.9_T1.js  # Expected a DummyError but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.9_T2.js  # Expected a DummyError but got a TypeError
+language/expressions/compound-assignment/S11.13.2_A7.9_T3.js  # Expected a DummyError but got a Test262Error
+language/expressions/delete/S11.4.1_A2.2_T2.js  # TypeError: MyFunction cannot be constructed: user-defined constructors and classes are not supported
+language/expressions/delete/S11.4.1_A2.2_T3.js  # TypeError: Cannot read properties of undefined (reading '…').
+language/expressions/delete/S11.4.1_A3.2_T3.js  # TypeError: MyFunction cannot be constructed: user-defined constructors and classes are not supported
+language/expressions/delete/S11.4.1_A3.3_T3.js  # TypeError: MyFunction cannot be constructed: user-defined constructors and classes are not supported
+language/expressions/delete/S8.12.7_A2_T2.js  # TypeError: Palette cannot be constructed: user-defined constructors and classes are not supported. C
+language/expressions/delete/non-reference-return-true.js  # TypeError: Only data fields may be deleted.
+language/expressions/delete/super-property-topropertykey.js  # Expected a ReferenceError but got a SyntaxError
+language/expressions/division/S11.5.2_A3_T1.5.js  # TypeError: Binary operators require data values.
+language/expressions/function/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/function/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
+language/expressions/function/dstr/dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/function/dstr/dflt-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
+language/expressions/generators/default-proto.js  # Expected SameValue(«object», «undefined») to be true
+language/expressions/generators/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
+language/expressions/generators/dstr/dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/generators/dstr/dflt-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
+language/expressions/generators/prototype-relation-to-function.js  # Expected SameValue(«object», «») to be true
+language/expressions/greater-than-or-equal/S11.8.4_A3.2_T1.2.js  # TypeError: Binary operators require data values.
+language/expressions/greater-than/S11.8.2_A3.2_T1.2.js  # TypeError: Binary operators require data values.
+language/expressions/in/S8.12.6_A2_T2.js  # TypeError: Robin cannot be constructed: user-defined constructors and classes are not supported. Cal
+language/expressions/left-shift/S11.7.1_A3_T1.5.js  # TypeError: Binary operators require data values.
+language/expressions/less-than-or-equal/S11.8.3_A3.2_T1.2.js  # TypeError: Binary operators require data values.
+language/expressions/less-than/S11.8.1_A3.2_T1.2.js  # TypeError: Binary operators require data values.
+language/expressions/logical-assignment/lgcl-and-assignment-operator-lhs-before-rhs.js  # Expected a DummyError but got a TypeError
+language/expressions/logical-assignment/lgcl-nullish-assignment-operator-lhs-before-rhs.js  # Expected a DummyError but got a TypeError
+language/expressions/logical-assignment/lgcl-or-assignment-operator-lhs-before-rhs.js  # Expected a DummyError but got a TypeError
+language/expressions/modulus/S11.5.3_A3_T1.5.js  # TypeError: Binary operators require data values.
+language/expressions/multiplication/S11.5.1_A3_T1.5.js  # TypeError: Binary operators require data values.
+language/expressions/new/ctorExpr-fn-ref-before-args-eval-fn-wrapup.js  # TypeError: x cannot be constructed: user-defined constructors and classes are not supported. Call it
+language/expressions/new/ctorExpr-fn-ref-before-args-eval.js  # TypeError: x cannot be constructed: user-defined constructors and classes are not supported. Call it
+language/expressions/new/ctorExpr-isCtor-after-args-eval-fn-wrapup.js  # arguments evaluated before checking valid ctor Expected SameValue(«undefined», «39») to be true
+language/expressions/new/ctorExpr-isCtor-after-args-eval.js  # Expected SameValue(«object», «Array») to be true
+language/expressions/new/spread-err-mult-err-expr-throws.js  # Expected a Test262Error but got a TypeError
+language/expressions/new/spread-err-mult-err-itr-get-call.js  # Expected a Test262Error but got a TypeError
+language/expressions/new/spread-err-mult-err-itr-step.js  # Expected a Test262Error but got a TypeError
+language/expressions/new/spread-err-mult-err-obj-unresolvable.js  # Expected a ReferenceError but got a TypeError
+language/expressions/new/spread-err-mult-err-unresolvable.js  # Expected a ReferenceError but got a TypeError
+language/expressions/new/spread-err-sngl-err-expr-throws.js  # Expected a Test262Error but got a TypeError
+language/expressions/new/spread-err-sngl-err-itr-get-call.js  # Expected a Test262Error but got a TypeError
+language/expressions/new/spread-err-sngl-err-itr-step.js  # Expected a Test262Error but got a TypeError
+language/expressions/new/spread-err-sngl-err-obj-unresolvable.js  # Expected a ReferenceError but got a TypeError
+language/expressions/new/spread-err-sngl-err-unresolvable.js  # Expected a ReferenceError but got a TypeError
+language/expressions/new/spread-mult-empty.js  # TypeError: The called value cannot be constructed: user-defined constructors and classes are not sup
+language/expressions/new/spread-mult-expr.js  # TypeError: The called value cannot be constructed: user-defined constructors and classes are not sup
+language/expressions/new/spread-mult-iter.js  # TypeError: The called value cannot be constructed: user-defined constructors and classes are not sup
+language/expressions/new/spread-mult-literal.js  # TypeError: The called value cannot be constructed: user-defined constructors and classes are not sup
+language/expressions/new/spread-mult-obj-null.js  # TypeError: The called value cannot be constructed: user-defined constructors and classes are not sup
+language/expressions/new/spread-mult-obj-undefined.js  # TypeError: The called value cannot be constructed: user-defined constructors and classes are not sup
+language/expressions/new/spread-obj-mult-spread.js  # TypeError: The called value cannot be constructed: user-defined constructors and classes are not sup
+language/expressions/new/spread-obj-null.js  # TypeError: The called value cannot be constructed: user-defined constructors and classes are not sup
+language/expressions/new/spread-obj-overrides-prev-properties.js  # TypeError: The called value cannot be constructed: user-defined constructors and classes are not sup
+language/expressions/new/spread-obj-undefined.js  # TypeError: The called value cannot be constructed: user-defined constructors and classes are not sup
+language/expressions/new/spread-sngl-empty.js  # TypeError: The called value cannot be constructed: user-defined constructors and classes are not sup
+language/expressions/new/spread-sngl-expr.js  # TypeError: The called value cannot be constructed: user-defined constructors and classes are not sup
+language/expressions/new/spread-sngl-iter.js  # TypeError: The called value cannot be constructed: user-defined constructors and classes are not sup
+language/expressions/new/spread-sngl-literal.js  # TypeError: The called value cannot be constructed: user-defined constructors and classes are not sup
+language/expressions/object/__proto__-duplicate-computed.js  # prototype is defined Expected SameValue(«object», «object») to be true
+language/expressions/object/accessor-name-literal-string-line-continuation.js  # TypeError: Only init object properties are supported.
+language/expressions/object/computed-property-name-topropertykey-before-value-evaluation.js  # Expected SameValue(«undefined», «"ok"») to be true
+language/expressions/object/dstr/async-gen-meth-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
+language/expressions/object/dstr/async-gen-meth-dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/async-gen-meth-dflt-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
+language/expressions/object/dstr/gen-meth-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
+language/expressions/object/dstr/gen-meth-dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/gen-meth-dflt-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
+language/expressions/object/dstr/meth-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/meth-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
+language/expressions/object/dstr/meth-dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
+language/expressions/object/dstr/meth-dflt-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
+language/expressions/object/method-definition/generator-super-prop-body.js  # unsupported syntax Super
+language/expressions/optional-chaining/optional-call-preserves-this.js  # TypeError: Cannot read properties of undefined (reading '…').
+language/expressions/postfix-decrement/S11.3.2_A2.1_T1.js  # TypeError: Cannot read properties of undefined (reading '…').
+language/expressions/postfix-decrement/S11.3.2_A3_T5.js  # TypeError: '…' requires a data value.
+language/expressions/postfix-decrement/S11.3.2_A4_T5.js  # TypeError: '…' requires a data value.
+language/expressions/postfix-decrement/S11.3.2_A6_T1.js  # Expected a DummyError but got a TypeError
+language/expressions/postfix-decrement/S11.3.2_A6_T2.js  # Expected a DummyError but got a TypeError
+language/expressions/postfix-increment/S11.3.1_A2.1_T1.js  # TypeError: Cannot read properties of undefined (reading '…').
+language/expressions/postfix-increment/S11.3.1_A3_T5.js  # TypeError: '…' requires a data value.
+language/expressions/postfix-increment/S11.3.1_A4_T5.js  # TypeError: '…' requires a data value.
+language/expressions/postfix-increment/S11.3.1_A6_T1.js  # Expected a DummyError but got a TypeError
+language/expressions/postfix-increment/S11.3.1_A6_T2.js  # Expected a DummyError but got a TypeError
+language/expressions/prefix-decrement/S11.4.5_A2.1_T1.js  # TypeError: Cannot read properties of undefined (reading '…').
+language/expressions/prefix-decrement/S11.4.5_A3_T5.js  # TypeError: '…' requires a data value.
+language/expressions/prefix-decrement/S11.4.5_A4_T5.js  # TypeError: '…' requires a data value.
+language/expressions/prefix-decrement/S11.4.5_A6_T1.js  # Expected a DummyError but got a TypeError
+language/expressions/prefix-decrement/S11.4.5_A6_T2.js  # Expected a DummyError but got a TypeError
+language/expressions/prefix-increment/S11.4.4_A2.1_T1.js  # TypeError: Cannot read properties of undefined (reading '…').
+language/expressions/prefix-increment/S11.4.4_A3_T5.js  # TypeError: '…' requires a data value.
+language/expressions/prefix-increment/S11.4.4_A4_T5.js  # TypeError: '…' requires a data value.
+language/expressions/prefix-increment/S11.4.4_A6_T1.js  # Expected a DummyError but got a TypeError
+language/expressions/prefix-increment/S11.4.4_A6_T2.js  # Expected a DummyError but got a TypeError
+language/expressions/property-accessors/S11.2.1_A4_T5.js  # #27: typeof String.prototype.length === "number". Actual: undefined
+language/expressions/property-accessors/S8.12.3_A1.js  # TypeError: Cannot read properties of undefined (reading '…').
+language/expressions/right-shift/S11.7.2_A3_T1.5.js  # TypeError: Binary operators require data values.
+language/expressions/subtraction/S11.6.2_A3_T1.5.js  # TypeError: Binary operators require data values.
+language/expressions/super/prop-dot-obj-ref-strict.js  # unsupported syntax Super
+language/expressions/super/prop-expr-obj-err.js  # unsupported syntax Super
+language/expressions/super/prop-expr-obj-key-err.js  # unsupported syntax Super
+language/expressions/super/prop-expr-obj-ref-strict.js  # unsupported syntax Super
+language/expressions/super/prop-expr-obj-unresolvable.js  # Expected SameValue(«SyntaxError», «ReferenceError») to be true
 language/expressions/tagged-template/constructor-invocation.js  # The called value cannot be constructed: user-defined constructors and classes are not supported.
 language/expressions/tagged-template/template-object-frozen-strict.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/expressions/this/11.1.1-1.js  # Expected SameValue(«undefined», «undefined») to be false
+language/expressions/unary-minus/S11.4.7_A3_T5.js  # TypeError: Unary operators require data values.
+language/expressions/unary-plus/S11.4.6_A3_T5.js  # TypeError: Unary operators require data values.
+language/expressions/unsigned-right-shift/S11.7.3_A3_T1.5.js  # TypeError: Binary operators require data values.
+language/expressions/yield/star-in-rltn-expr.js  # TypeError: yield* requires a compatible iterable value.
+language/expressions/yield/star-iterable.js  # First result `done` flag Expected SameValue(«false», «undefined») to be true
+language/function-code/10.4.3-1-21-s.js  # TypeError: f cannot be constructed: user-defined constructors and classes are not supported. Call it
+language/function-code/10.4.3-1-21gs.js  # TypeError: f cannot be constructed: user-defined constructors and classes are not supported. Call it
+language/function-code/10.4.3-1-23-s.js  # TypeError: f cannot be constructed: user-defined constructors and classes are not supported. Call it
+language/function-code/10.4.3-1-23gs.js  # TypeError: f cannot be constructed: user-defined constructors and classes are not supported. Call it
+language/function-code/10.4.3-1-25-s.js  # TypeError: The called value cannot be constructed: user-defined constructors and classes are not sup
+language/function-code/10.4.3-1-25gs.js  # TypeError: The called value cannot be constructed: user-defined constructors and classes are not sup
+language/global-code/decl-lex-restricted-global.js  # expected SyntaxError but completed
+language/global-code/return.js  # expected SyntaxError but the program ran
+language/identifier-resolution/S11.1.2_A1_T1.js  # TypeError: Cannot read properties of undefined (reading '…').
+language/identifier-resolution/S11.1.2_A1_T2.js  # #1.2: this.z; z === undefined throw ReferenceError. Actual: TypeError: Cannot read properties of und
+language/identifiers/part-unicode-17.0.0-escaped.js  # Invalid Unicode escape (17:5)
+language/identifiers/part-unicode-17.0.0.js  # Unexpected character '…' (15:5)
+language/identifiers/start-unicode-17.0.0-escaped.js  # Invalid Unicode escape (17:4)
+language/identifiers/start-unicode-17.0.0.js  # Unexpected character '…' (15:4)
+language/punctuators/S7.7_A1.js  # TypeError: Cannot read properties of undefined (reading '…').
 language/statements/async-generator/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/async-generator/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/statements/async-generator/dstr/dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
@@ -996,13 +1831,13 @@ language/statements/function/S13.2_A4_T2.js  # #1: typeof __gunc.prototype === '
 language/statements/function/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/function/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/statements/function/dstr/dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
-language/statements/generators/default-proto.js  # generator functions have no GeneratorFunction.prototype
 language/statements/function/dstr/dflt-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
+language/statements/generators/default-proto.js  # generator functions have no GeneratorFunction.prototype
 language/statements/generators/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/generators/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
 language/statements/generators/dstr/dflt-ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
-language/statements/generators/prototype-relation-to-function.js  # generator functions have no GeneratorFunction.prototype
 language/statements/generators/dstr/dflt-ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
+language/statements/generators/prototype-relation-to-function.js  # generator functions have no GeneratorFunction.prototype
 language/statements/generators/restricted-properties.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/labeled/value-await-non-module.js  # Failed to parse TypeScript: Expression expected.
 language/statements/let/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
@@ -1024,93 +1859,11 @@ language/statements/variable/S12.2_A11.js  # TypeError: Cannot read properties o
 language/statements/variable/S12.2_A9.js  # #1: When using property attributes, {DontEnum} not used
 language/statements/variable/dstr/ary-init-iter-get-err-array-prototype.js  # Expected a TypeError to be thrown but no exception was thrown at all
 language/statements/variable/dstr/ary-ptrn-elem-id-iter-val-array-prototype.js  # Expected SameValue(«3», «42») to be true
-built-ins/Array/prototype/entries/returns-iterator-from-object.js  # TypeError: Array.prototype.entries called on incompatible receiver a data object.
-built-ins/Array/prototype/keys/returns-iterator-from-object.js  # TypeError: Array.prototype.keys called on incompatible receiver a data object.
-built-ins/Array/prototype/toReversed/frozen-this-value.js  # TypeError: Array.prototype.toReversed called on incompatible receiver a data object.
-built-ins/Array/prototype/toSorted/frozen-this-value.js  # TypeError: Array.prototype.toSorted called on incompatible receiver a data object.
-built-ins/Array/prototype/toSpliced/frozen-this-value.js  # TypeError: Array.prototype.toSpliced called on incompatible receiver a data object.
-built-ins/Array/prototype/values/returns-iterator-from-object.js  # TypeError: Array.prototype.values called on incompatible receiver a data object.
-built-ins/Object/getPrototypeOf/15.2.3.2-2-30.js  # TypeError: Object.getPrototypeOf cannot convert undefined to an object.
-built-ins/Object/isExtensible/15.2.3.13-2-1.js  # Expected true but got false
-built-ins/Object/isExtensible/15.2.3.13-2-29.js  # Object.isExtensible(this) !== true
-built-ins/Object/isFrozen/15.2.3.12-3-1.js  # Expected true but got false
-built-ins/Object/isSealed/15.2.3.11-4-1.js  # Expected true but got false
-built-ins/Array/prototype/every/15.4.4.16-1-15.js  # TypeError: Array.prototype.every called on incompatible receiver an Arguments.
-built-ins/Array/prototype/every/15.4.4.16-7-c-i-25.js  # TypeError: Array.prototype.every called on incompatible receiver an Arguments.
-built-ins/Array/prototype/every/15.4.4.16-7-c-i-26.js  # TypeError: Array.prototype.every called on incompatible receiver an Arguments.
-built-ins/Array/prototype/every/15.4.4.16-7-c-i-27.js  # TypeError: Array.prototype.every called on incompatible receiver an Arguments.
-built-ins/Array/prototype/filter/15.4.4.20-1-15.js  # TypeError: Array.prototype.filter called on incompatible receiver an Arguments.
-built-ins/Array/prototype/filter/15.4.4.20-2-17.js  # TypeError: Array.prototype.filter called on incompatible receiver an Arguments.
-built-ins/Array/prototype/filter/15.4.4.20-9-c-i-25.js  # TypeError: Array.prototype.filter called on incompatible receiver an Arguments.
-built-ins/Array/prototype/filter/15.4.4.20-9-c-i-26.js  # TypeError: Array.prototype.filter called on incompatible receiver an Arguments.
-built-ins/Array/prototype/filter/15.4.4.20-9-c-i-27.js  # TypeError: Array.prototype.filter called on incompatible receiver an Arguments.
-built-ins/Array/prototype/forEach/15.4.4.18-1-15.js  # TypeError: Array.prototype.forEach called on incompatible receiver an Arguments.
-built-ins/Array/prototype/forEach/15.4.4.18-7-c-i-25.js  # TypeError: Array.prototype.forEach called on incompatible receiver an Arguments.
-built-ins/Array/prototype/forEach/15.4.4.18-7-c-i-26.js  # TypeError: Array.prototype.forEach called on incompatible receiver an Arguments.
-built-ins/Array/prototype/forEach/15.4.4.18-7-c-i-27.js  # TypeError: Array.prototype.forEach called on incompatible receiver an Arguments.
-built-ins/Array/prototype/indexOf/15.4.4.14-1-15.js  # TypeError: Array.prototype.indexOf called on incompatible receiver an Arguments.
-built-ins/Array/prototype/indexOf/15.4.4.14-9-b-i-25.js  # TypeError: Array.prototype.indexOf called on incompatible receiver an Arguments.
-built-ins/Array/prototype/indexOf/15.4.4.14-9-b-i-26.js  # TypeError: Array.prototype.indexOf called on incompatible receiver an Arguments.
-built-ins/Array/prototype/indexOf/15.4.4.14-9-b-i-27.js  # TypeError: Array.prototype.indexOf called on incompatible receiver an Arguments.
-built-ins/Array/prototype/lastIndexOf/15.4.4.15-1-15.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver an Arguments.
-built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-b-i-25.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver an Arguments.
-built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-b-i-26.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver an Arguments.
-built-ins/Array/prototype/lastIndexOf/15.4.4.15-8-b-i-27.js  # TypeError: Array.prototype.lastIndexOf called on incompatible receiver an Arguments.
-built-ins/Array/prototype/map/15.4.4.19-1-15.js  # TypeError: Array.prototype.map called on incompatible receiver an Arguments.
-built-ins/Array/prototype/map/15.4.4.19-2-17.js  # TypeError: Array.prototype.map called on incompatible receiver an Arguments.
-built-ins/Array/prototype/map/15.4.4.19-8-c-i-25.js  # TypeError: Array.prototype.map called on incompatible receiver an Arguments.
-built-ins/Array/prototype/map/15.4.4.19-8-c-i-26.js  # TypeError: Array.prototype.map called on incompatible receiver an Arguments.
-built-ins/Array/prototype/map/15.4.4.19-8-c-i-27.js  # TypeError: Array.prototype.map called on incompatible receiver an Arguments.
-built-ins/Array/prototype/reduce/15.4.4.21-1-15.js  # TypeError: Array.prototype.reduce called on incompatible receiver an Arguments.
-built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-25.js  # TypeError: Array.prototype.reduce called on incompatible receiver an Arguments.
-built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-26.js  # TypeError: Array.prototype.reduce called on incompatible receiver an Arguments.
-built-ins/Array/prototype/reduce/15.4.4.21-8-b-iii-1-27.js  # TypeError: Array.prototype.reduce called on incompatible receiver an Arguments.
-built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-25.js  # TypeError: Array.prototype.reduce called on incompatible receiver an Arguments.
-built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-26.js  # TypeError: Array.prototype.reduce called on incompatible receiver an Arguments.
-built-ins/Array/prototype/reduce/15.4.4.21-9-c-i-27.js  # TypeError: Array.prototype.reduce called on incompatible receiver an Arguments.
-built-ins/Array/prototype/reduceRight/15.4.4.22-1-15.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver an Arguments.
-built-ins/Array/prototype/reduceRight/15.4.4.22-2-17.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver an Arguments.
-built-ins/Array/prototype/reduceRight/15.4.4.22-8-b-iii-1-25.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver an Arguments.
-built-ins/Array/prototype/reduceRight/15.4.4.22-8-b-iii-1-26.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver an Arguments.
-built-ins/Array/prototype/reduceRight/15.4.4.22-8-b-iii-1-27.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver an Arguments.
-built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-i-25.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver an Arguments.
-built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-i-26.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver an Arguments.
-built-ins/Array/prototype/reduceRight/15.4.4.22-9-c-i-27.js  # TypeError: Array.prototype.reduceRight called on incompatible receiver an Arguments.
-built-ins/Array/prototype/some/15.4.4.17-1-15.js  # TypeError: Array.prototype.some called on incompatible receiver an Arguments.
-built-ins/Array/prototype/some/15.4.4.17-7-c-i-25.js  # TypeError: Array.prototype.some called on incompatible receiver an Arguments.
-built-ins/Array/prototype/some/15.4.4.17-7-c-i-26.js  # TypeError: Array.prototype.some called on incompatible receiver an Arguments.
-built-ins/Array/prototype/some/15.4.4.17-7-c-i-27.js  # TypeError: Array.prototype.some called on incompatible receiver an Arguments.
-built-ins/parseFloat/S15.1.2.3_A7.5.js  # TypeError: Cannot read properties of undefined (reading '…').
-built-ins/parseInt/S15.1.2.2_A9.5.js  # TypeError: Cannot read properties of undefined (reading '…').
-built-ins/Date/S15.9.3.1_A4_T0.js  # `new Date(new PoisonedValueOf(1))` throws a Test262Error exception Expected a Test262Error but got a
-built-ins/Date/S15.9.3.1_A4_T1.js  # `new Date(new PoisonedValueOf(1), new PoisonedValueOf(2))` throws a Test262Error exception Expected 
-built-ins/Date/S15.9.3.1_A4_T2.js  # `new Date(new PoisonedValueOf(1), new PoisonedValueOf(2), new PoisonedValueOf(3))` throws a Test262E
-built-ins/Date/S15.9.3.1_A4_T3.js  # `new Date(new PoisonedValueOf(1), new PoisonedValueOf(2), new PoisonedValueOf(3), new PoisonedValueO
-built-ins/Date/S15.9.3.1_A4_T4.js  # `new Date(new PoisonedValueOf(1), new PoisonedValueOf(2), new PoisonedValueOf(3), new PoisonedValueO
-built-ins/Date/S15.9.3.1_A4_T5.js  # `new Date(new PoisonedValueOf(1), new PoisonedValueOf(2), new PoisonedValueOf(3), new PoisonedValueO
-built-ins/Date/S15.9.3.1_A4_T6.js  # `new Date(new PoisonedValueOf(1), new PoisonedValueOf(2), new PoisonedValueOf(3), new PoisonedValueO
-built-ins/Date/prototype/toJSON/invoke-result.js  # TypeError: Date.prototype.toJSON called on incompatible receiver a data object.
-built-ins/Date/prototype/toJSON/to-primitive-value-of.js  # TypeError: Date.prototype.toJSON called on incompatible receiver a data object.
-built-ins/Date/prototype/toString/format.js  # Expected SameValue(«null», «null») to be false
-built-ins/Date/prototype/toString/negative-year.js  # Date.prototype.toString serializes year -1 to "-0001" Expected SameValue(«undefined», «"-0001"») to 
-language/expressions/assignment/dstr/array-elem-iter-rtrn-close-err.js  # TypeError: Iterator next must be a function.
-language/expressions/assignment/dstr/array-elem-iter-thrw-close-err.js  # Expected SameValue(«1», «0») to be true
-language/expressions/assignment/dstr/array-elem-iter-thrw-close.js  # Expected SameValue(«1», «0») to be true
-language/expressions/assignment/dstr/array-elem-trlg-iter-list-thrw-close-err.js  # Expected SameValue(«1», «0») to be true
-language/expressions/assignment/dstr/array-elem-trlg-iter-list-thrw-close.js  # Expected SameValue(«1», «0») to be true
-language/expressions/assignment/dstr/array-elem-trlg-iter-rest-rtrn-close-err.js  # Expected a Test262Error to be thrown but no exception was thrown at all
-language/expressions/assignment/dstr/array-elem-trlg-iter-rest-rtrn-close-null.js  # Expected a TypeError to be thrown but no exception was thrown at all
-language/expressions/assignment/dstr/array-elem-trlg-iter-rest-rtrn-close.js  # Expected SameValue(«11», «1») to be true
-language/expressions/assignment/dstr/array-elem-trlg-iter-rest-thrw-close-err.js  # Expected SameValue(«11», «1») to be true
-language/expressions/assignment/dstr/array-elem-trlg-iter-rest-thrw-close.js  # Expected SameValue(«11», «1») to be true
-language/expressions/assignment/dstr/array-rest-iter-rtrn-close-err.js  # TypeError: Iterator next must be a function.
-language/expressions/assignment/dstr/array-rest-iter-rtrn-close-null.js  # TypeError: Iterator next must be a function.
-language/expressions/assignment/dstr/array-rest-iter-rtrn-close.js  # Test262Error
-language/expressions/assignment/dstr/array-rest-iter-thrw-close-err.js  # Expected SameValue(«11», «0») to be true
-language/expressions/assignment/dstr/array-rest-iter-thrw-close.js  # Expected SameValue(«11», «0») to be true
-language/expressions/assignment/dstr/array-rest-lref-err.js  # Expected SameValue(«1», «0») to be true
-language/expressions/assignment/target-member-computed-reference-null.js  # Expected a DummyError but got a TypeError
-language/expressions/assignment/target-member-computed-reference-undefined.js  # Expected a DummyError but got a TypeError
-language/expressions/assignment/target-member-computed-reference.js  # Expected a DummyError but got a TypeError
-language/expressions/assignment/target-member-identifier-reference-null.js  # Expected SameValue(«0», «1») to be true
-language/expressions/assignment/target-member-identifier-reference-undefined.js  # Expected SameValue(«0», «1») to be true
+language/types/object/S8.6.2_A1.js  # TypeError: FooObj cannot be constructed: user-defined constructors and classes are not supported. Ca
+language/types/object/S8.6.2_A2.js  # TypeError: Cannot read properties of undefined (reading '…').
+language/types/object/S8.6.2_A5_T1.js  # TypeError: Cannot read properties of undefined (reading '…').
+language/types/object/S8.6.2_A5_T2.js  # TypeError: Cannot read properties of undefined (reading '…').
+language/types/object/S8.6.2_A5_T3.js  # TypeError: Cannot read properties of undefined (reading '…').
+language/types/object/S8.6.2_A5_T4.js  # TypeError: Cannot read properties of undefined (reading '…').
+language/types/reference/S8.7.1_A1.js  # TypeError: Cannot read properties of undefined (reading '…').
+language/types/reference/S8.7.2_A3.js  # TypeError: Cannot read properties of undefined (reading '…').

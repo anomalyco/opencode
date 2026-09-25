@@ -12,7 +12,8 @@ Without them the runner registers no tests, so CI is unaffected. Licensed under 
 
 ## Layout
 
-- `manifest.json` — the pinned upstream revision, which upstream directories are copied, and what is left out.
+- `manifest.json` — the pinned upstream revision, which upstream directories are copied (every `built-ins` and
+  `language` directory, about 14,900 files after filtering), and what is left out.
 - `built-ins/`, `language/` — the copied files, mirroring upstream `test/`; gitignored.
 - `skipped.txt` — vendored files that fail on a known interpreter gap, one `path  # reason` per line. They are
   skipped, and each gap is listed as unchecked in `interpreter-support.md`.
@@ -26,7 +27,8 @@ Without them the runner registers no tests, so CI is unaffected. Licensed under 
 manifest marks unsupported, or when its code matches one of the manifest's `boundaries` patterns. The sync checks the
 checkout is at the pinned revision, so every machine runs the same files. Boundaries are
 intentional limits of the interpreter, not compatibility work: classes, prototype objects, property descriptors,
-accessors, boxed primitives, sloppy mode, `eval`, `Symbol()`, and the `$262` host API. If one
+accessors, boxed primitives, typed arrays and buffers, weak collections, `Reflect` and `Proxy`, sloppy mode, `eval`,
+`Symbol()`, and the `$262` host API. If one
 of those decisions changes, delete its entry and re-sync; the tests are upstream, not lost.
 
 ## Commands
