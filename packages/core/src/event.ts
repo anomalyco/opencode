@@ -3,7 +3,7 @@ export * as EventV2 from "./event"
 import { Cause, Context, Effect, Layer, Option, PubSub, Queue, Schema, Stream } from "effect"
 import { Event } from "@opencode-ai/schema/event"
 import type { Data, Definition, Payload } from "@opencode-ai/schema/event"
-import { and, asc, eq, gt, inArray } from "drizzle-orm"
+import { and, asc, desc, eq, gt, inArray } from "drizzle-orm"
 import { Database } from "./database/database"
 import { EventSequenceTable, EventTable } from "./event/sql"
 import { Location } from "./location"
@@ -246,7 +246,14 @@ export const layerWith = (options?: LayerOptions) =>
                             .where(eq(EventSequenceTable.aggregate_id, aggregateID))
                             .get()
                             .pipe(Effect.orDie)
-                          const latest = row?.seq ?? -1
+                          const latestEvent = yield* db
+                            .select({ seq: EventTable.seq })
+                            .from(EventTable)
+                            .where(eq(EventTable.aggregate_id, aggregateID))
+                            .orderBy(desc(EventTable.seq))
+                            .get()
+                            .pipe(Effect.orDie)
+                          const latest = Math.max(row?.seq ?? -1, latestEvent?.seq ?? -1)
                           const encoded = Schema.encodeUnknownSync(definition.data)(event.data) as Record<
                             string,
                             unknown
