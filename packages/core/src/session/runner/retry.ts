@@ -120,19 +120,33 @@ export const policy = (sessionID: SessionSchema.ID) =>
   })
 
 /**
- * Retries one auxiliary request's transient failures under a shared `policy` allowance, letting the
+ * Retries one compaction request's transient failures under a shared `policy` allowance, letting the
  * session retry hook adjust each decision. Context overflow is never transient: callers recover it.
  */
 export const transient =
-  (decide: Effect.Success<ReturnType<typeof policy>>, input: Pick<Input, "agent" | "model" | "hook">) =>
+  (
+    decide: Effect.Success<ReturnType<typeof policy>>,
+    input: Pick<Input, "agent" | "model" | "hook"> & {
+      readonly bus: Bus.Interface
+      readonly sessionID: SessionSchema.ID
+    },
+  ) =>
   <A, R>(effect: Effect.Effect<A, AIError, R>) =>
     Effect.retry(effect, {
       while: (cause) =>
         Effect.gen(function* () {
           if (isContextOverflowFailure(cause)) return false
-          const decision = yield* decide({ ...input, cause, error: toSessionError(cause), retry: isRetryable(cause) })
+          const error = toSessionError(cause)
+          const decision = yield* decide({ ...input, cause, error, retry: isRetryable(cause) })
           if (!decision.retry) return false
-          yield* Effect.sleep(decision.delay)
+          const scheduled = yield* Clock.currentTimeMillis
+          yield* input.bus.publish(SessionEvent.Compaction.RetryScheduled, {
+            sessionID: input.sessionID,
+            attempt: decision.attempt,
+            at: scheduled + decision.delay,
+            error,
+          })
+          yield* Effect.sleep(Math.max(0, scheduled + decision.delay - (yield* Clock.currentTimeMillis)))
           return true
         }),
     })

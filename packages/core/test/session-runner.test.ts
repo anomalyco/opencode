@@ -2708,6 +2708,40 @@ describe("SessionRunnerLLM", () => {
     )
   })
 
+  scenario("publishes compaction retries and clears them when compaction settles", function* (s) {
+    yield* s.llm.push(TestLLM.text("Earlier answer", "history"))
+    yield* s.runPrompt("Earlier question")
+    s.requests.length = 0
+    const scheduled = yield* Queue.unbounded<number>()
+    yield* s.bus.subscribe(SessionEvent.Compaction.RetryScheduled).pipe(
+      Stream.runForEach((event) => Queue.offer(scheduled, event.data.attempt)),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    yield* s.llm.push(
+      TestLLM.failAfter(providerUnavailable(), LLMEvent.textDelta({ id: "draft", text: "## Objective\n- Partial" })),
+      TestLLM.textWithUsage("## Objective\n- Accepted summary", "accepted", 30),
+    )
+    const compaction = yield* s.session.compact({ sessionID })
+    const run = yield* s.resume.pipe(Effect.forkChild)
+
+    expect(yield* Queue.take(scheduled)).toBe(2)
+    expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({
+      status: "running",
+      retry: { attempt: 2, error: { type: "provider.transport", message: "Provider unavailable" } },
+    })
+    yield* TestClock.adjust(RETRY_GAPS_MAX[0])
+    yield* Fiber.join(run)
+
+    expect((yield* recordedEventTypes(sessionID)).filter((type) => type.startsWith("session.compaction"))).toEqual([
+      "session.compaction.started.1",
+      "session.compaction.retry.scheduled.1",
+      "session.compaction.ended.1",
+    ])
+    const settled = (yield* s.messages).find((message) => message.id === compaction.id)
+    expect(settled).toMatchObject({ status: "completed", summary: "## Objective\n- Accepted summary" })
+    expect(settled).not.toHaveProperty("retry")
+  })
+
   for (const header of [false, true]) {
     scenario(`stops compaction retries through the ${header ? "provider header" : "retry hook"}`, function* (s) {
       yield* s.llm.push(TestLLM.text("Earlier answer", "history"))

@@ -2022,6 +2022,7 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
   const text = () =>
     props.message.status === "failed" ? (cancelled() ? "" : props.message.error.message) : props.message.summary
   const content = createMemo(() => text().trim())
+  const retry = () => (props.message.status === "running" ? props.message.retry : undefined)
   const color = () => (status() === "failed" && !cancelled() ? theme.text.feedback.error.base : theme.text.muted)
   // Usage of the compaction request itself; the resulting context size only shows on the next assistant step.
   const usage = () => {
@@ -2061,6 +2062,11 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
         </box>
         <box border={["top"]} borderColor={color()} flexGrow={1} />
       </box>
+      <Show when={retry()}>
+        <box paddingTop={1}>
+          <AssistantRetry retry={retry()} />
+        </box>
+      </Show>
       <Show when={content()}>
         <box paddingTop={1} paddingLeft={3}>
           <markdown

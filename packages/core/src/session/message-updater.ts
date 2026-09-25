@@ -422,6 +422,19 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
             time: { created },
           }),
         ),
+      "session.compaction.retry.scheduled": (event) =>
+        Effect.gen(function* () {
+          const current = yield* adapter.getCompaction()
+          if (current?.status !== "running") return
+          yield* adapter.updateCompaction({
+            ...current,
+            retry: {
+              attempt: event.data.attempt,
+              at: DateTime.makeUnsafe(event.data.at),
+              error: event.data.error,
+            },
+          })
+        }),
       "session.compaction.ended": (event) =>
         Effect.gen(function* () {
           const current = yield* adapter.getCompaction()

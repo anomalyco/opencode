@@ -135,17 +135,6 @@ export type ToolFileContent = { type: "file"; uri: string; mime: string; name?: 
 
 export type SessionStructuredError = { type: string; message: string; status?: number }
 
-export type SessionMessageCompactionRunning = {
-  type: "compaction"
-  id: string
-  metadata?: { [x: string]: JsonValue }
-  time: { created: number }
-  status: "running"
-  reason: "auto" | "manual"
-  summary: string
-  recent: string
-}
-
 export type SessionProviderContextProvenance = {
   providerID: string
   provider: string
@@ -789,6 +778,16 @@ export type SessionCompactionStarted = {
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
   data: { sessionID: string; reason: "auto" | "manual"; recent: string; inputID?: string }
+}
+
+export type SessionCompactionRetryScheduled = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.compaction.retry.scheduled"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: { sessionID: string; attempt: number; at: number; error: SessionStructuredError }
 }
 
 export type SessionCompactionFailed = {
@@ -1770,6 +1769,18 @@ export type SessionMessageToolStateError = {
   metadata?: { [x: string]: JsonValue }
 }
 
+export type SessionMessageCompactionRunning = {
+  type: "compaction"
+  id: string
+  metadata?: { [x: string]: JsonValue }
+  time: { created: number }
+  status: "running"
+  reason: "auto" | "manual"
+  summary: string
+  recent: string
+  retry?: SessionMessageAssistantRetry
+}
+
 export type SessionMessageCompactionCompleted = {
   type: "compaction"
   id: string
@@ -2357,6 +2368,7 @@ export type SessionEventDurable =
   | SessionToolFailed
   | SessionRetryScheduled
   | SessionCompactionStarted
+  | SessionCompactionRetryScheduled
   | SessionCompactionEnded
   | SessionCompactionFailed
   | SessionRevertStaged
@@ -2426,6 +2438,7 @@ export type V2Event =
   | SessionRetryScheduled
   | SessionCompactionStarted
   | SessionCompactionDelta
+  | SessionCompactionRetryScheduled
   | SessionCompactionEnded
   | SessionCompactionFailed
   | SessionRevertStaged
@@ -3229,6 +3242,11 @@ export type SessionImportInput = {
               readonly reason: "auto" | "manual"
               readonly summary: string
               readonly recent: string
+              readonly retry?: {
+                readonly attempt: number
+                readonly at: number
+                readonly error: { readonly type: string; readonly message: string; readonly status?: number }
+              }
             }
           | {
               readonly type: "compaction"
@@ -3546,6 +3564,11 @@ export type SessionImportInput = {
               readonly reason: "auto" | "manual"
               readonly summary: string
               readonly recent: string
+              readonly retry?: {
+                readonly attempt: number
+                readonly at: number
+                readonly error: { readonly type: string; readonly message: string; readonly status?: number }
+              }
             }
           | {
               readonly type: "compaction"
@@ -3863,6 +3886,11 @@ export type SessionImportInput = {
               readonly reason: "auto" | "manual"
               readonly summary: string
               readonly recent: string
+              readonly retry?: {
+                readonly attempt: number
+                readonly at: number
+                readonly error: { readonly type: string; readonly message: string; readonly status?: number }
+              }
             }
           | {
               readonly type: "compaction"

@@ -1093,7 +1093,18 @@ export function createData(config: CreateDataInput) {
       case "session.compaction.delta":
         message.update(event.data.sessionID, (draft) => {
           const current = message.compaction(draft)
-          if (current?.status === "running") current.summary += event.data.text
+          if (current?.status !== "running") return
+          current.summary += event.data.text
+          current.retry = undefined
+        })
+        return
+      case "session.compaction.retry.scheduled":
+        message.update(event.data.sessionID, (draft) => {
+          const current = message.compaction(draft)
+          if (current?.status !== "running") return
+          // Core restarts the summary on retry, so drop the failed attempt's partial draft.
+          current.summary = ""
+          current.retry = { attempt: event.data.attempt, at: event.data.at, error: event.data.error }
         })
         return
       case "session.compaction.ended":
@@ -1111,6 +1122,7 @@ export function createData(config: CreateDataInput) {
               recent: event.data.recent,
               cost: event.data.cost,
               tokens: event.data.tokens,
+              retry: undefined,
             })
             return
           }

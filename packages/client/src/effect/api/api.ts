@@ -1183,6 +1183,25 @@ export type SessionLogOutput =
           readonly id: Event.ID
           readonly created: number
           readonly metadata?: { readonly [x: string]: unknown } | undefined
+          readonly type: "session.compaction.retry.scheduled"
+          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
+          readonly location?:
+            | {
+                readonly directory: AbsolutePath
+                readonly workspaceID?: (string & Brand.Brand<"Workspace.ID">) | undefined
+              }
+            | undefined
+          readonly data: {
+            readonly sessionID: Session.ID
+            readonly attempt: number
+            readonly at: number
+            readonly error: { readonly type: string; readonly message: string; readonly status?: number | undefined }
+          }
+        }
+      | {
+          readonly id: Event.ID
+          readonly created: number
+          readonly metadata?: { readonly [x: string]: unknown } | undefined
           readonly type: "session.compaction.ended"
           readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
           readonly location?:

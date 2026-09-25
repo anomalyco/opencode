@@ -707,6 +707,7 @@ const layer = Layer.effectDiscard(
     yield* bus.project(SessionEvent.Reasoning.Ended, (event) => run(db, event))
     yield* bus.project(SessionEvent.RetryScheduled, (event) => run(db, event))
     yield* bus.project(SessionEvent.Compaction.Started, (event) => run(db, event))
+    yield* bus.project(SessionEvent.Compaction.RetryScheduled, (event) => run(db, event))
     yield* bus.project(SessionEvent.Compaction.Ended, (event) =>
       Effect.gen(function* () {
         yield* run(db, event)

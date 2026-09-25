@@ -250,6 +250,7 @@ export const CompactionRunning = Schema.Struct({
   reason: Schema.Literals(["auto", "manual"]),
   summary: Schema.String,
   recent: Schema.String,
+  retry: AssistantRetry.pipe(optional),
 }).annotate({ identifier: "Session.Message.Compaction.Running" })
 
 export interface CompactionCompleted extends Schema.Schema.Type<typeof CompactionCompleted> {}

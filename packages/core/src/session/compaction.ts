@@ -547,6 +547,8 @@ export const layer = Layer.effect(
         agent: context.agent.id,
         model: context.model.ref,
         hook: prepared.retry,
+        bus,
+        sessionID: context.session.id,
       })
       yield* started(input, "")
       return yield* Effect.uninterruptibleMask((restore) =>
@@ -634,6 +636,8 @@ export const layer = Layer.effect(
         agent: context.agent.id,
         model: context.model.ref,
         hook: prepared.retry,
+        bus,
+        sessionID: context.session.id,
       })
       for (const request of [
         first,

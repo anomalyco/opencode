@@ -195,13 +195,18 @@ export async function streamTurn(input: {
         continue
       }
 
-      if (event.type === "session.step.started") {
-        if (!child) assistantMessageID = event.data.assistantMessageID
+      if (
+        event.type === "session.step.started" ||
+        event.type === "session.compaction.delta" ||
+        event.type === "session.compaction.ended" ||
+        event.type === "session.compaction.failed"
+      ) {
+        if (event.type === "session.step.started" && !child) assistantMessageID = event.data.assistantMessageID
         if (retries.delete(eventSessionID))
           await send({ sessionUpdate: "session_info_update", _meta: { [RetryMeta]: null } })
         continue
       }
-      if (event.type === "session.retry.scheduled") {
+      if (event.type === "session.retry.scheduled" || event.type === "session.compaction.retry.scheduled") {
         const retry = {
           attempt: event.data.attempt,
           nextRetryAt: new Date(event.data.at).toISOString(),

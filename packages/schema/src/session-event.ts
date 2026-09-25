@@ -604,6 +604,18 @@ export namespace Compaction {
   })
   export type Delta = typeof Delta.Type
 
+  export const RetryScheduled = Event.durable({
+    type: "session.compaction.retry.scheduled",
+    ...options,
+    schema: {
+      ...Base,
+      attempt: PositiveInt,
+      at: NonNegativeInt,
+      error: SessionError.Error,
+    },
+  })
+  export type RetryScheduled = typeof RetryScheduled.Type
+
   export const Ended = Event.durable({
     type: "session.compaction.ended",
     ...options,
@@ -697,6 +709,7 @@ export const Definitions = Event.inventory(
   RetryScheduled,
   Compaction.Started,
   Compaction.Delta,
+  Compaction.RetryScheduled,
   Compaction.Ended,
   Compaction.Failed,
   RevertEvent.Staged,
