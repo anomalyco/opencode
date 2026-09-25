@@ -362,7 +362,7 @@ export function registerIpcHandlers(deps: Deps) {
       tabID: tab.tabID,
       generation: tab.generation,
       url: tab.url,
-      active: (tab as typeof tab & { active: boolean }).active,
+      active: tab.active,
     }))
   })
   ipcMain.handle("app-dock-close-tab", (event: IpcMainInvokeEvent, tabID: unknown) => {

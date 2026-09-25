@@ -185,7 +185,7 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
           }
           if (!win.isFullScreen()) win.setFullScreen(true)
           if (fullscreenEpoch.get(senderID) !== epoch) return
-          return record.view.webContents.executeJavaScript("void document.exitFullscreen?.(); true", true)
+          void record.view.webContents.executeJavaScript("void document.exitFullscreen?.(); true", true)
         })
         .catch(() => undefined)
     }

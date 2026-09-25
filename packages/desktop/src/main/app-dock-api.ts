@@ -15,7 +15,7 @@ export interface AppDockAPI {
   close(senderID: number, win: BrowserWindow, tabID?: string): void
   closeAll(senderID: number, win: BrowserWindow): void
   closeTabs(senderID: number, tabID: string, scope: "others" | "right", order?: string[]): void
-  list(senderID: number): AppDockState[]
+  list(senderID: number): Array<AppDockState & { active: boolean }>
   deleteStorage(storageKey: string, win?: BrowserWindow): Promise<void>
   command(senderID: number, tabID: string, command: "back" | "forward" | "reload"): Promise<{ ok: boolean; navigated: boolean }>
   find(senderID: number, tabID: string, text: string, forward: boolean, notify: (result: AppDockFindResult) => void): number
