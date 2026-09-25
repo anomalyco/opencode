@@ -808,7 +808,7 @@ const layer: Layer.Layer<
     })
 
     const setShare = Effect.fn("Session.setShare")(function* (input: { sessionID: SessionID; share: Info["share"] }) {
-      yield* patch(input.sessionID, { share: input.share ?? null, time: { updated: Date.now() } }).pipe(Effect.orDie)
+      yield* patch(input.sessionID, { share: input.share ?? null }).pipe(Effect.orDie)
     })
 
     const setWorkspace = Effect.fn("Session.setWorkspace")(function* (input: {
