@@ -21,6 +21,11 @@
       "bun": "./src/source.bun.ts",
       "node": "./src/source.node.ts",
       "default": "./src/source.node.ts"
+    },
+    "#plugin-runtime": {
+      "bun": "./src/runtime.bun.ts",
+      "node": "./src/runtime.node.ts",
+      "default": "./src/runtime.node.ts"
     }
   },
   "files": [
