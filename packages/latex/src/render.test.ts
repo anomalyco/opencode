@@ -34,6 +34,44 @@ describe("renderLatexToString", () => {
     expect(renderLatexToString(String.raw`\sqrt{x^2+y^2}`)).toBe([" ╭───────", "╰╯x² + y²"].join("\n"))
   })
 
+  test.each([
+    [String.raw`\boxed{?}`, ["┌───┐", "│ ? │", "└───┘"]],
+    [String.raw`\boxed{\frac{1}{2}}`, ["┌─────┐", "│  1  │", "│ ─── │", "│  2  │", "└─────┘"]],
+    [String.raw`\boxed{\boxed{x}}`, ["┌───────┐", "│ ┌───┐ │", "│ │ x │ │", "│ └───┘ │", "└───────┘"]],
+    [String.raw`\sqrt[3]{\boxed{?}}`, ["3╭─────", " │┌───┐", " ││ ? │", "╰╯└───┘"]],
+  ])("renders boxed math without overwriting its body: %s", (source, expected) => {
+    expect(renderLatexToString(source, { strict: true })).toBe(expected.join("\n"))
+  })
+
+  test("preserves a box's baseline and style", () => {
+    const layout = renderLatex(String.raw`\boxed{\frac{1}{2}}=x`, { color: "red" })
+    expect(layout.baseline).toBe(2)
+    expect(layout.toString().split("\n")[layout.baseline]).toBe("│ ─── │ = x")
+    expect(
+      layout.cells
+        .flat()
+        .filter(Boolean)
+        .every((cell) => cell?.style?.color === "red"),
+    ).toBe(true)
+  })
+
+  test("does not apply mathematical alphabets to locally preserved TeX", () => {
+    expect(renderLatexToString(String.raw`\mathbb{\unknown{R}}`)).toBe(String.raw`\unknown{R}`)
+  })
+
+  test("keeps multiline unknown content readable without dropping grouping", () => {
+    expect(renderLatexToString("\\unknown{a\n+ b}")).toBe("\\unknown{a\n+ b}")
+    expect(renderLatexToString("\\unknown{a % comment\n  b}")).toBe("\\unknown{a % comment\n  b}")
+  })
+
+  test("renders known math alongside an opaque command", () => {
+    expect(renderLatexToString(String.raw`\frac{1}{2}=\unknown{x}`)).toBe(" 1\n─── = \\unknown{x}\n 2")
+  })
+
+  test("bounds rectangular layouts from uneven literal lines", () => {
+    expect(() => renderLatexToString("\\unknown{" + "x".repeat(2000) + "\nx".repeat(500) + "}")).toThrow(/cell limit/)
+  })
+
   test("renders matrices with stretching delimiters", () => {
     expect(renderLatexToString(String.raw`\begin{pmatrix}a & b \\ c & d\end{pmatrix}`)).toBe(
       ["⎛a b⎞", "⎜   ⎟", "⎝c d⎠"].join("\n"),
