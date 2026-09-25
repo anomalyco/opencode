@@ -5,6 +5,8 @@ import { sqliteLayer, supportsForeignKeyToggle, supportsTuningPragmas } from "#s
 import { Context, Effect, Layer, Schema, Semaphore } from "effect"
 import type { SqlClient } from "effect/unstable/sql"
 import { Global } from "@opencode/util/global"
+import { closeSync, existsSync, openSync } from "node:fs"
+import { chmod } from "node:fs/promises"
 import { isAbsolute, join } from "path"
 import { DatabaseMigration } from "./migration.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -70,10 +72,29 @@ export function layer(options: Options = { path: ":memory:" }) {
           Layer.provide(sqliteLayer({ filename })),
         )
       const filename = options.path ?? ":memory:"
-      if (filename === ":memory:" || isAbsolute(filename)) return provide(filename)
-      const global = yield* Global.Service
-      return provide(join(global.data, filename))
+      if (filename === ":memory:") return provide(filename)
+      const file = isAbsolute(filename) ? filename : join((yield* Global.Service).data, filename)
+      yield* Effect.promise(() => restrictToOwner(file))
+      return provide(file)
     }),
+  )
+}
+
+// The database stores credentials, so only its owner may read it. SQLite gives new -wal and -shm files
+// the database file's mode but never tightens existing ones, and macOS keeps them after close. Windows
+// ignores POSIX modes; there the per-user profile directory's inherited ACLs protect these files.
+async function restrictToOwner(filename: string) {
+  if (process.platform === "win32") return
+  // Never open an existing database: closing any descriptor for a file this process has open through
+  // SQLite releases its POSIX locks. Creating synchronously keeps other fibers from opening it meanwhile.
+  if (!existsSync(filename)) closeSync(openSync(filename, "a", 0o600))
+  await chmod(filename, 0o600)
+  await Promise.all(
+    [`${filename}-wal`, `${filename}-shm`].map((file) =>
+      chmod(file, 0o600).catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== "ENOENT") throw error
+      }),
+    ),
   )
 }
 
