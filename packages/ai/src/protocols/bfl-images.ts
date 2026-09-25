@@ -31,13 +31,21 @@ export type Request = ImageRequestFor<BlackForestLabsImageOptions>
 // 2. Token and response schemas
 // ---------------------------------------------------------------------------
 
-/** Regional clusters answer on different hosts, so the returned `polling_url` is followed verbatim. */
-export const Token = Schema.Struct({ id: Schema.String, pollingURL: Schema.String })
+/**
+ * Regional clusters answer on different hosts, so the returned `polling_url` is followed verbatim. BFL reports the
+ * credit cost on submit, so it rides on the token; it is optional so tokens persisted before it existed still decode.
+ */
+export const Token = Schema.Struct({
+  id: Schema.String,
+  pollingURL: Schema.String,
+  cost: Schema.optionalKey(Schema.Number),
+})
 export type Token = Schema.Schema.Type<typeof Token>
 
 const StartResponse = Schema.Struct({
   id: Schema.String,
   polling_url: Schema.String,
+  cost: optionalNull(Schema.Number),
 })
 
 const Result = Schema.Struct({
@@ -145,7 +153,11 @@ const fromRequest = Effect.fn("BlackForestLabsImages.fromRequest")(function* (re
 // ---------------------------------------------------------------------------
 
 const decodeStart = route.decodeStarted(StartResponse, (value) => ({
-  token: { id: value.id, pollingURL: value.polling_url },
+  token: {
+    id: value.id,
+    pollingURL: value.polling_url,
+    ...(value.cost === undefined || value.cost === null ? {} : { cost: value.cost }),
+  },
   snapshot: { id: value.id, status: "queued" },
 }))
 
@@ -172,11 +184,12 @@ const decodeResult = Effect.fn("BlackForestLabsImages.decodeResult")(function* (
   if (status !== "completed" || document.result === undefined || document.result === null)
     return yield* output.invalid(`${route.name} generation ${context.token.id} has no result`)
   const { sample, seed, prompt, ...rest } = document.result
+  // A settled `cost` on the result supersedes the submit-time cost carried on the token.
+  const cost = document.cost ?? context.token.cost
   return new ImageResponse({
     // `sample` is a signed URL that expires 10 minutes after the result is ready, so it is downloaded now.
     images: [yield* context.materialize(Media.url(sample))],
-    usage:
-      document.cost === undefined || document.cost === null ? undefined : { type: "credits", credits: document.cost },
+    usage: cost === undefined ? undefined : { type: "credits", credits: cost },
     providerMetadata: {
       bfl: { id: context.token.id, seed: seed ?? undefined, prompt: prompt ?? undefined, ...rest },
     },
