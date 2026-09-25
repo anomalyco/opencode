@@ -90,7 +90,7 @@ export const LspTool = Tool.define(
               case "documentSymbol":
                 return lsp.documentSymbol(uri)
               case "workspaceSymbol":
-                return lsp.workspaceSymbol(args.query ?? "")
+                return lsp.workspaceSymbol(args.query ?? "", file)
               case "goToImplementation":
                 return lsp.implementation(position)
               case "prepareCallHierarchy":
