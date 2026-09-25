@@ -380,7 +380,11 @@ const encode = (body: MediaProtocol.Body | undefined, headers: Headers.Headers) 
   }
 }
 
-/** Common fields are never silently dropped: a present field the protocol declared unsupported fails typed. */
+/**
+ * Common fields are never silently dropped: a present field the protocol declared unsupported fails typed. `false`
+ * counts as present because some booleans mean something when false (video `audio`); protocols reject opt-in
+ * booleans such as speech `timestamps` with `=== true` in `body.from` instead of listing them.
+ */
 const rejectUnsupported = <Request extends object>(
   route: string,
   provider: ProviderID,

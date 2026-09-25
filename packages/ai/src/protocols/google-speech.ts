@@ -56,6 +56,9 @@ interface State extends SpeechStream.Audio, GeminiGenerateContent.Metadata {
 // ---------------------------------------------------------------------------
 
 const fromRequest = Effect.fn("GoogleSpeech.fromRequest")(function* (request: MediaProtocol.Addressed<Request>) {
+  // Not in `unsupported`: that list would also reject `timestamps: false`, which asks for nothing.
+  if (request.timestamps === true)
+    return yield* route.unsupported("media.timestamps", `${route.name} does not return timestamps`)
   if (request.format === "pcm" && request.mode === "generate" && /^gemini-3\.8-.*-tts(?:-|$)/.test(request.model.id))
     return yield* route.unsupported(
       "media.format",
@@ -125,7 +128,7 @@ const finish = (state: State, context: MediaProtocol.ResponseContext<Request>) =
 // ---------------------------------------------------------------------------
 
 export const protocol = MediaProtocol.stream<Request, SpeechEvent, string, State>(route, {
-  unsupported: ["instructions", "speed", "timestamps"],
+  unsupported: ["instructions", "speed"],
   body: { from: fromRequest },
   frames: (bytes, context) => GeminiGenerateContent.frames(bytes, context.request.mode),
   initial: () => ({ chunks: [] }),

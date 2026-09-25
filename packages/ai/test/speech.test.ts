@@ -97,6 +97,42 @@ describe("Speech", () => {
     }).pipe(Effect.provide(layer(() => Effect.die("an unsupported request reached the network")))),
   )
 
+  it.effect("treats timestamps: false as not asking for timestamps on routes that cannot return them", () =>
+    Effect.gen(function* () {
+      const bytes = Uint8Array.from([1, 2, 3])
+      const gemini = JSON.stringify({
+        candidates: [
+          { content: { parts: [{ inlineData: { mimeType: "audio/L16;codec=pcm;rate=24000", data: "AQID" } }] } },
+        ],
+      })
+      const responses = yield* Effect.all([
+        Speech.generate({ model: openai, text: "Hi", timestamps: false }).pipe(
+          Effect.provide(respond(new Blob([bytes]).stream(), "audio/mpeg")),
+        ),
+        Speech.generate({ model: google, text: "Hi", timestamps: false }).pipe(
+          Effect.provide(respond(gemini, "application/json")),
+        ),
+        Speech.generate({ model: deepgram, text: "Hi", timestamps: false }).pipe(
+          Effect.provide(respond(new Blob([bytes]).stream(), "audio/mpeg")),
+        ),
+      ])
+      for (const response of responses) expect(yield* response.audio.bytes()).toEqual(bytes)
+
+      const errors = yield* Effect.all(
+        [openai, google, deepgram].map((model) =>
+          Speech.generate({ model, text: "Hi", timestamps: true }).pipe(Effect.flip),
+        ),
+      ).pipe(Effect.provide(layer(() => Effect.die("an unsupported request reached the network"))))
+      expect(errors.map((error) => [error.reason._tag, "operation" in error.reason && error.reason.operation])).toEqual(
+        [
+          ["UnsupportedOperation", "media.timestamps"],
+          ["UnsupportedOperation", "media.timestamps"],
+          ["UnsupportedOperation", "media.timestamps"],
+        ],
+      )
+    }),
+  )
+
   it.effect("classifies stream failures and keeps the provider payload and HTTP context", () =>
     Effect.gen(function* () {
       const badFrame = JSON.stringify({ type: "speech.audio.delta", audio: "not base64!" })
