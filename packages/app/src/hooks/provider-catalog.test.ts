@@ -75,3 +75,10 @@ test("uses config for legacy servers", () => {
     modelID: "claude",
   })
 })
+
+test("uses config for legacy servers with multi-slash model IDs", () => {
+  expect(resolveDefaultModel(undefined, "nvidia-nim/nvidia/nemotron-3-super-120b-a12b")).toEqual({
+    providerID: "nvidia-nim",
+    modelID: "nvidia/nemotron-3-super-120b-a12b",
+  })
+})

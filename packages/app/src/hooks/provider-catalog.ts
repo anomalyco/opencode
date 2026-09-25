@@ -32,6 +32,6 @@ export function resolveDefaultModel(
 ) {
   if (current !== undefined) return current ?? undefined
   if (!legacy) return undefined
-  const [providerID, modelID] = legacy.split("/")
-  return { providerID, modelID }
+  const [providerID, ...rest] = legacy.split("/")
+  return { providerID, modelID: rest.join("/") }
 }
