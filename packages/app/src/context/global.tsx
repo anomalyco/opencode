@@ -1,7 +1,7 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { createEffect, createMemo, createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createServerProjects, RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServer } from "./server"
+import { adoptable, createServerProjects, RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServer } from "./server"
 import { pathKey } from "@/utils/path-key"
 import { useServerHealth } from "@/utils/server-health"
 import { createServerSdkContext } from "./server-sdk"
@@ -110,18 +110,12 @@ function createServerCtx(
   const sdk = createServerSdkContext(conn, scope)
   const sync = createServerSyncContext(sdk)
 
-  // Adopt the server's working directory as a project so a fresh
-  // `opencode web`/`serve` in a folder surfaces that folder and its
-  // sessions in the UI without requiring a manual "Add project". Skip the
-  // user's home dir and the filesystem root, which the file finder cannot
-  // index and would otherwise appear empty.
+  // Show the folder `opencode web`/`serve` was started in. Desktop sidecars are
+  // started by the app, not from a project folder, so their cwd is not a project.
   createEffect(() => {
+    if (conn.type === "sidecar") return
     const directory = sync.data.path.directory
-    const home = sync.data.path.home
-    if (!directory || !home) return
-    const key = pathKey(directory)
-    if (key === pathKey(home) || key === "/") return
-    projects.adopt(directory)
+    if (adoptable(directory, sync.data.path.home)) projects.adopt(directory)
   })
 
   function enrich(project: { worktree: string; expanded: boolean }) {

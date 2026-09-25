@@ -76,6 +76,13 @@ export function migrateCanonicalLocalServerState(value: unknown, canonicalLocalS
   return next
 }
 
+// Home and filesystem roots ("/", "C:/") are too broad for the file finder to index.
+export function adoptable(directory: string, home: string) {
+  if (!directory || !home) return false
+  const key = pathKey(directory)
+  return !key.endsWith("/") && key !== pathKey(home)
+}
+
 export function createServerProjects<T extends ServerProjectState>(input: {
   scope: Accessor<ServerScope>
   store: Store<T>

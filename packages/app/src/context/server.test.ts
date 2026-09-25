@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { createRoot, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import {
+  adoptable,
   createServerProjects,
   migrateCanonicalLocalServerState,
   nextServerAfterRemoval,
@@ -183,6 +184,18 @@ describe("createServerProjects", () => {
       expect(projects.recentlyClosed().at(-1)).toBe("/p5")
       dispose()
     })
+  })
+
+  test("adoptable skips home, filesystem roots and unknown paths", () => {
+    expect(adoptable("/srv/repo", "/home/u")).toBe(true)
+    expect(adoptable("C:\\Users\\u\\repo", "C:\\Users\\u")).toBe(true)
+    expect(adoptable("/home/u", "/home/u")).toBe(false)
+    expect(adoptable("/home/u/", "/home/u")).toBe(false)
+    expect(adoptable("C:\\Users\\u", "C:\\Users\\u")).toBe(false)
+    expect(adoptable("/", "/home/u")).toBe(false)
+    expect(adoptable("C:\\", "C:\\Users\\u")).toBe(false)
+    expect(adoptable("", "/home/u")).toBe(false)
+    expect(adoptable("/srv/repo", "")).toBe(false)
   })
 
   test("adopts a directory when no project is open", () => {
