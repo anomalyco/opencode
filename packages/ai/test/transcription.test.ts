@@ -191,4 +191,35 @@ describe("Transcription", () => {
       ])
     }),
   )
+
+  it.effect("surfaces Gemini transcripts that ended without STOP instead of returning them as complete", () =>
+    Effect.gen(function* () {
+      const document = (finishReason?: string) =>
+        JSON.stringify({
+          candidates: [{ content: { parts: [{ audioTranscription: { text: "Hello" } }] }, finishReason }],
+        })
+      const withheld = JSON.stringify({ candidates: [{ finishReason: "SAFETY" }] })
+      const generate = (body: string) =>
+        Transcription.generate({ model: google, audio }).pipe(
+          Effect.provide(
+            layer((input) => Effect.succeed(input.respond(body, { headers: { "content-type": "application/json" } }))),
+          ),
+        )
+
+      const truncated = yield* generate(document()).pipe(Effect.flip)
+      const partial = yield* generate(document("MAX_TOKENS"))
+      const policy = yield* generate(withheld).pipe(Effect.flip)
+
+      expect(truncated.reason).toMatchObject({ _tag: "InvalidProviderOutput", classification: "incomplete-stream" })
+      expect(partial.text).toBe("Hello")
+      expect(partial.notices).toEqual([
+        {
+          type: "other",
+          message: "Google Transcription finished with MAX_TOKENS",
+          providerMetadata: { google: { finishReason: "MAX_TOKENS" } },
+        },
+      ])
+      expect(policy.reason).toMatchObject({ _tag: "ContentPolicy", body: withheld })
+    }),
+  )
 })

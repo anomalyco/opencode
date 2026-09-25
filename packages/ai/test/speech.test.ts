@@ -46,7 +46,10 @@ describe("Speech", () => {
           respond(
             JSON.stringify({
               candidates: [
-                { content: { parts: [{ inlineData: { mimeType: "audio/wav", data: Encoding.encodeBase64(bytes) } }] } },
+                {
+                  content: { parts: [{ inlineData: { mimeType: "audio/wav", data: Encoding.encodeBase64(bytes) } }] },
+                  finishReason: "STOP",
+                },
               ],
             }),
             "application/json",
@@ -124,6 +127,38 @@ describe("Speech", () => {
       expect(provider.reason).toMatchObject({ _tag: "InvalidRequest", body: JSON.stringify(cartesiaError) })
       expect(provider.message).toBe("Cartesia stream failed (Invalid model): Nope")
       expect(policy.reason).toMatchObject({ _tag: "ContentPolicy", body: blocked })
+    }),
+  )
+
+  it.effect("surfaces Gemini speech that ended without STOP instead of returning it as complete", () =>
+    Effect.gen(function* () {
+      const document = (finishReason?: string) =>
+        JSON.stringify({
+          candidates: [
+            {
+              content: { parts: [{ inlineData: { mimeType: "audio/L16;codec=pcm;rate=24000", data: "AQI=" } }] },
+              finishReason,
+            },
+          ],
+        })
+      const withheld = JSON.stringify({ candidates: [{ finishReason: "SAFETY" }] })
+      const generate = (body: string) =>
+        Speech.generate({ model: google, text: "Hi" }).pipe(Effect.provide(respond(body, "application/json")))
+
+      const truncated = yield* generate(document()).pipe(Effect.flip)
+      const partial = yield* generate(document("MAX_TOKENS"))
+      const policy = yield* generate(withheld).pipe(Effect.flip)
+
+      expect(truncated.reason).toMatchObject({ _tag: "InvalidProviderOutput", classification: "incomplete-stream" })
+      expect(yield* partial.audio.bytes()).toEqual(Uint8Array.from([1, 2]))
+      expect(partial.notices).toEqual([
+        {
+          type: "other",
+          message: "Google Speech finished with MAX_TOKENS",
+          providerMetadata: { google: { finishReason: "MAX_TOKENS" } },
+        },
+      ])
+      expect(policy.reason).toMatchObject({ _tag: "ContentPolicy", body: withheld })
     }),
   )
 

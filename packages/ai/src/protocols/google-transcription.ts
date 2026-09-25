@@ -154,6 +154,9 @@ const step = Effect.fn("GoogleTranscription.step")(function* (state: State, fram
     .filter((item) => item.length > 0)
     .join(" ")
   const delta = text.length === 0 || state.text.length === 0 ? text : ` ${text}`
+  const withheld =
+    state.text.length + delta.length === 0 ? GeminiGenerateContent.withheld(route.name, chunk, frame) : undefined
+  if (withheld !== undefined) return yield* withheld
   const events: ReadonlyArray<TranscriptionEvent> = [
     ...(delta.length === 0 ? [] : [TranscriptionTextDeltaEvent.make({ delta })]),
     ...segments.map((segment) => TranscriptionSegmentEvent.make({ segment })),
@@ -169,6 +172,7 @@ const finish = (state: State) => {
       segments: state.segments.length === 0 ? undefined : state.segments,
       words: state.words.length === 0 ? undefined : state.words,
       usage: GeminiGenerateContent.usage(state.usage),
+      notices: GeminiGenerateContent.notices(route.name, state),
       providerMetadata: GeminiGenerateContent.providerMetadata(state),
     }),
   ])

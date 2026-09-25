@@ -72,6 +72,44 @@ export const blocked = (name: string, chunk: Chunk, frame: string) => {
   })
 }
 
+const CONTENT_FILTER_REASONS = new Set([
+  "IMAGE_SAFETY",
+  "RECITATION",
+  "SAFETY",
+  "BLOCKLIST",
+  "PROHIBITED_CONTENT",
+  "SPII",
+  "MODEL_ARMOR",
+  "IMAGE_PROHIBITED_CONTENT",
+  "IMAGE_RECITATION",
+  "LANGUAGE",
+])
+
+/** Finish reasons for which Gemini stops output on safety or policy grounds. */
+export const contentFiltered = (finishReason: string | undefined) =>
+  finishReason !== undefined && CONTENT_FILTER_REASONS.has(finishReason)
+
+/** Callers check that the response produced no output: a policy stop after output is a partial result instead. */
+export const withheld = (name: string, chunk: Chunk, frame: string) => {
+  const finishReason = chunk.candidates?.[0]?.finishReason
+  if (!contentFiltered(finishReason)) return undefined
+  return new AIError({
+    reason: new ContentPolicyError({ message: `${name} withheld its output (${finishReason})`, body: frame }),
+  })
+}
+
+/** Any finish reason other than `STOP` means the output may be cut short, so it is surfaced rather than dropped. */
+export const notices = (name: string, state: Metadata): ReadonlyArray<Media.Notice> | undefined =>
+  state.finishReason === undefined || state.finishReason === "STOP"
+    ? undefined
+    : [
+        {
+          type: contentFiltered(state.finishReason) ? "filtered" : "other",
+          message: `${name} finished with ${state.finishReason}`,
+          providerMetadata: { google: { finishReason: state.finishReason } },
+        },
+      ]
+
 export const usage = (usage: UsageMetadata | undefined): MediaUsage | undefined =>
   usage === undefined
     ? undefined

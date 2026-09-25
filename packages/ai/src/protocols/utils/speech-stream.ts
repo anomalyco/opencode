@@ -85,6 +85,7 @@ export const finish = (
     readonly mediaType: string | undefined
     readonly info?: Media.Info
     readonly usage?: MediaUsage
+    readonly notices?: ReadonlyArray<Media.Notice>
     readonly providerMetadata?: ProviderMetadata
     readonly detail?: string
   },
@@ -97,6 +98,7 @@ export const finish = (
     SpeechFinishEvent.make({
       audio: Media.bytes(concatBytes(state.chunks), output.mediaType, { info: output.info }),
       usage: output.usage,
+      notices: output.notices,
       providerMetadata: output.providerMetadata,
     }),
   ])
