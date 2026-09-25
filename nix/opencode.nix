@@ -63,6 +63,10 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   installPhase = ''
     runHook preInstall
 
+    # buildPhase leaves cwd in packages/cli; ensure we are there
+    # so the dist/ glob below resolves reliably.
+    if [ -d ./packages/cli ]; then cd ./packages/cli; fi
+
     install -Dm755 dist/cli-*/bin/opencode $out/bin/opencode
 
     # OpenTUI dlopens Wayland for clipboard images.
@@ -85,14 +89,18 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   '';
 
   postInstall = lib.optionalString (stdenvNoCC.buildPlatform.canExecute stdenvNoCC.hostPlatform) ''
-    # trick yargs into also generating zsh completions
+    # Effect CLI exposes completions via the global --completions flag, not a subcommand.
     installShellCompletion --cmd opencode \
-      --bash <($out/bin/opencode completion) \
-      --zsh <(SHELL=/bin/zsh $out/bin/opencode completion)
+      --bash <($out/bin/opencode --completions bash) \
+      --fish <($out/bin/opencode --completions fish) \
+      --zsh <($out/bin/opencode --completions zsh)
 
+    # The generated script hardcodes command.name ("opencode"), so rewrite it
+    # for the opencode2 alias (complete -F _opencode opencode, #compdef, complete -c, ...).
     installShellCompletion --cmd opencode2 \
-      --bash <($out/bin/opencode2 completion) \
-      --zsh <(SHELL=/bin/zsh $out/bin/opencode2 completion)
+      --bash <($out/bin/opencode --completions bash | sed 's/opencode/opencode2/g') \
+      --fish <($out/bin/opencode --completions fish | sed 's/opencode/opencode2/g') \
+      --zsh <($out/bin/opencode --completions zsh | sed 's/opencode/opencode2/g')
   '';
 
   nativeInstallCheckInputs = [
