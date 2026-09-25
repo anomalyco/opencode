@@ -323,7 +323,7 @@ Settled rules:
 
 | Provider | Kind | Audio input | `timestamps` | `diarize` | Unsupported | Usage |
 |---|---|---|---|---|---|---|
-| OpenAI | stream (`stream: true` in `stream` mode) | multipart `file` (inline only) | `whisper-1` (`verbose_json`); diarize model: `segment` | `gpt-4o-transcribe-diarize` (`diarized_json`) | `speakers`; `prompt` on the diarize model; streaming on `whisper-1` | `tokens` or `seconds` |
+| OpenAI | stream (`stream: true` in `stream` mode; `whisper-1` ignores `stream`, so it emits only `finish`) | multipart `file` (inline only) | `whisper-1` (`verbose_json`); diarize model: `segment` | `gpt-4o-transcribe-diarize` (`diarized_json`) | `speakers`; `prompt` on the diarize model | `tokens` or `seconds` |
 | Gemini | stream (`generateContent` / `streamGenerateContent`) | `inlineData` or Gemini Files `fileData` | `audioTranscriptionConfig.wordTimestamp` | `audioTranscriptionConfig.diarization` | `prompt`, `speakers` | `tokens` |
 | Deepgram | inline | raw body, or JSON `{ url }` | words always; `segment` → `utterances` | `diarize_model=latest` + `utterances` | `prompt`, `speakers` | `seconds` (`metadata.duration`) |
 | AssemblyAI | queued (upload → submit → poll) | `/v2/upload` then `audio_url`, or a URL | words always; `segment` → `speaker_labels` | `speaker_labels` | — | `seconds` (`audio_duration`) |

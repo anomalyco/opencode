@@ -25,7 +25,6 @@ describe("Transcription", () => {
     Effect.gen(function* () {
       const errors = yield* Effect.all(
         [
-          Stream.runCollect(Transcription.stream({ model: openai.transcription("whisper-1"), audio })),
           Transcription.generate({ model: openai.transcription("gpt-4o-mini-transcribe"), audio, diarize: true }),
           Transcription.generate({ model: openai.transcription("gpt-4o-mini-transcribe"), audio, timestamps: "word" }),
           Transcription.generate({ model: openai.transcription("gpt-4o-transcribe-diarize"), audio, prompt: "Names" }),
@@ -53,7 +52,6 @@ describe("Transcription", () => {
       )
       expect(errors.map((error) => [error.reason._tag, "operation" in error.reason && error.reason.operation])).toEqual(
         [
-          ["UnsupportedOperation", "media.stream"],
           ["UnsupportedOperation", "media.diarize"],
           ["UnsupportedOperation", "media.timestamps"],
           ["UnsupportedOperation", "media.prompt"],
@@ -68,6 +66,67 @@ describe("Transcription", () => {
         ],
       )
     }).pipe(Effect.provide(layer(() => Effect.die("an unsupported request reached the network")))),
+  )
+
+  it.effect("ignores unknown OpenAI stream events and fails on an error event with the frame", () =>
+    Effect.gen(function* () {
+      const sse = (...frames: ReadonlyArray<string>) => frames.map((frame) => `data: ${frame}\n\n`).join("")
+      const failure = `{"type":"error","error":{"type":"server_error","code":"server_error","message":"The server had an error"}}`
+      const bodies = [
+        sse(
+          `{"type":"transcript.text.delta","delta":"Hi"}`,
+          `{"type":"transcript.text.future","payload":1}`,
+          `{"type":"transcript.text.done","text":"Hi"}`,
+          "[DONE]",
+        ),
+        sse(`{"type":"transcript.text.delta","delta":"Hi"}`, failure),
+      ]
+      const model = openai.transcription("gpt-4o-mini-transcribe")
+      const program = Effect.gen(function* () {
+        const events = Array.from(yield* Stream.runCollect(Transcription.stream({ model, audio })))
+        const error = yield* Stream.runCollect(Transcription.stream({ model, audio })).pipe(Effect.flip)
+        return { events, error }
+      })
+      const { events, error } = yield* program.pipe(
+        Effect.provide(
+          layer((input) =>
+            Effect.sync(() =>
+              input.respond(bodies.shift() ?? "", { headers: { "content-type": "text/event-stream" } }),
+            ),
+          ),
+        ),
+      )
+
+      expect(events.map((event) => event.type)).toEqual(["text-delta", "finish"])
+      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", body: failure })
+      expect(error.message).toContain("The server had an error")
+    }),
+  )
+
+  it.effect("streams whisper-1 as a single finish from a plain request", () =>
+    Effect.gen(function* () {
+      const bodies: Array<string> = []
+      const events = Array.from(
+        yield* Stream.runCollect(Transcription.stream({ model: openai.transcription("whisper-1"), audio })).pipe(
+          Effect.provide(
+            layer((input) =>
+              Effect.sync(() => {
+                bodies.push(input.text)
+                return input.respond(
+                  JSON.stringify({ text: "Hello there.", usage: { type: "duration", seconds: 2 } }),
+                  { headers: { "content-type": "application/json" } },
+                )
+              }),
+            ),
+          ),
+        ),
+      )
+
+      expect(bodies[0]).not.toContain('name="stream"')
+      expect(events).toEqual([
+        expect.objectContaining({ type: "finish", text: "Hello there.", usage: { type: "seconds", seconds: 2 } }),
+      ])
+    }),
   )
 
   it.effect(
