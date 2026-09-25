@@ -1688,3 +1688,52 @@ describe("ToPrimitive: operators and conversions honor program valueOf and toStr
     expect(failure.message).toContain("Cannot convert object to primitive value")
   })
 })
+
+describe("object destructuring from primitives", () => {
+  test("reads through the primitive's prototype like member access", async () => {
+    expect(
+      await value(`
+        const { length, 0: first, toUpperCase } = "abc"
+        const { toFixed } = 1.5
+        const {} = true
+        const { 0: a, ...rest } = "xyz"
+        const { ...none } = 42
+        let n
+        ;({ length: n } = "hello")
+        return [length, first, toUpperCase.call("q"), toFixed.call(2.345, 1), a, rest, none, n]
+      `),
+    ).toEqual([3, "a", "Q", "2.3", "x", { 1: "y", 2: "z" }, {}, 5])
+  })
+
+  test("only null and undefined sources throw", async () => {
+    expect((await error(`const { a } = null`)).message).toContain("Cannot destructure null as it is null")
+    expect((await error(`const {} = undefined`)).message).toContain("Cannot destructure undefined")
+    expect((await error(`let a; ({ a } = undefined)`)).message).toContain("Cannot destructure undefined")
+  })
+})
+
+describe("Date components convert through ToPrimitive", () => {
+  test("construction and Date.UTC ask each of the first seven arguments in order", async () => {
+    expect(
+      await value(`
+        const seen = []
+        const part = (n) => ({ valueOf() { seen.push(n); return n } })
+        const time = new Date(part(2024), part(1), part(2), part(3), part(4), part(5), part(6), part(99)).getTime()
+        const utc = Date.UTC(2024, { valueOf() { return 0 } }, 15)
+        return [seen, time === new Date(2024, 1, 2, 3, 4, 5, 6).getTime(), utc === Date.UTC(2024, 0, 15)]
+      `),
+    ).toEqual([[2024, 1, 2, 3, 4, 5, 6], true, true])
+    expect((await error(`new Date(2024, { valueOf() { throw new RangeError("boom") } })`)).message).toContain("boom")
+  })
+
+  test("setters on an invalid Date answer NaN without overwriting a time set during coercion", async () => {
+    expect(
+      await value(`
+        const d = new Date(NaN)
+        const result = d.setDate({ valueOf() { d.setTime(0); return 1 } })
+        const y = new Date(NaN)
+        return [Number.isNaN(result), d.getTime(), y.setFullYear(2020) === Date.UTC(2020, 0, 1) - y.getTimezoneOffset() * 60000]
+      `),
+    ).toEqual([true, 0, true])
+  })
+})

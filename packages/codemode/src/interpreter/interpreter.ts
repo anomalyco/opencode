@@ -1136,18 +1136,15 @@ class Frame<R> {
       }
 
       if (pattern.type === "ObjectPattern") {
-        if (!(value instanceof Obj)) {
-          throw typeError(
-            `Object destructuring requires a data object or array value, received ${describeValue(value)}.`,
-            pattern,
-          )
+        if (value === null || value === undefined) {
+          throw typeError(`Cannot destructure ${describeValue(value)} as it is ${value}.`, pattern)
         }
 
         const consumed = new Set<PropertyKey>()
         for (const property of pattern.properties) {
           if (property.type === "RestElement") {
             const rest = new Obj(self.ctx.builtins.Object)
-            assign(rest, value, consumed)
+            assign(rest, enumerableSource(self.ctx, "Object destructuring", value, pattern), consumed)
             yield* self.declarePattern(property.argument, rest, mutable, property, initialize)
             continue
           }
@@ -1156,7 +1153,7 @@ class Frame<R> {
           consumed.add(typeof key === "symbol" ? key : String(key))
           yield* self.declarePattern(
             property.value,
-            self.readProperty(value, key, property),
+            self.destructuredProperty(value, key, property),
             mutable,
             property,
             initialize,
@@ -1195,24 +1192,21 @@ class Frame<R> {
       }
 
       if (pattern.type === "ObjectPattern") {
-        if (!(value instanceof Obj)) {
-          throw invalidData(
-            `Object destructuring requires a data object or array value, received ${describeValue(value)}.`,
-            pattern,
-          )
+        if (value === null || value === undefined) {
+          throw typeError(`Cannot destructure ${describeValue(value)} as it is ${value}.`, pattern)
         }
 
         const consumed = new Set<PropertyKey>()
         for (const property of pattern.properties) {
           if (property.type === "RestElement") {
             const rest = new Obj(self.ctx.builtins.Object)
-            assign(rest, value, consumed)
+            assign(rest, enumerableSource(self.ctx, "Object destructuring", value, pattern), consumed)
             yield* self.assignPattern(property.argument, rest, property)
             continue
           }
           const key = yield* self.destructuringPropertyKey(property)
           consumed.add(typeof key === "symbol" ? key : String(key))
-          yield* self.assignPattern(property.value, self.readProperty(value, key, property), property)
+          yield* self.assignPattern(property.value, self.destructuredProperty(value, key, property), property)
         }
         return
       }
@@ -2189,30 +2183,46 @@ class Frame<R> {
         : propertyNode.type === "Identifier"
           ? propertyNode.name
           : self.toPropertyKey(yield* self.evaluateExpression(propertyNode))
-
-      if (objectValue instanceof ToolReference) {
-        if (typeof key !== "string") {
-          throw typeError("Tool paths must use string property names.", propertyNode)
-        }
-        return new ToolReference([...objectValue.path, key])
-      }
-
-      if (objectValue instanceof Obj) return { target: objectValue, key, receiver: objectValue }
-
-      // Strings own length and indexes; every other primitive property reads through the wrapper prototype.
-      if (typeof objectValue === "string") {
-        if (key === "length") return { value: objectValue.length }
-        const index = typeof key === "symbol" ? undefined : parseArrayIndex(key)
-        if (index !== undefined) return { value: objectValue[index] }
-      }
-      const proto = primitivePrototype(self.ctx.builtins, objectValue)
-      if (proto !== undefined) return { target: proto, key, receiver: objectValue }
-
-      if (objectValue === null || objectValue === undefined) {
-        throw typeError(`Cannot read properties of ${objectValue} (reading '${String(key)}').`, objectNode)
-      }
-      throw typeError("Cannot access a property on a non-object value.", objectNode)
+      return self.resolveProperty(objectValue, key, objectNode, propertyNode)
     })
+  }
+
+  private resolveProperty(
+    objectValue: Value,
+    key: PropertyKey,
+    objectNode: AstNode,
+    propertyNode: AstNode,
+  ): MemberReference | ToolReference | { value: Value } {
+    if (objectValue instanceof ToolReference) {
+      if (typeof key !== "string") {
+        throw typeError("Tool paths must use string property names.", propertyNode)
+      }
+      return new ToolReference([...objectValue.path, key])
+    }
+
+    if (objectValue instanceof Obj) return { target: objectValue, key, receiver: objectValue }
+
+    // Strings own length and indexes; every other primitive property reads through the wrapper prototype.
+    if (typeof objectValue === "string") {
+      if (key === "length") return { value: objectValue.length }
+      const index = typeof key === "symbol" ? undefined : parseArrayIndex(key)
+      if (index !== undefined) return { value: objectValue[index] }
+    }
+    const proto = primitivePrototype(this.ctx.builtins, objectValue)
+    if (proto !== undefined) return { target: proto, key, receiver: objectValue }
+
+    if (objectValue === null || objectValue === undefined) {
+      throw typeError(`Cannot read properties of ${objectValue} (reading '${String(key)}').`, objectNode)
+    }
+    throw typeError("Cannot access a property on a non-object value.", objectNode)
+  }
+
+  // One destructured property, read the way a member expression would read it (primitives use their prototype).
+  private destructuredProperty(source: Value, key: PropertyKey, node: AstNode): Value {
+    const reference = this.resolveProperty(source, key, node, node)
+    if (reference instanceof ToolReference) return reference
+    if ("value" in reference) return reference.value
+    return this.readProperty(reference.target, reference.key, node, reference.receiver)
   }
 
   private readReference(reference: MemberReference, node: MemberExpression): Value {

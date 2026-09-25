@@ -85,8 +85,9 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Array binding and assignment destructuring from strings, Maps, Sets, URLSearchParams, custom synchronous
       iterators, and synchronous generators, including stepwise elisions/rest and `IteratorClose` on early completion
       or binding/default failure.
-- [ ] Object destructuring from primitives follows ToObject (`const { length } = "abc"`, `const {} = 1`); non-object
-      sources are rejected.
+- [x] Object destructuring from primitives follows ToObject: `const { length } = "abc"` is `3`, `const { toFixed } = 1`
+      finds the built-in, `const {} = 1` is a no-op, and a rest element copies a string's indexes (`{ 1: "y", 2: "z" }`).
+      Only `null` and `undefined` sources throw (`Cannot destructure null as it is null.`).
 - [x] Destructuring reads through the prototype chain like member access: `const { constructor } = error` and
       `const { slice } = values` find the inherited built-in.
 - [x] Any assignment target as a `for...in` head, like `for...of`: `for (x.y in obj)`, `for (a[i++] in obj)`, and
@@ -240,9 +241,9 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       throws: `{ valueOf() { return 7 } } * 2` is `14`, `` `${{ toString() { return "x" } }}` `` is `"x"`, and
       `[1, 2]` with `arr.toString = () => "x"` makes `arr + ""` `"x"`. Dates keep their `Symbol.toPrimitive`
       behavior (`date + 1` concatenates, `date - date` subtracts).
-- [ ] ToPrimitive elsewhere: multi-argument `Date` construction, `Date.UTC`, `Error.prototype.toString` on an object
-      `message`, and numeric built-in arguments outside `Math` (`at`, `indexOf` start, `toFixed` digits) still use the
-      built-in form (`NaN`, `"[object Object]"`) and ignore own methods.
+- [ ] ToPrimitive elsewhere: `Error.prototype.toString` on an object `message` and numeric built-in arguments outside
+      `Math` and `Date` (`at`, `indexOf` start, `toFixed` digits) still use the built-in form (`NaN`,
+      `"[object Object]"`) and ignore own methods.
 - [x] Property keys follow ToPropertyKey: `x[null]`, `x[true]`, and objects (via their built-in string form) become
       string keys.
 
@@ -460,15 +461,15 @@ reject }` object.
 - [x] `getTimezoneOffset`, arithmetic, relational comparison, and `instanceof Date`.
 - [x] Date values serialize to ISO strings; invalid dates serialize to `null`.
 - [x] Local and UTC Date setters, including native argument coercion, mutation, rollover, invalid-Date recovery, and
-      `TimeClip` behavior.
+      `TimeClip` behavior. On an invalid Date every setter but `setTime` and `set(UTC)FullYear` answers `NaN` without
+      writing, so a time set inside an argument's `valueOf` survives.
 - [x] `Date.prototype.toUTCString` and its `toGMTString` alias.
 - [x] `toDateString` and `toTimeString` in the host's local timezone.
 - [x] `toLocaleString`, `toLocaleDateString`, and `toLocaleTimeString` always format as `en-US` in UTC
       (`"1/1/1970, 12:00:00 AM"`) so output does not depend on the host.
 - [x] Native one-argument Date coercion for supported values, including booleans, null, arrays, and plain objects.
-- [x] Date setters and one-argument construction coerce object arguments through their own `valueOf`/`toString` and
-      surface their throws.
-- [ ] Multi-argument construction and `Date.UTC` coerce object arguments the same way (see ToPrimitive above).
+- [x] Date setters, construction, and `Date.UTC` coerce object arguments through their own `valueOf`/`toString` in
+      argument order and surface their throws; only the first seven components are converted.
 - [x] Native Date loose-equality and default primitive-coercion semantics, using CodeMode's deterministic ISO string
       representation for the string primitive.
 - [x] Native `RangeError` branding for invalid `toISOString()` calls.
