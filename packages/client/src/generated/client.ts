@@ -314,6 +314,7 @@ export function make(options: ClientOptions) {
               agent: input?.["agent"],
               model: input?.["model"],
               location: input?.["location"],
+              infinite: input?.["infinite"],
             },
             successStatus: 200,
             declaredStatuses: [401, 400],
@@ -372,7 +373,13 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/prompt`,
-            body: { id: input["id"], prompt: input["prompt"], delivery: input["delivery"], resume: input["resume"] },
+            body: {
+              id: input["id"],
+              prompt: input["prompt"],
+              delivery: input["delivery"],
+              resume: input["resume"],
+              infinite: input["infinite"],
+            },
             successStatus: 200,
             declaredStatuses: [409, 404, 400, 401],
             empty: false,

@@ -32,6 +32,8 @@ import { LocationServiceMap } from "./location-service-map"
 import { MessageDecodeError } from "./session/error"
 import { SessionEvent } from "./session/event"
 import { SessionInput } from "./session/input"
+import { SessionInfinite } from "./session/infinite"
+import { ConfigInfinite } from "./config/infinite"
 import { Snapshot } from "./snapshot"
 import { SessionRevert } from "./session/revert"
 import { Revert } from "@opencode-ai/schema/revert"
@@ -81,6 +83,7 @@ type CreateInput = {
   agent?: AgentV2.ID
   model?: ModelV2.Ref
   location: Location.Ref
+  infinite?: boolean
 }
 
 type CompactInput = {
@@ -150,6 +153,7 @@ export interface Interface {
     prompt: PromptInput.Prompt
     delivery?: SessionInput.Delivery
     resume?: boolean
+    infinite?: boolean
   }) => Effect.Effect<SessionInput.Admitted, NotFoundError | PromptConflictError>
   readonly shell: (input: {
     id?: EventV2.ID
@@ -207,6 +211,8 @@ const layer = Layer.effect(
     const result = Service.of({
       create: Effect.fn("V2Session.create")(function* (input) {
         const sessionID = input.id ?? SessionSchema.ID.create()
+        if (input.infinite === true) SessionInfinite.enable(sessionID)
+        if (input.infinite === false) SessionInfinite.disable(sessionID)
         const recorded = yield* store.get(sessionID)
         if (recorded) return recorded
         const project = yield* projects.resolve(input.location.directory)
@@ -361,7 +367,13 @@ const layer = Layer.effect(
         Effect.uninterruptible(
           Effect.gen(function* () {
             yield* result.get(input.sessionID)
-            const prompt = resolvePrompt(input.prompt)
+            if (input.infinite === true) SessionInfinite.enable(input.sessionID)
+            if (input.infinite === false) SessionInfinite.disable(input.sessionID)
+            const resolvedText =
+              input.infinite === true
+                ? SessionInfinite.withSentinelInstruction(input.prompt.text, ConfigInfinite.Defaults.sentinel)
+                : input.prompt.text
+            const prompt = resolvePrompt({ ...input.prompt, text: resolvedText })
             const messageID = input.id ?? SessionMessage.ID.create()
             const delivery = input.delivery ?? "steer"
             const expected = { sessionID: input.sessionID, messageID, prompt, delivery }

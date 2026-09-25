@@ -272,25 +272,36 @@ export type SessionsCreateInput = {
     readonly agent?: string | null
     readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
     readonly location?: { readonly directory: string; readonly workspaceID?: string } | null
+    readonly infinite?: boolean | null
   }["id"]
   readonly agent?: {
     readonly id?: string | null
     readonly agent?: string | null
     readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
     readonly location?: { readonly directory: string; readonly workspaceID?: string } | null
+    readonly infinite?: boolean | null
   }["agent"]
   readonly model?: {
     readonly id?: string | null
     readonly agent?: string | null
     readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
     readonly location?: { readonly directory: string; readonly workspaceID?: string } | null
+    readonly infinite?: boolean | null
   }["model"]
   readonly location?: {
     readonly id?: string | null
     readonly agent?: string | null
     readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
     readonly location?: { readonly directory: string; readonly workspaceID?: string } | null
+    readonly infinite?: boolean | null
   }["location"]
+  readonly infinite?: {
+    readonly id?: string | null
+    readonly agent?: string | null
+    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+    readonly location?: { readonly directory: string; readonly workspaceID?: string } | null
+    readonly infinite?: boolean | null
+  }["infinite"]
 }
 
 export type SessionsCreateOutput = {
@@ -400,6 +411,7 @@ export type SessionsPromptInput = {
     }
     readonly delivery?: "steer" | "queue" | null
     readonly resume?: boolean | null
+    readonly infinite?: boolean | null
   }["id"]
   readonly prompt: {
     readonly id?: string | null
@@ -418,6 +430,7 @@ export type SessionsPromptInput = {
     }
     readonly delivery?: "steer" | "queue" | null
     readonly resume?: boolean | null
+    readonly infinite?: boolean | null
   }["prompt"]
   readonly delivery?: {
     readonly id?: string | null
@@ -436,6 +449,7 @@ export type SessionsPromptInput = {
     }
     readonly delivery?: "steer" | "queue" | null
     readonly resume?: boolean | null
+    readonly infinite?: boolean | null
   }["delivery"]
   readonly resume?: {
     readonly id?: string | null
@@ -454,7 +468,27 @@ export type SessionsPromptInput = {
     }
     readonly delivery?: "steer" | "queue" | null
     readonly resume?: boolean | null
+    readonly infinite?: boolean | null
   }["resume"]
+  readonly infinite?: {
+    readonly id?: string | null
+    readonly prompt: {
+      readonly text: string
+      readonly files?: ReadonlyArray<{
+        readonly uri: string
+        readonly name?: string
+        readonly description?: string
+        readonly source?: { readonly start: number; readonly end: number; readonly text: string }
+      }>
+      readonly agents?: ReadonlyArray<{
+        readonly name: string
+        readonly source?: { readonly start: number; readonly end: number; readonly text: string }
+      }>
+    }
+    readonly delivery?: "steer" | "queue" | null
+    readonly resume?: boolean | null
+    readonly infinite?: boolean | null
+  }["infinite"]
 }
 
 export type SessionsPromptOutput = {
