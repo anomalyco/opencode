@@ -1,4 +1,4 @@
-import type { DesktopTheme, ResolvedTheme, ResolvedV2Theme } from "./types"
+import type { DesktopTheme, HexColor, ResolvedTheme, ResolvedV2Theme, ThemeVariant } from "./types"
 import { resolveThemeVariant, themeToCss } from "./resolve"
 import { resolveThemeVariantV2, themeV2ToCss } from "./v2/resolve"
 
@@ -75,12 +75,55 @@ html[data-theme="${themeId}"] {
 `
 }
 
-export async function loadThemeFromUrl(url: string): Promise<DesktopTheme> {
-  const response = await fetch(url)
-  if (!response.ok) {
-    throw new Error(`Failed to load theme from ${url}: ${response.statusText}`)
+export type LoadThemeResult = { ok: true; theme: DesktopTheme } | { ok: false; error: "network" | "invalid" }
+
+const HEX_COLOR_PATTERN = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/
+const THEME_ID_PATTERN = /^[a-z0-9-]+$/
+const SEED_KEYS = ["neutral", "primary", "success", "warning", "error", "info", "interactive", "diffAdd", "diffDelete"]
+const PALETTE_REQUIRED_KEYS = ["neutral", "ink", "primary", "success", "warning", "error", "info"]
+
+function isHexColor(value: unknown): value is HexColor {
+  return typeof value === "string" && HEX_COLOR_PATTERN.test(value)
+}
+
+function isValidVariant(value: unknown): value is ThemeVariant {
+  if (typeof value !== "object" || value === null) return false
+  const variant = value as Record<string, unknown>
+  const hasSeeds = "seeds" in variant
+  const hasPalette = "palette" in variant
+  if (hasSeeds === hasPalette) return false
+  if (hasSeeds) {
+    const seeds = variant.seeds
+    if (typeof seeds !== "object" || seeds === null) return false
+    return SEED_KEYS.every((key) => isHexColor((seeds as Record<string, unknown>)[key]))
   }
-  return response.json()
+  const palette = variant.palette
+  if (typeof palette !== "object" || palette === null) return false
+  return PALETTE_REQUIRED_KEYS.every((key) => isHexColor((palette as Record<string, unknown>)[key]))
+}
+
+/**
+ * Structural validation for a DesktopTheme fetched from an untrusted source, mirroring
+ * the contract documented in ./desktop-theme.schema.json.
+ */
+export function isValidDesktopTheme(value: unknown): value is DesktopTheme {
+  if (typeof value !== "object" || value === null) return false
+  const theme = value as Record<string, unknown>
+  if (typeof theme.name !== "string" || theme.name.length === 0) return false
+  if (typeof theme.id !== "string" || !THEME_ID_PATTERN.test(theme.id)) return false
+  return isValidVariant(theme.light) && isValidVariant(theme.dark)
+}
+
+export async function loadThemeFromUrl(url: string): Promise<LoadThemeResult> {
+  const response = await fetch(url).catch(() => undefined)
+  if (!response || !response.ok) {
+    return { ok: false, error: "network" }
+  }
+  const json = await response.json().catch(() => undefined)
+  if (!isValidDesktopTheme(json)) {
+    return { ok: false, error: "invalid" }
+  }
+  return { ok: true, theme: json }
 }
 
 export function getActiveTheme(): DesktopTheme | null {
