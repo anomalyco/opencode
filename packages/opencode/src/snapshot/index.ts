@@ -22,6 +22,7 @@ export type FileDiff = typeof FileDiff.Type
 
 const prune = "7.days"
 const limit = 2 * 1024 * 1024
+const lineLimit = 10_000
 const core = ["-c", "core.longpaths=true", "-c", "core.symlinks=true"]
 const cfg = ["-c", "core.autocrlf=false", ...core]
 const quote = [...cfg, "-c", "core.quotepath=false"]
@@ -561,7 +562,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
               }
 
               const show = Effect.fnUntraced(function* (row: Row) {
-                if (row.binary) return ["", ""]
+                if (row.binary || (row.additions + row.deletions) > lineLimit) return ["", ""]
                 if (row.status === "added") {
                   return [
                     "",
@@ -588,7 +589,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
               const load = Effect.fnUntraced(
                 function* (rows: Row[]) {
                   const refs = rows.flatMap((row) => {
-                    if (row.binary) return []
+                    if (row.binary || (row.additions + row.deletions) > lineLimit) return []
                     if (row.status === "added")
                       return [{ file: row.file, side: "after", ref: `${to}:${row.file}` } satisfies Ref]
                     if (row.status === "deleted") {
@@ -660,7 +661,7 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
                       )
                     }
 
-                    const text = dec.decode(out.slice(i, i + size))
+                    const text = size > limit ? "" : dec.decode(out.slice(i, i + size))
                     if (ref.side === "before") hit.before = text
                     if (ref.side === "after") hit.after = text
                     map.set(ref.file, hit)
@@ -743,9 +744,14 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
                 for (const row of run) {
                   const hit = text?.get(row.file) ?? { before: "", after: "" }
                   const [before, after] = row.binary ? ["", ""] : text ? [hit.before, hit.after] : yield* show(row)
+                  const tooLarge =
+                    row.binary ||
+                    (row.additions + row.deletions) > lineLimit ||
+                    before.length > limit ||
+                    after.length > limit
                   result.push({
                     file: row.file,
-                    patch: row.binary ? "" : patch(row.file, before, after),
+                    patch: tooLarge ? "" : patch(row.file, before, after),
                     additions: row.additions,
                     deletions: row.deletions,
                     status: row.status,
