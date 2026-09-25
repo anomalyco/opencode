@@ -1,4 +1,4 @@
-# fix(session): anchor the compaction summary to the marker message
+# fix(session): make compaction summaries marker-safe and terminal
 
 ## Summary
 
@@ -8,6 +8,11 @@
 2. The **model pin is discarded** — the summary is generated with the new prompt's model rather than the model the caller requested for compaction.
 
 Both symptoms come from the same line. This fixes the parent and removes the race.
+
+The follow-up commit in this branch also closes a second OpenCode core defect:
+an incomplete summary stream was treated as a successful `continue`, allowing
+the same marker to be selected repeatedly. The promotion bundle carries both
+commits so an upstream update cannot restore either failure mode.
 
 ## The bug
 
@@ -61,15 +66,41 @@ The commit touches one line in `prompt.ts` and the logic around it in `compactio
 
 A forced-tail fallback that appeared in an earlier revision was **removed** — review established its premise was false: `message-v2.ts:534` (`if (!part.tail_start_id) break`) already treats a marker without `tail_start_id` as a valid full compaction, so the fallback was both unnecessary and wrong.
 
-## The gap that let it run for 37 hours
+## Follow-up defect: unfinished summaries retried forever
 
-Worth fixing separately, and the reason this went unnoticed so long: **there is no circuit breaker on repeated compaction.** The orphaned summary is invisible to the completion check, so the marker looks unprocessed forever and compaction re-fires indefinitely. One observed instance ran for **37 hours**.
+The anchor fix correctly binds a summary to its marker, but it cannot make a
+provider stream that ends without `finish` successful. In the affected session,
+the same marker acquired six `summary: true` assistant messages with no
+`finish` and no error. `SessionCompaction.process` returned `continue`,
+`prompt.ts` selected the marker again, and the loop emitted repeated compaction
+events and injected continuations.
+
+Commit `6037275267` fixes this in `packages/opencode/src/session/compaction.ts`:
+
+- preserve an existing processor error;
+- assign an `UnknownError` when the summary has no terminal finish;
+- persist `finish: "error"`; and
+- return `stop` before tail updates, autocontinue, or `Compacted` publication.
+
+The regression test proves an unfinished summary terminates and is persisted as
+an error. Successful summaries still require and retain their terminal finish.
+
+## The gap that let the original bug run for 37 hours
+
+The original anchor bug went unnoticed so long because **there was no terminal
+state on an incomplete compaction attempt**. The orphaned summary was invisible
+to the completion check, so the marker looked unprocessed forever and compaction
+re-fired indefinitely. One observed instance ran for **37 hours**. The two
+commits now address both sides: correct marker identity and terminal failure.
 
 A summary that is written but not counted as completing its marker is a contradiction. Either the write should fail loudly, or the completion check should be anchored the same way the write is. A guard that counts *attempts per marker* and refuses after N would make this class of bug self-limiting regardless of cause.
 
 ## Tests
 
-`packages/opencode/test/session/compaction.test.ts`, +156 lines. **59 pass / 1 skip / 0 fail**; typecheck clean across 30 packages. Three of the four new guards were confirmed red-green (they fail against the unfixed code).
+`packages/opencode/test/session/compaction.test.ts` covers both fixes,
+including the unfinished-summary regression. `bun run typecheck` passes, and
+the targeted anchor, terminal-state, overflow, event, and autocontinue tests
+pass individually.
 
 The tests deliberately cover the race, not just the happy path: a marker with a follow-up prompt already present, a marker whose summary already exists, and a marker with no `tail_start_id`.
 
