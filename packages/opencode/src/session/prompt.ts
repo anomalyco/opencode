@@ -642,15 +642,16 @@ const layer = Layer.effect(
     })
 
     // Credential resolution — three existing routes, in order:
-    // 1. `TYPESAFE_API_KEY` environment variable
-    // 2. `auth.json` entry for provider id `typesafe` (opencode credential store)
-    // 3. a custom `provider.typesafe` config entry's `options.apiKey`
-    const jevKeyResolver = () => async () => {
-      if (process.env.TYPESAFE_API_KEY) return process.env.TYPESAFE_API_KEY
-      const stored = await Effect.runPromise(auth.get("typesafe")).catch(() => undefined)
+    // 1. the engine's `apiKeyEnv` environment variable (default `TYPESAFE_API_KEY`)
+    // 2. `auth.json` entry for the engine's `authProvider` id (opencode credential store)
+    // 3. a custom `provider.<authProvider>` config entry's `options.apiKey`
+    const jevKeyResolver = (engineCfg: Jev.SystemOneConfig) => async () => {
+      const fromEnv = process.env[engineCfg.apiKeyEnv]
+      if (fromEnv) return fromEnv
+      const stored = await Effect.runPromise(auth.get(engineCfg.authProvider)).catch(() => undefined)
       if (stored?.type === "api") return stored.key
       const cfg = await Effect.runPromise(config.get()).catch(() => undefined)
-      const option = cfg?.provider?.["typesafe"]?.options?.apiKey
+      const option = cfg?.provider?.[engineCfg.authProvider]?.options?.apiKey
       if (typeof option === "string" && option) return option
       return undefined
     }
@@ -677,7 +678,7 @@ const layer = Layer.effect(
             Jev.routeWith(
               jev,
               { request: Jev.requestText(input.parts), defaultModel: model, signal },
-              Jev.engine({ timeoutMs: jev.timeoutMs, keyResolver: jevKeyResolver() }),
+              Jev.engine({ timeoutMs: jev.timeoutMs, keyResolver: jevKeyResolver(jev.engine), engine: jev.engine }),
             ).catch(() => undefined),
           )
           if (routed) {
@@ -1224,7 +1225,7 @@ const layer = Layer.effect(
                       : undefined,
                     signal,
                   },
-                  Jev.engine({ timeoutMs: jev.timeoutMs, keyResolver: jevKeyResolver() }),
+                  Jev.engine({ timeoutMs: jev.timeoutMs, keyResolver: jevKeyResolver(jev.engine), engine: jev.engine }),
                 ).catch(() => undefined),
               )
               if (routed) {
@@ -1445,7 +1446,7 @@ const layer = Layer.effect(
                       escalations: routing.escalations,
                       signal,
                     },
-                    Jev.engine({ timeoutMs: jev.timeoutMs, keyResolver: jevKeyResolver() }),
+                    Jev.engine({ timeoutMs: jev.timeoutMs, keyResolver: jevKeyResolver(jev.engine), engine: jev.engine }),
                   ).catch(() => undefined),
                 )
                 if (verdict?.escalate && verdict.model) {

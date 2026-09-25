@@ -41,7 +41,8 @@ export class Info extends Schema.Class<Info>("Config.Info")({
     description: "Default primary agent to use when no session agent is selected",
   }),
   jev: ConfigJevV1.Info.pipe(Schema.optional).annotate({
-    description: "Jev decision routing — confidence-gated model tier routing (default: disabled)",
+    description:
+      "Confidence-gated model tier routing (default: disabled). The decision engine defaults to Typesafe Jev; any System One decision model can be configured via `jev.engine`.",
   }),
   autoupdate: Schema.Union([Schema.Boolean, Schema.Literal("notify")])
     .pipe(Schema.optional)

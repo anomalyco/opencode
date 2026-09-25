@@ -4,7 +4,7 @@ import { ConfigJevV1 } from "@opencode-ai/core/v1/config/jev"
 export namespace Jev {
 
   // ---------------------------------------------------------------------------
-  // Wire protocol (TypeSafe "System One")
+  // Wire protocol (System One decision protocol — jev is the default instance)
   //
   // One call may carry multiple questions (speculative fan-out — extra questions
   // are ~free). `state` is the ONLY input the model sees: no tools, no transcript
@@ -287,8 +287,8 @@ export namespace Jev {
     evaluate(state: string, questions: Questions, signal?: AbortSignal): Promise<Answers | null>
   }
 
-  const ENDPOINT = "https://api.typesafe.ai/v1/systemone"
-  const MODEL = "jev-latest"
+  const SYSTEM_ONE_BASE_URL = "https://api.typesafe.ai/v1"
+  const SYSTEM_ONE_MODEL = "jev-latest"
   const DEFAULT_TIMEOUT_MS = 1_500
   /** Hard cap on the `state` payload — never send raw transcripts. */
   export const STATE_CLIP_CHARS = 24_000
@@ -300,20 +300,41 @@ export namespace Jev {
     return state.length <= STATE_CLIP_CHARS ? state : state.slice(0, STATE_CLIP_CHARS)
   }
 
-  export class TypesafeEngine implements JevEngine {
-    readonly id = "typesafe"
+  export interface SystemOneEngineOptions {
+    /** Decision model id at the gateway (default: "jev-latest"). */
+    model?: string
+    /** Gateway base URL exposing the /systemone route (default: the Typesafe API). */
+    baseURL?: string
+    /** Extra headers sent with each call. */
+    headers?: Record<string, string>
+    apiKey?: string
+    keyResolver?: () => Promise<string | undefined>
+    timeoutMs?: number
+    fetchImpl?: FetchImpl
+  }
 
+  /**
+   * Speaks the System One decision protocol against ANY gateway/model pair —
+   * the same shape upstream's `SystemOne.model` factory standardizes (model id
+   * + baseURL + bearer credential + headers). The Typesafe Jev instance is
+   * just the default; a laya-style model behind a gateway is a config change,
+   * not a code change.
+   */
+  export class SystemOneEngine implements JevEngine {
+    readonly id = "system-one"
+
+    #model: string
+    #baseURL: string
+    #headers?: Record<string, string>
     #key?: string
     #keyResolver?: () => Promise<string | undefined>
     #timeoutMs: number
     #fetch: FetchImpl
 
-    constructor(input: {
-      apiKey?: string
-      keyResolver?: () => Promise<string | undefined>
-      timeoutMs?: number
-      fetchImpl?: FetchImpl
-    } = {}) {
+    constructor(input: SystemOneEngineOptions = {}) {
+      this.#model = input.model ?? SYSTEM_ONE_MODEL
+      this.#baseURL = input.baseURL ?? SYSTEM_ONE_BASE_URL
+      this.#headers = input.headers
       this.#key = input.apiKey
       this.#keyResolver = input.keyResolver
       this.#timeoutMs = input.timeoutMs ?? DEFAULT_TIMEOUT_MS
@@ -343,13 +364,15 @@ export namespace Jev {
         const apiKey = await this.key()
         if (!apiKey || controller.signal.aborted) return null
 
-        const res = await this.#fetch(ENDPOINT, {
+        const url = `${this.#baseURL.replace(/\/$/, "")}/systemone`
+        const res = await this.#fetch(url, {
           method: "POST",
           headers: {
+            ...this.#headers,
             Authorization: `Bearer ${apiKey}`,
             "Content-Type": "application/json",
           },
-          body: JSON.stringify({ model: MODEL, state: clipState(state), questions }),
+          body: JSON.stringify({ model: this.#model, state: clipState(state), questions }),
           signal: controller.signal,
         })
         if (!res.ok) return null
@@ -398,16 +421,31 @@ export namespace Jev {
     evaluate(state: string, questions: Questions, signal?: AbortSignal): Promise<Answers | null>
   }
 
-  /** Chain: typesafe -> off. `off` always terminates with null. */
-  export function engine(input: { timeoutMs?: number; keyResolver?: () => Promise<string | undefined> } = {}): EngineChain {
-    return new EngineChain([new TypesafeEngine({ timeoutMs: input.timeoutMs, keyResolver: input.keyResolver }), new OffEngine()])
+  /**
+   * Chain: system-one (configured gateway/model) -> off. `off` always
+   * terminates with null.
+   */
+  export function engine(
+    input: { engine?: SystemOneConfig; timeoutMs?: number; keyResolver?: () => Promise<string | undefined> } = {},
+  ): EngineChain {
+    const cfg = input.engine
+    return new EngineChain([
+      new SystemOneEngine({
+        model: cfg?.model,
+        baseURL: cfg?.baseURL,
+        headers: cfg?.headers,
+        timeoutMs: input.timeoutMs,
+        keyResolver: input.keyResolver,
+      }),
+      new OffEngine(),
+    ])
   }
 
   /**
    * Credential resolution — three existing routes, in order:
-   * 1. `TYPESAFE_API_KEY` environment variable
-   * 2. `auth.json` entry for provider id `typesafe` (opencode credential store)
-   * 3. a custom `provider.typesafe` config entry's `options.apiKey`
+   * 1. the engine's `apiKeyEnv` environment variable (default `TYPESAFE_API_KEY`)
+   * 2. `auth.json` entry for the engine's `authProvider` id (opencode credential store)
+   * 3. a custom `provider.<authProvider>` config entry's `options.apiKey`
    * The caller supplies these as `keyResolver` (see session/prompt.ts).
    */
 
@@ -415,14 +453,31 @@ export namespace Jev {
   // Config mapping. `jev` is disabled unless explicitly enabled in config.
   // ---------------------------------------------------------------------------
 
+  /** Fully-resolved decision-engine settings (defaults applied). */
+  export interface SystemOneConfig {
+    model: string
+    baseURL: string
+    apiKeyEnv: string
+    authProvider: string
+    headers?: Record<string, string>
+  }
+
   export interface RouterConfig {
     tiers: Tier[]
     policy: RoutingPolicy
     timeoutMs?: number
+    engine: SystemOneConfig
   }
 
   export function resolveConfig(input: ConfigJevV1.Info | undefined): RouterConfig | undefined {
     if (!input?.enabled) return undefined
+    const engine: SystemOneConfig = {
+      model: input.engine?.model ?? SYSTEM_ONE_MODEL,
+      baseURL: input.engine?.baseURL ?? SYSTEM_ONE_BASE_URL,
+      apiKeyEnv: input.engine?.apiKeyEnv ?? "TYPESAFE_API_KEY",
+      authProvider: input.engine?.authProvider ?? "typesafe",
+      headers: input.engine?.headers,
+    }
     const tiers = (input.tiers ?? []).map((t) => ({
       id: t.id,
       capability: t.capability,
@@ -449,6 +504,7 @@ export namespace Jev {
       tiers,
       policy: { ...DEFAULT_POLICY, ...input.thresholds },
       timeoutMs: input.timeoutMs,
+      engine,
     }
   }
 
