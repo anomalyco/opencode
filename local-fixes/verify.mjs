@@ -14,7 +14,8 @@ import { fileURLToPath } from "node:url"
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..")
 const manifest = JSON.parse(readFileSync(join(ROOT, "local-fixes/manifest.json"), "utf8"))
-const fix = manifest.fix
+const fixes = manifest.fixes ?? (manifest.fix ? [manifest.fix] : [])
+if (!fixes.length) throw new Error("manifest contains no local fixes")
 
 let bad = 0
 const line = (mark, msg) => console.log(`  ${mark}  ${msg}`)
@@ -22,7 +23,7 @@ const good = (m) => line("ok  ", m)
 const warn = (m) => { bad++; line("FAIL", m) }
 const note = (m) => line("    ", m)
 
-console.log(`\n=== fixes:verify — ${fix.id} ===`)
+console.log(`\n=== fixes:verify — ${fixes.map((fix) => fix.id).join(", ")} ===`)
 
 // 1. staged binary present
 console.log(`\n[1] staged binary`)
@@ -52,16 +53,20 @@ if (!reported) {
 // 3. markers inside the binary
 console.log(`\n[3] fix markers inside the staged binary`)
 const hay = readFileSync(stagePath).toString("latin1")
-for (const m of fix.markers) {
-  if (hay.includes(m)) good(`present: ${m}`)
-  else warn(`MISSING: ${m}`)
+for (const fix of fixes) {
+  for (const m of fix.markers) {
+    if (hay.includes(m)) good(`${fix.id}: present: ${m}`)
+    else warn(`MISSING (${fix.id}): ${m}`)
+  }
 }
 
 // 4. fix commit still in this repo
-console.log(`\n[4] fix commit`)
-const has = spawnSync("git", ["cat-file", "-e", `${fix.commit}^{commit}`], { cwd: ROOT, encoding: "utf8" })
-if (has.status === 0) good(`${fix.commit.slice(0, 10)} present`)
-else warn(`fix commit ${fix.commit.slice(0, 10)} not found — has it been dropped?`)
+console.log(`\n[4] fix commits`)
+for (const fix of fixes) {
+  const has = spawnSync("git", ["cat-file", "-e", `${fix.commit}^{commit}`], { cwd: ROOT, encoding: "utf8" })
+  if (has.status === 0) good(`${fix.id}: ${fix.commit.slice(0, 10)} present`)
+  else warn(`${fix.id}: commit ${fix.commit.slice(0, 10)} not found — has it been dropped?`)
+}
 
 // 5. does the build branch for the reported version exist?
 console.log(`\n[5] build branch for the staged version`)
