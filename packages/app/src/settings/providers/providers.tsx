@@ -337,15 +337,21 @@ export const SettingsProviders: Component<{
             <Menu.Item disabled={state.credentialID !== undefined} onSelect={() => connect(menuProps.provider.id)}>
               {language.t("settings.providers.account.add")}
             </Menu.Item>
-            <Menu.Item
-              disabled={state.credentialID !== undefined || !active()}
-              onSelect={() => {
-                const account = active()
-                if (account) void remove(menuProps.provider, name(), account)
-              }}
-            >
-              {language.t("settings.providers.account.remove")}
-            </Menu.Item>
+            <Menu.Separator />
+            <Menu.Group>
+              <Menu.GroupLabel>{language.t("settings.providers.account.remove")}</Menu.GroupLabel>
+              <For each={accounts()}>
+                {(account) => (
+                  <Menu.Item
+                    disabled={state.credentialID !== undefined}
+                    badge={account.id === active()?.id ? language.t("settings.providers.account.active") : undefined}
+                    onSelect={() => void remove(menuProps.provider, name(), account)}
+                  >
+                    <span class="settings-provider-account-label">{account.label}</span>
+                  </Menu.Item>
+                )}
+              </For>
+            </Menu.Group>
           </Menu.Content>
         </Menu.Portal>
       </Menu>
