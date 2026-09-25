@@ -1,5 +1,18 @@
 import { expect, story } from "../../storybook/playwright/story"
 
+story("home connection progress stays in the server row", async ({ mount, page }) => {
+  const component = await mount("app-dialog-ssh--home-connecting")
+  await component.getByRole("button", { name: "Projects" }).click()
+  await expect(page.getByRole("status", { name: "Connecting over SSH…" })).toBeVisible()
+  await expect(page.locator('[data-action="home-server-authenticate"]')).toHaveCount(0)
+})
+
+story("home authentication action appears when required", async ({ mount, page }) => {
+  const component = await mount("app-dialog-ssh--authentication-required")
+  await component.getByRole("button", { name: "Projects" }).click()
+  await expect(page.getByRole("button", { name: "Authenticate", exact: true })).toBeVisible()
+})
+
 story("settings menu reconnect retains its prompt handler across server updates", async ({ mount, page }) => {
   const component = await mount("app-dialog-ssh--settings-reconnect")
   await component.getByRole("button", { name: "More options" }).click()
