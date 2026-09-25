@@ -113,6 +113,8 @@ const rateLimitDetails = (headers: Record<string, string>, retryAfter: number | 
   const limit: Record<string, string> = {}
   const remaining: Record<string, string> = {}
   const reset: Record<string, string> = {}
+  const utilization: Record<string, string> = {}
+  let status: string | undefined
 
   Object.entries(headers).forEach(([name, value]) => {
     const openaiLimit = /^x-ratelimit-limit-(.+)$/.exec(name)?.[1]
@@ -124,18 +126,31 @@ const rateLimitDetails = (headers: Record<string, string>, retryAfter: number | 
     const openaiReset = /^x-ratelimit-reset-(.+)$/.exec(name)?.[1]
     if (openaiReset) return addRateLimitValue(reset, openaiReset, value)
 
-    const anthropic = /^anthropic-ratelimit-(.+)-(limit|remaining|reset)$/.exec(name)
+    // Anthropic's unified subscription windows report a spent fraction rather
+    // than a remaining count, and a status of their own. Matching only
+    // limit/remaining/reset kept `anthropic-ratelimit-unified-5h-reset` and
+    // dropped `-utilization` beside it, so a rate-limited account was told
+    // when its window clears but never how full it was.
+    if (name === "anthropic-ratelimit-unified-status") {
+      status = value
+      return
+    }
+
+    const anthropic = /^anthropic-ratelimit-(.+)-(limit|remaining|reset|utilization)$/.exec(name)
     if (!anthropic) return
     if (anthropic[2] === "limit") return addRateLimitValue(limit, anthropic[1], value)
     if (anthropic[2] === "remaining") return addRateLimitValue(remaining, anthropic[1], value)
+    if (anthropic[2] === "utilization") return addRateLimitValue(utilization, anthropic[1], value)
     return addRateLimitValue(reset, anthropic[1], value)
   })
 
   if (
     retryAfter === undefined &&
+    status === undefined &&
     Object.keys(limit).length === 0 &&
     Object.keys(remaining).length === 0 &&
-    Object.keys(reset).length === 0
+    Object.keys(reset).length === 0 &&
+    Object.keys(utilization).length === 0
   )
     return undefined
 
@@ -144,6 +159,8 @@ const rateLimitDetails = (headers: Record<string, string>, retryAfter: number | 
     limit: Object.keys(limit).length === 0 ? undefined : limit,
     remaining: Object.keys(remaining).length === 0 ? undefined : remaining,
     reset: Object.keys(reset).length === 0 ? undefined : reset,
+    utilization: Object.keys(utilization).length === 0 ? undefined : utilization,
+    status,
   })
 }
 

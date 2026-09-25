@@ -20,6 +20,14 @@ export class HttpRateLimitDetails extends Schema.Class<HttpRateLimitDetails>("LL
   limit: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   remaining: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   reset: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  /**
+   * How much of a window is spent, as a fraction. Anthropic reports its unified
+   * subscription windows this way instead of as limit/remaining counts, so
+   * without this the reset instant arrives with nothing to reset from.
+   */
+  utilization: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  /** The provider's own word on whether the account is currently allowed. */
+  status: Schema.optional(Schema.String),
 }) {}
 
 export class HttpContext extends Schema.Class<HttpContext>("LLM.HttpContext")({

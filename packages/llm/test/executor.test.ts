@@ -211,6 +211,44 @@ describe("RequestExecutor", () => {
     ),
   )
 
+  it.effect("keeps the unified window's utilization, not only when it resets", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expectLLMError(error)
+      // A subscription account is rate limited by a spent fraction rather than
+      // by a remaining count, so `-reset` without `-utilization` says when the
+      // window clears and never how full it was.
+      expect(errorHttp(error)?.rateLimit).toEqual({
+        retryAfterMs: 0,
+        utilization: { "unified-5h": "0.42", "unified-7d": "0.3" },
+        reset: { "unified-5h": "2026-09-17T09:13:32Z", "unified-7d": "2026-09-23T05:25:11Z" },
+        status: "rejected",
+      })
+    }).pipe(
+      Effect.provide(
+        responsesLayer(
+          Array.from(
+            { length: 3 },
+            () =>
+              new Response("rate limited", {
+                status: 529,
+                headers: {
+                  "retry-after-ms": "0",
+                  "anthropic-ratelimit-unified-5h-utilization": "0.42",
+                  "anthropic-ratelimit-unified-5h-reset": "2026-09-17T09:13:32Z",
+                  "anthropic-ratelimit-unified-7d-utilization": "0.3",
+                  "anthropic-ratelimit-unified-7d-reset": "2026-09-23T05:25:11Z",
+                  "anthropic-ratelimit-unified-status": "rejected",
+                },
+              }),
+          ),
+        ),
+      ),
+    ),
+  )
+
   it.effect("extracts Anthropic-style rate-limit diagnostics", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service
