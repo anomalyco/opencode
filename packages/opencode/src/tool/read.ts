@@ -159,7 +159,12 @@ export const ReadTool = Tool.define<
               return
             }
 
-            const line = text.length > MAX_LINE_LENGTH ? text.substring(0, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX : text
+            // Keep the UTF-16 limit without cutting a Unicode surrogate pair in half.
+            const end =
+              text.charCodeAt(MAX_LINE_LENGTH - 1) >= 0xd800 && text.charCodeAt(MAX_LINE_LENGTH - 1) <= 0xdbff
+                ? MAX_LINE_LENGTH - 1
+                : MAX_LINE_LENGTH
+            const line = text.length > MAX_LINE_LENGTH ? text.substring(0, end) + MAX_LINE_SUFFIX : text
             const size = Buffer.byteLength(line, "utf-8") + (raw.length > 0 ? 1 : 0)
             if (flags.bytes + size <= MAX_BYTES) {
               raw.push(line)

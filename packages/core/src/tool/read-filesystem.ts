@@ -248,7 +248,12 @@ export const read = Effect.fn("ReadTool.read")(function* (
           next = line
           return false
         }
-        const text = input.length > MAX_LINE_LENGTH ? input.slice(0, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX : input
+        // Keep the UTF-16 limit without cutting a Unicode surrogate pair in half.
+        const end =
+          input.charCodeAt(MAX_LINE_LENGTH - 1) >= 0xd800 && input.charCodeAt(MAX_LINE_LENGTH - 1) <= 0xdbff
+            ? MAX_LINE_LENGTH - 1
+            : MAX_LINE_LENGTH
+        const text = input.length > MAX_LINE_LENGTH ? input.slice(0, end) + MAX_LINE_SUFFIX : input
         const size = Buffer.byteLength(text, "utf-8") + (lines.length > 0 ? 1 : 0)
         if (bytes + size > MAX_READ_BYTES) {
           next = line
