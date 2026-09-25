@@ -1,8 +1,9 @@
 import { OpenCode } from "@opencode/client"
 import { Service } from "@opencode/client/effect/service"
 import { Session } from "@opencode/schema/session"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { SessionTransfer } from "@opencode/schema/session-transfer"
-import { Effect, Option, Schema } from "effect"
+import { Effect, Option, Predicate, Schema } from "effect"
 import { EOL } from "node:os"
 import path from "node:path"
 import { Commands } from "../../commands"
@@ -23,7 +24,13 @@ export default Runtime.handler(
       catch: (cause) =>
         new Error(`Failed to read session data: ${cause instanceof Error ? cause.message : String(cause)}`),
     })
-    const data = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SessionTransfer.Data))(text)
+    const raw = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown))(text)
+    // Exports written before provider blobs were renamed to `native` still carry the old keys.
+    const data = yield* Schema.decodeUnknownEffect(SessionTransfer.Data)(
+      Predicate.isObject(raw) && Array.isArray(raw.messages)
+        ? { ...raw, messages: raw.messages.map(SessionMessage.persisted) }
+        : raw,
+    )
     const encoded = Schema.encodeSync(SessionTransfer.Data)(data)
     const server = yield* ServerConnection.resolve({
       server: Option.getOrUndefined(input.server),

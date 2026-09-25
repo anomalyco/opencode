@@ -38,7 +38,7 @@ export interface StepRecord {
   readonly finish?: {
     readonly finish: Extract<LLMEvent, { type: "step-finish" }>["reason"]["normalized"]
     readonly rawFinish?: string
-    readonly providerState?: SessionMessage.ProviderState
+    readonly native?: SessionMessage.ProviderState
     readonly tokens: ReturnType<typeof SessionUsage.tokens>
   }
   readonly needsContinuation: boolean
@@ -212,7 +212,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
           assistantMessageID: yield* currentAssistantMessageID(),
           ordinal,
           text: value,
-          state,
+          native: state,
         })
       }),
     (_textID, value, ordinal) =>
@@ -235,7 +235,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
           assistantMessageID: yield* currentAssistantMessageID(),
           ordinal,
           text: value,
-          state,
+          native: state,
         })
       }),
     (_reasoningID, value, ordinal) =>
@@ -388,7 +388,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
       error: stepFailure,
       finish: stepSettlement?.finish === "content-filter" ? stepSettlement.finish : undefined,
       rawFinish: stepSettlement?.rawFinish,
-      providerState: stepSettlement?.providerState,
+      native: stepSettlement?.native,
       ...details,
     })
   })
@@ -426,7 +426,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
           sessionID: input.sessionID,
           assistantMessageID: yield* startAssistant(),
           ordinal: startedReasoningOrdinal,
-          state: providerState(event.providerMetadata),
+          native: providerState(event.providerMetadata),
         })
         return
       case "reasoning-delta":
@@ -470,7 +470,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
           id: event.id,
           input: asRecord(event.input),
           executed: tool.providerExecuted,
-          state: providerState(event.providerMetadata),
+          native: providerState(event.providerMetadata),
         })
         return
       }
@@ -538,7 +538,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         stepSettlement = {
           finish: event.reason.normalized,
           rawFinish: event.reason.raw,
-          providerState: providerState(event.providerMetadata),
+          native: providerState(event.providerMetadata),
           tokens: SessionUsage.tokens(event.usage),
         }
         if (event.reason.normalized === "content-filter") {

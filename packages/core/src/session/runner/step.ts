@@ -236,7 +236,7 @@ export const make = Effect.gen(function* () {
               assistantMessageID: yield* publisher.startAssistant(),
               finish: record.finish.finish,
               rawFinish: record.finish.rawFinish,
-              providerState: record.finish.providerState,
+              native: record.finish.native,
               ...usage,
               snapshot,
               files,

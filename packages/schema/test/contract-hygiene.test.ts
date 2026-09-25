@@ -257,15 +257,15 @@ describe("contract hygiene", () => {
       text: "hello",
     })
     expect(
-      SessionMessage.AssistantReasoning.make({ type: "reasoning", text: "thinking", state: { id: "opaque" } }),
-    ).toEqual({ type: "reasoning", text: "thinking", state: { id: "opaque" } })
+      SessionMessage.AssistantReasoning.make({ type: "reasoning", text: "thinking", native: { id: "opaque" } }),
+    ).toEqual({ type: "reasoning", text: "thinking", native: { id: "opaque" } })
     expect(
       SessionMessage.AssistantTool.make({
         type: "tool",
         id: "call_1",
         name: "search",
         executed: true,
-        providerState: { itemId: "item_1" },
+        native: { itemId: "item_1" },
         state: { status: "streaming", input: "" },
         time: { created: DateTime.makeUnsafe(0) },
       }),

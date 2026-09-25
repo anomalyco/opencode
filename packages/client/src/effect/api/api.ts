@@ -875,7 +875,7 @@ export type SessionLogOutput =
             readonly assistantMessageID: SessionMessage.ID
             readonly finish: "stop" | "length" | "tool-calls" | "content-filter" | "error" | "unknown"
             readonly rawFinish?: string | undefined
-            readonly providerState?: SessionMessage.ProviderState | undefined
+            readonly native?: SessionMessage.ProviderState | undefined
             readonly cost: number & Brand.Brand<"Money.USD">
             readonly tokens: {
               readonly input: number
@@ -905,7 +905,7 @@ export type SessionLogOutput =
             readonly error: { readonly type: string; readonly message: string; readonly status?: number | undefined }
             readonly finish?: "content-filter" | undefined
             readonly rawFinish?: string | undefined
-            readonly providerState?: SessionMessage.ProviderState | undefined
+            readonly native?: SessionMessage.ProviderState | undefined
             readonly cost?: (number & Brand.Brand<"Money.USD">) | undefined
             readonly tokens?:
               | {
@@ -954,7 +954,7 @@ export type SessionLogOutput =
             readonly assistantMessageID: SessionMessage.ID
             readonly ordinal: number
             readonly text: string
-            readonly state?: SessionMessage.ProviderState | undefined
+            readonly native?: SessionMessage.ProviderState | undefined
           }
         }
       | {
@@ -973,7 +973,7 @@ export type SessionLogOutput =
             readonly sessionID: Session.ID
             readonly assistantMessageID: SessionMessage.ID
             readonly ordinal: number
-            readonly state?: SessionMessage.ProviderState | undefined
+            readonly native?: SessionMessage.ProviderState | undefined
           }
         }
       | {
@@ -993,7 +993,7 @@ export type SessionLogOutput =
             readonly assistantMessageID: SessionMessage.ID
             readonly ordinal: number
             readonly text: string
-            readonly state?: SessionMessage.ProviderState | undefined
+            readonly native?: SessionMessage.ProviderState | undefined
           }
         }
       | {
@@ -1052,7 +1052,7 @@ export type SessionLogOutput =
             readonly id: string
             readonly input: { readonly [x: string]: unknown }
             readonly executed: boolean
-            readonly state?: SessionMessage.ProviderState | undefined
+            readonly native?: SessionMessage.ProviderState | undefined
           }
         }
       | {
@@ -1195,7 +1195,7 @@ export type SessionLogOutput =
             readonly sessionID: Session.ID
             readonly reason: "auto" | "manual"
             readonly model?: Model.Ref | undefined
-            readonly providerState?: SessionMessage.ProviderState | undefined
+            readonly native?: SessionMessage.ProviderState | undefined
             readonly providerContext?:
               | {
                   readonly version: 1

@@ -47,7 +47,7 @@ function MermaidTimeline(props: { streaming: boolean }) {
                 "```mermaid\nsequenceDiagram\n Client->>Server: Send prompt\n Server->>Model: Generate response\n Model-->>Client: Response\n" +
                   (completed() ? "```" : ""),
               ].join("\n\n"),
-              ...(completed() ? {} : { state: { phase: "streaming" } }),
+              ...(completed() ? {} : { native: { phase: "streaming" } }),
             },
           ],
         },

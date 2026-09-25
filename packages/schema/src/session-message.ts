@@ -1,6 +1,6 @@
 export * as SessionMessage from "./session-message.js"
 
-import { Schema } from "effect"
+import { Predicate, Schema } from "effect"
 import { SessionProviderContext } from "./session-provider-context.js"
 import { optional } from "./schema.js"
 import { Content } from "./tool.js"
@@ -163,7 +163,7 @@ export const AssistantTool = Schema.Struct({
   id: Schema.String,
   name: Schema.String,
   executed: Schema.Boolean.pipe(optional),
-  providerState: ProviderState.pipe(optional),
+  native: ProviderState.pipe(optional),
   providerResultState: ProviderState.pipe(optional),
   state: ToolState,
   time: Schema.Struct({
@@ -177,14 +177,14 @@ export interface AssistantText extends Schema.Schema.Type<typeof AssistantText> 
 export const AssistantText = Schema.Struct({
   type: Schema.tag("text"),
   text: Schema.String,
-  state: ProviderState.pipe(optional),
+  native: ProviderState.pipe(optional),
 }).annotate({ identifier: "Session.Message.Assistant.Text" })
 
 export interface AssistantReasoning extends Schema.Schema.Type<typeof AssistantReasoning> {}
 export const AssistantReasoning = Schema.Struct({
   type: Schema.tag("reasoning"),
   text: Schema.String,
-  state: ProviderState.pipe(optional),
+  native: ProviderState.pipe(optional),
   time: Schema.Struct({
     created: DateTimeUtcFromMillis,
     completed: DateTimeUtcFromMillis.pipe(optional),
@@ -222,7 +222,7 @@ export const Assistant = Schema.Struct({
   }).pipe(optional),
   finish: FinishReason.pipe(optional),
   rawFinish: Schema.String.pipe(optional),
-  providerState: ProviderState.pipe(optional),
+  native: ProviderState.pipe(optional),
   cost: Money.USD.pipe(optional),
   tokens: TokenUsage.Info.pipe(optional),
   error: SessionError.Error.pipe(optional),
@@ -258,7 +258,7 @@ export const CompactionCompleted = Schema.Struct({
   status: Schema.tag("completed"),
   reason: Schema.Literals(["auto", "manual"]),
   model: Model.Ref.pipe(optional),
-  providerState: ProviderState.pipe(optional),
+  native: ProviderState.pipe(optional),
   summary: Schema.String,
   recent: Schema.String,
   providerContext: SessionProviderContext.Info.pipe(optional),
@@ -318,3 +318,26 @@ export type Info =
   | Compaction
   | Idle
 export type Type = Info["type"]
+
+/** Reads messages stored before provider blobs were renamed to `native`. */
+export function persisted(input: unknown) {
+  if (!Predicate.isObject(input)) return input
+  const message =
+    input.type === "assistant" || input.type === "compaction" ? rename(input, "providerState", "native") : input
+  if (message.type !== "assistant" || !Array.isArray(message.content)) return message
+  const stored: ReadonlyArray<unknown> = message.content
+  const content = stored.map((part) => {
+    if (!Predicate.isObject(part)) return part
+    if (part.type === "text" || part.type === "reasoning") return rename(part, "state", "native")
+    if (part.type === "tool") return rename(part, "providerState", "native")
+    return part
+  })
+  return content.every((part, index) => part === stored[index]) ? message : { ...message, content }
+}
+
+function rename(record: Record<string, unknown>, from: string, to: string) {
+  if (record[from] === undefined || record[to] !== undefined) return record
+  const value = record[from]
+  const rest = Object.fromEntries(Object.entries(record).filter(([key]) => key !== from))
+  return { ...rest, [to]: value }
+}

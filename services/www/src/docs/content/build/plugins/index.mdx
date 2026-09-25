@@ -1566,7 +1566,7 @@ interface SessionContextHook extends SessionRequestHook {
 
 interface SessionCompactionResult {
   summary: string
-  providerState?: Record<string, unknown>
+  native?: Record<string, unknown>
   metadata?: Record<string, unknown>
   tokens?: TokenUsage
 }

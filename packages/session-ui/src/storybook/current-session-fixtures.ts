@@ -190,13 +190,13 @@ export const streamingDocument = document(
         {
           type: "reasoning",
           text: "## Checking the current contract\n\nThe assistant content is nested on each current Session message.",
-          state: { phase: "streaming" },
+          native: { phase: "streaming" },
           time: { created: STORY_TIME + 11_100 },
         },
         {
           type: "text",
           text: "I have the typed rows in place. Next I am checking the streaming presentation",
-          state: { phase: "streaming" },
+          native: { phase: "streaming" },
         },
       ],
     }),
