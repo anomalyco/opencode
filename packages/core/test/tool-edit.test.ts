@@ -381,6 +381,32 @@ describe("EditTool", () => {
     ),
   )
 
+  it.live("rejects a non-UTF-8 file instead of corrupting it", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "legacy.txt")
+        const bytes = new Uint8Array([...new TextEncoder().encode("const x = 1\n"), 0xd6, 0xd0, 0xce, 0xc4, 0x0a])
+        return Effect.promise(() => fs.writeFile(target, bytes)).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              executeTool(registry, call({ path: "legacy.txt", oldString: "const x = 1", newString: "const y = 1" })),
+            ),
+          ),
+          Effect.andThen((result) =>
+            Effect.sync(() =>
+              expect(result).toEqual({ type: "error", value: "Unable to edit legacy.txt: file is not valid UTF-8" }),
+            ),
+          ),
+          Effect.andThen(() => Effect.promise(() => fs.readFile(target))),
+          Effect.tap((after) => Effect.sync(() => expect(new Uint8Array(after)).toEqual(bytes))),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   it.live("rejects an in-place content change after matching but before conditional commit", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
