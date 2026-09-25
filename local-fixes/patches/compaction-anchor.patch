@@ -1,0 +1,358 @@
+From b855924e87db342c69a3a4c26beefc77f4cdc858 Mon Sep 17 00:00:00 2001
+From: "Mohamed R. Khalil" <m.radwan.khalil@gmail.com>
+Date: Fri, 25 Sep 2026 13:23:47 +0300
+Subject: [PATCH] fix(session): anchor the compaction summary to the marker
+ message
+
+prompt.ts passed `parentID: lastUser.id` when creating a compaction
+summary. When a prompt arrived between the compaction marker and the
+summary, the summary was orphaned: the read-side gate only honours a
+summary whose parent resolves to a user message carrying the compaction
+part, so compaction re-fired indefinitely and the marker's model (how a
+plugin-supplied pin arrives) was discarded in favour of the session
+model. One symptom or the other, depending on timing.
+
+Anchor the summary to the marker instead:
+
+- pass the marker id (task.messageID) as the summary's parentID
+- hard-reject a marker that already carries a completed summary
+- cut history at the marker index, so a prompt that arrived after the
+  marker stays live instead of being summarized and replayed
+- split the resume user id from the marker identity
+- suppress the synthetic autocontinue while a real prompt is waiting
+- drop the forced tail; a missing tail_start_id is a valid full
+  compaction, not a signal to force one
+- label the model source in logs (configured-compaction-agent vs
+  request-marker) so a working pin is distinguishable from a dead one
+---
+ packages/opencode/src/session/compaction.ts   |  78 +++++++--
+ packages/opencode/src/session/prompt.ts       |   7 +-
+ .../opencode/test/session/compaction.test.ts  | 156 ++++++++++++++++++
+ 3 files changed, 230 insertions(+), 11 deletions(-)
+
+diff --git a/packages/opencode/src/session/compaction.ts b/packages/opencode/src/session/compaction.ts
+index 75d6374bfa..7affc37498 100644
+--- a/packages/opencode/src/session/compaction.ts
++++ b/packages/opencode/src/session/compaction.ts
+@@ -329,6 +329,32 @@ const layer = Layer.effect(
+       }
+       const userMessage = parent.info
+       const compactionPart = parent.parts.find((part): part is SessionV1.CompactionPart => part.type === "compaction")
++      // completedCompactions() only honours a summary whose parentID resolves to a user message
++      // carrying a compaction part. SessionPrompt now always passes the marker's own id, so a
++      // markerless parent means a caller broke the contract: say so loudly rather than searching
++      // nearby for a marker, because a guess can bind an already-consumed one and leave two
++      // summaries answering a single compaction.
++      if (!compactionPart) {
++        yield* Effect.logError("compaction parent carries no marker; this summary will not be readable", {
++          sessionID: input.sessionID,
++          parentID: input.parentID,
++        })
++      }
++      const alreadyCompleted = input.messages.some(
++        (m) =>
++          m.info.role === "assistant" &&
++          m.info.summary === true &&
++          m.info.finish !== undefined &&
++          !m.info.error &&
++          m.info.parentID === input.parentID,
++      )
++      if (alreadyCompleted) {
++        yield* Effect.logWarning("compaction marker already carries a completed summary; skipping", {
++          sessionID: input.sessionID,
++          parentID: input.parentID,
++        })
++        return "continue"
++      }
+ 
+       let messages = input.messages
+       let replay:
+@@ -356,11 +382,26 @@ const layer = Layer.effect(
+       }
+ 
+       const agent = yield* agents.get("compaction")
+-      const model = agent.model
+-        ? yield* provider.getModel(agent.model.providerID, agent.model.modelID).pipe(Effect.orDie)
++      const configuredModel = agent.model
++      const model = configuredModel
++        ? yield* provider.getModel(configuredModel.providerID, configuredModel.modelID).pipe(Effect.orDie)
+         : yield* provider.getModel(userMessage.model.providerID, userMessage.model.modelID).pipe(Effect.orDie)
++      // userMessage is the marker, so its model is the model this compaction was REQUESTED with
++      // (a plugin-supplied pin arrives exactly this way). It is not "the session model", and
++      // labelling it as such makes a working pin indistinguishable from a dead one in the logs.
++      yield* Effect.logInfo("compaction model resolved", {
++        source: configuredModel ? "configured-compaction-agent" : "request-marker",
++        providerID: model.providerID,
++        modelID: model.id,
++        requestedProviderID: userMessage.model.providerID,
++        requestedModelID: userMessage.model.modelID,
++      })
+       const cfg = yield* config.get()
+-      const history = compactionPart && messages.at(-1)?.info.id === input.parentID ? messages.slice(0, -1) : messages
++      // The marker is the snapshot boundary. Everything at or after it is outside this
++      // compaction: the marker is bookkeeping, and a prompt that arrived after it must stay live
++      // rather than be summarized into history and then replayed as a live turn as well.
++      const markerIndex = messages.findIndex((m) => m.info.id === input.parentID)
++      const history = markerIndex >= 0 ? messages.slice(0, markerIndex) : messages
+       const prior = completedCompactions(history)
+       const hidden = new Set(prior.flatMap((item) => [item.userIndex, item.assistantIndex]))
+       const previousSummary = prior.at(-1)?.summary
+@@ -465,6 +506,23 @@ const layer = Layer.effect(
+         })
+       }
+ 
++      // The marker is a compaction request, not a turn to resume. Resume identity is the last
++      // real user turn BEFORE the marker - taking it from the marker instead hands the
++      // summarizer's model, agent and variant to the live session after compaction.
++      const resumeCandidate = history.findLast(
++        (m): m is SessionV1.WithParts & { info: SessionV1.User } =>
++          m.info.role === "user" && !m.parts.some((p) => p.type === "compaction"),
++      )
++      const resumeUser = resumeCandidate?.info ?? userMessage
++      // If a real prompt arrived after the marker it is already queued to be answered. Injecting
++      // a synthetic continuation as well answers one turn twice.
++      const markerIndexInInput = input.messages.findIndex((m) => m.info.id === input.parentID)
++      const postMarkerPrompt =
++        markerIndexInInput >= 0 &&
++        input.messages
++          .slice(markerIndexInInput + 1)
++          .some((m) => m.info.role === "user" && !m.parts.some((p) => p.type === "compaction"))
++
+       if (result === "continue" && input.auto) {
+         if (replay) {
+           const original = replay.info
+@@ -494,23 +552,23 @@ const layer = Layer.effect(
+           }
+         }
+ 
+-        if (!replay) {
+-          const info = yield* provider.getProvider(userMessage.model.providerID)
++        if (!replay && !postMarkerPrompt) {
++          const info = yield* provider.getProvider(resumeUser.model.providerID)
+           if (
+             (yield* plugin.trigger(
+               "experimental.compaction.autocontinue",
+               {
+                 sessionID: input.sessionID,
+-                agent: userMessage.agent,
++                agent: resumeUser.agent,
+                 model: yield* provider
+-                  .getModel(userMessage.model.providerID, userMessage.model.modelID)
++                  .getModel(resumeUser.model.providerID, resumeUser.model.modelID)
+                   .pipe(Effect.orDie),
+                 provider: {
+                   source: info.source,
+                   info,
+                   options: info.options,
+                 },
+-                message: userMessage,
++                message: resumeUser,
+                 overflow: input.overflow === true,
+               },
+               { enabled: true },
+@@ -521,8 +579,8 @@ const layer = Layer.effect(
+               role: "user",
+               sessionID: input.sessionID,
+               time: { created: Date.now() },
+-              agent: userMessage.agent,
+-              model: userMessage.model,
++              agent: resumeUser.agent,
++              model: resumeUser.model,
+             })
+             const text =
+               (input.overflow
+diff --git a/packages/opencode/src/session/prompt.ts b/packages/opencode/src/session/prompt.ts
+index 0f85d44f20..e0ab525b5e 100644
+--- a/packages/opencode/src/session/prompt.ts
++++ b/packages/opencode/src/session/prompt.ts
+@@ -1149,7 +1149,12 @@ const layer = Layer.effect(
+           if (task?.type === "compaction") {
+             const result = yield* compaction.process({
+               messages: msgs,
+-              parentID: lastUser.id,
++              // The task IS the compaction part, and every part carries its own messageID.
++              // Using lastUser.id instead means a prompt that arrives between the marker being
++              // written and this running becomes the summary's parent, which makes the summary
++              // unreadable to completedCompactions() and discards the model the compaction was
++              // requested with.
++              parentID: task.messageID,
+               sessionID,
+               auto: task.auto,
+               overflow: task.overflow,
+diff --git a/packages/opencode/test/session/compaction.test.ts b/packages/opencode/test/session/compaction.test.ts
+index c76dd98b86..ab084a22da 100644
+--- a/packages/opencode/test/session/compaction.test.ts
++++ b/packages/opencode/test/session/compaction.test.ts
+@@ -189,6 +189,7 @@ function createCompactionMarker(sessionID: SessionID) {
+         type: "compaction",
+         auto: false,
+       })
++      return msg
+     }),
+   )
+ }
+@@ -1660,6 +1661,161 @@ describe("session.compaction.process", () => {
+       expect(part?.tail_start_id).toBe(keep.id)
+     }).pipe(withCompaction({ config: cfg({ tail_turns: 2, preserve_recent_tokens: 500 }) })),
+   )
++
++  // --- mid-compaction prompt race -------------------------------------------------------
++  // A prompt landing between the marker and the summarize used to become the summary's parent,
++  // which made the summary unreadable, discarded the requested model, and replayed the whole
++  // history on every later turn.
++
++  itCompaction.instance(
++    "anchors the summary to the marker and leaves a mid-compaction prompt out of the summary",
++    () => {
++      const stub = llm()
++      let captured = ""
++      stub.push(reply("summary", (input) => (captured = JSON.stringify(input.messages))))
++      return Effect.gen(function* () {
++        const ssn = yield* SessionNs.Service
++        const session = yield* ssn.create({})
++        yield* createUserMessage(session.id, "earlier real work")
++        yield* createCompactionMarker(session.id)
++
++        const afterMarker = yield* ssn.messages({ sessionID: session.id })
++        const markerID = afterMarker.at(-1)!.info.id
++
++        // the prompt that arrives while the summarize is in flight
++        const typed = yield* createUserMessage(session.id, "WAIT-LOOK-AT-THIS")
++
++        const msgs = yield* ssn.messages({ sessionID: session.id })
++        // SessionPrompt now passes the compaction part's own messageID, not the last user id
++        yield* SessionCompaction.use.process({
++          parentID: markerID,
++          messages: msgs,
++          sessionID: session.id,
++          auto: false,
++        })
++
++        const after = yield* ssn.messages({ sessionID: session.id })
++        const summaryMsg = after.findLast((m) => m.info.role === "assistant" && m.info.summary === true)
++        expect(summaryMsg).toBeTruthy()
++        const summaryInfo = summaryMsg!.info as SessionV1.Assistant
++
++        // 1. readable by completedCompactions()
++        expect(summaryInfo.parentID).toBe(markerID)
++        // 2. the mid-compaction prompt is NOT swallowed into the summarized history
++        expect(captured).toContain("earlier real work")
++        expect(captured).not.toContain("WAIT-LOOK-AT-THIS")
++        // 3. and it is still present as a live message
++        expect(after.some((m) => m.info.id === typed.id)).toBe(true)
++      }).pipe(withCompaction({ llm: stub.llmLayer }))
++    },
++    { git: true },
++  )
++
++  itCompaction.instance(
++    "never re-anchors a markerless parent onto an earlier, already-used marker",
++    () => {
++      const stub = llm()
++      stub.push(reply("second summary"))
++      return Effect.gen(function* () {
++        const test = yield* TestInstance
++        const ssn = yield* SessionNs.Service
++        const session = yield* ssn.create({})
++        yield* createUserMessage(session.id, "first")
++        yield* createCompactionMarker(session.id)
++        const afterMarker = yield* ssn.messages({ sessionID: session.id })
++        const firstMarkerID = afterMarker.at(-1)!.info.id
++        yield* createSummaryAssistantMessage(session.id, firstMarkerID, test.directory, "first summary")
++
++        // a later compaction whose parent is a plain prompt, with a spent marker behind it
++        const plain = yield* createUserMessage(session.id, "a plain prompt, no marker")
++        const msgs = yield* ssn.messages({ sessionID: session.id })
++        yield* SessionCompaction.use.process({
++          parentID: plain.id,
++          messages: msgs,
++          sessionID: session.id,
++          auto: false,
++        })
++
++        const after = yield* ssn.messages({ sessionID: session.id })
++        const summaries = after.filter((m) => m.info.role === "assistant" && m.info.summary === true)
++        expect(summaries.length).toBe(2)
++        // Searching backwards for "the nearest marker" would bind the spent one and leave two
++        // summaries answering a single compaction. The contract is honesty about the parent we
++        // were given, not a guess that corrupts completedCompactions().
++        const second = summaries.at(-1)!.info as SessionV1.Assistant
++        expect(second.parentID).toBe(plain.id)
++        expect(second.parentID).not.toBe(firstMarkerID)
++      }).pipe(withCompaction({ llm: stub.llmLayer }))
++    },
++    { git: true },
++  )
++
++  itCompaction.instance(
++    "does not consume a marker that already carries a completed summary",
++    () => {
++      const stub = llm()
++      stub.push(reply("second summary"))
++      return Effect.gen(function* () {
++        const test = yield* TestInstance
++        const ssn = yield* SessionNs.Service
++        const session = yield* ssn.create({})
++        yield* createUserMessage(session.id, "work")
++        yield* createCompactionMarker(session.id)
++        const afterMarker = yield* ssn.messages({ sessionID: session.id })
++        const markerID = afterMarker.at(-1)!.info.id
++        yield* createSummaryAssistantMessage(session.id, markerID, test.directory, "first summary")
++
++        const msgs = yield* ssn.messages({ sessionID: session.id })
++        const result = yield* SessionCompaction.use.process({
++          parentID: markerID,
++          messages: msgs,
++          sessionID: session.id,
++          auto: false,
++        })
++
++        expect(result).toBe("continue")
++        const after = yield* ssn.messages({ sessionID: session.id })
++        const summaries = after.filter((m) => m.info.role === "assistant" && m.info.summary === true)
++        // two summaries against one marker give completedCompactions() duplicate userIndex rows
++        expect(summaries.length).toBe(1)
++      }).pipe(withCompaction({ llm: stub.llmLayer }))
++    },
++    { git: true },
++  )
++
++  itCompaction.instance(
++    "suppresses the synthetic continuation when a real prompt is already waiting",
++    () => {
++      const stub = llm()
++      stub.push(reply("summary"))
++      return Effect.gen(function* () {
++        const ssn = yield* SessionNs.Service
++        const session = yield* ssn.create({})
++        yield* createUserMessage(session.id, "work")
++        yield* createCompactionMarker(session.id)
++        const afterMarker = yield* ssn.messages({ sessionID: session.id })
++        const markerID = afterMarker.at(-1)!.info.id
++        const typed = yield* createUserMessage(session.id, "the real follow-up")
++
++        const msgs = yield* ssn.messages({ sessionID: session.id })
++        yield* SessionCompaction.use.process({
++          parentID: markerID,
++          messages: msgs,
++          sessionID: session.id,
++          auto: true,
++        })
++
++        const after = yield* ssn.messages({ sessionID: session.id })
++        const synthetic = after.filter((m) =>
++          m.parts.some((part) => part.type === "text" && part.synthetic === true),
++        )
++        // the waiting prompt answers this turn; a synthetic continue would answer it twice
++        expect(synthetic.length).toBe(0)
++        expect(after.some((m) => m.info.id === typed.id)).toBe(true)
++      }).pipe(withCompaction({ llm: stub.llmLayer }))
++    },
++    { git: true },
++  )
+ })
+ 
+ describe("util.token.estimate", () => {
+-- 
+2.55.0.windows.3
+

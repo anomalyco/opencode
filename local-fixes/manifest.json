@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "purpose": "Upgrade the patched opencode 1.x binary to a newer upstream tag while re-applying our compaction-anchor fix, then verify the fix survived bundling before staging it for OpenChamber.",
+  "repo": "opencode-core-fix",
+  "upstream": "https://github.com/anomalyco/opencode.git",
+  "branch": "fix/compaction-anchor",
+  "upstreamConstraint": "v1.x only. NEVER target v2+: packages/opencode/ does not exist there and OpenChamber 1.24.2 requires OpenCode 1.x.",
+  "fix": {
+    "id": "compaction-anchor",
+    "title": "Anchor the compaction summary to the marker message",
+    "commit": "b855924e87db342c69a3a4c26beefc77f4cdc858",
+    "patch": "local-fixes/patches/compaction-anchor.patch",
+    "base": "v1.18.32",
+    "files": [
+      "packages/opencode/src/session/compaction.ts",
+      "packages/opencode/src/session/prompt.ts",
+      "packages/opencode/test/session/compaction.test.ts"
+    ],
+    "markers": [
+      "configured-compaction-agent",
+      "request-marker",
+      "marker already carries a completed summary"
+    ],
+    "tests": "test/session/compaction.test.ts",
+    "why": "prompt.ts passed parentID: lastUser.id for the compaction summary, so a prompt landing in the marker-to-summary window orphaned the summary (infinite compaction) and discarded the marker's model (a plugin-supplied pin). Anchoring to the marker repairs both."
+  },
+  "build": {
+    "cwd": "packages/opencode",
+    "command": "bun run script/build.ts --single --skip-embed-web-ui --skip-install",
+    "versionEnv": "OPENCODE_VERSION",
+    "artifact": "dist/opencode-windows-x64/bin/opencode.exe",
+    "note": "OPENCODE_VERSION must be set or the binary reports a dev version and free-tier models reject it with 426 'OpenCode 1.18.0 or newer is required'."
+  },
+  "stage": {
+    "path": "C:\\Users\\Zephyrus\\.local\\bin\\opencode-patched.exe",
+    "note": "Stable filename on purpose: opencodeBinary in OpenChamber settings.json points here forever, so an upgrade never requires editing settings again.",
+    "settingsFile": "C:\\Users\\Zephyrus\\.config\\openchamber\\settings.json",
+    "settingsKey": "opencodeBinary"
+  },
+  "buildBranchPrefix": "build/",
+  "restartNote": "OpenChamber must be fully closed and restarted to load a newly staged binary."
+}
