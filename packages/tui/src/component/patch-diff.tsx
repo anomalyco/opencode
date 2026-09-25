@@ -172,6 +172,8 @@ function VirtualAddedPatch(props: {
     return getTreeSitterClient()
       .highlightOnce(contents().join("\n"), filetype)
       .then((result) => result.highlights)
+      // Rejects when the renderer tears down the client mid-parse; chunks then keep their own highlights.
+      .catch(() => undefined)
   })
   const chunkHighlights =
     (index: number): OnHighlightCallback =>
