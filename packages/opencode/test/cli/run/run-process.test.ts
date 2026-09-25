@@ -7,6 +7,7 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { reply } from "../../lib/llm-server"
 import { cliIt } from "../../lib/cli-process"
+import { testProviderConfig } from "../../lib/test-provider"
 
 describe("opencode run (non-interactive subprocess)", () => {
   // Happy path: prompt completes, output reaches stdout, process exits 0.
@@ -137,6 +138,68 @@ describe("opencode run (non-interactive subprocess)", () => {
             .slice(0, -1)
             .every((line) => line.length > 0),
         ).toBe(true)
+      }),
+    60_000,
+  )
+
+  cliIt.concurrent(
+    "--format json omits compaction internals and preserves visible output",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* llm.push(
+          reply()
+            .reason("visible reasoning before compaction")
+            .text("visible before compaction")
+            .tool("bash", { command: "printf tool", description: "Print deterministic output" })
+            .usage({ input: 95_000, output: 100 }),
+          reply().reason("internal compaction reasoning").text("internal compaction summary").stop(),
+          reply().text("visible after compaction").stop(),
+        )
+
+        const result = yield* opencode.run("use a tool and continue after compaction", {
+          format: "json",
+          extraArgs: ["--thinking", "--dangerously-skip-permissions"],
+          env: {
+            OPENCODE_DISABLE_AUTOCOMPACT: "0",
+            OPENCODE_CONFIG_CONTENT: JSON.stringify({
+              ...testProviderConfig(llm.url),
+              compaction: { auto: true, prune: false, tail_turns: 0 },
+            }),
+          },
+        })
+
+        opencode.expectExit(result, 0)
+        const events = opencode.parseJsonEvents(result.stdout)
+        expect(events.map((event) => event.type)).toEqual([
+          "step_start",
+          "reasoning",
+          "text",
+          "tool_use",
+          "step_finish",
+          "step_start",
+          "text",
+          "step_finish",
+        ])
+        expect(events.filter((event) => event.type === "text").map((event) => event.part)).toEqual([
+          expect.objectContaining({ type: "text", text: "visible before compaction" }),
+          expect.objectContaining({ type: "text", text: "visible after compaction" }),
+        ])
+        expect(events.find((event) => event.type === "reasoning")?.part).toEqual(
+          expect.objectContaining({ type: "reasoning", text: "visible reasoning before compaction" }),
+        )
+        expect(events.find((event) => event.type === "tool_use")?.part).toEqual(
+          expect.objectContaining({
+            type: "tool",
+            tool: "bash",
+            state: expect.objectContaining({ status: "completed" }),
+          }),
+        )
+        expect(result.stdout).not.toContain("internal compaction")
+        expect(result.stdout).not.toContain("Continue if you have next steps")
+        // Prove the internal response became the summary used by the next turn,
+        // rather than merely relying on a queued mock response being consumed.
+        const requests = yield* llm.inputs
+        expect(requests.some((request) => JSON.stringify(request).includes("internal compaction summary"))).toBe(true)
       }),
     60_000,
   )

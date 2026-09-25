@@ -697,11 +697,21 @@ export const RunCommand = effectCmd({
         async function loop(client: OpencodeClient, events: Awaited<ReturnType<typeof sdk.event.subscribe>>) {
           const toggles = new Map<string, boolean>()
           const sessions = new Set([sessionID])
+          const compactionMessages = new Set<string>()
           let error: string | undefined
 
           for await (const event of events.stream) {
             if (event.type === "session.created" && event.properties.info.parentID) {
               if (sessions.has(event.properties.info.parentID)) sessions.add(event.properties.info.id)
+            }
+
+            if (
+              event.type === "message.updated" &&
+              event.properties.sessionID === sessionID &&
+              event.properties.info.role === "assistant" &&
+              event.properties.info.mode === "compaction"
+            ) {
+              compactionMessages.add(event.properties.info.id)
             }
 
             if (
@@ -720,6 +730,10 @@ export const RunCommand = effectCmd({
             if (event.type === "message.part.updated") {
               const part = event.properties.part
               if (part.sessionID !== sessionID) continue
+              // Skip all parts from compaction messages — message.updated for
+              // compaction arrives before its parts (same fiber, sequential
+              // publish), so the Set is populated before we reach here.
+              if (compactionMessages.has(part.messageID)) continue
 
               if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
                 if (emit("tool_use", { part })) continue
@@ -751,6 +765,7 @@ export const RunCommand = effectCmd({
               }
 
               if (part.type === "text" && part.time?.end) {
+                if (part.synthetic) continue
                 if (emit("text", { part })) continue
                 const text = part.text.trim()
                 if (!text) continue
