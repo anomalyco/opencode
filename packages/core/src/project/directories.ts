@@ -1,12 +1,12 @@
 export * as ProjectDirectories from "./directories"
 
-import { and, asc, desc, eq, isNotNull, isNull, ne, or } from "drizzle-orm"
+import { and, asc, desc, eq, isNotNull, isNull, ne, or, sql } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Database } from "../database/database"
 import { makeGlobalNode } from "../effect/app-node"
 import { AbsolutePath, optional } from "../schema"
 import { ProjectSchema } from "./schema"
-import { ProjectDirectoryTable } from "./sql"
+import { ProjectDirectoryTable, ProjectTable } from "./sql"
 import type { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
 
 export interface Directory {
@@ -53,6 +53,12 @@ export interface Interface {
   readonly contains: (input: { projectID: ProjectSchema.ID; directory: AbsolutePath }) => Effect.Effect<boolean>
   readonly create: (input: CreateInput, tx?: Transaction) => Effect.Effect<boolean>
   readonly remove: (input: RemoveInput, tx?: Transaction) => Effect.Effect<boolean>
+  /**
+   * Reverse lookup: given an opened directory, find the project that claimed it (or an
+   * ancestor of it) when the git repository no longer exists. Returns the deepest claim;
+   * falls back to the project table for databases predating project_directory rows.
+   */
+  readonly find: (directory: AbsolutePath) => Effect.Effect<{ projectID: ProjectSchema.ID; directory: AbsolutePath } | undefined>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ProjectDirectories") {}
@@ -145,12 +151,57 @@ const layer = Layer.effect(
       return row ? { directory: row.directory, strategy: row.strategy ?? undefined } : undefined
     })
 
+    const find = Effect.fn("ProjectDirectories.find")(function* (directory: AbsolutePath) {
+      // Stored rows are slash-normalized on Windows; the input keeps native separators.
+      const path = process.platform === "win32" ? directory.replaceAll("\\", "/") : directory
+      const rows = yield* db
+        .select({
+          projectID: ProjectDirectoryTable.project_id,
+          directory: ProjectDirectoryTable.directory,
+          created: ProjectDirectoryTable.time_created,
+        })
+        .from(ProjectDirectoryTable)
+        .where(
+          and(
+            ne(ProjectDirectoryTable.project_id, ProjectSchema.ID.global),
+            sql`(${ProjectDirectoryTable.directory} = ${path} or ${path} like ${ProjectDirectoryTable.directory} || '/%')`,
+          ),
+        )
+        .all()
+        .pipe(Effect.orDie)
+      const match = rows.reduce((best, row) => {
+        if (!best) return row
+        if (row.directory.length !== best.directory.length)
+          return row.directory.length > best.directory.length ? row : best
+        return row.created > best.created ? row : best
+      }, undefined as { projectID: ProjectSchema.ID; directory: AbsolutePath; created: number } | undefined)
+      if (match) return { projectID: match.projectID, directory: match.directory }
+
+      // Databases predating the project_directory table only have the project worktree.
+      const legacy = yield* db
+        .select({
+          projectID: ProjectTable.id,
+          directory: ProjectTable.worktree,
+          updated: ProjectTable.time_updated,
+        })
+        .from(ProjectTable)
+        .where(and(eq(ProjectTable.worktree, directory), ne(ProjectTable.id, ProjectSchema.ID.global)))
+        .all()
+        .pipe(Effect.orDie)
+      const matchLegacy = legacy.reduce((best, row) => {
+        if (!best) return row
+        return row.updated > best.updated ? row : best
+      }, undefined as { projectID: ProjectSchema.ID; directory: AbsolutePath; updated: number } | undefined)
+      return matchLegacy ? { projectID: matchLegacy.projectID, directory: matchLegacy.directory } : undefined
+    })
+
     return Service.of({
       list,
       get,
       contains,
       create,
       remove,
+      find,
     })
   }),
 )
