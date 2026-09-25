@@ -747,13 +747,22 @@ export const layer = Layer.effect(
       if (last?.type === "compaction" && last.status === "completed") return false
       // Native usage describes the compaction operation, not the replacement's size. Wait for
       // a primary response to anchor the new window, including after restart or new admission.
-      if (
-        input.messages.findLastIndex(hasInputUsage) < input.messages.findLastIndex(SessionProviderContext.isCheckpoint)
-      )
-        return false
+      const anchorIndex = input.messages.findLastIndex(hasInputUsage)
+      if (anchorIndex < input.messages.findLastIndex(SessionProviderContext.isCheckpoint)) return false
       const limit = input.resolved.limit
       const context = limit.context
       if (context <= 0) return false
+      // A real prompt cannot exceed the model's context window. Providers can report
+      // impossible usage after image-heavy histories (#50474); treating that as an overflow
+      // makes auto-compaction loop on every step. Genuine overflow still recovers through
+      // the context-overflow failure path.
+      const anchor = input.messages[anchorIndex]
+      if (
+        anchor?.type === "assistant" &&
+        anchor.tokens !== undefined &&
+        anchor.tokens.input + anchor.tokens.cache.read + anchor.tokens.cache.write > context
+      )
+        return false
       const output = Math.min(limit.output, OUTPUT_TOKEN_MAX)
       const promptCeiling = Math.min(
         limit.input === undefined ? Number.POSITIVE_INFINITY : limit.input - config.buffer,

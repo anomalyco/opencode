@@ -223,6 +223,13 @@ it.effect("auto compaction estimates current content against the buffered prompt
     expect(compaction.required(input(69_999, outputLimited))).toBe(false)
     expect(compaction.required(input(70_000, outputLimited))).toBe(true)
 
+    // A provider reported usage.input 24x the model's context window (#50474). A prompt
+    // larger than the window is impossible, so it must not schedule auto-compaction and
+    // loop; a prompt that exactly fills the window still compacts.
+    const large = { context: 1_048_576, output: 384_000 }
+    expect(compaction.required(input(25_391_744, large))).toBe(false)
+    expect(compaction.required(input(1_048_576, large))).toBe(true)
+
     const assistant = input(79_000, contextLimited).messages[0]
     const tool = SessionMessage.AssistantTool.make({
       type: "tool",
