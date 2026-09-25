@@ -1,5 +1,5 @@
 import * as path from "path"
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import * as Tool from "./tool"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
@@ -13,7 +13,8 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import DESCRIPTION from "./apply_patch.txt"
 import { FileSystem } from "@opencode-ai/core/filesystem"
 import { Format } from "../format"
-import * as Bom from "@/util/bom"
+import { Config } from "@/config/config"
+import { Encoding } from "@/util/encoding"
 
 export const Parameters = Schema.Struct({
   patchText: Schema.String.annotate({ description: "The full patch text that describes all changes to be made" }),
@@ -53,6 +54,11 @@ export const ApplyPatchTool = Tool.define(
       }
 
       const instance = yield* InstanceState.context
+      const configSvc = yield* Effect.serviceOption(Config.Service)
+      const config = Option.isSome(configSvc)
+        ? yield* configSvc.value.get().pipe(Effect.catch(() => Effect.succeed(undefined)))
+        : undefined
+      const fallback = config?.file_encoding ?? "utf-8"
 
       // Validate file paths and check permissions
       const fileChanges: Array<{
@@ -65,6 +71,7 @@ export const ApplyPatchTool = Tool.define(
         additions: number
         deletions: number
         bom: boolean
+        encoding: string
       }> = []
 
       let totalDiff = ""
@@ -78,7 +85,7 @@ export const ApplyPatchTool = Tool.define(
             const oldContent = ""
             const newContent =
               hunk.contents.length === 0 || hunk.contents.endsWith("\n") ? hunk.contents : `${hunk.contents}\n`
-            const next = Bom.split(newContent)
+            const next = Encoding.split(newContent)
             const diff = trimDiff(createTwoFilesPatch(filePath, filePath, oldContent, next.text))
 
             let additions = 0
@@ -97,6 +104,7 @@ export const ApplyPatchTool = Tool.define(
               additions,
               deletions,
               bom: next.bom,
+              encoding: fallback,
             })
 
             totalDiff += diff + "\n"
@@ -112,7 +120,7 @@ export const ApplyPatchTool = Tool.define(
               )
             }
 
-            const source = yield* Bom.readFile(afs, filePath)
+            const source = yield* Encoding.readFile(afs, filePath, fallback)
             const oldContent = source.text
             let newContent = oldContent
             let bom = source.bom
@@ -122,7 +130,7 @@ export const ApplyPatchTool = Tool.define(
               const fileUpdate = Patch.deriveNewContentsFromChunks(
                 filePath,
                 hunk.chunks,
-                Bom.join(source.text, source.bom),
+                Encoding.join(source.text, source.bom),
               )
               newContent = fileUpdate.content
               bom = fileUpdate.bom
@@ -152,6 +160,7 @@ export const ApplyPatchTool = Tool.define(
               additions,
               deletions,
               bom,
+              encoding: source.encoding,
             })
 
             totalDiff += diff + "\n"
@@ -159,7 +168,7 @@ export const ApplyPatchTool = Tool.define(
           }
 
           case "delete": {
-            const source = yield* Bom.readFile(afs, filePath).pipe(
+            const source = yield* Encoding.readFile(afs, filePath, fallback).pipe(
               Effect.catch((error) =>
                 Effect.fail(
                   new Error(
@@ -182,6 +191,7 @@ export const ApplyPatchTool = Tool.define(
               additions: 0,
               deletions,
               bom: source.bom,
+              encoding: source.encoding,
             })
 
             totalDiff += deleteDiff + "\n"
@@ -223,12 +233,12 @@ export const ApplyPatchTool = Tool.define(
           case "add":
             // Create parent directories (recursive: true is safe on existing/root dirs)
 
-            yield* afs.writeWithDirs(change.filePath, Bom.join(change.newContent, change.bom))
+            yield* Encoding.writeFile(afs, change.filePath, change.newContent, { encoding: change.encoding, bom: change.bom })
             updates.push({ file: change.filePath, event: "add" })
             break
 
           case "update":
-            yield* afs.writeWithDirs(change.filePath, Bom.join(change.newContent, change.bom))
+            yield* Encoding.writeFile(afs, change.filePath, change.newContent, { encoding: change.encoding, bom: change.bom })
             updates.push({ file: change.filePath, event: "change" })
             break
 
@@ -236,7 +246,7 @@ export const ApplyPatchTool = Tool.define(
             if (change.movePath) {
               // Create parent directories (recursive: true is safe on existing/root dirs)
 
-              yield* afs.writeWithDirs(change.movePath!, Bom.join(change.newContent, change.bom))
+              yield* Encoding.writeFile(afs, change.movePath!, change.newContent, { encoding: change.encoding, bom: change.bom })
               yield* afs.remove(change.filePath)
               updates.push({ file: change.filePath, event: "unlink" })
               updates.push({ file: change.movePath, event: "add" })
@@ -251,7 +261,7 @@ export const ApplyPatchTool = Tool.define(
 
         if (edited) {
           if (yield* format.file(edited)) {
-            yield* Bom.syncFile(afs, edited, change.bom)
+            yield* Encoding.syncFile(afs, edited, { encoding: change.encoding, bom: change.bom })
           }
           yield* events.publish(FileSystem.Event.Edited, { file: edited })
         }

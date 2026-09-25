@@ -87,6 +87,10 @@ export const Info = Schema.Struct({
   username: Schema.optional(Schema.String).annotate({
     description: "Custom username to display in conversations instead of system username",
   }),
+  file_encoding: Schema.optional(Schema.String).annotate({
+    description:
+      "Fallback encoding for files without a BOM that are not valid UTF-8, eg gbk, shift_jis, big5. Files are detected per read (BOM, then UTF-8 validity, then this fallback) and written back in the encoding they were loaded with. New files are created in this encoding. Defaults to utf-8.",
+  }),
   mode: Schema.optional(
     Schema.StructWithRest(
       Schema.Struct({ build: Schema.optional(ConfigAgentV1.Info), plan: Schema.optional(ConfigAgentV1.Info) }),

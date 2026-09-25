@@ -1,7 +1,8 @@
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import * as path from "path"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import * as Bom from "../util/bom"
+import { Config } from "@/config/config"
+import { Encoding } from "../util/encoding"
 
 export const PatchSchema = Schema.Struct({
   patchText: Schema.String.annotate({ description: "The full patch text that describes all changes to be made" }),
@@ -309,7 +310,7 @@ export function deriveNewContentsFromChunks(
   chunks: UpdateFileChunk[],
   originalText: string,
 ): ApplyPatchFileUpdate {
-  const originalContent = Bom.split(originalText)
+  const originalContent = Encoding.split(originalText)
 
   let originalLines = originalContent.text.split("\n")
 
@@ -326,7 +327,7 @@ export function deriveNewContentsFromChunks(
     newLines.push("")
   }
 
-  const next = Bom.split(newLines.join("\n"))
+  const next = Encoding.split(newLines.join("\n"))
   const newContent = next.text
 
   // Generate unified diff
@@ -517,6 +518,11 @@ export const applyHunksToFiles = Effect.fn("Patch.applyHunksToFiles")(function* 
   }
 
   const fs = yield* FSUtil.Service
+  const configSvc = yield* Effect.serviceOption(Config.Service)
+  const config = Option.isSome(configSvc)
+    ? yield* configSvc.value.get().pipe(Effect.catch(() => Effect.succeed(undefined)))
+    : undefined
+  const fallback = config?.file_encoding ?? "utf-8"
 
   const added: string[] = []
   const modified: string[] = []
@@ -525,7 +531,7 @@ export const applyHunksToFiles = Effect.fn("Patch.applyHunksToFiles")(function* 
   for (const hunk of hunks) {
     switch (hunk.type) {
       case "add": {
-        yield* fs.writeWithDirs(hunk.path, hunk.contents)
+        yield* Encoding.writeFile(fs, hunk.path, hunk.contents, { encoding: fallback, bom: false })
         added.push(hunk.path)
         yield* Effect.logInfo(`Added file: ${hunk.path}`)
         break
@@ -539,16 +545,20 @@ export const applyHunksToFiles = Effect.fn("Patch.applyHunksToFiles")(function* 
       }
 
       case "update": {
-        const originalText = yield* fs.readFileString(hunk.path)
-        const fileUpdate = deriveNewContentsFromChunks(hunk.path, hunk.chunks, originalText)
+        const source = yield* Encoding.readFile(fs, hunk.path, fallback)
+        const fileUpdate = deriveNewContentsFromChunks(
+          hunk.path,
+          hunk.chunks,
+          Encoding.join(source.text, source.bom),
+        )
 
         if (hunk.move_path) {
-          yield* fs.writeWithDirs(hunk.move_path, Bom.join(fileUpdate.content, fileUpdate.bom))
+          yield* Encoding.writeFile(fs, hunk.move_path, fileUpdate.content, { encoding: source.encoding, bom: fileUpdate.bom })
           yield* fs.remove(hunk.path)
           modified.push(hunk.move_path)
           yield* Effect.logInfo(`Moved file: ${hunk.path} -> ${hunk.move_path}`)
         } else {
-          yield* fs.writeWithDirs(hunk.path, Bom.join(fileUpdate.content, fileUpdate.bom))
+          yield* Encoding.writeFile(fs, hunk.path, fileUpdate.content, { encoding: source.encoding, bom: fileUpdate.bom })
           modified.push(hunk.path)
           yield* Effect.logInfo(`Updated file: ${hunk.path}`)
         }
@@ -594,6 +604,11 @@ export const maybeParseApplyPatchVerified = Effect.fn("Patch.maybeParseApplyPatc
   switch (result.type) {
     case MaybeApplyPatch.Body: {
       const fs = yield* FSUtil.Service
+      const configSvc = yield* Effect.serviceOption(Config.Service)
+      const config = Option.isSome(configSvc)
+        ? yield* configSvc.value.get().pipe(Effect.catch(() => Effect.succeed(undefined)))
+        : undefined
+      const fallback = config?.file_encoding ?? "utf-8"
       const args = result.args
       const effectiveCwd = args.workdir ? path.resolve(cwd, args.workdir) : cwd
       const changes = new Map<string, ApplyPatchFileChange>()
@@ -614,8 +629,10 @@ export const maybeParseApplyPatchVerified = Effect.fn("Patch.maybeParseApplyPatc
 
           case "delete": {
             const deletePath = path.resolve(effectiveCwd, hunk.path)
-            const content = yield* fs.readFileString(deletePath).pipe(Effect.catch(() => Effect.succeed(undefined)))
-            if (content === undefined) {
+            const source = yield* Encoding.readFile(fs, deletePath, fallback).pipe(
+              Effect.catch(() => Effect.succeed(undefined)),
+            )
+            if (source === undefined) {
               return {
                 type: MaybeApplyPatchVerified.CorrectnessError,
                 error: new Error(`Failed to read file for deletion: ${deletePath}`),
@@ -623,28 +640,30 @@ export const maybeParseApplyPatchVerified = Effect.fn("Patch.maybeParseApplyPatc
             }
             changes.set(resolvedPath, {
               type: "delete",
-              content,
+              content: source.text,
             })
             break
           }
 
           case "update": {
             const updatePath = path.resolve(effectiveCwd, hunk.path)
-            const originalText = yield* fs
-              .readFileString(updatePath)
-              .pipe(
-                Effect.catch((cause) =>
-                  Effect.succeed(new Error(`Failed to read file ${updatePath}: ${cause}`, { cause })),
-                ),
-              )
-            if (originalText instanceof Error) {
+            const source = yield* Encoding.readFile(fs, updatePath, fallback).pipe(
+              Effect.catch((cause) =>
+                Effect.succeed(new Error(`Failed to read file ${updatePath}: ${cause}`, { cause })),
+              ),
+            )
+            if (source instanceof Error) {
               return {
                 type: MaybeApplyPatchVerified.CorrectnessError,
-                error: originalText,
+                error: source,
               } satisfies MaybeApplyPatchVerifiedResult
             }
             try {
-              const fileUpdate = deriveNewContentsFromChunks(updatePath, hunk.chunks, originalText)
+              const fileUpdate = deriveNewContentsFromChunks(
+                updatePath,
+                hunk.chunks,
+                Encoding.join(source.text, source.bom),
+              )
               changes.set(resolvedPath, {
                 type: "update",
                 unified_diff: fileUpdate.unified_diff,
