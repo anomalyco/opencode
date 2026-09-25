@@ -267,6 +267,9 @@ const transformTools = (registry: Tool.Interface, tools: Readonly<Record<string,
   registry.transform((editor) =>
     Object.entries(tools).forEach(([name, tool]) => editor.add({ ...tool, name, options: options ?? tool.options })),
   )
+// Counts runner waits on plugin activation; a mid-turn plugin reload must not be observed half-applied.
+let activationWaits = 0
+
 const layer = Layer.unwrap(
   Effect.map(RunnerState, (state) => {
     const modelTransport = Layer.succeed(
@@ -418,7 +421,9 @@ const layer = Layer.unwrap(
       Permission.node.replace(permission),
       Config.node.replace(config),
       PluginSupervisor.node.replace(Layer.empty),
-      Plugin.node.replace(Layer.mock(Plugin.Service, { awaitActivation: Effect.void })),
+      Plugin.node.replace(
+        Layer.mock(Plugin.Service, { awaitActivation: Effect.sync(() => void activationWaits++) }),
+      ),
       SessionModelTransport.node.replace(modelTransport),
     ]
     const runnerLayer = AppNodeBuilder.build(SessionRunnerLLM.node, [
@@ -2632,6 +2637,22 @@ describe("SessionRunnerLLM", () => {
       )
     }
   }
+
+  scenario("waits for plugin activation before a retried step prepares its context", function* (s) {
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "retry", (event) =>
+      Effect.sync(() => {
+        event.decision = { retry: true, delay: 0 }
+      }),
+    )
+    yield* s.llm.push(TestLLM.failAfter(streamDisconnected()), TestLLM.text("Recovered", "text-activation-retry"))
+    const before = activationWaits
+    yield* s.runPrompt("Question")
+
+    expect(s.requests).toHaveLength(2)
+    // Turn entry, the first step and the retried step each wait for plugin activation.
+    expect(activationWaits - before).toBe(3)
+  })
 
   scenario("restarts compaction drafts after transient failures and unsuccessful finishes", function* (s) {
     yield* s.llm.push(TestLLM.text("Earlier answer", "text-manual-failure-history"))

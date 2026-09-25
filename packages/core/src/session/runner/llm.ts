@@ -117,6 +117,7 @@ const layer = Layer.effect(
                       session,
                       resolveContext: (session) =>
                         Effect.gen(function* () {
+                          yield* plugins.awaitActivation
                           const selected = yield* context.select(session.id)
                           const model = yield* context.resolveModel(selected.session)
                           // Preview updates without admitting them after the already-delivered compaction marker.
@@ -195,6 +196,9 @@ const layer = Layer.effect(
     })
 
     const prepareContext = Effect.fn("SessionRunner.prepareContext")(function* (sessionID: SessionSchema.ID) {
+      // Plugins can reload mid-turn (a local plugin file changed); each step and retry must see the settled
+      // catalog, not a partially rebuilt one that lacks the session's model or skills.
+      yield* plugins.awaitActivation
       const selected = yield* context.select(sessionID)
       // A blocked initial instruction baseline must leave admitted input pending.
       yield* InstructionState.prepare(db, bus, selected.instructions, sessionID)
