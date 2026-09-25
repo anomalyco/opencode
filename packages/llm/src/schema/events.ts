@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { ContentBlockID, FinishReason, ProtocolID, ProviderMetadata, RouteID, ToolCallID } from "./ids"
+import { ContentBlockID, FinishReason, ModelID, ProtocolID, ProviderMetadata, RouteID, ToolCallID } from "./ids"
 import { ModelSchema } from "./options"
 import { Message, ToolCallPart, ToolOutput, ToolResultPart, ToolResultValue, type ContentPart } from "./messages"
 import { ProviderFailureClassification } from "./errors"
@@ -184,6 +184,7 @@ export const StepFinish = Schema.Struct({
   type: Schema.tag("step-finish"),
   index: Schema.Number,
   reason: FinishReason,
+  modelID: Schema.optional(ModelID),
   usage: Schema.optional(Usage),
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "LLM.Event.StepFinish" })

@@ -299,6 +299,7 @@ it.live("session.processor effect tests preserve text start time", () =>
               {
                 id: "chatcmpl-test",
                 object: "chat.completion.chunk",
+                model: "actual-model",
                 choices: [{ delta: { role: "assistant" } }],
               },
               {
@@ -358,10 +359,13 @@ it.live("session.processor effect tests preserve text start time", () =>
         gate.resolve()
 
         const exit = yield* Fiber.await(run)
-        const text = (yield* MessageV2.parts(msg.id)).find((part): part is SessionV1.TextPart => part.type === "text")
+        const parts = yield* MessageV2.parts(msg.id)
+        const text = parts.find((part): part is SessionV1.TextPart => part.type === "text")
+        const finish = parts.find((part): part is SessionV1.StepFinishPart => part.type === "step-finish")
 
         expect(Exit.isSuccess(exit)).toBe(true)
         expect(text?.text).toBe("hello")
+        expect(finish?.modelID).toBe(ModelV2.ID.make("actual-model"))
         expect(text?.time?.start).toBeDefined()
         expect(text?.time?.end).toBeDefined()
         if (!text?.time?.start || !text.time.end) return
