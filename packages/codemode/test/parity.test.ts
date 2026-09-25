@@ -1936,3 +1936,51 @@ describe("String and Number method arguments convert through ToPrimitive", () =>
     )
   })
 })
+
+describe("WeakMap and WeakSet", () => {
+  test("hold program objects by identity and answer like JS for non-object keys", async () => {
+    expect(
+      await value(`
+        const k = {}
+        const f = () => 1
+        const wm = new WeakMap([[k, 1]])
+        const ws = new WeakSet([k])
+        return [
+          wm.set(f, "fn") === wm, wm.get(k), wm.get(f), wm.has({}), wm.get(1), wm.has(1), wm.delete("s"),
+          wm.getOrInsert(k, 9), wm.getOrInsertComputed({}, (key) => typeof key),
+          ws.add(f) === ws, ws.has(k), ws.has(f), ws.has(1), ws.delete(k), ws.has(k),
+          String(wm), wm.size, "clear" in wm, Symbol.iterator in ws, JSON.stringify(wm),
+        ]
+      `),
+    ).toEqual([
+      true,
+      1,
+      "fn",
+      false,
+      null,
+      false,
+      false,
+      1,
+      "object",
+      true,
+      true,
+      true,
+      false,
+      true,
+      false,
+      "[object WeakMap]",
+      null,
+      false,
+      false,
+      "{}",
+    ])
+  })
+
+  test("reject primitive keys, plain calls, bad receivers, and cloning", async () => {
+    expect((await error(`new WeakMap().set(1, 1)`)).message).toContain("Invalid value used as weak map key")
+    expect((await error(`new WeakSet([1])`)).message).toContain("Invalid value used in weak set")
+    expect((await error(`WeakMap()`)).message).toContain("new")
+    expect((await error(`WeakMap.prototype.get.call(new Map(), {})`)).message).toContain("incompatible receiver")
+    expect((await error(`structuredClone(new WeakSet())`)).message).toContain("DataCloneError")
+  })
+})

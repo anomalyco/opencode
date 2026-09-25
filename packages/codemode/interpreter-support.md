@@ -526,6 +526,11 @@ reject }` object.
 - [x] Map and Set values serialize to `{}` at host/JSON boundaries.
 - [x] Set composition and relation methods: `union`, `intersection`, `difference`, `symmetricDifference`, `isSubsetOf`,
       `isSupersetOf`, and `isDisjointFrom`, including supported Set-like operands.
+- [x] `WeakMap` (`get`, `set`, `has`, `delete`, `getOrInsert`, `getOrInsertComputed`) and `WeakSet` (`add`, `has`,
+      `delete`), constructed from iterables. Keys must be program objects: a primitive or tool reference throws
+      `Invalid value used as weak map key`, while `has`/`delete`/`get` with one answer `false`/`undefined`. Entries are
+      held by a host weak collection, so nothing is retained past the key's own lifetime. As in JS they have no `size`,
+      iteration, or `clear`, `structuredClone` rejects them, and they serialize to `{}` at host boundaries.
 
 ## URL and URI helpers
 

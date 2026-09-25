@@ -1695,3 +1695,9 @@ language/types/object/S8.6.2_A5_T3.js  # TypeError: Cannot read properties of un
 language/types/object/S8.6.2_A5_T4.js  # TypeError: Cannot read properties of undefined (reading '…').
 language/types/reference/S8.7.1_A1.js  # TypeError: Cannot read properties of undefined (reading '…').
 language/types/reference/S8.7.2_A3.js  # TypeError: Cannot read properties of undefined (reading '…').
+built-ins/WeakMap/iterable-with-object-keys.js  # Called WeakMap#set for each object Expected SameValue(«0», «2») to be true
+built-ins/WeakMap/iterator-close-after-set-failure.js  # Expected a Test262Error but got a TypeError
+built-ins/WeakMap/set-not-callable-throws.js  # Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/WeakSet/add-not-callable-throws.js  # Expected a TypeError to be thrown but no exception was thrown at all
+built-ins/WeakSet/iterable-with-object-values.js  # Called WeakSet#add for each object Expected SameValue(«0», «2») to be true
+built-ins/WeakSet/iterator-close-after-add-failure.js  # Expected a Test262Error but got a TypeError
