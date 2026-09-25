@@ -25,8 +25,8 @@ export type ModelCatalogEntry = {
   limit?: { context?: number; output?: number }
   modalities: { input: string[]; output: string[] }
   openWeights: boolean
-  reasoning: boolean
-  toolCall: boolean
+  reasoning?: boolean
+  toolCall?: boolean
   attachment: boolean
   temperature: boolean
   cost?: ModelCatalogCost
@@ -54,6 +54,7 @@ export type ModelCatalogLab = {
 
 export type ModelCatalog = {
   models: ModelCatalogEntry[]
+  aliases?: ModelCatalogEntry[]
   labs: ModelCatalogLab[]
 }
 
@@ -80,7 +81,8 @@ export function findModelCatalogEntry(catalog: ModelCatalog, model: string, lab?
   return (
     catalog.models.find((entry) => entry.id.toLowerCase() === normalizedId) ??
     catalog.models.find((entry) => (lab ? entry.lab === catalogLabSlug(lab) : true) && entry.slug === leaf) ??
-    catalog.models.find((entry) => entry.slug === leaf)
+    catalog.models.find((entry) => entry.slug === leaf) ??
+    catalog.aliases?.find((entry) => (lab ? entry.lab === catalogLabSlug(lab) : true) && entry.slug === leaf)
   )
 }
 
@@ -133,7 +135,7 @@ export function catalogSlug(value: string) {
     .replace(/-{2,}/g, "-")
 }
 
-function buildModelCatalog(payload: unknown, pricingPayload?: unknown, labPayload?: unknown): ModelCatalog {
+export function buildModelCatalog(payload: unknown, pricingPayload?: unknown, labPayload?: unknown): ModelCatalog {
   const costs = readCatalogCosts(pricingPayload)
   const labDescriptions = readCatalogLabDescriptions(payload, pricingPayload, labPayload)
   const models = readCatalogModels(payload)
@@ -149,6 +151,25 @@ function buildModelCatalog(payload: unknown, pricingPayload?: unknown, labPayloa
     .toSorted((a, b) => a.lab.localeCompare(b.lab) || displayDateTime(b.releaseDate) - displayDateTime(a.releaseDate))
   return {
     models,
+    // Contributor is a serving tier of these Muse models, with its own pricing.
+    // Keep aliases out of the model population used to normalize benchmark scores.
+    aliases: ["meta/muse-spark-1.2", "meta/muse-spark-1.3"].flatMap((id) => {
+      const model = models.find((entry) => entry.id === id)
+      if (!model) return []
+      const alias = `${id}-contributor`
+      return [
+        {
+          ...model,
+          id: alias,
+          slug: `${model.slug}-contributor`,
+          name: `${model.name} Contributor`,
+          cost:
+            costs.get(catalogIdKey(alias)) ??
+            costs.get(`${model.lab}/${model.slug}-contributor`) ??
+            costs.get(`${model.slug}-contributor`),
+        },
+      ]
+    }),
     labs: Object.values(
       models.reduce<Record<string, ModelCatalogLab>>((result, model) => {
         result[model.lab] = {
@@ -184,8 +205,8 @@ function readModelCatalogEntry(value: unknown): ModelCatalogEntry[] {
       limit: readCatalogLimit(value.limit),
       modalities: readCatalogModalities(value.modalities),
       openWeights: booleanValue(value.open_weights),
-      reasoning: booleanValue(value.reasoning),
-      toolCall: booleanValue(value.tool_call),
+      reasoning: typeof value.reasoning === "boolean" ? value.reasoning : undefined,
+      toolCall: typeof value.tool_call === "boolean" ? value.tool_call : undefined,
       attachment: booleanValue(value.attachment),
       temperature: booleanValue(value.temperature),
       cost: readCatalogCost(value.cost),

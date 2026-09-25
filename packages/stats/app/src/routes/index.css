@@ -6291,8 +6291,7 @@ body {
   vector-effect: non-scaling-stroke;
 }
 
-[data-page="stats"] [data-slot="compare-radar-area"],
-[data-page="stats"] [data-slot="compare-radar-line"] {
+[data-page="stats"] [data-slot="compare-radar-area"] {
   stroke: currentColor;
   stroke-width: 1.5px;
   stroke-linejoin: round;
@@ -6304,15 +6303,15 @@ body {
   fill-opacity: 0.09;
 }
 
-[data-page="stats"] [data-slot="compare-radar-line"] {
-  fill: none;
-}
-
 [data-page="stats"] [data-slot="compare-radar-point"] {
   fill: currentColor;
   stroke: currentColor;
   stroke-width: 1px;
   vector-effect: non-scaling-stroke;
+}
+
+[data-page="stats"] [data-slot="compare-radar-point"][data-fallback="true"] {
+  fill: var(--stats-bg);
 }
 
 [data-page="stats"] [data-slot="compare-radar-point-hit"] {
