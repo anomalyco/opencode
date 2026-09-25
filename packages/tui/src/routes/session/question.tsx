@@ -100,6 +100,7 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
   function selectTab(index: number) {
     setStore("tab", index)
     setStore("selected", 0)
+    setStore("editing", false)
   }
 
   function selectOption() {
