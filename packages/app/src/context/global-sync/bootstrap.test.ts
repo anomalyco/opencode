@@ -236,6 +236,31 @@ describe("query keys", () => {
     expect([...loadProvidersQuery(remote, null, api).queryKey]).toEqual(["https://debian.example", null, "providers"])
   })
 
+  test("maps both spellings of a Windows directory onto one entry", () => {
+    const client = {} as Parameters<typeof loadPathQuery>[2]
+    const api = {} as CatalogApi
+    const agents = {} as Parameters<typeof loadAgentsQuery>[2]
+
+    // Consumers reach these queries through `PathKey`, which normalises backslashes to slashes,
+    // while the bootstrap passes the raw directory. Unnormalised, the same directory lands under
+    // two cache entries and every consumer refetches what the bootstrap already loaded.
+    const backslash = "C:\\repo\\app"
+    const slash = "C:/repo/app"
+
+    expect([...loadPathQuery(ServerScope.local, backslash, client).queryKey]).toEqual([
+      ...loadPathQuery(ServerScope.local, slash, client).queryKey,
+    ])
+    expect([...loadProvidersQuery(ServerScope.local, backslash, api).queryKey]).toEqual([
+      ...loadProvidersQuery(ServerScope.local, slash, api).queryKey,
+    ])
+    expect([...loadAgentsQuery(ServerScope.local, backslash, agents).queryKey]).toEqual([
+      ...loadAgentsQuery(ServerScope.local, slash, agents).queryKey,
+    ])
+    expect([...loadReferencesQuery(ServerScope.local, backslash, {} as never).queryKey]).toEqual([
+      ...loadReferencesQuery(ServerScope.local, slash, {} as never).queryKey,
+    ])
+  })
+
   test("loads the current provider and model catalog", async () => {
     const calls: unknown[] = []
     const api = {

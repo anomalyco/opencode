@@ -24,6 +24,7 @@ import type {
   SessionApi,
 } from "@opencode-ai/client/promise"
 import { showToast } from "@/utils/toast"
+import { pathKey } from "@/utils/path-key"
 import { getFilename } from "@opencode-ai/core/util/path"
 import { retry } from "@opencode-ai/core/util/retry"
 import { batch } from "solid-js"
@@ -105,9 +106,22 @@ function showErrors(input: {
   })
 }
 
+// The bootstrap queries are requested by several consumers at once during startup — the global
+// bootstrap, the per-project bootstrap, the child store and the composer controls. Without a
+// staleTime every entry counts as stale the moment it is written, so each of those consumers
+// issues its own request for data that was just fetched.
+const BOOTSTRAP_STALE_TIME = 30_000
+
+// Consumers reach these queries through `PathKey`, which normalises backslashes to slashes,
+// while the bootstrap passes the raw directory it was handed. Without normalising here the same
+// directory lands under two cache entries on Windows, so every consumer refetches what the
+// bootstrap already loaded.
+const directoryKeyPart = (directory: string | null) => (directory === null ? null : pathKey(directory))
+
 export const loadGlobalConfigQuery = (scope: ServerScope, sdk: OpencodeClient, protocol?: Promise<ServerProtocol>) =>
   queryOptions({
     queryKey: [scope, "config"],
+    staleTime: BOOTSTRAP_STALE_TIME,
     queryFn: async () => {
       if ((await protocol) !== "v1") return {}
       return retry(() => sdk.global.config.get().then((x) => x.data!))
@@ -127,6 +141,7 @@ type VcsApi = ServerApi["vcs"]
 export const loadProjectsQuery = (scope: ServerScope, api: ProjectApi) =>
   queryOptions({
     queryKey: [scope, "project"],
+    staleTime: BOOTSTRAP_STALE_TIME,
     queryFn: () =>
       retry(() =>
         api.list().then((projects) => {
@@ -226,7 +241,8 @@ export const loadProvidersQuery = (
   protocol?: Promise<ServerProtocol>,
 ) =>
   queryOptions({
-    queryKey: [scope, directory, "providers"],
+    queryKey: [scope, directoryKeyPart(directory), "providers"],
+    staleTime: BOOTSTRAP_STALE_TIME,
     queryFn: () =>
       retry(async () => {
         if ((await protocol) === "v1" && legacy) {
@@ -263,7 +279,8 @@ export const loadAgentsQuery = (
   protocol?: Promise<ServerProtocol>,
 ) =>
   queryOptions({
-    queryKey: [scope, directory, "agents"],
+    queryKey: [scope, directoryKeyPart(directory), "agents"],
+    staleTime: BOOTSTRAP_STALE_TIME,
     queryFn: () =>
       retry(async () => {
         if ((await protocol) === "v1" && legacy) return normalizeAgentList((await legacy.app.agents()).data ?? [])
@@ -302,7 +319,8 @@ export const loadPathQuery = (
   protocol?: Promise<ServerProtocol>,
 ) =>
   queryOptions<Path>({
-    queryKey: [scope, directory, "path"],
+    queryKey: [scope, directoryKeyPart(directory), "path"],
+    staleTime: BOOTSTRAP_STALE_TIME,
     queryFn: async () => {
       if ((await protocol) !== "v1")
         return { state: "", config: "", worktree: "", directory: directory ?? "", home: "" }
@@ -318,7 +336,8 @@ export const loadReferencesQuery = (
   protocol?: Promise<ServerProtocol>,
 ) =>
   queryOptions<ReferenceInfo[]>({
-    queryKey: [scope, directory, "references"] as const,
+    queryKey: [scope, directoryKeyPart(directory), "references"] as const,
+    staleTime: BOOTSTRAP_STALE_TIME,
     queryFn: () =>
       retry(async () => {
         if ((await protocol) === "v1" && legacy) return (await legacy.v2.reference.list()).data?.data ?? []
