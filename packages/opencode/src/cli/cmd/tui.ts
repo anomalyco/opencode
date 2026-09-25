@@ -14,6 +14,8 @@ import { writeHeapSnapshot } from "v8"
 import { ServerAuth } from "@/server/auth"
 import { validateSession } from "../tui/validate-session"
 import { win32InstallCtrlCGuard } from "@opencode-ai/tui/terminal-win32"
+import open from "open"
+import { sessionDeepLink } from "./session-deep-link"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -140,6 +142,10 @@ export const TuiThreadCommand = cmd({
       .option("demo", {
         type: "boolean",
         hidden: true,
+      })
+      .option("open", {
+        type: "boolean",
+        describe: "open the web interface in your browser after the server starts",
       }),
   handler: async (args) => {
     if (args.replay === true) {
@@ -248,6 +254,18 @@ export const TuiThreadCommand = cmd({
             events: createEventSource(client),
           }
 
+      let openedSession: string | undefined
+      const openSession = (sessionID: string) => {
+        if (!external || !args.open) return
+        if (openedSession === sessionID || !sessionID.startsWith("ses_")) return
+        openedSession = sessionID
+        open(sessionDeepLink(transport.url, sessionID)).catch(() => {})
+      }
+
+      if (external && args.open) {
+        open(transport.url).catch(() => {})
+      }
+
       try {
         await validateSession({
           url: transport.url,
@@ -284,6 +302,7 @@ export const TuiThreadCommand = cmd({
             fetch: transport.fetch,
             headers: transport.headers,
             events: transport.events,
+            onActiveSession: openSession,
             args: {
               continue: args.continue,
               sessionID: args.session,
