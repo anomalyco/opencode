@@ -526,19 +526,7 @@ const mapFinishReason = (finishReason: string | undefined, hasToolCalls: boolean
   if (finishReason === undefined) return hasToolCalls ? "tool-calls" : "unknown"
   if (finishReason === "STOP") return hasToolCalls ? "tool-calls" : "stop"
   if (finishReason === "MAX_TOKENS") return "length"
-  if (
-    finishReason === "IMAGE_SAFETY" ||
-    finishReason === "RECITATION" ||
-    finishReason === "SAFETY" ||
-    finishReason === "BLOCKLIST" ||
-    finishReason === "PROHIBITED_CONTENT" ||
-    finishReason === "SPII" ||
-    finishReason === "MODEL_ARMOR" ||
-    finishReason === "IMAGE_PROHIBITED_CONTENT" ||
-    finishReason === "IMAGE_RECITATION" ||
-    finishReason === "LANGUAGE"
-  )
-    return "content-filter"
+  if (GeminiGenerateContent.contentFiltered(finishReason)) return "content-filter"
   if (
     finishReason === "MALFORMED_FUNCTION_CALL" ||
     finishReason === "UNEXPECTED_TOOL_CALL" ||
