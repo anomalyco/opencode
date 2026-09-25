@@ -100,6 +100,7 @@
     "@opentelemetry/sdk-trace-base": "2.6.1",
     "@parcel/watcher": "2.5.1",
     "@silvia-odwyer/photon-node": "0.3.4",
+    "@zip.js/zip.js": "2.7.62",
     "@openrouter/ai-sdk-provider": "2.9.0",
     "ai-gateway-provider": "3.2.0",
     "bun-pty": "0.4.8",
@@ -116,6 +117,7 @@
     "immer": "11.1.4",
     "ignore": "7.0.5",
     "jsonc-parser": "3.3.1",
+    "mammoth": "1.12.2",
     "mime-types": "3.0.2",
     "minimatch": "10.2.5",
     "npm-package-arg": "13.0.2",
@@ -123,7 +125,9 @@
     "turndown": "7.2.0",
     "venice-ai-sdk-provider": "2.1.1",
     "which": "6.0.1",
+    "word-extractor": "1.0.4",
     "xdg-basedir": "5.1.0",
+    "xlsx": "0.18.5",
     "zod": "catalog:"
   },
   "overrides": {

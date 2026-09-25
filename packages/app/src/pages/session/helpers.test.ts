@@ -211,4 +211,27 @@ describe("createSessionTabs", () => {
       dispose()
     })
   })
+
+  test("treats preview tabs as active and non-file tabs", () => {
+    createRoot((dispose) => {
+      const [state] = createStore({
+        active: "preview:report.pdf" as string | undefined,
+        all: ["file://src/a.ts", "preview:report.pdf"],
+      })
+      const tabs = createMemo(() => ({ active: () => state.active, all: () => state.all }))
+      const result = createSessionTabs({
+        tabs,
+        pathFromTab: (tab) => (tab.startsWith("file://") ? tab.slice("file://".length) : undefined),
+        normalizeTab: (tab) => tab,
+      })
+
+      expect(result.panelTabs()).toEqual(["file://src/a.ts", "preview:report.pdf"])
+      expect(result.openedTabs()).toEqual(["file://src/a.ts", "preview:report.pdf"])
+      expect(result.activeTab()).toBe("preview:report.pdf")
+      expect(result.activeFileTab()).toBeUndefined()
+      expect(result.activePreviewTab()).toBe("preview:report.pdf")
+      expect(result.closableTab()).toBe("preview:report.pdf")
+      dispose()
+    })
+  })
 })

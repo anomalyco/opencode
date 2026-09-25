@@ -2,6 +2,7 @@ import { sentryVitePlugin } from "@sentry/vite-plugin"
 import { defineConfig } from "electron-vite"
 import appPlugin from "@opencode-ai/app/vite"
 import * as fs from "node:fs/promises"
+import path from "node:path"
 
 const OPENCODE_SERVER_DIST = "../opencode/dist/node"
 
@@ -94,6 +95,16 @@ const require = __cjs_mod__.createRequire(import.meta.url);
     plugins: [appPlugin, sentry],
     publicDir: "../../../app/public",
     root: "src/renderer",
+    assetsInclude: ["**/*.wasm"],
+    optimizeDeps: {
+      exclude: ["@silurus/ooxml"],
+    },
+    server: {
+      fs: {
+        allow: [path.resolve(__dirname, "../.."), "/"],
+        strict: false,
+      },
+    },
     build: {
       sourcemap: true,
       rollupOptions: {
