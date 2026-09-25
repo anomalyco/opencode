@@ -2085,6 +2085,78 @@ it.effect("opencode loader keeps paid models when config apiKey is present", () 
   }).pipe(provideMultiInstance),
 )
 
+it.instance(
+  "empty opencode model config retains zen transport metadata",
+  Effect.gen(function* () {
+    const providers = yield* list
+    const model = providers[ProviderV2.ID.opencode].models["muse-spark-9.9-contributor-free"]
+    expect(model).toBeDefined()
+    expect(model.api.npm).toBe("@ai-sdk/openai")
+    expect(model.api.id).toBe("muse-spark-9.9-contributor-free")
+  }),
+  {
+    config: {
+      provider: {
+        opencode: {
+          models: {
+            "muse-spark-9.9-contributor-free": {},
+          },
+        },
+      },
+    },
+  },
+)
+
+it.effect("authenticated zen discovery exposes endpoint models without a models map", () =>
+  Effect.gen(function* () {
+    const server = yield* Effect.acquireRelease(
+      Effect.sync(() =>
+        Bun.serve({
+          port: 0,
+          fetch(request) {
+            if (!new URL(request.url).pathname.endsWith("/models")) return new Response("not found", { status: 404 })
+            return Response.json({
+              object: "list",
+              data: [{ id: "muse-spark-9.9-contributor-free", object: "model" }],
+            })
+          },
+        }),
+      ),
+      (server) => Effect.sync(() => void server.stop()),
+    )
+
+    const dir = yield* tmpdirScoped({
+      config: {
+        provider: {
+          opencode: {
+            options: {
+              apiKey: "zen-key",
+              baseURL: `${server.url}zen/v1`,
+            },
+          },
+        },
+      },
+    })
+
+    const result = yield* Effect.gen(function* () {
+      const provider = yield* Provider.Service
+      const providers = yield* provider.list()
+      const model = providers[ProviderV2.ID.opencode].models["muse-spark-9.9-contributor-free"]
+      expect(model).toBeDefined()
+      expect(model.api.npm).toBe("@ai-sdk/openai")
+      const language = yield* provider.getLanguage(model)
+      return language.constructor.name
+    }).pipe(
+      provideInstanceEffect(dir),
+      Effect.provide(instanceStoreLayer),
+      Effect.provide(AppNodeBuilder.build(CrossSpawnSpawner.node)),
+    )
+
+    expect(result).not.toContain("Compatible")
+    expect(result).toMatch(/Responses|OpenAI/)
+  }).pipe(provideMultiInstance),
+)
+
 it.effect("opencode loader keeps paid models when auth exists", () =>
   Effect.gen(function* () {
     const noneDir = yield* tmpdirScoped()
