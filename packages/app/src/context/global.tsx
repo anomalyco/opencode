@@ -1,5 +1,5 @@
 import { createSimpleContext } from "@opencode-ai/ui/context"
-import { createEffect, createMemo, createRoot } from "solid-js"
+import { createEffect, createMemo, createRoot, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { adoptable, createServerProjects, RECENTLY_CLOSED_DISPLAY_LIMIT, ServerConnection, useServer } from "./server"
 import { pathKey } from "@/utils/path-key"
@@ -112,10 +112,11 @@ function createServerCtx(
 
   // Show the folder `opencode web`/`serve` was started in. Desktop sidecars are
   // started by the app, not from a project folder, so their cwd is not a project.
+  // Track only the path, so emptying the list mid-session does not re-adopt.
   createEffect(() => {
     if (conn.type === "sidecar") return
     const directory = sync.data.path.directory
-    if (adoptable(directory, sync.data.path.home)) projects.adopt(directory)
+    if (adoptable(directory, sync.data.path.home)) untrack(() => projects.adopt(directory))
   })
 
   function enrich(project: { worktree: string; expanded: boolean }) {
