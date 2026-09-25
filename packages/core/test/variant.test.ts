@@ -104,6 +104,30 @@ test("recognizes Claude version spellings and future models", () => {
   ])
 })
 
+test("keeps thinking on for Claude Opus 5.5 and later", () => {
+  const supports: Variant.Support[] = [{ type: "toggle" }, { type: "effort", values: ["low", "high"] }]
+  const adaptive = ["low", "high"].map((effort) => ({
+    id: effort,
+    settings: { effort, thinking: { type: "adaptive", display: "summarized" } },
+  }))
+  for (const input of [
+    model("@opencode/ai/providers/cloudflare-ai-gateway", "anthropic/claude-opus-5.5"),
+    model("@opencode/ai/providers/anthropic", "claude-opus-5-5"),
+    model("@opencode/ai/providers/anthropic", "claude-opus-6"),
+  ])
+    expect(resolve(input, supports)).toEqual(adaptive)
+
+  expect(
+    resolve(model("@opencode/ai/providers/amazon-bedrock", "us.anthropic.claude-opus-5-5-v1:0"), [{ type: "toggle" }]),
+  ).toEqual([])
+
+  for (const id of ["claude-opus-5", "claude-opus-5-20260901"])
+    expect(resolve(model("@opencode/ai/providers/anthropic", id), supports)).toEqual([
+      { id: "none", settings: { thinking: { type: "disabled" } } },
+      ...adaptive,
+    ])
+})
+
 test("spells Cloudflare AI Gateway variants for their upstream routes", () => {
   const pkg = "@opencode/ai/providers/cloudflare-ai-gateway"
   expect(resolve(model(pkg, "openai/gpt-5.4"), [{ type: "effort", values: ["low", "xhigh"] }])).toEqual([

@@ -54,7 +54,8 @@ const modelID = (model: Model.Info) => model.modelID ?? model.id
 
 function claudeInfo(model: Model.Info) {
   const id = modelID(model)
-  const familyFirst = /(?:claude-)?(opus|sonnet|haiku|fable|mythos)-(\d+)(?:[.-](\d+))?/i.exec(id)
+  // Versions are at most two digits so snapshot dates such as `-20260901` are not read as versions.
+  const familyFirst = /(?:claude-)?(opus|sonnet|haiku|fable|mythos)-(\d{1,2})(?:[.-](\d{1,2}))?(?!\d)/i.exec(id)
   const versionFirst = /claude-(\d+)(?:[.-](\d+))?-(opus|sonnet|haiku|fable|mythos)/i.exec(id)
   const family = (familyFirst?.[1] ?? versionFirst?.[3])?.toLowerCase()
   const major = Number(familyFirst?.[2] ?? versionFirst?.[1])
@@ -64,7 +65,12 @@ function claudeInfo(model: Model.Info) {
     major,
     minor,
     manual: (major === 3 && minor === 7) || (major === 4 && minor < 6),
-    always: family === "fable" || family === "mythos" || id.toLowerCase().includes("mythos-preview"),
+    // Opus 5.5 and later reject disabled thinking.
+    always:
+      family === "fable" ||
+      family === "mythos" ||
+      id.toLowerCase().includes("mythos-preview") ||
+      (family === "opus" && (major > 5 || (major === 5 && minor >= 5))),
   }
 }
 
@@ -390,6 +396,7 @@ const bedrockConverse: Protocol = (model, support) => {
         return fields({ reasoningConfig: { type: "enabled", maxReasoningEffort: effort } })
       })
     case "toggle":
+      if (claude && claudeInfo(model).always) return []
       return claude
         ? toggle(fields({ thinking: { type: "disabled" } }), fields({ thinking: ADAPTIVE_THINKING }))
         : toggle(fields({ reasoningConfig: { type: "disabled" } }), fields({ reasoningConfig: { type: "enabled" } }))
@@ -449,6 +456,7 @@ const bedrockAISDK: Protocol = (model, support) => {
           : { reasoningConfig: { type: "enabled", maxReasoningEffort: effort } },
       }))
     case "toggle":
+      if (claude && claudeInfo(model).always) return []
       return claude
         ? toggle(
             { settings: { additionalModelRequestFields: { thinking: { type: "disabled" } } } },
@@ -507,6 +515,7 @@ const sapAICore: Protocol = (model, support) => {
           sap({ additionalModelRequestFields: { thinking: { type: "disabled" } } }),
           sap({ additionalModelRequestFields: { thinking: { type: "enabled" } } }),
         )
+      if (id.includes("anthropic") && claudeInfo(model).always) return []
       if (id.includes("anthropic"))
         return toggle(
           sap({ additionalModelRequestFields: { thinking: { type: "disabled" } } }),
