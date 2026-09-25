@@ -26,6 +26,7 @@ import { Plugin } from "../plugin"
 import { Provider } from "@/provider/provider"
 
 import { WebSearchTool } from "./websearch"
+import { McpSearchTool } from "./mcp-search"
 import { LspTool } from "./lsp"
 import * as Truncate from "./truncate"
 import { ApplyPatchTool } from "./apply_patch"
@@ -52,6 +53,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { MCP } from "@/mcp"
+import { McpToolSearch } from "@/mcp/tool-search"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { McpCatalog } from "@/mcp/catalog"
 
@@ -97,6 +99,7 @@ const layer = Layer.effect(
     const truncate = yield* Truncate.Service
     const flags = yield* RuntimeFlags.Service
     const mcp = yield* MCP.Service
+    const toolSearch = yield* McpToolSearch.Service
 
     const invalid = yield* InvalidTool
     const task = yield* TaskTool
@@ -114,6 +117,7 @@ const layer = Layer.effect(
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    const mcpsearch = yield* McpSearchTool
     const agent = yield* Agent.Service
     const codeMode = flags.experimentalCodeMode ? yield* Effect.promise(() => import("./code-mode")) : undefined
     const codeModeTool = codeMode ? yield* codeMode.CodeModeTool : undefined
@@ -219,6 +223,7 @@ const layer = Layer.effect(
           todo: Tool.init(todo),
           search: Tool.init(websearch),
           skill: Tool.init(skilltool),
+          mcpsearch: Tool.init(mcpsearch),
           patch: Tool.init(patchtool),
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
@@ -242,6 +247,7 @@ const layer = Layer.effect(
             tool.todo,
             tool.search,
             tool.skill,
+            tool.mcpsearch,
             tool.patch,
             ...(tool.execute ? [tool.execute] : []),
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
@@ -289,10 +295,27 @@ const layer = Layer.effect(
     })
 
     const tools: Interface["tools"] = Effect.fn("ToolRegistry.tools")(function* (input) {
+      // search_tools is only useful when there is at least one MCP server whose
+      // tools are being held back behind it; resolve() drops the held-back tools
+      // and keeps the search tool.
+      const ruleset = Permission.merge(input.agent.permission, input.permission ?? [])
+      const mcpTools = Permission.visibleTools(yield* mcp.tools(), ruleset)
+      const surfaceSize = Object.keys(mcpTools).length
+      const searchServers = Object.keys(yield* mcp.clients())
+      const heldBack = yield* Effect.forEach(
+        searchServers,
+        (server) => toolSearch.enabledFor(server, surfaceSize),
+        { concurrency: "unbounded" },
+      ).pipe(Effect.map((flags) => searchServers.filter((_, i) => flags[i])))
+      const anyHeldBack = heldBack.some((server) =>
+        Object.keys(mcpTools).some((id) => id.startsWith(McpCatalog.sanitize(server) + "_")),
+      )
+
       const filtered = (yield* all()).filter((tool) => {
         if (tool.id === WebSearchTool.id) {
           return webSearchEnabled(input.providerID, { exa: flags.enableExa, parallel: flags.enableParallel })
         }
+        if (tool.id === McpSearchTool.id) return anyHeldBack
 
         const usePatch =
           input.modelID.includes("gpt-") && !input.modelID.includes("oss") && !input.modelID.includes("gpt-4")
@@ -447,6 +470,7 @@ export const node = LayerNode.make({
     Truncate.node,
     RuntimeFlags.node,
     MCP.node,
+    McpToolSearch.node,
     Database.node,
     Ripgrep.node,
   ],

@@ -19,6 +19,7 @@ import { Plugin } from "../plugin"
 import { MAX_STEPS_PROMPT } from "@opencode-ai/core/session/runner/max-steps"
 import { ToolRegistry } from "@/tool/registry"
 import { MCP } from "../mcp"
+import { McpToolSearch } from "../mcp/tool-search"
 import { LSP } from "@/lsp/lsp"
 import { ulid } from "ulid"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
@@ -125,6 +126,7 @@ const layer = Layer.effect(
     const permission = yield* Permission.Service
     const fsys = yield* FSUtil.Service
     const mcp = yield* MCP.Service
+    const toolSearch = yield* McpToolSearch.Service
     const lsp = yield* LSP.Service
     const registry = yield* ToolRegistry.Service
     const truncate = yield* Truncate.Service
@@ -1236,6 +1238,7 @@ const layer = Layer.effect(
               Effect.provideService(Permission.Service, permission),
               Effect.provideService(ToolRegistry.Service, registry),
               Effect.provideService(MCP.Service, mcp),
+              Effect.provideService(McpToolSearch.Service, toolSearch),
               Effect.provideService(Truncate.Service, truncate),
               Effect.provideService(RuntimeFlags.Service, flags),
             )
@@ -1611,6 +1614,7 @@ export const node = LayerNode.make({
     Permission.node,
     FSUtil.node,
     MCP.node,
+    McpToolSearch.node,
     LSP.node,
     ToolRegistry.node,
     Truncate.node,
