@@ -62,4 +62,83 @@ describe("tui sync", () => {
       app.renderer.destroy()
     }
   })
+
+  test("session.error resets session status to idle and marks assistant message error", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(`${tmp.path}/kv.json`, "{}")
+    const { app, emit, sync } = await mount(undefined, tmp.path)
+
+    try {
+      const sessionID = "ses_error_test"
+
+      emit({
+        directory: "/tmp/other",
+        project: "proj_test",
+        payload: {
+          id: "evt_status",
+          type: "session.status",
+          properties: {
+            sessionID,
+            status: { type: "busy" },
+          },
+        },
+      })
+      await wait(() => sync.data.session_status[sessionID]?.type === "busy")
+
+      emit({
+        directory: "/tmp/other",
+        project: "proj_test",
+        payload: {
+          id: "evt_msg",
+          type: "message.updated",
+          properties: {
+            sessionID,
+            info: {
+              id: "msg_assist",
+              sessionID,
+              role: "assistant",
+              time: { created: 100 },
+              modelID: "test-model",
+              providerID: "opencode",
+              mode: "build",
+              agent: "build",
+              parentID: "msg_user",
+              path: { cwd: "/tmp", root: "/tmp" },
+              cost: 0,
+              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+            },
+          },
+        },
+      })
+      await wait(() => (sync.data.message[sessionID]?.length ?? 0) === 1)
+
+      emit({
+        directory: "/tmp/other",
+        project: "proj_test",
+        payload: {
+          id: "evt_err",
+          type: "session.error",
+          properties: {
+            sessionID,
+            error: {
+              name: "UnknownError",
+              data: { message: "Internal server error" },
+            },
+          },
+        },
+      })
+
+      await wait(() => sync.data.session_status[sessionID]?.type === "idle")
+      expect(sync.data.session_status[sessionID]?.type).toBe("idle")
+
+      const lastMsg = sync.data.message[sessionID]?.[0]
+      expect(lastMsg?.role).toBe("assistant")
+      if (lastMsg?.role === "assistant") {
+        expect(lastMsg.finish).toBe("error")
+        expect(lastMsg.error?.name).toBe("UnknownError")
+      }
+    } finally {
+      app.renderer.destroy()
+    }
+  })
 })
