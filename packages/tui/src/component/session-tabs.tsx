@@ -1704,13 +1704,13 @@ function HorizontalSessionTabs(props: {
                     </Index>
                   </Show>
                 </title_shimmer>
-                <text
+                <box
                   position="absolute"
-                  right={1}
+                  right={0}
                   zIndex={2}
-                  width={1}
-                  fg={closeHovered() ? theme.text.base : closeColor()}
-                  selectable={false}
+                  width={3}
+                  flexDirection="row"
+                  justifyContent="center"
                   onMouseOver={() => setCloseHovered(true)}
                   onMouseOut={() => setCloseHovered(false)}
                   onMouseDown={(event) => {
@@ -1729,8 +1729,14 @@ function HorizontalSessionTabs(props: {
                     tabs.close(tab === NEW_SESSION_TAB ? undefined : tab.sessionID)
                   }}
                 >
-                  {hovered() === tab.sessionID ? "✕" : ""}
-                </text>
+                  <text
+                    width={1}
+                    fg={closeHovered() ? theme.text.base : closeColor()}
+                    selectable={false}
+                  >
+                    {hovered() === tab.sessionID ? "✕" : ""}
+                  </text>
+                </box>
               </box>
             </box>
           )
