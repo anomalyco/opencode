@@ -11,7 +11,7 @@ import { createRequire } from "node:module"
 import { randomUUID } from "node:crypto"
 
 type Case = { id: string; status: "pass"; detail: string }
-const required = ["L01", "L02", "L03", "L04", "L05", "L06", "L07", "L08", "L09", "L10", "L11", "L12", "L15"]
+const required = ["L01", "L02", "L03", "L04", "L05", "L06", "L07", "L08", "L09", "L10", "L11", "L12", "L15", "L16"]
 const expectedCases = new Set([...required, "L13", "L14"])
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 const root = resolve(scriptDir, "../..")
@@ -303,6 +303,24 @@ async function child() {
     const afterBlocked = await rpc("read", {})
     check(afterBlocked && typeof afterBlocked === "object" && "url" in afterBlocked && afterBlocked.url.endsWith("/next"), "blocked redirect changed page URL")
     pass("L15", "dock_click reports blocked HTTP redirects")
+
+    await rpc("navigate", { address: `${site.base}/shadow` })
+    await rpc("evaluate", { script: "const host = document.createElement('div'); host.id = 'multiHost'; document.body.append(host); const root = host.attachShadow({ mode: 'open' }); root.innerHTML = '<button id=shadowInc>Shadow increment</button><button id=shadowOther>Shadow other</button>'; root.getElementById('shadowInc').addEventListener('click', () => { const c = document.getElementById('count'); c.textContent = String(Number(c.textContent || 0) + 1) }); true" })
+    const multiShadowSnap = await rpc("read", {})
+    check(multiShadowSnap.items.some((item) => item.name === "Shadow other"), "second shadow control missing from live snapshot")
+    const shadowButton = multiShadowSnap.items.find((item) => !!item && typeof item === "object" && "name" in item && item.name === "Shadow increment")
+    check(
+      shadowButton && typeof shadowButton === "object" && "x" in shadowButton && "y" in shadowButton && "width" in shadowButton && "height" in shadowButton,
+      "multi-control shadow button missing from live snapshot",
+    )
+    const shadowClick = await rpc("clickAt", {
+      x: shadowButton.x + shadowButton.width / 2,
+      y: shadowButton.y + shadowButton.height / 2,
+    })
+    check(shadowClick && typeof shadowClick === "object" && "ok" in shadowClick && shadowClick.ok === true, "shadow clickAt failed")
+    const afterShadowClick = await rpc("read", {})
+    check(typeof afterShadowClick.text === "string" && afterShadowClick.text.includes("1"), "shadow clickAt did not fire target handler")
+    pass("L16", "dock_clickAt targets one control among multiple shadow DOM controls")
 
     outcome = cases.length === expectedCases.size && new Set(cases.map((item) => item.id)).size === expectedCases.size && cases.every((item) => expectedCases.has(item.id)) ? 0 : 1
   } finally {

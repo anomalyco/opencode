@@ -5,12 +5,12 @@ import { createServer } from "node:https"
 import type { IncomingMessage, ServerResponse } from "node:http"
 import type { AddressInfo } from "node:net"
 import { tmpdir } from "node:os"
-import { dirname, isAbsolute, join, resolve } from "node:path"
+import { dirname, join, resolve } from "node:path"
 import { createRequire } from "node:module"
 import type { DockRPCReply } from "./app-dock-rpc"
 
 type Case = { id: string; status: "pass"; detail: string }
-const required = ["R01", "R02", "R03", "R04", "R05", "R06", "R07", "R08", "R09", "M01"]
+const required = ["R01", "R02", "R03", "R04", "R05", "R06", "R07", "R08", "R09", "R10", "R11", "M01"]
 const root = resolve(import.meta.dir, "../..")
 const artifact = join(process.env.APP_DOCK_ARTIFACT_ROOT ?? root, "artifacts/app-dock-rpc/s1.json")
 const cases: Case[] = []
@@ -37,12 +37,14 @@ async function fixture() {
   <output id="count">0</output>
   <label for="name">Name</label>
   <input id="name" type="text" placeholder="your name" />
+  <button id="fullscreen">Fullscreen</button>
 </div>
 <script>
   const count = document.getElementById("count")
   document.getElementById("inc").addEventListener("click", () => {
     count.textContent = String(Number(count.textContent || 0) + 1)
   })
+  document.getElementById("fullscreen").addEventListener("click", () => document.documentElement.requestFullscreen?.())
 </script>`
   const server = createServer({ key: await readFile(key), cert: await readFile(cert) }, (req: IncomingMessage, res: ServerResponse) => {
     res.writeHead(200, { "content-type": "text/html; charset=utf-8" })
@@ -63,13 +65,19 @@ async function child() {
   const electron = await import("electron")
   const { app, BrowserWindow } = electron
   const { createAppDock } = await import("./app-dock")
-  const { handleDockRPC, registerAppDockBridge } = await import("./app-dock-rpc")
+  const { handleDockRPC, registerAppDockBridge, registerAppDockProfileResolver } = await import("./app-dock-rpc")
   if (!process.versions.electron) throw new Error("Electron child not started")
   app.commandLine.appendSwitch("ignore-certificate-errors")
   await app.whenReady()
   const site = await fixture()
   const doc = createAppDock({ developmentMode: () => false })
   registerAppDockBridge(doc)
+  let profileResolverCalls = 0
+  let selectedStorageKey = "rpc-profile-storage"
+  registerAppDockProfileResolver(() => {
+    profileResolverCalls++
+    return { profileID: "rpc-profile", storageKey: selectedStorageKey }
+  })
   const settled = new Map<string, (result: unknown) => void>()
   const reply: DockRPCReply = (message) => {
     const result = message as { type: string; id: string }
@@ -99,6 +107,7 @@ async function child() {
     const tab = reply1.value as { tabID: string; url: string }
     check(tab.tabID && tab.url.startsWith("https://"), "open returned invalid tab")
     pass("R03", "open lands a real https tab through the bridge")
+    check(profileResolverCalls === 1, "RPC open did not resolve active profile storage")
 
     const unknown = (await rpc("explode")) as { ok: boolean; error?: { message: string } }
     check(unknown.ok === false && String(unknown.error?.message).includes("explode"), "unknown op not rejected")
@@ -112,14 +121,16 @@ async function child() {
     check(list.ok === true && list.value.length === 1 && list.value[0].tabID === tab.tabID && list.value[0].active === true, "list did not report opened tab as active")
     pass("R04", "list reports opened tab with active flag via senderID")
 
-    const read0 = (await rpc("read")) as { ok: boolean; value: { items: Array<{ ref: number; tag: string }> } }
+    const read0 = (await rpc("read")) as { ok: boolean; value: { items: Array<{ ref: number; tag: string; name?: string }> } }
     check(read0.ok === true, "read failed")
     const refs = new Map(read0.value.items.map((item) => [item.tag, item.ref] as const))
     check(refs.has("button") && refs.has("input"), "read snapshot missing button/input refs")
     pass("R05", "read returns page snapshot refs through execute")
 
-    const click = (await rpc("click", { ref: refs.get("button") })) as { ok: boolean; value: { ok: boolean } }
-    check(click.ok === true && click.value.ok === true, "click reported failure")
+    const incrementRef = read0.value.items.find((item) => item.name === "Increment")?.ref
+    check(typeof incrementRef === "number", "increment ref missing")
+    const click = (await rpc("click", { ref: incrementRef })) as { ok: boolean; value: { ok: boolean } }
+    check(click.ok === true && click.value.ok === true, `click reported failure: ${JSON.stringify(click)}`)
     const read1 = (await rpc("read")) as { ok: boolean; value: { text: string } }
     check(read1.ok === true && read1.value.text.includes("1"), "counter did not reach 1 after click")
     pass("R06", "click through bridge mutates the live page")
@@ -135,6 +146,31 @@ async function child() {
     const afterReload = (await rpc("list")) as { ok: boolean; value: Array<{ tabID: string }> }
     check(afterReload.ok === true && afterReload.value.length === 1, "tab was lost on reload")
     pass("R08", "go reload keeps the tab alive")
+
+    await rpc("wait", { milliseconds: 100 })
+    const fullscreenSnap = (await rpc("read")) as { ok: boolean; value?: { items: Array<{ ref: number; name?: string }> }; error?: unknown }
+    check(fullscreenSnap.ok === true && fullscreenSnap.value, `fullscreen read failed: ${JSON.stringify(fullscreenSnap)}`)
+    const fullscreenRef = fullscreenSnap.value.items.find((item) => item.name === "Fullscreen")?.ref
+    check(typeof fullscreenRef === "number", "fullscreen ref missing")
+    await rpc("click", { ref: fullscreenRef })
+    await rpc("wait", { milliseconds: 100 })
+    const entered = (await rpc("evaluate", { script: "Boolean(document.fullscreenElement)" })) as { value: { result: string } }
+    check(entered.value.result === "true", `fullscreen entry was not observed: ${JSON.stringify(entered)}`)
+    const escape = (await rpc("keyboard", { type: "keyDown", key: "Escape" })) as { ok: boolean; value: { ok: boolean; key: string } }
+    check(escape.ok === true && escape.value.ok === true && escape.value.key === "Escape", `Escape keyboard path failed: ${JSON.stringify(escape)}`)
+    await rpc("wait", { milliseconds: 100 })
+    const exited = (await rpc("evaluate", { script: "Boolean(document.fullscreenElement)" })) as { value: { result: string } }
+    check(exited.value.result === "false", `fullscreen exit was not observed: ${JSON.stringify(exited)}`)
+    pass("R11", "Escape keyboard path completes without stale fullscreen state")
+
+    const marker = await rpc("evaluate", { script: "localStorage.setItem('profile-marker', 'active'); true" })
+    check(marker && typeof marker === "object" && "ok" in marker && marker.ok === true, "profile marker write failed")
+    await rpc("close")
+    selectedStorageKey = "rpc-other-profile-storage"
+    await rpc("open", { address: `${site.base}/rpc` })
+    const isolated = (await rpc("storage", { storage: "local", key: "profile-marker" })) as { value: { value: string | null } }
+    check(isolated.value.value === null, `profile storage leaked across resolver switch: ${JSON.stringify(isolated)}`)
+    pass("R10", "RPC profile resolver isolates storage between profiles")
 
     const closed = (await rpc("close")) as { value: unknown[] }
     check(closed.ok === true && closed.value.length === 0, "close did not empty the tab list")

@@ -1453,7 +1453,7 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
         fullscreenEpochAtStart = (fullscreenEpoch.get(senderID) ?? 0) + 1
         fullscreenEpoch.set(senderID, fullscreenEpochAtStart)
         await record.view.webContents
-          .executeJavaScript("Boolean(document.fullscreenElement) ? (document.exitFullscreen?.(), true) : false", true)
+          .executeJavaScript("(async () => { if (!document.fullscreenElement) return false; await document.exitFullscreen?.(); return true })()", true)
           .catch(() => false)
       }
       record.view.webContents.sendInputEvent({ type, keyCode })
