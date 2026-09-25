@@ -1708,13 +1708,12 @@ describe("Anthropic Messages route", () => {
       expect(response.events).toEqual([
         { type: "step-start", index: 0 },
         { type: "tool-input-start", id: "call_1", name: "lookup" },
-        { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"', input: {} },
+        { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"' },
         {
           type: "tool-input-delta",
           id: "call_1",
           name: "lookup",
           text: ':"weather"}',
-          input: { query: "weather" },
         },
         { type: "tool-input-end", id: "call_1", name: "lookup", providerMetadata: undefined },
         {

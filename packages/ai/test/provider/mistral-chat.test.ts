@@ -415,14 +415,12 @@ describe("Mistral Chat", () => {
           id: "Ab12Cd34E",
           name: "lookup",
           text: '{"city":',
-          input: {},
         },
         {
           type: "tool-input-delta",
           id: "Ab12Cd34E",
           name: "lookup",
           text: '"Paris"}',
-          input: { city: "Paris" },
         },
         { type: "tool-input-end", id: "Ab12Cd34E", name: "lookup", providerMetadata: undefined },
         {
