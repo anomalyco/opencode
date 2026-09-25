@@ -699,7 +699,7 @@ const program = Effect.gen(function* () {
 })
 ```
 
-The hosted result is represented as a provider-executed tool call and tool result, and the generated image is also emitted as a first-class `media` `LLMEvent` (`response.message` then carries a `media` part). Gemini image-capable models emit the same `media` event for inline image output. Retaining `response.message` preserves the generated image for continuation on both routes.
+The hosted result is represented as a provider-executed tool call and a tool result whose content carries the generated image as a file. Gemini image-capable models instead emit a first-class `media` `LLMEvent` for inline image output (`response.message` then carries a `media` part). Retaining `response.message` preserves the generated image for continuation on both routes.
 
 ## Video generation
 
@@ -840,9 +840,10 @@ Provider notes:
 - **OpenAI** streams over SSE (`stream_format: "sse"`), which is also the only place it reports token usage; `tts-1`
   and `tts-1-hd` do not support SSE and stream the raw audio body instead. `pcm` is 24 kHz 16-bit mono. `language`
   and `timestamps` are not supported.
-- **Gemini TTS** returns raw 16-bit PCM only (`audio/L16;codec=pcm;rate=24000`), so any `format` other than `pcm`
-  fails typed; wrap the samples yourself. Style is directed in the text, so `instructions` and `speed` fail typed.
-  Only `gemini-3.1-flash-tts-preview` and later support streaming. Two-speaker audio goes through
+- **Gemini TTS** returns the provider's default output: WAV for Gemini 3.8 TTS `generate`, raw 16-bit PCM
+  (`audio/L16;codec=pcm;rate=24000`) otherwise. `pcm` is the only explicit `format` it accepts, and it fails typed on
+  Gemini 3.8 `generate`; the route never wraps PCM as WAV. Style is directed in the text, so `instructions` and
+  `speed` fail typed. Only `gemini-3.1-flash-tts-preview` and later support streaming. Two-speaker audio goes through
   `providerOptions.speechConfig.multiSpeakerVoiceConfig`.
 - **ElevenLabs** requires `voice` (the path voice id) and authenticates with `xi-api-key`. `format` maps to the
   `output_format` query parameter (`mp3_44100_128`, `pcm_24000`, `wav_24000`, `opus_48000_64`);
@@ -944,6 +945,7 @@ const transcript = await generation.await({ poll: { interval: 3_000 } })
 - **`ImageClient`** — Effect service and layer for image execution, parallel to `LLMClient`.
 - **`Media`** — the shared asset type (`Media.Asset`, `Media.Source`) and constructors used by messages, tool results, and media requests.
 - **`Generation`** — provider-neutral handle for an in-flight media generation (`await`, `refresh`, `cancel`, `events`) used by queued media routes.
+- **`Video.request` / `generate` / `stream` / `start` / `resume`** — queued video generation through a provider-neutral request; `VideoClient` is its Effect service and layer.
 - **`Speech.request` / `Speech.generate` / `Speech.stream`** — text-to-speech through a provider-neutral request; `SpeechClient` is its Effect service and layer.
 - **`Transcription.request` / `generate` / `stream` / `start` / `resume`** — speech-to-text over inline, streaming, and queued routes; `TranscriptionClient` is its Effect service and layer.
 - **`AIClient.layer` / `AIClient.layerWith(executor)`** — every modality client plus the request executor in one layer.
