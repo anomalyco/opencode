@@ -97,6 +97,8 @@ OpenCode Go 適用於 [OpenCode](https://opencode.ai) 以及其他會產生類�
 1. 傳送典型的程式設計 Agent 流量。
 2. 使用自身專屬的 user agent 識別資訊（例如 `my-coding-agent/1.0`），而非通用的 SDK 或 HTTP 函式庫名稱。
 3. 為每段對話在 `x-opencode-session` 請求標頭中傳送穩定的工作階段 ID，以便我們最佳化路由和提示詞快取。
+   在同一段對話的所有請求（包括輔助呼叫）中重複使用同一個 ID，而不是每個請求或每個處理程序各產生一個，並在用戶端使用的所有端點
+   （`/responses`、`/chat/completions` 和 `/messages`）上傳送；只在某一個 SDK 的中介軟體裡加入請求標頭，其他端點就收不到。
 
 ### 已驗證的用戶端
 

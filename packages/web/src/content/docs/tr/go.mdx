@@ -96,6 +96,9 @@ Trafik, diğer kullanıcıların deneyimini olumsuz etkileyen kötüye kullanım
 1. Tipik kodlama aracısı trafiği göndermelidir.
 2. Genel bir SDK veya HTTP kitaplığı adı yerine `my-coding-agent/1.0` gibi kendine ait bir user agent ile kendini tanıtmalıdır.
 3. Yönlendirmeyi ve istem önbelleğe almayı optimize edebilmemiz için her konuşmada `x-opencode-session` içinde değişmeyen bir oturum kimliği göndermelidir.
+   Aynı kimlik, yardımcı çağrılar dahil bir konuşmadaki tüm isteklerde yeniden kullanılmalı, istek veya süreç başına
+   yeni bir kimlik üretilmemeli ve istemcinin kullandığı tüm uç noktalara (`/responses`, `/chat/completions` ve
+   `/messages`) gönderilmelidir; yalnızca tek bir SDK'nın ara katmanına eklenen bir başlık diğerlerine ulaşmaz.
 
 ### Doğrulanmış İstemciler
 

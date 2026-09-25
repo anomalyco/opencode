@@ -109,6 +109,9 @@ Klienten din skal:
    for et generisk navn på et SDK eller HTTP-bibliotek.
 3. Sende en stabil sesjons-ID i `x-opencode-session` for hver samtale, slik at vi kan optimalisere ruting og
    promptbufring.
+   Gjenbruke samme ID for alle forespørsler i en samtale, hjelpekall inkludert, i stedet for å lage en ny per
+   forespørsel eller per prosess, og sende den på alle endepunktene klienten bruker (`/responses`,
+   `/chat/completions` og `/messages`); en header som bare legges til i ett SDKs mellomvare, når ikke de andre.
 
 ### Validerte klienter
 

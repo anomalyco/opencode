@@ -107,6 +107,10 @@ Il tuo client deve:
    con il nome generico di un SDK o di una libreria HTTP.
 3. Inviare un ID di sessione stabile in `x-opencode-session` per ogni conversazione, in modo da consentirci di ottimizzare il routing e
    il caching dei prompt.
+   Riutilizzare lo stesso ID per tutte le richieste di una conversazione, chiamate ausiliarie comprese, invece di
+   generarne uno per richiesta o per processo, e inviarlo su tutti gli endpoint usati dal client (`/responses`,
+   `/chat/completions` e `/messages`); un header aggiunto solo nel middleware di un singolo SDK non raggiunge gli
+   altri.
 
 ### Client convalidati
 

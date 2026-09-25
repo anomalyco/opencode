@@ -103,6 +103,10 @@ Twój klient powinien:
    ogólnej nazwy SDK lub biblioteki HTTP.
 3. Wysyłać stabilny identyfikator sesji w nagłówku `x-opencode-session` dla każdej rozmowy, aby umożliwić optymalizację routingu i
    buforowania promptów.
+   Używać tego samego identyfikatora dla wszystkich żądań w rozmowie, łącznie z wywołaniami pomocniczymi, zamiast
+   tworzyć nowy dla każdego żądania lub procesu, i wysyłać go na wszystkich endpointach używanych przez klienta
+   (`/responses`, `/chat/completions` i `/messages`); nagłówek dodany tylko w middleware jednego SDK nie trafia do
+   pozostałych.
 
 ### Zweryfikowane klienty
 
