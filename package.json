@@ -162,6 +162,7 @@
     "@types/node": "catalog:",
     "bun-types": "1.4.2",
     "effect": "catalog:",
+    "open": "11.0.4",
     "solid-js": "catalog:"
   },
   "patchedDependencies": {
