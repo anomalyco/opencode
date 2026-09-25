@@ -53,6 +53,7 @@ export const ApplyPatchTool = Tool.define(
       }
 
       const instance = yield* InstanceState.context
+      const originals: Array<{ filePath: string; content: Uint8Array }> = []
 
       // Validate file paths and check permissions
       const fileChanges: Array<{
@@ -113,6 +114,7 @@ export const ApplyPatchTool = Tool.define(
             }
 
             const source = yield* Bom.readFile(afs, filePath)
+            originals.push({ filePath, content: source.content })
             const oldContent = source.text
             let newContent = oldContent
             let bom = source.bom
@@ -168,6 +170,7 @@ export const ApplyPatchTool = Tool.define(
                 ),
               ),
             )
+            originals.push({ filePath, content: source.content })
             const contentToDelete = source.text
             const deleteDiff = trimDiff(createTwoFilesPatch(filePath, filePath, contentToDelete, ""))
 
@@ -213,6 +216,25 @@ export const ApplyPatchTool = Tool.define(
           files,
         },
       })
+
+      // Approval can outlive the contents used to prepare the patch. Check every
+      // source before writing any file so a stale later hunk leaves earlier ones untouched.
+      for (const original of originals) {
+        const current = yield* afs
+          .readFile(original.filePath)
+          .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)))
+        if (
+          !current ||
+          current.length !== original.content.length ||
+          !current.every((byte, index) => byte === original.content[index])
+        ) {
+          return yield* Effect.fail(
+            new Error(
+              `apply_patch verification failed: File changed since it was read: ${original.filePath}. No patch changes were applied. Read the file again and retry.`,
+            ),
+          )
+        }
+      }
 
       // Apply the changes
       const updates: Array<{ file: string; event: "add" | "change" | "unlink" }> = []

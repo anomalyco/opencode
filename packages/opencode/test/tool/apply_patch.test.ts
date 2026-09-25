@@ -401,6 +401,108 @@ describe("tool.apply_patch freeform", () => {
     }),
   )
 
+  for (const operation of ["update", "delete", "move"] as const) {
+    it.instance(`rejects a stale ${operation} source before applying any file changes`, () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const first = path.join(test.directory, "first.txt")
+        const second = path.join(test.directory, "second.txt")
+        const destination = path.join(test.directory, "moved.txt")
+        yield* writeText(first, "first\n")
+        yield* writeText(second, "second\n")
+
+        const hunk =
+          operation === "delete"
+            ? "*** Delete File: second.txt\n"
+            : `*** Update File: second.txt\n${operation === "move" ? "*** Move to: moved.txt\n" : ""}@@\n-second\n+patched\n`
+        const patchText = `*** Begin Patch\n*** Update File: first.txt\n@@\n-first\n+patched\n${hunk}*** End Patch`
+        const ctx: ToolCtx = {
+          ...baseCtx,
+          ask: () => writeText(second, "edited during approval\n"),
+        }
+
+        yield* expectFailure(execute({ patchText }, ctx), "File changed since it was read")
+        expect(yield* readText(first)).toBe("first\n")
+        expect(yield* readText(second)).toBe("edited during approval\n")
+        yield* expectReadFailure(destination)
+      }),
+    )
+  }
+
+  it.instance("rejects a BOM-only change during approval before creating any files", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const target = path.join(test.directory, "source.txt")
+      yield* writeText(target, "original\n")
+      const ctx: ToolCtx = {
+        ...baseCtx,
+        ask: () => writeText(target, "\uFEFForiginal\n"),
+      }
+
+      yield* expectFailure(
+        execute(
+          {
+            patchText:
+              "*** Begin Patch\n*** Add File: created.txt\n+created\n*** Update File: source.txt\n@@\n-original\n+patched\n*** End Patch",
+          },
+          ctx,
+        ),
+        "File changed since it was read",
+      )
+      expect(yield* readText(target)).toBe("\uFEFForiginal\n")
+      yield* expectReadFailure(path.join(test.directory, "created.txt"))
+    }),
+  )
+
+  it.instance("rejects a source removed during approval before changing earlier files", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const first = path.join(test.directory, "first.txt")
+      const second = path.join(test.directory, "second.txt")
+      yield* writeText(first, "first\n")
+      yield* writeText(second, "second\n")
+      const ctx: ToolCtx = {
+        ...baseCtx,
+        ask: () => Effect.promise(() => fs.unlink(second)),
+      }
+
+      yield* expectFailure(
+        execute(
+          {
+            patchText:
+              "*** Begin Patch\n*** Update File: first.txt\n@@\n-first\n+patched\n*** Delete File: second.txt\n*** End Patch",
+          },
+          ctx,
+        ),
+        "File changed since it was read",
+      )
+      expect(yield* readText(first)).toBe("first\n")
+      yield* expectReadFailure(second)
+    }),
+  )
+
+  it.instance("rejects byte changes hidden by UTF-8 replacement during approval", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const afs = yield* FSUtil.Service
+      const target = path.join(test.directory, "source.txt")
+      yield* afs.writeFile(target, new Uint8Array([0x80, 0x0a]))
+      const ctx: ToolCtx = {
+        ...baseCtx,
+        ask: () => afs.writeFile(target, new Uint8Array([0x81, 0x0a])).pipe(Effect.orDie),
+      }
+
+      yield* expectFailure(
+        execute(
+          { patchText: "*** Begin Patch\n*** Update File: source.txt\n@@\n-\uFFFD\n+patched\n*** End Patch" },
+          ctx,
+        ),
+        "File changed since it was read",
+      )
+      expect(Array.from(yield* afs.readFile(target))).toEqual([0x81, 0x0a])
+    }),
+  )
+
   it.instance("supports end of file anchor", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance
