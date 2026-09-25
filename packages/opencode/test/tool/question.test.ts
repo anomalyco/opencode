@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Effect, Fiber, Queue } from "effect"
+import { Effect, Fiber, Queue, Schema } from "effect"
 import { QuestionTool } from "../../src/tool/question"
 import { Question } from "../../src/question"
 import { SessionID, MessageID } from "../../src/session/schema"
@@ -87,6 +87,22 @@ describe("tool.question", () => {
 
       const result = yield* Fiber.join(fiber)
       expect(result.output).toContain(`"What is your favorite animal?"="Dog"`)
+    }),
+  )
+
+  it.instance("documents the repeated-item requirement with a valid multi-question example", () =>
+    Effect.gen(function* () {
+      const toolInfo = yield* QuestionTool
+      const tool = yield* toolInfo.init()
+      expect(tool.description).toContain("Every entry in `questions`")
+      expect(tool.description).toContain("including the second and every later entry")
+
+      const example = tool.description.split("\n").find((line) => line.startsWith('{"questions"'))
+      expect(example).toBeDefined()
+      const parsed = Schema.decodeUnknownSync(Schema.Struct({ questions: Schema.Array(Question.Prompt) }))(
+        JSON.parse(example!),
+      )
+      expect(parsed.questions.map((item) => item.header)).toEqual(["Database", "Caching"])
     }),
   )
 
