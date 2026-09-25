@@ -3,14 +3,17 @@ import { cp } from "node:fs/promises"
 import path from "node:path"
 import { Brand, Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Schedule, Schema, Scope, Stream } from "effect"
 import { Agent } from "@opencode/schema/agent"
+import { Document, Info } from "@opencode/schema/config"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
+import { Config } from "@opencode/core/config"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { Plugin } from "@opencode/core/plugin"
 import { ManagedPolicy } from "@opencode/core/managed-policy"
 import { PluginModule } from "@opencode/core/plugin/module"
 import { Rpc } from "@opencode/core/rpc"
+import { AbsolutePath } from "@opencode/core/schema"
 import { Tool } from "@opencode/core/tool"
 import { execute } from "@opencode/core/tool/runtime"
 import { Global } from "@opencode/util/global"
@@ -440,3 +443,27 @@ for (const target of ["policy-fixture@1.2.3", "@scope/policy-fixture@1.2.3"]) {
     }),
   )
 }
+
+it.live("blocks a plugin denied by managed configuration despite an authored allow", () =>
+  Effect.gen(function* () {
+    const file = AbsolutePath.make("/managed/opencode.json")
+    const policy = (effect: "allow" | "deny") =>
+      Schema.decodeUnknownSync(Info)({
+        experimental: { policies: [{ action: "integration.use", resource: "plugin:policy-fixture", effect }] },
+      })
+    const modules = yield* PluginModule.make().pipe(
+      Effect.provide(
+        Config.testLayer(
+          [
+            new Document({ type: "document", info: policy("allow") }),
+            new Document({ type: "document", path: file, info: policy("deny") }),
+          ],
+          undefined,
+          [file],
+        ),
+      ),
+    )
+    const operation = { type: "add" as const, target: "policy-fixture@1.2.3", options: {} }
+    expect(yield* modules.load(operation, { install: false })).toEqual({ blocked: true })
+  }),
+)

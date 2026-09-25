@@ -47,13 +47,27 @@ export const layer = Layer.effect(
 
 export const node = makeGlobalNode({ service: Service, layer, deps: [] })
 
-export function statements(entries: readonly Entry[], organization: State) {
+/**
+ * Orders policy statements so later ones win: authored documents (reversed, so user-global outranks
+ * repository), then administrator-managed documents, then Console organization statements.
+ *
+ * @param entries Loaded config entries.
+ * @param organization Statements from the connected Console.
+ * @param managed Paths of administrator-managed documents (`Config.Interface.managed`).
+ */
+export function statements(entries: readonly Entry[], organization: State, managed: readonly string[] = []) {
+  const documents = entries.filter((entry): entry is Document => entry.type === "document")
+  const isManaged = (entry: Document) => entry.path !== undefined && managed.includes(entry.path)
   return [
-    ...entries
-      .filter((entry): entry is Document => entry.type === "document")
+    ...documents
+      .filter((entry) => !isManaged(entry))
       .toReversed()
       .flatMap((entry) => entry.info.experimental?.policies ?? [])
       .map((policy) => ({ ...policy, message: "Blocked by configuration policy" })),
+    ...documents
+      .filter(isManaged)
+      .flatMap((entry) => entry.info.experimental?.policies ?? [])
+      .map((policy) => ({ ...policy, message: "Blocked by managed configuration policy" })),
     ...organization.statements.map((policy) => ({
       ...policy,
       message: organization.organization

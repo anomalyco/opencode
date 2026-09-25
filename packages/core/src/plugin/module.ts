@@ -51,7 +51,7 @@ export const make = Effect.fn("PluginModule.make")(function* () {
           path.isAbsolute(operation.target) || version <= 0 ? operation.target : operation.target.slice(0, version)
         if (
           ManagedPolicy.decision(
-            ManagedPolicy.statements(yield* config.entries(), managed.current()),
+            ManagedPolicy.statements(yield* config.entries(), managed.current(), config.managed),
             "integration.use",
             `plugin:${target}`,
           ) === "deny"
