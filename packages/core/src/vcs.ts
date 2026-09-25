@@ -123,7 +123,10 @@ const layer = Layer.effect(
       const changed = yield* Effect.gen(function* () {
         const provider = selected()
         const next: Info = provider
-          ? yield* protect(provider, "info", provider.info(scope).pipe(Effect.flatMap(decodeInfo)), { branch: {} })
+          ? {
+              ...(yield* protect(provider, "info", provider.info(scope).pipe(Effect.flatMap(decodeInfo)), { branch: {} })),
+              provider: provider.id,
+            }
           : { branch: {} }
         const changed = current.info.branch.current !== next.branch.current
         current.info = next

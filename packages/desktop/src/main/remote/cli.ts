@@ -24,12 +24,12 @@ export function requireVersion(version: string) {
 }
 
 export function discoverScript(options: { fromPath?: boolean; cache?: { directory: string; prefix: string } } = {}) {
-  return `cli=${options.fromPath ? "$(command -v opencode2 || true)" : '""'}
-if [ -z "$cli" ] && [ -x "$HOME/.opencode/bin/opencode2" ]; then cli="$HOME/.opencode/bin/opencode2"; fi
+  return `cli=${options.fromPath ? "$(command -v opencode || true)" : '""'}
+if [ -z "$cli" ] && [ -x "$HOME/.opencode/bin/opencode" ]; then cli="$HOME/.opencode/bin/opencode"; fi
 ${
   options.cache
     ? `if [ -z "$cli" ]; then
-  for binary in "$HOME"/${quote(options.cache.directory)}/${quote(options.cache.prefix)}*/opencode2; do
+  for binary in "$HOME"/${quote(options.cache.directory)}/${quote(options.cache.prefix)}*/opencode; do
     if [ -x "$binary" ]; then cli="$binary"; fi
   done
 fi
@@ -68,7 +68,7 @@ printf 'OPENCODE_REMOTE_TARGET=%s\\n' "$target"
 export function archiveUrl(target: string, version: string) {
   if (!/^(linux|darwin)-(x64-baseline|arm64)(-musl)?$/.test(target))
     throw new Failure({ code: "platform", detail: target })
-  return `https://registry.npmjs.org/@opencode-ai/cli-${target}/-/cli-${target}-${requireVersion(version)}.tgz`
+  return `https://registry.npmjs.org/@opencode/cli-${target}/-/cli-${target}-${requireVersion(version)}.tgz`
 }
 
 type Source = { type: "download"; url: string } | { type: "archive" } | { type: "installer"; binary?: string }
@@ -80,18 +80,18 @@ export function installScript(input: { version: string; directory?: string; sour
   if (input.source.type === "installer")
     return `set -eu
 curl -fsSL https://raw.githubusercontent.com/anomalyco/opencode/v2/install | bash -s -- ${input.source.binary ? `--binary ${input.source.binary}` : `--version ${quote(version)}`}
-${verifyScript('"$HOME/.opencode/bin/opencode2"', version)}
+${verifyScript('"$HOME/.opencode/bin/opencode"', version)}
 `
   return `set -eu
 umask 077
-destination="$HOME"/${quote(`${input.directory ?? ".opencode/bin"}/opencode2`)}
+destination="$HOME"/${quote(`${input.directory ?? ".opencode/bin"}/opencode`)}
 mkdir -p "$(dirname "$destination")"
 stage=$(mktemp -d "$(dirname "$destination")/.install-XXXXXX")
 trap 'rm -rf "$stage"' EXIT
 ${stageBinary(input.source)}
-chmod 755 "$stage/package/bin/opencode2"
-${verifyScript('"$stage/package/bin/opencode2"', version)}
-mv "$stage/package/bin/opencode2" "$destination"
+chmod 755 "$stage/package/bin/opencode"
+${verifyScript('"$stage/package/bin/opencode"', version)}
+mv "$stage/package/bin/opencode" "$destination"
 `
 }
 
@@ -114,12 +114,12 @@ const Beta = Schema.Struct({ version: Schema.String.check(Schema.isPattern(/^0\.
 
 export const latestBeta = Effect.fn("RemoteCli.latestBeta")(function* () {
   const http = yield* HttpClient.HttpClient
-  const metadata = yield* http.get("https://registry.npmjs.org/@opencode-ai%2fcli/beta").pipe(
+  const metadata = yield* http.get("https://registry.npmjs.org/@opencode%2fcli/beta").pipe(
     Effect.flatMap(HttpClientResponse.filterStatusOk),
     Effect.flatMap(HttpClientResponse.schemaBodyJson(Beta)),
     Effect.timeout("30 seconds"),
     Effect.mapError(
-      () => new Failure({ code: "install", detail: "https://registry.npmjs.org/@opencode-ai%2fcli/beta" }),
+      () => new Failure({ code: "install", detail: "https://registry.npmjs.org/@opencode%2fcli/beta" }),
     ),
   )
   return metadata.version

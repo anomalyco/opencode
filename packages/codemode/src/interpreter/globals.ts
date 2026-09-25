@@ -1,75 +1,138 @@
 import { Effect } from "effect"
+import { Arr, Callable, coerceToInteger, coerceToString, get, Obj, type Value } from "./objects.js"
 import { arrayGlobal } from "../stdlib/array.js"
+import { textDecoderGlobal, textEncoderGlobal, uint8ArrayGlobal } from "../stdlib/bytes.js"
 import { mapGlobal, setGlobal } from "../stdlib/collections.js"
 import { consoleGlobal } from "../stdlib/console.js"
 import { dateGlobal } from "../stdlib/date.js"
 import { jsonGlobal } from "../stdlib/json.js"
 import { mathGlobal } from "../stdlib/math.js"
-import { numberGlobal } from "../stdlib/number.js"
+import { booleanGlobal, numberGlobal } from "../stdlib/number.js"
 import { objectGlobal } from "../stdlib/object.js"
 import { regexpGlobal } from "../stdlib/regexp.js"
 import { stringGlobal } from "../stdlib/string.js"
 import { uriGlobal, urlGlobal, urlSearchParamsGlobal } from "../stdlib/url.js"
-import { coercion, errorConstructors } from "../stdlib/value.js"
+import { headersGlobal } from "../stdlib/headers.js"
+import { iteratorGlobals } from "../stdlib/iterator.js"
+import { coercion } from "../stdlib/value.js"
+import { base64Global, cryptoGlobal, structuredCloneGlobal } from "../stdlib/web.js"
 import { ToolReference } from "../tool-runtime.js"
 import { errorGlobal } from "./errors.js"
-import { HostFunction } from "./host.js"
-import { AsyncIteratorSymbol, InterpreterRuntimeError, IteratorSymbol } from "./model.js"
-import { promiseGlobal, type PromiseRuntime } from "./promises.js"
-import type { Runner } from "./runner.js"
+import { errorTypes } from "./intrinsics.js"
+import { constants, constructor, methods, native, receiver } from "./native.js"
+import { AsyncIteratorSymbol, IteratorSymbol, typeError } from "./model.js"
+import { checkArrayLength } from "./limits.js"
+import { generatorGlobals } from "./generators.js"
+import { promiseGlobal } from "./promises.js"
+import type { Interpreter } from "./interpreter.js"
 
-/** What the built-in globals need from the interpreter that owns them. */
-export type Host<R> = {
-  readonly runner: Runner<R>
-  readonly promises: PromiseRuntime<R>
-  readonly search: (args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
-  readonly toolKeys: (path: ReadonlyArray<string>) => ReadonlyArray<string>
-  readonly logs: Array<string>
+// Function.prototype.constructor exists so `fn.constructor === Function` holds; dynamic code is unsupported.
+const functionGlobal = <R>(ctx: Interpreter<R>) => {
+  const reject = () =>
+    Effect.sync(() => {
+      throw typeError("The Function constructor is not supported; write the function inline.")
+    })
+  const target = (thisValue: Value, method: string) => receiver(Callable, thisValue, `Function.prototype.${method}`)
+  methods(ctx.builtins, ctx.builtins.Function, [
+    ["call", 1, (thisValue, args) => ctx.call(target(thisValue, "call"), args[0], args.slice(1))],
+    ["apply", 2, (thisValue, args) => ctx.call(target(thisValue, "apply"), args[0], listFromArrayLike(args[1]))],
+    [
+      "bind",
+      1,
+      (thisValue, args) => {
+        const fn = target(thisValue, "bind")
+        const bound = args.slice(1)
+        return native<R>(ctx.builtins, {
+          name: `bound ${coerceToString(get(fn, "name"))}`,
+          length: Math.max(0, fn.length - bound.length),
+          call: (_, rest) => ctx.call(fn, args[0], [...bound, ...rest]),
+        })
+      },
+    ],
+  ])
+  return constructor<R>(ctx.builtins, ctx.builtins.Function, {
+    name: "Function",
+    length: 1,
+    call: reject,
+    construct: reject,
+  })
 }
 
-const symbolGlobal = new HostFunction({
-  name: "Symbol",
-  call: (_, node) =>
-    Effect.sync(() => {
-      throw new InterpreterRuntimeError(
-        "Symbol is not callable; only Symbol.asyncIterator and Symbol.iterator are available.",
-        node,
-      ).as("TypeError")
-    }),
-  callback: false,
-  members: { asyncIterator: AsyncIteratorSymbol, iterator: IteratorSymbol },
-})
+// CreateListFromArrayLike: `apply` reads `length` and the indexed properties of any object.
+const listFromArrayLike = (value: Value): Array<Value> => {
+  if (value === undefined || value === null) return []
+  if (value instanceof Arr) return [...value.items]
+  if (!(value instanceof Obj)) throw typeError("Function.prototype.apply expects an array-like argument list.")
+  const length = Math.max(0, coerceToInteger(get(value, "length")))
+  checkArrayLength(length)
+  return Array.from({ length }, (_, index) => get(value, String(index)))
+}
+
+const symbolGlobal = <R>(ctx: Interpreter<R>) => {
+  const symbol = native<R>(ctx.builtins, {
+    name: "Symbol",
+    call: () =>
+      Effect.sync(() => {
+        throw typeError("Symbol is not callable; only Symbol.asyncIterator and Symbol.iterator are available.")
+      }),
+    callback: false,
+  })
+  constants(symbol, { asyncIterator: AsyncIteratorSymbol, iterator: IteratorSymbol })
+  return symbol
+}
+
+type Factory = <R>(ctx: Interpreter<R>) => Value
+
+// A table rather than a list so the names are known before any runtime exists.
+const table: Record<string, Factory> = {
+  tools: () => new ToolReference([]),
+  search: (ctx) =>
+    native(ctx.builtins, { name: "search", call: (_, args) => ctx.tool(ctx.tools.search, args), callback: false }),
+  undefined: () => undefined,
+  NaN: () => NaN,
+  Infinity: () => Infinity,
+  Object: (ctx) => objectGlobal(ctx),
+  Function: (ctx) => functionGlobal(ctx),
+  Array: (ctx) => arrayGlobal(ctx),
+  Math: (ctx) => mathGlobal(ctx),
+  JSON: (ctx) => jsonGlobal(ctx),
+  console: (ctx) => consoleGlobal(ctx),
+  Promise: (ctx) => promiseGlobal(ctx),
+  Symbol: (ctx) => symbolGlobal(ctx),
+  Iterator: (ctx) => iteratorGlobals(ctx),
+  Number: (ctx) => numberGlobal(ctx),
+  String: (ctx) => stringGlobal(ctx),
+  Boolean: (ctx) => booleanGlobal(ctx),
+  parseInt: (ctx) => coercion(ctx, "parseInt", 2),
+  parseFloat: (ctx) => coercion(ctx, "parseFloat"),
+  isFinite: (ctx) => coercion(ctx, "isFinite"),
+  isNaN: (ctx) => coercion(ctx, "isNaN"),
+  Date: (ctx) => dateGlobal(ctx),
+  RegExp: (ctx) => regexpGlobal(ctx),
+  Map: (ctx) => mapGlobal(ctx),
+  Set: (ctx) => setGlobal(ctx),
+  URL: (ctx) => urlGlobal(ctx),
+  URLSearchParams: (ctx) => urlSearchParamsGlobal(ctx),
+  Headers: (ctx) => headersGlobal(ctx),
+  Uint8Array: (ctx) => uint8ArrayGlobal(ctx),
+  TextEncoder: (ctx) => textEncoderGlobal(ctx),
+  TextDecoder: (ctx) => textDecoderGlobal(ctx),
+  encodeURI: (ctx) => uriGlobal(ctx, "encodeURI"),
+  encodeURIComponent: (ctx) => uriGlobal(ctx, "encodeURIComponent"),
+  decodeURI: (ctx) => uriGlobal(ctx, "decodeURI"),
+  decodeURIComponent: (ctx) => uriGlobal(ctx, "decodeURIComponent"),
+  atob: (ctx) => base64Global(ctx, "atob"),
+  btoa: (ctx) => base64Global(ctx, "btoa"),
+  crypto: (ctx) => cryptoGlobal(ctx),
+  structuredClone: (ctx) => structuredCloneGlobal(ctx),
+  ...Object.fromEntries(errorTypes.map((type) => [type, <R>(ctx: Interpreter<R>) => errorGlobal(type, ctx)])),
+}
+
+/** Names bound in every program before extensions apply. */
+export const globalNames: ReadonlySet<string> = new Set(Object.keys(table))
 
 /** The immutable global bindings of every program, in declaration order. */
-export const globals = <R>(host: Host<R>): ReadonlyArray<readonly [string, unknown]> => [
-  ["tools", new ToolReference([])],
-  ["search", new HostFunction<R>({ name: "search", call: (args) => host.search(args), callback: false })],
-  ["undefined", undefined],
-  ["NaN", NaN],
-  ["Infinity", Infinity],
-  ["Object", objectGlobal(host.runner, host.toolKeys)],
-  ["Array", arrayGlobal(host.runner)],
-  ["Math", mathGlobal(host.runner)],
-  ["JSON", jsonGlobal(host.runner)],
-  ["console", consoleGlobal(host.logs)],
-  ["Promise", promiseGlobal(host.runner, host.promises)],
-  ["Symbol", symbolGlobal],
-  ["Number", numberGlobal],
-  ["String", stringGlobal],
-  ["Boolean", coercion("Boolean", { instanceOf: () => false })],
-  ["parseInt", coercion("parseInt")],
-  ["parseFloat", coercion("parseFloat")],
-  ["isFinite", coercion("isFinite")],
-  ["isNaN", coercion("isNaN")],
-  ["Date", dateGlobal(host.runner)],
-  ["RegExp", regexpGlobal],
-  ["Map", mapGlobal(host.runner)],
-  ["Set", setGlobal(host.runner)],
-  ["URL", urlGlobal],
-  ["URLSearchParams", urlSearchParamsGlobal(host.runner)],
-  ["encodeURI", uriGlobal("encodeURI")],
-  ["encodeURIComponent", uriGlobal("encodeURIComponent")],
-  ["decodeURI", uriGlobal("decodeURI")],
-  ["decodeURIComponent", uriGlobal("decodeURIComponent")],
-  ...[...errorConstructors].map((name) => [name, errorGlobal(name, host.runner)] as const),
-]
+export const globals = <R>(ctx: Interpreter<R>): ReadonlyArray<readonly [string, Value]> => {
+  generatorGlobals(ctx)
+  return Object.entries(table).map(([name, factory]) => [name, factory(ctx)] as const)
+}

@@ -28,6 +28,29 @@ const sentry =
       })
     : false
 
+// Every module the entry reaches through static imports lands in one chunk. Automatic splitting
+// otherwise fragments the initial graph into ~50 files shared with lazy routes, and each file costs
+// the renderer a main-thread request round trip through the main process before first paint.
+type ChunkingContext = { getModuleInfo(id: string): { isEntry: boolean; importers: readonly string[] } | null }
+const initialGraph = new WeakMap<ChunkingContext, Map<string, boolean>>()
+function inInitialGraph(id: string, ctx: ChunkingContext) {
+  const memo = initialGraph.get(ctx) ?? new Map<string, boolean>()
+  initialGraph.set(ctx, memo)
+  const visit = (id: string, path: Set<string>): boolean => {
+    const known = memo.get(id)
+    if (known !== undefined) return known
+    if (path.has(id)) return false
+    const info = ctx.getModuleInfo(id)
+    if (!info) return false
+    path.add(id)
+    const result = info.isEntry || info.importers.some((importer) => visit(importer, path))
+    path.delete(id)
+    memo.set(id, result)
+    return result
+  }
+  return visit(id, new Set())
+}
+
 export default defineConfig(({ command }) => ({
   main: {
     resolve: {
@@ -58,9 +81,9 @@ const require = __cjs_mod__.createRequire(import.meta.url);
         },
       },
       externalizeDeps: {
-        // Bundle the Effect family together; native MessagePack acceleration stays optional and external.
+        // Bundle the Effect family together.
         exclude: ["effect", "@effect/platform-node", "@effect/platform-node-shared", "drizzle-orm"],
-        include: [nodePtyPkg, "msgpackr-extract"],
+        include: [nodePtyPkg],
       },
     },
     plugins: [
@@ -96,6 +119,9 @@ const require = __cjs_mod__.createRequire(import.meta.url);
     define: {
       "import.meta.env.OPENCODE_VERSION": JSON.stringify(process.env.OPENCODE_VERSION),
       "import.meta.env.VITE_OPENCODE_CHANNEL": JSON.stringify(channel),
+      "import.meta.env.OPENCODE_TEST_ONBOARDING": JSON.stringify(
+        command === "serve" && process.env.OPENCODE_TEST_ONBOARDING === "1",
+      ),
     },
     plugins: [pickerPlugin(), appPlugin, sentry],
     publicDir: "../../../app/public",
@@ -106,6 +132,11 @@ const require = __cjs_mod__.createRequire(import.meta.url);
       rolldownOptions: {
         input: {
           main: "src/renderer/index.html",
+        },
+        output: {
+          codeSplitting: {
+            groups: [{ name: (id, ctx) => (inInitialGraph(id, ctx) ? "app" : null), priority: 10 }],
+          },
         },
       },
     },

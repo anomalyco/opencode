@@ -4,7 +4,7 @@
   "id": "catppuccin",
   "light": {
     "palette": {
-      "neutral": "#f5e0dc",
+      "neutral": "#eff1f5",
       "ink": "#4c4f69",
       "primary": "#7287fd",
       "accent": "#d20f39",
@@ -12,14 +12,14 @@
       "warning": "#df8e1d",
       "error": "#d20f39",
       "info": "#04a5e5",
-      "diffAdd": "#a6d189",
-      "diffDelete": "#e78284"
+      "diffAdd": "#40a02b",
+      "diffDelete": "#d20f39"
     },
     "overrides": {
-      "syntax-comment": "#6c7086",
+      "syntax-comment": "#6c6f85",
       "syntax-keyword": "#8839ef",
       "syntax-primitive": "#1e66f5",
-      "syntax-constant": "#ca6702"
+      "syntax-constant": "#fe640b"
     }
   },
   "dark": {
@@ -28,8 +28,8 @@
       "ink": "#cdd6f4",
       "primary": "#b4befe",
       "accent": "#f38ba8",
-      "success": "#a6d189",
-      "warning": "#f4b8e4",
+      "success": "#a6e3a1",
+      "warning": "#f9e2af",
       "error": "#f38ba8",
       "info": "#89dceb",
       "diffAdd": "#94e2d5",

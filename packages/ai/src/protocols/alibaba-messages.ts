@@ -26,18 +26,21 @@ export const protocol = Protocol.make({
     from: Effect.fn("AlibabaMessages.fromRequest")(function* (req) {
       const opts = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Options))(req.providerOptions ?? {})
       // Model Studio accepts enabled thinking without Anthropic's mandatory token budget.
+      const body = yield* AnthropicMessages.protocol.body.from(
+        LLMRequest.update(req, {
+          providerOptions: { ...req.providerOptions, thinking: undefined },
+        }),
+      )
+      const budget = opts.thinking?.budgetTokens ?? opts.thinking?.budget_tokens
       return {
-        ...(yield* AnthropicMessages.protocol.body.from(
-          LLMRequest.update(req, {
-            providerOptions: { ...req.providerOptions, thinking: undefined },
-          }),
-        )),
+        ...body,
         thinking:
           opts.thinking === undefined
             ? undefined
             : {
                 type: opts.thinking.type,
-                budget_tokens: opts.thinking.budgetTokens ?? opts.thinking.budget_tokens,
+                budget_tokens:
+                  budget === undefined ? undefined : ProviderShared.fitThinkingBudget(budget, body.max_tokens),
               },
       }
     }),

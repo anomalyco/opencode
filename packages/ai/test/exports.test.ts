@@ -1,16 +1,44 @@
 import { describe, expect, test } from "bun:test"
-import { AIError, ImageInput, LanguageModel, LLM, LLMClient, Provider } from "@opencode/ai"
-import { Route, Protocol, WebSocketTransport } from "@opencode/ai/route"
+import { Effect, Layer } from "effect"
+import {
+  AIClient,
+  AIError,
+  Generation,
+  Image,
+  ImageClient,
+  LanguageModel,
+  LLM,
+  LLMClient,
+  Media,
+  Provider,
+  Speech,
+  SpeechClient,
+  SpeechEvent,
+  TranscriptionClient,
+  Video,
+  VideoClient,
+} from "@opencode/ai"
+import { Route, Protocol, RequestExecutor, WebSocketTransport } from "@opencode/ai/route"
 import { Provider as ProviderSubpath } from "@opencode/ai/provider"
 import {
+  AssemblyAI,
   Baseten,
+  Cartesia,
   CloudflareAIGateway,
   CloudflareWorkersAI,
+  Deepgram,
   DeepSeek,
+  ElevenLabs,
+  Fal,
   Fireworks,
+  Google,
+  OpenCodeZen,
   OpenAI,
   OpenAICompatible,
   OpenRouter,
+  Runway,
+  TypeSafeAI,
+  VercelAIGateway,
   XAI,
 } from "@opencode/ai/providers"
 import {
@@ -23,20 +51,68 @@ import {
 } from "@opencode/ai/protocols"
 import * as AnthropicMessages from "@opencode/ai/protocols/anthropic-messages"
 import { TestLLM } from "@opencode/ai/testing"
+import { Evaluation, EvaluationClient } from "@opencode/ai/experimental"
 
 describe("public exports", () => {
+  test("modality, provider, and protocol entrypoints load first in a fresh process", async () => {
+    const results = await Promise.all(
+      ["image", "video", "speech", "transcription", "providers", "protocols"].map(async (entry) => {
+        const child = Bun.spawn(
+          [process.execPath, "-e", `await import(${JSON.stringify(`${import.meta.dir}/../src/${entry}.ts`)})`],
+          { stderr: "pipe" },
+        )
+        return { entry, exitCode: await child.exited, stderr: await new Response(child.stderr).text() }
+      }),
+    )
+    expect(results.filter((result) => result.exitCode !== 0)).toEqual([])
+  })
+
   test("root exposes app-facing runtime APIs", () => {
     expect(LLM.request).toBeFunction()
     expect(LLMClient.Service).toBeFunction()
     expect(LLMClient.layer).toBeDefined()
     expect(AIError).toBeFunction()
     expect(LanguageModel.make).toBeFunction()
-    expect(ImageInput.bytes).toBeFunction()
+    expect(Media.bytes).toBeFunction()
+    expect(Image.generate).toBeFunction()
+    expect(Video.start).toBeFunction()
+    expect(Video.resume).toBeFunction()
+    expect(VideoClient.layer).toBeDefined()
+    expect(Speech.generate).toBeFunction()
+    expect(Speech.stream).toBeFunction()
+    expect(SpeechClient.layer).toBeDefined()
+    expect(SpeechEvent.is.audioDelta).toBeFunction()
+    expect(Generation).toBeFunction()
     expect(Provider.make).toBeFunction()
     expect(ProviderSubpath.make).toBe(Provider.make)
     expect(TestLLM.layer).toBeFunction()
     expect(TestLLM.testLayer).toBeFunction()
     expect(TestLLM.Test.of).toBeFunction()
+    expect(Evaluation.run).toBeFunction()
+    expect(EvaluationClient.layer).toBeDefined()
+    expect(EvaluationClient.fetchLayer).toBeDefined()
+  })
+
+  test("AIClient.layerWith shares one executor across every client", async () => {
+    let built = 0
+    const counting = Layer.effect(
+      RequestExecutor.Service,
+      Effect.sync(() => {
+        built++
+        return RequestExecutor.Service.of({ execute: () => Effect.die("unexpected request") })
+      }),
+    )
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        yield* LLMClient.Service
+        yield* ImageClient.Service
+        yield* VideoClient.Service
+        yield* SpeechClient.Service
+        yield* TranscriptionClient.Service
+        yield* RequestExecutor.Service
+      }).pipe(Effect.provide(AIClient.layerWith(counting))),
+    )
+    expect(built).toBe(1)
   })
 
   test("route barrel exposes route-authoring APIs", () => {
@@ -66,11 +142,30 @@ describe("public exports", () => {
     expect(CloudflareWorkersAI.configure).toBeFunction()
     expect(CloudflareWorkersAI.configure({ accountId: "fixture", apiKey: "fixture" }).model).toBeFunction()
     expect(OpenRouter.model).toBeFunction()
+    expect(OpenRouter.experimental.evaluation).toBeFunction()
+    expect(TypeSafeAI.experimental.evaluation).toBeFunction()
+    expect(OpenCodeZen.experimental.evaluation).toBeFunction()
+    expect(VercelAIGateway.experimental.evaluation).toBeFunction()
     expect(XAI.model).toBeFunction()
     expect(XAI.provider.responses).toBe(XAI.responses)
     expect(XAI.provider.chat).toBe(XAI.chat)
     expect(XAI.configure({ apiKey: "fixture" }).responses("grok-4.3").route.id).toBe("openai-responses")
     expect(XAI.configure({ apiKey: "fixture" }).chat("grok-4.3").route.id).toBe("openai-compatible-chat")
+    expect(XAI.configure({ apiKey: "fixture" }).video("grok-imagine-video-1.5").route.id).toBe("xai-video")
+    expect(Fal.configure({ apiKey: "fixture" }).video("fal-ai/veo3.1").route.id).toBe("fal-video")
+    expect(Runway.configure({ apiKey: "fixture" }).video("gen4.5").route.id).toBe("runway-video")
+    expect(Runway.provider.video).toBe(Runway.video)
+    expect(OpenAI.configure({ apiKey: "fixture" }).speech("gpt-4o-mini-tts").route.id).toBe("openai-speech")
+    expect(Google.configure({ apiKey: "fixture" }).speech("gemini-2.5-flash-preview-tts").route.id).toBe(
+      "google-speech",
+    )
+    expect(ElevenLabs.configure({ apiKey: "fixture" }).speech("eleven_flash_v2_5").route.id).toBe("elevenlabs-speech")
+    expect(Cartesia.configure({ apiKey: "fixture" }).speech("sonic-3").route.id).toBe("cartesia-speech")
+    expect(Deepgram.configure({ apiKey: "fixture" }).speech("aura-2-thalia-en").route.id).toBe("deepgram-speech")
+    expect(OpenAI.configure({ apiKey: "fixture" }).transcription("gpt-transcribe").route.kind).toBe("stream")
+    expect(Google.configure({ apiKey: "fixture" }).transcription("gemini-3.5-transcribe").route.kind).toBe("stream")
+    expect(Deepgram.configure({ apiKey: "fixture" }).transcription("nova-3").route.kind).toBe("inline")
+    expect(AssemblyAI.configure({ apiKey: "fixture" }).transcription("universal-3-5-pro").route.kind).toBe("queued")
   })
 
   test("protocol barrels expose supported low-level routes", () => {

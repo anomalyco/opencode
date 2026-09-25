@@ -50,6 +50,19 @@ export class UnsupportedOperationError extends Schema.TaggedError<UnsupportedOpe
   route: Schema.optional(RouteID),
 }) {}
 
+/**
+ * Provider settings that are missing, conflicting, or unsupported, such as
+ * Azure without `resourceName` or `baseURL`. Thrown synchronously while a
+ * provider facade or package entrypoint configures a model, before any
+ * request exists, so it is not an `AIError` reason.
+ */
+export class ProviderConfigurationError extends Schema.TaggedError<ProviderConfigurationError>(
+  "AI.Error.ProviderConfiguration",
+)("ProviderConfiguration", {
+  provider: ProviderID,
+  message: Schema.String,
+}) {}
+
 export class NoRouteError extends Schema.TaggedError<NoRouteError>("AI.Error.NoRoute")("NoRoute", {
   ...ReasonFields,
   route: RouteID,
@@ -120,6 +133,12 @@ export class UnknownProviderError extends Schema.TaggedError<UnknownProviderErro
   ReasonFields,
 ) {}
 
+/** A caller-supplied deadline elapsed, such as `Generation.await` polling past its `Poll.timeout`. */
+export class TimeoutError extends Schema.TaggedError<TimeoutError>("AI.Error.Timeout")("Timeout", {
+  ...ReasonFields,
+  timeoutMs: Schema.optional(Schema.Number),
+}) {}
+
 export const AIErrorReason = Schema.Union([
   InvalidRequestError,
   UnsupportedOperationError,
@@ -132,6 +151,7 @@ export const AIErrorReason = Schema.Union([
   TransportError,
   InvalidProviderOutputError,
   UnknownProviderError,
+  TimeoutError,
 ]).pipe(Schema.toTaggedUnion("_tag"))
 export type AIErrorReason = Schema.Schema.Type<typeof AIErrorReason>
 

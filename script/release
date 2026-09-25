@@ -1,3 +1,0 @@
-#!/usr/bin/env bash
-
-gh workflow run publish.yml --ref v2

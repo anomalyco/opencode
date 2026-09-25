@@ -6,7 +6,7 @@ import { Auth } from "../route/auth.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
-import { ProviderID, type LLMRequest, type ModelID } from "../schema/index.js"
+import { ProviderConfigurationError, ProviderID, type LLMRequest, type ModelID } from "../schema/index.js"
 import { GoogleVertexShared } from "./google-vertex-shared.js"
 
 export interface GeminiOptionsInput extends Gemini.OptionsInput {
@@ -26,6 +26,7 @@ export type Config = RouteDefaultsInput &
   }
 
 export type Settings = ProviderPackage.Settings &
+  GeminiProviderOptionsInput &
   (
     | { readonly accessToken?: string; readonly apiKey?: never }
     | { readonly accessToken?: never; readonly apiKey?: string }
@@ -33,28 +34,17 @@ export type Settings = ProviderPackage.Settings &
     readonly baseURL?: string
     readonly location?: string
     readonly project?: string
-    readonly providerOptions?: GeminiProviderOptionsInput
   }
 
 const fromRequest = Effect.fn("GoogleVertex.fromRequest")(function* (request: LLMRequest) {
-  const body = yield* Gemini.protocol.body.from(request)
-  // Vertex's native REST schema rejects `id` on FunctionCall/FunctionResponse parts with HTTP 400,
-  // unlike AI Studio, so history minted there cannot be lowered verbatim.
-  const contents = body.contents.map((content) => ({
-    ...content,
-    parts: (content.parts ?? []).map((part) => {
-      if ("functionCall" in part) return { ...part, functionCall: { ...part.functionCall, id: undefined } }
-      if ("functionResponse" in part) return { ...part, functionResponse: { ...part.functionResponse, id: undefined } }
-      return part
-    }),
-  }))
+  const { serviceTier: _, ...body } = yield* Gemini.protocol.body.from(request)
   const value = request.providerOptions?.labels
   const labels = ProviderShared.isRecord(value)
     ? Object.fromEntries(
         Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
       )
     : undefined
-  return { ...body, contents, labels }
+  return { ...body, labels }
 })
 
 const protocol = {
@@ -75,6 +65,10 @@ const route = Route.make({
     return `/${model.startsWith("endpoints/") ? model : `models/${model}`}:streamGenerateContent?alt=sse`
   }),
   auth: Auth.none,
+  headers: ({ request }): Record<string, string> => {
+    const serviceTier = request.providerOptions?.serviceTier
+    return typeof serviceTier === "string" ? { "x-vertex-ai-llm-shared-request-type": serviceTier } : {}
+  },
   framing: Framing.sse,
 })
 
@@ -93,7 +87,10 @@ const configuredRoute = (input: Config, modelID: string | ModelID) => {
   const apiKey = GoogleVertexShared.apiKey(input)
   const endpointModel = String(modelID).startsWith("endpoints/")
   if (apiKey !== undefined && endpointModel)
-    throw new Error("Google Vertex tuned models do not support Express Mode API keys")
+    throw new ProviderConfigurationError({
+      provider: id,
+      message: "Google Vertex tuned models do not support Express Mode API keys",
+    })
   const location = GoogleVertexShared.location(inputLocation, "us-central1")
   const project = GoogleVertexShared.project(inputProject)
   const endpoint =
@@ -121,16 +118,22 @@ export const provider = {
   id,
   configure,
 }
-export const model: ProviderPackage.Definition<Settings, GeminiProviderOptionsInput>["model"] = (modelID, settings) => {
-  if (settings.apiKey !== undefined && settings.accessToken !== undefined)
-    throw new Error("Google Vertex apiKey cannot be combined with accessToken or auth")
+export const model: ProviderPackage.Definition<Settings, GeminiProviderOptionsInput>["model"] = (
+  modelID,
+  { accessToken, apiKey, baseURL, body, headers, location, project, ...providerOptions },
+) => {
+  if (apiKey !== undefined && accessToken !== undefined)
+    throw new ProviderConfigurationError({
+      provider: id,
+      message: "Google Vertex apiKey cannot be combined with accessToken or auth",
+    })
   return configure({
-    ...(settings.apiKey === undefined ? { accessToken: settings.accessToken } : { apiKey: settings.apiKey }),
-    baseURL: settings.baseURL,
-    headers: settings.headers === undefined ? undefined : { ...settings.headers },
-    http: settings.body === undefined ? undefined : { body: { ...settings.body } },
-    location: settings.location,
-    project: settings.project,
-    providerOptions: settings.providerOptions,
+    ...(apiKey === undefined ? { accessToken: accessToken } : { apiKey: apiKey }),
+    baseURL,
+    headers: headers === undefined ? undefined : { ...headers },
+    http: body === undefined ? undefined : { body: { ...body } },
+    location,
+    project,
+    providerOptions,
   }).model(modelID)
 }

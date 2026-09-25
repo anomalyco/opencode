@@ -31,6 +31,9 @@ import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
 import { projectForSession } from "@/shell/layout/helpers"
 import { useSettingsDialog } from "@/settings/command"
+import { updaterAction } from "@/shell/updates/action"
+import type { UpdaterState } from "@/shell/updates/types"
+import { rootSession } from "@/shell/routes/session"
 import devIcon from "../../../../desktop/icons/dev/64x64.png"
 import betaIcon from "../../../../desktop/icons/beta/64x64.png"
 
@@ -43,8 +46,7 @@ const macTrafficLightsBaseWidth = 68
 const macTrafficLightsTopClearance = 28
 
 export type TitlebarUpdate = {
-  version: string | undefined
-  installing: boolean
+  state: UpdaterState | undefined
   install: () => void
 }
 
@@ -96,13 +98,14 @@ export function Titlebar(props: {
   })
 
   const updateState = createMemo<TitlebarUpdatePillState>(() => {
-    const installing = props.update?.installing ?? false
-    const version = props.update?.version
+    const state = props.update?.state
+    const installing = state?.status === "installing"
+    const version = state?.status === "ready" || state?.status === "download-required" ? state.version : undefined
     return {
       visible: version !== undefined || installing,
       installing,
       label: language.t("titlebar.update"),
-      ariaLabel: language.t("toast.update.action.installRestart"),
+      ariaLabel: language.t(updaterAction(state).label),
       title: version ? language.t("titlebar.updateVersion", { version }) : undefined,
       onInstall: () => props.update?.install(),
     }
@@ -183,7 +186,7 @@ export function Titlebar(props: {
               const route = layout.route()
               return route.type === "session" && !!tabs.pendingSession(route.server, route.sessionId)
             })
-            const [loadedSession] = createResource(
+            const [resolvedSession] = createResource(
               () => {
                 const route = layout.route()
                 if (route.type !== "session") return undefined
@@ -191,7 +194,23 @@ export function Titlebar(props: {
                 const conn = global.servers.list().find((item) => ServerConnection.key(item) === route.server)
                 return conn ? { route, ctx: global.ensureServerCtx(conn) } : undefined
               },
-              ({ route, ctx }) => ctx.sdk.api.session.get({ sessionID: route.sessionId }).catch(() => {}),
+              async ({ route, ctx }) => {
+                const info = await ctx.sdk.api.session
+                  .get({ sessionID: route.sessionId })
+                  .catch(() => ctx.data.session.get(route.sessionId))
+                if (!info) return
+                ctx.data.session.remember(info)
+                const rootID = await rootSession(info, async (id) => {
+                  const cached = ctx.data.session.get(id)
+                  if (cached) return cached
+                  const ancestor = await ctx.sdk.api.session.get({ sessionID: id })
+                  ctx.data.session.remember(ancestor)
+                  return ancestor
+                })
+                  .then((root) => root.id)
+                  .catch(() => ctx.data.session.root(info.id))
+                return { info, rootID }
+              },
             )
             const session = createMemo(() => {
               const route = layout.route()
@@ -200,8 +219,8 @@ export function Titlebar(props: {
               const conn = global.servers.list().find((item) => ServerConnection.key(item) === route.server)
               const cached = conn ? global.ensureServerCtx(conn).data.session.get(route.sessionId) : undefined
               if (cached) return cached
-              const loaded = loadedSession()
-              return loaded?.id === route.sessionId ? loaded : undefined
+              const resolved = resolvedSession()
+              return resolved?.info.id === route.sessionId ? resolved.info : undefined
             })
 
             const matchRoute = (route: LayoutRoute) => {
@@ -219,7 +238,8 @@ export function Titlebar(props: {
                 if (main) return main
                 const s = session()
                 if (s?.parentID) {
-                  const parentID = s.parentID
+                  const resolved = resolvedSession()
+                  const parentID = resolved?.info.id === s.id ? resolved.rootID : s.parentID
                   const parent = tabsStore.find(
                     (item) => item.type === "session" && item.server === route.server && item.sessionId === parentID,
                   )
@@ -254,7 +274,9 @@ export function Titlebar(props: {
                 }
                 const s = session()
                 if (!s) return
-                const sessionId = s.parentID ?? s.id
+                const resolved = resolvedSession()
+                if (s.parentID && resolved?.info.id !== s.id) return
+                const sessionId = resolved?.info.id === s.id ? resolved.rootID : s.id
                 const next = { server: route.server, sessionId }
                 tabsStoreActions.addSessionTab(next)
               }
@@ -301,6 +323,7 @@ export function Titlebar(props: {
                   return
                 }
                 case "settings":
+                case "connect":
                 case "home": {
                   const selection = layout.home.selection()
                   const conn =
@@ -349,9 +372,10 @@ export function Titlebar(props: {
               >
                 <button
                   type="button"
+                  data-titlebar-tab-action
                   data-action="vertical-tabs-home"
                   data-state={layout.route().type === "home" ? "pressed" : undefined}
-                  class="group mb-1 flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] ps-1.5 pe-2 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 hover:text-v2-text-text-base data-[state=pressed]:bg-v2-background-bg-layer-02 data-[state=pressed]:text-v2-text-text-base"
+                  class="group mb-1 flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] ps-1.5 pe-2 text-[13px] leading-4 text-v2-text-text-faint hover:text-v2-text-text-base data-[state=pressed]:text-v2-text-text-base"
                   onClick={toggleHome}
                   aria-label={language.t("home.title")}
                   aria-pressed={layout.route().type === "home"}
@@ -648,8 +672,9 @@ export function Titlebar(props: {
                             {homeButton(true)}
                             <button
                               type="button"
+                              data-titlebar-tab-action
                               data-action="vertical-tabs-new-session"
-                              class="group flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] ps-1.5 pe-2 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 hover:text-v2-text-text-base"
+                              class="group flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] ps-1.5 pe-2 text-[13px] leading-4 text-v2-text-text-faint hover:text-v2-text-text-base"
                               onClick={openNewTab}
                               aria-label={language.t("command.session.new")}
                             >
@@ -679,12 +704,11 @@ export function Titlebar(props: {
                                 onReorder={(keys) => tabsStoreActions.reorder(keys)}
                               />
                             </div>
-                            <div data-slot="vertical-tabs-footer" class="mt-2 flex w-full shrink-0 flex-col gap-2">
-                              <TitlebarRightMount vertical />
-                              <Show when={updateState().visible}>
+                            <Show when={updateState().visible}>
+                              <div data-slot="vertical-tabs-footer" class="mt-2 flex w-full shrink-0 flex-col">
                                 <TitlebarUpdateIconButton state={updateState()} vertical />
-                              </Show>
-                            </div>
+                              </div>
+                            </Show>
                           </Portal>
                         )}
                       </Show>
@@ -791,7 +815,7 @@ function ChannelIndicator(props: {
   if (!channel || channel === "prod") return null
 
   const label = () => language.t(`titlebar.channel.${channel}`)
-  const debug = () => (channel === "dev" ? props.debugTools : undefined)
+  const debug = () => (channel === "dev" || channel === "local" ? props.debugTools : undefined)
   return (
     <Tooltip
       placement={props.sidebar ? "right" : "bottom"}

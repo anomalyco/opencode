@@ -29,7 +29,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { CodeMode } from "../src/index.js"
-import { invokeJsonMethod } from "../src/stdlib/json.js"
 
 const value = async (code: string) => {
   const result = await Effect.runPromise(CodeMode.execute({ code, tools: {} }))
@@ -211,34 +210,29 @@ describe("Test262 JSON.stringify replacer adaptations", () => {
 })
 
 describe("CodeMode JSON callback boundaries", () => {
-  test("this remains unsupported rather than exposing callback holders", async () => {
-    const result = await Effect.runPromise(
-      CodeMode.execute({ code: `return JSON.parse("1", function (key, item) { return this })`, tools: {} }),
-    )
-    expect(result).toMatchObject({ ok: false, error: { kind: "UnsupportedSyntax" } })
-  })
-
-  test("blocked parse keys are rejected before reviver traversal", async () => {
+  test("revivers and replacers see the holder as this", async () => {
     expect(
-      await value(
-        `try { JSON.parse('{"__proto__":1}', (key, item) => item) } catch (error) { return true } return false`,
-      ),
-    ).toBe(true)
+      await value(`
+        const revived = JSON.parse('{"a":{"b":1}}', function (key, item) { return key === "b" ? this.b + 1 : item })
+        const text = JSON.stringify({ a: 1, b: 2 }, function (key, item) { return key === "a" ? this.b : item })
+        return [revived, text]
+      `),
+    ).toEqual([{ a: { b: 2 } }, '{"a":2,"b":2}'])
   })
 
-  test("JSON.stringify directly rejects blocked input keys", () => {
-    expect(() =>
-      invokeJsonMethod(
-        {
-          invokeFunction: () => Effect.die("unused"),
-          invokeCallable: () => Effect.die("unused"),
-          settlePromise: () => Effect.die("unused"),
-          syncIterator: () => Effect.die("unused"),
-        },
-        "stringify",
-        [Object.fromEntries([["constructor", 1]])],
-        { type: "CallExpression", start: 0, end: 0 },
-      ),
-    ).toThrow("blocked property 'constructor'")
+  test("prototype-named keys parse as own data and reach the reviver", async () => {
+    expect(
+      await value(`
+        const seen = []
+        const parsed = JSON.parse('{"__proto__":{"polluted":1},"constructor":2}', (key, item) => { seen.push(key); return item })
+        return [seen, parsed.__proto__.polluted, parsed.constructor, ({}).polluted, Object.keys(parsed)]
+      `),
+    ).toEqual([["polluted", "__proto__", "constructor", ""], 1, 2, null, ["__proto__", "constructor"]])
+  })
+
+  test("JSON.stringify serializes prototype-named own keys", async () => {
+    expect(await value(`return JSON.stringify({ constructor: 1, __proto__: 2 })`)).toBe(
+      '{"constructor":1,"__proto__":2}',
+    )
   })
 })

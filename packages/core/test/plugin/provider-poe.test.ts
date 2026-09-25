@@ -1,6 +1,5 @@
 import { LLM } from "@opencode/ai"
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
-import { Catalog } from "@opencode/core/catalog"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { Model } from "@opencode/core/model"
@@ -36,17 +35,17 @@ const fixture = Effect.gen(function* () {
   )
   const integrations = yield* Integration.Service
   const credentials = yield* Credential.Service
-  const catalog = yield* Catalog.Service
+  const providers = yield* Provider.Service
   yield* integrations.transform((editor) => {
     editor.method.update({ integrationID, method: { type: "key" } })
     editor.method.update({ integrationID, method: { type: "env", names: ["POE_API_KEY"] } })
   })
-  yield* catalog.transform((editor) => {
-    editor.provider.update(providerID, (provider) => {
-      provider.package = Provider.aisdk("@ai-sdk/openai-compatible")
+  yield* providers.transform((editor) => {
+    editor.update(providerID, (provider) => {
+      provider.package = "@opencode/ai/providers/openai-compatible"
       provider.settings = { baseURL: "https://api.poe.com/v1" }
     })
-    editor.model.update(providerID, modelID, () => {})
+    editor.models.update(providerID, modelID, () => {})
   })
   const plugin = yield* Plugin.Service
   const host = yield* PluginHost.make(plugin)
@@ -320,7 +319,7 @@ it.effect("keeps near-expiry keys usable and requires a new login after expiry",
         expires: (yield* Clock.currentTimeMillis) + 120_000,
       }),
     })
-    const connection = { type: "credential" as const, id: saved.id, label: saved.label }
+    const connection = { type: "credential" as const, method: "oauth" as const, id: saved.id, label: saved.label }
     expect(yield* test.integrations.connection.resolve(connection)).toEqual(saved.value)
     yield* TestClock.adjust("2 minutes")
     const error = yield* test.integrations.connection.resolve(connection).pipe(Effect.flip)

@@ -25,6 +25,7 @@ import { TokenUsage } from "./token-usage.js"
 import { SessionInbox } from "./session-inbox.js"
 import { Project } from "./project.js"
 import { SessionFork } from "./session-fork.js"
+import { Permission } from "./permission.js"
 
 export { FileAttachment }
 
@@ -62,6 +63,7 @@ export const Created = Event.durable({
     model: Model.Ref.pipe(optional),
     /** Host-supplied annotations resolved at creation, including any inherited from a parent. */
     metadata: SessionMetadata.pipe(optional),
+    permissions: Permission.Ruleset.pipe(optional),
     version: Schema.String,
   },
 })
@@ -108,6 +110,26 @@ export const Renamed = Event.durable({
   },
 })
 export type Renamed = typeof Renamed.Type
+
+export const MetadataUpdated = Event.durable({
+  type: "session.metadata.updated",
+  ...options,
+  schema: {
+    ...Base,
+    metadata: SessionMetadata,
+  },
+})
+export type MetadataUpdated = typeof MetadataUpdated.Type
+
+export const Permissions = Event.durable({
+  type: "session.permissions",
+  ...options,
+  schema: {
+    ...Base,
+    permissions: Permission.Ruleset,
+  },
+})
+export type Permissions = typeof Permissions.Type
 
 export const Viewed = Event.durable({
   type: "session.viewed",
@@ -316,6 +338,8 @@ export namespace Step {
       agent: Agent.ID,
       model: Model.Ref,
       snapshot: Snapshot.ID.pipe(optional),
+      /** Request dispatch time, before waiting for provider output. */
+      started: NonNegativeInt,
     },
   })
   export type Started = typeof Started.Type
@@ -634,6 +658,8 @@ export const Definitions = Event.inventory(
   ModelSelected,
   Moved,
   Renamed,
+  MetadataUpdated,
+  Permissions,
   Viewed,
   UsageUpdated,
   Deleted,

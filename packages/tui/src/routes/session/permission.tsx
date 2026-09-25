@@ -47,8 +47,8 @@ function EditBody(props: { file?: string; diff?: string; patch?: string }) {
           scrollAcceleration={scrollAcceleration()}
           verticalScrollbarOptions={{
             trackOptions: {
-              backgroundColor: theme.background.default,
-              foregroundColor: theme.scrollbar.default,
+              backgroundColor: theme.background.base,
+              foregroundColor: theme.scrollbar.base,
             },
           }}
         >
@@ -61,7 +61,7 @@ function EditBody(props: { file?: string; diff?: string; patch?: string }) {
             showLineNumbers={true}
             width="100%"
             wrapMode="word"
-            fg={theme.text.default}
+            fg={theme.text.base}
             addedBg={theme.diff.background.added}
             removedBg={theme.diff.background.removed}
             contextBg={theme.diff.background.context}
@@ -79,7 +79,7 @@ function EditBody(props: { file?: string; diff?: string; patch?: string }) {
           when={props.patch}
           fallback={
             <box paddingLeft={1}>
-              <text fg={theme.text.subdued}>No diff provided</text>
+              <text fg={theme.text.muted}>No diff provided</text>
             </box>
           }
         >
@@ -89,8 +89,8 @@ function EditBody(props: { file?: string; diff?: string; patch?: string }) {
               scrollAcceleration={scrollAcceleration()}
               verticalScrollbarOptions={{
                 trackOptions: {
-                  backgroundColor: theme.background.default,
-                  foregroundColor: theme.scrollbar.default,
+                  backgroundColor: theme.background.base,
+                  foregroundColor: theme.scrollbar.base,
                 },
               }}
             >
@@ -100,7 +100,7 @@ function EditBody(props: { file?: string; diff?: string; patch?: string }) {
                 streaming={true}
                 syntaxStyle={syntax()}
                 content={patch()}
-                fg={theme.text.subdued}
+                fg={theme.text.muted}
               />
             </scrollbox>
           )}
@@ -135,7 +135,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
 
   function reply(value: PermissionReply, message?: string) {
     void data.session.permission
-      .reply({ sessionID: props.request.sessionID, requestID: props.request.id, reply: value, message })
+      .reply({ sessionID: props.request.sessionID, requestID: props.request.id, decision: value, message })
       .catch((error: unknown) => toast.error(error))
   }
 
@@ -171,9 +171,9 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
             ) : props.request.action === "external_directory" ? (
               <Show when={current.lines.length > 0}>
                 <box paddingLeft={1} gap={1}>
-                  <text fg={theme.text.subdued}>Patterns</text>
+                  <text fg={theme.text.muted}>Patterns</text>
                   <box>
-                    <For each={current.lines}>{(line) => <text fg={theme.text.default}>{line}</text>}</For>
+                    <For each={current.lines}>{(line) => <text fg={theme.text.base}>{line}</text>}</For>
                   </box>
                 </box>
               </Show>
@@ -186,8 +186,8 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
                         props.request.action === "shell" ||
                         props.request.action === "subagent" ||
                         props.request.action === "task"
-                          ? theme.text.default
-                          : theme.text.subdued
+                          ? theme.text.base
+                          : theme.text.muted
                       }
                     >
                       {line}
@@ -200,15 +200,15 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
           const header = () => (
             <box flexDirection="column" gap={0}>
               <box flexDirection="row" gap={1} flexShrink={0}>
-                <text fg={theme.text.feedback.warning.default}>{"△"}</text>
-                <text fg={theme.text.default}>Permission required</text>
+                <text fg={theme.text.feedback.warning.base}>{"△"}</text>
+                <text fg={theme.text.base}>Permission required</text>
               </box>
               <Show when={props.request.action !== "shell" && current.title}>
                 <box flexDirection="row" gap={1} paddingLeft={2} flexShrink={0}>
-                  <text fg={theme.text.subdued} flexShrink={0}>
+                  <text fg={theme.text.muted} flexShrink={0}>
                     {current.icon}
                   </text>
-                  <text fg={theme.text.default}>{current.title}</text>
+                  <text fg={theme.text.base}>{current.title}</text>
                 </box>
               </Show>
             </box>
@@ -224,7 +224,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
                 <Show when={option === "always"} fallback={presentationBody()}>
                   <box paddingLeft={1} gap={1}>
                     <For each={permissionAlwaysLines(props.request)}>
-                      {(line, index) => <text fg={index() === 0 ? theme.text.subdued : theme.text.default}>{line}</text>}
+                      {(line, index) => <text fg={index() === 0 ? theme.text.muted : theme.text.base}>{line}</text>}
                     </For>
                   </box>
                 </Show>
@@ -277,7 +277,7 @@ function RejectPrompt(props: {
 }) {
   let input: TextareaRenderable
   const enabled = useInteractivity()
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   const config = useConfig().data
   const dimensions = useTerminalDimensions()
   const narrow = createMemo(() => dimensions().width < 80)
@@ -314,18 +314,18 @@ function RejectPrompt(props: {
         role: "dialog",
         label: `Reject permission: ${props.action}`,
       }))}
-      backgroundColor={theme.background.default}
+      backgroundColor={theme.background.raised.base}
       border={["left"]}
-      borderColor={theme.text.feedback.error.default}
+      borderColor={theme.text.feedback.error.base}
       customBorderChars={SplitBorder.customBorderChars}
     >
       <box gap={1} paddingLeft={1} paddingRight={3} paddingTop={1} paddingBottom={1}>
         <box flexDirection="row" gap={1} paddingLeft={1}>
-          <text fg={theme.text.feedback.error.default}>{"△"}</text>
-          <text fg={theme.text.default}>Reject permission</text>
+          <text fg={theme.text.feedback.error.base}>{"△"}</text>
+          <text fg={theme.text.base}>Reject permission</text>
         </box>
         <box paddingLeft={1}>
-          <text fg={theme.text.subdued}>Tell OpenCode what to do differently</text>
+          <text fg={theme.text.muted}>Tell OpenCode what to do differently</text>
         </box>
       </box>
       <box
@@ -335,7 +335,7 @@ function RejectPrompt(props: {
         paddingLeft={2}
         paddingRight={3}
         paddingBottom={1}
-        backgroundColor={theme.raise(theme.background.default)}
+        backgroundColor={theme.decrease(theme.background.raised.base)}
         justifyContent={narrow() ? "flex-start" : "space-between"}
         alignItems={narrow() ? "flex-start" : "center"}
         gap={1}
@@ -354,9 +354,9 @@ function RejectPrompt(props: {
             val.traits = { status: "REJECT" }
           }}
           focused={enabled()}
-          textColor={theme.text.default}
-          focusedTextColor={theme.text.default}
-          cursorColor={theme.text.default}
+          textColor={theme.text.base}
+          focusedTextColor={theme.text.base}
+          cursorColor={theme.text.base}
           cursorStyle={config.cursor}
         />
         <box
@@ -380,8 +380,8 @@ function RejectPrompt(props: {
             }))}
             onMouseUp={() => props.onConfirm(input.plainText)}
           >
-            <text fg={theme.text.default}>
-              enter <span style={{ fg: theme.text.subdued }}>confirm</span>
+            <text fg={theme.text.base}>
+              enter <span style={{ fg: theme.text.muted }}>confirm</span>
             </text>
           </box>
           <box
@@ -394,8 +394,8 @@ function RejectPrompt(props: {
             }))}
             onMouseUp={props.onCancel}
           >
-            <text fg={theme.text.default}>
-              esc <span style={{ fg: theme.text.subdued }}>cancel</span>
+            <text fg={theme.text.base}>
+              esc <span style={{ fg: theme.text.muted }}>cancel</span>
             </text>
           </box>
         </box>
@@ -418,7 +418,7 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
   fullscreen?: boolean
   onSelect: (option: keyof T) => void
 }) {
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   const dimensions = useTerminalDimensions()
   const keys = Object.keys(props.options) as (keyof T)[]
   const [store, setStore] = createStore({
@@ -507,7 +507,7 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
         label: props.semanticLabel ?? props.title,
         expanded: store.expanded,
       }))}
-      backgroundColor={theme.background.default}
+      backgroundColor={theme.background.raised.base}
       border={["left"]}
       borderColor={theme.background.action.primary.focused}
       customBorderChars={SplitBorder.customBorderChars}
@@ -527,8 +527,8 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
           when={props.header}
           fallback={
             <box flexDirection="row" gap={1} paddingLeft={1} flexShrink={0}>
-              <text fg={theme.text.feedback.warning.default}>{"△"}</text>
-              <text fg={theme.text.default}>{props.title}</text>
+              <text fg={theme.text.feedback.warning.base}>{"△"}</text>
+              <text fg={theme.text.base}>{props.title}</text>
             </box>
           }
         >
@@ -546,7 +546,7 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
         paddingLeft={2}
         paddingRight={3}
         paddingBottom={1}
-        backgroundColor={theme.raise(theme.background.default)}
+        backgroundColor={theme.decrease(theme.background.raised.base)}
         justifyContent={narrow() ? "flex-start" : "space-between"}
         alignItems={narrow() ? "flex-start" : "center"}
       >
@@ -578,7 +578,7 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
                 backgroundColor={
                   option === store.selected
                     ? theme.background.action.primary.focused
-                    : theme.background.action.primary.default
+                    : theme.background.action.primary.base
                 }
                 onMouseMove={() => setStore("selected", option)}
                 onMouseUp={() => {
@@ -587,7 +587,7 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
                 }}
               >
                 <text
-                  fg={option === store.selected ? theme.text.action.primary.focused : theme.text.action.primary.default}
+                  fg={option === store.selected ? theme.text.action.primary.focused : theme.text.action.primary.base}
                 >
                   {props.options[option]}
                 </text>
@@ -597,17 +597,17 @@ export function SessionQuestion<const T extends Record<string, string>>(props: {
         </box>
         <box flexDirection="row" gap={2} flexShrink={0}>
           <Show when={props.fullscreen}>
-            <text fg={theme.text.default}>
-              {shortcuts.get("permission.prompt.fullscreen")} <span style={{ fg: theme.text.subdued }}>{hint()}</span>
+            <text fg={theme.text.base}>
+              {shortcuts.get("permission.prompt.fullscreen")} <span style={{ fg: theme.text.muted }}>{hint()}</span>
             </text>
           </Show>
           <Show when={keys.length > 1}>
-            <text fg={theme.text.default}>
-              {"⇆"} <span style={{ fg: theme.text.subdued }}>select</span>
+            <text fg={theme.text.base}>
+              {"⇆"} <span style={{ fg: theme.text.muted }}>select</span>
             </text>
           </Show>
-          <text fg={theme.text.default}>
-            enter <span style={{ fg: theme.text.subdued }}>confirm</span>
+          <text fg={theme.text.base}>
+            enter <span style={{ fg: theme.text.muted }}>confirm</span>
           </text>
         </box>
       </box>

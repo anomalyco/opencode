@@ -4,12 +4,12 @@ import { OpenAIChat } from "@opencode/ai/protocols"
 import { compileRequest } from "@opencode/ai/route/client"
 import { ConfigProvider, Effect, Layer } from "effect"
 import { Headers } from "effect/unstable/http"
+import { AISDKNative } from "@opencode/core/aisdk-native"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
-import { Compatibility, ID, Info, VariantID } from "@opencode/core/model"
+import { Compatibility, ID, Info, Model, VariantID } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { ModelResolver } from "@opencode/core/model-resolver"
-import { Catalog } from "@opencode/core/catalog"
 import { AISDK } from "@opencode/core/aisdk"
 import { Npm } from "@opencode/util/npm"
 import { it } from "./lib/effect"
@@ -26,8 +26,8 @@ interface ModelOptions {
   readonly limit?: Info["limit"]
 }
 
-const model = (packageName: string | undefined, options: ModelOptions = {}) =>
-  Info.make({
+function model(packageName: string | undefined, options: ModelOptions = {}) {
+  const info: Model.MutableInfo = {
     id: ID.make("test-model"),
     modelID: ID.make(options.modelID ?? "api-test-model"),
     providerID: options.providerID ?? Provider.ID.make("test-provider"),
@@ -39,13 +39,21 @@ const model = (packageName: string | undefined, options: ModelOptions = {}) =>
     headers: options.headers ?? { "x-test": "header" },
     body: options.body ?? { custom_extension: { enabled: true } },
     capabilities: { tools: true, input: ["text"], output: ["text"] },
-    variants: options.variants ?? [],
+    variants: structuredClone(options.variants ?? []) as Model.MutableInfo["variants"],
     time: { released: 0 },
     cost: [],
     status: "active",
     enabled: true,
     limit: options.limit ?? { context: 100, output: 20 },
+  }
+  AISDKNative.rewrite(info, {
+    specifier: packageName,
+    providerID: info.providerID,
+    canonical: info.canonical,
+    modelID: info.modelID,
   })
+  return Info.make(info)
+}
 
 function withEnv<A, E, R>(variables: Record<string, string | undefined>, effect: () => Effect.Effect<A, E, R>) {
   return Effect.acquireUseRelease(
@@ -132,9 +140,22 @@ describe("ModelResolver", () => {
     }),
   )
 
-  it.effect("keeps explicitly selected compatible packages generic for known provider IDs", () =>
+  it.effect("routes compatible packages to the host's dedicated package when one exists", () =>
     Effect.gen(function* () {
-      for (const providerID of ["baseten", "cerebras", "deepinfra", "deepseek", "fireworks-ai", "groq", "togetherai"]) {
+      const routes = {
+        "alibaba-coding-plan-cn": "alibaba-chat",
+        baseten: "baseten-chat",
+        deepseek: "deepseek-chat",
+        "fireworks-ai": "fireworks-chat",
+        "moonshotai-cn": "moonshot-chat",
+        zhipuai: "zai-chat",
+        "zhipuai-coding-plan": "zai-coding-chat",
+        cerebras: "openai-compatible-chat",
+        deepinfra: "openai-compatible-chat",
+        groq: "openai-compatible-chat",
+        togetherai: "openai-compatible-chat",
+      }
+      for (const [providerID, route] of Object.entries(routes)) {
         const selected = yield* ModelResolver.fromCatalogModel(
           model(Provider.aisdk("@ai-sdk/openai-compatible"), {
             providerID: Provider.ID.make(providerID),
@@ -142,7 +163,7 @@ describe("ModelResolver", () => {
           }),
         )
         expect(String(selected.provider)).toBe(providerID)
-        expect(selected.route.id).toBe("openai-compatible-chat")
+        expect(selected.route.id).toBe(route)
         expect(selected.route.endpoint.baseURL).toBe("https://provider.example/v1/openai")
         const prepared = yield* compileRequest(LLM.request({ model: selected, prompt: "Hello" }))
         expect(prepared.body.messages).toEqual([{ role: "user", content: "Hello" }])
@@ -169,19 +190,19 @@ describe("ModelResolver", () => {
     ),
   )
 
-  it.effect("maps Bedrock Mantle models to native Responses and safeguards to Chat", () =>
+  it.effect("maps Bedrock Mantle GPT-OSS models to Chat and other models to Responses", () =>
     Effect.gen(function* () {
       const credential = Credential.Key.make({ type: "key", key: "secret" })
       const responses = yield* ModelResolver.fromCatalogModel(
         model(Provider.aisdk("@ai-sdk/amazon-bedrock/mantle"), {
-          modelID: "openai.gpt-oss-120b",
+          modelID: "openai.gpt-5.5",
           settings: { region: "us-east-2" },
         }),
         credential,
       )
       const chat = yield* ModelResolver.fromCatalogModel(
         model(Provider.aisdk("@ai-sdk/amazon-bedrock/mantle"), {
-          modelID: "openai.gpt-oss-safeguard-20b",
+          modelID: "openai.gpt-oss-20b",
           settings: { region: "us-east-2" },
         }),
         credential,
@@ -215,7 +236,7 @@ describe("ModelResolver", () => {
           id: "bedrock-mantle-responses",
           endpoint: { baseURL: "https://bedrock-mantle.us-west-2.api.aws/openai/v1" },
         })
-        expect(catalog.settings?.baseURL).toBe("https://bedrock-mantle.${AWS_REGION}.api.aws/openai/v1")
+        expect(catalog.settings?.baseURL).toBe("https://bedrock-mantle.us-west-2.api.aws/openai/v1")
       }),
     ),
   )
@@ -335,21 +356,14 @@ describe("ModelResolver", () => {
       settings: selected.settings,
       headers: selected.headers,
     })
-    const catalog = Layer.mock(Catalog.Service, {
-      provider: {
-        get: () => Effect.succeed(provider),
-        all: () => Effect.die("unused"),
-        available: () => Effect.die("unused"),
-      },
-      model: {
-        get: () => Effect.succeed(selected),
-        all: () => Effect.die("unused"),
-        available: () => Effect.die("unused"),
-        default: () => Effect.die("unused"),
-        small: () => Effect.die("unused"),
-      },
+    const providers = Layer.mock(Provider.Service, {
+      get: () => Effect.succeed(provider),
+    })
+    const models = Layer.mock(Model.Service, {
+      get: () => Effect.succeed(selected),
     })
     const integrations = Layer.mock(Integration.Service, {
+      revision: () => 0,
       connection: {
         active: (id) => {
           expect(id).toBe(Integration.ID.make("gateway"))
@@ -384,7 +398,7 @@ describe("ModelResolver", () => {
       },
       model: () => Effect.die("unused"),
     })
-    const layer = ModelResolver.layer.pipe(Layer.provide(Layer.mergeAll(catalog, integrations, npm, aisdk)))
+    const layer = ModelResolver.layer.pipe(Layer.provide(Layer.mergeAll(providers, models, integrations, npm, aisdk)))
 
     return withConfigEnv({}, () =>
       Effect.gen(function* () {
@@ -1021,7 +1035,7 @@ describe("ModelResolver", () => {
                     baseURL: "https://provider.example/v1",
                     headers: { "x-provider": "header" },
                     body: { custom: true },
-                    providerOptions,
+                    ...providerOptions,
                   })
                   return LanguageModel.make({ id: modelID, provider: "native-provider", route: native.route })
                 },
@@ -1037,13 +1051,10 @@ describe("ModelResolver", () => {
   it.effect("never loads the AI SDK for packages with native implementations", () =>
     Effect.gen(function* () {
       const packages = [
+        ["@ai-sdk/alibaba", "@opencode/ai/providers/alibaba/chat", "api-model"],
         ["@ai-sdk/anthropic", "@opencode/ai/providers/anthropic", "api-model"],
         ["@ai-sdk/amazon-bedrock", "@opencode/ai/providers/amazon-bedrock", "api-model"],
-        [
-          "@ai-sdk/amazon-bedrock/mantle",
-          "@opencode/ai/providers/amazon-bedrock/mantle/responses",
-          "openai.gpt-oss-120b",
-        ],
+        ["@ai-sdk/amazon-bedrock/mantle", "@opencode/ai/providers/amazon-bedrock/mantle/chat", "openai.gpt-oss-120b"],
         ["@ai-sdk/azure", "@opencode/ai/providers/azure/responses", "api-model"],
         ["@ai-sdk/cerebras", "@opencode/ai/providers/cerebras", "api-model"],
         ["@ai-sdk/deepinfra", "@opencode/ai/providers/deepinfra", "api-model"],
@@ -1057,6 +1068,7 @@ describe("ModelResolver", () => {
         ["@openrouter/ai-sdk-provider", "@opencode/ai/providers/openrouter", "api-model"],
         ["@ai-sdk/togetherai", "@opencode/ai/providers/togetherai", "api-model"],
         ["@ai-sdk/xai", "@opencode/ai/providers/xai", "api-model"],
+        ["ai-gateway-provider", "@opencode/ai/providers/cloudflare-ai-gateway", "xai/grok-4.6"],
       ] as const
 
       yield* Effect.forEach(packages, ([catalogPackage, nativePackage, modelID]) =>
@@ -1112,10 +1124,8 @@ describe("ModelResolver", () => {
                   accessToken: "vertex-token",
                   location: "eu",
                   project: "vertex-project",
-                  providerOptions: {
-                    thinking: { type: "adaptive", display: "summarized" },
-                    effort: "high",
-                  },
+                  thinking: { type: "adaptive", display: "summarized" },
+                  effort: "high",
                 })
                 return LanguageModel.make({ id: modelID, provider: "native-provider", route: native.route })
               },
@@ -1236,6 +1246,16 @@ describe("ModelResolver", () => {
           settings: { region: "us-east-1", topP: 0.6 },
         }),
       )
+      const workers = yield* ModelResolver.fromCatalogModel(
+        model("@opencode/ai/providers/cloudflare-workers-ai", {
+          modelID: "@cf/meta/llama-3.1-8b-instruct",
+        }),
+        Credential.Key.make({
+          type: "key",
+          key: "workers-secret",
+          configuration: { accountId: "account" },
+        }),
+      )
 
       expect(google.route.id).toBe("gemini")
       expect(google.route.defaults.providerOptions).toEqual({ thinkingConfig: { thinkingBudget: 1_024 } })
@@ -1271,8 +1291,9 @@ describe("ModelResolver", () => {
       expect(bedrock.route.id).toBe("bedrock-converse")
       expect(bedrock.route.defaults.generation).toEqual({ topP: 0.8 })
       expect(bedrock.route.defaults.http?.body).toEqual({ serviceTier: { type: "priority" } })
-      expect(mantle.route.id).toBe("bedrock-mantle-responses")
+      expect(mantle.route.id).toBe("bedrock-mantle-chat")
       expect(mantle.route.defaults.generation).toEqual({ topP: 0.6 })
+      expect(workers.route.endpoint.baseURL).toBe("https://api.cloudflare.com/client/v4/accounts/account/ai/v1")
     }),
   )
 
@@ -1392,6 +1413,81 @@ describe("ModelResolver", () => {
         package: "aisdk:@ai-sdk/cohere",
       })
       expect(failure.message).toBe("Unsupported package for test-provider/test-model: aisdk:@ai-sdk/cohere")
+    }),
+  )
+
+  it.effect("reports provider configuration errors from supported packages", () =>
+    Effect.gen(function* () {
+      const failure = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/azure"), {
+          providerID: Provider.ID.azure,
+          modelID: "gpt-5.4-nano",
+        }),
+        Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("oauth"),
+          access: "oauth-token",
+          refresh: "refresh",
+          expires: Date.now() + 60_000,
+        }),
+      ).pipe(Effect.flip)
+
+      expect(failure).toMatchObject({
+        _tag: "SessionRunnerModel.ModelConfigurationError",
+        providerID: "azure",
+        modelID: "test-model",
+        package: "@opencode/ai/providers/azure/responses",
+        detail: "Azure requires resourceName or baseURL",
+      })
+      expect(failure.message).toBe("Cannot initialize azure/test-model: Azure requires resourceName or baseURL")
+    }),
+  )
+
+  it.effect("distinguishes unexpected constructor failures from configuration errors", () =>
+    Effect.gen(function* () {
+      const failure = yield* ModelResolver.fromCatalogModel(model("@opencode/ai/providers/custom"), undefined, {
+        loadPackage: () =>
+          Effect.succeed({
+            model: () => {
+              throw new Error("custom provider crashed")
+            },
+          }),
+      }).pipe(Effect.flip)
+
+      expect(failure).toMatchObject({
+        _tag: "SessionRunnerModel.ModelInitializationError",
+        phase: "construct",
+        detail: "custom provider crashed",
+      })
+    }),
+  )
+
+  it.effect("reports package load and AISDK initialization failures with their causes", () =>
+    Effect.gen(function* () {
+      const load = yield* ModelResolver.fromCatalogModel(model("@opencode/ai/providers/custom"), undefined, {
+        loadPackage: (specifier) =>
+          Effect.fail(
+            new Provider.LoadError({ package: specifier, cause: new Error(`Provider package ${specifier} is broken`) }),
+          ),
+      }).pipe(Effect.flip)
+      expect(load).toMatchObject({
+        _tag: "SessionRunnerModel.ModelInitializationError",
+        phase: "load",
+        detail: "Provider package @opencode/ai/providers/custom is broken",
+      })
+
+      const init = yield* ModelResolver.fromCatalogModel(model(Provider.aisdk("@ai-sdk/cohere")), undefined, {
+        loadAISDK: (runtime) =>
+          Effect.fail(
+            new AISDK.InitError({ providerID: runtime.providerID, cause: new Error("Cohere plugin failed") }),
+          ),
+      }).pipe(Effect.flip)
+      expect(init).toMatchObject({
+        _tag: "SessionRunnerModel.ModelInitializationError",
+        phase: "init",
+        detail: "Cohere plugin failed",
+      })
+      expect(init.message).toBe("Cannot initialize test-provider/test-model: Cohere plugin failed")
     }),
   )
 

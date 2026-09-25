@@ -63,7 +63,7 @@ const skillInfo = Skill.Info.make({
   id: Skill.ID.make("guide"),
   name: Skill.Name.make("Guide"),
   description: "Session guidance",
-  location: AbsolutePath.make("/skills/guide/SKILL.md"),
+  path: AbsolutePath.make("/skills/guide/SKILL.md"),
   content: "  Raw guidance\n",
 })
 
@@ -177,6 +177,7 @@ describe("Session-owned handles", () => {
         assistantMessageID: messageID,
         agent: Agent.ID.make("build"),
         model: { ...model, id: Model.ID.make("initial-model") },
+        started: 0,
       })
       yield* fixture.bus.publish(SessionEvent.Step.Ended, {
         sessionID,
@@ -368,12 +369,12 @@ describe("Session-owned handles", () => {
         }),
       )
       const initial = SessionMessage.ID.make("msg_owned_skill_initial")
-      yield* skill({ id: initial, skill: skillInfo.id, resume: false }).pipe(
+      yield* skill({ messageID: initial, skill: skillInfo.id, resume: false }).pipe(
         Effect.satisfiesServicesType<never>(),
         Effect.setContext(Context.empty()),
       )
       const moved = SessionMessage.ID.make("msg_owned_skill_moved")
-      const activation = skill({ id: moved, skill: skillInfo.id, resume: false })
+      const activation = skill({ messageID: moved, skill: skillInfo.id, resume: false })
       const destination = Location.Ref.make({ directory: AbsolutePath.make("/project/moved") })
       yield* fixture.bus.publish(SessionEvent.Moved, {
         sessionID,
@@ -467,12 +468,12 @@ describe("Session-owned handles", () => {
       )
       const { skill } = fixture.sessions.forSession(sessionID)
 
-      yield* skill({ id: SessionMessage.ID.make("msg_skill_no_resume"), skill: skillInfo.id, resume: false })
+      yield* skill({ messageID: SessionMessage.ID.make("msg_skill_no_resume"), skill: skillInfo.id, resume: false })
       expect(calls).toEqual(["published:evt_skill_no_resume"])
       yield* Effect.forEach(
         [
-          { id: SessionMessage.ID.make("msg_skill_default_resume"), skill: skillInfo.id },
-          { id: SessionMessage.ID.make("msg_skill_explicit_resume"), skill: skillInfo.id, resume: true },
+          { messageID: SessionMessage.ID.make("msg_skill_default_resume"), skill: skillInfo.id },
+          { messageID: SessionMessage.ID.make("msg_skill_explicit_resume"), skill: skillInfo.id, resume: true },
         ],
         (input) => skill(input).pipe(Effect.scoped, Effect.forkScoped, Effect.flatMap(Fiber.join)),
       )
@@ -530,7 +531,7 @@ describe("Session-owned handles", () => {
       })
       const shell = yield* fixture.sessions
         .forSession(sessionID)
-        .shell({ id: Event.ID.make("evt_owned_shell"), command: started.command })
+        .shell({ id: SessionMessage.ID.make("msg_owned_shell"), command: started.command })
         .pipe(Effect.forkScoped)
       yield* Deferred.await(blocked)
 
@@ -615,7 +616,7 @@ describe("Session-owned handles", () => {
       const joining = yield* Deferred.make<void>()
       const drains: SessionSchema.ID[] = []
       const resumes: SessionSchema.ID[] = []
-      const interrupts: Array<{ sessionID: SessionSchema.ID; options?: { readonly continue?: boolean } }> = []
+      const interrupts: Array<{ sessionID: SessionSchema.ID; options?: { readonly resume?: boolean } }> = []
       const coordinator = yield* SessionRunCoordinator.make<SessionSchema.ID, never>({
         drain: (id) =>
           Effect.sync(() => void drains.push(id)).pipe(
@@ -656,10 +657,10 @@ describe("Session-owned handles", () => {
       yield* fixture.sessions.forSession(sessionID).wait()
       expect(drains).toEqual([sessionID])
       expect(yield* coordinator.active).toEqual(new Set())
-      expect(yield* fixture.sessions.forSession(sessionID).interrupt({ continue: true })).toBe(false)
+      expect(yield* fixture.sessions.forSession(sessionID).interrupt({ resume: true })).toBe(false)
       expect(yield* fixture.sessions.forSession(sessionID).interrupt()).toBe(false)
       expect(interrupts).toEqual([
-        { sessionID, options: { continue: true } },
+        { sessionID, options: { resume: true } },
         { sessionID, options: undefined },
       ])
       expect(fixture.locations).toEqual([])

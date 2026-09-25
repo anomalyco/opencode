@@ -1,6 +1,7 @@
 export * as WarmingPlugin from "./warming.js"
 
 import { define } from "@opencode/plugin/effect/plugin"
+import type { SessionHooks } from "@opencode/plugin/effect/session"
 import type { Session } from "@opencode/schema/session"
 import { Clock, Duration, Effect, Scope } from "effect"
 import { Config } from "../config.js"
@@ -54,8 +55,11 @@ export const Plugin = define({
       },
     )
 
-    yield* ctx.session.hook("context", (event) =>
+    const hook = (event: SessionHooks["context"]) =>
       Effect.gen(function* () {
+        const session = yield* ctx.session.get({ sessionID: event.sessionID }).pipe(Effect.orDie)
+        if (session.parentID) return
+
         const active = sessions.get(event.sessionID)
         const settings = yield* loadSettings()
         if (!settings) {
@@ -95,7 +99,9 @@ export const Plugin = define({
           ),
           Effect.forkIn(scope),
         )
-      }),
-    )
+      })
+    yield* ctx.session.hook("context", hook)
+    yield* ctx.session.hook("compaction", hook)
+    yield* ctx.session.hook("generate", hook)
   }),
 })

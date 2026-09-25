@@ -20,7 +20,7 @@ posix(
     const bin = path.join(dir, ".opencode/desktop-ssh", version)
     yield* fs.makeDirectory(bin, { recursive: true })
     yield* fs.writeFileString(
-      path.join(bin, "opencode2"),
+      path.join(bin, "opencode"),
       `#!/bin/sh
 set -eu
 case "$1 $2" in
@@ -69,7 +69,7 @@ posix(
     yield* fs.makeDirectory(path.join(dir, ".opencode/bin"), { recursive: true })
     yield* fs.makeDirectory(path.join(dir, "state/opencode"), { recursive: true })
     yield* fs.writeFileString(
-      path.join(dir, ".opencode/bin/opencode2"),
+      path.join(dir, ".opencode/bin/opencode"),
       '#!/bin/sh\n[ "$1 $2" = "service status" ] || exit 66\nprintf "http://0.0.0.0:49374\\n"\n',
       { mode: 0o755 },
     )

@@ -31,8 +31,8 @@ export function DialogWorkspaceFileChanges(props: {
   message?: string
 }) {
   const dialog = useDialog()
-  const theme = useTheme("elevated")
-  const overlayTheme = useTheme("overlay")
+  const theme = useTheme().surface("dialog")
+  const overlayTheme = useTheme()
   const config = useConfig().data
   const dimensions = useTerminalDimensions()
   const scrollAcceleration = createMemo(() => getScrollAcceleration(config))
@@ -72,21 +72,21 @@ export function DialogWorkspaceFileChanges(props: {
   return (
     <box gap={1}>
       <box flexDirection="row" justifyContent="space-between" paddingLeft={2} paddingRight={2}>
-        <text attributes={TextAttributes.BOLD} fg={theme.text.default}>
+        <text attributes={TextAttributes.BOLD} fg={theme.text.base}>
           {props.title ?? "File Changes Found"}
         </text>
-        <text fg={theme.text.subdued} onMouseUp={() => dialog.clear()}>
+        <text fg={theme.text.muted} onMouseUp={() => dialog.clear()}>
           esc
         </text>
       </box>
       <box paddingLeft={2} paddingRight={2}>
-        <text fg={theme.text.subdued} wrapMode="word">
+        <text fg={theme.text.muted} wrapMode="word">
           {props.message ?? "Do you want to move these changes with the session?"}
         </text>
       </box>
       <scrollbox
         height={height()}
-        backgroundColor={overlayTheme.background.default}
+        backgroundColor={overlayTheme.background.raised.high}
         scrollbarOptions={{ visible: false }}
         scrollAcceleration={scrollAcceleration()}
       >
@@ -95,9 +95,9 @@ export function DialogWorkspaceFileChanges(props: {
             <box flexDirection="row" justifyContent="space-between" paddingLeft={2} paddingRight={2}>
               <box flexDirection="row" minWidth={0} flexShrink={1}>
                 <box width={2} flexShrink={0}>
-                  <text fg={overlayTheme.text.subdued}>{statusLabel(item.status)}</text>
+                  <text fg={overlayTheme.text.muted}>{statusLabel(item.status)}</text>
                 </box>
-                <FilePath value={item.file} maxWidth={fileNameWidth()} fg={overlayTheme.text.subdued} />
+                <FilePath value={item.file} maxWidth={fileNameWidth()} fg={overlayTheme.text.muted} />
               </box>
               <box flexDirection="row" gap={1} minWidth={7} flexShrink={0} justifyContent="flex-end">
                 <text>
@@ -125,7 +125,7 @@ export function DialogWorkspaceFileChanges(props: {
                 dialog.clear()
               }}
             >
-              <text fg={item === store.active ? theme.text.action.primary.focused : theme.text.subdued}>{item}</text>
+              <text fg={item === store.active ? theme.text.action.primary.focused : theme.text.muted}>{item}</text>
             </box>
           )}
         </For>

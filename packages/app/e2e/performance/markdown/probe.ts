@@ -4,6 +4,23 @@ import type {
   MarkdownWorkerResponse,
 } from "../../../../session-ui/src/components/markdown-worker-protocol"
 
+declare global {
+  interface Window {
+    markdownGate: {
+      admitted: number
+      responses: number
+      held: boolean
+      started: number
+      ready: number
+      released: number
+      settled: number
+      sanitizeCalls: number
+      sanitizeChars: number
+      arm: () => void
+    }
+  }
+}
+
 export async function installMarkdownGate(
   page: Page,
   input: { answer: string; sourcePart: string; targetPart: string; href: string },

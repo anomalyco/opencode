@@ -81,7 +81,7 @@ export async function runMini(input: MiniCommandInput) {
       const create = (
         client: OpenCodeClient,
         next: {
-          location: { directory: string; workspaceID?: string }
+          location: { directory: string }
           agent: string | undefined
           model: Model
           variant: string | undefined
@@ -90,7 +90,7 @@ export async function runMini(input: MiniCommandInput) {
       ) =>
         resolveSessionTarget({
           client,
-          location: { directory: next.location.directory, workspace: next.location.workspaceID },
+          location: { directory: next.location.directory },
           agent: next.agent,
           environment,
           model: next.model

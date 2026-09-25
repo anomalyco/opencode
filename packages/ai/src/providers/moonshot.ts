@@ -42,11 +42,11 @@ export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
     readonly providerOptions?: ChatOptionsInput | MessagesOptionsInput | ResponsesOptionsInput
   }
 
-export interface Settings<Options = ChatOptionsInput> extends ProviderPackage.Settings {
-  readonly apiKey?: string
-  readonly baseURL?: string
-  readonly providerOptions?: Options
-}
+export type Settings<Options = ChatOptionsInput> = ProviderPackage.Settings &
+  Options & {
+    readonly apiKey?: string
+    readonly baseURL?: string
+  }
 
 const ChatOptions = Schema.Struct({
   reasoningEffort: Schema.optional(Schema.String),
@@ -112,19 +112,20 @@ export const configure = (input: Config = {}) => {
         maxTokensField: "max_tokens",
         supportsStore: false,
         supportsStrictMode: false,
-        toolSchema: "moonshot",
+        supportsPromptCacheKey: true,
+        sanitizer: "moonshot",
         reasoningField: "reasoning_content",
       },
     })
   const messages = (modelID: string | ModelID) =>
     messagesRoute.with(defaults).model<MessagesOptionsInput>({
       id: modelID,
-      compatibility: { requireSignature: false, toolSchema: "moonshot" },
+      compatibility: { requireSignature: false, sanitizer: "moonshot" },
     })
   const responses = (modelID: string | ModelID) =>
     responsesRoute
       .with(defaults)
-      .model<ResponsesOptionsInput>({ id: modelID, compatibility: { toolSchema: "moonshot" } })
+      .model<ResponsesOptionsInput>({ id: modelID, compatibility: { sanitizer: "moonshot" } })
   return { id, model: chat, chat, messages, responses, configure }
 }
 
@@ -133,13 +134,16 @@ export const chat = provider.chat
 export const messages = provider.messages
 export const responses = provider.responses
 
-export const model: ProviderPackage.Definition<Settings, ChatOptionsInput>["model"] = (modelID, settings) =>
+export const model: ProviderPackage.Definition<Settings, ChatOptionsInput>["model"] = (
+  modelID,
+  { apiKey, baseURL, body, headers, ...providerOptions },
+) =>
   configure({
-    apiKey: settings.apiKey,
-    baseURL: settings.baseURL,
-    headers: settings.headers,
-    http: settings.body === undefined ? undefined : { body: { ...settings.body } },
-    providerOptions: settings.providerOptions,
+    apiKey,
+    baseURL,
+    headers,
+    http: body === undefined ? undefined : { body: { ...body } },
+    providerOptions,
   }).model(modelID)
 
 export * as Moonshot from "./moonshot.js"

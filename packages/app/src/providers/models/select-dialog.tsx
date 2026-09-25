@@ -6,14 +6,13 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { popularProviders } from "@/providers/catalog/providers"
 import { Button } from "@opencode/ui/button"
 import { Badge } from "@opencode/ui/badge"
-import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode/ui/dialog"
+import { Dialog, DialogBody, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { ScrollView } from "@opencode/ui/scroll-view"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Menu } from "@opencode/ui/menu"
 import { TextInput } from "@opencode/ui/text-input"
-import { ProviderIcon } from "@opencode/ui/provider-icon"
 import { ModelTooltip } from "./tooltip"
 import { useLanguage } from "@/runtime/i18n/language"
 import { decode64 } from "@/runtime/persistence/base64"
@@ -22,6 +21,7 @@ import { createMenuDismissController } from "@/shell/commands/menu-dismiss"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { matchesModelSearch } from "./search"
 import { SettingsList } from "@/settings/list"
+import { CONSOLE_GROUP_KEY, consoleModelGroup, ProviderModelSections } from "@/providers/models/provider-group"
 import "@/settings/settings.css"
 
 const isFree = (provider: string, cost: { input: number } | undefined) =>
@@ -62,9 +62,14 @@ const ModelList: Component<{
     collapsed: {} as Record<string, boolean>,
   })
   const models = createMemo(() => controller.models(store.search))
-  const groups = createMemo(() => controller.groups(models()))
+  const modelGroups = createMemo(() => controller.groups(models()))
+  const managed = createMemo(() => consoleModelGroup(controller.all()))
   const expanded = (provider: string) => store.search.length > 0 || !store.collapsed[provider]
-  const visibleModels = () => models().filter((item) => expanded(item.provider.id))
+  const managedIDs = createMemo(() => new Set(managed()?.providers.map((provider) => provider.id) ?? []))
+  const visibleModels = () =>
+    models().filter(
+      (item) => expanded(item.provider.id) && (!managedIDs().has(item.provider.id) || expanded(CONSOLE_GROUP_KEY)),
+    )
   let scrollRef: HTMLDivElement | undefined
 
   const setSearch = (value: string) => {
@@ -86,6 +91,53 @@ const ModelList: Component<{
   const selectActive = () => {
     const item = visibleModels().find((item) => modelKey(item) === store.active)
     if (item) controller.select(item)
+  }
+
+  function ModelRows(props: { items: ModelItem[] }) {
+    return (
+      <SettingsList variant="catalog">
+        <For each={props.items}>
+          {(item) => (
+            <button
+              type="button"
+              data-component="settings-row"
+              data-option-key={modelKey(item)}
+              class="-mx-4 w-[calc(100%+32px)] px-4 text-start first:rounded-t-lg last:rounded-b-lg hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+              classList={{ "bg-v2-overlay-simple-overlay-hover": store.active === modelKey(item) }}
+              onMouseEnter={() => setStore("active", modelKey(item))}
+              onMouseLeave={() => setStore("active", "")}
+              onClick={() => controller.select(item)}
+            >
+              <div data-slot="settings-row-copy">
+                <div data-slot="settings-row-title" class="flex items-center gap-2">
+                  <Tooltip
+                    placement="right-start"
+                    gutter={12}
+                    openDelay={0}
+                    value={
+                      <ModelTooltip model={item} latest={item.latest} free={isFree(item.provider.id, item.cost)} v2 />
+                    }
+                  >
+                    <span class="min-w-0 truncate">{item.name}</span>
+                  </Tooltip>
+                  <Show when={isFree(item.provider.id, item.cost)}>
+                    <Badge class="shrink-0">{language.t("model.tag.free")}</Badge>
+                  </Show>
+                  <Show when={item.latest}>
+                    <Badge class="shrink-0">{language.t("model.tag.latest")}</Badge>
+                  </Show>
+                </div>
+              </div>
+              <div data-slot="settings-row-control" class="size-4">
+                <Show when={controller.current() === modelKey(item)}>
+                  <Icon name="check" size="small" class="shrink-0 text-v2-icon-icon-base" />
+                </Show>
+              </div>
+            </button>
+          )}
+        </For>
+      </SettingsList>
+    )
   }
 
   return (
@@ -137,88 +189,19 @@ const ModelList: Component<{
         </div>
       </div>
       <div class="relative min-h-0 flex-1">
-        <div ref={(element) => (scrollRef = element)} class="settings-panel settings-models h-full px-4 pt-4 pb-4">
+        <div ref={(element) => (scrollRef = element)} class="settings-panel settings-models h-full px-4 pt-1 pb-4">
           <Show
             when={models().length > 0}
             fallback={<div class="settings-models-status">{language.t("dialog.model.empty")}</div>}
           >
-            <For each={groups()}>
-              {(group) => {
-                const searching = () => store.search.length > 0
-                const open = () => expanded(group.category)
-
-                return (
-                  <section class="settings-section" data-expanded={open() ? "" : undefined}>
-                    <h3 class="settings-models-group-header">
-                      <button
-                        type="button"
-                        class="settings-models-group-trigger"
-                        aria-expanded={open()}
-                        disabled={searching()}
-                        onClick={() => setStore("collapsed", group.category, open())}
-                      >
-                        <span class="settings-models-group-chevron">
-                          <Icon name="chevron-down" size="small" classList={{ "-rotate-90 rtl:rotate-90": !open() }} />
-                        </span>
-                        <span class="settings-models-group-label">
-                          <ProviderIcon id={group.category} width={16} height={16} class="shrink-0" />
-                          <span class="settings-section-title">{group.items[0].provider.name}</span>
-                        </span>
-                      </button>
-                    </h3>
-                    <Show when={open()}>
-                      <SettingsList>
-                        <For each={group.items}>
-                          {(item) => (
-                            <button
-                              type="button"
-                              data-component="settings-row"
-                              data-option-key={modelKey(item)}
-                              class="-mx-4 w-[calc(100%+32px)] px-4 text-start first:rounded-t-lg last:rounded-b-lg hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
-                              classList={{ "bg-v2-overlay-simple-overlay-hover": store.active === modelKey(item) }}
-                              onMouseEnter={() => setStore("active", modelKey(item))}
-                              onMouseLeave={() => setStore("active", "")}
-                              onClick={() => controller.select(item)}
-                            >
-                              <div data-slot="settings-row-copy">
-                                <div data-slot="settings-row-title" class="flex items-center gap-2">
-                                  <Tooltip
-                                    placement="right-start"
-                                    gutter={12}
-                                    openDelay={0}
-                                    value={
-                                      <ModelTooltip
-                                        model={item}
-                                        latest={item.latest}
-                                        free={isFree(item.provider.id, item.cost)}
-                                        v2
-                                      />
-                                    }
-                                  >
-                                    <span class="min-w-0 truncate">{item.name}</span>
-                                  </Tooltip>
-                                  <Show when={isFree(item.provider.id, item.cost)}>
-                                    <Badge class="shrink-0">{language.t("model.tag.free")}</Badge>
-                                  </Show>
-                                  <Show when={item.latest}>
-                                    <Badge class="shrink-0">{language.t("model.tag.latest")}</Badge>
-                                  </Show>
-                                </div>
-                              </div>
-                              <div data-slot="settings-row-control" class="size-4">
-                                <Show when={controller.current() === modelKey(item)}>
-                                  <Icon name="check" size="small" class="shrink-0 text-v2-icon-icon-base" />
-                                </Show>
-                              </div>
-                            </button>
-                          )}
-                        </For>
-                      </SettingsList>
-                    </Show>
-                  </section>
-                )
-              }}
-            </For>
+            <ProviderModelSections
+              groups={modelGroups()}
+              managed={managed()}
+              expanded={expanded}
+              disabled={store.search.length > 0}
+              onExpandedChange={(key, value) => setStore("collapsed", key, !value)}
+              rows={(items) => <ModelRows items={items} />}
+            />
           </Show>
         </div>
       </div>
@@ -272,6 +255,7 @@ function createModelSelectorController(input: {
   )
 
   return {
+    all: () => model.list().filter((item) => (input.provider() ? item.provider.id === input.provider() : true)),
     models: (search: string) => {
       const query = search.trim()
       const filtered = query
@@ -548,7 +532,7 @@ export const DialogSelectModel: Component<{ provider?: string; model?: ModelStat
   return (
     <Dialog size="large" variant="settings">
       <DialogHeader hideClose closeLabel={language.t("common.close")}>
-        <DialogTitle>{language.t("dialog.model.select.title")}</DialogTitle>
+        <DialogTitleGroup title={language.t("dialog.model.select.title")} />
         <Button icon="plus" onClick={provider}>
           {language.t("command.provider.connect")}
         </Button>

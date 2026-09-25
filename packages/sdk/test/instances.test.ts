@@ -90,7 +90,7 @@ test("Promise instances are lazy, share by key and Location, and stay isolated b
   expect(setups).toEqual([])
   // Permission and form lists read instance services, so they acquire the Session's instance.
   expect(await first.permission.list({ sessionID })).toEqual([])
-  expect(await first.form.list({ sessionID })).toEqual([])
+  expect(await first.session.form.list({ sessionID })).toEqual([])
   expect(configured).toEqual(["first:alpha"])
 
   await Promise.all(
@@ -112,7 +112,7 @@ test("Promise instances are lazy, share by key and Location, and stay isolated b
   )
 
   await first.sessions.switchAgent({ sessionID, agent: "plan" })
-  const fork = await first.sessions.fork({ sessionID, boundary: { type: "through" } })
+  const fork = await first.sessions.fork({ sessionID })
   expect(fork.metadata).toEqual(original.metadata)
   expect(fork.location).toEqual(original.location)
   expect(fork.fork?.sessionID).toBe(sessionID)

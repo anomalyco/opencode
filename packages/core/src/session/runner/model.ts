@@ -33,6 +33,10 @@ export const VariantUnavailableError = ModelResolver.VariantUnavailableError
 export type VariantUnavailableError = ModelResolver.VariantUnavailableError
 export const UnsupportedPackageError = ModelResolver.UnsupportedPackageError
 export type UnsupportedPackageError = ModelResolver.UnsupportedPackageError
+export const ModelConfigurationError = ModelResolver.ModelConfigurationError
+export type ModelConfigurationError = ModelResolver.ModelConfigurationError
+export const ModelInitializationError = ModelResolver.ModelInitializationError
+export type ModelInitializationError = ModelResolver.ModelInitializationError
 export const UnresolvedProviderVariablesError = ModelResolver.UnresolvedProviderVariablesError
 export type UnresolvedProviderVariablesError = ModelResolver.UnresolvedProviderVariablesError
 export const UnsupportedCompactionError = ModelResolver.UnsupportedCompactionError
@@ -60,7 +64,7 @@ export const resolved = (
     readonly cost: Model.Info["cost"]
     readonly limit: Model.Info["limit"]
     readonly compaction?: Provider.Compaction
-    readonly websocket?: boolean
+    readonly transport?: Provider.Transport
   },
 ): Resolved => ({
   model,
@@ -73,7 +77,7 @@ export const resolved = (
   cost: options.cost,
   limit: options.limit,
   compaction: options.compaction,
-  websocket: options.websocket ?? true,
+  transport: options.transport,
 })
 
 const layer = Layer.effect(

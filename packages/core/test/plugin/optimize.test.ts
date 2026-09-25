@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { SystemPart } from "@opencode/ai"
 import { Agent } from "@opencode/core/agent"
-import { Catalog } from "@opencode/core/catalog"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginHost } from "@opencode/core/plugin/host"
@@ -10,7 +9,7 @@ import { Session } from "@opencode/core/session"
 import { SessionSystemPrompt } from "@opencode/core/session/system-prompt"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Model } from "@opencode/schema/model"
-import { Provider } from "@opencode/schema/provider"
+import { Provider } from "@opencode/core/provider"
 import { Effect } from "effect"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -19,9 +18,11 @@ import PROMPT_GPT from "../../src/plugin/system-prompt/gpt.txt"
 import PROMPT_ASTRA from "../../src/plugin/system-prompt/gpt-astra.txt"
 import PROMPT_KIMI from "../../src/plugin/system-prompt/kimi.txt"
 import PROMPT_TRINITY from "../../src/plugin/system-prompt/trinity.txt"
+import PROMPT_ANTHROPIC from "../../src/plugin/system-prompt/anthropic.txt"
 
 const it = testEffect(PluginTestLayer)
 const fallback = SessionSystemPrompt.make([])
+const appended = `${fallback}\n\n${SessionSystemPrompt.render(PROMPT_ANTHROPIC, [])}`
 const makeHost = Effect.gen(function* () {
   const agents = yield* Agent.Service
   const plugins = yield* Plugin.Service
@@ -41,14 +42,14 @@ const context = (id: string, system = fallback): SessionHooks["context"] => ({
       { description: name, input: { type: "object" } },
     ]),
   ),
-  generation: {},
-  providerOptions: {},
+  options: {},
 })
 
 describe("OptimizePlugin", () => {
   test("enables prompt plugins without model-specific tool optimization", () => {
     expect(OptimizePlugin.Plugins.map((plugin) => plugin.id)).toEqual([
       "opencode.prompt.openai",
+      "opencode.prompt.anthropic",
       "opencode.prompt.kimi",
       "opencode.prompt.arcee",
       "opencode.prompt.meta",
@@ -57,13 +58,13 @@ describe("OptimizePlugin", () => {
 
   it.effect("selects model-lab prompts through session context hooks", () =>
     Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
+      const catalog = yield* Provider.Service
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
       yield* catalog.transform((editor) => {
-        for (const id of ["gpt-5", "gpt-4.1", "gpt-5-codex", "gpt-6-astra"])
-          editor.model.update(Provider.ID.make("test"), Model.ID.make(id), () => {})
-        editor.model.update(Provider.ID.make("test"), Model.ID.make("meta/muse-spark-1.1"), (model) => {
+        for (const id of ["gpt-5", "gpt-4.1", "gpt-5-codex", "gpt-6", "gpt-6-astra", "gpt-5-astra"])
+          editor.models.update(Provider.ID.make("test"), Model.ID.make(id), () => {})
+        editor.models.update(Provider.ID.make("test"), Model.ID.make("meta/muse-spark-1.1"), (model) => {
           model.name = "Muse Spark"
         })
       })
@@ -75,9 +76,11 @@ describe("OptimizePlugin", () => {
         ["gpt-4.1", PROMPT_GPT],
         ["o3", fallback],
         ["gpt-5-codex", PROMPT_GPT],
+        ["gpt-6", PROMPT_GPT],
         ["gpt-6-astra", PROMPT_ASTRA],
+        ["gpt-5-astra", PROMPT_ASTRA],
         ["gemini-2.5-pro", fallback],
-        ["claude-sonnet-4", fallback],
+        ["claude-sonnet-4", appended],
         ["kimi-k2", PROMPT_KIMI],
         ["trinity", PROMPT_TRINITY],
         ["meta/muse-spark-1.1", PROMPT_META.replaceAll("{{MODEL_NAME}}", "Muse Spark")],
@@ -107,11 +110,11 @@ describe("OptimizePlugin", () => {
 
   it.effect("renders the OpenAI prompt without changing tools or project instructions", () =>
     Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
+      const catalog = yield* Provider.Service
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
       yield* catalog.transform((editor) =>
-        editor.model.update(Provider.ID.make("test"), Model.ID.make("gpt-5"), () => {}),
+        editor.models.update(Provider.ID.make("test"), Model.ID.make("gpt-5"), () => {}),
       )
       yield* OptimizePlugin.OpenAIPlugin.effect(pluginHost)
       const event = context("gpt-5")
@@ -125,6 +128,30 @@ describe("OptimizePlugin", () => {
         "Project instructions",
       ])
       expect(event.system[0]?.text).not.toContain("${OPENCODE_TOOL_GUIDANCE}")
+      expect(Object.keys(event.tools).sort()).toEqual(["edit", "glob", "grep", "patch", "read", "shell", "write"])
+    }),
+  )
+
+  it.effect("appends the Anthropic prompt to the baseline without changing tools or project instructions", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Provider.Service
+      const hooks = yield* PluginHooks.Service
+      const pluginHost = yield* makeHost
+      yield* catalog.transform((editor) =>
+        editor.models.update(Provider.ID.make("test"), Model.ID.make("claude-sonnet-4"), () => {}),
+      )
+      yield* OptimizePlugin.AnthropicPlugin.effect(pluginHost)
+      const event = context("claude-sonnet-4")
+      event.system.push(SystemPart.make("Project instructions"))
+
+      yield* hooks.trigger("session", "context", event)
+
+      const baseline = SessionSystemPrompt.render(fallback, Object.keys(event.tools))
+      expect(event.system.map((part) => part.text)).toEqual([
+        `${baseline}\n\n${SessionSystemPrompt.render(PROMPT_ANTHROPIC, Object.keys(event.tools))}`,
+        "Project instructions",
+      ])
+      expect(event.system[0]?.text.startsWith(baseline)).toBe(true)
       expect(Object.keys(event.tools).sort()).toEqual(["edit", "glob", "grep", "patch", "read", "shell", "write"])
     }),
   )
@@ -195,7 +222,7 @@ describe("OptimizePlugin", () => {
 
   it.effect("uses catalog names in Meta prompts for Muse model IDs", () =>
     Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
+      const catalog = yield* Provider.Service
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
       const cases = [
@@ -206,7 +233,7 @@ describe("OptimizePlugin", () => {
       ] as const
       yield* catalog.transform((editor) => {
         for (const [id, name] of cases)
-          editor.model.update(Provider.ID.make("test"), Model.ID.make(id), (model) => {
+          editor.models.update(Provider.ID.make("test"), Model.ID.make(id), (model) => {
             model.name = name
           })
       })
@@ -289,23 +316,24 @@ describe("OptimizePlugin", () => {
 
   it.effect("preserves tools for model aliases and catalog-ID prompt selection by default", () =>
     Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
+      const catalog = yield* Provider.Service
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
       const cases = [
         ["gpt-5-alias", "custom-model", undefined, PROMPT_GPT],
-        ["gpt-6-alias", "custom-model", undefined, PROMPT_ASTRA],
+        ["gpt-6-alias", "custom-model", undefined, PROMPT_GPT],
+        ["gpt-5-astra-alias", "custom-model", undefined, PROMPT_ASTRA],
         ["openai-alias", "GPT-5", undefined, fallback],
         ["codex-family-alias", "custom-deployment", "GPT-CODEX", fallback],
         ["astra-api-alias", "gpt-6-astra", undefined, fallback],
         ["astra-family-alias", "custom-deployment", "gpt-6", fallback],
-        ["claude-catalog-alias", "custom-model", undefined, fallback],
+        ["claude-catalog-alias", "custom-model", undefined, appended],
         ["anthropic-api-alias", "Claude-Opus-4-8", undefined, fallback],
         ["anthropic-family-alias", "custom-deployment", "CLAUDE-SONNET", fallback],
       ] as const
       yield* catalog.transform((editor) => {
         for (const [id, modelID, family] of cases)
-          editor.model.update(Provider.ID.make("test"), Model.ID.make(id), (model) => {
+          editor.models.update(Provider.ID.make("test"), Model.ID.make(id), (model) => {
             model.modelID = Model.ID.make(modelID)
             if (family) model.family = Model.Family.make(family)
           })

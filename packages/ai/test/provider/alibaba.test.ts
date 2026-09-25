@@ -76,7 +76,13 @@ it.effect("Alibaba owns regional shared and workspace-specific endpoints", () =>
 
 test("Alibaba requires explicit placement and supports complete base URL overrides", () => {
   for (const region of ["eu-central-1", "ap-northeast-1", "future-region"])
-    expect(() => Alibaba.configure({ region })).toThrow("requires workspaceID or baseURL")
+    expect(() => Alibaba.configure({ region })).toThrow(
+      expect.objectContaining({
+        _tag: "ProviderConfiguration",
+        provider: "alibaba",
+        message: `Alibaba region ${region} requires workspaceID or baseURL`,
+      }),
+    )
   for (const config of [
     { baseURL: "https://gateway.example/prefix" },
     { region: "future-region", workspaceID: "ignored", baseURL: "https://gateway.example/prefix" },
@@ -207,6 +213,33 @@ it.effect("Alibaba keeps native reasoning controls and future efforts on their s
         budget_tokens: thinking.budgetTokens ?? thinking.budget_tokens,
       })
     }
+  }),
+)
+
+it.effect("Alibaba fits explicit thinking budgets to half the output limit", () =>
+  Effect.gen(function* () {
+    const provider = Alibaba.configure({ region: "ap-southeast-1", apiKey: "fixture" })
+    const chat = (maxTokens?: number) =>
+      compileRequest(
+        LLM.request({
+          model: provider.chat("qwen3.7-plus"),
+          prompt: "hi",
+          ...(maxTokens === undefined ? {} : { generation: { maxTokens } }),
+          providerOptions: { enableThinking: true, thinkingBudget: 131_071 },
+        }),
+      ).pipe(Effect.map((prepared) => prepared.body.thinking_budget))
+    const messages = yield* compileRequest(
+      LLM.request({
+        model: provider.messages("qwen3.7-plus"),
+        prompt: "hi",
+        generation: { maxTokens: 32_000 },
+        providerOptions: { thinking: { type: "enabled", budgetTokens: 131_071 } },
+      }),
+    )
+
+    expect(yield* chat(32_000)).toBe(16_000)
+    expect(yield* chat()).toBe(131_071)
+    expect(messages.body.thinking).toEqual({ type: "enabled", budget_tokens: 16_000 })
   }),
 )
 

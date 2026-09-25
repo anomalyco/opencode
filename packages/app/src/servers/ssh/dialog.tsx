@@ -120,7 +120,13 @@ export function DialogSsh(props: {
       <Divider />
       <DialogBody class="flex w-full min-w-0 flex-1 flex-col px-4 pt-4 pb-2">
         <div class="flex w-full min-w-0 flex-col gap-6">
-          <Show when={!props.promptOnly && (!state.prompted || (!!error() && !prompt()))}>
+          <Show
+            when={
+              !props.promptOnly &&
+              item()?.stage !== "incompatible" &&
+              (!state.prompted || (!!error() && !prompt()))
+            }
+          >
             <div class="flex w-full min-w-0 flex-col gap-2">
               <label class="settings-server-dialog-label" for="ssh-target">
                 {language.t("ssh.target")}
@@ -160,6 +166,12 @@ export function DialogSsh(props: {
               />
             </div>
           </Show>
+          <Show when={item()?.stage === "incompatible"}>
+            <div class="flex w-full min-w-0 flex-col gap-2" role="status" aria-live="polite">
+              <span class="text-14-medium text-v2-text-text-base">{language.t("ssh.stage.incompatible")}</span>
+              <span class="text-13-regular text-v2-text-text-muted">{language.t("ssh.error.version")}</span>
+            </div>
+          </Show>
           <Show when={prompt()} keyed>
             {(prompt) => (
               <div class="flex w-full min-w-0 flex-col gap-2">
@@ -195,7 +207,7 @@ export function DialogSsh(props: {
               </div>
             )}
           </Show>
-          <Show when={error()}>
+          <Show when={item()?.stage !== "incompatible" && error()}>
             {(error) => (
               <span class="settings-server-dialog-error !leading-[var(--line-height-compact)]" role="alert">
                 {error()}

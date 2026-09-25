@@ -31,6 +31,8 @@ export function toSessionError(cause: unknown): SessionError.Error {
         return providerError("provider.no-route", cause.reason)
       case "UnknownProvider":
         return providerError("provider.unknown", cause.reason)
+      case "Timeout":
+        return providerError("provider.timeout", cause.reason)
       default: {
         const exhaustive: never = cause.reason
         return exhaustive
@@ -55,6 +57,8 @@ export function toSessionError(cause: unknown): SessionError.Error {
     cause instanceof SessionRunnerModel.ModelUnavailableError ||
     cause instanceof SessionRunnerModel.VariantUnavailableError ||
     cause instanceof SessionRunnerModel.UnsupportedPackageError ||
+    cause instanceof SessionRunnerModel.ModelConfigurationError ||
+    cause instanceof SessionRunnerModel.ModelInitializationError ||
     cause instanceof SessionRunnerModel.UnresolvedProviderVariablesError
   )
     return { type: "provider.no-route", message: cause.message }

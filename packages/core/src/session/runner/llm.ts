@@ -5,6 +5,7 @@ import { and, desc, eq, sql } from "drizzle-orm"
 import { Cause, Effect, Exit, FiberMap, Layer } from "effect"
 import { Database } from "../../database/database.js"
 import { Bus } from "../../bus.js"
+import { LocationLifecycle } from "../../location-lifecycle.js"
 import { InstructionState } from "../instruction-state.js"
 import { SessionCompaction } from "../compaction.js"
 import { SessionContext } from "../context.js"
@@ -37,6 +38,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
+    const lifecycle = yield* LocationLifecycle.Service
     const store = yield* SessionStore.Service
     const context = yield* SessionContext.Service
     const modelTransport = yield* SessionModelTransport.Service
@@ -69,6 +71,10 @@ const layer = Layer.effect(
         Effect.uninterruptibleMask((restore) =>
           Effect.gen(function* () {
             while (true) {
+              if (lifecycle.isClosed()) {
+                yield* restore(modelTransport.close(sessionID))
+                return DrainResult.Reloaded({ force, continuation: continuing ? { step } : undefined })
+              }
               // Location entry and idle boundaries allow queued controls, not necessarily queued prompts.
               const pending = yield* SessionInbox.serialized(
                 sessionID,
@@ -130,7 +136,7 @@ const layer = Layer.effect(
                             instructionUpdate: history.instructionUpdate,
                           }
                         }),
-                      prepare: context.prepare,
+                      prepare: context.request.compaction,
                       messages: yield* store.context(sessionID),
                       inputID: pending.id,
                       started: true,
@@ -209,7 +215,7 @@ const layer = Layer.effect(
         initial = undefined
         const compactionInput = {
           context: loaded,
-          prepare: context.prepare,
+          prepare: context.request.compaction,
         }
         if (compaction.required({ messages: loaded.messages, resolved: loaded.model, context: loaded })) {
           const result = yield* compaction.compact(compactionInput)
@@ -226,20 +232,21 @@ const layer = Layer.effect(
           initial: loaded.initial,
           messages: loaded.messages,
         })
-        const prepared = yield* context.prepare({
-          kind: "primary",
-          scope: { session: loaded.session, agentID: loaded.agent.id, model: loaded.model, tools: loaded.tools },
-          transcript: {
-            system: transcript.system,
-            messages: stepLimitReached
-              ? [...transcript.messages, Message.assistant(MAX_STEPS_PROMPT)]
-              : transcript.messages,
-          },
+        const prepared = yield* context.request.primary({
+          session: loaded.session,
+          agent: loaded.agent.id,
+          model: loaded.model,
+          tools: loaded.tools,
+          system: transcript.system,
+          messages: stepLimitReached
+            ? [...transcript.messages, Message.assistant(MAX_STEPS_PROMPT)]
+            : transcript.messages,
           // Keep tool definitions on the final Step to preserve the provider's cached prefix.
           toolChoice: stepLimitReached ? "none" : undefined,
           webSocket: "session",
         })
         const outcome = yield* steps.attempt({
+          isLocationClosed: lifecycle.isClosed,
           sessionID,
           assistantMessageID,
           agent: loaded.agent.id,
@@ -356,6 +363,7 @@ export const node = makeLocationNode({
   layer,
   deps: [
     Bus.node,
+    LocationLifecycle.node,
     llmClient,
     SessionContext.node,
     SessionModelTransport.node,

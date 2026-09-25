@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/tui",
-  "version": "1.18.4",
+  "version": "2.0.16",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -41,6 +41,7 @@
     "./parsers-config": "./src/parsers-config.ts",
     "./util/error": "./src/util/error.ts",
     "./util/filetype": "./src/util/filetype.ts",
+    "./util/form": "./src/util/form.ts",
     "./util/locale": "./src/util/locale.ts",
     "./util/persistence": "./src/util/persistence.ts",
     "./util/record": "./src/util/record.ts",

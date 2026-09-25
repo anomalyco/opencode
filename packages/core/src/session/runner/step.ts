@@ -10,7 +10,7 @@ import {
   type ToolCall,
 } from "@opencode/ai"
 import type { Agent } from "@opencode/schema/agent"
-import { Cause, Data, Effect, Exit, Fiber, Option, Stream } from "effect"
+import { Cause, Clock, Data, Effect, Exit, Fiber, Option, Stream } from "effect"
 import { SessionError } from "@opencode/schema/session-error"
 import { Bus } from "../../bus.js"
 import { Permission } from "../../permission.js"
@@ -42,11 +42,12 @@ export type Outcome = Data.TaggedEnum<{
 export const Outcome = Data.taggedEnum<Outcome>()
 
 interface Input {
+  readonly isLocationClosed: () => boolean
   readonly sessionID: SessionSchema.ID
   readonly assistantMessageID: SessionMessage.ID
   readonly agent: Agent.ID
   readonly model: SessionRunnerModel.Resolved
-  readonly prepared: SessionModelRequest.Prepared
+  readonly prepared: Omit<SessionModelRequest.Prepared, "event">
   readonly retry: (
     cause: AIError,
     error: SessionError.Error,
@@ -77,6 +78,7 @@ export const make = Effect.gen(function* () {
       model: input.model.ref,
       providerMetadataKey: input.model.model.route.providerMetadataKey ?? input.model.model.provider,
       snapshot: startSnapshot,
+      started: yield* Clock.currentTimeMillis,
     })
     const toolRuns: Array<{
       readonly call: ToolCall
@@ -190,8 +192,9 @@ export const make = Effect.gen(function* () {
         for (const decline of tools.declines)
           yield* publisher.failTool(decline.call.id, {
             type: "aborted",
-            message:
-              decline.reason._tag === "QuestionTool.CancelledError"
+            message: input.isLocationClosed()
+              ? "Interaction cancelled because the location shut down"
+              : decline.reason._tag === "QuestionTool.CancelledError"
                 ? decline.reason.message
                 : "The user declined this tool call",
           })
@@ -251,7 +254,10 @@ export const make = Effect.gen(function* () {
           return Outcome.Continue({ error: llmError, decision: retry })
 
         if (Exit.isFailure(stream)) return yield* Effect.failCause(stream.cause)
-        if (tools.declines.length > 0) return yield* Effect.interrupt
+        if (tools.declines.length > 0) {
+          if (input.isLocationClosed()) return Outcome.Completed({ needsContinuation: true })
+          return yield* Effect.interrupt
+        }
         if (tools.interrupted && tools.failure) return yield* Effect.failCause(tools.failure)
         if (tools.interrupted && Exit.isFailure(joined)) return yield* Effect.failCause(joined.cause)
         if (record.failure) return yield* new StepFailedError({ error: record.failure })

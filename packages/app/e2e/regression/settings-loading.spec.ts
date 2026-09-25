@@ -1,23 +1,40 @@
 import { expect, test } from "@playwright/test"
 import { mockOpenCodeServer } from "../utils/mock-server"
+import type { OpenCodeEvent } from "@opencode/client/promise"
 
 const directory = "C:/Projects/settings-demo"
 const sandboxes = Array.from({ length: 12 }, (_, index) => `${directory}/workspace-${index + 1}`)
+const events: OpenCodeEvent[] = []
 
 test.use({ viewport: { width: 1440, height: 1000 }, colorScheme: "dark" })
 
 test.beforeEach(async ({ page }) => {
+  events.length = 0
   await mockOpenCodeServer(page, {
     directory,
     project: {
       id: "proj_settings_demo",
       canonical: directory,
       name: "Settings demo",
+      icon: {
+        color: "orange",
+        override:
+          "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' fill='red'/%3E%3C/svg%3E",
+      },
+      commands: { start: "echo setup" },
       vcs: "git",
       time: { created: 1700000000000, updated: 1700000000000 },
       sandboxes,
     },
     provider: { all: [], connected: [], default: {} },
+    configEntries: [
+      { type: "document", path: "/home/test/.config/opencode/opencode.jsonc", info: { shell: "/bin/zsh" } },
+      { type: "directory", path: "/home/test/.config/opencode" },
+    ],
+    shells: [
+      { path: "/bin/zsh", name: "zsh", acceptable: true },
+      { path: "/bin/bash", name: "bash", acceptable: true },
+    ],
     sessions: sandboxes.map((directory, index) => ({
       id: `ses_settings_${index + 1}`,
       title: `Workspace ${index + 1} session`,
@@ -26,6 +43,7 @@ test.beforeEach(async ({ page }) => {
       time: { created: 1700000000000, updated: 1700000000000 },
     })),
     pageMessages: () => ({ items: [] }),
+    events: () => events.splice(0),
   })
   await page.addInitScript((directory) => {
     localStorage.setItem(
@@ -36,6 +54,30 @@ test.beforeEach(async ({ page }) => {
   await page.goto("/")
   await page.getByRole("button", { name: "Settings", exact: true }).click()
   await expect(page.getByTestId("settings-screen").getByRole("tab", { name: "Preferences" })).toBeVisible()
+})
+
+test("an inventory event updates the open all-project worktree list", async ({ page }) => {
+  const discovered = `${directory}/discovered-workspace`
+  const inventory = [{ directory }, ...sandboxes.map((directory) => ({ directory, strategy: "git" }))]
+  await page.route(
+    (url) => url.pathname === "/api/worktree",
+    (route) => route.fulfill({ json: inventory }),
+  )
+  const settings = page.getByTestId("settings-screen")
+  await settings.getByRole("tab", { name: "Worktrees", exact: true }).click()
+  await expect(settings.getByText(sandboxes[0], { exact: true })).toBeVisible()
+  const listed = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === "/api/worktree" && response.request().method() === "GET",
+  )
+  inventory.push({ directory: discovered, strategy: "git" })
+  events.push({
+    id: "evt_settings_worktree_updated",
+    created: Date.now(),
+    type: "worktree.updated",
+    data: { projectID: "proj_settings_demo" },
+  })
+  expect((await listed).ok()).toBe(true)
+  await expect(settings.getByText(discovered, { exact: true })).toBeVisible()
 })
 
 test("settings has its own route and returns through app history", async ({ page }) => {
@@ -54,6 +96,214 @@ test("settings has its own route and returns through app history", async ({ page
   await expect(page).toHaveURL("/")
   await expect(settings).toBeHidden()
   await expect(home).toHaveAttribute("aria-pressed", "true")
+})
+
+test("settings page survives refresh", async ({ page }) => {
+  const settings = page.getByTestId("settings-screen")
+  const appearance = settings.getByRole("tab", { name: "Appearance", exact: true })
+
+  await appearance.click()
+  await expect(page).toHaveURL("/settings?tab=appearance")
+  await expect(appearance).toHaveAttribute("aria-selected", "true")
+
+  await page.reload()
+
+  await expect(settings).toBeVisible()
+  await expect(appearance).toHaveAttribute("aria-selected", "true")
+  await expect(page).toHaveURL("/settings?tab=appearance")
+})
+
+test("another server's settings page survives refresh", async ({ page }) => {
+  const remote = "http://127.0.0.1:4097"
+  await page.addInitScript(
+    (input) => {
+      localStorage.setItem(
+        "opencode.global.dat:server",
+        JSON.stringify({
+          list: [{ type: "http", http: { url: input.remote } }],
+          projects: { local: [{ worktree: input.directory, expanded: true }] },
+        }),
+      )
+    },
+    { directory, remote },
+  )
+  const settings = page.getByTestId("settings-screen")
+  const url = (value: URL) =>
+    value.pathname === "/settings" &&
+    value.searchParams.get("server") === remote &&
+    value.searchParams.get("tab") === "providers"
+
+  await page.goto(`/settings?server=${encodeURIComponent(remote)}&tab=providers`)
+  await expect(settings.getByRole("heading", { name: "Providers", exact: true })).toBeVisible()
+  await expect(page).toHaveURL(url)
+
+  await page.reload()
+
+  await expect(settings.getByRole("heading", { name: "Providers", exact: true })).toBeVisible()
+  await expect(page).toHaveURL(url)
+})
+
+test("single-server settings expose scoped pages without a server picker", async ({ page }) => {
+  const settings = page.getByTestId("settings-screen")
+  await expect(settings.getByRole("tab", { name: "Server", exact: true })).toBeVisible()
+  await expect(settings.getByRole("tab", { name: "Servers", exact: true })).toHaveCount(0)
+
+  for (const name of ["Projects", "Worktrees", "Providers", "Models", "Extensions"]) {
+    await settings.getByRole("tab", { name, exact: true }).click()
+    await expect(settings.locator('[data-action="settings-server-select"]')).toHaveCount(0)
+  }
+
+  await settings.getByRole("tab", { name: "Server", exact: true }).click()
+  await expect(settings.getByRole("button", { name: "Add server", exact: true })).toBeVisible()
+  await expect(settings.getByRole("heading", { name: "Connection", exact: true })).toBeVisible()
+  const connection = settings.locator('[data-component="settings-server-connection"]')
+  await expect(connection.getByRole("heading", { name: "Connection", exact: true })).toBeVisible()
+  await expect(connection.locator('[data-component="settings-list"]')).toHaveCSS("padding-left", "16px")
+  await expect(connection.locator(".settings-servers-row")).toHaveCSS("padding-top", "20px")
+  await expect(connection.locator(".settings-servers-lead")).toHaveCSS("column-gap", "10px")
+  await expect(connection.locator(".settings-servers-copy")).toHaveCSS("row-gap", "6px")
+  await expect(settings.getByRole("heading", { name: "Preferences", exact: true })).toBeVisible()
+  await expect(settings.getByText("Terminal shell", { exact: true })).toBeVisible()
+  await settings.getByText("zsh", { exact: true }).click()
+  const updated = page.waitForRequest(
+    (request) => request.method() === "PATCH" && new URL(request.url()).pathname === "/api/experimental/config",
+  )
+  await page.getByRole("option", { name: "bash", exact: true }).click()
+  expect((await updated).postDataJSON()).toEqual({ shell: "bash" })
+})
+
+test("project settings open as a nested autosaving view", async ({ page }) => {
+  const settings = page.getByTestId("settings-screen")
+  await settings.getByRole("tab", { name: "Projects", exact: true }).click()
+  await settings.getByRole("button", { name: "Settings demo", exact: true }).click()
+
+  await expect(settings.getByRole("button", { name: "Back to projects", exact: true })).toBeVisible()
+  await expect(settings.getByRole("tab", { name: "General", exact: true })).toBeVisible()
+  await expect(settings.getByRole("tab", { name: "Worktrees", exact: true })).toBeVisible()
+  await expect(settings.getByRole("tab", { name: "Extensions", exact: true })).toBeVisible()
+  await expect(settings.getByRole("tab", { name: "Scripts", exact: true })).toHaveCount(0)
+  await expect(settings.getByTitle(directory)).toHaveCount(0)
+  const projectIcon = settings.locator('.settings-tab-header [data-component="project-avatar-v2"]')
+  await expect(projectIcon).toHaveCSS("width", "32px")
+  const projectOptions = settings
+    .locator(".settings-tab-header")
+    .getByRole("button", { name: "More options", exact: true })
+  await expect(projectOptions).toHaveCSS("width", "28px")
+  await expect
+    .poll(
+      async () =>
+        new Set(
+          await Promise.all(
+            [
+              settings.getByRole("button", { name: "Back to projects", exact: true }),
+              settings.getByRole("heading", { name: "Settings demo", exact: true }),
+              projectIcon,
+              projectOptions,
+            ].map((item) =>
+              item.evaluate((element) => {
+                const bounds = element.getBoundingClientRect()
+                return Math.round(bounds.top + bounds.height / 2)
+              }),
+            ),
+          ),
+        ).size,
+    )
+    .toBe(1)
+  await expect
+    .poll(async () => {
+      const back = await settings
+        .getByRole("button", { name: "Back to projects", exact: true })
+        .evaluate((element) => element.getBoundingClientRect().top)
+      const general = await settings
+        .getByRole("tab", { name: "General", exact: true })
+        .evaluate((element) => element.getBoundingClientRect().top)
+      return Math.round(general - back)
+    })
+    .toBe(72)
+  await projectOptions.click()
+  const projectMenu = page.getByRole("menu")
+  await expect(projectMenu.getByRole("menuitem")).toHaveText(["Clear notifications", "Close"])
+  await page.keyboard.press("Escape")
+  await expect(projectMenu).toBeHidden()
+
+  const name = settings.getByRole("textbox", { name: "Project name", exact: true })
+  const saved = page.waitForRequest(
+    (request) => request.method() === "PATCH" && new URL(request.url()).pathname === "/api/project/proj_settings_demo",
+  )
+  await name.fill("Renamed project")
+  await name.blur()
+  expect((await saved).postDataJSON()).toEqual({ name: "Renamed project" })
+  await expect(settings.getByRole("tab", { name: "General", exact: true })).toBeVisible()
+  await expect(settings.getByRole("heading", { name: "Renamed project", exact: true })).toBeVisible()
+
+  const startup = settings.getByRole("textbox", { name: "Worktree startup script", exact: true })
+  const scriptSaved = page.waitForRequest(
+    (request) => request.method() === "PATCH" && new URL(request.url()).pathname === "/api/project/proj_settings_demo",
+  )
+  await startup.fill("bun install")
+  await startup.blur()
+  expect((await scriptSaved).postDataJSON()).toEqual({ commands: { start: "bun install" } })
+
+  const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
+  await settings.getByRole("tab", { name: "Worktrees", exact: true }).click()
+  await expect(settings.getByRole("heading", { name: "Worktrees", exact: true })).toBeVisible()
+  await expect(page).toHaveURL(
+    (url) =>
+      url.pathname === "/settings" &&
+      url.searchParams.get("server") === server &&
+      url.searchParams.get("project") === directory &&
+      url.searchParams.get("tab") === "workspaces",
+  )
+
+  await page.reload()
+
+  await expect(settings.getByRole("heading", { name: "Worktrees", exact: true })).toBeVisible()
+  await page.keyboard.press("Escape")
+  await expect(settings.getByRole("heading", { name: "Projects", exact: true })).toBeVisible()
+})
+
+test("clearing project fields sends explicit removal values", async ({ page }) => {
+  const settings = page.getByTestId("settings-screen")
+  await settings.getByRole("tab", { name: "Projects", exact: true }).click()
+  await settings.getByRole("button", { name: "Settings demo", exact: true }).click()
+  const startup = settings.getByRole("textbox", { name: "Worktree startup script", exact: true })
+  await expect(startup).toHaveValue("echo setup")
+
+  const scriptSaved = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" && new URL(response.url()).pathname === "/api/project/proj_settings_demo",
+  )
+  await startup.clear()
+  await startup.blur()
+  const scriptResponse = await scriptSaved
+  expect(scriptResponse.ok()).toBe(true)
+  expect(scriptResponse.request().postDataJSON()).toEqual({ commands: { start: "" } })
+  await expect(settings.locator('[aria-busy="true"]')).toHaveCount(0)
+
+  const icon = settings.getByRole("button", { name: "Project icon", exact: true })
+  await expect(icon.locator("img")).toHaveCount(1)
+  const iconSaved = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" && new URL(response.url()).pathname === "/api/project/proj_settings_demo",
+  )
+  await icon.hover()
+  await icon.click()
+  const iconResponse = await iconSaved
+  expect(iconResponse.ok()).toBe(true)
+  expect(iconResponse.request().postDataJSON()).toEqual({ icon: { color: "orange", override: "" } })
+  await expect(settings.locator('[aria-busy="true"]')).toHaveCount(0)
+
+  const color = settings.getByRole("button", { name: "Select orange color", exact: true })
+  await expect(color).toHaveAttribute("aria-pressed", "true")
+  const colorSaved = page.waitForResponse(
+    (response) =>
+      response.request().method() === "PATCH" && new URL(response.url()).pathname === "/api/project/proj_settings_demo",
+  )
+  await color.click()
+  const colorResponse = await colorSaved
+  expect(colorResponse.ok()).toBe(true)
+  expect(colorResponse.request().postDataJSON()).toEqual({ icon: { color: "", override: "" } })
+  await expect(settings.locator('[aria-busy="true"]')).toHaveCount(0)
 })
 
 test("new session shortcut leaves settings and opens a new session screen", async ({ page }) => {
@@ -76,7 +326,7 @@ test("recording a new session shortcut stays in settings until recording finishe
   await page.keyboard.press("Control+t")
 
   await expect(binding).toHaveText("Ctrl+T")
-  await expect(page).toHaveURL("/settings")
+  await expect(page).toHaveURL("/settings?tab=shortcuts")
   await expect(page.locator("[data-titlebar-tab]")).toHaveCount(0)
   await page.keyboard.press("Control+t")
   await expect(page).toHaveURL(/\/new-session\?draftId=.+$/)
@@ -102,7 +352,7 @@ test("workspaces opens without waiting for inventory or sessions", async ({ page
   const requested = page.waitForRequest(
     (request) =>
       new URL(request.url()).pathname === "/api/worktree" &&
-      new URL(request.url()).searchParams.get("location[directory]") === directory &&
+      new URL(request.url()).searchParams.get("projectID") === "proj_settings_demo" &&
       request.method() === "GET",
   )
   await settings.getByRole("tab", { name: "Worktrees", exact: true }).click()
@@ -131,7 +381,7 @@ test("workspaces opens without waiting for inventory or sessions", async ({ page
   refresh.resolve()
 })
 
-test("worktree deletion sends the project location separately from the target", async ({ page }) => {
+test("worktree deletion sends the project ID and target without a location", async ({ page }) => {
   const removed = new Set<string>()
   await page.route(
     (url) => url.pathname === "/api/worktree",
@@ -163,8 +413,8 @@ test("worktree deletion sends the project location separately from the target", 
   )
   await remove.click()
   const request = await deleting
-  expect(new URL(request.url()).searchParams.get("location[directory]")).toBe(directory)
-  expect(request.postDataJSON()).toEqual({ directory: sandboxes[0], force: true })
+  expect(new URL(request.url()).searchParams.has("location[directory]")).toBe(false)
+  expect(request.postDataJSON()).toEqual({ projectID: "proj_settings_demo", directory: sandboxes[0], force: true })
   await expect(settings.getByText(sandboxes[0], { exact: true })).toHaveCount(0)
   await expect(settings.getByText("11 worktrees", { exact: true })).toBeVisible()
 })

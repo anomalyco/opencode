@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { getEventListeners } from "node:events"
 import { createRoot } from "solid-js"
 import { createData, type CreateDataInput } from "../src/solid"
-import { OpenCode, type OpenCodeEvent, type Project, type SessionInfo } from "../src/promise"
+import { OpenCode, type ModelInfo, type OpenCodeEvent, type Project, type SessionInfo } from "../src/promise"
 
 const session = (viewed: number): SessionInfo => ({
   id: "ses_refresh",
@@ -12,6 +12,118 @@ const session = (viewed: number): SessionInfo => ({
   outcome: "succeeded",
   time: { created: 0, updated: 0, idle: 2, viewed },
   location: { directory: "/project" },
+})
+
+test("uses the configured initial window and retains normal cursor page sizes", async () => {
+  const requests: { limit: string | null; cursor: string | null }[] = []
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const url = new URL((input instanceof Request ? input : new Request(input, init)).url)
+      const cursor = url.searchParams.get("cursor")
+      requests.push({ limit: url.searchParams.get("limit"), cursor })
+      return Response.json({
+        data: [{ id: cursor ? "msg_1" : "msg_2", type: "user", text: "History", time: { created: cursor ? 1 : 2 } }],
+        cursor: cursor ? {} : { next: "older" },
+      })
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      initialMessageLimit: () => 40,
+      event: { on: () => () => {}, listen: () => () => {} },
+    }),
+    dispose,
+  }))
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    await setup.data.session.message.sync("ses_refresh")
+    expect(requests).toEqual([{ limit: "40", cursor: null }])
+    await setup.data.session.message.loadMore("ses_refresh")
+    expect(requests).toEqual([
+      { limit: "40", cursor: null },
+      { limit: "20", cursor: "older" },
+    ])
+    expect(setup.data.session.message.list("ses_refresh").map((message) => message.id)).toEqual(["msg_1", "msg_2"])
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("reconciles a stale running tool when execution settles", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  let completed = false
+  let requests = 0
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async () => {
+      requests++
+      return Response.json({
+        data: [
+          {
+            id: "msg_assistant",
+            type: "assistant",
+            agent: "build",
+            model: { providerID: "provider", id: "model" },
+            time: { created: 1, ...(completed ? { completed: 2 } : {}) },
+            content: [
+              {
+                type: "tool",
+                id: "call_execute",
+                name: "execute",
+                time: { created: 1, ran: 1, ...(completed ? { completed: 2 } : {}) },
+                state: completed
+                  ? { status: "completed", input: {}, metadata: {}, content: [] }
+                  : { status: "running", input: {}, metadata: {} },
+              },
+            ],
+          },
+        ],
+        cursor: {},
+      })
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+      connection: { status: () => "connected" },
+    }),
+    dispose,
+  }))
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    completed = true
+    const interrupted: OpenCodeEvent = {
+      id: "evt_interrupted",
+      created: 3,
+      type: "session.execution.interrupted",
+      durable: { aggregateID: "ses_refresh", seq: 1, version: 1 },
+      data: { sessionID: "ses_refresh", reason: "user" },
+    }
+    listeners.forEach((listener) => listener({ name: interrupted.type, details: interrupted }))
+
+    await wait(
+      () =>
+        setup.data.session.message.get("ses_refresh", "msg_assistant")?.content[0]?.type === "tool" &&
+        setup.data.session.message.get("ses_refresh", "msg_assistant")?.content[0]?.state.status === "completed",
+    )
+    expect(requests).toBe(2)
+    expect(setup.data.session.message.get("ses_refresh", "msg_assistant")?.content[0]).toMatchObject({
+      state: { status: "completed" },
+    })
+  } finally {
+    setup.dispose()
+  }
 })
 
 test("revalidates after an event overtakes an active session read", async () => {
@@ -264,7 +376,7 @@ test("adopts cached directory-project sessions when their repository is resolved
         ...session(0),
         id: "ses_remote",
         projectID: "directory-root",
-        location: { directory: "/repo", workspaceID: "workspace-remote" },
+        location: { directory: "/repo" },
       },
     ]
     sessions.forEach((item) => setup.data.session.remember(item))
@@ -304,7 +416,7 @@ test("adopts cached directory-project sessions when their repository is resolved
     expect(setup.data.session.get("ses_escaped")?.projectID).toBe("global")
     expect(setup.data.session.get("ses_other")?.projectID).toBe("other-repository")
     expect(setup.data.session.get("ses_sibling")?.projectID).toBe("global")
-    expect(setup.data.session.get("ses_remote")?.projectID).toBe("directory-root")
+    expect(setup.data.session.get("ses_remote")?.projectID).toBe("repository")
     await wait(() => setup.data.session.get("ses_uncached")?.projectID === "repository")
     expect(setup.data.session.get("ses_uncached")?.subpath).toBe("app")
   } finally {
@@ -312,7 +424,7 @@ test("adopts cached directory-project sessions when their repository is resolved
   }
 })
 
-test("refreshes global credential events across every loaded location and workspace", async () => {
+test("refreshes global credential events across every loaded location", async () => {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   const requests: URL[] = []
   const api = OpenCode.make({
@@ -325,7 +437,6 @@ test("refreshes global credential events across every loaded location and worksp
       return Response.json({
         location: {
           directory,
-          workspaceID: url.searchParams.get("location[workspace]") ?? undefined,
           project: { id: "project", directory, canonical: directory },
         },
         data: [],
@@ -347,7 +458,7 @@ test("refreshes global credential events across every loaded location and worksp
     }),
     dispose,
   }))
-  const locations = [{ directory: "/project" }, { directory: "/other", workspaceID: "workspace-other" }]
+  const locations = [{ directory: "/project" }, { directory: "/other" }]
 
   try {
     await Promise.all(
@@ -369,15 +480,9 @@ test("refreshes global credential events across every loaded location and worksp
     }
     listeners.forEach((listener) => listener({ name: updated.type, details: updated }))
     await wait(() => requests.length === 2)
-    expect(
-      requests.map((url) => [
-        url.pathname,
-        url.searchParams.get("location[directory]"),
-        url.searchParams.get("location[workspace]"),
-      ]),
-    ).toEqual([
-      ["/api/integration", "/project", null],
-      ["/api/integration", "/other", "workspace-other"],
+    expect(requests.map((url) => [url.pathname, url.searchParams.get("location[directory]")])).toEqual([
+      ["/api/integration", "/project"],
+      ["/api/integration", "/other"],
     ])
     requests.length = 0
 
@@ -390,18 +495,12 @@ test("refreshes global credential events across every loaded location and worksp
       }
       listeners.forEach((listener) => listener({ name: switched.type, details: switched }))
       await wait(() => requests.length === 4)
-      expect(
-        requests.map((url) => [
-          url.pathname,
-          url.searchParams.get("location[directory]"),
-          url.searchParams.get("location[workspace]"),
-        ]),
-      ).toEqual(
+      expect(requests.map((url) => [url.pathname, url.searchParams.get("location[directory]")])).toEqual(
         expect.arrayContaining([
-          ["/api/model", "/project", null],
-          ["/api/provider", "/project", null],
-          ["/api/model", "/other", "workspace-other"],
-          ["/api/provider", "/other", "workspace-other"],
+          ["/api/model", "/project"],
+          ["/api/provider", "/project"],
+          ["/api/model", "/other"],
+          ["/api/provider", "/other"],
         ]),
       )
       locations.forEach((location, index) =>
@@ -410,6 +509,140 @@ test("refreshes global credential events across every loaded location and worksp
       requests.length = 0
     }
   } finally {
+    setup.dispose()
+  }
+})
+
+for (const resource of ["provider", "model"] as const) {
+  test(`refreshes ${resource} values only at the location named by ${resource}.updated`, async () => {
+    const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+    const requests: URL[] = []
+    const current = { name: "Before" }
+    const api = OpenCode.make({
+      baseUrl: "http://opencode.local",
+      fetch: async (input, init) => {
+        const request = input instanceof Request ? input : new Request(input, init)
+        const url = new URL(request.url)
+        requests.push(url)
+        const directory = url.searchParams.get("location[directory]") ?? "/project"
+        if (url.pathname !== "/api/provider" && url.pathname !== "/api/model")
+          throw new Error(`Unexpected request: ${request.url}`)
+        return Response.json({
+          location: { directory, project: { id: directory, directory, canonical: directory } },
+          data:
+            url.pathname === "/api/provider"
+              ? [{ id: "company", name: current.name, activation: "enabled", package: "aisdk:@ai-sdk/openai" }]
+              : [modelInfo(current.name)],
+        })
+      },
+    })
+    const setup = createRoot((dispose) => ({
+      data: createData({
+        api: () => api,
+        directory: "/project",
+        event: {
+          on: () => () => {},
+          listen(handler) {
+            listeners.add(handler)
+            return () => listeners.delete(handler)
+          },
+        },
+        connection: { status: () => "connected" },
+      }),
+      dispose,
+    }))
+    const project = { directory: "/project" }
+    const other = { directory: "/other" }
+    const unaffected = resource === "provider" ? "model" : "provider"
+
+    try {
+      await Promise.all(
+        [project, other].flatMap((location) => [
+          setup.data.location.provider.sync(location),
+          setup.data.location.model.sync(location),
+        ]),
+      )
+      const untouchedResource = setup.data.location[unaffected].list(project)
+      const untouchedLocation = setup.data.location[resource].list(other)
+      requests.length = 0
+      current.name = "After"
+      const event: OpenCodeEvent = {
+        id: `evt_${resource}_updated`,
+        created: 1,
+        type: `${resource}.updated`,
+        location: project,
+        data: {},
+      }
+      listeners.forEach((listener) => listener({ name: event.type, details: event }))
+
+      await wait(() => setup.data.location[resource].list(project)?.[0]?.name === "After")
+      expect(requests.map((url) => [url.pathname, url.searchParams.get("location[directory]")])).toEqual([
+        [`/api/${resource}`, "/project"],
+      ])
+      expect(setup.data.location[unaffected].list(project)).toBe(untouchedResource)
+      expect(setup.data.location[resource].list(other)).toBe(untouchedLocation)
+      expect(setup.data.location[unaffected].list(project)?.[0]?.name).toBe("Before")
+      expect(setup.data.location[resource].list(other)?.[0]?.name).toBe("Before")
+    } finally {
+      setup.dispose()
+    }
+  })
+}
+
+test("revalidates model discovery when an update overtakes an in-flight model list", async () => {
+  const started = Promise.withResolvers<void>()
+  const release = Promise.withResolvers<void>()
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  let requests = 0
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init)
+      if (new URL(request.url).pathname !== "/api/model") throw new Error(`Unexpected request: ${request.url}`)
+      const initial = ++requests === 1
+      if (initial) {
+        started.resolve()
+        await release.promise
+      }
+      return Response.json({
+        location: { directory: "/project" },
+        data: [modelInfo(initial ? "Before discovery" : "Discovered model")],
+      })
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+      connection: { status: () => "connected" },
+    }),
+    dispose,
+  }))
+
+  try {
+    const initial = setup.data.location.model.sync()
+    await started.promise
+    const event: OpenCodeEvent = {
+      id: "evt_models_discovered",
+      created: 1,
+      type: "model.updated",
+      location: { directory: "/project" },
+      data: {},
+    }
+    listeners.forEach((listener) => listener({ name: event.type, details: event }))
+    release.resolve()
+    await initial
+    await wait(() => setup.data.location.model.list()?.[0]?.name === "Discovered model")
+    expect(requests).toBe(2)
+  } finally {
+    release.resolve()
     setup.dispose()
   }
 })
@@ -427,7 +660,6 @@ test("refreshes references for the location an update names", async () => {
       return Response.json({
         location: {
           directory,
-          workspaceID: url.searchParams.get("location[workspace]") ?? undefined,
           project: { id: "project", directory, canonical: directory },
         },
         data: [],
@@ -449,7 +681,7 @@ test("refreshes references for the location an update names", async () => {
     }),
     dispose,
   }))
-  const other = { directory: "/other", workspaceID: "workspace-other" }
+  const other = { directory: "/other" }
 
   try {
     await Promise.all([setup.data.location.reference.sync(), setup.data.location.reference.sync(other)])
@@ -464,11 +696,10 @@ test("refreshes references for the location an update names", async () => {
     }
     listeners.forEach((listener) => listener({ name: updated.type, details: updated }))
     await wait(() => requests.length === 1)
-    expect([
-      requests[0]!.pathname,
-      requests[0]!.searchParams.get("location[directory]"),
-      requests[0]!.searchParams.get("location[workspace]"),
-    ]).toEqual(["/api/reference", "/other", "workspace-other"])
+    expect([requests[0]!.pathname, requests[0]!.searchParams.get("location[directory]")]).toEqual([
+      "/api/reference",
+      "/other",
+    ])
   } finally {
     setup.dispose()
   }
@@ -839,6 +1070,22 @@ test("projects background user shell metadata from durable shell data", () => {
     setup.dispose()
   }
 })
+
+function modelInfo(name: string): ModelInfo {
+  return {
+    id: "chat",
+    modelID: "chat",
+    providerID: "company",
+    name,
+    capabilities: { tools: true, input: ["text"], output: ["text"] },
+    variants: [],
+    time: { released: 0 },
+    cost: [],
+    status: "active",
+    enabled: true,
+    limit: { context: 8192, output: 1024 },
+  }
+}
 
 function activityFixture(read: () => Response | Promise<Response>) {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()

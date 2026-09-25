@@ -18,7 +18,6 @@ const WebSocketResponseCreate = Schema.StructWithRest(Schema.Struct({ type: Sche
 ])
 const decodeMessage = ProviderShared.validateWith(Schema.decodeUnknownEffect(WebSocketResponseCreate))
 const encodeMessage = Schema.encodeSync(Schema.fromJsonString(WebSocketResponseCreate))
-const decodeEvent = Schema.decodeUnknownEffect(OpenResponses.protocol.stream.event)
 
 export interface Options {
   readonly id: string
@@ -27,6 +26,7 @@ export interface Options {
   readonly enabled?: (url: string) => boolean
   readonly url?: (url: string) => string
   readonly headers?: (headers: Headers.Headers) => Headers.Headers
+  readonly continuation?: OpenResponsesContinuation.Shape
 }
 
 export interface Prepared {
@@ -60,7 +60,7 @@ const driver = (options: Options, body: string): WebSocketChannelDriver => {
       }),
     observe: (_create, frame) =>
       Effect.gen(function* () {
-        const event = yield* decodeEvent(frame).pipe(
+        const event = yield* OpenResponses.decodeChannelEvent(frame).pipe(
           Effect.mapError((cause) =>
             ProviderShared.eventError(options.id, `Invalid ${options.name} WebSocket event`, frame, cause),
           ),
@@ -73,11 +73,6 @@ const driver = (options: Options, body: string): WebSocketChannelDriver => {
           )
         if (event.type === "error") {
           terminal = true
-          yield* OpenResponses.decodeKnownErrorEvent(event).pipe(
-            Effect.mapError((cause) =>
-              ProviderShared.eventError(options.id, `${options.name} returned a malformed error event`, frame, cause),
-            ),
-          )
           return {
             type: "provider-failure",
             error: OpenResponses.providerFailure(event, `${options.name} stream error`, frame),
@@ -163,10 +158,15 @@ export const transport = <Body>(options: Options): Transport<Body, Prepared, str
                     request: create.request,
                     message: create.message,
                     base,
+                    continuation: options.continuation,
                   }),
                 }
               })
             : undefined
+        if (input.webSocket && !channel)
+          yield* Effect.logWarning(`${options.name} does not offer WebSocket for this endpoint; using HTTP`, {
+            url: parts.url,
+          })
         return {
           http: {
             request: ProviderShared.jsonPost({ url: parts.url, body: parts.bodyText, headers: parts.headers }),

@@ -26,7 +26,9 @@ export const Result = Schema.Struct({
   title: Schema.String.pipe(optional),
   content: Schema.String.pipe(optional),
   time: Schema.Struct({
-    published: Schema.Finite.pipe(optional),
+    published: Schema.Finite.pipe(optional).annotate({
+      description: "Publication time in milliseconds since the Unix epoch",
+    }),
   }),
 }).annotate({ identifier: "WebSearch.Result" })
 

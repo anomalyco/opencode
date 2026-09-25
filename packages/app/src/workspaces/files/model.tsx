@@ -1,14 +1,16 @@
 import { batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
+import { isFileNotFoundError } from "@opencode/client/promise"
 import { createSimpleContext } from "@opencode/ui/context"
 import { showToast } from "@/shell/notifications/toast"
 import { useParams } from "@solidjs/router"
 import { base64Encode } from "@opencode/util/encode"
-import { getFilename } from "@opencode/util/path"
+import { getDirectory, getFilename } from "@opencode/util/path"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useLayout } from "@/shell/state/layout"
 import { createPathHelpers } from "./path"
+import { fileContentFromBytes } from "./artifact"
 import {
   approxBytes,
   evictContentLru,
@@ -22,6 +24,7 @@ import {
 } from "./content-cache"
 import { createFileViewCache } from "./view-cache"
 import { useServerSDK } from "@/runtime/server/client"
+import { formatServerError } from "@/runtime/server/errors"
 import { SessionRouteKey, SessionStateKey } from "@/runtime/server/scope"
 import { createFileTreeStore } from "./tree-store"
 import { invalidateFromWatcher } from "./watcher"
@@ -43,12 +46,6 @@ export {
   resetFileContentLru,
   setFileContentBytes,
   touchFileContent,
-}
-
-function errorMessage(error: unknown, fallback: string) {
-  if (error instanceof Error && error.message) return error.message
-  if (typeof error === "string" && error) return error
-  return fallback
 }
 
 export const { use: useFile, provider: FileProvider } = createSimpleContext({
@@ -81,7 +78,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         serverSDK.api.file.list({ path: dir, location: { directory: scope() } }).then((x) =>
           x.data.map((entry) => ({
             ...entry,
-            name: entry.path.split("/").at(-1) ?? entry.path,
+            name: getFilename(entry.path),
             absolute: `${scope()}/${entry.path}`,
             ignored: false,
           })),
@@ -146,18 +143,24 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         produce((draft) => {
           draft.loaded = true
           draft.loading = false
+          draft.notFound = false
           draft.content = content
         }),
       )
     }
 
-    const setLoadError = (file: string, message: string) => {
+    const setLoadError = (file: string, message: string, notFound = false) => {
+      if (notFound) removeFileContentBytes(file)
       setStore(
         "file",
         file,
         produce((draft) => {
           draft.loading = false
+          draft.notFound = notFound
           draft.error = message
+          if (!notFound) return
+          draft.loaded = false
+          draft.content = undefined
         }),
       )
       showToast({
@@ -183,20 +186,27 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
 
       setLoading(file)
 
+      // Files outside the workspace are read from their own directory, like markdown images.
+      // The trailing separator from getDirectory keeps "/" and "C:/" valid, like readLocalImage.
+      const request = path.absolute(file)
+        ? { path: getFilename(file), location: { directory: getDirectory(file) } }
+        : { path: file, location: { directory } }
       const promise = serverSDK.api.file
-        .read({ path: file, location: { directory } })
+        .read(request)
         .then((data) => {
           if (scope() !== directory) return
-          const content = { type: "text" as const, content: new TextDecoder().decode(data) }
+          const content = fileContentFromBytes(file, data)
           setLoaded(file, content)
-
-          if (!content) return
           touchFileContent(file, approxBytes(content))
           evictContent(new Set([file]))
         })
         .catch((e) => {
           if (scope() !== directory) return
-          setLoadError(file, errorMessage(e, language.t("error.chain.unknown")))
+          setLoadError(
+            file,
+            formatServerError(e, language.t, language.t("error.chain.unknown")),
+            isFileNotFoundError(e),
+          )
         })
         .finally(() => {
           inflight.delete(key)
@@ -275,6 +285,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     return {
       ready: () => view().ready(),
       normalize: path.normalize,
+      absolute: path.absolute,
       tab: path.tab,
       pathFromTab: path.pathFromTab,
       tree: {
@@ -286,6 +297,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         collapse: tree.collapseDir,
       },
       get,
+      notFound: (input: string) => store.file[path.normalize(input)]?.notFound ?? false,
       load,
       scrollTop,
       scrollLeft,

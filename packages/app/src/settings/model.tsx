@@ -79,8 +79,6 @@ const generalSchema = Persistence.struct({
   showFileTree: Schema.Boolean,
   showNavigation: Schema.Boolean,
   showSearch: Schema.Boolean,
-  showStatus: Schema.Boolean,
-  showProjectIcon: Schema.Boolean,
   showTerminal: Schema.Boolean,
   timelineDetail: Persistence.struct({
     shell: activitySchema,
@@ -95,7 +93,6 @@ const generalSchema = Persistence.struct({
   mobileDiffWrap: Schema.Boolean,
   terminalPlacement: Schema.Literals(["side", "bottom"]),
   followUpBehavior: Schema.Literals(["queue", "steer"]),
-  experimentalBrowser: Schema.Boolean,
 })
 
 const appearanceSchema = Persistence.struct({
@@ -104,7 +101,6 @@ const appearanceSchema = Persistence.struct({
   sans: Schema.String,
   terminal: Schema.String,
   tabLayout: Schema.Literals(["horizontal", "vertical"]),
-  showProjectName: Schema.Boolean,
 })
 
 const permissionsSchema = Persistence.struct({
@@ -135,6 +131,7 @@ const soundsSchema = Persistence.struct({
 
 export const settingsSchema = Persistence.struct({
   general: generalSchema,
+  sessionSummary: Persistence.struct({ projectExpanded: Schema.Boolean, serverExpanded: Schema.Boolean }),
   appearance: appearanceSchema,
   keybinds: Persistence.record(Schema.String.pipe(Schema.catchDecoding(() => Effect.succeed(Option.none())))),
   permissions: permissionsSchema,
@@ -243,8 +240,6 @@ export const defaultSettings: Settings = {
     showFileTree: false,
     showNavigation: false,
     showSearch: false,
-    showStatus: false,
-    showProjectIcon: false,
     showTerminal: false,
     timelineDetail: { ...timelinePresets[2].value },
     showCustomAgents: false,
@@ -252,9 +247,9 @@ export const defaultSettings: Settings = {
     mobileDiffWrap: true,
     terminalPlacement: "side",
     followUpBehavior: "steer",
-    experimentalBrowser: false,
   },
-  appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal", showProjectName: false },
+  sessionSummary: { projectExpanded: true, serverExpanded: true },
+  appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal" },
   keybinds: {},
   permissions: { autoApprove: false },
   workspaces: { defaultDestination: "last-used", lastUsed: {} },
@@ -280,7 +275,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     const [store, setStore, , ready] = persisted({ key: "settings.v3" }, settingsPersistence, defaultSettings)
     const showFileTree = withFallback(() => store.general?.showFileTree, defaultSettings.general.showFileTree)
     const showSearch = withFallback(() => store.general?.showSearch, defaultSettings.general.showSearch)
-    const showStatus = withFallback(() => store.general?.showStatus, defaultSettings.general.showStatus)
     const showCustomAgents = withFallback(
       () => store.general?.showCustomAgents,
       defaultSettings.general.showCustomAgents,
@@ -288,8 +282,12 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
     createEffect(() => {
       if (typeof document === "undefined") return
       const root = document.documentElement
-      root.style.setProperty("--font-family-mono", monoFontFamily(store.appearance?.mono))
+      const mono = monoFontFamily(store.appearance?.mono)
+      root.style.setProperty("--font-family-mono", mono)
       root.style.setProperty("--font-family-sans", sansFontFamily(store.appearance?.sans))
+      // Inline code can first appear during history backfill. Load its selected
+      // face with the shell so that font discovery does not resize that mount.
+      void document.fonts?.load(`440 13px ${mono}`).catch(() => undefined)
     })
 
     return {
@@ -317,14 +315,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         showSearch,
         setShowSearch(value: boolean) {
           setStore("general", "showSearch", value)
-        },
-        showStatus,
-        setShowStatus(value: boolean) {
-          setStore("general", "showStatus", value)
-        },
-        showProjectIcon: withFallback(() => store.general?.showProjectIcon, defaultSettings.general.showProjectIcon),
-        setShowProjectIcon(value: boolean) {
-          setStore("general", "showProjectIcon", value)
         },
         showTerminal: withFallback(() => store.general?.showTerminal, defaultSettings.general.showTerminal),
         setShowTerminal(value: boolean) {
@@ -360,18 +350,26 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setFollowUpBehavior(value: FollowUpBehavior) {
           setStore("general", "followUpBehavior", value)
         },
-        experimentalBrowser: withFallback(
-          () => store.general?.experimentalBrowser,
-          defaultSettings.general.experimentalBrowser,
+      },
+      sessionSummary: {
+        projectExpanded: withFallback(
+          () => store.sessionSummary?.projectExpanded,
+          defaultSettings.sessionSummary.projectExpanded,
         ),
-        setExperimentalBrowser(value: boolean) {
-          setStore("general", "experimentalBrowser", value)
+        serverExpanded: withFallback(
+          () => store.sessionSummary?.serverExpanded,
+          defaultSettings.sessionSummary.serverExpanded,
+        ),
+        setProjectExpanded(value: boolean) {
+          setStore("sessionSummary", "projectExpanded", value)
+        },
+        setServerExpanded(value: boolean) {
+          setStore("sessionSummary", "serverExpanded", value)
         },
       },
       visibility: {
         fileTree: showFileTree,
         search: showSearch,
-        status: showStatus,
         customAgents: showCustomAgents,
       },
       appearance: {
@@ -394,13 +392,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         tabLayout: withFallback(() => store.appearance?.tabLayout, defaultSettings.appearance.tabLayout),
         setTabLayout(value: TabLayout) {
           setStore("appearance", "tabLayout", value)
-        },
-        showProjectName: withFallback(
-          () => store.appearance?.showProjectName,
-          defaultSettings.appearance.showProjectName,
-        ),
-        setShowProjectName(value: boolean) {
-          setStore("appearance", "showProjectName", value)
         },
       },
       keybinds: {

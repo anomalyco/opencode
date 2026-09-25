@@ -71,6 +71,10 @@ async function main() {
             void ready.then(() => pane.layout(win, bindingID, layout))
           },
           command: (command) => ready.then(() => pane.command(win, bindingID, command)),
+          capture: (tabID) =>
+            ready
+              .then(() => pane.capture(win, bindingID, tabID))
+              .then((data) => data && new Blob([data], { type: "image/jpeg" })),
           close: () => {
             listeners.delete(bindingID)
             void ready.then(() => pane.close(win, bindingID)).catch(() => {})

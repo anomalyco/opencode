@@ -11,6 +11,7 @@ import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useCommand } from "@/shell/commands/command"
+import type { Browser } from "@opencode/plugin-browser/rpc"
 import type { createSessionBrowser } from "./model"
 
 export function SessionBrowserPane(props: { browser: ReturnType<typeof createSessionBrowser>; visible: boolean }) {
@@ -20,22 +21,37 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
   const command = useCommand()
   const state = props.browser.active
   const address = () => (state()?.url === "about:blank" ? "" : (state()?.url ?? ""))
+  const failed = () => !!state()?.loadError
   const registration = props.browser.registration
   const button = { variant: "ghost", size: "large" } as const
   const [store, setStore] = createStore({
     address: "",
     editing: false,
+    submitted: false,
+    // A submitted navigation the browser has not reported yet; keeps the empty state hidden meanwhile.
+    navigating: false,
     visible: typeof document === "undefined" || document.visibilityState === "visible",
+    // A still of the page shown in the DOM while floating content covers the hidden native view.
+    snapshot: undefined as { tabID: Browser.TabID; url: string } | undefined,
   })
+  const empty = () => !address() && !state()?.loading && !store.navigating
   let surface: HTMLDivElement | undefined
   let addressDisplay: HTMLDivElement | undefined
   let frame: number | undefined
   let layout: string | undefined
   let until = 0
+  let capturing: Browser.TabID | undefined
+  let release: ReturnType<typeof setTimeout> | undefined
   const canvas = document.createElement("canvas")
   canvas.width = canvas.height = 1
   const paint = canvas.getContext("2d", { willReadFrequently: true })
   const scheme = () => store.address.match(/^https?:\/\//i)?.[0] ?? ""
+  const error = () => {
+    const value = props.browser.error()
+    if (value === "browser.pane.replaced") return language.t("session.browser.replaced")
+    if (value === "browser.pane.unsupported") return language.t("session.browser.unsupported")
+    return value
+  }
 
   command.register("browser.navigation", () => [
     {
@@ -43,7 +59,7 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
       title: language.t("command.browser.reload"),
       category: language.t("command.category.view"),
       keybind: "f5",
-      disabled: !props.visible || !state(),
+      disabled: !props.visible || !address(),
       onSelect: () => {
         const tab = state()
         if (tab) props.browser.command({ type: "reload", tabID: tab.id })
@@ -58,6 +74,45 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
       const r = el.getBoundingClientRect()
       return r.width > 0 && r.left < rect.right && r.right > rect.left && r.top < rect.bottom && r.bottom > rect.top
     })
+  const replaceSnapshot = (next?: { tabID: Browser.TabID; url: string }) => {
+    if (store.snapshot?.url) URL.revokeObjectURL(store.snapshot.url)
+    setStore("snapshot", next)
+  }
+  // Keep the page on screen as a still under the floating content. The native view
+  // stays visible until the still has decoded, so the pane never flashes blank.
+  const freeze = (tabID: Browser.TabID) => {
+    clearTimeout(release)
+    release = undefined
+    if (store.snapshot?.tabID === tabID || capturing === tabID) return
+    capturing = tabID
+    void (registration()?.capture(tabID) ?? Promise.resolve(null))
+      .catch(() => null)
+      .then(async (blob) => {
+        const url = blob ? URL.createObjectURL(blob) : ""
+        if (url) {
+          const image = new Image()
+          image.src = url
+          await image.decode().catch(() => undefined)
+        }
+        if (capturing !== tabID) {
+          if (url) URL.revokeObjectURL(url)
+          return
+        }
+        capturing = undefined
+        // A failed capture still hides the page; the pane shows its background as before.
+        replaceSnapshot({ tabID, url })
+        schedule()
+      })
+  }
+  const thaw = () => {
+    capturing = undefined
+    if (!store.snapshot || release !== undefined) return
+    // Keep the still under the native view until the view has painted again.
+    release = setTimeout(() => {
+      release = undefined
+      replaceSnapshot()
+    }, 150)
+  }
   const measure = () => {
     if (!surface) return
     const tab = state()
@@ -71,7 +126,13 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
     const top = Math.round(rect.top * zoom)
     const right = Math.round(rect.right * zoom)
     const bottom = Math.round(rect.bottom * zoom)
-    const visible = props.visible && store.visible && !dialog.active && !covered(rect)
+    // The desktop page hides blank and loading documents itself; only hide here
+    // while the pane shows its own empty or failed state over the surface.
+    const shown = props.visible && store.visible && !empty() && !failed() && !dialog.active
+    const cover = covered(rect)
+    if (shown && cover) freeze(tab.id)
+    if (!cover) thaw()
+    const visible = shown && !(cover && store.snapshot?.tabID === tab.id)
     // The cutout exposes the app backdrop outside the rounded Review card,
     // not the browser surface inside it.
     const color = getComputedStyle(
@@ -107,7 +168,32 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
     if (frame === undefined) frame = requestAnimationFrame(tick)
   }
 
-  createEffect(() => !store.editing && setStore("address", address()))
+  createEffect(on([() => state()?.id, address], () => !store.editing && setStore("address", address())))
+  // Any reported movement, including a rejected or blocked request, ends the submitted navigation.
+  createEffect(
+    on(
+      [() => state()?.id, () => state()?.generation, () => state()?.loading, () => props.browser.error()],
+      () => setStore("navigating", false),
+      { defer: true },
+    ),
+  )
+  // A blocked or rejected submission leaves the page where it was; show that page's URL again.
+  createEffect(
+    on(
+      () => props.browser.error(),
+      (error) => {
+        if (error && !store.editing) setStore("address", address())
+      },
+      { defer: true },
+    ),
+  )
+  createEffect(
+    on(registration, (current) => {
+      // Session routes can change before this pane unmounts. Hide the registration
+      // that owned the native view, rather than reading the destination's handle.
+      onCleanup(() => current?.setLayout())
+    }),
+  )
   createEffect(
     on(
       [
@@ -116,10 +202,18 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
         () => store.visible,
         () => props.visible,
         () => state()?.id,
+        empty,
+        failed,
         registration,
       ],
       () => {
         layout = undefined
+        // Native views are not clipped by the retained panel's DOM. Hide before
+        // the next animation frame so closing the panel cannot leave its page above the app.
+        if (!props.visible || !store.visible || dialog.active || !state()) {
+          registration()?.setLayout()
+          return
+        }
         schedule(300)
       },
     ),
@@ -140,12 +234,14 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
   createEventListener(document, "visibilitychange", () => setStore("visible", document.visibilityState === "visible"))
   onCleanup(() => {
     if (frame !== undefined) cancelAnimationFrame(frame)
-    registration()?.setLayout()
+    clearTimeout(release)
+    capturing = undefined
+    replaceSnapshot()
   })
 
   return (
     <aside id="browser-panel" class="relative size-full min-w-0 overflow-hidden bg-v2-background-bg-base flex flex-col">
-      <div class="h-10 shrink-0 flex items-center gap-1 px-2 border-b border-v2-border-border-muted">
+      <div class="h-10 shrink-0 flex items-center gap-1 px-3 border-b border-v2-border-border-muted">
         <For each={["back", "forward"] as const}>
           {(direction) => (
             <Tooltip placement="top" value={language.t(direction === "back" ? "common.goBack" : "common.goForward")}>
@@ -181,7 +277,7 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
         >
           <IconButton
             {...button}
-            disabled={!state()}
+            disabled={!state()?.loading && !address()}
             aria-label={language.t(state()?.loading ? "prompt.action.stop" : "error.page.action.reload")}
             onClick={() => {
               const tab = state()
@@ -200,8 +296,13 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
           onSubmit={(event) => {
             event.preventDefault()
             const tab = state()
-            if (tab && store.address.trim())
-              props.browser.command({ type: "navigate", tabID: tab.id, url: store.address })
+            const url = store.address.trim()
+            if (!tab) return
+            if (url || failed()) {
+              setStore({ submitted: true, address: url, navigating: true })
+              props.browser.command({ type: "navigate", tabID: tab.id, url: url || "about:blank" })
+            }
+            event.currentTarget.querySelector("input")?.blur()
           }}
         >
           <input
@@ -212,8 +313,14 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
             disabled={!state()}
             placeholder={language.t("session.browser.address.placeholder")}
             aria-label={language.t("session.browser.address")}
-            onFocus={() => setStore("editing", true)}
-            onBlur={() => setStore({ editing: false, address: address() })}
+            onFocus={(event) => {
+              setStore("editing", true)
+              event.currentTarget.select()
+            }}
+            onClick={(event) => event.currentTarget.select()}
+            onBlur={() =>
+              setStore({ editing: false, address: store.submitted ? store.address : address(), submitted: false })
+            }
             onInput={(event) => setStore("address", event.currentTarget.value)}
             onScroll={(event) => {
               if (addressDisplay) addressDisplay.scrollLeft = event.currentTarget.scrollLeft
@@ -231,12 +338,41 @@ export function SessionBrowserPane(props: { browser: ReturnType<typeof createSes
           </div>
         </form>
       </div>
-      <Show when={props.browser.error()}>
-        <div class="shrink-0 px-3 py-1.5 text-12-regular text-text-danger-base border-b border-v2-border-border-muted">
-          {props.browser.error()}
+      <Show when={error() && !failed()}>
+        <div
+          class="shrink-0 px-3 py-1.5 text-12-regular text-text-danger-base border-b border-v2-border-border-muted"
+          role="alert"
+          aria-live="assertive"
+        >
+          {error()}
         </div>
       </Show>
-      <div ref={surface} class="min-h-0 flex-1 bg-v2-background-bg-base flex items-center justify-center">
+      <div ref={surface} class="relative min-h-0 flex-1 bg-v2-background-bg-base flex items-center justify-center">
+        <Show when={store.snapshot?.tabID === state()?.id && !empty() && !failed() && store.snapshot?.url}>
+          {(url) => (
+            <img
+              src={url()}
+              alt=""
+              draggable={false}
+              class="absolute inset-0 size-full pointer-events-none select-none"
+            />
+          )}
+        </Show>
+        <Show when={(empty() || failed()) && !props.browser.suspended()}>
+          {/* Add the 40px toolbar to the file empty state's 160px bottom padding to align their centers. */}
+          <div
+            dir="auto"
+            class="flex size-full flex-col items-center justify-center gap-2 p-6 pb-[200px] text-center text-text-weak"
+          >
+            <Icon name="globe" size="large" class="mb-2 shrink-0" />
+            <div class="text-[13px] font-medium leading-[var(--line-height-compact)] text-text-strong">
+              {language.t(failed() ? "session.browser.failed.title" : "session.browser.empty.title")}
+            </div>
+            <div class="text-13-regular leading-[var(--line-height-base)]">
+              {language.t(failed() ? "session.browser.failed.description" : "session.browser.empty.description")}
+            </div>
+          </div>
+        </Show>
         <Show when={props.browser.suspended()}>
           <p class="px-6 text-center text-13-regular text-v2-text-text-subtle" role="status">
             {language.t("session.browser.suspended")}

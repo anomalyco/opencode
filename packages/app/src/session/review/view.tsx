@@ -14,11 +14,8 @@ import { ReviewPanel } from "./panel"
 import { SessionReviewTab } from "./review-tab"
 import type { ChangeMode, SessionReviewModel } from "./model"
 import type { createSessionBrowser } from "../browser/model"
-
-const StatusDrawer = lazy(async () => {
-  const { StatusDrawer } = await import("@/shell/status/status-drawer")
-  return { default: StatusDrawer }
-})
+import type { SessionBtwModel } from "../btw/model"
+import { SessionBtwPanel } from "../btw/panel"
 
 const MobilePanelDrawer = lazy(async () => {
   const { MobilePanelDrawer } = await import("@/shell/mobile-panel-drawer")
@@ -34,11 +31,9 @@ export function SessionMobileViewTabs(props: {
   const language = useLanguage()
   const [store, setStore] = createStore({
     menu: false,
-    status: false,
-    statusLoaded: false,
     details: false,
     detailsLoaded: false,
-    pending: undefined as "status" | "details" | undefined,
+    pending: false,
   })
   createEffect(() => props.onDetailsOpenChange?.(store.details))
   onCleanup(() => props.onDetailsOpenChange?.(false))
@@ -95,32 +90,18 @@ export function SessionMobileViewTabs(props: {
             onCloseAutoFocus={(event) => {
               if (!store.pending) return
               event.preventDefault()
-              if (store.pending === "status") setStore({ status: true, statusLoaded: true })
-              if (store.pending === "details") setStore({ details: true, detailsLoaded: true })
-              setStore("pending", undefined)
+              setStore({ details: true, detailsLoaded: true, pending: false })
             }}
           >
             <Menu.Item onSelect={() => props.onSelect("usage")}>{language.t("session.tab.usage")}</Menu.Item>
             <Show when={props.details}>
-              <Menu.Item onSelect={() => setStore({ pending: "details", menu: false })}>
+              <Menu.Item onSelect={() => setStore({ pending: true, menu: false })}>
                 {language.t("session.summary.title")}
               </Menu.Item>
             </Show>
-            <Menu.Item onSelect={() => setStore({ pending: "status", menu: false })}>
-              {language.t("status.popover.trigger")}
-            </Menu.Item>
           </Menu.Content>
         </Menu.Portal>
       </Menu>
-      <Show when={store.statusLoaded}>
-        <Suspense>
-          <StatusDrawer
-            open={store.status}
-            onOpenChange={(open) => setStore("status", open)}
-            returnFocus={() => trigger}
-          />
-        </Suspense>
-      </Show>
       <Show when={store.detailsLoaded}>
         <Suspense>
           <MobilePanelDrawer
@@ -148,6 +129,7 @@ export function SessionMobileReview(props: { review: SessionReviewModel }) {
 export function SessionDesktopReview(props: {
   review: SessionReviewModel
   browser: ReturnType<typeof createSessionBrowser>
+  btw: SessionBtwModel
   present?: boolean
 }) {
   return (
@@ -174,6 +156,7 @@ export function SessionDesktopReview(props: {
         size={props.review.screen.size}
         stacked={props.review.screen.side.layout().stacked}
         browser={props.browser}
+        btwPanel={() => <SessionBtwPanel btw={props.btw} />}
       />
     </Suspense>
   )
@@ -270,7 +253,7 @@ function ReviewTitle(props: { review: SessionReviewModel }) {
 function ReviewEmpty(props: { review: SessionReviewModel; loadingClass: string }) {
   const language = useLanguage()
   const loading = () => (props.review.mode() === "git" || props.review.mode() === "branch") && !props.review.ready()
-  const noGit = () => props.review.mode() === "turn" && props.review.noGit()
+  const noGit = () => props.review.noGit()
   const text = () => {
     if (props.review.mode() === "git") return language.t("session.review.noUncommittedChanges")
     if (props.review.mode() === "branch") return language.t("session.review.noBranchChanges")
@@ -303,7 +286,7 @@ function ReviewEmpty(props: { review: SessionReviewModel; loadingClass: string }
 function ReviewPanelEmpty(props: { review: SessionReviewModel }) {
   const language = useLanguage()
   const loading = () => (props.review.mode() === "git" || props.review.mode() === "branch") && !props.review.ready()
-  const noGit = () => props.review.mode() === "turn" && props.review.noGit()
+  const noGit = () => props.review.noGit()
   return (
     <Switch>
       <Match when={loading()}>

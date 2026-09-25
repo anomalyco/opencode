@@ -16,6 +16,13 @@ export class TimeoutConfig extends Schema.Class<TimeoutConfig>("Mcp.TimeoutConfi
   }),
 }) {}
 
+export type Protocol = typeof Protocol.Type
+export const Protocol = Schema.Literals(["legacy", "auto", "2026-07-28"]).annotate({
+  identifier: "Mcp.Protocol",
+  description:
+    'MCP protocol negotiation. "legacy" (default) opens with the initialize handshake and speaks protocol revisions up to 2025-11-25. "auto" probes for the 2026-07-28 revision and falls back to legacy when the server does not support it. "2026-07-28" requires that revision and fails otherwise.',
+})
+
 export class LocalConfig extends Schema.Class<LocalConfig>("Mcp.LocalConfig")({
   type: Schema.Literal("local"),
   command: Schema.String.pipe(Schema.Array),
@@ -28,6 +35,7 @@ export class LocalConfig extends Schema.Class<LocalConfig>("Mcp.LocalConfig")({
     description: "Expose this server's tools through Code Mode. Defaults to true.",
   }),
   timeout: TimeoutConfig.pipe(optional),
+  protocol: Protocol.pipe(optional),
 }) {}
 
 export class OAuthConfig extends Schema.Class<OAuthConfig>("Mcp.OAuthConfig")({
@@ -36,6 +44,10 @@ export class OAuthConfig extends Schema.Class<OAuthConfig>("Mcp.OAuthConfig")({
   scope: Schema.String.pipe(optional),
   callback_port: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })).pipe(optional),
   redirect_uri: Schema.String.pipe(optional),
+  auth_server_metadata_url: Schema.String.pipe(optional).annotate({
+    description:
+      "URL of the OAuth or OpenID Connect authorization server metadata document. Set when the MCP server does not publish protected resource metadata that names its authorization server.",
+  }),
 }) {}
 
 export class RemoteConfig extends Schema.Class<RemoteConfig>("Mcp.RemoteConfig")({
@@ -48,6 +60,7 @@ export class RemoteConfig extends Schema.Class<RemoteConfig>("Mcp.RemoteConfig")
     description: "Expose this server's tools through Code Mode. Defaults to true.",
   }),
   timeout: TimeoutConfig.pipe(optional),
+  protocol: Protocol.pipe(optional),
 }) {}
 
 export const ServerConfig = Schema.Union([LocalConfig, RemoteConfig]).pipe(Schema.toTaggedUnion("type"))
@@ -65,7 +78,7 @@ const Disabled = Schema.Struct({ status: Schema.Literal("disabled") }).annotate(
 const Failed = Schema.Struct({ status: Schema.Literal("failed"), error: Schema.String }).annotate({
   identifier: "Mcp.Status.Failed",
 })
-const NeedsAuth = Schema.Struct({ status: Schema.Literal("needs_auth") }).annotate({
+const NeedsAuth = Schema.Struct({ status: Schema.Literal("needs_auth"), error: Schema.String }).annotate({
   identifier: "Mcp.Status.NeedsAuth",
 })
 

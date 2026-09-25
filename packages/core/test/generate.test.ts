@@ -3,11 +3,10 @@ import { LanguageModel } from "@opencode/ai"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
 import { AISDK } from "@opencode/core/aisdk"
-import { Catalog } from "@opencode/core/catalog"
 import { Generate } from "@opencode/core/generate"
 import { Integration } from "@opencode/core/integration"
 import { ModelResolver } from "@opencode/core/model-resolver"
-import { ID, Info, Ref } from "@opencode/core/model"
+import { ID, Info, Model, Ref } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { Npm } from "@opencode/util/npm"
 import { Effect, Layer } from "effect"
@@ -19,21 +18,14 @@ const selected = Info.make({
 })
 const runtime = LanguageModel.make({ id: "gemini", provider: "test-provider", route: OpenAIChat.route })
 
-const catalog = Layer.mock(Catalog.Service, {
-  provider: {
-    get: () => Effect.undefined,
-    all: () => Effect.die("unused"),
-    available: () => Effect.die("unused"),
-  },
-  model: {
-    get: () => Effect.succeed(selected),
-    all: () => Effect.die("unused"),
-    available: () => Effect.die("unused"),
-    default: () => Effect.die("unused"),
-    small: () => Effect.die("unused"),
-  },
+const providers = Layer.mock(Provider.Service, {
+  get: () => Effect.undefined,
+})
+const models = Layer.mock(Model.Service, {
+  get: () => Effect.succeed(selected),
 })
 const integrations = Layer.mock(Integration.Service, {
+  revision: () => 0,
   connection: {
     active: () => Effect.undefined,
     resolve: () => Effect.die("unused"),
@@ -67,7 +59,7 @@ const aisdk = Layer.mock(AISDK.Service, {
 })
 const client = TestLLM.testLayer({ fallback: TestLLM.text("OK", "generate") })
 
-const resolver = ModelResolver.layer.pipe(Layer.provide(Layer.mergeAll(catalog, integrations, npm, aisdk)))
+const resolver = ModelResolver.layer.pipe(Layer.provide(Layer.mergeAll(providers, models, integrations, npm, aisdk)))
 const it = testEffect(Generate.layer.pipe(Layer.provide(Layer.merge(resolver, client))))
 const resolverIt = testEffect(resolver)
 
@@ -94,7 +86,6 @@ resolverIt.effect("resolves dynamic models with their catalog metadata", () =>
       capabilities: selected.capabilities,
       cost: selected.cost,
       limit: selected.limit,
-      websocket: true,
     })
   }),
 )

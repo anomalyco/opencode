@@ -17,14 +17,12 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { CodeMode, Tool } from "../src/index.js"
-import { AsyncIteratorSymbol, IteratorSymbol } from "../src/interpreter/model.js"
-import { objectAssign } from "../src/stdlib/object.js"
 
 // Standard-library value types: Date, RegExp, Map, Set. Programs use them as ordinary JS;
 // intra-CodeMode checkpoints (Object.* helpers, spread, coercion inputs) preserve the live
-// values, while at the host boundary (final result, tool arguments, JSON.stringify) they
-// serialize exactly as JSON.stringify would: Date -> ISO string (invalid -> null),
-// URL -> href, and RegExp/Map/Set/URLSearchParams -> {}.
+// values. JSON.stringify keeps Date -> ISO string (invalid -> null), URL -> href, and
+// RegExp/Map/Set/URLSearchParams -> {}. The host boundary matches that except URLSearchParams,
+// which cross as their query string, and Set, which crosses as an array.
 const run = (code: string) => Effect.runPromise(CodeMode.execute({ code, tools: {} }))
 const value = async (code: string) => {
   const result = await run(code)
@@ -239,7 +237,7 @@ describe("RegExp", () => {
     ).toEqual(["1", "22"])
   })
 
-  test("lastIndex is writable and exec coerces its stored value", async () => {
+  test("lastIndex is writable and stores a number", async () => {
     expect(
       await value(`
         const pattern = /(?:ab|cd)\\d?/g
@@ -247,41 +245,114 @@ describe("RegExp", () => {
         const stored = [pattern.lastIndex, typeof pattern.lastIndex]
         const match = pattern.exec("aacd2233ab12nm444ab42")
         pattern.lastIndex = 0
-        return [stored, match[0], match.index, pattern.lastIndex, delete pattern.lastIndex]
+        return [stored, match[0], match.index, pattern.lastIndex]
       `),
-    ).toEqual([["12", "string"], "ab4", 17, 0, false])
+    ).toEqual([[12, "number"], "ab4", 17, 0])
+    // lastIndex is a prototype accessor, so delete is a no-op rather than a TypeError.
+    expect(await value(`const re = /a/; return [delete re.lastIndex, re.lastIndex]`)).toEqual([true, 0])
   })
 
-  test("exec coerces CodeMode data objects assigned to lastIndex", async () => {
+  test("a non-numeric lastIndex runs from 0; non-global exec and test leave it alone", async () => {
     expect(
       await value(`
         const pattern = /a/g
         pattern.lastIndex = {}
-        const stored = pattern.lastIndex
         const match = pattern.exec("ba")
         pattern.lastIndex = 10
         const missed = pattern.exec("a")
-        return [stored, match.index, pattern.lastIndex, missed]
+        const plain = /a/
+        plain.lastIndex = 5
+        return [match.index, pattern.lastIndex, missed, plain.exec("ba").index, plain.test("ba"), plain.lastIndex]
       `),
-    ).toEqual([{}, 1, 0, null])
+    ).toEqual([1, 0, null, 1, true, 5])
   })
 
-  test("non-global exec and test coerce and preserve lastIndex", async () => {
+  test("String methods read and update lastIndex like exec", async () => {
     expect(
       await value(`
-        const execPattern = /a/
-        const execIndex = {}
-        execPattern.lastIndex = execIndex
-        const match = execPattern.exec("ba")
-
-        const testPattern = /a/
-        const testIndex = {}
-        testPattern.lastIndex = testIndex
-        const matched = testPattern.test("ba")
-
-        return [match.index, execPattern.lastIndex === execIndex, matched, testPattern.lastIndex === testIndex]
+        const re = /a/y
+        re.exec("aa")
+        re.lastIndex = 0
+        return ["aa".replace(re, "b"), re.lastIndex]
       `),
-    ).toEqual([1, true, true, true])
+    ).toEqual(["ba", 1])
+    expect(
+      await value(`
+        const re = /a/g
+        re.exec("aaa")
+        return ["aaa".match(re), re.lastIndex]
+      `),
+    ).toEqual([["a", "a", "a"], 0])
+    expect(
+      await value(`
+        const re = /a/g
+        re.lastIndex = 2
+        return ["aaa".replace(re, () => "b"), re.lastIndex]
+      `),
+    ).toEqual(["bbb", 0])
+    expect(
+      await value(`
+        const re = /a/g
+        re.lastIndex = 2
+        return ["aaa".replaceAll(re, "b"), re.lastIndex]
+      `),
+    ).toEqual(["bbb", 0])
+    expect(
+      await value(`
+        const re = /a/y
+        re.lastIndex = 1
+        const m = "baa".match(re)
+        return [m.index, re.lastIndex]
+      `),
+    ).toEqual([1, 2])
+  })
+
+  test("split, search, and matchAll leave lastIndex unchanged like JS", async () => {
+    expect(
+      await value(`
+        const re = /a/y
+        re.lastIndex = 2
+        return ["banana".split(re), re.lastIndex]
+      `),
+    ).toEqual([["b", "n", "n", ""], 2])
+    expect(
+      await value(`
+        const re = /a/g
+        re.lastIndex = 2
+        return ["banana".search(re), re.lastIndex]
+      `),
+    ).toEqual([1, 2])
+    expect(
+      await value(`
+        const re = /a/y
+        re.lastIndex = 2
+        return ["banana".search(re), re.lastIndex]
+      `),
+    ).toEqual([-1, 2])
+    expect(
+      await value(`
+        const re = /a/g
+        re.lastIndex = 2
+        return ["banana".matchAll(re).map((m) => m.index), re.lastIndex]
+      `),
+    ).toEqual([[3, 5], 2])
+    expect(
+      await value(`
+        const re = /a/gy
+        re.lastIndex = 1
+        return ["banana".matchAll(re).map((m) => m.index), re.lastIndex]
+      `),
+    ).toEqual([[1], 1])
+  })
+
+  test("String methods leave lastIndex untouched without g or y", async () => {
+    expect(
+      await value(`
+        const re = /a/
+        re.lastIndex = 5
+        return ["aaa".replace(re, "b"), "aaa".match(re).index, "aaa".split(re), "aaa".search(re), re.lastIndex]
+      `),
+    ).toEqual(["baa", 0, ["", "", "", ""], 0, 5])
   })
 
   test("an unmatched string pattern returns null", async () => {
@@ -381,10 +452,12 @@ describe("RegExp", () => {
     expect((await error(`return "aa".matchAll(/a/)`)).message).toContain("write /a/g, or use String.match")
   })
 
-  test("a non-pattern argument names the expected shapes", async () => {
-    const err = await error(`return "abc".match(42)`)
-    expect(err.message).toContain("expects a regular expression")
-    expect(err.message).toContain("not number")
+  test("any argument is a pattern string, as new RegExp(arg) reads it", async () => {
+    expect(
+      await value(
+        `return ["a42b".match(42)[0], "xnullx".search(null), "abc".match(undefined), [..."1a1".matchAll(1)].length]`,
+      ),
+    ).toEqual(["42", 1, [""], 2])
   })
 
   test("source and flags properties read through", async () => {
@@ -395,8 +468,8 @@ describe("RegExp", () => {
     })
   })
 
-  test("regexes serialize to {} at the boundary, like JSON", async () => {
-    expect(await value(`return /a/`)).toEqual({})
+  test("regexes serialize as {} like JSON.stringify, at the boundary and inside the program", async () => {
+    expect(await value(`return [/a/, { r: /b/gi }]`)).toEqual([{}, { r: {} }])
     expect(await value(`return JSON.stringify({ r: /a/g })`)).toBe('{"r":{}}')
   })
 
@@ -522,7 +595,7 @@ describe("URL and URI helpers", () => {
       cannotParse: false,
       parsed: "https://example.test/users",
       invalidIsTypeError: true,
-      boundary: ["https://example.test/a", {}],
+      boundary: ["https://example.test/a", "q=one"],
       json: '{"url":"https://example.test/a","params":{}}',
     })
   })
@@ -564,6 +637,154 @@ describe("URL and URI helpers", () => {
   })
 })
 
+describe("Headers", () => {
+  test("constructs from records, pairs, Maps, and Headers; names fold to lowercase and values combine", async () => {
+    expect(
+      await value(`
+        const headers = new Headers({ "Content-Type": "text/plain", "X-Count": 1, "X-Null": null })
+        headers.append("Accept", "text/html")
+        headers.append("accept", "application/json")
+        headers.set("x-count", "2")
+        headers.delete("x-null")
+        const copy = new Headers(headers)
+        copy.set("content-type", "text/html")
+        return {
+          get: headers.get("content-type"),
+          missing: headers.get("x-missing"),
+          combined: headers.get("ACCEPT"),
+          has: [headers.has("Accept"), headers.has("x-null")],
+          count: headers.get("x-count"),
+          copied: [headers.get("content-type"), copy.get("content-type")],
+          pairs: [...new Headers([["b", "2"], ["A", "1"]])],
+          map: [...new Headers(new Map([["k", "v"]]))],
+          keys: [...headers.keys()],
+          values: [...headers.values()],
+          entries: [...headers.entries()],
+        }
+      `),
+    ).toEqual({
+      get: "text/plain",
+      missing: null,
+      combined: "text/html, application/json",
+      has: [true, false],
+      count: "2",
+      copied: ["text/plain", "text/html"],
+      pairs: [
+        ["a", "1"],
+        ["b", "2"],
+      ],
+      map: [["k", "v"]],
+      keys: ["accept", "content-type", "x-count"],
+      values: ["text/html, application/json", "text/plain", "2"],
+      entries: [
+        ["accept", "text/html, application/json"],
+        ["content-type", "text/plain"],
+        ["x-count", "2"],
+      ],
+    })
+  })
+
+  test("iterates in sorted order everywhere iteration is allowed, and getSetCookie keeps cookies apart", async () => {
+    expect(
+      await value(`
+        const headers = new Headers({ b: "2", a: "1" })
+        headers.append("Set-Cookie", "x=1")
+        headers.append("set-cookie", "y=2")
+        const seen = []
+        headers.forEach((value, name, self) => seen.push(name + "=" + value + ":" + (self === headers)))
+        const [first] = headers
+        function* pairs() { yield* headers }
+        return {
+          seen,
+          first,
+          spread: [...headers],
+          from: Array.from(headers).length,
+          generator: [...pairs()].length,
+          object: Object.fromEntries(headers),
+          cookies: headers.getSetCookie(),
+        }
+      `),
+    ).toEqual({
+      seen: ["a=1:true", "b=2:true", "set-cookie=x=1:true", "set-cookie=y=2:true"],
+      first: ["a", "1"],
+      spread: [
+        ["a", "1"],
+        ["b", "2"],
+        ["set-cookie", "x=1"],
+        ["set-cookie", "y=2"],
+      ],
+      from: 4,
+      generator: 4,
+      object: { a: "1", b: "2", "set-cookie": "y=2" },
+      cookies: ["x=1", "y=2"],
+    })
+  })
+
+  test("serializes as a name-to-value object at the boundary and in JSON; prints for console", async () => {
+    const result = await run(`
+      const headers = new Headers({ "X-A": "1", b: "2" })
+      console.log(headers)
+      return { headers, json: JSON.stringify({ headers }), text: String(headers), type: typeof headers, is: headers instanceof Headers }
+    `)
+    expect(result.ok && result.value).toEqual({
+      headers: { b: "2", "x-a": "1" },
+      json: '{"headers":{"b":"2","x-a":"1"}}',
+      text: "[object Headers]",
+      type: "object",
+      is: true,
+    })
+    expect(result.ok && result.logs?.[0]).toBe('Headers {"b":"2","x-a":"1"}')
+  })
+
+  test("rejects what it cannot build from, and invalid names and values, with TypeErrors the program can catch", async () => {
+    expect(
+      await value(`
+        function message(run) {
+          try { run(); return null } catch (error) { return error instanceof TypeError ? error.message : error }
+        }
+        const headers = new Headers()
+        return [
+          message(() => Headers()),
+          message(() => new Headers(null)),
+          message(() => new Headers(1)),
+          message(() => new Headers("a=1")),
+          message(() => new Headers(new Date())),
+          message(() => new Headers(() => 1)),
+          message(() => new Headers([["name"]])),
+          message(() => new Headers([["a", "b", "c"]])),
+          message(() => new Headers({ "bad name": "x" })),
+          message(() => new Headers({ name: "bad\u0000value" })),
+          message(() => headers.get("invalid\u0100")),
+          message(() => headers.has({})),
+          message(() => headers.set("a", "invalid\u0100")),
+          message(() => headers.append("a")),
+          message(() => headers.forEach()),
+          message(() => headers.forEach(1)),
+          message(() => { const get = headers.get; return get("a") }),
+        ]
+      `),
+    ).toEqual([
+      "Constructor Headers requires 'new'.",
+      "new Headers(...) expects a record of names to values, iterable [name, value] pairs, or Headers.",
+      "new Headers(...) expects a record of names to values, iterable [name, value] pairs, or Headers.",
+      "new Headers(...) expects a record of names to values, iterable [name, value] pairs, or Headers.",
+      "new Headers(...) expects a record of names to values, iterable [name, value] pairs, or Headers.",
+      "new Headers(...) expects a record of names to values, iterable [name, value] pairs, or Headers.",
+      "new Headers(...) expects iterable [name, value] pairs.",
+      "new Headers(...) expects iterable [name, value] pairs.",
+      expect.stringContaining("bad name"),
+      expect.stringContaining("invalid value"),
+      expect.stringContaining("Invalid header name"),
+      expect.stringContaining("[object Object]"),
+      expect.stringContaining("invalid value"),
+      "Headers.append requires 2 arguments.",
+      "Headers.forEach requires 1 argument.",
+      "Headers.forEach expects a function callback.",
+      "Headers.prototype.get called on incompatible receiver undefined.",
+    ])
+  })
+})
+
 describe("Map", () => {
   test("get/set/has/size with chaining", async () => {
     expect(
@@ -597,18 +818,28 @@ describe("Map", () => {
     expect((await error(`return new Map(["flat"])`)).message).toMatch(/\[key, value\] pairs/)
   })
 
-  test("keys/values/entries return arrays", async () => {
+  test("keys/values/entries return live iterators", async () => {
     expect(
       await value(`
       const m = new Map([["a", 1], ["b", 2]])
-      return { keys: m.keys(), values: m.values(), entries: m.entries() }
+      const keys = m.keys()
+      const first = keys.next()
+      m.set("c", 3)
+      return { first, rest: [...keys], values: [...m.values()], entries: [...m.entries()], same: [...m[Symbol.iterator]()] }
     `),
     ).toEqual({
-      keys: ["a", "b"],
-      values: [1, 2],
+      first: { value: "a", done: false },
+      rest: ["b", "c"],
+      values: [1, 2, 3],
       entries: [
         ["a", 1],
         ["b", 2],
+        ["c", 3],
+      ],
+      same: [
+        ["a", 1],
+        ["b", 2],
+        ["c", 3],
       ],
     })
   })
@@ -669,6 +900,42 @@ describe("Map", () => {
     ).toEqual({ a: 3, b: 1, c: 1 })
   })
 
+  test("getOrInsert and getOrInsertComputed insert only when the key is missing", async () => {
+    expect(
+      await value(`
+      const groups = new Map()
+      groups.getOrInsert("a", []).push(1)
+      groups.getOrInsert("a", []).push(2)
+      let calls = 0
+      const computed = (key) => { calls++; return key + "!" }
+      const first = groups.getOrInsertComputed("b", computed)
+      const second = groups.getOrInsertComputed("b", computed)
+      const zero = groups.getOrInsertComputed(-0, (key) => 1 / key === Infinity)
+      return [[...groups], first, second, calls, zero]
+    `),
+    ).toEqual([
+      [
+        ["a", [1, 2]],
+        ["b", "b!"],
+        [0, true],
+      ],
+      "b!",
+      "b!",
+      1,
+      true,
+    ])
+    expect(
+      await value(`
+      const m = new Map()
+      const outer = m.getOrInsertComputed("k", () => { m.set("k", "inner"); return "outer" })
+      let thrown
+      try { m.getOrInsertComputed("j", () => { throw new Error("boom") }) } catch (error) { thrown = error.message }
+      return [outer, m.get("k"), thrown, m.has("j")]
+    `),
+    ).toEqual(["outer", "outer", "boom", false])
+    expect((await error(`new Map().getOrInsertComputed("k", 5)`)).message).toContain("expects a function callback")
+  })
+
   test("maps serialize to {} at the boundary, like JSON", async () => {
     expect(await value(`return new Map([["a", 1]])`)).toEqual({})
     expect(await value(`return JSON.stringify(new Map([["a", 1]]))`)).toBe("{}")
@@ -682,6 +949,19 @@ describe("Map", () => {
 })
 
 describe("Set", () => {
+  test("forEach is live on Map and Set: deleted entries are skipped and added ones visited", async () => {
+    expect(
+      await value(`
+        const m = new Map([[1, "a"], [2, "b"]])
+        const s = new Set([1, 2])
+        const seen = []
+        m.forEach((v, k) => { seen.push(k); if (k === 1) { m.delete(2); m.set(3, "c") } })
+        s.forEach((v) => { seen.push(v); if (v === 1) { s.delete(2); s.add(3) } })
+        return seen
+      `),
+    ).toEqual([1, 3, 1, 3])
+  })
+
   test("add/has/delete/size with chaining", async () => {
     expect(
       await value(`
@@ -716,20 +996,531 @@ describe("Set", () => {
     ).toBe(6)
   })
 
-  test("sets serialize to {} at the boundary, like JSON", async () => {
-    expect(await value(`return { s: new Set([1]) }`)).toEqual({ s: {} })
+  test("sets cross the boundary as arrays; JSON.stringify keeps {} like JS", async () => {
+    expect(await value(`return { s: new Set([1, "a", { n: 1 }, undefined]) }`)).toEqual({ s: [1, "a", { n: 1 }, null] })
+    expect(await value(`return JSON.stringify(new Set([1]))`)).toBe("{}")
+  })
+})
+
+describe("Uint8Array", () => {
+  test("constructs from a length, an array, an iterable, or another Uint8Array", async () => {
+    expect(
+      await value(`
+      const a = new Uint8Array(2)
+      const b = new Uint8Array([1, 2, 300])
+      const c = Uint8Array.from(new Set([7, 8]))
+      const d = new Uint8Array(b)
+      d[0] = 9
+      return [[...a], [...b], [...c], [...d], [...b], new Uint8Array("3").length, [...Uint8Array.of(1, "2")]]
+    `),
+    ).toEqual([[0, 0], [1, 2, 44], [7, 8], [9, 2, 44], [1, 2, 44], 3, [1, 2]])
+    expect((await error(`new Uint8Array(-1)`)).message).toContain("Invalid typed array length: -1")
+    expect((await error(`new Uint8Array(1.5)`)).message).toContain("Invalid typed array length")
+    expect((await error(`new Uint8Array(20_000_000)`)).message).toContain("Invalid array length")
+    expect((await error(`Uint8Array.from(/x/)`)).message).toContain("received a RegExp")
+  })
+
+  test("index reads and writes clamp to a byte and ignore out-of-range writes, like JS", async () => {
+    expect(
+      await value(`
+      const b = new Uint8Array(3)
+      b[0] = 300
+      b[1] = -1
+      b["2"] = "7"
+      b[5] = 9
+      b.tag = "x"
+      return [b[0], b[1], b[2], b[5], b.length, Object.keys(b), 1 in b, 5 in b, b.tag]
+    `),
+    ).toEqual([44, 255, 7, null, 3, ["0", "1", "2", "tag"], true, false, "x"])
+    expect((await error(`delete new Uint8Array(1)[0]`)).message).toContain("Cannot delete property '0'")
+    expect((await error(`Uint8Array.prototype.length`)).message).toContain("incompatible receiver")
+  })
+
+  test("iteration, spread, destructuring, and Array.from", async () => {
+    expect(
+      await value(`
+      const b = new Uint8Array([1, 2, 3])
+      const [x, ...rest] = b
+      const seen = []
+      for (const byte of b) seen.push(byte)
+      function* g() { yield* b }
+      return [x, rest, seen, [...g()], Array.from(b, (n) => n * 2), new Set(b).size, Array.isArray(b)]
+    `),
+    ).toEqual([1, [2, 3], [1, 2, 3], [1, 2, 3], [2, 4, 6], 3, false])
+  })
+
+  test("methods", async () => {
+    expect(
+      await value(`
+      const b = Uint8Array.from([1, 2, 3, 2])
+      const view = b.subarray(1, 3)
+      view.fill(9)
+      const copy = b.slice(0, 2)
+      copy[0] = 5
+      const target = new Uint8Array(4)
+      target.set([1, 2], 2)
+      target.set(b.subarray(0, 1))
+      return [
+        b.at(-1), [...b], [...copy], [...target], b.indexOf(9), b.lastIndexOf(9), b.includes(3), b.includes(2, 1),
+        b.join("-"), b.toString(), [...b.keys()], [...b.values()], [...b.entries()], [...Uint8Array.from([1, 2]).reverse()],
+      ]
+    `),
+    ).toEqual([
+      2,
+      [1, 9, 9, 2],
+      [5, 9],
+      [1, 0, 1, 2],
+      1,
+      2,
+      false,
+      true,
+      "1-9-9-2",
+      "1,9,9,2",
+      [0, 1, 2, 3],
+      [1, 9, 9, 2],
+      [
+        [0, 1],
+        [1, 9],
+        [2, 9],
+        [3, 2],
+      ],
+      [2, 1],
+    ])
+    expect((await error(`new Uint8Array(2).set([1, 2, 3])`)).message).toContain("does not fit")
+    expect((await error(`new Uint8Array(2).set([1], 2)`)).message).toContain("does not fit")
+  })
+
+  test("base64 and hex", async () => {
+    expect(
+      await value(`
+      return [
+        new Uint8Array([104, 105]).toBase64(), new Uint8Array([255, 0]).toHex(),
+        [...Uint8Array.fromBase64("aGk=")], [...Uint8Array.fromHex("ff00")],
+      ]
+    `),
+    ).toEqual(["aGk=", "ff00", [104, 105], [255, 0]])
+    expect(await error(`Uint8Array.fromBase64("!!!")`)).toMatchObject({
+      message: expect.stringContaining("SyntaxError"),
+    })
+    expect(await error(`Uint8Array.fromHex("zz")`)).toMatchObject({ message: expect.stringContaining("SyntaxError") })
+  })
+
+  test("coercion, console, JSON, and Object.prototype.toString", async () => {
+    expect(
+      await value(`
+      const b = new Uint8Array([1, 2])
+      console.log(b, new Uint8Array())
+      return [String(b), b + "", +new Uint8Array([5]), Number.isNaN(Number(b)), b == "1,2", JSON.stringify(b), b.toLocaleString(), typeof b, b instanceof Uint8Array]
+    `),
+    ).toEqual(["1,2", "1,2", 5, true, true, '{"0":1,"1":2}', "1,2", "object", true])
+    expect((await run(`console.log(new Uint8Array([1, 2]), new Uint8Array())`)).logs).toEqual([
+      "Uint8Array(2) [1,2] Uint8Array(0) []",
+    ])
+  })
+
+  test("cannot cross the tool boundary; the error says how to encode it", async () => {
+    expect((await error(`return new Uint8Array(1)`)).message).toContain("pass text instead")
+    expect((await error(`return { deep: [new Uint8Array(1)] }`)).message).toContain("bytes.toBase64()")
+    expect(await value(`return new Uint8Array([7, 8]).toBase64()`)).toBe("Bwg=")
+  })
+})
+
+describe("TextEncoder and TextDecoder", () => {
+  test("round-trips UTF-8 and exposes the standard fields", async () => {
+    expect(
+      await value(`
+      const encoder = new TextEncoder()
+      const bytes = encoder.encode("héllo ✓")
+      const decoder = new TextDecoder()
+      return [
+        [...bytes], decoder.decode(bytes), decoder.decode(), [...encoder.encode()], encoder.encoding,
+        decoder.encoding, decoder.fatal, decoder.ignoreBOM, new TextDecoder("UTF8", { fatal: true }).fatal,
+        new TextDecoder().decode(new Uint8Array([0xef, 0xbb, 0xbf, 0x41])),
+        new TextDecoder("utf-8", { ignoreBOM: true }).decode(new Uint8Array([0xef, 0xbb, 0xbf, 0x41])),
+        new TextDecoder().decode(new Uint8Array([0xff])),
+        encoder instanceof TextEncoder, decoder instanceof TextDecoder,
+      ]
+    `),
+    ).toEqual([
+      [104, 195, 169, 108, 108, 111, 32, 226, 156, 147],
+      "héllo ✓",
+      "",
+      [],
+      "utf-8",
+      "utf-8",
+      false,
+      false,
+      true,
+      "A",
+      "\ufeffA",
+      "\ufffd",
+      true,
+      true,
+    ])
+  })
+
+  test("only UTF-8 is supported; fatal decoding rejects malformed input", async () => {
+    expect((await error(`new TextDecoder("latin1")`)).message).toContain('The "latin1" encoding is not supported')
+    expect((await error(`new TextDecoder("utf-8", { fatal: true }).decode(new Uint8Array([0xff]))`)).message).toContain(
+      "not valid utf-8",
+    )
+    expect((await error(`new TextDecoder().decode("text")`)).message).toContain(
+      "expects a Uint8Array, received a string",
+    )
+    expect((await error(`TextDecoder()`)).message).toContain("requires 'new'")
+  })
+
+  test("crypto.getRandomValues fills the given bytes in place", async () => {
+    expect(
+      await value(
+        `const b = new Uint8Array(16); const same = crypto.getRandomValues(b) === b; return [same, b.length, b.some((n) => n !== 0)]`,
+      ),
+    ).toEqual([true, 16, true])
+    expect((await error(`crypto.getRandomValues([1])`)).message).toContain("expects a Uint8Array, received an array")
+  })
+})
+
+describe("Iterator helpers", () => {
+  test("lazy helpers chain over collection iterators and generators, one source step per result", async () => {
+    expect(
+      await value(`
+        const pulled = []
+        function* naturals() { let n = 0; while (true) { pulled.push(n); yield n++ } }
+        const squares = naturals().map((n) => n * n).filter((n) => n % 2 === 0).drop(1).take(3)
+        const first = squares.next()
+        return {
+          first,
+          rest: squares.toArray(),
+          after: squares.next(),
+          pulled,
+          values: new Map([["a", 1], ["b", 2]]).values().map((v, i) => v * 10 + i).toArray(),
+          flat: [1, 2].values().flatMap((n) => [n, [n]]).toArray(),
+          entries: [...new Map([[1, 2]]).entries().map(([k, v]) => k + v)],
+        }
+      `),
+    ).toEqual({
+      first: { value: 4, done: false },
+      rest: [16, 36],
+      after: { done: true },
+      pulled: [0, 1, 2, 3, 4, 5, 6],
+      values: [10, 21],
+      flat: [1, [1], 2, [2]],
+      entries: [3],
+    })
+  })
+
+  test("eager helpers consume the source and close it on early exit", async () => {
+    expect(
+      await value(`
+        const log = []
+        function* g() { try { yield 1; yield 2; yield 3 } finally { log.push("closed") } }
+        const seen = []
+        g().forEach((v, i) => seen.push([v, i]))
+        return {
+          seen,
+          sum: g().reduce((a, b) => a + b),
+          sumFrom: g().reduce((a, b) => a + b, 10),
+          some: g().some((v) => v === 2),
+          every: g().every((v) => v < 2),
+          find: g().find((v) => v > 1),
+          missing: g().find((v) => v > 5),
+          log,
+        }
+      `),
+    ).toEqual({
+      seen: [
+        [1, 0],
+        [2, 1],
+        [3, 2],
+      ],
+      sum: 6,
+      sumFrom: 16,
+      some: true,
+      every: false,
+      find: 2,
+      log: ["closed", "closed", "closed", "closed", "closed", "closed", "closed"],
+    })
+  })
+
+  test("a helper closes its source when a callback throws, on return(), and on early for...of exit", async () => {
+    expect(
+      await value(`
+        const log = []
+        function* g(name) { try { yield 1; yield 2 } finally { log.push(name) } }
+        const throwing = g("throw").map((v) => { if (v === 2) throw new Error("boom"); return v })
+        throwing.next()
+        let message
+        try { throwing.next() } catch (error) { message = error.message }
+        const returned = g("return").map((v) => v)
+        returned.next()
+        const closed = returned.return()
+        for (const v of g("loop").filter((v) => true)) break
+        return { message, afterThrow: throwing.next(), closed, afterReturn: returned.next(), log }
+      `),
+    ).toEqual({
+      message: "boom",
+      afterThrow: { done: true },
+      closed: { done: true },
+      afterReturn: { done: true },
+      log: ["throw", "return", "loop"],
+    })
+  })
+
+  test("collection iterators have no return() and continue after an early exit, as in JS", async () => {
+    expect(
+      await value(`
+        const it = [1, 2, 3].values()
+        const found = it.some((v) => v === 2)
+        return [typeof it.return, found, it.next().value, typeof it.map(x => x).return]
+      `),
+    ).toEqual(["undefined", true, 3, "function"])
+  })
+
+  test("Iterator.from and the abstract Iterator constructor", async () => {
+    expect(
+      await value(`
+        const it = [1].values()
+        let n = 0
+        const errors = []
+        for (const attempt of [() => Iterator(), () => new Iterator(), () => Iterator.from(5)]) {
+          try { attempt() } catch (error) { errors.push(error.name) }
+        }
+        return [
+          Iterator.from(it) === it,
+          Iterator.from("ab").toArray(),
+          Iterator.from([1, 2]).map((v) => v * 2).toArray(),
+          Iterator.from({ next: () => ({ done: n > 1, value: n++ }) }).toArray(),
+          it instanceof Iterator,
+          errors,
+        ]
+      `),
+    ).toEqual([true, ["a", "b"], [2, 4], [0, 1], true, ["TypeError", "TypeError", "TypeError"]])
+  })
+
+  test("argument validation", async () => {
+    const cases: Array<[string, string]> = [
+      ["[1].values().map(1)", "Iterator.prototype.map expects a function callback."],
+      ["[1].values().take(-1)", "Iterator.prototype.take expects a non-negative count, received -1."],
+      ["[1].values().drop()", "Iterator.prototype.drop expects a non-negative count, received NaN."],
+      [
+        "[1].values().flatMap((v) => 'ab').toArray()",
+        "Iterator.prototype.flatMap expects an iterable or iterator, received a string.",
+      ],
+      ["[].values().reduce((a, b) => a)", "Iterator.prototype.reduce of an empty iterator with no initial value."],
+    ]
+    for (const [code, message] of cases) {
+      expect((await error(`return ${code}`)).message).toContain(message)
+    }
+    expect(
+      await error(`
+        function* g() { while (true) yield 1 }
+        const it = g().map(() => it.next())
+        return it.next()
+      `),
+    ).toMatchObject({ message: expect.stringContaining("Iterator helper is already running.") })
+  })
+})
+
+describe("built-in iterators", () => {
+  test("keys/values/entries and [Symbol.iterator] step with next() and stay live", async () => {
+    expect(
+      await value(`
+        const items = ["a"]
+        const it = items.entries()
+        items.push("b")
+        const steps = [it.next(), it.next(), it.next()]
+        items.push("c")
+        return { steps, after: it.next(), same: items[Symbol.iterator] === items.values }
+      `),
+    ).toEqual({
+      steps: [{ value: [0, "a"], done: false }, { value: [1, "b"], done: false }, { done: true }],
+      after: { done: true },
+      same: true,
+    })
+    expect(
+      await value(`
+        const s = new Set([1, 2])
+        const u = new URLSearchParams("a=1&b=2")
+        const h = new Headers({ b: "2", a: "1" })
+        const bytes = new Uint8Array([7, 8])
+        return [
+          [...s.entries()], [...s[Symbol.iterator]()], s[Symbol.iterator] === s.values,
+          [...u.keys()], [...u[Symbol.iterator]()], u[Symbol.iterator] === u.entries,
+          [...h.values()], [...h[Symbol.iterator]()], h[Symbol.iterator] === h.entries,
+          [...bytes.entries()], [...bytes[Symbol.iterator]()], bytes[Symbol.iterator] === bytes.values,
+          [..."ab"[Symbol.iterator]()],
+        ]
+      `),
+    ).toEqual([
+      [
+        [1, 1],
+        [2, 2],
+      ],
+      [1, 2],
+      true,
+      ["a", "b"],
+      [
+        ["a", "1"],
+        ["b", "2"],
+      ],
+      true,
+      ["1", "2"],
+      [
+        ["a", "1"],
+        ["b", "2"],
+      ],
+      true,
+      [
+        [0, 7],
+        [1, 8],
+      ],
+      [7, 8],
+      true,
+      ["a", "b"],
+    ])
+  })
+
+  test("iterators are consumed once by every iteration site", async () => {
+    expect(
+      await value(`
+        const it = [1, 2, 3, 4].values()
+        const picked = []
+        for (const item of it) { picked.push(item); if (item === 2) break }
+        const [third] = it
+        return { picked, third, rest: [...it], spent: Array.from(it), again: it[Symbol.iterator]() === it }
+      `),
+    ).toEqual({ picked: [1, 2], third: 3, rest: [4], spent: [], again: true })
+    expect(
+      await value(`
+        const m = new Map([["a", 1], ["b", 2]])
+        return [
+          Object.fromEntries(m.entries()), Array.from(m.keys(), (k) => k + "!"), new Set(m.values()).size,
+          await Promise.all([Promise.resolve(1), 2].values()),
+        ]
+      `),
+    ).toEqual([{ a: 1, b: 2 }, ["a!", "b!"], 2, [1, 2]])
+    expect(await value(`let s = 0; for await (const v of [Promise.resolve(1), 2].values()) s += v; return s`)).toBe(3)
+    expect(
+      await value(`return new Set([1, 2]).union({ size: 1, has: () => false, keys: () => new Set([3]).keys() })`),
+    ).toEqual([1, 2, 3])
+  })
+
+  test("iterators are opaque references", async () => {
+    expect(await value(`return [1].keys()`)).toEqual({})
+    expect(await value(`return JSON.stringify({ it: [1].keys() })`)).toBe('{"it":{}}')
+    expect(await value(`return [typeof [1].keys(), Array.isArray([1].keys()), Object.keys([1].keys())]`)).toEqual([
+      "object",
+      false,
+      [],
+    ])
+    const logged = await run(`console.log([1].keys()); return null`)
+    expect(logged.logs?.[0]).toBe("[opaque reference]")
+    expect((await error(`return [1].keys() + ""`)).message).toContain("Binary operators require data values")
+    expect((await error(`return [1].keys().next.call({})`)).message).toContain(
+      "Iterator.prototype.next called on incompatible receiver a data object",
+    )
+    expect((await error(`const it = [1].keys(); const next = it.next; return next()`)).message).toContain(
+      "Iterator.prototype.next called on incompatible receiver undefined",
+    )
+  })
+})
+
+describe("Object.prototype.toString", () => {
+  test("reports the built-in kind it is inherited by, as JS does through Symbol.toStringTag", async () => {
+    expect(
+      await value(`
+      return [
+        new Map().toString(), new Set().toString(), new Headers().toString(), Promise.resolve(1).toString(),
+        [1].values().toString(), ({}).toString(), String(new Map()), String(Promise.resolve(1)),
+        \`\${new Set([1])}\`, [new Map()] + "", new Map() == "[object Map]",
+      ]
+    `),
+    ).toEqual([
+      "[object Map]",
+      "[object Set]",
+      "[object Headers]",
+      "[object Promise]",
+      "[object Iterator]",
+      "[object Object]",
+      "[object Map]",
+      "[object Promise]",
+      "[object Set]",
+      "[object Map]",
+      true,
+    ])
+  })
+})
+
+describe("console.log of errors", () => {
+  test("prints name and message, nested too", async () => {
+    const result = await run(`console.log(new Error("boom"), { e: new RangeError("r") })`)
+    expect(result.logs).toEqual(['Error: boom {"e":RangeError: r}'])
+  })
+})
+
+describe("toLocaleString", () => {
+  test("numbers and dates format as en-US in UTC; everything else falls back to toString", async () => {
+    expect(
+      await value(`
+      return [
+        (1234567.891).toLocaleString(), new Date(0).toLocaleString(), new Date(0).toLocaleDateString(),
+        new Date(0).toLocaleTimeString(), "a".toLocaleString(), true.toLocaleString(), ({}).toLocaleString(),
+        ({ toString: () => "custom" }).toLocaleString(), new Uint8Array([1, 2]).toLocaleString(),
+      ]
+    `),
+    ).toEqual([
+      "1,234,567.891",
+      "1/1/1970, 12:00:00 AM",
+      "1/1/1970",
+      "12:00:00 AM",
+      "a",
+      "true",
+      "[object Object]",
+      "custom",
+      "1,2",
+    ])
+  })
+
+  test("arrays join each element's toLocaleString, skipping holes and nullish elements", async () => {
+    expect(
+      await value(`
+      let calls = 0
+      const item = { toLocaleString() { calls++; return "o" } }
+      return [[1234.5, "x", null, undefined, item, new Date(0)].toLocaleString(), [, item, , item].toLocaleString(), calls]
+    `),
+    ).toEqual(["1,234.5,x,,,o,1/1/1970, 12:00:00 AM", ",o,,o", 3])
+    expect((await error(`const f = ({}).toLocaleString; f()`)).message).toContain(
+      "Object.prototype.toLocaleString called on null or undefined",
+    )
+  })
+
+  test("toLocaleLowerCase and toLocaleUpperCase ignore the locale argument", async () => {
+    expect(
+      await value(`return ["ABC".toLocaleLowerCase("tr"), "abc".toLocaleUpperCase(), "İ".toLocaleLowerCase()]`),
+    ).toEqual(["abc", "ABC", "i̇"])
   })
 })
 
 describe("stdlib integration", () => {
+  test("constructor follows own keys, shadowing, writes, and new", async () => {
+    expect(
+      await value(`return [JSON.parse('{"constructor":"Foo"}').constructor, ({ constructor: 1 }).constructor]`),
+    ).toEqual(["Foo", 1])
+    expect(await value(`const Array = 5; return [].constructor.isArray([])`)).toBe(true)
+    expect(await value(`const o = {}; o.constructor = 7; return o.constructor`)).toBe(7)
+    expect(await value(`return new ([].constructor)(3).length`)).toBe(3)
+    expect(await value(`return typeof ({}).constructor`)).toBe("function")
+    expect(await value(`return ({}).constructor.constructor === Function`)).toBe(true)
+  })
+
   test("new dispatches on the constructor value, not its name", async () => {
     expect(await value(`const D = Date; return new D(0) instanceof Date`)).toBe(true)
     expect(await value(`const make = (C) => new C([["a", 1]]); return make(Map).get("a")`)).toBe(1)
     expect(await value(`const t = { M: Map }; return new t.M() instanceof Map`)).toBe(true)
     const shadowed = await error(`const Date = 5; return new Date()`)
-    expect(shadowed.message).toStartWith("Date is not a constructor.")
+    expect(shadowed.message).toStartWith("TypeError: Date is not a constructor.")
     const fn = await error(`const f = () => 1; return new f()`)
-    expect(fn.message).toStartWith("f cannot be constructed")
+    expect(fn.message).toStartWith("TypeError: f cannot be constructed")
   })
 
   test("Object.is uses SameValue semantics", async () => {
@@ -746,8 +1537,8 @@ describe("stdlib integration", () => {
     ).toEqual([true, false, true, false])
   })
 
-  test("Object.is rejects opaque runtime references", async () => {
-    expect((await error(`return Object.is(Math.max, Math.max)`)).kind).toBe("InvalidDataValue")
+  test("Object.is compares opaque runtime references by identity", async () => {
+    expect(await value(`return [Object.is(Math.max, Math.max), Object.is(Math.max, Math.min)]`)).toEqual([true, false])
   })
 
   test("Object values and entries accept arrays", async () => {
@@ -759,13 +1550,18 @@ describe("stdlib integration", () => {
       ],
     ])
     expect(await value(`const match = /a/.exec("ba"); return [Object.values(match), Object.entries(match)]`)).toEqual([
-      ["a", 1],
+      ["a", 1, "ba"],
       [
         ["0", "a"],
         ["index", 1],
+        ["input", "ba"],
       ],
     ])
-    expect(await value(`return Object.keys(Object.values({ match: /a/.exec("ba") })[0])`)).toEqual(["0", "index"])
+    expect(await value(`return Object.keys(Object.values({ match: /a/.exec("ba") })[0])`)).toEqual([
+      "0",
+      "index",
+      "input",
+    ])
   })
 
   test("Object.fromEntries accepts every supported entry collection", async () => {
@@ -838,86 +1634,6 @@ describe("stdlib integration", () => {
     expect(await value(`try { Object.assign(null, { a: 1 }); return false } catch { return true }`)).toBe(true)
   })
 
-  test("Object.assign ignores non-enumerable supported symbols without reading them", () => {
-    const target = {}
-    const reads: Array<boolean> = []
-    const source = Object.defineProperty({}, IteratorSymbol, {
-      get() {
-        reads.push(true)
-        return target
-      },
-    })
-    expect(objectAssign([target, source], { type: "CallExpression", start: 0, end: 0 })).toBe(target)
-    expect(reads).toEqual([])
-    expect(Object.hasOwn(target, IteratorSymbol)).toBe(false)
-  })
-
-  test("Object.assign ignores nested non-enumerable supported symbols during cycle checks", () => {
-    const target = {}
-    const reads: Array<boolean> = []
-    const nested = Object.defineProperty({}, IteratorSymbol, {
-      get() {
-        reads.push(true)
-        return target
-      },
-    })
-    expect(objectAssign([target, { nested }], { type: "CallExpression", start: 0, end: 0 })).toBe(target)
-    expect(reads).toEqual([])
-    expect(target).toEqual({ nested })
-  })
-
-  test("Object.assign rejects cycles through supported symbols on nested arrays", () => {
-    const target = {}
-    const nested = Object.defineProperty([], IteratorSymbol, { enumerable: true, value: target })
-    expect(() => objectAssign([target, { nested }], { type: "CallExpression", start: 0, end: 0 })).toThrow(
-      "Object.assign result contains a circular value.",
-    )
-    expect(Object.hasOwn(target, "nested")).toBe(false)
-  })
-
-  test("Object.assign cycle checks traverse sparse keys lazily", () => {
-    const target = {}
-    const reads: Array<boolean> = []
-    const nested = Object.defineProperties([], {
-      4294967294: { enumerable: true, value: target },
-      later: {
-        enumerable: true,
-        get() {
-          reads.push(true)
-          return null
-        },
-      },
-    })
-    expect(() => objectAssign([target, { nested }], { type: "CallExpression", start: 0, end: 0 })).toThrow(
-      "Object.assign result contains a circular value.",
-    )
-    expect(reads).toEqual([])
-  })
-
-  test("Object.assign stops after a supported symbol write fails", () => {
-    const previous = () => ({ done: true })
-    const target = Object.defineProperty({}, IteratorSymbol, { value: previous })
-    const reads: Array<boolean> = []
-    const source = Object.defineProperties(
-      {},
-      {
-        [IteratorSymbol]: { enumerable: true, value: () => ({ done: false }) },
-        [AsyncIteratorSymbol]: {
-          enumerable: true,
-          get() {
-            reads.push(true)
-            return () => ({ done: true })
-          },
-        },
-      },
-    )
-    expect(() => objectAssign([target, source], { type: "CallExpression", start: 0, end: 0 })).toThrow(
-      "Object.assign could not assign property",
-    )
-    expect(Reflect.get(target, IteratorSymbol)).toBe(previous)
-    expect(reads).toEqual([])
-  })
-
   test("Object.assign rejects direct and nested cycles", async () => {
     expect(
       await value(`
@@ -987,27 +1703,6 @@ describe("stdlib integration", () => {
         return [result === target, result.left === shared, result.left === result.right, shared.count]
       `),
     ).toEqual([true, true, true, 2])
-  })
-
-  test("Object.assign traverses shared aliases once", () => {
-    const reads: Array<boolean> = []
-    const shared = Object.defineProperty({}, "value", {
-      enumerable: true,
-      get() {
-        reads.push(true)
-        return 1
-      },
-    })
-    const target = {}
-    expect(
-      objectAssign([target, { left: shared, right: shared }], {
-        type: "CallExpression",
-        start: 0,
-        end: 0,
-      }),
-    ).toBe(target)
-    expect(target).toEqual({ left: shared, right: shared })
-    expect(reads).toEqual([true])
   })
 
   test("assignment resolves and reads its left side before evaluating the right side", async () => {
@@ -1119,7 +1814,7 @@ describe("CodeMode values at intra-CodeMode checkpoints", () => {
     const diagnostic = await error(`return Object.keys(Promise.resolve({ a: 1 }))`)
     expect(diagnostic.kind).toBe("InvalidDataValue")
     expect(diagnostic.message).toContain("await")
-    expect((await error(`return Object.keys(Math)`)).kind).toBe("InvalidDataValue")
+    expect(await value(`return Object.keys(Math)`)).toEqual([])
   })
 
   test("Object.assign keeps Maps usable", async () => {
@@ -1188,7 +1883,7 @@ describe("CodeMode values at intra-CodeMode checkpoints", () => {
     const diagnostic = await error(`return Array.from(Promise.resolve([1]))`)
     expect(diagnostic.kind).toBe("InvalidDataValue")
     expect(diagnostic.message).toContain("await")
-    expect((await error(`return Array.from(() => 1)`)).kind).toBe("InvalidDataValue")
+    expect(await value(`return Array.from((a, b) => 1)`)).toEqual([null, null])
   })
 
   test("regexes stay callable through Object.values", async () => {
@@ -1228,5 +1923,99 @@ describe("CodeMode values at intra-CodeMode checkpoints", () => {
     )
     expect(result.ok).toBe(true)
     expect(observed).toStrictEqual([{ when: "1970-01-01T00:00:00.000Z", tags: {} }])
+  })
+})
+
+describe("Uint8Array callback methods", () => {
+  test("map and filter return new Uint8Arrays with clamped bytes", async () => {
+    expect(
+      await value(`
+      const b = new Uint8Array([1, 2, 3])
+      const mapped = b.map((byte) => byte * 100)
+      const filtered = b.filter((byte) => byte > 1)
+      mapped[0] = 9
+      return [
+        [...mapped], mapped instanceof Uint8Array, Array.isArray(mapped), [...b], [...filtered],
+        [...b.map(() => "7")], b.map((byte) => byte, {}).length, [...new Uint8Array().map((byte) => byte)],
+      ]
+    `),
+    ).toEqual([[9, 200, 44], true, false, [1, 2, 3], [2, 3], [7, 7, 7], 3, []])
+  })
+
+  test("find, findIndex, findLast, findLastIndex, some, every, and forEach", async () => {
+    expect(
+      await value(`
+      const b = new Uint8Array([1, 2, 3])
+      const seen = []
+      b.forEach((byte, index, array) => seen.push([byte, index, array === b]))
+      return [
+        b.find((byte) => byte > 1), b.find((byte) => byte > 5) === undefined, b.findIndex((byte) => byte > 1),
+        b.findIndex((byte) => byte > 5), b.findLast((byte) => byte < 3), b.findLastIndex((byte) => byte < 3),
+        b.findLastIndex((byte) => byte > 9), b.some((byte) => byte > 2), b.every((byte) => byte > 2),
+        new Uint8Array().some(() => true), new Uint8Array().every(() => false),
+        b.every((byte, index, array) => array === b), seen,
+      ]
+    `),
+    ).toEqual([
+      2,
+      true,
+      1,
+      -1,
+      2,
+      1,
+      -1,
+      true,
+      false,
+      false,
+      true,
+      true,
+      [
+        [1, 0, true],
+        [2, 1, true],
+        [3, 2, true],
+      ],
+    ])
+  })
+
+  test("reduce and reduceRight", async () => {
+    expect(
+      await value(`
+      const b = new Uint8Array([1, 2, 3])
+      return [
+        b.reduce((sum, byte) => sum + byte), b.reduce((sum, byte) => sum + byte, 10),
+        b.reduceRight((text, byte) => text + byte, ""), new Uint8Array().reduce((sum, byte) => sum + byte, 5),
+        b.reduce((_, byte, index, array) => array === b && index, 0),
+      ]
+    `),
+    ).toEqual([6, 16, "321", 5, 2])
+    expect((await error(`new Uint8Array().reduce((sum, byte) => sum + byte)`)).message).toContain(
+      "Uint8Array.reduce of an empty array with no initial value",
+    )
+    expect((await error(`new Uint8Array().reduceRight((sum, byte) => sum + byte)`)).message).toContain(
+      "Uint8Array.reduceRight of an empty array with no initial value",
+    )
+    expect((await error(`new Uint8Array([1]).map(null)`)).message).toContain("Uint8Array.map expects a function")
+  })
+
+  test("sort is numeric by default and in place, with an optional comparator", async () => {
+    expect(
+      await value(`
+      const b = new Uint8Array([10, 9, 1])
+      const same = b.sort() === b
+      const desc = new Uint8Array([3, 1, 2]).sort((x, y) => y - x)
+      return [same, [...b], [...desc], desc instanceof Uint8Array, [...new Uint8Array([2, 1]).sort(() => NaN)]]
+    `),
+    ).toEqual([true, [1, 9, 10], [3, 2, 1], true, [2, 1]])
+    expect((await error(`new Uint8Array([2, 1]).sort(null)`)).message).toContain("Uint8Array.sort expects a function")
+  })
+
+  test("lastIndexOf treats an explicit undefined fromIndex as 0", async () => {
+    expect(
+      await value(`
+      const a = [1, 2, 1]
+      const b = new Uint8Array([1, 2, 1])
+      return [a.lastIndexOf(1, undefined), a.lastIndexOf(1), a.lastIndexOf(2, undefined), b.lastIndexOf(1, undefined), b.lastIndexOf(1)]
+    `),
+    ).toEqual([0, 2, -1, 0, 2])
   })
 })

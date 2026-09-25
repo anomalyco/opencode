@@ -19,11 +19,14 @@ export type BrowserPaneCommand = Browser.Action
 export type BrowserPaneState = Browser.State | null
 export type BrowserPaneEvent =
   | { type: "focus"; tabID: Browser.TabID }
+  | { type: "preview"; path: string }
   | { type: "state"; state: BrowserPaneState; error?: string }
 
 export type BrowserPaneRegistration = {
   setLayout(layout?: BrowserPaneLayout): void
   command(command: BrowserPaneCommand): Promise<void>
+  /** Captures the shown page, or resolves null when nothing is on screen. */
+  capture(tabID: Browser.TabID): Promise<Blob | null>
   close(): void
 }
 

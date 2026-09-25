@@ -8,7 +8,7 @@ import { SidebarContext } from "../../src/feature-plugins/sidebar/context"
 function context(options?: { cost?: number; tokens?: number }) {
   const color = RGBA.fromInts(200, 200, 200)
   return {
-    theme: { text: { default: color, subdued: color } },
+    theme: { text: { base: color, muted: color } },
     data: {
       session: {
         get: () => ({ location: { directory: "/workspace" } }),

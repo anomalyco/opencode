@@ -1,53 +1,299 @@
-import { sync } from "../interpreter/host.js"
-import { InterpreterRuntimeError } from "../interpreter/model.js"
+import { Effect } from "effect"
+import { constructor, fn, type Impl, type Method, methods } from "../interpreter/native.js"
+import { checkArrayLength, checkStringLength } from "../interpreter/limits.js"
+import { invalidData, IteratorSymbol, rangeError, typeError } from "../interpreter/model.js"
+import {
+  define,
+  get,
+  hidden,
+  Arr,
+  hostIterator,
+  Obj,
+  RegExpObj,
+  record,
+  coerceToInteger,
+  coerceToNumber,
+  coerceToString,
+  type Value,
+} from "../interpreter/objects.js"
+import { containsOpaqueReference, typeofValue } from "../interpreter/references.js"
+import { applyCollectionCallback, isSupportedCallback, toPrimitiveString } from "../interpreter/callback.js"
+import type { Interpreter } from "../interpreter/interpreter.js"
+import { matchToValue, toHostRegex } from "./regexp.js"
 import { coercion } from "./value.js"
 
-export const stringMethods = new Set([
-  "toLowerCase",
-  "toUpperCase",
-  "trim",
-  "trimStart",
-  "trimEnd",
-  "split",
-  "slice",
-  "substring",
-  "includes",
-  "startsWith",
-  "endsWith",
-  "indexOf",
-  "lastIndexOf",
-  "replace",
-  "replaceAll",
-  "repeat",
-  "padStart",
-  "padEnd",
-  "charAt",
-  "charCodeAt",
-  "codePointAt",
-  "at",
-  "concat",
-  "toString",
-  "match",
-  "matchAll",
-  "search",
-  "localeCompare",
-  "normalize",
-])
+// console is intercepted by the interpreter before reaching here.
+const requireDataArgument = (name: string, index: number, arg: Value): Value => {
+  if (containsOpaqueReference(arg)) {
+    throw invalidData(`String.${name} expects argument ${index + 1} to be a data value.`)
+  }
+  return arg
+}
 
-const codeUnits = (name: string, op: (...codes: Array<number>) => string) =>
-  sync(`String.${name}`, (args, node) =>
-    op(
-      ...args.map((arg) => {
-        if (typeof arg !== "number") throw new InterpreterRuntimeError(`String.${name} expects number arguments.`, node)
-        return arg
-      }),
+const replaceAllNeedsGlobal = (pattern: RegExp) => {
+  if (!pattern.global) {
+    throw typeError(
+      `String.replaceAll requires a regular expression with the global (g) flag: write /${pattern.source}/${pattern.flags}g, or use String.replace to replace only the first match.`,
+    )
+  }
+}
+
+const replaceWithCallback = <R>(
+  ctx: Interpreter<R>,
+  value: string,
+  name: "replace" | "replaceAll",
+  args: Array<Value>,
+): Effect.Effect<Value, unknown, R> => {
+  const builtins = ctx.builtins
+  const apply = applyCollectionCallback(ctx, args[1], `String.${name}`)
+  const matches: Array<{ readonly match: string; readonly offset: number; readonly args: Array<Value> }> = []
+  // The host calls back with (match, ...captures, offset, string, groups?); only groups is not already a Value.
+  const collect = (
+    ...callbackArgs: Array<string | number | undefined | Record<string, string | undefined>>
+  ): string => {
+    const match = callbackArgs[0]
+    const hasGroups = typeof callbackArgs.at(-1) === "object"
+    const offset = callbackArgs[callbackArgs.length - (hasGroups ? 3 : 2)]
+    if (typeof match !== "string" || typeof offset !== "number") {
+      throw typeError(`String.${name} produced an invalid replacement match.`)
+    }
+    const args = callbackArgs.map((arg) => (typeof arg === "object" ? record(builtins.Object, arg) : arg))
+    matches.push({ match, offset, args })
+    return match
+  }
+
+  const pattern = args[0]
+  if (pattern instanceof RegExpObj) {
+    if (name === "replaceAll") replaceAllNeedsGlobal(pattern.regex)
+    if (name === "replace") value.replace(pattern.regex, collect)
+    else value.replaceAll(pattern.regex, collect)
+  } else {
+    const search = coerceToString(requireDataArgument(name, 0, pattern))
+    if (name === "replace") value.replace(search, collect)
+    else value.replaceAll(search, collect)
+  }
+
+  return Effect.gen(function* () {
+    const output: Array<string> = []
+    let end = 0
+    for (const match of matches) {
+      const replacement = yield* apply(match.args)
+      output.push(value.slice(end, match.offset), coerceToString(replacement))
+      end = match.offset + match.match.length
+    }
+    output.push(value.slice(end))
+    return output.join("")
+  })
+}
+
+export const stringGlobal = <R>(ctx: Interpreter<R>) => {
+  const builtins = ctx.builtins
+  const string = constructor<R>(builtins, builtins.String, {
+    name: "String",
+    length: 1,
+    call: coercion(ctx, "String").call,
+  })
+  const codeUnits = (name: string, op: (...codes: Array<number>) => string): Method => [
+    name,
+    1,
+    (_, args) => op(...args.map(coerceToNumber)),
+  ]
+  methods(builtins, string, [
+    codeUnits("fromCharCode", String.fromCharCode),
+    codeUnits("fromCodePoint", String.fromCodePoint),
+    [
+      "raw",
+      1,
+      (_, args) => {
+        const template = args[0]
+        const raw = template instanceof Obj ? get(template, "raw") : undefined
+        if (!(raw instanceof Obj)) throw typeError("String.raw expects a template object with a raw array.")
+        const count = Math.max(0, coerceToInteger(get(raw, "length")))
+        checkArrayLength(count)
+        // Each literal is followed by its substitution, except the last literal, or when substitutions run out.
+        const parts = Array.from({ length: count }, (_, index) =>
+          index + 1 < count && index + 1 < args.length ? [get(raw, index), args[index + 1]] : [get(raw, index)],
+        ).flat()
+        return Effect.map(
+          Effect.forEach(parts, (part) => toPrimitiveString(ctx, part)),
+          (strings) => {
+            const output = strings.join("")
+            checkStringLength(output.length)
+            return output
+          },
+        )
+      },
+    ],
+  ])
+
+  const self = (thisValue: Value, name: string): string => {
+    if (typeof thisValue === "string") return thisValue
+    if (thisValue === null || thisValue === undefined) {
+      throw typeError(`String.prototype.${name} called on null or undefined.`)
+    }
+    return coerceToString(thisValue)
+  }
+  // Coerce arguments like native JS; opaque runtime references still reject.
+  const str = (name: string, args: Array<Value>, index: number): string =>
+    coerceToString(requireDataArgument(name, index, args[index]))
+  const num = (name: string, args: Array<Value>, index: number): number =>
+    coerceToNumber(requireDataArgument(name, index, args[index]))
+  const optNum = (name: string, args: Array<Value>, index: number): number | undefined =>
+    args[index] === undefined ? undefined : num(name, args, index)
+  const optStr = (name: string, args: Array<Value>, index: number): string | undefined =>
+    args[index] === undefined ? undefined : str(name, args, index)
+  const rejectRegex = (name: string, args: Array<Value>): void => {
+    if (args[0] instanceof RegExpObj) {
+      throw typeError(
+        `String.${name} cannot take a regular expression; use regex.test(string) or String.search instead.`,
+      )
+    }
+  }
+  const simple = (
+    name: string,
+    length: number,
+    op: (value: string, args: Array<Value>) => ReturnType<Impl>,
+  ): Method => [name, length, (thisValue, args) => op(self(thisValue, name), args)]
+  const replace = (name: "replace" | "replaceAll") =>
+    simple(name, 2, (value, args) => {
+      if (isSupportedCallback(args[1])) return replaceWithCallback(ctx, value, name, args)
+      if (typeofValue(args[1]) === "function") {
+        throw typeError(
+          `String.${name} cannot use this callable as a replacer; wrap it in an arrow function, e.g. (match) => tools.ns.tool(match).`,
+        )
+      }
+      if (args[0] instanceof RegExpObj) {
+        const pattern = args[0].regex
+        const replacement = str(name, args, 1)
+        if (name === "replaceAll") replaceAllNeedsGlobal(pattern)
+        return name === "replace" ? value.replace(pattern, replacement) : value.replaceAll(pattern, replacement)
+      }
+      if (name === "replace") return value.replace(str(name, args, 0), str(name, args, 1))
+      return value.replaceAll(str(name, args, 0), str(name, args, 1))
+    })
+
+  methods(builtins, builtins.String, [
+    simple("toString", 0, (value) => value),
+    simple("valueOf", 0, (value) => value),
+    simple("toLowerCase", 0, (value) => value.toLowerCase()),
+    simple("toUpperCase", 0, (value) => value.toUpperCase()),
+    simple("toLocaleLowerCase", 0, (value) => value.toLowerCase()),
+    simple("toLocaleUpperCase", 0, (value) => value.toUpperCase()),
+    simple("trim", 0, (value) => value.trim()),
+    simple("trimStart", 0, (value) => value.trimStart()),
+    simple("trimLeft", 0, (value) => value.trimStart()),
+    simple("trimEnd", 0, (value) => value.trimEnd()),
+    simple("trimRight", 0, (value) => value.trimEnd()),
+    // Locale/options are deliberately unsupported; comparison uses the host default locale.
+    simple("localeCompare", 1, (value, args) => value.localeCompare(str("localeCompare", args, 0))),
+    simple("normalize", 0, (value, args) => {
+      const form = optStr("normalize", args, 0)
+      try {
+        return value.normalize(form)
+      } catch {
+        throw rangeError(
+          `String.normalize expects the form "NFC", "NFD", "NFKC", or "NFKD" (got ${JSON.stringify(form)}).`,
+        )
+      }
+    }),
+    simple("split", 2, (value, args) => {
+      const wrap = (parts: Array<string>) => new Arr(builtins.Array, parts)
+      // Native: an undefined separator returns the whole string, not a split on "undefined",
+      // unless the limit truncates to zero.
+      const requestedLimit = optNum("split", args, 1)
+      if (args[0] === undefined) {
+        return wrap(requestedLimit !== undefined && requestedLimit >>> 0 === 0 ? [] : [value])
+      }
+      const parts =
+        args[0] instanceof RegExpObj
+          ? value.split(args[0].regex, requestedLimit)
+          : value.split(str("split", args, 0), requestedLimit === undefined ? undefined : requestedLimit >>> 0)
+      checkArrayLength(parts.length)
+      return wrap(parts)
+    }),
+    simple("slice", 2, (value, args) => value.slice(optNum("slice", args, 0), optNum("slice", args, 1))),
+    simple("includes", 1, (value, args) => {
+      rejectRegex("includes", args)
+      return value.includes(str("includes", args, 0), optNum("includes", args, 1))
+    }),
+    simple("startsWith", 1, (value, args) => {
+      rejectRegex("startsWith", args)
+      return value.startsWith(str("startsWith", args, 0), optNum("startsWith", args, 1))
+    }),
+    simple("endsWith", 1, (value, args) => {
+      rejectRegex("endsWith", args)
+      return value.endsWith(str("endsWith", args, 0), optNum("endsWith", args, 1))
+    }),
+    simple("indexOf", 1, (value, args) => value.indexOf(str("indexOf", args, 0), optNum("indexOf", args, 1))),
+    simple("lastIndexOf", 1, (value, args) =>
+      value.lastIndexOf(str("lastIndexOf", args, 0), optNum("lastIndexOf", args, 1)),
     ),
+    replace("replace"),
+    replace("replaceAll"),
+    simple("match", 1, (value, args) => {
+      const pattern = toHostRegex(args[0], "match")
+      const matched = value.match(pattern)
+      if (matched === null) return null
+      // Preserve the own `index` and `groups` properties on non-global matches.
+      if (pattern.global) return new Arr(builtins.Array, [...matched])
+      return matchToValue(builtins, matched)
+    }),
+    simple("matchAll", 1, (value, args) => {
+      const pattern = toHostRegex(args[0], "matchAll", "g")
+      if (!pattern.global) {
+        throw typeError(
+          `String.matchAll requires a regular expression with the global (g) flag: write /${pattern.source}/${pattern.flags}g, or use String.match for a single match.`,
+        )
+      }
+      const matches: Array<Value> = []
+      for (const match of value.matchAll(pattern)) {
+        checkArrayLength(matches.length + 1)
+        matches.push(matchToValue(builtins, match))
+      }
+      return new Arr(builtins.Array, matches)
+    }),
+    simple("search", 1, (value, args) => value.search(toHostRegex(args[0], "search"))),
+    simple("repeat", 1, (value, args) => {
+      const count = num("repeat", args, 0)
+      if (!Number.isFinite(count) || count < 0) {
+        throw rangeError("String.repeat expects a finite non-negative count.")
+      }
+      checkStringLength(value.length * count)
+      return value.repeat(count)
+    }),
+    simple("padStart", 1, (value, args) => {
+      const length = num("padStart", args, 0)
+      checkStringLength(length)
+      return value.padStart(length, optStr("padStart", args, 1))
+    }),
+    simple("padEnd", 1, (value, args) => {
+      const length = num("padEnd", args, 0)
+      checkStringLength(length)
+      return value.padEnd(length, optStr("padEnd", args, 1))
+    }),
+    simple("charAt", 1, (value, args) => value.charAt(optNum("charAt", args, 0) ?? 0)),
+    simple("at", 1, (value, args) => value.at(optNum("at", args, 0) ?? 0)),
+    simple("substring", 2, (value, args) =>
+      value.substring(optNum("substring", args, 0) ?? 0, optNum("substring", args, 1)),
+    ),
+    simple("substr", 2, (value, args) => value.substr(optNum("substr", args, 0) ?? 0, optNum("substr", args, 1))),
+    simple("isWellFormed", 0, (value) => value.isWellFormed()),
+    simple("toWellFormed", 0, (value) => value.toWellFormed()),
+    simple("charCodeAt", 1, (value, args) => value.charCodeAt(optNum("charCodeAt", args, 0) ?? 0)),
+    simple("codePointAt", 1, (value, args) => value.codePointAt(optNum("codePointAt", args, 0) ?? 0)),
+    simple("concat", 1, (value, args) => {
+      const joined = value.concat(...args.map((_, index) => str("concat", args, index)))
+      checkStringLength(joined.length)
+      return joined
+    }),
+  ])
+  define(
+    builtins.String,
+    IteratorSymbol,
+    fn(builtins, "[Symbol.iterator]", 0, (thisValue) =>
+      hostIterator(builtins, self(thisValue, "[Symbol.iterator]")[Symbol.iterator]()),
+    ),
+    hidden,
   )
-
-export const stringGlobal = coercion("String", {
-  instanceOf: () => false,
-  members: {
-    fromCharCode: codeUnits("fromCharCode", String.fromCharCode),
-    fromCodePoint: codeUnits("fromCodePoint", String.fromCodePoint),
-  },
-})
+  return string
+}

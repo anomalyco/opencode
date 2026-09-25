@@ -1,9 +1,10 @@
 import { EventStreamCodec } from "@smithy/eventstream-codec"
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8"
 import { describe, expect } from "bun:test"
-import { Effect, Encoding, Ref, Stream } from "effect"
+import { Effect, Encoding, Ref, Schema, Stream } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import {
+  Media,
   CacheHint,
   GenerationOptions,
   type LanguageModel,
@@ -11,9 +12,11 @@ import {
   LLMEvent,
   LLMRequest,
   Message,
+  Tool,
   ToolCallPart,
   ToolChoice,
   ToolDefinition,
+  ToolRuntime,
 } from "../../src/index.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -222,6 +225,48 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("omits maxTokens only for Nova 2 at high reasoning effort", () =>
+    Effect.gen(function* () {
+      const inferenceConfig = (modelID: string, maxReasoningEffort: string) =>
+        compileRequest(
+          LLMRequest.update(baseRequest, {
+            model: AmazonBedrock.model(modelID, {
+              baseURL: "https://bedrock-runtime.test",
+              apiKey: "test-bearer",
+              body: { additionalModelRequestFields: { reasoningConfig: { type: "enabled", maxReasoningEffort } } },
+            }),
+          }),
+        ).pipe(Effect.map((prepared) => prepared.body.inferenceConfig))
+
+      expect(yield* inferenceConfig("us.amazon.nova-2-lite-v1:0", "high")).toEqual({ temperature: 0 })
+      expect(yield* inferenceConfig("us.amazon.nova-2-lite-v1:0", "low")).toEqual({ maxTokens: 64, temperature: 0 })
+      expect(yield* inferenceConfig("us.xai.grok-4.6", "high")).toEqual({ maxTokens: 64, temperature: 0 })
+    }),
+  )
+
+  it.effect("fits a Claude thinking budget below maxTokens", () =>
+    Effect.gen(function* () {
+      const fields = (maxTokens: number, budgetTokens: number, topK?: number) =>
+        compileRequest(
+          LLMRequest.update(baseRequest, {
+            model: AmazonBedrock.model("us.anthropic.claude-haiku-4-5-20251001-v1:0", {
+              baseURL: "https://bedrock-runtime.test",
+              apiKey: "test-bearer",
+              thinking: { type: "enabled", budgetTokens },
+            }),
+            generation: GenerationOptions.make({ maxTokens, topK }),
+          }),
+        ).pipe(Effect.map((prepared) => prepared.body.additionalModelRequestFields))
+
+      expect(yield* fields(64_000, 31_999)).toEqual({ thinking: { type: "enabled", budget_tokens: 31_999 } })
+      expect(yield* fields(20_000, 31_999, 40)).toEqual({
+        top_k: 40,
+        thinking: { type: "enabled", budget_tokens: 10_000 },
+      })
+      expect(yield* fields(1_500, 31_999)).toEqual({ thinking: { type: "enabled", budget_tokens: 1_024 } })
+    }),
+  )
+
   it.effect("omits additionalModelRequestFields when topK is unset", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(baseRequest)
@@ -277,6 +322,52 @@ describe("Bedrock Converse route", () => {
           toolChoice: { any: {} },
         },
       })
+    }),
+  )
+  ;["", " \t\r\n"].forEach((description) => {
+    it.effect(`omits blank tool description ${JSON.stringify(description)}`, () =>
+      Effect.gen(function* () {
+        const prepared = yield* compileRequest(
+          LLMRequest.update(baseRequest, {
+            tools: [
+              ToolDefinition.make({
+                name: "lookup",
+                description,
+                inputSchema: { type: "object", properties: { query: { type: "string" } } },
+              }),
+            ],
+          }),
+        )
+
+        expect(prepared.body.toolConfig.tools).toEqual([
+          {
+            toolSpec: {
+              name: "lookup",
+              inputSchema: { json: { type: "object", properties: { query: { type: "string" } } } },
+            },
+          },
+        ])
+        expect(prepared.body.toolConfig.tools[0].toolSpec).not.toHaveProperty("description")
+      }),
+    )
+  })
+
+  it.effect("preserves meaningful tool descriptions including surrounding whitespace", () =>
+    Effect.gen(function* () {
+      const description = " \tLookup data.\n"
+      const prepared = yield* compileRequest(
+        LLMRequest.update(baseRequest, {
+          tools: [
+            ToolDefinition.make({
+              name: "lookup",
+              description,
+              inputSchema: { type: "object" },
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.toolConfig.tools[0].toolSpec.description).toBe(description)
     }),
   )
 
@@ -348,6 +439,45 @@ describe("Bedrock Converse route", () => {
       })
     }),
   )
+  ;[
+    { name: "browser.tabs.open", expected: "browser_tabs_open" },
+    { name: "$lookup", expected: "_lookup" },
+    { name: "", expected: "_" },
+    { name: "   ", expected: "___" },
+    { name: "a".repeat(65), expected: "a".repeat(64) },
+    { name: "lookup_123-ABC", expected: "lookup_123-ABC" },
+    { name: "a".repeat(64), expected: "a".repeat(64) },
+  ].forEach((item) => {
+    it.effect(`replays historical tool name ${JSON.stringify(item.name)} within Bedrock constraints`, () =>
+      Effect.gen(function* () {
+        const call = ToolCallPart.make({ id: "call_unknown", name: item.name, input: { query: "weather" } })
+        const error = `No tool named "${item.name}" is currently available. Please use a tool from the available tool list.`
+        const request = LLM.request({
+          model,
+          cache: "none",
+          tools: [ToolDefinition.make({ name: "execute", description: "Run code", inputSchema: { type: "object" } })],
+          messages: [
+            Message.user("Check the weather"),
+            Message.assistant([call]),
+            Message.tool({ id: call.id, name: call.name, result: error, resultType: "error" }),
+            Message.user("Say OK"),
+          ],
+        })
+        const prepared = yield* compileRequest(request)
+
+        expect(prepared.body.messages[1].content).toEqual([
+          { toolUse: { toolUseId: call.id, name: item.expected, input: call.input } },
+        ])
+        expect(prepared.body.messages[2].content).toEqual([
+          { toolResult: { toolUseId: call.id, content: [{ text: error }], status: "error" } },
+          { text: "Say OK" },
+        ])
+        expect(prepared.body.toolConfig.tools.map((tool) => tool.toolSpec.name)).toEqual(["execute"])
+        expect(request.messages[1].content[0]).toEqual(call)
+        expect(call.name).toBe(item.name)
+      }),
+    )
+  })
 
   it.effect("removes empty keys recursively from outbound tool inputs without mutating history", () =>
     Effect.gen(function* () {
@@ -748,6 +878,57 @@ describe("Bedrock Converse route", () => {
         type: "finish",
         reason: { normalized: "tool-calls", raw: "tool_use" },
       })
+    }),
+  )
+
+  it.effect("rejects a provider-emitted dotted name before normalizing its replay", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(baseRequest).pipe(
+        Effect.provide(
+          fixedBytes(
+            eventStreamBody(
+              [
+                "contentBlockStart",
+                { contentBlockIndex: 0, start: { toolUse: { toolUseId: "call_unknown", name: "browser.tabs.open" } } },
+              ],
+              ["contentBlockDelta", { contentBlockIndex: 0, delta: { toolUse: { input: "{}" } } }],
+              ["contentBlockStop", { contentBlockIndex: 0 }],
+              ["messageStop", { stopReason: "tool_use" }],
+            ),
+          ),
+        ),
+      )
+      const call = response.toolCalls[0]
+      if (!call) throw new Error("Expected a tool call")
+      expect(call.name).toBe("browser.tabs.open")
+      const dispatched = yield* ToolRuntime.dispatch(
+        {
+          browser_tabs_open: Tool.make({
+            description: "Open a tab",
+            parameters: Schema.Struct({}),
+            success: Schema.String,
+            execute: () => Effect.die("A normalized replay name must not select an executor"),
+          }),
+        },
+        call,
+      )
+      expect(dispatched.result).toEqual({
+        type: "error",
+        value:
+          'No tool named "browser.tabs.open" is currently available. Please use a tool from the available tool list.',
+      })
+
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          cache: "none",
+          messages: [response.message, Message.tool({ id: call.id, name: call.name, result: dispatched.result })],
+        }),
+      )
+      expect(prepared.body.messages[0].content).toEqual([
+        { toolUse: { toolUseId: call.id, name: "browser_tabs_open", input: {} } },
+      ])
+      expect(response.toolCalls[0]?.name).toBe("browser.tabs.open")
     }),
   )
 
@@ -1458,7 +1639,13 @@ describe("Bedrock Converse route", () => {
         expect(headers.get("authorization")).toContain("Credential=AKIACHAINEXAMPLE/")
         expect(headers.get("authorization")).toContain("/ap-southeast-2/bedrock/aws4_request")
       }
-      expect(() => AmazonBedrock.configure({ auth: "sigv4", apiKey: "k" })).toThrow("does not accept apiKey")
+      expect(() => AmazonBedrock.configure({ auth: "sigv4", apiKey: "k" })).toThrow(
+        expect.objectContaining({
+          _tag: "ProviderConfiguration",
+          provider: "amazon-bedrock",
+          message: "Amazon Bedrock SigV4 auth does not accept apiKey",
+        }),
+      )
     }).pipe(
       withProcessEnv({
         ...noAmbientAWS,
@@ -1534,10 +1721,10 @@ describe("Bedrock Converse route", () => {
           messages: [
             Message.user([
               { type: "text", text: "What is in this image?" },
-              { type: "media", mediaType: "image/png", data: "AAAA" },
-              { type: "media", mediaType: "image/jpeg", data: "BBBB" },
-              { type: "media", mediaType: "image/jpg", data: "CCCC" },
-              { type: "media", mediaType: "image/webp", data: "DDDD" },
+              { type: "media", media: Media.base64("AAAA", "image/png") },
+              { type: "media", media: Media.base64("BBBB", "image/jpeg") },
+              { type: "media", media: Media.base64("CCCC", "image/jpg") },
+              { type: "media", media: Media.base64("DDDD", "image/webp") },
             ]),
           ],
           cache: "none",
@@ -1568,7 +1755,9 @@ describe("Bedrock Converse route", () => {
         LLM.request({
           id: "req_image_bytes",
           model,
-          messages: [Message.user([{ type: "media", mediaType: "image/png", data: new Uint8Array([1, 2, 3, 4, 5]) }])],
+          messages: [
+            Message.user([{ type: "media", media: Media.bytes(new Uint8Array([1, 2, 3, 4, 5]), "image/png") }]),
+          ],
         }),
       )
 
@@ -1589,12 +1778,31 @@ describe("Bedrock Converse route", () => {
       const error = yield* compileRequest(
         LLM.request({
           model,
-          messages: [Message.user({ type: "media", mediaType: "image/png", data: "https://example.test/image.png" })],
+          messages: [Message.user({ type: "media", media: Media.base64("not base64!", "image/png") })],
         }),
       ).pipe(Effect.flip)
 
       expect(error).toMatchObject({ reason: { _tag: "InvalidRequest" } })
       expect(error.message).toContain("Bedrock Converse media data must be valid base64")
+    }),
+  )
+
+  it.effect("rejects remote image URLs that were not materialized", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user({
+              type: "media",
+              media: Media.url("https://example.test/image.png", { mediaType: "image/png" }),
+            }),
+          ],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error).toMatchObject({ reason: { _tag: "InvalidRequest" } })
+      expect(error.message).toContain("requires inline media")
     }),
   )
 
@@ -1608,8 +1816,8 @@ describe("Bedrock Converse route", () => {
           messages: [
             Message.user([
               { type: "text", text: "Summarize these documents." },
-              { type: "media", mediaType: "application/pdf", data: "UERGREFUQQ==", filename: "report.pdf" },
-              { type: "media", mediaType: "text/csv", data: "Q1NWREFUQQ==", filename: "data.csv" },
+              { type: "media", media: Media.base64("UERGREFUQQ==", "application/pdf"), filename: "report.pdf" },
+              { type: "media", media: Media.base64("Q1NWREFUQQ==", "text/csv"), filename: "data.csv" },
             ]),
           ],
         }),
@@ -1621,29 +1829,140 @@ describe("Bedrock Converse route", () => {
             role: "user",
             content: [
               { text: "Summarize these documents." },
-              { document: { format: "pdf", name: "report.pdf", source: { bytes: "UERGREFUQQ==" } } },
-              { document: { format: "csv", name: "data.csv", source: { bytes: "Q1NWREFUQQ==" } } },
+              { text: 'Attached file "report.pdf" has document label "report".' },
+              { document: { format: "pdf", name: "report", source: { bytes: "UERGREFUQQ==" } } },
+              { text: 'Attached file "data.csv" has document label "data".' },
+              { document: { format: "csv", name: "data", source: { bytes: "Q1NWREFUQQ==" } } },
             ],
           },
         ],
       })
     }),
   )
+  ;[
+    {
+      label: "filename punctuation",
+      filename: "report_v1.2?.pdf",
+      expected: "report v1 2",
+      duplicate: "report v1 2 2",
+    },
+    {
+      label: "repeated whitespace",
+      filename: "  Quarterly\t \n report.txt",
+      expected: "Quarterly report",
+      duplicate: "Quarterly report 2",
+    },
+    {
+      label: "allowed characters",
+      filename: "Report - Final (v2) [2026]",
+      expected: "Report - Final (v2) [2026]",
+      duplicate: "Report - Final (v2) [2026] 2",
+    },
+    { label: "accented filename", filename: "résumé.pdf", expected: "r sum", duplicate: "r sum 2" },
+    { label: "non-Latin filename", filename: "報告書.pdf", expected: "document", duplicate: "document 2" },
+    { label: "missing filename", filename: undefined, expected: "document", duplicate: "document 2" },
+    { label: "empty filename", filename: "", expected: "document", duplicate: "document 2" },
+    { label: "blank filename", filename: " \t\n", expected: "document", duplicate: "document 2" },
+    { label: "extension-only filename", filename: ".pdf", expected: "document", duplicate: "document 2" },
+    { label: "symbols-only filename", filename: "@@@.pdf", expected: "document", duplicate: "document 2" },
+    {
+      label: "overlong filename",
+      filename: `${"a".repeat(201)}.txt`,
+      expected: "a".repeat(200),
+      duplicate: `${"a".repeat(198)} 2`,
+    },
+    {
+      label: "maximum-length label",
+      filename: "a".repeat(200),
+      expected: "a".repeat(200),
+      duplicate: `${"a".repeat(198)} 2`,
+    },
+    {
+      label: "whitespace at truncation",
+      filename: `${"a".repeat(199)} b.txt`,
+      expected: "a".repeat(199),
+      duplicate: `${"a".repeat(198)} 2`,
+    },
+  ].forEach((item) => {
+    it.effect(`normalizes ${item.label} in user and tool-result documents`, () =>
+      Effect.gen(function* () {
+        const request = LLM.request({
+          model,
+          cache: "none",
+          messages: [
+            Message.user([
+              { type: "text", text: "Read this document" },
+              { type: "media", media: Media.base64("UERGREFUQQ==", "application/pdf"), filename: item.filename },
+            ]),
+            Message.assistant([ToolCallPart.make({ id: "call_read", name: "read", input: {} })]),
+            Message.tool({
+              id: "call_read",
+              name: "read",
+              result: {
+                type: "content",
+                value: [
+                  { type: "text", text: "Read successfully" },
+                  {
+                    type: "file",
+                    uri: "data:application/pdf;base64,UERGREFUQQ==",
+                    mime: "application/pdf",
+                    name: item.filename,
+                  },
+                ],
+              },
+            }),
+          ],
+        })
+        const original = JSON.stringify(request.messages)
+        const first = yield* compileRequest(request)
+        const second = yield* compileRequest(request)
+        const expected = { format: "pdf", name: item.expected, source: { bytes: "UERGREFUQQ==" } }
 
-  it.effect("requires names for document media", () =>
+        expect(first.body.messages[0].content.find((part) => "document" in part)?.document).toEqual(expected)
+        expect(
+          first.body.messages[2].content[0].toolResult.content.find((part) => "document" in part)?.document,
+        ).toEqual({
+          ...expected,
+          name: item.duplicate,
+        })
+        expect(second.body).toEqual(first.body)
+        expect(JSON.stringify(request.messages)).toBe(original)
+      }),
+    )
+  })
+
+  it.effect("keeps colliding document labels distinct within a request", () =>
     Effect.gen(function* () {
-      const error = yield* compileRequest(
+      const prepared = yield* compileRequest(
         LLM.request({
           model,
-          messages: [Message.user({ type: "media", mediaType: "application/pdf", data: "UERGREFUQQ==" })],
+          cache: "none",
+          messages: [
+            Message.user([
+              { type: "text", text: "Read these documents" },
+              ...["report_v1.txt", "report#v1.txt", "report v1 2.txt", "report v1.txt"].map((filename) => ({
+                type: "media" as const,
+                media: Media.base64("SGVsbG8=", "text/plain"),
+                filename,
+              })),
+            ]),
+          ],
         }),
-      ).pipe(Effect.flip)
-
-      expect(error.message).toContain("document media requires a filename")
+      )
+      expect(prepared.body.messages[0].content.slice(1)).toEqual([
+        { text: 'Attached file "report_v1.txt" has document label "report v1".' },
+        { document: { format: "txt", name: "report v1", source: { bytes: "SGVsbG8=" } } },
+        { text: 'Attached file "report#v1.txt" has document label "report v1 2".' },
+        { document: { format: "txt", name: "report v1 2", source: { bytes: "SGVsbG8=" } } },
+        { text: 'Attached file "report v1 2.txt" has document label "report v1 2 2".' },
+        { document: { format: "txt", name: "report v1 2 2", source: { bytes: "SGVsbG8=" } } },
+        { text: 'Attached file "report v1.txt" has document label "report v1 3".' },
+        { document: { format: "txt", name: "report v1 3", source: { bytes: "SGVsbG8=" } } },
+      ])
     }),
   )
 
-  it.effect("passes named document-only messages through for provider validation", () =>
+  it.effect("annotates renamed document-only messages with their original filename", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
@@ -1652,8 +1971,7 @@ describe("Bedrock Converse route", () => {
           messages: [
             Message.user({
               type: "media",
-              mediaType: "application/pdf",
-              data: "UERGREFUQQ==",
+              media: Media.base64("UERGREFUQQ==", "application/pdf"),
               filename: "report.pdf",
             }),
           ],
@@ -1663,8 +1981,39 @@ describe("Bedrock Converse route", () => {
       expect(prepared.body.messages).toEqual([
         {
           role: "user",
-          content: [{ document: { format: "pdf", name: "report.pdf", source: { bytes: "UERGREFUQQ==" } } }],
+          content: [
+            { text: 'Attached file "report.pdf" has document label "report".' },
+            { document: { format: "pdf", name: "report", source: { bytes: "UERGREFUQQ==" } } },
+          ],
         },
+      ])
+    }),
+  )
+
+  it.effect("quotes original filenames in annotations and omits redundant mappings", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          cache: "none",
+          messages: [
+            Message.user([
+              { type: "text", text: "Read these documents" },
+              ...["report", undefined, 'report "final"\n.pdf'].map((filename) => ({
+                type: "media" as const,
+                media: Media.base64("SGVsbG8=", "text/plain"),
+                filename,
+              })),
+            ]),
+          ],
+        }),
+      )
+      expect(prepared.body.messages[0].content).toEqual([
+        { text: "Read these documents" },
+        { document: { format: "txt", name: "report", source: { bytes: "SGVsbG8=" } } },
+        { document: { format: "txt", name: "document", source: { bytes: "SGVsbG8=" } } },
+        { text: 'Attached file "report \\"final\\"\\n.pdf" has document label "report final".' },
+        { document: { format: "txt", name: "report final", source: { bytes: "SGVsbG8=" } } },
       ])
     }),
   )
@@ -1688,7 +2037,7 @@ describe("Bedrock Converse route", () => {
                     type: "file",
                     uri: "data:application/pdf;base64,UERGREFUQQ==",
                     mime: "application/pdf",
-                    name: "report",
+                    name: "report.pdf",
                   },
                 ],
               },
@@ -1711,6 +2060,7 @@ describe("Bedrock Converse route", () => {
                 status: "success",
                 content: [
                   { text: "Read successfully" },
+                  { text: 'Attached file "report.pdf" has document label "report".' },
                   { document: { format: "pdf", name: "report", source: { bytes: "UERGREFUQQ==" } } },
                 ],
               },
@@ -1748,7 +2098,7 @@ describe("Bedrock Converse route", () => {
       ).pipe(Effect.flip)
 
       expect(error).toMatchObject({ reason: { _tag: "InvalidRequest" } })
-      expect(error.message).toContain("Bedrock Converse media data must be valid base64")
+      expect(error.message).toContain("requires inline media")
     }),
   )
 
@@ -1758,7 +2108,7 @@ describe("Bedrock Converse route", () => {
         LLM.request({
           id: "req_bad_image",
           model,
-          messages: [Message.user([{ type: "media", mediaType: "image/svg+xml", data: "x" }])],
+          messages: [Message.user([{ type: "media", media: Media.base64("x", "image/svg+xml") }])],
         }),
       ).pipe(Effect.flip)
 
@@ -1772,7 +2122,9 @@ describe("Bedrock Converse route", () => {
         LLM.request({
           id: "req_bad_doc",
           model,
-          messages: [Message.user([{ type: "media", mediaType: "application/x-tar", data: "x", filename: "a.tar" }])],
+          messages: [
+            Message.user([{ type: "media", media: Media.base64("x", "application/x-tar"), filename: "a.tar" }]),
+          ],
         }),
       ).pipe(Effect.flip)
 

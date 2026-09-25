@@ -1,12 +1,11 @@
-import { Headers } from "effect/unstable/http"
 import { Auth } from "../route/auth.js"
 import { type AtLeastOne, type ProviderAuthOption } from "../route/auth-options.js"
 import type { Route, RouteDefaultsInput, CompactionOperations } from "../route/client.js"
+import { Endpoint } from "../route/endpoint.js"
 import type { ProviderPackage } from "../provider-package.js"
-import { ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderConfigurationError, ProviderID, type ModelID } from "../schema/index.js"
 import * as OpenAIChat from "../protocols/openai-chat.js"
 import * as OpenAIResponses from "../protocols/openai-responses.js"
-import { ProviderShared } from "../protocols/shared.js"
 import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options.js"
 
 export const id = ProviderID.make("azure")
@@ -28,12 +27,12 @@ export type LanguageModelOptions = AzureURL &
 export type Config = LanguageModelOptions
 
 export type Settings = ProviderPackage.Settings &
+  OpenAIProviderOptionsInput &
   AzureURL & {
     readonly apiKey?: string
     readonly apiVersion?: string
     readonly queryParams?: Readonly<Record<string, string>>
     readonly useDeploymentBasedUrls?: boolean
-    readonly providerOptions?: OpenAIProviderOptionsInput
   }
 
 const resourceBaseURL = (resourceName: string) => `https://${resourceName.trim()}.openai.azure.com/openai`
@@ -60,11 +59,6 @@ const responsesRoute = OpenAIResponses.route.with({
       const url = new URL(value)
       url.searchParams.delete("api-version")
       return url.toString()
-    },
-    headers: (headers) => {
-      const apiKey = headers["api-key"]
-      if (!apiKey) return headers
-      return Headers.remove(Headers.set(headers, "authorization", `Bearer ${apiKey}`), "api-key")
     },
   }),
 })
@@ -114,7 +108,7 @@ const configuredRoute = <Body, Prepared, Compact extends CompactionOperations | 
   })
 
 function endpoint(input: Config, modelID: string | ModelID) {
-  const baseURL = ProviderShared.trimBaseUrl(input.baseURL ?? resourceBaseURL(input.resourceName!))
+  const baseURL = Endpoint.trimBaseUrl(input.baseURL ?? resourceBaseURL(input.resourceName!))
   const query = { "api-version": input.apiVersion ?? "v1", ...input.queryParams }
 
   if (input.useDeploymentBasedUrls) return { baseURL: `${baseURL}/deployments/${modelID}`, query }
@@ -135,7 +129,7 @@ export const configure = (input: Config) => {
   const chat = (modelID: string | ModelID) =>
     configuredRoute(chatRoute, input, modelID)
       .with(withOpenAIOptions(modelID, modelDefaults))
-      .model<OpenAIProviderOptionsInput>({ id: modelID })
+      .model<OpenAIProviderOptionsInput>({ id: modelID, compatibility: { supportsPromptCacheKey: true } })
 
   return {
     id,
@@ -151,19 +145,29 @@ export const provider = {
   configure,
 }
 
-const config = (settings: Settings): Config => {
+const config = ({
+  apiKey,
+  apiVersion,
+  baseURL,
+  body,
+  headers,
+  queryParams,
+  resourceName,
+  useDeploymentBasedUrls,
+  ...providerOptions
+}: Settings): Config => {
   const common = {
-    apiKey: settings.apiKey,
-    apiVersion: settings.apiVersion,
-    headers: settings.headers === undefined ? undefined : { ...settings.headers },
-    http: settings.body === undefined ? undefined : { body: { ...settings.body } },
-    providerOptions: settings.providerOptions,
-    queryParams: settings.queryParams === undefined ? undefined : { ...settings.queryParams },
-    useDeploymentBasedUrls: settings.useDeploymentBasedUrls,
+    apiKey,
+    apiVersion,
+    headers: headers === undefined ? undefined : { ...headers },
+    http: body === undefined ? undefined : { body: { ...body } },
+    providerOptions,
+    queryParams: queryParams === undefined ? undefined : { ...queryParams },
+    useDeploymentBasedUrls,
   }
-  if (settings.baseURL !== undefined) return { ...common, baseURL: settings.baseURL }
-  if (settings.resourceName !== undefined) return { ...common, resourceName: settings.resourceName }
-  throw new Error("Azure requires resourceName or baseURL")
+  if (baseURL !== undefined) return { ...common, baseURL }
+  if (resourceName !== undefined) return { ...common, resourceName }
+  throw new ProviderConfigurationError({ provider: id, message: "Azure requires resourceName or baseURL" })
 }
 
 export const responsesModel: ProviderPackage.Definition<

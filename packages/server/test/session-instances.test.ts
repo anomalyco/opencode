@@ -13,6 +13,7 @@ import { Plugin } from "@opencode/core/plugin"
 import { Session } from "@opencode/core/session"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { define } from "@opencode/plugin/effect/plugin"
+import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Agent } from "@opencode/schema/agent"
 import { Location } from "@opencode/schema/location"
 import { AbsolutePath } from "@opencode/schema/schema"
@@ -92,11 +93,12 @@ it.live(
                                 event.prompt.text += ` [${config.tool}]`
                               }),
                             )
-                            yield* ctx.session.hook("context", (event) =>
+                            const tune = (event: SessionHooks["context"]) =>
                               Effect.sync(() => {
-                                event.generation.temperature = config.temperature
-                              }),
-                            )
+                                event.options.temperature = config.temperature
+                              })
+                            yield* ctx.session.hook("context", tune)
+                            yield* ctx.session.hook("generate", tune)
                             yield* ctx.permission.hook("evaluate", (event) =>
                               Effect.sync(() => {
                                 event.effect = event.action === "instance-test" ? "ask" : "allow"
@@ -293,7 +295,7 @@ it.live(
         ).toBe(404)
         expect(
           (yield* request(`/api/session/${entry.session.id}/permission/${entry.foreignPermission.id}/reply`, {
-            reply: "once",
+            decision: "once",
           })).status,
         ).toBe(404)
         yield* Effect.gen(function* () {
@@ -313,7 +315,7 @@ it.live(
         ).toBe(204)
         expect(
           (yield* request(`/api/session/${entry.session.id}/permission/${entry.permission.id}/reply`, {
-            reply: "once",
+            decision: "once",
           })).status,
         ).toBe(204)
         yield* Effect.gen(function* () {

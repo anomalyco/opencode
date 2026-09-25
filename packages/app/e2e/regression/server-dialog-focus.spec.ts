@@ -16,8 +16,13 @@ test("server dialog keeps focus above fullscreen settings", async ({ page }) => 
         body: 'data: {"id":"evt_connected","type":"server.connected","data":{}}\n\n',
       })
     }
-    if (url.pathname === "/api/global/health" || url.pathname === "/api/health") {
-      return json(route, { healthy: true, version: "2.0.0" })
+    if (url.pathname === "/api/info") {
+      return json(route, {
+        version: "2.0.0",
+        pid: 1,
+        urls: [url.origin],
+        paths: { tmp: "/tmp/opencode" },
+      })
     }
     return json(route, {})
   })
@@ -27,8 +32,12 @@ test("server dialog keeps focus above fullscreen settings", async ({ page }) => 
   const settings = page.getByTestId("settings-screen")
   await expect(settings).toBeVisible()
   await expect(page.getByRole("dialog")).toHaveCount(0)
-  await settings.getByRole("tab", { name: "Servers" }).click()
-  await settings.getByRole("button", { name: "Add server" }).click()
+  const add = settings.getByRole("button", { name: "Add server" })
+  const group = settings.locator('[data-component="settings-nav-group-header"]').filter({ hasText: "Servers" })
+  await expect(add).toHaveCSS("opacity", "0")
+  await group.hover()
+  await expect(add).toHaveCSS("opacity", "1")
+  await add.click()
 
   const editor = page.getByRole("dialog", { name: "Add server" })
   await expect(editor.getByPlaceholder("http://localhost:4096")).toBeFocused()

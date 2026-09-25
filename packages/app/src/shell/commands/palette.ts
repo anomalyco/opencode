@@ -166,7 +166,7 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
     state.cleanup = undefined
     dialog.close()
     if (item.type === "command") {
-      item.option?.onSelect?.("palette")
+      void item.option?.onSelect?.("palette")
       return
     }
     if (item.type === "session") {

@@ -39,6 +39,11 @@ const mergeStringRecords = (
 export const ProviderOptions = Schema.Record(Schema.String, Schema.Unknown)
 export type ProviderOptions = Schema.Schema.Type<typeof ProviderOptions>
 
+export const ProviderMetadata = Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Unknown)).annotate({
+  identifier: "LLM.ProviderMetadata",
+})
+export type ProviderMetadata = Schema.Schema.Type<typeof ProviderMetadata>
+
 export const mergeProviderOptions = (
   ...items: ReadonlyArray<ProviderOptions | undefined>
 ): ProviderOptions | undefined => mergeJsonRecords(...items)
@@ -52,8 +57,13 @@ export class HttpOptions extends Schema.Class<HttpOptions>("AI.HttpOptions")({
 export namespace HttpOptions {
   export type Input = HttpOptions | ConstructorParameters<typeof HttpOptions>[0]
 
-  /** Normalize HTTP option input into the canonical `HttpOptions` class. */
-  export const make = (input: Input) => (input instanceof HttpOptions ? input : new HttpOptions(input))
+  /** Normalize HTTP option input into the canonical `HttpOptions` class; `undefined` stays `undefined`. */
+  export function make(input: Input): HttpOptions
+  export function make(input: Input | undefined): HttpOptions | undefined
+  export function make(input: Input | undefined) {
+    if (input === undefined || input instanceof HttpOptions) return input
+    return new HttpOptions(input)
+  }
 }
 
 export const mergeHttpOptions = (...items: ReadonlyArray<HttpOptions | undefined>): HttpOptions | undefined => {
@@ -135,13 +145,24 @@ export namespace LanguageModelDefaults {
     return new LanguageModelDefaults({
       generation: input.generation === undefined ? undefined : GenerationOptions.make(input.generation),
       providerOptions: input.providerOptions,
-      http: input.http === undefined ? undefined : HttpOptions.make(input.http),
+      http: HttpOptions.make(input.http),
     })
   }
 }
 
-export const LanguageModelToolSchemaCompatibility = Schema.Literals(["gemini", "moonshot"])
-export type LanguageModelToolSchemaCompatibility = Schema.Schema.Type<typeof LanguageModelToolSchemaCompatibility>
+/** Provider-defined string enum: known values for autocomplete, any string accepted. */
+export type OpenString<Known extends string> = Known | (string & {})
+
+export const ReasoningEfforts = ["none", "minimal", "low", "medium", "high", "xhigh", "max"] as const
+export type ReasoningEffort = OpenString<(typeof ReasoningEfforts)[number]>
+export const ReasoningEffort = Schema.declare<ReasoningEffort>(
+  (value): value is ReasoningEffort => typeof value === "string",
+  { title: "ReasoningEffort" },
+)
+
+/** Tool schema sanitizer for a model family. `none` opts out of the protocol and model-name defaults. */
+export const LanguageModelSanitizerCompatibility = Schema.Literals(["gemini", "moonshot", "none"])
+export type LanguageModelSanitizerCompatibility = Schema.Schema.Type<typeof LanguageModelSanitizerCompatibility>
 
 export const LanguageModelMaxTokensFieldCompatibility = Schema.Literals(["max_completion_tokens", "max_tokens"])
 export type LanguageModelMaxTokensFieldCompatibility = Schema.Schema.Type<
@@ -151,7 +172,7 @@ export type LanguageModelMaxTokensFieldCompatibility = Schema.Schema.Type<
 export class LanguageModelCompatibility extends Schema.Class<LanguageModelCompatibility>(
   "LLM.LanguageModelCompatibility",
 )({
-  toolSchema: Schema.optional(LanguageModelToolSchemaCompatibility),
+  sanitizer: Schema.optional(LanguageModelSanitizerCompatibility),
   reasoningField: Schema.optional(Schema.String),
   /** Require every assistant message to include its reasoning field, even when empty. */
   requireReasoning: Schema.optional(Schema.Boolean),
@@ -161,10 +182,15 @@ export class LanguageModelCompatibility extends Schema.Class<LanguageModelCompat
   supportsStore: Schema.optional(Schema.Boolean),
   supportsUsageInStreaming: Schema.optional(Schema.Boolean),
   supportsStrictMode: Schema.optional(Schema.Boolean),
+  // Accepts `prompt_cache_key` in the Chat Completions body. Chat omits the
+  // key unless this is set; session-affinity headers still flow regardless.
+  supportsPromptCacheKey: Schema.optional(Schema.Boolean),
   zaiToolStream: Schema.optional(Schema.Boolean),
   requireSignature: Schema.optional(Schema.Boolean),
   /** Supports Anthropic's thinking-prefix mismatch controls. Overrides model-ID detection. */
   supportsThinkingBlockBinding: Schema.optional(Schema.Boolean),
+  /** Supports per-message effort updates. Overrides model-ID detection. */
+  supportsEffortUpdates: Schema.optional(Schema.Boolean),
 }) {}
 
 export namespace LanguageModelCompatibility {

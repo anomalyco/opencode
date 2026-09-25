@@ -163,6 +163,89 @@ story("mounts cached completed Markdown with sanitized HTML and decorations", as
   await expect(markdown).toHaveAttribute("data-markdown-ready", "")
 })
 
+story("shows a stable GitHub mark without changing link text or other sites", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({
+      text: [
+        "[#540](https://github.com/anomalyco/opencode/pull/540)",
+        "[GitHub](https://github.com)",
+        "[other site](https://example.com/docs)",
+        "[lookalike](https://github.com.evil.example/pull/540)",
+      ].join(" · "),
+      cached: true,
+    })
+  }, fixture)
+
+  const markdown = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+  const github = markdown.getByRole("link", { name: "#540" })
+  await expect(github).toHaveAttribute("href", "https://github.com/anomalyco/opencode/pull/540")
+  await expect(github).toHaveText("#540")
+  expect(await github.evaluate((link) => getComputedStyle(link, "::before").width)).toBe("14px")
+  expect(await github.evaluate((link) => getComputedStyle(link, "::before").maskImage)).toContain("data:image/svg+xml")
+  expect(
+    await markdown.getByRole("link", { name: "GitHub" }).evaluate((link) => getComputedStyle(link, "::before").content),
+  ).toBe('""')
+  for (const name of ["other site", "lookalike"]) {
+    expect(
+      await markdown.getByRole("link", { name }).evaluate((link) => getComputedStyle(link, "::before").content),
+    ).toBe("none")
+  }
+})
+
+story("keeps favicon space stable across loading and failure without fetching private hosts", async ({ page }) => {
+  const requested: string[] = []
+  let release: () => void = () => undefined
+  const loading = new Promise<void>((resolve) => (release = resolve))
+  await page.route("https://www.google.com/s2/favicons?**", async (route) => {
+    requested.push(route.request().url())
+    if (route.request().url().includes("developer.mozilla.org")) await loading
+    if (route.request().url().includes("broken.example.org")) return route.abort()
+    await route.fulfill({ status: 200, contentType: "image/png", body: png })
+  })
+
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({
+      text: [
+        "[docs](https://developer.mozilla.org/docs)",
+        "[missing](https://broken.example.org/docs)",
+        "[private](http://localhost:8080/docs)",
+        "[GitHub](https://github.com/anomalyco/opencode)",
+      ].join(" · "),
+      cached: true,
+    })
+  }, fixture)
+
+  const markdown = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+  const docs = markdown.getByRole("link", { name: "docs" })
+  const image = docs.locator(".markdown-link-favicon img")
+  await expect.poll(() => requested.some((url) => url.includes("developer.mozilla.org"))).toBe(true)
+  await expect(image).toHaveCSS("opacity", "0")
+  await expect(docs.locator(".markdown-link-favicon")).toHaveCSS("width", "14px")
+  const width = await docs.evaluate((link) => link.getBoundingClientRect().width)
+  release()
+  await expect(image).toHaveAttribute("data-loaded", "")
+  await expect(image).toHaveCSS("opacity", "1")
+  await expect(image).not.toHaveAttribute("role", "button")
+  expect(await image.evaluate((favicon) => favicon.onclick)).toBeNull()
+  expect(await docs.evaluate((link) => link.getBoundingClientRect().width)).toBe(width)
+  expect(
+    await image.evaluate((favicon) => favicon.getBoundingClientRect().top - favicon.parentElement!.getBoundingClientRect().top),
+  ).toBe(0)
+
+  await expect(markdown.getByRole("link", { name: "missing" }).locator(".markdown-link-favicon img")).not.toHaveAttribute(
+    "data-loaded",
+    "",
+  )
+  await expect(markdown.getByRole("link", { name: "private" }).locator(".markdown-link-favicon img")).toHaveCount(0)
+  await expect(markdown.getByRole("link", { name: "GitHub" }).locator(".markdown-link-favicon")).toHaveCount(0)
+  expect(requested).toHaveLength(2)
+  expect(requested.every((url) => !url.includes("localhost") && !url.includes("github.com"))).toBe(true)
+})
+
 async function resolvedColor(page: Page, token: string) {
   return page.evaluate((token) => {
     const probe = document.createElement("span")
@@ -545,9 +628,9 @@ for (const streaming of [false, true]) {
         { fixture, streaming },
       )
       const harness = page.getByTestId("markdown-fixture")
-      const image = harness.getByRole("img", { name: "Chart", exact: true })
+      const image = harness.getByRole("button", { name: "Chart", exact: true })
       await expect.poll(() => image.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(1)
-      await expect(harness.getByRole("img", { name: "Again", exact: true })).toHaveAttribute("src", /^blob:/)
+      await expect(harness.getByRole("button", { name: "Again", exact: true })).toHaveAttribute("src", /^blob:/)
       expect(requests).toHaveLength(1)
       expect(new URL(requests[0]).searchParams.get("location[directory]")).toBe("C:/tmp/")
       const url = await image.getAttribute("src")
@@ -557,7 +640,9 @@ for (const streaming of [false, true]) {
       await harness.getByLabel("Markdown text").fill("![Replacement](./images/next.png)")
       await expect
         .poll(() =>
-          harness.getByRole("img", { name: "Replacement" }).evaluate((image: HTMLImageElement) => image.naturalWidth),
+          harness
+            .getByRole("button", { name: "Replacement" })
+            .evaluate((image: HTMLImageElement) => image.naturalWidth),
         )
         .toBe(1)
       expect(requests).toHaveLength(2)
@@ -571,9 +656,9 @@ for (const streaming of [false, true]) {
           url,
         ),
       ).toBe(true)
-      const next = await harness.getByRole("img", { name: "Replacement" }).getAttribute("src")
+      const next = await harness.getByRole("button", { name: "Replacement" }).getAttribute("src")
       await harness.getByRole("button", { name: "Toggle Markdown" }).click()
-      await expect(harness.getByRole("img")).toHaveCount(0)
+      await expect(harness.locator("img")).toHaveCount(0)
       expect(
         await page.evaluate(
           (url) =>
@@ -602,9 +687,14 @@ story("keeps remote images browser-owned and rejects unsafe image sources", asyn
   }, fixture)
   const harness = page.getByTestId("markdown-fixture")
   await expect
-    .poll(() => harness.getByRole("img", { name: "Remote" }).evaluate((image: HTMLImageElement) => image.naturalWidth))
+    .poll(() =>
+      harness.getByRole("button", { name: "Remote" }).evaluate((image: HTMLImageElement) => image.naturalWidth),
+    )
     .toBe(1)
-  await expect(harness.getByRole("img", { name: "Remote" })).toHaveAttribute("src", "https://images.example/chart.png")
+  await expect(harness.getByRole("button", { name: "Remote" })).toHaveAttribute(
+    "src",
+    "https://images.example/chart.png",
+  )
   await expect(harness.locator("[onerror], [src^='javascript:'], [data-local-image]")).toHaveCount(0)
 })
 
@@ -628,7 +718,7 @@ story("keeps scripts and external resources inactive inside local SVG images", a
     const { mountMarkdown } = await import(fixture)
     await mountMarkdown({ images: true, text: "![SVG](Z:/charts/chart.svg)" })
   }, fixture)
-  const image = page.getByTestId("markdown-fixture").getByRole("img", { name: "SVG" })
+  const image = page.getByTestId("markdown-fixture").getByRole("button", { name: "SVG" })
   await expect.poll(() => image.evaluate((image: HTMLImageElement) => image.naturalWidth)).toBe(32)
   await expect(image).toHaveAttribute("src", /^data:image\/svg\+xml;/)
   await expect(page).not.toHaveTitle("image-script-ran")
@@ -662,12 +752,12 @@ story("loads file URLs and leaves unreadable images as alt text", async ({ page 
   await expect
     .poll(() =>
       harness
-        .getByRole("img", { name: "Available", exact: true })
+        .getByRole("button", { name: "Available", exact: true })
         .evaluate((image: HTMLImageElement) => image.naturalWidth),
     )
     .toBe(1)
   await expect.poll(() => [...requested].sort()).toEqual(["/api/fs/read/chart%25.png", "/api/fs/read/missing.png"])
-  await expect(harness.getByRole("img", { name: "Unavailable" })).not.toHaveAttribute("src")
+  await expect(harness.getByRole("button", { name: "Unavailable" })).not.toHaveAttribute("src")
   await harness.getByLabel("Markdown text").fill("Still usable")
   await expect(harness.locator('[data-component="markdown"]')).toHaveText("Still usable")
 })

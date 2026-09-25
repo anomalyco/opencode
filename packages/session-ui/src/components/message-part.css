@@ -369,6 +369,7 @@
   min-width: 0;
 
   img {
+    cursor: zoom-in;
     display: block;
     max-width: 100%;
     height: auto;
@@ -607,7 +608,7 @@
   [data-slot="context-tool-group-title"] {
     display: flex;
     align-items: center;
-    gap: 0;
+    gap: 4px;
     flex-shrink: 1;
     min-width: 0;
   }
@@ -616,7 +617,7 @@
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    gap: 0;
+    gap: 4px;
     color: var(--v2-text-text-muted);
     font-family: var(--v2-font-family-sans);
     font-size: 13px;
@@ -632,6 +633,7 @@
 
   [data-slot="context-tool-group-count"] {
     color: var(--v2-text-text-base);
+    font-variant-numeric: tabular-nums;
   }
 
   [data-slot="context-tool-group-prefix"] {
@@ -1264,6 +1266,8 @@
 [data-component="write-tool"],
 [data-component="apply-patch-tool"] {
   > [data-component="collapsible"].tool-collapsible {
+    /* Only file lists with a tool title reserve space for its sticky row. */
+    --sticky-accordion-offset: calc(32px + var(--tool-content-gap));
     gap: 0px;
   }
 
@@ -1285,7 +1289,7 @@
     position: sticky;
     top: var(--sticky-accordion-top, 0px);
     z-index: 20;
-    height: calc(32px + var(--tool-content-gap));
+    height: var(--sticky-accordion-offset);
     padding-bottom: var(--tool-content-gap);
     background-color: var(--v2-background-bg-base);
   }
@@ -1308,7 +1312,7 @@
     flex-grow: 1;
     display: flex;
     align-items: center;
-    gap: 20px;
+    gap: 12px;
     min-width: 0;
   }
 

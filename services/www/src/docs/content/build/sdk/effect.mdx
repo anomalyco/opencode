@@ -6,7 +6,7 @@ title: "Effect"
 the owning Scope releases the router, Location services, fibers, and plugin registrations.
 
 ```sh
-bun add @opencode/sdk@dev effect
+bun add @opencode/sdk effect
 ```
 
 ## Create a host
@@ -38,7 +38,7 @@ The embedded host uses the same schema values, declared errors, request options,
 `@opencode/client/effect`.
 
 ```ts
-const health = yield* opencode.health.get()
+const info = yield* opencode.server.info()
 const sessions = yield* opencode.sessions.list()
 ```
 
@@ -94,7 +94,7 @@ import { Effect } from "effect"
 
 const program = Effect.gen(function* () {
   const opencode = yield* OpenCode.Service
-  return yield* opencode.health.get()
+  return yield* opencode.server.info()
 })
 
 const health = await Effect.runPromise(program.pipe(Effect.provide(OpenCode.layer())))

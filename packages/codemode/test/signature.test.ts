@@ -739,8 +739,8 @@ describe("JSDoc signatures in catalogs and search results", () => {
       "  },",
       "}",
     ].join("\n")
-    const signature = `tools.constrained(input: ${type}): Promise<${type}>`
-    expect(runtime.catalog()[0]?.signature).toBe(signature)
+    const signature = `tools.constrained(${type}): Promise<${type}>`
+    expect(runtime.catalog[0]?.signature).toBe(signature)
     const result = await Effect.runPromise(runtime.execute('return search({ query: "tools.constrained" })'))
     expect(result.ok).toBe(true)
     if (!result.ok) throw new Error("search failed")
@@ -761,7 +761,7 @@ describe("JSDoc signatures in catalogs and search results", () => {
     const item = items.find(({ path }) => path === "tools.github.list_issues")!
     expect(item.signature).toBe(
       [
-        "tools.github.list_issues(input: {",
+        "tools.github.list_issues({",
         "  /** Repository owner */",
         "  owner: string,",
         "  /** Cursor from the previous response's pageInfo */",
@@ -782,7 +782,7 @@ describe("JSDoc signatures in catalogs and search results", () => {
       const item = items.find(({ path }) => path === "tools.orders.lookup")!
       expect(item.signature).toBe(
         [
-          "tools.orders.lookup(input: {",
+          "tools.orders.lookup({",
           "  /** Order identifier */",
           "  id: string,",
           "  verbose?: boolean,",
@@ -796,7 +796,7 @@ describe("JSDoc signatures in catalogs and search results", () => {
   })
 
   test("the catalog uses the same JSDoc signatures as search", async () => {
-    const catalog = runtime.catalog()
+    const catalog = runtime.catalog
     const github = (await search("list issues repository")).items.find(
       ({ path }) => path === "tools.github.list_issues",
     )!
@@ -824,8 +824,8 @@ describe("non-identifier tool paths", () => {
   const runtime = CodeMode.make({ tools: { context7: { "resolve-library-id": resolveLibrary } } })
 
   test("catalog signatures use bracket notation for dashed tool names", () => {
-    expect(runtime.catalog()[0]?.signature).toBe(
-      'tools.context7["resolve-library-id"](input: {\n  query: string,\n  libraryName: string,\n}): Promise<unknown>',
+    expect(runtime.catalog[0]?.signature).toBe(
+      'tools.context7["resolve-library-id"]({\n  query: string,\n  libraryName: string,\n}): Promise<unknown>',
     )
   })
 
@@ -836,6 +836,6 @@ describe("non-identifier tool paths", () => {
 
     const value = result.value as { items: Array<{ path: string; signature: string }> }
     expect(value.items[0]?.path).toBe('tools.context7["resolve-library-id"]')
-    expect(value.items[0]?.signature).toContain('tools.context7["resolve-library-id"](input: {')
+    expect(value.items[0]?.signature).toContain('tools.context7["resolve-library-id"]({')
   })
 })

@@ -1,30 +1,12 @@
-import { Show } from "solid-js"
 import { createMediaQuery } from "@solid-primitives/media"
-import { useLanguage } from "@/runtime/i18n/language"
-import { useSettings } from "@/settings/model"
-import { StatusPopover } from "@/shell/status/status-popover"
-import { TitlebarRight } from "@/shell/titlebar/right-slot"
-import { Tooltip } from "@opencode/ui/tooltip"
+import { Show } from "solid-js"
 
-export function SessionHeader() {
-  const language = useLanguage()
-  const settings = useSettings()
-
+export function SessionHeaderSpacer(props: { visible: boolean }) {
   const isDesktop = createMediaQuery("(min-width: 768px)")
 
   return (
-    <>
-      <TitlebarRight>
-        <Show when={isDesktop() && settings.visibility.status()}>
-          <Tooltip appearance="standard" placement="bottom" value={language.t("status.popover.trigger")}>
-            <StatusPopover />
-          </Tooltip>
-        </Show>
-      </TitlebarRight>
-      {/* Keep the fixed toggle's slot mounted throughout panel motion. */}
-      <Show when={isDesktop()}>
-        <div class="size-7 shrink-0" aria-hidden />
-      </Show>
-    </>
+    <Show when={isDesktop() && props.visible}>
+      <div class="size-7 shrink-0" aria-hidden />
+    </Show>
   )
 }

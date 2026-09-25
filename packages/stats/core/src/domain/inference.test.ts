@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { toGeoAggregate, toModelAggregate, toProviderAggregate } from "./inference"
+import { buildStatsQuery, toGeoAggregate, toModelAggregate, toProviderAggregate } from "./inference"
 import { modelAuthor, normalizeInferenceModel, statModel, statProvider } from "./model-normalization"
 
 describe("inference stat normalization", () => {
@@ -38,7 +38,35 @@ describe("inference stat normalization", () => {
     expect(statProvider("unknown", "", "custom-provider")).toBe("custom-provider")
   })
 
+  test("attributes hy4 preview traffic to Tencent instead of the unknown provider", () => {
+    expect(modelAuthor("hy4-preview")).toBe("tencent")
+    expect(toModelAggregate(aggregate("hy4-preview", "opencode"))).toMatchObject([
+      { model: "hy4-preview", provider: "tencent" },
+    ])
+    expect(toProviderAggregate(aggregate("hy4-preview", "opencode"))).toMatchObject([{ provider: "tencent" }])
+    expect(toGeoAggregate({ ...aggregate("hy4-preview", "opencode"), country: "US" })).toMatchObject([
+      { model: "hy4-preview", provider: "tencent" },
+    ])
+  })
+
+  test("merges union alpha routes without exposing the provider", () => {
+    ;["opencode-go/union-alpha", "opencode/union-alpha"].forEach((model) => {
+      expect(statModel(model, "")).toBe("union-alpha")
+      expect(statProvider(model, "gpt-test-model", "test-provider")).toBe("unknown")
+      expect(
+        toModelAggregate({ ...aggregate(model, "test-provider"), provider_model: "gpt-test-model" }),
+      ).toMatchObject([{ model: "union-alpha", provider: "unknown", requests: 1 }])
+      expect(toProviderAggregate(aggregate(model, "test-provider"))).toMatchObject([
+        { provider: "unknown", requests: 1 },
+      ])
+      expect(toGeoAggregate({ ...aggregate(model, "test-provider"), country: "US" })).toMatchObject([
+        { model: "union-alpha", provider: "unknown", country: "US", requests: 1 },
+      ])
+    })
+  })
+
   test("merges renamed models under their current name", () => {
+    expect(statModel("deepseek-flash", "")).toBe("deepseek-v4.1-flash")
     expect(statModel("x-preview-f", "")).toBe("ox-alpha")
     expect(statModel("xiaomi/mimo-v2.5", "")).toBe("mimo-v2.5")
     expect(toModelAggregate(aggregate("x-preview-f", "openai"))).toMatchObject([
@@ -92,6 +120,20 @@ describe("inference stat normalization", () => {
         period_key: "2026-W20",
       }),
     ).toMatchObject([{ period_key: "2026-W20" }])
+  })
+
+  test("normalizes union alpha routes in stat queries", () => {
+    process.env.SST_RESOURCE_InferenceEvent = JSON.stringify({
+      catalog: "inference",
+      database: "events",
+      table: "generation",
+    })
+    process.env.SST_RESOURCE_StatsSyncConfig = JSON.stringify({ dataset: "zen" })
+    const query = buildStatsQuery(new Date("2026-05-20T00:00:00.000Z"), new Date("2026-05-21T00:00:00.000Z"))
+
+    expect(query).toContain("WHEN lower(model) = 'opencode-go/union-alpha' THEN 'union-alpha'")
+    expect(query).toContain("WHEN lower(model) = 'opencode/union-alpha' THEN 'union-alpha'")
+    expect(query).toContain("WHEN lower(model) IN ('omen-alpha', 'union-alpha') THEN 'unknown'")
   })
 })
 

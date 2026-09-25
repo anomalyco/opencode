@@ -354,7 +354,7 @@ const waitReady = Effect.fn("Ssh.waitReady")(function* (http: SshHttp, authentic
 const checkHealth = Effect.fn("Ssh.checkHealth")(function* (http: SshHttp) {
   const client = yield* HttpClient.HttpClient
   return yield* client
-    .get(`${http.url}/api/health`, {
+    .get(`${http.url}/api/info`, {
       headers: { authorization: `Basic ${Buffer.from(`opencode:${http.password}`).toString("base64")}` },
     })
     .pipe(

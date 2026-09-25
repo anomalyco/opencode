@@ -7,7 +7,6 @@ import { App } from "../../app.js"
 import { Bus } from "../../bus.js"
 import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
-import { Model } from "../../model.js"
 import { Provider } from "../../provider.js"
 import { iife } from "../../util/iife.js"
 import { which } from "../../util/which.js"
@@ -24,14 +23,6 @@ const decodeToken = Schema.decodeUnknownEffect(
     expiresOn: Schema.optional(Schema.NonEmptyString),
   }),
 )
-function selectLanguage(sdk: any, modelID: string, useChat: boolean) {
-  if (useChat && sdk.chat) return sdk.chat(modelID)
-  if (sdk.responses) return sdk.responses(modelID)
-  if (sdk.messages) return sdk.messages(modelID)
-  if (sdk.chat) return sdk.chat(modelID)
-  return sdk.languageModel(modelID)
-}
-
 export const AzurePlugin = define({
   id: "opencode.provider.azure",
   effect: Effect.fn(function* (ctx) {
@@ -105,7 +96,7 @@ export const AzurePlugin = define({
               if (!resourceName) return yield* Effect.fail(new Error("Azure resource name is required"))
               const current = yield* token(cognitiveScope)
               loaded.resource = resourceName
-              yield* ctx.catalog.reload()
+              yield* ctx.provider.reload()
               return Credential.OAuth.make({
                 type: "oauth",
                 methodID,
@@ -140,92 +131,98 @@ export const AzurePlugin = define({
     })
 
     yield* load()
-    yield* ctx.catalog.transform((evt) => {
-      for (const item of evt.provider.list()) {
-        if (item.provider.id !== Provider.ID.azure && Provider.packageName(item.provider.package) !== "@ai-sdk/azure")
+    yield* ctx.provider.transform((evt) => {
+      for (const item of evt.list()) {
+        if (
+          item.provider.id !== Provider.ID.azure &&
+          !item.provider.package.startsWith("@opencode/ai/providers/azure/")
+        )
           continue
         const resourceName = resolveResourceName(item.provider.settings, loaded.resource)
-        if (resourceName)
-          evt.provider.update(item.provider.id, (provider) => {
-            provider.settings = {
-              ...provider.settings,
-              resourceName,
-              ...(typeof provider.settings?.baseURL === "string"
-                ? { baseURL: expandResourceName(provider.settings.baseURL, resourceName) }
-                : {}),
-            }
-          })
-        for (const model of item.models.values()) {
-          evt.model.update(item.provider.id, model.id, (draft) => {
+        const websocket = responsesWebSocketCapable(item.provider)
+        if (!resourceName && !websocket) continue
+        evt.update(item.provider.id, (provider) => {
+          provider.settings = {
+            ...provider.settings,
+            ...(resourceName === undefined ? {} : { resourceName }),
+            ...(websocket ? { transport: provider.settings?.transport ?? "websocket" } : {}),
+            ...(resourceName !== undefined && typeof provider.settings?.baseURL === "string"
+              ? { baseURL: expandResourceName(provider.settings.baseURL, resourceName) }
+              : {}),
+          }
+        })
+      }
+    })
+    yield* ctx.model.transform((models) => {
+      for (const item of models.provider.list()) {
+        if (
+          item.provider.id !== Provider.ID.azure &&
+          !item.provider.package.startsWith("@opencode/ai/providers/azure/")
+        )
+          continue
+        const resourceName = resolveResourceName(item.provider.settings, loaded.resource)
+        for (const model of models.list(item.provider.id)) {
+          models.update(item.provider.id, model.id, (draft) => {
             if (resourceName && typeof draft.settings?.baseURL === "string")
               draft.settings.baseURL = expandResourceName(
                 draft.settings.baseURL,
                 resolveResourceName(draft.settings, resourceName) ?? resourceName,
               )
-            if (responsesWebSocketCapable(item.provider, draft)) draft.capabilities.responsesWebsockets = true
           })
         }
       }
     })
 
-    const reload = () => loading.withPermit(load().pipe(Effect.andThen(ctx.catalog.reload())))
+    const reload = () => loading.withPermit(load().pipe(Effect.andThen(ctx.provider.reload())))
     yield* bus.subscribe(Credential.Event.Switched).pipe(
       Stream.filter((event) => event.data.integrationID === Integration.ID.make("azure")),
       Stream.runForEach(reload),
       Effect.forkScoped({ startImmediately: true }),
     )
 
+    // Entra bearer tokens are minted per request from the target URL's scope, so they are injected
+    // at the transport hooks rather than stored as a credential.
+    const bearer = Effect.fn("AzurePlugin.bearer")(function* (url: string) {
+      const connection = yield* ctx.integration.connection.active(Provider.ID.azure)
+      const credential = connection
+        ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
+        : undefined
+      if (credential?.type !== "oauth" || credential.methodID !== methodID) return
+      const target = new URL(url)
+      const scope =
+        target.hostname.endsWith(".services.ai.azure.com") && !target.pathname.startsWith("/models")
+          ? foundryScope
+          : cognitiveScope
+      const current = yield* token(scope).pipe(Effect.orDie)
+      return `Bearer ${current.access}`
+    })
     yield* ctx.session.hook(
       "http.request",
       (evt) =>
         Effect.gen(function* () {
           if (evt.model.providerID !== Provider.ID.azure) return
-          const connection = yield* ctx.integration.connection.active(Provider.ID.azure)
-          const credential = connection
-            ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
-            : undefined
-          if (credential?.type !== "oauth" || credential.methodID !== methodID) return
-          const url = new URL(evt.request.url)
-          const scope =
-            url.hostname.endsWith(".services.ai.azure.com") && !url.pathname.startsWith("/models")
-              ? foundryScope
-              : cognitiveScope
-          const current = yield* token(scope).pipe(Effect.orDie)
+          const authorization = yield* bearer(evt.request.url)
+          if (!authorization) return
           evt.request.headers.delete("api-key")
           evt.request.headers.delete("x-api-key")
-          evt.request.headers.set("authorization", `Bearer ${current.access}`)
+          evt.request.headers.set("authorization", authorization)
           evt.request.headers.set("user-agent", App.useragent(ctx.app))
         }),
       { providerID: Provider.ID.azure },
     )
-
-    yield* ctx.aisdk.hook(
-      "sdk",
-      Effect.fn(function* (evt) {
-        if (evt.package !== "@ai-sdk/azure") return
-        if (evt.model.providerID === Provider.ID.azure) {
-          if (
-            !evt.options.resourceName &&
-            !evt.options.baseURL &&
-            (!Provider.isAISDK(evt.model.package) || typeof evt.model.settings?.baseURL !== "string")
-          ) {
-            throw new Error("Azure resource name is missing; set AZURE_RESOURCE_NAME or configure resourceName/baseURL")
-          }
-        }
-        const mod = yield* Effect.promise(() => import("@ai-sdk/azure"))
-        evt.sdk = mod.createAzure(evt.options)
-      }),
-    )
-    yield* ctx.aisdk.hook(
-      "language",
-      Effect.fn(function* (evt) {
-        if (evt.model.providerID !== Provider.ID.azure) return
-        evt.language = selectLanguage(
-          evt.sdk,
-          evt.model.modelID ?? evt.model.id,
-          Boolean(evt.options.useCompletionUrls),
-        )
-      }),
+    yield* ctx.session.hook(
+      "experimental.ws.handshake",
+      (evt) =>
+        Effect.gen(function* () {
+          if (evt.model.providerID !== Provider.ID.azure) return
+          const authorization = yield* bearer(evt.url)
+          if (!authorization) return
+          delete evt.headers["api-key"]
+          delete evt.headers["x-api-key"]
+          evt.headers.authorization = authorization
+          evt.headers["user-agent"] = App.useragent(ctx.app)
+        }),
+      { providerID: Provider.ID.azure },
     )
   }),
 })
@@ -242,10 +239,10 @@ function expandResourceName(baseURL: string, resourceName: string) {
     .replaceAll("${AZURE_COGNITIVE_SERVICES_RESOURCE_NAME}", resourceName)
 }
 
-function responsesWebSocketCapable(provider: Provider.Info, model: Model.Info) {
-  if (Provider.packageName(model.package ?? provider.package) !== "@ai-sdk/azure") return false
-  const settings = Provider.mergeOverlay(provider.settings, model.settings)
-  if (settings?.useCompletionUrls === true || settings?.useDeploymentBasedUrls === true) return false
+function responsesWebSocketCapable(provider: Provider.Info) {
+  if (provider.package !== "@opencode/ai/providers/azure/responses") return false
+  const settings = provider.settings
+  if (settings?.useDeploymentBasedUrls === true) return false
   if (settings?.apiVersion !== undefined && settings.apiVersion !== "v1") return false
   if (typeof settings?.baseURL !== "string") return true
   return /^https:\/\/[^/]+\.openai\.azure\.com(?:\/|$)/i.test(settings.baseURL)

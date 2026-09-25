@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Message } from "@opencode/ai"
+import { Message, Media } from "@opencode/ai"
 import { Model } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { SessionMessage } from "@opencode/core/session/message"
@@ -170,7 +170,7 @@ describe("toLLMMessages", () => {
         role: "user",
         content: [
           { type: "text", text: "Inspect this image" },
-          { type: "media", mediaType: "image/png", data: "aGVsbG8=", filename: "hello.png" },
+          { type: "media", media: Media.base64("aGVsbG8=", "image/png"), filename: "hello.png" },
         ],
         metadata: { agents: [{ name: "build" }] },
       }),
@@ -200,6 +200,44 @@ Recent work
         },
       ],
     ])
+  })
+
+  describe("model-switched", () => {
+    const ref = (variant?: string) =>
+      Model.Ref.make({
+        id: Model.ID.make("model"),
+        providerID: Provider.ID.make("provider"),
+        ...(variant === undefined ? {} : { variant: Model.VariantID.make(variant) }),
+      })
+    const switched = (to: Model.Ref, previous?: Model.Ref) =>
+      SessionMessage.ModelSelected.make({
+        id: id("model"),
+        type: "model-switched",
+        model: to,
+        previous,
+        time: { created },
+      })
+
+    test("records a same-model effort switch as an effort update", () => {
+      expect(toLLMMessages([switched(ref("low"), ref("high"))], ref("low"))).toEqual([
+        Message.effort({ effort: "low", previous: "high" }),
+      ])
+    })
+
+    test("maps the default variant and no variant to the model default effort", () => {
+      expect(toLLMMessages([switched(ref("low"), ref())], ref("low"))).toEqual([Message.effort({ effort: "low" })])
+      expect(toLLMMessages([switched(ref("default"), ref("max"))], ref())).toEqual([
+        Message.effort({ previous: "max" }),
+      ])
+    })
+
+    test("ignores switches that are not effort changes on the requested model", () => {
+      const other = Model.Ref.make({ id: Model.ID.make("other"), providerID: Provider.ID.make("provider") })
+      expect(toLLMMessages([switched(ref("low"))], ref("low"))).toEqual([])
+      expect(toLLMMessages([switched(ref("low"), other)], ref("low"))).toEqual([])
+      expect(toLLMMessages([switched(ref("thinking"), ref("high"))], ref("thinking"))).toEqual([])
+      expect(toLLMMessages([switched(ref("low"), ref("high"))], other)).toEqual([])
+    })
   })
 
   test("lowers text attachments after the prompt in one user message", () => {
@@ -456,8 +494,8 @@ Recent work
 
     expect(messages[0]?.content).toEqual([
       { type: "text", text: "Inspect this image" },
-      { type: "media", mediaType: "image/png", data, filename: "image.png" },
-      { type: "media", mediaType: "application/pdf", data: "JVBERg==", filename: "document.pdf" },
+      { type: "media", media: Media.base64(data, "image/png"), filename: "image.png" },
+      { type: "media", media: Media.base64("JVBERg==", "application/pdf"), filename: "document.pdf" },
     ])
   })
 
@@ -487,7 +525,7 @@ Recent work
     expect(messages[0]?.content).toEqual([
       { type: "text", text: "Inspect this image" },
       { type: "text", text: `Attached file: ${location}` },
-      { type: "media", mediaType: "image/png", data, filename: "IMG_3480.JPG" },
+      { type: "media", media: Media.base64(data, "image/png"), filename: "IMG_3480.JPG" },
     ])
   })
 
@@ -531,7 +569,7 @@ Recent work
           },
         },
       },
-      { type: "media", mediaType: "image/png", data, filename: "preview.png" },
+      { type: "media", media: Media.base64(data, "image/png"), filename: "preview.png" },
     ])
   })
 
@@ -559,7 +597,7 @@ Recent work
 
     expect(messages[0]?.content).toEqual([
       { type: "text", text: "Inspect this image" },
-      { type: "media", mediaType: "image/png", data, filename: "image.png" },
+      { type: "media", media: Media.base64(data, "image/png"), filename: "image.png" },
     ])
   })
 
@@ -603,11 +641,10 @@ Recent work
 
     expect(messages[0]?.content).toEqual([
       { type: "text", text: "[Image 1] [Image 1] [Image 2]" },
-      { type: "media", mediaType: "image/png", data, filename: "image.png" },
+      { type: "media", media: Media.base64(data, "image/png"), filename: "image.png" },
       {
         type: "media",
-        mediaType: "image/png",
-        data,
+        media: Media.base64(data, "image/png"),
         filename: "image.png",
         metadata: { description: "alternate use" },
       },

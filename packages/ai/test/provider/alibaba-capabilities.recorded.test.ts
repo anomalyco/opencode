@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent, LLMRequest, Message, ToolDefinition } from "../../src/index.js"
+import { LLM, LLMEvent, LLMRequest, Message, ToolDefinition, Media } from "../../src/index.js"
 import { Alibaba } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -65,7 +65,7 @@ for (const api of ["chat", "messages", "responses"] as const) {
               messages: [
                 Message.user([
                   { type: "text", text: "Read the three words in this image. Reply with only the words in order." },
-                  { type: "media", mediaType: "image/png", data: bytes },
+                  { type: "media", media: Media.bytes(bytes, "image/png") },
                 ]),
               ],
               generation: { maxTokens: 4096 },

@@ -47,7 +47,7 @@ export function HomeCommandPalette(props: {
     state.cleanup = undefined
     dialog.close()
     if (item.type === "command") {
-      item.option?.onSelect?.("palette")
+      void item.option?.onSelect?.("palette")
       return
     }
     if (item.type === "session") props.onSelectSession(item)

@@ -8,6 +8,8 @@ export const CredentialInfo = Schema.Struct({
   type: Schema.Literal("credential"),
   id: Credential.ID,
   label: Schema.String,
+  /** How the credential was obtained: a stored key or an OAuth grant. */
+  method: Schema.Literals(["key", "oauth"]),
 }).annotate({ identifier: "Connection.CredentialInfo" })
 
 export interface EnvInfo extends Schema.Schema.Type<typeof EnvInfo> {}

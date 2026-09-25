@@ -93,7 +93,7 @@ describe("normalizeProviderList", () => {
 
 describe("normalizeProjectInfo", () => {
   test("keeps the project VCS backend", () => {
-    const project = { id: "prj", canonical: "/repo", time: { created: 1, updated: 1 }, sandboxes: [] }
+    const project = { id: "prj", canonical: "/repo", time: { created: 1, updated: 1, active: 1 }, sandboxes: [] }
     expect(normalizeProjectInfo({ ...project, vcs: "git" } as Project).vcs).toBe("git")
     expect(normalizeProjectInfo({ ...project, vcs: "hg" } as Project).vcs).toBe("hg")
     expect(normalizeProjectInfo(project as Project).vcs).toBeUndefined()
@@ -124,7 +124,7 @@ describe("updateProjectInfo", () => {
       canonical: "/repo",
       name: "Repo",
       icon: { color: "purple" },
-      time: { created: 1, updated: 2 },
+      time: { created: 1, updated: 2, active: 2 },
       sandboxes: ["/repo-sandbox"],
     } satisfies Project
 

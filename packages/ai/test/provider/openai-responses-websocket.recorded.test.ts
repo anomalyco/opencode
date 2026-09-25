@@ -34,6 +34,13 @@ const observationFrame = (observation: ChannelObservation) => {
 
 const terminal = (observation: ChannelObservation) => observation.type !== "frame"
 
+// Whether the model emits an encrypted reasoning item ahead of its reply varies
+// between recordings, so full-context assertions compare the conversation without it.
+const conversation = (body: unknown) => {
+  const input = (body as { input: ReadonlyArray<{ type?: string }> }).input
+  return input.filter((item) => item.type !== "reasoning")
+}
+
 // This channel fixture supports sequential test traffic.
 const makeChannel = Effect.gen(function* () {
   const constructor = yield* Socket.WebSocketConstructor
@@ -167,14 +174,12 @@ describe("OpenAI Responses WebSocket recorded", () => {
       expect(second.text).toBe("Beta.")
       expect(channel.opens()).toBe(2)
       expect(channel.sent[1]).not.toHaveProperty("previous_response_id")
-      expect(channel.sent[1]).toMatchObject({
-        instructions: "Follow the user's exact reply instruction.",
-        input: [
-          { role: "user", content: [{ type: "input_text", text: "Reply exactly: Alpha." }] },
-          { role: "assistant", content: [{ type: "output_text", text: "Alpha." }] },
-          { role: "user", content: [{ type: "input_text", text: "Reply exactly: Beta." }] },
-        ],
-      })
+      expect(channel.sent[1]).toMatchObject({ instructions: "Follow the user's exact reply instruction." })
+      expect(conversation(channel.sent[1])).toMatchObject([
+        { type: "message", role: "user", content: [{ type: "input_text", text: "Reply exactly: Alpha." }] },
+        { role: "assistant", status: "completed", content: [{ type: "output_text", text: "Alpha." }] },
+        { type: "message", role: "user", content: [{ type: "input_text", text: "Reply exactly: Beta." }] },
+      ])
     }),
   )
 
@@ -204,14 +209,12 @@ describe("OpenAI Responses WebSocket recorded", () => {
       expect(channel.opens()).toBe(2)
       expect(channel.sent[1]).toHaveProperty("previous_response_id", expect.any(String))
       expect(channel.sent[2]).not.toHaveProperty("previous_response_id")
-      expect(channel.sent[2]).toMatchObject({
-        instructions: "Follow the user's exact reply instruction.",
-        input: [
-          { role: "user", content: [{ type: "input_text", text: "Reply exactly: Ready." }] },
-          { role: "assistant", content: [{ type: "output_text", text: "Ready." }] },
-          { role: "user", content: [{ type: "input_text", text: "Reply exactly: Recovered." }] },
-        ],
-      })
+      expect(channel.sent[2]).toMatchObject({ instructions: "Follow the user's exact reply instruction." })
+      expect(conversation(channel.sent[2])).toMatchObject([
+        { type: "message", role: "user", content: [{ type: "input_text", text: "Reply exactly: Ready." }] },
+        { role: "assistant", status: "completed", content: [{ type: "output_text", text: "Ready." }] },
+        { type: "message", role: "user", content: [{ type: "input_text", text: "Reply exactly: Recovered." }] },
+      ])
     }),
   )
 })

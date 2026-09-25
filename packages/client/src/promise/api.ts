@@ -21,8 +21,3 @@ export type SessionApi = Client["session"]
 export type SkillApi = Client["skill"]
 export type VcsApi = Client["vcs"]
 export type WorktreeApi = Client["worktree"]
-
-export interface CatalogApi {
-  readonly provider: ProviderApi
-  readonly model: ModelApi
-}
