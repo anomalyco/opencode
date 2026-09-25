@@ -147,7 +147,7 @@ const pluginContextRouterLayer = HttpRouter.middleware()(
     const session = yield* Session.Service
     const client = yield* HttpClient.HttpClient
     return (effect) =>
-      routeHttpApiWorkspace(client, provideInstanceContext(effect, store)).pipe(
+      routeHttpApiWorkspace(client, provideInstanceContext(effect, store, workspace)).pipe(
         Effect.provideService(Socket.WebSocketConstructor, makeWebSocket),
         Effect.provideService(Workspace.Service, workspace),
         Effect.provideService(Session.Service, session),
