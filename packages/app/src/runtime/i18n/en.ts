@@ -875,7 +875,7 @@ export const dict = {
   "session.queue.steerTooltip": "Send without interrupting",
   "session.queue.remove": "Remove",
   "session.queue.undo": "Undo",
-  "session.queue.undoDraft": "Clear your draft before undoing a queued prompt",
+  "session.queue.undoShell": "Leave shell mode before undoing a queued prompt",
   "session.queue.undoUnavailable": "Edit this prompt in the queue to preserve its file context",
   "session.queue.reorder": "Reorder queued prompt",
   "session.queue.attachments.one": "{{count}} attachment",

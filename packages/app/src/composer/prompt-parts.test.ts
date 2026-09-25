@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { Prompt } from "./state"
-import { clonePrompt, promptLength } from "./prompt-parts"
+import { appendPrompt, clonePrompt, promptLength } from "./prompt-parts"
 
 describe("composer prompt parts", () => {
   test("clones parts shallowly and copies file selections", () => {
@@ -39,5 +39,20 @@ describe("composer prompt parts", () => {
     ]
 
     expect(promptLength(prompt)).toBe(9)
+  })
+
+  test("appends with a custom separator and shifts following mentions", () => {
+    const prompt: Prompt = [{ type: "text", content: "one", start: 0, end: 3 }]
+    const following: Prompt = [
+      { type: "agent", content: "@build", start: 0, end: 6, name: "build" },
+      { type: "image", id: "1", filename: "img.png", mime: "image/png", blob: { id: "blob", url: "blob:test" } },
+    ]
+
+    expect(appendPrompt(prompt, following, "\n")).toEqual([
+      { type: "text", content: "one", start: 0, end: 3 },
+      { type: "text", content: "\n", start: 3, end: 4 },
+      { type: "agent", content: "@build", start: 4, end: 10, name: "build" },
+      { type: "image", id: "1", filename: "img.png", mime: "image/png", blob: { id: "blob", url: "blob:test" } },
+    ])
   })
 })

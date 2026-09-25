@@ -70,6 +70,7 @@ import { useToast } from "../../ui/toast"
 import stripAnsi from "strip-ansi"
 import { usePromptRef } from "../../context/prompt"
 import { projectedPromptInput } from "../../prompt/codec"
+import { appendPrompt } from "../../prompt/history"
 import { deduplicateVisibleImages } from "../../prompt/attachment"
 import { useEpilogue } from "../../context/epilogue"
 import { normalizePath } from "../../util/path"
@@ -654,21 +655,14 @@ export function Session(props: {
               const target = prompt()
               const queued = queuedPrompts().find((item) => item.id === option.value)
               if (!target || !queued) return
-              const current = target.current
-              if (
-                current.text.length ||
-                current.files?.length ||
-                current.agents?.length ||
-                current.skills?.length ||
-                current.pasted.length
-              ) {
-                toast.show({ message: "Clear or stash your draft before undoing a queued prompt", variant: "error" })
+              if (target.mode === "shell" && target.current.text) {
+                toast.show({ message: "Leave shell mode before undoing a queued prompt", variant: "error" })
                 return
               }
               void mutatePending("cancel", queued.id, "undo").then((undone) => {
                 if (!undone) return
                 target.setMode("normal")
-                target.set({ ...projectedPromptInput(queued.payload), pasted: [] })
+                target.set(appendPrompt(target.current, { ...projectedPromptInput(queued.payload), pasted: [] }))
                 dialog.clear()
                 target.focus()
               })

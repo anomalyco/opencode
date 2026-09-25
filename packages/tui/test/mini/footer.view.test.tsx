@@ -1301,9 +1301,8 @@ test.each(["queue", "steer"] as const)("direct footer toggles and deletes pendin
   }
 })
 
-test("undo restores a pending prompt without overwriting a draft", async () => {
+test("undo appends a pending prompt to the draft", async () => {
   const actions: string[] = []
-  const statuses: string[] = []
   const submitted: RunPrompt[] = []
   const queued: FooterQueuedPrompt = {
     messageID: "m-1",
@@ -1316,7 +1315,6 @@ test("undo restores a pending prompt without overwriting a draft", async () => {
   }
   const app = await renderFooter({
     queuedPrompts: [queued],
-    onStatus: (status) => statuses.push(status),
     onSubmit: (prompt) => {
       submitted.push(prompt)
       return true
@@ -1333,27 +1331,17 @@ test("undo restores a pending prompt without overwriting a draft", async () => {
     app.mockInput.pressKey("q")
     await app.renderOnce()
     app.mockInput.pressKey("u", { ctrl: true })
-    await app.renderOnce()
-    expect(statuses.at(-1)).toBe("clear your draft before undoing a queued prompt")
-    expect(actions).toEqual([])
-    app.mockInput.pressKey("ESCAPE")
-    await app.renderOnce()
-    expect(app.captureCharFrame()).toContain("existing draft")
-    app.mockInput.pressKey("c", { ctrl: true })
-    app.mockInput.pressKey("x", { ctrl: true })
-    app.mockInput.pressKey("q")
-    await app.renderOnce()
-    app.mockInput.pressKey("u", { ctrl: true })
     await Bun.sleep(0)
     await app.renderOnce()
     expect(actions).toEqual(["cancel:m-1"])
+    expect(app.captureCharFrame()).toContain("existing draft")
     expect(app.captureCharFrame()).toContain("look at main.ts")
     expect(app.captureCharFrame()).not.toContain("Pending prompts")
     await app.waitFor(() => app.renderer.currentFocusedEditor instanceof TextareaRenderable)
     app.mockInput.pressEnter()
     await Bun.sleep(0)
     await app.renderOnce()
-    expect(submitted).toMatchObject([{ text: "look at main.ts" }])
+    expect(submitted).toMatchObject([{ text: "existing draft\nlook at main.ts" }])
     expect(submitted[0].messageID).toBeUndefined()
   } finally {
     app.cleanup()

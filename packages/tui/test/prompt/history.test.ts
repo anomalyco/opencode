@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { isDuplicateEntry, MAX_HISTORY_ENTRIES, parsePromptHistory, type PromptInfo } from "../../src/prompt/history"
+import {
+  appendPrompt,
+  isDuplicateEntry,
+  MAX_HISTORY_ENTRIES,
+  parsePromptHistory,
+  type PromptInfo,
+} from "../../src/prompt/history"
 
 const entry = (text: string, files: PromptInfo["files"] = []): PromptInfo => ({
   text,
@@ -57,5 +63,28 @@ describe("prompt history", () => {
     ])
 
     expect(parsePromptHistory(JSON.stringify(value))).toEqual([value])
+  })
+
+  test("appends a prompt on a new line and shifts its ranges by display width", () => {
+    const output = appendPrompt(
+      { ...entry("日本"), pasted: [{ text: "long", source: { start: 0, end: 4, text: "日本" } }] },
+      {
+        ...entry("@a.ts [Pasted]", [{ uri: "file:///a.ts", mention: { start: 0, end: 5, text: "@a.ts" } }]),
+        agents: [{ name: "build" }],
+        pasted: [{ text: "more", source: { start: 6, end: 14, text: "[Pasted]" } }],
+      },
+    )
+
+    expect(output).toEqual({
+      text: "日本\n@a.ts [Pasted]",
+      files: [{ uri: "file:///a.ts", mention: { start: 5, end: 10, text: "@a.ts" } }],
+      agents: [{ name: "build", mention: undefined }],
+      skills: [],
+      pasted: [
+        { text: "long", source: { start: 0, end: 4, text: "日本" } },
+        { text: "more", source: { start: 11, end: 19, text: "[Pasted]" } },
+      ],
+    })
+    expect(appendPrompt(entry(""), entry("next")).text).toBe("next")
   })
 })

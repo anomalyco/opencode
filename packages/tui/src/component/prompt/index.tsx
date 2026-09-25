@@ -90,6 +90,7 @@ export type PromptProps = {
 export type PromptRef = {
   focused: boolean
   current: PromptInfo
+  mode: "normal" | "shell"
   setMode(mode: "normal" | "shell"): void
   set(prompt: PromptInfo): void
   reset(): void
@@ -672,6 +673,9 @@ export function Prompt(props: PromptProps) {
     },
     get current() {
       return store.prompt
+    },
+    get mode() {
+      return store.mode
     },
     focus() {
       if (disabled()) return

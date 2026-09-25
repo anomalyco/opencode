@@ -161,7 +161,7 @@ export type PromptState = {
   onContentChange: () => void
   onSizeChange: () => void
   current: () => RunPrompt
-  replacePrompt: (prompt: RunPrompt) => void
+  replacePrompt: (prompt: RunPrompt, cursor?: number) => void
   bind: (area?: TextareaRenderable) => void
 }
 

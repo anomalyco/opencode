@@ -7,7 +7,7 @@ import { Skill } from "@opencode/schema/skill"
 import type { ComposerDelivery } from "@/composer/adapter"
 import type { ComposerStateTarget } from "@/composer/submission-state"
 import type { ImageAttachmentPart, PathAttachmentPart, Prompt } from "@/composer/state"
-import { clonePrompt, isAttachment, promptLength } from "@/composer/prompt-parts"
+import { appendPrompt, clonePrompt, isAttachment, promptLength } from "@/composer/prompt-parts"
 import { buildPromptRequest } from "@/composer/request"
 import { blobDataUrl, createLegacyBlobReference } from "@/runtime/persistence/drafts"
 import { readPromptPresentation } from "@/composer/comment-note"
@@ -58,9 +58,12 @@ export function createSessionQueue(input: {
       if (change.type === "reorder") return rewrite(change.inboxIDs)
       if (change.type === "undo") {
         await server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: change.item.id })
-        input.draft.mode.set("normal")
-        input.draft.set(change.prompt, promptLength(change.prompt))
-        input.restoreFocus(promptLength(change.prompt))
+        const draft = input.draft.current()
+        const prompt = promptLength(draft)
+          ? appendPrompt(draft, change.prompt, "\n")
+          : [...change.prompt, ...draft.filter(isAttachment)]
+        input.draft.set(prompt, promptLength(prompt))
+        input.restoreFocus(promptLength(prompt))
         return
       }
       const replacement = await editedPromptInput(
@@ -152,12 +155,8 @@ export function createSessionQueue(input: {
     if (mutation.isPending || state.editing) return
     const item = queued().find((entry) => entry.id === id)
     if (!item) return
-    if (
-      input.draft.current().some((part) => ("content" in part ? !!part.content.length : true)) ||
-      input.draft.mode.current() !== "normal" ||
-      input.draft.retry.current()
-    ) {
-      showToast({ title: language.t("session.queue.undoDraft") })
+    if (input.draft.mode.current() !== "normal") {
+      showToast({ title: language.t("session.queue.undoShell") })
       return
     }
     const prompt = queuedPromptUndoDraft(item)

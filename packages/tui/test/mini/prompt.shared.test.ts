@@ -5,6 +5,7 @@ import {
   isExitCommand,
   isNewCommand,
   movePromptHistory,
+  promptAppend,
   pushPromptHistory,
 } from "../../src/mini/prompt.shared"
 import type { RunPrompt } from "../../src/mini/types"
@@ -104,5 +105,30 @@ describe("run prompt shared", () => {
     expect(isCompactCommand("/compact")).toBe(true)
     expect(isCompactCommand(" /COMPACT ")).toBe(true)
     expect(isCompactCommand("/summarize")).toBe(false)
+  })
+})
+
+describe("promptAppend", () => {
+  test("appends on a new line and shifts part ranges by display width", () => {
+    const output = promptAppend(
+      prompt("日本", [{ type: "agent", name: "plan", source: { start: 0, end: 4, value: "日本" } }]),
+      {
+        messageID: "m-1",
+        ...prompt("@a.ts /x", [
+          { type: "file", url: "file:///a.ts", source: { type: "file", text: { start: 0, end: 5, value: "@a.ts" } } },
+          { type: "skill", id: "x", source: { start: 6, end: 8, value: "/x" } },
+        ]),
+      },
+    )
+
+    expect(output).toEqual({
+      text: "日本\n@a.ts /x",
+      parts: [
+        { type: "agent", name: "plan", source: { start: 0, end: 4, value: "日本" } },
+        { type: "file", url: "file:///a.ts", source: { type: "file", text: { start: 5, end: 10, value: "@a.ts" } } },
+        { type: "skill", id: "x", source: { start: 11, end: 13, value: "/x" } },
+      ],
+    })
+    expect(promptAppend(prompt(""), prompt("next"))).toEqual(prompt("next"))
   })
 })
