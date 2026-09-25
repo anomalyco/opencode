@@ -22,8 +22,8 @@ export interface PatchDiffRef {
 }
 
 // Smaller patches render fine as a single DiffRenderable; only split files large enough to stall the TUI.
-const VIRTUAL_MIN_LINES = 1000
-const VIRTUAL_CHUNK_LINES = 128
+const VIRTUAL_MIN_LINES = 3000
+const VIRTUAL_CHUNK_LINES = 384
 
 type Props = Omit<JSX.IntrinsicElements["diff"], "diff" | "lineNumberBg" | "ref"> & {
   diff: string

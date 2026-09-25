@@ -2062,9 +2062,9 @@ test.each([80, 160])("virtualizes a large added file at %i columns without losin
   const lines = [
     "+{",
     ...Array.from(
-      { length: 2500 },
+      { length: 7500 },
       (_, index) =>
-        `+  "row-${String(index).padStart(4, "0")}": "${"value".repeat(index === 777 ? 2000 : index % 7 === 0 ? 24 : 1)}"${index === 2499 ? "" : ","}`,
+        `+  "row-${String(index).padStart(4, "0")}": "${"value".repeat(index === 777 ? 2000 : index % 7 === 0 ? 24 : 1)}"${index === 7499 ? "" : ","}`,
     ),
     "+}",
   ]
@@ -2084,16 +2084,16 @@ test.each([80, 160])("virtualizes a large added file at %i columns without losin
     expect(viewer.app.captureCharFrame()).toContain("row-0000")
     expect(
       findDiffs(viewer.app.renderer.root).reduce((total, node) => total + node.diff.split("\n").length, 0),
-    ).toBeLessThan(900)
+    ).toBeLessThan(2000)
     viewer.commands.get("diff.last")!.run()
     await viewer.app.flush()
-    if (!viewer.app.captureCharFrame().includes("row-2499")) {
-      await viewer.app.waitForFrame((frame) => frame.includes("row-2499"))
+    if (!viewer.app.captureCharFrame().includes("row-7499")) {
+      await viewer.app.waitForFrame((frame) => frame.includes("row-7499"))
     }
-    expect(viewer.app.captureCharFrame()).toContain("row-2499")
+    expect(viewer.app.captureCharFrame()).toContain("row-7499")
     expect(
       findDiffs(viewer.app.renderer.root).reduce((total, node) => total + node.diff.split("\n").length, 0),
-    ).toBeLessThan(900)
+    ).toBeLessThan(2000)
     viewer.commands.get("diff.first")!.run()
     await viewer.app.flush()
     expect(viewer.app.captureCharFrame()).toContain("row-0000")
@@ -2101,14 +2101,14 @@ test.each([80, 160])("virtualizes a large added file at %i columns without losin
     await viewer.app.flush()
     viewer.commands.get("diff.last")!.run()
     await viewer.app.flush()
-    expect(viewer.app.captureCharFrame()).toContain("row-2499")
+    expect(viewer.app.captureCharFrame()).toContain("row-7499")
   } finally {
     viewer.app.renderer.destroy()
   }
 })
 
 test("keeps the line-number gutter the same width across virtual chunks", async () => {
-  const additions = Array.from({ length: 2000 }, (_, index) => `+line-${String(index + 1).padStart(4, "0")}`)
+  const additions = Array.from({ length: 10500 }, (_, index) => `+line-${String(index + 1).padStart(5, "0")}`)
   const viewer = await renderDiffViewer(
     [
       {
@@ -2129,24 +2129,24 @@ test("keeps the line-number gutter the same width across virtual chunks", async 
       ?.indexOf(text)
   try {
     await viewer.app.flush()
-    const top = column("line-0001")
+    const top = column("line-00001")
     viewer.commands.get("diff.last")!.run()
     await viewer.app.flush()
-    if (!viewer.app.captureCharFrame().includes("line-2000")) {
-      await viewer.app.waitForFrame((frame) => frame.includes("line-2000"))
+    if (!viewer.app.captureCharFrame().includes("line-10500")) {
+      await viewer.app.waitForFrame((frame) => frame.includes("line-10500"))
     }
     expect(top).toBeDefined()
-    expect(column("line-2000")).toBe(top)
+    expect(column("line-10500")).toBe(top)
   } finally {
     viewer.app.renderer.destroy()
   }
 })
 
 test("highlights virtual chunks with whole-file syntax context", async () => {
-  const additions = Array.from({ length: 1200 }, (_, index) => {
-    if (index === 120) return "+/*"
-    if (index === 159) return "+*/"
-    if (index > 120 && index < 159) return `+  comment ${index}`
+  const additions = Array.from({ length: 3200 }, (_, index) => {
+    if (index === 370) return "+/*"
+    if (index === 399) return "+*/"
+    if (index > 370 && index < 399) return `+  comment ${index}`
     return `+const value${index} = ${index}`
   })
   const viewer = await renderDiffViewer(
@@ -2167,26 +2167,26 @@ test("highlights virtual chunks with whole-file syntax context", async () => {
       .lines.flatMap((line) => line.spans)
       .find((span) => span.text.includes(text))?.fg
   try {
-    findScrollBox(viewer.app.renderer.root)!.scrollTo(110)
+    findScrollBox(viewer.app.renderer.root)!.scrollTo(360)
     await viewer.app.flush()
     // The comment starts in the first chunk and ends in the second; wait until it is highlighted.
-    for (let attempt = 0; attempt < 100 && `${color("comment 125")}` === `${color("value115")}`; attempt++) {
+    for (let attempt = 0; attempt < 100 && `${color("comment 375")}` === `${color("value365")}`; attempt++) {
       await Bun.sleep(20)
       await viewer.app.flush()
     }
-    expect(`${color("comment 125")}`).not.toBe(`${color("value115")}`)
-    for (let attempt = 0; attempt < 100 && `${color("comment 135")}` !== `${color("comment 125")}`; attempt++) {
+    expect(`${color("comment 375")}`).not.toBe(`${color("value365")}`)
+    for (let attempt = 0; attempt < 100 && `${color("comment 390")}` !== `${color("comment 375")}`; attempt++) {
       await Bun.sleep(20)
       await viewer.app.flush()
     }
-    expect(`${color("comment 135")}`).toBe(`${color("comment 125")}`)
+    expect(`${color("comment 390")}`).toBe(`${color("comment 375")}`)
   } finally {
     viewer.app.renderer.destroy()
   }
 })
 
 test("does not virtualize added files at or below the size threshold", async () => {
-  const additions = Array.from({ length: 1000 }, (_, index) => `+small line ${index}`)
+  const additions = Array.from({ length: 3000 }, (_, index) => `+small line ${index}`)
   const viewer = await renderDiffViewer(
     [
       {
@@ -2207,7 +2207,7 @@ test("does not virtualize added files at or below the size threshold", async () 
 })
 
 test("file navigation and review still work after a virtualized patch", async () => {
-  const additions = Array.from({ length: 2200 }, (_, index) => `+added line ${index}`)
+  const additions = Array.from({ length: 6600 }, (_, index) => `+added line ${index}`)
   const viewer = await renderDiffViewer(
     [
       {
@@ -2223,7 +2223,7 @@ test("file navigation and review still work after a virtualized patch", async ()
   )
   try {
     const scroll = findScrollBox(viewer.app.renderer.root)!
-    scroll.scrollTo(900)
+    scroll.scrollTo(2700)
     await viewer.app.flush()
     viewer.commands.get("diff.previous_hunk")!.run()
     await viewer.app.flush()
