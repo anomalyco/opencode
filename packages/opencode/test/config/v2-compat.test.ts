@@ -248,6 +248,11 @@ describe("ConfigV2Compat.lower", () => {
     expect(config.agent?.reviewer?.permission).toEqual({ edit: "deny" })
   })
 
+  test("preserves customInstructions through V2 lowering", () => {
+    const config = lower({ customInstructions: "Use tabs." })
+    expect(config.customInstructions).toBe("Use tabs.")
+  })
+
   test("does not sanitize malformed V1 fields before schema validation", () => {
     expect(() => lower({ model: 42 })).toThrow()
     expect(() => lower({ snapshot: "enabled" })).toThrow()
