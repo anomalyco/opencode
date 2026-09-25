@@ -149,8 +149,7 @@ const decodeResult = Effect.fn("GoogleVideo.decodeResult")(function* (
   const output = yield* decodeOperation(response)
   const operation = output.value
   const status = statusOf(operation)
-  if (status === "running")
-    return yield* output.invalid(`${route.name} operation ${context.token.operation} has not finished`)
+  if (status === "running") return yield* output.pending(context.token.operation)
   if (status === "failed")
     return yield* output.ended(
       "failed",

@@ -838,3 +838,55 @@ describe("Video / Runway", () => {
     }),
   )
 })
+
+// ---------------------------------------------------------------------------
+// Shared queued behavior
+// ---------------------------------------------------------------------------
+
+describe("Video / queued result", () => {
+  for (const pending of [
+    {
+      model: Google.configure({ apiKey: "test", baseURL: "https://google.test/v1beta" }).video("veo-3.1"),
+      token: { operation: "models/veo-3.1/operations/op_1" },
+      body: { name: "models/veo-3.1/operations/op_1", done: false },
+      name: "Google Veo",
+    },
+    {
+      model: XAI.configure({ apiKey: "test", baseURL: "https://xai.test/v1" }).video("grok-imagine-video-1.5"),
+      token: { requestID: "req_1" },
+      body: { status: "pending", progress: 40 },
+      name: "xAI Video",
+    },
+    {
+      model: Runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5"),
+      token: { taskID: "task_1" },
+      body: { status: "RUNNING", progress: 0.5 },
+      name: "Runway",
+    },
+  ]) {
+    it.effect(`rejects reading a ${pending.model.provider} result before the generation finishes`, () =>
+      Effect.gen(function* () {
+        const generation = yield* Video.resume(pending.model, pending.token)
+        const error = yield* generation.result().pipe(Effect.flip)
+        expect(error.reason._tag).toBe("InvalidRequest")
+        expect(error.message).toBe(
+          `${pending.name} generation ${generation.id} has not finished; await it before reading the result`,
+        )
+        expect(error.reason.body).toBe(JSON.stringify(pending.body))
+        expect(error.reason.http?.status).toBe(200)
+      }).pipe(Effect.provide(layer((input) => Effect.succeed(json(input, pending.body))))),
+    )
+  }
+
+  it.effect("rejects a status that only matches an inherited property", () =>
+    Effect.gen(function* () {
+      const error = yield* Video.resume(
+        XAI.configure({ apiKey: "test", baseURL: "https://xai.test/v1" }).video("grok-imagine-video-1.5"),
+        { requestID: "req_1" },
+      ).pipe(Effect.flip)
+      expect(error.reason._tag).toBe("InvalidProviderOutput")
+      expect(error.message).toBe('Unknown generation status "constructor"')
+      expect(error.reason.body).toBe(JSON.stringify({ status: "constructor" }))
+    }).pipe(Effect.provide(layer((input) => Effect.succeed(json(input, { status: "constructor" }))))),
+  )
+})

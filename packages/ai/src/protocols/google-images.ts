@@ -101,7 +101,7 @@ const generationConfig = (request: Request) => {
 const fromRequest = Effect.fn("GoogleImages.fromRequest")(function* (request: Request) {
   if (request.n !== undefined && request.n > 1)
     return yield* route.unsupported(
-      "image.n",
+      "media.n",
       `${route.name} generates one image per request; call it once per image instead of n=${request.n}`,
     )
   const parts = yield* Effect.forEach(request.images ?? [], (image) =>

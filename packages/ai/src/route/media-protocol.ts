@@ -200,7 +200,8 @@ export const identity = (input: { readonly id: string; readonly name: string; re
   /**
    * Read a text body while retaining the original payload and HTTP context on every downstream error. `invalid` is a
    * malformed provider document; `ended` is a generation that reached a terminal status without output (`failed` is
-   * provider-side, `cancelled`/`expired` mean the result will never exist); `contentPolicy` is a moderated result.
+   * provider-side, `cancelled`/`expired` mean the result will never exist); `pending` is a `result()` read before the
+   * generation finished, which is caller misuse; `contentPolicy` is a moderated result.
    */
   const text = Effect.fn("MediaProtocol.text")(function* (response: HttpClientResponse.HttpClientResponse) {
     const http = context(response)
@@ -228,6 +229,14 @@ export const identity = (input: { readonly id: string; readonly name: string; re
             status === "failed"
               ? new ProviderInternalError({ message, body, http })
               : new InvalidRequestError({ message, body, http }),
+        }),
+      pending: (id: string) =>
+        new AIError({
+          reason: new InvalidRequestError({
+            message: `${input.name} generation ${id} has not finished; await it before reading the result`,
+            body,
+            http,
+          }),
         }),
       contentPolicy: (message: string) => new AIError({ reason: new ContentPolicyError({ message, body, http }) }),
     }
@@ -290,9 +299,8 @@ export const status = <Table extends Record<string, Status>>(
   raw: string,
   output: Output,
 ): Effect.Effect<Status, AIError> => {
-  const normalized: Status | undefined = table[raw]
-  if (normalized === undefined) return Effect.fail(output.invalid(`Unknown generation status "${raw}"`))
-  return Effect.succeed(normalized)
+  if (!Object.hasOwn(table, raw)) return Effect.fail(output.invalid(`Unknown generation status "${raw}"`))
+  return Effect.succeed(table[raw])
 }
 
 /** A `url` asset whose provider-declared retention window starts now. */

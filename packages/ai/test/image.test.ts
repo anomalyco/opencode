@@ -725,6 +725,7 @@ describe("Image", () => {
       const errors = yield* Effect.all(
         [
           Image.start({ model: Google.configure({ apiKey: "test" }).image("gemini-3.1-flash-image"), prompt }),
+          Image.generate({ model: Google.configure({ apiKey: "test" }).image("gemini-3.1-flash-image"), prompt, n: 2 }),
           Image.start({
             model: BlackForestLabs.configure({ apiKey: "test" }).image("flux-2-pro"),
             prompt,
@@ -749,6 +750,7 @@ describe("Image", () => {
       expect(errors.map((error) => [error.reason._tag, "operation" in error.reason && error.reason.operation])).toEqual(
         [
           ["UnsupportedOperation", "image.start"],
+          ["UnsupportedOperation", "media.n"],
           ["UnsupportedOperation", "media.aspectRatio"],
           ["UnsupportedOperation", "media.size"],
           ["UnsupportedOperation", "media.stream"],
@@ -842,6 +844,56 @@ describe("Image", () => {
     output: { text: "not an image" },
     urls: { get: "https://replicate.test/p_1", cancel: "https://replicate.test/p_1/cancel" },
   }
+  for (const pending of [
+    {
+      model: BlackForestLabs.configure({ apiKey: "test" }).image("flux-2-pro"),
+      token: { id: "req_1", pollingURL: "https://bfl.test/v1/get_result?id=req_1" },
+      status: 200,
+      body: { id: "req_1", status: "Pending" },
+      message: "Black Forest Labs generation req_1",
+    },
+    {
+      model: Replicate.configure({ apiKey: "test" }).image("owner/model"),
+      token: { id: "p_1", getURL: "https://replicate.test/p_1", cancelURL: "https://replicate.test/p_1/cancel" },
+      status: 200,
+      body: {
+        id: "p_1",
+        status: "processing",
+        urls: { get: "https://replicate.test/p_1", cancel: "https://replicate.test/p_1/cancel" },
+      },
+      message: "Replicate generation p_1",
+    },
+    {
+      model: Stability.configure({ apiKey: "test", baseURL: "https://stability.test" }).upscale(),
+      token: { id: "up_1" },
+      status: 202,
+      body: { id: "up_1", status: "in-progress" },
+      message: "Stability AI generation up_1",
+    },
+  ]) {
+    it.effect(`rejects reading a ${pending.model.provider} result before the generation finishes`, () =>
+      Effect.gen(function* () {
+        const generation = yield* Image.resume(pending.model, pending.token)
+        const error = yield* generation.result().pipe(Effect.flip)
+        expect(error.reason._tag).toBe("InvalidRequest")
+        expect(error.message).toBe(`${pending.message} has not finished; await it before reading the result`)
+        expect(error.reason.body).toBe(JSON.stringify(pending.body))
+        expect(error.reason.http?.status).toBe(pending.status)
+      }).pipe(
+        Effect.provide(
+          layer((input) =>
+            Effect.succeed(
+              input.respond(JSON.stringify(pending.body), {
+                status: pending.status,
+                headers: { "content-type": "application/json" },
+              }),
+            ),
+          ),
+        ),
+      ),
+    )
+  }
+
   it.effect("classifies terminal outcomes the recordings never saw", () =>
     Effect.gen(function* () {
       const bfl = yield* Image.resume(BlackForestLabs.configure({ apiKey: "test" }).image("flux-2-pro"), {

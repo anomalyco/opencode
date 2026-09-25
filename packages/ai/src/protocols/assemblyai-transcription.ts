@@ -158,8 +158,7 @@ const decodeResult = Effect.fn("AssemblyAITranscription.decodeResult")(function*
   const error = transcript.error ?? undefined
   if (status === "failed")
     return yield* output.ended("failed", `${route.name} transcription failed${error === undefined ? "" : `: ${error}`}`)
-  if (status !== "completed")
-    return yield* output.invalid(`${route.name} transcript ${context.token.transcriptID} has not finished`)
+  if (status !== "completed") return yield* output.pending(context.token.transcriptID)
   const duration = transcript.audio_duration ?? undefined
   return new TranscriptionResponse({
     text: transcript.text ?? "",

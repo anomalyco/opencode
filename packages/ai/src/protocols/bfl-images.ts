@@ -181,7 +181,8 @@ const decodeResult = Effect.fn("BlackForestLabsImages.decodeResult")(function* (
   if (isModerated(document.status)) return yield* output.contentPolicy(`${route.name} moderated the generation`)
   if (status === "failed" || status === "expired")
     return yield* output.ended(status, `${route.name} generation ${context.token.id} ended with ${document.status}`)
-  if (status !== "completed" || document.result === undefined || document.result === null)
+  if (status !== "completed") return yield* output.pending(context.token.id)
+  if (document.result === undefined || document.result === null)
     return yield* output.invalid(`${route.name} generation ${context.token.id} has no result`)
   const { sample, seed, prompt, ...rest } = document.result
   // A settled `cost` on the result supersedes the submit-time cost carried on the token.

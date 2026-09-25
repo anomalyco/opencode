@@ -141,8 +141,7 @@ const decodeResult = Effect.fn("RunwayVideo.decodeResult")(function* (
   }
   if (status === "cancelled")
     return yield* output.ended("cancelled", `${route.name} task ${context.token.taskID} was cancelled`)
-  if (status !== "completed")
-    return yield* output.invalid(`${route.name} task ${context.token.taskID} has not finished`)
+  if (status !== "completed") return yield* output.pending(context.token.taskID)
   const urls = task.output ?? []
   if (urls.length === 0) return yield* output.invalid(`${route.name} task succeeded without any output`)
   return new VideoResponse({

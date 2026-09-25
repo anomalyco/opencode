@@ -191,4 +191,25 @@ describe("Transcription", () => {
       ])
     }),
   )
+
+  it.effect("rejects reading an AssemblyAI result before the transcript finishes", () =>
+    Effect.gen(function* () {
+      const generation = yield* Transcription.resume(assemblyai, { transcriptID: "tr_1" })
+      const error = yield* generation.result().pipe(Effect.flip)
+      expect(error.reason._tag).toBe("InvalidRequest")
+      expect(error.message).toBe("AssemblyAI generation tr_1 has not finished; await it before reading the result")
+      expect(error.reason.body).toBe(JSON.stringify({ id: "tr_1", status: "processing" }))
+      expect(error.reason.http?.status).toBe(200)
+    }).pipe(
+      Effect.provide(
+        layer((input) =>
+          Effect.succeed(
+            input.respond(JSON.stringify({ id: "tr_1", status: "processing" }), {
+              headers: { "content-type": "application/json" },
+            }),
+          ),
+        ),
+      ),
+    ),
+  )
 })

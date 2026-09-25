@@ -175,7 +175,7 @@ const decodeUpscaleResult = Effect.fn("StabilityImages.decodeUpscaleResult")(fun
 ) {
   if (response.status === 202) {
     const output = yield* upscaleRoute.text(response)
-    return yield* output.invalid(`${upscaleRoute.name} upscale ${context.token.id} has not finished`)
+    return yield* output.pending(context.token.id)
   }
   return yield* decodeUpscaleImage(response)
 })
