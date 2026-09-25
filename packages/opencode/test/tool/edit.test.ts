@@ -263,6 +263,18 @@ describe("tool.edit", () => {
       }),
     )
 
+    it.instance("writes newString literally without expanding $ patterns", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "file.txt")
+        yield* put(filepath, 'log("done");')
+
+        yield* run({ filePath: filepath, oldString: 'log("done");', newString: 'log("$& $1 $` ok");' })
+
+        expect(yield* load(filepath)).toBe('log("$& $1 $` ok");')
+      }),
+    )
+
     it.instance("emits change event for existing files", () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
