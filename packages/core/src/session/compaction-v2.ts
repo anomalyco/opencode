@@ -103,6 +103,7 @@ type Streamed = {
 
 const MAX_REJECTIONS = 3
 const TOOL_OUTPUT_MAX_CHARS = 2_000
+const OMITTED_OUTPUT = "Output exceeded the available model context and was truncated"
 const IMAGE_TOKEN_ESTIMATE = 1_500
 const PDF_TOKEN_ESTIMATE = 2_000
 
@@ -287,17 +288,71 @@ export const layer = Layer.effect(
       return flatten(request, context, target)
     }
 
-    /** Tool outputs at the end, newest first, then media, replaced by placeholders until the estimate fits. */
-    const lighten = (request: LLMRequest, target: number): LLMRequest => {
-      throw new Error(`not implemented: lighten(${request.messages.length}, ${target})`)
+    /**
+     * The same structured request with as little replaced as fits `target`, so everything before the first change
+     * still hits the cache. First the tool outputs at the very end, newest first: results the model has not answered
+     * yet, and usually what overflowed. Earlier outputs stay, since later replies build on them. Then media, newest
+     * first. Stops once the estimate fits; the result may still not fit.
+     */
+    const lighten = (request: LLMRequest, target: number) => {
+      const messages = [...request.messages]
+      let size = estimateRequest(request)
+      const replace = (index: number, part: (part: ContentPart) => ContentPart) => {
+        const before = estimateMessage(messages[index])
+        messages[index] = Message.make({ ...messages[index], content: messages[index].content.map(part) })
+        size += estimateMessage(messages[index]) - before
+      }
+
+      for (let index = messages.length - 1; index >= 0 && size > target && messages[index].role === "tool"; index--) {
+        replace(index, (part) =>
+          part.type === "tool-result" && estimatePart(part) > Token.estimate(OMITTED_OUTPUT)
+            ? { ...part, result: { type: "text", value: OMITTED_OUTPUT } }
+            : part,
+        )
+      }
+      for (let index = messages.length - 1; index >= 0 && size > target; index--) replace(index, withoutMedia)
+      return LLMRequest.update(request, { messages })
     }
 
     /**
-     * `[previous compaction][transcript]`: tool outputs replaced, reasoning and media left out, oldest exchanges
-     * dropped until the estimate fits. Undefined when the previous compaction and newest exchange alone do not.
+     * Last resort: `[previous compaction][transcript]`, the conversation since that compaction as one text message.
+     * A previous summary always stays in front, while its verbatim recent part becomes the oldest transcript entry;
+     * a previous native window stays exactly as the provider made it. The transcript leaves out reasoning, media,
+     * and instruction updates, and replaces tool outputs longer than the placeholder. Whole exchanges are then
+     * dropped, oldest first, until the estimate fits. Undefined when even the newest exchange does not.
      */
-    const flatten = (request: LLMRequest, context: SessionContext.Loaded, target: number): LLMRequest | undefined => {
-      throw new Error(`not implemented: flatten(${request.messages.length}, ${context.session.id}, ${target})`)
+    const flatten = (request: LLMRequest, context: SessionContext.Loaded, target: number) => {
+      const [oldest] = context.messages
+      const previous = oldest?.type === "compaction" && oldest.status === "completed" ? oldest : undefined
+      const end =
+        request.messages.findLastIndex(
+          (message) =>
+            (previous !== undefined && message.id === previous.id) ||
+            message.content.some((part) => part.type === "compaction"),
+        ) + 1
+      const summary = previous !== undefined && !SessionProviderContext.isCheckpoint(previous) ? previous : undefined
+      const lead = summary
+        ? toLLMMessages([{ ...summary, recent: "" }], context.model.ref)
+        : request.messages.slice(0, end)
+
+      // A user message and everything after it, up to the next one, is one exchange: kept or dropped whole.
+      const exchanges = request.messages.slice(end).reduce<string[]>(
+        (groups, message) => {
+          const text = flattenMessage(message)
+          if (!text) return groups
+          if (message.role === "user" || groups.length === 0) groups.push(text)
+          else groups[groups.length - 1] += `\n${text}`
+          return groups
+        },
+        summary?.recent ? [summary.recent] : [],
+      )
+
+      const fixed = estimateRequest({ system: request.system, tools: request.tools, messages: lead })
+      const kept = exchanges.slice(oldestToDrop(exchanges, (text) => Token.estimate(text) + 1, target - fixed))
+      if (kept.length === 0) return undefined
+      const omitted = exchanges.length - kept.length
+      const note = omitted ? `[${omitted} older exchanges omitted]\n\n` : ""
+      return LLMRequest.update(request, { messages: [...lead, Message.user(note + kept.join("\n\n"))] })
     }
 
     /** A text summary of the older conversation; the newest `keep` tokens stay verbatim beside it. */
@@ -707,6 +762,43 @@ const truncateToolOutput = (value: string) => {
   }
   if (end === value.length) return value
   return `${value.slice(0, end)}\n[truncated]`
+}
+
+const withoutMedia = (part: ContentPart): ContentPart => {
+  if (part.type === "media") return Message.text(`[${part.media.mediaType} omitted]`)
+  if (part.type !== "tool-result" || part.result.type !== "content") return part
+  return {
+    ...part,
+    result: {
+      type: "content",
+      value: part.result.value.map((item) =>
+        item.type === "text" ? item : { type: "text", text: `[${item.mime} omitted]` },
+      ),
+    },
+  }
+}
+
+/** One request message as a flattened transcript line. Empty for what the transcript leaves out. */
+const flattenMessage = (message: Message) => {
+  if (message.role === "system") return ""
+  return message.content
+    .flatMap((part) => {
+      if (part.type === "text")
+        return part.text ? [`[${message.role === "user" ? "User" : "Assistant"}]: ${part.text}`] : []
+      if (part.type === "media") return [`[${part.media.mediaType} omitted]`]
+      if (part.type === "tool-call") return [`[Assistant tool call]: ${part.name}(${JSON.stringify(part.input) ?? ""})`]
+      if (part.type !== "tool-result") return []
+      const result = part.result
+      const output =
+        result.type === "content"
+          ? serializeToolContent(result.value)
+          : typeof result.value === "string"
+            ? result.value
+            : (JSON.stringify(result.value) ?? "")
+      const label = result.type === "error" ? "Tool error" : "Tool result"
+      return [`[${label}]: ${output.length > OMITTED_OUTPUT.length ? OMITTED_OUTPUT : output}`]
+    })
+    .join("\n")
 }
 
 const serializeToolContent = (content: ReadonlyArray<SessionMessage.ToolStateCompleted["content"][number]>) =>
