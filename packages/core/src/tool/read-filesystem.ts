@@ -61,6 +61,7 @@ export class PathKindError extends Schema.TaggedErrorClass<PathKindError>()("Rea
 }
 
 export type InspectError = FSUtil.Error | PathKindError
+export type ListError = FSUtil.Error | OffsetOutOfRangeError
 export type ReadError =
   | FSUtil.Error
   | BinaryFileError
@@ -97,7 +98,7 @@ export interface Interface {
     resource: string,
     page?: PageInput,
   ) => Effect.Effect<FileSystem.Content | TextPage, ReadError>
-  readonly list: (path: AbsolutePath, page?: PageInput) => Effect.Effect<ListPage, FSUtil.Error>
+  readonly list: (path: AbsolutePath, page?: PageInput) => Effect.Effect<ListPage, ListError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ReadToolFileSystem") {}
@@ -347,6 +348,7 @@ export const list = Effect.fn("ReadTool.list")(function* (fs: FSUtil.Interface, 
     .filter((item): item is FileSystem.Entry => item !== undefined)
     .sort((a, b) => (a.type === b.type ? a.path.localeCompare(b.path) : a.type === "directory" ? -1 : 1))
   const selected = visible.slice(offset - 1, offset - 1 + limit)
+  if (selected.length === 0 && offset !== 1) return yield* Effect.fail(new OffsetOutOfRangeError({ offset }))
   const truncated = offset - 1 + selected.length < visible.length
   return new ListPage({ entries: selected, truncated, ...(truncated ? { next: offset + selected.length } : {}) })
 })
