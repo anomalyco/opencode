@@ -97,6 +97,27 @@ describe("contract hygiene", () => {
     ).toEqual({ created: 0, updated: 0, idle: 2, viewed: 1 })
   })
 
+  test("optional() keeps inner annotations on the encoded schema used by OpenAPI", () => {
+    expect(
+      encodedDescription(
+        Schema.Struct({ value: optional(Schema.String.annotate({ description: "kept" })) }),
+        "value",
+      ),
+    ).toBe("kept")
+    expect(
+      encodedDescription(
+        Schema.Struct({ value: Schema.String.annotate({ description: "before-pipe" }).pipe(optional) }),
+        "value",
+      ),
+    ).toBe("before-pipe")
+    expect(
+      encodedDescription(
+        Schema.Struct({ value: optional(Schema.String).annotate({ description: "after" }) }),
+        "value",
+      ),
+    ).toBeUndefined()
+  })
+
   test("descriptions on optional fields reach the encoded schema used by OpenAPI", () => {
     expect(encodedDescription(Worktree.CreateInput, "directory")).toContain("Parent directory")
     expect(encodedDescription(Worktree.CreateInput, "name")).toContain("Child directory")
