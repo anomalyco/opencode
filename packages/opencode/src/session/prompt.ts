@@ -1149,7 +1149,12 @@ const layer = Layer.effect(
           if (task?.type === "compaction") {
             const result = yield* compaction.process({
               messages: msgs,
-              parentID: lastUser.id,
+              // The task IS the compaction part, and every part carries its own messageID.
+              // Using lastUser.id instead means a prompt that arrives between the marker being
+              // written and this running becomes the summary's parent, which makes the summary
+              // unreadable to completedCompactions() and discards the model the compaction was
+              // requested with.
+              parentID: task.messageID,
               sessionID,
               auto: task.auto,
               overflow: task.overflow,

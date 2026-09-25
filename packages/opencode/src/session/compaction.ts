@@ -329,6 +329,32 @@ const layer = Layer.effect(
       }
       const userMessage = parent.info
       const compactionPart = parent.parts.find((part): part is SessionV1.CompactionPart => part.type === "compaction")
+      // completedCompactions() only honours a summary whose parentID resolves to a user message
+      // carrying a compaction part. SessionPrompt now always passes the marker's own id, so a
+      // markerless parent means a caller broke the contract: say so loudly rather than searching
+      // nearby for a marker, because a guess can bind an already-consumed one and leave two
+      // summaries answering a single compaction.
+      if (!compactionPart) {
+        yield* Effect.logError("compaction parent carries no marker; this summary will not be readable", {
+          sessionID: input.sessionID,
+          parentID: input.parentID,
+        })
+      }
+      const alreadyCompleted = input.messages.some(
+        (m) =>
+          m.info.role === "assistant" &&
+          m.info.summary === true &&
+          m.info.finish !== undefined &&
+          !m.info.error &&
+          m.info.parentID === input.parentID,
+      )
+      if (alreadyCompleted) {
+        yield* Effect.logWarning("compaction marker already carries a completed summary; skipping", {
+          sessionID: input.sessionID,
+          parentID: input.parentID,
+        })
+        return "continue"
+      }
 
       let messages = input.messages
       let replay:
@@ -356,11 +382,26 @@ const layer = Layer.effect(
       }
 
       const agent = yield* agents.get("compaction")
-      const model = agent.model
-        ? yield* provider.getModel(agent.model.providerID, agent.model.modelID).pipe(Effect.orDie)
+      const configuredModel = agent.model
+      const model = configuredModel
+        ? yield* provider.getModel(configuredModel.providerID, configuredModel.modelID).pipe(Effect.orDie)
         : yield* provider.getModel(userMessage.model.providerID, userMessage.model.modelID).pipe(Effect.orDie)
+      // userMessage is the marker, so its model is the model this compaction was REQUESTED with
+      // (a plugin-supplied pin arrives exactly this way). It is not "the session model", and
+      // labelling it as such makes a working pin indistinguishable from a dead one in the logs.
+      yield* Effect.logInfo("compaction model resolved", {
+        source: configuredModel ? "configured-compaction-agent" : "request-marker",
+        providerID: model.providerID,
+        modelID: model.id,
+        requestedProviderID: userMessage.model.providerID,
+        requestedModelID: userMessage.model.modelID,
+      })
       const cfg = yield* config.get()
-      const history = compactionPart && messages.at(-1)?.info.id === input.parentID ? messages.slice(0, -1) : messages
+      // The marker is the snapshot boundary. Everything at or after it is outside this
+      // compaction: the marker is bookkeeping, and a prompt that arrived after it must stay live
+      // rather than be summarized into history and then replayed as a live turn as well.
+      const markerIndex = messages.findIndex((m) => m.info.id === input.parentID)
+      const history = markerIndex >= 0 ? messages.slice(0, markerIndex) : messages
       const prior = completedCompactions(history)
       const hidden = new Set(prior.flatMap((item) => [item.userIndex, item.assistantIndex]))
       const previousSummary = prior.at(-1)?.summary
@@ -465,6 +506,23 @@ const layer = Layer.effect(
         })
       }
 
+      // The marker is a compaction request, not a turn to resume. Resume identity is the last
+      // real user turn BEFORE the marker - taking it from the marker instead hands the
+      // summarizer's model, agent and variant to the live session after compaction.
+      const resumeCandidate = history.findLast(
+        (m): m is SessionV1.WithParts & { info: SessionV1.User } =>
+          m.info.role === "user" && !m.parts.some((p) => p.type === "compaction"),
+      )
+      const resumeUser = resumeCandidate?.info ?? userMessage
+      // If a real prompt arrived after the marker it is already queued to be answered. Injecting
+      // a synthetic continuation as well answers one turn twice.
+      const markerIndexInInput = input.messages.findIndex((m) => m.info.id === input.parentID)
+      const postMarkerPrompt =
+        markerIndexInInput >= 0 &&
+        input.messages
+          .slice(markerIndexInInput + 1)
+          .some((m) => m.info.role === "user" && !m.parts.some((p) => p.type === "compaction"))
+
       if (result === "continue" && input.auto) {
         if (replay) {
           const original = replay.info
@@ -494,23 +552,23 @@ const layer = Layer.effect(
           }
         }
 
-        if (!replay) {
-          const info = yield* provider.getProvider(userMessage.model.providerID)
+        if (!replay && !postMarkerPrompt) {
+          const info = yield* provider.getProvider(resumeUser.model.providerID)
           if (
             (yield* plugin.trigger(
               "experimental.compaction.autocontinue",
               {
                 sessionID: input.sessionID,
-                agent: userMessage.agent,
+                agent: resumeUser.agent,
                 model: yield* provider
-                  .getModel(userMessage.model.providerID, userMessage.model.modelID)
+                  .getModel(resumeUser.model.providerID, resumeUser.model.modelID)
                   .pipe(Effect.orDie),
                 provider: {
                   source: info.source,
                   info,
                   options: info.options,
                 },
-                message: userMessage,
+                message: resumeUser,
                 overflow: input.overflow === true,
               },
               { enabled: true },
@@ -521,8 +579,8 @@ const layer = Layer.effect(
               role: "user",
               sessionID: input.sessionID,
               time: { created: Date.now() },
-              agent: userMessage.agent,
-              model: userMessage.model,
+              agent: resumeUser.agent,
+              model: resumeUser.model,
             })
             const text =
               (input.overflow

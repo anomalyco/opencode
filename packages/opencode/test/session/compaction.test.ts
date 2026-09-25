@@ -189,6 +189,7 @@ function createCompactionMarker(sessionID: SessionID) {
         type: "compaction",
         auto: false,
       })
+      return msg
     }),
   )
 }
@@ -1659,6 +1660,161 @@ describe("session.compaction.process", () => {
       expect(part?.type).toBe("compaction")
       expect(part?.tail_start_id).toBe(keep.id)
     }).pipe(withCompaction({ config: cfg({ tail_turns: 2, preserve_recent_tokens: 500 }) })),
+  )
+
+  // --- mid-compaction prompt race -------------------------------------------------------
+  // A prompt landing between the marker and the summarize used to become the summary's parent,
+  // which made the summary unreadable, discarded the requested model, and replayed the whole
+  // history on every later turn.
+
+  itCompaction.instance(
+    "anchors the summary to the marker and leaves a mid-compaction prompt out of the summary",
+    () => {
+      const stub = llm()
+      let captured = ""
+      stub.push(reply("summary", (input) => (captured = JSON.stringify(input.messages))))
+      return Effect.gen(function* () {
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        yield* createUserMessage(session.id, "earlier real work")
+        yield* createCompactionMarker(session.id)
+
+        const afterMarker = yield* ssn.messages({ sessionID: session.id })
+        const markerID = afterMarker.at(-1)!.info.id
+
+        // the prompt that arrives while the summarize is in flight
+        const typed = yield* createUserMessage(session.id, "WAIT-LOOK-AT-THIS")
+
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        // SessionPrompt now passes the compaction part's own messageID, not the last user id
+        yield* SessionCompaction.use.process({
+          parentID: markerID,
+          messages: msgs,
+          sessionID: session.id,
+          auto: false,
+        })
+
+        const after = yield* ssn.messages({ sessionID: session.id })
+        const summaryMsg = after.findLast((m) => m.info.role === "assistant" && m.info.summary === true)
+        expect(summaryMsg).toBeTruthy()
+        const summaryInfo = summaryMsg!.info as SessionV1.Assistant
+
+        // 1. readable by completedCompactions()
+        expect(summaryInfo.parentID).toBe(markerID)
+        // 2. the mid-compaction prompt is NOT swallowed into the summarized history
+        expect(captured).toContain("earlier real work")
+        expect(captured).not.toContain("WAIT-LOOK-AT-THIS")
+        // 3. and it is still present as a live message
+        expect(after.some((m) => m.info.id === typed.id)).toBe(true)
+      }).pipe(withCompaction({ llm: stub.llmLayer }))
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
+    "never re-anchors a markerless parent onto an earlier, already-used marker",
+    () => {
+      const stub = llm()
+      stub.push(reply("second summary"))
+      return Effect.gen(function* () {
+        const test = yield* TestInstance
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        yield* createUserMessage(session.id, "first")
+        yield* createCompactionMarker(session.id)
+        const afterMarker = yield* ssn.messages({ sessionID: session.id })
+        const firstMarkerID = afterMarker.at(-1)!.info.id
+        yield* createSummaryAssistantMessage(session.id, firstMarkerID, test.directory, "first summary")
+
+        // a later compaction whose parent is a plain prompt, with a spent marker behind it
+        const plain = yield* createUserMessage(session.id, "a plain prompt, no marker")
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        yield* SessionCompaction.use.process({
+          parentID: plain.id,
+          messages: msgs,
+          sessionID: session.id,
+          auto: false,
+        })
+
+        const after = yield* ssn.messages({ sessionID: session.id })
+        const summaries = after.filter((m) => m.info.role === "assistant" && m.info.summary === true)
+        expect(summaries.length).toBe(2)
+        // Searching backwards for "the nearest marker" would bind the spent one and leave two
+        // summaries answering a single compaction. The contract is honesty about the parent we
+        // were given, not a guess that corrupts completedCompactions().
+        const second = summaries.at(-1)!.info as SessionV1.Assistant
+        expect(second.parentID).toBe(plain.id)
+        expect(second.parentID).not.toBe(firstMarkerID)
+      }).pipe(withCompaction({ llm: stub.llmLayer }))
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
+    "does not consume a marker that already carries a completed summary",
+    () => {
+      const stub = llm()
+      stub.push(reply("second summary"))
+      return Effect.gen(function* () {
+        const test = yield* TestInstance
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        yield* createUserMessage(session.id, "work")
+        yield* createCompactionMarker(session.id)
+        const afterMarker = yield* ssn.messages({ sessionID: session.id })
+        const markerID = afterMarker.at(-1)!.info.id
+        yield* createSummaryAssistantMessage(session.id, markerID, test.directory, "first summary")
+
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        const result = yield* SessionCompaction.use.process({
+          parentID: markerID,
+          messages: msgs,
+          sessionID: session.id,
+          auto: false,
+        })
+
+        expect(result).toBe("continue")
+        const after = yield* ssn.messages({ sessionID: session.id })
+        const summaries = after.filter((m) => m.info.role === "assistant" && m.info.summary === true)
+        // two summaries against one marker give completedCompactions() duplicate userIndex rows
+        expect(summaries.length).toBe(1)
+      }).pipe(withCompaction({ llm: stub.llmLayer }))
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
+    "suppresses the synthetic continuation when a real prompt is already waiting",
+    () => {
+      const stub = llm()
+      stub.push(reply("summary"))
+      return Effect.gen(function* () {
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        yield* createUserMessage(session.id, "work")
+        yield* createCompactionMarker(session.id)
+        const afterMarker = yield* ssn.messages({ sessionID: session.id })
+        const markerID = afterMarker.at(-1)!.info.id
+        const typed = yield* createUserMessage(session.id, "the real follow-up")
+
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        yield* SessionCompaction.use.process({
+          parentID: markerID,
+          messages: msgs,
+          sessionID: session.id,
+          auto: true,
+        })
+
+        const after = yield* ssn.messages({ sessionID: session.id })
+        const synthetic = after.filter((m) =>
+          m.parts.some((part) => part.type === "text" && part.synthetic === true),
+        )
+        // the waiting prompt answers this turn; a synthetic continue would answer it twice
+        expect(synthetic.length).toBe(0)
+        expect(after.some((m) => m.info.id === typed.id)).toBe(true)
+      }).pipe(withCompaction({ llm: stub.llmLayer }))
+    },
+    { git: true },
   )
 })
 
