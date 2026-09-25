@@ -51,6 +51,8 @@ describe("KV", () => {
         entries: [{ key: `${prefix}éclair`, value: { order: 3 } }],
       })
       expect(yield* kv.scan({ prefix: `${prefix}%_` })).toEqual({ entries: [] })
+      expect(yield* kv.scanAll(`${prefix}%_`)).toEqual([])
+      expect(yield* kv.scanAll(prefix)).toEqual([...first.entries, { key: `${prefix}éclair`, value: { order: 3 } }])
     }),
   )
 
@@ -76,6 +78,15 @@ describe("KV", () => {
       expect((yield* kv.scan({ prefix, limit: 0 })).entries).toHaveLength(1)
       expect((yield* kv.scan({ prefix, limit: -10 })).entries).toHaveLength(1)
       expect((yield* kv.scan({ prefix, limit: Number.NaN })).entries).toHaveLength(100)
+
+      const all = kv.scanAll(prefix)
+      const entries = Array.from({ length: 1001 }, (_, index) => {
+        const key = `${prefix}${index.toString().padStart(4, "0")}`
+        return { key, value: key }
+      })
+      expect(yield* all).toEqual(entries)
+      yield* kv.remove(`${prefix}0000`)
+      expect(yield* all).toEqual(entries.slice(1))
     }),
   )
 })
