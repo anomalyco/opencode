@@ -413,7 +413,7 @@ describe("SubagentTool", () => {
               type: "tool-call",
               id: "call-subagent",
               name: SubagentTool.name,
-              input: { agent: "reviewer", description: "review", prompt: "review this", model: "", sessionID: "" },
+              input: { agent: "reviewer", description: "review", prompt: "review this", model: "", sessionID: null },
             },
           })
 
