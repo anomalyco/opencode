@@ -92,6 +92,59 @@ describe("Format", () => {
     { config: { formatter: { uv: { disabled: true } } } },
   )
 
+  it.instance(
+    "status() keeps the built-in definition when config uses the published formatter name",
+    () =>
+      Format.Service.use((fmt) =>
+        Effect.gen(function* () {
+          const statuses = yield* fmt.status()
+          expect(statuses.find((item) => item.name === "clang-format")?.extensions).toEqual(Formatter.clang.extensions)
+          expect(statuses.find((item) => item.name === "air")?.extensions).toEqual(Formatter.rlang.extensions)
+          expect(statuses.find((item) => item.name === "uv")?.extensions).toEqual(Formatter.uvformat.extensions)
+        }),
+      ),
+    { config: { formatter: { "clang-format": {}, air: {}, uv: {} } } },
+  )
+
+  it.instance(
+    "file() still runs a built-in whose published name differs from its export name",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const file = `${test.directory}/test.published`
+        yield* Effect.promise(() => Bun.write(file, "x"))
+
+        const original = { extensions: Formatter.clang.extensions, enabled: Formatter.clang.enabled }
+
+        yield* Effect.acquireUseRelease(
+          Effect.sync(() => {
+            Formatter.clang.extensions = [".published"]
+            Formatter.clang.enabled = async () => [
+              "node",
+              "-e",
+              "const fs = require('fs'); const file = process.argv[1]; fs.writeFileSync(file, fs.readFileSync(file, 'utf8') + 'C')",
+              "$FILE",
+            ]
+          }),
+          () =>
+            Format.Service.use((fmt) =>
+              Effect.gen(function* () {
+                yield* fmt.init()
+                yield* fmt.file(file)
+              }),
+            ),
+          () =>
+            Effect.sync(() => {
+              Formatter.clang.extensions = original.extensions
+              Formatter.clang.enabled = original.enabled
+            }),
+        )
+
+        expect(yield* Effect.promise(() => Bun.file(file).text())).toBe("xC")
+      }),
+    { config: { formatter: { "clang-format": {} } } },
+  )
+
   it.instance("service initializes without error", () => Format.Service.use(() => Effect.void))
 
   it.instance(

@@ -127,13 +127,14 @@ const layer = Layer.effect(
           }
         }
 
-        for (const item of Object.values(Formatter)) {
-          formatters[item.name] = item
-        }
+        // Keyed by Info.name, which is the name the docs publish and the config uses. It differs
+        // from the export identifier for clang-format, air and uv.
+        const builtIns = Object.fromEntries(Object.values(Formatter).map((item) => [item.name, item]))
+        Object.assign(formatters, builtIns)
 
         if (cfg.formatter !== true) {
           for (const [name, item] of Object.entries(cfg.formatter)) {
-            const builtIn = Formatter[name as keyof typeof Formatter]
+            const builtIn = builtIns[name]
 
             // Ruff and uv are both the same formatter, so disabling either should disable both.
             if (["ruff", "uv"].includes(name) && (cfg.formatter.ruff?.disabled || cfg.formatter.uv?.disabled)) {
