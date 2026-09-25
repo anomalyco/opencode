@@ -4,6 +4,7 @@ import { EventV2 } from "@opencode-ai/core/event"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { Deferred, Effect, Exit, Layer } from "effect"
 import { Session as SessionNs } from "@/session/session"
+import { NotFoundError } from "@/storage/storage"
 import { MessageV2 } from "../../src/session/message-v2"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -280,6 +281,56 @@ describe("Session", () => {
 
       expect(created.metadata).toBeUndefined()
       expect(saved.metadata).toBeUndefined()
+    }),
+  )
+})
+
+describe("session.resolve", () => {
+  it.instance("resolves a full id to itself", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const created = yield* Effect.acquireRelease(session.create({ title: "resolve-full" }), (info) =>
+        session.remove(info.id).pipe(Effect.ignore),
+      )
+      expect(yield* session.resolve(created.id)).toBe(created.id)
+    }),
+  )
+
+  it.instance("resolves a unique prefix to the full id", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const created = yield* Effect.acquireRelease(session.create({ title: "resolve-prefix" }), (info) =>
+        session.remove(info.id).pipe(Effect.ignore),
+      )
+      expect(yield* session.resolve(created.id.slice(0, 12))).toBe(created.id)
+    }),
+  )
+
+  it.instance("fails when the prefix matches multiple sessions", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const first = yield* Effect.acquireRelease(session.create({ title: "resolve-ambig-1" }), (info) =>
+        session.remove(info.id).pipe(Effect.ignore),
+      )
+      const second = yield* Effect.acquireRelease(session.create({ title: "resolve-ambig-2" }), (info) =>
+        session.remove(info.id).pipe(Effect.ignore),
+      )
+
+      const error = yield* Effect.flip(session.resolve("ses_"))
+      expect(SessionNs.AmbiguousIDError.isInstance(error)).toBe(true)
+      if (SessionNs.AmbiguousIDError.isInstance(error)) {
+        expect(error.matches.length).toBeGreaterThanOrEqual(2)
+        expect(error.matches).toContain(first.id)
+        expect(error.matches).toContain(second.id)
+      }
+    }),
+  )
+
+  it.instance("fails when no session matches the prefix", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const error = yield* Effect.flip(session.resolve("ses_zzz-not-found"))
+      expect(NotFoundError.isInstance(error)).toBe(true)
     }),
   )
 })
