@@ -150,7 +150,7 @@ function MessageTimelineView(
   const avatarProject = createMemo(() => {
     const session = props.session.data.info()
     if (!session) return
-    return projectForSession(session, server.ctx.projects.list()) ?? project()
+    return server.ctx.projects.forSession(session)
   })
   createEffect(() => {
     const directory = project()?.worktree
@@ -535,6 +535,7 @@ function MessageTimelineView(
                             <SessionSummaryPanel
                               shown={summaryOpen()}
                               project={project()}
+                              avatarProject={avatarProject()}
                               directory={sessionDirectory()}
                               local={!workspaceSession()}
                               branch={data.location.vcs.info({ directory: sdk().directory })?.branch.current}

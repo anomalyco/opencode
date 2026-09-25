@@ -100,7 +100,21 @@ export function projectForSession<T extends { id?: string; worktree: string; san
   byID: Map<string, T> = new Map(projects.flatMap((project) => (project.id ? [[project.id, project] as const] : []))),
 ) {
   const direct = byID.get(session.projectID)
-  if (direct) return direct
+  if (direct) {
+    const matching = projects.filter((project) => project.id === session.projectID)
+    if (matching.length === 1) return direct
+    const directory = pathKey(session.location.directory)
+    const exact = matching.find(
+      (project) =>
+        pathKey(project.worktree) === directory || project.sandboxes?.some((sandbox) => pathKey(sandbox) === directory),
+    )
+    if (exact) return exact
+    return (
+      matching
+        .filter((project) => isProjectDirectory(project, session.location.directory))
+        .sort((a, b) => b.worktree.length - a.worktree.length)[0] ?? direct
+    )
+  }
   return projects.find((project) => isProjectDirectory(project, session.location.directory))
 }
 

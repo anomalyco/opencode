@@ -10,12 +10,14 @@ import "./summary.css"
 export function ProjectSummaryCard(
   props: ParentProps<{
     project: Pick<Project, "name" | "worktree" | "icon"> & { id?: string }
+    avatarProject?: Pick<Project, "name" | "worktree" | "icon"> & { id?: string }
     avatar?: JSX.Element
   }>,
 ) {
   const settings = useSettings()
   const contentID = createUniqueId()
   const expanded = settings.sessionSummary.projectExpanded
+  const avatarProject = () => props.avatarProject ?? props.project
   return (
     <section class="session-summary-card" data-section="project">
       <button
@@ -28,9 +30,9 @@ export function ProjectSummaryCard(
       >
         {props.avatar ?? (
           <ProjectAvatar
-            fallback={displayName(props.project)}
-            src={getProjectAvatarSource(props.project.id, props.project.icon)}
-            variant={getProjectAvatarVariant(props.project.icon?.color)}
+            fallback={displayName(avatarProject())}
+            src={getProjectAvatarSource(avatarProject().id, avatarProject().icon)}
+            variant={getProjectAvatarVariant(avatarProject().icon?.color)}
           />
         )}
         <span dir="auto" class="session-summary-label">

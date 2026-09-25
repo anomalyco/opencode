@@ -86,6 +86,7 @@ export function createHomeSessionsController(home: HomeController) {
       sessions: indexedSessions,
       projectDirectories,
       projects: home.project.list,
+      resolveProject: (session) => home.server.focusedContext()?.projects.forSession(session),
     }),
   )
   const records = createMemo(() => allRecords().slice(0, HOME_SESSION_LIMIT))

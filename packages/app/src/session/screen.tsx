@@ -68,6 +68,10 @@ function SessionScreenContent(props: { session: SessionModel; browser: ReturnTyp
     const info = session.data.info()
     return info ? projectForSession(info, server.ctx.sync.data.project) : undefined
   })
+  const detailsAvatarProject = createMemo(() => {
+    const info = session.data.info()
+    return info ? server.ctx.projects.forSession(info) : undefined
+  })
   const isDesktop = session.isDesktop
   const btw = createSessionBtw(session)
   const screen = createSessionScreenLayout(session)
@@ -201,6 +205,7 @@ function SessionScreenContent(props: { session: SessionModel; browser: ReturnTyp
                       <SessionSummaryPanel
                         mobile
                         project={project()}
+                        avatarProject={detailsAvatarProject()}
                         directory={session.workspace.directory()}
                         local={!session.workspace.current()}
                         branch={

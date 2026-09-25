@@ -189,6 +189,24 @@ describe("layout workspace helpers", () => {
     )
   })
 
+  test("prefers the session directory among opened projects sharing an ID", () => {
+    const primary = { id: "project", worktree: "/repo", icon: { override: "primary" } }
+    const nested = { id: "project", worktree: "/repo/packages/app", icon: { override: "nested" } }
+    expect(projectForSession(session({ id: "nested", directory: nested.worktree }), [nested, primary])).toBe(nested)
+    expect(projectForSession(session({ id: "primary", directory: primary.worktree }), [primary, nested])).toBe(primary)
+    expect(projectForSession(session({ id: "child", directory: `${nested.worktree}/src` }), [nested, primary])).toBe(
+      nested,
+    )
+  })
+
+  test("retains project ID ownership when a different project's directory overlaps", () => {
+    const owner = { id: "owner", worktree: "/repo" }
+    const overlap = { id: "other", worktree: "/repo/subdir" }
+    expect(
+      projectForSession(session({ id: "nested", projectID: "owner", directory: overlap.worktree }), [owner, overlap]),
+    ).toBe(owner)
+  })
+
   test("formats fallback project display name", () => {
     expect(displayName({ worktree: "/tmp/app" })).toBe("app")
     expect(displayName({ worktree: "/tmp/app", name: "My App" })).toBe("My App")
