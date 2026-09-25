@@ -14,6 +14,10 @@ export function adapterState() {
     reasoning: 0,
     currentTextID: undefined as string | undefined,
     currentReasoningID: undefined as string | undefined,
+    // Block ids for which a *-start event has already been emitted downstream.
+    // Used to synthesize a missing start when a provider streams orphan deltas.
+    startedText: {} as Record<string, boolean>,
+    startedReasoning: {} as Record<string, boolean>,
     toolNames: {} as Record<string, string>,
     copilotTotalNanoAiu: undefined as number | undefined,
   }
@@ -74,6 +78,40 @@ function currentReasoningID(state: ReturnType<typeof adapterState>, id: string |
   return state.currentReasoningID
 }
 
+// The AI SDK enqueues a non-fatal in-band error part
+//   { type: "error", error: `${"reasoning" | "text"} part ${id} not found` }
+// when a reasoning/text delta (or its end) arrives with no preceding *-start
+// block. This is common with OpenAI-compatible and Anthropic proxies that omit
+// the start events. The SDK returns and keeps streaming, so this must not be
+// promoted to a fatal turn failure. Verified against vercel/ai@6 stream-text.ts
+// (text part: L1171/L1190, reasoning part: L1220/L1239).
+function isOrphanStreamStateError(error: unknown) {
+  const message = errorMessage(error).trim()
+  return message.endsWith(" not found") && (message.startsWith("reasoning part ") || message.startsWith("text part "))
+}
+
+// Some OpenAI-compatible and Anthropic proxies stream text/reasoning deltas
+// without ever emitting the matching *-start block. SessionProcessor requires a
+// start before it will create a part (`if (!ctx.currentText) return` for text,
+// `if (!(value.id in ctx.reasoningMap)) return` for reasoning), so those orphan
+// deltas - and any providerMetadata riding on them, including Anthropic thinking
+// signatures - are dropped entirely. Losing the signature breaks thinking-block
+// replay on subsequent requests.
+//
+// The adapter is the protocol-normalization layer (it already synthesizes block
+// ids via currentTextID/currentReasoningID), so repair it here: emit the missing
+// start before the delta and hand the processor a well-formed stream. Streams
+// that do emit starts are unaffected.
+function synthesizeStart(
+  started: Record<string, boolean>,
+  id: string,
+  make: () => LLMEvent,
+): LLMEvent[] {
+  if (started[id]) return []
+  started[id] = true
+  return [make()]
+}
+
 export function toLLMEvents(
   state: ReturnType<typeof adapterState>,
   event: AISDKEvent,
@@ -129,6 +167,7 @@ export function toLLMEvents(
     case "text-start":
       return Effect.sync(() => {
         state.currentTextID = currentTextID(state, event.id)
+        state.startedText[state.currentTextID] = true
         return [
           LLMEvent.textStart({
             id: state.currentTextID,
@@ -138,19 +177,28 @@ export function toLLMEvents(
       })
 
     case "text-delta":
-      return Effect.succeed([
-        LLMEvent.textDelta({
-          id: currentTextID(state, event.id),
-          text: event.text,
-          providerMetadata: providerMetadata(event.providerMetadata),
-        }),
-      ])
+      return Effect.sync(() => {
+        const id = currentTextID(state, event.id)
+        return [
+          ...synthesizeStart(state.startedText, id, () =>
+            LLMEvent.textStart({ id, providerMetadata: providerMetadata(event.providerMetadata) }),
+          ),
+          LLMEvent.textDelta({
+            id,
+            text: event.text,
+            providerMetadata: providerMetadata(event.providerMetadata),
+          }),
+        ]
+      })
 
     case "text-end":
       return Effect.sync(() => {
         const id = currentTextID(state, event.id)
         state.currentTextID = undefined
         return [
+          ...synthesizeStart(state.startedText, id, () =>
+            LLMEvent.textStart({ id, providerMetadata: providerMetadata(event.providerMetadata) }),
+          ),
           LLMEvent.textEnd({
             id,
             providerMetadata: providerMetadata(event.providerMetadata),
@@ -161,6 +209,7 @@ export function toLLMEvents(
     case "reasoning-start":
       return Effect.sync(() => {
         state.currentReasoningID = currentReasoningID(state, event.id)
+        state.startedReasoning[state.currentReasoningID] = true
         return [
           LLMEvent.reasoningStart({
             id: state.currentReasoningID,
@@ -170,19 +219,28 @@ export function toLLMEvents(
       })
 
     case "reasoning-delta":
-      return Effect.succeed([
-        LLMEvent.reasoningDelta({
-          id: currentReasoningID(state, event.id),
-          text: event.text,
-          providerMetadata: providerMetadata(event.providerMetadata),
-        }),
-      ])
+      return Effect.sync(() => {
+        const id = currentReasoningID(state, event.id)
+        return [
+          ...synthesizeStart(state.startedReasoning, id, () =>
+            LLMEvent.reasoningStart({ id, providerMetadata: providerMetadata(event.providerMetadata) }),
+          ),
+          LLMEvent.reasoningDelta({
+            id,
+            text: event.text,
+            providerMetadata: providerMetadata(event.providerMetadata),
+          }),
+        ]
+      })
 
     case "reasoning-end":
       return Effect.sync(() => {
         const id = currentReasoningID(state, event.id)
         state.currentReasoningID = undefined
         return [
+          ...synthesizeStart(state.startedReasoning, id, () =>
+            LLMEvent.reasoningStart({ id, providerMetadata: providerMetadata(event.providerMetadata) }),
+          ),
           LLMEvent.reasoningEnd({
             id,
             providerMetadata: providerMetadata(event.providerMetadata),
@@ -265,6 +323,10 @@ export function toLLMEvents(
       })
 
     case "error":
+      if (isOrphanStreamStateError(event.error))
+        return Effect.logDebug("dropping orphan reasoning/text stream part", {
+          detail: errorMessage(event.error),
+        }).pipe(Effect.as<LLMEvent[]>([]))
       return Effect.fail(event.error)
 
     case "abort":
