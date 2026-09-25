@@ -12,7 +12,7 @@ const base = {
   question: Schema.String.annotate({ description: "Complete question" }),
   header: Schema.String.annotate({ description: "Very short label (max 30 chars)" }),
   options: Schema.Array(Option).annotate({ description: "Available choices" }),
-  multiple: Schema.Boolean.pipe(optional).annotate({ description: "Allow selecting multiple choices" }),
+  multiple: Schema.Boolean.annotate({ description: "Allow selecting multiple choices" }).pipe(optional),
 }
 
 export const Prompt = Schema.Struct(base).annotate({ identifier: "Question.Prompt" })

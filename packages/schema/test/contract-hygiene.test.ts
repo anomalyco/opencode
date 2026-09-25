@@ -2,11 +2,14 @@ import { describe, expect, test } from "bun:test"
 import { DateTime, Schema } from "effect"
 import { Agent } from "../src/agent.js"
 import { ConfigAgent } from "../src/config/agent.js"
+import { ConfigCommand } from "../src/config/command.js"
+import { Config } from "../src/config.js"
 import { ConfigProvider } from "../src/config/provider.js"
 import { FileSystem } from "../src/filesystem.js"
 import { Form } from "../src/form.js"
 import { Mcp } from "../src/mcp.js"
 import { Model } from "../src/model.js"
+import { Permission } from "../src/permission.js"
 import { Project } from "../src/project.js"
 import { SkillAttachment } from "../src/prompt.js"
 import { Provider } from "../src/provider.js"
@@ -22,6 +25,18 @@ import { Vcs } from "../src/vcs.js"
 import { Worktree } from "../src/worktree.js"
 import { PersistedRevert } from "../src/session-revert.js"
 import { AbsolutePath, optional } from "../src/schema.js"
+
+function encodedProperty(schema: Schema.Top, name: string) {
+  const encoded = Schema.toEncoded(schema)
+  if (encoded.ast._tag !== "Objects") return undefined
+  return encoded.ast.propertySignatures.find((property) => property.name === name)
+}
+
+function encodedDescription(schema: Schema.Top, name: string) {
+  const property = encodedProperty(schema, name)
+  if (!property) return undefined
+  return property.type.annotations?.description ?? property.type.checks?.at(-1)?.annotations?.description
+}
 
 describe("contract hygiene", () => {
   test("restricts agent colors to six-digit hex values", () => {
@@ -80,6 +95,16 @@ describe("contract hygiene", () => {
         time: { ...info.time, idle: DateTime.makeUnsafe(2), viewed: DateTime.makeUnsafe(1) },
       }).time,
     ).toEqual({ created: 0, updated: 0, idle: 2, viewed: 1 })
+  })
+
+  test("descriptions on optional fields reach the encoded schema used by OpenAPI", () => {
+    expect(encodedDescription(Worktree.CreateInput, "directory")).toContain("Parent directory")
+    expect(encodedDescription(Worktree.CreateInput, "name")).toContain("Child directory")
+    expect(encodedDescription(Shell.Time, "completed")).toContain("Completion time")
+    expect(encodedDescription(Shell.CreateInput, "timeout")).toContain("milliseconds")
+    expect(encodedDescription(Permission.Rule, "action")).toContain("Wildcard")
+    expect(encodedDescription(Config.Info, "$schema")).toContain("JSON schema")
+    expect(encodedDescription(ConfigCommand.Info, "subtask")).toBe("Deprecated alias for subagent.")
   })
 
   test("skill attachments retain legacy references while accepting prepared instructions", () => {
