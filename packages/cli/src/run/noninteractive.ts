@@ -60,7 +60,17 @@ type ToolState = StartedPart & {
 }
 
 type V2Event = EventSubscribeOutput
-type FormRequest = Extract<V2Event, { type: "form.created" }>["data"]["form"]
+type FormRequest = {
+  id: string
+  sessionID: string
+  metadata?: Readonly<Record<string, unknown>>
+  fields: ReadonlyArray<{
+    key: string
+    type: string
+    default?: unknown
+    options?: ReadonlyArray<{ value: string }>
+  }>
+}
 
 // MCP elicitations are temporarily owned by the "global" sentinel instead of a real
 // session. An exclusive local process may treat them as this run's blockers; an
@@ -79,6 +89,7 @@ export async function runNonInteractivePrompt(input: Input) {
   const renderedText = new Map<string, string>()
   const renderedReasoning = new Map<string, string>()
   const renderedTools = new Set<string>()
+  const sessions = new Set([input.sessionID])
   let submitted = false
   let promoted = false
   let emittedError = false
@@ -132,7 +143,12 @@ export async function runNonInteractivePrompt(input: Input) {
     }
   }
 
-  const replyPermission = async (request: { id: string; action: string; resources: ReadonlyArray<string> }) => {
+  const replyPermission = async (request: {
+    id: string
+    sessionID: string
+    action: string
+    resources: ReadonlyArray<string>
+  }) => {
     if (!input.auto) {
       permissionRejected = true
       UI.println(
@@ -143,13 +159,13 @@ export async function runNonInteractivePrompt(input: Input) {
     }
     await input.client.permission
       .reply({
-        sessionID: input.sessionID,
+        sessionID: request.sessionID,
         requestID: request.id,
         decision: input.auto ? "once" : "reject",
       })
       .catch(() => {})
     if (!input.auto) {
-      await input.client.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
+      await input.client.session.interrupt({ sessionID: request.sessionID }).catch(() => {})
     }
   }
 
@@ -165,6 +181,23 @@ export async function runNonInteractivePrompt(input: Input) {
     formCancelled = true
   }
 
+  const settleForm = async (request: FormRequest) => {
+    const field =
+      request.metadata?.kind === "websearch.provider"
+        ? request.fields.find((field) => field.type === "string" && field.options?.length)
+        : undefined
+    const value = typeof field?.default === "string" ? field.default : field?.options?.[0]?.value
+    if (!field || value === undefined) return cancelForm(request)
+    try {
+      await input.client.session.form.reply(
+        { sessionID: request.sessionID, formID: request.id, answer: { [field.key]: value } },
+        ...formRequestOptions(request.sessionID === GLOBAL_FORM_SESSION_ID ? input.location : undefined),
+      )
+    } catch (error) {
+      if (!formAlreadySettled(error)) throw error
+    }
+  }
+
   const consume = async () => {
     while (!controller.signal.aborted) {
       const next = await stream.next().catch((error) => {
@@ -177,19 +210,23 @@ export async function runNonInteractivePrompt(input: Input) {
       }
       const event = next.value
 
-      if (event.type === "permission.asked" && submitted && event.data.sessionID === input.sessionID) {
+      if (event.type === "session.created" && event.data.parentID && sessions.has(event.data.parentID)) {
+        sessions.add(event.data.sessionID)
+        continue
+      }
+      if (event.type === "permission.asked" && submitted && sessions.has(event.data.sessionID)) {
         await replyPermission(event.data)
         continue
       }
       if (
         event.type === "form.created" &&
         submitted &&
-        (event.data.form.sessionID === input.sessionID ||
+        (sessions.has(event.data.form.sessionID) ||
           (!input.attached &&
             event.data.form.sessionID === GLOBAL_FORM_SESSION_ID &&
             sameLocation(event.location, input.location)))
       ) {
-        await cancelForm(event.data.form)
+        await settleForm(event.data.form)
         continue
       }
       if (!("sessionID" in event.data) || event.data.sessionID !== input.sessionID) continue
@@ -476,28 +513,31 @@ export async function runNonInteractivePrompt(input: Input) {
         if (interrupted || permissionRejected || formCancelled) continue
         flushStep()
         emittedError = true
-        process.exitCode = 1
         if (!emit("error", time, { error: event.data.error })) UI.error(event.data.error.message)
         continue
       }
       if (event.type === "session.execution.failed") {
         if (input.compatibility === "v1" && (v1InvalidOutput || permissionRejected || formCancelled)) return
         flushStep()
-        if (!emittedError && !formCancelled) {
-          emittedError = true
+        if (!formCancelled) {
           process.exitCode = 1
-          if (!emit("error", time, { error: event.data.error })) UI.error(event.data.error.message)
+          if (!emittedError) {
+            emittedError = true
+            if (!emit("error", time, { error: event.data.error })) UI.error(event.data.error.message)
+          }
         }
         return
       }
       if (event.type === "session.execution.interrupted") {
         if (input.compatibility === "v1" && (permissionRejected || formCancelled)) return
         if (event.data.reason === "user" && interrupted) process.exitCode = 130
-        if (event.data.reason !== "user" && !emittedError) {
-          emittedError = true
+        if (event.data.reason !== "user") {
           process.exitCode = 1
-          const error = { type: "aborted" as const, message: `Session interrupted: ${event.data.reason}` }
-          if (!emit("error", time, { error })) UI.error(error.message)
+          if (!emittedError) {
+            emittedError = true
+            const error = { type: "aborted" as const, message: `Session interrupted: ${event.data.reason}` }
+            if (!emit("error", time, { error })) UI.error(error.message)
+          }
         }
         return
       }
@@ -525,9 +565,11 @@ export async function runNonInteractivePrompt(input: Input) {
 
   const reconcile = async () => {
     const projected = await projectedMessages()
+    let projectedError: { error: { message: string; [key: string]: unknown }; timestamp: number } | undefined
     for (const message of projected.messages) {
       if (message.type !== "assistant") continue
       const timestamp = message.time.completed ?? message.time.created
+      projectedError = message.error ? { error: message.error, timestamp } : undefined
       let textOrdinal = 0
       let reasoningOrdinal = 0
       for (const item of message.content) {
@@ -619,11 +661,13 @@ export async function runNonInteractivePrompt(input: Input) {
         await input.renderToolError(item)
         UI.error(item.state.error.message)
       }
-
-      if (message.error && !emittedError) {
+    }
+    if (projectedError && !interrupted && !permissionRejected && !formCancelled) {
+      process.exitCode = 1
+      if (!emittedError) {
         emittedError = true
-        process.exitCode = 1
-        if (!emit("error", timestamp, { error: message.error })) UI.error(message.error.message)
+        if (!emit("error", projectedError.timestamp, { error: projectedError.error }))
+          UI.error(projectedError.error.message)
       }
     }
     return {
@@ -706,9 +750,9 @@ export async function runNonInteractivePrompt(input: Input) {
     ])
     await Promise.all([
       ...(permissions ?? []).map(replyPermission),
-      ...(forms ?? []).map(cancelForm),
+      ...(forms ?? []).map(settleForm),
       ...(globals && sameLocation(globals.location, input.location)
-        ? globals.data.filter((form) => form.sessionID === GLOBAL_FORM_SESSION_ID).map(cancelForm)
+        ? globals.data.filter((form) => form.sessionID === GLOBAL_FORM_SESSION_ID).map(settleForm)
         : []),
     ])
     if (input.compatibility === "v1") {
