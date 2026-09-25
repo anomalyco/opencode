@@ -80,7 +80,7 @@ export const Info = Schema.Struct({
   }),
   jev: Schema.optional(ConfigJevV1.Info).annotate({
     description:
-      "Jev decision routing — confidence-gated model tier routing (default: disabled). Credentials resolve from TYPESAFE_API_KEY, the auth.json `typesafe` entry, or a custom `provider.typesafe` options.apiKey.",
+      "Confidence-gated model tier routing (default: disabled). The decision engine answers routing questions over the System One protocol and defaults to Typesafe Jev (credentials resolve from TYPESAFE_API_KEY, the auth.json `typesafe` entry, or a custom `provider.typesafe` options.apiKey). Any other System One decision model — e.g. a laya model behind a gateway — can be plugged in via `jev.engine`.",
   }),
   default_agent: Schema.optional(Schema.String).annotate({
     description:

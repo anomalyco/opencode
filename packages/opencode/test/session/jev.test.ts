@@ -52,6 +52,7 @@ const pool = [cheap, mid, top]
 const config = (tiers = pool, thresholds?: Partial<Jev.RoutingPolicy>): Jev.RouterConfig => ({
   tiers,
   policy: { ...Jev.DEFAULT_POLICY, ...thresholds },
+  engine: { model: "jev-latest", baseURL: "https://api.typesafe.ai/v1", apiKeyEnv: "TYPESAFE_API_KEY", authProvider: "typesafe" },
 })
 
 const input = (overrides: Partial<Jev.RouteInput> = {}): Jev.RouteInput => ({
@@ -170,6 +171,44 @@ describe("resolveConfig", () => {
     expect(cfg!.policy.minConfidenceToDegrade).toBe(0.6)
     expect(cfg!.policy.maxEscalationsPerTurn).toBe(2)
     expect(cfg!.policy.maxComplexityForDegrade).toBe(Jev.DEFAULT_POLICY.maxComplexityForDegrade)
+  })
+
+  test("engine defaults to the Typesafe Jev instance", () => {
+    const cfg = Jev.resolveConfig({
+      enabled: true,
+      tiers: [
+        { id: "cheap", model: "acme/cheap", capability: "x" },
+        { id: "top", model: "acme/top", capability: "y" },
+      ],
+    })
+    expect(cfg!.engine).toEqual({
+      model: "jev-latest",
+      baseURL: "https://api.typesafe.ai/v1",
+      apiKeyEnv: "TYPESAFE_API_KEY",
+      authProvider: "typesafe",
+    })
+  })
+
+  test("engine maps any System One decision model — laya via a gateway", () => {
+    const cfg = Jev.resolveConfig({
+      enabled: true,
+      engine: {
+        model: "convaiinnovations/laya",
+        baseURL: "https://openrouter.ai/api/v1",
+        apiKeyEnv: "OPENROUTER_API_KEY",
+        authProvider: "openrouter",
+        headers: { "X-Title": "opencode" },
+      },
+      tiers: [
+        { id: "cheap", model: "acme/cheap", capability: "x" },
+        { id: "top", model: "acme/top", capability: "y" },
+      ],
+    })
+    expect(cfg!.engine.model).toBe("convaiinnovations/laya")
+    expect(cfg!.engine.baseURL).toBe("https://openrouter.ai/api/v1")
+    expect(cfg!.engine.apiKeyEnv).toBe("OPENROUTER_API_KEY")
+    expect(cfg!.engine.authProvider).toBe("openrouter")
+    expect(cfg!.engine.headers).toEqual({ "X-Title": "opencode" })
   })
 })
 
@@ -371,7 +410,7 @@ describe("verifyWith", () => {
 })
 
 // ---------------------------------------------------------------------------
-// Engine chain + TypesafeEngine (never throws; off terminates with null)
+// Engine chain + SystemOneEngine (never throws; off terminates with null)
 // ---------------------------------------------------------------------------
 
 describe("engines", () => {
@@ -408,55 +447,79 @@ describe("engines", () => {
     expect(await chain.evaluate("s", questions)).toBeNull()
   })
 
-  test("typesafe engine without credentials is unavailable and returns null", async () => {
-    const engine = new Jev.TypesafeEngine({ keyResolver: async () => undefined })
+  test("system-one engine without credentials is unavailable and returns null", async () => {
+    const engine = new Jev.SystemOneEngine({ keyResolver: async () => undefined })
     expect(await engine.isAvailable()).toBe(false)
     expect(await engine.evaluate("s", questions)).toBeNull()
   })
 
-  test("typesafe engine returns null on network failure, non-200 and malformed body", async () => {
+  test("system-one engine returns null on network failure, non-200 and malformed body", async () => {
     const boom: Jev.FetchImpl = async () => {
       throw new TypeError("network down")
     }
-    expect(await new Jev.TypesafeEngine({ apiKey: "k", fetchImpl: boom }).evaluate("s", questions)).toBeNull()
+    expect(await new Jev.SystemOneEngine({ apiKey: "k", fetchImpl: boom }).evaluate("s", questions)).toBeNull()
 
     const bad: Jev.FetchImpl = async () => new Response("nope", { status: 429 })
-    expect(await new Jev.TypesafeEngine({ apiKey: "k", fetchImpl: bad }).evaluate("s", questions)).toBeNull()
+    expect(await new Jev.SystemOneEngine({ apiKey: "k", fetchImpl: bad }).evaluate("s", questions)).toBeNull()
 
     const junk: Jev.FetchImpl = async () => new Response("{not json", { status: 200 })
-    expect(await new Jev.TypesafeEngine({ apiKey: "k", fetchImpl: junk }).evaluate("s", questions)).toBeNull()
+    expect(await new Jev.SystemOneEngine({ apiKey: "k", fetchImpl: junk }).evaluate("s", questions)).toBeNull()
   })
 
-  test("typesafe engine parses answers and clips state", async () => {
+  test("system-one engine parses answers and clips state", async () => {
     let body: Record<string, unknown> | undefined
     const ok: Jev.FetchImpl = async (_url, init) => {
       body = JSON.parse(String(init?.body))
       return new Response(JSON.stringify({ answers: { tier: { type: "choice", choice: "cheap" } } }), { status: 200 })
     }
-    const engine = new Jev.TypesafeEngine({ apiKey: "k", fetchImpl: ok })
+    const engine = new Jev.SystemOneEngine({ apiKey: "k", fetchImpl: ok })
     const answers = await engine.evaluate("x".repeat(30_000), questions)
     expect(answers?.tier.choice).toBe("cheap")
     expect((body!.state as string).length).toBe(Jev.STATE_CLIP_CHARS)
     expect((body!.model as string)).toBe("jev-latest")
   })
 
-  test("typesafe engine enforces its own timeout", async () => {
+  test("system-one engine targets the configured gateway, model and headers — any System One model plugs in", async () => {
+    let url: string | undefined
+    let auth: string | undefined
+    let body: Record<string, unknown> | undefined
+    const ok: Jev.FetchImpl = async (u, init) => {
+      url = String(u)
+      auth = (init?.headers as Record<string, string>)?.Authorization
+      body = JSON.parse(String(init?.body))
+      return new Response(JSON.stringify({ answers: {} }), { status: 200 })
+    }
+    const engine = new Jev.SystemOneEngine({
+      baseURL: "https://openrouter.ai/api/v1/",
+      model: "convaiinnovations/laya",
+      headers: { "X-Title": "opencode" },
+      apiKey: "k",
+      fetchImpl: ok,
+    })
+    await engine.evaluate("s", questions)
+    // trailing slash on baseURL is normalized; the /systemone route is appended
+    expect(url).toBe("https://openrouter.ai/api/v1/systemone")
+    expect(body!.model).toBe("convaiinnovations/laya")
+    expect(auth).toBe("Bearer k")
+  })
+
+  test("system-one engine enforces its own timeout", async () => {
     const hangs: Jev.FetchImpl = (_url, init) =>
       new Promise<Response>((_, reject) => {
         init?.signal?.addEventListener("abort", () => reject(new Error("aborted")))
       })
-    const engine = new Jev.TypesafeEngine({ apiKey: "k", fetchImpl: hangs, timeoutMs: 20 })
+    const engine = new Jev.SystemOneEngine({ apiKey: "k", fetchImpl: hangs, timeoutMs: 20 })
     const answers = await engine.evaluate("s", questions)
     expect(answers).toBeNull()
   })
 
-  test("typesafe engine honors an outer abort signal", async () => {
+  test("system-one engine honors an outer abort signal", async () => {
     const outer = new AbortController()
     const hangs: Jev.FetchImpl = (_url, init) =>
       new Promise<Response>((_, reject) => {
         init?.signal?.addEventListener("abort", () => reject(new Error("aborted")))
       })
-    const engine = new Jev.TypesafeEngine({ apiKey: "k", fetchImpl: hangs, timeoutMs: 5_000 })
+    const engine = new Jev.SystemOneEngine({ apiKey: "k", fetchImpl: hangs, timeoutMs: 5_000 })
     const pending = engine.evaluate("s", questions, outer.signal)
     outer.abort()
     expect(await pending).toBeNull()

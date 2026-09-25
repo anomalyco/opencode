@@ -36,8 +36,34 @@ export const Tier = Schema.Struct({
 })
 export type Tier = Schema.Schema.Type<typeof Tier>
 
+export const Engine = Schema.Struct({
+  model: Schema.optional(Schema.String).annotate({
+    description:
+      'System One decision model id (default: "jev-latest"). Any model speaking the /systemone protocol can be plugged in, e.g. "convaiinnovations/laya" behind a gateway',
+  }),
+  baseURL: Schema.optional(Schema.String).annotate({
+    description:
+      'Base URL of the gateway exposing the /systemone route (default: "https://api.typesafe.ai/v1"; e.g. "https://openrouter.ai/api/v1")',
+  }),
+  apiKeyEnv: Schema.optional(Schema.String).annotate({
+    description: 'Environment variable carrying the gateway API key (default: "TYPESAFE_API_KEY")',
+  }),
+  authProvider: Schema.optional(Schema.String).annotate({
+    description:
+      'Credential fallback: auth.json entry and `provider.<authProvider>` options.apiKey for this provider id (default: "typesafe")',
+  }),
+  headers: Schema.optional(Schema.Record(Schema.String, Schema.String)).annotate({
+    description: "Extra headers sent with each decision call",
+  }),
+})
+export type Engine = Schema.Schema.Type<typeof Engine>
+
 export const Info = Schema.Struct({
   enabled: Schema.optional(Schema.Boolean).annotate({ description: "Enable Jev decision routing (default: false)" }),
+  engine: Schema.optional(Engine).annotate({
+    description:
+      "Decision engine — the System One model that answers routing questions. Defaults to the Typesafe Jev instance; point it at any other System One decision model (e.g. a laya model behind a gateway). Mirrors the upstream SystemOne provider shape: model id + baseURL + bearer credential + headers.",
+  }),
   tiers: Schema.optional(Schema.mutable(Schema.Array(Tier))).annotate({
     description:
       "Model tiers ordered cheapest -> most capable. Order is load-bearing: the last tier is the fail-open default. Define the pool so its most capable tier matches your default model.",
