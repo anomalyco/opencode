@@ -49,6 +49,16 @@ function resolveRunInput(value?: string, piped?: string): string | undefined {
   return value + "\n" + piped
 }
 
+const inProcessFetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+  const { Server } = await import("@/server/server")
+  const { ServerAuth } = await import("@/server/auth")
+  const request = new Request(input, init)
+  const headers = new Headers(request.headers)
+  const auth = ServerAuth.header()
+  if (auth) headers.set("Authorization", auth)
+  return Server.Default().app.fetch(new Request(request, { headers }))
+}) as typeof globalThis.fetch
+
 type FilePart = {
   type: "file"
   url: string
@@ -907,19 +917,11 @@ export const RunCommand = effectCmd({
       if (interactive && !args.attach && !args.session && !args.continue) {
         const model = pick(args.model)
         const { runInteractiveLocalMode } = await import("./run/runtime")
-        const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
-          const { Server } = await import("@/server/server")
-          const request = new Request(input, init)
-          const headers = new Headers(request.headers)
-          const auth = ServerAuth.header()
-          if (auth) headers.set("Authorization", auth)
-          return Server.Default().app.fetch(new Request(request, { headers }))
-        }) as typeof globalThis.fetch
 
         try {
           return await runInteractiveLocalMode({
             directory: directory ?? root,
-            fetch: fetchFn,
+            fetch: inProcessFetch,
             resolveAgent: localAgent,
             session,
             share,
@@ -945,17 +947,9 @@ export const RunCommand = effectCmd({
         return await execute(sdk)
       }
 
-      const fetchFn = (async (input: RequestInfo | URL, init?: RequestInit) => {
-        const { Server } = await import("@/server/server")
-        const request = new Request(input, init)
-        const headers = new Headers(request.headers)
-        const auth = ServerAuth.header()
-        if (auth) headers.set("Authorization", auth)
-        return Server.Default().app.fetch(new Request(request, { headers }))
-      }) as typeof globalThis.fetch
       const sdk = createOpencodeClient({
         baseUrl: "http://opencode.internal",
-        fetch: fetchFn,
+        fetch: inProcessFetch,
         directory,
       })
       await execute(sdk)
