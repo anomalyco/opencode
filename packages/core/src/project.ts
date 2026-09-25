@@ -77,21 +77,27 @@ const layer = Layer.effect(
     const projectDirectories = yield* ProjectDirectories.Service
 
     const directories = Effect.fn("Project.directories")(function* (input: DirectoriesInput) {
-      return yield* projectDirectories.list(input.projectID)
+      const recorded = yield* projectDirectories.list(input.projectID)
+      const associated = yield* projectDirectories.associations(input.projectID)
+      const known = new Set(recorded.map((item) => item.directory))
+      return [...recorded, ...associated.filter((item) => !known.has(item.directory))]
     })
 
     const associate = Effect.fn("Project.associate")(function* (input: AssociateInput) {
       yield* projectDirectories.associate({
         projectID: input.projectID,
-        directory: input.directory,
+        directory: AbsolutePath.make(yield* fs.resolve(input.directory)),
         strategy: input.strategy,
       })
-      return yield* projectDirectories.list(input.projectID)
+      return yield* directories({ projectID: input.projectID })
     })
 
     const dissociate = Effect.fn("Project.dissociate")(function* (input: DissociateInput) {
-      yield* projectDirectories.dissociate({ projectID: input.projectID, directory: input.directory })
-      return yield* projectDirectories.list(input.projectID)
+      yield* projectDirectories.dissociate({
+        projectID: input.projectID,
+        directory: AbsolutePath.make(yield* fs.resolve(input.directory)),
+      })
+      return yield* directories({ projectID: input.projectID })
     })
 
     const cached = Effect.fnUntraced(function* (dir: string) {

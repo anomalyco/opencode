@@ -5,7 +5,7 @@ import path from "path"
 import { tmpdirScoped } from "../fixture/fixture"
 import { GlobalBus } from "../../src/bus/global"
 import { Database } from "@opencode-ai/core/database/database"
-import { ProjectDirectoryTable, ProjectTable } from "@opencode-ai/core/project/sql"
+import { ProjectAssociationTable, ProjectTable } from "@opencode-ai/core/project/sql"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
 import { eq } from "drizzle-orm"
@@ -176,8 +176,8 @@ describe("Project.fromDirectory", () => {
         .run()
         .pipe(Effect.orDie)
       yield* db
-        .insert(ProjectDirectoryTable)
-        .values({ project_id: owner.id, directory: AbsolutePath.make(workspace), type: "association" })
+        .insert(ProjectAssociationTable)
+        .values({ project_id: owner.id, directory: AbsolutePath.make(workspace) })
         .run()
         .pipe(Effect.orDie)
 
@@ -243,6 +243,13 @@ describe("Project.fromDirectory", () => {
       const remoteID = remoteProjectID("github.com/acme/app")
       const sessionID = crypto.randomUUID() as SessionID
       const workspaceID = WorkspaceV2.ID.ascending()
+      const associatedDirectory = AbsolutePath.make(yield* tmpdirScoped())
+
+      yield* db
+        .insert(ProjectAssociationTable)
+        .values({ project_id: rootProject.id, directory: associatedDirectory })
+        .run()
+        .pipe(Effect.orDie)
 
       yield* db
         .insert(SessionTable)
@@ -279,6 +286,15 @@ describe("Project.fromDirectory", () => {
         (yield* db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, workspaceID)).get().pipe(Effect.orDie))
           ?.project_id,
       ).toBe(remoteID)
+      expect(
+        (yield* db
+          .select()
+          .from(ProjectAssociationTable)
+          .where(eq(ProjectAssociationTable.directory, associatedDirectory))
+          .get()
+          .pipe(Effect.orDie))?.project_id,
+      ).toBe(remoteID)
+      expect((yield* projects.fromDirectory(associatedDirectory)).project.id).toBe(remoteID)
     }),
   )
 })

@@ -16,6 +16,7 @@ import eventSourcedSessionInputMigration from "@opencode-ai/core/database/migrat
 import contextEpochAgentMigration from "@opencode-ai/core/database/migration/20260605042240_add_context_epoch_agent"
 import simplifyIntegrationCredentialsMigration from "@opencode-ai/core/database/migration/20260611192811_lush_chimera"
 import simplifySessionInputMigration from "@opencode-ai/core/database/migration/20260622202450_simplify_session_input"
+import projectAssociationMigration from "@opencode-ai/core/database/migration/20260925144545_project-association"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -39,6 +40,40 @@ const run = <A, E>(effect: Effect.Effect<A, E, SqlClientService>) =>
 const makeDb = EffectDrizzleSqlite.makeWithDefaults()
 
 describe("DatabaseMigration", () => {
+  test("moves legacy project associations without losing discovered directories", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE project (id text PRIMARY KEY)`)
+        yield* db.run(sql`
+          CREATE TABLE project_directory (
+            project_id text NOT NULL,
+            directory text NOT NULL,
+            type text,
+            strategy text,
+            time_created integer NOT NULL,
+            PRIMARY KEY (project_id, directory)
+          )
+        `)
+        yield* db.run(sql`INSERT INTO project (id) VALUES ('project-1')`)
+        yield* db.run(sql`
+          INSERT INTO project_directory (project_id, directory, type, strategy, time_created)
+          VALUES ('project-1', '/checkout', 'git_worktree', 'copy', 1),
+                 ('project-1', '/workspace', 'association', 'manual', 2)
+        `)
+
+        yield* DatabaseMigration.applyOnly(db, [projectAssociationMigration])
+
+        expect(yield* db.all(sql`SELECT directory, project_id, strategy, time_created FROM project_association`)).toEqual([
+          { directory: "/workspace", project_id: "project-1", strategy: "manual", time_created: 2 },
+        ])
+        expect(yield* db.all(sql`SELECT directory, type, strategy FROM project_directory`)).toEqual([
+          { directory: "/checkout", type: "git_worktree", strategy: "copy" },
+        ])
+      }),
+    )
+  })
+
   test("defaults missing workspace names while preserving legacy workspace data", async () => {
     await run(
       Effect.gen(function* () {

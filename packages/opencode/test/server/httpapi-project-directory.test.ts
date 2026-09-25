@@ -1,4 +1,6 @@
 import { afterEach, expect, test } from "bun:test"
+import fs from "fs/promises"
+import path from "path"
 import { HttpRouter } from "effect/unstable/http"
 import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
 import { disposeMiddleware } from "../../src/server/routes/instance/httpapi/lifecycle"
@@ -32,10 +34,10 @@ test("associating a previously opened directory takes effect on the next request
   const create = await request(route(`/project/${owner.id}/directories`, workspace.path), {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ directory: workspace.path }),
+    body: JSON.stringify({ directory: workspace.path, strategy: "manual" }),
   })
   expect(create.status).toBe(200)
-  expect(await create.json()).toEqual(expect.arrayContaining([{ directory: workspace.path }]))
+  expect(await create.json()).toEqual(expect.arrayContaining([{ directory: workspace.path, strategy: "manual" }]))
 
   const associated = await projectAt(workspace.path)
   expect(associated.id).toBe(owner.id)
@@ -56,4 +58,33 @@ test("association rejects an unknown project", async () => {
     body: JSON.stringify({ directory: workspace.path }),
   })
   expect(response.status).toBe(404)
+})
+
+test("association canonicalizes symlink paths and rejects relative paths", async () => {
+  await using checkout = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+  await using workspace = await tmpdir({ config: { formatter: false, lsp: false } })
+  await using aliases = await tmpdir({ config: { formatter: false, lsp: false } })
+  const alias = path.join(aliases.path, "workspace-link")
+  await fs.symlink(workspace.path, alias)
+  const owner = await projectAt(checkout.path)
+
+  const relative = await request(route(`/project/${owner.id}/directories`, workspace.path), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ directory: "relative/workspace" }),
+  })
+  expect(relative.status).toBe(400)
+
+  const create = await request(route(`/project/${owner.id}/directories`, workspace.path), {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ directory: alias }),
+  })
+  expect(create.status).toBe(200)
+  expect(await create.json()).toEqual(expect.arrayContaining([{ directory: workspace.path }]))
+  expect((await projectAt(workspace.path)).id).toBe(owner.id)
+
+  const remove = await request(route(`/project/${owner.id}/directories`, alias), { method: "DELETE" })
+  expect(remove.status).toBe(200)
+  expect((await projectAt(workspace.path)).id).toBe("global")
 })

@@ -2,8 +2,9 @@ import * as InstanceState from "@/effect/instance-state"
 import { Project } from "@/project/project"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { AbsolutePath } from "@opencode-ai/core/schema"
+import { isAbsolute } from "path"
 import { Effect } from "effect"
-import { HttpApiBuilder } from "effect/unstable/httpapi"
+import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { ProjectNotFoundError } from "../errors"
 import { markDirectoryForDisposal, markInstanceForReload } from "../lifecycle"
@@ -68,6 +69,7 @@ export const projectHandlers = HttpApiBuilder.group(InstanceHttpApi, "project", 
       params: { projectID: ProjectV2.ID }
       payload: { directory: AbsolutePath; strategy?: string }
     }) {
+      if (!isAbsolute(ctx.payload.directory)) return yield* new HttpApiError.BadRequest({})
       yield* known(ctx.params.projectID)
       const result = yield* project.associate({
         projectID: ctx.params.projectID,
@@ -82,6 +84,7 @@ export const projectHandlers = HttpApiBuilder.group(InstanceHttpApi, "project", 
       params: { projectID: ProjectV2.ID }
       query: { directory: AbsolutePath }
     }) {
+      if (!isAbsolute(ctx.query.directory)) return yield* new HttpApiError.BadRequest({})
       yield* known(ctx.params.projectID)
       const result = yield* project.dissociate({ projectID: ctx.params.projectID, directory: ctx.query.directory })
       yield* markDirectoryForDisposal(ctx.query.directory)

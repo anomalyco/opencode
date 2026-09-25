@@ -1,7 +1,7 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { and, eq, sql } from "drizzle-orm"
 import { Database } from "@opencode-ai/core/database/database"
-import { ProjectDirectoryTable, ProjectTable } from "@opencode-ai/core/project/sql"
+import { ProjectAssociationTable, ProjectDirectoryTable, ProjectTable } from "@opencode-ai/core/project/sql"
 import { ProjectDirectories } from "@opencode-ai/core/project/directories"
 import { SessionTable } from "@opencode-ai/core/session/sql"
 import { WorkspaceTable } from "@opencode-ai/core/control-plane/workspace.sql"
@@ -173,6 +173,13 @@ const layer = Layer.effect(
               // list and rely on it being re-populated to ensure
               // accuracy
               yield* d.delete(ProjectDirectoryTable).where(eq(ProjectDirectoryTable.project_id, oldID)).run()
+              // Explicit associations describe logical ownership, not discovered
+              // checkouts, and must follow the project when its ID changes.
+              yield* d
+                .update(ProjectAssociationTable)
+                .set({ project_id: newID })
+                .where(eq(ProjectAssociationTable.project_id, oldID))
+                .run()
 
               yield* d
                 .update(SessionTable)

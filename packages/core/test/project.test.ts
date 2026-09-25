@@ -324,9 +324,35 @@ describe("ProjectV2.resolve with an associated directory", () => {
 
       yield* project.associate({ projectID: associatedID, directory })
       expect((yield* project.resolve(directory)).id).toBe(associatedID)
-      expect(yield* project.directories({ projectID: oldID })).toEqual([])
+      expect(yield* project.directories({ projectID: oldID })).toEqual([{ directory }])
 
       yield* project.dissociate({ projectID: associatedID, directory })
+      expect((yield* project.resolve(directory)).id).toBe(ProjectV2.ID.global)
+    }),
+  )
+
+  itDb.live("keeps an automatically recorded directory after dissociation", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmp()
+      const directory = yield* real(dir.path)
+      const project = yield* ProjectV2.Service
+      yield* seedProject(associatedID, directory)
+      yield* Database.Service.use(({ db }) =>
+        db
+          .insert(ProjectDirectoryTable)
+          .values({ project_id: associatedID, directory, strategy: "git_worktree" })
+          .run()
+          .pipe(Effect.orDie),
+      )
+
+      yield* project.associate({ projectID: associatedID, directory })
+      expect(yield* project.directories({ projectID: associatedID })).toEqual([
+        { directory, strategy: "git_worktree" },
+      ])
+      yield* project.dissociate({ projectID: associatedID, directory })
+      expect(yield* project.directories({ projectID: associatedID })).toEqual([
+        { directory, strategy: "git_worktree" },
+      ])
       expect((yield* project.resolve(directory)).id).toBe(ProjectV2.ID.global)
     }),
   )

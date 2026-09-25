@@ -6,7 +6,7 @@ import { Database } from "../database/database"
 import { makeGlobalNode } from "../effect/app-node"
 import { AbsolutePath, optional } from "../schema"
 import { ProjectSchema } from "./schema"
-import { ProjectDirectoryTable } from "./sql"
+import { ProjectAssociationTable, ProjectDirectoryTable } from "./sql"
 import type { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
 
 export interface Directory {
@@ -46,6 +46,7 @@ export type ListOutput = typeof ListOutput.Type
 
 export interface Interface {
   readonly list: (projectID: ProjectSchema.ID) => Effect.Effect<ReadonlyArray<Directory>>
+  readonly associations: (projectID: ProjectSchema.ID) => Effect.Effect<ReadonlyArray<Directory>>
   readonly get: (input: {
     projectID: ProjectSchema.ID
     directory: AbsolutePath
@@ -117,6 +118,17 @@ const layer = Layer.effect(
       return rows.map((row) => ({ directory: row.directory, strategy: row.strategy ?? undefined }))
     })
 
+    const associations = Effect.fn("ProjectDirectories.associations")(function* (projectID: ProjectSchema.ID) {
+      const rows = yield* db
+        .select({ directory: ProjectAssociationTable.directory, strategy: ProjectAssociationTable.strategy })
+        .from(ProjectAssociationTable)
+        .where(eq(ProjectAssociationTable.project_id, projectID))
+        .orderBy(asc(ProjectAssociationTable.directory))
+        .all()
+        .pipe(Effect.orDie)
+      return rows.map((row) => ({ directory: row.directory, strategy: row.strategy ?? undefined }))
+    })
+
     const contains = Effect.fn("ProjectDirectories.contains")(function* (input: {
       projectID: ProjectSchema.ID
       directory: AbsolutePath
@@ -156,9 +168,9 @@ const layer = Layer.effect(
 
     const ownerOf = Effect.fn("ProjectDirectories.ownerOf")(function* (directory: AbsolutePath) {
       const row = yield* db
-        .select({ projectID: ProjectDirectoryTable.project_id })
-        .from(ProjectDirectoryTable)
-        .where(and(eq(ProjectDirectoryTable.directory, directory), eq(ProjectDirectoryTable.type, "association")))
+        .select({ projectID: ProjectAssociationTable.project_id })
+        .from(ProjectAssociationTable)
+        .where(eq(ProjectAssociationTable.directory, directory))
         .get()
         .pipe(Effect.orDie)
       return row?.projectID
@@ -169,33 +181,15 @@ const layer = Layer.effect(
       directory: AbsolutePath
       strategy?: string
     }) {
-      yield* db.transaction((tx) =>
-        Effect.gen(function* () {
-          yield* tx
-            .delete(ProjectDirectoryTable)
-            .where(
-              and(
-                eq(ProjectDirectoryTable.directory, input.directory),
-                eq(ProjectDirectoryTable.type, "association"),
-                ne(ProjectDirectoryTable.project_id, input.projectID),
-              ),
-            )
-            .run()
-          yield* tx
-            .insert(ProjectDirectoryTable)
-            .values({
-              project_id: input.projectID,
-              directory: input.directory,
-              type: "association",
-              strategy: input.strategy,
-            })
-            .onConflictDoUpdate({
-              target: [ProjectDirectoryTable.project_id, ProjectDirectoryTable.directory],
-              set: { type: "association", strategy: input.strategy ?? null },
-            })
-            .run()
-        }),
-      ).pipe(Effect.orDie)
+      yield* db
+        .insert(ProjectAssociationTable)
+        .values({ project_id: input.projectID, directory: input.directory, strategy: input.strategy })
+        .onConflictDoUpdate({
+          target: ProjectAssociationTable.directory,
+          set: { project_id: input.projectID, strategy: input.strategy ?? null },
+        })
+        .run()
+        .pipe(Effect.orDie)
     })
 
     const dissociate = Effect.fn("ProjectDirectories.dissociate")(function* (input: {
@@ -203,12 +197,11 @@ const layer = Layer.effect(
       directory: AbsolutePath
     }) {
       yield* db
-        .delete(ProjectDirectoryTable)
+        .delete(ProjectAssociationTable)
         .where(
           and(
-            eq(ProjectDirectoryTable.project_id, input.projectID),
-            eq(ProjectDirectoryTable.directory, input.directory),
-            eq(ProjectDirectoryTable.type, "association"),
+            eq(ProjectAssociationTable.project_id, input.projectID),
+            eq(ProjectAssociationTable.directory, input.directory),
           ),
         )
         .run()
@@ -217,6 +210,7 @@ const layer = Layer.effect(
 
     return Service.of({
       list,
+      associations,
       get,
       contains,
       ownerOf,
