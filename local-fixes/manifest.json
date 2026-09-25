@@ -33,10 +33,13 @@
   },
   "stage": {
     "path": "C:\\Users\\Zephyrus\\.local\\bin\\opencode-patched.exe",
-    "note": "Stable filename on purpose: opencodeBinary in OpenChamber settings.json points here forever, so an upgrade never requires editing settings again.",
+    "note": "Stable filename on purpose: the User environment variable OPENCODE_BINARY points here forever, so an upgrade never requires re-pinning.",
+    "pinMechanism": "OPENCODE_BINARY, User scope. OpenChamber resolves its binary at startup as `process.env.OPENCODE_BINARY || searchPathFor('opencode')` - the env var is read FIRST and is the only durable pin.",
     "settingsFile": "C:\\Users\\Zephyrus\\.config\\openchamber\\settings.json",
-    "settingsKey": "opencodeBinary"
+    "settingsKey": "opencodeBinary",
+    "settingsKeyNote": "COSMETIC ONLY. OpenChamber drops this key on every settings rewrite (observed 2026-09-25 at 18:57:50 and 19:10:49) and never reads it at startup. Do not rely on it."
   },
   "buildBranchPrefix": "build/",
-  "restartNote": "OpenChamber must be fully closed and restarted to load a newly staged binary."
+  "pinScript": "local-fixes/pin-opencode.ps1",
+  "restartNote": "OpenChamber must be restarted to load a newly staged binary - the env var is read at startup. Verify with managed-opencode/<pid>.json: it must record the staged path, not ...\\resources\\opencode-cli\\opencode.exe."
 }

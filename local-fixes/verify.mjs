@@ -7,7 +7,7 @@
  *
  *   bun run fixes:verify
  */
-import { spawnSync } from "node:child_process"
+import { spawnSync, execFileSync } from "node:child_process"
 import { existsSync, readFileSync, statSync } from "node:fs"
 import { join, dirname } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -71,19 +71,34 @@ if (br.status === 0) good(`${branch} exists`)
 else note(`(no ${branch} — staged binary may predate this workflow, which is fine)`)
 
 // 6. will OpenChamber use it?
-console.log(`\n[6] OpenChamber pin`)
+// The pin that COUNTS is the environment variable. OpenChamber resolves its binary at
+// startup as `process.env.OPENCODE_BINARY || searchPathFor('opencode')`, and it drops
+// settings.json's opencodeBinary on every settings rewrite (verified 2026-09-25).
+// Checking the settings file alone reports a pin that does not exist.
+console.log(`\n[6] OpenChamber pin (OPENCODE_BINARY, User scope)`)
+let pinned = ""
+try {
+  pinned = execFileSync("powershell.exe", [
+    "-NoProfile", "-Command",
+    "[Environment]::GetEnvironmentVariable('OPENCODE_BINARY','User')",
+  ], { encoding: "utf8" }).trim()
+} catch (e) {
+  warn(`could not read the User environment: ${e.message}`)
+}
+if (pinned === stagePath) good(`OPENCODE_BINARY (User) → staged binary`)
+else if (!pinned) warn(`OPENCODE_BINARY (User) is empty — OpenChamber will use its BUNDLED binary, not this one`)
+else warn(`OPENCODE_BINARY (User) points at "${pinned}" — NOT the staged binary`)
+
+// settings.json is cosmetic UI state; report it, never trust it
 const settingsFile = manifest.stage.settingsFile
-if (!existsSync(settingsFile)) {
-  note(`(no settings file at ${settingsFile})`)
-} else {
+if (existsSync(settingsFile)) {
   try {
     const s = JSON.parse(readFileSync(settingsFile, "utf8"))
-    const pinned = s[manifest.stage.settingsKey]
-    if (pinned === stagePath) good(`settings.json ${manifest.stage.settingsKey} → staged binary`)
-    else if (!pinned) warn(`settings.json ${manifest.stage.settingsKey} is empty — OpenChamber uses its BUNDLED binary, not this one`)
-    else warn(`settings.json points at "${pinned}" — NOT the staged binary`)
+    const ui = s[manifest.stage.settingsKey]
+    if (ui === stagePath) note(`(settings.json ${manifest.stage.settingsKey} matches — cosmetic, dropped on rewrite)`)
+    else note(`(settings.json ${manifest.stage.settingsKey} is ${ui ? `"${ui}"` : "empty"} — cosmetic only, not read at startup)`)
   } catch (e) {
-    warn(`could not read ${settingsFile}: ${e.message}`)
+    note(`(could not read ${settingsFile}: ${e.message})`)
   }
 }
 
