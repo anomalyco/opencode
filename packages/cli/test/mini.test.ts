@@ -249,4 +249,75 @@ describe("mini command", () => {
       expect(result.stderr).toContain("opencode mini requires a TTY stdout")
     }
   })
+
+  test("exposes --session-id as a create-only flag", async () => {
+    const [root, run, mini] = await Promise.all([cli(["--help"]), cli(["run", "--help"]), cli(["mini", "--help"])])
+
+    for (const result of [root, run, mini]) {
+      expect(result.exitCode).toBe(0)
+      expect(result.stdout).toContain("--session-id string")
+    }
+  })
+
+  test("rejects --session-id combined with resume flags", async () => {
+    for (const [args, message] of [
+      [
+        ["run", "--session-id", "ses_chosen", "--session", "ses_resume", "hi"],
+        "--session-id cannot be used with --session",
+      ],
+      [["run", "--session-id", "ses_chosen", "--continue", "hi"], "--session-id cannot be used with --continue"],
+      [["run", "--session-id", "ses_chosen", "--fork", "hi"], "--session-id cannot be used with --fork"],
+      [["run", "--session-id", "chosen", "hi"], "--session-id must be a session ID starting with ses"],
+    ] as const) {
+      const result = await cli([...args])
+
+      expect(result.exitCode).toBe(1)
+      expect(result.stderr).toContain(message)
+    }
+  })
+
+  test("creates the run session with the supplied --session-id", async () => {
+    let created: unknown
+    const server = Bun.serve({
+      port: 0,
+      async fetch(request) {
+        const url = new URL(request.url)
+        if (url.pathname === "/api/info")
+          return Response.json({
+            version: OPENCODE_VERSION,
+            pid: process.pid,
+            urls: [],
+            paths: { tmp: "/tmp/opencode" },
+          })
+        if (url.pathname === "/api/location")
+          return Response.json({ directory: process.cwd(), project: { id: "global", directory: process.cwd() } })
+        if (url.pathname === "/api/session" && request.method === "POST") {
+          created = await request.json()
+          return Response.json({
+            data: {
+              ...(created as object),
+              projectID: "global",
+              location: { directory: process.cwd() },
+              cost: 0,
+              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              time: { created: 0, updated: 0 },
+            },
+          })
+        }
+        if (url.pathname === "/api/session/ses_chosen/prompt") return new Response(null, { status: 204 })
+        return new Response(undefined, { status: 404 })
+      },
+    })
+
+    try {
+      const result = await cli(["run", "--server", server.url.toString(), "--session-id", "ses_chosen", "hi"])
+
+      expect(created).toMatchObject({ id: "ses_chosen" })
+      // The create contract is what this flag governs; the run then fails
+      // against the fixture's closed event stream, which is expected here.
+      expect(result.exitCode).toBe(1)
+    } finally {
+      server.stop(true)
+    }
+  })
 })

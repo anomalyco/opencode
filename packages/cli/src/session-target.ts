@@ -29,11 +29,25 @@ export class SessionTargetMutationError extends Error {
   }
 }
 
+export function validateSessionCreateInput(input: {
+  createSessionID?: string
+  session?: string
+  continue?: boolean
+  fork?: boolean
+}): string | undefined {
+  if (input.createSessionID === undefined) return
+  if (input.session) return "--session-id cannot be used with --session"
+  if (input.continue) return "--session-id cannot be used with --continue"
+  if (input.fork) return "--session-id cannot be used with --fork"
+  if (!input.createSessionID.startsWith("ses")) return "--session-id must be a session ID starting with ses"
+}
+
 export async function resolveSessionTarget(input: {
   client: OpenCodeClient
   location?: { directory?: string; workspace?: string }
   continue?: boolean
   session?: string
+  createSessionID?: string
   fork?: boolean
   model?: ModelRef
   agent?: string
@@ -63,6 +77,7 @@ export async function resolveSessionTarget(input: {
     (await input.client.session
       .create(
         {
+          id: input.createSessionID,
           agent: prepared.agent,
           model: prepared.model,
           location: { directory: location.directory },

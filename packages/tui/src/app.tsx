@@ -82,7 +82,7 @@ import { PromptStashProvider } from "./prompt/stash"
 import { Toast, ToastProvider, useToast } from "./ui/toast"
 import { isFallbackTitle } from "@opencode/util/session-title-fallback"
 import * as Model from "./util/model"
-import { ArgsProvider, useArgs, type Args } from "./context/args"
+import { ArgsProvider, seedCreateSessionID, useArgs, type Args } from "./context/args"
 import open from "open"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { Config, ConfigProvider, useConfig } from "./config"
@@ -632,6 +632,7 @@ function App() {
   const startupPrompt = args.prompt ? { text: args.prompt, files: [], agents: [], pasted: [] } : undefined
   onMount(() => {
     batch(() => {
+      seedCreateSessionID(args.createSessionID)
       if (args.agent) local.agent.set(args.agent)
       if (args.model) {
         const { providerID, modelID } = Model.parse(args.model)

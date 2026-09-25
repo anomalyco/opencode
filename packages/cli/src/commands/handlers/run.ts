@@ -17,6 +17,7 @@ export default Runtime.handler(Commands.commands.run, (input) =>
         message: [...input.message, ...(separator === -1 ? [] : process.argv.slice(separator + 1))],
         continue: input.continue,
         session: Option.getOrUndefined(input.session),
+        createSessionID: Option.getOrUndefined(input.sessionID),
         fork: input.fork,
         model: Option.getOrUndefined(input.model),
         agent: Option.getOrUndefined(input.agent),

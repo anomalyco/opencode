@@ -54,6 +54,10 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
       Flag.withDescription("Session ID to continue"),
       Flag.optional,
     ),
+    sessionID: Flag.string("session-id").pipe(
+      Flag.withDescription("Create a new session with this ID"),
+      Flag.optional,
+    ),
     prompt: Flag.string("prompt").pipe(Flag.withDescription("Prompt to use"), Flag.optional),
   },
   commands: [
@@ -329,6 +333,10 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           Flag.withDescription("Session ID to continue"),
           Flag.optional,
         ),
+        sessionID: Flag.string("session-id").pipe(
+          Flag.withDescription("Create a new session with this ID"),
+          Flag.optional,
+        ),
         fork: Flag.boolean("fork").pipe(
           Flag.withDescription("Fork the session when continuing"),
           Flag.withDefault(false),
@@ -367,6 +375,10 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         session: Flag.string("session").pipe(
           Flag.withAlias("s"),
           Flag.withDescription("Session ID to continue"),
+          Flag.optional,
+        ),
+        sessionID: Flag.string("session-id").pipe(
+          Flag.withDescription("Create a new session with this ID"),
           Flag.optional,
         ),
         fork: Flag.boolean("fork").pipe(

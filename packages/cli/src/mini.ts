@@ -4,7 +4,12 @@ import type { MiniFrontendInput } from "@opencode/tui/mini"
 import { setTimeout } from "node:timers/promises"
 import { readStdin } from "./util/io"
 import { createMiniHost, INTERACTIVE_INPUT_ERROR, usingInteractiveStdin } from "./mini-host"
-import { parseSessionTargetModel, resolveSessionTarget, type SessionTargetPreparation } from "./session-target"
+import {
+  parseSessionTargetModel,
+  resolveSessionTarget,
+  validateSessionCreateInput,
+  type SessionTargetPreparation,
+} from "./session-target"
 import { Env } from "./env"
 
 export type MiniCommandInput = {
@@ -14,6 +19,7 @@ export type MiniCommandInput = {
   }
   continue?: boolean
   session?: string
+  createSessionID?: string
   fork?: boolean
   model?: string
   agent?: string
@@ -54,6 +60,7 @@ export async function runMini(input: MiniCommandInput) {
               location: { directory },
               continue: input.continue,
               session: input.session,
+              createSessionID: input.createSessionID,
               fork: input.fork,
               model: requested,
               agent: input.agent,
@@ -196,6 +203,8 @@ function validate(input: MiniCommandInput) {
   if (input.replayLimit !== undefined && (!Number.isInteger(input.replayLimit) || input.replayLimit <= 0)) {
     fail("--replay-limit must be a positive integer")
   }
+  const invalid = validateSessionCreateInput(input)
+  if (invalid) fail(invalid)
   if (input.fork && !input.continue && !input.session) fail("--fork requires --continue or --session")
 }
 
