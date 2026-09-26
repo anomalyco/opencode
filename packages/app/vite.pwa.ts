@@ -17,6 +17,7 @@ export function serviceWorker(directory: string) {
       // Keep each open tab on its complete build until all old clients close.
       skipWaiting: false,
       inlineWorkboxRuntime: true,
+      importScripts: ["/notification.js"],
       navigateFallback: "/index.html",
       // Pairing links must reach the server so it can set the session cookie.
       navigateFallbackDenylist: [/^\/(?:api|auth)(?:\/|$)/, /^\/(?:_assets|assets)(?:\/|$)/],

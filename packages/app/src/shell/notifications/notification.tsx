@@ -242,8 +242,11 @@ export function createServerNotificationState(input: {
 
       if (settings.notifications.agent()) {
         void input.coordinator.system(`${input.key}\0${eventID}`, () =>
-          platform.notify(language.t("notification.session.responseReady.title"), session.title ?? sessionID, () =>
-            openNotificationSession(tabs, input.key, sessionID),
+          platform.notify(
+            language.t("notification.session.responseReady.title"),
+            session.title ?? sessionID,
+            () => openNotificationSession(tabs, input.key, sessionID),
+            sessionHref(input.key, sessionID),
           ),
         )
       }
@@ -272,8 +275,11 @@ export function createServerNotificationState(input: {
         (typeof error === "string" ? error : language.t("notification.session.error.fallbackDescription"))
       if (settings.notifications.errors()) {
         void input.coordinator.system(`${input.key}\0${eventID}`, () =>
-          platform.notify(language.t("notification.session.error.title"), description, () =>
-            openNotificationSession(tabs, input.key, sessionID),
+          platform.notify(
+            language.t("notification.session.error.title"),
+            description,
+            () => openNotificationSession(tabs, input.key, sessionID),
+            sessionHref(input.key, sessionID),
           ),
         )
       }

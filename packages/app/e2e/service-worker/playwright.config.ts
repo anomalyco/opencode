@@ -10,5 +10,6 @@ export default defineConfig({
   timeout: 60_000,
   workers: 1,
   expect: { timeout: 15_000 },
-  use: { browserName: "chromium" },
+  // New headless Chromium supports notifications; the headless shell denies permission.
+  use: { browserName: "chromium", channel: "chromium" },
 })
