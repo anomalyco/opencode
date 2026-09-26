@@ -56,6 +56,18 @@ const APP_IDS = {
   prod: "ai.opencode.desktop",
 } as const
 
+// Deb-target settings, applied per channel below.
+//
+// packageName must be explicit. electron-builder resolves the deb package name via
+// appInfo.linuxPackageName, which falls back to sanitizedProductName whenever package.json's
+// `name` is scoped: "@opencode/desktop" + productName "OpenCode" would produce "opencode" and
+// collide with the CLI deb of the same name.
+//
+// The artifact name carries the version so a stale build is identifiable from the filename
+// alone, the way the CLI deb already is (opencode_<version>_<arch>.deb). Scoped to the deb
+// target so the dmg and nsis names stay unchanged.
+const DEB_ARTIFACT_NAME = "opencode-desktop-${version}-${os}-${arch}.${ext}"
+
 const getBase = (appId: string): Configuration => ({
   artifactName: "opencode-desktop-${os}-${arch}.${ext}",
   directories: {
@@ -153,7 +165,8 @@ const getBase = (appId: string): Configuration => ({
         StartupWMClass: appId,
       },
     },
-    target: ["AppImage", "deb", "rpm"],
+    // Only the deb is produced by this pipeline; AppImage and rpm are not built.
+    target: ["deb"],
   },
 })
 
@@ -167,7 +180,7 @@ function getConfig() {
         ...base,
         appId,
         productName: "OpenCode Dev",
-        deb: { fpm: [metainfoFpm(appId)] },
+        deb: { packageName: "opencode-desktop-dev", artifactName: DEB_ARTIFACT_NAME, fpm: [metainfoFpm(appId)] },
         rpm: { packageName: "opencode-dev", fpm: [metainfoFpm(appId)] },
       }
     }
@@ -182,7 +195,7 @@ function getConfig() {
           url: "https://opencode.ai/update/api/beta/desktop/opencode/",
           channel: "latest",
         },
-        deb: { fpm: [metainfoFpm(appId)] },
+        deb: { packageName: "opencode-desktop-beta", artifactName: DEB_ARTIFACT_NAME, fpm: [metainfoFpm(appId)] },
         rpm: { packageName: "opencode-beta", fpm: [metainfoFpm(appId)] },
       }
     }
@@ -197,7 +210,7 @@ function getConfig() {
           url: "https://opencode.ai/update/api/latest/desktop/opencode/",
           channel: "latest",
         },
-        deb: { fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },
+        deb: { packageName: "opencode-desktop", artifactName: DEB_ARTIFACT_NAME, fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },
         rpm: { packageName: "opencode", fpm: [metainfoFpm(appId), legacyDesktopEntryFpm] },
       }
     }

@@ -10,11 +10,23 @@
 #
 set -euo pipefail
 
+# Bake a stable channel into the CLI binary. Without this, Script.channel falls back
+# to `git branch --show-current` (packages/script/src/index.ts:26-31), so the packaged
+# DB filename becomes opencode-<branch>.db and every release from a new branch starts
+# with an empty session database (packages/cli/src/database-path.ts:7-11).
+export OPENCODE_CHANNEL=prod
+
 # ── Paths ──────────────────────────────────────────────────────────────────────
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 OPENCODE_PKG="$REPO_ROOT/packages/cli"
 DIST_DIR="$REPO_ROOT/dist"
 VERSION="$(cd "$OPENCODE_PKG" && node -e "process.stdout.write(JSON.parse(require('fs').readFileSync('package.json','utf8')).version)")"
+# Bake the release version into the binary, exactly as CI does (publish.yml passes
+# needs.version.outputs.version). Without it Script.version falls into the preview branch:
+# IS_PREVIEW is `CHANNEL !== "latest"` (packages/script/src/index.ts:32), so channel "prod"
+# produces "0.0.0-prod-<timestamp>" at line 36. /api/info then reports that, and any client
+# requiring a 2.x server (e.g. openchamber) rejects the connection as "OpenCode v2 required".
+export OPENCODE_VERSION="$VERSION"
 
 SKIP_BUILD=false
 for arg in "$@"; do
@@ -33,14 +45,47 @@ echo "  Version : ${VERSION}"
 echo "  Arch    : ${ARCH}"
 echo "═══════════════════════════════════════════════════════════════"
 
+# Newest source file that is newer than the given CLI binary, or empty when the binary is current.
+# A matching channel (and even a matching version) is not proof of freshness: the CLI reports a
+# date-based version, so same-day rebuilds are indistinguishable by version. The 21:01 CLI deb
+# packaged a 17:14 binary that predated the disableAuth work (env.ts/server-process.ts, 19:29), so
+# OPENCODE_DISABLE_AUTH reached the process but had no effect — the code reading it was absent.
+# Errs toward rebuilding: over-rebuilding costs time, under-rebuilding ships stale code.
+newest_cli_source() {
+  find "$REPO_ROOT/packages" -type f \
+    -not -path "*/node_modules/*" \
+    -not -path "*/dist/*" \
+    \( -path "*/src/*" -o -name "package.json" -o -path "*/script/*" \) \
+    -newer "$1" -print -quit 2>/dev/null || true
+}
+
 # ── Step 1: Build binary if needed ─────────────────────────────────────────────
 if [ "$SKIP_BUILD" = false ]; then
   # Look for an existing linux-x64 binary first
   EXISTING_BIN=$(find "$OPENCODE_PKG/dist" -path "*/bin/opencode" -type f 2>/dev/null | head -1 || true)
+  BINARY_PATH=""
   if [ -n "$EXISTING_BIN" ]; then
-    echo "✓ Found existing binary: $EXISTING_BIN"
-    BINARY_PATH="$EXISTING_BIN"
-  else
+    # Reuse only when the artifact was baked with the same channel. A stale binary keeps its
+    # original OPENCODE_CHANNEL, which selects a different session DB at runtime
+    # (packages/cli/src/database-path.ts:7-11), so mere existence is not enough.
+    BIN_VERSION=$("$EXISTING_BIN" --version 2>/dev/null || true)
+    # Match the baked release version, not the channel. Now that OPENCODE_VERSION is set the channel is
+    # no longer part of the version string ("opencode v2.0.16"), so a channel substring would never
+    # match and every build would needlessly recompile. The channel still governs the DB/service
+    # filenames and remains fixed at "prod" above.
+    if [ -n "$BIN_VERSION" ] && [[ "$BIN_VERSION" == *"v${VERSION}"* ]]; then
+      NEWER_SRC=$(newest_cli_source "$EXISTING_BIN")
+      if [ -n "$NEWER_SRC" ]; then
+        echo "→ Stale binary: newer source ${NEWER_SRC#"$REPO_ROOT"/} — rebuilding"
+      else
+        echo "✓ Found existing binary (v$VERSION, channel $OPENCODE_CHANNEL): $EXISTING_BIN"
+        BINARY_PATH="$EXISTING_BIN"
+      fi
+    else
+      echo "→ Stale binary (${BIN_VERSION:-unreadable version}) is not v$VERSION — rebuilding"
+    fi
+  fi
+  if [ -z "$BINARY_PATH" ]; then
     echo "→ Building opencode binary (bun compile, linux-x64)..."
     cd "$OPENCODE_PKG"
     bun run script/build.ts --single
@@ -56,6 +101,19 @@ else
   BINARY_PATH=$(find "$OPENCODE_PKG/dist" -path "*/bin/opencode" -type f | head -1)
   if [ -z "$BINARY_PATH" ]; then
     echo "✗ No binary found at $OPENCODE_PKG/dist — run without --skip-build first" >&2
+    exit 1
+  fi
+  BIN_VERSION=$("$BINARY_PATH" --version 2>/dev/null || true)
+  if [ -n "$BIN_VERSION" ] && [[ "$BIN_VERSION" != *"v${VERSION}"* ]]; then
+    echo "⚠ --skip-build: binary version does not match $VERSION ($BIN_VERSION)" >&2
+  fi
+  # --skip-build exists to iterate on packaging, but packaging a stale binary silently ships code
+  # that was never compiled — exactly how OPENCODE_DISABLE_AUTH was lost. Fail loudly rather than
+  # produce a deb whose behaviour cannot be explained by its source.
+  NEWER_SRC=$(newest_cli_source "$BINARY_PATH")
+  if [ -n "$NEWER_SRC" ]; then
+    echo "✗ --skip-build: existing binary is OLDER than ${NEWER_SRC#"$REPO_ROOT"/}" >&2
+    echo "  Packaging it would ship stale code. Re-run without --skip-build to recompile the CLI." >&2
     exit 1
   fi
   echo "✓ Using existing binary: $BINARY_PATH"
