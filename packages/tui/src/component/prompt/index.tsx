@@ -1586,6 +1586,7 @@ export function Prompt(props: PromptProps) {
     sessionID: props.sessionID,
     mode: store.mode,
     showDetails: store.interrupt === 0 || dimensions().width >= 80,
+    model: local.model.current(),
   })
 
   const placeholderText = createMemo(() => {
