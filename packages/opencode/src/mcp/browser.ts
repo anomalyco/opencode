@@ -22,11 +22,14 @@ const layer = Layer.succeed(
           clearTimeout(timer)
           resume(Effect.fail(error))
         })
-        subprocess.on("exit", (code) => {
+        const onExit = (code: number | null) => {
           if (code === null || code === 0) return
           clearTimeout(timer)
           resume(Effect.fail(new Error(`Browser open failed with exit code ${code}`)))
-        })
+        }
+        subprocess.on("exit", onExit)
+        // On Windows and WSL, open() can return only after the launcher has exited.
+        onExit(subprocess.exitCode)
       })
     }),
   }),
