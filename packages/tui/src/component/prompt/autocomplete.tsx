@@ -24,6 +24,22 @@ import { useBindings, useCommandSlashes, useOpencodeModeStack } from "../../keym
 import { displayCharAt, mentionTriggerIndex } from "../../prompt/display"
 import type { FileSystemEntry } from "@opencode-ai/sdk/v2"
 
+export function readLogicalCaret(
+  input: { cursorOffset: number; logicalCursor: { row: number; col: number } },
+  offset: number,
+) {
+  const saved = input.cursorOffset
+  input.cursorOffset = offset
+  const cursor = input.logicalCursor
+  input.cursorOffset = saved
+  return cursor
+}
+
+export function placeDisplayCaret(input: { cursorOffset: number }, text: string) {
+  input.cursorOffset = Bun.stringWidth(text)
+  return input.cursorOffset
+}
+
 function removeLineRange(input: string) {
   const hashIndex = input.lastIndexOf("#")
   return hashIndex !== -1 ? input.substring(0, hashIndex) : input
@@ -177,10 +193,8 @@ export function Autocomplete(props: {
     const needsSpace = charAfterCursor !== " "
     const append = "@" + text + (needsSpace ? " " : "")
 
-    input.cursorOffset = store.index
-    const startCursor = input.logicalCursor
-    input.cursorOffset = currentCursorOffset
-    const endCursor = input.logicalCursor
+    const startCursor = readLogicalCaret(input, store.index)
+    const endCursor = readLogicalCaret(input, currentCursorOffset)
 
     input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
     input.insertText(append)
@@ -458,7 +472,7 @@ export function Autocomplete(props: {
           const cursor = props.input().logicalCursor
           props.input().deleteRange(0, 0, cursor.row, cursor.col)
           props.input().insertText(newText)
-          props.input().cursorOffset = Bun.stringWidth(newText)
+          placeDisplayCaret(props.input(), newText)
         },
       })
     }
@@ -567,10 +581,8 @@ export function Autocomplete(props: {
     const displayText = (selected.value ?? selected.display).trimEnd()
     const path = displayText.startsWith("@") ? displayText.slice(1) : displayText
 
-    input.cursorOffset = store.index
-    const startCursor = input.logicalCursor
-    input.cursorOffset = currentCursorOffset
-    const endCursor = input.logicalCursor
+    const startCursor = readLogicalCaret(input, store.index)
+    const endCursor = readLogicalCaret(input, currentCursorOffset)
 
     input.deleteRange(startCursor.row, startCursor.col, endCursor.row, endCursor.col)
     input.insertText("@" + path + "/")

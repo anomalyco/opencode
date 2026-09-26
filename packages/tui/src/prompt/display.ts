@@ -29,7 +29,10 @@ export function displaySlice(value: string, start = 0, end = promptOffsetWidth(v
 export function displayCharAt(value: string, offset: number) {
   let width = 0
   for (const part of graphemes.segment(value)) {
-    const next = width + promptOffsetWidth(part.segment)
+    const size = promptOffsetWidth(part.segment)
+    // A dangling mark has no cell. Returning it would hide the character that shares this column.
+    if (size === 0) continue
+    const next = width + size
     if (offset === width || offset < next) return part.segment
     width = next
   }

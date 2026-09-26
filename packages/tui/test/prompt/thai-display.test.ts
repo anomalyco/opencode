@@ -114,6 +114,23 @@ describe("thai prompt display offsets", () => {
     }
   })
 
+  test("a slice ending inside sara am does not drop the mark off its base", () => {
+    const sliced = displaySlice(thai.saraAmTone, 0, 1)
+    const baseKeptWithoutSaraAm = sliced.includes("น") && !sliced.includes("ำ")
+    expect(baseKeptWithoutSaraAm).toBe(false)
+    console.log(`thai-slice-inside ${JSON.stringify(thai.saraAmTone)} -> ${JSON.stringify(sliced)}`)
+  })
+
+  test("per-column read of a dangling mark keeps the other characters", () => {
+    const columns = promptOffsetWidth(thai.danglingMark)
+    const reads = Array.from({ length: columns }, (_, offset) => displayCharAt(thai.danglingMark, offset) ?? "")
+    console.log(`thai-dangling-columns ${JSON.stringify(reads)}`)
+    const joined = reads.join("")
+    for (const char of "ทดสอบ") {
+      expect(joined.includes(char)).toBe(true)
+    }
+  })
+
   test("mentions resolve offsets in thai text like CJK text", () => {
     expect(mentionTriggerIndex("สวัสดี @")).toBe(5)
     expect(mentionTriggerIndex("ทดสอบ @src file", Bun.stringWidth("ทดสอบ @src"))).toBe(6)
