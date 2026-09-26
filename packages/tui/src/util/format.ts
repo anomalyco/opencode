@@ -1,3 +1,7 @@
+export function formatElapsed(startedAt: number, now: number) {
+  return formatDuration(Math.max(0, Math.floor((now - startedAt) / 1000)))
+}
+
 export function formatDuration(secs: number) {
   if (secs <= 0) return ""
   if (secs < 60) return `${secs}s`
