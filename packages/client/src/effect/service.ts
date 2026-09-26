@@ -95,7 +95,14 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     } else timeouts = undefined
     if (service !== undefined) {
       spawnDelay = timing.spawnDelay
-      const compatible = service.compatible && matchesVersion(service.version, options)
+      const versionMatches = matchesVersion(service.version, options)
+      const compatible = service.compatible && versionMatches
+      if (!service.compatible && versionMatches)
+        return yield* Effect.fail(
+          new Error(
+            "Background service uses an incompatible health protocol. Update this client or explicitly restart the service.",
+          ),
+        )
       if (compatible && service.state === "ready") {
         yield* Effect.tryPromise(() => PtyHandoff.complete(options.file ?? fallback(), service.info))
         return Option.some(service)
@@ -202,10 +209,7 @@ const probe = Effect.fnUntraced(function* (info: Info) {
   return (yield* probeResult(info)).service
 })
 
-const probeResult = Effect.fnUntraced(function* (
-  info: Info,
-  timeout = defaultEnsureTiming.requestTimeout,
-) {
+const probeResult = Effect.fnUntraced(function* (info: Info, timeout = defaultEnsureTiming.requestTimeout) {
   const endpoint = {
     url: info.url,
     auth:
@@ -227,8 +231,8 @@ const probeResult = Effect.fnUntraced(function* (
   )
   if ("cause" in result) return { service: undefined, timedOut: signal.aborted }
   const response = result.value.response
-  // The previous V2 service exposes /api/status instead. Its authenticated 404 is enough
-  // to recognize the registered daemon as incompatible and route it through replacement.
+  // A missing health endpoint identifies protocol incompatibility, not an older
+  // version. Only an unmet version requirement lets ensure replace this owner.
   if (response.status === 404)
     return {
       service: {
