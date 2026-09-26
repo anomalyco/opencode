@@ -11,6 +11,24 @@ export class InvalidRequestError extends Schema.TaggedError<InvalidRequestError>
   { httpApiStatus: 400 },
 ) {}
 
+export class LocationDirectoryNotFoundError extends Schema.TaggedError<LocationDirectoryNotFoundError>()(
+  "LocationDirectoryNotFoundError",
+  {
+    directory: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 400 },
+) {}
+
+export class LocationPermissionDeniedError extends Schema.TaggedError<LocationPermissionDeniedError>()(
+  "LocationPermissionDeniedError",
+  {
+    directory: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 403 },
+) {}
+
 export class RpcError extends Schema.TaggedError<RpcError>()(
   "RpcError",
   {

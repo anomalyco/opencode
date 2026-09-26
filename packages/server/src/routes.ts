@@ -31,6 +31,7 @@ import { PluginUpdate } from "@opencode/core/plugin/update"
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
 import { WellKnown } from "@opencode/core/wellknown"
 import { Workspace } from "@opencode/core/workspace"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { HttpRouter } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
@@ -51,6 +52,7 @@ import type { ServerOptions } from "./options"
 
 const applicationServiceNodes = [
   Global.node,
+  FSUtil.node,
   Database.node,
   Bus.node,
   EventLogger.node,
@@ -139,6 +141,7 @@ function makeRoutes<AuthError, AuthServices>(
       }),
     ),
   ]
+  const directoryCheck = options.fs?.directoryCheck !== false && !options.simulation
   const build = (overrides: LayerNode.Replacements) => {
     const replacements: LayerNode.Replacements = [
       ...standard,
@@ -146,7 +149,7 @@ function makeRoutes<AuthError, AuthServices>(
       ...(instances ? [Instance.node.replace(instances(() => replacements))] : []),
       ...overrides,
     ]
-    return AppNodeBuilder.build(applicationServices, replacements)
+    return AppNodeBuilder.build(applicationServices, replacements, { directoryCheck })
   }
   const serviceLayer = options.simulation
     ? Layer.unwrap(
@@ -177,7 +180,7 @@ function makeRoutes<AuthError, AuthServices>(
         Layer.provide(handlers.pipe(Layer.provide(services), Layer.provide(Layer.succeed(CorsConfig, options)))),
         Layer.provide(formLocationLayer),
         Layer.provide(sessionLocationLayer),
-        Layer.provide(layer),
+        Layer.provide(layer(directoryCheck)),
         Layer.provide(authorizationLayer),
         Layer.provide(schemaErrorLayer),
         Layer.provide(auth),
