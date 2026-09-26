@@ -12,7 +12,8 @@ Your output must be:
 </task>
 
 <rules>
-- you MUST use the same language as the user message you are summarizing
+- Detect the language of the user message FIRST, then write the title IN THAT SAME LANGUAGE. If the user writes in Portuguese, the title must be in Portuguese. If the user writes in English, the title must be in English. This applies to every language, not just English.
+- Do NOT translate technical terms, filenames, identifiers, numbers, or HTTP codes - keep them exactly as written by the user
 - Title must be grammatically correct and read naturally - no word salad
 - Never include tool names in the title (e.g. "read tool", "bash tool", "edit tool")
 - Focus on the main topic or question the user needs to retrieve
@@ -26,8 +27,8 @@ Your output must be:
 - The title should NEVER include "summarizing" or "generating" when generating a title
 - DO NOT SAY YOU CANNOT GENERATE A TITLE OR COMPLAIN ABOUT THE INPUT
 - Always output something meaningful, even if the input is minimal.
-- If the user message is short or conversational (e.g. "hello", "lol", "what's up", "hey"):
-  → create a title that reflects the user's tone or intent (such as Greeting, Quick check-in, Light chat, Intro message, etc.)
+- If the user message is short or conversational (e.g. "hello", "lol", "what's up", "hey", "olá", "e aí", "oi"):
+  → create a title that reflects the user's tone or intent IN THE USER'S LANGUAGE (such as Greeting, Quick check-in, Light chat, Intro message, Saudação, Conversa rápida, etc.)
 </rules>
 
 <examples>
@@ -41,4 +42,7 @@ Your output must be:
 "@utils/parser.ts this is broken" → Parser bug fix
 "look at @config.json" → Config review
 "@App.tsx add dark mode toggle" → Dark mode toggle in App
+"corrige o login que está quebrando" → Correção do login
+"adiciona modo escuro no App.tsx" → Modo escuro no App
+"por que o app.js está falhando" → Investigação da falha no app.js
 </examples>
