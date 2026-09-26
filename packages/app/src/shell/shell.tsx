@@ -31,6 +31,7 @@ export default function Layout(props: ParentProps) {
   })
   const verticalTabs = () => preferences.appearance.tabLayout() === "vertical" && !mobile()
   const bottomTitlebar = () => mobile() && preferences.general.mobileTitlebarPosition() === "bottom"
+  const iosStandalone = platform.platform === "web" && "standalone" in navigator && navigator.standalone === true
 
   const update: TitlebarUpdate = {
     get state() {
@@ -60,9 +61,14 @@ export default function Layout(props: ParentProps) {
       <div
         class="relative bg-v2-background-bg-deep flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text"
         style={{
+          // iOS 26 Home Screen web apps get a Liquid Glass scroll-edge fade that dims ~32px below the
+          // status bar and has no web opt-out. Only add it when a status bar is present (inset > 0).
+          "--safe-area-inset-top": iosStandalone
+            ? "calc(env(safe-area-inset-top, 0px) + min(32px, env(safe-area-inset-top, 0px) * 1000))"
+            : "env(safe-area-inset-top, 0px)",
           // Native Windows chrome supplies the gap; retain paint clearance for the panels' outer outlines.
           "--shell-top-inset": bottomTitlebar()
-            ? "max(0px, calc(8px - env(safe-area-inset-top, 0px)))"
+            ? "max(0px, calc(8px - var(--safe-area-inset-top, env(safe-area-inset-top, 0px))))"
             : platform.platform === "desktop" && platform.os === "windows"
               ? "1px"
               : "8px",
@@ -101,7 +107,7 @@ export default function Layout(props: ParentProps) {
           <main
             class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-content"
             style={{
-              "padding-top": bottomTitlebar() ? "env(safe-area-inset-top, 0px)" : "0px",
+              "padding-top": bottomTitlebar() ? "var(--safe-area-inset-top, env(safe-area-inset-top, 0px))" : "0px",
               "padding-bottom":
                 bottomTitlebar() || settings.active()
                   ? "0px"
