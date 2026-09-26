@@ -55,7 +55,7 @@ const OpenAIResponsesReasoningSummaryText = Schema.Struct({
 
 const OpenAIResponsesReasoningItem = Schema.Struct({
   type: Schema.tag("reasoning"),
-  id: Schema.optionalKey(Schema.String),
+  id: Schema.String,
   summary: Schema.Array(OpenAIResponsesReasoningSummaryText),
   encrypted_content: optionalNull(Schema.String),
 })
@@ -103,7 +103,7 @@ type OpenAIResponsesReasoningInput = {
   summary: Array<{ type: "summary_text"; text: string }>
   encrypted_content?: string | null
 }
-type OpenAIResponsesReasoningReplay = Omit<OpenAIResponsesReasoningInput, "id">
+type OpenAIResponsesReasoningReplay = OpenAIResponsesReasoningInput
 
 const OpenAIResponsesTool = Schema.Struct({
   type: Schema.tag("function"),
@@ -400,6 +400,7 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
           }
           const replay = {
             type: reasoning.type,
+            id: reasoning.id,
             summary: reasoning.summary,
             encrypted_content: reasoning.encrypted_content,
           }
