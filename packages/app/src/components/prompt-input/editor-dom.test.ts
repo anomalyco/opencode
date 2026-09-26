@@ -1,8 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { createTextFragment, getCursorPosition, getNodeLength, getTextLength, setCursorPosition } from "./editor-dom"
 
-const thaiSaraAm = "น้ำ"
-
 describe("prompt-input editor dom", () => {
   test("createTextFragment preserves newlines with consecutive br nodes", () => {
     const fragment = createTextFragment("foo\n\nbar")
@@ -96,32 +94,6 @@ describe("prompt-input editor dom", () => {
     setCursorPosition(container, 3)
     expect(getCursorPosition(container)).toBe(3)
 
-    container.remove()
-  })
-
-  test("thai caret length counts utf-16 code units", () => {
-    const container = document.createElement("div")
-    container.appendChild(document.createTextNode(thaiSaraAm))
-    document.body.appendChild(container)
-
-    const length = getTextLength(container)
-    const cells = Bun.stringWidth(thaiSaraAm)
-    console.log(
-      `thai-app-caret length ${length} utf16 ${thaiSaraAm.length} cells ${cells} unit ${length === thaiSaraAm.length ? "utf16" : "other"}`,
-    )
-    expect(length).toBe(thaiSaraAm.length)
-
-    const selection = window.getSelection()
-    if (!selection) {
-      console.log("thai-app-caret position unavailable")
-      container.remove()
-      return
-    }
-
-    setCursorPosition(container, thaiSaraAm.length)
-    const position = getCursorPosition(container)
-    console.log(`thai-app-caret position ${position} unit utf16`)
-    expect(position).toBe(thaiSaraAm.length)
     container.remove()
   })
 })

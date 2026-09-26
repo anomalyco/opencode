@@ -60,19 +60,21 @@ export function duration(input: number) {
 
 const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" })
 
-// `len` counts UTF-16 code units, same as `string.length` for ASCII callers.
-// A cluster that does not fit is dropped whole so a Thai vowel or tone mark stays on its base.
+// Keep the existing UTF-16 length budget, but discard a whole grapheme if it does not fit.
 export function truncate(str: string, len: number): string {
+  if (len <= 0) return ""
   if (str.length <= len) return str
   return takeGraphemePrefix(str, len - 1) + "…"
 }
 
 export function truncateLeft(str: string, len: number): string {
+  if (len <= 0) return ""
   if (str.length <= len) return str
   return "…" + takeGraphemeSuffix(str, len - 1)
 }
 
 export function truncateMiddle(str: string, maxLength: number = 35): string {
+  if (maxLength <= 0) return ""
   if (str.length <= maxLength) return str
 
   const ellipsis = "…"
@@ -83,26 +85,20 @@ export function truncateMiddle(str: string, maxLength: number = 35): string {
 }
 
 function takeGraphemePrefix(str: string, budget: number) {
-  if (budget <= 0) return str.slice(0, budget)
-
-  let size = 0
+  if (budget <= 0) return ""
   for (const part of graphemes.segment(str)) {
-    if (size + part.segment.length > budget) break
-    size += part.segment.length
+    if (part.index + part.segment.length > budget) return str.slice(0, part.index)
   }
-  return str.slice(0, size)
+  return str
 }
 
 function takeGraphemeSuffix(str: string, budget: number) {
-  // `slice(-0)` is `slice(0)`. A 1-wide truncateLeft stays "…" plus the whole ASCII string.
-  if (budget <= 0) return str.slice(-budget)
-
-  let size = 0
-  for (const part of [...graphemes.segment(str)].reverse()) {
-    if (size + part.segment.length > budget) break
-    size += part.segment.length
+  if (budget <= 0) return ""
+  const start = str.length - budget
+  for (const part of graphemes.segment(str)) {
+    if (part.index >= start) return str.slice(part.index)
   }
-  return str.slice(str.length - size)
+  return ""
 }
 
 export function pluralize(count: number, singular: string, plural: string): string {
