@@ -56,6 +56,8 @@ export function slashTriggerIndex(value: string, offset = promptOffsetWidth(valu
     const query = text.slice(index)
     if (before !== undefined && !/\s/.test(before)) continue
     if (/\s/.test(query) || query.slice(1).includes("/")) return
+    // let users type / inside sentences without triggering the command menu
+    if (index !== 0 && query.length === 1) return
     return promptOffsetWidth(text.slice(0, index))
   }
 }
