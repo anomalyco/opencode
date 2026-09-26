@@ -106,6 +106,34 @@ describe("Glob", () => {
       expect(results.sort()).toEqual([".hidden", "visible"])
     })
 
+    test("does not descend into ignored directories", async () => {
+      await using tmp = await tmpdir()
+      await fs.mkdir(path.join(tmp.path, "ok", "nested"), { recursive: true })
+      await fs.mkdir(path.join(tmp.path, "ok", "node_modules", "pkg"), { recursive: true })
+      await fs.mkdir(path.join(tmp.path, "ok", ".git"), { recursive: true })
+      await fs.mkdir(path.join(tmp.path, "ok", "dist"), { recursive: true })
+      await fs.mkdir(path.join(tmp.path, "ok", ".cache"), { recursive: true })
+      await fs.writeFile(path.join(tmp.path, "ok", "SKILL.md"), "", "utf-8")
+      await fs.writeFile(path.join(tmp.path, "ok", "nested", "SKILL.md"), "", "utf-8")
+      await fs.writeFile(path.join(tmp.path, "ok", "node_modules", "pkg", "SKILL.md"), "", "utf-8")
+      await fs.writeFile(path.join(tmp.path, "ok", ".git", "SKILL.md"), "", "utf-8")
+      await fs.writeFile(path.join(tmp.path, "ok", "dist", "SKILL.md"), "", "utf-8")
+      await fs.writeFile(path.join(tmp.path, "ok", ".cache", "SKILL.md"), "", "utf-8")
+
+      const results = await Glob.scan("**/SKILL.md", {
+        cwd: tmp.path,
+        absolute: true,
+        include: "file",
+        symlink: true,
+        dot: true,
+        ignore: ["**/node_modules/**", "**/.git/**", "**/dist/**", "**/.cache/**"],
+      })
+
+      expect(results.sort()).toEqual(
+        [path.join(tmp.path, "ok", "SKILL.md"), path.join(tmp.path, "ok", "nested", "SKILL.md")].sort(),
+      )
+    })
+
     test("excludes dotfiles when dot option is false", async () => {
       await using tmp = await tmpdir()
       await fs.writeFile(path.join(tmp.path, ".hidden"), "", "utf-8")
