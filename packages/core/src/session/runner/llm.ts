@@ -185,10 +185,18 @@ const layer = Layer.effect(
         ),
       )
 
+      const gcEvery = Number.parseInt(process.env.OPENCODE_GC_ON_STEP ?? "", 10)
+      let gcCount = 0
       while (true) {
         const next = yield* advanceToStep()
         if (next._tag !== "Ready") return next
         continuing = yield* runStep(next.context, step)
+        // opt-in: collect step transients (decoded history, converted messages) at the loop boundary;
+        // OPENCODE_GC_ON_STEP=N collects every Nth step (1 = every step)
+        if (gcEvery >= 1 && ++gcCount % gcEvery === 0) {
+          const bun = globalThis as typeof globalThis & { Bun?: { gc: (sync: boolean) => void } }
+          bun.Bun?.gc(true)
+        }
         step++
         force = false
         entering = false
