@@ -8,18 +8,30 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { type Component, Show } from "solid-js"
 import { useLocal } from "@/context/local"
 import { popularProviders, useProviders } from "@/hooks/use-providers"
-import { DialogConnectProvider } from "./dialog-connect-provider"
-import { DialogSelectProvider } from "./dialog-select-provider"
 import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
+import { decode64 } from "@/utils/base64"
 
 type ModelState = ReturnType<typeof useLocal>["model"]
 
 export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props) => {
-  const model = props.model ?? useLocal().model
+  const local = useLocal()
+  const model = props.model ?? local.model
   const dialog = useDialog()
-  const providers = useProviders()
+  const directory = () => decode64(local.slug())
+  const providers = useProviders(directory)
   const language = useLanguage()
+
+  const openProviders = (provider?: string) => {
+    void import("./dialog-connect-provider").then((x) => {
+      const controller = x.useProviderConnectController()
+      controller.select(provider)
+      void dialog.show(() => <x.DialogConnectProvider controller={controller} directory={directory} />)
+    })
+  }
+
+  const connect = (provider: string) => openProviders(provider)
+  const all = () => openProviders()
 
   let listRef: ListRef | undefined
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -35,7 +47,7 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
       <div class="flex flex-col gap-3 px-2.5" onKeyDown={handleKeyDown}>
         <div class="text-14-medium text-text-base px-2.5">{language.t("dialog.model.unpaid.freeModels.title")}</div>
         <List
-          class="[&_[data-slot=list-scroll]]:overflow-visible"
+          class="px-3 [&_[data-slot=list-scroll]]:overflow-visible"
           ref={(ref) => (listRef = ref)}
           items={model.list}
           current={model.current()}
@@ -80,8 +92,8 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
             <div class="px-2 text-14-medium text-text-base">{language.t("dialog.model.unpaid.addMore.title")}</div>
             <div class="w-full">
               <List
-                class="w-full px-0"
-                key={(x) => x?.id}
+                class="w-full px-3"
+                key={(p) => p.id}
                 items={providers.popular}
                 activeIcon="plus-small"
                 sortBy={(a, b) => {
@@ -91,7 +103,7 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
                 }}
                 onSelect={(x) => {
                   if (!x) return
-                  dialog.show(() => <DialogConnectProvider provider={x.id} />)
+                  connect(x.id)
                 }}
               >
                 {(i) => (
@@ -122,9 +134,7 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
                 variant="ghost"
                 class="w-full justify-start px-[11px] py-3.5 gap-4.5 text-14-medium"
                 icon="dot-grid"
-                onClick={() => {
-                  dialog.show(() => <DialogSelectProvider />)
-                }}
+                onClick={all}
               >
                 {language.t("dialog.provider.viewAll")}
               </Button>

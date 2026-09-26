@@ -13,14 +13,14 @@ export function HoverCard(props: HoverCardProps) {
 
   return (
     <Kobalte gutter={4} {...rest}>
-      <Kobalte.Trigger as="div" data-slot="hover-card-trigger">
+      <Kobalte.Trigger as="div" data-slot="hover-card-trigger" tabIndex={-1}>
         {local.trigger}
       </Kobalte.Trigger>
       <Kobalte.Portal mount={local.mount}>
         <Kobalte.Content
           data-component="hover-card-content"
           classList={{
-            ...(local.classList ?? {}),
+            ...local.classList,
             [local.class ?? ""]: !!local.class,
           }}
         >

@@ -8,7 +8,7 @@ export function StickyAccordionHeader(
     <Accordion.Header
       data-component="sticky-accordion-header"
       classList={{
-        ...(props.classList ?? {}),
+        ...props.classList,
         [props.class ?? ""]: !!props.class,
       }}
     >

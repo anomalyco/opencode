@@ -12,7 +12,7 @@ const root = path.resolve(process.cwd(), "..", "..", "..")
 const PARTS = 30
 
 // read the secret
-const ret = await $`bun sst secret list`.cwd(root).text()
+const ret = await $`bun sst secret list --stage frank`.cwd(root).text()
 const lines = ret.split("\n")
 const values = Array.from({ length: PARTS }, (_, i) => {
   const value = lines

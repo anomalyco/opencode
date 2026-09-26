@@ -1,0 +1,15 @@
+{
+  "snapshot": false,
+  "snapshots": true,
+  "attachment": { "image": { "max_width": 640 } },
+  "media": { "image": { "max_width": 1920 } },
+  "subagent_depth": 1,
+  "experimental": { "subagent_depth": 3, "mcp_timeout": 4000 },
+  "compaction": {
+    "preserve_recent_tokens": 100,
+    "keep": { "tokens": 200 },
+    "reserved": 300,
+    "buffer": 400,
+  },
+  "mcp": { "timeout": { "catalog": 8000, "execution": 8000 } },
+}

@@ -1,5 +1,7 @@
 import type { Argv, InferredOptionTypes } from "yargs"
-import { Config } from "../config/config"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+import type { Config } from "@/config/config"
+import { Effect } from "effect"
 
 const options = {
   port: {
@@ -36,14 +38,32 @@ export function withNetworkOptions<T>(yargs: Argv<T>) {
   return yargs.options(options)
 }
 
-export async function resolveNetworkOptions(args: NetworkOptions) {
-  const config = await Config.global()
-  const portExplicitlySet = process.argv.includes("--port")
-  const hostnameExplicitlySet = process.argv.includes("--hostname")
-  const mdnsExplicitlySet = process.argv.includes("--mdns")
-  const mdnsDomainExplicitlySet = process.argv.includes("--mdns-domain")
-  const corsExplicitlySet = process.argv.includes("--cors")
+export function hasArg(name: string) {
+  return networkArgs().some((arg) => arg === name || arg.startsWith(name + "="))
+}
 
+function hasBooleanArg(name: string) {
+  return networkArgs().some(
+    (arg) => arg === name || arg === name + "=true" || arg === name + "=false" || arg === "--no-" + name.slice(2),
+  )
+}
+
+function networkArgs() {
+  const separator = process.argv.indexOf("--")
+  return process.argv.slice(2, separator === -1 ? undefined : separator)
+}
+
+export const resolveNetworkOptions = Effect.fn("Cli.resolveNetworkOptions")(function* (args: NetworkOptions) {
+  const { Config } = yield* Effect.promise(() => import("@/config/config"))
+  const config = yield* Config.Service.use((cfg) => cfg.getGlobal())
+  return resolveNetworkOptionsNoConfig(args, config)
+})
+
+export function resolveNetworkOptionsNoConfig(args: NetworkOptions, config?: ConfigV1.Info) {
+  const portExplicitlySet = hasArg("--port")
+  const hostnameExplicitlySet = hasArg("--hostname")
+  const mdnsExplicitlySet = hasBooleanArg("--mdns")
+  const mdnsDomainExplicitlySet = hasArg("--mdns-domain")
   const mdns = mdnsExplicitlySet ? args.mdns : (config?.server?.mdns ?? args.mdns)
   const mdnsDomain = mdnsDomainExplicitlySet ? args["mdns-domain"] : (config?.server?.mdnsDomain ?? args["mdns-domain"])
   const port = portExplicitlySet ? args.port : (config?.server?.port ?? args.port)

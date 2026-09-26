@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "metadata": {
+    "name": "openai-compatible-chat/groq-llama-3-3-70b-drives-a-tool-loop",
+    "recordedAt": "2026-05-06T01:35:06.032Z",
+    "tags": [
+      "prefix:openai-compatible-chat",
+      "protocol:openai-compatible-chat",
+      "provider:groq",
+      "tool",
+      "tool-loop",
+      "golden"
+    ]
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"llama-3.3-70b-versatile\",\"messages\":[{\"role\":\"system\",\"content\":\"Use the get_weather tool, then answer in one short sentence.\"},{\"role\":\"user\",\"content\":\"What is the weather in Paris?\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false}}}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":80,\"temperature\":0}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"id\":\"chatcmpl-74a8ff95-296e-4c98-8e51-4b23d5d7f261\",\"object\":\"chat.completion.chunk\",\"created\":1778031305,\"model\":\"llama-3.3-70b-versatile\",\"system_fingerprint\":\"fp_43d97c5965\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":null},\"logprobs\":null,\"finish_reason\":null}],\"x_groq\":{\"id\":\"req_01kqxes90afm8r12en80ez1vhw\",\"seed\":1587279809}}\n\ndata: {\"id\":\"chatcmpl-74a8ff95-296e-4c98-8e51-4b23d5d7f261\",\"object\":\"chat.completion.chunk\",\"created\":1778031305,\"model\":\"llama-3.3-70b-versatile\",\"system_fingerprint\":\"fp_43d97c5965\",\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"id\":\"4vgxtgdfg\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"},\"index\":0}]},\"logprobs\":null,\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-74a8ff95-296e-4c98-8e51-4b23d5d7f261\",\"object\":\"chat.completion.chunk\",\"created\":1778031305,\"model\":\"llama-3.3-70b-versatile\",\"system_fingerprint\":\"fp_43d97c5965\",\"choices\":[{\"index\":0,\"delta\":{},\"logprobs\":null,\"finish_reason\":\"tool_calls\"}],\"x_groq\":{\"id\":\"req_01kqxes90afm8r12en80ez1vhw\",\"usage\":{\"queue_time\":0.036768035,\"prompt_tokens\":237,\"prompt_time\":0.012356963,\"completion_tokens\":14,\"completion_time\":0.047052437,\"total_tokens\":251,\"total_time\":0.0594094}},\"usage\":{\"queue_time\":0.036768035,\"prompt_tokens\":237,\"prompt_time\":0.012356963,\"completion_tokens\":14,\"completion_time\":0.047052437,\"total_tokens\":251,\"total_time\":0.0594094}}\n\ndata: {\"id\":\"chatcmpl-74a8ff95-296e-4c98-8e51-4b23d5d7f261\",\"object\":\"chat.completion.chunk\",\"created\":1778031305,\"model\":\"llama-3.3-70b-versatile\",\"system_fingerprint\":\"fp_43d97c5965\",\"choices\":[],\"usage\":{\"queue_time\":0.036768035,\"prompt_tokens\":237,\"prompt_time\":0.012356963,\"completion_tokens\":14,\"completion_time\":0.047052437,\"total_tokens\":251,\"total_time\":0.0594094},\"service_tier\":\"on_demand\"}\n\ndata: [DONE]\n\n"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"llama-3.3-70b-versatile\",\"messages\":[{\"role\":\"system\",\"content\":\"Use the get_weather tool, then answer in one short sentence.\"},{\"role\":\"user\",\"content\":\"What is the weather in Paris?\"},{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"4vgxtgdfg\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"4vgxtgdfg\",\"content\":\"{\\\"temperature\\\":22,\\\"condition\\\":\\\"sunny\\\"}\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false}}}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":80,\"temperature\":0}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"id\":\"chatcmpl-52c0acaf-3f4b-45c8-8aa5-93a3b6adb045\",\"object\":\"chat.completion.chunk\",\"created\":1778031305,\"model\":\"llama-3.3-70b-versatile\",\"system_fingerprint\":\"fp_43d97c5965\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"\"},\"logprobs\":null,\"finish_reason\":null}],\"x_groq\":{\"id\":\"req_01kqxes966fm8r4q94e70a83gn\",\"seed\":524268521}}\n\ndata: {\"id\":\"chatcmpl-52c0acaf-3f4b-45c8-8aa5-93a3b6adb045\",\"object\":\"chat.completion.chunk\",\"created\":1778031305,\"model\":\"llama-3.3-70b-versatile\",\"system_fingerprint\":\"fp_43d97c5965\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"The\"},\"logprobs\":null,\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-52c0acaf-3f4b-45c8-8aa5-93a3b6adb045\",\"object\":\"chat.completion.chunk\",\"created\":1778031305,\"model\":\"llama-3.3-70b-versatile\",\"system_fingerprint\":\"fp_43d97c5965\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" weather\"},\"logprobs\":null,\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-52c0acaf-3f4b-45c8-8aa5-93a3b6adb045\",\"object\":\"chat.completion.chunk\",\"created\":1778031305,\"model\":\"llama-3.3-70b-versatile\",\"system_fingerprint\":\"fp_43d97c5965\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" in\"},\"logprobs\":null,\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-52c0acaf-3f4b-45c8-8aa5-93a3b6adb045\",\"object\":\"chat.completion.chunk\",\"created\":1778031305,\"model\":\"llama-3.3-70b-versatile\",\"system_fingerprint\":\"fp_43d97c5965\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" Paris\"},\"logprobs\":null,\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-52c0acaf-3f4b-45c8-8aa5-93a3b6adb045\",\"object\":\"chat.completion.chunk\",\"created\":1778031305,\"model\":\"llama-3.3-70b-versatile\",\"system_fingerprint\":\"fp_43d97c5965\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" is\"},\"logprobs\":null,\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-52c0acaf-3f4b-45c8-8aa5-93a3b6adb045\",\"object\":\"chat.completion.chunk\",\"created\":1778031306,\"model\":\"llama-3.3-70b-versatile\",\"system_fingerprint\":\"fp_43d97c5965\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" sunny\"},\"logprobs\":null,\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-52c0acaf-3f4b-45c8-8aa5-93a3b6adb045\",\"object\":\"chat.completion.chunk\",\"created\":1778031306,\"model\":\"llama-3.3-70b-versatile\",\"system_fingerprint\":\"fp_43d97c5965\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" with\"},\"logprobs\":null,\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-52c0acaf-3f4b-45c8-8aa5-93a3b6adb045\",\"object\":\"chat.completion.chunk\",\"created\":1778031306,\"model\":\"llama-3.3-70b-versatile\",\"system_fingerprint\":\"fp_43d97c5965\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" a\"},\"logprobs\":null,\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-52c0acaf-3f4b-45c8-8aa5-93a3b6adb045\",\"object\":\"chat.completion.chunk\",\"created\":1778031306,\"model\":\"llama-3.3-70b-versatile\",\"system_fingerprint\":\"fp_43d97c5965\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" temperature\"},\"logprobs\":null,\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-52c0acaf-3f4b-45c8-8aa5-93a3b6adb045\",\"object\":\"chat.completion.chunk\",\"created\":1778031306,\"model\":\"llama-3.3-70b-versatile\",\"system_fingerprint\":\"fp_43d97c5965\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" of\"},\"logprobs\":null,\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-52c0acaf-3f4b-45c8-8aa5-93a3b6adb045\",\"object\":\"chat.completion.chunk\",\"created\":1778031306,\"model\":\"llama-3.3-70b-versatile\",\"system_fingerprint\":\"fp_43d97c5965\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" \"},\"logprobs\":null,\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-52c0acaf-3f4b-45c8-8aa5-93a3b6adb045\",\"object\":\"chat.completion.chunk\",\"created\":1778031306,\"model\":\"llama-3.3-70b-versatile\",\"system_fingerprint\":\"fp_43d97c5965\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"22\"},\"logprobs\":null,\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-52c0acaf-3f4b-45c8-8aa5-93a3b6adb045\",\"object\":\"chat.completion.chunk\",\"created\":1778031306,\"model\":\"llama-3.3-70b-versatile\",\"system_fingerprint\":\"fp_43d97c5965\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\" degrees\"},\"logprobs\":null,\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-52c0acaf-3f4b-45c8-8aa5-93a3b6adb045\",\"object\":\"chat.completion.chunk\",\"created\":1778031306,\"model\":\"llama-3.3-70b-versatile\",\"system_fingerprint\":\"fp_43d97c5965\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\".\"},\"logprobs\":null,\"finish_reason\":null}]}\n\ndata: {\"id\":\"chatcmpl-52c0acaf-3f4b-45c8-8aa5-93a3b6adb045\",\"object\":\"chat.completion.chunk\",\"created\":1778031306,\"model\":\"llama-3.3-70b-versatile\",\"system_fingerprint\":\"fp_43d97c5965\",\"choices\":[{\"index\":0,\"delta\":{},\"logprobs\":null,\"finish_reason\":\"stop\"}],\"x_groq\":{\"id\":\"req_01kqxes966fm8r4q94e70a83gn\",\"usage\":{\"queue_time\":0.036680462,\"prompt_tokens\":270,\"prompt_time\":0.014468555,\"completion_tokens\":15,\"completion_time\":0.057896947,\"total_tokens\":285,\"total_time\":0.072365502}},\"usage\":{\"queue_time\":0.036680462,\"prompt_tokens\":270,\"prompt_time\":0.014468555,\"completion_tokens\":15,\"completion_time\":0.057896947,\"total_tokens\":285,\"total_time\":0.072365502}}\n\ndata: {\"id\":\"chatcmpl-52c0acaf-3f4b-45c8-8aa5-93a3b6adb045\",\"object\":\"chat.completion.chunk\",\"created\":1778031306,\"model\":\"llama-3.3-70b-versatile\",\"system_fingerprint\":\"fp_43d97c5965\",\"choices\":[],\"usage\":{\"queue_time\":0.036680462,\"prompt_tokens\":270,\"prompt_time\":0.014468555,\"completion_tokens\":15,\"completion_time\":0.057896947,\"total_tokens\":285,\"total_time\":0.072365502},\"service_tier\":\"on_demand\"}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

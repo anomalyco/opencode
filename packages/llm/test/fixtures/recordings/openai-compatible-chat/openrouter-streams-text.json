@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "metadata": {
+    "name": "openai-compatible-chat/openrouter-streams-text",
+    "recordedAt": "2026-05-06T01:35:06.767Z",
+    "tags": ["prefix:openai-compatible-chat", "protocol:openai-compatible-chat", "provider:openrouter"]
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"openai/gpt-4o-mini\",\"messages\":[{\"role\":\"system\",\"content\":\"You are concise.\"},{\"role\":\"user\",\"content\":\"Reply with exactly: Hello!\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":20,\"temperature\":0}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": ": OPENROUTER PROCESSING\n\ndata: {\"id\":\"gen-1778031306-UD7bR0I1JNCsPvVzlXat\",\"object\":\"chat.completion.chunk\",\"created\":1778031306,\"model\":\"openai/gpt-4o-mini\",\"provider\":\"Azure\",\"system_fingerprint\":\"fp_eb37e061ec\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"Hello\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1778031306-UD7bR0I1JNCsPvVzlXat\",\"object\":\"chat.completion.chunk\",\"created\":1778031306,\"model\":\"openai/gpt-4o-mini\",\"provider\":\"Azure\",\"system_fingerprint\":\"fp_eb37e061ec\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"!\",\"role\":\"assistant\"},\"finish_reason\":null,\"native_finish_reason\":null}]}\n\ndata: {\"id\":\"gen-1778031306-UD7bR0I1JNCsPvVzlXat\",\"object\":\"chat.completion.chunk\",\"created\":1778031306,\"model\":\"openai/gpt-4o-mini\",\"provider\":\"Azure\",\"system_fingerprint\":\"fp_eb37e061ec\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\"},\"finish_reason\":\"stop\",\"native_finish_reason\":\"stop\"}]}\n\ndata: {\"id\":\"gen-1778031306-UD7bR0I1JNCsPvVzlXat\",\"object\":\"chat.completion.chunk\",\"created\":1778031306,\"model\":\"openai/gpt-4o-mini\",\"provider\":\"Azure\",\"system_fingerprint\":\"fp_eb37e061ec\",\"choices\":[{\"index\":0,\"delta\":{\"content\":\"\",\"role\":\"assistant\"},\"finish_reason\":\"stop\",\"native_finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":21,\"completion_tokens\":3,\"total_tokens\":24,\"cost\":0.00000495,\"is_byok\":false,\"prompt_tokens_details\":{\"cached_tokens\":0,\"cache_write_tokens\":0,\"audio_tokens\":0,\"video_tokens\":0},\"cost_details\":{\"upstream_inference_cost\":0.00000495,\"upstream_inference_prompt_cost\":0.00000315,\"upstream_inference_completions_cost\":0.0000018},\"completion_tokens_details\":{\"reasoning_tokens\":0,\"image_tokens\":0,\"audio_tokens\":0}}}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

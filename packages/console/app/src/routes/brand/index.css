@@ -376,7 +376,6 @@
       align-items: center;
       gap: 16px;
       opacity: 0;
-      transition: opacity 0.2s ease;
 
       @media (max-width: 40rem) {
         position: static;

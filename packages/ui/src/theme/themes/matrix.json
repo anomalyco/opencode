@@ -43,6 +43,17 @@
       "markdown-image": "#30b3ff",
       "markdown-image-text": "#24f6d9",
       "markdown-code-block": "#203022"
+    },
+    "v2Overrides": {
+      "v2-text-text-base": "#353535",
+      "v2-text-text-muted": "#748476",
+      "v2-text-text-faint": "#748476",
+      "v2-background-bg-accent": "var(--v2-green-600)",
+      "v2-text-text-accent": "var(--v2-green-600)",
+      "v2-text-text-accent-hover": "var(--v2-green-700)",
+      "v2-icon-icon-accent": "var(--v2-green-600)",
+      "v2-icon-icon-accent-hover": "var(--v2-green-700)",
+      "v2-border-border-focus": "var(--v2-green-500)"
     }
   },
   "dark": {
@@ -86,6 +97,17 @@
       "markdown-image": "#30b3ff",
       "markdown-image-text": "#24f6d9",
       "markdown-code-block": "#62ff94"
+    },
+    "v2Overrides": {
+      "v2-text-text-base": "#ececec",
+      "v2-text-text-muted": "#8ca391",
+      "v2-text-text-faint": "#8ca391",
+      "v2-background-bg-accent": "var(--v2-green-600)",
+      "v2-text-text-accent": "var(--v2-green-400)",
+      "v2-text-text-accent-hover": "var(--v2-green-300)",
+      "v2-icon-icon-accent": "var(--v2-green-400)",
+      "v2-icon-icon-accent-hover": "var(--v2-green-300)",
+      "v2-border-border-focus": "var(--v2-green-500)"
     }
   }
 }

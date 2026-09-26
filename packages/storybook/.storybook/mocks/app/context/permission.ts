@@ -12,6 +12,9 @@ export function usePermission() {
     isAutoAccepting(sessionID: string, directory?: string) {
       return accepted.has(key(sessionID, directory))
     },
+    isAutoAcceptingDirectory() {
+      return false
+    },
     toggleAutoAccept(sessionID: string, directory?: string) {
       const next = key(sessionID, directory)
       if (accepted.has(next)) {

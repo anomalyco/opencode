@@ -112,7 +112,7 @@ describe("prompt-input history", () => {
         end: 12,
         selection: { startLine: 1, startChar: 1, endLine: 2, endChar: 1 },
       },
-      { type: "image", id: "1", filename: "img.png", mime: "image/png", dataUrl: "data:image/png;base64,abc" },
+      { type: "image", id: "1", filename: "img.png", mime: "image/png", blob: { id: "blob", url: "blob:test" } },
     ]
     const copy = clonePromptParts(original)
     expect(copy).not.toBe(original)
@@ -126,7 +126,7 @@ describe("prompt-input history", () => {
   test("canNavigateHistoryAtCursor only allows prompt boundaries", () => {
     const value = "a\nb\nc"
 
-    expect(canNavigateHistoryAtCursor("up", value, 0)).toBe(true)
+    expect(canNavigateHistoryAtCursor("up", value, 0)).toBe(false)
     expect(canNavigateHistoryAtCursor("down", value, 0)).toBe(false)
 
     expect(canNavigateHistoryAtCursor("up", value, 2)).toBe(false)
@@ -135,10 +135,13 @@ describe("prompt-input history", () => {
     expect(canNavigateHistoryAtCursor("up", value, 5)).toBe(false)
     expect(canNavigateHistoryAtCursor("down", value, 5)).toBe(true)
 
-    expect(canNavigateHistoryAtCursor("up", "abc", 0)).toBe(true)
+    expect(canNavigateHistoryAtCursor("up", "abc", 0)).toBe(false)
     expect(canNavigateHistoryAtCursor("down", "abc", 3)).toBe(true)
     expect(canNavigateHistoryAtCursor("up", "abc", 1)).toBe(false)
     expect(canNavigateHistoryAtCursor("down", "abc", 1)).toBe(false)
+
+    expect(canNavigateHistoryAtCursor("up", "", 0)).toBe(true)
+    expect(canNavigateHistoryAtCursor("down", "", 0)).toBe(true)
 
     expect(canNavigateHistoryAtCursor("up", "abc", 0, true)).toBe(true)
     expect(canNavigateHistoryAtCursor("up", "abc", 3, true)).toBe(true)

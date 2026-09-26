@@ -486,13 +486,13 @@ Możesz kontrolować zachowanie kompaktowania kontekstu za pomocą opcji `compac
   "$schema": "https://opencode.ai/config.json",
   "compaction": {
     "auto": true,
-    "prune": true
+    "prune": false
   }
 }
 ```
 
 - `auto` - Automatycznie kompaktuj, gdy kontekst jest pełny (domyślnie: `true`).
-- `prune` - Usuń stare wyniki narzędzi, aby zaoszczędzić tokeny (domyślnie: `true`).
+- `prune` - Usuń stare wyniki narzędzi, aby zaoszczędzić tokeny (domyślnie: `false`).
 
 ---
 

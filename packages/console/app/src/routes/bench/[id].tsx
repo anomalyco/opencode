@@ -1,7 +1,7 @@
 import { Title } from "@solidjs/meta"
 import { createAsync, query, useParams } from "@solidjs/router"
 import { createSignal, For, Show } from "solid-js"
-import { Database, desc, eq } from "@opencode-ai/console-core/drizzle/index.js"
+import { Database, eq } from "@opencode-ai/console-core/drizzle/index.js"
 import { BenchmarkTable } from "@opencode-ai/console-core/schema/benchmark.sql.js"
 import { useI18n } from "~/context/i18n"
 

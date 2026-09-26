@@ -89,6 +89,13 @@ const getTerminalBuffers = (value: ITerminalCore): TerminalBuffers | undefined =
   return { active, normal, alternate }
 }
 
+const getTerminalMode = (value: ITerminalCore, mode: number) => {
+  if (!isRecord(value)) return false
+  const terminal = value.wasmTerm
+  if (!isRecord(terminal) || typeof terminal.getMode !== "function") return false
+  return terminal.getMode(mode) === true
+}
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -258,8 +265,8 @@ class StringSerializeHandler extends BaseSerializeHandler {
   }
 
   protected _beforeSerialize(rows: number, start: number, _end: number): void {
-    this._allRows = new Array<string>(rows)
-    this._allRowSeparators = new Array<string>(rows)
+    this._allRows = Array.from<string>({ length: rows })
+    this._allRowSeparators = Array.from<string>({ length: rows })
     this._rowIndex = 0
 
     this._currentRow = ""
@@ -544,7 +551,8 @@ export class SerializeAddon implements ITerminalAddon {
       return ""
     }
 
-    let content = options?.range
+    let content = !options?.excludeModes && getTerminalMode(this._terminal, 2031) ? "\u001b[?2031h" : ""
+    content += options?.range
       ? this._serializeBufferByRange(normalBuffer, options.range, true)
       : this._serializeBufferByScrollback(normalBuffer, options?.scrollback)
 

@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test"
+import { ServerScope } from "@/utils/server-scope"
 
-let getWorkspaceTerminalCacheKey: (dir: string) => string
+let getWorkspaceTerminalCacheKey: typeof import("./terminal").getWorkspaceTerminalCacheKey
 let getLegacyTerminalStorageKeys: (dir: string, legacySessionID?: string) => string[]
 let migrateTerminalState: (value: unknown) => unknown
 
@@ -8,6 +9,8 @@ beforeAll(async () => {
   mock.module("@solidjs/router", () => ({
     useNavigate: () => () => undefined,
     useParams: () => ({}),
+    useLocation: () => ({}),
+    useSearchParams: () => [{}, () => undefined],
   }))
   mock.module("@opencode-ai/ui/context", () => ({
     createSimpleContext: () => ({
@@ -23,7 +26,13 @@ beforeAll(async () => {
 
 describe("getWorkspaceTerminalCacheKey", () => {
   test("uses workspace-only directory cache key", () => {
-    expect(getWorkspaceTerminalCacheKey("/repo")).toBe("/repo:__workspace__")
+    expect(String(getWorkspaceTerminalCacheKey("/repo"))).toBe("local\u0000/repo\u0000__workspace__")
+  })
+
+  test("can include a server scope", () => {
+    expect(String(getWorkspaceTerminalCacheKey("/repo", "ssh:debian" as ServerScope))).toBe(
+      "ssh:debian\u0000/repo\u0000__workspace__",
+    )
   })
 })
 

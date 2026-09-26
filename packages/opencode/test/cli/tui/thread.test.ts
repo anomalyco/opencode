@@ -1,148 +1,36 @@
-import { describe, expect, mock, test } from "bun:test"
+import { describe, expect, test } from "bun:test"
+import { Effect } from "effect"
 import fs from "fs/promises"
 import path from "path"
+import yargs from "yargs"
 import { tmpdir } from "../../fixture/fixture"
-
-const stop = new Error("stop")
-const seen = {
-  tui: [] as string[],
-  inst: [] as string[],
-}
-
-mock.module("../../../src/cli/cmd/tui/app", () => ({
-  tui: async (input: { directory: string }) => {
-    seen.tui.push(input.directory)
-    throw stop
-  },
-}))
-
-mock.module("@/util/rpc", () => ({
-  Rpc: {
-    client: () => ({
-      call: async () => ({ url: "http://127.0.0.1" }),
-      on: () => {},
-    }),
-  },
-}))
-
-mock.module("@/cli/ui", () => ({
-  UI: {
-    error: () => {},
-  },
-}))
-
-mock.module("@/util/log", () => ({
-  Log: {
-    init: async () => {},
-    create: () => ({
-      error: () => {},
-      info: () => {},
-      warn: () => {},
-      debug: () => {},
-      time: () => ({ stop: () => {} }),
-    }),
-    Default: {
-      error: () => {},
-      info: () => {},
-      warn: () => {},
-      debug: () => {},
-    },
-  },
-}))
-
-mock.module("@/util/timeout", () => ({
-  withTimeout: <T>(input: Promise<T>) => input,
-}))
-
-mock.module("@/cli/network", () => ({
-  withNetworkOptions: <T>(input: T) => input,
-  resolveNetworkOptions: async () => ({
-    mdns: false,
-    port: 0,
-    hostname: "127.0.0.1",
-  }),
-}))
-
-mock.module("../../../src/cli/cmd/tui/win32", () => ({
-  win32DisableProcessedInput: () => {},
-  win32InstallCtrlCGuard: () => undefined,
-}))
-
-mock.module("@/config/tui", () => ({
-  TuiConfig: {
-    get: () => ({}),
-  },
-}))
-
-mock.module("@/project/instance", () => ({
-  Instance: {
-    provide: async (input: { directory: string; fn: () => Promise<unknown> | unknown }) => {
-      seen.inst.push(input.directory)
-      return input.fn()
-    },
-  },
-}))
+import { TuiThreadCommand, resolveThreadDirectory } from "../../../src/cli/cmd/tui"
+import { cliIt } from "../../lib/cli-process"
 
 describe("tui thread", () => {
-  async function call(project?: string) {
-    const { TuiThreadCommand } = await import("../../../src/cli/cmd/tui/thread")
-    const args: Parameters<NonNullable<typeof TuiThreadCommand.handler>>[0] = {
-      _: [],
-      $0: "opencode",
-      project,
-      prompt: "hi",
-      model: undefined,
-      agent: undefined,
-      session: undefined,
-      continue: false,
-      fork: false,
-      port: 0,
-      hostname: "127.0.0.1",
-      mdns: false,
-      "mdns-domain": "opencode.local",
-      mdnsDomain: "opencode.local",
-      cors: [],
-    }
-    return TuiThreadCommand.handler(args)
-  }
+  test("loads the TUI integration lazily", async () => {
+    const source = await Bun.file(new URL("../../../src/cli/cmd/tui.ts", import.meta.url)).text()
+
+    expect(source).toContain('await import("../tui/layer")')
+    expect(source).toMatch(/await import\(["']@\/plugin\/tui\/runtime["']\)/)
+    expect(source).not.toContain('import("./app")')
+  })
+
+  test("forwards the CLI environment to the TUI worker", async () => {
+    const source = await Bun.file(new URL("../../../src/cli/cmd/tui.ts", import.meta.url)).text()
+
+    expect(source).toMatch(/new Worker\(file, \{\s*env: Object\.fromEntries\(\s*Object\.entries\(process\.env\)/)
+  })
 
   async function check(project?: string) {
     await using tmp = await tmpdir({ git: true })
-    const cwd = process.cwd()
-    const pwd = process.env.PWD
-    const worker = globalThis.Worker
-    const tty = Object.getOwnPropertyDescriptor(process.stdin, "isTTY")
     const link = path.join(path.dirname(tmp.path), path.basename(tmp.path) + "-link")
     const type = process.platform === "win32" ? "junction" : "dir"
-    seen.tui.length = 0
-    seen.inst.length = 0
-    await fs.symlink(tmp.path, link, type)
-
-    Object.defineProperty(process.stdin, "isTTY", {
-      configurable: true,
-      value: true,
-    })
-    globalThis.Worker = class extends EventTarget {
-      onerror = null
-      onmessage = null
-      onmessageerror = null
-      postMessage() {}
-      terminate() {}
-    } as unknown as typeof Worker
 
     try {
-      process.chdir(tmp.path)
-      process.env.PWD = link
-      await expect(call(project)).rejects.toBe(stop)
-      expect(seen.inst[0]).toBe(tmp.path)
-      expect(seen.tui[0]).toBe(tmp.path)
+      await fs.symlink(tmp.path, link, type)
+      expect(resolveThreadDirectory(project, link, tmp.path)).toBe(tmp.path)
     } finally {
-      process.chdir(cwd)
-      if (pwd === undefined) delete process.env.PWD
-      else process.env.PWD = pwd
-      if (tty) Object.defineProperty(process.stdin, "isTTY", tty)
-      else delete (process.stdin as { isTTY?: boolean }).isTTY
-      globalThis.Worker = worker
       await fs.rm(link, { recursive: true, force: true }).catch(() => undefined)
     }
   }
@@ -154,4 +42,60 @@ describe("tui thread", () => {
   test("uses the real cwd after resolving a relative project from PWD", async () => {
     await check(".")
   })
+
+  test("resolves a relative mini project from PWD when cwd differs", async () => {
+    await using pwd = await tmpdir({ git: true })
+    await using cwd = await tmpdir({ git: true })
+
+    expect(resolveThreadDirectory(".", pwd.path, cwd.path)).toBe(pwd.path)
+    expect(resolveThreadDirectory(undefined, pwd.path, cwd.path)).toBe(cwd.path)
+  })
+
+  test("parses supported --no-replay forms", async () => {
+    for (const option of ["--no-replay", "--no-replay=true", "--noReplay"]) {
+      const args = await yargs([])
+        .command({ ...TuiThreadCommand, handler: () => {} })
+        .exitProcess(false)
+        .parse(["--mini", option, "--replay-limit", "10"])
+
+      expect(args.replay === false || args.noReplay === true).toBe(true)
+      expect(args.replayLimit).toBe(10)
+    }
+  })
+
+  test("preserves boolean negation for existing options", async () => {
+    const args = await yargs([])
+      .command({ ...TuiThreadCommand, handler: () => {} })
+      .exitProcess(false)
+      .parse(["--mdns", "--no-mdns"])
+
+    expect(args.mdns).toBe(false)
+  })
+
+  cliIt.live("rejects mini-only options without --mini", ({ opencode }) =>
+    Effect.gen(function* () {
+      const result = yield* opencode.spawn(["--replay-limit", "10"])
+
+      opencode.expectExit(result, 1)
+      expect(result.stderr).toContain("--replay-limit requires --mini")
+    }),
+  )
+
+  cliIt.live("routes attached sessions to mini mode", ({ opencode }) =>
+    Effect.gen(function* () {
+      const result = yield* opencode.spawn(["attach", "http://127.0.0.1:1", "--mini"])
+
+      opencode.expectExit(result, 1)
+      expect(result.stderr).toContain("--mini requires a TTY stdout")
+    }),
+  )
+
+  cliIt.live("rejects network options in mini mode", ({ opencode }) =>
+    Effect.gen(function* () {
+      const result = yield* opencode.spawn(["--mini", "--port", "4096"])
+
+      opencode.expectExit(result, 1)
+      expect(result.stderr).toContain("--port cannot be used with --mini")
+    }),
+  )
 })

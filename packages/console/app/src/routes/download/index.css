@@ -284,7 +284,7 @@
   }
 
   [data-component="content"] {
-    padding: 6rem 5rem;
+    padding: 3rem 5rem 6rem;
 
     @media (max-width: 60rem) {
       padding: 4rem 1.5rem;
@@ -311,121 +311,6 @@
     a:hover {
       color: var(--color-text);
       text-decoration: underline;
-    }
-  }
-
-  /* Download Hero Section */
-  [data-component="download-hero"] {
-    display: grid;
-    grid-template-columns: 260px 1fr;
-    gap: 4rem;
-    padding-bottom: 2rem;
-    margin-bottom: 4rem;
-
-    @media (max-width: 50rem) {
-      grid-template-columns: 1fr;
-      gap: 1.5rem;
-      padding-bottom: 2rem;
-      margin-bottom: 2rem;
-    }
-
-    [data-component="hero-icon"] {
-      display: flex;
-      justify-content: flex-end;
-      align-items: center;
-
-      @media (max-width: 40rem) {
-        display: none;
-      }
-
-      [data-slot="icon-placeholder"] {
-        width: 120px;
-        height: 120px;
-        background: var(--color-background-weak);
-        border: 1px solid var(--color-border-weak);
-        border-radius: 24px;
-
-        @media (max-width: 50rem) {
-          width: 80px;
-          height: 80px;
-        }
-      }
-
-      img {
-        width: 120px;
-        height: 120px;
-        border-radius: 24px;
-        box-shadow:
-          0 1.467px 2.847px 0 rgba(0, 0, 0, 0.42),
-          0 0.779px 1.512px 0 rgba(0, 0, 0, 0.34),
-          0 0.324px 0.629px 0 rgba(0, 0, 0, 0.24);
-
-        @media (max-width: 50rem) {
-          width: 80px;
-          height: 80px;
-          border-radius: 16px;
-        }
-      }
-
-      @media (max-width: 50rem) {
-        justify-content: flex-start;
-      }
-    }
-
-    [data-component="hero-text"] {
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-
-      h1 {
-        font-size: 1.5rem;
-        font-weight: 700;
-        color: var(--color-text-strong);
-        margin-bottom: 4px;
-
-        @media (max-width: 40rem) {
-          margin-bottom: 1rem;
-        }
-      }
-
-      p {
-        color: var(--color-text);
-        margin-bottom: 12px;
-
-        @media (max-width: 40rem) {
-          margin-bottom: 2.5rem;
-          line-height: 1.6;
-        }
-      }
-
-      [data-component="download-button"] {
-        padding: 8px 20px 8px 16px;
-        background: var(--color-background-strong);
-        color: var(--color-text-inverted);
-        border: none;
-        border-radius: 4px;
-        font-weight: 500;
-        cursor: pointer;
-        display: inline-flex;
-        align-items: center;
-        gap: 10px;
-        transition: all 0.2s ease;
-        text-decoration: none;
-        width: fit-content;
-
-        &:hover:not(:disabled) {
-          background: var(--color-background-strong-hover);
-        }
-
-        &:active {
-          transform: scale(0.98);
-        }
-
-        &:disabled {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-      }
     }
   }
 

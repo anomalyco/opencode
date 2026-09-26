@@ -11,6 +11,7 @@ import { dict as da } from "~/i18n/da"
 import { dict as ja } from "~/i18n/ja"
 import { dict as pl } from "~/i18n/pl"
 import { dict as ru } from "~/i18n/ru"
+import { dict as uk } from "~/i18n/uk"
 import { dict as ar } from "~/i18n/ar"
 import { dict as no } from "~/i18n/no"
 import { dict as br } from "~/i18n/br"
@@ -35,6 +36,7 @@ export function i18n(locale: Locale): Dict {
   if (locale === "ja") return { ...base, ...ja }
   if (locale === "pl") return { ...base, ...pl }
   if (locale === "ru") return { ...base, ...ru }
+  if (locale === "uk") return { ...base, ...uk }
   if (locale === "ar") return { ...base, ...ar }
   if (locale === "no") return { ...base, ...no }
   if (locale === "br") return { ...base, ...br }

@@ -79,3 +79,126 @@ await using tmp = await tmpdir({
 - Directories are created in the system temp folder with prefix `opencode-test-`
 - Use `await using` for automatic cleanup when the variable goes out of scope
 - Paths are sanitized to strip null bytes (defensive fix for CI environments)
+
+## Testing With Effects
+
+Use `testEffect(...)` from `test/lib/effect.ts` for tests that exercise Effect services or Effect-based workflows.
+
+### Core Pattern
+
+```typescript
+import { describe, expect } from "bun:test"
+import { Effect, Layer } from "effect"
+import { testEffect } from "../lib/effect"
+
+const it = testEffect(Layer.mergeAll(MyService.defaultLayer))
+
+describe("my service", () => {
+  it.instance("does the thing", () =>
+    Effect.gen(function* () {
+      const svc = yield* MyService.Service
+      const out = yield* svc.run()
+      expect(out).toEqual("ok")
+    }),
+  )
+})
+```
+
+### `it.effect` vs `it.live`
+
+- Use `it.effect(...)` when the test should run with `TestClock` and `TestConsole`.
+- Use `it.live(...)` when the test depends on real time, filesystem mtimes, child processes, git, locks, or other live OS behavior.
+- Use `it.instance(...)` for live Effect tests that need a scoped temporary directory and instance context.
+- Most integration-style tests in this package use `it.live(...)`.
+
+### Effect Fixtures
+
+Prefer the Effect-aware helpers from `fixture/fixture.ts` instead of building a manual runtime in each test.
+
+- `tmpdirScoped(options?)` creates a scoped temp directory and cleans it up when the Effect scope closes.
+- `provideInstance(dir)(effect)` is the low-level helper. It does not create a directory; it runs an Effect with `InstanceRef` provided for `dir`.
+- `provideTmpdirInstance((dir) => effect, options?)` is the convenience helper. It creates a temp directory, binds it as the active instance, and disposes the instance on cleanup.
+- `provideTmpdirServer((input) => effect, options?)` does the same, but also provides the test LLM server.
+
+Use `it.instance(...)` by default when a test only needs one temp instance. Yield `TestInstance` from `fixture/fixture.ts` when the test needs the temp directory path:
+
+```typescript
+import { TestInstance } from "../fixture/fixture"
+
+it.instance("uses the temp directory", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    expect(test.directory).toContain("opencode-test-")
+  }),
+)
+```
+
+Use `provideTmpdirInstance(...)` or `tmpdirScoped()` plus `provideInstance(...)` when a test needs multiple directories, custom setup before binding, needs to switch instance context within one test, or explicitly tests instance disposal/reload lifetime.
+
+### Style
+
+- Define `const it = testEffect(...)` near the top of the file.
+- Keep the test body inside `Effect.gen(function* () { ... })`.
+- Yield services directly with `yield* MyService.Service` or `yield* MyTool`.
+- Avoid custom `ManagedRuntime`, `attach(...)`, or ad hoc `run(...)` wrappers when `testEffect(...)` already provides the runtime.
+- When a test needs instance-local state, prefer `it.instance(...)` over manual `Instance.provide(...)` inside Promise-style tests.
+
+### Partial Service Stubs
+
+When a test only needs to override one or two methods of a service, prefer `Layer.mock` over a hand-rolled `Layer.succeed(Service, Service.of({ ... }))`. `Layer.mock` lets you supply just the methods that matter — anything else throws an `UnimplementedError` defect if the test accidentally calls it, which is exactly the signal you want.
+
+```typescript
+import { Effect, Layer } from "effect"
+import { Account } from "@/account/account"
+
+const failingAccountLayer = Layer.mock(Account.Service, {
+  orgsByAccount: () => Effect.fail(new Account.AccountServiceError({ message: "simulated upstream failure" })),
+})
+```
+
+This is much shorter than stubbing every method with `Effect.void` / `Effect.succeed(...)` placeholders, and it keeps the test focused on the behaviour under test.
+
+## Synchronizing With Concurrent Work
+
+### The Anti-Pattern
+
+Using `Effect.sleep(N)` or `setTimeout` as a "wait for the forked fiber to be ready" hack races the scheduler. The forked fiber may not have reached the synchronization point within `N` ms on a slow CI host, and the test fails intermittently. See PR #27622 for a concrete flake that fell out of this exact pattern.
+
+### The Fix
+
+Wait on a **published readiness signal**, not wall-clock time. Available affordances:
+
+- `pollWithTimeout(effect, message, duration?)` from `test/lib/effect.ts` — repeatedly run a predicate effect until it returns a non-`undefined` value, with a timeout.
+- `awaitWithTimeout(effect, message, duration?)` from `test/lib/effect.ts` — wrap any effect with `Effect.timeoutOrElse` and a custom error message.
+- `llm.wait(n)` from `test/lib/llm-server.ts` — wait until the mock LLM has received `n` HTTP calls.
+- `SessionStatus.Service` `.get(sessionID)` — observable per-session state (`{ type: "busy" | "idle" | ... }`).
+- `BackgroundJob.wait({ id, timeout })` from `src/background/job.ts` — wait for a background job to complete.
+- Bus subscriptions — fork `Stream.runForEach(bus.subscribe(Event), ...)` and open a `Latch` inside the callback to signal first-event readiness.
+- `Deferred.await(deferred).pipe(Effect.timeoutOrElse(...))` for one-shot signals.
+
+### Example
+
+```ts
+// Antipattern — race
+yield * prompt.shell({ command: "sleep 30" }).pipe(Effect.forkChild)
+yield * Effect.sleep(50)
+yield * prompt.cancel(chat.id)
+
+// Fix — wait for a published readiness signal
+yield * prompt.shell({ command: "sleep 30" }).pipe(Effect.forkChild)
+yield *
+  pollWithTimeout(
+    Effect.gen(function* () {
+      const s = yield* (yield* SessionStatus.Service).get(chat.id)
+      return s.type === "busy" ? (true as const) : undefined
+    }),
+    "session never became busy",
+  )
+yield * prompt.cancel(chat.id)
+```
+
+### When Fixed Sleeps Are OK
+
+- Testing debounce or throttle behavior, where the sleep **is** the test.
+- Letting real wall-clock advance past a genuine timestamp resolution boundary (e.g. mtime granularity).
+- Simulating network latency in race-regression tests that intentionally exercise ordering.

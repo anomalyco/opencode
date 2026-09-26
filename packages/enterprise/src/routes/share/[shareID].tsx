@@ -1,7 +1,7 @@
-import { FileDiff, Message, Model, Part, Session, SessionStatus, UserMessage } from "@opencode-ai/sdk/v2"
-import { SessionTurn } from "@opencode-ai/ui/session-turn"
-import { SessionReview } from "@opencode-ai/ui/session-review"
-import { DataProvider } from "@opencode-ai/ui/context"
+import { Message, Model, Part, Session, SessionStatus, SnapshotFileDiff, UserMessage } from "@opencode-ai/sdk/v2"
+import { SessionTurn } from "@opencode-ai/session-ui/session-turn"
+import { SessionReview } from "@opencode-ai/session-ui/session-review"
+import { DataProvider } from "@opencode-ai/session-ui/context"
 import { FileComponentProvider } from "@opencode-ai/ui/context/file"
 import { WorkerPoolProvider } from "@opencode-ai/ui/context/worker-pool"
 import { createAsync, query, useParams } from "@solidjs/router"
@@ -10,36 +10,50 @@ import { Share } from "~/core/share"
 import { Logo, Mark } from "@opencode-ai/ui/logo"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { iife } from "@opencode-ai/util/iife"
-import { Binary } from "@opencode-ai/util/binary"
-import { NamedError } from "@opencode-ai/util/error"
+import { iife } from "@opencode-ai/core/util/iife"
+import { Binary } from "@opencode-ai/core/util/binary"
+import { NamedError } from "@opencode-ai/core/util/error"
 import { DateTime } from "luxon"
 import { createStore } from "solid-js/store"
-import z from "zod"
 import NotFound from "../[...404]"
 import { Tabs } from "@opencode-ai/ui/tabs"
-import { MessageNav } from "@opencode-ai/ui/message-nav"
-import { FileSSR } from "@opencode-ai/ui/file-ssr"
+import { MessageNav } from "@opencode-ai/session-ui/message-nav"
+import { FileSSR } from "@opencode-ai/session-ui/file-ssr"
 import { clientOnly } from "@solidjs/start"
 import { Meta, Title } from "@solidjs/meta"
 import { Base64 } from "js-base64"
 import { getRequestEvent } from "solid-js/web"
 
 const ClientOnlyWorkerPoolProvider = clientOnly(() =>
-  import("@opencode-ai/ui/pierre/worker").then((m) => ({
+  import("@opencode-ai/session-ui/pierre/worker").then((m) => ({
     default: (props: { children: any }) => (
       <WorkerPoolProvider pools={m.getWorkerPools()}>{props.children}</WorkerPoolProvider>
     ),
   })),
 )
 
-const SessionDataMissingError = NamedError.create(
-  "SessionDataMissingError",
-  z.object({
-    sessionID: z.string(),
-    message: z.string().optional(),
-  }),
-)
+class SessionDataMissingError extends NamedError {
+  public override readonly name = "SessionDataMissingError"
+
+  constructor(
+    public readonly data: { sessionID: string; message?: string },
+    options?: ErrorOptions,
+  ) {
+    super("SessionDataMissingError", options)
+  }
+
+  static isInstance(input: unknown): input is SessionDataMissingError {
+    return NamedError.hasName(input, "SessionDataMissingError")
+  }
+
+  schema(): never {
+    throw new Error("SessionDataMissingError does not expose a schema")
+  }
+
+  toObject() {
+    return { name: this.name, data: this.data }
+  }
+}
 
 const getData = query(async (shareID) => {
   "use server"
@@ -51,7 +65,7 @@ const getData = query(async (shareID) => {
     shareID: string
     session: Session[]
     session_diff: {
-      [sessionID: string]: FileDiff[]
+      [sessionID: string]: SnapshotFileDiff[]
     }
     session_status: {
       [sessionID: string]: SessionStatus
@@ -309,6 +323,12 @@ export default function () {
                                       current={activeMessage()}
                                       size="compact"
                                       onMessageSelect={setActiveMessage}
+                                      getLabel={(message) =>
+                                        data()
+                                          .part[message.id]?.find((part) => part.type === "text")
+                                          ?.text.trim()
+                                          .split("\n")[0]
+                                      }
                                     />
                                   </Show>
                                   <SessionTurn

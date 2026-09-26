@@ -1,5 +1,8 @@
 research
 dist
+dist-*
 gen
 app.log
-src/provider/models-snapshot.ts
+script/build-*.ts
+temporary-*.md
+.artifacts

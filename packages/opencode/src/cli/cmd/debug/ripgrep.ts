@@ -1,31 +1,18 @@
 import { EOL } from "os"
-import { Ripgrep } from "../../../file/ripgrep"
-import { Instance } from "../../../project/instance"
-import { bootstrap } from "../../bootstrap"
+import { Effect } from "effect"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
+import { effectCmd } from "../../effect-cmd"
 import { cmd } from "../cmd"
+import { InstanceRef } from "@/effect/instance-ref"
 
 export const RipgrepCommand = cmd({
   command: "rg",
   describe: "ripgrep debugging utilities",
-  builder: (yargs) => yargs.command(TreeCommand).command(FilesCommand).command(SearchCommand).demandCommand(),
+  builder: (yargs) => yargs.command(FilesCommand).command(SearchCommand).demandCommand(),
   async handler() {},
 })
 
-const TreeCommand = cmd({
-  command: "tree",
-  describe: "show file tree using ripgrep",
-  builder: (yargs) =>
-    yargs.option("limit", {
-      type: "number",
-    }),
-  async handler(args) {
-    await bootstrap(process.cwd(), async () => {
-      process.stdout.write((await Ripgrep.tree({ cwd: Instance.directory, limit: args.limit })) + EOL)
-    })
-  },
-})
-
-const FilesCommand = cmd({
+const FilesCommand = effectCmd({
   command: "files",
   describe: "list files using ripgrep",
   builder: (yargs) =>
@@ -42,22 +29,22 @@ const FilesCommand = cmd({
         type: "number",
         description: "Limit number of results",
       }),
-  async handler(args) {
-    await bootstrap(process.cwd(), async () => {
-      const files: string[] = []
-      for await (const file of Ripgrep.files({
-        cwd: Instance.directory,
-        glob: args.glob ? [args.glob] : undefined,
-      })) {
-        files.push(file)
-        if (args.limit && files.length >= args.limit) break
-      }
-      process.stdout.write(files.join(EOL) + EOL)
-    })
-  },
+  handler: Effect.fn("Cli.debug.rg.files")(function* (args) {
+    const ctx = yield* InstanceRef
+    if (!ctx) return
+    const ripgrep = yield* Ripgrep.Service
+    const files = yield* ripgrep
+      .glob({
+        cwd: ctx.directory,
+        pattern: args.glob ?? "**/*",
+        limit: args.limit ?? 10_000,
+      })
+      .pipe(Effect.orDie)
+    process.stdout.write(files.map((file) => file.path).join(EOL) + EOL)
+  }),
 })
 
-const SearchCommand = cmd({
+const SearchCommand = effectCmd({
   command: "search <pattern>",
   describe: "search file contents using ripgrep",
   builder: (yargs) =>
@@ -75,13 +62,18 @@ const SearchCommand = cmd({
         type: "number",
         description: "Limit number of results",
       }),
-  async handler(args) {
-    const results = await Ripgrep.search({
-      cwd: process.cwd(),
-      pattern: args.pattern,
-      glob: args.glob as string[] | undefined,
-      limit: args.limit,
-    })
+  handler: Effect.fn("Cli.debug.rg.search")(function* (args) {
+    const ctx = yield* InstanceRef
+    if (!ctx) return
+    const ripgrep = yield* Ripgrep.Service
+    const results = yield* ripgrep
+      .grep({
+        cwd: ctx.directory,
+        pattern: args.pattern,
+        include: args.glob?.[0],
+        limit: args.limit ?? 10_000,
+      })
+      .pipe(Effect.orDie)
     process.stdout.write(JSON.stringify(results, null, 2) + EOL)
-  },
+  }),
 })
