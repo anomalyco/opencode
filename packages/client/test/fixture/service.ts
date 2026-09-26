@@ -17,17 +17,31 @@ if (mode === "environment") {
 }
 if (mode === "signal") process.kill(process.pid, process.platform === "win32" ? "SIGTERM" : "SIGKILL")
 
-if (mode === "delayed" || mode === "delayed-failed" || mode === "coordinated" || mode === "coordinated-failed-loser") {
+if (
+  mode === "delayed" ||
+  mode === "delayed-failed" ||
+  mode === "coordinated" ||
+  mode === "coordinated-failed-loser" ||
+  mode === "coordinated-double-failed"
+) {
   await appendFile(registration + ".starts", process.pid + "\n")
   const owner = await writeFile(registration + ".owner", String(process.pid), { flag: "wx" })
     .then(() => true)
     .catch(() => false)
-  if (!owner) process.exit(mode === "coordinated-failed-loser" ? 1 : 0)
-  if (mode === "coordinated" || mode === "coordinated-failed-loser") {
+  if (!owner && mode !== "coordinated-double-failed") process.exit(mode === "coordinated-failed-loser" ? 1 : 0)
+  if (mode === "coordinated" || mode === "coordinated-failed-loser" || mode === "coordinated-double-failed") {
     while ((await Bun.file(registration + ".starts").text()).trim().split("\n").length < 2) await Bun.sleep(10)
     if (mode === "coordinated-failed-loser") await Bun.sleep(Number(delay ?? 1_500))
   } else await Bun.sleep(Number(delay))
   if (mode === "delayed-failed") process.exit(1)
+  if (mode === "coordinated-double-failed") {
+    // Every contender ultimately fails, but the owner fails first while a
+    // second (loser) contender is still in flight — the overlap window that
+    // used to let a persistent startup failure be discarded (see
+    // "surfaces a persistent failure hidden by contender overlap" below).
+    await Bun.sleep(owner ? Number(delay ?? 50) : Number(delay ?? 50) + 250)
+    process.exit(1)
+  }
 }
 
 let requests = 0
