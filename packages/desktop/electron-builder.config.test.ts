@@ -29,6 +29,20 @@ for (const channel of channels) {
   })
 }
 
+test("names the prod Linux packages so they cannot collide with the opencode CLI", async () => {
+  const previous = process.env.OPENCODE_CHANNEL
+  process.env.OPENCODE_CHANNEL = "prod"
+
+  const module = await import("./electron-builder.config.ts?package-name=prod")
+  const config = module.default as Configuration
+
+  if (previous === undefined) delete process.env.OPENCODE_CHANNEL
+  else process.env.OPENCODE_CHANNEL = previous
+
+  expect(config.deb?.packageName).toBe("opencode-desktop")
+  expect(config.rpm?.packageName).toBe("opencode-desktop")
+})
+
 test("keeps a hidden prod launcher for old Linux pins", async () => {
   const previous = process.env.OPENCODE_CHANNEL
   process.env.OPENCODE_CHANNEL = "prod"
