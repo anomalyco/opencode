@@ -118,6 +118,36 @@ describe("normalizeProviderList", () => {
   test("preserves an empty current default", () => {
     expect(normalizeProviderList([] as ProviderListOutput["data"], [], null).defaultModel).toBeNull()
   })
+
+  test("sets release_date to undefined when the server reports released=0", () => {
+    // Models with time.released === 0 have no known release date. The server
+    // uses 0 as a sentinel for "unreleased" or "config-only" models. Mapping 0
+    // to "1970-01-01" produces a valid DateTime in the visibility filter, which
+    // then hides the model because 1970-01-01 is outside the recent 6-month
+    // window. Setting release_date to "" instead triggers the
+    // unknown-date escape hatch in models.tsx and keeps the model visible.
+    const result = normalizeProviderList(
+      [{ id: "custom", name: "Custom", package: "@custom/provider" }] as ProviderListOutput["data"],
+      [
+        {
+          id: "my-model",
+          modelID: "my-model",
+          providerID: "custom",
+          name: "My Model",
+          capabilities: { tools: true, input: ["text"], output: ["text"] },
+          variants: [],
+          time: { released: 0 },
+          cost: [],
+          status: "active",
+          enabled: true,
+          limit: { context: 32_000, output: 4_096 },
+        },
+      ] as ModelListOutput["data"],
+      undefined,
+    )
+
+    expect(result.all.get("custom")?.models["my-model"]?.release_date).toBe("")
+  })
 })
 
 describe("directoryKey", () => {
