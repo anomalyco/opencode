@@ -694,6 +694,75 @@ it.instance(
   { git: true },
 )
 
+it.instance(
+  "ask - configured deny outranks a previously approved allow",
+  () =>
+    Effect.gen(function* () {
+      const first = yield* ask({
+        id: PermissionV1.ID.make("per_deny_rank"),
+        sessionID: SessionID.make("session_deny_rank"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: ["ls"],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      yield* waitForPending(1)
+      yield* reply({ requestID: PermissionV1.ID.make("per_deny_rank"), reply: "always" })
+      yield* Fiber.join(first)
+
+      const err = yield* fail(
+        ask({
+          sessionID: SessionID.make("session_deny_rank_2"),
+          permission: "bash",
+          patterns: ["ls"],
+          metadata: {},
+          always: [],
+          ruleset: [{ permission: "bash", pattern: "*", action: "deny" }],
+        }),
+      )
+      expect(err).toBeInstanceOf(PermissionV1.DeniedError)
+    }),
+  { git: true },
+)
+
+it.instance(
+  "ask - approved wildcard does not auto-approve flag-bearing commands",
+  () =>
+    Effect.gen(function* () {
+      const first = yield* ask({
+        id: PermissionV1.ID.make("per_strict_approved"),
+        sessionID: SessionID.make("session_strict_approved"),
+        permission: "bash",
+        patterns: ["rm file.txt"],
+        metadata: {},
+        always: ["rm *"],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      yield* waitForPending(1)
+      yield* reply({ requestID: PermissionV1.ID.make("per_strict_approved"), reply: "always" })
+      yield* Fiber.join(first)
+
+      const second = yield* ask({
+        id: PermissionV1.ID.make("per_strict_danger"),
+        sessionID: SessionID.make("session_strict_approved"),
+        permission: "bash",
+        patterns: ["rm -rf /"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      const pending = yield* waitForPending(1)
+      expect(pending[0].patterns).toEqual(["rm -rf /"])
+      yield* rejectAll()
+      yield* Fiber.await(second)
+    }),
+  { git: true },
+)
+
 // reply tests
 
 it.instance(

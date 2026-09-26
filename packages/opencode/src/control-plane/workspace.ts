@@ -35,6 +35,15 @@ import { WorkspaceAdapterRuntime } from "./workspace-adapter-runtime"
 import { AppNodeBuilderV1 } from "@/effect/app-node-builder-v1"
 import { WorkspaceEvent } from "@opencode-ai/schema/workspace-event"
 
+// `/sync/history` returns at most this many events per request; the sync
+// client pages until a short page. Kept here because the handler and the client
+// must agree on the bound and this module already sits below both.
+export const SYNC_HISTORY_LIMIT = 1000
+
+// A misbehaving workspace can return a full, ever-advancing page forever, so bound
+// the history pull instead of looping without end.
+const SYNC_HISTORY_MAX_PAGES = 1000
+
 export const Info = Schema.Struct({
   ...WorkspaceInfoSchema.fields,
   timeUsed: Schema.Number,
@@ -315,7 +324,7 @@ const layer = Layer.effect(
         .where(eq(SessionTable.workspace_id, space.id))
         .all()
         .pipe(Effect.orDie)).map((row) => row.id)
-      const state = sessionIDs.length
+      const state: Record<string, number> = sessionIDs.length
         ? Object.fromEntries(
             (yield* db
               .select()
@@ -326,41 +335,58 @@ const layer = Layer.effect(
           )
         : {}
 
-      const response = yield* http.execute(
-        HttpClientRequest.post(route(url, "/sync/history"), {
-          headers: new Headers(headers),
-          body: HttpBody.jsonUnsafe(state),
-        }),
-      )
+      // The server caps a single page, so keep requesting with the advanced
+      // per-aggregate sequence until it returns no further events.
+      for (let page = 0; page < SYNC_HISTORY_MAX_PAGES; page++) {
+        const response = yield* http.execute(
+          HttpClientRequest.post(route(url, "/sync/history"), {
+            headers: new Headers(headers),
+            body: HttpBody.jsonUnsafe(state),
+          }),
+        )
 
-      if (response.status < 200 || response.status >= 300) {
-        const body = yield* response.text
-        return yield* new SyncHttpError({
-          message: `Workspace history HTTP failure: ${response.status} ${body}`,
-          status: response.status,
-          body,
-        })
+        if (response.status < 200 || response.status >= 300) {
+          const body = yield* response.text
+          return yield* new SyncHttpError({
+            message: `Workspace history HTTP failure: ${response.status} ${body}`,
+            status: response.status,
+            body,
+          })
+        }
+
+        const history = (yield* response.json) as HistoryEvent[]
+        if (history.length === 0) return
+
+        yield* Effect.forEach(
+          history,
+          (event) =>
+            events
+              .replay(
+                {
+                  id: EventV2.ID.make(event.id),
+                  aggregateID: event.aggregate_id,
+                  seq: event.seq,
+                  type: event.type,
+                  data: event.data,
+                },
+                { publish: true, ownerID: space.id },
+              )
+              .pipe(Effect.provideService(WorkspaceRef, space.id)),
+          { discard: true },
+        )
+
+        let progressed = false
+        for (const event of history) {
+          if (event.seq <= (state[event.aggregate_id] ?? -1)) continue
+          state[event.aggregate_id] = event.seq
+          progressed = true
+        }
+        if (history.length < SYNC_HISTORY_LIMIT || !progressed) return
       }
-
-      const history = (yield* response.json) as HistoryEvent[]
-
-      yield* Effect.forEach(
-        history,
-        (event) =>
-          events
-            .replay(
-              {
-                id: EventV2.ID.make(event.id),
-                aggregateID: event.aggregate_id,
-                seq: event.seq,
-                type: event.type,
-                data: event.data,
-              },
-              { publish: true, ownerID: space.id },
-            )
-            .pipe(Effect.provideService(WorkspaceRef, space.id)),
-        { discard: true },
-      )
+      return yield* new SyncHttpError({
+        message: `Workspace history exceeded ${SYNC_HISTORY_MAX_PAGES} pages`,
+        status: 0,
+      })
     })
 
     const syncWorkspaceLoop = Effect.fn("Workspace.syncWorkspaceLoop")(function* (space: Info) {
@@ -388,7 +414,7 @@ const layer = Layer.effect(
         )
 
         if (stream) {
-          attempt = 0
+          let sawEvent = false
 
           setStatus(space.id, "connected")
 
@@ -397,6 +423,7 @@ const layer = Layer.effect(
               if (!evt || typeof evt !== "object" || !("payload" in evt)) return
               const payload = evt.payload as { type?: string; syncEvent?: EventV2.SerializedEvent }
               if (payload.type === "server.heartbeat") return
+              sawEvent = true
 
               if (payload.type === "sync" && payload.syncEvent) {
                 const failed = yield* events.replay(payload.syncEvent, { publish: true, ownerID: space.id }).pipe(
@@ -429,10 +456,12 @@ const layer = Layer.effect(
           )
 
           setStatus(space.id, "disconnected")
+          if (sawEvent) attempt = 0
         }
 
         // Back off reconnect attempts up to 2 minutes while the workspace
-        // stays unavailable.
+        // stays unavailable. A stream that delivered events counts as a healthy
+        // connection and resets the backoff; an accept-then-close server keeps growing it.
         yield* Effect.sleep(`${Math.min(120_000, 1_000 * 2 ** attempt)} millis`)
         attempt += 1
       }

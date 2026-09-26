@@ -6,6 +6,7 @@ import {
   Message,
   SystemPart,
   isContextOverflowFailure,
+  isStaleReasoningFailure,
   type ProviderErrorEvent,
 } from "@opencode-ai/llm"
 import { Cause, DateTime, Effect, FiberSet, Layer, Option, Semaphore, Stream } from "effect"
@@ -30,6 +31,7 @@ import { SessionEvent } from "../event"
 import { SessionHistory } from "../history"
 import { SessionInput } from "../input"
 import { SessionSchema } from "../schema"
+import { SessionStaleReasoning } from "../stale-reasoning"
 import { SessionStore } from "../store"
 import { type RunError, Service } from "./index"
 import { SessionRunnerModel } from "./model"
@@ -154,6 +156,8 @@ const layer = Layer.effect(
       | { readonly _tag: "ContinueAfterCompaction"; readonly step: number }
       // Overflow compaction completed; rebuild once through the path without overflow recovery.
       | { readonly _tag: "ContinueAfterOverflowCompaction"; readonly step: number }
+      // Stale encrypted reasoning was stripped; rebuild once without those caller-bound blobs.
+      | { readonly _tag: "ContinueAfterStaleReasoning"; readonly step: number }
 
     class TurnTransitionError extends Error {
       constructor(readonly transition: TurnTransition) {
@@ -164,6 +168,8 @@ const layer = Layer.effect(
     const continueAfterCompaction = (step: number) => new TurnTransitionError({ _tag: "ContinueAfterCompaction", step })
     const continueAfterOverflowCompaction = (step: number) =>
       new TurnTransitionError({ _tag: "ContinueAfterOverflowCompaction", step })
+    const continueAfterStaleReasoning = (step: number) =>
+      new TurnTransitionError({ _tag: "ContinueAfterStaleReasoning", step })
 
     const loadSystemContext = (agent: AgentV2.Selection) =>
       Effect.all([systemContext.load(), skillGuidance.load(agent), referenceGuidance.load()], {
@@ -175,6 +181,7 @@ const layer = Layer.effect(
       promotion: SessionInput.Delivery | undefined,
       step: number,
       recoverOverflow?: typeof compaction.compactAfterOverflow,
+      recoverStaleReasoning = true,
     ) {
       const session = yield* getSession(sessionID)
       if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
@@ -236,13 +243,18 @@ const layer = Layer.effect(
       const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
         withPublication(publisher.publish(event, outputPaths))
       let overflowFailure: ProviderErrorEvent | undefined
+      let staleReasoningFailure: ProviderErrorEvent | undefined
       const providerStream = llm.stream(request).pipe(
         Stream.runForEach((event) =>
           Effect.gen(function* () {
-            if (overflowFailure || publisher.hasProviderError()) return
+            if (overflowFailure || staleReasoningFailure || publisher.hasProviderError()) return
             if (LLMEvent.is.providerError(event)) {
               if (isContextOverflowFailure(event) && !publisher.hasAssistantStarted()) {
                 overflowFailure = event
+                return
+              }
+              if (recoverStaleReasoning && isStaleReasoningFailure(event) && !publisher.hasAssistantStarted()) {
+                staleReasoningFailure = event
                 return
               }
             }
@@ -293,7 +305,16 @@ const layer = Layer.effect(
             (yield* restore(recoverOverflow({ sessionID: session.id, entries, model, request })))
           )
             return yield* Effect.die(continueAfterOverflowCompaction(currentStep))
+          if (
+            recoverStaleReasoning &&
+            !publisher.hasAssistantStarted() &&
+            isStaleReasoningFailure(staleReasoningFailure ?? failure)
+          ) {
+            yield* restore(SessionStaleReasoning.persist(db, session.id, context))
+            return yield* Effect.die(continueAfterStaleReasoning(currentStep))
+          }
           if (overflowFailure) yield* publish(overflowFailure)
+          if (staleReasoningFailure) yield* publish(staleReasoningFailure)
           const llmFailure = failure instanceof LLMError ? failure : undefined
           if (llmFailure && !publisher.hasProviderError()) {
             yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
@@ -366,6 +387,8 @@ const layer = Layer.effect(
             if (!(defect instanceof TurnTransitionError)) return yield* Effect.die(defect)
             if (defect.transition._tag === "ContinueAfterOverflowCompaction")
               return yield* Effect.die("Post-compaction provider attempt cannot recover another overflow")
+            if (defect.transition._tag === "ContinueAfterStaleReasoning")
+              return yield* runTurnAttempt(sessionID, undefined, defect.transition.step, undefined, false)
             yield* Effect.yieldNow
             return yield* runAfterOverflowCompaction(sessionID, undefined, defect.transition.step)
           }),
@@ -381,6 +404,14 @@ const layer = Layer.effect(
             yield* Effect.yieldNow
             if (defect.transition._tag === "ContinueAfterOverflowCompaction")
               return yield* runAfterOverflowCompaction(sessionID, undefined, defect.transition.step)
+            if (defect.transition._tag === "ContinueAfterStaleReasoning")
+              return yield* runTurnAttempt(
+                sessionID,
+                undefined,
+                defect.transition.step,
+                compaction.compactAfterOverflow,
+                false,
+              )
             return yield* runTurn(sessionID, undefined, defect.transition.step)
           }),
         ),

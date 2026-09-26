@@ -65,6 +65,7 @@ const lsp = Layer.succeed(
     hasClients: () => Effect.succeed(false),
     touchFile: () => Effect.void,
     diagnostics: () => Effect.succeed({}),
+    diagnosticsFor: () => Effect.succeed([]),
     hover: () => Effect.succeed(undefined),
     definition: () => Effect.succeed([]),
     references: () => Effect.succeed([]),
@@ -165,7 +166,7 @@ it.live("tool execution produces non-empty session diff (snapshot race)", () =>
       expect(fileExists).toBe(true)
 
       // Verify the tool call completed (in the first assistant message)
-      const allMsgs = yield* MessageV2.filterCompactedEffect(session.id)
+      const allMsgs = (yield* MessageV2.filterCompactedEffect(session.id)).messages
       const user = allMsgs.find(
         (msg): msg is SessionV1.WithParts & { info: SessionV1.User } => msg.info.role === "user",
       )

@@ -544,4 +544,31 @@ describe("run subagent data", () => {
       }),
     ])
   })
+
+  test("evicts a tab and detail when its child session is deleted", () => {
+    const data = createSubagentData()
+
+    bootstrapSubagentData({
+      data,
+      messages: [taskMessage("child-1")],
+      children: [{ id: "child-1" }],
+      permissions: [],
+      questions: [],
+    })
+
+    expect(data.tabs.has("child-1")).toBe(true)
+    expect(data.details.has("child-1")).toBe(true)
+
+    reduce(data, {
+      type: "session.deleted",
+      properties: {
+        sessionID: "child-1",
+        info: { id: "child-1" },
+      },
+    })
+
+    expect(data.tabs.has("child-1")).toBe(false)
+    expect(data.details.has("child-1")).toBe(false)
+    expect(snapshotSubagentData(data).tabs).toEqual([])
+  })
 })

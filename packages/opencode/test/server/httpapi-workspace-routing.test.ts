@@ -456,6 +456,20 @@ describe("HttpApi workspace routing middleware", () => {
     }),
   )
 
+  it.live("rejects a malformed workspace id with a typed 400", () =>
+    Effect.gen(function* () {
+      yield* serveProbe
+
+      const response = yield* HttpClient.get("/probe?workspace=garbage")
+
+      expect(response.status).toBe(400)
+      expect((yield* response.json) as Record<string, unknown>).toMatchObject({
+        _tag: "InvalidRequestError",
+        field: "workspace",
+      })
+    }),
+  )
+
   it.live("keeps control-plane routes local even when workspace is selected", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })

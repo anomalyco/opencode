@@ -11,7 +11,7 @@ import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { Format } from "../format"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { InstanceState } from "@/effect/instance-state"
-import { trimDiff } from "./edit"
+import { assertPathStable, trimDiff, withLock } from "./edit"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import * as Bom from "@/util/bom"
 
@@ -41,40 +41,50 @@ export const WriteTool = Tool.define(
           const filepath = path.isAbsolute(params.filePath)
             ? params.filePath
             : path.join(instance.directory, params.filePath)
-          yield* assertExternalDirectoryEffect(ctx, filepath)
 
-          const exists = yield* fs.existsSafe(filepath)
-          const source = exists ? yield* Bom.readFile(fs, filepath) : { bom: false, text: "" }
-          const next = Bom.split(params.content)
-          const desiredBom = source.bom || next.bom
-          const contentOld = source.text
-          const contentNew = next.text
+          let exists = false
+          yield* withLock(
+            filepath,
+            Effect.gen(function* () {
+              yield* assertExternalDirectoryEffect(ctx, filepath)
+              const guard = FSUtil.resolveExisting(filepath)
+              exists = yield* fs.existsSafe(filepath)
+              const source = exists ? yield* Bom.readFile(fs, filepath) : { bom: false, text: "" }
+              const next = Bom.split(params.content)
+              const desiredBom = source.bom || next.bom
+              const contentOld = source.text
+              const contentNew = next.text
 
-          const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, contentNew))
-          yield* ctx.ask({
-            permission: "edit",
-            patterns: [path.relative(instance.worktree, filepath)],
-            always: ["*"],
-            metadata: {
-              filepath,
-              diff,
-            },
-          })
+              const diff = trimDiff(createTwoFilesPatch(filepath, filepath, contentOld, contentNew))
+              const relative = path.relative(instance.worktree, filepath)
+              yield* ctx.ask({
+                permission: "edit",
+                patterns: [relative],
+                always: [relative],
+                metadata: {
+                  filepath,
+                  diff,
+                },
+              })
 
-          yield* fs.writeWithDirs(filepath, Bom.join(contentNew, desiredBom))
-          if (yield* format.file(filepath)) {
-            yield* Bom.syncFile(fs, filepath, desiredBom)
-          }
-          yield* events.publish(FileSystem.Event.Edited, { file: filepath })
-          yield* events.publish(Watcher.Event.Updated, {
-            file: filepath,
-            event: exists ? "change" : "add",
-          })
+              assertPathStable(filepath, guard)
+              yield* fs.writeWithDirs(filepath, Bom.join(contentNew, desiredBom))
+              if (yield* format.file(filepath)) {
+                yield* Bom.syncFile(fs, filepath, desiredBom)
+              }
+              yield* events.publish(FileSystem.Event.Edited, { file: filepath })
+              yield* events.publish(Watcher.Event.Updated, {
+                file: filepath,
+                event: exists ? "change" : "add",
+              })
+            }).pipe(Effect.orDie),
+          )
 
           let output = "Wrote file successfully."
           yield* lsp.touchFile(filepath, "document")
           const diagnostics = yield* lsp.diagnostics()
           const normalizedFilepath = FSUtil.normalizePath(filepath)
+          const currentDiagnostics = diagnostics[normalizedFilepath] ?? []
           let projectDiagnosticsCount = 0
           for (const [file, issues] of Object.entries(diagnostics)) {
             const current = file === normalizedFilepath
@@ -92,7 +102,7 @@ export const WriteTool = Tool.define(
           return {
             title: path.relative(instance.worktree, filepath),
             metadata: {
-              diagnostics,
+              diagnostics: { [normalizedFilepath]: currentDiagnostics },
               filepath,
               exists: exists,
             },

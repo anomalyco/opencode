@@ -32,16 +32,46 @@ function convertToLineEnding(text: string, ending: "\n" | "\r\n"): string {
   return text.replaceAll("\n", "\r\n")
 }
 
-const locks = new Map<string, Semaphore.Semaphore>()
+type LockEntry = { semaphore: Semaphore.Semaphore; holders: number }
 
-function lock(filePath: string) {
-  const resolvedFilePath = FSUtil.resolve(filePath)
-  const hit = locks.get(resolvedFilePath)
-  if (hit) return hit
+const locks = new Map<string, LockEntry>()
 
-  const next = Semaphore.makeUnsafe(1)
-  locks.set(resolvedFilePath, next)
-  return next
+function withLockKey<A, E, R>(key: string, effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> {
+  const entry = locks.get(key) ?? { semaphore: Semaphore.makeUnsafe(1), holders: 0 }
+  entry.holders++
+  locks.set(key, entry)
+
+  return entry.semaphore
+    .withPermits(1)(effect)
+    .pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          entry.holders--
+          if (entry.holders === 0 && locks.get(key) === entry) locks.delete(key)
+        }),
+      ),
+    )
+}
+
+export function withLock<A, E, R>(filePath: string, effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> {
+  // Key by the symlink-resolved path: `resolve` falls back to the lexical path for
+  // a not-yet-existing file, so two aliases of a symlinked parent would take
+  // different locks and serialize nothing.
+  return withLockKey(FSUtil.resolveExisting(filePath), effect)
+}
+
+export function withLocks<A, E, R>(
+  filePaths: ReadonlyArray<string>,
+  effect: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E, R> {
+  const keys = [...new Set(filePaths.map((filePath) => FSUtil.resolveExisting(filePath)))].sort()
+  return keys.reduceRight<Effect.Effect<A, E, R>>((acc, key) => withLockKey(key, acc), effect)
+}
+
+// Fail closed if a symlink is swapped between the containment check and the
+// write, closing the O-01 check-vs-use window.
+export function assertPathStable(filePath: string, guard: string) {
+  if (FSUtil.resolveExisting(filePath) !== guard) throw new Error(`Path changed during the operation: ${filePath}`)
 }
 
 export const Parameters = Schema.Struct({
@@ -80,13 +110,15 @@ export const EditTool = Tool.define(
           const filePath = path.isAbsolute(params.filePath)
             ? params.filePath
             : path.join(instance.directory, params.filePath)
-          yield* assertExternalDirectoryEffect(ctx, filePath)
 
           let diff = ""
           let contentOld = ""
           let contentNew = ""
-          yield* lock(filePath).withPermits(1)(
+          yield* withLock(
+            filePath,
             Effect.gen(function* () {
+              yield* assertExternalDirectoryEffect(ctx, filePath)
+              const guard = FSUtil.resolveExisting(filePath)
               if (params.oldString === "") {
                 const existed = yield* afs.existsSafe(filePath)
                 if (existed) {
@@ -99,15 +131,17 @@ export const EditTool = Tool.define(
                 contentOld = ""
                 contentNew = next.text
                 diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
+                const relative = path.relative(instance.worktree, filePath)
                 yield* ctx.ask({
                   permission: "edit",
-                  patterns: [path.relative(instance.worktree, filePath)],
-                  always: ["*"],
+                  patterns: [relative],
+                  always: [relative],
                   metadata: {
                     filepath: filePath,
                     diff,
                   },
                 })
+                assertPathStable(filePath, guard)
                 yield* afs.writeWithDirs(filePath, Bom.join(contentNew, desiredBom))
                 if (yield* format.file(filePath)) {
                   contentNew = yield* Bom.syncFile(afs, filePath, desiredBom)
@@ -142,33 +176,35 @@ export const EditTool = Tool.define(
                   normalizeLineEndings(contentNew),
                 ),
               )
+              const relative = path.relative(instance.worktree, filePath)
               yield* ctx.ask({
                 permission: "edit",
-                patterns: [path.relative(instance.worktree, filePath)],
-                always: ["*"],
+                patterns: [relative],
+                always: [relative],
                 metadata: {
                   filepath: filePath,
                   diff,
                 },
               })
 
+              assertPathStable(filePath, guard)
               yield* afs.writeWithDirs(filePath, Bom.join(contentNew, desiredBom))
               if (yield* format.file(filePath)) {
                 contentNew = yield* Bom.syncFile(afs, filePath, desiredBom)
+                diff = trimDiff(
+                  createTwoFilesPatch(
+                    filePath,
+                    filePath,
+                    normalizeLineEndings(contentOld),
+                    normalizeLineEndings(contentNew),
+                  ),
+                )
               }
               yield* events.publish(FileSystem.Event.Edited, { file: filePath })
               yield* events.publish(Watcher.Event.Updated, {
                 file: filePath,
                 event: "change",
               })
-              diff = trimDiff(
-                createTwoFilesPatch(
-                  filePath,
-                  filePath,
-                  normalizeLineEndings(contentOld),
-                  normalizeLineEndings(contentNew),
-                ),
-              )
             }).pipe(Effect.orDie),
           )
 
@@ -195,14 +231,14 @@ export const EditTool = Tool.define(
 
           let output = "Edit applied successfully."
           yield* lsp.touchFile(filePath, "document")
-          const diagnostics = yield* lsp.diagnostics()
+          const diagnostics = yield* lsp.diagnosticsFor(filePath)
           const normalizedFilePath = FSUtil.normalizePath(filePath)
-          const block = LSP.Diagnostic.report(filePath, diagnostics[normalizedFilePath] ?? [])
+          const block = LSP.Diagnostic.report(filePath, diagnostics)
           if (block) output += `\n\nLSP errors detected in this file, please fix:\n${block}`
 
           return {
             metadata: {
-              diagnostics,
+              diagnostics: { [normalizedFilePath]: diagnostics },
               diff,
               filediff,
             },

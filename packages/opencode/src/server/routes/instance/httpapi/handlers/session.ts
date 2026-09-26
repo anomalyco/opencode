@@ -70,7 +70,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
         roots: ctx.query.roots,
         start: ctx.query.start,
         search: ctx.query.search,
-        limit: ctx.query.limit,
+        limit: ctx.query.limit === undefined ? undefined : Math.min(ctx.query.limit, 200),
       })
     })
 
@@ -275,9 +275,12 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       payload: typeof SummarizePayload.Type
     }) {
       yield* revertSvc.cleanup(yield* requireSession(ctx.params.sessionID))
-      const messages = yield* SessionError.mapStorageNotFound(session.messages({ sessionID: ctx.params.sessionID }))
+      const lastUser = yield* SessionError.mapStorageNotFound(
+        session.findMessageInfo(ctx.params.sessionID, (info) => info.role === "user"),
+      )
       const defaultAgent = yield* agentSvc.defaultAgent()
-      const currentAgent = messages.findLast((message) => message.info.role === "user")?.info.agent ?? defaultAgent
+      const currentAgent =
+        Option.isSome(lastUser) && lastUser.value.role === "user" ? lastUser.value.agent : defaultAgent
 
       yield* compactSvc.create({
         sessionID: ctx.params.sessionID,

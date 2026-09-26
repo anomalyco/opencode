@@ -191,7 +191,7 @@ const observe = (value: SystemContext) =>
               : { _tag: "Available", key: source.key, ...result },
         ),
       ),
-    { concurrency: "unbounded" },
+    { concurrency: 8 },
   )
 
 /** Creates the immutable baseline and durable snapshot for a new generation. */

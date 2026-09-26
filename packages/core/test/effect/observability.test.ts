@@ -107,3 +107,27 @@ test("file logger flattens nested objects", async () => {
   expect(line).toContain("session.id=session-1")
   expect(line).not.toContain("request={")
 })
+
+test("file logger rotates an oversized shared log before appending", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-log-rotate-"))
+  const file = path.join(dir, "opencode.log")
+  await fs.writeFile(file, "x".repeat(32))
+
+  fileLogger(file, "run-r", 16)
+
+  expect(await fs.readFile(`${file}.1`, "utf8")).toBe("x".repeat(32))
+  expect(await Bun.file(file).exists()).toBe(false)
+  await fs.rm(dir, { recursive: true, force: true })
+})
+
+test("file logger keeps a log that is under the rotation cap", async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-log-rotate-"))
+  const file = path.join(dir, "opencode.log")
+  await fs.writeFile(file, "small")
+
+  fileLogger(file, "run-r", 1024)
+
+  expect(await fs.readFile(file, "utf8")).toBe("small")
+  expect(await Bun.file(`${file}.1`).exists()).toBe(false)
+  await fs.rm(dir, { recursive: true, force: true })
+})

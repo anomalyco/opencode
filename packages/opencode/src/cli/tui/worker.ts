@@ -3,7 +3,8 @@ import { InstanceRuntime } from "@/project/instance-runtime"
 import { Rpc } from "@/util/rpc"
 import { upgrade } from "@/cli/upgrade"
 import { Config } from "@/config/config"
-import { GlobalBus } from "@/bus/global"
+import { GlobalBus, type GlobalEvent } from "@/bus/global"
+import { collapseEventBatch, shouldForwardEvent, EVENT_BATCH_INTERVAL, EVENT_BATCH_LIMIT } from "@/cli/tui/event-batch"
 import { ServerAuth } from "@/server/auth"
 import { writeHeapSnapshot } from "node:v8"
 import { Heap } from "@/cli/heap"
@@ -13,16 +14,45 @@ import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecy
 
 Heap.start()
 
-const onUnhandledRejection = (_error: unknown) => {}
+const onUnhandledRejection = (error: unknown) => {
+  process.stderr.write(`[opencode worker] unhandledRejection: ${formatWorkerError(error)}\n`)
+}
 
-const onUncaughtException = (_error: Error) => {}
+const onUncaughtException = (error: Error) => {
+  process.stderr.write(`[opencode worker] uncaughtException: ${formatWorkerError(error)}\n`)
+}
+
+function formatWorkerError(error: unknown) {
+  if (error instanceof Error) return error.stack ?? error.message
+  return String(error)
+}
 
 process.on("unhandledRejection", onUnhandledRejection)
 process.on("uncaughtException", onUncaughtException)
 
-// Subscribe to global events and forward them via RPC
-GlobalBus.on("event", (event) => {
-  Rpc.emit("global.event", event)
+// Subscribe to global events and forward them via RPC. Events are buffered and
+// flushed on a short interval so a fast stream (several lanes emitting part
+// deltas) costs one cross-thread message per flush instead of one per token.
+const pendingEvents: GlobalEvent[] = []
+let flushTimer: ReturnType<typeof setTimeout> | undefined
+
+function flushEvents() {
+  flushTimer = undefined
+  if (pendingEvents.length === 0) return
+  Rpc.emit("global.event.batch", collapseEventBatch(pendingEvents.splice(0)))
+}
+
+GlobalBus.on("event", (event: GlobalEvent) => {
+  if (!shouldForwardEvent(event)) return
+  pendingEvents.push(event)
+  if (pendingEvents.length >= EVENT_BATCH_LIMIT) {
+    if (flushTimer !== undefined) clearTimeout(flushTimer)
+    flushEvents()
+    return
+  }
+  if (flushTimer === undefined) {
+    flushTimer = setTimeout(flushEvents, EVENT_BATCH_INTERVAL)
+  }
 })
 
 let server: Awaited<ReturnType<typeof Server.listen>> | undefined

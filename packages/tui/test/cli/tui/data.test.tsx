@@ -484,3 +484,76 @@ test("projects live context updates with their message ID", async () => {
     app.renderer.destroy()
   }
 })
+
+test("bounds per-session mirrored messages and evicts on session.deleted", async () => {
+  const events = createEventSource()
+  const calls = createFetch(undefined, events)
+  let sync!: ReturnType<typeof useData>
+  let ready!: () => void
+  const mounted = new Promise<void>((resolve) => {
+    ready = resolve
+  })
+
+  function Probe() {
+    sync = useData()
+    onMount(ready)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <SDKProvider url="http://test" directory={directory} events={events.source} fetch={calls.fetch}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </SDKProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await mounted
+    for (let index = 0; index < 130; index++) {
+      emitEvent(events, {
+        id: `evt_prompt_${index}`,
+        type: "session.next.prompted",
+        properties: {
+          sessionID: "session-cap",
+          messageID: `msg_${index}`,
+          timestamp: index,
+          prompt: { text: `message ${index}` },
+          delivery: "steer",
+        },
+      })
+    }
+
+    await wait(() => sync.session.message.list("session-cap")?.length === 100)
+    const messages = sync.session.message.list("session-cap") ?? []
+    expect(messages.length).toBe(100)
+    expect(messages[0]?.id).toBe("msg_129")
+    expect(messages.at(-1)?.id).toBe("msg_30")
+
+    emitEvent(events, {
+      id: "evt_deleted",
+      type: "session.deleted",
+      properties: {
+        sessionID: "session-cap",
+        info: {
+          id: "session-cap",
+          slug: "session-cap",
+          projectID: "proj_test",
+          directory,
+          title: "Test session",
+          version: "1",
+          time: { created: 0, updated: 0 },
+        },
+      },
+    })
+
+    await wait(() => sync.session.message.list("session-cap") === undefined)
+    expect(sync.session.message.list("session-cap")).toBeUndefined()
+  } finally {
+    app.renderer.destroy()
+  }
+})

@@ -13,6 +13,7 @@ import type { EventSource } from "@opencode-ai/tui/context/sdk"
 import { writeHeapSnapshot } from "v8"
 import { ServerAuth } from "@/server/auth"
 import { validateSession } from "../tui/validate-session"
+import { readPipedStdin } from "./run/runtime.stdin"
 import { win32InstallCtrlCGuard } from "@opencode-ai/tui/terminal-win32"
 
 declare global {
@@ -42,9 +43,17 @@ function createWorkerFetch(client: RpcClient): typeof fetch {
 function createEventSource(client: RpcClient): EventSource {
   return {
     subscribe: async (handler) => {
-      return client.on<GlobalEvent>("global.event", (e) => {
-        handler(e)
-      })
+      const unsubscribes = [
+        client.on<GlobalEvent>("global.event", (e) => {
+          handler(e)
+        }),
+        client.on<GlobalEvent[]>("global.event.batch", (events) => {
+          events.forEach((event) => handler(event))
+        }),
+      ]
+      return () => {
+        unsubscribes.forEach((unsubscribe) => unsubscribe())
+      }
     },
   }
 }
@@ -57,7 +66,7 @@ async function target() {
 }
 
 async function input(value?: string) {
-  const piped = process.stdin.isTTY ? undefined : await Bun.stdin.text()
+  const piped = process.stdin.isTTY ? undefined : await readPipedStdin()
   if (!value) return piped
   if (!piped) return value
   return piped + "\n" + value
@@ -207,12 +216,31 @@ export const TuiThreadCommand = cmd({
       }
       const cwd = Filesystem.resolve(process.cwd())
 
+      // Read piped stdin before spawning the worker so an over-cap pipe aborts
+      // without leaving a worker behind.
+      let prompt: string | undefined
+      try {
+        prompt = await input(args.prompt)
+      } catch (error) {
+        UI.error(errorMessage(error))
+        process.exitCode = 1
+        return
+      }
+
       const worker = new Worker(file, {
         env: Object.fromEntries(
           Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined),
         ),
       })
       const client = Rpc.client<typeof rpc>(worker)
+      // A dead worker otherwise leaves every in-flight call pending forever.
+      // Drain them with the real cause and reject later calls instead of hanging.
+      worker.addEventListener("error", (event) => {
+        client.fail(new Error(event.message || "opencode worker failed"))
+      })
+      worker.addEventListener("close", () => {
+        client.fail(new Error("opencode worker exited"))
+      })
       const reload = () => {
         client.call("reload", undefined).catch(() => {})
       }
@@ -227,7 +255,6 @@ export const TuiThreadCommand = cmd({
         worker.terminate()
       }
 
-      const prompt = await input(args.prompt)
       const config = await TuiConfig.get()
 
       const network = resolveNetworkOptionsNoConfig(args)

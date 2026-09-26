@@ -1,4 +1,4 @@
-import { expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
@@ -9,7 +9,7 @@ import { Provider } from "@/provider/provider"
 import { Session } from "@/session/session"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import { SessionProcessor } from "@/session/processor"
-import { SessionTools } from "@/session/tools"
+import { SessionTools, capMetadata } from "@/session/tools"
 import { Tool } from "@/tool/tool"
 import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
@@ -87,6 +87,18 @@ const layer = Layer.mergeAll(
                 return { title: "timing", metadata: {}, output: "done" }
               }),
           } satisfies Tool.Def,
+          {
+            id: "merge",
+            description: "publishes metadata then a title separately",
+            parameters: Schema.Struct({}),
+            jsonSchema: { type: "object", properties: {} },
+            execute: (_args, ctx) =>
+              Effect.gen(function* () {
+                yield* ctx.metadata({ metadata: { progress: 1 } })
+                yield* ctx.metadata({ title: "done" })
+                return { title: "merge", metadata: {}, output: "done" }
+              }),
+          } satisfies Tool.Def,
         ]),
     }),
   ),
@@ -133,7 +145,8 @@ it.effect("preserves running tool start time across metadata updates", () =>
           return state
         }),
       completeToolCall: () => Effect.void,
-    } satisfies Pick<SessionProcessor.Handle, "message" | "updateToolCall" | "completeToolCall">
+      abortToolCall: () => Effect.void,
+    } satisfies Pick<SessionProcessor.Handle, "message" | "updateToolCall" | "completeToolCall" | "abortToolCall">
 
     const tools = yield* SessionTools.resolve({
       agent,
@@ -163,5 +176,174 @@ it.effect("preserves running tool start time across metadata updates", () =>
     if (state.state.status === "running") {
       expect(state.state.time.start).toBe(100)
     }
+  }),
+)
+
+describe("SessionTools.capMetadata", () => {
+  test("caps oversized strings with the truncation marker", () => {
+    const capped = capMetadata({ output: "x".repeat(40_000) })
+    expect((capped.output as string).length).toBe(30_005)
+    expect((capped.output as string).startsWith("...\n\n")).toBe(true)
+  })
+
+  test("caps nested strings and leaves small metadata untouched", () => {
+    const small = { source: "test", nested: { count: 1 } }
+    expect(capMetadata(small)).toBe(small)
+
+    const capped = capMetadata({ calls: [{ output: "y".repeat(31_000) }] })
+    const calls = capped.calls as Array<{ output: string }>
+    expect(calls[0]!.output.length).toBe(30_005)
+    expect(calls[0]!.output.startsWith("...\n\n")).toBe(true)
+  })
+
+  test("caps strings nested past the depth limit instead of passing them through", () => {
+    const deep = { a: { b: { c: { d: { e: { f: "z".repeat(40_000) } } } } } }
+    const capped = capMetadata(deep)
+    const atLimit = (capped.a as { b: { c: { d: unknown } } }).b.c.d
+    expect(typeof atLimit).toBe("string")
+    if (typeof atLimit !== "string") return
+    expect(atLimit.length).toBeLessThanOrEqual(30_005)
+    expect(atLimit.startsWith("...\n\n")).toBe(true)
+  })
+})
+
+it.effect("merges throttled metadata fields instead of clearing them", () =>
+  Effect.gen(function* () {
+    const state: SessionV1.ToolPart = {
+      id: partID,
+      sessionID,
+      messageID,
+      type: "tool",
+      tool: "merge",
+      callID,
+      state: {
+        status: "running",
+        input: {},
+        time: { start: 100 },
+      },
+    }
+    const processor = {
+      message: {
+        id: messageID,
+        sessionID,
+        role: "assistant",
+        parentID: MessageID.ascending(),
+        agent: "build",
+        mode: "build",
+        path: { cwd: "/tmp", root: "/tmp" },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: ModelV2.ID.make("test-model"),
+        providerID: ProviderV2.ID.make("test"),
+        time: { created: 1 },
+      } satisfies SessionV1.Assistant,
+      updateToolCall: (_toolCallID, update) =>
+        Effect.sync(() => {
+          const next = update(state)
+          state.state = next.state
+          return state
+        }),
+      completeToolCall: () => Effect.void,
+      abortToolCall: () => Effect.void,
+    } satisfies Pick<SessionProcessor.Handle, "message" | "updateToolCall" | "completeToolCall" | "abortToolCall">
+
+    const tools = yield* SessionTools.resolve({
+      agent,
+      model,
+      session: { id: sessionID, permission: [] } as unknown as Session.Info,
+      processor,
+      bypassAgentCheck: false,
+      messages: [],
+      promptOps: {} as never,
+    })
+    const execute = tools.merge.execute
+    if (!execute) throw new Error("merge tool is missing execute")
+
+    yield* Effect.promise(() =>
+      execute(
+        {},
+        {
+          toolCallId: callID,
+          abortSignal: new AbortController().signal,
+          messages: [],
+        },
+      ),
+    )
+
+    expect(state.state.status).toBe("running")
+    if (state.state.status === "running") {
+      expect(state.state.title).toBe("done")
+      expect(state.state.metadata).toEqual({ progress: 1 })
+    }
+  }),
+)
+
+it.effect("routes an aborted tool execution through abortToolCall", () =>
+  Effect.gen(function* () {
+    const state: SessionV1.ToolPart = {
+      id: partID,
+      sessionID,
+      messageID,
+      type: "tool",
+      tool: "timing",
+      callID,
+      state: {
+        status: "running",
+        input: {},
+        time: { start: 100 },
+      },
+    }
+    const aborted: string[] = []
+    const controller = new AbortController()
+    controller.abort()
+    const processor = {
+      message: {
+        id: messageID,
+        sessionID,
+        role: "assistant",
+        parentID: MessageID.ascending(),
+        agent: "build",
+        mode: "build",
+        path: { cwd: "/tmp", root: "/tmp" },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: ModelV2.ID.make("test-model"),
+        providerID: ProviderV2.ID.make("test"),
+        time: { created: 1 },
+      } satisfies SessionV1.Assistant,
+      updateToolCall: (_toolCallID, update) =>
+        Effect.sync(() => {
+          const next = update(state)
+          state.state = next.state
+          return state
+        }),
+      completeToolCall: () => Effect.void,
+      abortToolCall: (toolCallID: string) => Effect.sync(() => void aborted.push(toolCallID)),
+    } satisfies Pick<SessionProcessor.Handle, "message" | "updateToolCall" | "completeToolCall" | "abortToolCall">
+
+    const tools = yield* SessionTools.resolve({
+      agent,
+      model,
+      session: { id: sessionID, permission: [] } as unknown as Session.Info,
+      processor,
+      bypassAgentCheck: false,
+      messages: [],
+      promptOps: {} as never,
+    })
+    const execute = tools.timing.execute
+    if (!execute) throw new Error("timing tool is missing execute")
+
+    yield* Effect.promise(() =>
+      execute(
+        {},
+        {
+          toolCallId: callID,
+          abortSignal: controller.signal,
+          messages: [],
+        },
+      ),
+    )
+
+    expect(aborted).toEqual([callID])
   }),
 )

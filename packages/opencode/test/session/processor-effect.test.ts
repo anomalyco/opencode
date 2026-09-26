@@ -708,6 +708,67 @@ it.live("session.processor effect tests retry network_error finish reasons", () 
   ),
 )
 
+it.live("session.processor effect tests retry does not duplicate an abandoned partial text", () =>
+  provideTmpdirServer(
+    ({ dir, llm }) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        yield* llm.push(
+          raw({
+            chunks: [
+              {
+                id: "chatcmpl-partial",
+                object: "chat.completion.chunk",
+                choices: [{ index: 0, delta: { role: "assistant", content: "partial " } }],
+              },
+              { error: { type: "server_error", code: "server_error", message: "xxx" } },
+            ],
+          }),
+        )
+        yield* llm.text("partial complete")
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "retry partial text")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "retry partial text" }],
+          tools: {},
+        })
+
+        const texts = (yield* MessageV2.parts(msg.id)).filter(
+          (part): part is SessionV1.TextPart => part.type === "text",
+        )
+
+        expect(value).toBe("continue")
+        expect(yield* llm.calls).toBe(2)
+        expect(texts).toHaveLength(1)
+        expect(texts[0]?.text).toBe("partial complete")
+        expect(handle.message.error).toBeUndefined()
+      }),
+    { config: (url) => providerCfg(url) },
+  ),
+)
+
 it.live("session.processor effect tests publish retry status updates", () =>
   provideTmpdirServer(
     ({ dir, llm }) =>

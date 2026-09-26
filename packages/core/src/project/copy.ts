@@ -217,7 +217,7 @@ const layer = Layer.effect(
       const checked = yield* Effect.forEach(
         stored,
         (item) => fs.isDir(item.directory).pipe(Effect.map((exists) => ({ ...item, exists }))),
-        { concurrency: "unbounded" },
+        { concurrency: 8 },
       )
       const sourceDirectories = checked
         .filter((item) => item.strategy === undefined && item.exists)
@@ -236,7 +236,7 @@ const layer = Layer.effect(
               ),
             ),
           ),
-        { concurrency: "unbounded" },
+        { concurrency: 8 },
       ).pipe(
         Effect.map((sets) => new Map(sets.flat(2).map((item) => [item.directory, item] as const)).values().toArray()),
       )

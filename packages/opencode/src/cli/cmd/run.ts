@@ -19,12 +19,12 @@ import { pathToFileURL } from "url"
 import { open } from "node:fs/promises"
 import { Effect } from "effect"
 import { UI } from "../ui"
-import { effectCmd } from "../effect-cmd"
+import { effectCmd, CliError } from "../effect-cmd"
 import { EOL } from "os"
 import { Filesystem } from "@/util/filesystem"
 import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
 import { FormatError, FormatUnknownError } from "../error"
-import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./run/runtime.stdin"
+import { INTERACTIVE_INPUT_ERROR, readPipedStdin, resolveInteractiveStdin } from "./run/runtime.stdin"
 
 type ModelInput = Parameters<OpencodeClient["session"]["prompt"]>[0]["model"]
 
@@ -273,9 +273,8 @@ export const RunCommand = effectCmd({
       const interactive = args.mini
       const auto = args.auto || args.yolo || args["dangerously-skip-permissions"]
       const thinking = interactive ? (args.thinking ?? true) : (args.thinking ?? false)
-      const die = (message: string): never => {
-        UI.error(message)
-        process.exit(1)
+      function die(message: string): never {
+        throw new CliError({ message })
       }
       const dieInteractive = (error: unknown): never => {
         if (error instanceof Error && error.message === INTERACTIVE_INPUT_ERROR) {
@@ -339,8 +338,7 @@ export const RunCommand = effectCmd({
           process.chdir(path.isAbsolute(args.dir) ? args.dir : path.join(root, args.dir))
           return process.cwd()
         } catch {
-          UI.error("Failed to change directory to " + args.dir)
-          process.exit(1)
+          die("Failed to change directory to " + args.dir)
         }
       })()
       const attachHeaders = args.attach
@@ -361,15 +359,13 @@ export const RunCommand = effectCmd({
         for (const filePath of list) {
           const resolvedPath = path.resolve(args.attach ? root : (directory ?? root), filePath)
           if (!(await Filesystem.exists(resolvedPath))) {
-            UI.error(`File not found: ${filePath}`)
-            process.exit(1)
+            die(`File not found: ${filePath}`)
           }
 
           const stat = Filesystem.stat(resolvedPath)
           const isDirectory = stat?.isDirectory() ?? false
           if (args.attach && isDirectory) {
-            UI.error(`Cannot attach local directory without a shared filesystem: ${filePath}`)
-            process.exit(1)
+            die(`Cannot attach local directory without a shared filesystem: ${filePath}`)
           }
 
           const content = await (async () => {
@@ -378,8 +374,7 @@ export const RunCommand = effectCmd({
             try {
               const opened = await handle.stat()
               if (!opened.isFile() || Number(opened.size) > ATTACH_FILE_MAX_BYTES) {
-                UI.error(`Cannot attach local file larger than 10 MiB or a special file: ${filePath}`)
-                process.exit(1)
+                die(`Cannot attach local file larger than 10 MiB or a special file: ${filePath}`)
               }
               if (opened.size === 0) return Buffer.alloc(0)
               const buffer = Buffer.alloc(Number(opened.size))
@@ -413,18 +408,18 @@ export const RunCommand = effectCmd({
         }
       }
 
-      const piped = process.stdin.isTTY ? undefined : await Bun.stdin.text()
+      const piped = process.stdin.isTTY
+        ? undefined
+        : await readPipedStdin().catch((error) => die(error instanceof Error ? error.message : String(error)))
       message = resolveRunInput(message, piped) ?? ""
       const initialInput = resolveRunInput(rawMessage, piped)
 
       if (message.trim().length === 0 && !args.command && !interactive) {
-        UI.error("You must provide a message or a command")
-        process.exit(1)
+        die("You must provide a message or a command")
       }
 
       if (args.fork && !args.continue && !args.session) {
-        UI.error("--fork requires --continue or --session")
-        process.exit(1)
+        die("--fork requires --continue or --session")
       }
 
       const rules: PermissionV1.Ruleset = interactive
@@ -462,8 +457,7 @@ export const RunCommand = effectCmd({
             .catch(() => undefined)
 
           if (!current?.data) {
-            UI.error("Session not found")
-            process.exit(1)
+            die("Session not found")
           }
 
           if (args.fork) {
@@ -588,8 +582,7 @@ export const RunCommand = effectCmd({
           return next
         }
 
-        UI.error("Failed to resolve remote directory")
-        process.exit(1)
+        die("Failed to resolve remote directory")
       }
 
       async function localAgent() {
@@ -670,8 +663,7 @@ export const RunCommand = effectCmd({
       async function execute(sdk: OpencodeClient) {
         const sess = await session(sdk)
         if (!sess?.id) {
-          UI.error("Session not found")
-          process.exit(1)
+          die("Session not found")
         }
         const sessionID = sess.id
 
@@ -832,24 +824,51 @@ export const RunCommand = effectCmd({
 
         if (!interactive) {
           const events = await client.event.subscribe()
-          const completed = loop(client, events).catch((e) => {
-            console.error(e)
-            process.exitCode = 1
-          })
-          async function finish() {
-            if (args.attach) return
-            const error = await completed
-            if (error) process.exitCode = 1
+          const interrupt = (code: number) => () => {
+            process.exitCode = code
+            void client.session.abort({ sessionID }).catch(() => {})
+            void events.stream.return(undefined).catch(() => {})
           }
+          const onSigint = interrupt(130)
+          const onSigterm = interrupt(143)
+          process.once("SIGINT", onSigint)
+          process.once("SIGTERM", onSigterm)
+          try {
+            const completed = loop(client, events).catch((e) => {
+              console.error(e)
+              process.exitCode = 1
+            })
+            async function finish() {
+              if (args.attach) return
+              const error = await completed
+              if (error) process.exitCode = 1
+            }
 
-          if (args.command) {
-            const result = await client.session.command({
+            if (args.command) {
+              const result = await client.session.command({
+                sessionID,
+                agent,
+                model: args.model,
+                command: args.command,
+                arguments: message,
+                variant: args.variant,
+              })
+              if (result.error) {
+                if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
+                process.exitCode = 1
+                return
+              }
+              await finish()
+              return
+            }
+
+            const model = pick(args.model)
+            const result = await client.session.prompt({
               sessionID,
               agent,
-              model: args.model,
-              command: args.command,
-              arguments: message,
+              model,
               variant: args.variant,
+              parts: [...files, { type: "text", text: message }],
             })
             if (result.error) {
               if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
@@ -857,23 +876,10 @@ export const RunCommand = effectCmd({
               return
             }
             await finish()
-            return
+          } finally {
+            process.off("SIGINT", onSigint)
+            process.off("SIGTERM", onSigterm)
           }
-
-          const model = pick(args.model)
-          const result = await client.session.prompt({
-            sessionID,
-            agent,
-            model,
-            variant: args.variant,
-            parts: [...files, { type: "text", text: message }],
-          })
-          if (result.error) {
-            if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
-            process.exitCode = 1
-            return
-          }
-          await finish()
           return
         }
 

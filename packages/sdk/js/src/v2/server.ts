@@ -43,7 +43,7 @@ export async function createOpencodeServer(options?: ServerOptions) {
   const url = await new Promise<string>((resolve, reject) => {
     const id = setTimeout(() => {
       clear()
-      stop(proc)
+      void stop(proc)
       reject(new Error(`Timeout waiting for server to start after ${options.timeout}ms`))
     }, options.timeout)
     let output = ""
@@ -57,7 +57,7 @@ export async function createOpencodeServer(options?: ServerOptions) {
           const match = line.match(/on\s+(https?:\/\/[^\s]+)/)
           if (!match) {
             clear()
-            stop(proc)
+            void stop(proc)
             clearTimeout(id)
             reject(new Error(`Failed to parse server url from output: ${line}`))
             return
@@ -92,9 +92,9 @@ export async function createOpencodeServer(options?: ServerOptions) {
 
   return {
     url,
-    close() {
+    async close() {
       clear()
-      stop(proc)
+      await stop(proc)
     },
   }
 }
@@ -126,9 +126,9 @@ export function createOpencodeTui(options?: TuiOptions) {
   const clear = bindAbort(proc, options?.signal)
 
   return {
-    close() {
+    async close() {
       clear()
-      stop(proc)
+      await stop(proc)
     },
   }
 }

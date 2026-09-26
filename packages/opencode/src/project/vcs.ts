@@ -9,6 +9,9 @@ import { EventV2 } from "@opencode-ai/core/event"
 import { VcsEvent } from "@opencode-ai/schema/vcs-event"
 
 const PATCH_CONTEXT_LINES = 2_147_483_647
+// Clamp client/default context: INT32_MAX overflows git's hunk-merge arithmetic,
+// which re-emits the whole file once per hunk instead of one full-context hunk.
+const MAX_PATCH_CONTEXT_LINES = 1_000_000
 const MAX_PATCH_BYTES = 10_000_000
 const MAX_TOTAL_PATCH_BYTES = 10_000_000
 type DiffOptions = {
@@ -104,7 +107,7 @@ const batchPatches = Effect.fnUntraced(function* (
   if (list.length === 0) return { patches: new Map<string, string>(), capped: false }
 
   const result = yield* git.patchAll(cwd, ref, {
-    context: options?.context ?? PATCH_CONTEXT_LINES,
+    context: Math.min(options?.context ?? PATCH_CONTEXT_LINES, MAX_PATCH_CONTEXT_LINES),
     maxOutputBytes: MAX_TOTAL_PATCH_BYTES,
   })
 
@@ -129,11 +132,11 @@ const nativePatch = Effect.fnUntraced(function* (
   const result =
     item.code === "??" || !ref
       ? yield* git.patchUntracked(cwd, item.file, {
-          context: options?.context ?? PATCH_CONTEXT_LINES,
+          context: Math.min(options?.context ?? PATCH_CONTEXT_LINES, MAX_PATCH_CONTEXT_LINES),
           maxOutputBytes: MAX_PATCH_BYTES,
         })
       : yield* git.patch(cwd, ref, item.file, {
-          context: options?.context ?? PATCH_CONTEXT_LINES,
+          context: Math.min(options?.context ?? PATCH_CONTEXT_LINES, MAX_PATCH_CONTEXT_LINES),
           maxOutputBytes: MAX_PATCH_BYTES,
         })
   if (!result.truncated && result.text) return result.text

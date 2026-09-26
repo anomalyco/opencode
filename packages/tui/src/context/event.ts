@@ -1,10 +1,7 @@
-import type { Event } from "@opencode-ai/sdk/v2"
+import type { Event, GlobalEvent } from "@opencode-ai/sdk/v2"
 import { useSDK } from "./sdk"
 
-type EventMetadata = {
-  directory: string
-  workspace: string | undefined
-}
+export type EventMetadata = Pick<GlobalEvent, "directory" | "workspace">
 
 export function useEvent() {
   const sdk = useSDK()
@@ -15,7 +12,8 @@ export function useEvent() {
         return
       }
 
-      handler(event.payload, { directory: event.directory, workspace: event.workspace })
+      // Reuse the GlobalEvent envelope as metadata; avoids a per-event allocation.
+      handler(event.payload, event)
     })
   }
 

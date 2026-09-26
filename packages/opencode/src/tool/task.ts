@@ -10,7 +10,7 @@ import { Agent } from "../agent/agent"
 import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
 import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
-import { Effect, Exit, Schema, Scope } from "effect"
+import { Effect, Exit, Schema, Scope, Semaphore } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@opencode-ai/core/database/database"
@@ -33,6 +33,10 @@ const BACKGROUND_STARTED = [
   "DO NOT sleep, poll for progress, ask the task for status, or duplicate this task's work — avoid working with the same files or topics it is using.",
   "Work on non-overlapping tasks, or briefly tell the user what you launched and end your response.",
 ].join("\n")
+// Every subagent runs a full provider stream on the single worker thread, so an
+// unbounded fan-out starves every other request. Only depth-0 launches take a
+// permit; nested launches bypass it so a parent waiting on a child cannot deadlock.
+const MAX_CONCURRENT_SUBAGENTS = 4
 const BACKGROUND_UPDATED = [
   "Additional context sent to the running background task.",
   "The task is still working in the background. You will be notified automatically when it finishes.",
@@ -88,6 +92,7 @@ export const TaskTool = Tool.define(
     const scope = yield* Scope.Scope
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
+    const subagents = yield* Semaphore.make(MAX_CONCURRENT_SUBAGENTS)
 
     const run = Effect.fn("TaskTool.execute")(function* (
       params: Schema.Schema.Type<typeof Parameters>,
@@ -171,16 +176,16 @@ export const TaskTool = Tool.define(
           ],
         }))
 
-      const msg = yield* MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }).pipe(
+      const msg = yield* MessageV2.getInfo({ sessionID: ctx.sessionID, messageID: ctx.messageID }).pipe(
         Effect.provideService(Database.Service, database),
         Effect.orDie,
       )
-      if (msg.info.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
-      const variant = msg.info.variant
+      if (msg.role !== "assistant") return yield* Effect.fail(new Error("Not an assistant message"))
+      const variant = msg.variant
 
       const model = next.model ?? {
-        modelID: msg.info.modelID,
-        providerID: msg.info.providerID,
+        modelID: msg.modelID,
+        providerID: msg.providerID,
       }
       const metadata = {
         parentSessionId: ctx.sessionID,
@@ -264,7 +269,9 @@ export const TaskTool = Tool.define(
         )
       })
 
-      if (yield* background.extend({ id: nextSession.id, run: runTask() })) {
+      const gatedRunTask = () => (depth === 0 ? subagents.withPermits(1)(runTask()) : runTask())
+
+      if (yield* background.extend({ id: nextSession.id, run: gatedRunTask() })) {
         return {
           title: params.description,
           metadata: {
@@ -293,7 +300,7 @@ export const TaskTool = Tool.define(
           }),
           notify(nextSession.id),
         ]),
-        run: runTask().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id))),
+        run: gatedRunTask().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id))),
       })
 
       function backgroundResult() {
@@ -333,7 +340,9 @@ export const TaskTool = Tool.define(
           Effect.gen(function* () {
             const result = yield* Effect.raceFirst(
               background.wait({ id: nextSession.id }).pipe(Effect.map((waited) => waited.info)),
-              background.waitForPromotion(nextSession.id),
+              background
+                .waitForPromotion(nextSession.id)
+                .pipe(Effect.catchTag("BackgroundJob.NotFound", () => Effect.succeed(undefined))),
             )
             if (result?.metadata?.background === true) return backgroundResult()
             if (result?.status === "error") return yield* Effect.fail(new Error(result.error ?? "Task failed"))

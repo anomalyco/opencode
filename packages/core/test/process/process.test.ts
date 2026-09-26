@@ -364,5 +364,38 @@ describe("AppProcess", () => {
         }),
       ),
     )
+
+    it.live(
+      "treats killing an already-exited child as success",
+      Effect.scoped(
+        Effect.gen(function* () {
+          const svc = yield* AppProcess.Service
+          const handle = yield* svc.spawn(cmd("-e", "process.exit(0)"))
+          yield* handle.exitCode
+          const exit = yield* Effect.exit(handle.kill())
+          expect(Exit.isSuccess(exit)).toBe(true)
+        }),
+      ),
+    )
+
+    it.live(
+      "escalates to SIGKILL when the child ignores SIGTERM and forceKillAfter is unset",
+      Effect.scoped(
+        Effect.gen(function* () {
+          const svc = yield* AppProcess.Service
+          const ready = path.join(tmpdir(), `opencode-sigterm-${Date.now()}`)
+          yield* Effect.gen(function* () {
+            const handle = yield* svc.spawn(
+              ChildProcess.make("sh", ["-c", `trap '' TERM; : > ${ready}; while true; do sleep 1; done`]),
+            )
+            yield* waitForFile(ready)
+            expect(yield* handle.isRunning).toBe(true)
+            yield* handle.kill()
+            expect(yield* handle.isRunning).toBe(false)
+          }).pipe(Effect.ensuring(Effect.promise(() => fs.rm(ready, { force: true }).catch(() => undefined))))
+        }),
+      ),
+      { timeout: 15_000 },
+    )
   })
 })

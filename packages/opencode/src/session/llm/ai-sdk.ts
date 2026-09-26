@@ -7,6 +7,9 @@ import { ProviderError } from "@/provider/error"
 type Result = Awaited<ReturnType<typeof streamText>>
 type AISDKEvent = Result["fullStream"] extends AsyncIterable<infer T> ? T : never
 
+const NO_EVENTS: ReadonlyArray<LLMEvent> = Object.freeze([])
+const NO_EVENTS_EFFECT = Effect.succeed(NO_EVENTS)
+
 export function adapterState() {
   return {
     step: 0,
@@ -19,13 +22,16 @@ export function adapterState() {
   }
 }
 
+const isFinishReason = Schema.is(FinishReason)
+const isProviderMetadata = Schema.is(ProviderMetadata)
+
 function finishReason(value: string | undefined): FinishReason {
-  return Schema.is(FinishReason)(value) ? value : "unknown"
+  return isFinishReason(value) ? value : "unknown"
 }
 
 function providerMetadata(value: unknown): ProviderMetadata | undefined {
   if (value == null) return undefined
-  return Schema.is(ProviderMetadata)(value) ? value : undefined
+  return isProviderMetadata(value) ? value : undefined
 }
 
 // Temporary AI SDK bridge: Copilot billing survives only in raw provider chunks here.
@@ -80,7 +86,7 @@ export function toLLMEvents(
 ): Effect.Effect<ReadonlyArray<LLMEvent>, unknown> {
   switch (event.type) {
     case "start":
-      return Effect.succeed([])
+      return NO_EVENTS_EFFECT
 
     case "start-step":
       return Effect.succeed([LLMEvent.stepStart({ index: state.step })])
@@ -272,18 +278,18 @@ export function toLLMEvents(
     case "file":
     case "tool-output-denied":
     case "tool-approval-request":
-      return Effect.succeed([])
+      return NO_EVENTS_EFFECT
 
     case "raw":
       return Effect.sync(() => {
         state.copilotTotalNanoAiu = copilotTotalNanoAiu(event.rawValue) ?? state.copilotTotalNanoAiu
-        return []
+        return NO_EVENTS
       })
 
     default: {
       const _exhaustive: never = event
       void _exhaustive
-      return Effect.succeed([])
+      return NO_EVENTS_EFFECT
     }
   }
 }

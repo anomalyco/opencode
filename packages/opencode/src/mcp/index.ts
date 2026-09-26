@@ -20,6 +20,7 @@ import { ConfigMCPV1 } from "@opencode-ai/core/v1/config/mcp"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { withTimeout } from "@/util/timeout"
+import { sanitizePluginEnv, userPluginEnvAllowlist } from "@/util/plugin-env"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { McpOAuthPendingProvider, McpOAuthProvider, OAUTH_CALLBACK_PATH } from "./oauth-provider"
 import { McpOAuthCallback } from "./oauth-callback"
@@ -108,7 +109,33 @@ export type Status = Schema.Schema.Type<typeof Status>
 
 // Store transports for OAuth servers to allow finishing auth
 type TransportWithAuth = StreamableHTTPClientTransport | SSEClientTransport
-const pendingOAuthTransports = new Map<string, { transport: TransportWithAuth; provider?: McpOAuthPendingProvider }>()
+type PendingOAuthTransport = {
+  transport: TransportWithAuth
+  provider?: McpOAuthPendingProvider
+  timer: ReturnType<typeof setTimeout>
+}
+const pendingOAuthTransports = new Map<string, PendingOAuthTransport>()
+const PENDING_OAUTH_TTL_MS = 10 * 60 * 1000
+
+// An abandoned auth flow never reaches finishAuth, so bound its lifetime and close its
+// transport instead of retaining a live connection for the whole process.
+function dropOAuthTransport(key: string, close: boolean) {
+  const entry = pendingOAuthTransports.get(key)
+  if (!entry) return
+  clearTimeout(entry.timer)
+  pendingOAuthTransports.delete(key)
+  if (!close) return
+  try {
+    void entry.transport.close().catch(() => {})
+  } catch {}
+}
+
+function rememberOAuthTransport(key: string, transport: TransportWithAuth, provider?: McpOAuthPendingProvider) {
+  dropOAuthTransport(key, true)
+  const timer = setTimeout(() => dropOAuthTransport(key, true), PENDING_OAUTH_TTL_MS)
+  if (typeof timer === "object" && "unref" in timer && typeof timer.unref === "function") timer.unref()
+  pendingOAuthTransports.set(key, { transport, provider, timer })
+}
 
 // Prompt cache types
 type PromptInfo = Awaited<ReturnType<MCPClient["listPrompts"]>>["prompts"][number]
@@ -145,6 +172,7 @@ interface State {
   clients: Record<string, MCPClient>
   defs: Record<string, MCPToolDef[]>
   instructions: Record<string, string>
+  toolNames?: Map<string, Map<string, string>>
 }
 
 export interface ServerInstructions {
@@ -159,6 +187,8 @@ export interface McpTool {
   readonly def: MCPToolDef
   readonly client: MCPClient
   readonly timeout?: number
+  /** Raw configured server name, used to attribute the tool to its origin. */
+  readonly server?: string
 }
 
 export interface Interface {
@@ -309,7 +339,7 @@ const layer = Layer.effect(
                   })
                   .pipe(Effect.ignore, Effect.as(undefined))
               } else {
-                pendingOAuthTransports.set(key, { transport })
+                rememberOAuthTransport(key, transport)
                 lastStatus = { status: "needs_auth" as const }
                 return events
                   .publish(TuiEvent.ToastShow, {
@@ -343,7 +373,19 @@ const layer = Layer.effect(
     ) {
       const [cmd, ...args] = mcp.command
       const baseDir = yield* InstanceState.directory
-      const cwd = mcp.cwd ? path.resolve(baseDir, mcp.cwd) : baseDir
+      const cwd = mcp.cwd ? FSUtil.resolveExisting(path.resolve(baseDir, mcp.cwd)) : baseDir
+      if (!FSUtil.contains(FSUtil.resolveExisting(baseDir), cwd)) {
+        return {
+          client: undefined,
+          status: { status: "failed" as const, error: `MCP server cwd escapes the workspace: ${cwd}` },
+        }
+      }
+      const sanitized = sanitizePluginEnv(mcp.environment ?? {}, userPluginEnvAllowlist())
+      if (sanitized.dropped.length > 0)
+        yield* Effect.logWarning("mcp.environment dropped variables not on the allowlist", {
+          key,
+          keys: sanitized.dropped,
+        })
       const transport = new StdioClientTransport({
         stderr: "pipe",
         command: cmd,
@@ -352,7 +394,7 @@ const layer = Layer.effect(
         env: {
           ...process.env,
           ...(cmd === "opencode" ? { BUN_BE_BUN: "1" } : {}),
-          ...mcp.environment,
+          ...sanitized.env,
         },
       })
 
@@ -439,6 +481,21 @@ const layer = Layer.effect(
       Effect.catch(() => Effect.succeed([] as number[])),
     )
 
+    function killClient(client: MCPClient) {
+      return Effect.gen(function* () {
+        const pid = client.transport instanceof StdioClientTransport ? client.transport.pid : null
+        if (typeof pid === "number") {
+          const pids = yield* descendants(pid)
+          for (const dpid of pids) {
+            try {
+              process.kill(dpid, "SIGTERM")
+            } catch {}
+          }
+        }
+        yield* Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
+      })
+    }
+
     function watch(s: State, name: string, client: MCPClient, bridge: EffectBridge.Shape, timeout?: number) {
       client.onclose = () => {
         if (s.clients[name] !== client) return
@@ -446,6 +503,7 @@ const layer = Layer.effect(
         delete s.defs[name]
         delete s.instructions[name]
         s.status[name] = { status: "failed", error: "Connection closed" }
+        s.toolNames = undefined
         bridge.fork(
           Effect.logWarning("MCP connection closed", { server: name }).pipe(
             Effect.andThen(events.publish(ToolsChanged, { server: name })),
@@ -467,6 +525,7 @@ const layer = Layer.effect(
         if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
 
         s.defs[name] = listed
+        s.toolNames = undefined
         await bridge.promise(events.publish(ToolsChanged, { server: name }).pipe(Effect.ignore))
       })
     }
@@ -518,6 +577,7 @@ const layer = Layer.effect(
 
               const result = yield* create(key, mcp)
               s.status[key] = result.status
+              s.toolNames = undefined
               if (result.mcpClient) {
                 s.clients[key] = result.mcpClient
                 s.defs[key] = result.defs!
@@ -534,26 +594,17 @@ const layer = Layer.effect(
             s.clients = {}
             s.defs = {}
             s.instructions = {}
-            yield* Effect.forEach(
-              clients,
-              (client) =>
-                Effect.gen(function* () {
-                  const pid = client.transport instanceof StdioClientTransport ? client.transport.pid : null
-                  if (typeof pid === "number") {
-                    const pids = yield* descendants(pid)
-                    for (const dpid of pids) {
-                      try {
-                        process.kill(dpid, "SIGTERM")
-                      } catch {}
-                    }
-                  }
-                  yield* Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
-                }),
-              { concurrency: "unbounded" },
-            )
-            pendingOAuthTransports.clear()
+            s.toolNames = undefined
+            yield* Effect.forEach(clients, (client) => killClient(client), { concurrency: "unbounded" })
+            yield* Effect.sync(() => {
+              for (const key of [...pendingOAuthTransports.keys()]) dropOAuthTransport(key, true)
+            })
+            yield* Effect.promise(() => McpOAuthCallback.release())
           }),
         )
+        // Register the releaser before taking the reference, so an interrupted init
+        // can never leave `consumers` incremented without a matching release.
+        McpOAuthCallback.retain()
 
         return s
       }),
@@ -564,8 +615,9 @@ const layer = Layer.effect(
       delete s.clients[name]
       delete s.defs[name]
       delete s.instructions[name]
+      s.toolNames = undefined
       if (!client) return Effect.void
-      return Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
+      return killClient(client)
     }
 
     const storeClient = Effect.fnUntraced(function* (
@@ -581,10 +633,11 @@ const layer = Layer.effect(
       s.status[name] = { status: "connected" }
       s.clients[name] = client
       s.defs[name] = listed
+      s.toolNames = undefined
       if (instructions) s.instructions[name] = instructions
       else delete s.instructions[name]
       watch(s, name, client, bridge, timeout)
-      if (previous) yield* Effect.tryPromise(() => previous.close()).pipe(Effect.ignore)
+      if (previous) yield* killClient(previous)
       return s.status[name]
     })
 
@@ -612,15 +665,28 @@ const layer = Layer.effect(
       return s.clients
     })
 
+    function assignedToolNames(s: State) {
+      if (s.toolNames) return s.toolNames
+      s.toolNames = McpCatalog.assignToolNames(
+        Object.entries(s.defs).flatMap(([clientName, listed]) =>
+          s.status[clientName]?.status === "connected" ? listed.map((def) => ({ clientName, name: def.name })) : [],
+        ),
+      )
+      return s.toolNames
+    }
+
     const instructions = Effect.fn("MCP.instructions")(function* () {
       const s = yield* InstanceState.get(state)
+      const names = assignedToolNames(s)
       return Object.entries(s.instructions)
         .filter(([name]) => s.status[name]?.status === "connected")
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([name, item]) => ({
           name,
           instructions: item,
-          tools: (s.defs[name] ?? []).map((tool) => McpCatalog.toolName(name, tool.name)),
+          tools: (s.defs[name] ?? []).map(
+            (tool) => names.get(name)?.get(tool.name) ?? McpCatalog.toolName(name, tool.name),
+          ),
         }))
     })
 
@@ -670,6 +736,7 @@ const layer = Layer.effect(
       const cfg = yield* cfgSvc.get()
       const config = cfg.mcp ?? {}
       const defaultTimeout = cfg.experimental?.mcp_timeout
+      const names = assignedToolNames(s)
 
       for (const [clientName, client] of Object.entries(s.clients)) {
         if (s.status[clientName]?.status !== "connected") continue
@@ -681,7 +748,11 @@ const layer = Layer.effect(
         }
         const timeout = requestTimeout(s, clientName, mcpConfig, defaultTimeout)
         for (const def of listed) {
-          result[McpCatalog.toolName(clientName, def.name)] = { def, client, timeout }
+          const name = names.get(clientName)?.get(def.name) ?? McpCatalog.toolName(clientName, def.name)
+          if (name !== McpCatalog.toolName(clientName, def.name)) {
+            yield* Effect.logWarning("MCP tool name collision resolved", { clientName, tool: def.name, name })
+          }
+          result[name] = { def, client, timeout, server: clientName }
         }
       }
       return result
@@ -861,7 +932,7 @@ const layer = Layer.effect(
       }).pipe(
         Effect.catch((error) => {
           if (error instanceof UnauthorizedError && capturedUrl) {
-            pendingOAuthTransports.set(mcpName, { transport, provider: authProvider })
+            rememberOAuthTransport(mcpName, transport, authProvider)
             return Effect.succeed({ authorizationUrl: capturedUrl.toString(), oauthState } satisfies AuthResult)
           }
           return Effect.die(error)
@@ -930,11 +1001,14 @@ const layer = Layer.effect(
         }),
       )
 
-      if (error) return { status: "failed", error: `OAuth completion failed: ${error}` } satisfies Status
+      if (error) {
+        dropOAuthTransport(mcpName, true)
+        return { status: "failed", error: `OAuth completion failed: ${error}` } satisfies Status
+      }
 
       yield* Effect.promise(() => pending.provider?.commit() ?? Promise.resolve())
       yield* auth.clearCodeVerifier(mcpName)
-      pendingOAuthTransports.delete(mcpName)
+      dropOAuthTransport(mcpName, true)
 
       const mcpConfig = yield* requireMcpConfig(mcpName)
 
@@ -944,7 +1018,7 @@ const layer = Layer.effect(
     const removeAuth = Effect.fn("MCP.removeAuth")(function* (mcpName: string) {
       yield* auth.remove(mcpName)
       McpOAuthCallback.cancelPending(mcpName)
-      pendingOAuthTransports.delete(mcpName)
+      dropOAuthTransport(mcpName, true)
     })
 
     const supportsOAuth = Effect.fn("MCP.supportsOAuth")(function* (mcpName: string) {

@@ -17,6 +17,8 @@ interface PendingAuth {
 
 let server: ReturnType<typeof createServer> | undefined
 const pendingAuths = new Map<string, PendingAuth>()
+// Number of live MCP instances that may use this process-global callback server.
+let consumers = 0
 // Reverse index: mcpName → oauthState, so cancelPending(mcpName) can
 // find the right entry in pendingAuths (which is keyed by oauthState).
 const mcpNameToState = new Map<string, string>()
@@ -128,6 +130,18 @@ export async function ensureRunning(redirectUri?: string): Promise<void> {
     })
     server!.on("error", reject)
   })
+  server.unref()
+}
+
+export function retain() {
+  consumers++
+}
+
+// Release one consumer; stop the shared server only once the last consumer is gone.
+export function release(): Promise<void> {
+  consumers = Math.max(0, consumers - 1)
+  if (consumers === 0) return stop()
+  return Promise.resolve()
 }
 
 export function waitForCallback(oauthState: string, mcpName?: string): Promise<string> {
@@ -141,6 +155,7 @@ export function waitForCallback(oauthState: string, mcpName?: string): Promise<s
         stopIfIdle()
       }
     }, CALLBACK_TIMEOUT_MS)
+    if (typeof timeout === "object" && "unref" in timeout && typeof timeout.unref === "function") timeout.unref()
 
     pendingAuths.set(oauthState, { resolve, reject, timeout })
   })

@@ -29,6 +29,16 @@ function hasTaskTool(agent?: Agent.Info) {
   return evaluate("task", "*", agent.permission).action !== "deny"
 }
 
+function lineCount(text: string) {
+  let count = 1
+  let index = text.indexOf("\n")
+  while (index !== -1) {
+    count++
+    index = text.indexOf("\n", index + 1)
+  }
+  return count
+}
+
 export interface Interface {
   readonly cleanup: () => Effect.Effect<void>
   readonly write: (text: string) => Effect.Effect<string>
@@ -49,6 +59,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
+    const ensureTruncationDir = yield* Effect.cached(fs.ensureDir(TRUNCATION_DIR).pipe(Effect.orDie))
 
     const cleanup = Effect.fn("Truncate.cleanup")(function* () {
       const cutoff = Date.now() - Duration.toMillis(RETENTION)
@@ -56,18 +67,23 @@ const layer = Layer.effect(
         Effect.map((all) => all.filter((name) => name.startsWith("tool_"))),
         Effect.catch(() => Effect.succeed([])),
       )
-      for (const entry of entries) {
-        const file = path.join(TRUNCATION_DIR, entry)
-        const info = yield* fs.stat(file).pipe(Effect.catch(() => Effect.succeed(undefined)))
-        const mtime = info && Option.getOrUndefined(info.mtime)
-        if (!mtime || mtime.getTime() >= cutoff) continue
-        yield* fs.remove(file).pipe(Effect.catch(() => Effect.void))
-      }
+      yield* Effect.forEach(
+        entries,
+        (entry) =>
+          Effect.gen(function* () {
+            const file = path.join(TRUNCATION_DIR, entry)
+            const info = yield* fs.stat(file).pipe(Effect.catch(() => Effect.succeed(undefined)))
+            const mtime = info && Option.getOrUndefined(info.mtime)
+            if (!mtime || mtime.getTime() >= cutoff) return
+            yield* fs.remove(file).pipe(Effect.catch(() => Effect.void))
+          }),
+        { concurrency: 16, discard: true },
+      )
     })
 
     const write = Effect.fn("Truncate.write")(function* (text: string) {
       const file = path.join(TRUNCATION_DIR, ToolID.ascending())
-      yield* fs.ensureDir(TRUNCATION_DIR).pipe(Effect.orDie)
+      yield* ensureTruncationDir
       yield* fs.writeFileString(file, text).pipe(Effect.orDie)
       return file
     })
@@ -87,12 +103,13 @@ const layer = Layer.effect(
       const maxLines = options.maxLines ?? resolved.maxLines
       const maxBytes = options.maxBytes ?? resolved.maxBytes
       const direction = options.direction ?? "head"
-      const lines = text.split("\n")
       const totalBytes = Buffer.byteLength(text, "utf-8")
 
-      if (lines.length <= maxLines && totalBytes <= maxBytes) {
+      if (totalBytes <= maxBytes && lineCount(text) <= maxLines) {
         return { content: text, truncated: false } as const
       }
+
+      const lines = text.split("\n")
 
       const out: string[] = []
       let i = 0

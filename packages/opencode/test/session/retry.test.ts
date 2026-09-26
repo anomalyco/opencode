@@ -36,14 +36,15 @@ describe("session.retry.delay", () => {
   test("caps delay at 30 seconds when headers missing", () => {
     const error = apiError()
     const delays = Array.from({ length: 10 }, (_, index) => SessionRetry.delay(index + 1, error, 0))
-    expect(delays).toStrictEqual([2000, 4000, 8000, 16000, 30000, 30000, 30000, 30000, 30000, 30000])
+    expect(delays).toStrictEqual([1000, 2000, 4000, 8000, 16000, 30000, 30000, 30000, 30000, 30000])
   })
 
-  test("adds jitter to exponential delays", () => {
+  test("spreads jitter across half the exponential window", () => {
     const error = apiError()
-    expect(SessionRetry.delay(1, error, 0)).toBe(2000)
-    expect(SessionRetry.delay(1, error, 1)).toBe(2500)
-    expect(SessionRetry.delay(4, error, 1)).toBe(20000)
+    expect(SessionRetry.delay(1, error, 0)).toBe(1000)
+    expect(SessionRetry.delay(1, error, 1)).toBe(2000)
+    expect(SessionRetry.delay(1, error, 0.5)).toBe(1500)
+    expect(SessionRetry.delay(4, error, 1)).toBe(16000)
     expect(SessionRetry.delay(5, error, 1)).toBe(30000)
   })
 
@@ -67,31 +68,31 @@ describe("session.retry.delay", () => {
 
   test("ignores invalid retry hints", () => {
     const error = apiError({ "retry-after": "not-a-number" })
-    expect(SessionRetry.delay(1, error, 0)).toBe(2000)
+    expect(SessionRetry.delay(1, error, 0)).toBe(1000)
   })
 
   test("ignores malformed date retry hints", () => {
     const error = apiError({ "retry-after": "Invalid Date String" })
-    expect(SessionRetry.delay(1, error, 0)).toBe(2000)
+    expect(SessionRetry.delay(1, error, 0)).toBe(1000)
   })
 
   test("ignores past date retry hints", () => {
     const pastDate = new Date(Date.now() - 5000).toUTCString()
     const error = apiError({ "retry-after": pastDate })
-    expect(SessionRetry.delay(1, error, 0)).toBe(2000)
+    expect(SessionRetry.delay(1, error, 0)).toBe(1000)
   })
 
-  test("uses retry-after values even when exceeding 10 minutes with headers", () => {
+  test("clamps header retry-after values to the 30s ceiling", () => {
     const error = apiError({ "retry-after": "50" })
-    expect(SessionRetry.delay(1, error)).toBe(50000)
+    expect(SessionRetry.delay(1, error)).toBe(SessionRetry.RETRY_MAX_DELAY_NO_HEADERS)
 
     const longError = apiError({ "retry-after-ms": "700000" })
-    expect(SessionRetry.delay(1, longError)).toBe(700000)
+    expect(SessionRetry.delay(1, longError)).toBe(SessionRetry.RETRY_MAX_DELAY_NO_HEADERS)
   })
 
-  test("caps oversized header delays to the runtime timer limit", () => {
+  test("caps hostile header delays to the 30s ceiling", () => {
     const error = apiError({ "retry-after-ms": "999999999999" })
-    expect(SessionRetry.delay(1, error)).toBe(SessionRetry.RETRY_MAX_DELAY)
+    expect(SessionRetry.delay(1, error)).toBe(SessionRetry.RETRY_MAX_DELAY_NO_HEADERS)
   })
 
   it.instance("policy updates retry status and increments attempts", () =>

@@ -26,6 +26,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { isRecord } from "@/util/record"
 import { optional } from "@opencode-ai/core/schema"
 import { ProviderTransform } from "./transform"
+import { Snowflake } from "./snowflake"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
@@ -34,33 +35,64 @@ import { ProviderError } from "./error"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 300_000
 
-function wrapSSE(res: Response, ms: number, ctl: AbortController) {
+export function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   if (typeof ms !== "number" || ms <= 0) return res
   if (!res.body) return res
   if (!res.headers.get("content-type")?.includes("text/event-stream")) return res
 
   const reader = res.body.getReader()
-  const body = new ReadableStream<Uint8Array>({
-    async pull(ctrl) {
-      const part = await new Promise<Awaited<ReturnType<typeof reader.read>>>((resolve, reject) => {
-        const id = setTimeout(() => {
-          const err = new ProviderError.ResponseStreamError("SSE read timed out")
-          ctl.abort(err)
-          reader.cancel(err).catch(() => {})
-          reject(err)
-        }, ms)
+  let controller: ReadableStreamDefaultController<Uint8Array> | undefined
+  let timer: ReturnType<typeof setTimeout> | undefined
+  let timedOut = false
+  let lastReadAt = Date.now()
 
-        reader.read().then(
-          (part) => {
-            clearTimeout(id)
-            resolve(part)
-          },
-          (err) => {
-            clearTimeout(id)
-            reject(err)
-          },
-        )
-      })
+  const fail = () => {
+    if (timedOut) return
+    timedOut = true
+    timer = undefined
+    const err = new ProviderError.ResponseStreamError("SSE read timed out")
+    ctl.abort(err)
+    reader.cancel(err).catch(() => {})
+    controller?.error(err)
+  }
+  const stopTimer = () => {
+    if (timer === undefined) return
+    clearTimeout(timer)
+    timer = undefined
+  }
+  // The watchdog is armed only while an upstream read is outstanding: measuring from
+  // `start` made downstream backpressure look like a provider stall. It fires at most
+  // once and always terminates the stream through `fail()`.
+  const onIdle = () => {
+    const idle = Date.now() - lastReadAt
+    if (idle >= ms) {
+      fail()
+      return
+    }
+    timer = setTimeout(onIdle, ms - idle)
+  }
+  reader.closed.catch(() => {}).finally(stopTimer)
+
+  const body = new ReadableStream<Uint8Array>({
+    start(ctrl) {
+      controller = ctrl
+    },
+    async pull(ctrl) {
+      if (timedOut) return
+      lastReadAt = Date.now()
+      stopTimer()
+      timer = setTimeout(onIdle, ms)
+
+      let part: Awaited<ReturnType<typeof reader.read>>
+      try {
+        part = await reader.read()
+      } catch (error) {
+        if (timedOut) return
+        throw error
+      }
+      stopTimer()
+      lastReadAt = Date.now()
+      if (timedOut) return
 
       if (part.done) {
         ctrl.close()
@@ -70,6 +102,7 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
       ctrl.enqueue(part.value)
     },
     async cancel(reason) {
+      stopTimer()
       ctl.abort(reason)
       await reader.cancel(reason)
     },
@@ -82,9 +115,9 @@ function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   })
 }
 
-function timeoutController(ms: number) {
+function timeoutController(ms: number, reason: () => unknown = () => new ProviderError.HeaderTimeoutError(ms)) {
   const ctl = new AbortController()
-  const id = setTimeout(() => ctl.abort(new ProviderError.HeaderTimeoutError(ms)), ms)
+  const id = setTimeout(() => ctl.abort(reason()), ms)
   return {
     signal: ctl.signal,
     clear: () => clearTimeout(id),
@@ -972,24 +1005,10 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
           }
 
           if (response.body && response.headers.get("content-type")?.includes("text/event-stream")) {
-            const reader = response.body.getReader()
-            const encoder = new TextEncoder()
-            const decoder = new TextDecoder()
-            const stream = new ReadableStream({
-              async pull(ctrl) {
-                const { done, value } = await reader.read()
-                if (done) {
-                  ctrl.close()
-                  return
-                }
-                const text = decoder.decode(value, { stream: true })
-                ctrl.enqueue(encoder.encode(text.replace(/"role"\s*:\s*""/g, '"role":"assistant"')))
-              },
-              cancel() {
-                reader.cancel()
-              },
+            return new Response(Snowflake.rewriteSnowflakeRole(response.body), {
+              headers: response.headers,
+              status: response.status,
             })
-            return new Response(stream, { headers: response.headers, status: response.status })
           }
 
           return response
@@ -1807,13 +1826,19 @@ const layer = Layer.effect(
           const chunkAbortCtl = typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined
           const headerTimeoutMs = headerTimeout === false ? undefined : headerTimeout
           const headerTimeoutCtl = typeof headerTimeoutMs === "number" ? timeoutController(headerTimeoutMs) : undefined
+          const requestTimeout =
+            options["timeout"] !== undefined && options["timeout"] !== null && options["timeout"] !== false
+              ? timeoutController(
+                  options["timeout"],
+                  () => new DOMException("The operation timed out.", "TimeoutError"),
+                )
+              : undefined
           const signals: AbortSignal[] = []
 
           if (opts.signal) signals.push(opts.signal)
           if (chunkAbortCtl) signals.push(chunkAbortCtl.signal)
           if (headerTimeoutCtl) signals.push(headerTimeoutCtl.signal)
-          if (options["timeout"] !== undefined && options["timeout"] !== null && options["timeout"] !== false)
-            signals.push(AbortSignal.timeout(options["timeout"]))
+          if (requestTimeout) signals.push(requestTimeout.signal)
 
           const combined = signals.length === 0 ? null : signals.length === 1 ? signals[0] : AbortSignal.any(signals)
           if (combined) opts.signal = combined
@@ -1822,7 +1847,10 @@ const layer = Layer.effect(
             ...opts,
             // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
             timeout: false,
-          }).finally(() => headerTimeoutCtl?.clear())
+          }).finally(() => {
+            headerTimeoutCtl?.clear()
+            requestTimeout?.clear()
+          })
 
           if (!chunkAbortCtl) return res
           return wrapSSE(res, chunkTimeout, chunkAbortCtl)

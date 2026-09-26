@@ -1,7 +1,6 @@
 import { type ChildProcess } from "child_process"
 import type { Stream } from "node:stream"
 import launch from "cross-spawn"
-import { buffer } from "node:stream/consumers"
 import { errorMessage } from "./error"
 
 export type Stdio = "inherit" | "pipe" | "ignore" | number | Stream
@@ -111,6 +110,37 @@ export function spawn(cmd: string[], opts: Options = {}): Child {
   return child
 }
 
+// `buffer()` has no ceiling, so a chatty command can exhaust the worker heap. Cap
+// collection and append a marker instead; callers that parse the output see the
+// marker rather than silently truncated bytes.
+export const MAX_OUTPUT_BYTES = 10 * 1024 * 1024
+const OUTPUT_TRUNCATED = Buffer.from("\n... [output truncated]")
+
+function readCapped(stream: NodeJS.ReadableStream, limit = MAX_OUTPUT_BYTES): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = []
+    let size = 0
+    let truncated = false
+    stream.on("data", (chunk: Buffer) => {
+      if (truncated) return
+      const remaining = limit - size
+      if (remaining <= 0) {
+        truncated = true
+        return
+      }
+      const slice = chunk.length > remaining ? chunk.subarray(0, remaining) : chunk
+      chunks.push(slice)
+      size += slice.length
+      if (slice.length < chunk.length) truncated = true
+    })
+    stream.on("end", () => {
+      if (truncated) chunks.push(OUTPUT_TRUNCATED)
+      resolve(Buffer.concat(chunks))
+    })
+    stream.on("error", reject)
+  })
+}
+
 export async function run(cmd: string[], opts: RunOptions = {}): Promise<Result> {
   const proc = spawn(cmd, {
     cwd: opts.cwd,
@@ -126,7 +156,7 @@ export async function run(cmd: string[], opts: RunOptions = {}): Promise<Result>
 
   if (!proc.stdout || !proc.stderr) throw new Error("Process output not available")
 
-  const out = await Promise.all([proc.exited, buffer(proc.stdout), buffer(proc.stderr)])
+  const out = await Promise.all([proc.exited, readCapped(proc.stdout), readCapped(proc.stderr)])
     .then(([code, stdout, stderr]) => ({
       code,
       stdout,
@@ -146,20 +176,70 @@ export async function run(cmd: string[], opts: RunOptions = {}): Promise<Result>
 
 // Duplicated in `packages/sdk/js/src/process.ts` because the SDK cannot import
 // `opencode` without creating a cycle. Keep both copies in sync.
+const STOP_ESCALATE_MS = 2_000
+const STOP_FINAL_WAIT_MS = 5_000
+
+// Concurrent stop() calls must share one teardown: without this each caller attaches its
+// own exit listener and escalation timer and sends its own SIGTERM (v8 NEW-09).
+const stopping = new WeakMap<ChildProcess, Promise<void>>()
+
 export async function stop(proc: ChildProcess) {
+  const pending = stopping.get(proc)
+  if (pending) return pending
+  const task = stopProcess(proc)
+  stopping.set(proc, task)
+  try {
+    await task
+  } finally {
+    if (stopping.get(proc) === task) stopping.delete(proc)
+  }
+}
+
+async function stopProcess(proc: ChildProcess) {
   if (proc.exitCode !== null || proc.signalCode !== null) return
 
-  if (process.platform !== "win32" || !proc.pid) {
+  if (process.platform === "win32" && proc.pid) {
+    const out = await run(["taskkill", "/pid", String(proc.pid), "/T", "/F"], {
+      nothrow: true,
+    })
+    if (out.code === 0) return
     proc.kill()
     return
   }
 
-  const out = await run(["taskkill", "/pid", String(proc.pid), "/T", "/F"], {
-    nothrow: true,
+  let finished = false
+  let escalate: ReturnType<typeof setTimeout> | undefined
+  let resolveExit: (() => void) | undefined
+  const onExit = () => {
+    finished = true
+    if (escalate) clearTimeout(escalate)
+    resolveExit?.()
+  }
+  const exited = new Promise<void>((resolve) => {
+    resolveExit = resolve
+    proc.once("exit", onExit)
   })
-
-  if (out.code === 0) return
-  proc.kill()
+  try {
+    proc.kill("SIGTERM")
+  } catch {}
+  escalate = setTimeout(() => {
+    if (finished || proc.exitCode !== null || proc.signalCode !== null) return
+    try {
+      proc.kill("SIGKILL")
+    } catch {}
+  }, STOP_ESCALATE_MS)
+  let finalWait: ReturnType<typeof setTimeout> | undefined
+  await Promise.race([
+    exited,
+    new Promise<void>((resolve) => {
+      finalWait = setTimeout(resolve, STOP_FINAL_WAIT_MS)
+    }),
+  ])
+  if (escalate) clearTimeout(escalate)
+  if (finalWait) clearTimeout(finalWait)
+  // The 5s final wait wins over a hung child, whose `exit` never fires; drop the listener
+  // so repeated stop() calls cannot accumulate them or re-arm a SIGKILL per call.
+  proc.removeListener("exit", onExit)
 }
 
 export async function text(cmd: string[], opts: RunOptions = {}): Promise<TextResult> {

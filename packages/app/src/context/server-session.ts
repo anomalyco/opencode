@@ -86,6 +86,7 @@ function legacyMessageSource(items: { info: Message; parts: Part[] }[]): Session
 
 // Most markers describe the current HTTP attempt; deltaParts persists non-durable stream state across retries.
 type MessageLoadState = {
+  attempt: number
   touchedMessages: Set<string>
   removedMessages: Set<string>
   retainedMessages: Set<string>
@@ -217,6 +218,7 @@ export function createServerSession(
   const pendingParts = new Map<string, Map<string, Set<string>>>()
   const orphanParts = new Map<string, Set<string>>()
   const removedMessages = new Map<string, Set<string>>()
+  const pendingDiffs = new Map<string, Map<string, FileDiffInfo[]>>()
   const deltaBases = new Map<string, { base: string; sessionID: string }>()
   const deleteMessageParts = (
     cache: { part: Record<string, Part[] | undefined>; part_text_accum_delta: Record<string, string | undefined> },
@@ -227,6 +229,12 @@ export function createServerSession(
       deltaBases.delete(part.id)
     }
     delete cache.part[messageID]
+  }
+  const retirePendingDiff = (sessionID: string, messageID: string) => {
+    const pending = pendingDiffs.get(sessionID)
+    if (!pending) return
+    pending.delete(messageID)
+    if (pending.size === 0) pendingDiffs.delete(sessionID)
   }
   const seen = new Set<string>()
   const infoSeen = new Set<string>()
@@ -422,6 +430,22 @@ export function createServerSession(
     load.touchedParts.set(messageID, new Set([partID]))
   }
 
+  // A page retry supersedes any buffer written from the previous page attempt's view. A parent
+  // backfill reuses the marker reset below and must not retire the still-current page buffer, and an
+  // obsolete load must never mutate the replacement session's buffer.
+  const beginPageAttempt = (sessionID: string, load: MessageLoadState) => {
+    load.attempt += 1
+    if (load.attempt > 1 && messageLoads.get(sessionID) === load) pendingDiffs.delete(sessionID)
+  }
+
+  // Every parent HTTP read is a fresh authoritative snapshot for that identity, so a diff buffered
+  // before the request started is superseded whether this is the first attempt or a retry. Only that
+  // parent's buffer is retired; page and sibling-parent buffers survive, and an obsolete load must
+  // never mutate the replacement session's buffer.
+  const beginParentAttempt = (sessionID: string, load: MessageLoadState, messageID: string) => {
+    if (messageLoads.get(sessionID) === load) retirePendingDiff(sessionID, messageID)
+  }
+
   const resetMessageLoad = (sessionID: string, load: MessageLoadState, baseline?: MessageLoadBaseline) => {
     load.touchedMessages.clear()
     load.retainedMessages.clear()
@@ -491,6 +515,7 @@ export function createServerSession(
       pendingParts.delete(sessionID)
       orphanParts.delete(sessionID)
       removedMessages.delete(sessionID)
+      pendingDiffs.delete(sessionID)
     })
     setData(
       produce((draft) => {
@@ -712,9 +737,18 @@ export function createServerSession(
       preserveUnfetched,
       compare: compareMessages,
     })
+    const pending = pendingDiffs.get(sessionID)
+    const withPending = pending
+      ? messages.map((message) => {
+          if (message.role !== "user") return message
+          const diffs = pending.get(message.id)
+          if (!diffs) return message
+          return { ...message, summary: { ...message.summary, diffs } }
+        })
+      : messages
     batch(() => {
       if (source) setData("session_message", sessionID, reconcile(source))
-      const messageIDs = replaceMessages(sessionID, messages)
+      const messageIDs = replaceMessages(sessionID, withPending)
       replaceParts(sessionID, merged.part, messageIDs, load)
       const orphans = orphanParts.get(sessionID)
       if (cleanupOrphans && page.complete && orphans) {
@@ -723,17 +757,19 @@ export function createServerSession(
         }
         orphanParts.delete(sessionID)
       }
-      setMeta("limit", sessionID, messages.length)
+      setMeta("limit", sessionID, withPending.length)
       setMeta("cursor", sessionID, merged.cursor)
       setMeta("complete", sessionID, merged.complete)
       setMeta("at", sessionID, Date.now())
     })
+    pendingDiffs.delete(sessionID)
   }
 
   const loadMessages = async (sessionID: string, limit: number, before?: string, mode?: "replace" | "prepend") => {
     if (meta.loading[sessionID]) return
     const active = generation(sessionID)
     const load: MessageLoadState = {
+      attempt: 0,
       touchedMessages: new Set(),
       removedMessages: new Set(),
       retainedMessages: new Set(),
@@ -750,7 +786,10 @@ export function createServerSession(
     setMeta("loading", sessionID, true)
     let applied = false
     try {
-      const page = await fetchMessages(sessionID, limit, before, () => resetMessageLoad(sessionID, load))
+      const page = await fetchMessages(sessionID, limit, before, () => {
+        beginPageAttempt(sessionID, load)
+        resetMessageLoad(sessionID, load)
+      })
       const first = page.session.reduce<Message | undefined>(
         (oldest, message) => (!oldest || compareMessages(message, oldest) < 0 ? message : oldest),
         undefined,
@@ -778,9 +817,10 @@ export function createServerSession(
         ]
         for (const parentID of parentIDs) {
           if (generations.get(sessionID) !== active) break
-          const parent = await fetchMessage(sessionID, parentID, () =>
-            resetMessageLoad(sessionID, load, messageLoadBaseline(load, parentID)),
-          ).catch((error) => {
+          const parent = await fetchMessage(sessionID, parentID, () => {
+            beginParentAttempt(sessionID, load, parentID)
+            resetMessageLoad(sessionID, load, messageLoadBaseline(load, parentID))
+          }).catch((error) => {
             const cause = error instanceof Error && typeof error.cause === "object" ? error.cause : undefined
             if (cause && "status" in cause && cause.status === 404) {
               load.removedMessages.add(parentID)
@@ -828,7 +868,10 @@ export function createServerSession(
         }
         if (orphanParts.get(sessionID)?.size === 0) orphanParts.delete(sessionID)
       }
-      if (messageLoads.get(sessionID) === load) messageLoads.delete(sessionID)
+      if (messageLoads.get(sessionID) === load) {
+        pendingDiffs.delete(sessionID)
+        messageLoads.delete(sessionID)
+      }
       if (generations.get(sessionID) === active) setMeta("loading", sessionID, false)
     }
   }
@@ -1029,6 +1072,7 @@ export function createServerSession(
       }
       case "message.updated": {
         const info = cleanMessage((event.properties as { info: Message }).info)
+        retirePendingDiff(info.sessionID, info.id)
         indexLegacyMessage(info)
         const load = messageLoads.get(info.sessionID)
         load?.touchedMessages.add(info.id)
@@ -1060,6 +1104,29 @@ export function createServerSession(
           })
         return
       }
+      case "message.diff.updated": {
+        const props = event.properties as { sessionID: string; messageID: string; diffs: FileDiffInfo[] }
+        if (removedMessages.get(props.sessionID)?.has(props.messageID)) return
+        const messages = data.message[props.sessionID]
+        const index = messages?.findIndex((message) => message.id === props.messageID) ?? -1
+        const current = index >= 0 ? messages?.[index] : undefined
+        if (!current || current.role !== "user") {
+          // An in-flight page can resolve with a snapshot older than this diff; buffer and overlay
+          // when that load materializes the message. With no active load there is no snapshot to
+          // reconcile against, so a diff-only event for an absent turn is ignored rather than
+          // starting new message work.
+          if (!messageLoads.has(props.sessionID)) return
+          const pending = pendingDiffs.get(props.sessionID) ?? new Map<string, FileDiffInfo[]>()
+          pending.set(props.messageID, props.diffs)
+          pendingDiffs.set(props.sessionID, pending)
+          return
+        }
+        const info = cleanMessage({ ...current, summary: { ...current.summary, diffs: props.diffs } })
+        indexLegacyMessage(info)
+        messageLoads.get(props.sessionID)?.touchedMessages.add(props.messageID)
+        setData("message", props.sessionID, index, reconcile(info))
+        return
+      }
       case "message.removed": {
         const props = event.properties as { sessionID: string; messageID: string }
         setData("session_message", props.sessionID, (messages) =>
@@ -1075,6 +1142,7 @@ export function createServerSession(
         load?.optimisticParts.delete(props.messageID)
         pendingParts.get(props.sessionID)?.delete(props.messageID)
         if (pendingParts.get(props.sessionID)?.size === 0) pendingParts.delete(props.sessionID)
+        retirePendingDiff(props.sessionID, props.messageID)
         const removedMessagesForSession = removedMessages.get(props.sessionID) ?? new Set<string>()
         removedMessagesForSession.add(props.messageID)
         removedMessages.set(props.sessionID, removedMessagesForSession)

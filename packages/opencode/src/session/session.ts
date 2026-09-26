@@ -314,7 +314,7 @@ export type GlobalListInput = {
   directory?: string
   roots?: boolean
   start?: number
-  cursor?: number
+  cursor?: { time: number; id?: string } | number
   search?: string
   limit?: number
   archived?: boolean
@@ -325,6 +325,7 @@ export const Event = {
   Updated: SessionV1.Event.Updated,
   Deleted: SessionV1.Event.Deleted,
   Diff: SessionV1.Event.Diff,
+  MessageDiffUpdated: SessionV1.Event.MessageDiffUpdated,
   Error: SessionV1.Event.Error,
 }
 
@@ -469,6 +470,11 @@ export interface Interface {
     sessionID: SessionID,
     predicate: (msg: SessionV1.WithParts) => boolean,
   ) => Effect.Effect<Option.Option<SessionV1.WithParts>, NotFound>
+  /** Like findMessage, but hydrates only `info` (no parts/diffs query). */
+  readonly findMessageInfo: (
+    sessionID: SessionID,
+    predicate: (info: SessionV1.Info) => boolean,
+  ) => Effect.Effect<Option.Option<SessionV1.Info>, NotFound>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Session") {}
@@ -557,7 +563,17 @@ const layer: Layer.Layer<
       if (input?.directory) conditions.push(eq(SessionTable.directory, input.directory))
       if (input?.roots) conditions.push(isNull(SessionTable.parent_id))
       if (input?.start) conditions.push(gte(SessionTable.time_updated, input.start))
-      if (input?.cursor) conditions.push(lt(SessionTable.time_updated, input.cursor))
+      if (input?.cursor) {
+        const cursor = typeof input.cursor === "number" ? { time: input.cursor } : input.cursor
+        const condition =
+          cursor.id === undefined
+            ? lt(SessionTable.time_updated, cursor.time)
+            : or(
+                lt(SessionTable.time_updated, cursor.time),
+                and(eq(SessionTable.time_updated, cursor.time), lt(SessionTable.id, SessionID.make(cursor.id))),
+              )
+        if (condition) conditions.push(condition)
+      }
       if (input?.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
       if (!input?.archived) conditions.push(isNull(SessionTable.time_archived))
 
@@ -903,6 +919,12 @@ const layer: Layer.Layer<
       return Option.none<SessionV1.WithParts>()
     })
 
+    const findMessageInfo: Interface["findMessageInfo"] = Effect.fn("Session.findMessageInfo")(
+      function* (sessionID, predicate) {
+        return yield* MessageV2.findInfo(sessionID, predicate).pipe(Effect.provideService(Database.Service, database))
+      },
+    )
+
     return Service.of({
       list,
       listGlobal,
@@ -931,6 +953,7 @@ const layer: Layer.Layer<
       getPart,
       updatePartDelta,
       findMessage,
+      findMessageInfo,
     })
   }),
 )

@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { BackgroundJob } from "@opencode-ai/core/background-job"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Deferred, Effect, Exit, Scope } from "effect"
+import { Deferred, Effect, Exit, Option, Scope } from "effect"
 import { it } from "./lib/effect"
 
 const jobsLayer = LayerNode.compile(BackgroundJob.node)
@@ -86,6 +86,49 @@ describe("BackgroundJob", () => {
     }).pipe(Effect.provide(jobsLayer)),
   )
 
+  it.live("prunes oldest terminal jobs while retaining running work", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const running = yield* jobs.start({ id: "job_running", type: "test", run: Effect.never })
+      const completed: string[] = []
+
+      yield* Effect.forEach(
+        Array.from({ length: BackgroundJob.RETAINED_TERMINAL_JOBS + 5 }, (_, index) => index),
+        (index) =>
+          Effect.gen(function* () {
+            const id = `job_terminal_${index}`
+            yield* jobs.start({ id, type: "test", run: Effect.succeed(`done-${index}`) })
+            yield* jobs.wait({ id })
+            completed.push(id)
+          }),
+        { concurrency: 1 },
+      )
+
+      const listed = yield* jobs.list()
+      expect(listed.some((job) => job.id === running.id)).toBe(true)
+      expect(listed.filter((job) => job.status !== "running")).toHaveLength(BackgroundJob.RETAINED_TERMINAL_JOBS)
+      expect(listed.some((job) => job.id === completed[0])).toBe(false)
+      expect(listed.some((job) => job.id === completed[completed.length - 1])).toBe(true)
+
+      yield* jobs.cancel(running.id)
+    }).pipe(Effect.provide(jobsLayer)),
+  )
+
+  it.live("delivers the lossless result once while retaining only a capped preview", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const body = `${"x".repeat(50_000)}END`
+      const job = yield* jobs.start({ id: "job_large", type: "test", run: Effect.succeed(body) })
+
+      const done = yield* jobs.wait({ id: job.id })
+      expect(done.info?.output).toBe(body)
+
+      const retained = yield* jobs.get(job.id)
+      expect(retained?.output?.length).toBeLessThan(body.length)
+      expect(retained?.output?.endsWith("END")).toBe(true)
+    }).pipe(Effect.provide(jobsLayer)),
+  )
+
   it.live("interrupts live work without promising settlement after the owning process-local scope closes", () =>
     Effect.gen(function* () {
       const scope = yield* Scope.make()
@@ -102,5 +145,19 @@ describe("BackgroundJob", () => {
       // The abandoned in-memory registry is not a durable observation channel.
       expect((yield* jobs.get(job.id))?.status).toBe("running")
     }),
+  )
+
+  it.live("resolves promotion waiters instead of hanging on missing or settled jobs", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+
+      const missing = yield* jobs.waitForPromotion("job_missing").pipe(Effect.exit)
+      expect(Exit.findErrorOption(missing).pipe(Option.getOrUndefined)).toBeInstanceOf(BackgroundJob.NotFoundError)
+
+      const job = yield* jobs.start({ id: "job_settled", type: "test", run: Effect.succeed("done") })
+      yield* jobs.wait({ id: job.id })
+
+      expect(yield* jobs.waitForPromotion(job.id)).toMatchObject({ status: "completed" })
+    }).pipe(Effect.provide(jobsLayer)),
   )
 })

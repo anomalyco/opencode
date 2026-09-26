@@ -167,6 +167,15 @@ const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> = Layer.
       const method = hooks[input.providerID].methods[input.method]
       if (method.type !== "oauth") return
 
+      const existing = pending.get(input.providerID)
+      if (existing) {
+        return {
+          url: existing.url,
+          method: existing.method,
+          instructions: existing.instructions,
+        }
+      }
+
       if (method.prompts && input.inputs) {
         for (const prompt of method.prompts) {
           if (prompt.type === "text" && prompt.validate && input.inputs[prompt.key] !== undefined) {
@@ -218,6 +227,8 @@ const layer: Layer.Layer<Service, never, Auth.Service | Plugin.Service> = Layer.
           ...extra,
         })
       }
+
+      pending.delete(input.providerID)
     })
 
     return Service.of({ methods, authorize, callback })

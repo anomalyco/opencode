@@ -29,6 +29,9 @@ import { filesystem, path } from "./effect/app-node-platform"
 
 const toError = (err: unknown): Error => (err instanceof globalThis.Error ? err : new globalThis.Error(String(err)))
 
+/** Teardown bound when `forceKillAfter` is unset, so a child that ignores the kill signal cannot stall scope exit. */
+const DEFAULT_FORCE_KILL_AFTER = "5 seconds" as const
+
 const toTag = (err: NodeJS.ErrnoException): PlatformError.SystemErrorTag => {
   switch (err.code) {
     case "ENOENT":
@@ -284,8 +287,12 @@ export const make = Effect.gen(function* () {
       proc.on("spawn", () => {
         resume(Effect.succeed([proc, signal]))
       })
-      return Effect.sync(() => {
-        proc.kill("SIGTERM")
+      return Effect.suspend(() => {
+        tryKill(proc, "SIGTERM")
+        return Effect.timeoutOrElse(Deferred.await(signal), {
+          duration: command.options.forceKillAfter ?? DEFAULT_FORCE_KILL_AFTER,
+          orElse: () => Effect.sync(() => void tryKill(proc, "SIGKILL")),
+        }).pipe(Effect.asVoid)
       })
     })
 
@@ -311,14 +318,29 @@ export const make = Effect.gen(function* () {
     })
   }
 
+  // `ChildProcess.kill` throws `ESRCH` when the child already exited; a teardown path
+  // must not let that defect escape scope exit, so a failed signal is a `false` result.
+  const tryKill = (proc: NodeChildProcess.ChildProcess, signal: NodeJS.Signals) => {
+    try {
+      return proc.kill(signal)
+    } catch {
+      return false
+    }
+  }
+
   const killOne = (
     command: ChildProcess.StandardCommand,
     proc: NodeChildProcess.ChildProcess,
     signal: NodeJS.Signals,
+    exited: Effect.Effect<boolean>,
   ) =>
     Effect.suspend(() => {
-      if (proc.kill(signal)) return Effect.void
-      return Effect.fail(toPlatformError("kill", new Error("Failed to kill child process"), command))
+      if (tryKill(proc, signal)) return Effect.void
+      return exited.pipe(
+        Effect.flatMap((done) =>
+          done ? Effect.void : Effect.fail(toPlatformError("kill", new Error("Failed to kill child process"), command)),
+        ),
+      )
     })
 
   const timeout =
@@ -335,9 +357,8 @@ export const make = Effect.gen(function* () {
       ) => Effect.Effect<A, E, R>,
     ) => {
       const signal = opts?.killSignal ?? "SIGTERM"
-      if (Predicate.isUndefined(opts?.forceKillAfter)) return f(command, proc, signal)
       return Effect.timeoutOrElse(f(command, proc, signal), {
-        duration: opts.forceKillAfter,
+        duration: opts?.forceKillAfter ?? DEFAULT_FORCE_KILL_AFTER,
         orElse: () => f(command, proc, "SIGKILL"),
       })
     }
@@ -389,15 +410,13 @@ export const make = Effect.gen(function* () {
                 return yield* Effect.void
               }
               const send = (s: NodeJS.Signals) =>
-                Effect.catch(killGroup(command, proc, s), () => killOne(command, proc, s))
+                Effect.catch(killGroup(command, proc, s), () => killOne(command, proc, s, Deferred.isDone(signal)))
               const sig = command.options.killSignal ?? "SIGTERM"
               const attempt = send(sig).pipe(Effect.andThen(Deferred.await(signal)), Effect.asVoid)
-              const escalated = command.options.forceKillAfter
-                ? Effect.timeoutOrElse(attempt, {
-                    duration: command.options.forceKillAfter,
-                    orElse: () => send("SIGKILL").pipe(Effect.andThen(Deferred.await(signal)), Effect.asVoid),
-                  })
-                : attempt
+              const escalated = Effect.timeoutOrElse(attempt, {
+                duration: command.options.forceKillAfter ?? DEFAULT_FORCE_KILL_AFTER,
+                orElse: () => send("SIGKILL").pipe(Effect.andThen(Deferred.await(signal)), Effect.asVoid),
+              })
               return yield* Effect.ignore(escalated)
             }),
           )
@@ -427,11 +446,10 @@ export const make = Effect.gen(function* () {
             kill: (opts?: ChildProcess.KillOptions) => {
               const sig = opts?.killSignal ?? "SIGTERM"
               const send = (s: NodeJS.Signals) =>
-                Effect.catch(killGroup(command, proc, s), () => killOne(command, proc, s))
+                Effect.catch(killGroup(command, proc, s), () => killOne(command, proc, s, Deferred.isDone(signal)))
               const attempt = send(sig).pipe(Effect.andThen(Deferred.await(signal)), Effect.asVoid)
-              if (!opts?.forceKillAfter) return attempt
               return Effect.timeoutOrElse(attempt, {
-                duration: opts.forceKillAfter,
+                duration: opts?.forceKillAfter ?? DEFAULT_FORCE_KILL_AFTER,
                 orElse: () => send("SIGKILL").pipe(Effect.andThen(Deferred.await(signal)), Effect.asVoid),
               })
             },

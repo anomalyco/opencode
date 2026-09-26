@@ -179,7 +179,8 @@ const layer = Layer.effect(
       const files = new Map<RelativePath, Git.TreeID>()
       for (const [file, snapshot] of input.files) {
         const absolute = path.resolve(worktree, file)
-        if (!FSUtil.contains(worktree, absolute))
+        const real = FSUtil.resolveExisting(absolute)
+        if (!FSUtil.contains(worktree, absolute) || !FSUtil.contains(FSUtil.resolveExisting(worktree), real))
           return yield* new Error({ operation, message: `Path escapes the project: ${file}` })
         files.set(file, Git.TreeID.make(snapshot))
       }

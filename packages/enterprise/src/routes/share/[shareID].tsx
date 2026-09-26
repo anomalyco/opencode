@@ -57,9 +57,12 @@ class SessionDataMissingError extends NamedError {
 
 const getData = query(async (shareID) => {
   "use server"
-  const share = await Share.get(shareID)
-  if (!share) throw new SessionDataMissingError({ sessionID: shareID })
-  const data = await Share.data(shareID)
+  const parsed = Share.ShareID.safeParse(shareID)
+  if (!parsed.success) throw new SessionDataMissingError({ sessionID: shareID })
+  const id = parsed.data
+  const share = await Share.get(id)
+  if (!share) throw new SessionDataMissingError({ sessionID: id })
+  const data = await Share.data(id)
   const result: {
     sessionID: string
     shareID: string
@@ -81,7 +84,7 @@ const getData = query(async (shareID) => {
     }
   } = {
     sessionID: share.sessionID,
-    shareID,
+    shareID: id,
     session: [],
     session_diff: {
       [share.sessionID]: [],
@@ -140,14 +143,10 @@ export default function () {
           return <NotFound />
         }
         console.error(error)
-        const details = error instanceof Error ? (error.stack ?? error.message) : String(error)
         return (
           <div class="min-h-screen w-full bg-background-base text-text-base flex flex-col items-center justify-center gap-4 p-6 text-center">
             <p class="text-16-medium">Unable to render this share.</p>
             <p class="text-14-regular text-text-weaker">Check the console for more details.</p>
-            <pre class="text-12-mono text-left whitespace-pre-wrap break-words w-full max-w-200 bg-background-stronger rounded-md p-4">
-              {details}
-            </pre>
           </div>
         )
       }}

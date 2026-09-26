@@ -1,6 +1,11 @@
-import { deflateSync, gzipSync } from "node:zlib"
+import { deflate, gzip } from "node:zlib"
+import { promisify } from "node:util"
 import { Effect } from "effect"
 import { HttpBody, HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+
+// libuv threadpool, so compressing a large transcript does not stall the shared JS event loop.
+const gzipAsync = promisify(gzip)
+const deflateAsync = promisify(deflate)
 
 // Keep the server's compressible content-type set stable across HTTP backend changes.
 const COMPRESSIBLE_CONTENT_TYPE_REGEX =
@@ -54,7 +59,9 @@ export const compressionLayer = HttpRouter.middleware<{ handles: unknown }>()((e
     const encoding = pickEncoding(request.headers["accept-encoding"])
     if (!encoding) return response
 
-    const compressed = encoding === "gzip" ? gzipSync(body.body) : deflateSync(body.body)
+    const compressed = yield* Effect.promise(() =>
+      encoding === "gzip" ? gzipAsync(body.body) : deflateAsync(body.body),
+    )
     return HttpServerResponse.setHeader(
       HttpServerResponse.setBody(response, HttpBody.uint8Array(compressed, contentType)),
       "content-encoding",

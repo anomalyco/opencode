@@ -137,6 +137,8 @@ try {
   // Some subprocesses don't react properly to SIGTERM and similar signals.
   // Most notably, some docker-container-based MCP servers don't handle such signals unless
   // run using `docker run --init`.
+  // Drain pending stdout writes first: process.exit() truncates them under a pipe.
+  await new Promise<void>((resolve) => process.stdout.write("", () => resolve()))
   // Explicitly exit to avoid any hanging subprocesses.
   process.exit()
 }

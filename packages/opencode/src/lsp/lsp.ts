@@ -109,11 +109,38 @@ const filterExperimentalServers = (servers: Record<string, LSPServer.Info>, flag
 
 type LocInput = { file: string; line: number; character: number }
 
+// A server that crashed once is quarantined, not disabled for the process lifetime.
+// Repeat crashes escalate the quarantine so a reliably-failing server cannot be
+// respawned on a fixed schedule (retry storm).
+const BROKEN_TTL_MS = 5 * 60_000
+const BROKEN_MAX_BACKOFF_MS = 60 * 60_000
+
+interface BrokenEntry {
+  at: number
+  failures: number
+}
+
 interface State {
   clients: LSPClient.Info[]
   servers: Record<string, LSPServer.Info>
-  broken: Set<string>
+  broken: Map<string, BrokenEntry>
   spawning: Map<string, Promise<LSPClient.Info | undefined>>
+  /** Clients whose exit is a deliberate shutdown and must not be marked broken. */
+  shuttingDown: WeakSet<LSPClient.Info>
+}
+
+function markBroken(state: State, key: string) {
+  const previous = state.broken.get(key)
+  state.broken.set(key, { at: Date.now(), failures: (previous?.failures ?? 0) + 1 })
+}
+
+function isBroken(state: State, key: string) {
+  const entry = state.broken.get(key)
+  if (entry === undefined) return false
+  const backoff = Math.min(BROKEN_TTL_MS * 2 ** Math.min(entry.failures - 1, 4), BROKEN_MAX_BACKOFF_MS)
+  if (Date.now() - entry.at < backoff) return true
+  state.broken.delete(key)
+  return false
 }
 
 export interface Interface {
@@ -122,6 +149,7 @@ export interface Interface {
   readonly hasClients: (file: string) => Effect.Effect<boolean>
   readonly touchFile: (input: string, diagnostics?: "document" | "full") => Effect.Effect<void>
   readonly diagnostics: () => Effect.Effect<Record<string, LSPClient.Diagnostic[]>>
+  readonly diagnosticsFor: (file: string) => Effect.Effect<LSPClient.Diagnostic[]>
   readonly hover: (input: LocInput) => Effect.Effect<any>
   readonly definition: (input: LocInput) => Effect.Effect<any[]>
   readonly references: (input: LocInput) => Effect.Effect<any[]>
@@ -191,12 +219,14 @@ const layer = Layer.effect(
         const s: State = {
           clients: [],
           servers,
-          broken: new Set(),
+          broken: new Map(),
           spawning: new Map(),
+          shuttingDown: new WeakSet(),
         }
 
         yield* Effect.addFinalizer(() =>
           Effect.promise(async () => {
+            for (const client of s.clients) s.shuttingDown.add(client)
             await Promise.all(s.clients.map((client) => client.shutdown()))
           }),
         )
@@ -218,11 +248,11 @@ const layer = Layer.effect(
           const handle = await server
             .spawn(root, ctx, flags)
             .then((value) => {
-              if (!value) s.broken.add(key)
+              if (!value) markBroken(s, key)
               return value
             })
             .catch(() => {
-              s.broken.add(key)
+              markBroken(s, key)
               return undefined
             })
 
@@ -234,7 +264,7 @@ const layer = Layer.effect(
             directory: ctx.directory,
             instance: ctx,
           }).catch(async () => {
-            s.broken.add(key)
+            markBroken(s, key)
             await Process.stop(handle.process)
             return undefined
           })
@@ -248,6 +278,13 @@ const layer = Layer.effect(
           }
 
           s.clients.push(client)
+          client.onExit(() => {
+            const index = s.clients.indexOf(client)
+            if (index !== -1) s.clients.splice(index, 1)
+            // A deliberate shutdown must not quarantine the root+server for minutes.
+            if (s.shuttingDown.has(client)) return
+            markBroken(s, key)
+          })
           return client
         }
 
@@ -256,7 +293,7 @@ const layer = Layer.effect(
 
           const root = await server.root(file, ctx)
           if (!root) continue
-          if (s.broken.has(root + server.id)) continue
+          if (isBroken(s, root + server.id)) continue
 
           const match = s.clients.find((x) => x.root === root && x.serverID === server.id)
           if (match) {
@@ -334,7 +371,7 @@ const layer = Layer.effect(
           if (server.extensions.length && !server.extensions.includes(extension)) continue
           const root = await server.root(file, ctx)
           if (!root) continue
-          if (s.broken.has(root + server.id)) continue
+          if (isBroken(s, root + server.id)) continue
           return true
         }
         return false
@@ -371,6 +408,13 @@ const layer = Layer.effect(
           results[p] = arr
         }
       }
+      return results
+    })
+
+    const diagnosticsFor = Effect.fn("LSP.diagnosticsFor")(function* (file: string) {
+      const all = yield* runAll(async (client) => client.diagnosticsFor({ path: file }))
+      const results: LSPClient.Diagnostic[] = []
+      for (const diags of all) results.push(...diags)
       return results
     })
 
@@ -483,6 +527,7 @@ const layer = Layer.effect(
       hasClients,
       touchFile,
       diagnostics,
+      diagnosticsFor,
       hover,
       definition,
       references,

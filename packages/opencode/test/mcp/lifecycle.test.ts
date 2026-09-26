@@ -216,6 +216,19 @@ it.instance(
   { init: (directory) => Effect.promise(() => Bun.$`mkdir -p ${path.join(directory, "plugins/sub")}`.quiet()) },
 )
 
+it.instance("rejects a local mcp cwd that escapes the instance directory", () =>
+  Effect.gen(function* () {
+    const mcp = yield* MCP.Service
+    const result = yield* mcp.add("escape-cwd", {
+      type: "local",
+      command: [process.execPath, stdioFixture],
+      cwd: path.join("..", "outside"),
+    })
+
+    expect(statusName(result.status, "escape-cwd")).toBe("failed")
+  }),
+)
+
 it.instance("tools() reuses cached definitions until a protocol notification", () =>
   Effect.gen(function* () {
     const server = yield* lifecycleServer({ capabilities: { tools: { listChanged: true } } })

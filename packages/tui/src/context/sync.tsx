@@ -28,7 +28,7 @@ import { useTuiStartup } from "./runtime"
 import { createSimpleContext } from "./helper"
 import { useExit } from "./exit"
 import { useArgs } from "./args"
-import { batch, onMount } from "solid-js"
+import { batch, onCleanup, onMount } from "solid-js"
 import path from "path"
 import { useKV } from "./kv"
 import { usePermission } from "./permission"
@@ -56,6 +56,21 @@ function compareMessage(a: Message, b: Message) {
 }
 
 const messageKey = (message: Message) => message.time.created + message.id
+
+// A deleted session tombstone must not grow for the process lifetime across create/delete
+// cycles, so the insertion-ordered set keeps only the most recent deletes.
+const MAX_DELETED_SESSIONS = 1024
+
+export function rememberDeleted(sessions: Set<string>, sessionID: string, max = MAX_DELETED_SESSIONS) {
+  // Re-insert so eviction order tracks the latest delete, then drop the oldest tombstones.
+  sessions.delete(sessionID)
+  sessions.add(sessionID)
+  while (sessions.size > max) {
+    const oldest = sessions.values().next()
+    if (oldest.done) break
+    sessions.delete(oldest.value)
+  }
+}
 
 export const {
   context: SyncContext,
@@ -150,11 +165,22 @@ export const {
     const fullSyncedSessions = new Set<string>()
     const syncingSessions = new Map<string, Promise<void>>()
     const hydratingSessions = new Map<string, { messages: Set<string>; parts: Set<string> }>()
+    const pendingDiffs = new Map<string, Map<string, SnapshotFileDiff[]>>()
+    // A deleted session must not be resurrected by an in-flight sync that resolves after
+    // the delete, nor by a late live event for the same id; `sync()` and every live
+    // handler that writes a session-keyed mirror consult the tombstone.
+    const deletedSessions = new Set<string>()
     const touchMessage = (sessionID: string, messageID: string) => {
       hydratingSessions.get(sessionID)?.messages.add(messageID)
     }
     const touchPart = (sessionID: string, partID: string) => {
       hydratingSessions.get(sessionID)?.parts.add(partID)
+    }
+    const retirePendingDiff = (sessionID: string, messageID: string) => {
+      const pending = pendingDiffs.get(sessionID)
+      if (!pending) return
+      pending.delete(messageID)
+      if (pending.size === 0) pendingDiffs.delete(sessionID)
     }
 
     function sessionListQuery(): { scope?: "project"; path?: string } {
@@ -173,12 +199,50 @@ export const {
         .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
     }
 
-    event.subscribe((event, { directory, workspace }) => {
+    // Assigned once `result` exists; the desync handler runs later, so the holder lets
+    // it trigger a refetch of everything currently mirrored without a forward reference.
+    let resyncOnDesync: (() => void) | undefined
+    const unsubscribeSyncEvent = event.subscribe((event, { directory, workspace }) => {
+      if (event.type === "message.diff.updated") {
+        if (deletedSessions.has(event.properties.sessionID)) return
+        const messages = store.message[event.properties.sessionID]
+        const index = messages?.findIndex((message) => message.id === event.properties.messageID) ?? -1
+        const current = index >= 0 ? messages?.[index] : undefined
+        if (!current || current.role !== "user") {
+          // Buffer only across an in-flight first page; a later fetch reads the durable diff itself.
+          if (!hydratingSessions.has(event.properties.sessionID)) return
+          const pending = pendingDiffs.get(event.properties.sessionID) ?? new Map<string, SnapshotFileDiff[]>()
+          // Later fetches read the durable diff, so the oldest buffered entries can be dropped.
+          if (pending.size >= 100) {
+            const oldest = pending.keys().next()
+            if (!oldest.done) pending.delete(oldest.value)
+          }
+          pending.set(event.properties.messageID, event.properties.diffs)
+          pendingDiffs.set(event.properties.sessionID, pending)
+          return
+        }
+        touchMessage(event.properties.sessionID, event.properties.messageID)
+        setStore(
+          "message",
+          event.properties.sessionID,
+          index,
+          reconcile({ ...current, summary: { ...current.summary, diffs: event.properties.diffs } }),
+        )
+        return
+      }
+      // `server.desync` is a raw SSE marker, not part of the typed Event union.
+      if (String(event.type) === "server.desync") {
+        // The server dropped events for this connection; every incremental mirror may
+        // be stale, so drop the "already synced" markers and refetch what is loaded.
+        resyncOnDesync?.()
+        return
+      }
       switch (event.type) {
         case "server.instance.disposed":
           void bootstrap()
           break
         case "permission.replied": {
+          if (deletedSessions.has(event.properties.sessionID)) break
           const requests = store.permission[event.properties.sessionID]
           if (!requests) break
           const match = search(requests, event.properties.requestID, (r) => r.id)
@@ -194,6 +258,7 @@ export const {
         }
 
         case "permission.asked": {
+          if (deletedSessions.has(event.properties.sessionID)) break
           const request = event.properties
           if (permission.mode === "auto") {
             void sdk.client.permission.reply({
@@ -226,6 +291,7 @@ export const {
 
         case "question.replied":
         case "question.rejected": {
+          if (deletedSessions.has(event.properties.sessionID)) break
           const requests = store.question[event.properties.sessionID]
           if (!requests) break
           const match = search(requests, event.properties.requestID, (r) => r.id)
@@ -241,6 +307,7 @@ export const {
         }
 
         case "question.asked": {
+          if (deletedSessions.has(event.properties.sessionID)) break
           const request = event.properties
           const requests = store.question[request.sessionID]
           if (!requests) {
@@ -263,15 +330,26 @@ export const {
         }
 
         case "todo.updated":
-          setStore("todo", event.properties.sessionID, event.properties.todos)
+          if (deletedSessions.has(event.properties.sessionID)) break
+          setStore("todo", event.properties.sessionID, reconcile(event.properties.todos))
           break
 
         case "session.diff":
-          setStore("session_diff", event.properties.sessionID, event.properties.diff)
+          if (deletedSessions.has(event.properties.sessionID)) break
+          setStore("session_diff", event.properties.sessionID, reconcile(event.properties.diff))
           break
 
         case "session.deleted": {
-          const result = search(store.session, event.properties.info.id, (s) => s.id)
+          const sessionID = event.properties.info.id
+          rememberDeleted(deletedSessions, sessionID)
+          pendingDiffs.delete(sessionID)
+          fullSyncedSessions.delete(sessionID)
+          // Drop in-flight markers so a late resolution cannot re-add the session; the
+          // tombstone guard in sync() is the backstop.
+          syncingSessions.delete(sessionID)
+          hydratingSessions.delete(sessionID)
+          const messageIDs = (store.message[sessionID] ?? []).map((message) => message.id)
+          const result = search(store.session, sessionID, (s) => s.id)
           if (result.found) {
             setStore(
               "session",
@@ -280,9 +358,58 @@ export const {
               }),
             )
           }
+          setStore(
+            "message",
+            produce((draft) => {
+              delete draft[sessionID]
+            }),
+          )
+          setStore(
+            "todo",
+            produce((draft) => {
+              delete draft[sessionID]
+            }),
+          )
+          setStore(
+            "session_diff",
+            produce((draft) => {
+              delete draft[sessionID]
+            }),
+          )
+          setStore(
+            "session_status",
+            produce((draft) => {
+              delete draft[sessionID]
+            }),
+          )
+          setStore(
+            "permission",
+            produce((draft) => {
+              delete draft[sessionID]
+            }),
+          )
+          setStore(
+            "question",
+            produce((draft) => {
+              delete draft[sessionID]
+            }),
+          )
+          setStore(
+            "part",
+            produce((draft) => {
+              for (const messageID of messageIDs) delete draft[messageID]
+              // A part can arrive before its message, so sweep by session id too instead
+              // of leaking an orphan mirror that no known message id covers.
+              for (const messageID of Object.keys(draft)) {
+                if (draft[messageID]?.some((part) => part.sessionID === sessionID)) delete draft[messageID]
+              }
+            }),
+          )
           break
         }
         case "session.updated": {
+          // A genuinely re-created session clears the delete tombstone.
+          deletedSessions.delete(event.properties.info.id)
           const result = search(store.session, event.properties.info.id, (s) => s.id)
           if (result.found) {
             setStore("session", result.index, reconcile(event.properties.info))
@@ -314,11 +441,14 @@ export const {
         }
 
         case "session.status": {
-          setStore("session_status", event.properties.sessionID, event.properties.status)
+          if (deletedSessions.has(event.properties.sessionID)) break
+          setStore("session_status", event.properties.sessionID, reconcile(event.properties.status))
           break
         }
 
         case "message.updated": {
+          if (deletedSessions.has(event.properties.info.sessionID)) break
+          retirePendingDiff(event.properties.info.sessionID, event.properties.info.id)
           touchMessage(event.properties.info.sessionID, event.properties.info.id)
           const messages = store.message[event.properties.info.sessionID]
           if (!messages) {
@@ -358,10 +488,12 @@ export const {
           }
           break
         }
+
         case "message.removed": {
+          if (deletedSessions.has(event.properties.sessionID)) break
           touchMessage(event.properties.sessionID, event.properties.messageID)
           const messages = store.message[event.properties.sessionID]
-          const index = messages.findIndex((message) => message.id === event.properties.messageID)
+          const index = messages?.findIndex((message) => message.id === event.properties.messageID) ?? -1
           if (index !== -1) {
             setStore(
               "message",
@@ -374,6 +506,7 @@ export const {
           break
         }
         case "message.part.updated": {
+          if (deletedSessions.has(event.properties.part.sessionID)) break
           touchPart(event.properties.part.sessionID, event.properties.part.id)
           const parts = store.part[event.properties.part.messageID]
           if (!parts) {
@@ -396,6 +529,7 @@ export const {
         }
 
         case "message.part.delta": {
+          if (deletedSessions.has(event.properties.sessionID)) break
           const parts = store.part[event.properties.messageID]
           if (!parts) break
           const result = search(parts, event.properties.partID, (part) => part.id)
@@ -415,6 +549,7 @@ export const {
         }
 
         case "message.part.removed": {
+          if (deletedSessions.has(event.properties.sessionID)) break
           touchPart(event.properties.sessionID, event.properties.partID)
           const parts = store.part[event.properties.messageID]
           const result = search(parts, event.properties.partID, (part) => part.id)
@@ -444,12 +579,18 @@ export const {
         }
       }
     })
+    onCleanup(unsubscribeSyncEvent)
 
     const exit = useExit()
     const args = useArgs()
 
     async function bootstrap(input: { fatal?: boolean } = {}) {
       const fatal = input.fatal ?? true
+      fullSyncedSessions.clear()
+      // Buffered/in-flight state from before a restart must not merge into the fresh fetch.
+      pendingDiffs.clear()
+      syncingSessions.clear()
+      hydratingSessions.clear()
       const workspace = project.workspace.current()
       const projectPromise = project.sync()
       const sessionListPromise = projectPromise.then(() => listSessions())
@@ -592,7 +733,7 @@ export const {
           return last.time.completed ? "idle" : "working"
         },
         async sync(sessionID: string) {
-          if (fullSyncedSessions.has(sessionID)) return
+          if (fullSyncedSessions.has(sessionID) || deletedSessions.has(sessionID)) return
           const syncing = syncingSessions.get(sessionID)
           if (syncing) return syncing
           const tracker = { messages: new Set<string>(), parts: new Set<string>() }
@@ -604,6 +745,8 @@ export const {
               sdk.client.session.todo({ sessionID }),
               sdk.client.session.diff({ sessionID }),
             ])
+            // The session may have been deleted while these four requests were in flight.
+            if (deletedSessions.has(sessionID)) return
             setStore(
               produce((draft) => {
                 const match = search(draft.session, sessionID, (s) => s.id)
@@ -611,15 +754,15 @@ export const {
                 if (!match.found) draft.session.splice(match.index, 0, session.data!)
                 draft.todo[sessionID] = todo.data ?? []
                 const currentMessages = draft.message[sessionID] ?? []
+                const currentMessageByID = new Map(currentMessages.map((message) => [message.id, message]))
                 const infos = (messages.data ?? []).flatMap((message) => {
                   if (!tracker.messages.has(message.info.id)) return [message.info]
-                  const current = currentMessages.find((item) => item.id === message.info.id)
+                  const current = currentMessageByID.get(message.info.id)
                   return current ? [current] : []
                 })
+                const infoIDs = new Set(infos.map((message) => message.id))
                 infos.push(
-                  ...currentMessages.filter(
-                    (message) => tracker.messages.has(message.id) && !infos.some((item) => item.id === message.id),
-                  ),
+                  ...currentMessages.filter((message) => tracker.messages.has(message.id) && !infoIDs.has(message.id)),
                 )
                 infos.sort(compareMessage)
                 const removed = infos.slice(0, -100)
@@ -631,8 +774,9 @@ export const {
                     continue
                   }
                   const currentParts = draft.part[message.info.id] ?? []
+                  const currentPartByID = new Map(currentParts.map((part) => [part.id, part]))
                   const parts = message.parts.flatMap((part) => {
-                    const current = currentParts.find((item) => item.id === part.id)
+                    const current = currentPartByID.get(part.id)
                     if (tracker.parts.has(part.id)) return current ? [current] : []
                     if (
                       current &&
@@ -645,20 +789,28 @@ export const {
                     }
                     return [part]
                   })
-                  parts.push(
-                    ...currentParts.filter(
-                      (part) => tracker.parts.has(part.id) && !parts.some((item) => item.id === part.id),
-                    ),
-                  )
+                  const partIDs = new Set(parts.map((part) => part.id))
+                  parts.push(...currentParts.filter((part) => tracker.parts.has(part.id) && !partIDs.has(part.id)))
                   draft.part[message.info.id] = parts
                 }
                 for (const message of removed) delete draft.part[message.id]
+                const pending = pendingDiffs.get(sessionID)
+                if (pending) {
+                  visible.forEach((message, index) => {
+                    if (message.role !== "user") return
+                    const diffs = pending.get(message.id)
+                    if (!diffs) return
+                    visible[index] = { ...message, summary: { ...message.summary, diffs } }
+                  })
+                  pendingDiffs.delete(sessionID)
+                }
                 draft.message[sessionID] = visible
                 draft.session_diff[sessionID] = diff.data ?? []
               }),
             )
             fullSyncedSessions.add(sessionID)
           })().finally(() => {
+            pendingDiffs.delete(sessionID)
             syncingSessions.delete(sessionID)
             hydratingSessions.delete(sessionID)
           })
@@ -667,6 +819,11 @@ export const {
         },
       },
       bootstrap,
+    }
+    resyncOnDesync = () => {
+      fullSyncedSessions.clear()
+      void bootstrap({ fatal: false })
+      for (const sessionID of Object.keys(store.message)) void result.session.sync(sessionID)
     }
     return result
   },

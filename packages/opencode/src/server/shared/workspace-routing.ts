@@ -1,4 +1,5 @@
 import { SessionID } from "@/session/schema"
+import { Option, Schema } from "effect"
 
 type Rule = { method?: string; path: string; exact?: boolean; action: "local" | "forward" }
 
@@ -25,7 +26,10 @@ export function getWorkspaceRouteSessionID(url: URL) {
     url.pathname.match(/^\/experimental\/session\/([^/]+)\/background$/)?.[1]
   if (!id) return null
 
-  return SessionID.make(id)
+  // A non-session path segment must not throw in SessionID.make; let the
+  // endpoint's declared param decoder reject it instead of a defect 500.
+  const decoded = Schema.decodeUnknownOption(SessionID)(id)
+  return Option.isSome(decoded) ? decoded.value : null
 }
 
 export function workspaceProxyURL(target: string | URL, requestURL: URL) {
@@ -41,5 +45,18 @@ export function workspaceProxyURL(target: string | URL, requestURL: URL) {
   // crashes prompt handling. Drop it so the remote falls back to its own
   // project root. This mirrors ProxyUtil.headers stripping `x-opencode-directory`.
   proxyURL.searchParams.delete("directory")
+  // Never forward the host's query credential to the sandbox target.
+  proxyURL.searchParams.delete("auth_token")
   return proxyURL
+}
+
+// `auth_token` carries a Basic credential, so strip it before a URL reaches logs.
+export function redactAuthToken(url: string) {
+  try {
+    const parsed = new URL(url)
+    if (parsed.searchParams.has("auth_token")) parsed.searchParams.set("auth_token", "[redacted]")
+    return parsed.toString()
+  } catch {
+    return url
+  }
 }

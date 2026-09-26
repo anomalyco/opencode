@@ -1,5 +1,5 @@
-import { beforeEach, describe, expect } from "bun:test"
-import { Effect, Exit, Layer, Option } from "effect"
+import { beforeEach, describe, expect, test } from "bun:test"
+import { Effect, Exit, Layer, Logger, Option } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
@@ -10,8 +10,12 @@ import { AccessToken, AccountID, OrgID, RefreshToken } from "../../src/account/s
 import { AccountRepo } from "../../src/account/repo"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { Session } from "@/session/session"
+import { MessageID } from "../../src/session/schema"
 import type { SessionID } from "../../src/session/schema"
-import { ShareNext } from "@/share/share-next"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { ShareNext, boundQueueMaps, rememberRemoval, reportRemovalEviction, trimQueue } from "@/share/share-next"
 import { SessionShareTable } from "@opencode-ai/core/share/sql"
 import { Database } from "@opencode-ai/core/database/database"
 import { eq } from "drizzle-orm"
@@ -321,4 +325,395 @@ describe("ShareNext", () => {
       { config: { enterprise: { url: "https://legacy-share.example.com" } } },
     ),
   )
+
+  it.live("ShareNext forwards a dedicated turn diff event as a hydrated message", () =>
+    provideTmpdirInstance(
+      () => {
+        const seen: string[] = []
+        const client = HttpClient.make((req) => {
+          if (req.url.endsWith("/sync") && req.body._tag === "Uint8Array") {
+            seen.push(new TextDecoder().decode(req.body.body))
+          }
+          return Effect.succeed(json(req, { ok: true }))
+        })
+
+        return Effect.gen(function* () {
+          const events = yield* EventV2Bridge.Service
+          const share = yield* ShareNext.Service
+          const session = yield* Session.Service
+          const info = yield* session.create({ title: "shared-diff" })
+          yield* share.init()
+          yield* Effect.sleep(50)
+          const { db } = yield* Database.Service
+          yield* db
+            .insert(SessionShareTable)
+            .values({
+              session_id: info.id,
+              id: "shr_diff",
+              url: "https://legacy-share.example.com/share/diff",
+              secret: "sec_diff",
+            })
+            .run()
+            .pipe(Effect.orDie)
+
+          const messageID = MessageID.ascending()
+          yield* session.updateMessage({
+            id: messageID,
+            sessionID: info.id,
+            role: "user",
+            time: { created: Date.now() },
+            agent: "build",
+            model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("model") },
+          } satisfies SessionV1.User)
+          yield* events.publish(Session.Event.MessageDiffUpdated, {
+            sessionID: info.id,
+            messageID,
+            diffs: [{ file: "shared.ts", additions: 1, deletions: 0, status: "modified", patch: "SHARED-DIFF-PATCH" }],
+          })
+          yield* pollWithTimeout(
+            Effect.sync(() => (seen.length >= 1 ? true : undefined)),
+            "timed out waiting for share sync",
+            "5 seconds",
+          )
+
+          expect(seen.join(" ")).toContain("SHARED-DIFF-PATCH")
+        }).pipe(Effect.provide(integrationLayer(client)))
+      },
+      { config: { enterprise: { url: "https://legacy-share.example.com" } } },
+    ),
+  )
+
+  it.live("remove clears the local share even when the DELETE fails", () =>
+    provideTmpdirInstance(
+      () => {
+        const client = HttpClient.make((req) => {
+          if (req.method === "POST") {
+            return Effect.succeed(
+              json(req, {
+                id: "shr_abc",
+                url: "https://legacy-share.example.com/share/abc",
+                secret: "sec_123",
+              }),
+            )
+          }
+          return Effect.succeed(json(req, { error: "boom" }, 500))
+        })
+        return Effect.gen(function* () {
+          const session = yield* (yield* Session.Service).create({ title: "test" })
+          const service = yield* ShareNext.Service
+
+          yield* service.create(session.id)
+          yield* service.remove(session.id)
+
+          expect(yield* share(session.id)).toBeUndefined()
+        }).pipe(Effect.provide(integrationLayer(client)))
+      },
+      { config: { enterprise: { url: "https://legacy-share.example.com" } } },
+    ),
+  )
+
+  it.live("create pages a large session into bounded sync payloads", () =>
+    provideTmpdirInstance(
+      () => {
+        const syncBodies: string[] = []
+        const client = HttpClient.make((req) => {
+          if (req.method === "POST" && req.url.endsWith("/sync")) {
+            if (req.body._tag === "Uint8Array") syncBodies.push(new TextDecoder().decode(req.body.body))
+            return Effect.succeed(json(req, { ok: true }))
+          }
+          if (req.method === "POST") {
+            return Effect.succeed(
+              json(req, {
+                id: "shr_big",
+                url: "https://legacy-share.example.com/share/big",
+                secret: "sec_big",
+              }),
+            )
+          }
+          return Effect.succeed(json(req, { ok: true }))
+        })
+        return Effect.gen(function* () {
+          const sessions = yield* Session.Service
+          const session = yield* sessions.create({ title: "big" })
+          for (let index = 0; index < 60; index++) {
+            yield* sessions.updateMessage({
+              id: MessageID.ascending(),
+              sessionID: session.id,
+              role: "user",
+              time: { created: Date.now() },
+              agent: "build",
+              model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("model") },
+            } satisfies SessionV1.User)
+          }
+
+          yield* (yield* ShareNext.Service).create(session.id)
+          yield* pollWithTimeout(
+            Effect.sync(() => (syncBodies.length >= 2 ? true : undefined)),
+            "timed out waiting for paged full sync",
+            "10 seconds",
+          )
+
+          for (const body of syncBodies) {
+            const parsed = JSON.parse(body) as { data: unknown[] }
+            expect(parsed.data.length).toBeLessThanOrEqual(2000)
+          }
+        }).pipe(Effect.provide(integrationLayer(client)))
+      },
+      { config: { enterprise: { url: "https://legacy-share.example.com" } } },
+    ),
+  )
+
+  it.live("ShareNext requeues a failed sync batch and retries it", () =>
+    provideTmpdirInstance(
+      () => {
+        const bodies: string[] = []
+        let status = 500
+        const client = HttpClient.make((req) => {
+          if (req.url.endsWith("/sync") && req.body._tag === "Uint8Array") {
+            bodies.push(new TextDecoder().decode(req.body.body))
+            const code = status
+            status = 200
+            return Effect.succeed(json(req, { ok: true }, code))
+          }
+          return Effect.succeed(json(req, { ok: true }))
+        })
+
+        return Effect.gen(function* () {
+          const events = yield* EventV2Bridge.Service
+          const share = yield* ShareNext.Service
+          const session = yield* Session.Service
+
+          const info = yield* session.create({ title: "retry" })
+          yield* share.init()
+          yield* Effect.sleep(50)
+          const { db } = yield* Database.Service
+          yield* db
+            .insert(SessionShareTable)
+            .values({
+              session_id: info.id,
+              id: "shr_retry",
+              url: "https://legacy-share.example.com/share/retry",
+              secret: "sec_retry",
+            })
+            .run()
+            .pipe(Effect.orDie)
+
+          yield* events.publish(Session.Event.Diff, {
+            sessionID: info.id,
+            diff: [{ file: "retry.ts", patch: "RETRY-PATCH", additions: 1, deletions: 0, status: "modified" }],
+          })
+          yield* pollWithTimeout(
+            Effect.sync(() => (bodies.length >= 2 ? true : undefined)),
+            "timed out waiting for share retry",
+            "10 seconds",
+          )
+
+          expect(bodies).toHaveLength(2)
+          expect(bodies[1]).toContain("RETRY-PATCH")
+        }).pipe(Effect.provide(integrationLayer(client)))
+      },
+      { config: { enterprise: { url: "https://legacy-share.example.com" } } },
+    ),
+  )
+
+  it.live("retries a failed remote unshare on a later sync from another session", () =>
+    provideTmpdirInstance(
+      () => {
+        const deletes: string[] = []
+        const client = HttpClient.make((req) => {
+          if (req.method === "DELETE") {
+            deletes.push(req.url)
+            return Effect.succeed(json(req, { error: "boom" }, 500))
+          }
+          return Effect.succeed(json(req, { ok: true }))
+        })
+        return Effect.gen(function* () {
+          const events = yield* EventV2Bridge.Service
+          const share = yield* ShareNext.Service
+          const session = yield* Session.Service
+          const first = yield* session.create({ title: "first" })
+          const second = yield* session.create({ title: "second" })
+          yield* share.init()
+          yield* Effect.sleep(50)
+          const { db } = yield* Database.Service
+          yield* db
+            .insert(SessionShareTable)
+            .values([
+              { session_id: first.id, id: "shr_first", url: "https://x/first", secret: "sec_first" },
+              { session_id: second.id, id: "shr_second", url: "https://x/second", secret: "sec_second" },
+            ])
+            .run()
+            .pipe(Effect.orDie)
+
+          yield* share.remove(first.id)
+          expect(deletes).toEqual(["https://legacy-share.example.com/api/share/shr_first"])
+
+          yield* events.publish(Session.Event.Diff, {
+            sessionID: second.id,
+            diff: [{ file: "x.ts", patch: "P", additions: 1, deletions: 0, status: "modified" }],
+          })
+          yield* pollWithTimeout(
+            Effect.sync(() => (deletes.length >= 2 ? true : undefined)),
+            "timed out waiting for the remote unshare retry",
+            "5 seconds",
+          )
+
+          expect(deletes).toEqual([
+            "https://legacy-share.example.com/api/share/shr_first",
+            "https://legacy-share.example.com/api/share/shr_first",
+          ])
+        }).pipe(Effect.provide(integrationLayer(client)))
+      },
+      { config: { enterprise: { url: "https://legacy-share.example.com" } } },
+    ),
+  )
+})
+
+describe("ShareNext.boundQueueMaps", () => {
+  const id = (value: string) => value as SessionID
+  const share = (value: string) => ({ id: value, url: value, secret: value })
+
+  test("caps both maps even when every queued session is also shared", () => {
+    const queue = new Map<SessionID, Map<string, { type: string }>>()
+    const shared = new Map<SessionID, ReturnType<typeof share>>()
+    for (let index = 0; index < 300; index++) {
+      queue.set(id(`ses_${index}`), new Map([["session", { type: "session" }]]))
+      shared.set(id(`ses_${index}`), share(`shr_${index}`))
+    }
+
+    const dropped = boundQueueMaps(
+      queue,
+      shared,
+      { inflight: new Set<SessionID>(), scheduled: new Set<SessionID>(), removals: new Map() },
+      10,
+      10,
+    )
+
+    expect(dropped).toEqual({ queuedDropped: 290, sharedDropped: 290 })
+    expect(queue.size).toBe(10)
+    expect(shared.size).toBe(10)
+    expect(queue.has(id("ses_299"))).toBe(true)
+    expect(queue.has(id("ses_0"))).toBe(false)
+    expect(shared.has(id("ses_299"))).toBe(true)
+    expect(shared.has(id("ses_0"))).toBe(false)
+  })
+
+  test("skips sessions with in-flight work so a bound never tears down an active flush", () => {
+    const queue = new Map<SessionID, Map<string, { type: string }>>()
+    const shared = new Map<SessionID, ReturnType<typeof share>>()
+    for (let index = 0; index < 20; index++) {
+      queue.set(id(`ses_${index}`), new Map([["session", { type: "session" }]]))
+      shared.set(id(`ses_${index}`), share(`shr_${index}`))
+    }
+    const scheduled = new Set([id("ses_0"), id("ses_1")])
+
+    boundQueueMaps(queue, shared, { inflight: new Set(), scheduled, removals: new Map() }, 10, 10)
+
+    expect(queue.size).toBe(10)
+    expect(queue.has(id("ses_0"))).toBe(true)
+    expect(queue.has(id("ses_1"))).toBe(true)
+    expect(queue.has(id("ses_2"))).toBe(false)
+  })
+})
+
+describe("ShareNext.rememberRemoval", () => {
+  const id = (value: string) => value as SessionID
+  const share = (value: string) => ({ id: value, url: value, secret: value })
+
+  test("bounds the pending removals and reports the oldest evictions", () => {
+    const removals = new Map<SessionID, ReturnType<typeof share>>()
+    let evicted: SessionID[] = []
+    for (let index = 0; index < 5; index++) {
+      evicted = rememberRemoval(removals, id(`ses_${index}`), share(`shr_${index}`), 3)
+    }
+
+    expect([...removals.keys()].map(String)).toEqual(["ses_2", "ses_3", "ses_4"])
+    expect(evicted.map(String)).toEqual(["ses_1"])
+  })
+
+  test("moves a re-remembered session to the newest position", () => {
+    const removals = new Map<SessionID, ReturnType<typeof share>>()
+    rememberRemoval(removals, id("ses_a"), share("shr_a"), 2)
+    rememberRemoval(removals, id("ses_b"), share("shr_b"), 2)
+    const evicted = rememberRemoval(removals, id("ses_a"), share("shr_a2"), 2)
+
+    expect(evicted.map(String)).toEqual([])
+    expect([...removals.keys()].map(String)).toEqual(["ses_b", "ses_a"])
+  })
+
+  test("warns with the dropped session names when the cap evicts", async () => {
+    const messages: unknown[] = []
+    await Effect.runPromise(
+      reportRemovalEviction([id("ses_old")]).pipe(
+        Effect.provide(
+          Logger.layer([
+            Logger.make<unknown, void>((options) => {
+              messages.push(options.message)
+            }),
+          ]),
+        ),
+      ),
+    )
+
+    expect(messages).toEqual([
+      ["share removal tombstones capped; oldest pending remote deletes dropped", { dropped: 1, sessionIDs: ["ses_old"] }],
+    ])
+  })
+
+  test("stays silent when nothing is evicted", async () => {
+    const messages: unknown[] = []
+    await Effect.runPromise(
+      reportRemovalEviction([]).pipe(
+        Effect.provide(
+          Logger.layer([
+            Logger.make<unknown, void>((options) => {
+              messages.push(options.message)
+            }),
+          ]),
+        ),
+      ),
+    )
+
+    expect(messages).toEqual([])
+  })
+})
+
+describe("ShareNext.trimQueue", () => {
+  test("caps the queue and drops the oldest part entries first", () => {
+    const queue = new Map<string, { type: string }>()
+    queue.set("session", { type: "session" })
+    queue.set("session_diff", { type: "session_diff" })
+    for (let index = 0; index < 2100; index++) queue.set(`part/message/p${index}`, { type: "part" })
+
+    expect(trimQueue(queue)).toBe(102)
+    expect(queue.size).toBe(2000)
+    expect(queue.has("session")).toBe(true)
+    expect(queue.has("session_diff")).toBe(true)
+    expect(queue.has("part/message/p101")).toBe(false)
+    expect(queue.has("part/message/p102")).toBe(true)
+    expect(queue.has("part/message/p2099")).toBe(true)
+  })
+
+  test("leaves a queue at or below the cap untouched", () => {
+    const queue = new Map<string, { type: string }>([["session", { type: "session" }]])
+    expect(trimQueue(queue)).toBe(0)
+    expect(queue.size).toBe(1)
+  })
+
+  test("drops the oldest message parts when full() inserts pages newest-first", () => {
+    const queue = new Map<string, { type: string }>()
+    queue.set("session", { type: "session" })
+    // ShareNext.full() inserts the newest page first, so the oldest message ids land last.
+    for (let message = 20; message >= 0; message--) {
+      for (let part = 0; part < 100; part++) {
+        queue.set(`part/msg_${String(message).padStart(4, "0")}/p${part}`, { type: "part" })
+      }
+    }
+
+    expect(trimQueue(queue)).toBe(101)
+    expect(queue.size).toBe(2000)
+    expect(queue.has("session")).toBe(true)
+    expect(queue.has("part/msg_0000/p0")).toBe(false)
+    expect(queue.has("part/msg_0020/p99")).toBe(true)
+  })
 })

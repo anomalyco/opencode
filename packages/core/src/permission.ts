@@ -1,7 +1,7 @@
 export * as PermissionV2 from "./permission"
 
 import { makeLocationNode } from "./effect/app-node"
-import { Context, Deferred, Effect as EffectRuntime, Layer, Schema } from "effect"
+import { Context, Deferred, Duration, Effect as EffectRuntime, Exit, Layer, Schedule, Schema } from "effect"
 import { Permission } from "@opencode-ai/schema/permission"
 import { EventV2 } from "./event"
 import { Location } from "./location"
@@ -104,7 +104,14 @@ interface Pending {
   readonly request: Request
   readonly agent?: AgentV2.ID
   readonly deferred: Deferred.Deferred<void, DeclinedError | CorrectedError>
+  readonly createdAt: number
+  // True for fire-and-forget `ask` entries: nothing awaits the deferred, so an unanswered
+  // request can be reaped without affecting a caller.
+  readonly detached: boolean
 }
+
+const PENDING_TTL_MS = 15 * 60_000
+const PENDING_SWEEP_INTERVAL = Schedule.spaced(Duration.millis(PENDING_TTL_MS / 15))
 
 const layer = Layer.effect(
   Service,
@@ -117,7 +124,7 @@ const layer = Layer.effect(
     const pending = new Map<ID, Pending>()
 
     yield* EffectRuntime.addFinalizer(() =>
-      EffectRuntime.forEach(pending.values(), (item) => Deferred.fail(item.deferred, new DeclinedError()), {
+      EffectRuntime.forEach(Array.from(pending.values()), (item) => Deferred.fail(item.deferred, new DeclinedError()), {
         discard: true,
       }).pipe(
         EffectRuntime.ensuring(
@@ -127,6 +134,17 @@ const layer = Layer.effect(
         ),
       ),
     )
+
+    const sweepDetached = EffectRuntime.fnUntraced(function* () {
+      const now = Date.now()
+      for (const [id, item] of Array.from(pending.entries())) {
+        if (!item.detached) continue
+        if (now - item.createdAt < PENDING_TTL_MS) continue
+        pending.delete(id)
+        yield* Deferred.fail(item.deferred, new DeclinedError())
+      }
+    })
+    yield* EffectRuntime.forkScoped(sweepDetached().pipe(EffectRuntime.repeat(PENDING_SWEEP_INTERVAL)))
 
     const savedRules = EffectRuntime.fnUntraced(function* () {
       return (yield* saved.list({ projectID: location.project.id })).map(
@@ -173,16 +191,22 @@ const layer = Layer.effect(
       }
     }
 
-    const create = (request: Request, agent?: AgentV2.ID) =>
+    const create = (request: Request, agent?: AgentV2.ID, detached = false) =>
       EffectRuntime.uninterruptible(
         EffectRuntime.gen(function* () {
           const deferred = yield* Deferred.make<void, DeclinedError | CorrectedError>()
-          const item = { request, agent, deferred }
+          const item = { request, agent, deferred, createdAt: Date.now(), detached }
           if (pending.has(request.id)) return yield* EffectRuntime.die(`Duplicate pending permission ID: ${request.id}`)
           pending.set(request.id, item)
-          yield* events
-            .publish(Event.Asked, request)
-            .pipe(EffectRuntime.onError(() => EffectRuntime.sync(() => pending.delete(request.id))))
+          yield* events.publish(Event.Asked, request).pipe(
+            EffectRuntime.onExit((exit) =>
+              Exit.isFailure(exit)
+                ? EffectRuntime.sync(() => {
+                    pending.delete(request.id)
+                  })
+                : EffectRuntime.void,
+            ),
+          )
           return item
         }),
       )
@@ -190,7 +214,7 @@ const layer = Layer.effect(
     const ask = EffectRuntime.fn("PermissionV2.ask")(function* (input: AssertInput) {
       const result = yield* evaluateInput(input)
       const value = request(input)
-      if (result.effect === "ask") yield* create(value, input.agent)
+      if (result.effect === "ask") yield* create(value, input.agent, true)
       return { id: value.id, effect: result.effect }
     })
 
@@ -234,7 +258,7 @@ const layer = Layer.effect(
               input.message ? new CorrectedError({ feedback: input.message }) : new DeclinedError(),
             )
             pending.delete(input.requestID)
-            for (const [id, item] of pending) {
+            for (const [id, item] of Array.from(pending.entries())) {
               if (item.request.sessionID !== existing.request.sessionID) continue
               yield* events.publish(Event.Replied, {
                 sessionID: item.request.sessionID,
@@ -259,7 +283,7 @@ const layer = Layer.effect(
           if (input.reply !== "always" || !existing.request.save?.length) return
 
           const rememberedRules = yield* savedRules()
-          for (const [id, item] of pending) {
+          for (const [id, item] of Array.from(pending.entries())) {
             const input = { ...item.request }
             const rules = yield* configured(item.request.sessionID, item.agent).pipe(
               EffectRuntime.catchTag("Session.NotFoundError", () => EffectRuntime.succeed(undefined)),

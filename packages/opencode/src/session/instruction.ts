@@ -72,6 +72,7 @@ const layer: Layer.Layer<
         Effect.succeed({
           // Track which instruction files have already been attached for a given assistant message.
           claims: new Map<MessageID, Set<string>>(),
+          systemPaths: undefined as { config: unknown; paths: Set<string> } | undefined,
         }),
       ),
     )
@@ -109,6 +110,9 @@ const layer: Layer.Layer<
 
     const systemPaths = Effect.fn("Instruction.systemPaths")(function* () {
       const config = yield* cfg.get()
+      const s = yield* InstanceState.get(state)
+      if (s.systemPaths?.config === config) return s.systemPaths.paths
+
       const ctx = yield* InstanceState.context
       const paths = new Set<string>()
 
@@ -149,6 +153,7 @@ const layer: Layer.Layer<
         }
       }
 
+      s.systemPaths = { config, paths }
       return paths
     })
 

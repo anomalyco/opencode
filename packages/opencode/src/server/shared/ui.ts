@@ -1,5 +1,5 @@
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import { Effect, Stream } from "effect"
+import { Cause, Effect, Stream } from "effect"
 import { HttpBody, HttpClient, HttpClientRequest, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { createHash } from "node:crypto"
 import { ProxyUtil } from "../proxy-util"
@@ -52,13 +52,24 @@ function notFound() {
   return HttpServerResponse.jsonUnsafe({ error: "Not Found" }, { status: 404 })
 }
 
-function embeddedUIResponse(file: string, body: Uint8Array) {
+type EmbeddedUIAsset = { readonly body: Uint8Array; readonly csp: string | undefined }
+
+// Embedded assets are build-time immutable, so decode + CSP hash once per path instead of on
+// every request. Invalidation is unnecessary because the manifest is memoized with the build.
+const embeddedUIAssets = new Map<string, EmbeddedUIAsset>()
+
+function buildEmbeddedUIAsset(file: string, body: Uint8Array): EmbeddedUIAsset {
   const mime = FSUtil.mimeType(file)
-  const headers = new Headers({ "content-type": mime })
-  if (mime.startsWith("text/html")) {
-    headers.set("content-security-policy", cspForHtml(new TextDecoder().decode(body)))
+  return {
+    body,
+    csp: mime.startsWith("text/html") ? cspForHtml(new TextDecoder().decode(body)) : undefined,
   }
-  return HttpServerResponse.raw(body, { headers })
+}
+
+function embeddedUIResponse(file: string, asset: EmbeddedUIAsset) {
+  const headers = new Headers({ "content-type": FSUtil.mimeType(file) })
+  if (asset.csp !== undefined) headers.set("content-security-policy", asset.csp)
+  return HttpServerResponse.raw(asset.body, { headers })
 }
 
 export function serveEmbeddedUIEffect(
@@ -69,8 +80,15 @@ export function serveEmbeddedUIEffect(
   const file = embeddedWebUI[requestPath.replace(/^\//, "")] ?? embeddedWebUI["index.html"] ?? null
   if (!file) return Effect.succeed(notFound())
 
+  const cached = embeddedUIAssets.get(file)
+  if (cached) return Effect.succeed(embeddedUIResponse(file, cached))
+
   return fs.readFile(file).pipe(
-    Effect.map((body) => embeddedUIResponse(file, body)),
+    Effect.map((body) => {
+      const asset = buildEmbeddedUIAsset(file, body)
+      embeddedUIAssets.set(file, asset)
+      return embeddedUIResponse(file, asset)
+    }),
     Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(notFound())),
   )
 }
@@ -100,9 +118,18 @@ export function serveUIEffect(
     }
 
     headers.set("Content-Security-Policy", csp())
-    return HttpServerResponse.stream(response.stream.pipe(Stream.catchCause(() => Stream.empty)), {
-      status: response.status,
-      headers,
-    })
+    return HttpServerResponse.stream(
+      response.stream.pipe(
+        Stream.catchCause((cause) =>
+          Stream.fromEffect(
+            Effect.logWarning("ui proxy stream interrupted", { path, cause: Cause.pretty(cause) }),
+          ).pipe(Stream.drain, Stream.concat(Stream.failCause(cause))),
+        ),
+      ),
+      {
+        status: response.status,
+        headers,
+      },
+    )
   })
 }

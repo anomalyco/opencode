@@ -23,21 +23,39 @@ export const assertExternalDirectoryEffect = Effect.fn("Tool.assertExternalDirec
 
   const ins = yield* InstanceState.context
   const full = process.platform === "win32" ? FSUtil.normalizePath(target) : target
-  if (containsPath(full, ins)) return false
+  // Lexical containment is not enough: a symlink inside the worktree can point
+  // outside it (e.g. `vendor/x -> /etc`). Require both the lexical path and its
+  // symlink-resolved target to stay inside before skipping the prompt.
+  const resolved = FSUtil.resolveExisting(full)
+  if (containsPath(full, ins) && containsPath(resolved, ins)) return false
 
+  // The persisted `always` grant is keyed on the *resolved* target: keying it
+  // lexically would let a later symlink swap (`vendor -> /etc`) reuse a
+  // `vendor/*` grant on `/etc/*` without re-prompting. The request `patterns`
+  // stay on the user-visible lexical path so a pre-approved config rule written
+  // against an alias/symlink path (macOS `/tmp` -> `/private/tmp`, vendored
+  // worktree aliases) still matches. `Permission.ask` requires *every* pattern to
+  // be allowed, so adding the resolved form here would force a prompt even when
+  // the lexical rule is allowed; the resolved target is surfaced through
+  // `metadata` instead. Trade-off: an interactively-approved symlink alias
+  // re-prompts on each call (its cached grant is the resolved path), which is the
+  // conservative direction.
   const kind = options?.kind ?? "file"
-  const dir = kind === "directory" ? full : path.dirname(full)
-  const glob =
+  const targetDir = (p: string) => (kind === "directory" ? p : path.dirname(p))
+  const toGlob = (p: string) =>
     process.platform === "win32"
-      ? FSUtil.normalizePathPattern(path.join(dir, "*"))
-      : path.join(dir, "*").replaceAll("\\", "/")
+      ? FSUtil.normalizePathPattern(path.join(p, "*"))
+      : path.join(p, "*").replaceAll("\\", "/")
+  const dir = targetDir(resolved)
+  const resolvedGlob = toGlob(dir)
+  const lexicalGlob = toGlob(targetDir(full))
 
   yield* ctx.ask({
     permission: "external_directory",
-    patterns: [glob],
-    always: [glob],
+    patterns: [lexicalGlob],
+    always: [resolvedGlob],
     metadata: {
-      filepath: full,
+      filepath: resolved,
       parentDir: dir,
     },
   })

@@ -40,6 +40,7 @@ const lsp = Layer.succeed(
     hasClients: () => Effect.succeed(true),
     touchFile: () => Effect.void,
     diagnostics: () => Effect.succeed({}),
+    diagnosticsFor: () => Effect.succeed([]),
     hover: () => Effect.succeed([]),
     definition: () => Effect.succeed([]),
     references: () => Effect.succeed([]),

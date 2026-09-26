@@ -30,9 +30,8 @@ export const ripgrepLayer = Layer.effect(
     const scope = yield* Scope.Scope
     const state = {
       files: [] as string[],
-      directories: [] as string[],
+      directories: new Set<string>(),
     }
-    const directories = new Set<string>()
     yield* ripgrep
       .find({
         cwd: location.directory,
@@ -41,9 +40,12 @@ export const ripgrepLayer = Layer.effect(
         onEntry: (entry) =>
           Effect.sync(() => {
             state.files.push(entry.path)
-            const parts = entry.path.split("/")
-            parts.slice(0, -1).forEach((_, index) => directories.add(parts.slice(0, index + 1).join("/") + path.sep))
-            state.directories = Array.from(directories)
+            // Directories accumulate in place; rebuilding the array per entry made this O(files * directories).
+            let prefix = ""
+            for (const part of entry.path.split("/").slice(0, -1)) {
+              prefix = prefix ? `${prefix}/${part}` : part
+              state.directories.add(prefix + path.sep)
+            }
           }),
       })
       .pipe(Effect.orDie, Effect.asVoid, Effect.forkIn(scope))
@@ -105,7 +107,7 @@ export const ripgrepLayer = Layer.effect(
             input.type === "file"
               ? state.files
               : input.type === "directory"
-                ? state.directories
+                ? [...state.directories]
                 : [...state.files, ...state.directories]
           return fuzzysort.go(input.query, items, { limit: input.limit ?? 50 }).map((item) => {
             const relative = item.target

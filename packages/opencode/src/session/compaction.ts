@@ -11,6 +11,7 @@ import { Agent } from "@/agent/agent"
 import { Plugin } from "@/plugin"
 import { Config } from "@/config/config"
 import { NotFoundError } from "@/storage/storage"
+import { Database } from "@opencode-ai/core/database/database"
 
 import { Effect, Layer, Context } from "effect"
 import { InstanceState } from "@/effect/instance-state"
@@ -27,7 +28,7 @@ export const Event = SessionCompactionEvent
 
 export const PRUNE_MINIMUM = 20_000
 export const PRUNE_PROTECT = 40_000
-const TOOL_OUTPUT_MAX_CHARS = 2_000
+export const TOOL_OUTPUT_MAX_CHARS = 2_000
 const PRUNE_PROTECTED_TOOLS = ["skill"]
 const MIN_PRESERVE_RECENT_TOKENS = 2_000
 const MAX_PRESERVE_RECENT_TOKENS = 15_000
@@ -199,6 +200,7 @@ const layer = Layer.effect(
     const provider = yield* Provider.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
+    const database = yield* Database.Service
 
     const isOverflow = Effect.fn("SessionCompaction.isOverflow")(function* (input: {
       tokens: SessionV1.Assistant["tokens"]
@@ -216,7 +218,9 @@ const layer = Layer.effect(
       messages: SessionV1.WithParts[]
       model: Provider.Model
     }) {
-      const msgs = yield* MessageV2.toModelMessagesEffect(input.messages, input.model)
+      const msgs = yield* MessageV2.toModelMessagesEffect(input.messages, input.model, {
+        toolOutputMaxChars: TOOL_OUTPUT_MAX_CHARS,
+      })
       return Token.estimate(JSON.stringify(msgs))
     })
 
@@ -275,33 +279,48 @@ const layer = Layer.effect(
       if (!cfg.compaction?.prune) return
       yield* Effect.logInfo("pruning")
 
-      const msgs = yield* session
-        .messages({ sessionID: input.sessionID })
-        .pipe(Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed(undefined)))
-      if (!msgs) return
-
+      // Scan newest-first page by page and stop at the second user turn (or the first
+      // compaction summary) instead of hydrating the whole session to walk back ~2 turns.
+      const size = 50
+      let before: string | undefined
       let total = 0
       let pruned = 0
       const toPrune: SessionV1.ToolPart[] = []
       let turns = 0
+      let stop = false
 
-      loop: for (let msgIndex = msgs.length - 1; msgIndex >= 0; msgIndex--) {
-        const msg = msgs[msgIndex]
-        if (msg.info.role === "user") turns++
-        if (turns < 2) continue
-        if (msg.info.role === "assistant" && msg.info.summary) break loop
-        for (let partIndex = msg.parts.length - 1; partIndex >= 0; partIndex--) {
-          const part = msg.parts[partIndex]
-          if (part.type !== "tool") continue
-          if (part.state.status !== "completed") continue
-          if (PRUNE_PROTECTED_TOOLS.includes(part.tool)) continue
-          if (part.state.time.compacted) break loop
-          const estimate = Token.estimate(part.state.output)
-          total += estimate
-          if (total <= PRUNE_PROTECT) continue
-          pruned += estimate
-          toPrune.push(part)
+      while (!stop) {
+        const next = yield* MessageV2.page({ sessionID: input.sessionID, limit: size, before }).pipe(
+          Effect.provideService(Database.Service, database),
+          Effect.catchIf(NotFoundError.isInstance, () => Effect.succeed(undefined)),
+        )
+        if (!next) return
+        for (let msgIndex = next.items.length - 1; msgIndex >= 0 && !stop; msgIndex--) {
+          const msg = next.items[msgIndex]!
+          if (msg.info.role === "user") turns++
+          if (turns < 2) continue
+          if (msg.info.role === "assistant" && msg.info.summary) {
+            stop = true
+            break
+          }
+          for (let partIndex = msg.parts.length - 1; partIndex >= 0; partIndex--) {
+            const part = msg.parts[partIndex]!
+            if (part.type !== "tool") continue
+            if (part.state.status !== "completed") continue
+            if (PRUNE_PROTECTED_TOOLS.includes(part.tool)) continue
+            if (part.state.time.compacted) {
+              stop = true
+              break
+            }
+            const estimate = Token.estimate(part.state.output)
+            total += estimate
+            if (total <= PRUNE_PROTECT) continue
+            pruned += estimate
+            toPrune.push(part)
+          }
         }
+        if (!next.more || !next.cursor) break
+        before = next.cursor
       }
 
       yield* Effect.logInfo("found", { pruned, total })
@@ -602,6 +621,7 @@ export const node = LayerNode.make({
     Provider.node,
     EventV2Bridge.node,
     RuntimeFlags.node,
+    Database.node,
   ],
 })
 

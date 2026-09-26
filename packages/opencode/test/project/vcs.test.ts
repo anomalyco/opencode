@@ -237,6 +237,30 @@ describe("Vcs diff", () => {
   )
 
   it.instance(
+    "diff('git') bounds the requested context so a file is emitted once",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const lines = Array.from({ length: 400 }, (_, index) => `line ${index}`)
+        yield* write(path.join(test.directory, "spread.txt"), lines.join("\n") + "\n")
+        yield* git(test.directory, ["add", "."])
+        yield* git(test.directory, ["commit", "--no-gpg-sign", "-m", "add spread"])
+        lines[0] = "changed top"
+        lines[399] = "changed bottom"
+        yield* write(path.join(test.directory, "spread.txt"), lines.join("\n") + "\n")
+
+        const vcs = yield* init()
+        const diff = yield* vcs.diff("git", { context: 2_147_483_647 })
+        const file = diff.find((item) => item.file === "spread.txt")
+
+        expect(file?.patch).toBeDefined()
+        expect(file?.patch?.match(/diff --git /g) ?? []).toHaveLength(1)
+        expect(file?.patch?.match(/^@@ /gm) ?? []).toHaveLength(1)
+      }),
+    { git: true },
+  )
+
+  it.instance(
     "diff('git') handles special filenames",
     () =>
       Effect.gen(function* () {

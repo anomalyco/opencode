@@ -601,6 +601,15 @@ const events = {
       info: Info,
     },
   }),
+  MessageDiffUpdated: define({
+    type: "message.diff.updated",
+    ...options,
+    schema: {
+      sessionID: SessionID,
+      messageID: MessageID,
+      diffs: Schema.Array(FileDiff.Info),
+    },
+  }),
   MessageRemoved: define({
     type: "message.removed",
     ...options,
@@ -666,6 +675,7 @@ export const Event = {
     events.Updated,
     events.Deleted,
     events.MessageUpdated,
+    events.MessageDiffUpdated,
     events.MessageRemoved,
     events.PartUpdated,
     events.PartRemoved,
