@@ -19,7 +19,7 @@ import { formatServerError } from "./errors"
 import { useSettings } from "@/settings/model"
 import { timelinePreset } from "@opencode/session-ui/timeline/detail"
 import type { SessionInfo } from "@opencode/client/promise"
-import { resolveProjectForSession, resolveSessionDetailsProject } from "@/shell/layout/helpers"
+import { appendKnownProjects, resolveProjectForSession, resolveSessionDetailsProject } from "@/shell/layout/helpers"
 
 export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext({
   name: "Global",
@@ -181,7 +181,10 @@ function createServerController(
     return base
   }
 
-  const projectsList = createMemo(() => projects.list().map(enrich))
+  // Known projects never opened stay off the persisted list, so they must not go through
+  // enrich(): it would pin a child store per directory. Their metadata comes from the server.
+  const openedList = createMemo(() => projects.list().map(enrich))
+  const projectsList = createMemo(() => appendKnownProjects(openedList(), sync.data.project))
   const forSession = (session: SessionInfo) => {
     const project = resolveProjectForSession(session, projectsList(), sync.data.project)
     if (!project) return
@@ -209,6 +212,7 @@ function createServerController(
     projects: {
       ...projects,
       list: projectsList,
+      opened: openedList,
       forSession,
       detailsForSession,
       resolve: enrich,
