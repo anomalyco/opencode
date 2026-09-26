@@ -154,3 +154,61 @@ describe("SessionModelRequest HTTP hooks", () => {
     }),
   )
 })
+
+describe("SessionModelRequest output limit", () => {
+  const input = { session, agent: Agent.ID.make("build"), model, system: [], messages: [] }
+
+  it.effect("caps the default output limit per request kind", () =>
+    Effect.gen(function* () {
+      const requests = yield* SessionModelRequest.Service.pipe(Effect.provide(SessionModelRequest.layer))
+      const large = {
+        ...input,
+        model: SessionRunnerModel.resolved(OpenAIChat.route.model({ id: "large-output", provider: "test" }), {
+          capabilities: { tools: true, input: ["text"], output: ["text"] },
+          cost: [],
+          limit: { context: 1_000_000, output: 384_000 },
+        }),
+      }
+      const maxTokens = (prepared: SessionModelRequest.Prepared<unknown>) => prepared.request.generation?.maxTokens
+      expect(maxTokens(yield* requests.primary(large))).toBe(256_000)
+      expect(maxTokens(yield* requests.compaction(large))).toBe(32_000)
+      const inputTokens = { measured: 170_000, estimated: 8_000 }
+      expect(maxTokens(yield* requests.primary({ ...input, inputTokens }))).toBe(20_800)
+      expect(maxTokens(yield* requests.compaction({ ...input, inputTokens }))).toBe(20_800)
+    }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
+  )
+
+  // Provider plugins that remove the default limit only hook `context` and `compaction`. If titles or generate get a
+  // default, also hook `title` and `generate` in: the OpenAI plugin (`omitOutputLimit`), whose ChatGPT backend
+  // rejects any requested limit.
+  it.effect("sends no output limit for titles and generate by default", () =>
+    Effect.gen(function* () {
+      const requests = yield* SessionModelRequest.Service.pipe(Effect.provide(SessionModelRequest.layer))
+      expect((yield* requests.title(input)).request.generation?.maxTokens).toBeUndefined()
+      expect((yield* requests.generate(input)).request.generation?.maxTokens).toBeUndefined()
+    }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
+  )
+
+  it.effect("lets hooks change or remove the default output limit", () =>
+    Effect.gen(function* () {
+      const hooks = yield* PluginHooks.Service
+      const seen: Array<number | undefined> = []
+      yield* hooks.register("session", "context", (event) =>
+        Effect.sync(() => {
+          seen.push(event.options.maxTokens)
+          delete event.options.maxTokens
+        }),
+      )
+      yield* hooks.register("session", "title", (event) =>
+        Effect.sync(() => {
+          event.options.maxTokens = 100
+        }),
+      )
+      const requests = yield* SessionModelRequest.Service.pipe(Effect.provide(SessionModelRequest.layer))
+
+      expect((yield* requests.primary(input)).request.generation).toBeUndefined()
+      expect((yield* requests.title(input)).request.generation?.maxTokens).toBe(100)
+      expect(seen).toEqual([32_000])
+    }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
+  )
+})

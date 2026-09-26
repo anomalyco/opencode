@@ -265,7 +265,8 @@ export const layer = Layer.effect(
       const prompt = buildPrompt(previous !== undefined, previous?.summary.includes(LEGACY_HEADING) ?? false)
       const headings = SUMMARY_TEMPLATE.split("\n").filter((line) => line.startsWith("##"))
       const filled = (text: string) => text.split("\n").some((line) => headings.includes(line.trim()))
-      const prepared = yield* prepare(context, split.older)
+      const overhead = Token.estimate(prompt) + Token.estimate(NUDGE)
+      const prepared = yield* prepare(context, split.older, undefined, overhead)
 
       // Hooks saw the request without the summary prompt, so it is appended here. A reply that ignores the
       // template gets one reminder before it counts as a failure.
@@ -288,7 +289,6 @@ export const layer = Layer.effect(
           })
         })
 
-      const overhead = Token.estimate(prompt) + Token.estimate(NUDGE)
       return yield* deliver(trigger, prepared, split.recent, budget - overhead, send)
     })
 
@@ -551,12 +551,15 @@ export const layer = Layer.effect(
     }
 
     /** The conversation as the runner would send it, after request hooks. */
+    /** `overhead` counts text sent outside the history, such as the summary prompt, toward the prompt size. */
     const prepare = (
       context: SessionContext.Loaded,
       messages: ReadonlyArray<SessionMessage.Info>,
       webSocket?: "session",
+      overhead = 0,
     ) => {
       const base = transcript(context, messages)
+      const prompt = estimatePrompt({ ...context, messages })
       return requests.compaction({
         session: context.session,
         agent: context.agent.id,
@@ -565,6 +568,7 @@ export const layer = Layer.effect(
         system: base.system,
         messages: base.messages,
         webSocket,
+        inputTokens: { measured: prompt.measured, estimated: prompt.estimated + overhead },
       })
     }
 
@@ -843,6 +847,12 @@ export const recentUserMessages = (
 }
 
 export const estimateContext = (context: SessionContext.Loaded) => {
+  const prompt = estimatePrompt(context)
+  return prompt.measured + prompt.estimated
+}
+
+/** The prompt size: `measured` is what the provider reported at the latest response, `estimated` is the text since. */
+export const estimatePrompt = (context: SessionContext.Loaded) => {
   const anchorIndex = context.messages.findLastIndex((message) => hasMeasuredPrompt(message, context.model.ref))
   const anchor = context.messages[anchorIndex]
   const base = transcript(context, context.messages.slice(Math.max(0, anchorIndex)))
@@ -856,11 +866,16 @@ export const estimateContext = (context: SessionContext.Loaded) => {
   const unmeasured = sent.filter((message) => message.role !== "assistant" || message.id !== anchor?.id)
 
   if (anchor?.type !== "assistant" || !anchor.tokens)
-    return estimateRequest({ system: base.system, tools: context.tools.definitions, messages: unmeasured })
+    return {
+      measured: 0,
+      estimated: estimateRequest({ system: base.system, tools: context.tools.definitions, messages: unmeasured }),
+    }
 
   const tokens = anchor.tokens
-  const measured = tokens.input + tokens.cache.read + tokens.cache.write + tokens.output + tokens.reasoning
-  return measured + unmeasured.reduce((sum, message) => sum + estimateMessage(message), 0)
+  return {
+    measured: tokens.input + tokens.cache.read + tokens.cache.write + tokens.output + tokens.reasoning,
+    estimated: unmeasured.reduce((sum, message) => sum + estimateMessage(message), 0),
+  }
 }
 
 /** The largest request the model takes while leaving room for its reply. */

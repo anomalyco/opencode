@@ -1,5 +1,6 @@
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import { define } from "@opencode/plugin/effect/plugin"
+import type { SessionRequest } from "@opencode/plugin/effect/session"
 import { Deferred, Effect, Option, Schema, Semaphore, Stream } from "effect"
 import type { Server } from "node:http"
 import { App } from "../../app.js"
@@ -307,6 +308,13 @@ export const OpenAIPlugin = define({
         }),
       { providerID: Provider.ID.openai },
     )
+    // The ChatGPT backend rejects a requested output limit, and OpenAI counts one against rate limits.
+    const omitOutputLimit = (evt: SessionRequest) =>
+      Effect.sync(() => {
+        delete evt.options.maxTokens
+      })
+    for (const name of ["context", "compaction"] as const)
+      yield* ctx.session.hook(name, omitOutputLimit, { providerID: Provider.ID.openai })
     const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.provider.reload())))
     yield* bus.subscribe(Credential.Event.Switched).pipe(
       Stream.filter((event) => event.data.integrationID === Integration.ID.make("openai")),
