@@ -33,6 +33,7 @@ import type { InstanceContext } from "../project/instance-context"
 import { InstanceState } from "@/effect/instance-state"
 import { Snapshot } from "@/snapshot"
 import { ProjectV2 } from "@opencode-ai/core/project"
+import { SessionDirectory } from "@opencode-ai/core/session/directory"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { SessionID, MessageID, PartID } from "./schema"
 
@@ -554,12 +555,12 @@ const layer: Layer.Layer<
 
     const listGlobal = Effect.fn("Session.listGlobal")(function* (input?: GlobalListInput) {
       const conditions: SQL[] = []
-      if (input?.directory) conditions.push(eq(SessionTable.directory, input.directory))
       if (input?.roots) conditions.push(isNull(SessionTable.parent_id))
       if (input?.start) conditions.push(gte(SessionTable.time_updated, input.start))
       if (input?.cursor) conditions.push(lt(SessionTable.time_updated, input.cursor))
       if (input?.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
       if (!input?.archived) conditions.push(isNull(SessionTable.time_archived))
+      if (input?.directory) conditions.push(yield* SessionDirectory.filter(db, input.directory, conditions))
 
       const query =
         conditions.length > 0
@@ -959,52 +960,51 @@ function listByProject(
     experimentalWorkspaces: boolean
   },
 ) {
-  const conditions = [eq(SessionTable.project_id, input.projectID)]
+  return Effect.gen(function* () {
+    const conditions = [eq(SessionTable.project_id, input.projectID)]
 
-  if (input.workspaceID) {
-    conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
-  }
-  if (input.path !== undefined) {
-    if (input.path) {
-      const conds = [
-        eq(SessionTable.path, input.path),
-        like(SessionTable.path, sql.param(`${input.path}/%`, SessionTable.path)),
-      ]
-
-      conditions.push(
-        input.directory
-          ? or(...conds, and(isNull(SessionTable.path), eq(SessionTable.directory, input.directory))!)!
-          : or(...conds)!,
-      )
+    if (input.workspaceID) {
+      conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
     }
-  } else if (input.scope !== "project") {
-    if (input.directory) {
-      conditions.push(eq(SessionTable.directory, input.directory))
+    if (input.roots) {
+      conditions.push(isNull(SessionTable.parent_id))
     }
-  }
-  if (input.roots) {
-    conditions.push(isNull(SessionTable.parent_id))
-  }
-  if (input.start) {
-    conditions.push(gte(SessionTable.time_updated, input.start))
-  }
-  if (input.search) {
-    conditions.push(like(SessionTable.title, `%${input.search}%`))
-  }
+    if (input.start) {
+      conditions.push(gte(SessionTable.time_updated, input.start))
+    }
+    if (input.search) {
+      conditions.push(like(SessionTable.title, `%${input.search}%`))
+    }
+    const directory = input.directory ? yield* SessionDirectory.filter(db, input.directory, conditions) : undefined
+    if (input.path !== undefined) {
+      if (input.path) {
+        const conds = [
+          eq(SessionTable.path, input.path),
+          like(SessionTable.path, sql.param(`${input.path}/%`, SessionTable.path)),
+        ]
 
-  const limit = input.limit ?? 100
+        conditions.push(
+          directory ? or(...conds, and(isNull(SessionTable.path), directory)!)! : or(...conds)!,
+        )
+      }
+    } else if (input.scope !== "project") {
+      if (directory) {
+        conditions.push(directory)
+      }
+    }
 
-  return db
-    .select()
-    .from(SessionTable)
-    .where(and(...conditions))
-    .orderBy(desc(SessionTable.time_updated))
-    .limit(limit)
-    .all()
-    .pipe(
-      Effect.orDie,
-      Effect.map((rows) => rows.map(fromRow)),
-    )
+    const limit = input.limit ?? 100
+
+    const rows = yield* db
+      .select()
+      .from(SessionTable)
+      .where(and(...conditions))
+      .orderBy(desc(SessionTable.time_updated))
+      .limit(limit)
+      .all()
+      .pipe(Effect.orDie)
+    return rows.map(fromRow)
+  })
 }
 
 export const node = LayerNode.make({
