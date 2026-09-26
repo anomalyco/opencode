@@ -4,17 +4,20 @@
   --font-family-mono:
     ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
   --font-family-mono--font-feature-settings: normal;
-
-  --font-size-small: 13px;
   --font-size-base: 14px;
-  --font-size-large: 16px;
-  --font-size-x-large: 20px;
+  --font-size-x-small: calc(var(--font-size-base) * 0.85);
+  --font-size-small: calc(var(--font-size-base) * 0.9);
+  --font-size-large: calc(var(--font-size-base) * 1.2);
+  --font-size-x-large: calc(var(--font-size-base) * 1.4);
+  --font-size-mono: var(--font-size-base);
   --font-weight-regular: 400;
   --font-weight-medium: 500;
-  --line-height-normal: 130%;
-  --line-height-large: 150%;
-  --line-height-x-large: 180%;
-  --line-height-2x-large: 200%;
+  --line-height-mono: 1.6;
+  --line-height-mono-px: 22.4px;
+  --line-height-normal: calc(var(--line-height-mono) * 0.8125);
+  --line-height-large: calc(var(--line-height-mono) * 0.9375);
+  --line-height-x-large: calc(var(--line-height-mono) * 1.125);
+  --line-height-2x-large: calc(var(--line-height-mono) * 1.25);
   --letter-spacing-normal: 0;
   --letter-spacing-tight: -0.1599999964237213;
   --letter-spacing-tightest: -0.3199999928474426;
