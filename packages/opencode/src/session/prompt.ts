@@ -1237,6 +1237,7 @@ const layer = Layer.effect(
               Effect.provideService(ToolRegistry.Service, registry),
               Effect.provideService(MCP.Service, mcp),
               Effect.provideService(Truncate.Service, truncate),
+              Effect.provideService(Config.Service, config),
               Effect.provideService(RuntimeFlags.Service, flags),
             )
 
