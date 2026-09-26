@@ -33,7 +33,7 @@ import { setTimeout as sleep } from "node:timers/promises"
 import { Process } from "@/util/process"
 import { parseGitHubRemote } from "@/util/repository"
 import { Effect } from "effect"
-import { extractResponseText, formatPromptTooLargeError } from "./github.shared"
+import { commitSubject, extractResponseText, formatPromptTooLargeError } from "./github.shared"
 
 type GitHubAuthor = {
   login: string
@@ -464,7 +464,8 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
     }
     const gitStatus = (args: string[]) => Effect.runPromise(gitSvc.run(args, { cwd: ctx.worktree }))
     const commitChanges = async (summary: string, actor?: string) => {
-      const args = ["commit", "-m", summary]
+      // Summaries also title PRs, so normalize only the commit message.
+      const args = ["commit", "-m", commitSubject(summary)]
       if (actor) args.push("-m", `Co-authored-by: ${actor} <${actor}@users.noreply.github.com>`)
       await gitRun(args)
     }
