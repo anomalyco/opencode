@@ -468,7 +468,8 @@ export const layer = Layer.effect(
         summary?.recent ? [summary.recent] : [],
       )
 
-      const note = (omitted: number) => (omitted ? `[${omitted} older exchanges omitted]\n\n` : "")
+      const note = (omitted: number) =>
+        omitted ? `[${omitted} older ${omitted === 1 ? "exchange" : "exchanges"} omitted]\n\n` : ""
       // Room for the longest possible note is set aside before choosing what to keep.
       const room =
         target -
