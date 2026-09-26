@@ -247,16 +247,55 @@ test("uses the active location for integration data without scoping credential r
   }
 })
 
-async function renderIntegration(activeLocation?: LocationRef, form?: FormFields) {
+test.each(["mcp", "provider", "service"] as const)("hands off model selection after %s connection", async (kind) => {
+  const connected: Array<string | undefined> = []
+  const fixture = await renderIntegration(undefined, undefined, {
+    kind,
+    onConnected: (providerID) => connected.push(providerID),
+  })
+
+  try {
+    if (kind !== "mcp") {
+      await fixture.app.mockInput.typeText("test-key")
+      fixture.app.mockInput.pressEnter()
+    }
+    await fixture.app.waitFor(() => connected.length > 0 || fixture.dialog.stack.length === 0)
+
+    expect(connected).toHaveLength(kind === "mcp" ? 0 : 1)
+    if (kind === "mcp") expect(fixture.dialog.stack).toHaveLength(0)
+    expect(fixture.requests).toEqual(
+      kind === "mcp"
+        ? [{ method: "POST", path: `/api/integration/${fixture.integrationID}/connect/oauth` }]
+        : [
+            {
+              method: "POST",
+              path: `/api/integration/${fixture.integrationID}/connect/key`,
+              body: { key: "test-key" },
+            },
+          ],
+    )
+  } finally {
+    fixture.app.renderer.destroy()
+  }
+})
+
+async function renderIntegration(
+  activeLocation?: LocationRef,
+  form?: FormFields,
+  options?: { kind: "mcp" | "provider" | "service"; onConnected: (providerID?: string) => void },
+) {
   const events = createEventStream()
   const requests: Array<{ method: string; path: string; body?: unknown }> = []
   const locations: LocationRef[] = []
   const credentialQueries: string[] = []
   const reads = { integration: 0, model: 0, provider: 0 }
-  let accounts = [
-    { type: "credential" as const, method: "key" as const, id: "cred_personal", label: "Personal" },
-    { type: "credential" as const, method: "key" as const, id: "cred_work", label: "Work" },
-  ]
+  const integrationID = options?.kind === "mcp" ? "mcp_linear" : options?.kind === "service" ? "service" : "openai"
+  let accounts: Array<{ type: "credential"; method: "key"; id: string; label: string }> = options
+    ? []
+    : [
+        { type: "credential" as const, method: "key" as const, id: "cred_personal", label: "Personal" },
+        { type: "credential" as const, method: "key" as const, id: "cred_work", label: "Work" },
+      ]
 
   const calls = createFetch(async (url, request) => {
     const directory =
@@ -275,18 +314,43 @@ async function renderIntegration(activeLocation?: LocationRef, form?: FormFields
         location,
         data: [
           {
-            id: "openai",
-            name: "OpenAI",
-            methods: [{ type: "key", label: "API key", form }],
-            connections: [...accounts, { type: "env", name: "OPENAI_API_KEY" }],
+            id: integrationID,
+            name: options?.kind === "mcp" ? "linear" : options?.kind === "service" ? "Service" : "OpenAI",
+            metadata: options?.kind === "mcp" ? { source: "mcp" } : undefined,
+            methods:
+              options?.kind === "mcp"
+                ? [{ type: "oauth", id: "oauth_linear", label: "linear" }]
+                : [{ type: "key", label: "API key", form }],
+            connections: [...accounts, ...(options ? [] : [{ type: "env", name: "OPENAI_API_KEY" }])],
           },
         ],
       })
     }
 
-    if (request.method === "POST" && url.pathname === "/api/integration/openai/connect/key") {
+    if (request.method === "POST" && url.pathname === `/api/integration/${integrationID}/connect/key`) {
       requests.push({ method: request.method, path: url.pathname, body: await request.json() })
       return new Response(null, { status: 204 })
+    }
+
+    if (
+      options?.kind === "mcp" &&
+      request.method === "POST" &&
+      url.pathname === `/api/integration/${integrationID}/connect/oauth`
+    ) {
+      requests.push({ method: request.method, path: url.pathname })
+      return json({
+        location,
+        data: {
+          attemptID: "attempt_linear",
+          mode: "auto",
+          url: "https://linear.example.com/oauth",
+          instructions: "Authorize in your browser.",
+        },
+      })
+    }
+
+    if (options?.kind === "mcp" && url.pathname === `/api/integration/${integrationID}/connect/oauth/attempt_linear`) {
+      return json({ location, data: { status: "complete" } })
     }
 
     if (url.pathname === "/api/model") {
@@ -343,6 +407,8 @@ async function renderIntegration(activeLocation?: LocationRef, form?: FormFields
     return undefined
   }, events)
 
+  let connectedDialog!: ReturnType<typeof useDialog>
+
   function Probe() {
     const data = useData()
     const dialog = useDialog()
@@ -351,8 +417,13 @@ async function renderIntegration(activeLocation?: LocationRef, form?: FormFields
       location.set(activeLocation)
       void data.location.integration
         .sync(activeLocation)
-        .then(() => dialog.replace(() => <DialogIntegration integrationID="openai" autoConnect />))
+        .then(() =>
+          dialog.replace(() => (
+            <DialogIntegration integrationID={integrationID} autoConnect onConnected={options?.onConnected} />
+          )),
+        )
     })
+    connectedDialog = dialog
     return null
   }
 
@@ -382,13 +453,19 @@ async function renderIntegration(activeLocation?: LocationRef, form?: FormFields
   )
 
   app.renderer.start()
-  await app.waitForFrame(
-    (frame) => frame.includes("Add account") && frame.includes("Personal") && frame.includes("Work"),
-  )
-  await app.waitFor(() => app.renderer.currentFocusedEditor instanceof InputRenderable)
+  if (options?.kind === "mcp") await app.waitFor(() => requests.length === 1)
+  else if (options) await app.waitFor(() => app.renderer.currentFocusedEditor instanceof TextareaRenderable)
+  else {
+    await app.waitForFrame(
+      (frame) => frame.includes("Add account") && frame.includes("Personal") && frame.includes("Work"),
+    )
+    await app.waitFor(() => app.renderer.currentFocusedEditor instanceof InputRenderable)
+  }
 
   return {
     app,
+    integrationID,
+    dialog: connectedDialog,
     reads,
     requests,
     locations,
