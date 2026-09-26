@@ -20,12 +20,18 @@ type Context = {
   providerLabel: string
   modelLabel: string
   limit: number | undefined
-  input: number
-  total: number
+  ctxInput: number
+  ctxTotal: number
   usage: number | null
+  sessInput: number
+  sessOutput: number
+  sessReasoning: number
+  sessCacheRead: number
+  sessCacheWrite: number
+  sessTotal: number
 }
 
-const tokenTotal = (msg: AssistantMessage) => {
+const ctxTokenTotal = (msg: AssistantMessage) => {
   return msg.tokens.input + msg.tokens.output + msg.tokens.reasoning + msg.tokens.cache.read + msg.tokens.cache.write
 }
 
@@ -33,8 +39,32 @@ const lastAssistantWithTokens = (messages: Message[]) => {
   for (let i = messages.length - 1; i >= 0; i--) {
     const msg = messages[i]
     if (msg.role !== "assistant") continue
-    if (tokenTotal(msg) <= 0) continue
+    if (ctxTokenTotal(msg) <= 0) continue
     return msg
+  }
+}
+
+const sumSessionTokens = (messages: Message[]) => {
+  const total = {
+    input: 0,
+    output: 0,
+    reasoning: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+  }
+
+  for (const msg of messages) {
+    if (msg.role !== "assistant") continue
+    total.input += msg.tokens.input
+    total.output += msg.tokens.output
+    total.reasoning += msg.tokens.reasoning
+    total.cacheRead += msg.tokens.cache.read
+    total.cacheWrite += msg.tokens.cache.write
+  }
+
+  return {
+    ...total,
+    total: total.input + total.output + total.reasoning + total.cacheRead + total.cacheWrite,
   }
 }
 
@@ -45,7 +75,8 @@ const build = (messages: Message[] = [], providers: Provider[] = []): Context | 
   const provider = providers.find((item) => item.id === message.providerID)
   const model = provider?.models[message.modelID]
   const limit = model?.limit.context
-  const total = tokenTotal(message)
+  const ctxTotal = ctxTokenTotal(message)
+  const sess = sumSessionTokens(messages)
 
   return {
     message,
@@ -54,9 +85,15 @@ const build = (messages: Message[] = [], providers: Provider[] = []): Context | 
     providerLabel: provider?.name ?? message.providerID,
     modelLabel: model?.name ?? message.modelID,
     limit,
-    input: message.tokens.input,
-    total,
-    usage: limit ? Math.round((total / limit) * 100) : null,
+    ctxInput: message.tokens.input,
+    ctxTotal,
+    usage: limit ? Math.round((ctxTotal / limit) * 100) : null,
+    sessInput: sess.input,
+    sessOutput: sess.output,
+    sessReasoning: sess.reasoning,
+    sessCacheRead: sess.cacheRead,
+    sessCacheWrite: sess.cacheWrite,
+    sessTotal: sess.total,
   }
 }
 

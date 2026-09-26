@@ -742,7 +742,6 @@ export const dict = {
 
   "session.tab.session": "会话",
   "session.tab.review": "审查",
-  "session.tab.context": "上下文",
   "session.tab.unknown": "未知会话",
   "session.panel.reviewAndFiles": "审查和文件",
   "session.error.notFound": "找不到此会话",

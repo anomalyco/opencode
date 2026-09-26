@@ -495,10 +495,10 @@ export const dict = {
   "context.export.session": "Export session",
 
   "context.stats.session": "Session",
-  "context.stats.messages": "Messages",
+  "context.stats.messages": "Messages (user/assistant)",
   "context.stats.provider": "Provider",
   "context.stats.model": "Model",
-  "context.stats.limit": "Context Limit",
+  "context.stats.limit": "Window Length",
   "context.stats.totalTokens": "Total Tokens",
   "context.stats.usage": "Usage",
   "context.stats.inputTokens": "Input Tokens",
@@ -667,7 +667,7 @@ export const dict = {
 
   "session.tab.session": "Session",
   "session.tab.review": "Review",
-  "session.tab.context": "Context",
+  "session.tab.stats": "Stats",
   "session.tab.unknown": "Unknown Session",
   "session.panel.reviewAndFiles": "Review and files",
   "session.error.notFound": "This session cannot be found",

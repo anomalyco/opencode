@@ -387,7 +387,7 @@ export function SessionSidePanel(props: {
                                 >
                                   <div class="flex items-center gap-2">
                                     <SessionContextUsage variant="indicator" />
-                                    <div>{language.t("session.tab.context")}</div>
+                                    <div>{language.t("session.tab.stats")}</div>
                                   </div>
                                 </Tabs.Trigger>
                               </Show>
@@ -601,7 +601,7 @@ export function SessionSidePanel(props: {
                               >
                                 <div class="flex items-center gap-2">
                                   <SessionContextUsage variant="indicator" />
-                                  <div>{language.t("session.tab.context")}</div>
+                                  <div>{language.t("session.tab.stats")}</div>
                                 </div>
                               </Tabs.Trigger>
                             </Show>
