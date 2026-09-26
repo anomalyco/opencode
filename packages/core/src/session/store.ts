@@ -105,7 +105,11 @@ const layer = Layer.effect(
         if ("directory" in input) conditions.push(eq(SessionTable.directory, input.directory))
         if (input.workspaceID) conditions.push(eq(SessionTable.workspace_id, input.workspaceID))
         if ("project" in input) conditions.push(eq(SessionTable.project_id, input.project))
-        if ("project" in input && input.subpath !== undefined) conditions.push(eq(SessionTable.path, input.subpath))
+        // Truthiness, not `!== undefined`: the TUI sends path.relative(root, dir), which is "" at
+        // the project root, and RelativePath admits "". `!== undefined` turned that into path = '',
+        // matching only sessions whose stored path is literally empty. info.ts:51 maps both '' and
+        // NULL to no subpath, so this makes the filter agree with it.
+        if ("project" in input && input.subpath) conditions.push(eq(SessionTable.path, input.subpath))
         if (input.search) conditions.push(like(SessionTable.title, `%${input.search}%`))
         if (input.parentID !== undefined)
           conditions.push(

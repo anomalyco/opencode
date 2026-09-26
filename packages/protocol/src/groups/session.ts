@@ -55,6 +55,14 @@ const ParentIDFilter = Schema.Union([
   description: "Filter by parent session. Use null to return only root sessions.",
 })
 
+// Shared by SessionsProjectQuery, where `project` is required, and SessionsQuery, where it is
+// optional. The store only applies the predicate when `project` is present, so say so here rather
+// than in only one of the two places, or the documented contract over-promises.
+const SubpathFilter = RelativePath.pipe(Schema.optional).annotate({
+  description:
+    "Match a session's subpath exactly, relative to the project root. Empty or omitted applies no path filter. Ignored unless `project` is also set.",
+})
+
 const SessionsQueryFields = {
   limit: Schema.NumberFromString.pipe(Schema.decodeTo(PositiveInt), Schema.optional).annotate({
     description: "Maximum number of sessions to return. Defaults to the newest 50 sessions.",
@@ -74,7 +82,7 @@ const SessionsDirectoryQuery = Schema.Struct({
 const SessionsProjectQuery = Schema.Struct({
   ...SessionsQueryFields,
   project: Project.ID,
-  subpath: RelativePath.pipe(Schema.optional),
+  subpath: SubpathFilter,
 })
 
 const SessionsAllQuery = Schema.Struct(SessionsQueryFields)
@@ -166,7 +174,7 @@ export const SessionsQuery = Schema.Struct({
   ...SessionsQueryFields,
   directory: AbsolutePath.pipe(Schema.optional),
   project: Project.ID.pipe(Schema.optional),
-  subpath: RelativePath.pipe(Schema.optional),
+  subpath: SubpathFilter,
   cursor: SessionsQueryCursor.pipe(Schema.optional),
 }).annotate({ identifier: "SessionsQuery" })
 
