@@ -7,6 +7,7 @@ import { eq } from "drizzle-orm"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { expect } from "bun:test"
 import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
+import { logLines } from "effect/testing/TestConsole"
 import path from "path"
 import { fileURLToPath } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
@@ -551,6 +552,57 @@ it.instance("loop calls LLM and returns assistant message", () =>
     const parts = result.parts.filter((p) => p.type === "text")
     expect(parts.some((p) => p.type === "text" && p.text === "world")).toBe(true)
     expect(yield* llm.hits).toHaveLength(1)
+  }),
+)
+
+it.instance("loop warns when a stop turn produces no model output", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({
+      title: "Pinned",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+    yield* llm.reason("cut mid-thought", { usage: { input: 559, output: 0 } })
+
+    const result = yield* prompt.loop({ sessionID: chat.id })
+    expect(result.info.role).toBe("assistant")
+    expect(result.parts.some((p) => p.type === "reasoning")).toBe(true)
+    expect(result.parts.some((p) => p.type === "text")).toBe(false)
+
+    const lines = yield* logLines
+    expect(lines.some((line) => String(line).includes("turn ended with no model output"))).toBe(true)
+  }),
+)
+
+it.instance("loop does not warn when a stop turn has text output", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({
+      title: "Pinned",
+      permission: [{ permission: "*", pattern: "*", action: "allow" }],
+    })
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+    yield* llm.text("world")
+
+    yield* prompt.loop({ sessionID: chat.id })
+
+    const lines = yield* logLines
+    expect(lines.some((line) => String(line).includes("turn ended with no model output"))).toBe(false)
   }),
 )
 
