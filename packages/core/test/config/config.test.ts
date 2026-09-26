@@ -718,6 +718,92 @@ describe("Config", () => {
     })
   })
 
+  test("preserves the v1 provider endpoint when legacy api is also configured", () => {
+    const migrated = ConfigMigrateV1.migrate(
+      Schema.decodeUnknownSync(ConfigV1.Info)({
+        provider: {
+          custom: {
+            npm: "@ai-sdk/openai-compatible",
+            api: "https://legacy.example/v1",
+            options: {
+              baseURL: "https://custom.example/v1",
+              apiKey: "test-key",
+              headers: { "x-test": "1" },
+              body: { trace: true },
+              timeout: 30000,
+            },
+            models: { custom: { name: "Custom", variants: { fast: { temperature: 0.2 } } } },
+          },
+        },
+      }),
+    )
+
+    expect(migrated.providers?.custom).toMatchObject({
+      package: Provider.aisdk("@ai-sdk/openai-compatible"),
+      settings: { baseURL: "https://custom.example/v1", apiKey: "test-key", timeout: 30000 },
+      headers: { "x-test": "1" },
+      body: { trace: true },
+      models: { custom: { name: "Custom", variants: [{ id: "fast", settings: { temperature: 0.2 } }] } },
+    })
+    Schema.decodeUnknownSync(Info)(migrated)
+  })
+
+  test.each([
+    { api: "https://legacy.example/v1", options: undefined, expected: "https://legacy.example/v1" },
+    { api: undefined, options: { baseURL: "https://custom.example/v1" }, expected: "https://custom.example/v1" },
+    { api: "https://legacy.example/v1", options: { baseURL: "" }, expected: "https://legacy.example/v1" },
+    { api: undefined, options: undefined, expected: undefined },
+  ])("preserves v1 provider endpoint fallback: %j", ({ api, options, expected }) => {
+    const migrated = ConfigMigrateV1.migrate({ provider: { custom: { api, options } } })
+    expect(migrated.providers?.custom?.settings?.baseURL).toBe(expected)
+  })
+
+  test("preserves the v1 provider endpoint over a model API fallback", () => {
+    const migrated = ConfigMigrateV1.migrate(
+      Schema.decodeUnknownSync(ConfigV1.Info)({
+        provider: {
+          custom: {
+            npm: "@ai-sdk/openai-compatible",
+            options: { baseURL: "https://custom.example/v1" },
+            models: {
+              custom: {
+                provider: { api: "https://model.example/v1" },
+                options: { temperature: 0.2 },
+              },
+            },
+          },
+        },
+      }),
+    )
+
+    expect(migrated.providers?.custom?.models?.custom?.settings).toEqual({
+      baseURL: "https://custom.example/v1",
+      temperature: 0.2,
+    })
+  })
+
+  test.each([undefined, ""])("preserves the v1 model API fallback with provider baseURL %j", (baseURL) => {
+    const migrated = ConfigMigrateV1.migrate({
+      provider: {
+        custom: {
+          api: "https://provider.example/v1",
+          options: { baseURL },
+          models: {
+            custom: {
+              provider: { api: "https://model.example/v1", npm: "@ai-sdk/openai-compatible" },
+              options: { temperature: 0.2 },
+            },
+          },
+        },
+      },
+    })
+
+    expect(migrated.providers?.custom?.models?.custom).toMatchObject({
+      package: Provider.aisdk("@ai-sdk/openai-compatible"),
+      settings: { baseURL: "https://model.example/v1", temperature: 0.2 },
+    })
+  })
+
   test("renames old provider IDs while migrating v1 configuration", () => {
     const migrated = ConfigMigrateV1.migrate({
       model: "azure-cognitive-services/deployment",
