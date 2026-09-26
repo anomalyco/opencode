@@ -246,6 +246,32 @@ test("live messages merged during hydration retain the 100 message window", asyn
   }
 })
 
+test("a message re-sent with the same id keeps one row at the new creation time", async () => {
+  await using tmp = await tmpdir()
+  await Bun.write(`${tmp.path}/kv.json`, "{}")
+  const { app, emit, sync } = await mount(undefined, tmp.path)
+
+  try {
+    const first = { ...assistant, id: "msg_x", time: { created: 10, completed: 11 } }
+    const other = { ...assistant, id: "msg_y", time: { created: 30, completed: 31 } }
+    const resent = { ...assistant, id: "msg_x", time: { created: 50, completed: 51 } }
+    emit(global({ id: "evt_x1", type: "message.updated", properties: { sessionID, info: first } }))
+    emit(global({ id: "evt_y", type: "message.updated", properties: { sessionID, info: other } }))
+    emit(global({ id: "evt_x2", type: "message.updated", properties: { sessionID, info: resent } }))
+    await wait(() => {
+      const rows = sync.data.message[sessionID]
+      return rows?.length === 2 && rows.some((message) => message.id === "msg_x" && message.time.created === 50)
+    })
+
+    const rows = sync.data.message[sessionID]
+    expect(rows.map((message) => message.id)).toEqual(["msg_y", "msg_x"])
+    expect(rows.filter((message) => message.id === "msg_x")).toHaveLength(1)
+    expect(rows.find((message) => message.id === "msg_x")?.time.created).toBe(50)
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("a message removed during hydration does not regain stale parts", async () => {
   await using tmp = await tmpdir()
   await Bun.write(`${tmp.path}/kv.json`, "{}")
