@@ -26,6 +26,18 @@ export function takeCreateSessionID() {
   return id
 }
 
+// A failed create returns the id so the retry still uses it.
+export function restoreCreateSessionID(id: string) {
+  pendingCreateSessionID ??= id
+}
+
+// Drops the id only while it is still waiting for the first create.
+export function discardCreateSessionID(id: string) {
+  if (pendingCreateSessionID !== id) return false
+  pendingCreateSessionID = undefined
+  return true
+}
+
 export const { use: useArgs, provider: ArgsProvider } = createSimpleContext({
   name: "Args",
   init: (props: Args) => props,

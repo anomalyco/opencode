@@ -117,6 +117,7 @@ describe("session target resolver", () => {
   test("creates a fresh Session with the requested id", async () => {
     const client = OpenCode.make({ baseUrl: "https://opencode.test" })
     spyOn(client.location, "get").mockResolvedValue(location("/project"))
+    spyOn(client.session, "get").mockRejectedValue({ _tag: "SessionNotFoundError", sessionID: "ses_chosen" })
     const create = spyOn(client.session, "create").mockImplementation(async (input) =>
       session(input?.id ?? "ses_fresh", "/project"),
     )
@@ -125,6 +126,19 @@ describe("session target resolver", () => {
     expect(create).toHaveBeenCalledTimes(1)
     expect(create.mock.calls[0]?.[0]).toMatchObject({ id: "ses_chosen" })
     expect(target.session.id).toBe("ses_chosen")
+    expect(target.resume).toBe(false)
+  })
+
+  test("rejects a requested id that already exists without mutating it", async () => {
+    const client = OpenCode.make({ baseUrl: "https://opencode.test" })
+    spyOn(client.location, "get").mockResolvedValue(location("/project"))
+    spyOn(client.session, "get").mockResolvedValue(session("ses_taken", "/project"))
+    const create = spyOn(client.session, "create").mockImplementation(async () => session("ses_taken", "/project"))
+
+    await expect(resolveSessionTarget({ client, createSessionID: "ses_taken", prepare })).rejects.toThrow(
+      "Session already exists: ses_taken",
+    )
+    expect(create).not.toHaveBeenCalled()
   })
 })
 
@@ -135,6 +149,7 @@ describe("session create input validation", () => {
 
   test("rejects resume flag combinations", () => {
     expect(validateSessionCreateInput({ createSessionID: "ses_chosen", session: "ses_resume" })).toContain("--session")
+    expect(validateSessionCreateInput({ createSessionID: "ses_chosen", session: "" })).toContain("--session")
     expect(validateSessionCreateInput({ createSessionID: "ses_chosen", continue: true })).toContain("--continue")
     expect(validateSessionCreateInput({ createSessionID: "ses_chosen", fork: true })).toContain("--fork")
   })

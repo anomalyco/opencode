@@ -53,7 +53,7 @@ import { usePromptMove } from "./move"
 import { resolvePastedAttachments } from "./local-attachment"
 import { locationKey, useData } from "../../context/data"
 import { useLocation } from "../../context/location"
-import { takeCreateSessionID } from "../../context/args"
+import { restoreCreateSessionID, takeCreateSessionID } from "../../context/args"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { useInteractivity } from "../../context/interactivity"
 import { abbreviateHome } from "../../runtime"
@@ -1241,6 +1241,7 @@ export function Prompt(props: PromptProps) {
           variant,
         },
       })
+      if (createID !== undefined) created.request.catch(() => restoreCreateSessionID(createID))
       sessionID = created.id
       session = data.session.get(created.id)
       newSession = {

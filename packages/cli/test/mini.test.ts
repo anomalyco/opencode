@@ -304,6 +304,11 @@ describe("mini command", () => {
             },
           })
         }
+        if (url.pathname === "/api/session/ses_chosen" && request.method === "GET")
+          return Response.json(
+            { _tag: "SessionNotFoundError", sessionID: "ses_chosen", message: "Session not found" },
+            { status: 404 },
+          )
         if (url.pathname === "/api/session/ses_chosen/prompt") return new Response(null, { status: 204 })
         return new Response(undefined, { status: 404 })
       },
@@ -316,6 +321,57 @@ describe("mini command", () => {
       // The create contract is what this flag governs; the run then fails
       // against the fixture's closed event stream, which is expected here.
       expect(result.exitCode).toBe(1)
+    } finally {
+      server.stop(true)
+    }
+  })
+
+  test("refuses a --session-id that already exists instead of writing into it", async () => {
+    const mutations: string[] = []
+    const server = Bun.serve({
+      port: 0,
+      async fetch(request) {
+        const url = new URL(request.url)
+        if (url.pathname === "/api/info")
+          return Response.json({
+            version: OPENCODE_VERSION,
+            pid: process.pid,
+            urls: [],
+            paths: { tmp: "/tmp/opencode" },
+          })
+        if (url.pathname === "/api/location")
+          return Response.json({ directory: process.cwd(), project: { id: "global", directory: process.cwd() } })
+        if (url.pathname === "/api/session/ses_taken" && request.method === "GET")
+          return Response.json({
+            data: {
+              id: "ses_taken",
+              projectID: "global",
+              location: { directory: process.cwd() },
+              cost: 0,
+              tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              time: { created: 0, updated: 0 },
+            },
+          })
+        if (request.method !== "GET") mutations.push(`${request.method} ${url.pathname}`)
+        return new Response(undefined, { status: 404 })
+      },
+    })
+
+    try {
+      const result = await cli([
+        "run",
+        "--server",
+        server.url.toString(),
+        "--session-id",
+        "ses_taken",
+        "--title",
+        "New",
+        "hi",
+      ])
+
+      expect(result.exitCode).toBe(1)
+      expect(result.stderr).toContain("Session already exists: ses_taken")
+      expect(mutations).toEqual([])
     } finally {
       server.stop(true)
     }

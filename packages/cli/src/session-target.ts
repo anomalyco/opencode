@@ -36,7 +36,7 @@ export function validateSessionCreateInput(input: {
   fork?: boolean
 }): string | undefined {
   if (input.createSessionID === undefined) return
-  if (input.session) return "--session-id cannot be used with --session"
+  if (input.session !== undefined) return "--session-id cannot be used with --session"
   if (input.continue) return "--session-id cannot be used with --continue"
   if (input.fork) return "--session-id cannot be used with --fork"
   if (!input.createSessionID.startsWith("ses")) return "--session-id must be a session ID starting with ses"
@@ -55,6 +55,10 @@ export async function resolveSessionTarget(input: {
   prepare: SessionTargetPreparation
   signal?: AbortSignal
 }): Promise<SessionTarget> {
+  // The server returns an existing session for a supplied ID; --session-id is
+  // create-only, so reject that here instead of writing into another session.
+  if (input.createSessionID !== undefined && (await findSession(input.client, input.createSessionID, input.signal)))
+    throw new Error(`Session already exists: ${input.createSessionID}. Use --session to continue it.`)
   const selection = await selectSession(input)
   const selected = selection.session
   const location =
@@ -116,13 +120,7 @@ async function selectSession(input: {
   fork?: boolean
   signal?: AbortSignal
 }) {
-  const explicit = input.session
-    ? await input.client.session.get({ sessionID: input.session }, ...requestOptions(input.signal)).catch((error) => {
-        if (error && typeof error === "object" && "_tag" in error && error._tag === "SessionNotFoundError")
-          return undefined
-        throw error
-      })
-    : undefined
+  const explicit = input.session ? await findSession(input.client, input.session, input.signal) : undefined
   if (input.session && !explicit) throw new Error("Session not found")
   if (explicit)
     return {
@@ -146,6 +144,13 @@ async function selectSession(input: {
         })
       : selected,
   }
+}
+
+async function findSession(client: OpenCodeClient, sessionID: string, signal?: AbortSignal) {
+  return client.session.get({ sessionID }, ...requestOptions(signal)).catch((error) => {
+    if (error && typeof error === "object" && "_tag" in error && error._tag === "SessionNotFoundError") return undefined
+    throw error
+  })
 }
 
 async function latestSession(

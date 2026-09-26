@@ -82,7 +82,7 @@ import { PromptStashProvider } from "./prompt/stash"
 import { Toast, ToastProvider, useToast } from "./ui/toast"
 import { isFallbackTitle } from "@opencode/util/session-title-fallback"
 import * as Model from "./util/model"
-import { ArgsProvider, seedCreateSessionID, useArgs, type Args } from "./context/args"
+import { ArgsProvider, discardCreateSessionID, seedCreateSessionID, useArgs, type Args } from "./context/args"
 import open from "open"
 import { PromptRefProvider, usePromptRef } from "./context/prompt"
 import { Config, ConfigProvider, useConfig } from "./config"
@@ -690,6 +690,26 @@ function App() {
       .fork({ sessionID: args.sessionID })
       .then((result) => route.navigate({ type: "session", sessionID: result.id, prompt: startupPrompt }))
       .catch(toast.error)
+  })
+
+  // Handle --session-id once: the server returns an existing session for a
+  // supplied ID, so an ID that is already taken must not reach the first create.
+  let reserved = false
+  createEffect(() => {
+    const createSessionID = args.createSessionID
+    if (reserved || createSessionID === undefined || client.connection.status() !== "connected") return
+    reserved = true
+    void client.api.session
+      .get({ sessionID: createSessionID })
+      .then(() => {
+        if (!discardCreateSessionID(createSessionID)) return
+        toast.show({
+          variant: "error",
+          message: `Session already exists: ${createSessionID}. Use --session to continue it.`,
+          duration: 5000,
+        })
+      })
+      .catch(() => undefined)
   })
 
   const connected = useConnected()
