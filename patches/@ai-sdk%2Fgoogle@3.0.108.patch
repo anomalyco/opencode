@@ -1,0 +1,72 @@
+diff --git a/dist/index.js b/dist/index.js
+index 42600e796d652c7875d7641b0c1fd204ba74699b..b4ab296fde1ef969fad9b8ae0ab0023eda84dfe9 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -685,6 +685,9 @@ function convertToGoogleGenerativeAIMessages(prompt, options) {
+             }
+           }).filter((part) => part !== void 0)
+         });
++        if (contents[contents.length - 1].parts.length === 0) {
++          contents.pop();
++        }
+         break;
+       }
+       case "tool": {
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 583d152b57bee68a7301247223227db5a2f79ba8..5f9d1229800867de16eebc2c6930b527116d504c 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -691,6 +691,9 @@ function convertToGoogleGenerativeAIMessages(prompt, options) {
+             }
+           }).filter((part) => part !== void 0)
+         });
++        if (contents[contents.length - 1].parts.length === 0) {
++          contents.pop();
++        }
+         break;
+       }
+       case "tool": {
+diff --git a/dist/internal/index.js b/dist/internal/index.js
+index 88511c9da09d42a35ba59616ef763b1cc73bd5c0..11dedb04bc6b3885b7b90494e956e0f05bdedf1f 100644
+--- a/dist/internal/index.js
++++ b/dist/internal/index.js
+@@ -468,6 +468,9 @@ function convertToGoogleGenerativeAIMessages(prompt, options) {
+             }
+           }).filter((part) => part !== void 0)
+         });
++        if (contents[contents.length - 1].parts.length === 0) {
++          contents.pop();
++        }
+         break;
+       }
+       case "tool": {
+diff --git a/dist/internal/index.mjs b/dist/internal/index.mjs
+index 0d2953ff873b4de75f8ef0c95e024edbe3e1516a..9208705ffb9bb897461168954a5afb07fab3214a 100644
+--- a/dist/internal/index.mjs
++++ b/dist/internal/index.mjs
+@@ -450,6 +450,9 @@ function convertToGoogleGenerativeAIMessages(prompt, options) {
+             }
+           }).filter((part) => part !== void 0)
+         });
++        if (contents[contents.length - 1].parts.length === 0) {
++          contents.pop();
++        }
+         break;
+       }
+       case "tool": {
+diff --git a/src/convert-to-google-generative-ai-messages.ts b/src/convert-to-google-generative-ai-messages.ts
+index 50fc3ee09cc5e6ccd2cd2a72e5d22f398409f579..1d23d82991029baa85fb04e37ce1662a08ab7c0c 100644
+--- a/src/convert-to-google-generative-ai-messages.ts
++++ b/src/convert-to-google-generative-ai-messages.ts
+@@ -459,6 +459,11 @@ export function convertToGoogleGenerativeAIMessages(
+             })
+             .filter(part => part !== undefined),
+         });
++        // Empty text and reasoning parts, including signature-bearing ones, are
++        // filtered above. Do not emit a model entry that Gemini rejects.
++        if (contents[contents.length - 1].parts.length === 0) {
++          contents.pop();
++        }
+ 
+         break;
+       }
