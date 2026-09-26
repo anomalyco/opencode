@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import path from "path"
-import { Clock, Deferred, Effect } from "effect"
+import { Cause, Clock, Deferred, Effect, Logger } from "effect"
 import { TestClock } from "effect/testing"
 import { Command } from "@opencode/core/command"
 import { Bus } from "@opencode/core/bus"
@@ -134,12 +134,14 @@ it.effect("unloading a plugin removes its commands and runs cleanup", () =>
   }),
 )
 
-it.effect("reports a failed plugin without blocking a healthy plugin", () =>
-  Effect.gen(function* () {
+it.effect("reports a concise setup failure with a diagnostic reference and logs the full cause", () => {
+  const logs: unknown[] = []
+  return Effect.gen(function* () {
     const plugins = yield* Plugin.Service
     const commands = yield* Command.Service
+    const cause = new Error("Set the PLUGIN_TOKEN environment variable")
     yield* plugins.activate([
-      { id: "broken", revision: "1", effect: () => Effect.die(new Error("Setup failed")) },
+      { id: "broken", revision: "1", effect: () => Effect.die(cause) },
       {
         id: "greeting",
         revision: "1",
@@ -150,11 +152,43 @@ it.effect("reports a failed plugin without blocking a healthy plugin", () =>
       },
     ])
 
-    expect((yield* plugins.list()).find((plugin) => plugin.id === "broken")?.state).toMatchObject({
+    const state = (yield* plugins.list()).find((plugin) => plugin.id === "broken")?.state
+    expect(state).toEqual({
       status: "failed",
-      error: expect.stringContaining("Setup failed"),
+      error: "Set the PLUGIN_TOKEN environment variable",
+      ref: expect.stringMatching(/^err_/),
     })
+    expect(JSON.stringify(state)).not.toContain("plugin.test.ts")
+    expect(logs).toEqual([
+      [
+        "failed to load plugin",
+        {
+          "plugin.id": "broken",
+          ref: state?.status === "failed" ? state.ref : undefined,
+          cause: expect.anything(),
+        },
+      ],
+    ])
+    const logged = logs[0]
+    if (!Array.isArray(logged) || typeof logged[1] !== "object" || logged[1] === null || !("cause" in logged[1]))
+      return yield* Effect.die("missing logged plugin cause")
+    if (!Cause.isCause(logged[1].cause)) return yield* Effect.die("invalid logged plugin cause")
+    expect(Cause.squash(logged[1].cause)).toBe(cause)
+    expect(Cause.pretty(logged[1].cause)).toContain("plugin.test.ts")
     expect(yield* commands.get("greet")).toBeDefined()
+  }).pipe(Effect.provideService(Logger.CurrentLoggers, new Set([Logger.make((entry) => logs.push(entry.message))])))
+})
+
+it.effect("uses a setup fallback when an Error message is blank", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    yield* plugins.activate([{ id: "broken", revision: "1", effect: () => Effect.die(new Error(" \n\t ")) }])
+
+    expect((yield* plugins.list())[0]?.state).toEqual({
+      status: "failed",
+      error: "Plugin failed to set up. Check server logs for details.",
+      ref: expect.stringMatching(/^err_/),
+    })
   }),
 )
 
