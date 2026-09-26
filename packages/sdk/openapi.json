@@ -4867,6 +4867,273 @@
         ]
       }
     },
+    "/permission/auto": {
+      "get": {
+        "tags": ["permission"],
+        "operationId": "permission.autoList",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Active auto-approve leases",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/PermissionAutoLease"
+                  },
+                  "description": "Active auto-approve leases"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "List the auto-approve leases that have not expired or been released.",
+        "summary": "List auto-approve leases",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.permission.autoList({\n  ...\n})"
+          }
+        ]
+      },
+      "post": {
+        "tags": ["permission"],
+        "operationId": "permission.autoAcquire",
+        "parameters": [
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Acquired lease",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionAutoLease"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Auto-approve requests in scope that would otherwise ask, without publishing permission.asked. Explicit deny rules still apply, requests already pending are unaffected, and the lease expires unless renewed within its ttl.",
+        "summary": "Acquire an auto-approve lease",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "scope": {
+                    "$ref": "#/components/schemas/PermissionAutoScope"
+                  },
+                  "ttl": {
+                    "type": "integer",
+                    "exclusiveMinimum": 0
+                  }
+                },
+                "required": ["scope"],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.permission.autoAcquire({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/permission/auto/{leaseID}/renew": {
+      "post": {
+        "tags": ["permission"],
+        "operationId": "permission.autoRenew",
+        "parameters": [
+          {
+            "name": "leaseID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^pal"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Renewed lease",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionAutoLease"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PermissionAutoLeaseNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PermissionAutoLeaseNotFoundError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Extend a lease by its ttl. Fails once the lease has expired or been released.",
+        "summary": "Renew an auto-approve lease",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.permission.autoRenew({\n  ...\n})"
+          }
+        ]
+      }
+    },
+    "/permission/auto/{leaseID}": {
+      "delete": {
+        "tags": ["permission"],
+        "operationId": "permission.autoRelease",
+        "parameters": [
+          {
+            "name": "leaseID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^pal"
+            },
+            "required": true
+          },
+          {
+            "name": "directory",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          },
+          {
+            "name": "workspace",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Lease released",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean",
+                  "description": "Lease released"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BadRequestError"
+                }
+              }
+            }
+          }
+        },
+        "description": "Release a lease immediately instead of waiting for it to expire.",
+        "summary": "Release an auto-approve lease",
+        "x-codeSamples": [
+          {
+            "lang": "js",
+            "source": "import { createOpencodeClient } from \"@opencode-ai/sdk\n\nconst client = createOpencodeClient()\nawait client.permission.autoRelease({\n  ...\n})"
+          }
+        ]
+      }
+    },
     "/permission/{requestID}/reply": {
       "post": {
         "tags": ["permission"],
@@ -22891,6 +23158,75 @@
           }
         },
         "required": ["id", "sessionID", "permission", "patterns", "metadata", "always"],
+        "additionalProperties": false
+      },
+      "PermissionAutoScope": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["instance"]
+              }
+            },
+            "required": ["type"],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": ["session"]
+              },
+              "sessionID": {
+                "type": "string",
+                "pattern": "^ses"
+              }
+            },
+            "required": ["type", "sessionID"],
+            "additionalProperties": false
+          }
+        ]
+      },
+      "PermissionAutoLease": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^pal"
+          },
+          "scope": {
+            "$ref": "#/components/schemas/PermissionAutoScope"
+          },
+          "ttl": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "expires": {
+            "type": "integer",
+            "minimum": 0
+          }
+        },
+        "required": ["id", "scope", "ttl", "expires"],
+        "additionalProperties": false
+      },
+      "PermissionAutoLeaseNotFoundError": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["PermissionAutoLeaseNotFoundError"]
+          },
+          "leaseID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "leaseID", "message"],
         "additionalProperties": false
       },
       "PermissionNotFoundError": {

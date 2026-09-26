@@ -195,7 +195,10 @@ export const {
 
         case "permission.asked": {
           const request = event.properties
-          if (permission.mode === "auto") {
+          // A server holding our lease never publishes this event for a request
+          // it auto-approved, so replying here is only needed against servers
+          // predating the lease endpoint.
+          if (permission.mode === "auto" && !permission.managed) {
             void sdk.client.permission.reply({
               requestID: request.id,
               reply: "once",
