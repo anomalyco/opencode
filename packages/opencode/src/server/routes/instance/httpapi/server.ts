@@ -19,6 +19,7 @@ import { Installation } from "@/installation"
 import { LSP } from "@/lsp/lsp"
 import { MCP } from "@/mcp"
 import { McpAuth } from "@/mcp/auth"
+import { McpTool } from "@/tool/mcp"
 import { Permission } from "@/permission"
 import { Plugin } from "@/plugin"
 import { PluginPtyEnvironment } from "@/plugin/pty-environment"
@@ -248,6 +249,7 @@ const app = LayerNode.group([
   LLM.node,
   LSP.node,
   MCP.node,
+  McpTool.node,
   McpAuth.node,
   Command.node,
   Truncate.node,
