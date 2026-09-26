@@ -80,6 +80,8 @@ export type ProjectDirString = Schema.Schema.Type<typeof ProjectDirString>
 export function decodeDirectory(dir: string): ProjectDirString | undefined {
   const decoded = decode64(dir)
   if (!decoded) return
+  // A non-canonical segment like "app" decodes to "j\uFFFD", which is never a directory we encoded.
+  if (base64Encode(decoded) !== dir) return
   return ProjectDirString.make(decoded)
 }
 
