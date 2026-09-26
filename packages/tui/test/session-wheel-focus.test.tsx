@@ -8,7 +8,8 @@ import { tmpdir } from "./fixture/fixture"
 
 test.each([80, 120, 180])("session wheel scrolling preserves pane focus at width %s", async (width) => {
   await using state = await tmpdir()
-  const setup = await createTestRenderer({ width, height: 36, useThread: false, kittyKeyboard: true })
+  const setup = await createTestRenderer({ width, height: 36, kittyKeyboard: true })
+  await setup.renderer.setupTerminal()
   setup.renderer.start()
   const session = {
     id: "ses_wheel",

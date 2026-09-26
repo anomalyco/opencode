@@ -5,7 +5,7 @@ import { TitleShimmerRenderable } from "../../src/component/title-shimmer"
 
 test("shimmer fades in from idle and fades out on unchanged completion", async () => {
   const clock = new ManualClock()
-  const app = await createTestRenderer({ width: 24, height: 1, useThread: false, clock })
+  const app = await createTestRenderer({ width: 24, height: 1, clock })
   const title = new TitleShimmerRenderable(app.renderer, {
     width: 24,
     height: 1,
@@ -45,12 +45,13 @@ test("shimmer fades in from idle and fades out on unchanged completion", async (
     expect(app.renderer.root.liveCount).toBe(0)
   } finally {
     app.renderer.destroy()
+    await app.renderer.closed
   }
 })
 
 test("a feathered wipe keeps the old shimmer moving without dimming the revealed new title", async () => {
   const clock = new ManualClock()
-  const app = await createTestRenderer({ width: 16, height: 1, useThread: false, clock })
+  const app = await createTestRenderer({ width: 16, height: 1, clock })
   const title = new TitleShimmerRenderable(app.renderer, {
     width: 16,
     height: 1,
@@ -102,12 +103,13 @@ test("a feathered wipe keeps the old shimmer moving without dimming the revealed
     expect(app.renderer.root.liveCount).toBe(0)
   } finally {
     app.renderer.destroy()
+    await app.renderer.closed
   }
 })
 
 test("native Unicode clipping and shorter replacement leave no split glyphs or old tail", async () => {
   const clock = new ManualClock()
-  const app = await createTestRenderer({ width: 24, height: 3, useThread: false, clock })
+  const app = await createTestRenderer({ width: 24, height: 3, clock })
   const content = "A\u65e5B \u{1f680} cafe\u0301"
   const title = new TitleShimmerRenderable(app.renderer, {
     width: 20,
@@ -141,5 +143,6 @@ test("native Unicode clipping and shorter replacement leave no split glyphs or o
     expect(app.renderer.root.liveCount).toBe(0)
   } finally {
     app.renderer.destroy()
+    await app.renderer.closed
   }
 })

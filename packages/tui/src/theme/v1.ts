@@ -1,4 +1,4 @@
-import { RGBA, SyntaxStyle } from "@opentui/core"
+import { RGBA, SyntaxStyle, type NativeResourceOwner } from "@opentui/core"
 import type { Theme, ThemeV1Json } from "@opencode/theme/tui/v1"
 import aura from "./assets/aura.json" with { type: "json" }
 import ayu from "./assets/ayu.json" with { type: "json" }
@@ -85,8 +85,8 @@ export function selectedForeground(theme: Theme, bg?: RGBA): RGBA {
   return theme.background
 }
 
-export function generateSyntax(theme: Theme) {
-  return SyntaxStyle.fromTheme(getSyntaxRules(theme))
+export function generateSyntax(theme: Theme, owner: NativeResourceOwner) {
+  return SyntaxStyle.fromTheme(getSyntaxRules(theme), owner)
 }
 
 function getSyntaxRules(theme: Theme) {

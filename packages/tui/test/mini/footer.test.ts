@@ -108,6 +108,7 @@ async function setup(
   const app = await createTestRenderer({
     width: 112,
     height: 24,
+    exitOnCtrlC: false,
     screenMode: "split-footer",
     footerHeight: 4,
     externalOutputMode: "capture-stdout",
@@ -321,7 +322,7 @@ test.each([false, true])("monochrome toggles live without replacing the footer (
     ])
     expect(output.filter((text) => text.includes("new output"))).toHaveLength(2)
     app.mockInput.pressKey("c", { ctrl: true })
-    await app.renderOnce()
+    await app.flush()
     expect(app.renderer.currentFocusedEditor?.plainText).toBe("draft")
     expect(app.captureCharFrame()).toContain(mono ? "| draft" : "\u2503 draft")
   } finally {

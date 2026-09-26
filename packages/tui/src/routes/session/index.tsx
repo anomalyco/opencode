@@ -215,6 +215,7 @@ export function Session(props: {
     return messages().findLast((x) => x.type === "assistant")
   })
 
+  const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
   const thinkingMode = createMemo<ThinkingMode>(() => config.session?.thinking ?? "hide")
   const showScrollbar = createMemo(() => config.session?.scrollbar ?? false)
@@ -366,8 +367,8 @@ export function Session(props: {
 
   /** Runs after layout has settled (two frames), unless the transcript was torn down. */
   const afterLayout = (continuation: () => void) => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
+    renderer.requestAnimationFrame(() => {
+      renderer.requestAnimationFrame(() => {
         if (!scroll || scroll.isDestroyed) return
         continuation()
       })
@@ -537,7 +538,6 @@ export function Session(props: {
     current.submit()
   })
   const dialog = useDialog()
-  const renderer = useRenderer()
   const runPendingAction = createSingleFlight<string>()
   const mutatePending = async (action: PendingAction, inboxID: string) => {
     const result = await runPendingAction(inboxID, async () => {
@@ -1744,8 +1744,10 @@ function SessionReasoningGroupView(props: {
   const ctx = use()
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
-  const thinkingSyntax = createSyntaxStyleMemo(() => generateThinkingSyntax(syntax(), theme.text.subdued))
   const renderer = useRenderer()
+  const thinkingSyntax = createSyntaxStyleMemo(() =>
+    generateThinkingSyntax(syntax(), theme.text.subdued, renderer.nativeScene),
+  )
   const [expanded, setExpanded] = createSignal(false)
   const [hover, setHover] = createSignal(false)
   const parts = createMemo(() =>

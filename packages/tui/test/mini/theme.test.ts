@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "bun:test"
 import path from "node:path"
 import { RGBA, type CliRenderer, type TerminalColors } from "@opentui/core"
+import { createTestRenderer } from "@opentui/core/testing"
 import { DEFAULT_THEME, resolveThemeDocument, type ResolvedTheme } from "@opencode/theme/tui"
 import {
   RUN_THEME_MONO,
@@ -14,6 +15,11 @@ import { generateSystem } from "../../src/theme/system"
 import { tmpdir } from "../fixture/fixture"
 
 const tmp = await tmpdir()
+const resources = await createTestRenderer({})
+afterAll(async () => {
+  resources.renderer.destroy()
+  await resources.renderer.closed
+})
 const previousConfig = process.env.OPENCODE_CONFIG_DIR
 beforeAll(() => {
   process.env.OPENCODE_CONFIG_DIR = tmp.path
@@ -51,6 +57,17 @@ const emptyColors = terminalColors({
   highlightForeground: null,
 })
 
+test("theme lookup does not allocate resources after renderer shutdown", async () => {
+  const setup = await createTestRenderer({})
+  const palette = Promise.withResolvers<TerminalColors>()
+  setup.renderer.getPalette = () => palette.promise
+  const pending = resolveRunTheme(setup.renderer)
+  setup.renderer.destroy()
+  await setup.renderer.closed
+  palette.resolve(terminalColors())
+  expect((await pending).block.syntax).toBeUndefined()
+})
+
 function renderer(
   input: {
     themeMode?: "dark" | "light"
@@ -60,6 +77,7 @@ function renderer(
   } = {},
 ) {
   return {
+    nativeScene: resources.renderer.nativeScene,
     get themeMode() {
       return input.themeMode
     },

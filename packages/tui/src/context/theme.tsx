@@ -322,7 +322,7 @@ const themeContext = createSimpleContext({
 
     createEffect(() => renderer.setBackgroundColor(valuesV2().background.default))
 
-    const currentSyntax = createSyntaxStyleMemo(() => generateSyntax(valuesV2(), mode()))
+    const currentSyntax = createSyntaxStyleMemo(() => generateSyntax(valuesV2(), mode(), renderer.nativeScene))
     const service: Themes = {
       current,
       currentTokens: valuesV2,

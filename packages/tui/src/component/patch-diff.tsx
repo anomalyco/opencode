@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { DiffRenderable, LineNumberRenderable, type ColorInput } from "@opentui/core"
-import type { JSX } from "@opentui/solid"
+import { useRenderer, type JSX } from "@opentui/solid"
 import { createMemo, For, Show, splitProps } from "solid-js"
 import { splitPatchHunks } from "../util/diff"
 import { stringWidth } from "../util/string-width"
@@ -17,6 +17,7 @@ type Props = Omit<JSX.IntrinsicElements["diff"], "diff" | "lineNumberBg" | "ref"
 }
 
 export function PatchDiff(props: Props) {
+  const renderer = useRenderer()
   const [local, diffProps] = splitProps(props, ["diff", "hunkFg", "lineNumberBg", "ref"])
   const hunks = createMemo(() => splitPatchHunks(local.diff))
   const nodes = new Map<number, DiffRenderable>()
@@ -28,7 +29,7 @@ export function PatchDiff(props: Props) {
         .filter((node) => !node.isDestroyed),
   })
   const syncGutters = (attempt = 0) => {
-    requestAnimationFrame(() => {
+    renderer.requestAnimationFrame(() => {
       const sides = [...nodes.values()]
         .filter((item) => !item.isDestroyed)
         .flatMap((item) => item.getChildren().filter((side) => side instanceof LineNumberRenderable))

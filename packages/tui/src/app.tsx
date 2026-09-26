@@ -247,7 +247,10 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
         if (handoff) {
           handoff.renderer.useMouse = options.useMouse
           return yield* Effect.acquireRelease(Effect.succeed(handoff.renderer), (renderer) =>
-            Effect.sync(() => destroyRenderer(renderer)),
+            Effect.promise(async () => {
+              destroyRenderer(renderer)
+              await renderer.closed
+            }),
           )
         }
         if (process.env.OPENCODE_DRIVE) {
@@ -259,7 +262,11 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
             try: () => createCliRenderer(options),
             catch: (error) => (error instanceof Error ? error : new Error(String(error))),
           }),
-          (renderer) => Effect.sync(() => destroyRenderer(renderer)),
+          (renderer) =>
+            Effect.promise(async () => {
+              destroyRenderer(renderer)
+              await renderer.closed
+            }),
         )
       })
       const clipboard = yield* Effect.acquireRelease(

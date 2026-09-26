@@ -10,7 +10,8 @@ test.each([70, 120])(
   "/compact renders before model setup, suppresses repeat gestures, and toasts rollback at %i columns",
   async (width) => {
     await using state = await tmpdir()
-    const setup = await createTestRenderer({ width, height: 30, useThread: false, kittyKeyboard: true })
+    const setup = await createTestRenderer({ width, height: 30, kittyKeyboard: true })
+    await setup.renderer.setupTerminal()
     setup.renderer.start()
     const ready = Promise.withResolvers<void>()
     const model = Promise.withResolvers<Response>()
@@ -96,7 +97,8 @@ test.each(["first", "second"])(
   "a following prompt commits its selected model after prompt and compaction setup (cached: %s)",
   async (initial) => {
     await using state = await tmpdir()
-    const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
+    const setup = await createTestRenderer({ width: 100, height: 30, kittyKeyboard: true })
+    await setup.renderer.setupTerminal()
     setup.renderer.start()
     const ready = Promise.withResolvers<void>()
     const first = Promise.withResolvers<void>()

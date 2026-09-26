@@ -1,11 +1,19 @@
 import { afterEach, expect, test } from "bun:test"
 import type { SessionMessageAssistantTool } from "@opencode/client/promise"
-import { CliRenderEvents, MarkdownRenderable, RGBA, SyntaxStyle, TextAttributes, TextRenderable } from "@opentui/core"
+import {
+  CliRenderEvents,
+  MarkdownRenderable,
+  ResourceContext,
+  RGBA,
+  SyntaxStyle,
+  TextAttributes,
+  TextRenderable,
+} from "@opentui/core"
 import { MockTreeSitterClient, createTestRenderer, type TestRenderer } from "@opentui/core/testing"
 import { monoSnapshot } from "../../src/mini/mono"
 import { RunScrollbackStream } from "../../src/mini/scrollback.surface"
 import { entryLook } from "../../src/mini/scrollback.shared"
-import { entryGroupKey } from "../../src/mini/scrollback.writer"
+import { entryGroupKey, entryWriter } from "../../src/mini/scrollback.writer"
 import { RUN_THEME_FALLBACK, RUN_THEME_MONO, type RunTheme } from "../../src/mini/theme"
 import type { StreamCommit } from "../../src/mini/types"
 import { canonicalToolPart } from "./fixture/tool-part"
@@ -22,9 +30,10 @@ type ClaimedCommit = {
 const decoder = new TextDecoder()
 const active: TestRenderer[] = []
 
-afterEach(() => {
+afterEach(async () => {
   for (const renderer of active.splice(0)) {
     renderer.destroy()
+    await renderer.closed
   }
 })
 
@@ -144,8 +153,9 @@ test("turn summary starts at the left edge", async () => {
 })
 
 test("theme swaps restyle active reasoning without resetting the stream", async () => {
-  const previousSyntax = SyntaxStyle.fromStyles({ default: { fg: "#123456" } })
-  const nextSyntax = SyntaxStyle.fromStyles({ default: { fg: "#abcdef" } })
+  const owner = new ResourceContext({ objectCapacity: 8, renderCellsMax: 1 })
+  const previousSyntax = SyntaxStyle.fromStyles({ default: { fg: "#123456" } }, owner)
+  const nextSyntax = SyntaxStyle.fromStyles({ default: { fg: "#abcdef" } }, owner)
   const released: RunTheme[] = []
   const previous = {
     ...RUN_THEME_FALLBACK,
@@ -165,20 +175,30 @@ test("theme swaps restyle active reasoning without resetting the stream", async 
 
   try {
     await out.scrollback.append(reasoning("before"))
-    expect(activeSyntax(out.scrollback)).toBe(previousSyntax)
+    const previousBound = activeSyntax(out.scrollback)!
+    expect(previousBound).not.toBe(previousSyntax)
+    expect(previousBound.getAllStyles()).toEqual(previousSyntax.getAllStyles())
 
     out.scrollback.setTheme(next)
-    expect(activeSyntax(out.scrollback)).toBe(nextSyntax)
+    const nextBound = activeSyntax(out.scrollback)!
+    expect(nextBound).not.toBe(nextSyntax)
+    expect(nextBound.getAllStyles()).toEqual(nextSyntax.getAllStyles())
+    expect(previousBound.getAllStyles()).toEqual(previousSyntax.getAllStyles())
     expect(released).toEqual([])
 
     await out.scrollback.append(reasoning("after"))
-    expect(activeSyntax(out.scrollback)).toBe(nextSyntax)
+    expect(activeSyntax(out.scrollback)).toBe(nextBound)
     expect(released).toEqual([previous])
+    expect(() => previousBound.getAllStyles()).toThrow()
+    await out.scrollback.complete()
+    expect(() => nextBound.getAllStyles()).toThrow()
+    expect(nextSyntax.getStyle("default")?.fg?.toInts()).toEqual(RGBA.fromHex("#abcdef").toInts())
   } finally {
     out.scrollback.destroy()
     destroy(claim(out.renderer))
     previousSyntax.destroy()
     nextSyntax.destroy()
+    owner.destroy()
   }
 })
 
@@ -186,6 +206,35 @@ function activeSyntax(scrollback: RunScrollbackStream) {
   const entry = Reflect.get(scrollback, "active") as { renderable?: { syntaxStyle?: SyntaxStyle } } | undefined
   return entry?.renderable?.syntaxStyle
 }
+
+test("static scrollback owns its bound style without releasing the source theme", async () => {
+  const out = await setup()
+  const syntax = SyntaxStyle.fromStyles({ default: { fg: "#123456" } }, out.renderer.nativeScene)
+  const surface = out.renderer.createScrollbackSurface()
+  try {
+    const snapshot = entryWriter({
+      commit: assistant("Hello", "final"),
+      body: { type: "markdown", content: "Hello" },
+      theme: { ...RUN_THEME_FALLBACK, block: { ...RUN_THEME_FALLBACK.block, syntax } },
+    })({
+      width: surface.width,
+      widthMethod: out.renderer.widthMethod,
+      tailColumn: 0,
+      renderContext: surface.renderContext,
+    })
+    const bound = (snapshot.root.getChildren()[0] as MarkdownRenderable).syntaxStyle
+    expect(bound).not.toBe(syntax)
+    expect(bound.getAllStyles()).toEqual(syntax.getAllStyles())
+    snapshot.root.destroyRecursively()
+    snapshot.teardown?.()
+    expect(() => bound.getAllStyles()).toThrow()
+    expect(syntax.getStyleCount()).toBe(1)
+  } finally {
+    surface.destroy()
+    syntax.destroy()
+    out.scrollback.destroy()
+  }
+})
 
 test("theme swaps preserve streamed markdown parser state", async () => {
   const out = await setup()

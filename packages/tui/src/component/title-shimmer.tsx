@@ -109,9 +109,9 @@ export class TitleShimmerRenderable extends TextRenderable {
     this.requestRender()
   }
 
-  override render(buffer: OptimizedBuffer, deltaTime: number) {
+  protected override renderSelf(buffer: OptimizedBuffer, deltaTime = 0) {
     if (!this.visible || this.isDestroyed || !Number.isFinite(this.width) || this.width <= 0 || this.height <= 0) return
-    if (!this.animating) return super.render(buffer, deltaTime)
+    if (!this.animating) return super.renderSelf(buffer)
     // A newly live title must not inherit time spent idle before its fade started.
     const delta = this.fresh ? 0 : deltaTime
     this.fresh = false
@@ -131,10 +131,13 @@ export class TitleShimmerRenderable extends TextRenderable {
     if (!this.animating) {
       this.previous?.destroy()
       this.previous = undefined
-      return super.render(buffer, deltaTime)
+      return super.renderSelf(buffer)
     }
     if (!this.scratch)
-      this.scratch = OptimizedBuffer.create(this.width, this.height, this._ctx.widthMethod, { respectAlpha: true })
+      this.scratch = OptimizedBuffer.create(this.width, this.height, this._ctx.widthMethod, {
+        owner: this._ctx.nativeScene,
+        respectAlpha: true,
+      })
     if (this.scratch.width !== this.width || this.scratch.height !== this.height)
       this.scratch.resize(this.width, this.height)
 
@@ -175,80 +178,85 @@ export class TitleShimmerRenderable extends TextRenderable {
       Math.max(0, clip.right - clip.left),
       Math.max(0, clip.bottom - clip.top),
     )
-    this.scratch.drawTextBuffer(this.textBufferView, 0, 0)
-    const characters = this.scratch.buffers.char
-    let end = 0
-    for (let row = 0; row < this.height; row++) {
-      let column = this.width
-      while (
-        column > 0 &&
-        (characters[row * this.width + column - 1] === 32 || characters[row * this.width + column - 1] === 0)
-      )
-        column--
-      end = Math.max(end, column)
-    }
-    const wipeFront =
-      this.arrival !== undefined && this.previous
-        ? -WIPE_FEATHER +
-          coast(this.arrival / ARRIVAL_DURATION) * (Math.max(end, this.previous.width) + WIPE_FEATHER * 2)
-        : undefined
-    const cut = Math.max(0, Math.min(this.width, Math.round(wipeFront ?? 0)))
-    if (wipeFront !== undefined && this.previous) {
-      this.scratch.clear(TRANSPARENT)
-      this.scratch.pushScissorRect(0, 0, cut, this.height)
-      this.scratch.drawTextBuffer(this.textBufferView, 0, 0)
-      this.scratch.popScissorRect()
-      // Snapshot slices must also end on whole glyphs; framebuffer clipping alone can split them.
-      for (let row = 0; row < Math.min(this.height, this.previous.height); row++) {
-        let left = Math.max(cut, clip.left)
-        let right = Math.min(this.previous.width, clip.right)
-        const offset = row * this.previous.width
-        while (left < right && (this.previous.buffers.char[offset + left] & CONTINUATION) === CONTINUATION) left++
+    this.drawToBuffer(this.scratch, 0, 0)
+    const scratch = this.scratch
+    scratch.withBuffers((cells) => {
+      const characters = cells.char
+      let end = 0
+      for (let row = 0; row < this.height; row++) {
+        let column = this.width
         while (
-          right > left &&
-          right < this.previous.width &&
-          (this.previous.buffers.char[offset + right] & CONTINUATION) === CONTINUATION
+          column > 0 &&
+          (characters[row * this.width + column - 1] === 32 || characters[row * this.width + column - 1] === 0)
         )
-          right--
-        if (right > left) this.scratch.drawFrameBuffer(left, row, this.previous, left, row, right - left, 1)
+          column--
+        end = Math.max(end, column)
       }
-    }
-    this.scratch.clearScissorRects()
-    if (this.mask.length !== this.width * this.height * 3) this.mask = new Float32Array(this.width * this.height * 3)
-    if (wipeFront === undefined) {
-      if (!this.previous)
-        this.previous = OptimizedBuffer.create(Math.max(1, end), this.height, this._ctx.widthMethod, {
-          respectAlpha: true,
+      const wipeFront =
+        this.arrival !== undefined && this.previous
+          ? -WIPE_FEATHER +
+            coast(this.arrival / ARRIVAL_DURATION) * (Math.max(end, this.previous.width) + WIPE_FEATHER * 2)
+          : undefined
+      const cut = Math.max(0, Math.min(this.width, Math.round(wipeFront ?? 0)))
+      if (wipeFront !== undefined && this.previous) {
+        scratch.clear(TRANSPARENT)
+        scratch.pushScissorRect(0, 0, cut, this.height)
+        this.drawToBuffer(scratch, 0, 0)
+        scratch.popScissorRect()
+        const previous = this.previous
+        previous.withBuffers((cells) => {
+          // Snapshot slices must also end on whole glyphs; framebuffer clipping alone can split them.
+          for (let row = 0; row < Math.min(this.height, previous.height); row++) {
+            let left = Math.max(cut, clip.left)
+            let right = Math.min(previous.width, clip.right)
+            const offset = row * previous.width
+            while (left < right && (cells.char[offset + left] & CONTINUATION) === CONTINUATION) left++
+            while (
+              right > left &&
+              right < previous.width &&
+              (cells.char[offset + right] & CONTINUATION) === CONTINUATION
+            )
+              right--
+            if (right > left) scratch.drawFrameBuffer(left, row, previous, left, row, right - left, 1)
+          }
         })
-      if (this.previous.width !== Math.max(1, end) || this.previous.height !== this.height)
-        this.previous.resize(Math.max(1, end), this.height)
-      this.previous.clear(TRANSPARENT)
-      this.previous.drawFrameBuffer(0, 0, this.scratch)
-    }
-    const front = -4 + coast(this.elapsed / SHIMMER_DURATION) * ((this.previous?.width ?? end) + 4 + 18)
-    const level = smootherstep(this.blend)
-    let strength = 0
-    for (let cell = 0; cell < characters.length; cell++) {
-      const column = cell % this.width
-      if ((characters[cell] & CONTINUATION) !== CONTINUATION) {
-        const old = wipeFront === undefined || column >= cut
-        let visibility = old ? 1 - 0.6 * level * (1 - intensityAt(column, front, 4, 18)) : 1
-        if (wipeFront !== undefined) {
-          let width = 1
-          while (column + width < this.width && (characters[cell + width] & CONTINUATION) === CONTINUATION) width++
-          const distance = old ? column - wipeFront : wipeFront - (column + width)
-          visibility *= smootherstep(Math.max(0, Math.min(1, distance / WIPE_FEATHER)))
-        }
-        strength = 1 - visibility
       }
-      this.mask[cell * 3] = column
-      this.mask[cell * 3 + 1] = Math.floor(cell / this.width)
-      this.mask[cell * 3 + 2] = strength
-    }
-    this.scratch.colorMatrix(this.matrix, this.mask, 1, TargetChannel.FG)
-    buffer.drawFrameBuffer(this.screenX, this.screenY, this.scratch)
-    this.markClean()
-    this._ctx.addToHitGrid(this.screenX, this.screenY, this.width, this.height, this.num)
+      scratch.clearScissorRects()
+      if (this.mask.length !== this.width * this.height * 3) this.mask = new Float32Array(this.width * this.height * 3)
+      if (wipeFront === undefined) {
+        if (!this.previous)
+          this.previous = OptimizedBuffer.create(Math.max(1, end), this.height, this._ctx.widthMethod, {
+            owner: this._ctx.nativeScene,
+            respectAlpha: true,
+          })
+        if (this.previous.width !== Math.max(1, end) || this.previous.height !== this.height)
+          this.previous.resize(Math.max(1, end), this.height)
+        this.previous.clear(TRANSPARENT)
+        this.previous.drawFrameBuffer(0, 0, scratch)
+      }
+      const front = -4 + coast(this.elapsed / SHIMMER_DURATION) * ((this.previous?.width ?? end) + 4 + 18)
+      const level = smootherstep(this.blend)
+      let strength = 0
+      for (let cell = 0; cell < characters.length; cell++) {
+        const column = cell % this.width
+        if ((characters[cell] & CONTINUATION) !== CONTINUATION) {
+          const old = wipeFront === undefined || column >= cut
+          let visibility = old ? 1 - 0.6 * level * (1 - intensityAt(column, front, 4, 18)) : 1
+          if (wipeFront !== undefined) {
+            let width = 1
+            while (column + width < this.width && (characters[cell + width] & CONTINUATION) === CONTINUATION) width++
+            const distance = old ? column - wipeFront : wipeFront - (column + width)
+            visibility *= smootherstep(Math.max(0, Math.min(1, distance / WIPE_FEATHER)))
+          }
+          strength = 1 - visibility
+        }
+        this.mask[cell * 3] = column
+        this.mask[cell * 3 + 1] = Math.floor(cell / this.width)
+        this.mask[cell * 3 + 2] = strength
+      }
+      scratch.colorMatrix(this.matrix, this.mask, 1, TargetChannel.FG)
+      buffer.drawFrameBuffer(this.screenX, this.screenY, scratch)
+    })
   }
 
   override destroy() {

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { RGBA } from "@opentui/core"
+import { ResourceContext, RGBA } from "@opentui/core"
 import {
   DEFAULT_THEME,
   generateSyntax,
@@ -45,10 +45,15 @@ test("validates and resolves categorical hues in configured order", () => {
 
 test("generates syntax with one categorical hue", () => {
   const theme = resolveSource({ version: 2, light: { categorical: ["red"] } }, "light")
-  const syntax = generateSyntax(theme, "light")
+  const owner = new ResourceContext({ objectCapacity: 1, renderCellsMax: 1 })
+  const syntax = generateSyntax(theme, "light", owner)
 
-  expect(syntax.getStyleId("extmark.skill")).not.toBeNull()
-  syntax.destroy()
+  try {
+    expect(syntax.getStyleId("extmark.skill")).not.toBeNull()
+  } finally {
+    syntax.destroy()
+    owner.destroy()
+  }
 })
 
 test("uses the default categorical order for direct definitions", () => {

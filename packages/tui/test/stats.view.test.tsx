@@ -7,7 +7,8 @@ import { tmpdir } from "./fixture/fixture"
 
 test("stats shows only this year and returns after errors or success", async () => {
   await using state = await tmpdir()
-  const setup = await createTestRenderer({ width: 100, height: 34, useThread: false, kittyKeyboard: true })
+  const setup = await createTestRenderer({ width: 100, height: 34, kittyKeyboard: true })
+  await setup.renderer.setupTerminal()
   setup.renderer.start()
   const requests: URL[] = []
   const calls = createFetch((url) => {

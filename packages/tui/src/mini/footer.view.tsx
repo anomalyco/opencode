@@ -524,7 +524,7 @@ export function RunFooterView(props: RunFooterViewProps) {
       .join(props.mono ? " - " : " \u00b7 ")
     if (stringWidth(text) <= statusWidth() && !text.includes("\n")) return 1
     // Measure outside the clipped footer so wrapped required controls can grow it.
-    const buffer = TextBuffer.create(renderer.widthMethod)
+    const buffer = TextBuffer.create(renderer.widthMethod, renderer.nativeScene)
     const view = TextBufferView.create(buffer)
     buffer.setText(text)
     view.setWrapMode("word")

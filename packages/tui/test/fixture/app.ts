@@ -20,9 +20,9 @@ export async function createAppFixture(
   const setup = await createTestRenderer({
     width: input.width ?? 100,
     height: input.height ?? 30,
-    useThread: false,
     kittyKeyboard: true,
   })
+  await setup.renderer.setupTerminal()
   setup.renderer.start()
   const ready = Promise.withResolvers<void>()
   const events = createEventStream()

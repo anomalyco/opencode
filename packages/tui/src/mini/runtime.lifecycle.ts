@@ -94,9 +94,9 @@ export type Lifecycle = {
 // Gracefully tears down the renderer. Order matters: switch external output
 // back to passthrough before leaving split-footer mode, so pending stdout
 // doesn't get captured into the now-dead scrollback pipeline.
-function shutdown(renderer: CliRenderer): void {
+async function shutdown(renderer: CliRenderer): Promise<void> {
   if (renderer.isDestroyed) {
-    return
+    return renderer.closed
   }
 
   if (renderer.externalOutputMode === "capture-stdout") {
@@ -110,6 +110,7 @@ function shutdown(renderer: CliRenderer): void {
   if (!renderer.isDestroyed) {
     renderer.destroy()
   }
+  await renderer.closed
 }
 
 function splashTitle(title: string | undefined, history: RunPrompt[]) {
@@ -334,8 +335,8 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
       footer.close()
       await footer.idle().catch(() => {})
       footer.destroy()
-      if (input.host.platform === "linux") renderer.setTerminalTitle("")
-      shutdown(renderer)
+      if (input.host.platform === "linux" && !renderer.isDestroyed) renderer.setTerminalTitle("")
+      await shutdown(renderer)
       if (!wroteExit) {
         input.host.stdout.write("\n")
       }

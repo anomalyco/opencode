@@ -1,6 +1,7 @@
 import { createMemo, For, Show, createEffect, onMount, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { TextAttributes, ScrollBoxRenderable } from "@opentui/core"
+import { useRenderer } from "@opentui/solid"
 import type { SessionInfo } from "@opencode/client"
 import { useRoute, useRouteData } from "../../../context/route"
 import { useData } from "../../../context/data"
@@ -22,6 +23,7 @@ interface SubagentEntry {
 }
 
 export function SubagentsTab(props: { sessionID: string }) {
+  const renderer = useRenderer()
   const route = useRouteData("session")
   const data = useData()
   const client = useClient()
@@ -84,7 +86,7 @@ export function SubagentsTab(props: { sessionID: string }) {
       const scrollCurrentIntoView = () => scrollToIndex(next, true)
       scrollCurrentIntoView()
       // The remounted scrollbox finishes layout on the next frame and resets its scroll position.
-      requestAnimationFrame(() => requestAnimationFrame(scrollCurrentIntoView))
+      renderer.requestAnimationFrame(() => renderer.requestAnimationFrame(scrollCurrentIntoView))
     }
     wasActive = true
     if (store.selected >= list.length) moveTo(Math.max(0, list.length - 1))

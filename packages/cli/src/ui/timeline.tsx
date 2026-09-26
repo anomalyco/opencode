@@ -94,6 +94,7 @@ function bounded(task: Promise<unknown>) {
 }
 
 async function shutdown(renderer: CliRenderer): Promise<void> {
+  if (renderer.isDestroyed) return renderer.closed
   await bounded(renderer.idle())
   try {
     renderer.externalOutputMode = "passthrough"
@@ -102,6 +103,7 @@ async function shutdown(renderer: CliRenderer): Promise<void> {
       renderer.screenMode = "main-screen"
     } finally {
       if (!renderer.isDestroyed) renderer.destroy()
+      await renderer.closed
     }
   }
 }

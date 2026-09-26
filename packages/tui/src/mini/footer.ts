@@ -1144,7 +1144,11 @@ export class RunFooter implements FooterApi {
     this.prompts.clear()
     this.closes.clear()
     this.scrollback.destroy()
-    for (const theme of [...this.themes]) this.destroyTheme(theme)
+    void this.renderer.closed
+      .catch(() => {})
+      .then(() => {
+        for (const theme of [...this.themes]) this.destroyTheme(theme)
+      })
   }
 
   // Drains the commit queue to scrollback. The surface manager owns grouping,
