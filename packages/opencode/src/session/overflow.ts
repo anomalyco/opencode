@@ -28,7 +28,14 @@ export function isOverflow(input: {
   if (input.cfg.compaction?.auto === false) return false
   if (input.model.limit.context === 0) return false
 
-  const count =
-    input.tokens.total || input.tokens.input + input.tokens.output + input.tokens.cache.read + input.tokens.cache.write
+  const tokens = input.tokens
+  const prompt = tokens.input + tokens.cache.read + tokens.cache.write
+  // A real prompt can never exceed the model's context window. Some providers report
+  // impossible usage after image-heavy histories (#50474); trusting it makes
+  // auto-compaction loop on every step, so ignore such reports here. Genuine
+  // overflow still recovers through the ContextOverflowError path.
+  if (prompt > input.model.limit.context) return false
+
+  const count = tokens.total || prompt + tokens.output
   return count >= usable(input)
 }

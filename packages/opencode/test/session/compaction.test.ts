@@ -561,6 +561,46 @@ describe("session.compaction.isOverflow", () => {
       },
     ),
   )
+
+  // ─── Regression: #50474 ───────────────────────────────────────────────
+  // A provider reported usage.input 24x the model's context window. isOverflow
+  // trusted it, so auto-compaction re-triggered every step until interrupted.
+
+  it.live(
+    "returns false when reported input exceeds the model's context window",
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const model = createModel({ context: 1_048_576, input: 1_048_576, output: 384_000 })
+        const tokens = { input: 25_391_744, output: 2_041_207, reasoning: 0, cache: { read: 0, write: 0 } }
+        expect(yield* compact.isOverflow({ tokens, model })).toBe(false)
+      }),
+    ),
+  )
+
+  it.live(
+    "returns false when input plus cache exceeds the model's context window",
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const model = createModel({ context: 1_048_576, output: 384_000 })
+        const tokens = { input: 600_000, output: 10_000, reasoning: 0, cache: { read: 600_000, write: 0 } }
+        expect(yield* compact.isOverflow({ tokens, model })).toBe(false)
+      }),
+    ),
+  )
+
+  it.live(
+    "still returns true when the prompt exactly fills the context window",
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        const model = createModel({ context: 100_000, output: 32_000 })
+        const tokens = { input: 100_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } }
+        expect(yield* compact.isOverflow({ tokens, model })).toBe(true)
+      }),
+    ),
+  )
 })
 
 describe("session.compaction.create", () => {
