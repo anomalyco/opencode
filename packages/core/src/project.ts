@@ -32,10 +32,28 @@ export interface Resolved {
   readonly id: ID
   readonly directory: AbsolutePath
   readonly vcs?: Vcs
+  readonly associated?: boolean
 }
+
+export const AssociateInput = Schema.Struct({
+  projectID: ID,
+  directory: AbsolutePath,
+  strategy: Schema.optional(Schema.String),
+}).annotate({ identifier: "Project.AssociateInput" })
+export type AssociateInput = typeof AssociateInput.Type
+
+export const DissociateInput = Schema.Struct({
+  projectID: ID,
+  directory: AbsolutePath,
+}).annotate({ identifier: "Project.DissociateInput" })
+export type DissociateInput = typeof DissociateInput.Type
 
 export interface Interface {
   readonly directories: (input: DirectoriesInput) => Effect.Effect<Directories>
+  /** Associate a directory with a project, and return the project's directories. */
+  readonly associate: (input: AssociateInput) => Effect.Effect<Directories>
+  /** Remove a directory's association with a project, and return what remains. */
+  readonly dissociate: (input: DissociateInput) => Effect.Effect<Directories>
   readonly resolve: (input: AbsolutePath) => Effect.Effect<Resolved>
   /**
    * Temporary bridge method for writing the resolved project ID to the repo-local cache.
@@ -59,7 +77,27 @@ const layer = Layer.effect(
     const projectDirectories = yield* ProjectDirectories.Service
 
     const directories = Effect.fn("Project.directories")(function* (input: DirectoriesInput) {
-      return yield* projectDirectories.list(input.projectID)
+      const recorded = yield* projectDirectories.list(input.projectID)
+      const associated = yield* projectDirectories.associations(input.projectID)
+      const known = new Set(recorded.map((item) => item.directory))
+      return [...recorded, ...associated.filter((item) => !known.has(item.directory))]
+    })
+
+    const associate = Effect.fn("Project.associate")(function* (input: AssociateInput) {
+      yield* projectDirectories.associate({
+        projectID: input.projectID,
+        directory: AbsolutePath.make(yield* fs.resolve(input.directory)),
+        strategy: input.strategy,
+      })
+      return yield* directories({ projectID: input.projectID })
+    })
+
+    const dissociate = Effect.fn("Project.dissociate")(function* (input: DissociateInput) {
+      yield* projectDirectories.dissociate({
+        projectID: input.projectID,
+        directory: AbsolutePath.make(yield* fs.resolve(input.directory)),
+      })
+      return yield* directories({ projectID: input.projectID })
     })
 
     const cached = Effect.fnUntraced(function* (dir: string) {
@@ -109,7 +147,15 @@ const layer = Layer.effect(
 
     const resolve = Effect.fn("Project.resolve")(function* (input: AbsolutePath) {
       const repo = yield* git.repo.discover(input)
-      if (!repo) return { id: ID.global, directory: AbsolutePath.make(path.parse(input).root), vcs: undefined }
+      if (!repo) {
+        // An exact, explicit association gives a non-repository directory a project.
+        //
+        // Deliberately a fallback: git discovery still wins where it succeeds, so an
+        // association can never silently re-home a directory that is a worktree.
+        const owner = yield* projectDirectories.ownerOf(input)
+        if (owner) return { id: owner, directory: input, vcs: undefined, associated: true }
+        return { id: ID.global, directory: AbsolutePath.make(path.parse(input).root), vcs: undefined }
+      }
 
       const previous = yield* cached(repo.commonDirectory)
       const id = (yield* remote(repo)) ?? previous ?? (yield* root(repo))
@@ -125,7 +171,7 @@ const layer = Layer.effect(
       yield* fs.writeFileString(path.join(input.store, "opencode"), input.id).pipe(Effect.ignore)
     })
 
-    return Service.of({ directories, resolve, commit })
+    return Service.of({ directories, associate, dissociate, resolve, commit })
   }),
 )
 
