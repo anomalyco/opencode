@@ -431,7 +431,12 @@ function unsupportedParts(msgs: ModelMessage[], model: Provider.Model): ModelMes
       const filename = part.type === "file" ? part.filename : undefined
       const modality = mimeToModality(mime)
       if (!modality) return part
-      if (model.capabilities.input[modality]) return part
+      if (
+        Array.isArray(model.capabilities.input)
+          ? model.capabilities.input.includes(modality)
+          : model.capabilities.input[modality]
+      )
+        return part
 
       const name = filename ? `"${filename}"` : modality
       return {
