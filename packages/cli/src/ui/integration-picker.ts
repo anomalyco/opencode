@@ -7,6 +7,7 @@ export type IntegrationChoice = {
   label: string
   category: "MCP" | "Popular" | "Services"
   connected: boolean
+  hint?: string
 }
 
 export async function selectIntegration(choices: IntegrationChoice[], kind = "integration") {
@@ -38,7 +39,7 @@ export async function selectIntegration(choices: IntegrationChoice[], kind = "in
           : []),
         `${color.cyan(S_BAR)}  ${start + index === this.cursor ? color.green(S_RADIO_ACTIVE) : color.dim(S_RADIO_INACTIVE)} ${
           start + index === this.cursor ? choice.label : color.dim(choice.label)
-        }${choice.connected ? ` ${color.green("✓")}` : ""}`,
+        }${choice.connected ? ` ${color.green("✓")}` : ""}${choice.hint ? ` ${color.dim(`(${choice.hint})`)}` : ""}`,
       ])
       return [
         title,
