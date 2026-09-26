@@ -40,10 +40,10 @@ index 0ddf03bf666a05f50c66bef32af65b1403ed0192..1cd52ecee9c28ccd812813cef29e9207
  //# sourceMappingURL=index.node.js.map
 diff --git a/node_modules/@opentui/core/thai-caret.js b/thai-caret.js
 new file mode 100644
-index 0000000000000000000000000000000000000000..01ad206104f0df3479a520e23f26b2863e351e61
+index 0000000000000000000000000000000000000000..62027907e3ac98f43b6d4e0b9cd619570b747088
 --- /dev/null
 +++ b/thai-caret.js
-@@ -0,0 +1,176 @@
+@@ -0,0 +1,189 @@
 +const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" })
 +const thaiWords = new Intl.Segmenter("th", { granularity: "word" })
 +const THAI = /[\u0E00-\u0E7F]/
@@ -114,6 +114,7 @@ index 0000000000000000000000000000000000000000..01ad206104f0df3479a520e23f26b286
 +
 +  const moveCursorRight = proto.moveCursorRight
 +  const insertText = proto.insertText
++  const setText = proto.setText
 +  const moveWordForward = proto.moveWordForward
 +  const moveWordBackward = proto.moveWordBackward
 +  const deleteWordBackward = proto.deleteWordBackward
@@ -124,7 +125,12 @@ index 0000000000000000000000000000000000000000..01ad206104f0df3479a520e23f26b286
 +    const collapsing = !selecting && this.hasSelection()
 +    const before = this.cursorOffset
 +    const result = moveCursorRight.call(this, options)
-+    if (collapsing) return result
++    // Collapse uses selection.end - 1, which lands inside a wide Thai cluster.
++    // Snap that caret, but do not take the extra step meant for a stuck arrow.
++    if (collapsing) {
++      snapCaret(this)
++      return result
++    }
 +    snapCaret(this)
 +    if (this.cursorOffset === before) stepCaret(this)
 +    if (selecting && this.cursorOffset !== before) this.updateSelectionForMovement(true, false)
@@ -157,6 +163,13 @@ index 0000000000000000000000000000000000000000..01ad206104f0df3479a520e23f26b286
 +    flush()
 +    this.requestRender()
 +    snapCaret(this)
++  }
++
++  proto.setText = function (text) {
++    if (!text.includes(SARA_AM)) return setText.call(this, text)
++    setText.call(this, "")
++    this.insertText(text)
++    this.editBuffer.clearHistory()
 +  }
 +
 +  proto.moveWordForward = function (options) {

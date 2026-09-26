@@ -309,14 +309,11 @@ describe("thai typing", () => {
       while (editor.textarea.cursorOffset > 0) editor.app.mockInput.pressArrow("left")
       editor.app.mockInput.pressKey("DELETE")
       await editor.app.renderOnce()
-      if (editor.textarea.plainText === source) {
-        editor.app.mockInput.pressKey("d", { ctrl: true })
-        await editor.app.renderOnce()
-      }
-      assertWholeClusters(source, editor.textarea.plainText)
       console.log(
         `thai-forward-delete ${JSON.stringify(editor.textarea.plainText)} caret ${editor.textarea.cursorOffset}`,
       )
+      expect(editor.textarea.plainText).toBe("ดี")
+      expect(editor.textarea.cursorOffset).toBe(0)
     } finally {
       await editor.cleanup()
     }
@@ -331,10 +328,11 @@ describe("thai typing", () => {
       editor.app.mockInput.pressArrow("left", { shift: true })
       editor.app.mockInput.pressKey("ก")
       await editor.app.renderOnce()
-      assertWholeClusters(source + "ก", editor.textarea.plainText)
       console.log(
         `thai-select-replace ${JSON.stringify(editor.textarea.plainText)} caret ${editor.textarea.cursorOffset}`,
       )
+      expect(editor.textarea.plainText).toBe(`${thai.saraAmTone}ก`)
+      expect(editor.textarea.cursorOffset).toBe(promptOffsetWidth(thai.saraAmTone))
     } finally {
       await editor.cleanup()
     }
@@ -348,21 +346,29 @@ describe("thai typing", () => {
       editor.app.mockInput.pressEnter()
       await editor.app.mockInput.typeText(thai.leadingVowel)
       await editor.app.renderOnce()
-      assertWholeClusters(`${thai.saraAmTone}\n${thai.leadingVowel}`, editor.textarea.plainText)
+      const text = `${thai.saraAmTone}\n${thai.leadingVowel}`
+      const end = promptOffsetWidth(text)
+      expect(editor.textarea.plainText).toBe(text)
+      expect(editor.textarea.cursorOffset).toBe(end)
       console.log(`thai-newline ${JSON.stringify(editor.textarea.plainText)} caret ${editor.textarea.cursorOffset}`)
 
       editor.app.mockInput.pressArrow("up")
       await editor.app.renderOnce()
       console.log(`thai-arrow-up caret ${editor.textarea.cursorOffset}`)
+      expect(editor.textarea.cursorOffset).toBe(promptOffsetWidth(thai.saraAmTone))
       editor.app.mockInput.pressArrow("down")
       await editor.app.renderOnce()
       console.log(`thai-arrow-down caret ${editor.textarea.cursorOffset}`)
+      expect(editor.textarea.cursorOffset).toBe(end)
 
       const homeKey = await moveKey(editor, "HOME", { key: "a", ctrl: true })
       console.log(`thai-home caret ${editor.textarea.cursorOffset} key ${homeKey}`)
+      expect(editor.textarea.cursorOffset).toBe(0)
+      expect(homeKey).toBe("home")
       const endKey = await moveKey(editor, "END", { key: "e", ctrl: true })
       console.log(`thai-end caret ${editor.textarea.cursorOffset} key ${endKey}`)
-      expect(startsWithThaiMark(editor.textarea.plainText)).toBe(false)
+      expect(editor.textarea.cursorOffset).toBe(end)
+      expect(endKey).toBe("end")
     } finally {
       await editor.cleanup()
     }
@@ -417,6 +423,84 @@ describe("thai typing", () => {
       expect(editor.textarea.plainText).toBe(text)
     } finally {
       await editor.cleanup()
+    }
+  })
+
+  test("collapsing a selection snaps out of a thai cluster", async () => {
+    const editor = await mountTextarea()
+    try {
+      const text = `${thai.saraAmTone}ดี`
+      await editor.app.mockInput.typeText(text)
+      await editor.app.renderOnce()
+      editor.app.mockInput.pressArrow("left")
+      editor.app.mockInput.pressArrow("left", { shift: true })
+      await editor.app.renderOnce()
+      editor.app.mockInput.pressArrow("right")
+      await editor.app.renderOnce()
+      console.log(`thai-collapse caret ${editor.textarea.cursorOffset}`)
+      expect(editor.textarea.plainText).toBe(text)
+      expect(editor.textarea.cursorOffset).toBe(promptOffsetWidth(thai.saraAmTone))
+    } finally {
+      await editor.cleanup()
+    }
+  })
+
+  test("setText keeps sara am wide enough to walk", async () => {
+    const editor = await mountTextarea()
+    try {
+      const text = `${thai.saraAmTone}ดี`
+      editor.textarea.setText(text)
+      await editor.app.renderOnce()
+      editor.textarea.cursorOffset = 0
+      const seen = [0]
+      const end = promptOffsetWidth(text)
+      while (editor.textarea.cursorOffset < end) {
+        const before = editor.textarea.cursorOffset
+        editor.app.mockInput.pressArrow("right")
+        await editor.app.renderOnce()
+        expect(editor.textarea.cursorOffset).toBeGreaterThan(before)
+        seen.push(editor.textarea.cursorOffset)
+        if (seen.length > 6) break
+      }
+      console.log(`thai-set-text-edges ${JSON.stringify(seen)}`)
+      expect(seen).toEqual([0, promptOffsetWidth(thai.saraAmTone), end])
+      expect(editor.textarea.plainText).toBe(text)
+      expect(editor.textarea.editBuffer.canUndo()).toBe(false)
+    } finally {
+      await editor.cleanup()
+    }
+  })
+
+  test("plain paste undoes in one step and sara am paste undoes cleanly", async () => {
+    const plain = await mountTextarea()
+    try {
+      await plain.app.mockInput.pasteBracketedText("abc")
+      await plain.app.renderOnce()
+      plain.textarea.undo()
+      await plain.app.renderOnce()
+      console.log(`thai-undo-plain ${JSON.stringify(plain.textarea.plainText)}`)
+      expect(plain.textarea.plainText).toBe("")
+    } finally {
+      await plain.cleanup()
+    }
+
+    const sara = await mountTextarea()
+    try {
+      const pasted = `abc${thai.saraAmTone}def`
+      await sara.app.mockInput.pasteBracketedText(pasted)
+      await sara.app.renderOnce()
+      const steps = [sara.textarea.plainText]
+      while (sara.textarea.editBuffer.canUndo()) {
+        sara.textarea.undo()
+        await sara.app.renderOnce()
+        steps.push(sara.textarea.plainText)
+        expect(startsWithThaiMark(sara.textarea.plainText)).toBe(false)
+        if (steps.length > 8) break
+      }
+      console.log(`thai-undo-sara ${JSON.stringify(steps)}`)
+      expect(steps).toEqual([pasted, `abc${thai.saraAmTone}`, "abcน้", "abcน", "abc", ""])
+    } finally {
+      await sara.cleanup()
     }
   })
 
@@ -567,14 +651,4 @@ function assertWholeClusters(source: string, result: string) {
     const split = thaiGraphemes(source).some((grapheme) => grapheme !== part && grapheme.includes(part))
     expect(split).toBe(false)
   }
-}
-
-function isGraphemePrefix(original: string, piece: string) {
-  if (piece === "") return true
-  let acc = ""
-  for (const part of thaiGraphemes(original)) {
-    acc += part
-    if (acc === piece) return true
-  }
-  return false
 }
