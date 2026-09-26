@@ -185,7 +185,9 @@ it.effect("Moonshot retains unsigned and signed Messages reasoning and projects 
         expect.objectContaining({
           input_schema: {
             type: "object",
-            properties: { pair: { type: "array", items: { anyOf: [{ type: "string" }, { type: "number" }] } } },
+            properties: {
+              pair: { type: "array", prefixItems: [{ type: "string" }, { type: "number" }], items: {} },
+            },
           },
         }),
       ]),
