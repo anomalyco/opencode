@@ -94,6 +94,7 @@ async function createKnownTextPart(
       partId,
       partType: "text",
       role: "assistant",
+      summary: false,
     }),
   )
 }

@@ -108,9 +108,13 @@ export class Subscription {
   async replayMessage(message: SessionMessageResponse) {
     if (message.info.role !== "assistant" && message.info.role !== "user") return
 
+    // Compaction summaries are internal assistant messages: keep recording their part metadata so
+    // later deltas stay filtered, but never replay their content to the ACP client.
+    const summary = message.info.role === "assistant" && message.info.summary === true
     const cwd = message.info.role === "assistant" ? message.info.path?.cwd : undefined
     for (const part of message.parts) {
       await this.recordFetchedPart(message.info.sessionID, message, part)
+      if (summary) continue
       if (part.type === "tool") {
         await this.handleToolPart(message.info.sessionID, part, cwd ?? process.cwd())
         continue
@@ -223,11 +227,15 @@ export class Subscription {
         partId: props.partID,
       }),
     )
+    // Reasoning parts record an assistant role from part.updated before the owning message is
+    // inspected, so only reuse cached metadata once the summary decision is known too. Otherwise
+    // resolve the message so an internal compaction summary can never leak as assistant output.
     const metadata =
-      known?.role && known.partType
+      known?.role && known.partType && known.summary !== undefined
         ? known
         : await this.fetchPartMetadata(session.id, session.cwd, props.messageID, props.partID)
     if (metadata?.role !== "assistant") return
+    if (metadata.summary === true) return
     if (metadata.partType === "text" && props.field === "text" && metadata.ignored !== true) {
       await this.input.connection.sessionUpdate({
         sessionId: session.id,
@@ -285,6 +293,7 @@ export class Subscription {
         partId: part.id,
         partType: part.type,
         role: message.info.role,
+        summary: message.info.role === "assistant" && message.info.summary === true,
         ignored: part.type === "text" ? part.ignored : undefined,
         toolCallId: part.type === "tool" ? part.callID : undefined,
         metadata: "metadata" in part ? part.metadata : undefined,
