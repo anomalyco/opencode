@@ -28,11 +28,29 @@ export const refuseNetwork = (violations: string[]): typeof fetch =>
     { preconnect: fetch.preconnect },
   )
 
+// Effect's default logger writes through the Console service, and TestConsole
+// captures it, so a failing test printed its assertion with none of the logs
+// that led to it, and no sign that any had been captured. Read the capture back
+// here, where the test console is still the current one, and replay it verbatim.
+// `console.error` is the host console, which TestConsole does not replace, and
+// is the only way to reach the real output from inside the captured region.
+const replayCaptured = TestConsole.testConsoleWith((testConsole) =>
+  Effect.gen(function* () {
+    if (testConsole.logLines === undefined) return
+    const captured = [...(yield* testConsole.logLines), ...(yield* testConsole.errorLines)]
+    if (captured.length === 0) return
+    console.error("--- console output captured during the failing test ---")
+    for (const entry of captured) console.error(entry)
+    console.error("--- end of captured output ---")
+  }),
+)
+
 const run = <A, E, R, E2>(value: Body<A, E, R | Scope.Scope>, layer: Layer.Layer<R, E2>) =>
   Effect.gen(function* () {
     const violations: string[] = []
     const exit = yield* body(value).pipe(
       Effect.scoped,
+      Effect.onExit((exit) => (Exit.isFailure(exit) ? replayCaptured : Effect.void)),
       Effect.provide(layer),
       Effect.provideService(FetchHttpClient.Fetch, refuseNetwork(violations)),
       Effect.exit,
