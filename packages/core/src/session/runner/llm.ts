@@ -208,6 +208,7 @@ const layer = Layer.effect(
           headers: {
             "x-session-affinity": session.id,
             "X-Session-Id": session.id,
+            "x-opencode-session": session.id,
             ...(session.parentID ? { "x-parent-session-id": session.parentID } : {}),
           },
         },
