@@ -706,6 +706,7 @@ export const dict = {
   "session.review.noBranchChanges": "لا توجد تغييرات في الفرع بعد",
   "session.review.noVcs": "لم يُكتشف نظام Git للتحكم في الإصدارات، لذا لن تُعرض التغييرات",
   "session.review.noSnapshot": "تم تعطيل تتبع اللقطات في التكوين، لذا فإن تغييرات الجلسة غير متوفرة",
+  "session.files.refresh": "تحديث",
   "session.files.selectToOpen": "اختر ملفًا لفتحه",
   "session.files.all": "كل الملفات",
   "session.files.empty": "لا توجد ملفات",

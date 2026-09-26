@@ -736,6 +736,7 @@ export const dict = {
   "session.review.noChanges": "އެއްވެސް ބަދަލެއް ނާދެއެވެ",
   "session.review.noUncommittedChanges": "އަދި ކޮމިޓް ނުކުރާ ބަދަލެއް ނާދެއެވެ",
   "session.review.noBranchChanges": "އަދި އެއްވެސް ބްރާންޗަކަށް ބަދަލެއް ނާދެއެވެ",
+  "session.files.refresh": "ރިފްރެޝް ކޮށްލާށެވެ",
   "session.files.selectToOpen": "ހުޅުވަން ބޭނުންވާ ފައިލެއް ހޮވާށެވެ",
   "session.files.all": "ހުރިހާ ފައިލްއެކެވެ",
   "session.files.empty": "ފައިލްތަކެއް ނެތެވެ",

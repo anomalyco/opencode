@@ -759,6 +759,7 @@ export const dict = {
   "session.review.noChanges": "无更改",
   "session.review.noUncommittedChanges": "尚无未提交的更改",
   "session.review.noBranchChanges": "尚无分支更改",
+  "session.files.refresh": "刷新",
   "session.files.selectToOpen": "选择要打开的文件",
   "session.files.all": "所有文件",
   "session.files.empty": "无文件",
