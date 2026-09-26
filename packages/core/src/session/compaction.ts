@@ -543,7 +543,11 @@ export const layer = Layer.effect(
         return yield* reject(
           `No plugin provides native compaction for ${request.model.provider}/${request.model.route.id}`,
         )
-      const transient = SessionRunnerRetry.transient(yield* SessionRunnerRetry.policy(context.session.id), {
+      const retryConfig =
+        context.model.maxRetries !== undefined || context.model.initialDelay !== undefined
+          ? { maxRetries: context.model.maxRetries, initialDelay: context.model.initialDelay }
+          : undefined
+      const transient = SessionRunnerRetry.transient(yield* SessionRunnerRetry.policy(context.session.id, retryConfig), {
         agent: context.agent.id,
         model: context.model.ref,
         hook: prepared.retry,
@@ -630,7 +634,11 @@ export const layer = Layer.effect(
         messages: [...prepared.request.messages, Message.user(buildPrompt(previous !== undefined, legacy))],
       })
       // Both requests share the retry allowance; rejected output never enters the reminder request.
-      const transient = SessionRunnerRetry.transient(yield* SessionRunnerRetry.policy(context.session.id), {
+      const retryConfig =
+        context.model.maxRetries !== undefined || context.model.initialDelay !== undefined
+          ? { maxRetries: context.model.maxRetries, initialDelay: context.model.initialDelay }
+          : undefined
+      const transient = SessionRunnerRetry.transient(yield* SessionRunnerRetry.policy(context.session.id, retryConfig), {
         agent: context.agent.id,
         model: context.model.ref,
         hook: prepared.retry,

@@ -465,6 +465,8 @@ export type ProviderSettings = {
   chunkTimeout?: number
   compaction?: ProviderCompaction
   transport?: ProviderTransport
+  retry?: number
+  backoffDelay?: number
 } & { [x: string]: any }
 
 export type ConfigProviderSettings = {
@@ -472,6 +474,8 @@ export type ConfigProviderSettings = {
   chunkTimeout?: number
   compaction?: ProviderCompaction
   transport?: ProviderTransport
+  retry?: number
+  backoffDelay?: number
 } & { [x: string]: JsonValue | null }
 
 export type PermissionRule = { action: string; resource: string; effect: PermissionEffect }
@@ -2111,6 +2115,7 @@ export type ConfigEntry =
             name?: string
             env?: Array<string>
             package?: string
+            discover?: boolean
             settings?: ConfigProviderSettings
             headers?: { [x: string]: string }
             body?: { [x: string]: JsonValue }

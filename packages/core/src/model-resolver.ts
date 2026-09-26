@@ -124,6 +124,10 @@ export interface Resolved {
   readonly transport?: Provider.Transport
   /** Milliseconds without streamed data before a WebSocket exchange fails. */
   readonly chunkTimeout?: number
+  /** Maximum number of retries for retryable API errors (default 10). Set to 0 to disable retries. */
+  readonly maxRetries?: number
+  /** Initial delay in milliseconds for exponential backoff between retries (default 2000). Ignored when provider responds with retry-after headers. */
+  readonly initialDelay?: number
 }
 
 export interface Interface {
@@ -391,6 +395,8 @@ export const layer = Layer.effect(
         compaction: runtimeInfo.settings?.compaction,
         transport: provider?.settings?.transport,
         chunkTimeout: provider?.settings?.chunkTimeout,
+        maxRetries: provider?.settings?.retry,
+        initialDelay: provider?.settings?.backoffDelay,
       }
     })
     return Service.of({

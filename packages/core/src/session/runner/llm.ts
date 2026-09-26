@@ -205,7 +205,11 @@ const layer = Layer.effect(
     const runStep = Effect.fn("SessionRunner.runStep")(function* (first: SessionContext.Loaded, step: number) {
       const sessionID = first.session.id
       let assistantMessageID = SessionMessage.ID.create()
-      const retry = yield* SessionRunnerRetry.make(bus, sessionID)
+      const retryConfig =
+        first.model.maxRetries !== undefined || first.model.initialDelay !== undefined
+          ? { maxRetries: first.model.maxRetries, initialDelay: first.model.initialDelay }
+          : undefined
+      const retry = yield* SessionRunnerRetry.make(bus, sessionID, retryConfig)
       let initial: SessionContext.Loaded | undefined = first
       let recoverOverflow = true
       let recoverContinuation = true

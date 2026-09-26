@@ -4,7 +4,7 @@ import { Schema } from "effect"
 import { Money } from "../money.js"
 import { Capabilities, Compatibility, Family, ID, VariantID } from "../model.js"
 import { Provider } from "../provider.js"
-import { optional } from "../schema.js"
+import { NonNegativeInt, optional, PositiveInt } from "../schema.js"
 
 export const Settings = Schema.StructWithRest(
   Schema.Struct({
@@ -12,6 +12,14 @@ export const Settings = Schema.StructWithRest(
     chunkTimeout: Schema.Finite.pipe(optional),
     compaction: Provider.Compaction.pipe(optional),
     transport: Provider.Transport.pipe(optional),
+    retry: NonNegativeInt.pipe(optional).annotate({
+      description:
+        "Maximum number of retries for retryable API errors from this provider (default 10). Set to 0 to disable retries.",
+    }),
+    backoffDelay: PositiveInt.pipe(optional).annotate({
+      description:
+        "Initial delay in milliseconds for exponential backoff between retries (default 2000). Ignored when the provider responds with retry-after headers.",
+    }),
   }),
   [Schema.Record(Schema.String, Schema.UndefinedOr(Schema.Json))],
 ).annotate({ identifier: "Config.Provider.Settings" })

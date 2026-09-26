@@ -12,6 +12,14 @@ import { SessionMessage } from "../message.js"
 import { SessionSchema } from "../schema.js"
 import { toSessionError } from "../to-session-error.js"
 
+/** Per-provider retry configuration. */
+export interface RetryConfig {
+  /** Maximum number of retries (default 10). Set to 0 to disable retries. */
+  readonly maxRetries?: number
+  /** Initial delay in milliseconds for exponential backoff (default 2000). Ignored when provider responds with retry-after headers. */
+  readonly initialDelay?: number
+}
+
 interface Input {
   readonly cause: AIError
   readonly error: SessionError.Error
@@ -75,24 +83,33 @@ const retryAfter = (input: Input) => {
   return undefined
 }
 
-// Exponential from 2s capped at 10s per gap, for 10 retries: 2, 4, 8, then 10 × 7, about 84s of
-// waiting when every attempt fails (67–101s with jitter). `min` takes the faster schedule, so the
-// cap applies per gap; `max` with `recurs` bounds the count.
-const schedule = Schedule.max([
-  Schedule.min([Schedule.exponential("2 seconds"), Schedule.spaced("10 seconds")]),
-  Schedule.recurs(10),
-]).pipe(
-  Schedule.jittered,
-  Schedule.setInputType<Input>(),
-  Schedule.modifyDelay(({ input, duration: delay }) => {
-    const minimum = retryAfter(input)
-    const duration = minimum === undefined ? delay : Duration.max(delay, Duration.millis(minimum))
-    return Effect.succeed(Duration.millis(Math.ceil(Duration.toMillis(duration))))
-  }),
-)
+// Build a schedule from optional per-provider retry config.
+// Default: exponential from 2s capped at 10s per gap, for 10 retries: 2, 4, 8, then 10 × 7,
+// about 84s of waiting when every attempt fails (67–101s with jitter). `min` takes the faster
+// schedule, so the cap applies per gap; `max` with `recurs` bounds the count.
+const buildSchedule = (config?: RetryConfig) => {
+  const initialDelay = config?.initialDelay ?? 2000
+  const maxRetries = config?.maxRetries ?? 10
+  return Schedule.max([
+    Schedule.min([
+      Schedule.exponential(Duration.millis(initialDelay)),
+      Schedule.spaced("10 seconds"),
+    ]),
+    Schedule.recurs(maxRetries),
+  ]).pipe(
+    Schedule.jittered,
+    Schedule.setInputType<Input>(),
+    Schedule.modifyDelay(({ input, duration: delay }) => {
+      const minimum = retryAfter(input)
+      const duration = minimum === undefined ? delay : Duration.max(delay, Duration.millis(minimum))
+      return Effect.succeed(Duration.millis(Math.ceil(Duration.toMillis(duration))))
+    }),
+  )
+}
 
-export const policy = (sessionID: SessionSchema.ID) =>
+export const policy = (sessionID: SessionSchema.ID, config?: RetryConfig) =>
   Effect.gen(function* () {
+    const schedule = buildSchedule(config)
     const step = yield* Schedule.toStep(schedule)
     let attempt = 1
     return (input: Input) =>
@@ -137,9 +154,9 @@ export const transient =
         }),
     })
 
-export const make = (bus: Bus.Interface, sessionID: SessionSchema.ID) =>
+export const make = (bus: Bus.Interface, sessionID: SessionSchema.ID, config?: RetryConfig) =>
   Effect.gen(function* () {
-    const decide = yield* policy(sessionID)
+    const decide = yield* policy(sessionID, config)
     const wait = (input: {
       readonly decision: Decision
       readonly assistantMessageID: SessionMessage.ID
