@@ -1,6 +1,7 @@
-import { and, asc, desc, eq, gte, or, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gt, gte, or, sql } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 import { Database } from "../database/database.js"
+import { HistoryCache } from "./history-cache.js"
 import { MessageDecodeError } from "./error.js"
 import { SessionMessage } from "./message.js"
 import { SessionSchema } from "./schema.js"
@@ -75,11 +76,61 @@ export const decodeMessageRow = (row: typeof SessionMessageTable.$inferSelect) =
     ),
   )
 
+const decodeRows = (rows: Array<typeof SessionMessageTable.$inferSelect>) =>
+  Effect.forEach(rows, (row) =>
+    decodeMessageRow(row).pipe(Effect.map((message) => ({ seq: row.seq, message }))),
+  )
+
+const filterEntries = (
+  entries: ReadonlyArray<{ seq: number; message: SessionMessage.Info }>,
+  boundary: Boundary,
+) => {
+  // Re-expansion may cross a native checkpoint whose completion already advanced the instruction
+  // epoch: the baseline supersedes the chronological updates before it. Forks seed their baseline
+  // at sequence 0 but retain parent sequences, so the copied checkpoint still retires them.
+  const native = entries.findLast((entry) => SessionProviderContext.isCheckpoint(entry.message))
+  // Skipped native checkpoints are not textual summaries. Their original transcript remains available.
+  return entries.filter(
+    (entry) =>
+      !(entry.message.type === "system" && native && entry.seq < native.seq) && replayable(entry.message, boundary),
+  )
+}
+
+const boundaryKey = (boundary: Boundary) => JSON.stringify(boundary)
+
 const messageEntries = Effect.fnUntraced(function* (
   db: DatabaseService,
   sessionID: SessionSchema.ID,
   boundary: Boundary,
+  useCache = false,
 ) {
+  const key = boundaryKey(boundary)
+  // L1 fast path: only rows appended since the last read. The projector drops
+  // the cache whenever an already-read row is rewritten or the boundary moves,
+  // so a hit here is by construction up to date.
+  const cached = useCache ? HistoryCache.get(sessionID, key) : undefined
+  if (cached) {
+    const rows = yield* db
+      .select()
+      .from(SessionMessageTable)
+      .where(and(eq(SessionMessageTable.session_id, sessionID), gt(SessionMessageTable.seq, cached.watermark)))
+      .orderBy(asc(SessionMessageTable.seq))
+      .all()
+      .pipe(Effect.orDie)
+    // A compaction completing after the watermark moves the read boundary even
+    // though its row is brand new. Fall through to the full read so the new
+    // boundary is honored instead of serving the stale pre-compaction range.
+    if (!rows.some((row) => row.type === "compaction")) {
+      const appended = yield* decodeRows(rows)
+      const entries = appended.length === 0 ? cached.entries : [...cached.entries, ...appended]
+      if (appended.length > 0) {
+        const last = appended[appended.length - 1]
+        HistoryCache.put(sessionID, key, { watermark: last.seq, entries })
+      }
+      return filterEntries(entries, boundary)
+    }
+    HistoryCache.drop(sessionID)
+  }
   const compaction = yield* latestCompaction(db, sessionID, boundary)
   const rows = yield* db
     .select()
@@ -93,18 +144,12 @@ const messageEntries = Effect.fnUntraced(function* (
     .orderBy(asc(SessionMessageTable.seq))
     .all()
     .pipe(Effect.orDie)
-  const entries = yield* Effect.forEach(rows, (row) =>
-    decodeMessageRow(row).pipe(Effect.map((message) => ({ seq: row.seq, message }))),
-  )
-  // Re-expansion may cross a native checkpoint whose completion already advanced the instruction
-  // epoch: the baseline supersedes the chronological updates before it. Forks seed their baseline
-  // at sequence 0 but retain parent sequences, so the copied checkpoint still retires them.
-  const native = entries.findLast((entry) => SessionProviderContext.isCheckpoint(entry.message))
-  // Skipped native checkpoints are not textual summaries. Their original transcript remains available.
-  return entries.filter(
-    (entry) =>
-      !(entry.message.type === "system" && native && entry.seq < native.seq) && replayable(entry.message, boundary),
-  )
+  const entries = yield* decodeRows(rows)
+  if (useCache) {
+    const last = entries[entries.length - 1]
+    HistoryCache.put(sessionID, key, { watermark: last ? last.seq : -1, entries })
+  }
+  return filterEntries(entries, boundary)
 })
 
 export const load = Effect.fn("SessionHistory.load")(function* (
@@ -124,7 +169,7 @@ export const entriesForRunner = Effect.fn("SessionHistory.entriesForRunner")(fun
   return yield* db
     .transaction(() =>
       Effect.gen(function* () {
-        const messages = yield* messageEntries(db, sessionID, boundary)
+        const messages = yield* messageEntries(db, sessionID, boundary, true)
         return {
           initial: yield* InstructionState.initial(db, sessionID, instructions),
           entries: messages,

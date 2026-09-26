@@ -18,6 +18,7 @@ import { AbsolutePath, RelativePath } from "../schema.js"
 import { Session } from "../session.js"
 import { Slug } from "../util/slug.js"
 import { SessionEvent } from "./event.js"
+import { HistoryCache } from "./history-cache.js"
 import { SessionMessage } from "./message.js"
 import { SessionProjector } from "./projector.js"
 import { SessionMessageTable, SessionTable } from "./sql.js"
@@ -112,6 +113,8 @@ const layer = Layer.effect(
                   if (messages.length > 0) {
                     yield* db.insert(SessionMessageTable).values(messages).run().pipe(Effect.orDie)
                     yield* Bus.reserveSequence(db, sessionID, seq + messages.length)
+                    // L1 history cache: imported rows bypass the projector's invalidation.
+                    HistoryCache.drop(sessionID)
                   }
                   yield* db
                     .update(SessionTable)
