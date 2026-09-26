@@ -11,6 +11,7 @@ import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { Provider } from "@opencode/core/provider"
 import { Session } from "@opencode/core/session"
+import { AbsolutePath } from "@opencode/core/schema"
 import { Effect, Schema } from "effect"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "../plugin/fixture"
@@ -31,11 +32,22 @@ const permission = (effect: ConfigPolicy.Effect, resource: string): ConfigPolicy
   effect,
 })
 
-const addPlugin = Effect.fn(function* (entries: Entry[]) {
+const addPlugin = Effect.fn(function* (entries: Entry[], managedPaths: readonly string[] = []) {
   const plugin = yield* Plugin.Service
   const host = yield* PluginHost.make(plugin)
-  yield* ConfigPolicyPlugin.Plugin.effect(host).pipe(Effect.provide(Config.testLayer(entries)))
+  yield* ConfigPolicyPlugin.Plugin.effect(host).pipe(
+    Effect.provide(
+      Config.testLayer(
+        entries,
+        undefined,
+        managedPaths.map((file) => AbsolutePath.make(file)),
+      ),
+    ),
+  )
 })
+
+const managedDocument = (file: string, ...policies: ConfigPolicy.Info[]) =>
+  new Document({ type: "document", path: AbsolutePath.make(file), info: decode({ experimental: { policies } }) })
 
 const evaluate = Effect.fn(function* (action: string, resources: string[], effect: Permission.Effect = "allow") {
   const hooks = yield* PluginHooks.Service
@@ -185,6 +197,50 @@ describe("ConfigPolicyPlugin.Plugin", () => {
         effect: "deny",
         message: "Blocked by your organization's policy",
       })
+    }),
+  )
+
+  it.effect("ranks managed statements above user-global and project policy", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Provider.Service
+      yield* catalog.transform((catalog) => {
+        catalog.update(Provider.ID.openai, () => {})
+        catalog.update(Provider.ID.anthropic, () => {})
+      })
+      const file = "/managed/opencode.json"
+      yield* addPlugin(
+        [
+          document(provider("allow", "*"), permission("allow", "shell:*")),
+          document(provider("allow", "openai")),
+          managedDocument(
+            file,
+            provider("deny", "*"),
+            provider("allow", "anthropic"),
+            permission("deny", "shell:sudo *"),
+          ),
+        ],
+        [file],
+      )
+
+      expect(yield* catalog.get(Provider.ID.openai)).toBeUndefined()
+      expect(yield* catalog.get(Provider.ID.anthropic)).toBeDefined()
+      expect(yield* evaluate("shell", ["sudo ls"])).toEqual({
+        effect: "deny",
+        message: "Blocked by managed configuration policy",
+      })
+    }),
+  )
+
+  it.effect("lets organization statements override managed statements", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Provider.Service
+      const managed = yield* ManagedPolicy.Service
+      yield* catalog.transform((catalog) => catalog.update(Provider.ID.openai, () => {}))
+      yield* managed.set({ statements: [provider("allow", "openai")] })
+      const file = "/managed/opencode.json"
+      yield* addPlugin([managedDocument(file, provider("deny", "openai"))], [file])
+
+      expect(yield* catalog.get(Provider.ID.openai)).toBeDefined()
     }),
   )
 

@@ -160,9 +160,10 @@ from broader configuration are evaluated later, so they override narrower ones.
 | Authority   | Source                                                          |
 | ----------- | --------------------------------------------------------------- |
 | 1 (highest) | Connected OpenCode Console workspace                            |
-| 2           | Global `~/.config/opencode/opencode.json(c)`                    |
-| 3           | Direct `opencode.json(c)`; outer directories beat inner ones    |
-| 4 (lowest)  | `.opencode/opencode.json(c)`; outer directories beat inner ones |
+| 2           | [Managed settings](/config#managed-settings)                    |
+| 3           | Global `~/.config/opencode/opencode.json(c)`                    |
+| 4           | Direct `opencode.json(c)`; outer directories beat inner ones    |
+| 5 (lowest)  | `.opencode/opencode.json(c)`; outer directories beat inner ones |
 
 A repository cannot re-enable a provider you deny globally:
 

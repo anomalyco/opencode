@@ -14,16 +14,23 @@ export const Plugin = define({
     const config = yield* Config.Service
     const managed = yield* ManagedPolicy.Service
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.provider.reload())
-    // Authored documents reverse so user-global policy outranks repository policy; organization statements
-    // from the connected Console follow every authored one and have the final say.
+    const managedPaths = new Set<string>(config.managed ?? [])
+    const isManaged = (entry: Document) => entry.path !== undefined && managedPaths.has(entry.path)
+    // Authored documents reverse so user-global policy outranks repository policy; administrator-managed
+    // documents follow them, and organization statements from the connected Console have the final say.
     const policies = () => {
       const organization = managed.current()
+      const documents = loaded.entries.filter((entry): entry is Document => entry.type === "document")
       return [
-        ...loaded.entries
-          .filter((entry): entry is Document => entry.type === "document")
+        ...documents
+          .filter((entry) => !isManaged(entry))
           .toReversed()
           .flatMap((entry) => entry.info.experimental?.policies ?? [])
           .map((policy) => ({ ...policy, message: "Blocked by configuration policy" })),
+        ...documents
+          .filter(isManaged)
+          .flatMap((entry) => entry.info.experimental?.policies ?? [])
+          .map((policy) => ({ ...policy, message: "Blocked by managed configuration policy" })),
         ...organization.statements.map((policy) => ({
           ...policy,
           message: organization.organization

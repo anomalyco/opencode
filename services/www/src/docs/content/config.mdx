@@ -68,6 +68,31 @@ OpenCode applies these files from lowest to highest precedence:
 The package config overrides matching settings from the repository config,
 which overrides the global config. Settings that do not conflict are preserved.
 
+### Managed settings
+
+Administrators can enforce settings that user and project configuration cannot
+override. OpenCode reads `opencode.json(c)` from the system-managed directory:
+
+| Platform | Directory                               |
+| -------- | --------------------------------------- |
+| macOS    | `/Library/Application Support/opencode` |
+| Linux    | `/etc/opencode`                         |
+| Windows  | `%ProgramData%\opencode`                |
+
+On macOS it also reads managed preferences deployed through MDM (Jamf, Kandji,
+FleetDM) as a `.mobileconfig` with the `ai.opencode.managed` PayloadType. The
+first plist found wins:
+
+1. `/Library/Managed Preferences/<user>/ai.opencode.managed.plist`
+2. `/Library/Managed Preferences/ai.opencode.managed.plist`
+
+Plist keys map directly to config fields; MDM metadata keys such as
+`PayloadUUID` are ignored. Managed preferences rank above the managed
+directory, which ranks above every other configuration file. Their
+[policies](/policies#precedence) likewise outrank user and project statements.
+V1-style managed configuration is migrated like any other configuration file.
+Changes to managed sources apply the next time configuration reloads.
+
 ## Schema
 
 The complete OpenCode configuration schema is available at
