@@ -340,15 +340,7 @@ export function Prompt(props: PromptProps) {
 
   event.on("tui.prompt.append", (evt, { directory }) => {
     if (directory !== (currentLocation.current?.directory ?? data.location.default().directory)) return
-    if (!input || input.isDestroyed) return
-    input.insertText(evt.data.text)
-    setTimeout(() => {
-      // setTimeout is a workaround and needs to be addressed properly
-      if (!input || input.isDestroyed) return
-      input.getLayoutNode().markDirty()
-      input.gotoBufferEnd()
-      renderer.requestRender()
-    }, 0)
+    insertPrompt(evt.data.text)
   })
 
   createEffect(() => {
@@ -372,6 +364,20 @@ export function Prompt(props: PromptProps) {
   })
   let disposed = false
   let pasteQueue = Promise.resolve()
+
+  function insertPrompt(text: string, position: "cursor" | "end" = "cursor") {
+    if (!input || input.isDestroyed) return false
+    if (text.length === 0) return true
+    if (position === "end") input.gotoBufferEnd()
+    input.insertText(text)
+    setTimeout(() => {
+      if (!input || disposed || input.isDestroyed) return
+      input.getLayoutNode().markDirty()
+      input.gotoBufferEnd()
+      renderer.requestRender()
+    }, 0)
+    return true
+  }
 
   function enqueuePaste(run: (changed: () => boolean) => Promise<void>) {
     pasteQueue = pasteQueue
@@ -695,16 +701,7 @@ export function Prompt(props: PromptProps) {
       input.gotoBufferEnd()
     },
     append(text) {
-      if (text.length === 0) return true
-      if (disposed || input.isDestroyed) return false
-      input.insertText(text)
-      setTimeout(() => {
-        if (disposed || input.isDestroyed) return
-        input.getLayoutNode().markDirty()
-        input.gotoBufferEnd()
-        renderer.requestRender()
-      }, 0)
-      return true
+      return insertPrompt(text, "end")
     },
     reset() {
       resetComposer()

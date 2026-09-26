@@ -284,7 +284,7 @@ export interface Toast {
 export interface Prompt {
   /** Returns the current composer text, or undefined when no composer is mounted. */
   current(): string | undefined
-  /** Appends text to the composer. Returns false when no composer is available. */
+  /** Appends text to the end of the composer. Returns false when no composer is available. */
   append(text: string): boolean
   /** Focuses the composer. No-op when no composer is available. */
   focus(): void

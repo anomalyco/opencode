@@ -69,10 +69,10 @@ export function usePluginHost() {
     dialog: useDialog(),
     toast: useToast(),
     attention: useAttention(),
+    prompt: usePromptRef(),
     storage: useStorage(),
     sessionTabs: useSessionTabs(),
     panel: useOptionalPanel(),
-    prompt: usePromptRef(),
     local: useLocal(),
   }
 }
@@ -127,9 +127,7 @@ export function createPluginContext(input: {
       return host.prompt.current?.current.text
     },
     append(text) {
-      const ref = host.prompt.current
-      if (!ref) return false
-      return ref.append(text)
+      return host.prompt.current?.append(text) ?? false
     },
     focus() {
       host.prompt.current?.focus()
