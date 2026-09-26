@@ -334,6 +334,23 @@ Use the `--refresh` flag to update the cached model list. This is useful when ne
 opencode models --refresh
 ```
 
+Use the `--verbose` flag to see what each model is, as a table per provider.
+
+```bash
+opencode models --verbose
+```
+
+```
+Anthropic
+─────────────────────────────────────────────────────────────────────────────────────────────────
+Model                        Name               Cost ($/1M in/out)  Context  Output  Capabilities
+─────────────────────────────────────────────────────────────────────────────────────────────────
+anthropic/claude-opus-4-5    Claude Opus 4.5    5 / 25              200K     64K     reasoning, tools, attachments
+anthropic/claude-sonnet-4-5  Claude Sonnet 4.5  3 / 15              200K     64K     reasoning, tools, attachments
+```
+
+Costs are the base rate per 1M tokens, before any context-tier pricing. A `-` means the value is not known — for example, a custom provider's model whose config declares no cost. The default output stays one plain `provider/model` per line, so it can still be piped into other commands.
+
 ---
 
 ### run
