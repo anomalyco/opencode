@@ -152,12 +152,13 @@ export const oauthLogin = Effect.fn("cli.auth.login.oauth")(function* (
   integration: IntegrationInfo,
   method: Extract<ConnectMethod, { type: "oauth" }>,
   answer?: FormAnswer,
+  label?: string,
 ) {
   const progress = spinner()
   progress.start("Starting authorization...")
   const started = yield* request((signal) =>
     client.integration.oauth.connect(
-      { integrationID: integration.id, methodID: method.id, answer, location },
+      { integrationID: integration.id, methodID: method.id, answer, label, location },
       { signal },
     ),
   ).pipe(Effect.tapCause(() => Effect.sync(() => progress.stop("Authentication failed", 1))))
