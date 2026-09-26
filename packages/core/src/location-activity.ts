@@ -1,9 +1,11 @@
 export * as LocationActivity from "./location-activity.js"
 
-import { Clock, Context, Duration, Effect, Layer, RcMap, Schema } from "effect"
+import { Clock, Context, Duration, Effect, Layer, Option, RcMap, Schema } from "effect"
 import { Bus } from "./bus.js"
+import { Form } from "./form.js"
 import { Location } from "./location.js"
 import { LocationServiceMap } from "./location-service-map.js"
+import { Permission } from "./permission.js"
 import { SessionEvent } from "./session/event.js"
 import { SessionExecution } from "./session/execution.js"
 import { SessionStore } from "./session/store.js"
@@ -30,6 +32,25 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
           entries.set(key(ref), { ref, expiresAt: clock.currentTimeMillisUnsafe() + timeToLive })
         })
 
+      // A pending form or permission request is a person being asked to answer, and
+      // waiting for them produces no durable activity. Protect the whole location
+      // rather than its waiting owners: the session holding the question is often a
+      // child of another session that is idle only because it awaits that answer.
+      const awaitingReply = (ref: Location.Ref) =>
+        Effect.gen(function* () {
+          const context = yield* locations.contextEffectOption(ref)
+          if (Option.isNone(context)) return false
+          const forms = Context.getOption(context.value, Form.Service)
+          if (Option.isSome(forms) && (yield* forms.value.list()).length > 0) return true
+          const permissions = Context.getOption(context.value, Permission.Service)
+          return Option.isSome(permissions) && (yield* permissions.value.list()).length > 0
+        }).pipe(
+          // Borrow only long enough to read the pending sets, and let a detached or
+          // failed graph evict: it can no longer be holding anyone's answer.
+          Effect.scoped,
+          Effect.catchCause(() => Effect.succeed(false)),
+        )
+
       const unsubscribe = yield* bus.listen((event) => {
         if (!isSessionEvent(event)) return Effect.void
         const location = event.location
@@ -55,6 +76,9 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
           expired,
           (entry) =>
             Effect.gen(function* () {
+              // Hold the deadline open for the next interval instead of interrupting
+              // the wait. An explicit stop still cancels the question immediately.
+              if (yield* awaitingReply(entry.ref)) return yield* touch(entry.ref)
               const owners = active.flatMap((session) =>
                 session && key(session.location) === key(entry.ref) ? [session] : [],
               )
