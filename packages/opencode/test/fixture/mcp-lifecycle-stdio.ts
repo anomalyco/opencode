@@ -2,10 +2,21 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js"
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js"
 
+const pidFile = process.env.MCP_LIFECYCLE_PID_FILE
+if (pidFile) await Bun.write(pidFile, String(process.pid))
+
+const childPidFile = process.env.MCP_LIFECYCLE_CHILD_PID_FILE
+if (childPidFile) {
+  const child = Bun.spawn([process.execPath, "-e", "await new Promise(() => {})"], {
+    stdin: "ignore",
+    stdout: "ignore",
+    stderr: "ignore",
+  })
+  await Bun.write(childPidFile, String(child.pid))
+}
+
 if (process.argv.includes("--hang")) {
-  const pidFile = process.env.MCP_LIFECYCLE_PID_FILE
   if (!pidFile) throw new Error("MCP_LIFECYCLE_PID_FILE is required")
-  await Bun.write(pidFile, String(process.pid))
   await new Promise(() => {})
 }
 
