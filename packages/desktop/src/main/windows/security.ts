@@ -37,10 +37,11 @@ export function wireRendererHeaders(win: BrowserWindow) {
   // decision, so adding Authorization here does not reintroduce one.
   //
   // Only the renderer's own top-level frame is credentialed. Other content in this session (web views,
-  // embedded pages) can reach the same loopback origin and must not inherit its access. Requests with
+  // embedded pages) can reach the same sidecar origin and must not inherit its access. Requests with
   // no frame, such as from a service worker, are not credentialed either; the renderer registers none.
+  // The service may bind to a non-loopback address; SidecarCredentials enforces its exact origin.
   win.webContents.session.webRequest.onBeforeSendHeaders(
-    { urls: ["http://127.0.0.1/*", "http://localhost/*"] },
+    { urls: ["http://*/*", "https://*/*"] },
     (details, callback) => {
       const frame = details.frame
       const renderer = !!frame && frame.parent === null && isRendererUrl(frame.url)
