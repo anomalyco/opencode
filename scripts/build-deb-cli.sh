@@ -12,7 +12,7 @@ set -euo pipefail
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-OPENCODE_PKG="$REPO_ROOT/packages/opencode"
+OPENCODE_PKG="$REPO_ROOT/packages/cli"
 DIST_DIR="$REPO_ROOT/dist"
 VERSION="$(cd "$OPENCODE_PKG" && node -e "process.stdout.write(JSON.parse(require('fs').readFileSync('package.json','utf8')).version)")"
 
