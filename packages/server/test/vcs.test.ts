@@ -9,6 +9,78 @@ import { startServer } from "./fixture/server"
 import { ServerFetch } from "../src/fetch"
 
 it.live(
+  "initializes Git in a markerless project and refreshes its location",
+  () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-vcs-init-")))
+      yield* Effect.promise(() => Bun.write(path.join(tmp.path, "hello.txt"), "hello\n"))
+      const server = yield* startServer(path.join(tmp.path, "config"))
+      const url = new URL("/api/vcs/init", server.base)
+      url.searchParams.set("location[directory]", tmp.path)
+      const before = yield* Effect.promise(() =>
+        fetch(new URL(`/api/location${url.search}`, server.base), { headers: server.headers }),
+      )
+      expect(before.status).toBe(200)
+      const original = yield* Effect.promise(() => before.json())
+      const initialized = yield* Effect.promise(() => fetch(url, { method: "POST", headers: server.headers }))
+      expect(initialized.status).toBe(204)
+      expect(yield* Effect.promise(() => $`git -C ${tmp.path} rev-parse --is-inside-work-tree`.text())).toBe("true\n")
+      url.pathname = "/api/location"
+      const location = yield* Effect.promise(() => fetch(url, { headers: server.headers }))
+      expect(location.status).toBe(200)
+      const refreshed = yield* Effect.promise(() => location.json())
+      expect(refreshed).toMatchObject({ project: { directory: tmp.path } })
+      expect(refreshed.project.id).not.toBe(original.project.id)
+      const projects = yield* Effect.promise(() =>
+        fetch(new URL("/api/project", server.base), { headers: server.headers }),
+      )
+      expect(yield* Effect.promise(() => projects.json())).toContainEqual(
+        expect.objectContaining({ id: refreshed.project.id, vcs: "git" }),
+      )
+      url.pathname = "/api/vcs"
+      const vcs = yield* Effect.tryPromise({
+        try: async () => {
+          const response = await fetch(url, { headers: server.headers })
+          const body: unknown = await response.json()
+          if (!isRecord(body) || !isRecord(body.data) || body.data.provider !== "git")
+            throw new Error("Git provider not ready")
+          return body
+        },
+        catch: (cause) => cause,
+      }).pipe(Effect.retry(Schedule.spaced("10 millis")), Effect.timeout("2 seconds"))
+      expect(vcs).toMatchObject({ data: { provider: "git" } })
+      url.pathname = "/api/vcs/diff"
+      url.searchParams.set("mode", "working")
+      const diff = yield* Effect.promise(() => fetch(url, { headers: server.headers }))
+      expect(diff.status).toBe(200)
+      expect(yield* Effect.promise(() => diff.json())).toMatchObject({
+        data: expect.arrayContaining([expect.objectContaining({ file: "hello.txt" })]),
+      })
+      url.searchParams.delete("mode")
+      url.pathname = "/api/vcs/init"
+      const repeated = yield* Effect.promise(() => fetch(url, { method: "POST", headers: server.headers }))
+      expect(repeated.status).toBe(409)
+    }),
+  15_000,
+)
+
+it.live(
+  "does not create a project directory while initializing Git",
+  () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-vcs-missing-")))
+      const server = yield* startServer(path.join(tmp.path, "config"))
+      const directory = path.join(tmp.path, "absent")
+      const url = new URL("/api/vcs/init", server.base)
+      url.searchParams.set("location[directory]", directory)
+      const response = yield* Effect.promise(() => fetch(url, { method: "POST", headers: server.headers }))
+      expect(response.status).not.toBe(204)
+      expect(yield* Effect.promise(() => Bun.file(path.join(directory, ".git", "HEAD")).exists())).toBe(false)
+    }),
+  15_000,
+)
+
+it.live(
   "serves lazy review bases, committed diffs, and unavailable-base errors",
   () =>
     Effect.gen(function* () {
