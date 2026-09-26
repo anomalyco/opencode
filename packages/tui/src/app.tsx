@@ -209,11 +209,13 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   })
   const options = { baseUrl: input.server.endpoint.url, headers: Service.headers(input.server.endpoint) }
   const api = OpenCode.make(options)
-  const location = yield* Effect.tryPromise(() => api.file.list({ location: { directory: process.cwd() } })).pipe(
-    Effect.map((response) => response.location),
-    Effect.catch(() => Effect.tryPromise(() => api.location.get())),
+  const launch = yield* Effect.tryPromise(() => api.file.list({ location: { directory: process.cwd() } })).pipe(
+    Effect.map((response) => ({ location: response.location, fallback: false })),
+    Effect.catch(() =>
+      Effect.tryPromise(() => api.location.get()).pipe(Effect.map((location) => ({ location, fallback: true }))),
+    ),
   )
-  const directory = location.directory
+  const directory = launch.location.directory
   const pluginDirectories = yield* Effect.promise(() => localPluginDirectories(process.cwd(), global.config))
   const handoff = input.terminalHandoff ? yield* Effect.promise(input.terminalHandoff) : undefined
   const managed = input.server.service
@@ -403,7 +405,9 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                                                 packages={input.packages}
                                                                                 directories={pluginDirectories}
                                                                               >
-                                                                                <App />
+                                                                                <App
+                                                                                  locationFallback={launch.fallback}
+                                                                                />
                                                                               </PluginProvider>
                                                                             </PanelProvider>
                                                                           </UpdateNotificationProvider>
@@ -456,7 +460,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   })
 })
 
-function App() {
+function App(props: { locationFallback: boolean }) {
   const log = useLog({ component: "app" })
   const app = useTuiApp()
   const startup = useTuiStartup()
@@ -473,6 +477,15 @@ function App() {
   const event = useEvent()
   const client = useClient()
   const toast = useToast()
+  onMount(() => {
+    if (!props.locationFallback) return
+    toast.show({
+      variant: "warning",
+      title: "Could not open directory",
+      message: "Using the server default instead. Check the requested directory and its OpenCode config.",
+      duration: 12_000,
+    })
+  })
   const updater = useUpdateNotification()
   const theme = useTheme()
   const { mode, supports, setMode, locked, lock, unlock, afterPaint } = useThemes()

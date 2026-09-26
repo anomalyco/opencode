@@ -924,6 +924,11 @@ test.each([false, true])("uses the resolved launch directory for new prompts (fa
 
   await setup.ready
   await setup.waitForFrame((frame) => frame.includes("Build · Remote Model Provider"))
+  if (fallback) {
+    await setup.waitForFrame((frame) => frame.includes("Could not open directory"))
+  } else {
+    expect(setup.captureCharFrame()).not.toContain("Could not open directory")
+  }
   setup.mockInput.pressKey("F6")
   await setup.renderOnce()
   await setup.mockInput.typeText("REMOTE_READY")
@@ -949,6 +954,31 @@ test.each([false, true])("uses the resolved launch directory for new prompts (fa
       .filter((url) => url.searchParams.has("location[directory]"))
       .every((url) => url.searchParams.get("location[directory]") === target),
   ).toBe(true)
+})
+
+test.each([100, 44])("shows a failed launch location in the TUI at width %s", async (width) => {
+  await using state = await tmpdir()
+  const requested = process.cwd()
+  const fallback = { directory, project: { id: "project", directory, canonical: directory } }
+  const requests: URL[] = []
+  await using setup = await createAppFixture({
+    width,
+    state: state.path,
+    fetch: (url) => {
+      requests.push(url)
+      if (url.pathname === "/api/fs/list") return new Response(null, { status: 500 })
+      if (url.pathname === "/api/location") return json(fallback)
+      return undefined
+    },
+  })
+  await setup.ready
+  const frame = await setup.waitForFrame((frame) => frame.includes("Could not open directory"))
+  expect(frame).toContain("OpenCode")
+  expect(frame).toContain("config.")
+  expect(requests[0]?.searchParams.get("location[directory]")).toBe(requested)
+  expect(requests.some((url) => url.pathname === "/api/location" && !url.searchParams.has("location[directory]"))).toBe(
+    true,
+  )
 })
 
 test("error investigations repeatedly seed editable home drafts without creating sessions", async () => {
