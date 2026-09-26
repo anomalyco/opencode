@@ -1,6 +1,7 @@
 export * as Currency from "./currency"
 
-// Approximate display exchange rates, units per 1 USD. Snapshot: 2026-08.
+// Approximate display exchange rates for the 7 most-traded currencies, units per 1 USD. Snapshot: 2026-08.
+// Other currencies can be added via `display.exchangeRates`.
 // These are display-only approximations and are never billing-authoritative.
 export const ExchangeRates: Readonly<Record<string, number>> = {
   USD: 1,
@@ -8,21 +9,8 @@ export const ExchangeRates: Readonly<Record<string, number>> = {
   GBP: 0.74,
   JPY: 147.5,
   CNY: 7.15,
-  HKD: 7.8,
-  SGD: 1.34,
-  KRW: 1380,
-  INR: 84,
   CAD: 1.37,
   AUD: 1.52,
-  NZD: 1.68,
-  CHF: 0.8,
-  SEK: 10.5,
-  NOK: 10.8,
-  DKK: 6.9,
-  PLN: 3.9,
-  BRL: 5.4,
-  MXN: 18.5,
-  ZAR: 18,
 }
 
 export function normalize(currency: string): string {
