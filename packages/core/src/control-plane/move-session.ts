@@ -1,6 +1,9 @@
 export * as MoveSession from "./move-session"
 
 import { Context, DateTime, Effect, Layer, Schema } from "effect"
+import { Database } from "../database/database"
+import { FSUtil } from "../fs-util"
+import { ProjectTable } from "../project/sql"
 import { makeGlobalNode } from "../effect/app-node"
 import { EventV2 } from "../event"
 import { Git } from "../git"
@@ -22,6 +25,7 @@ export const Input = Schema.Struct({
   sessionID: SessionSchema.ID,
   destination: Destination,
   moveChanges: Schema.optional(Schema.Boolean),
+  allowCrossProject: Schema.optional(Schema.Boolean),
 }).annotate({ identifier: "MoveSession.Input" })
 export type Input = typeof Input.Type
 
@@ -73,6 +77,8 @@ const layer = Layer.effect(
     const events = yield* EventV2.Service
     const project = yield* ProjectV2.Service
     const sessions = yield* SessionStore.Service
+    const fs = yield* FSUtil.Service
+    const { db } = yield* Database.Service
 
     const moveSession = Effect.fn("MoveSession.moveSession")(function* (input: Input) {
       const current = yield* sessions.get(input.sessionID)
@@ -80,13 +86,31 @@ const layer = Layer.effect(
       const directory = AbsolutePath.make(input.destination.directory)
       if (current.location.directory === directory) return
 
+      // Ensure target directory exists on disk
+      yield* fs.ensureDir(directory).pipe(Effect.ignore)
+
       const source = yield* project.resolve(current.location.directory)
       const destination = yield* project.resolve(directory)
-      if (current.projectID !== destination.id) {
+      const isCrossProject = current.projectID !== destination.id
+      if (isCrossProject && input.allowCrossProject === false) {
         return yield* new DestinationProjectMismatchError({ expected: current.projectID, actual: destination.id })
       }
 
-      const moveChanges = input.moveChanges && source.directory !== destination.directory
+      if (isCrossProject) {
+        yield* db
+          .insert(ProjectTable)
+          .values({
+            id: destination.id,
+            worktree: destination.directory,
+            vcs: destination.vcs?.type,
+            sandboxes: [],
+          })
+          .onConflictDoNothing()
+          .run()
+          .pipe(Effect.orDie)
+      }
+
+      const moveChanges = !isCrossProject && input.moveChanges && source.directory !== destination.directory
       const sourceRepository = moveChanges ? yield* git.repo.discover(current.location.directory) : undefined
       if (moveChanges && !sourceRepository)
         return yield* new CaptureChangesError({ message: "Source is not a Git repository" })
@@ -107,6 +131,7 @@ const layer = Layer.effect(
         sessionID: input.sessionID,
         location: Location.Ref.make({ directory }),
         subdirectory: RelativePath.make(path.relative(destination.directory, directory).replaceAll("\\", "/")),
+        projectID: destination.id,
         timestamp: yield* DateTime.now,
       })
 
@@ -144,5 +169,5 @@ const layer = Layer.effect(
 export const node = makeGlobalNode({
   service: Service,
   layer,
-  deps: [Git.node, EventV2.node, ProjectV2.node, SessionStore.node],
+  deps: [Git.node, EventV2.node, ProjectV2.node, SessionStore.node, FSUtil.node, Database.node],
 })

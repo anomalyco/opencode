@@ -73,6 +73,7 @@ export interface DialogSelectOption<T = any> {
 
 export type DialogSelectRef<T> = {
   filter: string
+  setFilter(text: string): void
   filtered: DialogSelectOption<T>[]
   moveTo(value: T): void
 }
@@ -486,6 +487,16 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const ref: DialogSelectRef<T> = {
     get filter() {
       return store.filter
+    },
+    setFilter(text: string) {
+      batch(() => {
+        setStore("filter", text)
+        if (input && !input.isDestroyed) {
+          input.setText(text)
+          input.gotoBufferEnd()
+        }
+        props.onFilter?.(text)
+      })
     },
     get filtered() {
       return filtered()
