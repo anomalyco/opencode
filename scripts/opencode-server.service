@@ -85,6 +85,14 @@ Environment=XDG_RUNTIME_DIR=/run/user/1000
 Environment=DISPLAY=:0
 Environment=XAUTHORITY=/home/mxadm/.Xauthority
 
+# Session database: use the canonical opencode.db instead of a channel-derived
+# filename. Without this the filename comes from OPENCODE_CHANNEL, which is baked
+# in at build time from `git branch --show-current` (packages/script/src/index.ts:26-31,
+# packages/cli/script/build.ts:154), so a release built from a new branch silently
+# starts with an empty session database (packages/cli/src/database-path.ts:7-11).
+Environment=OPENCODE_DISABLE_CHANNEL_DB=1
+Environment=OPENCODE_DISABLE_AUTH=1
+
 # --- filesystem --------------------------------------------------------------
 # ProtectHome MUST be read-only, not yes. The harness reads its config and its
 # agent definitions out of ~/.config/opencode; `yes` makes those unreachable and
