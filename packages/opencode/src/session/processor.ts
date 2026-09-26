@@ -20,6 +20,7 @@ import { SessionStatus } from "./status"
 import { SessionSummary } from "./summary"
 import type { Provider } from "@/provider/provider"
 import { Question } from "@/question"
+import { ProviderError } from "@/provider/error"
 import { errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -647,17 +648,58 @@ const layer = Layer.effect(
         ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
 
         return yield* Effect.gen(function* () {
+          const attempt = {
+            previous: new Set<SessionV1.Part["id"]>(),
+            parts: [] as SessionV1.Part[],
+            saved: {
+              finish: ctx.assistantMessage.finish,
+              cost: ctx.assistantMessage.cost,
+              tokens: ctx.assistantMessage.tokens,
+            },
+            snapshot: ctx.snapshot,
+            finished: false,
+            hasUsage: false,
+            hasOutput: false,
+          }
           yield* Effect.gen(function* () {
+            attempt.finished = false
+            attempt.hasUsage = false
+            attempt.hasOutput = false
+            attempt.previous = new Set(
+              (yield* MessageV2.parts(ctx.assistantMessage.id).pipe(
+                Effect.provideService(Database.Service, database),
+              )).map((part) => part.id),
+            )
+            attempt.saved = {
+              finish: ctx.assistantMessage.finish,
+              cost: ctx.assistantMessage.cost,
+              tokens: ctx.assistantMessage.tokens,
+            }
+            attempt.snapshot = ctx.snapshot ?? (yield* snapshot.track())
+            ctx.snapshot = attempt.snapshot
             ctx.currentText = undefined
             ctx.reasoningMap = {}
             yield* status.set(ctx.sessionID, { type: "busy" })
             const stream = llm.stream(streamInput)
 
             yield* stream.pipe(
-              Stream.tap((event) => handleEvent(event)),
+              Stream.tap((event) => {
+                if (event.type === "step-finish" || event.type === "finish") {
+                  attempt.finished ||= event.reason !== "unknown"
+                  attempt.hasUsage ||= event.usage !== undefined
+                }
+                if (event.type === "text-delta" && event.text.length > 0) attempt.hasOutput = true
+                if (event.type === "tool-call" || event.type === "tool-result") attempt.hasOutput = true
+                return handleEvent(event)
+              }),
               Stream.takeUntil(() => ctx.needsCompaction),
               Stream.runDrain,
             )
+            if (!ctx.needsCompaction && !attempt.finished && !attempt.hasUsage && !attempt.hasOutput) {
+              return yield* Effect.fail(
+                new ProviderError.ResponseStreamError("Provider stream ended without a finish reason or output"),
+              )
+            }
           }).pipe(
             Effect.onInterrupt(() =>
               Effect.gen(function* () {
@@ -675,15 +717,36 @@ const layer = Layer.effect(
               SessionRetry.policy({
                 provider: input.model.providerID,
                 parse,
-                set: (info) => {
-                  return status.set(ctx.sessionID, {
-                    type: "retry",
-                    attempt: info.attempt,
-                    message: info.message,
-                    action: info.action,
-                    next: info.next,
-                  })
-                },
+                canRetry: () =>
+                  Effect.gen(function* () {
+                    attempt.parts = (yield* MessageV2.parts(ctx.assistantMessage.id).pipe(
+                      Effect.provideService(Database.Service, database),
+                    )).filter((part) => !attempt.previous.has(part.id))
+                    return !attempt.parts.some((part) => part.type === "tool" && part.state.status !== "pending")
+                  }),
+                set: (info) =>
+                  Effect.gen(function* () {
+                    yield* status.set(ctx.sessionID, {
+                      type: "retry",
+                      attempt: info.attempt,
+                      message: info.message,
+                      action: info.action,
+                      next: info.next,
+                    })
+                    yield* Effect.forEach(attempt.parts, (part) =>
+                      session.removePart({
+                        sessionID: part.sessionID,
+                        messageID: part.messageID,
+                        partID: part.id,
+                      }),
+                    )
+                    yield* Effect.forEach(Object.keys(ctx.toolcalls), settleToolCall)
+                    Object.assign(ctx.assistantMessage, attempt.saved)
+                    // A failed step may have cleared its snapshot; re-tracking now would hide edits left on disk.
+                    ctx.snapshot = attempt.snapshot
+                    ctx.currentText = undefined
+                    ctx.reasoningMap = {}
+                  }),
               }),
             ),
             Effect.catch(halt),
