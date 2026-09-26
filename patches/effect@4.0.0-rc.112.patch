@@ -1,0 +1,163 @@
+diff --git a/dist/unstable/cli/Flag.d.ts b/dist/unstable/cli/Flag.d.ts
+index d3badcbcc620386d42c6dc0cf3beb7d0871eda43..92ac9150f9c3a451903d14f0c33cfd9916814a3e 100644
+--- a/dist/unstable/cli/Flag.d.ts
++++ b/dist/unstable/cli/Flag.d.ts
+@@ -45,7 +45,7 @@ export interface Flag<A> extends Param.Param<typeof Param.flagKind, A> {
+  * @category constructors
+  * @since 4.0.0
+  */
+-export declare const string: (name: string) => Flag<string>;
++export declare const string: (name: string, options?: { readonly defaultMissingValue?: string }) => Flag<string>;
+ /**
+  * Creates a boolean flag that can be enabled or disabled.
+  *
+diff --git a/dist/unstable/cli/Flag.js b/dist/unstable/cli/Flag.js
+index d679995b8359a6d43825f7ae1bf3941f2594d89b..a10893b9822a51464d34836eb1e2dc457aa65d81 100644
+--- a/dist/unstable/cli/Flag.js
++++ b/dist/unstable/cli/Flag.js
+@@ -19,7 +19,7 @@ import * as Param from "./Param.js";
+  * @category constructors
+  * @since 4.0.0
+  */
+-export const string = name => Param.string(Param.flagKind, name);
++export const string = (name, options) => Param.string(Param.flagKind, name, options);
+ /**
+  * Creates a boolean flag that can be enabled or disabled.
+  *
+diff --git a/dist/unstable/cli/Param.d.ts b/dist/unstable/cli/Param.d.ts
+index 6c47ae34c5aa309d731752f846cf0540966477b1..e38d6c9c7ae271b8d88c4cb21b4a296597dc8b91 100644
+--- a/dist/unstable/cli/Param.d.ts
++++ b/dist/unstable/cli/Param.d.ts
+@@ -173,6 +173,7 @@ export interface Single<Kind extends ParamKind, out A> extends Param<Kind, A> {
+     readonly _tag: "Single";
+     readonly kind: Kind;
+     readonly name: string;
++    readonly defaultMissingValue?: string | undefined;
+     readonly description: Option.Option<string>;
+     readonly aliases: ReadonlyArray<string>;
+     readonly primitiveType: Primitive.Primitive<A>;
+@@ -285,6 +286,7 @@ export declare const isSingle: <const Kind extends ParamKind, A>(param: Param<Ki
+ export declare const makeSingle: <const Kind extends ParamKind, A>(params: {
+     readonly kind: Kind;
+     readonly name: string;
++    readonly defaultMissingValue?: string | undefined;
+     readonly primitiveType: Primitive.Primitive<A>;
+     readonly typeName?: string | undefined;
+     readonly description?: Option.Option<string> | undefined;
+@@ -312,7 +314,7 @@ export declare const makeSingle: <const Kind extends ParamKind, A>(params: {
+  * @category constructors
+  * @since 4.0.0
+  */
+-export declare const string: <const Kind extends ParamKind>(kind: Kind, name: string) => Param<Kind, string>;
++export declare const string: <const Kind extends ParamKind>(kind: Kind, name: string, options?: { readonly defaultMissingValue?: string }) => Param<Kind, string>;
+ /**
+  * Creates a boolean parameter.
+  *
+diff --git a/dist/unstable/cli/Param.js b/dist/unstable/cli/Param.js
+index d82b78cc872322275bfd0e42bba30f20c2d0941b..d4d1bb2a747e473859e8113804c7f0e0ffcde451 100644
+--- a/dist/unstable/cli/Param.js
++++ b/dist/unstable/cli/Param.js
+@@ -145,10 +145,11 @@ export const makeSingle = params => {
+  * @category constructors
+  * @since 4.0.0
+  */
+-export const string = (kind, name) => makeSingle({
++export const string = (kind, name, options) => makeSingle({
+   name,
+   primitiveType: Primitive.string,
+-  kind
++  kind,
++  defaultMissingValue: options?.defaultMissingValue
+ });
+ /**
+  * Creates a boolean parameter.
+diff --git a/dist/unstable/cli/internal/parser.js b/dist/unstable/cli/internal/parser.js
+index df0333041275c7125f2eae1f166e6657118569fa..e55485d68fc510f90fbdc9a319752fd3c5623309 100644
+--- a/dist/unstable/cli/internal/parser.js
++++ b/dist/unstable/cli/internal/parser.js
+@@ -300,6 +300,13 @@ const consumeFlagValueWithTokens = (cursor, token, spec, negated = false) => {
+       tokens: valueToken === undefined ? [] : [valueToken]
+     };
+   }
++  if (spec.defaultMissingValue !== undefined) {
++    return {
++      _tag: "Value",
++      value: spec.defaultMissingValue,
++      tokens: []
++    };
++  }
+   return {
+     _tag: "Error",
+     error: missingFlagValue(spec),
+diff --git a/src/unstable/cli/Flag.ts b/src/unstable/cli/Flag.ts
+index 2390d5c2eef9f70ed0cb26aacb803f5c640c4d5e..f512cf69363cb2c3d9449d468029953be53b99b0 100644
+--- a/src/unstable/cli/Flag.ts
++++ b/src/unstable/cli/Flag.ts
+@@ -54,7 +54,10 @@ export interface Flag<A> extends Param.Param<typeof Param.flagKind, A> {}
+  * @category constructors
+  * @since 4.0.0
+  */
+-export const string = (name: string): Flag<string> => Param.string(Param.flagKind, name)
++export const string = (
++  name: string,
++  options?: { readonly defaultMissingValue?: string }
++): Flag<string> => Param.string(Param.flagKind, name, options)
+ 
+ /**
+  * Creates a boolean flag that can be enabled or disabled.
+diff --git a/src/unstable/cli/Param.ts b/src/unstable/cli/Param.ts
+index 57205910d2bbdaf45c7958e2d440cb566e64c2da..42d5292757b69e98a00b3804cf2617fde37f7c6e 100644
+--- a/src/unstable/cli/Param.ts
++++ b/src/unstable/cli/Param.ts
+@@ -193,6 +193,7 @@ export interface Single<Kind extends ParamKind, out A> extends Param<Kind, A> {
+   readonly _tag: "Single"
+   readonly kind: Kind
+   readonly name: string
++  readonly defaultMissingValue?: string | undefined
+   readonly description: Option.Option<string>
+   readonly aliases: ReadonlyArray<string>
+   readonly primitiveType: Primitive.Primitive<A>
+@@ -335,6 +336,7 @@ export const isFlagParam = <A>(
+ export const makeSingle = <const Kind extends ParamKind, A>(params: {
+   readonly kind: Kind
+   readonly name: string
++  readonly defaultMissingValue?: string | undefined
+   readonly primitiveType: Primitive.Primitive<A>
+   readonly typeName?: string | undefined
+   readonly description?: Option.Option<string> | undefined
+@@ -378,12 +380,14 @@ export const makeSingle = <const Kind extends ParamKind, A>(params: {
+  */
+ export const string = <const Kind extends ParamKind>(
+   kind: Kind,
+-  name: string
++  name: string,
++  options?: { readonly defaultMissingValue?: string }
+ ): Param<Kind, string> =>
+   makeSingle({
+     name,
+     primitiveType: Primitive.string,
+-    kind
++    kind,
++    defaultMissingValue: options?.defaultMissingValue
+   })
+ 
+ /**
+diff --git a/src/unstable/cli/internal/parser.ts b/src/unstable/cli/internal/parser.ts
+index 5e00b9f1c75330da083c0be8088f5396f1bff371..f92f05e4d5db574724a3620e707ecd56f470b3e7 100644
+--- a/src/unstable/cli/internal/parser.ts
++++ b/src/unstable/cli/internal/parser.ts
+@@ -508,6 +508,14 @@ const consumeFlagValueWithTokens = (
+     }
+   }
+ 
++  if (spec.defaultMissingValue !== undefined) {
++    return {
++      _tag: "Value",
++      value: spec.defaultMissingValue,
++      tokens: []
++    }
++  }
++
+   return {
+     _tag: "Error",
+     error: missingFlagValue(spec),
