@@ -9,6 +9,8 @@ export type RelativePath = typeof RelativePath.Type
 export const AbsolutePath = Schema.String.pipe(Schema.brand("AbsolutePath"))
 export type AbsolutePath = typeof AbsolutePath.Type
 
+// Optional object properties. Annotate `schema` before wrapping; annotations on the
+// returned value sit on the decoded Union and never reach OpenAPI (Schema.toEncoded).
 export const optional = <S extends Schema.Top>(schema: S) =>
   Schema.optionalKey(schema).pipe(
     Schema.decodeTo(Schema.optional(Schema.toType(schema)), {

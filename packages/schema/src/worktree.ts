@@ -12,11 +12,18 @@ export const CreateInput = Schema.Struct({
   projectID: Project.ID,
   from: optional(AbsolutePath),
   branch: optional(Schema.Trim.pipe(Schema.check(Schema.isNonEmpty()))),
-  directory: optional(AbsolutePath).annotate({
-    description:
-      "Parent directory for the new worktree. Uses the project's canonical configuration, then defaults to the server's data directory under worktree/<first six project ID characters>.",
-  }),
-  name: optional(Schema.String),
+  directory: optional(
+    AbsolutePath.annotate({
+      description:
+        "Parent directory for the new worktree. Uses the project's canonical configuration, then defaults to the server's data directory under worktree/<first six project ID characters>.",
+    }),
+  ),
+  name: optional(
+    Schema.String.annotate({
+      description:
+        "Child directory created under directory. If that path exists, the server tries -2 through -10 and then fails. A slug is used when omitted.",
+    }),
+  ),
 }).annotate({ identifier: "Worktree.CreateInput" })
 export interface CreateInput extends Schema.Schema.Type<typeof CreateInput> {}
 

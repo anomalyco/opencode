@@ -26,7 +26,11 @@ const RequestFields = {
   sessionID: SessionID,
   action: Schema.String,
   resources: Schema.Array(Schema.String),
-  save: Schema.Array(Schema.String).pipe(optional),
+  save: Schema.Array(Schema.String)
+    .annotate({
+      description: "Wildcard patterns to persist as an allow rule when the request is approved.",
+    })
+    .pipe(optional),
   metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
   source: Source.pipe(optional),
   message: Schema.String.pipe(optional),
@@ -57,9 +61,15 @@ export type Effect = typeof Effect.Type
 
 export interface Rule extends Schema.Schema.Type<typeof Rule> {}
 export const Rule = Schema.Struct({
-  action: Schema.String,
-  resource: Schema.String,
-  effect: Effect,
+  action: Schema.String.annotate({
+    description: "Wildcard pattern for the tool or action. The last matching rule wins.",
+  }),
+  resource: Schema.String.annotate({
+    description: "Wildcard pattern for the resource the action targets.",
+  }),
+  effect: Effect.annotate({
+    description: "allow, deny, or ask. Unmatched requests default to ask.",
+  }),
 }).annotate({ identifier: "Permission.Rule" })
 
 export const Ruleset = Schema.Array(Rule).annotate({ identifier: "Permission.Ruleset" })
