@@ -60,6 +60,42 @@ describe("Speech", () => {
     }),
   )
 
+  it.effect("describes OpenAI audio in the format the request body actually asked for", () =>
+    Effect.gen(function* () {
+      const [pcm, wav] = yield* Effect.all([
+        Speech.generate({ model: openai, text: "Hi", format: "mp3", providerOptions: { response_format: "pcm" } }),
+        Speech.generate({ model: openai, text: "Hi", http: { body: { response_format: "wav" } } }),
+      ]).pipe(Effect.provide(respond("\u0001\u0002", "application/octet-stream")))
+      expect(pcm.audio.mediaType).toBe("audio/pcm")
+      expect(pcm.audio.info).toEqual({ format: "pcm", encoding: "pcm_s16le", sampleRate: 24000, channels: 1 })
+      expect(wav.audio.mediaType).toBe("audio/wav")
+      expect(wav.audio.info?.format).toBe("wav")
+    }),
+  )
+
+  it.effect("describes Deepgram raw encodings in their default WAV container", () =>
+    Effect.gen(function* () {
+      const response = yield* Speech.generate({ model: deepgram, text: "Hi", providerOptions: { encoding: "mulaw" } })
+      expect(response.audio.mediaType).toBe("audio/wav")
+      expect(response.audio.info?.format).toBe("wav")
+    }).pipe(Effect.provide(respond("RIFF....WAVEfmt ", "audio/wav"))),
+  )
+
+  it.effect("always gives headerless Deepgram PCM a sample rate", () =>
+    Effect.gen(function* () {
+      const [requested, defaulted] = yield* Effect.all([
+        Speech.generate({
+          model: deepgram,
+          text: "Hi",
+          providerOptions: { encoding: "mulaw", container: "none", sampleRate: 16000 },
+        }),
+        Speech.generate({ model: deepgram, text: "Hi", providerOptions: { encoding: "alaw", container: "none" } }),
+      ]).pipe(Effect.provide(respond("\u0001\u0002", "audio/basic")))
+      expect(requested.audio.info).toEqual({ format: "pcm", encoding: "pcm_mulaw", sampleRate: 16000, channels: 1 })
+      expect(defaulted.audio.info).toEqual({ format: "pcm", encoding: "pcm_alaw", sampleRate: 8000, channels: 1 })
+    }),
+  )
+
   it.effect("rejects raw PCM for Gemini 3.8 unary requests before sending", () =>
     Effect.gen(function* () {
       const errors = yield* Effect.all(
@@ -76,6 +112,7 @@ describe("Speech", () => {
       const errors = yield* Effect.all(
         [
           Speech.generate({ model: openai, text: "Hi", timestamps: true }),
+          Speech.generate({ model: openai, text: "Hi", format: "ogg" }),
           Speech.generate({ model: google, text: "Hi", format: "mp3" }),
           Speech.generate({ model: google, text: "Hi", instructions: "Warm." }),
           collect(Speech.stream({ model: elevenlabs, text: "Hi", voice, format: "wav" })),
@@ -87,13 +124,15 @@ describe("Speech", () => {
         [
           ["UnsupportedOperation", "media.timestamps"],
           ["UnsupportedOperation", "media.format"],
+          ["UnsupportedOperation", "media.format"],
           ["UnsupportedOperation", "media.instructions"],
           ["UnsupportedOperation", "media.format"],
           ["UnsupportedOperation", "media.format"],
           ["UnsupportedOperation", "media.voice"],
         ],
       )
-      expect(errors[1].reason).toMatchObject({ provider: "google", route: "google-speech" })
+      expect(errors[1].reason).toMatchObject({ provider: "openai", route: "openai-speech" })
+      expect(errors[2].reason).toMatchObject({ provider: "google", route: "google-speech" })
     }).pipe(Effect.provide(layer(() => Effect.die("an unsupported request reached the network")))),
   )
 

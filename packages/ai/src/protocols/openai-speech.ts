@@ -60,10 +60,17 @@ interface State extends SpeechStream.Audio {
 // `sse` is not supported for `tts-1` or `tts-1-hd`; those models stream the raw audio body instead.
 const supportsSse = (model: string) => !/^tts-1(-hd)?(-|$)/.test(model)
 
+const FORMATS = new Set(["mp3", "opus", "aac", "flac", "wav", "pcm"])
+
 const fromRequest = Effect.fn("OpenAISpeech.fromRequest")(function* (request: MediaProtocol.Addressed<Request>) {
   // Not in `unsupported`: that list would also reject `timestamps: false`, which asks for nothing.
   if (request.timestamps === true)
     return yield* route.unsupported("media.timestamps", `${route.name} does not return timestamps`)
+  if (request.format !== undefined && !FORMATS.has(request.format))
+    return yield* route.unsupported(
+      "media.format",
+      `${route.name} supports the mp3, opus, aac, flac, wav, and pcm formats, not "${request.format}"`,
+    )
   return MediaProtocol.json(
     mergeJsonRecords(
       {
@@ -112,7 +119,9 @@ const onEvent = Effect.fn("OpenAISpeech.onEvent")(function* (state: State, frame
 
 const finish = (state: State, context: MediaProtocol.ResponseContext<Request>) => {
   if (isSse(context.body) && !state.done) return Effect.fail(route.incomplete())
-  const format = context.request.format ?? "mp3"
+  // The sent body reflects `providerOptions` and `http.body` overrides of `format`.
+  const sent = context.body.type === "json" ? context.body.value.response_format : undefined
+  const format = typeof sent === "string" ? sent : "mp3"
   return SpeechStream.finish(route, state, {
     ...(format === "pcm" ? SpeechStream.pcm("pcm_s16le", PCM_SAMPLE_RATE) : SpeechStream.container(format)),
     usage: state.usage,
