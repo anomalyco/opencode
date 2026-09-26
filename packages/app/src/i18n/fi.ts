@@ -678,6 +678,8 @@ export const dict = {
   "session.header.reveal.finder": "Näytä Finderissa",
   "session.header.reveal.fileExplorer": "Näytä Resurssienhallinnassa",
   "session.header.reveal.containingFolder": "Avaa tiedoston sisältävä kansio",
+  "session.file.openInApp": "Avaa sovelluksessa {{app}}",
+
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",

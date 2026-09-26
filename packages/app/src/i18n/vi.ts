@@ -790,6 +790,8 @@ export const dict = {
   "session.header.reveal.finder": "Hiển thị trong Finder",
   "session.header.reveal.fileExplorer": "Hiển thị trong File Explorer",
   "session.header.reveal.containingFolder": "Mở thư mục chứa",
+  "session.file.openInApp": "Mở trong {{app}}",
+
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",

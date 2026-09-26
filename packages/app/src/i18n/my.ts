@@ -788,6 +788,8 @@ export const dict = {
   "session.header.reveal.finder": "Finder တွင် ထုတ်ပြပါ။",
   "session.header.reveal.fileExplorer": "File Explorer တွင် ထုတ်ပြပါ။",
   "session.header.reveal.containingFolder": "ပါဝင်သောဖိုင်တွဲကိုဖွင့်ပါ။",
+  "session.file.openInApp": "{{app}} တွင် ဖွင့်ပါ။",
+
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",

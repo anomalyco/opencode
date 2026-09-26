@@ -780,6 +780,8 @@ export const dict = {
   "session.header.reveal.finder": "გამოვლენა Finder",
   "session.header.reveal.fileExplorer": "გამოვლენა File Explorer-ში",
   "session.header.reveal.containingFolder": "გახსენით შემცველი საქაღალდე",
+  "session.file.openInApp": "გახსენით {{app}}",
+
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",
