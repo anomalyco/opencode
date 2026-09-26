@@ -391,6 +391,35 @@ describe("thai typing", () => {
     }
   })
 
+  test("right and left arrows stop only on grapheme edges", async () => {
+    const editor = await mountTextarea()
+    try {
+      const text = `${thai.clusterAbove}${thai.saraAmTone}${thai.leadingVowel}`
+      const edges = [0]
+      for (const cluster of thaiGraphemes(text)) {
+        edges.push((edges.at(-1) ?? 0) + promptOffsetWidth(cluster))
+      }
+      await editor.app.mockInput.typeText(text)
+      await editor.app.renderOnce()
+      while (editor.textarea.cursorOffset > 0) editor.app.mockInput.pressArrow("left")
+      const seen = [editor.textarea.cursorOffset]
+      const end = edges.at(-1) ?? 0
+      while (editor.textarea.cursorOffset < end) {
+        const before = editor.textarea.cursorOffset
+        editor.app.mockInput.pressArrow("right")
+        await editor.app.renderOnce()
+        expect(editor.textarea.cursorOffset).toBeGreaterThan(before)
+        seen.push(editor.textarea.cursorOffset)
+        if (seen.length > edges.length) break
+      }
+      console.log(`thai-caret-edges ${JSON.stringify(seen)}`)
+      expect(seen).toEqual(edges)
+      expect(editor.textarea.plainText).toBe(text)
+    } finally {
+      await editor.cleanup()
+    }
+  })
+
   test("english word motion stays on whitespace", async () => {
     const editor = await mountTextarea()
     try {

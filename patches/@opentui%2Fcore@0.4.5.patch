@@ -40,10 +40,10 @@ index 0ddf03bf666a05f50c66bef32af65b1403ed0192..1cd52ecee9c28ccd812813cef29e9207
  //# sourceMappingURL=index.node.js.map
 diff --git a/node_modules/@opentui/core/thai-caret.js b/thai-caret.js
 new file mode 100644
-index 0000000000000000000000000000000000000000..ec6b5a604414b1a0c2ab20d51d465316cf45260b
+index 0000000000000000000000000000000000000000..62153df00981090a8405630e6ffd98415a66c0bc
 --- /dev/null
 +++ b/thai-caret.js
-@@ -0,0 +1,134 @@
+@@ -0,0 +1,168 @@
 +const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" })
 +const thaiWords = new Intl.Segmenter("th", { granularity: "word" })
 +const THAI = /[\u0E00-\u0E7F]/
@@ -58,11 +58,11 @@ index 0000000000000000000000000000000000000000..ec6b5a604414b1a0c2ab20d51d465316
 +  return width
 +}
 +
-+function snapForward(text, offset) {
++function clusterEnd(text, offset, onlyInside) {
 +  let col = 0
 +  for (const part of graphemes.segment(text)) {
 +    const next = col + (part.segment === "\n" ? 1 : Bun.stringWidth(part.segment))
-+    if (offset > col && offset < next) return next
++    if (onlyInside ? offset > col && offset < next : next > offset) return next
 +    col = next
 +  }
 +  return offset
@@ -82,6 +82,23 @@ index 0000000000000000000000000000000000000000..ec6b5a604414b1a0c2ab20d51d465316
 +  return editor.editorView.getEOL().offset
 +}
 +
++// The native buffer can leave the caret one cell inside a wide grapheme.
++// Snap forward to that grapheme's end when the column exists. A boundary is left alone.
++function placeCaret(editor, next) {
++  const limit = lineEnd(editor)
++  if (next > editor.cursorOffset && next <= limit) editor.cursorOffset = next
++}
++
++function snapCaret(editor) {
++  placeCaret(editor, clusterEnd(editor.plainText, editor.cursorOffset, true))
++}
++
++// Native right-arrow can refuse the last column of a leading vowel plus consonant (`เก`).
++// Step to the next grapheme edge when the column exists.
++function stepCaret(editor) {
++  placeCaret(editor, clusterEnd(editor.plainText, editor.cursorOffset, false))
++}
++
 +export function installThaiCaretFixes(Renderable) {
 +  const proto = Renderable.prototype
 +  if (proto[installed]) return
@@ -95,25 +112,40 @@ index 0000000000000000000000000000000000000000..ec6b5a604414b1a0c2ab20d51d465316
 +  const deleteWordForward = proto.deleteWordForward
 +
 +  proto.moveCursorRight = function (options) {
++    const before = this.cursorOffset
 +    const result = moveCursorRight.call(this, options)
-+    const limit = lineEnd(this)
-+    const next = snapForward(this.plainText, this.cursorOffset)
-+    if (next > this.cursorOffset && next <= limit) {
-+      this.cursorOffset = next
-+      if (options?.select) this.updateSelectionForMovement(true, false)
-+    }
++    snapCaret(this)
++    if (this.cursorOffset === before) stepCaret(this)
++    if (options?.select && this.cursorOffset !== before) this.updateSelectionForMovement(true, false)
 +    return result
 +  }
 +
 +  proto.insertText = function (text) {
-+    if (!text.includes(SARA_AM)) return insertText.call(this, text)
-+    if (this.hasSelection()) this.deleteSelectedText()
-+    for (const part of text.split(/(\u0E33)/)) {
-+      if (!part) continue
-+      if (part === SARA_AM) this.editBuffer.insertChar(part)
-+      else this.editBuffer.insertText(part)
++    if (!text.includes(SARA_AM)) {
++      const result = insertText.call(this, text)
++      snapCaret(this)
++      return result
 +    }
++    if (this.hasSelection()) this.deleteSelectedText()
++    // Bulk insert measures สระอำ as zero width. Keep it in its own insertChar so the
++    // column table matches text typed one code point at a time, then snap to the cluster edge.
++    let chunk = ""
++    const flush = () => {
++      if (!chunk) return
++      this.editBuffer.insertText(chunk)
++      chunk = ""
++    }
++    for (const part of graphemes.segment(text)) {
++      if (!part.segment.includes(SARA_AM)) {
++        chunk += part.segment
++        continue
++      }
++      flush()
++      for (const ch of part.segment) this.editBuffer.insertChar(ch)
++    }
++    flush()
 +    this.requestRender()
++    snapCaret(this)
 +  }
 +
 +  proto.moveWordForward = function (options) {
@@ -123,6 +155,7 @@ index 0000000000000000000000000000000000000000..ec6b5a604414b1a0c2ab20d51d465316
 +    const bounds = wordBounds(this.plainText)
 +    const next = bounds.find((bound) => bound > this.cursorOffset) ?? this.cursorOffset
 +    this.cursorOffset = Math.min(next, lineEnd(this))
++    snapCaret(this)
 +    this.updateSelectionForMovement(select, false)
 +    this.requestRender()
 +    return true
@@ -135,6 +168,7 @@ index 0000000000000000000000000000000000000000..ec6b5a604414b1a0c2ab20d51d465316
 +    const bounds = wordBounds(this.plainText)
 +    const prev = bounds.findLast((bound) => bound < this.cursorOffset) ?? 0
 +    this.cursorOffset = prev
++    snapCaret(this)
 +    this.updateSelectionForMovement(select, false)
 +    this.requestRender()
 +    return true
