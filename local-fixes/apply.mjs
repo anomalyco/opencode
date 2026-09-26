@@ -227,7 +227,7 @@ if (missing.length) {
 // ---------------------------------------------------------------- 8. stage
 step++
 console.log(`\n[${step}] stage the binary`)
-const stagePath = manifest.stage.path
+const stagePath = manifest.stage.path.replace("{version}", version)
 copyFileSync(artifact, stagePath)
 ok(`copied → ${stagePath}`)
 

@@ -50,8 +50,8 @@
     "note": "OPENCODE_VERSION must be set or the binary reports a dev version and free-tier models reject it with 426 'OpenCode 1.18.0 or newer is required'."
   },
   "stage": {
-    "path": "C:\\Users\\Zephyrus\\.local\\bin\\opencode-patched.exe",
-    "note": "Stable filename on purpose: the User environment variable OPENCODE_BINARY points here forever, so an upgrade never requires re-pinning.",
+    "path": "C:\\Users\\Zephyrus\\.local\\bin\\opencode-patched-{version}.exe",
+    "note": "Versioned filename on purpose: Windows locks the running binary, so overwriting one stable file fails with EBUSY while OpenChamber is up. Each build stages to opencode-patched-<version>.exe; OPENCODE_BINARY is repointed at it (future launches only, running sessions untouched).",
     "pinMechanism": "OPENCODE_BINARY, User scope. OpenChamber resolves its binary at startup as `process.env.OPENCODE_BINARY || searchPathFor('opencode')` - the env var is read FIRST and is the only durable pin.",
     "settingsFile": "C:\\Users\\Zephyrus\\.config\\openchamber\\settings.json",
     "settingsKey": "opencodeBinary",

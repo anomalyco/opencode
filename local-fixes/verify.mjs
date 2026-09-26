@@ -8,14 +8,49 @@
  *   bun run fixes:verify
  */
 import { spawnSync, execFileSync } from "node:child_process"
-import { existsSync, readFileSync, statSync } from "node:fs"
-import { join, dirname } from "node:path"
+import { existsSync, readFileSync, statSync, readdirSync } from "node:fs"
+import { join, dirname, basename } from "node:path"
 import { fileURLToPath } from "node:url"
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..")
 const manifest = JSON.parse(readFileSync(join(ROOT, "local-fixes/manifest.json"), "utf8"))
 const fixes = manifest.fixes ?? (manifest.fix ? [manifest.fix] : [])
 if (!fixes.length) throw new Error("manifest contains no local fixes")
+
+function readPinnedBinary() {
+  try {
+    return execFileSync("powershell.exe", [
+      "-NoProfile", "-Command",
+      "[Environment]::GetEnvironmentVariable('OPENCODE_BINARY','User')",
+    ], { encoding: "utf8" }).trim()
+  } catch {
+    return ""
+  }
+}
+
+const pinnedBinary = readPinnedBinary()
+
+/** Resolve the stage template to the binary OpenChamber will actually load:
+ *  the pin target when it matches the template, else the newest versioned
+ *  file on disk, else null. Versioned filenames exist because Windows locks
+ *  the running binary, so each build stages to opencode-patched-<version>.exe. */
+function resolveStagePath(template) {
+  if (!template.includes("{version}")) return template
+  const dir = dirname(template)
+  const tbase = basename(template).split("{version}")
+  const prefix = tbase[0]
+  const suffix = tbase[1]
+  const matches = (p) => basename(p).startsWith(prefix) && basename(p).endsWith(suffix)
+  if (pinnedBinary && matches(pinnedBinary) && existsSync(pinnedBinary)) return pinnedBinary
+  if (!existsSync(dir)) return null
+  const ranked = readdirSync(dir)
+    .filter((f) => f.startsWith(prefix) && f.endsWith(suffix))
+    .map((f) => ({ f, v: /^(\d+)\.(\d+)\.(\d+)$/.exec(f.slice(prefix.length, suffix.length ? -suffix.length : undefined)) }))
+    .filter((x) => x.v)
+    .sort((a, b) => (a.v[1] - b.v[1]) || (a.v[2] - b.v[2]) || (a.v[3] - b.v[3]))
+  if (!ranked.length) return null
+  return join(dir, ranked[ranked.length - 1].f)
+}
 
 let bad = 0
 const line = (mark, msg) => console.log(`  ${mark}  ${msg}`)
@@ -27,9 +62,9 @@ console.log(`\n=== fixes:verify — ${fixes.map((fix) => fix.id).join(", ")} ===
 
 // 1. staged binary present
 console.log(`\n[1] staged binary`)
-const stagePath = manifest.stage.path
-if (!existsSync(stagePath)) {
-  warn(`missing: ${stagePath}`)
+const stagePath = resolveStagePath(manifest.stage.path)
+if (!stagePath || !existsSync(stagePath)) {
+  warn(`no staged binary for template: ${manifest.stage.path}`)
   note(`run \`bun run fixes:apply\` to build and stage it`)
   console.log(`\nNot trustworthy — the fix is not staged.\n`)
   process.exit(1)
@@ -81,15 +116,8 @@ else note(`(no ${branch} — staged binary may predate this workflow, which is f
 // settings.json's opencodeBinary on every settings rewrite (verified 2026-09-25).
 // Checking the settings file alone reports a pin that does not exist.
 console.log(`\n[6] OpenChamber pin (OPENCODE_BINARY, User scope)`)
-let pinned = ""
-try {
-  pinned = execFileSync("powershell.exe", [
-    "-NoProfile", "-Command",
-    "[Environment]::GetEnvironmentVariable('OPENCODE_BINARY','User')",
-  ], { encoding: "utf8" }).trim()
-} catch (e) {
-  warn(`could not read the User environment: ${e.message}`)
-}
+const pinned = pinnedBinary
+if (!pinned) warn(`could not read the User environment — OpenChamber may use its BUNDLED binary, not this one`)
 if (pinned === stagePath) good(`OPENCODE_BINARY (User) → staged binary`)
 else if (!pinned) warn(`OPENCODE_BINARY (User) is empty — OpenChamber will use its BUNDLED binary, not this one`)
 else warn(`OPENCODE_BINARY (User) points at "${pinned}" — NOT the staged binary`)

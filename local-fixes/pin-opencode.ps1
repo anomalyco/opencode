@@ -16,7 +16,20 @@ $ProgressPreference = 'SilentlyContinue'
 $ErrorActionPreference = 'Stop'
 
 $settings = 'C:\Users\Zephyrus\.config\openchamber\settings.json'
-$target   = 'C:\Users\Zephyrus\.local\bin\opencode-patched.exe'
+# Versioned staging: Windows locks the running binary, so each build stages to
+# opencode-patched-<version>.exe. Pin the newest versioned build.
+$candidates = Get-ChildItem 'C:\Users\Zephyrus\.local\bin\opencode-patched-*.exe' -ErrorAction SilentlyContinue | ForEach-Object {
+  $m = [regex]::Match($_.Name, '^opencode-patched-(\d+)\.(\d+)\.(\d+)\.exe$')
+  if ($m.Success) {
+    [PSCustomObject]@{ Path = $_.FullName; V = [version]"$($m.Groups[1].Value).$($m.Groups[2].Value).$($m.Groups[3].Value)" }
+  }
+}
+$target = ($candidates | Sort-Object V | Select-Object -Last 1).Path
+if (-not $target) {
+  Write-Host 'MISSING: no opencode-patched-<version>.exe in C:\Users\Zephyrus\.local\bin\'
+  Write-Host "Run 'bun run fixes:apply' first to build and stage a patched binary."
+  exit 1
+}
 
 Write-Host "=== pin-opencode ==="
 
