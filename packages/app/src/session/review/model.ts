@@ -17,6 +17,8 @@ import { createOpenReviewFile } from "../helpers"
 import type { SessionModel } from "../model"
 import type { SessionScreenLayout } from "../screen-layout"
 import { createReviewPanelState } from "./panel-state"
+import { showToast } from "@/shell/notifications/toast"
+import { formatServerError } from "@/runtime/server/errors"
 import { reviewDiffDirectory, reviewDiffNeedsLoad, reviewRootDirectory } from "./review-diff-kinds"
 import type { DiffStyle } from "./review-tab"
 
@@ -42,6 +44,7 @@ export function createSessionReview(input: {
     detailsOpen: false,
     scroll: undefined as HTMLDivElement | undefined,
     pendingFile: undefined as string | undefined,
+    initializingGit: false,
   })
   const mode = () => input.session.layout.view().review.mode() ?? "git"
   const selectedFile = () => input.session.layout.view().review.file()
@@ -160,6 +163,32 @@ export function createSessionReview(input: {
     if (project && !project.vcs) return true
     if (mode() === "git" || mode() === "branch") return !vcsQuery.isPending
     return true
+  }
+  const initializeGit = () => {
+    if (state.initializingGit) return
+    const directory = location().directory
+    const sessionID = input.session.identity.params.id
+    if (!sessionID) return
+    setState("initializingGit", true)
+    void server.api.vcs
+      .init({ location: { directory } })
+      .then(async () => {
+        data.project.invalidate()
+        data.session.invalidate(sessionID)
+        data.location.invalidate({ directory })
+        data.location.vcs.invalidate({ directory })
+        await data.project.sync()
+        await data.session.sync(sessionID)
+        await Promise.all([data.location.sync({ directory }), data.location.vcs.sync({ directory })])
+      })
+      .catch((error) =>
+        showToast({
+          variant: "error",
+          title: language.t("common.requestFailed"),
+          description: formatServerError(error, language.t),
+        }),
+      )
+      .finally(() => setState("initializingGit", false))
   }
   const loadDiff = async (path: string, version?: number): Promise<FileDiffInfo | undefined> => {
     const value = vcsMode()
@@ -410,6 +439,8 @@ export function createSessionReview(input: {
     diffs,
     focusFile,
     hasChanges,
+    initializeGit,
+    initializingGit: () => state.initializingGit,
     loadDiff,
     mobile: {
       changes: mobileChanges,

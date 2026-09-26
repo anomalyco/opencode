@@ -101,6 +101,7 @@ describe("node build", () => {
           list: () => Effect.succeed([]),
           update: () => Effect.die("not implemented"),
           activate: () => Effect.void,
+          initializeGit: () => Effect.die("not implemented"),
           resolve: (directory) => Effect.succeed({ id: Project.ID.global, directory, canonical: directory }),
         })
       }),

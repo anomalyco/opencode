@@ -3,9 +3,9 @@ import { Location } from "@opencode/schema/location"
 import { NonNegativeInt, PositiveInt, optional } from "@opencode/schema/schema"
 import { Vcs } from "@opencode/schema/vcs"
 import { Schema } from "effect"
-import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
-import { ServiceUnavailableError } from "../errors.js"
+import { ConflictError, InvalidRequestError, ServiceUnavailableError } from "../errors.js"
 
 const BranchesQuery = Schema.Struct({
   ...LocationQuery.fields,
@@ -21,6 +21,21 @@ const DiffQuery = Schema.Struct({
 })
 
 export const VcsGroup = HttpApiGroup.make("server.vcs")
+  .add(
+    HttpApiEndpoint.post("vcs.init", "/api/vcs/init", {
+      query: LocationQuery,
+      success: HttpApiSchema.NoContent,
+      error: [ConflictError, InvalidRequestError, ServiceUnavailableError],
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "vcs.init",
+          summary: "Initialize Git repository",
+          description: "Initialize Git in a markerless project's directory and refresh its location services.",
+        }),
+      ),
+  )
   .add(
     HttpApiEndpoint.get("vcs.get", "/api/vcs", {
       query: LocationQuery,

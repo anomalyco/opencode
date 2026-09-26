@@ -6249,6 +6249,12 @@ export type WorktreeRefreshInput = { readonly projectID: { readonly projectID: s
 
 export type WorktreeRefreshOutput = void
 
+export type VcsInitInput = {
+  readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]
+}
+
+export type VcsInitOutput = void
+
 export type VcsGetInput = {
   readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]
 }
