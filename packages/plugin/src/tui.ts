@@ -421,6 +421,7 @@ type TuiConfigView = Pick<PluginConfig, "$schema" | "theme" | "plugin"> &
     leader_timeout: number
     attention: TuiAttentionConfigView
     plugin_enabled?: Record<string, boolean>
+    sidebar_sections?: { order?: string[]; hidden?: string[] }
     keybinds: TuiBindingLookupView
   }
 
