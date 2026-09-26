@@ -60,6 +60,48 @@ describe("util.process", () => {
     expect(Date.now() - started).toBeLessThan(1000)
   }, 3000)
 
+  test("stops only the direct process by default", async () => {
+    if (process.platform === "win32") return
+
+    const proc = Process.spawn(
+      node(`
+        const { spawn } = require("node:child_process")
+        const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" })
+        process.stdout.write(String(child.pid) + "\\n")
+        setInterval(() => {}, 1000)
+      `),
+      { stdout: "pipe" },
+    )
+    let childPID: number | undefined
+
+    try {
+      childPID = await new Promise<number>((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("child process did not publish its pid")), 1000)
+        proc.stdout?.once("data", (data) => {
+          clearTimeout(timer)
+          resolve(Number(data.toString()))
+        })
+        proc.once("error", (error) => {
+          clearTimeout(timer)
+          reject(error)
+        })
+      })
+
+      await Process.stop(proc)
+      await proc.exited
+      const pid = childPID
+      if (pid === undefined) throw new Error("child process did not publish its pid")
+      expect(() => process.kill(pid, 0)).not.toThrow()
+    } finally {
+      if (proc.exitCode === null && proc.signalCode === null) proc.kill("SIGKILL")
+      if (childPID) {
+        try {
+          process.kill(childPID, "SIGKILL")
+        } catch {}
+      }
+    }
+  }, 3000)
+
   test("uses cwd when spawning commands", async () => {
     await using tmp = await tmpdir()
     const out = await Process.run(node("process.stdout.write(process.cwd())"), {
@@ -75,6 +117,23 @@ describe("util.process", () => {
       },
     })
     expect(out.stdout.toString()).toBe("set")
+  })
+
+  test("preserves cwd, environment, and stdout for owned processes", async () => {
+    await using tmp = await tmpdir()
+    const out = await Process.run(node('process.stdout.write(process.cwd() + ":" + process.env.OPENCODE_TEST)'), {
+      cwd: tmp.path,
+      env: { OPENCODE_TEST: "set" },
+      owned: true,
+    })
+
+    expect(out.stdout.toString()).toBe(`${tmp.path}:set`)
+  })
+
+  test("rejects shell for owned processes", () => {
+    expect(() => Process.spawn(node("process.exit(0)"), { owned: true, shell: true })).toThrow(
+      "Owned processes do not support shell",
+    )
   })
 
   test("uses shell in run on Windows", async () => {
@@ -124,5 +183,26 @@ describe("util.process", () => {
     expect(err).toMatchObject({
       code: "ENOENT",
     })
+  })
+
+  test("rejects owned missing commands without leaking unhandled errors", async () => {
+    await using tmp = await tmpdir()
+    const cmd = path.join(tmp.path, "missing" + (process.platform === "win32" ? ".cmd" : ""))
+    const err = await (() => {
+      try {
+        return Process.spawn([cmd], {
+          owned: true,
+          stdin: "pipe",
+          stdout: "pipe",
+          stderr: "pipe",
+        }).exited
+      } catch (error) {
+        return Promise.reject(error)
+      }
+    })().catch((error) => error)
+
+    if (process.platform === "win32") expect(err).toBe(1)
+    else expect(err).toMatchObject({ message: "Unable to own process without a PID" })
+    await Bun.sleep(10)
   })
 })

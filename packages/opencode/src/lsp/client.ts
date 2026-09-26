@@ -5,7 +5,7 @@ import type { Diagnostic as VSCodeDiagnostic } from "vscode-languageserver-types
 import { Process } from "@/util/process"
 import { LANGUAGE_EXTENSIONS } from "./language"
 import { Effect, Schema } from "effect"
-import type * as LSPServer from "./server"
+import type { Handle } from "./server"
 import { withTimeout } from "../util/timeout"
 import { Filesystem } from "@/util/filesystem"
 import type { InstanceContext } from "@/project/instance-context"
@@ -16,6 +16,7 @@ const DIAGNOSTICS_FULL_WAIT_TIMEOUT_MS = 10_000
 const DIAGNOSTICS_REQUEST_TIMEOUT_MS = 3_000
 
 const INITIALIZE_TIMEOUT_MS = 45_000
+const SHUTDOWN_TIMEOUT_MS = 1_000
 
 // LSP spec constants
 const FILE_CHANGE_CREATED = 1
@@ -122,7 +123,7 @@ function shouldSeedDiagnosticsOnFirstPush(serverID: string) {
 
 export async function create(input: {
   serverID: string
-  server: LSPServer.Handle
+  server: Handle
   root: string
   directory: string
   instance: InstanceContext
@@ -211,7 +212,7 @@ export async function create(input: {
   const initialized = await withTimeout(
     connection.sendRequest<{ capabilities?: ServerCapabilities }>("initialize", {
       rootUri: pathToFileURL(input.root).href,
-      processId: input.server.process.pid,
+      processId: process.pid,
       workspaceFolders: [
         {
           name: "workspace",
@@ -542,6 +543,7 @@ export async function create(input: {
 
   // --- Public API ---
 
+  let shutdown: Promise<void> | undefined
   const result = {
     root: input.root,
     get serverID() {
@@ -637,10 +639,36 @@ export async function create(input: {
       }
       await waitForFullDiagnostics({ path: normalizedPath, version: request.version, after: request.after })
     },
-    async shutdown() {
-      connection.end()
-      connection.dispose()
-      await Process.stop(input.server.process)
+    shutdown() {
+      shutdown ??= (async () => {
+        try {
+          await withTimeout(
+            Promise.resolve().then(() => connection.sendRequest("shutdown")),
+            SHUTDOWN_TIMEOUT_MS,
+          ).catch(() => undefined)
+          await withTimeout(
+            Promise.resolve().then(() => connection.sendNotification("exit")),
+            SHUTDOWN_TIMEOUT_MS,
+          ).catch(() => undefined)
+          if (input.server.process.exitCode === null && input.server.process.signalCode === null) {
+            await withTimeout(
+              new Promise<void>((resolve) => input.server.process.once("exit", () => resolve())),
+              SHUTDOWN_TIMEOUT_MS,
+            ).catch(() => undefined)
+          }
+        } finally {
+          try {
+            connection.end()
+          } finally {
+            try {
+              connection.dispose()
+            } finally {
+              await Process.stop(input.server.process)
+            }
+          }
+        }
+      })()
+      return shutdown
     },
   }
 

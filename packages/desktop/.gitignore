@@ -25,5 +25,6 @@ dist-ssr
 out/
 
 resources/opencode-cli*
+resources/opencode-process-win32.exe
 resources/icons
 resources/*.metainfo.xml

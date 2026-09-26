@@ -340,13 +340,37 @@ download_and_install() {
         unzip -q "$tmp_dir/$filename" -d "$tmp_dir"
     fi
 
-    mv "$tmp_dir/opencode" "$INSTALL_DIR"
-    chmod 755 "${INSTALL_DIR}/opencode"
+    if [ "$os" = "windows" ]; then
+        if [ ! -f "$tmp_dir/opencode.exe" ] || [ ! -f "$tmp_dir/opencode-process-win32.exe" ]; then
+            print_message error "Windows archive is missing required executable files"
+            exit 1
+        fi
+        mv "$tmp_dir/opencode.exe" "$INSTALL_DIR"
+        mv "$tmp_dir/opencode-process-win32.exe" "$INSTALL_DIR"
+        chmod 755 "${INSTALL_DIR}/opencode.exe" "${INSTALL_DIR}/opencode-process-win32.exe"
+    else
+        mv "$tmp_dir/opencode" "$INSTALL_DIR"
+        chmod 755 "${INSTALL_DIR}/opencode"
+    fi
     rm -rf "$tmp_dir"
 }
 
 install_from_binary() {
     print_message info "\n${MUTED}Installing ${NC}opencode ${MUTED}from: ${NC}$binary_path"
+    case "$(uname -s)" in
+        MINGW*|MSYS*|CYGWIN*)
+            local process_binary
+            process_binary="$(dirname "$binary_path")/opencode-process-win32.exe"
+            if [ ! -f "$process_binary" ]; then
+                print_message error "Windows binary requires opencode-process-win32.exe beside it"
+                exit 1
+            fi
+            cp "$binary_path" "${INSTALL_DIR}/opencode.exe"
+            cp "$process_binary" "${INSTALL_DIR}/opencode-process-win32.exe"
+            chmod 755 "${INSTALL_DIR}/opencode.exe" "${INSTALL_DIR}/opencode-process-win32.exe"
+            return
+            ;;
+    esac
     cp "$binary_path" "${INSTALL_DIR}/opencode"
     chmod 755 "${INSTALL_DIR}/opencode"
 }

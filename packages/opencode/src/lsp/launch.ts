@@ -13,6 +13,7 @@ export function spawn(cmd: string, argsOrOpts?: string[] | Process.Options, opts
     stdin: "pipe",
     stdout: "pipe",
     stderr: "pipe",
+    owned: true,
   }) as Child
 
   if (!proc.stdin || !proc.stdout || !proc.stderr) throw new Error("Process output not available")

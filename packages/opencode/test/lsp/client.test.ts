@@ -1,18 +1,36 @@
 import { describe, expect, test } from "bun:test"
+import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
 import { tmpdir, withTestInstance } from "../fixture/fixture"
 import { LSPClient } from "@/lsp/client"
 import * as LSPServer from "@/lsp/server"
+import { spawn } from "@/lsp/launch"
+import { Process } from "@/util/process"
+import { withTimeout } from "@/util/timeout"
 
-function spawnFakeServer() {
-  const { spawn } = require("child_process")
+function spawnFakeServer(env?: NodeJS.ProcessEnv) {
   const serverPath = path.join(__dirname, "../fixture/lsp/fake-lsp-server.js")
   return {
     process: spawn(process.execPath, [serverPath], {
-      stdio: "pipe",
+      env,
     }),
   }
+}
+
+async function waitForEvent(file: string, event: string) {
+  const started = Date.now()
+  while (Date.now() - started < 1_000) {
+    const events = (await fs.readFile(file, "utf8").catch(() => "")).trim().split("\n").filter(Boolean)
+    if (events.includes(event)) return
+    await Bun.sleep(10)
+  }
+  throw new Error(`Timed out waiting for ${event}`)
+}
+
+async function stopFakeServer(handle: ReturnType<typeof spawnFakeServer>) {
+  if (handle.process.exitCode !== null || handle.process.signalCode !== null) return
+  await Process.stop(handle.process).catch(() => undefined)
 }
 
 describe("LSPClient interop", () => {
@@ -104,6 +122,8 @@ describe("LSPClient interop", () => {
     })
 
     const params = await client.connection.sendRequest<any>("test/get-initialize-params", {})
+    expect(params.processId).toBe(process.pid)
+    expect(params.processId).not.toBe(handle.process.pid)
     expect(params.capabilities.workspace.diagnostics.refreshSupport).toBe(false)
     expect(params.capabilities.textDocument.publishDiagnostics.versionSupport).toBe(false)
 
@@ -485,4 +505,101 @@ describe("LSPClient interop", () => {
       },
     })
   })
+
+  test("sends shutdown then exit once when shutdown is called concurrently", async () => {
+    await using tmp = await tmpdir()
+    const events = path.join(tmp.path, "shutdown-events")
+    const release = path.join(tmp.path, "shutdown-release")
+    const handle = spawnFakeServer({
+      OPENCODE_TEST_LSP_SHUTDOWN: "cooperative",
+      OPENCODE_TEST_LSP_EVENT_FILE: events,
+      OPENCODE_TEST_LSP_SHUTDOWN_RELEASE_FILE: release,
+    })
+
+    try {
+      const client = await withTestInstance({
+        directory: tmp.path,
+        fn: (ctx) =>
+          LSPClient.create({
+            serverID: "fake",
+            server: handle as LSPServer.Handle,
+            root: tmp.path,
+            directory: tmp.path,
+            instance: ctx,
+          }),
+      })
+
+      const first = client.shutdown()
+      expect(client.shutdown()).toBe(first)
+      await waitForEvent(events, "shutdown")
+      const observed = (await fs.readFile(events, "utf8")).trim().split("\n")
+      expect(observed).toEqual(["shutdown"])
+      expect(observed).not.toContain("exit")
+      await Bun.write(release, "release")
+      await Promise.all([first, client.shutdown()])
+      await client.shutdown()
+
+      expect(await handle.process.exited).toBe(0)
+      expect((await fs.readFile(events, "utf8")).trim().split("\n")).toEqual(["shutdown", "shutdown-response", "exit"])
+    } finally {
+      await stopFakeServer(handle)
+    }
+  })
+
+  test("falls back to stopping an unresponsive owned server", async () => {
+    await using tmp = await tmpdir()
+    const events = path.join(tmp.path, "shutdown-events")
+    const handle = spawnFakeServer({
+      OPENCODE_TEST_LSP_SHUTDOWN: "unresponsive",
+      OPENCODE_TEST_LSP_EVENT_FILE: events,
+    })
+
+    try {
+      const client = await withTestInstance({
+        directory: tmp.path,
+        fn: (ctx) =>
+          LSPClient.create({
+            serverID: "fake",
+            server: handle as LSPServer.Handle,
+            root: tmp.path,
+            directory: tmp.path,
+            instance: ctx,
+          }),
+      })
+
+      await withTimeout(Promise.all([client.shutdown(), handle.process.exited]), 3_000)
+
+      expect(await handle.process.exited).not.toBe(0)
+      expect((await fs.readFile(events, "utf8")).trim().split("\n")).toEqual(["shutdown", "exit"])
+    } finally {
+      await stopFakeServer(handle)
+    }
+  }, 5_000)
+
+  test("stops a server when the connection is already disposed", async () => {
+    await using tmp = await tmpdir()
+    const handle = spawnFakeServer({
+      OPENCODE_TEST_LSP_SHUTDOWN: "unresponsive",
+    })
+
+    try {
+      const client = await withTestInstance({
+        directory: tmp.path,
+        fn: (ctx) =>
+          LSPClient.create({
+            serverID: "fake",
+            server: handle as LSPServer.Handle,
+            root: tmp.path,
+            directory: tmp.path,
+            instance: ctx,
+          }),
+      })
+
+      client.connection.dispose()
+      await withTimeout(Promise.all([client.shutdown(), handle.process.exited]), 3_000)
+      expect(await handle.process.exited).not.toBe(0)
+    } finally {
+      await stopFakeServer(handle)
+    }
+  }, 5_000)
 })
