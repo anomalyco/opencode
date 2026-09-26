@@ -88,13 +88,13 @@ scoop bucket add extras; scoop install extras/opencode-desktop
 
 1. `$OPENCODE_INSTALL_DIR` - Користувацький каталог встановлення
 2. `$XDG_BIN_DIR` - Шлях, сумісний зі специфікацією XDG Base Directory
-3. `$HOME/bin` - Стандартний каталог користувацьких бінарників (якщо існує або його можна створити)
+3. `$HOME/bin` - Стандартний каталог користувацьких бінарників (якщо існує)
 4. `$HOME/.opencode/bin` - Резервний варіант за замовчуванням
 
 ```bash
 # Приклади
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+curl -fsSL https://opencode.ai/install | OPENCODE_INSTALL_DIR=$HOME/.local/bin bash
+curl -fsSL https://opencode.ai/install | OPENCODE_INSTALL_DIR=$HOME/.local/bin bash -s -- --no-modify-path
 ```
 
 ### Агенти

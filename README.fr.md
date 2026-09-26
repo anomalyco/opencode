@@ -88,13 +88,13 @@ Le script d'installation respecte l'ordre de priorité suivant pour le chemin d'
 
 1. `$OPENCODE_INSTALL_DIR` - Répertoire d'installation personnalisé
 2. `$XDG_BIN_DIR` - Chemin conforme à la spécification XDG Base Directory
-3. `$HOME/bin` - Répertoire binaire utilisateur standard (s'il existe ou peut être créé)
+3. `$HOME/bin` - Répertoire binaire utilisateur standard (s'il existe)
 4. `$HOME/.opencode/bin` - Repli par défaut
 
 ```bash
 # Exemples
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+curl -fsSL https://opencode.ai/install | OPENCODE_INSTALL_DIR=$HOME/.local/bin bash
+curl -fsSL https://opencode.ai/install | OPENCODE_INSTALL_DIR=$HOME/.local/bin bash -s -- --no-modify-path
 ```
 
 ### Agents

@@ -88,13 +88,13 @@ The install script respects the following priority order for the installation pa
 
 1. `$OPENCODE_INSTALL_DIR` - Custom installation directory
 2. `$XDG_BIN_DIR` - XDG Base Directory Specification compliant path
-3. `$HOME/bin` - Standard user binary directory (if it exists or can be created)
+3. `$HOME/bin` - Standard user binary directory (if it exists)
 4. `$HOME/.opencode/bin` - Default fallback
 
 ```bash
 # Examples
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
+curl -fsSL https://opencode.ai/install | OPENCODE_INSTALL_DIR=$HOME/.local/bin bash
+curl -fsSL https://opencode.ai/install | OPENCODE_INSTALL_DIR=$HOME/.local/bin bash -s -- --no-modify-path
 ```
 
 ### Agents
