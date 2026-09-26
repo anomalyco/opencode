@@ -139,3 +139,18 @@ export function errorMessage(error: unknown): string {
   if (formatted) return formatted
   return "unknown error"
 }
+
+// Native renderer construction fails when the allocator is exhausted. Drawing the
+// full error screen would allocate more text and editor buffers and fail again, so
+// these are treated as fatal and routed to a plain stderr message instead.
+const fatalRendererAllocationMessages = new Set([
+  "Failed to create TextBuffer",
+  "Failed to create TextBufferView",
+  "Failed to create EditorView",
+  "Failed to create EditBuffer",
+  "Failed to create SyntaxStyle",
+])
+
+export function isFatalRendererAllocationError(error: unknown): boolean {
+  return fatalRendererAllocationMessages.has(errorMessage(error))
+}

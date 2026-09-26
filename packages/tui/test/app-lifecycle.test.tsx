@@ -1692,3 +1692,111 @@ test.each([44, 100])(
   },
   15_000,
 )
+
+test("fatal renderer allocation restores the terminal and exits nonzero", async () => {
+  const result = await runWithRendererError({})
+
+  expect(result.destroyCalls).toBe(1)
+  expect(result.titles.at(-1)).toBe("")
+  expect(result.stderr).toContain("Failed to create TextBuffer")
+  expect(result.exitCode).toBe(1)
+  expect(result.listenersRestored).toBe(true)
+})
+
+test("fatal renderer allocation preserves an existing failure status", async () => {
+  const result = await runWithRendererError({ exitCode: 7 })
+
+  expect(result.exitCode).toBe(7)
+})
+
+test("fatal renderer allocation survives a competing destroy", async () => {
+  const result = await runWithRendererError({ competingDestroy: true })
+
+  expect(result.destroyCalls).toBe(1)
+  expect(result.exitCode).toBe(1)
+})
+
+test("ordinary renderer errors keep the error screen and exit status", async () => {
+  const result = await runWithRendererError({ message: "ordinary render failure" })
+
+  expect(result.rendererDestroyed).toBe(false)
+  expect(result.exitCode).toBe(0)
+})
+
+async function runWithRendererError(input: { competingDestroy?: boolean; exitCode?: number; message?: string }) {
+  const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
+  const events = createEventStream()
+  const calls = createFetch(undefined, events)
+  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+  const listeners = new Set(process.listeners("SIGHUP"))
+  const previousRoute = process.env.OPENCODE_ROUTE
+  const previousExitCode = process.exitCode
+  const previousWrite = process.stderr.write.bind(process.stderr)
+  const originalParse = JSON.parse
+  const originalDestroy = setup.renderer.destroy.bind(setup.renderer)
+  const originalTitle = setup.renderer.setTerminalTitle.bind(setup.renderer)
+  const marker = "__renderer_error__"
+  const failed = Promise.withResolvers<void>()
+  const titles: string[] = []
+  let stderr = ""
+  let destroyCalls = 0
+
+  setup.renderer.destroy = () => {
+    destroyCalls++
+    originalDestroy()
+  }
+  setup.renderer.setTerminalTitle = (title) => {
+    titles.push(title)
+    originalTitle(title)
+  }
+  process.env.OPENCODE_ROUTE = marker
+  process.exitCode = input.exitCode ?? 0
+  JSON.parse = ((text: string, reviver?: (this: unknown, key: string, value: unknown) => unknown) => {
+    if (text === marker) {
+      if (input.competingDestroy) queueMicrotask(() => process.emit("SIGHUP"))
+      failed.resolve()
+      throw new Error(input.message ?? "Failed to create TextBuffer")
+    }
+    return originalParse(text, reviver)
+  }) as typeof JSON.parse
+  process.stderr.write = ((chunk: string | Uint8Array) => {
+    stderr += String(chunk)
+    return true
+  }) as typeof process.stderr.write
+
+  try {
+    const { run } = await import("../src/app")
+    const task = Effect.runPromise(
+      run({
+        app: { name: "test", version: "test", channel: "test" },
+        server: { endpoint: { url: server.url.toString() } },
+        config: { get: async () => ({}), update: async () => ({}) },
+        packages: { prepare: async () => ({ directory: "" }) },
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
+        args: {},
+        log: () => {},
+      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
+    )
+    await failed.promise
+    await Bun.sleep(0)
+    const rendererDestroyed = setup.renderer.isDestroyed
+    if (!rendererDestroyed) process.emit("SIGHUP")
+    await task
+    return {
+      destroyCalls,
+      titles,
+      stderr,
+      exitCode: process.exitCode,
+      rendererDestroyed,
+      listenersRestored: process.listeners("SIGHUP").every((listener) => listeners.has(listener)),
+    }
+  } finally {
+    JSON.parse = originalParse
+    process.stderr.write = previousWrite
+    process.exitCode = previousExitCode ?? 0
+    if (previousRoute === undefined) delete process.env.OPENCODE_ROUTE
+    else process.env.OPENCODE_ROUTE = previousRoute
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    await server.stop()
+  }
+}
