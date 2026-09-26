@@ -823,7 +823,6 @@ function VerticalSessionTabs(props: {
                 () => previous()?.sessionID === activeID() && Boolean(previousStatus().attention),
                 animations,
               )
-              const indicatorWidth = 10
               let lastPreviousGlowHue: RGBA | undefined
               const previousGlowHue = () => {
                 const feedback = tabFeedbackColor(previousStatus(), theme)
@@ -961,7 +960,6 @@ function VerticalSessionTabs(props: {
                       glow={glows()}
                       outerGlow={previousGlows()}
                       color={separatorLowerPulseColor()}
-                      width={indicatorWidth}
                       outerColor={separatorUpperPulseColor()}
                       flashColor={tint(background(), theme.text.base, 0.22)}
                       outerFlashColor={tint(background(), theme.text.base, 0.18)}
@@ -988,7 +986,6 @@ function VerticalSessionTabs(props: {
                         glow={glows()}
                         outerGlow={false}
                         color={tint(background(), theme.text.base, 0.04)}
-                        width={indicatorWidth}
                         outerColor={tint(background(), theme.text.base, 0.006)}
                         flashColor={tint(background(), theme.text.base, 0.18)}
                         flashTail={8}
@@ -1009,7 +1006,6 @@ function VerticalSessionTabs(props: {
                         complete={complete() && !status().attention}
                         glow={glows()}
                         color={pulseColor()}
-                        width={indicatorWidth}
                         glowColor={glowColor()}
                         flashColor={flashColor()}
                         flashTail={8}
@@ -1094,7 +1090,6 @@ function VerticalSessionTabs(props: {
                         complete={complete() && !status().attention}
                         glow={glows()}
                         color={detailPulseColor()}
-                        width={indicatorWidth}
                         glowColor={detailGlowColor()}
                         glowTail={10}
                         flashColor={detailFlashColor()}
