@@ -53,6 +53,21 @@ export const PluginGroup = HttpApiGroup.make("server.plugin")
         }),
       ),
   )
+  .add(
+    HttpApiEndpoint.post("plugin.awaitActivation", "/api/plugin/await-activation", {
+      query: LocationQuery,
+      success: HttpApiSchema.NoContent,
+    })
+      .annotateMerge(locationQueryOpenApi)
+      .annotateMerge(
+        OpenApi.annotations({
+          identifier: "plugin.awaitActivation",
+          summary: "Await plugin activation",
+          description:
+            "Wait until plugin activation has settled for the location. Clients that read plugin-derived state (the model catalog, agents, commands) should call this before their first read so async discovery rounds have a chance to land. Required after v2.0.4 to surface user-config providers in the ACP session catalog.",
+        }),
+      ),
+  )
   .annotateMerge(
     OpenApi.annotations({
       title: "plugin",

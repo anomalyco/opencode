@@ -16,6 +16,8 @@ import type {
   PluginCheckOutput,
   PluginUpdateInput,
   PluginUpdateOutput,
+  PluginAwaitActivationInput,
+  PluginAwaitActivationOutput,
   SessionListInput,
   SessionListOutput,
   SessionStatsInput,
@@ -522,6 +524,18 @@ export function make(options: ClientOptions) {
             body: { targets: input["targets"] },
             successStatus: 204,
             declaredStatuses: [400, 401, 503],
+            empty: true,
+          },
+          requestOptions,
+        ),
+      awaitActivation: (input?: PluginAwaitActivationInput, requestOptions?: RequestOptions) =>
+        request<PluginAwaitActivationOutput>(
+          {
+            method: "POST",
+            path: `/api/plugin/await-activation`,
+            query: { location: input?.["location"] },
+            successStatus: 204,
+            declaredStatuses: [400, 401],
             empty: true,
           },
           requestOptions,

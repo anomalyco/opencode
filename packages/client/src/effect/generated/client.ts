@@ -22,6 +22,8 @@ import type {
   PluginCheckOutput,
   PluginUpdateInput,
   PluginUpdateOutput,
+  PluginAwaitActivationInput,
+  PluginAwaitActivationOutput,
   SessionListInput,
   SessionListOutput,
   SessionStatsInput,
@@ -347,10 +349,16 @@ const EndpointPluginUpdate = (raw: RawClient["server.plugin"]) => (input: Plugin
     ),
   )
 
+const EndpointPluginAwaitActivation = (raw: RawClient["server.plugin"]) => (input?: PluginAwaitActivationInput) =>
+  preserveEffect<PluginAwaitActivationOutput>()(
+    raw["plugin.awaitActivation"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const adaptGroupPlugin = (raw: RawClient["server.plugin"]) => ({
   list: EndpointPluginList(raw),
   check: EndpointPluginCheck(raw),
   update: EndpointPluginUpdate(raw),
+  awaitActivation: EndpointPluginAwaitActivation(raw),
 })
 
 const EndpointSessionList = (raw: RawClient["server.session"]) => (input?: SessionListInput) =>
