@@ -9,6 +9,7 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Agent } from "@opencode/schema/agent"
 import { Model } from "@opencode/schema/model"
 import { SessionEvent } from "./event.js"
+import { HistoryCache } from "./history-cache.js"
 import { SessionMessage } from "./message.js"
 import { SessionMessageUpdater } from "./message-updater.js"
 import { SessionInbox } from "./inbox.js"
@@ -241,8 +242,18 @@ function run(db: DatabaseService, event: MessageEvent) {
             eq(SessionMessageTable.session_id, event.data.sessionID),
           ),
         )
-        .run()
-        .pipe(Effect.orDie)
+        .returning({ seq: SessionMessageTable.seq })
+        .get()
+        .pipe(
+          Effect.orDie,
+          // L1 history cache: rewriting an already-read row invalidates the decoded cache.
+          Effect.tap((row) => {
+            if (row && row.seq <= HistoryCache.highWater(event.data.sessionID))
+              HistoryCache.drop(event.data.sessionID)
+            return Effect.void
+          }),
+          Effect.asVoid,
+        )
     }
     const appendMessage = (message: SessionMessage.Info) => insertMessage(db, event, message)
     const adapter: SessionMessageUpdater.Adapter = {
@@ -701,6 +712,8 @@ const layer = Layer.effectDiscard(
     yield* bus.project(SessionEvent.Compaction.Started, (event) => run(db, event))
     yield* bus.project(SessionEvent.Compaction.Ended, (event) =>
       Effect.gen(function* () {
+        // L1 history cache: the completed compaction moves the read boundary.
+        HistoryCache.drop(event.data.sessionID)
         yield* run(db, event)
         yield* InstructionState.advanceEpoch(db, event.data.sessionID, event.durable.seq)
       }),
@@ -730,6 +743,8 @@ const layer = Layer.effectDiscard(
     )
     yield* bus.project(SessionEvent.RevertEvent.Committed, (event) =>
       Effect.gen(function* () {
+        // L1 history cache: rows deleted by the revert may already be cached.
+        HistoryCache.drop(event.data.sessionID)
         const boundary = yield* db
           .select({ seq: SessionMessageTable.seq })
           .from(SessionMessageTable)

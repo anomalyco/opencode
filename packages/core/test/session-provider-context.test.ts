@@ -10,6 +10,7 @@ import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { AbsolutePath } from "@opencode/core/schema"
 import { SessionEvent } from "@opencode/core/session/event"
+import { HistoryCache } from "@opencode/core/session/history-cache"
 import { SessionHistory } from "@opencode/core/session/history"
 import { SessionInbox } from "@opencode/core/session/inbox"
 import { InstructionState } from "@opencode/core/session/instruction-state"
@@ -168,6 +169,32 @@ test("compatibility uses the actual deployment and endpoint rather than a catalo
   ).toBeUndefined()
   expect(SessionProviderContext.compatible(providerContext.provenance, undefined)).toBe(false)
 })
+
+it.effect(
+  "incrementally extends runner history and rebuilds after a compaction boundary moves",
+  () =>
+    Effect.gen(function* () {
+      const s = yield* setup
+      yield* s.prepare
+      yield* s.prompt("first request")
+
+      const first = yield* s.load("local")
+      const firstWatermark = HistoryCache.highWater(sessionID)
+      expect(firstWatermark).toBeGreaterThanOrEqual(0)
+
+      yield* s.prompt("second request")
+      const incremental = yield* s.load("local")
+      const full = yield* SessionHistory.load(s.db, sessionID, "local")
+      expect(incremental.entries.map((entry) => entry.message)).toEqual(full)
+      expect(HistoryCache.highWater(sessionID)).toBeGreaterThan(firstWatermark)
+
+      yield* s.compact()
+      const afterCompaction = yield* s.load("local")
+      expect(afterCompaction.entries.at(-1)?.message).toMatchObject({ type: "compaction" })
+      expect(HistoryCache.highWater(sessionID)).toBeGreaterThan(firstWatermark)
+      expect(afterCompaction.entries).toHaveLength(1)
+    }),
+)
 
 it.effect(
   "advances the native instruction epoch and omits superseded chronological updates after durable replay and provider switches",
