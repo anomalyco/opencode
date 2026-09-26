@@ -1,4 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { NamedError } from "@opencode-ai/core/util/error"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Image } from "@/image/image"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
@@ -14,7 +15,7 @@ import { LLM } from "./llm"
 import { MessageV2 } from "./message-v2"
 import { isOverflow } from "./overflow"
 import { PartID } from "./schema"
-import type { SessionID } from "./schema"
+import type { MessageID, SessionID } from "./schema"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
 import { SessionSummary } from "./summary"
@@ -44,7 +45,12 @@ export interface Handle {
       attachments?: SessionV1.FilePart[]
     },
   ) => Effect.Effect<void>
-  readonly process: (streamInput: LLM.StreamInput) => Effect.Effect<Result>
+  readonly process: (
+    streamInput: LLM.StreamInput,
+    // Reactive recovery admission from the prompt loop. Callers that do not consult it (compaction's
+    // summary request) leave it undefined, which keeps the recoverable overflow arm.
+    reactiveAllowed?: boolean,
+  ) => Effect.Effect<Result>
 }
 
 type Input = {
@@ -64,15 +70,81 @@ type ToolCall = {
   done: Deferred.Deferred<void>
 }
 
+// Private failure-channel value for retry orchestration. Deliberately plain Err-shaped rather
+// than a Schema.Class: `parse` passes it through by identity so it never degrades into an
+// UnknownError, `SessionRetry.retryable` discriminates on `data.classification`, and the halt
+// control arm either re-fails the raw cause (mixed) or settles the attempt (incomplete).
+const RETRY_CONTROL = "session.processor.retry-control"
+
+type RetryControl = {
+  name: typeof RETRY_CONTROL
+  data:
+    | { classification: "incomplete-stream"; source: string; message: string }
+    | { classification: "mixed-interrupt"; source: string; message: string; cause: Cause.Cause<never> }
+}
+
+const isRetryControl = (value: unknown): value is RetryControl => isRecord(value) && value.name === RETRY_CONTROL
+
+// Incomplete streams get their own budget, shared by the classified marker and the clean-EOF
+// detections; the retry ordinal itself stays the ordinary shared one.
+const INCOMPLETE_RETRY_LIMIT = 2
+
 interface ProcessorContext extends Input {
   toolcalls: Record<string, ToolCall>
   shouldBreak: boolean
   snapshot: string | undefined
   blocked: boolean
   needsCompaction: boolean
+  // Handle-level monotonic replay vetoes. They are deliberately not part of the per-attempt
+  // reset below: once this handle has observed tool activity or dispatched a matching text hook,
+  // no later attempt may replay it with another provider request.
+  observedToolActivity: boolean
+  dispatchedTextCompleteHook: boolean
   currentText: SessionV1.TextPart | undefined
   reasoningMap: Record<string, SessionV1.ReasoningPart>
+  evidence: Evidence
+  // Per-attempt ownership and rollback preparation, replaced wholesale alongside `evidence`.
+  // `ownedParts` is registered before the part's first durable write so an authorized retry can
+  // delete exactly what this attempt created. `baseline` is captured before the attempt runs, so
+  // the attempt's own mutations (step-finish, settleIncomplete, halt) are what rollback undoes.
+  ownedParts: PartID[]
+  pendingSummaries: { sessionID: SessionID; messageID: MessageID }[]
+  baseline: {
+    finish: SessionV1.Assistant["finish"]
+    cost: number
+    tokens: SessionV1.Assistant["tokens"]
+    error: SessionV1.Assistant["error"]
+    timeCompleted: SessionV1.Assistant["time"]["completed"]
+  }
 }
+
+/**
+ * Per-attempt stream observation used to settle a stream that reaches EOF without a
+ * reliable settlement. Held as a ctx field reference and replaced wholesale per physical
+ * attempt (same pattern as ctx.toolcalls), so handleEvent always reads the live attempt.
+ */
+interface Evidence {
+  hasSettledStep: boolean
+  hasOpenStep: boolean
+  lastStepUnknown: boolean
+  hasVisibleText: boolean
+  hasToolCallEvidence: boolean
+  incompleteMarkerSeen: boolean
+  // A content-less start (text/reasoning/tool-input/tool-call) arrived this attempt. Unlike the
+  // EOF rules above it only vetoes a reactive recovery — an attempt that already produced output
+  // may not be replayed by a compaction — and it never feeds the incomplete-settlement rules.
+  hasStartedOutput: boolean
+}
+
+const emptyEvidence = (): Evidence => ({
+  hasSettledStep: false,
+  hasOpenStep: false,
+  lastStepUnknown: false,
+  hasVisibleText: false,
+  hasToolCallEvidence: false,
+  incompleteMarkerSeen: false,
+  hasStartedOutput: false,
+})
 
 type StreamEvent = LLMEvent
 
@@ -109,16 +181,37 @@ const layer = Layer.effect(
         snapshot: initialSnapshot,
         blocked: false,
         needsCompaction: false,
+        observedToolActivity: false,
+        dispatchedTextCompleteHook: false,
         currentText: undefined,
         reasoningMap: {},
+        evidence: emptyEvidence(),
+        ownedParts: [],
+        pendingSummaries: [],
+        baseline: {
+          finish: input.assistantMessage.finish,
+          cost: input.assistantMessage.cost,
+          tokens: structuredClone(input.assistantMessage.tokens),
+          error: input.assistantMessage.error,
+          timeCompleted: input.assistantMessage.time.completed,
+        },
       }
       let aborted = false
+      // Raw value of the failure `halt` presented, i.e. the attempt's own primary cause. `Effect.catch`
+      // consumes that failure, so the retry region exits successfully; the finalizer reads this to keep
+      // the primary identity alive when finalization itself faults.
+      let primary: unknown = undefined
+      // Admission of the current process call, read by halt. Only a strict `false` may settle an
+      // overflow, so an undefined value can never turn a recoverable overflow terminal.
+      let reactiveAdmission: boolean | undefined = undefined
 
       const parse = (e: unknown) =>
-        MessageV2.fromError(e, {
-          providerID: input.model.providerID,
-          aborted,
-        })
+        isRetryControl(e)
+          ? e
+          : MessageV2.fromError(e, {
+              providerID: input.model.providerID,
+              aborted,
+            })
 
       const settleToolCall = Effect.fn("SessionProcessor.settleToolCall")(function* (toolCallID: string) {
         const done = ctx.toolcalls[toolCallID]?.done
@@ -233,8 +326,10 @@ const layer = Layer.effect(
           }
           return { call: ctx.toolcalls[input.id], part }
         }
+        const partID = PartID.ascending()
+        ctx.ownedParts.push(partID)
         const part = yield* session.updatePart({
-          id: PartID.ascending(),
+          id: partID,
           messageID: ctx.assistantMessage.id,
           sessionID: ctx.assistantMessage.sessionID,
           type: "tool",
@@ -278,6 +373,7 @@ const layer = Layer.effect(
       const handleEvent = Effect.fnUntraced(function* (value: StreamEvent) {
         switch (value.type) {
           case "reasoning-start":
+            ctx.evidence.hasStartedOutput = true
             if (value.id in ctx.reasoningMap) return
             ctx.reasoningMap[value.id] = {
               id: PartID.ascending(),
@@ -288,6 +384,7 @@ const layer = Layer.effect(
               time: { start: Date.now() },
               metadata: value.providerMetadata,
             }
+            ctx.ownedParts.push(ctx.reasoningMap[value.id].id)
             yield* session.updatePart(ctx.reasoningMap[value.id])
             return
 
@@ -313,6 +410,8 @@ const layer = Layer.effect(
             return
 
           case "tool-input-start":
+            ctx.evidence.hasStartedOutput = true
+            ctx.observedToolActivity = true
             if (ctx.assistantMessage.summary) {
               throw new Error(`Tool call not allowed while generating summary: ${value.name}`)
             }
@@ -320,15 +419,21 @@ const layer = Layer.effect(
             return
 
           case "tool-input-delta":
+            ctx.observedToolActivity = true
             yield* ensureToolCall(value)
             return
 
           case "tool-input-end": {
+            ctx.observedToolActivity = true
             yield* ensureToolCall(value)
             return
           }
 
           case "tool-call": {
+            ctx.evidence.hasStartedOutput = true
+            ctx.observedToolActivity = true
+            // A normalized tool call is usable output evidence; tool-input-* events are not.
+            ctx.evidence.hasToolCallEvidence = true
             if (ctx.assistantMessage.summary) {
               throw new Error(`Tool call not allowed while generating summary: ${value.name}`)
             }
@@ -381,6 +486,7 @@ const layer = Layer.effect(
           }
 
           case "tool-result": {
+            ctx.observedToolActivity = true
             const toolCall = yield* readToolCall(value.id)
             if (!toolCall && value.result.type === "error") return
             if (value.result.type === "error") {
@@ -414,17 +520,32 @@ const layer = Layer.effect(
           }
 
           case "tool-error": {
+            ctx.observedToolActivity = true
             yield* failToolCall(value.id, value.error ?? new Error(value.message))
             return
           }
 
           case "provider-error":
+            // A classified incomplete-stream marker only records evidence; the settlement that
+            // follows it must still be consumed, so this branch neither throws nor compacts.
+            if (value.classification === "incomplete-stream") {
+              ctx.evidence.incompleteMarkerSeen = true
+              return
+            }
+            // An opaque message with an explicit overflow classification still reaches the
+            // existing ContextOverflowError path, so the classification survives the throw.
+            if (value.classification === "context-overflow") {
+              throw new SessionV1.ContextOverflowError({ message: value.message })
+            }
             throw new Error(value.message)
 
           case "step-start":
+            ctx.evidence.hasOpenStep = true
             if (!ctx.snapshot) ctx.snapshot = yield* snapshot.track()
+            const stepStartID = PartID.ascending()
+            ctx.ownedParts.push(stepStartID)
             yield* session.updatePart({
-              id: PartID.ascending(),
+              id: stepStartID,
               messageID: ctx.assistantMessage.id,
               sessionID: ctx.sessionID,
               snapshot: ctx.snapshot,
@@ -433,6 +554,9 @@ const layer = Layer.effect(
             return
 
           case "step-finish": {
+            ctx.evidence.hasSettledStep = true
+            ctx.evidence.lastStepUnknown = value.reason === "unknown"
+            ctx.evidence.hasOpenStep = false
             const completedSnapshot = yield* snapshot.track()
             yield* Effect.forEach(Object.keys(ctx.reasoningMap), finishReasoning)
             // Anthropic reports thinking blocks it removed before the model saw the
@@ -457,8 +581,10 @@ const layer = Layer.effect(
             ctx.assistantMessage.finish = value.reason
             ctx.assistantMessage.cost += usage.cost
             ctx.assistantMessage.tokens = usage.tokens
+            const stepFinishID = PartID.ascending()
+            ctx.ownedParts.push(stepFinishID)
             yield* session.updatePart({
-              id: PartID.ascending(),
+              id: stepFinishID,
               reason: value.reason,
               snapshot: completedSnapshot,
               messageID: ctx.assistantMessage.id,
@@ -471,8 +597,10 @@ const layer = Layer.effect(
             if (ctx.snapshot) {
               const patch = yield* snapshot.patch(ctx.snapshot)
               if (patch.files.length) {
+                const stepPatchID = PartID.ascending()
+                ctx.ownedParts.push(stepPatchID)
                 yield* session.updatePart({
-                  id: PartID.ascending(),
+                  id: stepPatchID,
                   messageID: ctx.assistantMessage.id,
                   sessionID: ctx.sessionID,
                   type: "patch",
@@ -482,22 +610,26 @@ const layer = Layer.effect(
               }
               ctx.snapshot = undefined
             }
-            yield* summary
-              .summarize({
-                sessionID: ctx.sessionID,
-                messageID: ctx.assistantMessage.parentID,
-              })
-              .pipe(Effect.ignore, Effect.forkIn(scope))
+            // Deferred instead of launched here: rollback drops this attempt's summaries by
+            // clearing the pending list, and the finalizer flushes whatever survived.
+            ctx.pendingSummaries.push({
+              sessionID: ctx.sessionID,
+              messageID: ctx.assistantMessage.parentID,
+            })
             if (
               !ctx.assistantMessage.summary &&
               isOverflow({ cfg: yield* config.get(), tokens: usage.tokens, model: ctx.model })
             ) {
               ctx.needsCompaction = true
             }
+            // A settled length cutoff is a terminal in its own right: the real step-finish path
+            // produces the existing output-length error, it is not parsed from a later failure.
+            if (value.reason === "length") throw new SessionV1.OutputLengthError({})
             return
           }
 
           case "text-start":
+            ctx.evidence.hasStartedOutput = true
             ctx.currentText = {
               id: PartID.ascending(),
               messageID: ctx.assistantMessage.id,
@@ -507,12 +639,15 @@ const layer = Layer.effect(
               time: { start: Date.now() },
               metadata: value.providerMetadata,
             }
+            ctx.ownedParts.push(ctx.currentText.id)
             yield* session.updatePart(ctx.currentText)
             return
 
           case "text-delta":
             if (!ctx.currentText) return
             ctx.currentText.text += value.text
+            // Whitespace-only output is not visible text (same trim basis as empty-unknown).
+            if (ctx.currentText.text.trim() !== "") ctx.evidence.hasVisibleText = true
             if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
             yield* session.updatePartDelta({
               sessionID: ctx.currentText.sessionID,
@@ -527,6 +662,11 @@ const layer = Layer.effect(
             if (!ctx.currentText) return
             // oxlint-disable-next-line no-self-assign -- reactivity trigger
             ctx.currentText.text = ctx.currentText.text
+            // Dispatch is a replay veto even when the handler itself fails, so check the real
+            // dispatch list before handing the text over. A hook registered between this check
+            // and trigger() is missed; that approximation is accepted in the approved design.
+            if ((yield* plugin.list()).some((hook) => typeof hook["experimental.text.complete"] === "function"))
+              ctx.dispatchedTextCompleteHook = true
             ctx.currentText.text = (yield* plugin.trigger(
               "experimental.text.complete",
               {
@@ -554,8 +694,10 @@ const layer = Layer.effect(
         if (ctx.snapshot) {
           const patch = yield* snapshot.patch(ctx.snapshot)
           if (patch.files.length) {
+            const cleanupPatchID = PartID.ascending()
+            ctx.ownedParts.push(cleanupPatchID)
             yield* session.updatePart({
-              id: PartID.ascending(),
+              id: cleanupPatchID,
               messageID: ctx.assistantMessage.id,
               sessionID: ctx.sessionID,
               type: "patch",
@@ -610,14 +752,33 @@ const layer = Layer.effect(
         yield* session.updateMessage(ctx.assistantMessage)
       })
 
+      // Finalization: launch the summaries this attempt deferred, then run cleanup. Both run under
+      // one `Effect.exit` capture in the retry region's finalizer so a failure in either is
+      // reported alongside — never instead of — the region's own failure or interrupt.
+      const finalize = Effect.fn("SessionProcessor.finalize")(function* () {
+        yield* Effect.forEach(ctx.pendingSummaries, (input) =>
+          summary.summarize(input).pipe(Effect.ignore, Effect.forkIn(scope)),
+        )
+        ctx.pendingSummaries = []
+        yield* cleanup()
+      })
+
       const halt = Effect.fn("SessionProcessor.halt")(function* (e: unknown) {
+        primary = e
         yield* Effect.logError("process", {
           "session.id": input.sessionID,
           messageID: input.assistantMessage.id,
           error: errorMessage(e),
           stack: e instanceof Error ? e.stack : undefined,
         })
-        const error = parse(e)
+        // Retry controls never reach the parse chain: a mixed cause keeps both identities on the
+        // failure channel, an incomplete one settles exactly like the exhausted EOF path. Both
+        // arms return, so the settlement below cannot publish a second error or idle.
+        if (isRetryControl(e)) {
+          if (e.data.classification === "mixed-interrupt") return yield* Effect.failCause(e.data.cause)
+          return yield* settleIncomplete(e.data.message)
+        }
+        const error = parse(e) as NonNullable<SessionV1.Assistant["error"]>
         if (SessionV1.ContextOverflowError.isInstance(error)) {
           if ((yield* config.get()).compaction?.auto === false && !ctx.assistantMessage.summary) {
             ctx.assistantMessage.error = error
@@ -626,7 +787,19 @@ const layer = Layer.effect(
             yield* status.set(ctx.sessionID, { type: "idle" })
             return
           }
-          ctx.needsCompaction = true
+          // Same terminal shape as the auto=false arm: an overflow the caller cannot follow with a
+          // recovery settles instead of asking for a compaction that would never be dispatched or
+          // would replay output this attempt already produced. The caller's admission is strict, so
+          // a caller that does not consult it (compaction's summary) stays on the recoverable arm;
+          // the summary guard keeps a summary message's own overflow there too.
+          if ((reactiveAdmission === false || ctx.evidence.hasStartedOutput) && !ctx.assistantMessage.summary) {
+            ctx.assistantMessage.error = error
+            ctx.assistantMessage.finish = "error"
+            yield* events.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
+            yield* status.set(ctx.sessionID, { type: "idle" })
+            return
+          }
+          if (!ctx.evidence.hasStartedOutput) ctx.needsCompaction = true
           yield* events.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
           return
         }
@@ -638,7 +811,55 @@ const layer = Layer.effect(
         yield* status.set(ctx.sessionID, { type: "idle" })
       })
 
-      const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.StreamInput) {
+      // Terminal settlement for a stream that ended without a reliable settlement. Same shape
+      // as the auto=false overflow arm of halt: only message fields are overwritten, the
+      // durable step-finish part keeps its own reason, and cleanup still persists the message.
+      const settleIncomplete = Effect.fn("SessionProcessor.settleIncomplete")(function* (message: string) {
+        const error = new NamedError.Unknown({ message }).toObject()
+        ctx.assistantMessage.error = error
+        ctx.assistantMessage.finish = "error"
+        yield* events.publish(Session.Event.Error, { sessionID: ctx.sessionID, error })
+        yield* status.set(ctx.sessionID, { type: "idle" })
+      })
+
+      // Undo this attempt's durable transcript and accounting before the next request is sent.
+      // Runs from the retry seam, i.e. after the retry is authorized and before the backoff sleep,
+      // so it never discards a retained attempt. Every writer here is typed `never`, so a failure
+      // can only be a defect: it escapes the retry and is combined into the region's exit cause.
+      const rollbackAttempt = Effect.fn("SessionProcessor.rollbackAttempt")(function* () {
+        // Session aggregates recover through the same projection that applied these parts.
+        yield* Effect.forEach(ctx.ownedParts, (partID) =>
+          session.removePart({ sessionID: ctx.sessionID, messageID: ctx.assistantMessage.id, partID }),
+        )
+        const baseline = ctx.baseline
+        ctx.assistantMessage.finish = baseline.finish
+        ctx.assistantMessage.cost = baseline.cost
+        ctx.assistantMessage.tokens = baseline.tokens
+        ctx.assistantMessage.error = baseline.error
+        ctx.assistantMessage.time.completed = baseline.timeCompleted
+        yield* session.updateMessage(ctx.assistantMessage)
+        // Dropped, never launched: nothing this attempt asked for may outlive the rollback.
+        ctx.pendingSummaries = []
+        // Open refs would make cleanup upsert the deleted rows back into existence during the
+        // backoff; tool calls are retired by their existing paths instead.
+        ctx.currentText = undefined
+        ctx.reasoningMap = {}
+      })
+
+      // One interrupt body for both the attempt region and the retry/rollback region around it.
+      // `aborted` is set before the settled-error guard because parse reads it.
+      const abortAttempt = Effect.fn("SessionProcessor.abortAttempt")(function* () {
+        aborted = true
+        if (!ctx.assistantMessage.error) {
+          yield* halt(new DOMException("Aborted", "AbortError"))
+        }
+      })
+
+      const process = Effect.fn("SessionProcessor.process")(function* (
+        streamInput: LLM.StreamInput,
+        reactiveAllowed?: boolean,
+      ) {
+        reactiveAdmission = reactiveAllowed
         yield* Effect.logInfo("process", {
           "session.id": input.sessionID,
           messageID: input.assistantMessage.id,
@@ -646,10 +867,37 @@ const layer = Layer.effect(
         ctx.needsCompaction = false
         ctx.shouldBreak = (yield* config.get()).experimental?.continue_loop_on_deny !== true
 
+        // Process-local incomplete budget. Raised before the retry is authorized, so the observable
+        // arithmetic stays at most three physical attempts: two raises plus the exhausted settle.
+        // The counter dies with this region and never carries into a later process.
+        let incompleteRetries = 0
+        const raiseIncomplete = (source: string) =>
+          Effect.gen(function* () {
+            if (incompleteRetries === INCOMPLETE_RETRY_LIMIT) return yield* settleIncomplete(source)
+            incompleteRetries++
+            yield* Effect.fail<RetryControl>({
+              name: RETRY_CONTROL,
+              data: { classification: "incomplete-stream", source, message: source },
+            })
+          })
+
         return yield* Effect.gen(function* () {
           yield* Effect.gen(function* () {
             ctx.currentText = undefined
             ctx.reasoningMap = {}
+            ctx.evidence = emptyEvidence()
+            ctx.ownedParts = []
+            ctx.pendingSummaries = []
+            // Checkpoint before the attempt mutates the message: rollback restores these values.
+            // `tokens` is cloned because step-finish replaces the object reference per step.
+            ctx.baseline = {
+              finish: ctx.assistantMessage.finish,
+              cost: ctx.assistantMessage.cost,
+              tokens: structuredClone(ctx.assistantMessage.tokens),
+              error: ctx.assistantMessage.error,
+              timeCompleted: ctx.assistantMessage.time.completed,
+            }
+            primary = undefined
             yield* status.set(ctx.sessionID, { type: "busy" })
             const stream = llm.stream(streamInput)
 
@@ -658,40 +906,97 @@ const layer = Layer.effect(
               Stream.takeUntil(() => ctx.needsCompaction),
               Stream.runDrain,
             )
+
+            // The stream reached EOF without failing. Settle only when no reliable terminal
+            // state was reached; an established terminal state keeps its existing outcome.
+            if (ctx.evidence.incompleteMarkerSeen) {
+              yield* raiseIncomplete("provider")
+            } else if (!ctx.blocked && !ctx.needsCompaction && !ctx.assistantMessage.error) {
+              const credible = ctx.evidence.hasSettledStep && !ctx.evidence.hasOpenStep
+              if (!credible) {
+                yield* raiseIncomplete("unsettled-step")
+              } else if (
+                ctx.evidence.lastStepUnknown &&
+                !(ctx.evidence.hasVisibleText || ctx.evidence.hasToolCallEvidence)
+              ) {
+                yield* raiseIncomplete("empty-unknown")
+              }
+            }
           }).pipe(
-            Effect.onInterrupt(() =>
-              Effect.gen(function* () {
-                aborted = true
-                if (!ctx.assistantMessage.error) {
-                  yield* halt(new DOMException("Aborted", "AbortError"))
-                }
-              }),
-            ),
+            Effect.onInterrupt(() => abortAttempt()),
             Effect.catchCauseIf(
               (cause) => !Cause.hasInterruptsOnly(cause),
-              (cause) => Effect.fail(Cause.squash(cause)),
+              (cause) =>
+                Effect.fail(
+                  // A mixed cause loses its interrupt identity through squash, so it travels as a
+                  // control instead; an incomplete control has no interrupt reason and squash
+                  // returns it unchanged, so both paths share this handler unchanged.
+                  Cause.hasInterrupts(cause)
+                    ? {
+                        name: RETRY_CONTROL,
+                        data: {
+                          classification: "mixed-interrupt" as const,
+                          source: "interrupt",
+                          message: "attempt interrupted mid-failure",
+                          // The raw cause is re-failed verbatim by halt; its error type is not
+                          // tracked by the processor.
+                          cause: cause as Cause.Cause<never>,
+                        },
+                      }
+                    : Cause.squash(cause),
+                ),
             ),
             Effect.retry(
               SessionRetry.policy({
                 provider: input.model.providerID,
                 parse,
+                gate: () =>
+                  !(ctx.observedToolActivity || ctx.dispatchedTextCompleteHook || ctx.needsCompaction || ctx.blocked),
                 set: (info) => {
-                  return status.set(ctx.sessionID, {
-                    type: "retry",
-                    attempt: info.attempt,
-                    message: info.message,
-                    action: info.action,
-                    next: info.next,
-                  })
+                  // Rollback precedes publication: if it dies, the status must not claim a retry
+                  // that is not going to happen.
+                  return rollbackAttempt().pipe(
+                    Effect.andThen(
+                      status.set(ctx.sessionID, {
+                        type: "retry",
+                        attempt: info.attempt,
+                        message: info.message,
+                        action: info.action,
+                        next: info.next,
+                      }),
+                    ),
+                  )
                 },
               }),
             ),
+            // Backoff and rollback cancellation never reaches the inner handler: the interrupted
+            // sleep is inside the retry. Publishing the abort here covers that window, and the
+            // guard keeps an already-settled terminal from being overwritten by the second trigger.
+            Effect.onInterrupt(() => abortAttempt()),
             Effect.catch(halt),
-            Effect.ensuring(cleanup()),
+            Effect.onExit((exit) =>
+              Effect.gen(function* () {
+                // Deferred summaries and cleanup are captured by one `Effect.exit`, so neither the
+                // flush orchestration nor cleanup can replace the region's own cause. A successful
+                // capture returns the original exit unchanged; a failed one keeps both identities.
+                const done = yield* Effect.exit(finalize())
+                if (Exit.isSuccess(done)) return
+                // A region that failed keeps its own cause; a region whose failure `halt` presented
+                // contributes the raw primary instead, so a finalization fault cannot erase it.
+                const failure = Exit.isFailure(exit)
+                  ? exit.cause
+                  : primary === undefined
+                    ? undefined
+                    : Cause.die(primary)
+                return yield* Effect.failCause(failure ? Cause.combine(failure, done.cause) : done.cause)
+              }),
+            ),
           )
 
-          if (ctx.needsCompaction) return "compact"
+          // An established terminal state outruns compaction: a settled error must not be
+          // swallowed by returning "compact".
           if (ctx.blocked || ctx.assistantMessage.error) return "stop"
+          if (ctx.needsCompaction) return "compact"
           return "continue"
         })
       })
