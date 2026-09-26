@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import path from "node:path"
-import { createModelPreferenceRepository, decodeModelPreference } from "../src/model-preference"
+import { createModelPreferenceRepository, decodeModelPreference, type ModelPreference } from "../src/model-preference"
 import { tmpdir } from "./fixture/fixture"
 
 test("repairs known model preferences and preserves unrelated fields", () => {
@@ -45,4 +45,21 @@ test("atomically serializes model preference updates", async () => {
     "openai/org/gpt-5": "default",
     "anthropic/claude/sonnet": "low",
   })
+})
+
+test("subscription survives when the preference directory cannot be watched", async () => {
+  await using tmp = await tmpdir()
+  // The parent directory does not exist, so fs.watch throws synchronously;
+  // subscribing must degrade instead of propagating into the render tree.
+  const repository = createModelPreferenceRepository(path.join(tmp.path, "missing", "model.json"))
+  const received: ModelPreference[] = []
+  await new Promise<void>((resolve) => {
+    expect(() =>
+      repository.subscribe((value) => {
+        received.push(value)
+        resolve()
+      }),
+    ).not.toThrow()
+  })
+  expect(received).toEqual([{ recent: [], favorite: [], variant: {} }])
 })
