@@ -1470,10 +1470,10 @@
 }
 
 :root body [data-workspace-session] [data-component="user-message"] [data-slot="user-message-text"] {
-  --user-message-mention-prefix-color: var(--v2-blue-300);
+  --user-message-mention-prefix-color: var(--v2-text-text-on-accent);
 
   background: var(--v2-background-bg-accent);
-  color: var(--v2-text-text-contrast);
+  color: var(--v2-text-text-on-accent);
 }
 
 :root[data-color-scheme="light"]
