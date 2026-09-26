@@ -22,6 +22,7 @@ export function createAutoScroll(options: AutoScrollOptions) {
     contentRef: undefined as HTMLElement | undefined,
     scrollRef: undefined as HTMLElement | undefined,
     userScrolled: false,
+    atBottom: true,
   })
 
   const active = () => options.working() || settling
@@ -102,11 +103,12 @@ export function createAutoScroll(options: AutoScrollOptions) {
     if (!el) return
     if (!canScroll(el)) {
       if (store.userScrolled) setStore("userScrolled", false)
+      if (!store.atBottom) setStore("atBottom", true)
       return
     }
     if (store.userScrolled) return
 
-    setStore("userScrolled", true)
+    setStore({ userScrolled: true, atBottom: false })
     options.onUserInteracted?.()
   }
 
@@ -128,11 +130,13 @@ export function createAutoScroll(options: AutoScrollOptions) {
 
     if (!canScroll(el)) {
       if (store.userScrolled) setStore("userScrolled", false)
+      if (!store.atBottom) setStore("atBottom", true)
       return
     }
 
     if (distanceFromBottom(el) < threshold()) {
       if (store.userScrolled) setStore("userScrolled", false)
+      if (!store.atBottom) setStore("atBottom", true)
       return
     }
 
@@ -175,10 +179,14 @@ export function createAutoScroll(options: AutoScrollOptions) {
       const el = store.scrollRef
       if (el && !canScroll(el)) {
         if (store.userScrolled) setStore("userScrolled", false)
+        if (!store.atBottom) setStore("atBottom", true)
         return
       }
       if (!active()) return
       if (store.userScrolled) return
+      // Only follow content that grows while the user is anchored at the
+      // bottom; never pull the viewport down over content the user is reading.
+      if (!store.atBottom) return
       // ResizeObserver fires after layout, before paint.
       // Keep the bottom locked in the same frame to avoid visible
       // "jump up then catch up" artifacts while streaming content.
@@ -228,10 +236,12 @@ export function createAutoScroll(options: AutoScrollOptions) {
     pause: stop,
     resume: () => {
       if (store.userScrolled) setStore("userScrolled", false)
+      if (!store.atBottom) setStore("atBottom", true)
       scrollToBottom(true)
     },
     scrollToBottom: () => scrollToBottom(false),
     forceScrollToBottom: () => scrollToBottom(true),
     userScrolled: () => store.userScrolled,
+    atBottom: () => store.atBottom,
   }
 }
