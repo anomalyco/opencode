@@ -1,9 +1,10 @@
 import { batch, createContext, onCleanup, useContext, type ParentProps } from "solid-js"
 import { createStore, produce, reconcile, type Store } from "solid-js/store"
 import path from "path"
-import { mkdirSync, readFileSync, watch } from "fs"
+import { mkdirSync, readFileSync } from "fs"
 import { Flock } from "@opencode/util/flock"
 import { writeJsonAtomic } from "../util/persistence"
+import { safeWatch } from "../util/watch"
 import { useTuiApp, useTuiPaths } from "./runtime"
 
 type Options<Value extends object> = {
@@ -111,26 +112,18 @@ export function createStorage(root: string, channel: string) {
   }
 
   let reloadTimer: ReturnType<typeof setTimeout> | undefined
-  let watcher: ReturnType<typeof watch> | undefined
-  try {
-    watcher = watch(directory, () => {
-      clearTimeout(reloadTimer)
-      // Atomic writes notify for the temporary file before its final rename, and some
-      // platforms coalesce the rename event. Reload after the event burst has settled.
-      reloadTimer = setTimeout(() => entries.forEach((entry) => entry.reload()), 50)
-    })
-    watcher.on("error", (error) => {
-      clearTimeout(reloadTimer)
-      watcher?.close()
-      watcher = undefined
-      console.error("Storage directory watcher failed, live-reload disabled", { directory, error })
-    })
-  } catch (error) {
-    // fs.watch throws synchronously (e.g. ENOSPC when the inotify watch limit is
-    // exhausted). Losing cross-process live-reload is recoverable; crashing the
-    // whole TUI over it is not, so degrade instead of propagating.
-    console.error("Failed to watch storage directory, live-reload disabled", { directory, error })
-  }
+  let watcher = safeWatch(directory, () => {
+    clearTimeout(reloadTimer)
+    // Atomic writes notify for the temporary file before its final rename, and some
+    // platforms coalesce the rename event. Reload after the event burst has settled.
+    reloadTimer = setTimeout(() => entries.forEach((entry) => entry.reload()), 50)
+  })
+  watcher?.on("error", (error) => {
+    clearTimeout(reloadTimer)
+    watcher?.close()
+    watcher = undefined
+    console.error("Storage directory watcher failed, live-reload disabled", { directory, error })
+  })
   return {
     storage,
     close: () => {
