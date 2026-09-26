@@ -163,17 +163,57 @@ describe("prompt input v2 interaction machine", () => {
   })
 
   test("opens skills with $ trigger and inserts slash form", () => {
+    const skill = { id: "skill:review", kind: "skill" as const, label: "/review" }
     const open = transitionPromptInputV2(
       createPromptInputV2InteractionState(),
       { type: "input.changed", value: "$re" },
       persisted("$re"),
     )
 
-    expect(open.state.popover).toEqual({ type: "command-inline", query: "re" })
+    expect(open.state.popover).toEqual({ type: "skill-inline", query: "re" })
 
-    const selected = transitionPromptInputV2(open.state, { type: "popover.select", item: command }, persisted("$re"))
+    const selected = transitionPromptInputV2(open.state, { type: "popover.select", item: skill }, persisted("$re"))
 
     expect(selected.commands).toContainEqual({ type: "draft.setText", value: "/review " })
+  })
+
+  test("opens skills with bare $ trigger", () => {
+    const open = transitionPromptInputV2(
+      createPromptInputV2InteractionState(),
+      { type: "input.changed", value: "review $" },
+      persisted("review $"),
+    )
+
+    expect(open.state.popover).toEqual({ type: "skill-inline", query: "" })
+  })
+
+  test("preserves text after the cursor when inserting a skill", () => {
+    const skill = { id: "skill:review", kind: "skill" as const, label: "/review" }
+    const value = "fix $re and ship"
+    const input = persisted(value)
+    input.cursor = 7
+    const open = transitionPromptInputV2(
+      createPromptInputV2InteractionState(),
+      { type: "input.changed", value, persist: false },
+      input,
+    )
+
+    expect(open.state.popover).toEqual({ type: "skill-inline", query: "re" })
+
+    const selected = transitionPromptInputV2(open.state, { type: "popover.select", item: skill }, input)
+
+    expect(selected.commands).toContainEqual({ type: "draft.setText", value: "fix /review  and ship" })
+  })
+
+  test("ignores $ trigger in shell mode", () => {
+    const state = { ...createPromptInputV2InteractionState(), mode: "shell" as const }
+    const result = transitionPromptInputV2(
+      state,
+      { type: "input.changed", value: "$re" },
+      persisted("$re"),
+    )
+
+    expect(result.state.popover).toEqual({ type: "closed" })
   })
 
   test("ignores $HOME, $1, and currency amounts", () => {

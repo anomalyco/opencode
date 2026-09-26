@@ -24,6 +24,7 @@ import {
   loadProjectsQuery,
   loadProvidersQuery,
   loadReferencesQuery,
+  loadSkills,
 } from "./global-sync/bootstrap"
 import { createChildStoreManager } from "./global-sync/child-store"
 import { applyDirectoryEvent, applyGlobalEvent } from "./global-sync/event-reducer"
@@ -372,6 +373,9 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
             description: formatServerError(err, language.t),
           })
         })
+      void loadSkills(directory, sdkFor(directory), serverSDK.protocol)
+        .then((skills) => setStore("skill", skills))
+        .catch(() => setStore("skill", []))
     },
     onDispose: (directory) => {
       const key = directoryKey(directory)
