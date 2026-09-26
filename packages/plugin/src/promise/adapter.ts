@@ -330,6 +330,14 @@ export function fromPromise(plugin: Plugin) {
                 ),
                 options,
               ),
+            subscribeGlobal: (options) =>
+              streams(
+                host.event.subscribeGlobal().pipe(
+                  Stream.mapEffect((event) => Schema.encodeUnknownEffect(OpenCodeEvent)(event)),
+                  Stream.map((event) => event as unknown as PromiseEvent),
+                ),
+                options,
+              ),
           },
           experimental: {
             terminal: {
@@ -578,6 +586,12 @@ export function fromPromise(plugin: Plugin) {
               register(
                 host.session.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))), options),
               ),
+            // list bypasses adaptApiMethod intentionally: the in-process
+            // SessionList is a cursor-free subset of the HTTP SessionsQuery
+            // (no anchor/cursor encoding), so there is no single endpoint
+            // schema to decode against.
+            list: (input) =>
+              run(host.session.list(input ?? {})).then((result) => ({ data: result.data })),
             create: adaptApiMethod(SessionEndpoints["session.create"], host.session.create),
             get: adaptApiMethod(SessionEndpoints["session.get"], host.session.get),
             switchAgent: adaptApiMethod(SessionEndpoints["session.switchAgent"], host.session.switchAgent),
@@ -590,7 +604,19 @@ export function fromPromise(plugin: Plugin) {
             update: adaptApiMethod(SessionEndpoints["session.update"], host.session.update),
             move: adaptApiMethod(SessionEndpoints["session.move"], host.session.move),
             wait: adaptApiMethod(SessionEndpoints["session.wait"], host.session.wait),
+            compact: adaptApiMethod(SessionEndpoints["session.compact"], host.session.compact),
+            skill: adaptApiMethod(SessionEndpoints["session.skill"], host.session.skill),
+            revert: {
+              stage: adaptApiMethod(SessionEndpoints["session.revert.stage"], host.session.revert.stage),
+              clear: adaptApiMethod(SessionEndpoints["session.revert.clear"], host.session.revert.clear),
+              commit: adaptApiMethod(SessionEndpoints["session.revert.commit"], host.session.revert.commit),
+            },
             context: adaptApiMethod(SessionEndpoints["session.context"], host.session.context),
+            form: {
+              list: adaptApiMethod(SessionEndpoints["session.form.list"], host.session.form.list),
+              reply: adaptApiMethod(SessionEndpoints["session.form.reply"], host.session.form.reply),
+              cancel: adaptApiMethod(SessionEndpoints["session.form.cancel"], host.session.form.cancel),
+            },
           },
           shell: {
             hook: (name, callback) =>
