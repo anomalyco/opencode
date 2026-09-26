@@ -32,7 +32,7 @@ import {
 } from "@opencode/ai"
 import { Auth, Endpoint, RequestExecutor, type AnyRoute, type HttpMiddleware } from "@opencode/ai/route"
 import { ProviderShared } from "@opencode/ai/protocols/shared"
-import { Cause, Context, Effect, Layer, Option, Schema, Scope, Stream } from "effect"
+import { Cause, Context, Effect, Exit, Layer, Option, Schema, Scope, Stream } from "effect"
 import { makeParser } from "effect/unstable/encoding/Sse"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { AsyncLocalStorage } from "node:async_hooks"
@@ -707,14 +707,22 @@ function metadataProviderOptions(input: ProviderMetadata | undefined): SharedV3P
 
 function streamLanguage(language: LanguageModelV3, options: LanguageModelV3CallOptions, http?: HttpMiddleware) {
   const state: StreamState = { step: 0, toolNames: {}, open: {} }
+  // An interrupted or failed stream must reach the model through the AI SDK's abortSignal: cancelling the
+  // returned stream stops HTTP providers, but a provider doing work outside its stream (a subprocess, a queue)
+  // or still preparing in doStream is only told this way. A normally completed stream is not aborted.
+  const abort = new AbortController()
+  const call: LanguageModelV3CallOptions = {
+    ...options,
+    abortSignal: options.abortSignal ? AbortSignal.any([options.abortSignal, abort.signal]) : abort.signal,
+  }
+  const cancel = Effect.sync(() => abort.abort())
   return Stream.concat(
     Stream.make(LLMEvent.stepStart({ index: state.step })),
     Stream.unwrap(
       Effect.gen(function* () {
         const context = yield* Effect.context<never>()
         return yield* Effect.tryPromise({
-          try: () =>
-            http ? httpMiddleware.run({ http, context }, () => language.doStream(options)) : language.doStream(options),
+          try: () => (http ? httpMiddleware.run({ http, context }, () => language.doStream(call)) : language.doStream(call)),
           catch: (error) => llmError(error, "request"),
         })
       }).pipe(
@@ -728,7 +736,7 @@ function streamLanguage(language: LanguageModelV3, options: LanguageModelV3CallO
           ),
         ),
       ),
-    ),
+    ).pipe(Stream.onExit((exit) => (Exit.isSuccess(exit) ? Effect.void : cancel))),
   )
 }
 
