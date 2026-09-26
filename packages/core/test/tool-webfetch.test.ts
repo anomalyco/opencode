@@ -420,7 +420,7 @@ describe("WebFetchTool registration", () => {
         status: "completed",
         output: { url, contentType: "text/plain", format: "text", output: "hello" },
         content: [{ type: "text", text: "hello" }],
-        metadata: { contentType: "text/plain" },
+        metadata: { contentType: "text/plain", status: 200 },
       })
       expect(assertions).toMatchObject([
         { sessionID, action: "webfetch", resources: [url], save: ["*"], metadata: { url, format: "text", timeout: 4 } },
