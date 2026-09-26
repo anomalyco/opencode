@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="40%" r="60%">
+      <stop offset="0%" stop-color="2a1a3e"/>
+      <stop offset="100%" stop-color="0a0a10"/>
+    </radialGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2.5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="128" height="128" rx="20" fill="url(#bg)"/>
+  <g filter="url(#glow)" stroke-width="1.5" stroke-linecap="round">
+    <line x1="64" y1="34" x2="40" y2="78" stroke="7c6fa0" opacity="0.5"/>
+    <line x1="64" y1="34" x2="88" y2="78" stroke="7c6fa0" opacity="0.5"/>
+    <line x1="40" y1="78" x2="88" y2="78" stroke="7c6fa0" opacity="0.5"/>
+    <circle cx="64" cy="34" r="9" fill="a855f7"/>
+    <circle cx="40" cy="78" r="9" fill="06b6d4"/>
+    <circle cx="88" cy="78" r="9" fill="f59e0b"/>
+  </g>
+  <text x="64" y="116" text-anchor="middle" font-family="system-ui,sans-serif" font-size="10" font-weight="600" fill="e4e4ed" letter-spacing="0.5">OPENCO</text>
+</svg>
