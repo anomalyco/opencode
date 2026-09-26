@@ -8,7 +8,7 @@ import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionStore } from "@opencode/core/session/store"
 import { Event } from "@opencode/schema/event"
 import { Project } from "@opencode/schema/project"
-import { AbsolutePath } from "@opencode/schema/schema"
+import { AbsolutePath, RelativePath } from "@opencode/schema/schema"
 import { Session } from "@opencode/schema/session"
 import { SessionEvent } from "@opencode/schema/session-event"
 import { SessionMessage } from "@opencode/schema/session-message"
@@ -21,7 +21,7 @@ const it = testEffect(
   ]),
 )
 
-const seedSessions = (rows: { id: string; updated: number }[]) =>
+const seedSessions = (rows: { id: string; updated: number; subpath?: string }[]) =>
   Effect.gen(function* () {
     const database = yield* Database.Service
     const bus = yield* Bus.Service
@@ -36,6 +36,9 @@ const seedSessions = (rows: { id: string; updated: number }[]) =>
           location: { directory },
           slug: "store-test",
           version: "test",
+          // Omitting subpath leaves session.path NULL -- the state the v1
+          // migration copies over, since the column was added with no backfill.
+          ...(row.subpath === undefined ? {} : { subpath: RelativePath.make(row.subpath) }),
         })
         yield* bus.replay({
           id: Event.ID.create(),
@@ -51,6 +54,43 @@ const seedSessions = (rows: { id: string; updated: number }[]) =>
   })
 
 describe("SessionStore", () => {
+  it.effect("treats an empty subpath as no subpath rather than a filter on the empty string", () =>
+    Effect.gen(function* () {
+      yield* seedSessions([
+        { id: "ses_root", updated: 10, subpath: "" },
+        { id: "ses_null", updated: 20 },
+        { id: "ses_a", updated: 30, subpath: "a" },
+        { id: "ses_ab", updated: 40, subpath: "a/b" },
+      ])
+      const store = yield* SessionStore.Service
+      // The TUI sends an empty subpath at a project root. An equality test on '' matches
+      // ses_root alone: ses_null cannot match (NULL = '' is null) and ses_a/ses_ab are excluded.
+      expect(
+        (yield* store.list({ project: Project.ID.global, subpath: RelativePath.make("") })).map((s) => String(s.id)),
+      ).toEqual(["ses_ab", "ses_a", "ses_null", "ses_root"])
+    }),
+  )
+
+  it.effect("keeps a non-empty subpath an exact match", () =>
+    Effect.gen(function* () {
+      yield* seedSessions([
+        { id: "ses_root", updated: 10, subpath: "" },
+        { id: "ses_null", updated: 20 },
+        { id: "ses_a", updated: 30, subpath: "a" },
+        { id: "ses_ab", updated: 40, subpath: "a/b" },
+        { id: "ses_abc", updated: 50, subpath: "a/b/c" },
+        { id: "ses_prefix", updated: 60, subpath: "ab" },
+      ])
+      const store = yield* SessionStore.Service
+      // Guards against a fix that widens the filter: 'a' is not the subtree 'a/...', 'ab' is not
+      // prefix match, and NULL rows are not folded in -- NULL says the column predates the
+      // session, not that the session started at the project root.
+      expect(
+        (yield* store.list({ project: Project.ID.global, subpath: RelativePath.make("a") })).map((s) => String(s.id)),
+      ).toEqual(["ses_a"])
+    }),
+  )
+
   it.effect("lists by updated time and ID with exclusive two-item pages in either direction", () =>
     Effect.gen(function* () {
       yield* seedSessions([

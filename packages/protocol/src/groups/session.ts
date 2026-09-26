@@ -55,6 +55,10 @@ const ParentIDFilter = Schema.Union([
   description: "Filter by parent session. Use null to return only root sessions.",
 })
 
+const SubpathFilter = RelativePath.pipe(Schema.optional).annotate({
+  description: "Match session.path exactly, relative to the project root. An empty value applies no path filter.",
+})
+
 const SessionsQueryFields = {
   limit: Schema.NumberFromString.pipe(Schema.decodeTo(PositiveInt), Schema.optional).annotate({
     description: "Maximum number of sessions to return. Defaults to the newest 50 sessions.",
@@ -74,7 +78,7 @@ const SessionsDirectoryQuery = Schema.Struct({
 const SessionsProjectQuery = Schema.Struct({
   ...SessionsQueryFields,
   project: Project.ID,
-  subpath: RelativePath.pipe(Schema.optional),
+  subpath: SubpathFilter,
 })
 
 const SessionsAllQuery = Schema.Struct(SessionsQueryFields)
@@ -166,7 +170,7 @@ export const SessionsQuery = Schema.Struct({
   ...SessionsQueryFields,
   directory: AbsolutePath.pipe(Schema.optional),
   project: Project.ID.pipe(Schema.optional),
-  subpath: RelativePath.pipe(Schema.optional),
+  subpath: SubpathFilter,
   cursor: SessionsQueryCursor.pipe(Schema.optional),
 }).annotate({ identifier: "SessionsQuery" })
 
