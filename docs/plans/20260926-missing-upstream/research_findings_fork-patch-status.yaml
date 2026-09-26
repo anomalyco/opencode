@@ -1,0 +1,188 @@
+plan_id: 20260926-missing-upstream
+objective: Verify fork-patch status on series/v2.0.16 vs upstream origin/dev
+focus_area: fork-patch-status
+created_at: '2026-09-26'
+created_by: researcher
+status: completed
+tldr: |
+  - 5/5 named commits PRESENT on series/v2.0.16; 2 of 6 patches live only as uncommitted working-tree changes
+  - Only remote-auth patch is already upstream (byte-identical) -> obsolete on rebase, merges clean
+  - Fork npm scope @opencode/* internally consistent; origin/dev still on @opencode-ai/* (lineage divergence, high merge friction)
+research_metadata:
+  methodology: git log/show/merge-base/grep/ls-tree across series/v2.0.16, 3a103fe0af base, origin/dev
+  scope: 5 fork patches + 1 test fix + 1 scripts fix, 4 upstream-equivalence checks, npm scope check
+  confidence: high
+  coverage: 95
+  decision_blockers: 0
+  research_blockers: 0
+files_analyzed:
+  - file: series/v2.0.16 tip history
+    path: git log series/v2.0.16 --not 3a103fe0af
+    purpose: confirm committed patches present
+    key_elements:
+      - element: 6fff8c8e66 test fix
+        type: pattern
+        location: series/v2.0.16~0
+        description: committed, ancestor verified via merge-base
+        language: git
+      - element: 053f16e820 scripts path fix
+        type: pattern
+        location: series/v2.0.16~1
+        description: committed, updates build-deb paths packages/opencode to packages/cli
+        language: git
+      - element: e3a0e8bbeb provider schema port
+        type: pattern
+        location: series/v2.0.16~2
+        description: committed, all 4 files incl schema/config/provider.ts discover line
+        language: git
+      - element: bfb523a01b webfetch 2xx
+        type: pattern
+        location: series/v2.0.16~3
+        description: committed, packages/core/src/tool/plugin/webfetch.ts +11/-4
+        language: git
+      - element: d306943e71 debian packaging
+        type: pattern
+        location: series/v2.0.16~4
+        description: committed, 7 scripts +1211 lines
+        language: git
+    lines: 5
+  - file: uncommitted working tree
+    path: git diff + git status on series/v2.0.16
+    purpose: locate the 2 patches with no commit hash
+    key_elements:
+      - element: remote-auth surfacing
+        type: pattern
+        location: packages/tui/src/util/error.ts + packages/tui/src/app.tsx
+        description: uncommitted, ConfigRemoteAuthError formatting + exitCode=1
+        language: typescript
+      - element: retry-config re-implementation
+        type: pattern
+        location: packages/core/src/session/runner/retry.ts + llm.ts + compaction.ts + model-resolver.ts + schema x2
+        description: uncommitted, RetryConfig/buildSchedule, 6 files + untracked test session-retry-config.test.ts
+        language: typescript
+    lines: 27
+  - file: upstream references
+    path: origin/dev @ 696f41bc8e
+    purpose: equivalence + overlap checks
+    key_elements:
+      - element: a97622c801 remote-auth upstream
+        type: pattern
+        location: origin/dev (ancestor), packages/tui/src/util/error.ts + app.tsx:359-361
+        description: byte-identical hunks already upstream
+        language: typescript
+      - element: pr-41699 retry branch
+        type: pattern
+        location: local branch pr-41699 @ 42e103a8ee, NOT ancestor of origin/dev
+        description: competing retry-cap implementation, unmerged
+        language: git
+    lines: 3
+patterns_found:
+  - category: structure
+    pattern: fork-only v2 paths absent upstream
+    description: tool/plugin/webfetch.ts, session/runner/retry.ts, model-resolver.ts, schema/config/provider.ts, scripts/ all DEV-LACKS
+    examples:
+      - file: git cat-file -e origin/dev:<path>
+        location: 6 of 9 fork patch paths missing on dev
+        snippet: DEV-LACKS x6, DEV-HAS x3 (llm.ts, compaction.ts, schema/provider.ts)
+    prevalence: common
+  - category: naming
+    pattern: npm scope lineage split
+    description: fork @opencode/* (rename a5312e169b in v2.0.16 base) vs dev @opencode-ai/*
+    examples:
+      - file: packages/protocol/package.json
+        location: fork=@opencode/protocol, origin/dev=@opencode-ai/protocol
+        snippet: '"name": "@opencode/protocol" vs "@opencode-ai/protocol"'
+    prevalence: common
+related_architecture:
+  components_relevant_to_domain:
+    - component: v2 package split (cli/core/server/protocol/schema)
+      responsibility: v2.0.16 layout fork patches target
+      location: packages/*/
+      relationship_to_domain: patch files live in v2 paths dev partially lacks
+  interfaces_used_by_domain:
+    - interface: Effect Schedule-based retry policy
+      location: packages/core/src/session/runner/retry.ts (fork worktree) vs packages/opencode/src/session/retry.ts (dev, StepWithMetadata arch)
+      usage_pattern: architecturally divergent retry implementations
+  data_flow_involving_domain: series/v2.0.16 = 3a103fe0af + 5 commits + uncommitted worktree (remote-auth, retry-config); origin/dev shares merge-base 0e2dd4ad15 but diverged (different retry arch, old npm scope, no scripts/)
+  key_relationships_to_domain:
+    - from: 177bc64633 (series/v1.18.29 cherry-pick)
+      to: a97622c801 (upstream PR #49016)
+      relationship: composes
+related_technology_stack:
+  languages_used_in_domain: [typescript, git, shell]
+  frameworks_used_in_domain:
+    - name: effect
+      usage_in_domain: Schedule/Duration retry policy, Schema provider config
+  libraries_used_in_domain: []
+  external_apis_used_in_domain: []
+related_conventions:
+  naming_patterns_in_domain: conventional-commit (fix/chore/test) subjects on fork commits
+  structure_of_domain: series/* maintenance branches; fork patches stacked on release tag 3a103fe0af
+  error_handling_in_domain: ConfigRemoteAuthError formatting; webfetch HTTP-status notice; retry-after-aware backoff
+  testing_in_domain: webfetch test updated (6fff8c8e66); untracked session-retry-config.test.ts uses bun:test + TestClock
+  documentation_in_domain: commit bodies document port provenance (v1.18.29 commit refs, skipped files)
+related_dependencies:
+  internal:
+    - component: '@opencode/protocol workspace:*'
+      relationship_to_domain: uniform internal scope across 7 fork packages (cli/client/plugin/protocol/sdk/server/simulation)
+      direction: bidirectional
+  external:
+    - name: '@opencode-ai/pty, @opencode-ai/sdk pin'
+      purpose_for_domain: residual old-scope strings are third-party deps, not scope inconsistency
+domain_security_considerations:
+  sensitive_areas: []
+  authentication_patterns_in_domain: remote-auth error path surfaces SSO/proxy login-page failures with re-auth hint
+  authorization_patterns_in_domain: none observed
+  data_validation_in_domain: NonNegativeInt/PositiveInt for retry/backoffDelay; StatusNotice only for non-200
+testing_patterns:
+  framework: bun:test
+  coverage_areas: [webfetch status metadata, retry policy schedule]
+  test_organization: packages/core/test/
+  mock_patterns: [Response stubs with status codes, TestClock]
+open_questions: []
+gaps:
+  - area: retry-config + remote-auth uncommitted
+    description: two patches exist only in working tree; `git stash`/checkout would lose them; no hash to reference
+    impact: nice_to_know
+    affects: [20260926-missing-upstream]
+patch_status:
+  - patch: d306943e71 debian packaging (7 scripts)
+    present_on_series: true
+    upstream_equivalent_on_dev: false
+    verdict: present/clean
+    evidence: merge-base ancestor OK; `git ls-tree -r origin/dev scripts/` count=0 vs fork 7; DEV-LACKS scripts/build-deb.sh
+  - patch: remote-auth surfacing (error.ts + app.tsx, no hash)
+    present_on_series: true-uncommitted
+    upstream_equivalent_on_dev: true
+    verdict: obsolete-on-rebase/clean-merge
+    evidence: worktree diff byte-identical to origin/dev hunks; a97622c801 ancestor of dev, NOT in 3a103fe0af base; app.tsx:359-361 exitCode=1 on dev
+  - patch: bfb523a01b webfetch 2xx status
+    present_on_series: true
+    upstream_equivalent_on_dev: false
+    verdict: present/not-obsolete/low-risk
+    evidence: dev webfetch at other paths has only CF-403 check, no status notice; dev test has no status expectations; fork path DEV-LACKS (move-divergence, no textual conflict)
+  - patch: retry-config Schedule re-implementation (no hash, 6 files)
+    present_on_series: true-uncommitted
+    upstream_equivalent_on_dev: false
+    verdict: present-uncommitted/at-risk
+    evidence: dev lacks runner/retry.ts; dev retry is StepWithMetadata arch; 8520617ca8 and pr-41699/42e103a8ee NOT in dev; overlap on 2/6 files (llm.ts, compaction.ts exist on dev with different arch)
+  - patch: e3a0e8bbeb provider schema port (4 files)
+    present_on_series: true
+    upstream_equivalent_on_dev: false
+    verdict: present/not-obsolete/low-risk
+    evidence: dev schema/provider.ts grep discover|retry|backoffDelay empty; additive optional fields; worktree further amends schema files uncommitted
+  - patch: 6fff8c8e66 test fix
+    present_on_series: true
+    upstream_equivalent_on_dev: false
+    verdict: present/clean
+    evidence: pairs with bfb523a01b; dev test lacks status expectations
+  - patch: 053f16e820 scripts path fix
+    present_on_series: true
+    upstream_equivalent_on_dev: false
+    verdict: present/clean
+    evidence: amends d306943e71 for v2 layout (packages/opencode to packages/cli)
+npm_scope_check:
+  fork_internal: consistent
+  upstream_dev: '@opencode-ai/protocol'
+  fork_series: '@opencode/protocol'
+  detail: 7 fork packages use @opencode/protocol workspace:*; residuals (@opencode-ai/pty, @opencode-ai/sdk pin) are external deps; rename a5312e169b in v2.0.16 base but NOT in origin/dev -> full dev-merge would friction on every package.json
