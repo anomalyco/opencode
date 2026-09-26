@@ -1,0 +1,87 @@
+diff --git a/dist/utils/renderDiffWithHighlighter.js b/dist/utils/renderDiffWithHighlighter.js
+index 8710dba37eed8c2ebc0e9be8274bc04cd77d6feb..170bf6a3fdf84dc7e912b9226948053125bdb49e 100644
+--- a/dist/utils/renderDiffWithHighlighter.js
++++ b/dist/utils/renderDiffWithHighlighter.js
+@@ -132,6 +132,13 @@ function renderDiffWithHighlighter(diff, highlighter, options, { forcePlainText,
+ 		baseThemeType
+ 	};
+ }
++// Match GitHub Desktop: one highlight from the first change to the last change on a line.
++function joinChangedSpans(spans) {
++	const first = spans.findIndex((span) => span[0] === 1);
++	if (first === -1) return;
++	const last = spans.findLastIndex((span) => span[0] === 1);
++	spans.splice(first, last - first + 1, [1, spans.slice(first, last + 1).map((span) => span[1]).join("")]);
++}
+ function computeLineDiffDecorations({ deletionLine, additionLine, deletionLineIndex, additionLineIndex, deletionDecorations, additionDecorations, lineDiffType, maxLineDiffLength }) {
+ 	if (deletionLine == null || additionLine == null || lineDiffType === "none") return;
+ 	deletionLine = cleanLastNewline(deletionLine);
+@@ -172,6 +179,10 @@ function computeLineDiffDecorations({ deletionLine, additionLine, deletionLineIn
+ 			isLastItem
+ 		});
+ 	}
++	if (enableJoin) {
++		joinChangedSpans(deletionSpans);
++		joinChangedSpans(additionSpans);
++	}
+ 	let spanIndex = 0;
+ 	for (const span of deletionSpans) {
+ 		if (span[0] === 1) deletionDecorations.push(createDiffSpanDecoration({
+diff --git a/dist/worker/worker-portable.js b/dist/worker/worker-portable.js
+index b2bc4f5ed16b2573543294ed43456b82f57844ed..94f48a2f953c7090fa8dddf4e92e033a48e5d7da 100644
+--- a/dist/worker/worker-portable.js
++++ b/dist/worker/worker-portable.js
+@@ -16777,6 +16777,13 @@ function renderDiffWithHighlighter(diff, highlighter$1, options, { forcePlainTex
+ 		baseThemeType
+ 	};
+ }
++// Match GitHub Desktop: one highlight from the first change to the last change on a line.
++function joinChangedSpans(spans) {
++	const first = spans.findIndex((span) => span[0] === 1);
++	if (first === -1) return;
++	const last = spans.findLastIndex((span) => span[0] === 1);
++	spans.splice(first, last - first + 1, [1, spans.slice(first, last + 1).map((span) => span[1]).join("")]);
++}
+ function computeLineDiffDecorations({ deletionLine, additionLine, deletionLineIndex, additionLineIndex, deletionDecorations, additionDecorations, lineDiffType, maxLineDiffLength }) {
+ 	if (deletionLine == null || additionLine == null || lineDiffType === "none") {
+ 		return;
+@@ -16824,6 +16831,10 @@ function computeLineDiffDecorations({ deletionLine, additionLine, deletionLineIn
+ 			});
+ 		}
+ 	}
++	if (enableJoin) {
++		joinChangedSpans(deletionSpans);
++		joinChangedSpans(additionSpans);
++	}
+ 	let spanIndex = 0;
+ 	for (const span of deletionSpans) {
+ 		if (span[0] === 1) {
+diff --git a/dist/worker/worker.js b/dist/worker/worker.js
+index a863d53aae135c97cbeeab7887421f5ade467273..9beeccac2bcb43a4e3bddd9b6ac9d0eb210efe9d 100644
+--- a/dist/worker/worker.js
++++ b/dist/worker/worker.js
+@@ -1421,6 +1421,13 @@ function renderDiffWithHighlighter(diff, highlighter$1, options, { forcePlainTex
+ 		baseThemeType
+ 	};
+ }
++// Match GitHub Desktop: one highlight from the first change to the last change on a line.
++function joinChangedSpans(spans) {
++	const first = spans.findIndex((span) => span[0] === 1);
++	if (first === -1) return;
++	const last = spans.findLastIndex((span) => span[0] === 1);
++	spans.splice(first, last - first + 1, [1, spans.slice(first, last + 1).map((span) => span[1]).join("")]);
++}
+ function computeLineDiffDecorations({ deletionLine, additionLine, deletionLineIndex, additionLineIndex, deletionDecorations, additionDecorations, lineDiffType, maxLineDiffLength }) {
+ 	if (deletionLine == null || additionLine == null || lineDiffType === "none") return;
+ 	deletionLine = cleanLastNewline(deletionLine);
+@@ -1461,6 +1468,10 @@ function computeLineDiffDecorations({ deletionLine, additionLine, deletionLineIn
+ 			isLastItem
+ 		});
+ 	}
++	if (enableJoin) {
++		joinChangedSpans(deletionSpans);
++		joinChangedSpans(additionSpans);
++	}
+ 	let spanIndex = 0;
+ 	for (const span of deletionSpans) {
+ 		if (span[0] === 1) deletionDecorations.push(createDiffSpanDecoration({

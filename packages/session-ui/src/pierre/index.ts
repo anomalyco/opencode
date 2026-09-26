@@ -17,6 +17,11 @@ export type DiffProps<T = {}> = FileDiffOptions<T> & {
 const unsafeCSS = `
 :host {
   --diffs-bg: var(--opencode-diffs-bg, var(--color-background-stronger));
+  /* Pierre mixes 15% in dark mode, which makes collapsed rows read as highlighted. */
+  --diffs-bg-separator-override: light-dark(
+    color-mix(in lab, var(--diffs-bg) 98%, var(--diffs-mixer)),
+    color-mix(in lab, var(--diffs-bg) 95%, var(--diffs-mixer))
+  );
 }
 
 [data-diff],
