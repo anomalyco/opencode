@@ -84,6 +84,50 @@ describe("ConfigV2Compat.lower", () => {
     })
   })
 
+  test("retains a numeric MCP server timeout", () => {
+    const config = lower({
+      mcp: {
+        servers: {
+          remote: { type: "remote", url: "https://example.com/mcp", timeout: 18000 },
+        },
+      },
+    })
+
+    expect(config.mcp).toEqual({
+      remote: { type: "remote", url: "https://example.com/mcp", enabled: true, timeout: 18000 },
+    })
+  })
+
+  test("retains a request-shaped MCP server timeout", () => {
+    const config = lower({
+      mcp: {
+        servers: {
+          local: { type: "local", command: ["local-mcp"], timeout: { request: 12000 } },
+        },
+      },
+    })
+
+    expect(config.mcp).toEqual({
+      local: { type: "local", command: ["local-mcp"], enabled: true, timeout: 12000 },
+    })
+  })
+
+  test("maps a numeric global MCP timeout to the V1 experimental field", () => {
+    const config = lower({
+      mcp: {
+        timeout: 60000,
+        servers: {
+          remote: { type: "remote", url: "https://example.com/mcp" },
+        },
+      },
+    })
+
+    expect(config.experimental?.mcp_timeout).toBe(60000)
+    expect(config.mcp).toEqual({
+      remote: { type: "remote", url: "https://example.com/mcp", enabled: true },
+    })
+  })
+
   test("reports unsupported settings and lossy conversions without their values", () => {
     const secret = "do-not-log-credentials"
     const result = ConfigV2Compat.lower({
@@ -365,6 +409,42 @@ describe("V2 configuration loading", () => {
         variant: "thinking",
       })
       expect(config.subagent_depth).toBe(2)
+    }),
+  )
+
+  it.instance("retains MCP servers configured with a numeric timeout", () =>
+    Effect.gen(function* () {
+      const instance = yield* TestInstance
+      const fs = yield* FSUtil.Service
+      yield* fs.writeWithDirs(
+        path.join(instance.directory, "opencode.json"),
+        JSON.stringify({
+          $schema: "https://opencode.ai/config.json",
+          mcp: {
+            timeout: 60000,
+            servers: {
+              remote: { type: "remote", url: "https://example.com/mcp", timeout: 18000 },
+              local: { type: "local", command: ["local-mcp"], timeout: { request: 12000 } },
+            },
+          },
+        }),
+      )
+
+      const config = yield* Config.use.get()
+
+      expect(config.mcp?.remote).toEqual({
+        type: "remote",
+        url: "https://example.com/mcp",
+        enabled: true,
+        timeout: 18000,
+      })
+      expect(config.mcp?.local).toEqual({
+        type: "local",
+        command: ["local-mcp"],
+        enabled: true,
+        timeout: 12000,
+      })
+      expect(config.experimental?.mcp_timeout).toBe(60000)
     }),
   )
 
