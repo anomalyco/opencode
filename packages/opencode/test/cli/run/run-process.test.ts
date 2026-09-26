@@ -104,6 +104,21 @@ describe("opencode run (non-interactive subprocess)", () => {
     60_000,
   )
 
+  // Regression for empty provider responses: an unknown finish with no text,
+  // reasoning, or tool call must fail the turn instead of spinning forever.
+  cliIt.concurrent(
+    "exits nonzero promptly when the provider returns an empty unknown response",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        yield* llm.push(reply().unknown())
+        const result = yield* opencode.run("empty response", { timeoutMs: 10_000 })
+        expect(result.exitCode).not.toBe(0)
+        expect(result.durationMs).toBeLessThan(10_000)
+        expect(result.stderr).toContain("Provider returned an empty response")
+      }),
+    30_000,
+  )
+
   // --format json puts one JSON object per line on stdout for each emitted
   // event. Consumers (CI scripts, tooling) parse this stream. Asserts the
   // shape so a future event-emit change has to update this expectation.
