@@ -126,6 +126,7 @@ const fullOutputModel = testModel("full-output", { context: 262_144, output: 262
 const unknownContextModel = testModel("unknown-context", { context: 0, output: 32_000 })
 const undersizedContextModel = testModel("undersized-context", { context: 1, output: 1_000 })
 const recoveryModel = testModel("recovery", { context: 200_000, output: 1_000 })
+const fittedOutputModel = testModel("fitted-output", { context: 100_000, output: 64_000 })
 
 test("calculates step cost using the matching context tier", () => {
   expect(
@@ -3205,7 +3206,7 @@ describe("SessionRunnerLLM", () => {
     expect(yield* Effect.exit(s.resume)).toMatchObject({ _tag: "Failure" })
 
     expect(s.requests).toHaveLength(1)
-    expect(s.requests[0]?.generation).toBeUndefined()
+    expect(s.requests[0]?.generation?.maxTokens).toBe(50)
     expect(yield* s.context).toContainEqual(
       expect.objectContaining({
         type: "compaction",
@@ -3408,6 +3409,18 @@ describe("SessionRunnerLLM", () => {
       { type: "compaction", summary: "## Objective\n- Recover raw overflow" },
       { type: "assistant", finish: "stop" },
     ])
+  })
+
+  scenario("fits the output limit to the prompt size", function* (s) {
+    s.currentModel = fittedOutputModel
+    yield* s.llm.push(TestLLM.textWithUsage("Earlier answer", "text-fitted-first", 50_000))
+    yield* s.runPrompt("Earlier question")
+    yield* s.llm.push(TestLLM.text("Continued", "text-fitted-final"))
+    yield* s.runPrompt("Continue")
+
+    expect(s.requests[0]?.generation?.maxTokens).toBe(64_000)
+    expect(s.requests[1]?.generation?.maxTokens).toBeLessThan(100_000 - 50_000)
+    expect(s.requests[1]?.generation?.maxTokens).toBeGreaterThan(100_000 - 50_000 - 100)
   })
 
   scenario("publishes the original overflow when recovery summarization fails", function* (s) {

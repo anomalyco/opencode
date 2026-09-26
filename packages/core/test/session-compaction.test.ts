@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { LLMClient, LLMEvent, LanguageModel, ToolDefinition, type LLMRequest } from "@opencode/ai"
+import { GenerationOptions, LLMClient, LLMEvent, LanguageModel, ToolDefinition, type LLMRequest } from "@opencode/ai"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -452,7 +452,7 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
       "x-opencode-session": sessionID,
       "x-opencode-client": "opencode",
     })
-    expect(requests[0]?.generation).toBeUndefined()
+    expect(requests[0]?.generation).toEqual(GenerationOptions.make({ maxTokens: 32_000 }))
     expect(JSON.stringify(requests[0]?.messages)).toContain("Manual compaction should include this short conversation.")
     expect(JSON.stringify(requests[0]?.messages)).toContain("Use Effect services and generators.")
     expect(JSON.stringify(requests[0]?.messages)).toContain("User shell pwd completed: /project")
