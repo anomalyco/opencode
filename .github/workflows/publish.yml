@@ -34,6 +34,10 @@ permissions:
 
 env:
   OPENCODE_CHANNEL: ${{ (github.ref_name == 'v2' && !inputs.bump && !inputs.version && 'dev') || '' }}
+  # Single source of truth for the desktop release channel. The bundled CLI must
+  # compile with this same channel so it registers the same service-<channel>.json
+  # file the desktop reads (packages/desktop/src/main/service/service-registration.ts).
+  OPENCODE_DESKTOP_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
 
 jobs:
   version:
@@ -114,6 +118,7 @@ jobs:
         run: ./packages/cli/script/build.ts ${{ (github.ref_name == 'beta' && '--sourcemaps') || '' }}
         env:
           BUN_COMPILE_RELEASE: bun-v1.4.2
+          OPENCODE_CHANNEL: ${{ env.OPENCODE_DESKTOP_CHANNEL }}
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
           OPENCODE_RELEASE: ${{ needs.version.outputs.release }}
           GH_REPO: ${{ needs.version.outputs.repo }}
@@ -446,7 +451,7 @@ jobs:
         working-directory: packages/desktop
         env:
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
-          OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
+          OPENCODE_CHANNEL: ${{ env.OPENCODE_DESKTOP_CHANNEL }}
           OPENCODE_CLI_TARGET: ${{ matrix.settings.target }}
           OPENCODE_CLI_DIST: ${{ github.workspace }}/packages/cli/dist
 
@@ -456,7 +461,7 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=4096
           OPENCODE_VERSION: ${{ needs.version.outputs.version }}
-          OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
+          OPENCODE_CHANNEL: ${{ env.OPENCODE_DESKTOP_CHANNEL }}
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ vars.SENTRY_ORG }}
           SENTRY_PROJECT: ${{ vars.WEB_SENTRY_PROJECT }}
@@ -473,7 +478,7 @@ jobs:
         working-directory: packages/desktop
         timeout-minutes: 60
         env:
-          OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
+          OPENCODE_CHANNEL: ${{ env.OPENCODE_DESKTOP_CHANNEL }}
           GH_TOKEN: ${{ steps.committer.outputs.token }}
           CSC_KEYCHAIN: build.keychain
           APPLE_API_KEY: ${{ runner.temp }}/apple-api-key.p8
@@ -486,7 +491,7 @@ jobs:
         working-directory: packages/desktop
         timeout-minutes: 60
         env:
-          OPENCODE_CHANNEL: ${{ (github.ref_name == 'beta' && 'beta') || 'prod' }}
+          OPENCODE_CHANNEL: ${{ env.OPENCODE_DESKTOP_CHANNEL }}
 
       - name: Create macOS .app.tar.gz
         if: runner.os == 'macOS' && needs.version.outputs.release
