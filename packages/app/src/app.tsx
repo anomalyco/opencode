@@ -39,6 +39,7 @@ import {
 import { Dynamic } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { CommandProvider, useCommand, type CommandOption } from "@/context/command"
+import { ConnectionLinks } from "@/components/connection-links"
 import { CommentsProvider } from "@/context/comments"
 import { FileProvider } from "@/context/file"
 import { ServerSDKProvider } from "@/context/server-sdk"
@@ -316,6 +317,7 @@ function SharedProviders(props: ParentProps) {
       <BodyDesignClass />
       <CommandProvider>
         <DesktopCommands />
+        <ConnectionLinks />
         <HighlightsProvider>{props.children}</HighlightsProvider>
       </CommandProvider>
     </>
