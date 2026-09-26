@@ -78,7 +78,11 @@ const OpenAIResponsesFunctionCallOutput = Schema.Union([
 const OpenAIResponsesInputItem = Schema.Union([
   Schema.Struct({ role: Schema.tag("system"), content: Schema.String }),
   Schema.Struct({ role: Schema.tag("user"), content: Schema.Array(OpenAIResponsesInputContent) }),
-  Schema.Struct({ role: Schema.tag("assistant"), content: Schema.Array(OpenAIResponsesOutputText) }),
+  Schema.Struct({
+    role: Schema.tag("assistant"),
+    status: Schema.tag("completed"),
+    content: Schema.Array(OpenAIResponsesOutputText),
+  }),
   OpenAIResponsesReasoningItem,
   OpenAIResponsesItemReference,
   Schema.Struct({
@@ -374,7 +378,11 @@ const lowerMessages = Effect.fn("OpenAIResponses.lowerMessages")(function* (requ
       const hostedToolReferences = new Set<string>()
       const flushText = () => {
         if (content.length === 0) return
-        input.push({ role: "assistant", content: content.map((part) => ({ type: "output_text", text: part.text })) })
+        input.push({
+          role: "assistant",
+          status: "completed",
+          content: content.map((part) => ({ type: "output_text", text: part.text })),
+        })
         content.splice(0, content.length)
       }
       for (const part of message.content) {

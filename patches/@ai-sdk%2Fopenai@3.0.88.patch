@@ -1,5 +1,5 @@
 diff --git a/dist/index.js b/dist/index.js
-index 5fc82d7ca0f5fba1da3b24c15bb714f51b5aa178..e1a3e2c97774af3a5688c7052bd9a07d692fcc8f 100644
+index 5fc82d7..24c0c52 100644
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -1035,22 +1035,6 @@ var OpenAIChatLanguageModel = class {
@@ -25,7 +25,15 @@ index 5fc82d7ca0f5fba1da3b24c15bb714f51b5aa178..e1a3e2c97774af3a5688c7052bd9a07d
      const {
        tools: openaiTools2,
        toolChoice: openaiToolChoice,
-@@ -5454,22 +5438,6 @@ var OpenAIResponsesLanguageModel = class {
+@@ -3143,6 +3127,7 @@ async function convertToOpenAIResponsesInput({
+               }
+               input.push({
+                 role: "assistant",
++                status: "completed",
+                 content: [{ type: "output_text", text: part.text }],
+                 id,
+                 ...phase != null && { phase }
+@@ -5454,22 +5439,6 @@ var OpenAIResponsesLanguageModel = class {
          });
        }
      }
@@ -49,7 +57,7 @@ index 5fc82d7ca0f5fba1da3b24c15bb714f51b5aa178..e1a3e2c97774af3a5688c7052bd9a07d
        (tool) => tool.type === "provider" && tool.id === "openai.shell"
      )) == null ? void 0 : _i.args) == null ? void 0 : _j.environment) == null ? void 0 : _k.type;
 diff --git a/dist/index.mjs b/dist/index.mjs
-index 589c4f76955bee692b8af36ea1d9a15121695d4a..6838ea0a362c8fe774527bb1126b8031ebfd3fab 100644
+index 589c4f7..272fd97 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
 @@ -1031,22 +1031,6 @@ var OpenAIChatLanguageModel = class {
@@ -75,7 +83,15 @@ index 589c4f76955bee692b8af36ea1d9a15121695d4a..6838ea0a362c8fe774527bb1126b8031
      const {
        tools: openaiTools2,
        toolChoice: openaiToolChoice,
-@@ -5557,22 +5541,6 @@ var OpenAIResponsesLanguageModel = class {
+@@ -3238,6 +3222,7 @@ async function convertToOpenAIResponsesInput({
+               }
+               input.push({
+                 role: "assistant",
++                status: "completed",
+                 content: [{ type: "output_text", text: part.text }],
+                 id,
+                 ...phase != null && { phase }
+@@ -5557,22 +5542,6 @@ var OpenAIResponsesLanguageModel = class {
          });
        }
      }
@@ -99,7 +115,7 @@ index 589c4f76955bee692b8af36ea1d9a15121695d4a..6838ea0a362c8fe774527bb1126b8031
        (tool) => tool.type === "provider" && tool.id === "openai.shell"
      )) == null ? void 0 : _i.args) == null ? void 0 : _j.environment) == null ? void 0 : _k.type;
 diff --git a/dist/internal/index.js b/dist/internal/index.js
-index ad78b5df9359509091f4b8a1751dc34c03c74e32..ed92f56d8fe9c1442f741ef8d42d592ce9b28643 100644
+index ad78b5d..14fa761 100644
 --- a/dist/internal/index.js
 +++ b/dist/internal/index.js
 @@ -1070,22 +1070,6 @@ var OpenAIChatLanguageModel = class {
@@ -125,7 +141,15 @@ index ad78b5df9359509091f4b8a1751dc34c03c74e32..ed92f56d8fe9c1442f741ef8d42d592c
      const {
        tools: openaiTools,
        toolChoice: openaiToolChoice,
-@@ -5724,22 +5708,6 @@ var OpenAIResponsesLanguageModel = class {
+@@ -3092,6 +3076,7 @@ async function convertToOpenAIResponsesInput({
+               }
+               input.push({
+                 role: "assistant",
++                status: "completed",
+                 content: [{ type: "output_text", text: part.text }],
+                 id,
+                 ...phase != null && { phase }
+@@ -5724,22 +5709,6 @@ var OpenAIResponsesLanguageModel = class {
          });
        }
      }
@@ -149,7 +173,7 @@ index ad78b5df9359509091f4b8a1751dc34c03c74e32..ed92f56d8fe9c1442f741ef8d42d592c
        (tool) => tool.type === "provider" && tool.id === "openai.shell"
      )) == null ? void 0 : _i.args) == null ? void 0 : _j.environment) == null ? void 0 : _k.type;
 diff --git a/dist/internal/index.mjs b/dist/internal/index.mjs
-index db7d6741c9ea615d577ea07722b469c144066268..f6b41b2832d2c8392072e0ecc1612e9e18b1b48e 100644
+index db7d674..7c70c45 100644
 --- a/dist/internal/index.mjs
 +++ b/dist/internal/index.mjs
 @@ -1023,22 +1023,6 @@ var OpenAIChatLanguageModel = class {
@@ -175,7 +199,15 @@ index db7d6741c9ea615d577ea07722b469c144066268..f6b41b2832d2c8392072e0ecc1612e9e
      const {
        tools: openaiTools,
        toolChoice: openaiToolChoice,
-@@ -5802,22 +5786,6 @@ var OpenAIResponsesLanguageModel = class {
+@@ -3134,6 +3118,7 @@ async function convertToOpenAIResponsesInput({
+               }
+               input.push({
+                 role: "assistant",
++                status: "completed",
+                 content: [{ type: "output_text", text: part.text }],
+                 id,
+                 ...phase != null && { phase }
+@@ -5802,22 +5787,6 @@ var OpenAIResponsesLanguageModel = class {
          });
        }
      }
@@ -199,7 +231,7 @@ index db7d6741c9ea615d577ea07722b469c144066268..f6b41b2832d2c8392072e0ecc1612e9e
        (tool) => tool.type === "provider" && tool.id === "openai.shell"
      )) == null ? void 0 : _i.args) == null ? void 0 : _j.environment) == null ? void 0 : _k.type;
 diff --git a/src/chat/openai-chat-language-model.ts b/src/chat/openai-chat-language-model.ts
-index 009a58deea236c2be03adc5cd03f98ed9050fd7b..a606675d82fc72a0bab8d52ac99866100e7ffb1d 100644
+index 009a58d..a606675 100644
 --- a/src/chat/openai-chat-language-model.ts
 +++ b/src/chat/openai-chat-language-model.ts
 @@ -267,34 +267,6 @@ export class OpenAIChatLanguageModel implements LanguageModelV3 {
@@ -237,8 +269,32 @@ index 009a58deea236c2be03adc5cd03f98ed9050fd7b..a606675d82fc72a0bab8d52ac9986610
      const {
        tools: openaiTools,
        toolChoice: openaiToolChoice,
+diff --git a/src/responses/convert-to-openai-responses-input.ts b/src/responses/convert-to-openai-responses-input.ts
+index 5941962..d508432 100644
+--- a/src/responses/convert-to-openai-responses-input.ts
++++ b/src/responses/convert-to-openai-responses-input.ts
+@@ -271,6 +271,7 @@ export async function convertToOpenAIResponsesInput({
+ 
+               input.push({
+                 role: 'assistant',
++                status: 'completed',
+                 content: [{ type: 'output_text', text: part.text }],
+                 id,
+                 ...(phase != null && { phase }),
+diff --git a/src/responses/openai-responses-api.ts b/src/responses/openai-responses-api.ts
+index 9ab482d..71ab94d 100644
+--- a/src/responses/openai-responses-api.ts
++++ b/src/responses/openai-responses-api.ts
+@@ -120,6 +120,7 @@ export type OpenAIResponsesUserMessage = {
+ 
+ export type OpenAIResponsesAssistantMessage = {
+   role: 'assistant';
++  status: 'completed';
+   content: Array<{ type: 'output_text'; text: string }>;
+   id?: string;
+   phase?: 'commentary' | 'final_answer' | null;
 diff --git a/src/responses/openai-responses-language-model.ts b/src/responses/openai-responses-language-model.ts
-index 926e7ec713480353b969901f19c5d1d8cc883dab..ed457ce8f07a60ed48c47a3cbf11b2a7c6cf6415 100644
+index 926e7ec..ed457ce 100644
 --- a/src/responses/openai-responses-language-model.ts
 +++ b/src/responses/openai-responses-language-model.ts
 @@ -433,36 +433,6 @@ export class OpenAIResponsesLanguageModel implements LanguageModelV3 {
