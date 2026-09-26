@@ -29,6 +29,8 @@ export const Response = WebSearch.Response
 export type Response = WebSearch.Response
 
 export const ProviderKey = "websearch:provider"
+// Keeps one oversized page from crowding the other results out of the bounded tool output.
+export const MAX_RESULT_CONTENT_LENGTH = 4_000
 export const Selection = Schema.Union([ID, Schema.Literal("random"), Schema.Literal(false)])
 export type Selection = typeof Selection.Type
 
@@ -39,18 +41,45 @@ export interface ProviderImplementation extends Provider {
 export class ProviderRequiredError extends Schema.TaggedError<ProviderRequiredError>()(
   "WebSearch.ProviderRequired",
   {},
-) {}
+) {
+  override get message() {
+    return "No web search provider is selected"
+  }
+}
 
 export class ProviderNotFoundError extends Schema.TaggedError<ProviderNotFoundError>()("WebSearch.ProviderNotFound", {
   providerID: ID,
-}) {}
+}) {
+  override get message() {
+    return `Web search provider not found: ${this.providerID}`
+  }
+}
 
-export class DisabledError extends Schema.TaggedError<DisabledError>()("WebSearch.Disabled", {}) {}
+export class DisabledError extends Schema.TaggedError<DisabledError>()("WebSearch.Disabled", {}) {
+  override get message() {
+    return "Web search is disabled"
+  }
+}
 
 export class RequestError extends Schema.TaggedError<RequestError>()("WebSearch.Request", {
   providerID: ID,
   cause: Schema.Defect(),
-}) {}
+}) {
+  // HTTP client messages include the request URL, which can carry a provider credential.
+  override get message() {
+    const cause = this.cause
+    if (!HttpClientError.isHttpClientError(cause))
+      return cause instanceof Error && cause.message ? cause.message : "Request failed"
+    const status = cause.response?.status
+    if (status !== undefined && cause.reason.description) return `HTTP ${status}: ${cause.reason.description}`
+    if (status === 429) return "Rate limited (HTTP 429)"
+    if (status === 401) return "Authentication failed (HTTP 401)"
+    if (status !== undefined) return `Request failed (HTTP ${status})`
+    return cause.cause instanceof Error && cause.cause.message
+      ? `Request failed: ${cause.cause.message}`
+      : "Request failed"
+  }
+}
 
 export type Error = ProviderRequiredError | ProviderNotFoundError | DisabledError | RequestError
 
@@ -195,7 +224,13 @@ const layer = Layer.effect(
             const result = yield* provider
               .execute({ query: input.query })
               .pipe(Effect.flatMap(decodeResults), Effect.result)
-            if (result._tag === "Success") return new Response({ providerID: provider.id, results: result.success })
+            if (result._tag === "Success")
+              return new Response({
+                providerID: provider.id,
+                results: result.success.map((item) =>
+                  item.content === undefined ? item : { ...item, content: limitContent(item.content) },
+                ),
+              })
             const cause = result.failure
             const error = new RequestError({ providerID: provider.id, cause })
             if (choice !== "random" || !HttpClientError.isHttpClientError(cause) || cause.response?.status !== 429)
@@ -211,6 +246,14 @@ const layer = Layer.effect(
     })
   }),
 )
+
+function limitContent(content: string) {
+  if (content.length <= MAX_RESULT_CONTENT_LENGTH) return content
+  const code = content.charCodeAt(MAX_RESULT_CONTENT_LENGTH - 1)
+  // Do not split a surrogate pair; a lone surrogate is invalid text for model requests.
+  const end = code >= 0xd800 && code <= 0xdbff ? MAX_RESULT_CONTENT_LENGTH - 1 : MAX_RESULT_CONTENT_LENGTH
+  return `${content.slice(0, end)}\n[truncated]`
+}
 
 function cooldownMillis(value: string | undefined, now: number) {
   if (!value?.trim()) return 60_000

@@ -1,26 +1,22 @@
 export * as WebSearchMcp from "./mcp.js"
 
-import { Duration, Effect, Schema } from "effect"
+import { Duration, Effect, Option, Schema } from "effect"
 import { HttpClient, HttpClientRequest } from "effect/unstable/http"
-import { collectBoundedResponseBody } from "../../tool/http-body.js"
+import { WebSearchResponse } from "./response.js"
 
-export const MAX_RESPONSE_BYTES = 256 * 1024
-
-export const parseResponse = <F extends Schema.Struct.Fields>(body: string, result: Schema.Struct<F>) => {
-  const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Struct({ result })))
-  const parse = (payload: string) => {
-    const trimmed = payload.trim()
-    if (!trimmed.startsWith("{")) return Effect.undefined
-    return decode(trimmed).pipe(Effect.map((response) => response.result))
-  }
+export const parseResponse = <F extends Schema.Struct.Fields>(
+  body: { readonly text: string; readonly truncated: boolean },
+  tool: string,
+  result: Schema.Struct<F>,
+) => {
+  const decode = Schema.decodeUnknownEffect(Schema.Struct({ result }))
   return Effect.gen(function* () {
-    const trimmed = body.trim()
-    const direct = trimmed ? yield* parse(trimmed) : undefined
-    if (direct) return direct
-    for (const line of body.split("\n")) {
-      if (!line.startsWith("data: ")) continue
-      const data = yield* parse(line.substring(6))
-      if (data) return data
+    for (const payload of WebSearchResponse.payloads(body.text)) {
+      const message = WebSearchResponse.json(payload, body.truncated)
+      if (Option.isNone(message)) return yield* Effect.fail(new Error(`${tool} returned invalid JSON`))
+      const failure = WebSearchResponse.failure(message.value)
+      if (failure !== undefined) return yield* Effect.fail(new Error(failure))
+      return (yield* decode(message.value)).result
     }
   })
 }
@@ -52,13 +48,8 @@ export const call = <F extends Schema.Struct.Fields, R extends Schema.Struct.Fie
       }),
     )
     return yield* Effect.gen(function* () {
-      const response = yield* HttpClient.withScope(HttpClient.filterStatusOk(http)).execute(request)
-      const body = yield* collectBoundedResponseBody(
-        response,
-        MAX_RESPONSE_BYTES,
-        () => new Error(`${tool} response exceeded ${MAX_RESPONSE_BYTES} bytes`),
-      )
-      return yield* parseResponse(body.toString("utf8"), schema.output)
+      const body = yield* WebSearchResponse.execute(http, request)
+      return { result: yield* parseResponse(body, tool, schema.output), truncated: body.truncated }
     }).pipe(
       Effect.scoped,
       Effect.timeoutOrElse({

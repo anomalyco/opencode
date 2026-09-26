@@ -1,9 +1,10 @@
 export * as WebSearchTavily from "./tavily.js"
 
 import { define } from "@opencode/plugin/effect/plugin"
-import { Duration, Effect, Schema, Scope } from "effect"
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { Duration, Effect, Option, Schema, Scope } from "effect"
+import { HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { App } from "../../app.js"
+import { WebSearchResponse } from "./response.js"
 
 export const endpoint = "https://api.tavily.com/search"
 
@@ -14,14 +15,12 @@ const SearchRequest = Schema.Struct({
   max_results: Schema.Number,
 })
 
-const SearchResponse = Schema.Struct({
-  results: Schema.Array(
-    Schema.Struct({
-      title: Schema.String,
-      url: Schema.String,
-      content: Schema.String,
-    }),
-  ),
+const decodeSearchResponse = Schema.decodeUnknownOption(Schema.Struct({ results: Schema.Array(Schema.Unknown) }))
+
+const SearchResult = Schema.Struct({
+  title: Schema.String,
+  url: Schema.String,
+  content: Schema.String,
 })
 
 export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
@@ -63,17 +62,16 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
                 max_results: 8,
               }),
             )
-            const response = yield* HttpClient.withScope(HttpClient.filterStatusOk(http))
-              .execute(request)
-              .pipe(
-                Effect.flatMap(HttpClientResponse.schemaBodyJson(SearchResponse)),
-                Effect.scoped,
-                Effect.timeoutOrElse({
-                  duration: Duration.seconds(25),
-                  orElse: () => Effect.fail(new Error("Tavily web search request timed out")),
-                }),
-              )
-            return response.results.map((item) => ({
+            const body = yield* WebSearchResponse.execute(http, request).pipe(
+              Effect.scoped,
+              Effect.timeoutOrElse({
+                duration: Duration.seconds(25),
+                orElse: () => Effect.fail(new Error("Tavily web search request timed out")),
+              }),
+            )
+            const search = WebSearchResponse.json(body.text, body.truncated).pipe(Option.flatMap(decodeSearchResponse))
+            if (Option.isNone(search)) return yield* Effect.fail(new Error("Tavily returned an invalid response"))
+            return WebSearchResponse.items(SearchResult, search.value.results, body.truncated).map((item) => ({
               url: item.url,
               title: item.title,
               ...(item.content ? { content: item.content } : {}),

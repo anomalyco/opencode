@@ -1,4 +1,4 @@
-import { Duration, Effect, Equal, Schema, Semaphore, Stream } from "effect"
+import { Duration, Effect, Equal, Option, Schema, Semaphore, Stream } from "effect"
 import type { Scope } from "effect"
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import { define } from "@opencode/plugin/effect/plugin"
@@ -11,6 +11,7 @@ import { IntegrationConnection } from "../../integration/connection.js"
 import { ManagedPolicy } from "../../managed-policy.js"
 import { Provider } from "../../provider.js"
 import { WebSearch } from "../../websearch.js"
+import { WebSearchResponse } from "../websearch/response.js"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
 import { ConfigProvider } from "@opencode/schema/config/provider"
 import { Mcp } from "@opencode/schema/mcp"
@@ -55,6 +56,9 @@ const TokenPending = Schema.Struct({ error: Schema.String })
 const DeviceToken = Schema.Union([Token, TokenPending])
 const User = Schema.Struct({ id: Schema.String, email: Schema.String })
 const Org = Schema.Struct({ id: Schema.String, name: Schema.String })
+const decodeWebSearchResponse = Schema.decodeUnknownOption(
+  Schema.Struct({ providerID: WebSearch.ID, results: Schema.Array(Schema.Unknown) }),
+)
 
 function oauth(http: HttpClient.HttpClient) {
   return {
@@ -329,25 +333,27 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
                 providerID: descriptor.providerID,
               }),
             )
-            const response = yield* HttpClient.withScope(HttpClient.filterStatusOk(http))
-              .execute(request)
-              .pipe(
-                Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }),
-                Effect.flatMap(HttpClientResponse.schemaBodyJson(WebSearch.Response)),
-                Effect.scoped,
-                Effect.timeoutOrElse({
-                  duration: Duration.seconds(25),
-                  orElse: () => Effect.fail(new Error("OpenCode web search request timed out")),
-                }),
-              )
-            if (response.providerID !== descriptor.providerID) {
+            const body = yield* WebSearchResponse.execute(http, request).pipe(
+              Effect.provideService(FetchHttpClient.RequestInit, { redirect: "error" }),
+              Effect.scoped,
+              Effect.timeoutOrElse({
+                duration: Duration.seconds(25),
+                orElse: () => Effect.fail(new Error("OpenCode web search request timed out")),
+              }),
+            )
+            const response = WebSearchResponse.json(body.text, body.truncated).pipe(
+              Option.flatMap(decodeWebSearchResponse),
+            )
+            if (Option.isNone(response))
+              return yield* Effect.fail(new Error("OpenCode web search returned an invalid response"))
+            if (response.value.providerID !== descriptor.providerID) {
               return yield* Effect.fail(
                 new Error(
-                  `OpenCode web search returned provider ${response.providerID} instead of ${descriptor.providerID}`,
+                  `OpenCode web search returned provider ${response.value.providerID} instead of ${descriptor.providerID}`,
                 ),
               )
             }
-            return response.results
+            return WebSearchResponse.items(WebSearch.Result, response.value.results, body.truncated)
           }),
       })
       editor.default.set(descriptor.providerID)

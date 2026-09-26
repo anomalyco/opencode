@@ -47,23 +47,25 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
             const credential = connection ? yield* ctx.integration.connection.resolve(connection) : undefined
             const url = new URL(endpoint)
             if (credential?.type === "key") url.searchParams.set("exaApiKey", credential.key)
-            const result = yield* WebSearchMcp.call(
+            const response = yield* WebSearchMcp.call(
               http,
               url.toString(),
               "web_search_exa",
               { input: McpInput, output: McpOutput },
               { query: input.query, numResults: 8 },
             )
-            const content = result?.content.find((item) => item.text)
-            return content ? parseResults(content.text) : []
+            const content = response.result?.content.find((item) => item.text)
+            return content ? parseResults(content.text, response.truncated) : []
           }),
       })
     })
   }),
 })
 
-function parseResults(text: string) {
-  return text.split(/\n\n---\n\n/).flatMap((block) => {
+function parseResults(text: string, truncated: boolean) {
+  const blocks = text.split(/\n\n---\n\n/)
+  // The final block of a truncated response may end mid-line, including inside its URL.
+  return (truncated ? blocks.slice(0, -1) : blocks).flatMap((block) => {
     const url = block.match(/^URL:\s*(.+)$/m)?.[1]?.trim()
     if (!url) return []
     const title = block.match(/^Title:\s*(.+)$/m)?.[1]?.trim()
