@@ -1,5 +1,6 @@
 import { type Locale } from "./lib/language"
 import { dict as ar } from "./i18n/ar"
+import { dict as be } from "./i18n/be"
 import { dict as br } from "./i18n/br"
 import { dict as da } from "./i18n/da"
 import { dict as de } from "./i18n/de"
@@ -269,6 +270,7 @@ const dictionaries = {
   uk,
   zh,
   zht,
+  be,
 } satisfies Record<Locale, Dict>
 
 export function dict(locale: Locale) {

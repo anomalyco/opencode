@@ -15,6 +15,7 @@ const appLocales = [
   "pl",
   "ru",
   "uk",
+  "be",
   "th",
   "tr",
   "zh",
