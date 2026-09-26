@@ -195,16 +195,14 @@ export const oauthLogin = Effect.fn("cli.auth.login.oauth")(function* (
     return
   }
 
-  const waiting = spinner()
-  waiting.start("Waiting for authorization...")
-  const status = yield* waitForOAuth(client, integration.id, attempt.attemptID).pipe(
-    Effect.tapCause(() => Effect.sync(() => waiting.stop("Authentication failed", 1))),
-  )
+  // Clack's spinner captures Ctrl+C and exits the process directly, which would skip the finalizer that
+  // cancels the attempt. Waits that can last minutes use plain log lines so Ctrl+C interrupts normally.
+  log.step("Waiting for authorization...")
+  const status = yield* waitForOAuth(client, integration.id, attempt.attemptID)
   if (status.status === "complete") {
-    waiting.stop(`Connected to ${integration.name}`)
+    log.success(`Connected to ${integration.name}`)
     return
   }
-  waiting.stop("Authentication failed", 1)
   if (status.status === "failed") yield* Effect.fail(new Error(status.message))
   yield* Effect.fail(new Error("Authorization expired"))
 })
@@ -231,14 +229,21 @@ const commandLogin = Effect.fn("cli.auth.login.command")(function* (
       ),
     ).pipe(Effect.ignore),
   )
-  const status = yield* waitForCommand(client, integration.id, started.data.attemptID, (message) =>
-    progress.message(message.trim() || "Waiting for authentication command..."),
-  ).pipe(Effect.tapCause(() => Effect.sync(() => progress.stop("Authentication failed", 1))))
+  progress.stop("Authentication command started")
+  // The status message accumulates the command's stderr; print each completed line once.
+  let printed = 0
+  log.step("Waiting for authentication command...")
+  const status = yield* waitForCommand(client, integration.id, started.data.attemptID, (message) => {
+    const end = message.lastIndexOf("\n") + 1
+    if (end <= printed) return
+    const output = message.slice(printed, end).trim()
+    printed = end
+    if (output) log.message(output)
+  })
   if (status.status === "complete") {
-    progress.stop(`Connected to ${integration.name}`)
+    log.success(`Connected to ${integration.name}`)
     return
   }
-  progress.stop("Authentication failed", 1)
   if (status.status === "failed") yield* Effect.fail(new Error(status.message))
   yield* Effect.fail(new Error("Authentication expired"))
 })
