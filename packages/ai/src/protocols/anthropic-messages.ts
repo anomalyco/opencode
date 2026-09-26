@@ -31,6 +31,7 @@ import { effortUpdate, resolveEffortUpdates } from "../effort-updates.js"
 import * as Cache from "./utils/cache.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolStream } from "./utils/tool-stream.js"
+import { AnthropicModel } from "./utils/anthropic-model.js"
 
 const ADAPTER = "anthropic-messages"
 export const DEFAULT_BASE_URL = "https://api.anthropic.com/v1"
@@ -988,26 +989,10 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
   return messages
 })
 
-// Accept gateway namespaces and Vertex suffixes without treating a snapshot date as a minor version.
-const claudeVersion = (id: string) => {
-  const match = /(?:^|[./])claude-(?<family>[a-z]+)-(?<major>\d+)(?:[.-](?<minor>\d{1,2}))?(?:$|[-:@])/.exec(
-    id.toLowerCase(),
-  )?.groups
-  if (!match) return undefined
-  return { family: match.family, major: Number(match.major), minor: Number(match.minor ?? 0) }
-}
-
-const supportsThinkingBlockBinding = (model: LLMRequest["model"]) => {
-  const override = model.compatibility?.supportsThinkingBlockBinding
-  if (override !== undefined) return override
-  const version = claudeVersion(model.id)
-  return version !== undefined && (version.major > 5 || (version.major === 5 && version.minor >= 1))
-}
-
 const supportsEffortUpdates = (model: LLMRequest["model"]) => {
   const override = model.compatibility?.supportsEffortUpdates
   if (override !== undefined) return override
-  const version = claudeVersion(model.id)
+  const version = AnthropicModel.version(model.id)
   if (version === undefined) return false
   if (version.family === "opus") return version.major >= 5
   if (version.family !== "fable" && version.family !== "mythos") return false
@@ -1016,7 +1001,7 @@ const supportsEffortUpdates = (model: LLMRequest["model"]) => {
 
 const applyThinkingBindingDefault = (model: LLMRequest["model"], thinking: AnthropicThinking | undefined) => {
   if (thinking?.type === "disabled") return thinking
-  if (!supportsThinkingBlockBinding(model)) return thinking
+  if (!AnthropicModel.supportsThinkingBlockBinding(model)) return thinking
   return {
     ...(thinking ?? { type: "adaptive" as const }),
     block_binding: {
