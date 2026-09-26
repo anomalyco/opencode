@@ -53,6 +53,7 @@ import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { SessionUsage } from "@opencode/core/session/usage"
 import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
 import { Plugin } from "@opencode/core/plugin"
+import { PluginPromise } from "@opencode/core/plugin/promise"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { OptimizePlugin } from "@opencode/core/plugin/optimize"
 import { IdentityPlugin } from "@opencode/core/plugin/identity"
@@ -4766,6 +4767,50 @@ describe("SessionRunnerLLM", () => {
     ])
   })
 
+  scenario("preserves each parallel Promise hook failure", function* (s) {
+    const hooks = yield* PluginHooks.Service
+    const calls: string[] = []
+    yield* PluginPromise.fromPromise({
+      id: "parallel-hook-errors",
+      async setup(context) {
+        await context.tool.hook("execute.before", (event) => {
+          calls.push(event.id)
+          if (event.id === "call-alpha") throw new Error("HOOK BLOCK ALPHA")
+          if (event.id === "call-beta") throw new Error("HOOK BLOCK BETA")
+        })
+      },
+    }).effect(host({ tool: { ...host().tool, hook: (name, callback) => hooks.register("tool", name, callback) } }))
+    yield* s.admit("Run parallel guarded tools")
+    yield* s.llm.push(
+      TestLLM.toolCalls(
+        LLMEvent.toolCall({ id: "call-alpha", name: "echo", input: { text: "alpha-block" } }),
+        LLMEvent.toolCall({ id: "call-beta", name: "echo", input: { text: "beta-block" } }),
+        LLMEvent.toolCall({ id: "call-ok", name: "echo", input: { text: "ok" } }),
+      ),
+      TestLLM.stop(),
+    )
+    yield* s.resume
+    expect(calls).toEqual(["call-alpha", "call-beta", "call-ok"])
+    expect(s.executions).toEqual(["ok"])
+    expect(s.requests).toHaveLength(2)
+    expect(s.requests[1].messages.flatMap((message) => (message.role === "tool" ? message.content : []))).toMatchObject(
+      [
+        { id: "call-alpha", result: { type: "error", value: { error: { message: "HOOK BLOCK ALPHA" } } } },
+        { id: "call-beta", result: { type: "error", value: { error: { message: "HOOK BLOCK BETA" } } } },
+        { id: "call-ok", result: { type: "text", value: "ok" } },
+      ],
+    )
+    expect(yield* s.context).toMatchObject([
+      Expected.user("Run parallel guarded tools"),
+      Expected.assistant({}, [
+        Expected.failedTool({ id: "call-alpha" }, { error: { message: "HOOK BLOCK ALPHA" } }),
+        Expected.failedTool({ id: "call-beta" }, { error: { message: "HOOK BLOCK BETA" } }),
+        Expected.completedTool({ id: "call-ok" }, { content: [{ type: "text", text: "ok" }] }),
+      ]),
+      { type: "assistant", finish: "stop" },
+    ])
+  })
+
   scenario("returns tool-wrapped policy blocks to the model and continues", function* (s) {
     const registry = yield* Tool.Service
     yield* transformTools(
@@ -4801,6 +4846,10 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("interrupts runner continuation on a decline after settling an ordinary tool error", function* (s) {
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("tool", "execute.before", (event) =>
+      event.id === "call-hook-defect" ? Effect.die(new Error("Hook defect before decline")) : Effect.void,
+    )
     const registry = yield* Tool.Service
     yield* transformTools(
       registry,
@@ -4827,6 +4876,7 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push(
       TestLLM.toolCalls(
         LLMEvent.toolCall({ id: "call-failed", name: "failed", input: {} }),
+        LLMEvent.toolCall({ id: "call-hook-defect", name: "echo", input: { text: "blocked" } }),
         LLMEvent.toolCall({ id: "call-declined", name: "declined", input: {} }),
       ),
     )
@@ -4840,6 +4890,10 @@ describe("SessionRunnerLLM", () => {
       Expected.user("Call declined"),
       Expected.assistant({}, [
         Expected.failedTool({ id: "call-failed" }, { error: { message: "Ordinary tool failure" } }),
+        Expected.failedTool(
+          { id: "call-hook-defect" },
+          { error: { type: "aborted", message: "Tool execution interrupted" } },
+        ),
         Expected.failedTool(
           { id: "call-declined" },
           { error: { type: "aborted", message: "The user declined this tool call" } },

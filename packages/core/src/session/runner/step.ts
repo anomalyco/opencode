@@ -199,6 +199,9 @@ export const make = Effect.gen(function* () {
                 : "The user declined this tool call",
           })
         const interrupted = tools.declines.length > 0 || streamInterrupted || tools.interrupted
+        if (!interrupted)
+          for (const failure of tools.failures)
+            yield* publisher.failTool(failure.call.id, toSessionError(Cause.squash(failure.cause)))
         const toolFailure = interrupted
           ? TOOLS_INTERRUPTED
           : tools.failure !== undefined
@@ -293,6 +296,11 @@ const classifyToolExits = (
   const causes = Exit.isFailure(settled)
     ? [settled.cause]
     : exits.flatMap((exit) => (Exit.isFailure(exit) ? [exit.cause] : []))
+  const failures = exits.flatMap((exit, index) => {
+    if (Exit.isSuccess(exit)) return []
+    const reasons = exit.cause.reasons.filter(Cause.isDieReason)
+    return reasons.length > 0 ? [{ call: runs[index].call, cause: Cause.fromReasons<never>(reasons) }] : []
+  })
   const failure = causes
     .flatMap((cause) => {
       if (Cause.hasInterrupts(cause)) return []
@@ -300,5 +308,5 @@ const classifyToolExits = (
       return reasons.length > 0 ? [Cause.fromReasons<never>(reasons)] : []
     })
     .at(0)
-  return { interrupted: causes.some(Cause.hasInterrupts), declines, failure }
+  return { interrupted: causes.some(Cause.hasInterrupts), declines, failures, failure }
 }
