@@ -17,14 +17,17 @@ export function DialogVariant() {
           local.model.variant.set(undefined)
         },
       },
-      ...local.model.variant.list().map((variant) => ({
-        value: variant,
-        title: variant,
-        onSelect: () => {
-          dialog.clear()
-          local.model.variant.set(variant)
-        },
-      })),
+      ...local.model.variant
+        .list()
+        .filter((variant) => variant !== "default")
+        .map((variant) => ({
+          value: variant,
+          title: variant,
+          onSelect: () => {
+            dialog.clear()
+            local.model.variant.set(variant)
+          },
+        })),
     ]
   })
 
