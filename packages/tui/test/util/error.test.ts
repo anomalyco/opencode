@@ -22,6 +22,13 @@ describe("util.error", () => {
     expect(data.code).toBe("E_BAD")
   })
 
+  test("maps MessageOutputLengthError to a readable message", () => {
+    const err = { name: "MessageOutputLengthError", data: {} }
+    expect(errorMessage(err)).toBe(
+      "Response was cut off by the output token limit before completing. Increase the model's limit.output or reduce reasoning effort.",
+    )
+  })
+
   test("never returns bare {} for opaque object errors", () => {
     expect(errorFormat({})).not.toBe("{}")
     expect(errorFormat({})).toContain("no message")
