@@ -62,6 +62,13 @@ const authenticate = Effect.fn("cli.mcp.auth.run")(function* (name?: string) {
   }
 
   yield* oauthLogin(client, integration, method, yield* answerForm(method.form))
+  // Re-authenticating replaces the previous sign-in rather than adding an account; the old
+  // credentials are only removed once the new one is stored, so a failed attempt keeps them.
+  yield* Effect.forEach(
+    integration.connections.filter((connection) => connection.type === "credential"),
+    (connection) => request((signal) => client.credential.remove({ credentialID: connection.id }, { signal })),
+    { discard: true },
+  )
   outro("Done")
 })
 
