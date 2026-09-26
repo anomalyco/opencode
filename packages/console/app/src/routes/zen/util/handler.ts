@@ -122,7 +122,11 @@ export async function handler(
       })
       if (response) return response
     }
-    const sessionId = input.request.headers.get("x-opencode-session") ?? ""
+    const sessionId =
+      input.request.headers.get("x-opencode-session") ??
+      input.request.headers.get("session-id") ??
+      input.request.headers.get("thread-id") ??
+      ""
     const requestId = input.request.headers.get("x-opencode-request") ?? ""
     const ocClient = input.request.headers.get("x-opencode-client") ?? ""
     const projectId = input.request.headers.get("x-opencode-project") ?? ""
