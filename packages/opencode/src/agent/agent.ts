@@ -10,6 +10,7 @@ import { Auth } from "../auth"
 import { ProviderTransform } from "@/provider/transform"
 
 import PROMPT_GENERATE from "./generate.txt"
+import PROMPT_BROWSER from "./prompt/browser.txt"
 import PROMPT_COMPACTION from "./prompt/compaction.txt"
 import PROMPT_EXPLORE from "./prompt/explore.txt"
 import PROMPT_SUMMARY from "./prompt/summary.txt"
@@ -212,6 +213,27 @@ const layer = Layer.effect(
             ),
             description: `Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx"), search code for keywords (eg. "API endpoints"), or answer questions about the codebase (eg. "how do API endpoints work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.`,
             prompt: PROMPT_EXPLORE,
+            options: {},
+            mode: "subagent",
+            native: true,
+          },
+          browser: {
+            name: "browser",
+            description:
+              "Browser automation specialist. Verifies web applications in a real browser and returns evidence (screenshots, console and network errors) to the calling agent. Never reports a web task complete without browser evidence; reports BLOCKED when the browser is unavailable.",
+            permission: Permission.merge(
+              defaults,
+              Permission.fromConfig({
+                browser: "allow",
+                edit: "deny",
+                write: "deny",
+                apply_patch: "deny",
+                task: "deny",
+                todowrite: "deny",
+              }),
+              user,
+            ),
+            prompt: PROMPT_BROWSER,
             options: {},
             mode: "subagent",
             native: true,

@@ -464,3 +464,78 @@ exports[`tool parameters JSON Schema (wire shape) write 1`] = `
   "type": "object",
 }
 `;
+
+exports[`tool parameters JSON Schema (wire shape) browser 1`] = `
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "properties": {
+    "action": {
+      "description": "The browser operation to perform.",
+      "enum": [
+        "open",
+        "close",
+        "goto",
+        "back",
+        "forward",
+        "click",
+        "fill",
+        "select",
+        "upload",
+        "screenshot",
+        "snapshot",
+        "eval",
+        "console",
+        "network",
+        "downloads",
+        "viewport",
+        "wait",
+      ],
+      "type": "string",
+    },
+    "code": {
+      "description": "JavaScript expression for eval (page context).",
+      "type": "string",
+    },
+    "fullPage": {
+      "description": "Capture the full scrollable page (screenshot).",
+      "type": "boolean",
+    },
+    "headless": {
+      "description": "Run without a visible window on open (default true).",
+      "type": "boolean",
+    },
+    "height": {
+      "description": "Viewport height for viewport (requires width).",
+      "type": "number",
+    },
+    "path": {
+      "description": "Destination file for screenshot instead of an attachment.",
+      "type": "string",
+    },
+    "selector": {
+      "description": "CSS selector for click/fill/select/upload/wait.",
+      "type": "string",
+    },
+    "timeoutMs": {
+      "description": "Timeout for navigation and interaction actions (default 30000).",
+      "type": "number",
+    },
+    "url": {
+      "description": "URL for goto; optional immediate navigation on open.",
+      "type": "string",
+    },
+    "value": {
+      "description": "Text for fill, option value or label for select, absolute file path for upload.",
+      "type": "string",
+    },
+    "width": {
+      "description": "Viewport width for viewport (requires height).",
+      "type": "number",
+    },
+  },
+  "required": [
+    "action",
+  ],
+  "type": "object",
+}
+`;
