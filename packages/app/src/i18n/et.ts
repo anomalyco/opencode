@@ -872,6 +872,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "Tühjenda märguanded",
   "sidebar.empty.title": "Avatud projekte pole",
   "sidebar.empty.description": "Alustamiseks avage projekt",
+  "sidebar.history.runningChat": "Töös: {{title}}",
   "debugBar.ariaLabel": "Arendustegevuse diagnostika",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

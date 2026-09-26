@@ -153,7 +153,7 @@ async function trial(page: Page, mode: ParentHydrationBenchmarkMode) {
     lastID,
     requiredPartID: lastPartID,
     requireBottomAnchor: false,
-    href,
+    triggerSelector: `a[href="${href}"]`,
     switch: async () => {
       await page.locator("#parent-hydration-target").click()
       await expectSessionTitle(page, target.title)
