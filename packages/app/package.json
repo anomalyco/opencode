@@ -1,6 +1,6 @@
 {
   "name": "@opencode/app",
-  "version": "2.0.0",
+  "version": "2.0.18",
   "description": "",
   "type": "module",
   "exports": {
@@ -46,7 +46,6 @@
     "@sentry/vite-plugin": "catalog:",
     "@tailwindcss/vite": "4.3.3",
     "@types/bun": "catalog:",
-    "@types/luxon": "catalog:",
     "@types/node": "catalog:",
     "@typescript/native-preview": "catalog:",
     "diff": "catalog:",
@@ -84,14 +83,15 @@
     "@solidjs/router": "catalog:",
     "@tanstack/solid-query": "5.91.4",
     "@tanstack/solid-virtual": "catalog:",
+    "core-js": "3.50.0",
     "effect": "catalog:",
     "fuzzysort": "catalog:",
     "ghostty-web": "github:anomalyco/ghostty-web#83c0a07b8628b748aed073b232cb4b52a6ca11c1",
-    "luxon": "catalog:",
     "qr-scanner": "1.4.2",
     "remeda": "catalog:",
     "solid-js": "catalog:",
     "solid-presence": "0.2.0",
-    "tailwindcss": "4.3.3"
+    "tailwindcss": "4.3.3",
+    "uqr": "0.1.3"
   }
 }

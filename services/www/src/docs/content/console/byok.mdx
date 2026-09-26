@@ -1,0 +1,131 @@
+---
+title: "BYOK"
+description: "Call your own provider connections through the Console gateway with a Console key."
+---
+
+Bring your own key (BYOK) connects a provider account you already pay for to your workspace. Console stores the
+provider credential and gives each connection one gateway URL. Members and integrations call that URL with a Console
+key and never handle the provider secret.
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-chat",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+## Connect a provider
+
+1. In the [Console](https://opencode.ai/console), open **Providers** and click **Connect Provider**.
+2. Pick a provider from the catalog and paste its API key, or click **Add Custom Provider** for any other endpoint.
+3. Copy the **Console API URL** from the provider page.
+
+```text
+https://opencode.ai/inference/custom/<connection_id>
+```
+
+Catalog providers come with their models preconfigured. Custom providers need a few more fields:
+
+| Field      | Description                                                                       |
+| ---------- | --------------------------------------------------------------------------------- |
+| Base URL   | Where Console forwards requests, for example `https://api.deepseek.com/v1`.       |
+| API schema | Chat Completions, Responses API, Anthropic Compatible, or Google Generative AI.   |
+| Auth mode  | Bearer, API key header, or Custom header, plus the credential to send.            |
+| Models     | The model IDs members can request, with optional pricing used for usage tracking. |
+
+## Authentication
+
+Replace `<token>` with a service account key created in Console. Console swaps it for the connection's credential
+before forwarding, so the provider secret stays in the workspace.
+
+```text
+Authorization: Bearer <token>
+```
+
+Console also reads the key from `x-api-key`, `api-key`, or `x-goog-api-key`, so provider SDKs work when pointed at the
+Console API URL.
+
+## Endpoints
+
+Append the provider's API path to the Console API URL. Console forwards the request to the connection's base URL and
+returns the provider response unchanged.
+
+| API schema           | Path                              |
+| -------------------- | --------------------------------- |
+| Chat Completions     | `/chat/completions`               |
+| Responses API        | `/responses`                      |
+| Anthropic Compatible | `/messages`                       |
+| Google Generative AI | `/models/<model>:generateContent` |
+
+Send the model ID as it appears on the provider page. When a model has a different API ID upstream, Console rewrites it.
+Requests for models that are not enabled on the connection are rejected.
+
+### Chat Completions
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../chat/completions" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "deepseek-chat",
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Responses API
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../responses" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-5.4",
+    "input": "Say hi"
+  }'
+```
+
+### Anthropic Compatible
+
+`max_tokens` is required.
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../messages" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "claude-sonnet-4-6",
+    "max_tokens": 1024,
+    "messages": [{ "role": "user", "content": "Say hi" }]
+  }'
+```
+
+### Google Generative AI
+
+The model and method are part of the path. Replace `:generateContent` with `:streamGenerateContent` to stream the
+response.
+
+```bash
+curl -X POST "https://opencode.ai/inference/custom/conn_.../models/gemini-3.1-pro:generateContent" \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "contents": [{ "parts": [{ "text": "Say hi" }] }]
+  }'
+```
+
+## Use in OpenCode
+
+Members do not need the gateway URL. Connections appear as providers in OpenCode for everyone who connects to the
+workspace with `/connect`, and `/models` lists their enabled models.
+
+```text
+/connect
+```
+
+## Usage and limits
+
+The provider bills you for the tokens. Console records every request and, using the pricing configured on the model,
+counts it toward workspace and member monthly limits.

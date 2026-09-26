@@ -34,7 +34,7 @@ test("a concurrent same-version start cannot invalidate a resolved endpoint", as
 
   expect(starts).toEqual([])
   expect(await Bun.file(registration).json()).toEqual(original)
-  expect(await health(resolved.url)).toEqual({ healthy: true, version: "test", pid: original.pid })
+  expect(await status(resolved.url)).toMatchObject({ version: "test", pid: original.pid })
 })
 
 test("reuses a compatible registered service", async () => {
@@ -107,7 +107,7 @@ test("waits for a registered service to finish starting", async () => {
   await fixture.waitForFile()
   const result = run(ensure({ file: registration, version: "test", command: [] }))
 
-  await fixture.waitForFile(registration + ".health-request")
+  await fixture.waitForFile(registration + ".status-request")
   expect(process.exitCode).toBe(null)
   await writeFile(registration + ".release", "")
   expect((await result).url).toBe((await Bun.file(registration).json()).url)
@@ -146,7 +146,7 @@ test("evicts an unresponsive registered service before starting its replacement"
   expect(await existing.exited).toBe(0)
   expect(replacement.pid).not.toBe(original.pid)
   expect(endpoint.url).toBe(replacement.url)
-  expect(await health(endpoint.url)).toEqual({ healthy: true, version: "test", pid: replacement.pid })
+  expect(await status(endpoint.url)).toMatchObject({ version: "test", pid: replacement.pid })
 })
 
 test("signals an unresponsive registered service process", async () => {
@@ -180,20 +180,6 @@ test("signals an incompatible service before starting its replacement", async ()
   expect(endpoint.url).toBe(replacement.url)
 })
 
-test("a legacy health response is still replaced", async () => {
-  await using fixture = await serviceFixture()
-  const registration = fixture.registration
-  const existing = fixture.spawn("legacy")
-  await fixture.waitForFile()
-
-  const starts: EnsureReason[] = []
-  const result = run(ensure({ file: registration, command: [], onStart: (reason) => starts.push(reason) }))
-
-  await expect(result).rejects.toThrow("Missing service command")
-  expect(starts).toEqual(["version-mismatch"])
-  await existing.exited
-})
-
 test("waits for a slow winner while bounding lock probes", async () => {
   await using fixture = await serviceFixture()
   const registration = fixture.registration
@@ -208,7 +194,7 @@ test("waits for a slow winner while bounding lock probes", async () => {
   fixture.track(info.pid)
 
   expect(endpoint.url).toBe(info.url)
-  expect(await health(endpoint.url)).toEqual({ healthy: true, version: "test", pid: info.pid })
+  expect(await status(endpoint.url)).toMatchObject({ version: "test", pid: info.pid })
   expect((await Bun.file(registration + ".starts").text()).trim().split("\n")).toHaveLength(2)
 })
 
@@ -313,6 +299,6 @@ function run<A, E>(effect: Effect.Effect<A, E, FileSystem.FileSystem>) {
   return Effect.runPromise(effect.pipe(Effect.provide(NodeFileSystem.layer)))
 }
 
-async function health(url: string) {
-  return fetch(new URL("/api/health", url), { signal: AbortSignal.timeout(1_000) }).then((response) => response.json())
+async function status(url: string) {
+  return fetch(new URL("/api/info", url), { signal: AbortSignal.timeout(1_000) }).then((response) => response.json())
 }

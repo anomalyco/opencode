@@ -51,6 +51,15 @@ describe("command keybind helpers", () => {
     ).toBe(true)
   })
 
+  test("matchKeybind uses the letter key for option-modified characters", () => {
+    expect(
+      matchKeybind(
+        parseKeybind("meta+alt+l"),
+        new KeyboardEvent("keydown", { key: "¬", code: "KeyL", metaKey: true, altKey: true }),
+      ),
+    ).toBe(true)
+  })
+
   test("formatKeybind returns human readable output", () => {
     const display = formatKeybind("ctrl+alt+arrowup")
 

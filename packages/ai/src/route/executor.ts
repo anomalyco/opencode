@@ -1,4 +1,4 @@
-import { Cause, Context, Effect, Layer, Option, Schema, Stream } from "effect"
+import { Cause, Effect, Layer, Option, Schema, Stream } from "effect"
 import {
   FetchHttpClient,
   Headers,
@@ -9,23 +9,10 @@ import {
 } from "effect/unstable/http"
 import { HttpContext, HttpRateLimitDetails, AIError, TransportError } from "../schema/index.js"
 import { classifyProviderFailure } from "../provider-error.js"
+import { Service, type HttpMiddleware, type Interface } from "./executor-service.js"
 
-export interface Interface {
-  readonly execute: (
-    request: HttpClientRequest.HttpClientRequest,
-    middleware?: HttpMiddleware,
-  ) => Effect.Effect<HttpClientResponse.HttpClientResponse, AIError>
-}
-
-export type HttpHandler = (
-  request: HttpClientRequest.HttpClientRequest,
-) => Effect.Effect<HttpClientResponse.HttpClientResponse, Error>
-export type HttpMiddleware = (
-  request: HttpClientRequest.HttpClientRequest,
-  handler: HttpHandler,
-) => Effect.Effect<HttpClientResponse.HttpClientResponse, Error>
-
-export class Service extends Context.Service<Service, Interface>()("@opencode/AI/RequestExecutor") {}
+export { Service } from "./executor-service.js"
+export type { HttpHandler, HttpMiddleware, Interface } from "./executor-service.js"
 
 const headerDetails = (headers: Headers.Headers) =>
   Object.fromEntries(Object.entries(headers).map(([name, value]) => [name, String(value)]))
@@ -267,5 +254,21 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
 )
 
 export const fetchLayer = layer.pipe(Layer.provide(FetchHttpClient.layer))
+
+/** Run `fn` on every request: it sees the raw response before status classification, inside middleware already on `executor`, and outside per-call middleware. */
+export const middleware = (fn: HttpMiddleware, executor: Layer.Layer<Service> = fetchLayer): Layer.Layer<Service> =>
+  Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const inner = yield* Service
+      return Service.of({
+        execute: (request, next) =>
+          inner.execute(
+            request,
+            next === undefined ? fn : (input, handler) => fn(input, (forwarded) => next(forwarded, handler)),
+          ),
+      })
+    }),
+  ).pipe(Layer.provide(executor))
 
 export * as RequestExecutor from "./executor.js"

@@ -1,0 +1,42 @@
+/* Desktop controls use the default cursor; the pointer cursor is reserved for links. */
+:where(
+  .cursor-pointer:not(a):not([role="link"]),
+  .session-service-config,
+  [data-component="timeline-detail-control"] input[type="range"],
+  .project-settings-server-link,
+  .project-settings-icon,
+  .settings-back,
+  .settings-providers-view-all,
+  .settings-keybind-button,
+  .settings-wsl-catalog-card,
+  [data-component="file-tree-v2"] [data-slot="file-tree-v2-row"],
+  .toast-v2 [data-close-button],
+  [data-slot="segmented-control-v2-item"],
+  [data-slot="line-comment-v2-overflow"],
+  [data-slot="line-comment-v2-mention-item"],
+  [data-slot="text-input-v2-icon-button"],
+  button[data-component="button-v2"]:not([role="link"]),
+  [data-slot="dialog-close-button"],
+  [data-slot="field-v2-label-info"],
+  [data-component="line-comment"][data-inline][data-variant="default"]
+    [data-slot="line-comment-popover"][data-inline-body],
+  [data-component="attachment-card"][data-clickable],
+  [data-slot="user-message-attachment"][data-clickable],
+  span[data-slot="basic-tool-tool-subtitle"].clickable:not(.webfetch-link),
+  [role="button"]:not([aria-disabled="true"]) [data-component="tool-trigger"][data-clickable="true"],
+  [data-component="context-tool-group-trigger"] [data-slot="collapsible-arrow"],
+  [data-slot="question-option"],
+  [data-slot="question-progress-segment"],
+  [data-slot="question-minimized-trigger"],
+  [data-slot="session-review-view-button"],
+  [data-slot="exa-tool-more"],
+  [data-slot="session-turn-diffs-toggle"],
+  [data-slot="session-turn-diffs-more"],
+  button[style*="cursor: pointer"]
+):not(:disabled) {
+  cursor: default !important;
+}
+
+.settings-extension-link {
+  cursor: pointer;
+}

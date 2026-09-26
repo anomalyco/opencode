@@ -94,20 +94,24 @@ describe("acp service lifecycle", () => {
     })
 
     const loaded = await fixture.service.loadSession({
-      cwd: "/ignored",
+      cwd: "/workspace",
       sessionId: "ses_loaded",
       mcpServers: [],
     })
     const resumed = await fixture.service.resumeSession({
-      cwd: "/ignored",
+      cwd: "/workspace",
       sessionId: "ses_resume",
       mcpServers: [],
     })
     const forked = await fixture.service.forkSession({
-      cwd: "/ignored",
+      cwd: "/workspace",
       sessionId: "ses_loaded",
       mcpServers: [],
     })
+    const mismatched = await fixture.service
+      .loadSession({ cwd: "/elsewhere", sessionId: "ses_loaded", mcpServers: [] })
+      .catch((error: unknown) => error)
+    expect(mismatched).toMatchObject({ _tag: "ACPSessionDirectoryMismatchError", cwd: "/elsewhere" })
 
     expect(currentValue(loaded, "model")).toBe("test/second-model")
     expect(currentValue(loaded, "effort")).toBe("medium")
@@ -168,7 +172,7 @@ describe("acp service lifecycle", () => {
       method: "POST",
       path: "/api/session/ses_loaded/fork",
       query: {},
-      body: { boundary: { type: "through" } },
+      body: {},
     })
   })
 
@@ -214,7 +218,8 @@ describe("acp service lifecycle", () => {
     ])
   })
 
-  test("cancel preserves the attachment while close removes it and interrupts best-effort", async () => {
+  test("cancel preserves the attachment while close removes it and surfaces interrupt failures", async () => {
+    const interrupt = { fail: true }
     await using fixture = makeACPFixture({
       fetch(request) {
         if (request.method === "POST" && request.path === "/api/session") {
@@ -223,8 +228,14 @@ describe("acp service lifecycle", () => {
         if (request.method === "POST" && request.path === "/api/session/ses_lifecycle/model") {
           return new Response(null, { status: 204 })
         }
+        if (request.method === "POST" && request.path === "/api/session/missing/interrupt") {
+          return Response.json(
+            { _tag: "SessionNotFoundError", sessionID: "missing", message: "session not found" },
+            { status: 404 },
+          )
+        }
         if (request.method === "POST" && request.path.endsWith("/interrupt")) {
-          return new Response(null, { status: 500 })
+          return interrupt.fail ? new Response(null, { status: 500 }) : Response.json({ interrupted: false })
         }
         return undefined
       },
@@ -239,6 +250,9 @@ describe("acp service lifecycle", () => {
     })
 
     expect(currentValue(updated, "effort")).toBe("high")
+    const failed = await fixture.service.closeSession({ sessionId: created.sessionId }).catch((error: unknown) => error)
+    expect(failed).toMatchObject({ name: "ClientError", reason: "UnexpectedStatus" })
+    interrupt.fail = false
     expect(await fixture.service.closeSession({ sessionId: created.sessionId })).toEqual({})
     const missing = await fixture.service
       .setSessionConfigOption({
@@ -252,6 +266,7 @@ describe("acp service lifecycle", () => {
     expect(
       fixture.requests.filter((request) => request.path.endsWith("/interrupt")).map((request) => request.path),
     ).toEqual([
+      "/api/session/ses_lifecycle/interrupt",
       "/api/session/ses_lifecycle/interrupt",
       "/api/session/ses_lifecycle/interrupt",
       "/api/session/missing/interrupt",

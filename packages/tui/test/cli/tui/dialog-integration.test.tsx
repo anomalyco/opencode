@@ -1,6 +1,6 @@
 /** @jsxImportSource @opentui/solid */
 import { InputRenderable, TextareaRenderable } from "@opentui/core"
-import type { LocationRef } from "@opencode/client"
+import type { FormFields, LocationRef } from "@opencode/client"
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { onMount } from "solid-js"
@@ -44,6 +44,31 @@ test("opens the key connection prompt from the initially focused add account row
     await fixture.app.waitForFrame((frame) => frame.includes("API key") && !frame.includes("Connected accounts"))
 
     expect(fixture.requests).toEqual([])
+  } finally {
+    fixture.app.renderer.destroy()
+  }
+})
+
+test("skips hidden authentication fields and sends their defaults", async () => {
+  const fixture = await renderIntegration(undefined, [
+    { type: "string", key: "server", title: "Console URL", hidden: true, default: "https://example.com/console" },
+    { type: "string", key: "optional", hidden: true },
+  ])
+
+  try {
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitFor(() => fixture.app.renderer.currentFocusedEditor instanceof TextareaRenderable)
+    expect(fixture.app.captureCharFrame()).not.toContain("Console URL")
+    await fixture.app.mockInput.typeText("test-key")
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitFor(() => fixture.requests.length === 1)
+    expect(fixture.requests).toEqual([
+      {
+        method: "POST",
+        path: "/api/integration/openai/connect/key",
+        body: { key: "test-key", answer: { server: "https://example.com/console" } },
+      },
+    ])
   } finally {
     fixture.app.renderer.destroy()
   }
@@ -129,7 +154,7 @@ test("requires delete confirmation and preserves the account manager when anothe
     await fixture.app.waitForFrame((frame) => frame.includes("Connected accounts") && !frame.includes("Work"))
 
     expect(fixture.requests).toEqual([{ method: "DELETE", path: "/api/credential/cred_work" }])
-    expect(fixture.accounts).toEqual([{ type: "credential", id: "cred_personal", label: "Personal" }])
+    expect(fixture.accounts).toEqual([{ type: "credential", method: "key", id: "cred_personal", label: "Personal" }])
     expect(fixture.reads.model).toBe(0)
     expect(fixture.reads.provider).toBe(0)
     expect(fixture.app.captureCharFrame()).toContain("Add account")
@@ -173,7 +198,7 @@ test("marks the remaining account active after deleting the active credential", 
     })
 
     expect(fixture.requests).toEqual([{ method: "DELETE", path: "/api/credential/cred_personal" }])
-    expect(fixture.accounts).toEqual([{ type: "credential", id: "cred_work", label: "Work" }])
+    expect(fixture.accounts).toEqual([{ type: "credential", method: "key", id: "cred_work", label: "Work" }])
   } finally {
     fixture.app.renderer.destroy()
   }
@@ -204,8 +229,8 @@ test("hides account rename and delete actions while the add account row is selec
   }
 })
 
-test("uses the active location for integration data and credential requests", async () => {
-  const location = { directory: "/remote/project", workspaceID: "workspace_test" }
+test("uses the active location for integration data without scoping credential requests", async () => {
+  const location = { directory: "/remote/project" }
   const fixture = await renderIntegration(location)
 
   try {
@@ -216,28 +241,28 @@ test("uses the active location for integration data and credential requests", as
     await fixture.app.waitFor(() => fixture.requests.length === 1)
     expect(fixture.locations).toContainEqual(location)
     expect(fixture.locations.at(-1)).toEqual(location)
+    expect(fixture.credentialQueries).toEqual([""])
   } finally {
     fixture.app.renderer.destroy()
   }
 })
 
-async function renderIntegration(activeLocation?: LocationRef) {
+async function renderIntegration(activeLocation?: LocationRef, form?: FormFields) {
   const events = createEventStream()
-  const requests: Array<{ method: string; path: string; body?: { label: string } }> = []
+  const requests: Array<{ method: string; path: string; body?: unknown }> = []
   const locations: LocationRef[] = []
+  const credentialQueries: string[] = []
   const reads = { integration: 0, model: 0, provider: 0 }
   let accounts = [
-    { type: "credential" as const, id: "cred_personal", label: "Personal" },
-    { type: "credential" as const, id: "cred_work", label: "Work" },
+    { type: "credential" as const, method: "key" as const, id: "cred_personal", label: "Personal" },
+    { type: "credential" as const, method: "key" as const, id: "cred_work", label: "Work" },
   ]
 
   const calls = createFetch(async (url, request) => {
     const directory =
       url.searchParams.get("location[directory]") ??
       decodeURIComponent(request.headers.get("x-opencode-directory") ?? process.cwd())
-    const workspaceID =
-      url.searchParams.get("location[workspace]") ?? request.headers.get("x-opencode-workspace") ?? undefined
-    const requestedLocation = { directory, ...(workspaceID ? { workspaceID } : {}) }
+    const requestedLocation = { directory }
     const location = {
       ...requestedLocation,
       project: { id: "proj_test", directory, canonical: directory },
@@ -252,11 +277,16 @@ async function renderIntegration(activeLocation?: LocationRef) {
           {
             id: "openai",
             name: "OpenAI",
-            methods: [{ type: "key", label: "API key" }],
+            methods: [{ type: "key", label: "API key", form }],
             connections: [...accounts, { type: "env", name: "OPENAI_API_KEY" }],
           },
         ],
       })
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/integration/openai/connect/key") {
+      requests.push({ method: request.method, path: url.pathname, body: await request.json() })
+      return new Response(null, { status: 204 })
     }
 
     if (url.pathname === "/api/model") {
@@ -270,7 +300,7 @@ async function renderIntegration(activeLocation?: LocationRef) {
     }
 
     if (request.method === "POST" && /^\/api\/credential\/[^/]+\/activate$/.test(url.pathname)) {
-      locations.push(requestedLocation)
+      credentialQueries.push(url.search)
       const id = url.pathname.split("/")[3]
       const active = accounts.find((account) => account.id === id)
       if (!active) throw new Error(`unknown credential: ${id}`)
@@ -362,6 +392,7 @@ async function renderIntegration(activeLocation?: LocationRef) {
     reads,
     requests,
     locations,
+    credentialQueries,
     get accounts() {
       return accounts
     },

@@ -44,7 +44,8 @@ const it = testEffect(
   ),
 )
 
-const setup = Effect.fnUntraced(function* (endpoint = false) {
+const setup = Effect.fnUntraced(function* (options: { endpoint?: boolean } = {}) {
+  const endpoint = options.endpoint ?? false
   const db = (yield* Database.Service).db
   const bus = yield* Bus.Service
   const inbox = yield* SessionInbox.Service
@@ -54,7 +55,7 @@ const setup = Effect.fnUntraced(function* (endpoint = false) {
   const hooks = yield* PluginHooks.Service
   const blocked = Deferred.makeUnsafe<void>()
   const hanging = Promise.withResolvers<Response>()
-  const state = { failure: false, flaky: false, hang: false, overflow: false, localFailure: false, calls: 0 }
+  const state = { failure: false, flaky: false, hang: false, overflow: false, calls: 0 }
   const bodies: Record<string, unknown>[] = []
   const headers: Headers[] = []
   const server = yield* Effect.acquireRelease(
@@ -84,7 +85,7 @@ const setup = Effect.fnUntraced(function* (endpoint = false) {
             )
           }
           const trigger = JSON.stringify(bodies.at(-1)).includes("compaction_trigger")
-          if (state.overflow && (trigger || state.localFailure))
+          if (state.overflow && trigger)
             return Response.json(
               {
                 error: {
@@ -111,26 +112,8 @@ const setup = Effect.fnUntraced(function* (endpoint = false) {
               usage: { input_tokens: 20, output_tokens: 4, total_tokens: 24 },
             })
           const output = trigger ? [checkpoint] : []
-          const summary = state.overflow
-            ? [
-                {
-                  type: "response.output_item.added",
-                  output_index: 0,
-                  item: { type: "message", id: "summary", role: "assistant", content: [] },
-                },
-                {
-                  type: "response.output_text.delta",
-                  item_id: "summary",
-                  output_index: 0,
-                  content_index: 0,
-                  delta: "## Objective\n- Recovered locally",
-                },
-              ]
-                .map((event) => `data: ${JSON.stringify(event)}\n\n`)
-                .join("")
-            : ""
           return new Response(
-            `${summary}data: ${JSON.stringify({
+            `data: ${JSON.stringify({
               type: "response.completed",
               response: {
                 id: `resp_${state.calls}`,
@@ -161,7 +144,7 @@ const setup = Effect.fnUntraced(function* (endpoint = false) {
       capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
       cost: [],
       limit: { context: 200_000, output: 32_000 },
-      compaction: { mode: "provider" },
+      compaction: { type: "native" },
     },
   )
   const sessionID = SessionSchema.ID.create()
@@ -214,7 +197,6 @@ const setup = Effect.fnUntraced(function* (endpoint = false) {
       model,
       initial: history.initial,
       messages: history.messages,
-      instructionUpdate: history.instructionUpdate,
       agent: { id: Agent.defaultID, info: Agent.Info.default(Agent.defaultID) },
       tools: {
         definitions: [
@@ -224,14 +206,11 @@ const setup = Effect.fnUntraced(function* (endpoint = false) {
       },
     }
   })
+  // Opens the compaction's message as the runner does when it delivers `/compact`.
   const compact = Effect.gen(function* () {
-    return yield* compaction.compactManual({
-      session,
-      messages: yield* store.context(sessionID),
-      inputID: SessionMessage.ID.create(),
-      resolveContext: () => load,
-      prepare: requests.compaction,
-    })
+    const inputID = SessionMessage.ID.create()
+    yield* bus.publish(SessionEvent.Compaction.Started, { sessionID, reason: "manual", recent: "", inputID })
+    return yield* compaction.compact({ reason: "manual", context: yield* load, inputID })
   })
   const checkpoint = Effect.gen(function* () {
     const messages = (yield* load).messages
@@ -246,8 +225,9 @@ const setup = Effect.fnUntraced(function* (endpoint = false) {
   })
   return {
     compact,
-    automatic: Effect.gen(function* () {
-      return yield* compaction.compact({ context: yield* load, prepare: requests.compaction })
+    // An automatic compaction that skips the "is it due" check, which a context this small never passes.
+    overflow: Effect.gen(function* () {
+      return yield* compaction.compact({ reason: "overflow", context: yield* load })
     }),
     checkpoint,
     prompt,
@@ -261,6 +241,7 @@ const setup = Effect.fnUntraced(function* (endpoint = false) {
     store,
     hooks,
     model,
+    compaction,
   }
 })
 
@@ -348,20 +329,22 @@ it.live(
 
 it.live("manual and automatic endpoint compaction keep the provider replacement unchanged", () =>
   Effect.gen(function* () {
-    const fixture = yield* setup(true)
+    const fixture = yield* setup({ endpoint: true })
     yield* fixture.prompt("Original user")
     expect(yield* fixture.compact).toEqual({ status: "completed" })
-    expect(yield* fixture.automatic).toEqual({ status: "completed" })
+    yield* fixture.prompt("Later user")
+    expect(yield* fixture.overflow).toEqual({ status: "completed" })
     const replacement = SessionProviderContext.decode(yield* fixture.checkpoint)
     expect(replacement[0]?.content).toEqual([Message.text("endpoint retained")])
     expect(JSON.stringify(replacement)).not.toContain("Original user")
     expect(fixture.state.calls).toBe(2)
     expect(fixture.headers[0]?.get("x-http-hook")).toBe("compaction")
+    expect(fixture.bodies[0]).toMatchObject({ tools: [expect.objectContaining({ name: "read" })] })
     expect(fixture.bodies[0]).not.toHaveProperty("context_management")
   }),
 )
 
-it.live("only known automatic native overflow falls back locally and failed recovery retains the checkpoint", () =>
+it.live("automatic native failures, interruptions, and overflows retain the checkpoint", () =>
   Effect.gen(function* () {
     const fixture = yield* setup()
     yield* fixture.prompt("Original durable request")
@@ -369,12 +352,12 @@ it.live("only known automatic native overflow falls back locally and failed reco
     const installed = yield* fixture.checkpoint
     yield* fixture.prompt("Recent request")
     fixture.state.failure = true
-    expect(yield* fixture.automatic).toMatchObject({ status: "failed", error: { type: "provider.rate-limit" } })
+    expect(yield* fixture.overflow).toMatchObject({ status: "failed", error: { type: "provider.rate-limit" } })
     expect(fixture.state.calls).toBe(2)
     expect(yield* fixture.checkpoint).toEqual(installed)
     fixture.state.failure = false
     fixture.state.hang = true
-    const pending = yield* fixture.automatic.pipe(Effect.forkScoped)
+    const pending = yield* fixture.overflow.pipe(Effect.forkScoped)
     yield* Deferred.await(fixture.blocked)
     yield* Fiber.interrupt(pending)
     expect((yield* fixture.load).messages.at(-1)).toMatchObject({
@@ -384,19 +367,12 @@ it.live("only known automatic native overflow falls back locally and failed reco
     })
     expect(yield* fixture.checkpoint).toEqual(installed)
     fixture.state.hang = false
+    // Overflow retries natively, with the provider's window, and gives up once nothing is left to shrink.
     fixture.state.overflow = true
-    fixture.state.localFailure = true
-    expect(yield* fixture.automatic).toMatchObject({ status: "failed" })
-    expect(fixture.state.calls).toBe(5)
+    expect(yield* fixture.overflow).toMatchObject({ status: "failed", error: { type: "compaction.failed" } })
+    expect(fixture.state.calls).toBe(4)
+    expect(JSON.stringify(fixture.bodies[3])).toContain("encrypted_1")
     expect(yield* fixture.checkpoint).toEqual(installed)
-    expect(JSON.stringify(fixture.bodies[4])).toContain("Original durable request")
-    expect(JSON.stringify(fixture.bodies[4])).not.toContain("encrypted_1")
-    fixture.state.localFailure = false
-    expect(yield* fixture.automatic).toEqual({ status: "completed", recoveredOverflow: true })
-    expect(fixture.state.calls).toBe(7)
-    expect((yield* fixture.load).messages).toContainEqual(
-      expect.objectContaining({ type: "compaction", summary: "## Objective\n- Recovered locally" }),
-    )
   }),
 )
 
@@ -462,8 +438,8 @@ test("retained user budget counts attachments and drops whole oldest messages", 
     ...user("x".repeat(63_000 * 4)),
     files: [{ mime: "image/png", data: "aGVsbG8=", source: { type: "inline" as const } }],
   }
-  expect(SessionCompaction.retainUsers([user("old"), newest], model, 64_000)).toEqual([])
+  expect(SessionCompaction.recentUserMessages([user("old"), newest], model, 64_000)).toEqual([])
   expect(
-    SessionCompaction.retainUsers([user("x".repeat(63_000 * 4)), { ...newest, text: "new" }], model, 64_000),
+    SessionCompaction.recentUserMessages([user("x".repeat(63_000 * 4)), { ...newest, text: "new" }], model, 64_000),
   ).toHaveLength(1)
 })

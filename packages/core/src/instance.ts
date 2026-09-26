@@ -1,7 +1,8 @@
-import { Effect, Layer } from "effect"
+import { Context, Effect, Layer } from "effect"
 import { Agent } from "./agent.js"
 import { AISDK } from "./aisdk.js"
-import { Catalog } from "./catalog.js"
+import { Model } from "./model.js"
+import { Provider } from "./provider.js"
 import { Command } from "./command.js"
 import { Config } from "./config.js"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -17,6 +18,7 @@ import { Image } from "./image.js"
 import { LocationWatcher } from "./filesystem/location-watcher.js"
 import { Integration } from "./integration.js"
 import { Location } from "./location.js"
+import { LocationLifecycle } from "./location-lifecycle.js"
 import { FileAccess } from "./file-access.js"
 import { ModelResolver } from "./model-resolver.js"
 import { Mcp } from "./mcp/index.js"
@@ -25,8 +27,7 @@ import { Plugin } from "./plugin.js"
 import { PluginHooks } from "./plugin/hooks.js"
 import { InstancePlugins } from "./plugin/instance.js"
 import { PluginSupervisor } from "./plugin/supervisor.js"
-import { WorktreeRefresh } from "./worktree/refresh.js"
-import { Worktree } from "./worktree.js"
+import { WorktreeStrategies } from "./worktree/strategies.js"
 import { Pty } from "./pty.js"
 import { Shell } from "./shell.js"
 import { ShellSelect } from "./shell/select.js"
@@ -57,6 +58,7 @@ export { Service, node, type Interface } from "./instance/service.js"
 
 const nodes = [
   Location.node,
+  LocationLifecycle.node,
   Environment.node,
   Config.node,
   Agent.node,
@@ -65,15 +67,15 @@ const nodes = [
   Rpc.node,
   WebSearch.node,
   Integration.node,
-  Catalog.node,
+  Provider.node,
+  Model.node,
   ModelResolver.node,
   AISDK.node,
   Plugin.node,
   PluginHooks.node,
   InstancePlugins.node,
   PluginSupervisor.node,
-  WorktreeRefresh.node,
-  Worktree.node,
+  WorktreeStrategies.node,
   FileSystemSearch.node,
   FileSystem.node,
   ShellSelect.node,
@@ -157,6 +159,7 @@ export function layer(ref: Location.Ref, options: Options = {}): Layer.Layer<Ser
   return LayerNode.compile(graph, { replacements, shared: Node.tags.values.global }).pipe(
     // Instance boot failures are defects; provided operations retain their typed errors.
     Layer.orDie,
+    Layer.tap((context) => Effect.addFinalizer(() => Context.get(context, LocationLifecycle.Service).shutdown)),
     Layer.tap(() =>
       Effect.logInfo("location services booted", {
         directory: ref.directory,

@@ -30,27 +30,31 @@ describe("new on a non-constructible callee", () => {
     // Number is a real constructor in JS, so the message must not claim otherwise.
     const failure = await error(`return new Number(42)`)
     expect(failure.kind).toBe("ExecutionFailure")
-    expect(failure.message).toStartWith("new Number(...) is not supported; call Number(...) without new instead.")
+    expect(failure.message).toStartWith(
+      "TypeError: new Number(...) is not supported; call Number(...) without new instead.",
+    )
     expect(failure.suggestions).toBeUndefined()
-    expect((await error(`return new String("a")`)).message).toStartWith("new String(...) is not supported")
+    expect((await error(`return new String("a")`)).message).toStartWith("TypeError: new String(...) is not supported")
     expect((await error(`return new Math.abs(1)`)).message).toStartWith(
-      "new Math.abs(...) is not supported; call Math.abs(...) without new instead.",
+      "TypeError: new Math.abs(...) is not supported; call Math.abs(...) without new instead.",
     )
   })
 
   test("non-callable values are not constructors", async () => {
-    expect((await error(`return new tools.echo()`)).message).toStartWith("tools.echo is not a constructor.")
-    expect((await error(`return new (1)()`)).message).toStartWith("The called value is not a constructor.")
-    expect((await error(`const Date = 5; return new Date()`)).message).toStartWith("Date is not a constructor.")
+    expect((await error(`return new tools.echo()`)).message).toStartWith("TypeError: tools.echo is not a constructor.")
+    expect((await error(`return new (1)()`)).message).toStartWith("TypeError: The called value is not a constructor.")
+    expect((await error(`const Date = 5; return new Date()`)).message).toStartWith(
+      "TypeError: Date is not a constructor.",
+    )
   })
 
   test("user-defined functions explain the documented gap", async () => {
     const failure = await error(`function Point(x) { return { x } }; return new Point(1)`)
     expect(failure.message).toStartWith(
-      "Point cannot be constructed: user-defined constructors and classes are not supported. Call it as a function that returns a plain object instead.",
+      "TypeError: Point cannot be constructed: user-defined constructors and classes are not supported. Call it as a function that returns a plain object instead.",
     )
     expect((await error(`const make = () => ({}); return new make()`)).message).toStartWith(
-      "make cannot be constructed",
+      "TypeError: make cannot be constructed",
     )
   })
 
@@ -71,10 +75,8 @@ describe("new on a non-constructible callee", () => {
     const failure = await error(`class A {}; return new A()`)
     expect(failure.kind).toBe("UnsupportedSyntax")
     expect(failure.message).toStartWith(
-      "Syntax 'ClassDeclaration' is not supported. This is a restricted JavaScript-like language. Supported: ",
+      "SyntaxError: Syntax 'ClassDeclaration' is not supported. This is a restricted JavaScript-like language. Supported: ",
     )
-    expect(failure.message).toContain(
-      "Unsupported: classes, this, getters/setters, tagged templates, BigInt, and custom Symbols.",
-    )
+    expect(failure.message).toContain("Unsupported: classes, getters/setters, BigInt, and custom Symbols.")
   })
 })

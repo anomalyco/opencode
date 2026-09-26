@@ -1,11 +1,11 @@
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Fiber, Ref, Stream } from "effect"
+import { Deferred, Effect, Fiber, Layer, Ref, Stream } from "effect"
 import { Headers, HttpClientError, HttpClientRequest } from "effect/unstable/http"
 import { LLM, AIError, HttpContext, InvalidProviderOutputError, TransportError } from "../src/index.js"
 import { LLMClient, RequestExecutor, WebSocketTransport, type WebSocketChannelExecutor } from "../src/route.js"
 import { route } from "../src/protocols/openai-chat.js"
 import { configure } from "../src/providers/openai.js"
-import { dynamicResponse, fixedResponse, systemError } from "./lib/http.js"
+import { dynamicResponse, fixedResponse, handlerLayer, systemError } from "./lib/http.js"
 import { deltaChunk } from "./lib/openai-chunks.js"
 import { sseEvents, sseRaw } from "./lib/sse.js"
 import { it } from "./lib/effect.js"
@@ -195,6 +195,26 @@ describe("RequestExecutor", () => {
     ),
   )
 
+  it.effect("runs shared middleware outside per-call middleware", () => {
+    const calls: Array<string> = []
+    const record = (name: string) => Effect.sync(() => calls.push(name))
+    const base = RequestExecutor.layer.pipe(
+      Layer.provide(handlerLayer((input) => record("handler").pipe(Effect.as(input.respond("ok"))))),
+    )
+    return Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      yield* executor.execute(request, (input, next) => record("per-call").pipe(Effect.andThen(next(input))))
+      expect(calls).toEqual(["outer", "per-call", "handler"])
+      calls.length = 0
+      yield* executor.execute(request)
+      expect(calls).toEqual(["outer", "handler"])
+    }).pipe(
+      Effect.provide(
+        RequestExecutor.middleware((input, next) => record("outer").pipe(Effect.andThen(next(input))), base),
+      ),
+    )
+  })
+
   it.effect("classifies context overflow responses", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service
@@ -309,7 +329,7 @@ describe("RequestExecutor", () => {
     }),
   )
 
-  it.effect("classifies provider overloads hidden behind HTTP 400", () =>
+  it.effect("does not let server codes override a 4xx rejection", () =>
     Effect.gen(function* () {
       const classify = (body: string) =>
         Effect.gen(function* () {
@@ -317,11 +337,11 @@ describe("RequestExecutor", () => {
           const error = yield* executor.execute(request).pipe(Effect.flip)
 
           expectAIError(error)
-          expect(error.reason).toMatchObject({ _tag: "ProviderInternal" })
+          expect(error.reason).toMatchObject({ _tag: "InvalidRequest" })
         }).pipe(Effect.provide(fixedResponse(body, { status: 400 })))
 
       yield* classify('{"code":"resource_exhausted"}')
-      yield* classify('{"code":"service_unavailable"}')
+      yield* classify('{"error":{"type":"server_error","message":"Upstream request failed: Model is unavailable."}}')
     }),
   )
 

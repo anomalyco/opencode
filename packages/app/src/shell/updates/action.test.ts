@@ -19,6 +19,10 @@ describe("updaterAction", () => {
       label: "toast.update.action.installRestart",
       run: "install",
     })
+    expect(updaterAction({ status: "download-required", version: "2.0.0" })).toEqual({
+      label: "settings.updates.action.download",
+      run: "install",
+    })
     expect(updaterAction({ status: "installing", version: "2.0.0" })).toEqual({
       label: "settings.updates.action.installing",
     })

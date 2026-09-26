@@ -325,6 +325,7 @@ describe("provider package entrypoints", () => {
   test("requires an Anthropic-compatible base URL at runtime", async () => {
     const AnthropicCompatible = await import("@opencode/ai/providers/anthropic-compatible")
     expect(() =>
+      // oxlint-disable-next-line no-restricted-globals -- This test intentionally bypasses static required-option checks.
       Reflect.apply(AnthropicCompatible.model, undefined, ["compatible-model", { apiKey: "fixture" }]),
     ).toThrow(configuration("anthropic-compatible", "Anthropic-compatible providers require a baseURL"))
   })
@@ -333,6 +334,7 @@ describe("provider package entrypoints", () => {
     const Anthropic = await import("@opencode/ai/providers/anthropic")
     const AnthropicCompatible = await import("@opencode/ai/providers/anthropic-compatible")
     expect(() =>
+      // oxlint-disable-next-line no-restricted-globals -- This test intentionally passes a statically invalid option combination.
       Reflect.apply(AnthropicCompatible.model, undefined, [
         "compatible-model",
         {
@@ -343,6 +345,7 @@ describe("provider package entrypoints", () => {
       ]),
     ).toThrow(configuration("anthropic-compatible", "Anthropic-compatible apiKey cannot be combined with authToken"))
     expect(() =>
+      // oxlint-disable-next-line no-restricted-globals -- This test intentionally passes a statically invalid option combination.
       Reflect.apply(Anthropic.model, undefined, ["claude-sonnet-4-6", { apiKey: "fixture", authToken: "token" }]),
     ).toThrow(configuration("anthropic", "Anthropic apiKey cannot be combined with authToken"))
   })
@@ -490,11 +493,13 @@ describe("provider package entrypoints", () => {
     const GoogleVertexResponses = await import("@opencode/ai/providers/google-vertex/responses")
     const Providers = await import("@opencode/ai/providers")
     expect(() =>
+      // oxlint-disable-next-line no-restricted-globals -- This test intentionally passes a statically invalid option combination.
       Reflect.apply(GoogleVertex.model, undefined, [
         "gemini-3.5-flash",
         { accessToken: "token", apiKey: "fixture", project: "vertex-project" },
       ]),
     ).toThrow(configuration("google-vertex", "Google Vertex apiKey cannot be combined with accessToken or auth"))
+    // oxlint-disable-next-line no-restricted-globals -- This test intentionally passes a statically invalid option combination.
     const configured = Reflect.apply(GoogleVertex.configure, undefined, [
       { accessToken: "token", auth: {}, project: "vertex-project" },
     ])
@@ -502,34 +507,40 @@ describe("provider package entrypoints", () => {
       configuration("google-vertex", "Google Vertex accessToken cannot be combined with auth"),
     )
     expect(() =>
+      // oxlint-disable-next-line no-restricted-globals -- This test intentionally passes an unsupported authentication option.
       Reflect.apply(GoogleVertexMessages.model, undefined, [
         "claude-sonnet-4-6",
         { apiKey: "fixture", project: "vertex-project" },
       ]),
     ).toThrow(configuration("google-vertex", "Google Vertex Messages does not support API keys"))
     expect(() =>
+      // oxlint-disable-next-line no-restricted-globals -- This test intentionally passes an unsupported authentication option.
       Reflect.apply(Providers.GoogleVertexMessages.configure, undefined, [
         { apiKey: "fixture", project: "vertex-project" },
       ]),
     ).toThrow(configuration("google-vertex", "Google Vertex Messages does not support API keys"))
     expect(() =>
+      // oxlint-disable-next-line no-restricted-globals -- This test intentionally passes an unsupported authentication option.
       Reflect.apply(GoogleVertexChat.model, undefined, [
         "deepseek-ai/deepseek-v3.2-maas",
         { apiKey: "fixture", project: "vertex-project" },
       ]),
     ).toThrow(configuration("google-vertex", "Google Vertex Chat does not support API keys"))
     expect(() =>
+      // oxlint-disable-next-line no-restricted-globals -- This test intentionally passes an unsupported authentication option.
       Reflect.apply(Providers.GoogleVertexChat.configure, undefined, [
         { apiKey: "fixture", project: "vertex-project" },
       ]),
     ).toThrow(configuration("google-vertex", "Google Vertex Chat does not support API keys"))
     expect(() =>
+      // oxlint-disable-next-line no-restricted-globals -- This test intentionally passes an unsupported authentication option.
       Reflect.apply(GoogleVertexResponses.model, undefined, [
         "xai/grok-4.20-reasoning",
         { apiKey: "fixture", project: "vertex-project" },
       ]),
     ).toThrow(configuration("google-vertex", "Google Vertex Responses does not support API keys"))
     expect(() =>
+      // oxlint-disable-next-line no-restricted-globals -- This test intentionally passes an unsupported authentication option.
       Reflect.apply(Providers.GoogleVertexResponses.configure, undefined, [
         { apiKey: "fixture", project: "vertex-project" },
       ]),

@@ -20,7 +20,6 @@ test("session settings use the remote server context", async ({ page }) => {
   // one toggle sweeps every connected server, not just the focused one.
   await mockServers(page, permissionRequests, permissionResponses, {
     pending: { [serverA]: [pendingPermission("permission-pending-a", sessionA.id)] },
-    preferencesUnavailable: true,
   })
   await configureServers(page)
 
@@ -35,7 +34,7 @@ test("session settings use the remote server context", async ({ page }) => {
   await expect(page.locator('[data-titlebar-tab][data-active="true"]')).toHaveCount(0)
   await expect(page.getByRole("button", { name: "Home", exact: true })).toHaveAttribute("aria-pressed", "false")
   await expect(page.getByRole("dialog")).toHaveCount(0)
-  await expect(settings.getByRole("tablist")).toHaveCSS("width", "328px")
+  await expect(settings.getByRole("complementary")).toHaveCSS("width", "328px")
   await expect(sessionHeading).toBeHidden()
   await expect(settings.getByText("Servers", { exact: true })).toBeVisible()
   await expect(settings.getByRole("tab", { name: "Models", exact: true })).toHaveCount(0)
@@ -62,7 +61,7 @@ test("session settings use the remote server context", async ({ page }) => {
         directory: undefined,
         sessionID: sessionA.id,
         permissionID: "permission-pending-a",
-        body: { reply: "once" },
+        body: { decision: "once" },
       },
     ])
 
@@ -154,7 +153,7 @@ test("auto-accept responds for an unfocused server session", async ({ page }) =>
         directory: undefined,
         sessionID: sessionA.id,
         permissionID: "permission-background-a",
-        body: { reply: "once" },
+        body: { decision: "once" },
       },
     ])
 
@@ -181,14 +180,14 @@ test("auto-accept responds for an unfocused server session", async ({ page }) =>
         directory: undefined,
         sessionID: sessionA.id,
         permissionID: "permission-background-a",
-        body: { reply: "once" },
+        body: { decision: "once" },
       },
       {
         origin: serverA,
         directory: undefined,
         sessionID: childSessionA.id,
         permissionID: "permission-background-a-child",
-        body: { reply: "once" },
+        body: { decision: "once" },
       },
     ])
 })
@@ -244,7 +243,7 @@ test("auto-accept sweeps again after a reconnect", async ({ page }) => {
         directory: undefined,
         sessionID: sessionA.id,
         permissionID: "permission-offline-a",
-        body: { reply: "once" },
+        body: { decision: "once" },
       },
     ])
   // The reconnect sweep must resync active sessions instead of trusting
@@ -281,7 +280,7 @@ test("auto-accept approves a request discovered by opening a session", async ({ 
         directory: undefined,
         sessionID: sessionA.id,
         permissionID: "permission-synced-a",
-        body: { reply: "once" },
+        body: { decision: "once" },
       },
     ])
 })
@@ -326,7 +325,6 @@ type MockServerOptions = {
   listFailures?: Record<string, number>
   // Records /api/session/:id GETs so tests can assert session resyncs.
   sessionGets?: string[]
-  preferencesUnavailable?: boolean
 }
 
 async function mockServers(
@@ -398,8 +396,6 @@ async function mockServers(
         },
       ])
     }
-    if (url.pathname === "/api/project/current")
-      return json(route, { id: remote ? sessionB.projectID : "project-server-a", directory, canonical: directory })
     if (url.pathname === "/api/session")
       return json(route, { data: sessions.map((session) => currentSession(session)), cursor: {} })
     if (url.pathname === "/api/session/active")
@@ -418,11 +414,8 @@ async function mockServers(
         directory,
         project: { id: remote ? sessionB.projectID : "project-server-a", directory, canonical: directory },
       })
-    if (url.pathname === "/api/config/preferences") return json(route, {}, options.preferencesUnavailable ? 404 : 200)
-    if (url.pathname === "/api/config/shell")
-      return json(route, options.preferencesUnavailable ? {} : [], options.preferencesUnavailable ? 404 : 200)
-    if (url.pathname === "/api/websearch/provider")
-      return json(route, { location: { directory }, data: [] }, options.preferencesUnavailable ? 404 : 200)
+    if (url.pathname === "/api/config/shell") return json(route, [])
+    if (url.pathname === "/api/websearch/provider") return json(route, { location: { directory }, data: [] })
     if (url.pathname === "/api/worktree") return json(route, [{ directory }])
     if (url.pathname === "/api/vcs")
       return json(route, { location: { directory }, data: { branch: "main", defaultBranch: "main" } })

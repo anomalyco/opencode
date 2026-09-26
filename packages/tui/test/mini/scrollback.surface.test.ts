@@ -29,6 +29,7 @@ afterEach(() => {
 })
 
 function claim(renderer: TestRenderer): ClaimedCommit[] {
+  // oxlint-disable-next-line no-restricted-globals -- OpenTUI does not expose its external-output queue publicly.
   const queue = Reflect.get(renderer, "externalOutputQueue")
   if (!queue || typeof queue !== "object" || !("claim" in queue) || typeof queue.claim !== "function") {
     throw new Error("renderer missing external output queue")
@@ -183,6 +184,7 @@ test("theme swaps restyle active reasoning without resetting the stream", async 
 })
 
 function activeSyntax(scrollback: RunScrollbackStream) {
+  // oxlint-disable-next-line no-restricted-globals -- RunScrollbackStream does not expose its active entry publicly.
   const entry = Reflect.get(scrollback, "active") as { renderable?: { syntaxStyle?: SyntaxStyle } } | undefined
   return entry?.renderable?.syntaxStyle
 }
@@ -277,12 +279,14 @@ test("renders monochrome scrollback as ASCII markdown", async () => {
 
   try {
     await out.scrollback.append(assistant("# H"))
+    // oxlint-disable-next-line no-restricted-globals -- RunScrollbackStream does not expose its active entry publicly.
     expect(Reflect.get(out.scrollback, "active")?.renderable).toBeInstanceOf(MarkdownRenderable)
     await out.scrollback.append(
       assistant(
         "éading →\n\n> “quote”\n\n---\n\n| A | B |\n| - | - |\n| α | β |\n\n• literal\n\n———\n\n[café](https://example.com/café)",
       ),
     )
+    // oxlint-disable-next-line no-restricted-globals -- RunScrollbackStream does not expose its active entry publicly.
     const active: unknown = Reflect.get(out.scrollback, "active")
     const renderable =
       active && typeof active === "object" && "renderable" in active && active.renderable instanceof MarkdownRenderable

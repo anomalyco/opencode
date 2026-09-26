@@ -1,92 +1,67 @@
-import { toData, toProgram } from "../data.js"
-import { HostNamespace, sync } from "../interpreter/host.js"
-import { get, ownEntries, ProgramArray, ProgramObject } from "../interpreter/objects.js"
-import { containsOpaqueReference, containsRuntimeReference, isRuntimeReference } from "../interpreter/references.js"
-import { Values } from "../values.js"
-import { coerceToString } from "./value.js"
+import { type Method, methods } from "../interpreter/native.js"
+import { entries, get, Arr, Obj, type Value } from "../interpreter/objects.js"
+import { ToolReference } from "../tool-runtime.js"
+import { containsOpaqueReference } from "../interpreter/references.js"
+import type { Interpreter } from "../interpreter/interpreter.js"
 
 const consoleMethods = ["log", "info", "debug", "warn", "error", "dir", "table"]
 
 /** Captured console: every method appends one formatted line to `logs`. */
-export const consoleGlobal = (logs: Array<string>) =>
-  new HostNamespace(
-    "console",
-    Object.fromEntries(
-      consoleMethods.map((name) => [
+export const consoleGlobal = <R>(ctx: Interpreter<R>) => {
+  const builtins = ctx.builtins
+  const console = new Obj(builtins.Object)
+  methods(
+    builtins,
+    console,
+    consoleMethods.map(
+      (name): Method => [
         name,
-        sync(`console.${name}`, (args) => {
-          logs.push(formatConsoleMessage(name, args))
+        0,
+        (_, args) => {
+          ctx.logs.push(formatConsoleMessage(name, args))
           return undefined
-        }),
-      ]),
+        },
+      ],
     ),
   )
+  return console
+}
 
 const MAX_CONSOLE_DEPTH = 32
 
-const formatConsoleMessage = (name: string, args: Array<unknown>): string => {
-  if (name === "dir") return args.length === 0 ? "undefined" : formatConsoleArgument(args[0])
+const formatConsoleMessage = (name: string, args: Array<Value>): string => {
+  if (name === "dir") return args.length === 0 ? "undefined" : formatValue(args[0])
   if (name === "table") return formatConsoleTable(args[0], args[1])
   const prefix = name === "warn" ? "[warn] " : name === "error" ? "[error] " : name === "debug" ? "[debug] " : ""
-  return `${prefix}${args.map((arg) => formatConsoleArgument(arg)).join(" ")}`
+  return `${prefix}${args.map((arg) => formatValue(arg)).join(" ")}`
 }
 
-const formatConsoleArgument = (value: unknown): string => {
+/** One value as `console.log` shows it. */
+export const formatValue = (value: Value): string => {
   if (value === undefined) return "undefined"
   if (typeof value === "string") return value
   return formatConsoleValue(value, new Set(), 0)
 }
 
-const formatConsoleValue = (value: unknown, seen: Set<object>, depth: number): string => {
+const formatConsoleValue = (value: Value, seen: Set<object>, depth: number): string => {
   if (value === null || value === undefined) return "null"
   if (typeof value === "string") return JSON.stringify(value)
-  if (typeof value === "number" || typeof value === "boolean") return String(value)
-  if (typeof value !== "object") return String(value)
-  if (value instanceof Values.Promise) return "[Promise (await it to get its value)]"
-  if (value instanceof Values.Date) return coerceToString(value)
-  if (value instanceof Values.RegExp) return coerceToString(value)
-  if (value instanceof Values.URL) return coerceToString(value)
-  if (value instanceof Values.URLSearchParams) return coerceToString(value)
+  if (!(value instanceof Obj)) return value instanceof ToolReference ? "[opaque reference]" : String(value)
   if (depth > MAX_CONSOLE_DEPTH) return "..."
   if (seen.has(value)) return "[Circular]"
-  if (value instanceof Values.Map) {
-    seen.add(value)
-    try {
-      const entries = Array.from(value.map.entries(), ([key, item]) => new ProgramArray([key, item]))
-      return `Map(${value.map.size}) ${formatConsoleValue(new ProgramArray(entries), seen, depth + 1)}`
-    } finally {
-      seen.delete(value)
-    }
-  }
-  if (value instanceof Values.Set) {
-    seen.add(value)
-    try {
-      return `Set(${value.set.size}) ${formatConsoleValue(new ProgramArray([...value.set.values()]), seen, depth + 1)}`
-    } finally {
-      seen.delete(value)
-    }
-  }
-  if (isRuntimeReference(value)) return "[opaque reference]"
   seen.add(value)
   try {
-    if (value instanceof ProgramArray) {
-      return `[${value.items.map((item) => formatConsoleValue(item, seen, depth + 1)).join(",")}]`
-    }
-    if (!(value instanceof ProgramObject)) return "[object Object]"
-    return `{${ownEntries(value)
-      .map(([key, item]) => `${JSON.stringify(key)}:${formatConsoleValue(item, seen, depth + 1)}`)
-      .join(",")}}`
+    return value.inspect((item) => formatConsoleValue(item, seen, depth + 1))
   } finally {
     seen.delete(value)
   }
 }
 
-const formatConsoleTable = (value: unknown, columnsArgument: unknown): string => {
+const formatConsoleTable = (value: Value, columnsArgument: Value): string => {
   if (value === undefined) return "undefined"
   if (containsOpaqueReference(value)) return "[opaque reference]"
-  const data = toProgram(value, "console.table argument")
-  const columns = consoleTableColumns(columnsArgument)
-  const rows = consoleTableRows(data, columns)
+  const columns = columnsArgument instanceof Arr ? columnsArgument.items.map(String) : undefined
+  const rows = consoleTableRows(value, columns)
   const keys = columns ?? Array.from(new Set(rows.flatMap((row) => Object.keys(row.values))))
   const header = ["(index)", ...keys].join("\t")
   return [
@@ -95,35 +70,28 @@ const formatConsoleTable = (value: unknown, columnsArgument: unknown): string =>
   ].join("\n")
 }
 
-const consoleTableColumns = (value: unknown): ReadonlyArray<string> | undefined => {
-  if (value === undefined) return undefined
-  if (containsRuntimeReference(value)) return undefined
-  const columns = toData(value, "console.table columns", "result")
-  return Array.isArray(columns) ? columns.map((column) => String(column)) : undefined
-}
-
 const consoleTableRows = (
-  data: unknown,
+  data: Value,
   columns: ReadonlyArray<string> | undefined,
-): Array<{ readonly index: string; readonly values: Record<string, unknown> }> => {
-  if (data instanceof ProgramArray) {
+): Array<{ readonly index: string; readonly values: Record<string, Value> }> => {
+  if (data instanceof Arr) {
     return data.items.map((item, index) => ({ index: String(index), values: consoleTableValues(item, columns) }))
   }
-  if (data instanceof ProgramObject) {
-    return ownEntries(data).map(([index, item]) => ({ index, values: consoleTableValues(item, columns) }))
+  if (data instanceof Obj) {
+    return entries(data).map(([index, item]) => ({ index, values: consoleTableValues(item, columns) }))
   }
   return [{ index: "0", values: { Value: data } }]
 }
 
-const consoleTableValues = (value: unknown, columns: ReadonlyArray<string> | undefined): Record<string, unknown> => {
-  if (value instanceof ProgramObject && !(value instanceof ProgramArray)) {
+const consoleTableValues = (value: Value, columns: ReadonlyArray<string> | undefined): Record<string, Value> => {
+  if (value instanceof Obj && !(value instanceof Arr)) {
     if (columns !== undefined) return Object.fromEntries(columns.map((column) => [column, get(value, column)]))
-    return Object.fromEntries(ownEntries(value))
+    return Object.fromEntries(entries(value))
   }
   return { Value: value }
 }
 
-const formatConsoleTableCell = (value: unknown): string => {
+const formatConsoleTableCell = (value: Value): string => {
   if (value === undefined) return ""
   if (typeof value === "string") return value
   return formatConsoleValue(value, new Set(), 0)

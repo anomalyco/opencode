@@ -1,12 +1,13 @@
-import type { AgentSideConnection, PermissionOption, ToolCallContent, ToolCallLocation } from "@agentclientprotocol/sdk"
+import type { PermissionOption, ToolCallContent, ToolCallLocation } from "@agentclientprotocol/sdk"
 import type { EventSubscribeOutput, OpenCodeClient } from "@opencode/client/promise"
 import { Patch } from "@opencode/util/patch"
 import { Result } from "effect"
 import { isAbsolute, resolve } from "node:path"
+import type { ACPConnection } from "./connection"
 import { pendingToolCall, stringValue, toLocations, toToolKind, type ToolInput } from "./tool"
 
 type PermissionEvent = Extract<EventSubscribeOutput, { type: "permission.asked" }>
-type Connection = Pick<AgentSideConnection, "requestPermission"> & Partial<Pick<AgentSideConnection, "writeTextFile">>
+type Connection = Pick<ACPConnection.Connection, "requestPermission" | "writeTextFile">
 type Tool = { readonly name: string; readonly input: ToolInput }
 
 const options: PermissionOption[] = [
@@ -25,37 +26,40 @@ export async function replyPermission(input: {
   readonly tool?: Tool
   readonly toolCallPrefix?: string
   readonly titlePrefix?: string
+  readonly signal?: AbortSignal
 }) {
   const toolName = input.tool?.name ?? input.event.data.action
   const toolInput = { ...input.event.data.metadata, ...input.tool?.input }
   const previews = await permissionPreviews(toolName, toolInput, input.cwd)
   const toolCallID = input.event.data.source?.id ?? input.event.data.id
   const title = permissionTitle(toolName, toolInput, previews)
-  const result = await input.connection
-    .requestPermission({
-      sessionId: input.clientSessionID ?? input.sessionID,
-      toolCall: {
-        ...pendingToolCall({
-          toolCallId: input.toolCallPrefix ? `${input.toolCallPrefix}:${toolCallID}` : toolCallID,
-          toolName,
-          state: {
-            input: toolInput,
-            title: prefixedTitle(input.titlePrefix, title),
-          },
-          cwd: input.cwd,
-        }),
-        locations: permissionLocations(toolName, toolInput, input.event.data.resources, input.cwd, previews),
-        ...(previews.length > 0 ? { content: previews } : {}),
-      },
-      options,
-    })
-    .catch(() => undefined)
+  const request = {
+    sessionId: input.clientSessionID ?? input.sessionID,
+    toolCall: {
+      ...pendingToolCall({
+        toolCallId: input.toolCallPrefix ? `${input.toolCallPrefix}:${toolCallID}` : toolCallID,
+        toolName,
+        state: {
+          input: toolInput,
+          title: prefixedTitle(input.titlePrefix, title),
+        },
+        cwd: input.cwd,
+      }),
+      locations: permissionLocations(toolName, toolInput, input.event.data.resources, input.cwd, previews),
+      ...(previews.length > 0 ? { content: previews } : {}),
+    },
+    options,
+  }
+  // An already-cancelled turn skips the round-trip; the SDK would still send the request and then cancel it.
+  const result = input.signal?.aborted
+    ? undefined
+    : await input.connection.requestPermission(request, { cancellationSignal: input.signal }).catch(() => undefined)
   const selected = result?.outcome.outcome === "selected" ? result.outcome.optionId : undefined
   const reply = selected === "once" || selected === "always" ? selected : "reject"
   await input.client.permission.reply({
     sessionID: input.sessionID,
     requestID: input.event.data.id,
-    reply,
+    decision: reply,
   })
 }
 
@@ -66,19 +70,20 @@ function prefixedTitle(prefix: string | undefined, title: string | undefined) {
 }
 
 export async function syncEditedFiles(input: {
-  readonly connection: Partial<Pick<AgentSideConnection, "writeTextFile">>
+  readonly connection: Pick<ACPConnection.Connection, "writeTextFile">
   readonly writeTextFile: boolean
   readonly sessionID: string
   readonly cwd: string
   readonly toolName: string
   readonly toolInput: ToolInput
   readonly metadata: Readonly<Record<string, unknown>>
+  readonly signal?: AbortSignal
 }) {
   if (!input.writeTextFile || !input.connection.writeTextFile || toToolKind(input.toolName) !== "edit") return
   const files = Array.isArray(input.metadata.files)
     ? input.metadata.files.flatMap((file): string[] => {
         if (!file || typeof file !== "object") return []
-        const path = Reflect.get(file, "file")
+        const path = "file" in file ? file.file : undefined
         return typeof path === "string" ? [path] : []
       })
     : []
@@ -89,7 +94,10 @@ export async function syncEditedFiles(input: {
       const target = resolvePath(path, input.cwd)
       const file = Bun.file(target)
       if (!(await file.exists())) return
-      await input.connection.writeTextFile?.({ sessionId: input.sessionID, path: target, content: await file.text() })
+      await input.connection.writeTextFile?.(
+        { sessionId: input.sessionID, path: target, content: await file.text() },
+        { cancellationSignal: input.signal },
+      )
     }),
   )
 }

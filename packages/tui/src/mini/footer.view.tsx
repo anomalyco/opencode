@@ -21,13 +21,14 @@ import {
   RunModelSelectBody,
   RunQueuedPromptSelectBody,
   RunSettingsBody,
-  RunSkillSelectBody,
   RunSubagentSelectBody,
   RunVariantSelectBody,
 } from "./footer.command"
 import { FOOTER_MENU_ROWS, RunFooterMenu } from "./footer.menu"
 import { RunFooterSubagentBody } from "./footer.subagent"
 import { RunPromptBody, createPromptState } from "./footer.prompt"
+import { promptAppend } from "./prompt.shared"
+import { promptOffsetWidth } from "../prompt/display"
 import { RunPermissionBody } from "./footer.permission"
 import { RunFormBody } from "./footer.form"
 import { createFormBodyState, type FormBodyState } from "./form.shared"
@@ -149,13 +150,11 @@ export function RunFooterView(props: RunFooterViewProps) {
   const [subagentMenuRows, setSubagentMenuRows] = createSignal(RUN_SUBAGENT_PANEL_ROWS)
   const queuedPrompts = createMemo(() => props.queuedPrompts?.() ?? [])
   const queue = createMemo(() => queuedPrompts().filter((item) => item.delivery === "queue"))
-  const skills = createMemo(() => (props.commands() ?? []).filter((item) => item.source === "skill"))
   const prompt = createMemo(() => active().type === "prompt" && route().type === "composer")
   const selectingSubagent = createMemo(() => active().type === "prompt" && route().type === "subagent-menu")
   const selectingQueued = createMemo(() => active().type === "prompt" && route().type === "queued-menu")
   const inspecting = createMemo(() => active().type === "prompt" && route().type === "subagent")
   const commanding = createMemo(() => active().type === "prompt" && route().type === "command")
-  const skilling = createMemo(() => active().type === "prompt" && route().type === "skill")
   const agenting = createMemo(() => active().type === "prompt" && route().type === "agent")
   const modeling = createMemo(() => active().type === "prompt" && route().type === "model")
   const varianting = createMemo(() => active().type === "prompt" && route().type === "variant")
@@ -167,7 +166,6 @@ export function RunFooterView(props: RunFooterViewProps) {
       selectingQueued() ||
       selectingSubagent() ||
       commanding() ||
-      skilling() ||
       agenting() ||
       modeling() ||
       varianting() ||
@@ -298,14 +296,6 @@ export function RunFooterView(props: RunFooterViewProps) {
     openRoute({ type: "agent" })
   }
 
-  const openSkillMenu = () => {
-    if (props.commands() && skills().length === 0) {
-      return
-    }
-
-    openRoute({ type: "skill" })
-  }
-
   const openVariant = () => {
     openRoute({ type: "variant" })
   }
@@ -332,7 +322,7 @@ export function RunFooterView(props: RunFooterViewProps) {
   }
 
   const runQueuedAction = createSingleFlight<string>()
-  const queuedPromptAction = async (action: QueuedPromptAction, inboxID: string) => {
+  const queuedPromptAction = async (action: QueuedPromptAction, inboxID: string, failureLabel?: string) => {
     const run = props.onQueuedPromptAction
     if (!run) return false
     const result = await runQueuedAction(inboxID, async () => {
@@ -341,7 +331,9 @@ export function RunFooterView(props: RunFooterViewProps) {
         (error) => error,
       )
       if (!error) return true
-      props.onStatus(`failed to ${action === "cancel" ? "delete" : action} pending prompt: ${errorMessage(error)}`)
+      props.onStatus(
+        `failed to ${failureLabel ?? (action === "cancel" ? "delete" : action)} pending prompt: ${errorMessage(error)}`,
+      )
       return false
     })
     return result ?? false
@@ -398,7 +390,6 @@ export function RunFooterView(props: RunFooterViewProps) {
     onInputClear: props.onInputClear,
     onExitRequest: props.onExitRequest,
     onExit: props.onExit,
-    onSkillMenu: openSkillMenu,
     onSettings: openSettings,
     onRows: setPromptRows,
     onStatus: props.onStatus,
@@ -424,6 +415,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     if (notice()) return notice()
     if (!footerDetails()) return shell() ? "Shell" : ""
     if (busy()) {
+      if (stateStatus() === "reconnecting") return "reconnecting"
       return interruptLabel() ? `${interruptLabel()} stop` : "Running"
     }
     return stateStatus() || (shell() ? "Shell" : "")
@@ -683,7 +675,6 @@ export function RunFooterView(props: RunFooterViewProps) {
     const current = route()
     if (
       current.type !== "command" &&
-      current.type !== "skill" &&
       current.type !== "agent" &&
       current.type !== "model" &&
       current.type !== "variant" &&
@@ -808,6 +799,17 @@ export function RunFooterView(props: RunFooterViewProps) {
                               )
                                 closePanel()
                             }}
+                            onUndo={async (item) => {
+                              const current = composer.current()
+                              if (current.mode === "shell" && current.text) {
+                                props.onStatus("leave shell mode before undoing a queued prompt")
+                                return
+                              }
+                              if (!(await queuedPromptAction("cancel", item.messageID, "undo"))) return
+                              closePanel()
+                              const next = promptAppend(composer.current(), item.prompt)
+                              composer.replacePrompt(next, promptOffsetWidth(next.text))
+                            }}
                             onDelete={(item) => {
                               void queuedPromptAction("cancel", item.messageID)
                             }}
@@ -830,7 +832,6 @@ export function RunFooterView(props: RunFooterViewProps) {
                               closePanel()
                               void composer.openEditor()
                             }}
-                            onSkill={openSkillMenu}
                             onSubagent={openSubagentMenu}
                             onQueued={openQueuedMenu}
                             onVariant={openVariant}
@@ -857,26 +858,6 @@ export function RunFooterView(props: RunFooterViewProps) {
                             }}
                             onExit={props.onExit}
                             clearShortcut={shortcut("app.clear")}
-                            mono={props.mono}
-                          />
-                        </Match>
-                        <Match when={skilling()}>
-                          <RunSkillSelectBody
-                            theme={theme}
-                            commands={props.commands}
-                            onClose={closePanel}
-                            onSelect={(name) => {
-                              composer.replacePrompt({
-                                text: `/${name} `,
-                                parts: [],
-                                command: {
-                                  name,
-                                  arguments: "",
-                                  source: "skill",
-                                },
-                              })
-                              closePanel()
-                            }}
                             mono={props.mono}
                           />
                         </Match>

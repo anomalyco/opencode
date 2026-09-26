@@ -74,7 +74,7 @@ for (const scenario of ["visible-output", "hidden-output", "full-scrollback-tear
               window.terminalProbe.draws++
               if (!this.canvas.checkVisibility()) window.terminalProbe.hiddenDraws++
             }
-            Reflect.apply(fill, this, args)
+            fill.apply(this, args)
           }
         })
       }

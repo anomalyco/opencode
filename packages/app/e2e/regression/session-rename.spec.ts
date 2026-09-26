@@ -11,9 +11,9 @@ test.beforeEach(async ({ page }) => {
     project: fixture.project,
     pageMessages,
   })
-  await page.route("**/api/session/*/rename", async (route) => {
-    if (route.request().method() !== "POST") return route.fallback()
-    const id = new URL(route.request().url()).pathname.split("/").at(-2)
+  await page.route("**/api/session/*", async (route) => {
+    if (route.request().method() !== "PATCH") return route.fallback()
+    const id = new URL(route.request().url()).pathname.split("/").at(-1)
     const session = sessions.find((item) => item.id === id)
     const payload: unknown = route.request().postDataJSON()
     if (
@@ -59,8 +59,10 @@ test("cancels the session heading with Escape", async ({ page }) => {
 })
 
 test("keeps the draft when saving the session heading fails", async ({ page }) => {
-  await page.route("**/api/session/*/rename", (route) =>
-    route.fulfill({ status: 500, headers: { "access-control-allow-origin": "*" } }),
+  await page.route("**/api/session/*", (route) =>
+    route.request().method() === "PATCH"
+      ? route.fulfill({ status: 500, headers: { "access-control-allow-origin": "*" } })
+      : route.fallback(),
   )
   await page.getByRole("heading", { name: fixture.expected.targetTitle, exact: true }).click()
   const input = page.locator('input[data-slot="session-title-child"]')

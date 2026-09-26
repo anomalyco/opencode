@@ -6,7 +6,7 @@ export async function checkHealth(url: string, password?: string | null): Promis
   }
 
   try {
-    const res = await fetch(new URL("/api/health", url), {
+    const res = await fetch(new URL("/api/info", url), {
       method: "GET",
       headers,
       signal: AbortSignal.timeout(3000),

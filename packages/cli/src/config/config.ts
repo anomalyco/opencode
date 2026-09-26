@@ -7,7 +7,7 @@ import { produce, type Draft } from "immer"
 import { applyEdits, modify, parse, type ParseError } from "jsonc-parser"
 import path from "path"
 import { ConfigMigration } from "./migrate"
-import { Info, SchemaURL } from "./schema"
+import { Info, normalizeLegacyTabs, SchemaURL } from "./schema"
 
 export * from "./schema"
 
@@ -20,7 +20,7 @@ export interface Interface {
 export class Service extends Context.Service<Service, Interface>()("@opencode/cli/config/Config") {}
 
 const decode = Schema.decodeUnknownOption(Info)
-const decodeRecord = Schema.decodeUnknownOption(Schema.Record(Schema.String, Schema.Any))
+const decodeRecord = Schema.decodeUnknownOption(Schema.Record(Schema.String, Schema.Unknown))
 const empty: Info = {}
 
 export const layer = Layer.effect(
@@ -29,14 +29,14 @@ export const layer = Layer.effect(
     const fs = yield* FileSystem.FileSystem
     const global = yield* Global.Service
     const file = path.join(global.config, "cli.json")
+    const content = process.env.OPENCODE_CLI_CONFIG_CONTENT
+      ? Option.getOrUndefined(decode(parseRecord(process.env.OPENCODE_CLI_CONFIG_CONTENT)))
+      : undefined
 
     const readJson = Effect.fnUntraced(function* () {
       const text = yield* fs.readFileString(file).pipe(Effect.orElseSucceed(() => undefined))
       if (text === undefined) return undefined
-      const errors: ParseError[] = []
-      const value: any = parse(text, errors, { allowTrailingComma: true })
-      if (errors.length) return undefined
-      return Option.getOrUndefined(decodeRecord(value))
+      return parseRecord(text)
     })
 
     const write = Effect.fnUntraced(function* (text: string) {
@@ -61,6 +61,9 @@ export const layer = Layer.effect(
           }),
         ),
       )
+    const load = Effect.fnUntraced(function* (migration?: Info) {
+      return merge(migration ?? Option.getOrUndefined(decode(yield* readJson())), content)
+    })
 
     const get = Effect.fn("cli.config.get")(() =>
       withLock(
@@ -72,8 +75,7 @@ export const layer = Layer.effect(
           )
           if (migration?.cause)
             yield* Effect.logWarning("failed to persist migrated cli config", { cause: migration.cause })
-          if (migration?.info) return migration.info
-          return Option.getOrElse(decode(yield* readJson()), () => empty)
+          return yield* load(migration?.info)
         }),
       ),
     )
@@ -83,7 +85,7 @@ export const layer = Layer.effect(
         Effect.gen(function* () {
           const migration = yield* migrate
           if (migration?.cause) return yield* Effect.failCause(migration.cause)
-          const current = migration?.info ?? Option.getOrElse(decode(yield* readJson()), () => empty)
+          const current = yield* load(migration?.info)
           const next = produce(current, update)
           const edits = changes(current, next)
           if (!edits.length) return current
@@ -102,7 +104,7 @@ export const layer = Layer.effect(
           const config = Option.getOrUndefined(decode(parse(updated, errors, { allowTrailingComma: true })))
           if (errors.length || config === undefined) return yield* Effect.fail(new Error("Invalid CLI config update"))
           yield* write(updated.endsWith("\n") ? updated : updated + "\n")
-          return config
+          return merge(config, content)
         }),
       ).pipe(Effect.mapError((cause) => new Error("Failed to update CLI config", { cause }))),
     )
@@ -112,6 +114,39 @@ export const layer = Layer.effect(
 )
 
 type Edit = { readonly path: (string | number)[]; readonly value: any }
+
+function merge(...values: readonly (Info | undefined)[]) {
+  return Option.getOrElse(
+    decode(
+      values.reduce<Record<string, unknown>>(
+        (result, value) => mergeRecords(result, normalizeLegacyTabs(value) ?? {}),
+        {},
+      ),
+    ),
+    () => empty,
+  )
+}
+
+function mergeRecords(base: object, overlay: object) {
+  return Object.entries(overlay).reduce<Record<string, unknown>>(
+    (result, [key, value]) => {
+      result[key] = isRecord(result[key]) && isRecord(value) ? mergeRecords(result[key], value) : value
+      return result
+    },
+    { ...base },
+  )
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function parseRecord(text: string) {
+  const errors: ParseError[] = []
+  const value: unknown = parse(text, errors, { allowTrailingComma: true })
+  if (errors.length) return undefined
+  return Option.getOrUndefined(decodeRecord(value))
+}
 
 function changes(before: any, after: any, path: (string | number)[] = []): Edit[] {
   if (Object.is(before, after)) return []

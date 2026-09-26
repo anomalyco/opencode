@@ -34,7 +34,7 @@ describe("run permission shared", () => {
     expect(out.reply).toEqual({
       sessionID: "session-1",
       requestID: "perm-1",
-      reply: "once",
+      decision: "once",
     })
   })
 
@@ -47,7 +47,7 @@ describe("run permission shared", () => {
     expect(permissionRun(next.state, "perm-1", "confirm").reply).toEqual({
       sessionID: "session-1",
       requestID: "perm-1",
-      reply: "always",
+      decision: "always",
     })
 
     expect(permissionRun(next.state, "perm-1", "cancel").state).toMatchObject({
@@ -64,7 +64,7 @@ describe("run permission shared", () => {
     expect(out).toEqual({
       sessionID: "session-1",
       requestID: "perm-1",
-      reply: "reject",
+      decision: "reject",
       message: "use rg",
     })
 

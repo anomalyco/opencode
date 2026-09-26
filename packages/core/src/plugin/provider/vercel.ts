@@ -5,11 +5,11 @@ import { Provider } from "../../provider.js"
 export const VercelPlugin = define({
   id: "opencode.provider.vercel",
   effect: Effect.fn(function* (ctx) {
-    yield* ctx.catalog.transform((evt) => {
-      for (const item of evt.provider.list()) {
+    yield* ctx.provider.transform((evt) => {
+      for (const item of evt.list()) {
         if (!Provider.isAISDK(item.provider.package)) continue
         if (Provider.packageName(item.provider.package) !== "@ai-sdk/vercel") continue
-        evt.provider.update(item.provider.id, (provider) => {
+        evt.update(item.provider.id, (provider) => {
           provider.headers = { ...provider.headers, "http-referer": "https://opencode.ai/", "x-title": "opencode" }
         })
       }

@@ -25,6 +25,8 @@ export const docsSections: DocsSection[] = [
         items: [
           { title: "Intro", slug: "index" },
           { title: "Config", slug: "config" },
+          { title: "Migrate from V1", slug: "migrate-v1" },
+          { title: "Troubleshooting", slug: "troubleshooting" },
         ],
       },
       {
@@ -47,15 +49,10 @@ export const docsSections: DocsSection[] = [
           { title: "Tools", slug: "tools" },
           { title: "MCP servers", slug: "mcp-servers" },
           { title: "Permissions", slug: "permissions" },
+          { title: "Policies", slug: "policies" },
           { title: "Instructions", slug: "instructions" },
           { title: "Sharing", slug: "sharing" },
           { title: "Warming", slug: "warming" },
-        ],
-      },
-      {
-        items: [
-          { title: "Migrate from V1", slug: "migrate-v1" },
-          { title: "Troubleshooting", slug: "troubleshooting" },
         ],
       },
     ],
@@ -69,7 +66,7 @@ export const docsSections: DocsSection[] = [
         items: [
           { title: "Intro", slug: "cli" },
           { title: "TUI", slug: "cli/tui" },
-          { title: "Config", slug: "cli/config" },
+          { title: "Settings", slug: "cli/config" },
           { title: "Web", slug: "cli/web" },
           { title: "Providers", slug: "cli/providers" },
           { title: "Commands", slug: "cli/commands" },
@@ -95,6 +92,7 @@ export const docsSections: DocsSection[] = [
           { title: "Overview", slug: "build/plugins" },
           { title: "RPC", slug: "build/plugins/rpc" },
           { title: "CLI", slug: "build/plugins/cli" },
+          { title: "Migrate from V1", slug: "build/plugins/migrate-v1" },
         ],
       },
       {
@@ -141,6 +139,14 @@ export const docsSections: DocsSection[] = [
           { title: "Models", slug: "console/models" },
           { title: "Websearch", slug: "console/websearch" },
           { title: "Go", slug: "console/go" },
+        ],
+      },
+      {
+        title: "API",
+        items: [
+          { title: "Inference", slug: "console/inference" },
+          { title: "BYOK", slug: "console/byok" },
+          { title: "Budgets", slug: "console/budgets" },
         ],
       },
     ],

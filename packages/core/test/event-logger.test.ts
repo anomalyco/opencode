@@ -6,7 +6,8 @@ import { Database } from "@opencode/core/database/database"
 import { Bus } from "@opencode/core/bus"
 import { EventLogger } from "@opencode/core/event-logger"
 import { Agent } from "@opencode/schema/agent"
-import { Catalog } from "@opencode/schema/catalog"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
 import { Command } from "@opencode/schema/command"
 import { Config } from "@opencode/schema/config"
 import { McpEvent } from "@opencode/schema/mcp-event"
@@ -23,7 +24,8 @@ describe("EventLogger", () => {
     await Effect.gen(function* () {
       const bus = yield* Bus.Service
       yield* bus.publish(Agent.Event.Updated, {})
-      yield* bus.publish(Catalog.Event.Updated, {})
+      yield* bus.publish(Provider.Event.Updated, {})
+      yield* bus.publish(Model.Event.Updated, {})
       yield* bus.publish(Command.Event.Updated, {})
       yield* bus.publish(Config.Event.Updated, {})
       yield* bus.publish(McpEvent.StatusChanged, { server: "example" })
@@ -39,7 +41,8 @@ describe("EventLogger", () => {
       output.flatMap((entry) => (Array.isArray(entry.message) && entry.message[0] === "event" ? [entry.message] : [])),
     ).toEqual([
       ["event", { event: expect.objectContaining({ type: "agent.updated" }) }],
-      ["event", { event: expect.objectContaining({ type: "catalog.updated" }) }],
+      ["event", { event: expect.objectContaining({ type: "provider.updated" }) }],
+      ["event", { event: expect.objectContaining({ type: "model.updated" }) }],
       ["event", { event: expect.objectContaining({ type: "command.updated" }) }],
       ["event", { event: expect.objectContaining({ type: "config.updated" }) }],
     ])

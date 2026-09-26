@@ -6,7 +6,15 @@ import * as path from "node:path"
 import { fileURLToPath } from "node:url"
 import { LLMClient, RequestExecutor } from "../src/route.js"
 import { ImageClient } from "../src/image-client.js"
+import { VideoClient } from "../src/video-client.js"
+import { SpeechClient } from "../src/speech-client.js"
+import { TranscriptionClient } from "../src/transcription-client.js"
+import { EvaluationClient } from "../src/experimental/evaluation-client.js"
+import type { Service as EvaluationClientService } from "../src/experimental/evaluation-client.js"
 import type { Service as ImageClientService } from "../src/image-client.js"
+import type { Service as VideoClientService } from "../src/video-client.js"
+import type { Service as SpeechClientService } from "../src/speech-client.js"
+import type { Service as TranscriptionClientService } from "../src/transcription-client.js"
 import type { Service as LLMClientService } from "../src/route/client.js"
 import type { Service as RequestExecutorService } from "../src/route/executor.js"
 import {
@@ -18,7 +26,15 @@ import {
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const FIXTURES_DIR = path.resolve(__dirname, "fixtures", "recordings")
 
-type RecordedEnv = RequestExecutorService | LLMClientService | ImageClientService | Socket.WebSocketConstructor
+type RecordedEnv =
+  | RequestExecutorService
+  | LLMClientService
+  | ImageClientService
+  | VideoClientService
+  | SpeechClientService
+  | TranscriptionClientService
+  | EvaluationClientService
+  | Socket.WebSocketConstructor
 
 type RecordedTestsOptions = RecordedGroupOptions & {
   readonly options?: HttpRecorder.RecorderOptions
@@ -92,6 +108,10 @@ export const recordedTests = (options: RecordedTestsOptions) =>
         requestExecutor,
         LLMClient.layer.pipe(Layer.provide(requestExecutor)),
         ImageClient.layer.pipe(Layer.provide(requestExecutor)),
+        VideoClient.layer.pipe(Layer.provide(requestExecutor)),
+        SpeechClient.layer.pipe(Layer.provide(requestExecutor)),
+        TranscriptionClient.layer.pipe(Layer.provide(requestExecutor)),
+        EvaluationClient.layer.pipe(Layer.provide(requestExecutor)),
         webSocket,
       )
     },

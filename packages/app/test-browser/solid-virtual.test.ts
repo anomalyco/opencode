@@ -219,6 +219,7 @@ test("snapshots materialize only measured rows and restore their current geometr
     new Proxy(measurements, {
       get(target, key, receiver) {
         if (typeof key === "string" && /^\d+$/.test(key)) reads.push(Number(key))
+        // oxlint-disable-next-line no-restricted-globals -- Proxy forwarding requires receiver-aware property access.
         return Reflect.get(target, key, receiver)
       },
     })

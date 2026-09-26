@@ -419,7 +419,7 @@ test.each(["once", "always", "reject"] as const)(
         app.mockInput.pressEnter()
         await settle(app)
       }
-      expect(replies).toEqual([{ sessionID: permission.sessionID, requestID: permission.id, reply: choice }])
+      expect(replies).toEqual([{ sessionID: permission.sessionID, requestID: permission.id, decision: choice }])
     } finally {
       footer.destroy()
       app.renderer.destroy()

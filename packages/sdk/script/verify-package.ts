@@ -150,7 +150,7 @@ export class OpenCodeDO {
     if (this.configurations !== 1 || admitted.some(item => item.payload.text !== "Packed prompt:packed-thread")) {
       throw new Error("Packed instance configuration did not share or prepare prompts correctly")
     }
-    return Response.json(await opencode.health.get())
+    return Response.json(await opencode.server.info())
   }
 }
 
@@ -180,7 +180,7 @@ try {
     "Packed workerd health returned " + response.status + ": " + await response.text(),
   )
   const body = await response.json()
-  if (body.healthy !== true || body.version !== "packed-workerd") {
+  if (body.version !== "packed-workerd" || body.pid !== 1 || !Array.isArray(body.urls)) {
     throw new Error("Unexpected packed workerd health: " + JSON.stringify(body))
   }
 } finally {
@@ -213,6 +213,7 @@ for (const module of modules) {
     throw new Error(`Packed SDK consumer resolved multiple Effect runtimes:\n${runtimes.join("\n")}`)
   }
   await $`bun imports.mjs`.cwd(consumer)
+  await $`node imports.mjs`.cwd(consumer)
   await $`bun --conditions=workerd imports.mjs`.cwd(consumer)
   await $`node_modules/.bin/wrangler deploy --dry-run --config wrangler.jsonc --outdir dist`.cwd(consumer)
 

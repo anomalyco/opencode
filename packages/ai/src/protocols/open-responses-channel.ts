@@ -73,11 +73,6 @@ const driver = (options: Options, body: string): WebSocketChannelDriver => {
           )
         if (event.type === "error") {
           terminal = true
-          yield* OpenResponses.decodeKnownErrorEvent(event).pipe(
-            Effect.mapError((cause) =>
-              ProviderShared.eventError(options.id, `${options.name} returned a malformed error event`, frame, cause),
-            ),
-          )
           return {
             type: "provider-failure",
             error: OpenResponses.providerFailure(event, `${options.name} stream error`, frame),
@@ -168,6 +163,10 @@ export const transport = <Body>(options: Options): Transport<Body, Prepared, str
                 }
               })
             : undefined
+        if (input.webSocket && !channel)
+          yield* Effect.logWarning(`${options.name} does not offer WebSocket for this endpoint; using HTTP`, {
+            url: parts.url,
+          })
         return {
           http: {
             request: ProviderShared.jsonPost({ url: parts.url, body: parts.bodyText, headers: parts.headers }),

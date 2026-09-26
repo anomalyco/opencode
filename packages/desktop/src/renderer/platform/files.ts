@@ -11,6 +11,7 @@ type DesktopFileAPI = Pick<
   | "getPathForFile"
   | "saveFile"
   | "openExternal"
+  | "openBrowser"
   | "openLocalFile"
   | "resolveAppPath"
   | "openPath"
@@ -19,7 +20,7 @@ type DesktopFileAPI = Pick<
   | "writeClipboardText"
 >
 
-export function createDesktopFiles(api: DesktopFileAPI, os: DesktopOS, acceptedExtensions: string[]) {
+export function createDesktopFiles(api: DesktopFileAPI, os: DesktopOS) {
   const attachmentPaths = new WeakMap<File, string>()
   const openDirectoryPickerDialog: Extract<Platform, { platform: "desktop" }>["openDirectoryPickerDialog"] = async (
     options,
@@ -34,7 +35,7 @@ export function createDesktopFiles(api: DesktopFileAPI, os: DesktopOS, acceptedE
       multiple: options?.multiple ?? false,
       title: options?.title,
       defaultPath: options?.defaultPath,
-      extensions: options?.extensions ?? acceptedExtensions,
+      extensions: options?.extensions,
     })
     if (!result) return
     try {
@@ -55,6 +56,7 @@ export function createDesktopFiles(api: DesktopFileAPI, os: DesktopOS, acceptedE
     saveFile: (options: { title?: string; defaultPath?: string }, content: string) =>
       api.saveFile({ title: options.title, defaultPath: options.defaultPath }, content),
     openExternal: (url: string) => api.openExternal(url),
+    openBrowser: (url: string) => api.openBrowser(url),
     openLocalFile: (url: string) => api.openLocalFile(url),
     async openPath(path: string, app?: string) {
       if (os !== "windows") {

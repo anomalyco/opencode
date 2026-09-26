@@ -8,7 +8,7 @@ import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/un
 const fields = {
   id: Event.ID,
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-  location: Schema.optional(Location.Ref),
+  location: Schema.optional(Location.PublicRef),
 }
 
 const rpcEvent = Schema.Struct({
@@ -16,7 +16,7 @@ const rpcEvent = Schema.Struct({
   created: Schema.Finite,
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   type: Schema.TemplateLiteral(["rpc.", Schema.String]),
-  location: Location.Ref,
+  location: Location.PublicRef,
   data: Schema.Record(Schema.String, Schema.Unknown),
 }).annotate({ identifier: "V2Event.rpc" })
 
@@ -45,7 +45,7 @@ const make = <const Definitions extends ReadonlyArray<Definition>>(definitions: 
           success: HttpApiSchema.StreamSse({ data: EventSchema }),
         }).annotateMerge(
           OpenApi.annotations({
-            identifier: "v2.event.subscribe",
+            identifier: "event.subscribe",
             summary: "Subscribe to events",
             description:
               "Subscribe to native events and plugin RPC events across all server locations. Volatile by contract: a slow consumer overflows and fails the stream, and events during disconnection are missed.",

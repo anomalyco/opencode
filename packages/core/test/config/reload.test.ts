@@ -4,13 +4,13 @@ import { writeFileSync } from "node:fs"
 import { describe, expect } from "bun:test"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { Agent } from "@opencode/core/agent"
-import { Catalog } from "@opencode/core/catalog"
 import { Command } from "@opencode/core/command"
 import { Config } from "@opencode/core/config"
 import { ConfigAgentPlugin } from "@opencode/core/config/plugin/agent"
 import { ConfigCommandPlugin } from "@opencode/core/config/plugin/command"
 import { ConfigProviderPlugin } from "@opencode/core/config/plugin/provider"
 import { ConfigReferencePlugin } from "@opencode/core/config/plugin/reference"
+import { ConfigCompatibilityPlugin } from "@opencode/core/config/plugin/compatibility"
 import { ConfigSkillPlugin } from "@opencode/core/config/plugin/skill"
 import { Bus } from "@opencode/core/bus"
 import { Integration } from "@opencode/core/integration"
@@ -67,7 +67,7 @@ describe("config plugin reloads", () => {
               const plugins = yield* Plugin.Service
               const skills = yield* Skill.Service
               const host = yield* PluginHost.make(plugins)
-              yield* ConfigSkillPlugin.Plugin.effect(host)
+              yield* ConfigCompatibilityPlugin.Plugin.effect(host)
               expect(yield* skills.list()).toEqual([])
 
               // Finish startup by observing an ordinary config reload before creating the root.
@@ -80,7 +80,7 @@ describe("config plugin reloads", () => {
                 Bun.write(skill, "---\nname: probe\ndescription: Hot reload\n---\nTest skill"),
               )
               yield* waitUntil(skills.list().pipe(Effect.map((items) => items.some((item) => item.id === "probe"))))
-              expect((yield* skills.list())[0]?.location).toBe(AbsolutePath.make(skill))
+              expect((yield* skills.list())[0]?.path).toBe(AbsolutePath.make(skill))
               yield* Effect.promise(() => fs.rm(root, { recursive: true }))
               yield* waitUntil(skills.list().pipe(Effect.map((items) => items.length === 0)))
               yield* Effect.promise(() => Bun.write(skill, "---\nname: probe\ndescription: Recreated\n---\nTest skill"))
@@ -268,7 +268,7 @@ describe("config plugin reloads", () => {
   it.live("reloads config-backed domains without reloading external plugins", () =>
     Effect.gen(function* () {
       const agents = yield* Agent.Service
-      const catalog = yield* Catalog.Service
+      const providers = yield* Provider.Service
       const commands = yield* Command.Service
       const integrations = yield* Integration.Service
       const bus = yield* Bus.Service
@@ -289,7 +289,7 @@ describe("config plugin reloads", () => {
       expect(yield* integrations.get(Integration.ID.make("first"))).toBeDefined()
       expect((yield* skills.list()).some((skill) => skill.id === "first")).toBe(true)
       expect((yield* references.list()).map((reference) => reference.name)).toEqual(["first"])
-      expect(yield* catalog.provider.get(Provider.ID.make("first"))).toBeDefined()
+      expect(yield* providers.get(Provider.ID.make("first"))).toBeDefined()
 
       yield* test.setEntries([config("second")])
       yield* Effect.yieldNow
@@ -304,8 +304,8 @@ describe("config plugin reloads", () => {
             (yield* integrations.get(Integration.ID.make("first"))) === undefined &&
             (yield* integrations.get(Integration.ID.make("second"))) !== undefined &&
             (yield* references.list()).some((reference) => reference.name === "second") &&
-            (yield* catalog.provider.get(Provider.ID.make("first"))) === undefined &&
-            (yield* catalog.provider.get(Provider.ID.make("second"))) !== undefined
+            (yield* providers.get(Provider.ID.make("first"))) === undefined &&
+            (yield* providers.get(Provider.ID.make("second"))) !== undefined
           )
         }),
       )

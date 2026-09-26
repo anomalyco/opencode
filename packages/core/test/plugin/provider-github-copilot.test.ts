@@ -5,7 +5,6 @@ import { Session } from "@opencode/core/session"
 import { Location } from "@opencode/core/location"
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { Catalog } from "@opencode/core/catalog"
 import { Model } from "@opencode/core/model"
 import { ModelResolver } from "@opencode/core/model-resolver"
 import { Plugin } from "@opencode/core/plugin"
@@ -16,7 +15,9 @@ import {
   copilotEntitlementError,
   copilotFetch,
   GithubCopilotPlugin,
+  utilityTitle,
 } from "@opencode/core/plugin/provider/github-copilot"
+import { Message, SystemPart } from "@opencode/ai"
 import { Provider } from "@opencode/core/provider"
 import { Integration } from "@opencode/core/integration"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
@@ -238,6 +239,73 @@ describe("GithubCopilotPlugin", () => {
     }),
   )
 
+  const titleRequest = {
+    sessionID: Session.ID.make("ses_title"),
+    system: [SystemPart.make("You are a title generator.")],
+    messages: [Message.user("how do I make my python script faster")],
+    options: { maxTokens: 32 },
+  }
+  const utilityInput = (send: (init?: RequestInit) => Response | Promise<Response>) => ({
+    baseURL: "https://api.individual.githubcopilot.com",
+    token: "token",
+    model: "gpt-4o-mini",
+    app: App.make({ name: "test", version: "1.2.3", channel: "beta" }),
+    fetch: async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => send(init),
+  })
+
+  it.live("names sessions with the utility model as a free background request", () =>
+    Effect.gen(function* () {
+      const seen: Array<{ url?: string; init?: RequestInit }> = []
+      const title = yield* utilityTitle(
+        {
+          ...utilityInput(() => Response.json({ choices: [{ message: { content: "  Speed Up Python Script\n" } }] })),
+          fetch: async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+            seen.push({ url: String(input), init })
+            return Response.json({ choices: [{ message: { content: "  Speed Up Python Script\n" } }] })
+          },
+        },
+        titleRequest,
+      )
+      expect(title).toBe("Speed Up Python Script")
+      expect(seen[0]?.url).toBe("https://api.individual.githubcopilot.com/chat/completions")
+      const headers = new Headers(seen[0]?.init?.headers)
+      expect(headers.get("authorization")).toBe("Bearer token")
+      expect(headers.get("x-interaction-type")).toBe("agent-session-name-generation")
+      expect(headers.get("x-interaction-id")).toBe("ses_title")
+      expect(headers.get("x-initiator")).toBe("agent")
+      expect(headers.get("x-github-api-version")).toBe("2026-08-01")
+      expect(JSON.parse(String(seen[0]?.init?.body))).toEqual({
+        model: "gpt-4o-mini",
+        stream: false,
+        max_tokens: 32,
+        messages: [
+          { role: "system", content: "You are a title generator." },
+          { role: "user", content: "how do I make my python script faster" },
+        ],
+      })
+    }),
+  )
+
+  it.live("fails the utility title on rate limits so the billable path can run", () =>
+    Effect.gen(function* () {
+      const error = yield* utilityTitle(
+        utilityInput(() => new Response("slow down", { status: 429 })),
+        titleRequest,
+      ).pipe(Effect.flip)
+      expect(String(error)).toContain("429")
+    }),
+  )
+
+  it.live("fails the utility title on an empty completion", () =>
+    Effect.gen(function* () {
+      const error = yield* utilityTitle(
+        utilityInput(() => Response.json({ choices: [{ message: { content: null } }] })),
+        titleRequest,
+      ).pipe(Effect.flip)
+      expect(String(error)).toContain("empty")
+    }),
+  )
+
   it.live("keeps a declared agent initiator when the body looks user-initiated", () =>
     Effect.gen(function* () {
       const requests: Headers[] = []
@@ -297,16 +365,19 @@ describe("GithubCopilotPlugin", () => {
 
   it.effect("rewrites models.dev fallback models to the GitHub Copilot package", () =>
     Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
       const aisdk = yield* AISDK.Service
-      yield* catalog.transform((catalog) => {
-        catalog.provider.update(Provider.ID.githubCopilot, () => {})
-        catalog.model.update(Provider.ID.githubCopilot, Model.ID.make("gpt-5.6-sol"), (model) => {
+      yield* providers.transform((editor) => {
+        editor.update(Provider.ID.githubCopilot, (provider) => {
+          provider.activation = "enabled"
+        })
+        editor.models.update(Provider.ID.githubCopilot, Model.ID.make("gpt-5.6-sol"), (model) => {
           model.package = Provider.aisdk("@ai-sdk/openai-compatible")
         })
       })
       yield* addPlugin()
-      const fallback = required(yield* catalog.model.get(Provider.ID.githubCopilot, Model.ID.make("gpt-5.6-sol")))
+      const fallback = required(yield* models.get(Provider.ID.githubCopilot, Model.ID.make("gpt-5.6-sol")))
       expect(fallback.package).toBe(Provider.aisdk("@ai-sdk/github-copilot"))
 
       const resolved = yield* ModelResolver.fromCatalogModel(fallback, undefined, {
@@ -414,6 +485,66 @@ describe("GithubCopilotPlugin", () => {
     }),
   )
 
+  it.effect("uses responses for Grok, Gemini, and MAI Code models", () =>
+    Effect.gen(function* () {
+      const aisdk = yield* AISDK.Service
+      const calls: string[] = []
+      yield* addPlugin()
+      yield* aisdk.runLanguage({
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("github-copilot"), Model.ID.make("grok-4.5")),
+          modelID: Model.ID.make("grok-4.5"),
+          package: "aisdk:test-provider",
+        }),
+        sdk: fakeSelectorSdk(calls),
+        options: {},
+      })
+      yield* aisdk.runLanguage({
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("github-copilot"), Model.ID.make("grok-4.6")),
+          modelID: Model.ID.make("grok-4.6"),
+          package: "aisdk:test-provider",
+        }),
+        sdk: fakeSelectorSdk(calls),
+        options: {},
+      })
+      yield* aisdk.runLanguage({
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("github-copilot"), Model.ID.make("gemini-3.5-flash")),
+          modelID: Model.ID.make("gemini-3.5-flash"),
+          package: "aisdk:test-provider",
+        }),
+        sdk: fakeSelectorSdk(calls),
+        options: {},
+      })
+      yield* aisdk.runLanguage({
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("github-copilot"), Model.ID.make("mai-code-1.1-flash")),
+          modelID: Model.ID.make("mai-code-1.1-flash"),
+          package: "aisdk:test-provider",
+        }),
+        sdk: fakeSelectorSdk(calls),
+        options: {},
+      })
+      yield* aisdk.runLanguage({
+        model: Model.Info.make({
+          ...Model.Info.default(Provider.ID.make("github-copilot"), Model.ID.make("gpt-4o")),
+          modelID: Model.ID.make("gpt-4o"),
+          package: "aisdk:test-provider",
+        }),
+        sdk: fakeSelectorSdk(calls),
+        options: {},
+      })
+      expect(calls).toEqual([
+        "responses:grok-4.5",
+        "responses:grok-4.6",
+        "responses:gemini-3.5-flash",
+        "responses:mai-code-1.1-flash",
+        "chat:gpt-4o",
+      ])
+    }),
+  )
+
   it.effect("uses advertised Copilot endpoint metadata before model ID fallbacks", () =>
     Effect.gen(function* () {
       const aisdk = yield* AISDK.Service
@@ -481,14 +612,17 @@ describe("GithubCopilotPlugin", () => {
 
   it.effect("disables gpt-5-chat-latest before Copilot language selection", () =>
     Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
-      yield* catalog.transform((catalog) => {
-        catalog.provider.update(Provider.ID.make("github-copilot"), () => {})
-        catalog.model.update(Provider.ID.make("github-copilot"), Model.ID.make("gpt-5-chat-latest"), () => {})
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      yield* providers.transform((editor) => {
+        editor.update(Provider.ID.githubCopilot, (provider) => {
+          provider.activation = "enabled"
+        })
+        editor.models.update(Provider.ID.githubCopilot, Model.ID.make("gpt-5-chat-latest"), () => {})
       })
       yield* addPlugin()
       expect(
-        required(yield* catalog.model.get(Provider.ID.make("github-copilot"), Model.ID.make("gpt-5-chat-latest")))
+        required(yield* models.get(Provider.ID.githubCopilot, Model.ID.make("gpt-5-chat-latest")))
           .enabled,
       ).toBe(false)
     }),
@@ -496,14 +630,15 @@ describe("GithubCopilotPlugin", () => {
 
   it.effect("does not disable gpt-5-chat-latest for non-Copilot providers", () =>
     Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
-      yield* catalog.transform((catalog) => {
-        catalog.provider.update(Provider.ID.make("custom-copilot"), () => {})
-        catalog.model.update(Provider.ID.make("custom-copilot"), Model.ID.make("gpt-5-chat-latest"), () => {})
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      yield* providers.transform((editor) => {
+        editor.update(Provider.ID.make("custom-copilot"), () => {})
+        editor.models.update(Provider.ID.make("custom-copilot"), Model.ID.make("gpt-5-chat-latest"), () => {})
       })
       yield* addPlugin()
       expect(
-        required(yield* catalog.model.get(Provider.ID.make("custom-copilot"), Model.ID.make("gpt-5-chat-latest")))
+        required(yield* models.get(Provider.ID.make("custom-copilot"), Model.ID.make("gpt-5-chat-latest")))
           .enabled,
       ).toBe(true)
     }),

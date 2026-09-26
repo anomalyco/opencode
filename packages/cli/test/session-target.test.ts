@@ -2,16 +2,16 @@ import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { OpenCode, type LocationGetOutput, type ModelRef, type SessionInfo } from "@opencode/client/promise"
 import { resolveSessionTarget, SessionTargetMutationError } from "../src/session-target"
 
-function location(directory: string, workspaceID?: string): LocationGetOutput {
-  return { directory, workspaceID, project: { id: "project", directory, canonical: directory } }
+function location(directory: string): LocationGetOutput {
+  return { directory, project: { id: "project", directory, canonical: directory } }
 }
 
-function session(id: string, directory: string, workspaceID?: string, model?: ModelRef): SessionInfo {
+function session(id: string, directory: string, model?: ModelRef): SessionInfo {
   return {
     id,
     projectID: "project",
     title: id,
-    location: { directory, workspaceID },
+    location: { directory },
     model,
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -29,23 +29,23 @@ afterEach(() => mock.restore())
 describe("session target resolver", () => {
   test("adopts an explicit Session location and model", async () => {
     const client = OpenCode.make({ baseUrl: "https://opencode.test" })
-    const selected = session("ses_resume", "/session", "work_1", { providerID: "openai", id: "gpt-5" })
+    const selected = session("ses_resume", "/session", { providerID: "openai", id: "gpt-5" })
     spyOn(client.session, "get").mockResolvedValue(selected)
-    spyOn(client.location, "get").mockResolvedValue(location("/session", "work_1"))
+    spyOn(client.location, "get").mockResolvedValue(location("/session"))
 
     const target = await resolveSessionTarget({ client, session: selected.id, prepare })
     expect(target).toMatchObject({
       session: { id: "ses_resume" },
-      location: { directory: "/session", workspaceID: "work_1" },
+      location: { directory: "/session" },
       model: { providerID: "openai", id: "gpt-5" },
       resume: true,
     })
   })
 
-  test("paginates to continue the exact implicit workspace", async () => {
+  test("paginates to continue the exact directory", async () => {
     const client = OpenCode.make({ baseUrl: "https://opencode.test" })
     spyOn(client.location, "get").mockResolvedValue(location("/project"))
-    const explicit = Array.from({ length: 50 }, (_, index) => session(`ses_${index}`, "/project", `work_${index}`))
+    const explicit = Array.from({ length: 50 }, (_, index) => session(`ses_${index}`, `/other/${index}`))
     const list = spyOn(client.session, "list")
       .mockResolvedValueOnce({ data: explicit, cursor: { next: "page_2" } })
       .mockResolvedValueOnce({ data: [session("ses_implicit", "/project")], cursor: {} })
@@ -78,11 +78,11 @@ describe("session target resolver", () => {
   test("prepares a fresh Session at the server Location before creation", async () => {
     const client = OpenCode.make({ baseUrl: "https://opencode.test" })
     const order: string[] = []
-    spyOn(client.location, "get").mockResolvedValue(location("/server", "work_1"))
+    spyOn(client.location, "get").mockResolvedValue(location("/server"))
     const create = spyOn(client.session, "create").mockImplementation(async (input) => {
       order.push("create")
-      expect(input).toMatchObject({ agent: "prepared", location: { directory: "/server", workspaceID: "work_1" } })
-      return session("ses_fresh", "/server", "work_1")
+      expect(input).toMatchObject({ agent: "prepared", location: { directory: "/server" } })
+      return session("ses_fresh", "/server")
     })
 
     await resolveSessionTarget({
@@ -90,7 +90,7 @@ describe("session target resolver", () => {
       agent: "requested",
       prepare: async (input) => {
         order.push("prepare")
-        expect(input.location.workspaceID).toBe("work_1")
+        expect(input.location.directory).toBe("/server")
         return { model: input.model, agent: "prepared" }
       },
     })

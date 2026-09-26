@@ -70,7 +70,7 @@ export function createSessionRevert(input: {
       .map((item) => item.id)
     void server.api.session.inbox
       .list({ sessionID })
-      .then((rows) => rows.filter((row) => row.type === "user" && row.timeCreated <= cutoff).map((row) => row.id))
+      .then((rows) => rows.filter((row) => row.type === "user" && row.time.created <= cutoff).map((row) => row.id))
       .catch(() => [])
       .then((authoritative) => {
         new Set([...local, ...authoritative]).forEach(

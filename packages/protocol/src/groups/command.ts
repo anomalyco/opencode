@@ -13,7 +13,7 @@ export const CommandGroup = HttpApiGroup.make("server.command")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.command.list",
+          identifier: "command.list",
           summary: "List commands",
           description: "Retrieve currently registered commands.",
         }),

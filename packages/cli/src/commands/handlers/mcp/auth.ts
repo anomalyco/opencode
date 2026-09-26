@@ -1,65 +1,109 @@
-import { EOL } from "node:os"
-import { Effect } from "effect"
-import {
-  OpenCode,
-  type IntegrationAttemptStatus,
-  type IntegrationOAuthMethod,
-  type OpenCodeClient,
-} from "@opencode/client"
+import { confirm, intro, log, outro } from "@clack/prompts"
+import { Effect, Option } from "effect"
+import { OpenCode, type IntegrationInfo, type IntegrationOAuthMethod, type McpServer } from "@opencode/client"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { Service } from "@opencode/client/effect/service"
 import { ServiceConfig } from "../../../services/service-config"
-import { resolveIntegration } from "./resolve"
+import { selectIntegration, type IntegrationChoice } from "../../../ui/integration-picker"
+import { handlePromptErrors, prompt, requireInteractive } from "../../../ui/prompt"
+import { answerForm } from "../auth/form"
+import { oauthLogin } from "../auth/login"
+import { loadIntegrations, request } from "../auth/shared"
 
 const location = { directory: process.cwd() }
 
 export default Runtime.handler(
   Commands.commands.mcp.commands.auth,
-  Effect.fn("cli.mcp.auth")(function* (input) {
-    const endpoint = yield* Service.ensure(yield* ServiceConfig.options())
-    const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
-
-    const integration = yield* resolveIntegration(client, input.name, location)
-    if (!integration)
-      return yield* Effect.fail(new Error(`MCP server "${input.name}" is not an OAuth-capable remote server`))
-    const method = integration.methods.find(
-      (candidate): candidate is IntegrationOAuthMethod => candidate.type === "oauth",
-    )
-    if (!method)
-      return yield* Effect.fail(new Error(`MCP server "${input.name}" is not an OAuth-capable remote server`))
-
-    const started = yield* Effect.promise(() =>
-      client.integration.oauth.connect({ integrationID: integration.id, methodID: method.id, location }),
-    )
-    const attempt = started.data
-    if (attempt.mode === "code")
-      return yield* Effect.fail(new Error("This server requires manual code entry, which the CLI does not support"))
-
-    process.stdout.write(attempt.instructions + EOL + attempt.url + EOL)
-
-    const result = yield* poll(client, integration.id, attempt.attemptID)
-    if (result.status === "complete") {
-      process.stdout.write(`Authenticated with ${input.name}` + EOL)
-      return
-    }
-    const reason = result.status === "failed" ? `: ${result.message}` : ""
-    return yield* Effect.fail(new Error(`Authentication ${result.status}${reason}`))
-  }),
+  Effect.fn("cli.mcp.auth")((input) => authenticate(Option.getOrUndefined(input.name)).pipe(handlePromptErrors)),
 )
 
-const poll = (
-  client: OpenCodeClient,
-  integrationID: string,
-  attemptID: string,
-): Effect.Effect<Exclude<IntegrationAttemptStatus, { status: "pending" }>> =>
-  Effect.gen(function* () {
-    const status = yield* Effect.promise(() =>
-      client.integration.oauth.status({ integrationID, attemptID, location }),
-    ).pipe(Effect.map((result) => result.data))
-    if (status.status === "pending") {
-      yield* Effect.sleep("1 second")
-      return yield* poll(client, integrationID, attemptID)
+const authenticate = Effect.fn("cli.mcp.auth.run")(function* (name?: string) {
+  if (!name) yield* requireInteractive("Pass an MCP server name when running without an interactive terminal")
+  intro("Authenticate an MCP server")
+  const endpoint = yield* Service.ensure(yield* ServiceConfig.options())
+  const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
+  const integrations = yield* loadIntegrations(client)
+  const servers = yield* request((signal) => client.mcp.list({ location }, { signal }))
+  const choices = mcpAuthChoices(servers.data, integrations)
+  if (!name && choices.length === 0) {
+    log.warn("No OAuth-capable MCP servers configured")
+    log.info(
+      `Remote MCP servers support OAuth by default. Add one with \`opencode mcp add\` or in opencode.json:\n${exampleConfig}`,
+    )
+    outro("Done")
+    return
+  }
+
+  const server = name ? servers.data.find((item) => item.name === name) : undefined
+  if (name && !server) return yield* Effect.fail(new Error(`MCP server not found: ${name}`))
+  const integrationID = server
+    ? server.integrationID
+    : yield* prompt<string>(() => selectIntegration(choices, "MCP server"))
+  const integration = integrations.find((item) => item.id === integrationID)
+  const method = integration?.methods.find(
+    (candidate): candidate is IntegrationOAuthMethod => candidate.type === "oauth",
+  )
+  if (!integration || !method)
+    return yield* Effect.fail(new Error(`MCP server "${name}" is not an OAuth-capable remote server`))
+
+  if (integration.connections.length > 0) {
+    const status = servers.data.find((item) => item.integrationID === integration.id)?.status.status
+    if (status === "needs_auth") log.warn(`${integration.name} has expired credentials. Re-authenticating...`)
+    if (status !== "needs_auth" && process.stdin.isTTY && process.stdout.isTTY) {
+      const again = yield* prompt<boolean>(() =>
+        confirm({ message: `${integration.name} already has valid credentials. Re-authenticate?` }),
+      )
+      if (!again) {
+        outro("Cancelled")
+        return
+      }
     }
-    return status
-  })
+  }
+
+  // Re-authenticating replaces the previous sign-in rather than adding an account. The new credential
+  // keeps the active one's label, and the old ones are only removed once it is stored, so a failed
+  // attempt keeps them.
+  const previous = integration.connections.filter((connection) => connection.type === "credential")
+  yield* oauthLogin(client, integration, method, yield* answerForm(method.form), previous[0]?.label)
+  yield* Effect.forEach(
+    previous,
+    (connection) => request((signal) => client.credential.remove({ credentialID: connection.id }, { signal })),
+    { discard: true },
+  )
+  outro("Done")
+})
+
+const exampleConfig = `
+  "mcp": {
+    "my-server": {
+      "type": "remote",
+      "url": "https://example.com/mcp"
+    }
+  }`
+
+// Choices carry the server-owned integration ID so provider integrations with colliding names never match.
+export function mcpAuthChoices(servers: McpServer[], integrations: IntegrationInfo[]): IntegrationChoice[] {
+  const byID = new Map(integrations.map((integration) => [integration.id, integration]))
+  return servers
+    .flatMap((server) => {
+      const integration = server.integrationID ? byID.get(server.integrationID) : undefined
+      if (!integration?.methods.some((method) => method.type === "oauth")) return []
+      return [
+        {
+          value: integration.id,
+          label: server.name,
+          category: "MCP" as const,
+          connected: integration.connections.length > 0,
+          hint: statusHint(server.status),
+        },
+      ]
+    })
+    .toSorted((a, b) => a.label.localeCompare(b.label) || a.value.localeCompare(b.value))
+}
+
+function statusHint(status: McpServer["status"]) {
+  if (status.status === "needs_auth") return "needs authentication"
+  if (status.status === "failed" || status.status === "disabled") return status.status
+  return undefined
+}

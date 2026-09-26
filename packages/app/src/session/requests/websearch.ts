@@ -1,4 +1,4 @@
-import type { FormInfo, FormOption, FormReplyInput, FormStringField } from "@opencode/client/promise"
+import type { FormInfo, FormOption, SessionFormReplyInput, FormStringField } from "@opencode/client/promise"
 import { createEffect, createMemo, createResource, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { OpenCodeEventStream } from "@/runtime/server/client"
@@ -14,7 +14,7 @@ export function createWebSearchRequest(input: {
   connected: () => boolean
   request: () => FormInfo | undefined
   providers: (sessionID: string) => Promise<FormOption[]>
-  reply: (input: FormReplyInput) => Promise<unknown>
+  reply: (input: SessionFormReplyInput) => Promise<unknown>
   events: Pick<OpenCodeEventStream, "listen">
 }) {
   const [store, setStore] = createStore({
@@ -93,7 +93,7 @@ export async function replyWebSearch(input: {
   form: FormInfo
   selection: string | false
   signal: AbortSignal
-  reply: (input: FormReplyInput) => Promise<unknown>
+  reply: (input: SessionFormReplyInput) => Promise<unknown>
   events: Pick<OpenCodeEventStream, "listen">
 }) {
   if (input.signal.aborted) return

@@ -4,6 +4,39 @@ export interface PatchHunk {
   readonly rows?: number
 }
 
+export interface AddedPatchChunk {
+  readonly patch: string
+  readonly lines: readonly string[]
+  readonly rows: number
+}
+
+/**
+ * Splits a new-file patch into chunks of `size` lines, each a valid patch with its own `@@ -0,0 +start,count @@`
+ * header. Returns undefined for anything else: patches with context or removed lines would need old and new line
+ * numbers recomputed at every cut, so they are not split.
+ */
+export function splitAddedPatch(patch: string, size: number): AddedPatchChunk[] | undefined {
+  const header = /^@@ -0,0 \+1,(\d+) @@[^\n]*\n/m.exec(patch)
+  if (!header) return
+  const count = Number(header[1])
+  const lines = patch
+    .slice(header.index + header[0].length)
+    .replace(/\n$/, "")
+    .split("\n")
+  const marker = lines.at(-1)?.startsWith("\\ No newline at end of file") ? lines.pop() : undefined
+  if (lines.length !== count || lines.some((line) => !line.startsWith("+"))) return
+  const prefix = patch.slice(0, header.index)
+  return Array.from({ length: Math.ceil(count / size) }, (_, index) => {
+    const start = index * size
+    const slice = lines.slice(start, start + size)
+    return {
+      patch: `${prefix}@@ -0,0 +${start + 1},${slice.length} @@\n${slice.join("\n")}${marker && start + size >= count ? `\n${marker}` : ""}`,
+      lines: slice,
+      rows: slice.length,
+    }
+  })
+}
+
 export function splitPatchHunks(patch: string): PatchHunk[] {
   const starts = [...patch.matchAll(/^@@ -\d+(?:,\d+)? \+\d+(?:,\d+)? @@.*$/gm)].map((match) => match.index)
   if (starts.length <= 1) return [{ patch }]

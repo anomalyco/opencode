@@ -181,24 +181,30 @@ export const SnowflakeCortexPlugin = define({
       )
     })
     yield* load
-    yield* ctx.catalog.transform((catalog) => {
-      const item = catalog.provider.get(providerID)
+    yield* ctx.provider.transform((providers) => {
+      const item = providers.get(providerID)
       if (!item) return
       const settings = { ...item.provider.settings, ...configured }
-      item.provider.settings = {
-        ...settings,
-        baseURL: endpoint(settings.baseURL, account.value),
-        ...(typeof settings.token === "string" ? { apiKey: settings.token } : {}),
-      }
-      for (const model of item.models.values()) {
-        model.compatibility = { maxTokensField: "max_completion_tokens", ...model.compatibility }
-        if (model.settings?.baseURL !== undefined)
-          model.settings.baseURL = endpoint(model.settings.baseURL, account.value)
+      providers.update(providerID, (provider) => {
+        provider.settings = {
+          ...settings,
+          baseURL: endpoint(settings.baseURL, account.value),
+          ...(typeof settings.token === "string" ? { apiKey: settings.token } : {}),
+        }
+      })
+    })
+    yield* ctx.model.transform((models) => {
+      for (const item of models.list(providerID)) {
+        models.update(providerID, item.id, (model) => {
+          model.compatibility = { maxTokensField: "max_completion_tokens", ...model.compatibility }
+          if (model.settings?.baseURL !== undefined)
+            model.settings.baseURL = endpoint(model.settings.baseURL, account.value)
+        })
       }
     })
     yield* bus.subscribe(Credential.Event.Switched).pipe(
       Stream.filter((event) => event.data.integrationID === integrationID),
-      Stream.runForEach(() => load.pipe(Effect.andThen(ctx.catalog.reload()))),
+      Stream.runForEach(() => load.pipe(Effect.andThen(ctx.provider.reload()))),
       Effect.forkScoped({ startImmediately: true }),
     )
     yield* ctx.session.hook(

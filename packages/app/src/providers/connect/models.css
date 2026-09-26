@@ -1,0 +1,72 @@
+.connected-model-row-shell {
+  position: relative;
+  margin-inline: 4px;
+  padding-block: 4px;
+}
+
+.connected-model-row-shell:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  inset-inline: 12px;
+  bottom: 0;
+  height: 0.5px;
+  background: var(--v2-border-border-base);
+}
+
+.connected-model-row {
+  display: flex;
+  width: 100%;
+  height: 40px;
+  align-items: center;
+  padding-inline: 12px;
+  padding-block: 0;
+  border: 0;
+  border-radius: 4px;
+}
+
+@media (hover: hover) {
+  .connected-model-row:hover {
+    background-color: var(--v2-background-bg-layer-03);
+  }
+}
+
+.connected-model-row:focus-visible {
+  background-color: var(--v2-background-bg-layer-03);
+}
+
+[data-component="first-provider-models"] [data-component="settings-list"] {
+  background-color: var(--v2-background-bg-layer-02);
+  overflow: hidden;
+  padding-inline: 0;
+}
+
+[data-component="first-provider-models"] .provider-model-groups--dialog .provider-model-group {
+  background-color: var(--v2-background-bg-layer-02);
+}
+
+[data-component="first-provider-models"] .provider-model-groups--dialog .provider-model-group-models {
+  padding-inline: 0;
+}
+
+[data-component="first-provider-models"]
+  .provider-model-groups--dialog
+  .provider-model-group-models
+  > [data-component="settings-list"] {
+  background-color: transparent;
+}
+
+@media (hover: hover) {
+  [data-component="first-provider-models"]
+    .provider-model-groups--dialog
+    .provider-model-group-trigger:not(:disabled):hover {
+    background-color: var(--v2-background-bg-layer-03);
+  }
+}
+
+[data-component="first-provider-models"] .settings-section {
+  gap: 8px;
+}
+
+[data-component="first-provider-models"] .settings-section[data-expanded] {
+  padding-bottom: 8px;
+}

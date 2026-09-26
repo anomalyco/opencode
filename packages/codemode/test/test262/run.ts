@@ -3,13 +3,13 @@
 // test262's own assert.js relies on.
 import path from "node:path"
 import { Cause, Effect } from "effect"
-import { caughtErrorValue } from "../../src/interpreter/errors.js"
+import { materialize } from "../../src/interpreter/errors.js"
 import { executeProgram } from "../../src/interpreter/execute.js"
-import type { Host } from "../../src/interpreter/globals.js"
-import { HostFunction } from "../../src/interpreter/host.js"
-import { ProgramThrow } from "../../src/interpreter/model.js"
+import type { Interpreter } from "../../src/interpreter/interpreter.js"
+import { Throw } from "../../src/interpreter/model.js"
 import { createErrorValue } from "../../src/interpreter/intrinsics.js"
-import { get, hasPrototype, ProgramArray, ProgramObject, set } from "../../src/interpreter/objects.js"
+import { constructor, fn, methods } from "../../src/interpreter/native.js"
+import { Callable, define, get, hidden, Arr, Fn, Obj, type Value } from "../../src/interpreter/objects.js"
 import { ToolRuntime } from "../../src/tool-runtime.js"
 
 export const root = import.meta.dir
@@ -42,8 +42,8 @@ export const run = async (file: string): Promise<Outcome> => {
   // work instead, so drain explicitly.
   const drain = meta.flags?.includes("async") ? "\nfor (let i = 0; i < 100; i++) await null" : ""
   const result = await Effect.runPromise(
-    executeProgram(`"use strict";\n${source}${drain}`, prepared, limits, {}, (host) =>
-      harness(host, (error) => {
+    executeProgram(`"use strict";\n${source}${drain}`, prepared, limits, {}, (ctx) =>
+      harness(ctx, (error) => {
         done ??= { error }
       }),
     ),
@@ -64,96 +64,97 @@ export const run = async (file: string): Promise<Outcome> => {
   return { status: "pass" }
 }
 
-const harness = <R>(host: Host<R>, onDone: (error: unknown) => void): ReadonlyArray<readonly [string, unknown]> => {
-  const test262Prototype = new ProgramObject()
-  set(test262Prototype, "name", "Test262Error")
+const harness = <R>(ctx: Interpreter<R>, onDone: (error: Value) => void): ReadonlyArray<readonly [string, Value]> => {
+  const builtins = ctx.builtins
+  const test262Prototype = new Obj(builtins.Object)
+  define(test262Prototype, "name", "Test262Error", hidden)
   const test262 = (args: Array<unknown>) =>
     createErrorValue(test262Prototype, args[0] === undefined ? "" : String(args[0]))
-  const fail = (message: string) => Effect.fail(new ProgramThrow(test262([message])))
+  const fail = (message: string) => Effect.fail(new Throw(test262([message])))
   const prefix = (message: unknown) => (message === undefined ? "" : `${String(message)} `)
   const compare = (a: unknown, b: unknown) =>
-    a instanceof ProgramArray &&
-    b instanceof ProgramArray &&
+    a instanceof Arr &&
+    b instanceof Arr &&
     a.items.length === b.items.length &&
     a.items.every((value, i) => Object.is(value, b.items[i]))
-  const test262Error = new HostFunction<R>({
+  const test262Error = constructor<R>(builtins, test262Prototype, {
     name: "Test262Error",
-    call: (args) => Effect.succeed(test262(args)),
+    call: (_, args) => Effect.succeed(test262(args)),
     construct: (args) => Effect.succeed(test262(args)),
-    instanceOf: (value) => hasPrototype(value, test262Prototype),
-    members: { thrower: new HostFunction<R>({ name: "Test262Error.thrower", call: (args) => fail(String(args[0])) }) },
   })
-  set(test262Prototype, "constructor", test262Error)
-  const compareArray = new HostFunction<R>({
-    name: "compareArray",
-    call: (args) => Effect.succeed(compare(args[0], args[1])),
-    members: {
-      format: new HostFunction<R>({ name: "compareArray.format", call: (args) => Effect.succeed(show(args[0])) }),
-    },
-  })
-  const assert = new HostFunction<R>({
-    name: "assert",
-    call: (args) =>
-      args[0] === true
-        ? Effect.void
-        : fail(args[1] === undefined ? `Expected true but got ${show(args[0])}` : String(args[1])),
-    members: {
-      sameValue: new HostFunction<R>({
-        name: "assert.sameValue",
-        call: (args) =>
-          Object.is(args[0], args[1])
-            ? Effect.void
-            : fail(`${prefix(args[2])}Expected SameValue(«${show(args[0])}», «${show(args[1])}») to be true`),
-      }),
-      notSameValue: new HostFunction<R>({
-        name: "assert.notSameValue",
-        call: (args) =>
-          Object.is(args[0], args[1])
-            ? fail(`${prefix(args[2])}Expected SameValue(«${show(args[0])}», «${show(args[1])}») to be false`)
-            : Effect.void,
-      }),
-      compareArray: new HostFunction<R>({
-        name: "assert.compareArray",
-        call: (args) =>
-          compare(args[0], args[1])
-            ? Effect.void
-            : fail(
-                `Actual ${show(args[0])} and expected ${show(args[1])} should have the same contents. ${prefix(args[2])}`,
-              ),
-      }),
-      throws: new HostFunction<R>({
-        name: "assert.throws",
-        call: (args, node) => {
-          const expected = args[0] instanceof HostFunction ? args[0].name : show(args[0])
-          return host.runner.invokeCallable(args[1], [], node).pipe(
-            Effect.matchCauseEffect({
-              onFailure: (cause) => {
-                if (cause.reasons.some(Cause.isInterruptReason)) return Effect.failCause(cause)
-                const thrown = caughtErrorValue(host.runner, Cause.squash(cause))
-                if (!(thrown instanceof ProgramObject)) return fail(`${prefix(args[2])}Thrown value was not an object!`)
-                const actual = get(thrown, "constructor")
-                if (actual === args[0]) return Effect.void
-                return fail(`${prefix(args[2])}Expected a ${expected} but got a ${show(actual)}`)
-              },
-              onSuccess: () =>
-                fail(`${prefix(args[2])}Expected a ${expected} to be thrown but no exception was thrown at all`),
-            }),
-          )
-        },
-      }),
-    },
-  })
+  methods(builtins, test262Error, [["thrower", 1, (_, args) => fail(String(args[0]))]])
+  const compareArray = fn<R>(builtins, "compareArray", 2, (_, args) => compare(args[0], args[1]))
+  methods(builtins, compareArray, [["format", 1, (_, args) => show(args[0])]])
+  const assert = fn<R>(builtins, "assert", 2, (_, args) =>
+    args[0] === true
+      ? Effect.undefined
+      : fail(args[1] === undefined ? `Expected true but got ${show(args[0])}` : String(args[1])),
+  )
+  methods(builtins, assert, [
+    [
+      "sameValue",
+      3,
+      (_, args) =>
+        Object.is(args[0], args[1])
+          ? Effect.undefined
+          : fail(`${prefix(args[2])}Expected SameValue(«${show(args[0])}», «${show(args[1])}») to be true`),
+    ],
+    [
+      "notSameValue",
+      3,
+      (_, args) =>
+        Object.is(args[0], args[1])
+          ? fail(`${prefix(args[2])}Expected SameValue(«${show(args[0])}», «${show(args[1])}») to be false`)
+          : Effect.undefined,
+    ],
+    [
+      "compareArray",
+      3,
+      (_, args) =>
+        compare(args[0], args[1])
+          ? Effect.undefined
+          : fail(
+              `Actual ${show(args[0])} and expected ${show(args[1])} should have the same contents. ${prefix(args[2])}`,
+            ),
+    ],
+    [
+      "throws",
+      3,
+      (_, args) => {
+        const expected = args[0] instanceof Callable ? String(get(args[0], "name")) : show(args[0])
+        return ctx.call(args[1], undefined, []).pipe(
+          Effect.matchCauseEffect({
+            onFailure: (cause) => {
+              if (cause.reasons.some(Cause.isInterruptReason)) return Effect.failCause(cause)
+              const thrown = materialize(ctx, Cause.squash(cause))
+              if (!(thrown instanceof Obj)) return fail(`${prefix(args[2])}Thrown value was not an object!`)
+              const actual = get(thrown, "constructor")
+              if (actual === args[0]) return Effect.undefined
+              return fail(`${prefix(args[2])}Expected a ${expected} but got a ${show(actual)}`)
+            },
+            onSuccess: () =>
+              fail(`${prefix(args[2])}Expected a ${expected} to be thrown but no exception was thrown at all`),
+          }),
+        )
+      },
+    ],
+  ])
   return [
     ["assert", assert],
     ["compareArray", compareArray],
     ["Test262Error", test262Error],
-    ["$DONE", new HostFunction<R>({ name: "$DONE", call: (args) => Effect.sync(() => onDone(args[0])) })],
+    [
+      "$DONE",
+      fn<R>(builtins, "$DONE", 1, (_, args) => {
+        onDone(args[0])
+        return undefined
+      }),
+    ],
     [
       "$DONOTEVALUATE",
-      new HostFunction<R>({
-        name: "$DONOTEVALUATE",
-        call: () => Effect.fail(new ProgramThrow("Test262: This statement should not be evaluated.")),
-      }),
+      fn<R>(builtins, "$DONOTEVALUATE", 0, () =>
+        Effect.fail(new Throw("Test262: This statement should not be evaluated.")),
+      ),
     ],
   ]
 }
@@ -161,9 +162,10 @@ const harness = <R>(host: Host<R>, onDone: (error: unknown) => void): ReadonlyAr
 const show = (value: unknown): string => {
   if (typeof value === "string") return JSON.stringify(value)
   if (Object.is(value, -0)) return "-0"
-  if (value instanceof ProgramArray) return `[${value.items.map(show).join(", ")}]`
-  if (value instanceof HostFunction) return value.name
-  if (!(value instanceof ProgramObject)) return String(value)
+  if (value instanceof Arr) return `[${value.items.map(show).join(", ")}]`
+  if (value instanceof Fn) return "program function"
+  if (value instanceof Callable) return String(get(value, "name"))
+  if (!(value instanceof Obj)) return String(value)
   const message = get(value, "message")
   return typeof message === "string" ? `${String(get(value, "name") ?? "object")}: ${message}` : "object"
 }

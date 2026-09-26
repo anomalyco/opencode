@@ -82,7 +82,9 @@ test.each(["pointer", "output"])("joins both recording streams after an early %s
     if (failed === "pointer") await mkdir(join(directory, "timeline.pointers.jsonl"))
     const error = new Promise<Error>((resolve) => timeline.once("error", resolve))
     timeline.pointer("move", 10, 5)
+    // oxlint-disable-next-line no-restricted-globals -- This failure-path test must access Timeline's owned private stream.
     const output: unknown = Reflect.get(timeline, "output")
+    // oxlint-disable-next-line no-restricted-globals -- This failure-path test must access Timeline's owned private stream.
     const pointers: unknown = Reflect.get(timeline, "pointers")
     if (!(output instanceof WriteStream) || !(pointers instanceof WriteStream)) throw new Error("missing owned streams")
     if (failed === "output") {
@@ -95,7 +97,9 @@ test.each(["pointer", "output"])("joins both recording streams after an early %s
     await expect(finishing).rejects.toBe(failure)
     expect(output.closed).toBe(true)
     expect(pointers.closed).toBe(true)
+    // oxlint-disable-next-line no-restricted-globals -- Node does not expose the stream descriptor state publicly.
     expect(Reflect.get(output, "fd")).toBeNull()
+    // oxlint-disable-next-line no-restricted-globals -- Node does not expose the stream descriptor state publicly.
     expect(Reflect.get(pointers, "fd")).toBeNull()
     timeline.pointer("move", 99, 99)
     expect(timeline.finish()).toBe(finishing)

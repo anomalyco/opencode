@@ -54,6 +54,7 @@ export const Tab = Schema.Struct({
   url: Schema.String.check(Schema.isMaxLength(16_384)),
   title: short,
   loading: Schema.Boolean,
+  loadError: optional(short),
   canGoBack: Schema.Boolean,
   canGoForward: Schema.Boolean,
   generation: count,
@@ -159,8 +160,14 @@ export const Operations = [
   ),
   operation(
     "tabs.open",
-    "Open a browser tab. Defaults to about:blank and focused. Website traffic uses the connected server's network; localhost reaches that server.",
-    { url: optional(short), focus: optional(Schema.Boolean) },
+    "Open a browser tab, show it in the Review pane, and select it. Defaults to about:blank. Website traffic uses the connected server's network; localhost reaches that server.",
+    {
+      url: optional(short),
+      focus: optional(Schema.Boolean).annotate({
+        description:
+          "Default true: open the Review pane and select the new tab so the user sees it. Pass false only when the user asked for the tab to stay in the background.",
+      }),
+    },
     Tab,
   ),
   operation(
@@ -174,6 +181,12 @@ export const Operations = [
     "Close only this browser tab, abort its work, and release its browser resources.",
     tab,
     State,
+  ),
+  operation(
+    "preview",
+    "Show a file to the user. Opens the file in the Review pane and focuses its tab for viewing. Images and screenshots (PNG, JPEG, GIF, WebP, charts, plots, photos), SVG, audio, video (MP4, WebM), PDF documents, HTML pages, Markdown, Mermaid diagrams, CSV and TSV tables, and fonts render as a media preview; code and other text files display highlighted source. Use this to present an artifact, output, or result you created or changed instead of pasting its contents, describing it, or opening a file:// URL in a browser tab. The path is server-local: relative to the workspace or absolute.",
+    { path: short.annotate({ description: "Server-local path to the file, relative to the workspace or absolute." }) },
+    Schema.Struct({ path: short }),
   ),
   operation(
     "navigate",

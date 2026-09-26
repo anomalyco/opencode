@@ -26,8 +26,6 @@ export const Event = SessionEvent
 export { Revert }
 export const ForkBoundary = SessionFork.Boundary
 export type ForkBoundary = SessionFork.Boundary
-export const ForkRequestBoundary = SessionFork.RequestBoundary
-export type ForkRequestBoundary = SessionFork.RequestBoundary
 
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({

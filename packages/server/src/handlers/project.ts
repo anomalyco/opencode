@@ -1,4 +1,3 @@
-import { Location } from "@opencode/core/location"
 import { Project } from "@opencode/core/project"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
@@ -19,15 +18,6 @@ export const ProjectHandler = HttpApiBuilder.group(Api, "server.project", (handl
               }),
           ),
         ),
-      ),
-    )
-    .handle("project.current", () =>
-      Location.Service.use((location) =>
-        Effect.succeed({
-          id: location.project.id,
-          directory: location.project.directory,
-          canonical: location.project.canonical,
-        }),
       ),
     ),
 )

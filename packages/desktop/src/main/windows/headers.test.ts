@@ -27,7 +27,7 @@ describe("renderer response headers", () => {
   test("adds the crash-report document policy only to renderer documents", () => {
     const document = {}
     addRendererHeaders(document, { document: true })
-    expect(Reflect.get(document, documentPolicyHeader)).toEqual([jsCallStacksDocumentPolicy])
+    expect(document[documentPolicyHeader]).toEqual([jsCallStacksDocumentPolicy])
     const asset = {}
     addRendererHeaders(asset, { document: false })
     expect(Object.keys(asset)).not.toContain(documentPolicyHeader)

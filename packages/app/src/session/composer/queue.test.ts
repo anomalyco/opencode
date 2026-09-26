@@ -1,12 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionInboxInfo } from "@opencode/client/promise"
-import { queuedPromptRows } from "./queue"
+import { queuedPromptAttachments, queuedPromptUndoDraft, queuedPromptRows } from "./queue"
 
 const queued = [
   {
     id: "msg_original",
     sessionID: "ses_1",
-    timeCreated: 1,
+    time: { created: 1 },
     type: "user",
     delivery: "queue",
     payload: { text: "original" },
@@ -14,7 +14,7 @@ const queued = [
   {
     id: "msg_replacement",
     sessionID: "ses_1",
-    timeCreated: 2,
+    time: { created: 2 },
     type: "user",
     delivery: "queue",
     payload: { text: "edited" },
@@ -50,5 +50,97 @@ describe("queuedPromptRows", () => {
       { id: "msg_other", text: "other", attachments: 0 },
       { id: "msg_replacement", text: "edited", attachments: 0 },
     ])
+  })
+})
+
+describe("queuedPromptAttachments", () => {
+  test("returns inline attachments as composer image parts", () => {
+    const item = {
+      ...queued[0],
+      payload: {
+        text: "",
+        files: [
+          { data: "aGk=", mime: "image/png", source: { type: "inline" as const }, name: "shot.png" },
+          { data: "aGk=", mime: "application/pdf", source: { type: "inline" as const } },
+        ],
+      },
+    } satisfies SessionInboxInfo
+
+    expect(queuedPromptAttachments(item)).toEqual([
+      {
+        type: "image",
+        id: "msg_original:file:0",
+        filename: "shot.png",
+        mime: "image/png",
+        blob: { id: "data:image/png;base64,aGk=", url: "data:image/png;base64,aGk=" },
+      },
+      {
+        type: "image",
+        id: "msg_original:file:1",
+        filename: "attachment",
+        mime: "application/pdf",
+        blob: { id: "data:application/pdf;base64,aGk=", url: "data:application/pdf;base64,aGk=" },
+      },
+    ])
+  })
+
+  test("leaves file mentions and context files in the payload", () => {
+    const item = {
+      ...queued[0],
+      payload: {
+        text: "see @src/a.ts",
+        files: [
+          {
+            data: "aGk=",
+            mime: "text/plain",
+            source: { type: "inline" as const },
+            mention: { start: 4, end: 13, text: "@src/a.ts" },
+          },
+          { data: "aGk=", mime: "text/plain", source: { type: "uri" as const, uri: "file:///src/b.ts" } },
+        ],
+      },
+    } satisfies SessionInboxInfo
+
+    expect(queuedPromptAttachments(item)).toEqual([])
+  })
+})
+
+describe("queuedPromptUndoDraft", () => {
+  test("keeps full text, structured mentions, and inline images", () => {
+    const item = {
+      ...queued[0],
+      payload: {
+        text: "inspect @main.ts with @build",
+        files: [
+          {
+            data: "aGk=",
+            mime: "text/plain",
+            source: { type: "uri" as const, uri: "file:///repo/main.ts" },
+            name: "main.ts",
+            mention: { start: 8, end: 16, text: "@main.ts" },
+          },
+          { data: "aGk=", mime: "image/png", source: { type: "inline" as const }, name: "shot.png" },
+        ],
+        agents: [{ name: "build", mention: { start: 22, end: 28, text: "@build" } }],
+      },
+    } satisfies SessionInboxInfo
+    expect(queuedPromptUndoDraft(item)).toMatchObject([
+      { type: "text", content: "inspect " },
+      { type: "file", content: "@main.ts", url: "data:text/plain;base64,aGk=" },
+      { type: "text", content: " with " },
+      { type: "agent", content: "@build", name: "build" },
+      { type: "image", filename: "shot.png" },
+    ])
+  })
+
+  test("does not drop hidden file context", () => {
+    const item = {
+      ...queued[0],
+      payload: {
+        text: "inspect this",
+        files: [{ data: "aGk=", mime: "text/plain", source: { type: "uri" as const, uri: "file:///repo/main.ts" } }],
+      },
+    } satisfies SessionInboxInfo
+    expect(queuedPromptUndoDraft(item)).toBeUndefined()
   })
 })

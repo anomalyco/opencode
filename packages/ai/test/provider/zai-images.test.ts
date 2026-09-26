@@ -17,7 +17,7 @@ describe("Z.ai Images", () => {
           http: { body: { configured: true, quality: "configured" }, query: { trace: "default" } },
         }).image("glm-image"),
         prompt: "A red circle on a white background",
-        options: {
+        providerOptions: {
           quality: "hd",
           userID: "alias-user",
           user_id: "raw-user",
@@ -31,8 +31,20 @@ describe("Z.ai Images", () => {
       })
 
       expect(response.images).toHaveLength(1)
-      expect(response.image?.mediaType).toBe("application/octet-stream")
-      expect(response.image?.data).toBe("https://cdn.z.ai/generated.png")
+      expect(response.image.mediaType).toBe("application/octet-stream")
+      // Z.ai documents that output URLs expire 30 days after generation; the test clock starts at 0.
+      expect(response.image.source).toEqual({
+        type: "url",
+        url: "https://cdn.z.ai/generated.png",
+        expiresAt: 30 * 24 * 60 * 60 * 1000,
+      })
+      expect(response.notices).toEqual([
+        {
+          type: "moderated",
+          message: "Z.ai Images applied a content filter for future-role at level 4.5",
+          providerMetadata: { zai: { role: "future-role", level: 4.5 } },
+        },
+      ])
       expect(response.providerMetadata).toEqual({
         zai: {
           created: 1_760_335_349,
@@ -109,7 +121,7 @@ describe("Z.ai Images", () => {
     Image.generate({
       model: ZAI.configure({ apiKey: "test" }).image("model"),
       prompt: "test",
-      options: { quality: "future-quality", userID: "x", user_id: "raw-user" },
+      providerOptions: { quality: "future-quality", userID: "x", user_id: "raw-user" },
     }).pipe(
       Effect.provide(
         ImageClient.layer.pipe(

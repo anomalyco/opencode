@@ -53,11 +53,11 @@ it.live("uses base configuration without depending on process.cwd()", () =>
     )
 
     expect(global).not.toBe(process.cwd())
-    expect(yield* request(handler, new URL("http://opencode.local/api/generate"))).toEqual({
+    expect(yield* request(handler, new URL("http://opencode.local/api/experimental/generate"))).toEqual({
       model: { providerID: "base", model: "default" },
     })
 
-    const legacy = new URL("http://opencode.local/api/generate")
+    const legacy = new URL("http://opencode.local/api/experimental/generate")
     legacy.searchParams.set("location[directory]", project)
     expect(yield* request(handler, legacy)).toEqual({
       model: { providerID: "base", model: "default" },
