@@ -13,6 +13,7 @@ import sessionUsageMigration from "@opencode-ai/core/database/migration/20260510
 import normalizeStoragePathsMigration from "@opencode-ai/core/database/migration/20260601010001_normalize_storage_paths"
 import sessionMessageProjectionOrderMigration from "@opencode-ai/core/database/migration/20260603040000_session_message_projection_order"
 import eventSourcedSessionInputMigration from "@opencode-ai/core/database/migration/20260604172448_event_sourced_session_input"
+import eventCompactKeyMigration from "@opencode-ai/core/database/migration/20260916181847_event_compact_key"
 import contextEpochAgentMigration from "@opencode-ai/core/database/migration/20260605042240_add_context_epoch_agent"
 import simplifyIntegrationCredentialsMigration from "@opencode-ai/core/database/migration/20260611192811_lush_chimera"
 import simplifySessionInputMigration from "@opencode-ai/core/database/migration/20260622202450_simplify_session_input"
@@ -701,6 +702,39 @@ describe("DatabaseMigration", () => {
         yield* DatabaseMigration.applyOnly(db, [])
 
         expect(yield* db.all(sql`SELECT id FROM migration ORDER BY id`)).toEqual([{ id: "existing" }])
+      }),
+    )
+  })
+})
+
+describe("DatabaseMigration event compact key", () => {
+  test("backfills compact keys from serialized event data and exempts accounting rows", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(
+          sql`CREATE TABLE event (id text PRIMARY KEY, aggregate_id text NOT NULL, seq integer NOT NULL, type text NOT NULL, data text NOT NULL)`,
+        )
+        // Raw SQL insert mirrors pre-upgrade storage; data is a serialized string.
+        yield* db.run(sql`
+          INSERT INTO event (id, aggregate_id, seq, type, data) VALUES
+            ('evt_1', 'ses_1', 1, 'session.updated.1', ${JSON.stringify({ sessionID: "ses_1", info: { id: "ses_1" } })}),
+            ('evt_2', 'ses_1', 2, 'session.updated.1', ${JSON.stringify({ sessionID: "ses_1", info: { id: "ses_1" } })}),
+            ('evt_3', 'ses_1', 3, 'message.part.updated.1', ${JSON.stringify({ sessionID: "ses_1", part: { id: "prt_1", type: "step-finish" } })}),
+            ('evt_4', 'ses_1', 4, 'message.part.updated.1', ${JSON.stringify({ sessionID: "ses_1", part: { id: "prt_2", type: "text" } })})
+        `)
+
+        yield* DatabaseMigration.applyOnly(db, [eventCompactKeyMigration])
+
+        const rows = yield* db.all<{ id: string; compact_key: string | null }>(
+          sql`SELECT id, compact_key FROM event ORDER BY id`,
+        )
+        expect(rows).toEqual([
+          { id: "evt_1", compact_key: "ses_1" },
+          { id: "evt_2", compact_key: "ses_1" },
+          { id: "evt_3", compact_key: null },
+          { id: "evt_4", compact_key: "prt_2" },
+        ])
       }),
     )
   })
