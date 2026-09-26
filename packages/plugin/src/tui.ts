@@ -217,6 +217,7 @@ export type TuiPromptProps = {
   hint?: JSX.Element
   right?: JSX.Element
   showPlaceholder?: boolean
+  rawPlaceholders?: boolean
   placeholders?: {
     normal?: string[]
     shell?: string[]
