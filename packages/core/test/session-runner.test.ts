@@ -319,15 +319,24 @@ const layer = Layer.unwrap(
     const models = Layer.mock(SessionRunnerModel.Service)({
       resolve: (session) =>
         state.modelResolveHook.pipe(
-          Effect.map(() => {
+          Effect.flatMap(() => {
+            if (session.model?.id === "missing")
+              return Effect.fail(
+                new SessionRunnerModel.ModelUnavailableError({
+                  providerID: session.model.providerID,
+                  modelID: session.model.id,
+                }),
+              )
             const selected = session.model?.id === "replacement" ? replacementModel : state.currentModel
-            return SessionRunnerModel.resolved(selected, {
-              capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
-              cost: [],
-              limit: modelLimits.get(String(selected.id)) ?? defaultModelLimit,
-              variant: session.model?.variant,
-              compaction: state.compaction,
-            })
+            return Effect.succeed(
+              SessionRunnerModel.resolved(selected, {
+                capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+                cost: [],
+                limit: modelLimits.get(String(selected.id)) ?? defaultModelLimit,
+                variant: session.model?.variant,
+                compaction: state.compaction,
+              }),
+            )
           }),
         ),
     })
@@ -3624,6 +3633,49 @@ describe("SessionRunnerLLM", () => {
       [defaultSystem, replacementIdentity, "Initial context"],
     ])
     expect(systemTexts(s.requests[1])).toContain("Replacement context")
+  })
+
+  scenario("routes a tool-driven continuation step through the model.select hook", function* (s) {
+    const hooks = yield* PluginHooks.Service
+    const seen: { step: number; types: string[] }[] = []
+    yield* hooks.register("session", "model.select", (event) =>
+      Effect.sync(() => {
+        seen.push({ step: event.step, types: event.messages.map((message) => message.type) })
+        if (event.step > 1) event.model = { id: ID.make("replacement"), providerID: Provider.ID.make("fake") }
+      }),
+    )
+    yield* s.admit("Echo this")
+    yield* s.llm.push(TestLLM.tool("call-echo", "echo", { text: "hello" }), TestLLM.stop())
+
+    yield* s.resume
+
+    expect(seen).toEqual([
+      { step: 1, types: ["user"] },
+      { step: 2, types: ["user", "assistant"] },
+    ])
+    expect(s.requests.map((request) => request.model)).toEqual([model, replacementModel])
+    expect(s.requests[1]?.system.map((part) => part.text)).toContain(replacementIdentity)
+    // Routing applies to one turn and never replaces the Session's selected model.
+    expect((yield* s.session.get(sessionID)).model).toBeUndefined()
+  })
+
+  scenario("keeps the selected model when the model.select hook returns an unavailable model", function* (s) {
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "model.select", (event) =>
+      Effect.sync(() => {
+        event.model = { id: ID.make("missing"), providerID: Provider.ID.make("fake") }
+      }),
+    )
+    yield* s.admit("Say hi")
+    yield* s.llm.push(TestLLM.text("hi", "text-hi"))
+
+    yield* s.resume
+
+    expect(s.requests.map((request) => request.model)).toEqual([model])
+    expect(yield* s.context).toMatchObject([
+      Expected.user("Say hi"),
+      Expected.assistant({ finish: "stop" }, [Expected.text("hi")]),
+    ])
   })
 
   scenario("consumes the full provider stream before recording its boundary and settling local tools", function* (s) {

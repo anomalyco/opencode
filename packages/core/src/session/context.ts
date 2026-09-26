@@ -11,6 +11,7 @@ import { InstructionDiscovery } from "../instruction-discovery.js"
 import { Instructions } from "../instructions/index.js"
 import { InstructionBuiltIns } from "../instructions/builtins.js"
 import { Location } from "../location.js"
+import { PluginHooks } from "../plugin/hooks.js"
 import { McpInstructions } from "../mcp/instructions.js"
 import { McpTool } from "../tool/mcp.js"
 import { ReferenceInstructions } from "../reference/instructions.js"
@@ -51,8 +52,8 @@ export interface Loaded {
 export interface Interface {
   /** Selects the Session, agent, instructions, and tools used by subsequent work. */
   readonly select: (sessionID: SessionSchema.ID) => Effect.Effect<Selection, AgentNotFoundError>
-  /** Resolves the model and active history for that selection. */
-  readonly load: (selection: Selection) => Effect.Effect<Loaded, SessionRunnerModel.Error>
+  /** Resolves the model and active history for one provider turn of that selection. */
+  readonly load: (selection: Selection, step: number) => Effect.Effect<Loaded, SessionRunnerModel.Error>
   readonly resolveModel: (
     session: SessionSchema.Info,
   ) => Effect.Effect<SessionRunnerModel.Resolved, SessionRunnerModel.Error>
@@ -79,6 +80,7 @@ const layer = Layer.effect(
     const model = yield* Model.Service
     const db = (yield* Database.Service).db
     const discovery = yield* InstructionDiscovery.Service
+    const hooks = yield* PluginHooks.Service
     const entries = yield* InstructionEntry.Service
     const location = yield* Location.Service
     const mcpInstructions = yield* McpInstructions.Service
@@ -157,20 +159,41 @@ const layer = Layer.effect(
       }
     })
 
-    const load = Effect.fn("SessionContext.load")(function* (selection: Selection) {
-      const model = yield* resolveModel(selection.session)
-      const history = yield* SessionHistory.entriesForRunner(
-        db,
-        selection.session.id,
-        selection.instructions,
-        SessionProviderContext.provenance(model) ?? "local",
-      )
+    const load = Effect.fn("SessionContext.load")(function* (selection: Selection, step: number) {
+      const selected = yield* resolveModel(selection.session)
+      const history = (resolved: SessionRunnerModel.Resolved) =>
+        SessionHistory.entriesForRunner(
+          db,
+          selection.session.id,
+          selection.instructions,
+          SessionProviderContext.provenance(resolved) ?? "local",
+        )
+      const initial = yield* history(selected)
+      const event = yield* hooks.trigger("session", "model.select", {
+        sessionID: selection.session.id,
+        agent: selection.agent.id,
+        step,
+        messages: initial.entries.map((entry) => entry.message),
+        model: selected.ref,
+      })
+      const model = sameModel(event.model, selected.ref)
+        ? selected
+        : yield* resolveModel({ ...selection.session, model: event.model }).pipe(
+            Effect.catch((error) =>
+              Effect.logWarning("session.model.select returned an unavailable model; keeping the selected model", {
+                model: event.model,
+                error,
+              }).pipe(Effect.as(selected)),
+            ),
+          )
+      // History selects native provider windows by provenance, so a routed turn reloads it for its route.
+      const loaded = model === selected ? initial : yield* history(model)
       return {
         session: selection.session,
         agent: selection.agent,
         model,
-        initial: history.initial,
-        messages: history.entries.map((entry) => entry.message),
+        initial: loaded.initial,
+        messages: loaded.entries.map((entry) => entry.message),
         tools: selection.tools,
       }
     })
@@ -178,6 +201,9 @@ const layer = Layer.effect(
     return Service.of({ select, load, resolveModel, selectTitle, request })
   }),
 )
+
+const sameModel = (a: Model.Ref, b: Model.Ref) =>
+  a.providerID === b.providerID && a.id === b.id && (a.variant ?? "default") === (b.variant ?? "default")
 
 /** Variant IDs that minimize reasoning output, in preference order. */
 const MINIMAL_REASONING_VARIANTS = ["none", "minimal", "low"].map((id) => Model.VariantID.make(id))
@@ -195,6 +221,7 @@ export const node = makeLocationNode({
     Location.node,
     McpInstructions.node,
     McpTool.node,
+    PluginHooks.node,
     ReferenceInstructions.node,
     SessionRunnerModel.node,
     SessionModelRequest.node,
