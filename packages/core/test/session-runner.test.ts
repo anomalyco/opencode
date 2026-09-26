@@ -671,6 +671,11 @@ const invalidRequest = () =>
     reason: new InvalidRequestError({ message: "Invalid request" }),
   })
 
+const payloadTooLarge = () =>
+  new AIError({
+    reason: new InvalidRequestError({ message: "Too large", classification: "payload-too-large" }),
+  })
+
 const rateLimited = (retryAfterMs?: number) =>
   new AIError({
     reason: new RateLimitError({ message: "Rate limited", retryAfterMs }),
@@ -2816,13 +2821,7 @@ describe("SessionRunnerLLM", () => {
     )
     s.currentModel = unknownContextModel
     s.requests.length = 0
-    const tooLarge = () =>
-      Stream.fail(
-        new AIError({
-          reason: new InvalidRequestError({ message: "Too large", classification: "payload-too-large" }),
-        }),
-      )
-    yield* s.llm.push(tooLarge(), tooLarge(), tooLarge(), tooLarge(), tooLarge())
+    yield* s.llm.push(...Array.from({ length: 5 }, () => Stream.fail(payloadTooLarge())))
     const compaction = yield* s.session.compact({ sessionID })
     yield* s.resume
 
@@ -2836,6 +2835,53 @@ describe("SessionRunnerLLM", () => {
     expect(userTexts(s.requests[3])[0].length).toBeLessThan(userTexts(s.requests[2])[0].length)
     expect(userTexts(s.requests[4])[0].length).toBeLessThan(userTexts(s.requests[3])[0].length)
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({ status: "failed" })
+  })
+
+  scenario("resends whole history as text after payload too large when it cannot be shortened", function* (s) {
+    const image = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+    yield* s.session.prompt({
+      sessionID,
+      text: `Request 0: ${"x".repeat(40_000)}`,
+      files: [{ uri: `data:image/png;base64,${image}` }],
+      resume: false,
+    })
+    yield* s.llm.push(TestLLM.text("Answer 0", "answer-0"))
+    yield* s.resume
+    s.currentModel = testModel("smaller-history", { context: 7_000, output: 1_000 })
+    s.requests.length = 0
+    yield* s.llm.push(Stream.fail(payloadTooLarge()), TestLLM.text("## Objective\n- Recovered", "summary"))
+    const compaction = yield* s.session.compact({ sessionID })
+    yield* s.resume
+
+    // Even the latest exchange is over the estimated limit, so the first send is unchanged and the second keeps it all.
+    expect(s.requests).toHaveLength(2)
+    expect(s.requests[0]?.messages.some((message) => message.content.some((part) => part.type === "media"))).toBeTrue()
+    expect(s.requests[1]?.messages.every((message) => message.role === "user")).toBeTrue()
+    expect(userTexts(s.requests[1])[0]).toContain("[image/png omitted]")
+    expect(userTexts(s.requests[1])[0]).toContain(`Request 0: ${"x".repeat(40_000)}`)
+    expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({ status: "completed" })
+  })
+
+  scenario("shrinks after payload too large on a compaction already sent as text", function* (s) {
+    const service = yield* SessionCompaction.Service
+    yield* service.transform((editor) => editor.configure({ buffer: 3_000 }))
+    s.currentModel = testModel("large-history", { context: 1_000_000, output: 32_000 })
+    yield* s.llm.push(...Array.from({ length: 6 }, (_, index) => TestLLM.text(`Answer ${index}`, `answer-${index}`)))
+    yield* Effect.forEach(
+      Array.from({ length: 6 }, (_, index) => index),
+      (index) => s.runPrompt(`Request ${index}: ${"x".repeat(8_000)}`),
+    )
+    s.currentModel = testModel("smaller-history", { context: 12_000, output: 1_000 })
+    s.requests.length = 0
+    yield* s.llm.push(Stream.fail(payloadTooLarge()), TestLLM.text("## Objective\n- Recovered", "summary"))
+    const compaction = yield* s.session.compact({ sessionID })
+    yield* s.resume
+
+    // The first send was already text, so there is no media left to drop; the rejection counts like "too long".
+    expect(s.requests).toHaveLength(2)
+    expect(s.requests[0]?.messages.every((message) => message.role === "user")).toBeTrue()
+    expect(userTexts(s.requests[1])[0].length).toBeLessThan(userTexts(s.requests[0])[0].length)
+    expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({ status: "completed" })
   })
 
   scenario("aims the first overflow compaction below the rejected context", function* (s) {

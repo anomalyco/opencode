@@ -356,13 +356,13 @@ export const layer = Layer.effect(
 
     /**
      * Sends the request as-is if it is estimated to fit `target`, and as text otherwise (see `flattenAndDropOldest`).
-     * Limits and estimates can be wrong, so until the provider rejects something, a request that cannot be made to
-     * fit is sent unchanged. A "too long" rejection means the estimate ran low, so the next attempts aim at 70%, 50%,
-     * then 35% of the first rejected request's estimate, and a rejection after those gives up. A "payload too large"
-     * rejection is about bytes, which inline media almost always accounts for, so the first one resends as text,
-     * which carries no media, without counting; any later one counts as "too long". Other provider errors resend the
-     * same request under the session's retry policy. A `Failure` from `send` is a reply that cannot be used, and is
-     * never retried.
+     * Limits and estimates can be wrong, so until the provider rejects something as too long, a request that cannot
+     * be made to fit is sent whole: unchanged, or as text once its media has to go. A "too long" rejection means the
+     * estimate ran low, so the next attempts aim at 70%, 50%, then 35% of the first rejected request's estimate, and a
+     * rejection after those gives up. A "payload too large" rejection is about bytes, which inline media almost always
+     * accounts for, so one on the unchanged request resends it as text, which carries no media, without counting; one
+     * on text counts as "too long". Other provider errors resend the same request under the session's retry policy. A
+     * `Failure` from `send` is a reply that cannot be used, and is never retried.
      */
     const deliver = Effect.fnUntraced(function* (
       trigger: Trigger,
@@ -388,7 +388,11 @@ export const layer = Layer.effect(
         const request = fits
           ? prepared.request
           : (flattenAndDropOldest(prepared.request, context, target) ??
-            (rejections === 0 ? prepared.request : undefined))
+            (rejections > 0
+              ? undefined
+              : asText
+                ? flattenAndDropOldest(prepared.request, context, Number.POSITIVE_INFINITY)
+                : prepared.request))
         if (!request) {
           return yield* Effect.fail<Failure>({
             error: {
@@ -406,7 +410,7 @@ export const layer = Layer.effect(
         const error = toSessionError(cause)
         const tooLarge = cause.reason._tag === "InvalidRequest" && cause.reason.classification === "payload-too-large"
 
-        if (tooLarge && !asText) {
+        if (tooLarge && request === prepared.request) {
           asText = true
           continue
         }
