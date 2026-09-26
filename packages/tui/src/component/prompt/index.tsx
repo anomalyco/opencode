@@ -367,11 +367,11 @@ export function Prompt(props: PromptProps) {
 
   function insertPrompt(text: string, position: "cursor" | "end" = "cursor") {
     if (!input || input.isDestroyed) return false
-    if (text.length === 0) return true
     if (position === "end") input.gotoBufferEnd()
     input.insertText(text)
     setTimeout(() => {
-      if (!input || disposed || input.isDestroyed) return
+      // setTimeout is a workaround and needs to be addressed properly
+      if (!input || input.isDestroyed) return
       input.getLayoutNode().markDirty()
       input.gotoBufferEnd()
       renderer.requestRender()

@@ -1,20 +1,21 @@
 import { expect, test } from "bun:test"
 import { createPluginContext, type Registry, type usePluginHost } from "../src/plugin/api"
+import { emptyPrompt } from "../src/prompt/history"
 import type { PromptRef } from "../src/component/prompt"
 
-type Host = ReturnType<typeof usePluginHost>
+type Ref = Pick<PromptRef, "current" | "append" | "focus">
 
-function setup(prompt?: Pick<PromptRef, "current" | "append" | "focus">) {
+// Eagerly read host services need a shape; the prompt API only forwards to the ref.
+function setup(ref?: Ref) {
   const host = {
-    app: { version: "test", channel: "test" },
-    client: { api: {} },
-    keymap: { dispatch() {}, mode: { current: () => "normal", push: () => () => {} } },
-    shortcuts: { list: () => [] },
-    keymapState: { commands: () => [], pending: () => [], active: () => [] },
-    sessionTabs: { enabled: () => false },
-    attention: {},
-    prompt: { current: prompt },
-  } as unknown as Host
+    app: {},
+    client: {},
+    keymap: {},
+    shortcuts: {},
+    keymapState: {},
+    sessionTabs: {},
+    prompt: { current: ref },
+  } as unknown as ReturnType<typeof usePluginHost>
   const registry: Registry = { has: () => false, set() {}, remove() {}, active: () => true }
   return createPluginContext({ host, id: "test", options: undefined, owned: [], registry }).ui.prompt
 }
@@ -23,7 +24,7 @@ test("prompt API reads, appends to, and focuses the mounted composer", () => {
   const appended: string[] = []
   let focused = 0
   const prompt = setup({
-    current: { text: "draft", files: [], agents: [], skills: [], pasted: [] },
+    current: { ...emptyPrompt(), text: "draft" },
     append(text) {
       appended.push(text)
       return true
