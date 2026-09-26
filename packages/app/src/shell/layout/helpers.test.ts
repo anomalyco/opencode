@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionInfo } from "@opencode/client/promise"
 import {
+  appendKnownProjects,
   childSessionOnPath,
   closeHomeProject,
   compareSessionTime,
@@ -18,6 +19,7 @@ import {
 } from "./helpers"
 import { pathKey } from "@/workspaces/path-key"
 import { ServerConnection } from "@/runtime/server/registry"
+import type { Project } from "@/runtime/server/types"
 
 const serverKey = ServerConnection.Key.make
 
@@ -287,4 +289,51 @@ describe("layout workspace helpers", () => {
     expect(errorMessage(new Error("broken"), "fallback")).toBe("broken")
     expect(errorMessage("unknown", "fallback")).toBe("fallback")
   })
+
+  test("appends never-opened server projects after the opened ones, newest first", () => {
+    const opened = [{ id: "opened", worktree: "/opened", expanded: true }]
+    const result = appendKnownProjects(opened, [knownProject("/old", 5), knownProject("/new", 9)])
+
+    expect(result).toEqual([
+      { id: "opened", worktree: "/opened", expanded: true },
+      { ...knownProject("/new", 9), expanded: false },
+      { ...knownProject("/old", 5), expanded: false },
+    ])
+  })
+
+  test("skips server projects that are already opened across path separators", () => {
+    const opened = [{ id: "opened", worktree: "D:\\repo", expanded: true }]
+    const result = appendKnownProjects(opened, [knownProject("D:/repo", 9), knownProject("/other", 3)])
+
+    expect(result.map((project) => project.worktree)).toEqual(["D:\\repo", "/other"])
+  })
+
+  test("appends each server project once when the server list repeats a directory", () => {
+    const result = appendKnownProjects([], [knownProject("D:/repo", 9), knownProject("D:\\repo", 5)])
+
+    expect(result).toEqual([{ ...knownProject("D:/repo", 9), expanded: false }])
+  })
+
+  test("skips server projects without a worktree", () => {
+    const result = appendKnownProjects([], [knownProject("", 9), knownProject("/kept", 3)])
+
+    expect(result.map((project) => project.worktree)).toEqual(["/kept"])
+  })
+
+  test("keeps the opened list unchanged when the server knows no projects", () => {
+    const opened = [{ id: "opened", worktree: "/opened", expanded: true }]
+
+    expect(appendKnownProjects(opened, [])).toEqual(opened)
+  })
 })
+
+function knownProject(worktree: string, updated: number) {
+  return {
+    id: worktree || "empty",
+    canonical: worktree,
+    worktree,
+    worktrees: [{ directory: worktree }],
+    sandboxes: [],
+    time: { created: updated, updated, active: updated },
+  } as Project
+}
