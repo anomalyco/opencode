@@ -4,7 +4,8 @@ import { Effect, Layer, Context } from "effect"
 import { Database } from "@opencode-ai/core/database/database"
 import { eq } from "drizzle-orm"
 import { asc } from "drizzle-orm"
-import { TodoTable } from "@opencode-ai/core/session/sql"
+import { SessionTable, TodoTable } from "@opencode-ai/core/session/sql"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { SessionTodo } from "@opencode-ai/schema/session-todo"
 
@@ -47,7 +48,21 @@ const layer = Layer.effect(
           }),
         )
         .pipe(Effect.orDie)
-      yield* events.publish(Event.Updated, input)
+      // The SSE event stream filters by location.directory, so events
+      // published without a location are dropped before reaching external
+      // subscribers (e.g. ACP clients) even though in-process subscribers
+      // like the TUI still see them. Attach the owning session's directory
+      // so the event reaches every subscriber.
+      const row = yield* db
+        .select({ directory: SessionTable.directory, workspaceID: SessionTable.workspace_id })
+        .from(SessionTable)
+        .where(eq(SessionTable.id, input.sessionID))
+        .get()
+        .pipe(Effect.orDie)
+      const location = row
+        ? { directory: AbsolutePath.make(row.directory), workspaceID: row.workspaceID ?? undefined }
+        : undefined
+      yield* events.publish(Event.Updated, input, location ? { location } : undefined)
     })
 
     const get = Effect.fn("Todo.get")(function* (sessionID: SessionID) {
