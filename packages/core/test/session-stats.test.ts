@@ -235,6 +235,14 @@ describe("SessionStats", () => {
       const project = yield* SessionStats.get({ projectID, timezone: "UTC", tools: "none" })
       expect(DateTime.toEpochMillis(project.range.from)).toBe(Date.UTC(2025, 11, 30, 10))
 
+      const allProjects = yield* SessionStats.get({ to: Date.UTC(2026, 1, 1), timezone: "UTC" })
+      const emptyProject = yield* SessionStats.get({
+        projectID: Project.ID.make(""),
+        to: Date.UTC(2026, 1, 1),
+        timezone: "UTC",
+      })
+      expect(emptyProject).toEqual(allProjects)
+
       const error = yield* Effect.flip(
         SessionStats.get({ from: Date.UTC(2026, 1, 1), to: Date.UTC(2026, 0, 1), tools: "none" }),
       )
