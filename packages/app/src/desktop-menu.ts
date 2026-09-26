@@ -3,6 +3,7 @@ import type { DesktopNativeKey } from "./i18n/desktop-native"
 export type DesktopMenuPlatform = "macos" | "windows"
 
 export type DesktopMenuAction =
+  | "app.about"
   | "app.checkForUpdates"
   | "app.relaunch"
   | "edit.undo"
@@ -293,6 +294,8 @@ export const DESKTOP_MENU: DesktopMenu[] = [
         labelKey: "desktop.menu.reportBug",
         href: "https://github.com/anomalyco/opencode/issues/new?template=bug_report.yml",
       },
+      { type: "separator", platforms: ["windows"] },
+      { type: "item", labelKey: "desktop.menu.about", action: "app.about", platforms: ["windows"] },
     ],
   },
 ]

@@ -1,5 +1,6 @@
 export const dict: Record<string, string> = {
   "desktop.menu.app": "OpenCode",
+  "desktop.menu.about": "སྐོར།",
   "desktop.menu.file": "ཡིག༌སྣོད",
   "desktop.menu.edit": "ཞུན༌དག",
   "desktop.menu.view": "བསམ༌འཆར",
