@@ -26,10 +26,12 @@ export type SessionReviewV2Props = {
   empty?: JSX.Element
   sidebarOpen?: boolean
   sidebar?: JSX.Element
+  sidebarToggle?: JSX.Element
   activeFile?: string
   files: string[]
   onSelectFile: (file: string) => void
   diffStyle: SessionReviewDiffStyle
+  toolbarAction?: JSX.Element
   onDiffStyleChange?: (style: SessionReviewDiffStyle) => void
   expandMode: SessionReviewExpandMode
   onExpandModeChange: (mode: SessionReviewExpandMode) => void
@@ -265,6 +267,7 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
 
   const toolbarEnd = () => (
     <>
+      {props.toolbarAction}
       <SegmentedControl
         value={props.expandMode}
         onChange={(value) => {
@@ -313,7 +316,9 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
   return (
     <SessionFilePanelV2
       sidebar={props.sidebar}
-      toolbar={props.hasDiffs}
+      sidebarToggle={props.sidebarToggle}
+      sidebarCollapsed={props.sidebarOpen === false}
+      toolbar={props.hasDiffs || props.sidebarOpen === false}
       toolbarStart={toolbarStart()}
       toolbarEnd={toolbarEnd()}
     >

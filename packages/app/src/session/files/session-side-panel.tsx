@@ -28,6 +28,7 @@ const fileBrowserTabPanelID = "session-side-panel-file-browser-tabpanel"
 import { SessionContextTab } from "@/session/files/session-context-tab"
 import { SortableTab } from "@/session/files/tab"
 import { OpenInAppButton } from "@/session/files/open-in-app-button"
+import type { OpenInAppState } from "@/session/files/open-in-app"
 import { useCommand } from "@/shell/commands/command"
 import { useFile, type SelectedLineRange } from "@/workspaces/files/model"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -67,7 +68,7 @@ export function SessionSidePanel(props: {
   reviewHasFocusableContent: boolean
   reviewCount: number
   reviewPanel: () => JSX.Element
-  reviewSidebarToggle: (disabled: boolean) => JSX.Element
+  openInApp: OpenInAppState
   fileBrowserState: SessionFileBrowserState
   activeDiff?: string
   focusReviewDiff: (path: string) => void
@@ -329,9 +330,6 @@ export function SessionSidePanel(props: {
                             onCleanup(stop)
                           }}
                         >
-                          <div class="session-review-v2-sidebar-toggle-slot h-full shrink-0 sticky start-0 z-10 flex items-center justify-center bg-v2-background-bg-base">
-                            {props.reviewSidebarToggle(activeTab() === SESSION_OPEN_FILE_TAB)}
-                          </div>
                           <Show when={reviewTab() && props.canReview}>
                             <Tabs.Trigger
                               value="review"
@@ -552,7 +550,14 @@ export function SessionSidePanel(props: {
                           onPointerDown={(event) => event.stopPropagation()}
                           onClick={(event) => event.stopPropagation()}
                         >
-                          <OpenInAppButton directory={projectDirectory} />
+                          <Show
+                            when={
+                              activeTab() !== "review" ||
+                              (!props.hasReview && props.fileBrowserState.sidebarOpened())
+                            }
+                          >
+                            <OpenInAppButton directory={projectDirectory} state={props.openInApp} />
+                          </Show>
                           <Show when={reviewVisible()}>
                             <div class="size-7 shrink-0" aria-hidden />
                           </Show>

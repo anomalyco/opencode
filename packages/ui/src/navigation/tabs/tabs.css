@@ -646,59 +646,10 @@
   [data-component="tabs"]
   .session-review-v2-tabs-bar
   [data-slot="tabs-list"]
-  > .sticky:not(.session-review-v2-sidebar-toggle-slot) {
+  > .sticky {
   left: auto;
   right: auto;
   inset-inline-end: 0;
-}
-
-:root
-  body
-  #review-panel
-  [data-component="tabs"]
-  .session-review-v2-tabs-bar
-  [data-slot="tabs-list"]
-  > .session-review-v2-sidebar-toggle-slot.sticky {
-  left: auto;
-  right: auto;
-  inset-inline-start: 0;
-  padding-inline-end: 0;
-
-  &::before {
-    content: "";
-    position: absolute;
-    top: 50%;
-    bottom: auto;
-    inset-inline-start: auto;
-    inset-inline-end: 100%;
-    transform: translateY(-50%);
-    width: 12px;
-    height: 28px;
-    background-color: var(--v2-background-bg-base);
-    background-image: none;
-    pointer-events: none;
-  }
-
-  &::after {
-    content: "";
-    position: absolute;
-    top: 50%;
-    inset-inline-start: 100%;
-    inset-inline-end: auto;
-    transform: translateY(-50%);
-    width: 8px;
-    height: 28px;
-    pointer-events: none;
-    background: linear-gradient(90deg, var(--v2-background-bg-base), transparent);
-  }
-
-  &:dir(rtl)::after {
-    background: linear-gradient(270deg, var(--v2-background-bg-base), transparent);
-  }
-
-  [data-component="icon-button-v2"]::after {
-    display: none;
-  }
 }
 
 :root body #review-panel [data-component="tabs"] .session-review-v2-open-in-app-slot {

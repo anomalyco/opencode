@@ -1,4 +1,5 @@
 import { createSignal, For, Show, type ParentProps } from "solid-js"
+import { createStore } from "solid-js/store"
 import { AppIcon } from "@opencode/ui/app-icon"
 import { Icon } from "@opencode/ui/icon"
 import { Spinner } from "@opencode/ui/spinner"
@@ -6,11 +7,12 @@ import { Menu } from "@opencode/ui/menu"
 import { SplitButton, SplitButtonAction, SplitButtonMenuTrigger } from "@opencode/ui/split-button"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { useLanguage } from "@/runtime/i18n/language"
-import { type OpenApp, useOpenInApp } from "@/session/files/open-in-app"
+import { type OpenApp, type OpenInAppState } from "@/session/files/open-in-app"
 
-export function OpenInAppButton(props: { directory: () => string }) {
+export function OpenInAppButton(props: { directory: () => string; state: OpenInAppState }) {
   const language = useLanguage()
-  const state = useOpenInApp({ path: props.directory })
+  const state = props.state
+  const [menu, setMenu] = createStore({ open: false })
 
   return (
     <Show when={props.directory() && state.canOpen()}>
@@ -39,8 +41,8 @@ export function OpenInAppButton(props: { directory: () => string }) {
           gutter={4}
           modal={false}
           placement="bottom-end"
-          open={state.menu.open}
-          onOpenChange={(open) => state.setMenu("open", open)}
+          open={menu.open}
+          onOpenChange={(open) => setMenu("open", open)}
         >
           <Menu.Trigger
             as={SplitButtonMenuTrigger}
@@ -52,7 +54,7 @@ export function OpenInAppButton(props: { directory: () => string }) {
           </Menu.Trigger>
           <Menu.Portal>
             <Menu.Content class="open-in-app-v2-menu">
-              <OpenInAppMenuItemsV2 state={state} close={() => state.setMenu("open", false)} />
+              <OpenInAppMenuItemsV2 state={state} close={() => setMenu("open", false)} />
             </Menu.Content>
           </Menu.Portal>
         </Menu>
@@ -60,8 +62,6 @@ export function OpenInAppButton(props: { directory: () => string }) {
     </Show>
   )
 }
-
-type OpenInAppState = ReturnType<typeof useOpenInApp>
 
 function OpenInAppMenuItemsV2(props: {
   state: OpenInAppState
