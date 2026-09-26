@@ -720,6 +720,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const menu = store.slashMenu
     closePopover()
     const images = imageAttachments()
+    const currentText = prompt
+      .current()
+      .map((part) => ("content" in part ? part.content : ""))
+      .join("")
+    const dollarToken = currentText.match(/(^|\s)\$[a-z][a-zA-Z0-9-_]*$/)
+    if (dollarToken && !menu) {
+      const tokenStart = currentText.lastIndexOf("$")
+      const prefix = currentText.slice(0, tokenStart)
+      const text = `${prefix}/${cmd.trigger} `
+      setEditorText(text)
+      prompt.set([{ type: "text", content: text, start: 0, end: text.length }, ...images], text.length)
+      focusEditorEnd()
+      return
+    }
 
     if (cmd.type === "custom") {
       const text = `/${cmd.trigger} `
@@ -999,10 +1013,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!shellMode) {
       const atMatch = rawText.substring(0, cursorPosition).match(/@(\S*)$/)
       const slashMatch = rawText.match(/^\/(\S*)$/)
+      const skillMatch = rawText.substring(0, cursorPosition).match(/(?:^|\s)\$([a-z][a-zA-Z0-9-_]*)$/)
 
       if (atMatch) {
         atOnInput(atMatch[1])
         setStore({ popover: "at", slashMenu: false, slashMenuQuery: "" })
+      } else if (skillMatch) {
+        slashOnInput(skillMatch[1] ?? "")
+        setStore({ popover: "slash", slashMenu: false, slashMenuQuery: "" })
       } else if (slashMatch) {
         slashOnInput(slashMatch[1])
         setStore({ popover: "slash", slashMenu: false, slashMenuQuery: "" })

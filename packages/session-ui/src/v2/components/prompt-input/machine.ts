@@ -102,6 +102,15 @@ function inputChanged(
     ])
   }
 
+  const skill = value.slice(0, cursor ?? value.length).match(/(?:^|\s)\$([a-z][a-zA-Z0-9-_]*)$/)
+  if (skill) {
+    const query = skill[1] ?? ""
+    return changed({ ...state, popover: { type: "command-inline", query }, focus: "editor" }, [
+      ...setText,
+      { type: "popover.filter", popover: "command", query },
+    ])
+  }
+
   const command = value.match(/^\/(\S*)$/)
   if (command) {
     const query = command[1] ?? ""
@@ -180,7 +189,9 @@ function suggestionSelected(
           ? current.trim()
             ? `${item.label} ${current.trim()}`
             : `${item.label} `
-          : replaceTrigger(current, "/", `${item.label} `),
+          : current.match(/(?:^|\s)\$[a-z][a-zA-Z0-9-_]*$/)
+            ? replaceTrigger(current, "$", `${item.label} `)
+            : replaceTrigger(current, "/", `${item.label} `),
     })
   } else {
     commands.push({ type: "mention.add", item })
@@ -239,7 +250,7 @@ function populated(persisted: PromptInputV2PersistedState) {
   )
 }
 
-function replaceTrigger(value: string, trigger: "@" | "/", replacement: string) {
+function replaceTrigger(value: string, trigger: "@" | "/" | "$", replacement: string) {
   const index = trigger === "/" ? value.indexOf(trigger) : value.lastIndexOf(trigger)
   return index < 0 ? replacement : value.slice(0, index) + replacement
 }

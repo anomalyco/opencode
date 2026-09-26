@@ -161,4 +161,26 @@ describe("prompt input v2 interaction machine", () => {
     expect(result.state.popover).toEqual({ type: "context", query: "", activeID: "first" })
     expect(result.handled).toBeTrue()
   })
+
+  test("opens skills with $ trigger and inserts slash form", () => {
+    const open = transitionPromptInputV2(
+      createPromptInputV2InteractionState(),
+      { type: "input.changed", value: "$re" },
+      persisted("$re"),
+    )
+
+    expect(open.state.popover).toEqual({ type: "command-inline", query: "re" })
+
+    const selected = transitionPromptInputV2(open.state, { type: "popover.select", item: command }, persisted("$re"))
+
+    expect(selected.commands).toContainEqual({ type: "draft.setText", value: "/review " })
+  })
+
+  test("ignores $HOME, $1, and currency amounts", () => {
+    const state = createPromptInputV2InteractionState()
+    for (const value of ["$HOME", "cost is $5", "price $100", "$@"]) {
+      const result = transitionPromptInputV2(state, { type: "input.changed", value }, persisted(value))
+      expect(result.state.popover).toEqual({ type: "closed" })
+    }
+  })
 })
