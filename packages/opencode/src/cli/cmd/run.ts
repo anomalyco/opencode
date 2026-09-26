@@ -22,7 +22,7 @@ import { UI } from "../ui"
 import { effectCmd } from "../effect-cmd"
 import { EOL } from "os"
 import { Filesystem } from "@/util/filesystem"
-import { createOpencodeClient, type OpencodeClient, type ToolPart } from "@opencode-ai/sdk/v2"
+import { createOpencodeClient, type Message, type OpencodeClient, type Part, type ReasoningPart, type TextPart, type ToolPart } from "@opencode-ai/sdk/v2"
 import { FormatError, FormatUnknownError } from "../error"
 import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./run/runtime.stdin"
 
@@ -47,6 +47,36 @@ function resolveRunInput(value?: string, piped?: string): string | undefined {
   }
 
   return value + "\n" + piped
+}
+
+// Finished assistant parts that the live event stream never delivered. The
+// stream can publish session.status idle before the final
+// message.part.updated (or drop the update on some transports), in which case
+// non-interactive `run` would exit with an empty result despite the backend
+// having recorded output. Callers re-fetch the session timeline on idle and
+// mirror whatever this returns.
+export function missedCompletedParts(
+  messages: Array<{ info: Message; parts: Array<Part> }>,
+  emittedPartIDs: Set<string>,
+  thinking: boolean,
+): Array<TextPart | ReasoningPart | ToolPart> {
+  const missed: Array<TextPart | ReasoningPart | ToolPart> = []
+  for (const message of messages) {
+    if (message.info.role !== "assistant") continue
+    for (const part of message.parts) {
+      if (!part || emittedPartIDs.has(part.id)) continue
+      if (part.type === "text") {
+        // Internal continuation signals are never user output (mirrors loop).
+        if (part.synthetic) continue
+        if (part.time?.end) missed.push(part)
+      } else if (part.type === "reasoning") {
+        if (thinking && part.time?.end) missed.push(part)
+      } else if (part.type === "tool") {
+        if (part.state.status === "completed" || part.state.status === "error") missed.push(part)
+      }
+    }
+  }
+  return missed
 }
 
 type FilePart = {
@@ -690,6 +720,77 @@ export const RunCommand = effectCmd({
           return false
         }
 
+        // IDs of parts already mirrored to stdout/UI. The event stream can
+        // deliver session.status idle before the final message.part.updated,
+        // so flushMissedParts() re-fetches the timeline on idle and mirrors
+        // anything completed that we missed (see missedCompletedParts).
+        const emittedPartIDs = new Set<string>()
+        function markEmitted(part: { id?: string }) {
+          if (part.id) emittedPartIDs.add(part.id)
+        }
+
+        // Mirror one finished part to stdout/UI. Shared by the live event loop
+        // below and flushMissedParts() so a part rendered through either path
+        // looks identical. Completed tool calls were already executed
+        // server-side; tool()/toolError() only render them.
+        async function outputPart(part: TextPart | ReasoningPart | ToolPart) {
+          markEmitted(part)
+          if (part.type === "text") {
+            if (emit("text", { part })) return
+            const text = part.text.trim()
+            if (!text) return
+            if (!process.stdout.isTTY) {
+              process.stdout.write(text + EOL)
+              return
+            }
+            UI.empty()
+            UI.println(text)
+            UI.empty()
+            return
+          }
+          if (part.type === "reasoning" && thinking) {
+            if (emit("reasoning", { part })) return
+            const text = part.text.trim()
+            if (!text) return
+            const line = `Thinking: ${text}`
+            if (process.stdout.isTTY) {
+              UI.empty()
+              UI.println(`${UI.Style.TEXT_DIM}\u001b[3m${line}\u001b[0m${UI.Style.TEXT_NORMAL}`)
+              UI.empty()
+              return
+            }
+            process.stdout.write(line + EOL)
+            return
+          }
+          if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
+            if (emit("tool_use", { part })) return
+            if (part.state.status === "completed") {
+              await tool(part)
+              return
+            }
+            await toolError(part)
+            UI.error(part.state.error)
+            return
+          }
+        }
+
+        // Re-fetch the session timeline and mirror finished parts the live
+        // stream missed. Best-effort: failures keep the previous behavior
+        // (whatever the stream delivered so far).
+        async function flushMissedParts(client: OpencodeClient) {
+          let messages: Array<{ info: Message; parts: Array<Part> }>
+          try {
+            const res = await client.session.messages({ sessionID })
+            if (res.error || !res.data) return
+            messages = res.data
+          } catch {
+            return
+          }
+          for (const part of missedCompletedParts(messages, emittedPartIDs, thinking)) {
+            await outputPart(part)
+          }
+        }
+
         // Consume one subscribed event stream for the active session and mirror it
         // to stdout/UI. `client` is passed explicitly because attach mode may
         // rebind the SDK to the session's directory after the subscription is
@@ -722,13 +823,8 @@ export const RunCommand = effectCmd({
               if (part.sessionID !== sessionID) continue
 
               if (part.type === "tool" && (part.state.status === "completed" || part.state.status === "error")) {
-                if (emit("tool_use", { part })) continue
-                if (part.state.status === "completed") {
-                  await tool(part)
-                  continue
-                }
-                await toolError(part)
-                UI.error(part.state.error)
+                await outputPart(part)
+                continue
               }
 
               if (
@@ -751,30 +847,13 @@ export const RunCommand = effectCmd({
               }
 
               if (part.type === "text" && part.time?.end) {
-                if (emit("text", { part })) continue
-                const text = part.text.trim()
-                if (!text) continue
-                if (!process.stdout.isTTY) {
-                  process.stdout.write(text + EOL)
-                  continue
-                }
-                UI.empty()
-                UI.println(text)
-                UI.empty()
+                await outputPart(part)
+                continue
               }
 
               if (part.type === "reasoning" && part.time?.end && thinking) {
-                if (emit("reasoning", { part })) continue
-                const text = part.text.trim()
-                if (!text) continue
-                const line = `Thinking: ${text}`
-                if (process.stdout.isTTY) {
-                  UI.empty()
-                  UI.println(`${UI.Style.TEXT_DIM}\u001b[3m${line}\u001b[0m${UI.Style.TEXT_NORMAL}`)
-                  UI.empty()
-                  continue
-                }
-                process.stdout.write(line + EOL)
+                await outputPart(part)
+                continue
               }
             }
 
@@ -795,6 +874,7 @@ export const RunCommand = effectCmd({
               event.properties.sessionID === sessionID &&
               event.properties.status.type === "idle"
             ) {
+              await flushMissedParts(client)
               break
             }
 
