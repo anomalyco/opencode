@@ -1,0 +1,176 @@
+# Confines the long-running harness: the most privileged, longest-lived process
+# in the stack, and the one no sandbox ever touches, because it is the thing that
+# launches them.
+#
+# This replaces the AppArmor profile. Same property, a file you already maintain,
+# no separate policy language, and no complain-mode trap to forget about.
+#
+# ======================= READ BEFORE HARDENING FURTHER =======================
+# Building a namespace IS mount + unshare + pivot_root + mkdir. Anything that
+# restricts those breaks bwrap, and then EVERY command your agents run stops
+# working. The obvious offenders:
+#
+#   RestrictNamespaces=yes          blocks CLONE_NEWUSER/NEWNS/NEWPID outright
+#   PrivateMounts=yes               fights the wrapper's own mount namespace
+#   PrivateUsers=yes                bwrap needs to create its own user namespace
+#   SystemCallFilter=@system-service  EXCLUDES @mount (mount, pivot_root, umount2)
+#
+# AND THE NON-OBVIOUS ONES, measured on this host, each in isolation. These do
+# not mention SystemCallFilter anywhere, but every one of them IMPLIES a seccomp
+# filter, and where systemd cannot filter on arguments it answers ENOSYS. What
+# surfaces is 'bwrap: Can't mkdir parents for /proc: Function not implemented',
+# which looks like a kernel problem and is not:
+#
+#   ProtectKernelTunables=yes       BREAKS bwrap (implies a raw-IO filter)
+#   ProtectKernelLogs=yes           BREAKS bwrap (implies a syslog filter)
+#   RestrictSUIDSGID=yes            BREAKS bwrap (filters mkdir/chmod arguments)
+#
+# Note ProtectKernelModules=yes implies a filter too and is KEPT, because it
+# covers module loading, which bwrap never does. So the rule is not "no implied
+# filter" -- it is "no implied filter over mount, mkdir or chmod".
+#
+# What the three cost, and what covers them instead. Each loss is near zero on
+# its own, and each compensating control is cheaper than a per-unit filter:
+#
+#   ProtectKernelTunables  would stop writes to /proc/sys. The harness runs as a
+#                          normal user with an empty capability set, so those
+#                          writes already fail on file ownership. No real loss.
+#   ProtectKernelLogs      would stop reading the kernel ring buffer. Covered
+#                          system-wide and more cheaply by:
+#                              sysctl -w kernel.dmesg_restrict=1
+#                          (persist in /etc/sysctl.d/). One line, every process.
+#   RestrictSUIDSGID       would stop creating setuid files. Any file it created
+#                          would be setuid to its own unprivileged user, which
+#                          grants nothing it does not already have. Cover the
+#                          filesystem instead: mount the data partition nosuid
+#                          in /etc/fstab. Also structural: no phase profile ever
+#                          binds a path where a setuid bit would be honoured.
+#
+# Verify after ANY edit here:  systemd/deploy.sh --verify
+# That establishes a plain-bwrap baseline first, reproduces this unit's exact
+# hardening around a real namespace, bisects to the first directive that breaks
+# it, and runs a negative control that MUST fail so the check cannot pass
+# vacuously.
+# =============================================================================
+
+[Unit]
+Description=OpenCode server (PAA harness)
+Documentation=https://opencode.ai
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=mxadm
+Group=mxadm
+WorkingDirectory=/home/mxadm
+
+# Paths only. Deliberately NOT the ledger credentials: the wrapper writes an
+# audit spool as JSON lines and the supervisor ingests it, so the harness side
+# never needs a database password. See systemd/deploy.sh for the file's shape.
+EnvironmentFile=-/mnt/Meta/paa/env.harness
+
+ExecStart=/usr/local/bin/opencode-env.sh serve --port 7700 --cors http://localhost:7700 --cors http://127.0.0.1:7700
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# D-Bus session and X handles for KeePassXC key retrieval (kpx_get).
+# The harness holding model keys is correct and intended: the traffic is the
+# harness's, not the sandbox's. No phase profile has network on build or test,
+# so the agent never holds a key for a much simpler reason.
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/mxadm/.Xauthority
+
+# --- filesystem --------------------------------------------------------------
+# ProtectHome MUST be read-only, not yes. The harness reads its config and its
+# agent definitions out of ~/.config/opencode; `yes` makes those unreachable and
+# the server never starts.
+# Both directives measured working with bwrap on this host.
+ProtectSystem=strict
+ProtectHome=read-only
+
+ReadWritePaths=/home/mxadm/.opencode
+ReadWritePaths=/home/mxadm/.config/opencode
+ReadWritePaths=/home/mxadm/.local/share/opencode
+ReadWritePaths=/home/mxadm/.cache/opencode
+# The wrapper's working set: task trees it edits, per-task package caches it
+# populates, and the log + audit spool it appends to.
+ReadWritePaths=/mnt/Meta/paa/worktrees
+ReadWritePaths=/mnt/Meta/paa/cache
+ReadWritePaths=/mnt/Meta/paa/logs
+
+# Executable and readable: the wrapper itself, the mount lists it enforces, the
+# check specs, the active rule set, the phase machine, and the guard plugin the
+# harness loads in-process.
+ReadOnlyPaths=/mnt/Meta/Projects/paa-supervisor/bin
+ReadOnlyPaths=/mnt/Meta/Projects/paa-supervisor/profiles
+ReadOnlyPaths=/mnt/Meta/Projects/paa-supervisor/checks
+ReadOnlyPaths=/mnt/Meta/Projects/paa-supervisor/rules
+ReadOnlyPaths=/mnt/Meta/Projects/paa-supervisor/statewright
+ReadOnlyPaths=/mnt/Meta/Projects/paa-supervisor/hooks
+
+# Not merely unwritable: unreachable. The harness has no business reading the
+# verdict code that judges it, the schema, the patch series, or the tests.
+# NOTE the division of labour: this stops the HARNESS PROCESS. It does not stop
+# an AGENT from reading the paths above that the harness must load -- that is
+# the job of the harness's own path-glob permissions, which are the one action
+# class no external layer can see.
+InaccessiblePaths=/mnt/Meta/Projects/paa-supervisor/supervisor
+InaccessiblePaths=/mnt/Meta/Projects/paa-supervisor/sql
+InaccessiblePaths=/mnt/Meta/Projects/paa-supervisor/tests
+InaccessiblePaths=/mnt/Meta/Projects/paa-supervisor/patches
+InaccessiblePaths=/mnt/Meta/Projects/paa-supervisor/systemd
+InaccessiblePaths=/mnt/Meta/Projects/paa-supervisor/docs
+# The bare repository the supervisor lands into. The harness reaches task trees
+# only, never the object database they came from.
+InaccessiblePaths=/mnt/Meta/paa/repos
+# The supervisor's environment file, ledger credentials included. systemd reads
+# EnvironmentFile in the manager before this namespace exists, so the harness's
+# own variables still arrive while the supervisor's file stays unreadable here.
+InaccessiblePaths=/mnt/Meta/paa/env.supervisor
+
+PrivateTmp=yes
+
+# --- privilege ---------------------------------------------------------------
+# NoNewPrivileges is safe only because bwrap here is NOT setuid; it relies on
+# unprivileged user namespaces (kernel.unprivileged_userns_clone = 1 on this
+# host). If a future bwrap ships setuid, this line and the empty capability set
+# below will break it. Check with:  ls -l $(command -v bwrap)
+NoNewPrivileges=yes
+CapabilityBoundingSet=
+AmbientCapabilities=
+# Kept: implies a module-loading filter, which bwrap never needs. Verified.
+ProtectKernelModules=yes
+ProtectClock=yes
+ProtectControlGroups=yes
+ProtectProc=invisible
+RestrictRealtime=yes
+LockPersonality=yes
+# Must stay no: the runtime JIT-compiles.
+MemoryDenyWriteExecute=no
+
+# --- MUST stay unset so bwrap can build namespaces ---------------------------
+# Every line below is commented ON PURPOSE and measured, not assumed.
+# RestrictNamespaces=      blocks namespace creation outright
+# SystemCallFilter=        @system-service excludes @mount
+# ProtectKernelTunables=   implied raw-IO filter -> ENOSYS on mkdir /proc
+# ProtectKernelLogs=       implied syslog filter -> same
+# RestrictSUIDSGID=        filters mkdir/chmod arguments -> same
+PrivateUsers=no
+PrivateMounts=no
+
+# --- resources ---------------------------------------------------------------
+# These cap the harness AND every bwrap child, collectively rather than per task,
+# because the children live in this unit's control group. That is why the
+# wrapper's own systemd-run scope limits are optional: if you do want per-task
+# caps, set PAA_SCOPE_LIMITS and note that systemd-run needs --user from inside
+# a user session, or it will ask for authorisation and hang.
+MemoryMax=12G
+TasksMax=4096
+
+[Install]
+WantedBy=multi-user.target
