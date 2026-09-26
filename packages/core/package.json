@@ -82,6 +82,7 @@
   },
   "devDependencies": {
     "@ai-sdk/openai-compatible": "2.0.41",
+    "@ai-sdk/openai-compatible-v4": "npm:@ai-sdk/openai-compatible@3.0.57",
     "@effect/platform-node": "catalog:",
     "@effect/sql-sqlite-bun": "catalog:",
     "@modelcontextprotocol/server": "2.0.0",
@@ -105,6 +106,7 @@
     "@ai-sdk/gateway": "3.0.104",
     "@ai-sdk/perplexity": "3.0.26",
     "@ai-sdk/provider": "3.0.8",
+    "@ai-sdk/provider-v4": "npm:@ai-sdk/provider@4.0.18",
     "@ai-sdk/provider-utils": "4.0.23",
     "@ai-sdk/vercel": "2.0.39",
     "@ff-labs/fff-bun": "0.10.5",
