@@ -9,6 +9,7 @@ import {
   type ProviderErrorEvent,
   type ToolCall,
 } from "@opencode/ai"
+import type { StreamOptions } from "@opencode/ai/route/client"
 import type { Agent } from "@opencode/schema/agent"
 import { Cause, Clock, Data, Effect, Exit, Fiber, Option, Stream } from "effect"
 import { SessionError } from "@opencode/schema/session-error"
@@ -101,7 +102,11 @@ export const make = Effect.gen(function* () {
     // A local execution starts only after its Tool.Called publication completes.
     let overflowFailure: ProviderErrorEvent | undefined
     // Read to the end, not just the finish event, so the next request can reuse this response.
-    const providerStream = llm.stream(input.prepared.request, input.prepared.options).pipe(
+    // The abort signal tells providers doing work outside their stream (plugin models) that the
+    // turn was interrupted; built-in HTTP providers already stop when the stream is cancelled.
+    const abort = new AbortController()
+    const options: StreamOptions = { ...input.prepared.options, abortSignal: abort.signal }
+    const providerStream = llm.stream(input.prepared.request, options).pipe(
       Stream.runForEach((event) =>
         Effect.gen(function* () {
           if (overflowFailure || publisher.hasProviderError()) return
@@ -129,6 +134,7 @@ export const make = Effect.gen(function* () {
           })
         }),
       ),
+      Effect.onInterrupt(() => Effect.sync(() => abort.abort())),
       Effect.ensuring(publisher.flush()),
     )
 

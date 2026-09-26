@@ -400,7 +400,11 @@ function modelFromLanguage(info: RuntimeInfo, language: LanguageModelV3) {
       LanguageModel.make({ ...input, provider: "provider" in input ? input.provider : providerID, route }),
     prepareTransport: (body) => Effect.succeed(body),
     streamPrepared: (prepared, _request, _runtime, options) =>
-      streamLanguage(language, prepared as LanguageModelV3CallOptions, options?.http),
+      streamLanguage(
+        language,
+        { ...(prepared as LanguageModelV3CallOptions), abortSignal: options?.abortSignal },
+        options?.http,
+      ),
   }
   return LanguageModel.make({
     id: info.modelID ?? info.id,
