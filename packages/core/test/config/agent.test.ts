@@ -131,6 +131,13 @@ permissions:
     )
   }
 
+  it.live("loads Markdown legacy temperature with an embedded variant", () =>
+    Effect.gen(function* () {
+      const agent = yield* loadMarkdownAgent("model: example/chat#high\ntemperature: 0.5")
+      expect(agent.model).toEqual(Model.Ref.parse("example/chat#high"))
+    }),
+  )
+
   it.effect("matches POSIX paths against home-relative permissions", () =>
     Effect.gen(function* () {
       const permissions = yield* loadHomePermissions("/home/test")
