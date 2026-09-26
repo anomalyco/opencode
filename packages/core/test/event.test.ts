@@ -419,6 +419,42 @@ describe("EventV2", () => {
     }),
   )
 
+  it.effect("repairs a stale durable sequence before publishing", () =>
+    Effect.gen(function* () {
+      const events = yield* EventV2.Service
+      const { db } = yield* Database.Service
+      const aggregateID = EventV2.ID.create()
+
+      yield* events.publish(SyncMessage, { id: aggregateID, text: "first" })
+      yield* events.publish(SyncMessage, { id: aggregateID, text: "second" })
+      yield* events.claim(aggregateID, "owner-a")
+      yield* db
+        .update(EventSequenceTable)
+        .set({ seq: 0 })
+        .where(eq(EventSequenceTable.aggregate_id, aggregateID))
+        .run()
+        .pipe(Effect.orDie)
+
+      const event = yield* events.publish(SyncMessage, { id: aggregateID, text: "recovered" })
+      const rows = yield* db
+        .select({ seq: EventTable.seq })
+        .from(EventTable)
+        .where(eq(EventTable.aggregate_id, aggregateID))
+        .all()
+        .pipe(Effect.orDie)
+      const sequence = yield* db
+        .select({ seq: EventSequenceTable.seq, ownerID: EventSequenceTable.owner_id })
+        .from(EventSequenceTable)
+        .where(eq(EventSequenceTable.aggregate_id, aggregateID))
+        .get()
+        .pipe(Effect.orDie)
+
+      expect(event.durable?.seq).toBe(2)
+      expect(rows.map((row) => row.seq)).toEqual([0, 1, 2])
+      expect(sequence).toEqual({ seq: 2, ownerID: "owner-a" })
+    }),
+  )
+
   it.effect("replays durable aggregate events after a sequence and tails new events", () =>
     Effect.gen(function* () {
       const events = yield* EventV2.Service
