@@ -11,6 +11,14 @@ import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 
 const gitlabSDKOptions: Record<string, unknown>[] = []
+const discoveredWorkflowModels: {
+  id: string
+  name: string
+  ref: string
+  context: number
+  output: number
+}[] = []
+const gitlabDiscoveryCalls: { instanceUrl: string; headers: Record<string, string>; workingDirectory: string }[] = []
 const it = testEffect(PluginTestLayer)
 
 const addPlugin = Effect.fn(function* () {
@@ -50,11 +58,69 @@ void mock.module("gitlab-ai-provider", () => ({
       workflowChat: (id: string, options: unknown) => ({ id, options, type: "workflow" }),
     }
   },
-  discoverWorkflowModels: async () => ({ models: [], project: undefined }),
+  discoverWorkflowModels: async (
+    options: { instanceUrl: string; getHeaders: () => Record<string, string> },
+    context: { workingDirectory: string },
+  ) => {
+    gitlabDiscoveryCalls.push({
+      instanceUrl: options.instanceUrl,
+      headers: options.getHeaders(),
+      workingDirectory: context.workingDirectory,
+    })
+    return { models: discoveredWorkflowModels, project: undefined }
+  },
   isWorkflowModel: (id: string) => id === "duo-workflow" || id === "duo-workflow-exact",
 }))
 
 describe("GitLabPlugin", () => {
+  it.effect("discovers workflow models into the catalog", () =>
+    withEnv(
+      {
+        GITLAB_INSTANCE_URL: "https://gitlab.example.com",
+        GITLAB_TOKEN: "env-token",
+      },
+      () =>
+        Effect.gen(function* () {
+          discoveredWorkflowModels.splice(0, discoveredWorkflowModels.length, {
+            id: "duo-workflow-sonnet",
+            name: "Sonnet workflow",
+            ref: "claude_sonnet_4_6",
+            context: 200_000,
+            output: 64_000,
+          })
+          gitlabDiscoveryCalls.length = 0
+
+          const catalog = yield* Catalog.Service
+          yield* catalog.transform((draft) => {
+            draft.provider.update(ProviderV2.ID.gitlab, (provider) => {
+              provider.api = { type: "aisdk", package: "gitlab-ai-provider", url: "https://gitlab.default.example" }
+            })
+          })
+          yield* addPlugin()
+
+          const model = yield* catalog.model.get(ProviderV2.ID.gitlab, ModelV2.ID.make("duo-workflow-sonnet"))
+          expect(model).toMatchObject({
+            name: "Agent Platform (Sonnet workflow)",
+            api: {
+              type: "aisdk",
+              package: "gitlab-ai-provider",
+              url: "https://gitlab.example.com",
+            },
+            request: { body: { workflowRef: "claude_sonnet_4_6" } },
+            capabilities: { tools: true, input: ["text", "image", "pdf"], output: ["text"] },
+            limit: { context: 200_000, output: 64_000 },
+          })
+          expect(gitlabDiscoveryCalls).toEqual([
+            {
+              instanceUrl: "https://gitlab.example.com",
+              headers: { "PRIVATE-TOKEN": "env-token" },
+              workingDirectory: expect.any(String),
+            },
+          ])
+        }),
+    ),
+  )
+
   it.effect("creates SDKs with legacy default instance URL, token env, headers, and feature flags", () =>
     withEnv(
       {
