@@ -83,6 +83,7 @@ Die aktuelle Liste der Modelle umfasst:
 - **Hy4 preview**
 - **Hy3**
 - **Space Bunny Free** (für begrenzte Zeit)
+- **LongCat 2.5 Preview Free** (für begrenzte Zeit)
 
 Die Liste der Modelle kann sich ändern, während wir neue testen und hinzufügen.
 
@@ -180,6 +181,7 @@ Tokenpreise gelten pro 1M Tokens.
 | Hy4 preview                             | $0.834 | $2.501 | $0.042      | -            | **$30**                                               |
 | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | **$60**                                               |
 | Space Bunny Free                        | Free   | Free   | Free        | -            | **Unbegrenzt**<br /><small>für begrenzte Zeit</small> |
+| LongCat 2.5 Preview Free                | Free   | Free   | Free        | -            | **Unbegrenzt**<br /><small>für begrenzte Zeit</small> |
 | Grok 4.7 (≤ 200K tokens)                | $2.00  | $6.00  | $0.50       | -            | **$15**                                               |
 | Grok 4.7 (> 200K tokens)                | $4.00  | $12.00 | $1.00       | -            | **$15**                                               |
 | Grok 4.6 (≤ 200K tokens)                | $2.00  | $6.00  | $0.50       | -            | **$15**                                               |
@@ -190,6 +192,8 @@ Tokenpreise gelten pro 1M Tokens.
 | GPT 5.6 Luna (> 272K tokens)            | $0.40  | $1.80  | $0.04       | $0.50        | **$15**                                               |
 
 **Space Bunny Free:** Für begrenzte Zeit kostenlos.
+
+**LongCat 2.5 Preview Free:** Für begrenzte Zeit kostenlos.
 
 **DeepSeek V4.1 Flash / V4 Pro / V4 Flash / V4 Flash Vision Exp:** Die Peak-Zeiten sind montags bis freitags von 01:00-04:00 und 06:00-10:00 UTC; alle anderen Zeiten, einschließlich der Wochenenden, sind Off-Peak. [Mehr erfahren](https://api-docs.deepseek.com/quick_start/pricing/).
 
@@ -229,6 +233,7 @@ Die folgende Tabelle enthält eine geschätzte Anzahl von Anfragen basierend auf
 | Hy4 preview                  | 1,350                  | 3,380              | 6,770              |
 | Hy3                          | 4,300                  | 10,750             | 21,500             |
 | Space Bunny Free             | Unbegrenzt             | Unbegrenzt         | Unbegrenzt         |
+| LongCat 2.5 Preview Free     | Unbegrenzt             | Unbegrenzt         | Unbegrenzt         |
 | Grok 4.7                     | 169                    | 423                | 845                |
 | Grok 4.6                     | 169                    | 423                | 845                |
 | GPT 6 Luna                   | 4,230                  | 10,560             | 21,130             |
@@ -331,6 +336,7 @@ Du kannst auf die Go-Modelle auch über die folgenden API-Endpunkte zugreifen.
 | Hy4 preview                  | hy4-preview                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Space Bunny Free             | space-bunny-free             | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| LongCat 2.5 Preview Free     | longcat-2.5-preview-free     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 Die [Modell-ID](/docs/config/#models) in deiner OpenCode Config verwendet das Format `opencode-go/<model-id>`. Für Kimi K3 würdest du beispielsweise `opencode-go/kimi-k3` in deiner Config verwenden.
 
@@ -382,6 +388,7 @@ https://opencode.ai/zen/go/v1/models
 | Hy4 preview                  | Nicht verwendet | 0 Tage            |
 | Hy3                          | Nicht verwendet | 0 Tage            |
 | Space Bunny Free             | Nicht verwendet | 0 Tage            |
+| LongCat 2.5 Preview Free     | Nicht verwendet | 0 Tage            |
 
 - **Grok 4.7/4.6:** ZDR deaktiviert wichtige API-Funktionen, die von gespeicherten Daten abhängen, einschließlich der zustandsbehafteten Responses API, Files and Collections und der Batch API. [Mehr erfahren](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 6 Luna / GPT 5.6 Luna:** Für die Nutzung aller API-Funktionen werden Protokolle zur Missbrauchsüberwachung erstellt und bis zu 30 Tage lang aufbewahrt. [Mehr erfahren](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
