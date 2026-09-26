@@ -18,6 +18,7 @@ import {
   createPriorityTaskQueue,
   displayPickerPath,
   pickerParent,
+  pickerBrowseDirectory,
   pickerRoot,
   pickerAbsoluteInput,
 } from "./directory-picker-domain"
@@ -110,6 +111,22 @@ test("treats the server share prefix as the UNC root", () => {
   expect(pickerRoot("\\\\Server\\Share\\repo\\src")).toBe("//Server/Share")
   expect(pickerParent("//Server/Share")).toBe("//Server/Share")
   expect(pickerParent("//Server/Share/repo")).toBe("//Server/Share")
+})
+
+test("identifies the directory being browsed from the picker filter", () => {
+  expect(pickerBrowseDirectory("", "/home/luke")).toBe("")
+  expect(pickerBrowseDirectory("doc", "/home/luke")).toBe("")
+  expect(pickerBrowseDirectory("doc/", "/home/luke")).toBe("")
+  expect(pickerBrowseDirectory("/home/luke", "/home/luke")).toBe("")
+  expect(pickerBrowseDirectory("~/projects/", "/home/luke")).toBe("/home/luke/projects")
+  expect(pickerBrowseDirectory("~", "/home/luke")).toBe("/home/luke")
+  expect(pickerBrowseDirectory("~/", "/home/luke")).toBe("/home/luke")
+  expect(pickerBrowseDirectory("/", "/home/luke")).toBe("/")
+  expect(pickerBrowseDirectory("/etc/", "/home/luke")).toBe("/etc")
+  expect(pickerBrowseDirectory("C:/Users/luke/", "C:/Users/luke")).toBe("C:/Users/luke")
+  expect(pickerBrowseDirectory("C:/", "C:/Users/luke")).toBe("C:/")
+  expect(pickerBrowseDirectory("C:\\", "C:/Users/luke")).toBe("C:/")
+  expect(pickerBrowseDirectory("//server/share/", "/home/luke")).toBe("//server/share")
 })
 
 test("resolves relative input against the current picker root", () => {

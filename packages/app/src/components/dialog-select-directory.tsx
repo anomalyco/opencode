@@ -1,6 +1,8 @@
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { Dialog } from "@opencode-ai/ui/dialog"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
+import { Icon } from "@opencode-ai/ui/icon"
+import { IconButton } from "@opencode-ai/ui/icon-button"
 import { List } from "@opencode-ai/ui/list"
 import type { ListRef } from "@opencode-ai/ui/list"
 import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
@@ -8,7 +10,14 @@ import { createMemo, createResource, createSignal } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/server"
 import { useGlobal } from "@/context/global"
-import { cleanPickerInput, createDirectorySearch, displayPickerPath } from "./directory-picker-domain"
+import {
+  cleanPickerInput,
+  createDirectorySearch,
+  displayPickerPath,
+  pickerBrowseDirectory,
+  pickerParent,
+  trimPickerPath,
+} from "./directory-picker-domain"
 import type { Path } from "@opencode-ai/sdk/v2/client"
 
 interface DialogSelectDirectoryProps {
@@ -83,6 +92,27 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
     base: start,
   })
 
+  let searchWrapper: HTMLDivElement | undefined
+
+  const focusSearch = () => {
+    searchWrapper?.querySelector<HTMLInputElement>('[data-slot="input-input"]')?.focus()
+  }
+
+  const current = createMemo(() => pickerBrowseDirectory(filter(), home()))
+
+  const canGoUp = createMemo(() => {
+    const directory = current()
+    return directory !== "" && pickerParent(directory) !== directory
+  })
+
+  const navigate = (absolute: string) => {
+    const target = trimPickerPath(absolute)
+    if (!target || target === current()) return
+    const path = displayPickerPath(target, "", home())
+    list?.setFilter(path.endsWith("/") ? path : path + "/")
+    focusSearch()
+  }
+
   const recentProjects = createMemo(() => {
     const projects = serverCtx.projects.list()
     const byProject = new Map<string, number>()
@@ -130,71 +160,105 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
 
   return (
     <Dialog title={props.title ?? language.t("command.project.open")}>
-      <List
-        class="px-3"
-        search={{ placeholder: language.t("dialog.directory.search.placeholder"), autofocus: true }}
-        emptyMessage={language.t("dialog.directory.empty")}
-        loadingMessage={language.t("common.loading")}
-        items={items}
-        key={(x) => x.absolute}
-        filterKeys={["search"]}
-        groupBy={(item) => item.group}
-        sortGroupsBy={(a, b) => {
-          if (a.category === b.category) return 0
-          return a.category === "recent" ? -1 : 1
-        }}
-        groupHeader={(group) =>
-          group.category === "recent" ? language.t("home.recentProjects") : language.t("command.project.open")
-        }
-        ref={(r) => (list = r)}
-        onFilter={(value) => setFilter(cleanPickerInput(value))}
-        onKeyEvent={(e, item) => {
-          if (e.key !== "Tab") return
-          if (e.shiftKey) return
-          if (!item) return
+      <div ref={(el) => (searchWrapper = el)}>
+        <List
+          class="px-3"
+          search={{
+            placeholder: language.t("dialog.directory.search.placeholder"),
+            autofocus: true,
+            action: (
+              <IconButton
+                icon="arrow-up"
+                variant="ghost"
+                title={language.t("dialog.directory.parent")}
+                aria-label={language.t("dialog.directory.parent")}
+                disabled={!canGoUp()}
+                onClick={() => navigate(pickerParent(current()))}
+              />
+            ),
+          }}
+          emptyMessage={language.t("dialog.directory.empty")}
+          loadingMessage={language.t("common.loading")}
+          items={items}
+          key={(x) => x.absolute}
+          filterKeys={["search"]}
+          groupBy={(item) => item.group}
+          sortGroupsBy={(a, b) => {
+            if (a.category === b.category) return 0
+            return a.category === "recent" ? -1 : 1
+          }}
+          groupHeader={(group) =>
+            group.category === "recent" ? language.t("home.recentProjects") : language.t("command.project.open")
+          }
+          ref={(r) => (list = r)}
+          onFilter={(value) => setFilter(cleanPickerInput(value))}
+          onKeyEvent={(e, item) => {
+            if (e.key !== "Tab") return
+            if (e.shiftKey) return
+            if (!item) return
 
-          e.preventDefault()
-          e.stopPropagation()
+            e.preventDefault()
+            e.stopPropagation()
 
-          const value = displayPickerPath(item.absolute, filter(), home())
-          list?.setFilter(value.endsWith("/") ? value : value + "/")
-        }}
-        onSelect={(path) => {
-          if (!path) return
-          resolve(path.absolute)
-        }}
-      >
-        {(item) => {
-          const path = displayPickerPath(item.absolute, filter(), home())
-          if (path === "~") {
+            const value = displayPickerPath(item.absolute, filter(), home())
+            list?.setFilter(value.endsWith("/") ? value : value + "/")
+          }}
+          onSelect={(path) => {
+            if (!path) return
+            resolve(path.absolute)
+          }}
+        >
+          {(item) => {
+            const path = displayPickerPath(item.absolute, filter(), home())
+            if (path === "~") {
+              return (
+                <div data-directory-path={item.absolute} class="w-full flex items-center justify-between rounded-md">
+                  <div class="flex items-center gap-x-3 grow min-w-0">
+                    <FileIcon node={{ path: item.absolute, type: "directory" }} class="shrink-0 size-4" />
+                    <div class="flex items-center text-14-regular min-w-0">
+                      <span class="text-text-strong whitespace-nowrap">~</span>
+                      <span class="text-text-weak whitespace-nowrap">/</span>
+                    </div>
+                  </div>
+                </div>
+              )
+            }
             return (
               <div data-directory-path={item.absolute} class="w-full flex items-center justify-between rounded-md">
                 <div class="flex items-center gap-x-3 grow min-w-0">
                   <FileIcon node={{ path: item.absolute, type: "directory" }} class="shrink-0 size-4" />
                   <div class="flex items-center text-14-regular min-w-0">
-                    <span class="text-text-strong whitespace-nowrap">~</span>
+                    <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
+                      {getDirectory(path)}
+                    </span>
+                    <span class="text-text-strong whitespace-nowrap">{getFilename(path)}</span>
                     <span class="text-text-weak whitespace-nowrap">/</span>
                   </div>
                 </div>
+                <span
+                  data-directory-enter
+                  role="button"
+                  tabindex={-1}
+                  title={language.t("common.open")}
+                  aria-label={language.t("common.open")}
+                  class="group -my-1 -mr-1 flex size-8 shrink-0 items-center justify-center rounded-md"
+                  onClick={(event) => {
+                    event.preventDefault()
+                    event.stopPropagation()
+                    navigate(item.absolute)
+                  }}
+                >
+                  <Icon
+                    name="chevron-right"
+                    size="small"
+                    class="transition-colors group-hover:text-icon-hover group-active:text-icon-active"
+                  />
+                </span>
               </div>
             )
-          }
-          return (
-            <div data-directory-path={item.absolute} class="w-full flex items-center justify-between rounded-md">
-              <div class="flex items-center gap-x-3 grow min-w-0">
-                <FileIcon node={{ path: item.absolute, type: "directory" }} class="shrink-0 size-4" />
-                <div class="flex items-center text-14-regular min-w-0">
-                  <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
-                    {getDirectory(path)}
-                  </span>
-                  <span class="text-text-strong whitespace-nowrap">{getFilename(path)}</span>
-                  <span class="text-text-weak whitespace-nowrap">/</span>
-                </div>
-              </div>
-            </div>
-          )
-        }}
-      </List>
+          }}
+        </List>
+      </div>
     </Dialog>
   )
 }
