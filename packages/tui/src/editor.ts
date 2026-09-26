@@ -23,20 +23,50 @@ export function normalizePromptContent(content: string) {
   return content
 }
 
+export function parseEditorCommand(command: string) {
+  const parts: string[] = []
+  let current = ""
+  let quote: '"' | "'" | undefined
+  for (const char of command) {
+    if (quote) {
+      if (char === quote) quote = undefined
+      else current += char
+      continue
+    }
+    if (char === '"' || char === "'") {
+      quote = char
+      continue
+    }
+    if (char === " " || char === "\t") {
+      if (current) parts.push(current)
+      current = ""
+      continue
+    }
+    current += char
+  }
+  if (current) parts.push(current)
+  return parts
+}
+
 export async function openEditor(input: { value: string; renderer: CliRenderer; cwd?: string; stdin?: EditorStdio }) {
   const editor = process.env.VISUAL || process.env.EDITOR
   if (!editor) return
+  const [program, ...args] = parseEditorCommand(editor)
+  if (!program) return
   const file = path.join(os.tmpdir(), `${Date.now()}.md`)
   await writeFile(file, input.value)
   input.renderer.suspend()
   input.renderer.currentRenderBuffer.clear()
   try {
     await new Promise<void>((resolve, reject) => {
-      const parts = editor.split(" ")
-      const child = spawn(parts[0]!, [...parts.slice(1), file], {
+      // Windows launches the editor through a shell, which re-joins the argument
+      // vector without quoting, so quote every token to keep paths with spaces intact.
+      const shell = process.platform === "win32"
+      const quote = (value: string) => (shell ? `"${value.replaceAll('"', '""')}"` : value)
+      const child = spawn(quote(program), [...args, file].map(quote), {
         cwd: input.cwd && existsSync(input.cwd) ? input.cwd : process.cwd(),
         stdio: [input.stdin ?? "inherit", "inherit", "inherit"],
-        shell: process.platform === "win32",
+        shell,
       })
       child.on("error", reject)
       child.on("exit", (code, signal) => {
