@@ -249,6 +249,7 @@ function migrateStandardProvider(info: ConfigProviderV1.Info) {
   return {
     name: info.name,
     env: info.env,
+    discover: info.discover,
     package: info.npm ? Provider.aisdk(info.npm) : undefined,
     settings: info.api ? { ...options.settings, baseURL: info.api } : info.options ? options.settings : undefined,
     headers: info.options && options.headers,
