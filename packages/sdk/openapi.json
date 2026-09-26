@@ -21290,6 +21290,10 @@
             "type": "integer",
             "minimum": 0
           },
+          "subagent_concurrency": {
+            "type": "integer",
+            "minimum": 1
+          },
           "username": {
             "type": "string"
           },
