@@ -1,10 +1,13 @@
 import { describe, expect } from "bun:test"
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect"
+import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import fs from "fs/promises"
 import path from "path"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Bus } from "@opencode/core/bus"
+import { Config } from "@opencode/core/config"
 import { ConfigInstructionPlugin } from "@opencode/core/config/plugin/instruction"
+import { Document, Info } from "@opencode/schema/config"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { Location } from "@opencode/core/location"
@@ -26,12 +29,25 @@ const instructionLayer = (input: {
   home?: string
   locationServiceLayer: Layer.Layer<Location.Service>
   filesystemLayer?: Layer.Layer<FSUtil.Service>
+  configLayer?: Layer.Layer<Config.Service>
+  httpLayer?: Layer.Layer<HttpClient.HttpClient>
   project?: boolean
 }) => {
   const watcher = Watcher.testLayer
+  const http = HttpClient.make((request) =>
+    Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null, { status: 404 }))),
+  )
   return Layer.mergeAll(
     AppNodeBuilder.build(
-      LayerNode.group([InstructionDiscovery.node, Bus.node, FSUtil.node, Global.node, Location.node, Watcher.node]),
+      LayerNode.group([
+        InstructionDiscovery.node,
+        Bus.node,
+        Config.node,
+        FSUtil.node,
+        Global.node,
+        Location.node,
+        Watcher.node,
+      ]),
       [
         InstructionDiscovery.node.replace(InstructionDiscovery.configured({ project: input.project })),
         Global.node.replace(
@@ -42,12 +58,14 @@ const instructionLayer = (input: {
               })
             : tempGlobalLayer,
         ),
+        Config.node.replace(input.configLayer ?? Config.testLayer()),
         Location.node.replace(input.locationServiceLayer),
         Watcher.node.replace(watcher),
         ...(input.filesystemLayer ? [FSUtil.node.replace(input.filesystemLayer)] : []),
       ],
     ),
     watcher,
+    input.httpLayer ?? Layer.succeed(HttpClient.HttpClient, http),
   )
 }
 
@@ -56,8 +74,7 @@ const start = Effect.fnUntraced(function* () {
   return yield* InstructionDiscovery.Service
 })
 
-const file = (path: string, content: string) =>
-  new InstructionDiscovery.File({ path: AbsolutePath.make(path), content })
+const file = (path: string, content: string) => new InstructionDiscovery.File({ path, content })
 
 function emitAndWait(update: Watcher.Update) {
   return Effect.gen(function* () {
@@ -241,6 +258,80 @@ describe("ConfigInstructionPlugin.Plugin", () => {
                     { directory: AbsolutePath.make(directory) },
                     { projectDirectory: AbsolutePath.make(project) },
                   ),
+                ),
+              ),
+            }),
+          ),
+        )
+      }),
+    ),
+  )
+
+  it.live("loads configured instruction files, globs, home paths, and URLs", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const home = path.join(tmp.path, "home")
+        const project = path.join(tmp.path, "repo")
+        const nested = path.join(project, "packages", "core")
+        const absolute = path.join(tmp.path, "absolute.md")
+        const homeFile = path.join(home, "home.md")
+        const first = path.join(project, "rules", "a.md")
+        const second = path.join(project, "rules", "b.md")
+        const remote = "https://example.test/instructions.md"
+        const requests: string[] = []
+        const http = HttpClient.make((request) => {
+          requests.push(request.url)
+          return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("remote")))
+        })
+        return Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.mkdir(nested, { recursive: true })
+            await fs.mkdir(path.dirname(homeFile), { recursive: true })
+            await fs.mkdir(path.dirname(first), { recursive: true })
+            await fs.writeFile(absolute, "absolute")
+            await fs.writeFile(homeFile, "home")
+            await fs.writeFile(first, "first")
+            await fs.writeFile(second, "second")
+          })
+
+          const discovery = yield* start()
+          const initialized = yield* readInitial(yield* discovery.load())
+          expect(initialized.text).toBe(
+            [
+              `Instructions from: ${absolute}\nabsolute`,
+              `Instructions from: ${first}\nfirst`,
+              `Instructions from: ${second}\nsecond`,
+              `Instructions from: ${homeFile}\nhome`,
+              `Instructions from: ${remote}\nremote`,
+            ].join("\n\n"),
+          )
+          expect(requests).toEqual([remote])
+
+          yield* Effect.promise(() => fs.writeFile(first, "changed"))
+          yield* emitAndWait({ type: "update", path: first })
+          expect((yield* readUpdate(yield* discovery.load(), initialized)).text).toContain(
+            `The instructions changed:\nInstructions from: ${first}\nchanged`,
+          )
+        }).pipe(
+          Effect.provide(
+            instructionLayer({
+              config: global,
+              home,
+              configLayer: Config.testLayer([
+                new Document({
+                  type: "document",
+                  info: new Info({ instructions: [absolute, "rules/*.md", "~/home.md", remote] }),
+                }),
+              ]),
+              httpLayer: Layer.succeed(HttpClient.HttpClient, http),
+              locationServiceLayer: Layer.succeed(
+                Location.Service,
+                Location.Service.of(
+                  location({ directory: AbsolutePath.make(nested) }, { projectDirectory: AbsolutePath.make(project) }),
                 ),
               ),
             }),

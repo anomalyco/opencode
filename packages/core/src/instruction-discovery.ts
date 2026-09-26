@@ -5,11 +5,11 @@ import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { createPatch } from "diff"
 import { Bus } from "./bus.js"
 import { Instructions } from "./instructions/index.js"
-import { AbsolutePath } from "./schema.js"
 import { State } from "./state.js"
 
 export class File extends Schema.Class<File>("InstructionDiscovery.File")({
-  path: AbsolutePath,
+  // Configured instructions may use an HTTP(S) URL as their source identity.
+  path: Schema.String,
   content: Schema.String,
 }) {}
 
@@ -21,7 +21,7 @@ export const Event = {
 }
 
 export type Data = {
-  files: Map<AbsolutePath, Types.DeepMutable<File>>
+  files: Map<string, Types.DeepMutable<File>>
   available: boolean
 }
 
@@ -64,12 +64,12 @@ export const layer = (options?: Options) =>
           list: () => Array.from(editor.files.values()),
           add: (file) => editor.files.set(file.path, new File(file) as Types.DeepMutable<File>),
           update: (path, update) => {
-            const current = editor.files.get(AbsolutePath.make(path))
+            const current = editor.files.get(path)
             if (!current) return
             update(current)
-            current.path = AbsolutePath.make(path)
+            current.path = path
           },
-          remove: (path) => editor.files.delete(AbsolutePath.make(path)),
+          remove: (path) => editor.files.delete(path),
           unavailable: () => {
             editor.available = false
           },

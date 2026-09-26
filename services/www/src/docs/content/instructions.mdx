@@ -38,9 +38,7 @@ Keep guidance that applies everywhere in the global file. Put repository-wide gu
 
 If the workspace is outside the project root, only the global file is loaded. Set `OPENCODE_DISABLE_PROJECT_CONFIG=1` to skip project `AGENTS.md` discovery without disabling the global file.
 
-<Callout type="note">
-  OpenCode V2 recognizes `AGENTS.md` only. It does not use `CLAUDE.md` as a fallback.
-</Callout>
+<Callout type="note">OpenCode V2 recognizes `AGENTS.md` only. It does not use `CLAUDE.md` as a fallback.</Callout>
 
 ## Discovery
 
@@ -100,7 +98,7 @@ Instruction values remain privileged. Clients can see which sources changed, but
 
 ## Configuration
 
-The V2 config schema accepts an `instructions` array, but V2 does not currently resolve its files, glob patterns, or URLs. This configuration does not add instructions to the model yet:
+Use the `instructions` array to add files, glob patterns, or HTTP(S) URLs alongside discovered `AGENTS.md` files:
 
 ```jsonc title="opencode.jsonc"
 {
@@ -109,4 +107,4 @@ The V2 config schema accepts an `instructions` array, but V2 does not currently 
 }
 ```
 
-Use `AGENTS.md` for active V2 instructions. See [Config](/config) for configuration locations and precedence.
+Relative patterns are resolved upward from the current workspace to the project root. Absolute paths and `~/` paths resolve directly, and remote instructions use a five-second request timeout. See [Config](/config) for configuration locations and precedence.
