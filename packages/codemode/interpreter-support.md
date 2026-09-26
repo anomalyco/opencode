@@ -34,10 +34,20 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
       shadowable by program declarations like other globals.
 - [x] Cooperative timeout, an optional total tool-call limit, output bounding, and unrestricted tool-call concurrency.
 - [x] The timeout fires between interpreter steps, so one built-in is bounded in what it may build: strings up to
-      2^24 characters (`repeat`, `pad*`, `concat`, `join`, `+`, template literals, `JSON.stringify`), arrays up to
-      10,000,000 elements (`Array(n)`, `length =`, `Array.from`, `split`, `matchAll`, `concat`, `flat`; below the JS
-      maximum of 2^32 - 1), and 10,000 pending promises at once. Exceeding one throws a `RangeError`. A single regular
-      expression match can still run long on a pathological pattern; the host regex engine has no interrupt hook.
+      2^24 characters (`repeat`, `pad*`, `concat`, `join`, `+`, template literals, `JSON.stringify`, `replace` and
+      `replaceAll` with a string replacement (checked before the host builds the result), `encodeURI*`, `btoa`,
+      `Uint8Array` `toString`/`toBase64`/`toHex`, `URLSearchParams.toString`), arrays up to 10,000,000 elements
+      (`Array(n)`, `length =`, `Array.from`, spread, rest, `split`, `matchAll`, `concat`, `flat`; below the JS maximum
+      of 2^32 - 1), 250,000 arguments to one call (spread arguments, `apply`, bound arguments), and 10,000 pending
+      promises at once. Exceeding one throws a `RangeError`. A replacement whose quick bound is too big is measured
+      first: the check is exact for a global replacement without `$`, and otherwise charges each `$` token the longest
+      group of its match (a whole subject for `` $` `` and `$'`), so a result near the cap may still be rejected.
+      `encodeURI*` and `Uint8Array.toString` are checked after the host builds the string (at most nine times a capped
+      input). Unhandled rejections from un-awaited promises are reported individually up to 100, each message cut at
+      4,096 characters, with one summary warning counting the rest that were never handled.
+- [ ] A single regular expression match can still run long on a pathological pattern (`/a*a*a*a*b/` on a 1 KB
+      subject): the host regex engine has no interrupt hook and no subject-length cap helps beyond quadratic patterns,
+      so this needs a step-counted regex engine of our own.
 - [x] A trailing comma after a rest parameter is a syntax error, with or without `"use strict"`.
 - [x] A program that begins with `"use strict"` rejects `yield` as an identifier and duplicate parameter names at
       parse time. Without it, `yield` is an ordinary binding.
@@ -55,7 +65,7 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Tagged templates: a tag applied to a template literal is called as `tag(strings, ...values)`, with the tag read
       like a callee so a member tag keeps its receiver. `strings` is an array of the cooked text with a read-only `raw`
       array of the source text; an invalid escape such as `\unicode` cooks to `undefined`. One template object per
-      site, as in JS, but it is not frozen: `strings[0] = "x"` succeeds here where JS throws.
+      site and both arrays are frozen, as in JS: `strings[0] = "x"` throws a `TypeError`.
 - [x] Regular-expression literals.
 - [x] `NaN` and `Infinity` globals.
 - [ ] BigInt literals and in-interpreter BigInt arithmetic; BigInt remains invalid at JSON-like host boundaries.
@@ -101,9 +111,11 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] `for`, `while`, and `do...while`.
 - [x] `for...of` over arrays, strings, Maps, Sets, URLSearchParams, Headers, Uint8Arrays, built-in iterators, custom
       synchronous iterators, and confined synchronous generators. Abrupt completion invokes the iterator's optional `return()`.
-- [x] `for...in` over own keys of plain objects, arrays, strings, and tool references. `null`, `undefined`, and other
-      non-objects iterate nothing. An un-awaited promise throws rather than iterating.
-- [ ] `for...in` over inherited enumerable keys (`Object.create(proto)`), and skipping keys deleted during the loop.
+- [x] `for...in` over the enumerable keys of plain objects, arrays, strings, and tool references, following the
+      prototype chain like JS (`for (k in Object.create({ a: 1 }))` visits `a`; built-in prototype methods are
+      non-enumerable so `for (k in [])` visits nothing). A key deleted before its turn is skipped and keys added during
+      the loop are not visited. `null`, `undefined`, and other non-objects iterate nothing. An un-awaited promise
+      throws rather than iterating.
 - [x] Unlabeled `break` and `continue`.
 - [x] `try`, `catch`, optional catch bindings, and `finally`.
 - [x] `throw` with arbitrary values.
@@ -122,8 +134,11 @@ ultimate source of truth. Upstream test262 files run verbatim from `test/test262
 - [x] Closures, recursion, default parameters, rest parameters, and destructured parameters.
 - [x] A call depth limit of 10000: deeper nesting throws a catchable `RangeError: Maximum call stack size exceeded`
       at the overflowing call instead of running until the timeout. Callbacks invoked by built-ins count below the
-      call that invoked the built-in, and a resumed `await` starts from depth 0 as in JS, so long async chains such
-      as recursive pagination are unaffected.
+      call that invoked the built-in, and built-ins invoking one another count toward the same limit, so a cycle
+      through built-ins alone (`String(a)` on a 100,000-deep nested array runs `toString` → `join` → `toString`)
+      bottoms out too. A resumed `await` starts from depth 0 as in JS, so long async chains such as recursive pagination are
+      unaffected. A thenable that keeps resolving with another thenable loops in constant memory until the timeout, as
+      in JS.
 - [x] Expression and block function bodies.
 - [x] User callbacks for the supported Array, Map, Set, URLSearchParams, sort, string-replacement, and `Array.from`
       mapper APIs, with one shared acceptance rule everywhere including promise reactions.
@@ -170,8 +185,11 @@ Math.floor)` is `"3"`). A detached method loses its receiver, as in JS: `values.
 - [x] Redeclaring a function in the same scope, or alongside a `var`, is allowed: the last declaration wins.
 - [x] Generator functions have their own `prototype` (inheriting the shared generator prototype), so
       `g() instanceof g` holds. Plain functions have none, since they cannot construct.
-- [ ] `GeneratorFunction.prototype`: every function, generator or not, inherits directly from `Function.prototype`,
-      and a generator whose `prototype` was replaced by a non-object still creates from the shared generator prototype.
+- [x] Generator functions inherit from `GeneratorFunction.prototype` (async ones from
+      `AsyncGeneratorFunction.prototype`), an ordinary non-callable object under `Function.prototype` whose `prototype`
+      is the shared generator prototype and vice versa (`Object.getPrototypeOf(g).prototype.constructor`). Neither is
+      a global; async non-generator functions still inherit from `Function.prototype` directly. A generator whose
+      `prototype` was replaced by a non-object creates from the shared generator prototype.
 - [x] Generator and async generator functions bind parameters (defaults, destructuring) at the call and defer only the
       body to the first `next()`, so a bad argument throws synchronously from the call site, as in JS.
 - [x] Synchronous and async generator declarations/expressions, `yield`, and `yield*`, including lazy bodies,
@@ -247,9 +265,13 @@ Math.floor)` is `"3"`). A detached method loses its receiver, as in JS: `values.
       hint (`"abc".indexOf({ toString() { return "b" } })` is `1`, `(255).toString({ valueOf() { return 16 } })` is
       `"ff"`, `String.prototype.trim.call({ toString() { return " a " } })` is `"a"`). Only consumed positions
       convert; a RegExp pattern is used as is, and `includes`/`startsWith`/`endsWith` reject one before converting.
-- [ ] ToPrimitive elsewhere: `Error.prototype.toString` on an object `message` and numeric arguments of the Array and
-      Uint8Array methods (`at`, `indexOf` start, `slice`) still use the built-in form (`NaN`, `"[object Object]"`) and
-      ignore own methods.
+- [x] `Error.prototype.toString` converts an object `name` or `message` through its own `toString` (`String(e)` with
+      `e.message = { toString() { return "m" } }` is `"Error: m"`); an uncaught error's report at the result boundary
+      still uses the built-in form.
+- [x] `Array.prototype.toString` calls `this.join`, so `arr.join = () => "j"` makes `arr + ""`, `String(arr)`, and
+      `${arr}` all `"j"`; a non-callable `join` gives `"[object Array]"`.
+- [ ] ToPrimitive elsewhere: numeric arguments of the Array and Uint8Array methods (`at`, `indexOf` start, `slice`)
+      still use the built-in form (`NaN`) and ignore own methods.
 - [x] Property keys follow ToPropertyKey: `x[null]` and `x[true]` become string keys, and a data object key
       converts through its own `toString`/`valueOf` (string hint) exactly once per access, in reads, writes,
       compound assignment, `++`, `delete`, `in`, object literals, and destructuring:
@@ -259,6 +281,8 @@ Math.floor)` is `"3"`). A detached method loses its receiver, as in JS: `values.
 ## Promises and tools
 
 - [x] Tool calls start eagerly and return supervised, run-once CodeMode promises.
+- [x] Tool references have identity: `tools.x === tools.x` and `tools.ns === tools.ns`, so they work as `Map`/`Set`
+      members and `switch` cases like any other object.
 - [x] Direct `await`, repeated awaits, and recursive thenable assimilation when a promise or thenable is returned from
       a function/program.
 - [x] `Promise.resolve` and `Promise.reject`.
@@ -335,7 +359,7 @@ reject }` object.
       `TypeError`.
 - [x] `Object.create(proto)` with an object or `null` prototype; any other prototype is a `TypeError`
       (`Object prototype may only be an Object or null`). Inherited reads, `in`, `hasOwnProperty`, and own-only
-      `Object.keys` follow the chain as in JS, but `for...in` still enumerates own keys only. A second `properties`
+      `Object.keys` follow the chain as in JS, and `for...in` enumerates inherited keys too. A second `properties`
       argument other than `undefined` throws a `TypeError`: property descriptors are not supported (there is no
       `Object.defineProperty` either).
 - [x] `Object.freeze`, `Object.seal`, and `Object.preventExtensions`, with `isFrozen`, `isSealed`, and `isExtensible`.

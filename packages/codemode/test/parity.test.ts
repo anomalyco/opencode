@@ -1382,7 +1382,7 @@ describe("Object.getPrototypeOf and Object.create", () => {
     expect((await error(`Object.getPrototypeOf(Symbol.iterator)`)).message).toContain("cannot convert a symbol")
   })
 
-  test("Object.create links the prototype: inherited reads, in, and own-only keys", async () => {
+  test("Object.create links the prototype: inherited reads, in, own-only keys, and for...in", async () => {
     expect(
       await value(`
         const p = { greet(name) { return "hi " + name }, a: 1 }
@@ -1392,7 +1392,7 @@ describe("Object.getPrototypeOf and Object.create", () => {
         for (const key in c) seen.push(key)
         return ["greet" in c, Object.keys(c), c.hasOwnProperty("a"), c.a, c.greet(c.name), Object.getPrototypeOf(c) === p, Object.getPrototypeOf(Object.create(null)), seen]
       `),
-    ).toEqual([true, ["name"], false, 1, "hi x", true, null, ["name"]])
+    ).toEqual([true, ["name"], false, 1, "hi x", true, null, ["name", "greet", "a"]])
   })
 
   test("Object.create rejects non-object prototypes and property descriptors", async () => {
@@ -1560,7 +1560,7 @@ describe("this, arguments, and Function.prototype.call/apply/bind", () => {
       "Function.prototype.call called on incompatible receiver",
     )
     expect((await error(`(() => 1).apply(null, 5)`)).message).toContain("expects an array-like argument list")
-    expect((await error(`(() => 1).apply(null, { length: 1e9 })`)).message).toContain("Invalid array length")
+    expect((await error(`(() => 1).apply(null, { length: 1e9 })`)).message).toContain("Too many arguments")
     expect(
       await value(
         `function f() { return arguments.length } return [f.apply(null, { length: -5 }), f.apply(null, { length: "2" })]`,
@@ -1982,5 +1982,235 @@ describe("WeakMap and WeakSet", () => {
     expect((await error(`WeakMap()`)).message).toContain("new")
     expect((await error(`WeakMap.prototype.get.call(new Map(), {})`)).message).toContain("incompatible receiver")
     expect((await error(`structuredClone(new WeakSet())`)).message).toContain("DataCloneError")
+  })
+})
+
+describe("small language leftovers", () => {
+  test("for...in walks the prototype chain and skips keys deleted before their turn", async () => {
+    expect(
+      await value(`
+        const o = Object.create({ a: 1, shadowed: 1 })
+        o.b = 2
+        o.shadowed = 3
+        const keys = []
+        for (const k in o) keys.push(k)
+        const live = { a: 1, b: 2, c: 3 }
+        const seen = []
+        for (const k in live) { seen.push(k); delete live.b; live.z = 1 }
+        const none = []
+        for (const k in []) none.push(k)
+        for (const k in new TypeError("x")) none.push(k)
+        return [keys, seen, none]
+      `),
+    ).toEqual([["b", "shadowed", "a"], ["a", "c"], []])
+  })
+
+  test("tagged template objects are frozen", async () => {
+    expect(
+      await value(`
+        const tag = (s) => s
+        const f = () => tag\`a\${1}b\`
+        return [f() === f(), Object.isFrozen(f()), Object.isFrozen(f().raw)]
+      `),
+    ).toEqual([true, true, true])
+    expect((await error("const tag = (s) => s; tag`a`[0] = 'x'")).message).toContain("read only")
+  })
+
+  test("Array.prototype.toString delegates to join", async () => {
+    expect(
+      await value(`
+        const a = [1, 2]
+        a.join = () => "j"
+        const b = [1]
+        b.join = 5
+        return [a + "", String(a), \`\${a}\`, b.toString(), Array.prototype.toString.call([3, [4]])]
+      `),
+    ).toEqual(["j", "j", "j", "[object Array]", "3,4"])
+  })
+
+  test("Error.prototype.toString converts object name and message", async () => {
+    expect(
+      await value(`
+        const e = new Error("m")
+        e.message = { toString() { return "obj" } }
+        e.name = { valueOf() { return "N" }, toString() { return "T" } }
+        return [String(e), Error.prototype.toString.call({ name: "", message: "m" }), Error.prototype.toString.call({})]
+      `),
+    ).toEqual(["T: obj", "m", "Error"])
+    expect(
+      (await error(`const e = new Error(); e.message = { toString() { throw new RangeError("r") } }; String(e)`))
+        .message,
+    ).toContain("r")
+  })
+
+  test("generator functions inherit from GeneratorFunction.prototype", async () => {
+    expect(
+      await value(`
+        function* g() {}
+        async function* ag() {}
+        const GFP = Object.getPrototypeOf(g)
+        g.prototype = null
+        return [
+          typeof GFP, GFP === Function.prototype, Object.getPrototypeOf(GFP) === Function.prototype,
+          GFP.prototype.constructor === GFP, Object.getPrototypeOf(ag) === GFP, typeof g.bind,
+          Object.getPrototypeOf(g()) === GFP.prototype,
+        ]
+      `),
+    ).toEqual(["object", false, true, true, false, "function", true])
+    expect((await error(`function* g() {} Object.getPrototypeOf(g)()`)).message).toContain("not a function")
+  })
+})
+
+describe("confinement caps", () => {
+  test("string replacement results are bounded before the host builds them", async () => {
+    expect((await error(`"x".repeat(2 ** 16).replaceAll("x", "x".repeat(2 ** 9))`)).message).toContain(
+      "Invalid string length",
+    )
+    expect((await error(`"x".repeat(2 ** 20).replace(/x/g, "yyyyyyyyyyyyyyyyyyyyyyyyy")`)).message).toContain(
+      "Invalid string length",
+    )
+    // Every prefix token can repeat the subject once per match, and so can a capture inside a lookahead.
+    expect((await error('"x".repeat(2600).replace(/x/g, "$`".repeat(100))')).message).toContain("Invalid string length")
+    expect((await error('"x".repeat(20000).replace(/(?=(x*))/g, "$1")')).message).toContain("Invalid string length")
+    expect(
+      (await error(`const p = new URLSearchParams(); const s = "x".repeat(2 ** 24); p.append(s, s); p.toString()`))
+        .message,
+    ).toContain("Invalid string length")
+    // Counting empty matches must step over surrogate pairs under the u flag.
+    expect(
+      await value(
+        `return ["😀".repeat(10).replace(/(?:)/gu, "x".repeat(2 ** 20)).length, "1234567".replace(/(\\d)(?=(\\d{3})+$)/g, "$1,")]`,
+      ),
+    ).toEqual([11534356, "1,234,567"])
+    expect(
+      await value(`
+        return [
+          "x".repeat(2 ** 23).replaceAll("x", "y").length,
+          "ab".repeat(2 ** 21).replace(/a/g, "$&").length,
+          "abc".replaceAll("", "-"),
+          "aaa".replace(/a/g, (m) => m + m),
+          "hello world ".repeat(2000).replace(/(\\w+)(?=\\s)/g, "[$1]").length,
+          "x".repeat(100).replaceAll("x", "y".repeat(167772)).length,
+          "a  ".repeat(3e6).replace(/ +/g, " ").length,
+        ]
+      `),
+    ).toEqual([8388608, 4194304, "-a-b-c-", "aaaaaa", 32000, 16777200, 6000000])
+    expect((await error(`encodeURIComponent("\\u{1F600}".repeat(2 ** 22))`)).message).toContain("Invalid string length")
+    expect((await error(`btoa("x".repeat(2 ** 24))`)).message).toContain("Invalid string length")
+    expect((await error(`new Uint8Array(9e6).toHex()`)).message).toContain("Invalid string length")
+    expect((await error(`new Uint8Array(9e6).toString()`)).message).toContain("Invalid string length")
+    expect(
+      (await error(`const p = new URLSearchParams(); p.append("\\u20ac".repeat(2 ** 21), ""); p.toString()`)).message,
+    ).toContain("Invalid string length")
+    expect((await error(`decodeURIComponent("%")`)).message).toContain("malformed URI")
+  })
+
+  test("recursion through built-ins alone hits the call depth limit", async () => {
+    expect(
+      await value(`
+        let a = []
+        for (let i = 0; i < 100000; i++) a = [a]
+        let shallow = []
+        for (let i = 0; i < 3000; i++) shallow = [shallow]
+        const names = []
+        try { String(a) } catch (e) { names.push(e.name) }
+        try { \`\${a}\` } catch (e) { names.push(e.name) }
+        const b = [1]
+        b.join = b.toString
+        try { String(b) } catch (e) { names.push(e.name) }
+        return [names, String(shallow).length, [[[1]]].map((x) => String(x))]
+      `),
+    ).toEqual([["RangeError", "RangeError", "RangeError"], 0, ["1"]])
+    // A resumed await starts from depth 0 even when each step recurses through a bound callback of a built-in.
+    expect(
+      await value(`
+        let n = 0
+        let failure = null
+        async function step() {
+          await null
+          n++
+          if (n < 12000) [0].forEach((() => { step().catch((e) => { failure = e.name }) }).bind(null))
+        }
+        await step()
+        while (n < 12000 && failure === null) await null
+        return [n, failure]
+      `),
+    ).toEqual([12000, null])
+  })
+
+  test("argument and spread counts are capped", async () => {
+    expect((await error(`Math.max(...Array(300000).fill(1))`)).message).toContain("Too many arguments")
+    expect((await error(`Math.max.apply(null, { length: 1e9 })`)).message).toContain("Too many arguments")
+    expect(
+      (await error(`function f() { return arguments.length } const a = Array(2e5).fill(0); f(...a, ...a)`)).message,
+    ).toContain("Too many arguments")
+    expect((await error(`function f() {} f.apply(null, Array(300000).fill(0))`)).message).toContain(
+      "Too many arguments",
+    )
+    expect(
+      (
+        await error(
+          `const a = Array(2e5).fill(0); const f = ((...xs) => xs.length).bind(null, ...a).bind(null, ...a); f()`,
+        )
+      ).message,
+    ).toContain("Too many arguments")
+    expect((await error(`const a = Array(6e6).fill(0); [...a, ...a]`)).message).toContain("Invalid array length")
+    expect(await value(`return Math.max(...Array(200000).fill(7))`)).toBe(7)
+  })
+
+  test("a thenable chain resolves iteratively and a self-resolving promise is a chaining cycle", async () => {
+    expect(
+      await value(
+        `const mk = (n) => n === 0 ? "done" : { then(res) { res(mk(n - 1)) } }; return await Promise.resolve(mk(5000))`,
+      ),
+    ).toBe("done")
+    expect(
+      (await error(`let p; p = new Promise((r) => Promise.resolve().then(() => r(p))); await p`)).message,
+    ).toContain("Chaining cycle")
+    // The cycle check still applies after a thenable step hands back the promise being resolved.
+    expect(
+      (await error(`let p; p = new Promise((r) => Promise.resolve().then(() => r({ then(r2) { r2(p) } }))); await p`))
+        .message,
+    ).toContain("Chaining cycle")
+  })
+
+  test("a thenable that resolves with itself runs in constant memory until the timeout", async () => {
+    Bun.gc(true)
+    const before = process.memoryUsage().heapUsed
+    let peak = before
+    const sample = setInterval(() => (peak = Math.max(peak, process.memoryUsage().heapUsed)), 50)
+    const result = await Effect.runPromise(
+      CodeMode.execute({
+        code: `const t = { then(res) { res(t) } }; await Promise.resolve(t)`,
+        tools: {},
+        limits: { timeoutMs: 1000 },
+      }),
+    )
+    clearInterval(sample)
+    expect(result.ok ? undefined : result.error.kind).toBe("TimeoutExceeded")
+    expect(peak - before).toBeLessThan(50_000_000)
+  })
+
+  test("unhandled rejection diagnostics are capped with a summary", async () => {
+    const result = await run(`for (let i = 0; i < 500; i++) Promise.reject(new Error("x".repeat(10000))); return 1`)
+    if (!result.ok) throw new Error(result.error.message)
+    expect(result.warnings?.length).toBe(101)
+    expect(result.warnings?.[0]?.message.length).toBeLessThanOrEqual(4096)
+    expect(result.warnings?.at(-1)?.message).toContain("not reported individually: 400")
+    const handled = await run(
+      `const ps = []; for (let i = 0; i < 200; i++) ps.push(Promise.reject(new Error("x"))); await Promise.allSettled(ps); return 1`,
+    )
+    expect(handled.ok && handled.warnings).toBeUndefined()
+  })
+
+  test("cut rejection messages do not keep the full message alive", async () => {
+    Bun.gc(true)
+    const before = process.memoryUsage().heapUsed
+    const result = await run(
+      `for (let i = 0; i < 50; i++) Promise.reject(new Error(i + "x".repeat(2 ** 22))); return 1`,
+    )
+    Bun.gc(true)
+    expect(result.ok && result.warnings?.length).toBe(50)
+    expect(process.memoryUsage().heapUsed - before).toBeLessThan(50_000_000)
   })
 })
