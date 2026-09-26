@@ -47,6 +47,7 @@ import { registerWslIpcHandlers } from "./wsl/ipc"
 import { spawnWslSidecar } from "./wsl/sidecar"
 import { migrate } from "./migrate"
 import { cleanupStoreFiles } from "./store-cleanup"
+import { createSidecarSupervisor } from "./sidecar-supervisor"
 import { startBackgroundCli } from "./background-cli"
 import { setNativeTranslations } from "./native-translations"
 
@@ -62,10 +63,12 @@ const APP_IDS: Record<string, string> = {
 }
 const TEST_ONBOARDING = process.env.OPENCODE_TEST_ONBOARDING === "1"
 const SIDECAR_VERSION = process.env.OPENCODE_SIDECAR_V2 === "1" ? "v2" : "v1"
+const SIDECAR_RESPAWN_LIMIT = 3
 const jsCallStackFeature = "DocumentPolicyIncludeJSCallStacksInCrashReports"
 
 let logger: ReturnType<typeof initLogging>
 let server: SidecarListener | null = null
+let quitting = false
 
 const pendingDeepLinks: string[] = []
 
@@ -89,7 +92,12 @@ async function killSidecar() {
   if (!server) return
   const current = server
   server = null
-  await current.stop()
+  quitting = true
+  try {
+    await current.stop()
+  } finally {
+    quitting = false
+  }
 }
 
 function ensureLoopbackNoProxy() {
@@ -169,6 +177,7 @@ const main = Effect.gen(function* () {
     wslServers.stopAll()
   }
   const relaunch = () => {
+    quitting = true
     setAppQuitting()
     void stopSidecars().finally(() => {
       app.relaunch()
@@ -222,11 +231,13 @@ const main = Effect.gen(function* () {
   })
 
   app.on("before-quit", () => {
+    quitting = true
     setAppQuitting()
     void stopSidecars()
   })
 
   app.on("will-quit", () => {
+    quitting = true
     setAppQuitting()
     void stopSidecars()
   })
@@ -245,6 +256,7 @@ const main = Effect.gen(function* () {
 
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.on(signal, () => {
+      quitting = true
       setAppQuitting()
       void stopSidecars().finally(() => app.quit())
     })
@@ -374,15 +386,41 @@ const main = Effect.gen(function* () {
     const url = `http://${hostname}:${port}`
     const password = randomUUID()
 
-    logger.log("spawning sidecar", { url })
-    const { listener, health } = yield* Effect.promise(() =>
-      spawnLocalServer(hostname, port, password, {
+    // If the sidecar crashes (e.g. V8 aborts under memory pressure) the app
+    // window stays open but every request fails with "Failed to fetch".
+    // Respawn on the same port with the same password so the renderer can
+    // reconnect without a full app restart, then reload the windows.
+    const supervisor = createSidecarSupervisor({ respawnLimit: SIDECAR_RESPAWN_LIMIT })
+    const spawnWithSupervisor = async () => {
+      const spawned = await spawnLocalServer(hostname, port, password, {
         userDataPath: app.getPath("userData"),
         onStdout: (message) => writeLog("server", "stdout", { message }),
         onStderr: (message) => writeLog("server", "stderr", { message }, "warn"),
-        onExit: (code) => writeLog("utility", "sidecar exited", { code }, "warn"),
-      }),
-    )
+        onExit: (code) => {
+          writeLog("utility", "sidecar exited", { code }, "warn")
+          if (quitting || !supervisor.shouldRespawn(code)) {
+            if (!quitting) logger.error("sidecar restart limit reached", { code, attempts: supervisor.attempts })
+            return
+          }
+          logger.log("respawning sidecar after exit", { code, attempt: supervisor.attempts })
+          spawnWithSupervisor()
+            .then(async (next) => {
+              server = next.listener
+              supervisor.succeeded()
+              await next.health.wait
+              logger.log("sidecar respawned", { url })
+              for (const win of BrowserWindow.getAllWindows()) {
+                if (!win.isDestroyed()) win.reload()
+              }
+            })
+            .catch((error) => logger.error("sidecar respawn failed", error))
+        },
+      })
+      return spawned
+    }
+
+    logger.log("spawning sidecar", { url })
+    const { listener, health } = yield* Effect.promise(() => spawnWithSupervisor())
     server = listener
     yield* Deferred.succeed(serverReady, {
       url,
