@@ -37,6 +37,11 @@
   &[data-closed] {
     animation: tooltipV2Out 80ms ease-in forwards;
   }
+
+  &[data-instant],
+  &[data-instant][data-closed] {
+    animation: none;
+  }
 }
 
 @keyframes tooltipV2In {
