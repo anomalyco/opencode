@@ -2,14 +2,17 @@ import { Effect, Encoding, Schema } from "effect"
 import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
+import { HttpTransport } from "../route/transport/index.js"
 import {
   AIError,
+  HttpOptions,
+  LLMRequest,
+  mergeJsonRecords,
   LLMEvent,
   Usage,
   type CacheHint,
   type FinishReason,
   type FinishReasonDetails,
-  type LLMRequest,
   type LanguageModel,
   type ProviderMetadata,
   type ReasoningPart,
@@ -21,6 +24,7 @@ import { BedrockEventStream } from "./bedrock-event-stream.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { JsonObject, optionalArray, ProviderShared } from "./shared.js"
 import { BedrockAuth } from "./utils/bedrock-auth.js"
+import { AnthropicModel } from "./utils/anthropic-model.js"
 import { BedrockCache } from "./utils/bedrock-cache.js"
 import { BedrockMedia } from "./utils/bedrock-media.js"
 import { Lifecycle } from "./utils/lifecycle.js"
@@ -805,6 +809,62 @@ export const protocol = Protocol.make({
   },
 })
 
+const decodeBindingFields = ProviderShared.validateWith(
+  Schema.decodeUnknownEffect(
+    Schema.Struct({
+      additionalModelRequestFields: Schema.optional(
+        Schema.Struct({
+          thinking: Schema.optional(
+            Schema.Struct({
+              type: Schema.optional(Schema.String),
+              block_binding: Schema.optional(
+                Schema.Struct({ prefix_mismatch_behavior: Schema.optional(Schema.String) }),
+              ),
+            }),
+          ),
+          anthropic_beta: Schema.optional(Schema.Array(Schema.String)),
+        }),
+      ),
+    }),
+  ),
+)
+
+const http = HttpTransport.httpJson<BedrockConverseBody, object>({ framing })
+const transport = {
+  ...http,
+  prepare: Effect.fn("BedrockConverse.prepare")(function* (input: Parameters<typeof http.prepare>[0]) {
+    if (!AnthropicModel.supportsThinkingBlockBinding(input.request.model)) return yield* http.prepare(input)
+    const fields = yield* decodeBindingFields(mergeJsonRecords(input.body, input.request.http?.body))
+    const thinking = fields.additionalModelRequestFields?.thinking
+    if (thinking?.type === "disabled") return yield* http.prepare(input)
+    // Apply after body overlays so variant settings and existing betas survive, and before SigV4 signs the body.
+    return yield* http.prepare({
+      ...input,
+      request: LLMRequest.update(input.request, {
+        http: new HttpOptions({
+          ...input.request.http,
+          body: mergeJsonRecords(input.request.http?.body, {
+            additionalModelRequestFields: {
+              thinking: {
+                type: thinking?.type ?? "adaptive",
+                block_binding: {
+                  prefix_mismatch_behavior: thinking?.block_binding?.prefix_mismatch_behavior ?? "drop_block",
+                },
+              },
+              anthropic_beta: [
+                ...new Set([
+                  ...(fields.additionalModelRequestFields?.anthropic_beta ?? []),
+                  "thinking-binding-controls-2026-08-01",
+                ]),
+              ],
+            },
+          }),
+        }),
+      }),
+    })
+  }),
+}
+
 export const route = Route.make({
   id: ADAPTER,
   provider: "bedrock",
@@ -817,7 +877,7 @@ export const route = Route.make({
     ({ body }) => `/model/${encodeURIComponent(body.modelId)}/converse-stream`,
   ),
   auth: BedrockAuth.auth,
-  framing,
+  transport,
 })
 
 export const sigV4Auth = BedrockAuth.sigV4
