@@ -694,15 +694,13 @@ export async function runNonInteractivePrompt(input: Input) {
     if (interrupted) await input.client.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
 
     const [permissions, forms, globals] = await Promise.all([
-      input.client.permission.list({ sessionID: input.sessionID }).catch(() => undefined),
-      input.client.session.form.list({ sessionID: input.sessionID }).catch(() => undefined),
+      input.client.permission.list({ sessionID: input.sessionID }),
+      input.client.session.form.list({ sessionID: input.sessionID }),
       input.attached
         ? Promise.resolve(undefined)
-        : input.client.form
-            .list({
-              location: { directory: input.location.directory },
-            })
-            .catch(() => undefined),
+        : input.client.form.list({
+            location: { directory: input.location.directory },
+          }),
     ])
     await Promise.all([
       ...(permissions ?? []).map(replyPermission),
