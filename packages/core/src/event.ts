@@ -115,6 +115,39 @@ export class SubscriberOverflowError extends Schema.TaggedErrorClass<SubscriberO
 export const define = Event.define
 export const versionedType = Event.versionedType
 
+// Storage policy belongs to core, not the shared event schema or live notification path.
+const durableTransforms = new Map<string, (data: Record<string, unknown>) => Record<string, unknown>>([
+  [
+    "message.updated.1",
+    (data) => {
+      const info = data.info
+      if (!info || typeof info !== "object" || !("role" in info) || info.role !== "user" || !("summary" in info))
+        return data
+      const { summary, ...message } = info
+      // V1 requires diffs whenever summary is present. Keep its legal metadata so
+      // replay can recover patches from the snapshots in durable part events.
+      if (!summary || typeof summary !== "object" || !("diffs" in summary) || !Array.isArray(summary.diffs))
+        return { ...data, info: message }
+      return {
+        ...data,
+        info: {
+          ...message,
+          summary: {
+            ...("title" in summary && summary.title !== undefined ? { title: summary.title } : {}),
+            ...("body" in summary && summary.body !== undefined ? { body: summary.body } : {}),
+            diffs: summary.diffs.map((d) => ({
+              ...(d.file !== undefined ? { file: d.file } : {}),
+              ...(d.status !== undefined ? { status: d.status } : {}),
+              additions: d.additions,
+              deletions: d.deletions,
+            })),
+          },
+        },
+      }
+    },
+  ],
+])
+
 export interface PublishOptions {
   readonly id?: ID
   readonly metadata?: Record<string, unknown>
@@ -247,10 +280,9 @@ export const layerWith = (options?: LayerOptions) =>
                             .get()
                             .pipe(Effect.orDie)
                           const latest = row?.seq ?? -1
-                          const encoded = Schema.encodeUnknownSync(definition.data)(event.data) as Record<
-                            string,
-                            unknown
-                          >
+                          const transform = durableTransforms.get(versionedType(definition.type, durable.version))
+                          const data = transform ? transform(event.data as Record<string, unknown>) : event.data
+                          const encoded = Schema.encodeUnknownSync(definition.data)(data) as Record<string, unknown>
                           if (input?.strictOwner && row?.ownerID && row.ownerID !== input.ownerID) {
                             yield* Effect.die(
                               new InvalidDurableEventError({
@@ -269,7 +301,7 @@ export const layerWith = (options?: LayerOptions) =>
                             if (
                               stored?.id === event.id &&
                               stored.type === versionedType(definition.type, durable.version) &&
-                              isDeepStrictEqual(stored.data, encoded)
+                              isDeepStrictEqual(transform ? transform(stored.data) : stored.data, encoded)
                             ) {
                               if (input.ownerID && row?.ownerID == null) {
                                 yield* db
@@ -315,6 +347,9 @@ export const layerWith = (options?: LayerOptions) =>
                             )
                           const committed = {
                             ...event,
+                            // Projectors and live listeners consume the full decoded payload.
+                            // Only the durable EventTable representation is transformed.
+                            data: event.data,
                             durable: { aggregateID, seq, version: durable.version },
                           } as Payload
                           for (const projector of list) {
