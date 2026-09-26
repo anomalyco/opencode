@@ -130,7 +130,19 @@ export const Plugin = define({
   }),
 })
 
-function ancestorDirectories(start: string, stop: string): string[] {
-  if (start === stop) return [start]
-  return [start, ...ancestorDirectories(dirname(start), stop)]
+// Walks start and every ancestor up to and including stop. Bounded by the filesystem
+// root rather than by reaching stop: path forms can disagree (separator or case drift
+// on Windows), and dirname at the root returns the root itself, so an unbounded
+// `start === stop` recursion overflows the stack and blocks every session's
+// instruction initialization.
+export function ancestorDirectories(start: string, stop: string): string[] {
+  const directories: string[] = []
+  let current: string | undefined = start
+  while (current !== undefined) {
+    directories.push(current)
+    if (current === stop) break
+    const parent = dirname(current)
+    current = parent === current ? undefined : parent
+  }
+  return directories
 }
