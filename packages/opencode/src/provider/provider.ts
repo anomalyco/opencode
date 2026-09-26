@@ -1,6 +1,7 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import os from "os"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
+import { ConfigProviderV1 } from "@opencode-ai/core/v1/config/provider"
 import fuzzysort from "fuzzysort"
 import { Config } from "@/config/config"
 import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
@@ -18,7 +19,7 @@ import { iife } from "@/util/iife"
 import { Global } from "@opencode-ai/core/global"
 import path from "path"
 import { pathToFileURL } from "url"
-import { Effect, Layer, Context, Schema, Types } from "effect"
+import { Effect, Layer, Context, Schema, Types, Duration, Schedule } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectPromise } from "@/effect/promise"
@@ -26,6 +27,7 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { isRecord } from "@/util/record"
 import { optional } from "@opencode-ai/core/schema"
 import { ProviderTransform } from "./transform"
+import { ProviderDiscover } from "./discover"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ModelStatus } from "./model-status"
@@ -33,6 +35,8 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderError } from "./error"
 
 const OPENAI_HEADER_TIMEOUT_DEFAULT = 300_000
+const DISCOVERY_INTERVAL = Duration.hours(24)
+const DISCOVERY_CONCURRENCY = 8
 
 function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   if (typeof ms !== "number" || ms <= 0) return res
@@ -1262,6 +1266,42 @@ function cloudflareGatewayNpm(providerID: string, modelID: string) {
   return undefined
 }
 
+function discoveryFailure(error: unknown) {
+  if (error instanceof ProviderDiscover.DiscoverError) return { kind: error.kind, message: error.message }
+  return { kind: "failed", message: error instanceof Error ? error.message : String(error) }
+}
+
+// `/v1/models` reports no pricing or limits. A zero context limit means "unknown": `isOverflow` skips compaction.
+function compatibleDiscoveredModel(providerID: ProviderV2.ID, modelID: string): Model {
+  return {
+    id: ModelV2.ID.make(modelID),
+    providerID,
+    name: modelID,
+    family: "",
+    api: {
+      id: modelID,
+      url: "",
+      npm: "@ai-sdk/openai-compatible",
+    },
+    status: "active",
+    headers: {},
+    options: {},
+    cost: { input: 0, output: 0, cache: { read: 0, write: 0 } },
+    limit: { context: 0, output: 0 },
+    capabilities: {
+      temperature: false,
+      reasoning: false,
+      attachment: false,
+      toolcall: true,
+      input: { text: true, audio: false, image: false, video: false, pdf: false },
+      output: { text: true, audio: false, image: false, video: false, pdf: false },
+      interleaved: false,
+    },
+    release_date: "",
+    variants: {},
+  }
+}
+
 function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model): Model {
   const base: Model = {
     id: ModelV2.ID.make(model.id),
@@ -1417,6 +1457,8 @@ const layer = Layer.effect(
         const discoveryLoaders: {
           [providerID: string]: CustomDiscoverModels
         } = {}
+        // Providers without static models; discovery moves them into `providers` once it finds some.
+        const pending: Record<ProviderV2.ID, Info> = {} as Record<ProviderV2.ID, Info>
         const dep = {
           auth: (id: string) => auth.get(id).pipe(Effect.orDie),
           config: () => config.get(),
@@ -1654,19 +1696,58 @@ const layer = Layer.effect(
           mergeProvider(providerID, partial)
         }
 
-        const gitlab = ProviderV2.ID.make("gitlab")
-        if (discoveryLoaders[gitlab] && providers[gitlab] && isProviderAllowed(gitlab)) {
-          yield* Effect.promise(async () => {
-            try {
-              const discovered = await discoveryLoaders[gitlab]()
-              for (const [modelID, model] of Object.entries(discovered)) {
-                if (!providers[gitlab].models[modelID]) {
-                  providers[gitlab].models[modelID] = model
+        const runDiscovery = Effect.fn("Provider.discovery")(function* () {
+          const fresh = yield* config.get()
+          const freshDisabled = new Set(fresh.disabled_providers ?? [])
+          const freshEnabled = fresh.enabled_providers ? new Set(fresh.enabled_providers) : null
+          const allowed = (id: ProviderV2.ID) => !(freshEnabled && !freshEnabled.has(id)) && !freshDisabled.has(id)
+
+          const discover = (providerID: ProviderV2.ID, load: () => Promise<Record<string, Model>>) =>
+            Effect.tryPromise({ try: load, catch: (error) => error }).pipe(
+              Effect.map((models) => {
+                const provider = providers[providerID] ?? pending[providerID]
+                if (!provider) return
+                for (const [modelID, model] of Object.entries(models)) {
+                  if (provider.models[modelID]) continue
+                  if (acceptModel(providerID, fresh.provider?.[providerID], modelID, model))
+                    provider.models[modelID] = model
                 }
-              }
-            } catch (e) {}
+                if (Object.keys(provider.models).length === 0) return
+                providers[providerID] = provider
+                delete pending[providerID]
+              }),
+              Effect.catch((error) =>
+                Effect.logDebug("provider discovery failed", { providerID, ...discoveryFailure(error) }),
+              ),
+            )
+
+          const gitlab = ProviderV2.ID.make("gitlab")
+          if (discoveryLoaders[gitlab] && (providers[gitlab] ?? pending[gitlab]) && allowed(gitlab))
+            yield* discover(gitlab, discoveryLoaders[gitlab])
+
+          const targets = Object.entries({ ...pending, ...providers }).flatMap(([id, provider]) => {
+            const providerID = ProviderV2.ID.make(id)
+            if (!allowed(providerID)) return []
+            const npm = modelsDev[providerID]?.npm
+            const configProvider = fresh.provider?.[providerID]
+            if (configProvider?.npm !== "@ai-sdk/openai-compatible" && npm !== "@ai-sdk/openai-compatible") return []
+            const baseURL = (provider.options?.baseURL as string | undefined)?.trim()
+            if (!baseURL) return []
+            // Same key precedence as requests in `resolveSDK`; local runtimes like Ollama need no key.
+            return [{ providerID, baseURL, apiKey: (provider.options?.apiKey as string | undefined) ?? provider.key }]
           })
-        }
+
+          yield* Effect.forEach(
+            targets,
+            (target) =>
+              discover(target.providerID, () =>
+                ProviderDiscover.discoverOpenAICompatibleModels(target).then((ids) =>
+                  Object.fromEntries(ids.map((id) => [id, compatibleDiscoveredModel(target.providerID, id)])),
+                ),
+              ),
+            { concurrency: DISCOVERY_CONCURRENCY, discard: true },
+          )
+        })
 
         for (const [id, provider] of Object.entries(providers)) {
           const providerID = ProviderV2.ID.make(id)
@@ -1676,46 +1757,59 @@ const layer = Layer.effect(
           }
 
           const configProvider = cfg.provider?.[providerID]
-
           for (const [modelID, model] of Object.entries(provider.models)) {
-            model.api.id = model.api.id ?? model.id ?? modelID
-
-            if (
-              // These chat aliases are invalid for the special handling in the
-              // built-in providers below, but custom providers may support them.
-              (modelID === "gpt-5-chat-latest" &&
-                (providerID === ProviderV2.ID.openai ||
-                  providerID === ProviderV2.ID.githubCopilot ||
-                  providerID === ProviderV2.ID.openrouter)) ||
-              (providerID === ProviderV2.ID.openrouter && modelID === "openai/gpt-5-chat")
-            )
-              delete provider.models[modelID]
-            if (model.status === "alpha" && !runtimeFlags.enableExperimentalModels) delete provider.models[modelID]
-            if (model.status === "deprecated") delete provider.models[modelID]
-            if (
-              (configProvider?.blacklist && configProvider.blacklist.includes(modelID)) ||
-              (configProvider?.whitelist && !configProvider.whitelist.includes(modelID))
-            )
-              delete provider.models[modelID]
-
-            if (model.variants === undefined) {
-              model.variants = mapValues(ProviderTransform.variants(model), (v) => v)
-            }
-
-            const configVariants = configProvider?.models?.[modelID]?.variants
-            if (configVariants && model.variants) {
-              const merged = mergeDeep(model.variants, configVariants)
-              model.variants = mapValues(
-                pickBy(merged, (v) => !v.disabled),
-                (v) => omit(v, ["disabled"]),
-              )
-            }
+            if (!acceptModel(providerID, configProvider, modelID, model)) delete provider.models[modelID]
           }
 
           if (Object.keys(provider.models).length === 0) {
             delete providers[providerID]
+            pending[providerID] = provider
             continue
           }
+        }
+
+        yield* runDiscovery()
+        yield* runDiscovery().pipe(Effect.delay(DISCOVERY_INTERVAL), Effect.repeat(Schedule.forever), Effect.forkScoped)
+
+        function acceptModel(
+          providerID: ProviderV2.ID,
+          configProvider: ConfigProviderV1.Info | undefined,
+          modelID: string,
+          model: Model,
+        ) {
+          model.api.id = model.api.id ?? model.id ?? modelID
+
+          if (
+            // These chat aliases are invalid for the special handling in the
+            // built-in providers below, but custom providers may support them.
+            (modelID === "gpt-5-chat-latest" &&
+              (providerID === ProviderV2.ID.openai ||
+                providerID === ProviderV2.ID.githubCopilot ||
+                providerID === ProviderV2.ID.openrouter)) ||
+            (providerID === ProviderV2.ID.openrouter && modelID === "openai/gpt-5-chat")
+          )
+            return false
+          if (model.status === "alpha" && !runtimeFlags.enableExperimentalModels) return false
+          if (model.status === "deprecated") return false
+          if (
+            (configProvider?.blacklist && configProvider.blacklist.includes(modelID)) ||
+            (configProvider?.whitelist && !configProvider.whitelist.includes(modelID))
+          )
+            return false
+
+          if (model.variants === undefined) {
+            model.variants = mapValues(ProviderTransform.variants(model), (v) => v)
+          }
+
+          const configVariants = configProvider?.models?.[modelID]?.variants
+          if (configVariants && model.variants) {
+            const merged = mergeDeep(model.variants, configVariants)
+            model.variants = mapValues(
+              pickBy(merged, (v) => !v.disabled),
+              (v) => omit(v, ["disabled"]),
+            )
+          }
+          return true
         }
 
         return {

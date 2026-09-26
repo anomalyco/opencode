@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test"
+import { afterAll, afterEach, expect, test } from "bun:test"
 import { mkdir, unlink } from "fs/promises"
 import path from "path"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -404,6 +404,82 @@ it.instance(
           env: [],
           models: { "gpt-4": { name: "GPT-4", tool_call: true, limit: { context: 128000, output: 4096 } } },
           options: { apiKey: "test-key", baseURL: "https://custom.openai.com/v1" },
+        },
+      },
+    },
+  },
+)
+
+const discovery = { inflight: 0, peak: 0 }
+const discoveryServer = Bun.serve({
+  port: 0,
+  async fetch(request) {
+    const segment = new URL(request.url).pathname.split("/")[1]
+    if (segment === "broken") return new Response("unavailable", { status: 500 })
+    if (segment === "keyed" && request.headers.get("authorization") !== "Bearer secret")
+      return new Response("unauthorized", { status: 401 })
+    discovery.inflight++
+    discovery.peak = Math.max(discovery.peak, discovery.inflight)
+    await Bun.sleep(200)
+    discovery.inflight--
+    return Response.json({ data: [{ id: `${segment}-model` }, { id: `${segment}-extra` }] })
+  },
+})
+
+afterAll(() => discoveryServer.stop(true))
+
+const discoveryProvider = (segment: string) => ({
+  name: segment,
+  npm: "@ai-sdk/openai-compatible",
+  env: [],
+  models: {},
+  options: { baseURL: `http://127.0.0.1:${discoveryServer.port}/${segment}/v1` },
+})
+
+it.instance(
+  "discovers keyless compatible provider models concurrently and isolates failures",
+  () =>
+    Effect.gen(function* () {
+      const providers = yield* list
+      expect(Object.keys(providers[ProviderV2.ID.make("alpha")].models)).toContain("alpha-model")
+      expect(Object.keys(providers[ProviderV2.ID.make("beta")].models)).toContain("beta-model")
+      expect(providers[ProviderV2.ID.make("broken")]).toBeUndefined()
+      expect(discovery.peak).toBe(2)
+    }),
+  {
+    config: {
+      provider: {
+        alpha: discoveryProvider("alpha"),
+        beta: discoveryProvider("beta"),
+        broken: discoveryProvider("broken"),
+      },
+    },
+  },
+)
+
+it.instance(
+  "applies config whitelist to discovered models",
+  () =>
+    Effect.gen(function* () {
+      const providers = yield* list
+      expect(Object.keys(providers[ProviderV2.ID.make("listed")].models)).toEqual(["listed-model"])
+    }),
+  { config: { provider: { listed: { ...discoveryProvider("listed"), whitelist: ["listed-model"] } } } },
+)
+
+it.instance(
+  "discovers models with the config apiKey",
+  () =>
+    Effect.gen(function* () {
+      const providers = yield* list
+      expect(Object.keys(providers[ProviderV2.ID.make("keyed")].models)).toContain("keyed-model")
+    }),
+  {
+    config: {
+      provider: {
+        keyed: {
+          ...discoveryProvider("keyed"),
+          options: { ...discoveryProvider("keyed").options, apiKey: "secret" },
         },
       },
     },
