@@ -427,6 +427,73 @@ export function Session() {
     }, 50)
   }
 
+  // Pagination + asymmetric windowing
+  const WINDOW_CAP = 200
+
+  async function maybeLoadOlderMessages() {
+    if (!scroll || scroll.isDestroyed) return
+    if (!sync.data.messageOlderCursor[route.sessionID]) return
+    if (sync.data.messageOlderLoading[route.sessionID]) return
+    if (scroll.scrollTop > 5) return
+    // Anchor-based scroll restoration: identify the first visible child
+    // so we can restore its position after content changes at either end.
+    // Note: child.y includes the scroll offset, so child.y - scroll.y
+    // gives the offset from the viewport top regardless of scroll position.
+    const anchor = scroll.getChildren().find((c) => c.id && c.y >= scroll.y)
+    const anchorId = anchor?.id
+    const anchorOffset = anchor ? anchor.y - scroll.y : undefined
+    await sync.session.loadOlderMessages(route.sessionID)
+    // Trim from the bottom if the user is well above it - only safe when
+    // there's room above the live tail and no message there is still
+    // streaming. trimNewerMessages itself enforces the streaming guard.
+    const messages = sync.data.message[route.sessionID] ?? []
+    if (messages.length > WINDOW_CAP && scroll.scrollHeight - scroll.scrollTop > scroll.height * 4) {
+      sync.session.trimNewerMessages(route.sessionID, WINDOW_CAP)
+    }
+    restoreScrollAnchor(anchorId, anchorOffset)
+  }
+
+  async function maybeLoadNewerMessages() {
+    if (!scroll || scroll.isDestroyed) return
+    if (!sync.data.messageNewerCursor[route.sessionID]) return
+    if (sync.data.messageNewerLoading[route.sessionID]) return
+    const distanceFromBottom = scroll.scrollHeight - scroll.height - scroll.scrollTop
+    if (distanceFromBottom > 5) return
+    // Anchor-based scroll restoration: identify the first visible child
+    // so we can restore its position after content changes at either end.
+    // Note: child.y includes the scroll offset, so child.y - scroll.y
+    // gives the offset from the viewport top regardless of scroll position.
+    const anchor = scroll.getChildren().find((c) => c.id && c.y >= scroll.y)
+    const anchorId = anchor?.id
+    const anchorOffset = anchor ? anchor.y - scroll.y : undefined
+    await sync.session.loadNewerMessages(route.sessionID)
+    // Trim from the top - older messages can always be re-fetched via the
+    // older cursor, no streaming concern.
+    const messages = sync.data.message[route.sessionID] ?? []
+    if (messages.length > WINDOW_CAP && scroll.scrollTop > scroll.height * 4) {
+      sync.session.trimOlderMessages(route.sessionID, WINDOW_CAP)
+    }
+    restoreScrollAnchor(anchorId, anchorOffset)
+  }
+
+  // Anchor-based scroll restoration: after content changes at either end,
+  // reposition the viewport so the previously-visible anchor child stays
+  // in place. child.y includes the scroll offset, so child.y - scroll.y
+  // gives the offset from the viewport top regardless of scroll position.
+  function restoreScrollAnchor(anchorId?: string, anchorOffset?: number) {
+    setTimeout(() => {
+      if (!scroll || scroll.isDestroyed) return
+      if (anchorId === undefined || anchorOffset === undefined) return
+      const child = scroll.getChildren().find((c) => c.id === anchorId)
+      if (child) scroll.scrollBy(child.y - scroll.y - anchorOffset)
+    }, 0)
+  }
+
+  function maybeLoadAdjacent() {
+    void maybeLoadOlderMessages()
+    void maybeLoadNewerMessages()
+  }
+
   const local = useLocal()
 
   function enterChild(sessionID: string) {
@@ -755,6 +822,7 @@ export function Session() {
       hidden: true,
       run: () => {
         scroll.scrollBy(-scroll.height / 2)
+        maybeLoadAdjacent()
         dialog.clear()
       },
     },
@@ -765,6 +833,7 @@ export function Session() {
       hidden: true,
       run: () => {
         scroll.scrollBy(scroll.height / 2)
+        maybeLoadAdjacent()
         dialog.clear()
       },
     },
@@ -775,6 +844,7 @@ export function Session() {
       hidden: true,
       run: () => {
         scroll.scrollBy(-1)
+        maybeLoadAdjacent()
         dialog.clear()
       },
     },
@@ -785,6 +855,7 @@ export function Session() {
       hidden: true,
       run: () => {
         scroll.scrollBy(1)
+        maybeLoadAdjacent()
         dialog.clear()
       },
     },
@@ -795,6 +866,7 @@ export function Session() {
       hidden: true,
       run: () => {
         scroll.scrollBy(-scroll.height / 4)
+        maybeLoadAdjacent()
         dialog.clear()
       },
     },
@@ -805,6 +877,7 @@ export function Session() {
       hidden: true,
       run: () => {
         scroll.scrollBy(scroll.height / 4)
+        maybeLoadAdjacent()
         dialog.clear()
       },
     },
@@ -815,6 +888,7 @@ export function Session() {
       hidden: true,
       run: () => {
         scroll.scrollTo(0)
+        maybeLoadAdjacent()
         dialog.clear()
       },
     },
@@ -825,6 +899,7 @@ export function Session() {
       hidden: true,
       run: () => {
         scroll.scrollTo(scroll.scrollHeight)
+        maybeLoadAdjacent()
         dialog.clear()
       },
     },
@@ -1194,7 +1269,17 @@ export function Session() {
                 stickyStart="bottom"
                 flexGrow={1}
                 scrollAcceleration={scrollAcceleration()}
+                onMouseScroll={() => {
+                  // Defer until after the scrollbox has applied the scroll
+                  // delta so scroll.y reflects the post-event position.
+                  setTimeout(() => maybeLoadAdjacent(), 0)
+                }}
               >
+                <Show when={sync.data.messageOlderLoading[route.sessionID]}>
+                  <box paddingLeft={3} flexShrink={0}>
+                    <Spinner color={theme.textMuted}>Loading older messages…</Spinner>
+                  </box>
+                </Show>
                 <box height={1} />
                 <For each={messages()}>
                   {(message, index) => (
@@ -1292,6 +1377,11 @@ export function Session() {
                     </Switch>
                   )}
                 </For>
+                <Show when={sync.data.messageNewerLoading[route.sessionID]}>
+                  <box paddingLeft={3} flexShrink={0}>
+                    <Spinner color={theme.textMuted}>Loading newer messages…</Spinner>
+                  </box>
+                </Show>
               </scrollbox>
               <box flexShrink={0}>
                 <Show when={permissions().length > 0}>
@@ -1440,7 +1530,7 @@ function UserMessage(props: {
                 <Show when={ctx.showTimestamps()}>
                   <text fg={theme.textMuted}>
                     <span style={{ fg: theme.textMuted }}>
-                      {Locale.todayTimeOrDateTime(props.message.time.created)}
+                      {Locale.datetimeFull(props.message.time.created)}
                     </span>
                   </text>
                 </Show>
