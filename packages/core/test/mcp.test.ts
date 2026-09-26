@@ -17,6 +17,7 @@ import { ConfigMcpPlugin } from "@opencode/core/config/plugin/mcp"
 import { Credential } from "@opencode/core/credential"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { EffectFlock } from "@opencode/util/effect-flock"
 import { Bus } from "@opencode/core/bus"
 import { ID, type Payload } from "@opencode/schema/event"
 import { Form } from "@opencode/core/form"
@@ -347,6 +348,7 @@ function resourceMcpLayer(
           },
         }),
         Layer.mock(Credential.Service, {}),
+        Layer.mock(EffectFlock.Service, {}),
         overrides?.environment ?? hostEnvironmentLayer,
       ),
     ),
@@ -1988,7 +1990,15 @@ testEffect(Layer.empty).live("keeps MCP config snapshots stable during an in-fli
 
 const shutdownIt = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Bus.node, Integration.node, Credential.node, Form.node, Environment.node, Location.node]),
+    LayerNode.group([
+      Bus.node,
+      Integration.node,
+      Credential.node,
+      EffectFlock.node,
+      Form.node,
+      Environment.node,
+      Location.node,
+    ]),
     [
       Location.node.replace(
         Layer.succeed(

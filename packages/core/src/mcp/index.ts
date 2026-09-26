@@ -8,6 +8,7 @@ import { createHash } from "node:crypto"
 import { isDeepStrictEqual } from "node:util"
 import { Cause, Context, Effect, Exit, FiberSet, Latch, Layer, Schema, Scope, Semaphore, Stream, Types } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { EffectFlock } from "@opencode/util/effect-flock"
 import { Credential } from "../credential.js"
 import { Bus } from "../bus.js"
 import { Environment } from "../environment/index.js"
@@ -149,6 +150,7 @@ export const layer = (options?: Options) =>
       const forms = yield* Form.Service
       const integration = yield* Integration.Service
       const credentials = yield* Credential.Service
+      const flock = yield* EffectFlock.Service
       const root = yield* Effect.scope
       const fork = yield* FiberSet.makeRuntime<never, void, never>()
 
@@ -214,6 +216,7 @@ export const layer = (options?: Options) =>
         const { McpOAuth } = yield* Effect.promise(() => import("./oauth.js"))
         return yield* McpOAuth.connectProvider({ config: entry.config, integrationID: entry.integrationID }).pipe(
           Effect.provideService(Credential.Service, credentials),
+          Effect.provideService(EffectFlock.Service, flock),
         )
       })
 
@@ -759,7 +762,7 @@ export function configured(options?: Options) {
   return makeLocationNode({
     service: Service,
     layer: layer(options),
-    deps: [Location.node, Environment.node, Bus.node, Form.node, Integration.node, Credential.node],
+    deps: [Location.node, Environment.node, Bus.node, Form.node, Integration.node, Credential.node, EffectFlock.node],
   })
 }
 

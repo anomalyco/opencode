@@ -1,8 +1,32 @@
 diff --git a/dist/index.cjs b/dist/index.cjs
-index 635f1c0134274c89e7efbcae2adf3d9ecba575ee..5eaa7b451c8c7e12e51f61c2a835ff6f7a8ea0ae 100644
+index 635f1c0134274c89e7efbcae2adf3d9ecba575ee..a2a7fc2a1b567ee3633392d6c596734d1d00fb90 100644
 --- a/dist/index.cjs
 +++ b/dist/index.cjs
-@@ -977,7 +977,6 @@ async function discoverMetadataWithFallback(serverUrl, wellKnownType, fetchFn, o
+@@ -754,6 +754,7 @@ async function authInternal(provider, { serverUrl, authorizationCode, iss, scope
+ 		}, infoCtx);
+ 		return "AUTHORIZED";
+ 	}
++	const refreshed = await (provider.withRefreshLock ?? ((refresh) => refresh()))(async () => {
+ 	let tokens = discardIfIssuerMismatch(await provider.tokens(infoCtx), issuer);
+ 	if (tokens && tokens.issuer === void 0) {
+ 		tokens = {
+@@ -775,11 +776,14 @@ async function authInternal(provider, { serverUrl, authorizationCode, iss, scope
+ 			...newTokens,
+ 			issuer
+ 		}, infoCtx);
+-		return "AUTHORIZED";
++		return true;
+ 	} catch (error) {
+ 		if (error instanceof InsecureTokenEndpointError) throw error;
+ 		if (!(error instanceof require_src.OAuthError) || error.code === require_src.OAuthErrorCode.ServerError) {} else throw error;
+ 	}
++	return false;
++	});
++	if (refreshed) return "AUTHORIZED";
+ 	const state = provider.state ? await provider.state() : void 0;
+ 	const { authorizationUrl, codeVerifier } = await startAuthorization(authorizationServerUrl, {
+ 		metadata,
+@@ -977,7 +981,6 @@ async function discoverMetadataWithFallback(serverUrl, wellKnownType, fetchFn, o
  	else {
  		const wellKnownPath = buildWellKnownPath(wellKnownType, issuer.pathname);
  		url = new URL(wellKnownPath, opts?.metadataServerUrl ?? issuer);
@@ -10,7 +34,7 @@ index 635f1c0134274c89e7efbcae2adf3d9ecba575ee..5eaa7b451c8c7e12e51f61c2a835ff6f
  	}
  	let response = await tryMetadataDiscovery(url, protocolVersion, fetchFn);
  	if (!opts?.metadataUrl && shouldAttemptFallback(response, issuer.pathname)) response = await tryMetadataDiscovery(new URL(`/.well-known/${wellKnownType}`, issuer), protocolVersion, fetchFn);
-@@ -1158,7 +1157,6 @@ async function startAuthorization(authorizationServerUrl, { metadata, clientInfo
+@@ -1158,7 +1161,6 @@ async function startAuthorization(authorizationServerUrl, { metadata, clientInfo
  	authorizationUrl.searchParams.set("redirect_uri", String(redirectUrl));
  	if (state) authorizationUrl.searchParams.set("state", state);
  	if (scope) authorizationUrl.searchParams.set("scope", scope);
@@ -18,11 +42,69 @@ index 635f1c0134274c89e7efbcae2adf3d9ecba575ee..5eaa7b451c8c7e12e51f61c2a835ff6f
  	if (resource) authorizationUrl.searchParams.set("resource", resource.href);
  	return {
  		authorizationUrl,
+diff --git a/dist/index.d.cts b/dist/index.d.cts
+index 2d74180d5402a97f7460305726d8dc7da6105dcf..97a30ccce75a8135827654375f90d9034f9fb434 100644
+--- a/dist/index.d.cts
++++ b/dist/index.d.cts
+@@ -335,6 +335,12 @@ interface OAuthClientProvider {
+    * This avoids requiring the user to intervene manually.
+    */
+   invalidateCredentials?(scope: 'all' | 'client' | 'tokens' | 'verifier' | 'discovery'): void | Promise<void>;
++  /**
++   * If implemented, wraps reading the stored tokens, refreshing them and saving the result.
++   * Providers whose credentials are shared across processes can hold a lock here, so a
++   * waiting refresher reads the rotated token instead of replaying the one it replaced.
++   */
++  withRefreshLock?<T>(refresh: () => Promise<T>): Promise<T>;
+   /**
+    * Prepares grant-specific parameters for a token request.
+    *
+diff --git a/dist/index.d.mts b/dist/index.d.mts
+index d54447a08f0aa9876dacfe37f50ec1a48a77c132..e26e4dadb4867b80904ae7011cf0d121645a61ae 100644
+--- a/dist/index.d.mts
++++ b/dist/index.d.mts
+@@ -335,6 +335,12 @@ interface OAuthClientProvider {
+    * This avoids requiring the user to intervene manually.
+    */
+   invalidateCredentials?(scope: 'all' | 'client' | 'tokens' | 'verifier' | 'discovery'): void | Promise<void>;
++  /**
++   * If implemented, wraps reading the stored tokens, refreshing them and saving the result.
++   * Providers whose credentials are shared across processes can hold a lock here, so a
++   * waiting refresher reads the rotated token instead of replaying the one it replaced.
++   */
++  withRefreshLock?<T>(refresh: () => Promise<T>): Promise<T>;
+   /**
+    * Prepares grant-specific parameters for a token request.
+    *
 diff --git a/dist/index.mjs b/dist/index.mjs
-index f02ce3ca394e826fc27c9848dbe9a214bf6ba7a9..73a93a066c3540e131fa0770a74b4a7e8d9343a0 100644
+index f02ce3ca394e826fc27c9848dbe9a214bf6ba7a9..5136555235c5b1a30cff4708d396dccfbf8cee00 100644
 --- a/dist/index.mjs
 +++ b/dist/index.mjs
-@@ -974,7 +974,6 @@ async function discoverMetadataWithFallback(serverUrl, wellKnownType, fetchFn, o
+@@ -751,6 +751,7 @@ async function authInternal(provider, { serverUrl, authorizationCode, iss, scope
+ 		}, infoCtx);
+ 		return "AUTHORIZED";
+ 	}
++	const refreshed = await (provider.withRefreshLock ?? ((refresh) => refresh()))(async () => {
+ 	let tokens = discardIfIssuerMismatch(await provider.tokens(infoCtx), issuer);
+ 	if (tokens && tokens.issuer === void 0) {
+ 		tokens = {
+@@ -772,11 +773,14 @@ async function authInternal(provider, { serverUrl, authorizationCode, iss, scope
+ 			...newTokens,
+ 			issuer
+ 		}, infoCtx);
+-		return "AUTHORIZED";
++		return true;
+ 	} catch (error) {
+ 		if (error instanceof InsecureTokenEndpointError) throw error;
+ 		if (!(error instanceof OAuthError) || error.code === OAuthErrorCode.ServerError) {} else throw error;
+ 	}
++	return false;
++	});
++	if (refreshed) return "AUTHORIZED";
+ 	const state = provider.state ? await provider.state() : void 0;
+ 	const { authorizationUrl, codeVerifier } = await startAuthorization(authorizationServerUrl, {
+ 		metadata,
+@@ -974,7 +978,6 @@ async function discoverMetadataWithFallback(serverUrl, wellKnownType, fetchFn, o
  	else {
  		const wellKnownPath = buildWellKnownPath(wellKnownType, issuer.pathname);
  		url = new URL(wellKnownPath, opts?.metadataServerUrl ?? issuer);
@@ -30,7 +112,7 @@ index f02ce3ca394e826fc27c9848dbe9a214bf6ba7a9..73a93a066c3540e131fa0770a74b4a7e
  	}
  	let response = await tryMetadataDiscovery(url, protocolVersion, fetchFn);
  	if (!opts?.metadataUrl && shouldAttemptFallback(response, issuer.pathname)) response = await tryMetadataDiscovery(new URL(`/.well-known/${wellKnownType}`, issuer), protocolVersion, fetchFn);
-@@ -1155,7 +1154,6 @@ async function startAuthorization(authorizationServerUrl, { metadata, clientInfo
+@@ -1155,7 +1158,6 @@ async function startAuthorization(authorizationServerUrl, { metadata, clientInfo
  	authorizationUrl.searchParams.set("redirect_uri", String(redirectUrl));
  	if (state) authorizationUrl.searchParams.set("state", state);
  	if (scope) authorizationUrl.searchParams.set("scope", scope);
