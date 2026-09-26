@@ -59,10 +59,15 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       const serviceOptions = options.mode === "service" ? yield* ServiceConfig.options() : undefined
       const config = options.mode === "service" ? yield* ServiceConfig.read() : {}
       const hostname = options.hostname ?? config.hostname ?? "127.0.0.1"
-      const port = options.port ?? config.port ?? (options.mode === "service" ? ServiceConfig.defaultPort() : undefined)
+      const configuredPort = options.port ?? config.port
+      const port = configuredPort ?? (options.mode === "service" ? ServiceConfig.defaultPort() : undefined)
       const incumbent =
-        serviceOptions !== undefined && port !== undefined
-          ? yield* Service.incumbent({ ...serviceOptions, url: serviceURL(hostname, port) })
+        serviceOptions !== undefined
+          ? yield* Service.incumbent(
+              configuredPort === undefined
+                ? serviceOptions
+                : { ...serviceOptions, url: serviceURL(hostname, configuredPort) },
+            )
           : undefined
       if (incumbent !== undefined) return
       // Keep a package-manager or curl install replaceable while the service runs; Desktop updates its own copy.
@@ -84,46 +89,43 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       if (!password) return yield* Effect.fail(new Error("Missing server password"))
       const instanceID = randomUUID()
       const transform = yield* WebUi.handler()
-      const server = yield* start(
-        {
-          app: {
-            name: process.env.OPENCODE_CLIENT ?? OPENCODE_ARTIFACT,
-            version: OPENCODE_VERSION,
-            channel: OPENCODE_CHANNEL,
-          },
-          hostname,
-          port,
-          cors: options.cors ?? config.cors,
-          password,
-          pty: { handoff },
-          simulation: truthy(process.env.OPENCODE_SIMULATE),
-          database: {
-            path: databasePath(global.data),
-          },
-          models: {
-            url: process.env.OPENCODE_MODELS_URL,
-            file: process.env.OPENCODE_MODELS_PATH,
-            fetch: !truthy(process.env.OPENCODE_DISABLE_MODELS_FETCH),
-          },
-          config: {
-            directory: process.env.OPENCODE_CONFIG_DIR,
-            project: !truthy(
-              process.env.OPENCODE_CONFIG_PROJECT_DISABLE ?? process.env.OPENCODE_DISABLE_PROJECT_CONFIG,
-            ),
-            file: process.env.OPENCODE_CONFIG,
-            content: process.env.OPENCODE_CONFIG_CONTENT,
-          },
-          windows: {
-            gitbash: process.env.OPENCODE_GIT_BASH_PATH,
-          },
-          fs: {
-            filewatcher: !truthy(process.env.OPENCODE_FILEWATCHER_DISABLE ?? process.env.OPENCODE_DISABLE_FILEWATCHER),
-            fff:
-              process.env.OPENCODE_DISABLE_FFF === undefined
-                ? process.platform !== "win32"
-                : !truthy(process.env.OPENCODE_DISABLE_FFF),
-          },
+      const serverOptions = {
+        app: {
+          name: process.env.OPENCODE_CLIENT ?? OPENCODE_ARTIFACT,
+          version: OPENCODE_VERSION,
+          channel: OPENCODE_CHANNEL,
         },
+        hostname,
+        cors: options.cors ?? config.cors,
+        password,
+        pty: { handoff },
+        simulation: truthy(process.env.OPENCODE_SIMULATE),
+        database: {
+          path: databasePath(global.data),
+        },
+        models: {
+          url: process.env.OPENCODE_MODELS_URL,
+          file: process.env.OPENCODE_MODELS_PATH,
+          fetch: !truthy(process.env.OPENCODE_DISABLE_MODELS_FETCH),
+        },
+        config: {
+          directory: process.env.OPENCODE_CONFIG_DIR,
+          project: !truthy(process.env.OPENCODE_CONFIG_PROJECT_DISABLE ?? process.env.OPENCODE_DISABLE_PROJECT_CONFIG),
+          file: process.env.OPENCODE_CONFIG,
+          content: process.env.OPENCODE_CONFIG_CONTENT,
+        },
+        windows: {
+          gitbash: process.env.OPENCODE_GIT_BASH_PATH,
+        },
+        fs: {
+          filewatcher: !truthy(process.env.OPENCODE_FILEWATCHER_DISABLE ?? process.env.OPENCODE_DISABLE_FILEWATCHER),
+          fff:
+            process.env.OPENCODE_DISABLE_FFF === undefined
+              ? process.platform !== "win32"
+              : !truthy(process.env.OPENCODE_DISABLE_FFF),
+        },
+      }
+      const lifecycle =
         serviceOptions === undefined
           ? undefined
           : {
@@ -138,11 +140,17 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
                     shutdown,
                   })
                 }),
-            },
-        transform,
-      ).pipe(
+            }
+      const startOnPort = (selectedPort?: number) =>
+        start({ ...serverOptions, port: selectedPort }, lifecycle, transform)
+      const server = yield* startOnPort(port).pipe(
         Effect.catch((error) => {
-          if (serviceOptions === undefined || port === undefined || !addressInUse(error)) return Effect.fail(error)
+          if (serviceOptions === undefined || port === undefined) return Effect.fail(error)
+          if (configuredPort === undefined && (addressInUse(error) || accessDenied(error)))
+            return Service.incumbent(serviceOptions).pipe(
+              Effect.flatMap((found) => (found ? Effect.void : startOnPort(undefined))),
+            )
+          if (!addressInUse(error)) return Effect.fail(error)
           return recognizeIncumbent(serviceOptions, hostname, port).pipe(
             Effect.flatMap((found) =>
               found
@@ -192,6 +200,12 @@ function addressInUse(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false
   if ("code" in error && error.code === "EADDRINUSE") return true
   return "cause" in error && addressInUse(error.cause)
+}
+
+function accessDenied(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false
+  if ("code" in error && error.code === "EACCES") return true
+  return "cause" in error && accessDenied(error.cause)
 }
 
 function waitForStdinClose() {

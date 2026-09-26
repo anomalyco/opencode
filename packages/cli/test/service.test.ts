@@ -316,6 +316,95 @@ test("configured managed service port overrides the channel default", async () =
   }
 }, 30_000)
 
+test("unconfigured managed service skips occupied ports and registers the selected address", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-auto-port-"))
+  const previousDefaultPort = 0xc0df
+  // An existing service may already own either port on a developer machine.
+  const occupied = await Promise.all([4096, previousDefaultPort].map(reservePort))
+  const registration = path.join(root, "state", "opencode", "service-local.json")
+  const owner = Bun.spawn([process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"], {
+    env: serviceEnv(root),
+    stderr: "pipe",
+    stdout: "ignore",
+  })
+  try {
+    const info = await Promise.race([
+      waitForInfo(registration),
+      owner.exited.then(() => {
+        throw new Error("Service exited before registering a fallback port")
+      }),
+    ])
+    expect(new URL(info.url).port).not.toBe(String(previousDefaultPort))
+    expect(new URL(info.url).port).not.toBe("4096")
+    expect(
+      await Effect.runPromise(Service.discover({ file: registration }).pipe(Effect.provide(NodeFileSystem.layer))),
+    ).toMatchObject({
+      url: info.url,
+    })
+  } finally {
+    owner.kill("SIGTERM")
+    await owner.exited
+    occupied.forEach((server) => server?.stop(true))
+    await fs.rm(root, { recursive: true, force: true })
+  }
+}, 30_000)
+
+test("concurrent unconfigured services converge on one registered owner", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-auto-election-"))
+  const occupied = await reservePort(0xc0df)
+  const registration = path.join(root, "state", "opencode", "service-local.json")
+  const command = [process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"]
+  const processes = Array.from({ length: 2 }, () =>
+    Bun.spawn(command, { env: serviceEnv(root), stderr: "pipe", stdout: "ignore" }),
+  )
+  try {
+    const exited = await Promise.race([
+      ...processes.map((process, index) => process.exited.then((code) => ({ index, code }))),
+      Bun.sleep(20_000).then(() => undefined),
+    ])
+    if (!exited) throw new Error("Concurrent services did not settle")
+    expect(exited.code).toBe(0)
+    const winner = processes[1 - exited.index]!
+    const info = await waitForInfo(registration, (value) => value.pid === winner.pid)
+    expect(winner.exitCode).toBeNull()
+    await Bun.sleep(5_500)
+    expect((await Bun.file(registration).json()).id).toBe(info.id)
+    expect(winner.exitCode).toBeNull()
+    const contender = Bun.spawn(command, { env: serviceEnv(root), stderr: "pipe", stdout: "ignore" })
+    expect(await contender.exited).toBe(0)
+    expect((await Bun.file(registration).json()).id).toBe(info.id)
+  } finally {
+    processes.forEach((process) => process.kill("SIGTERM"))
+    await Promise.all(processes.map((process) => process.exited))
+    occupied?.stop(true)
+    await fs.rm(root, { recursive: true, force: true })
+  }
+}, 35_000)
+
+test("a failed service on a fallback port retains its registered owner", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-auto-failed-"))
+  const occupied = await reservePort(0xc0df)
+  const database = path.join(root, "database")
+  await fs.mkdir(database)
+  const registration = path.join(root, "state", "opencode", "service-local.json")
+  const command = [process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"]
+  const env = { ...serviceEnv(root), OPENCODE_DB: database }
+  const owner = Bun.spawn(command, { env, stderr: "pipe", stdout: "ignore" })
+  try {
+    const info = await waitForInfo(registration)
+    await waitForFailed(info)
+    const contender = Bun.spawn(command, { env, stderr: "pipe", stdout: "ignore" })
+    expect(await contender.exited).toBe(0)
+    expect((await Bun.file(registration).json()).id).toBe(info.id)
+    expect(owner.exitCode).toBeNull()
+  } finally {
+    owner.kill("SIGTERM")
+    await owner.exited
+    occupied?.stop(true)
+    await fs.rm(root, { recursive: true, force: true })
+  }
+}, 30_000)
+
 test.each([
   { args: [], origins: ["http://192.0.2.10:3001", "https://configured.example.com"] },
   {
@@ -597,6 +686,21 @@ async function availablePort() {
   await server.stop(true)
   if (port === undefined) throw new Error("Server did not bind a port")
   return port
+}
+
+async function reservePort(port: number) {
+  return Effect.runPromise(
+    Effect.try({
+      try: () => Bun.serve({ hostname: "127.0.0.1", port, fetch: () => new Response("unrelated") }),
+      catch: (cause) => cause,
+    }).pipe(
+      Effect.catch((error) =>
+        typeof error === "object" && error !== null && "code" in error && error.code === "EADDRINUSE"
+          ? Effect.succeed(undefined)
+          : Effect.fail(error),
+      ),
+    ),
+  )
 }
 
 function serviceEnv(root: string) {
