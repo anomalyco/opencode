@@ -715,6 +715,45 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return [...custom, ...builtin]
   })
 
+  const skillCommands = createMemo<SlashCommand[]>(() =>
+    sync().data.skill.map((skill) => ({
+      id: `skill.${skill.name}`,
+      trigger: skill.name,
+      title: skill.name,
+      description: skill.description,
+      type: "custom" as const,
+      source: "skill" as const,
+    })),
+  )
+
+  const handleSkillSelect = (cmd: SlashCommand | undefined) => {
+    if (!cmd) return
+    closePopover()
+    const cursorPosition = getCursorPosition(editorRef)
+    const rawText = prompt
+      .current()
+      .map((part) => ("content" in part ? part.content : ""))
+      .join("")
+    const before = rawText.substring(0, cursorPosition)
+    const match = before.match(/(?:^|\s)\$(?:[a-z][a-zA-Z0-9_-]*)?$/)
+    if (!match || match.index === undefined) return
+    const tokenStart = match.index + (match[0].startsWith("$") ? 0 : 1)
+    const selection = window.getSelection()
+    if (!selection || selection.rangeCount === 0 || !editorRef.contains(selection.anchorNode)) return
+    const range = selection.getRangeAt(0)
+    setRangeEdge(editorRef, range, "start", tokenStart)
+    setRangeEdge(editorRef, range, "end", cursorPosition)
+    range.deleteContents()
+    const node = document.createTextNode(`/${cmd.trigger} `)
+    range.insertNode(node)
+    range.setStartAfter(node)
+    range.collapse(true)
+    selection.removeAllRanges()
+    selection.addRange(range)
+    handleInput()
+    closePopover()
+  }
+
   const handleSlashSelect = (cmd: SlashCommand | undefined) => {
     if (!cmd) return
     const menu = store.slashMenu
@@ -757,6 +796,19 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     key: (x) => x?.id,
     filterKeys: ["trigger", "title"],
     onSelect: handleSlashSelect,
+  })
+
+  const {
+    flat: skillFlat,
+    active: skillActive,
+    setActive: setSkillActive,
+    onInput: skillOnInput,
+    onKeyDown: skillOnKeyDown,
+  } = useFilteredList<SlashCommand>({
+    items: skillCommands,
+    key: (x) => x?.id,
+    filterKeys: ["trigger", "title"],
+    onSelect: handleSkillSelect,
   })
 
   const createPill = (part: FileAttachmentPart | AgentPart) => {
@@ -819,7 +871,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
   }
 
   const scrollSlashActiveIntoView = () => {
-    const activeId = slashActive()
+    const activeId = store.slashKind === "skill" ? skillActive() : slashActive()
     if (!activeId || !slashPopoverRef) return
 
     requestAnimationFrame(() => {
@@ -838,6 +890,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     }
 
     if (store.popover === "slash") {
+      if (store.slashKind === "skill") {
+        const items = skillFlat()
+        if (items.length === 0) return
+        const active = skillActive()
+        const item = items.find((entry) => entry.id === active) ?? items[0]
+        handleSkillSelect(item)
+        return
+      }
       const items = slashFlat()
       if (items.length === 0) return
       const active = slashActive()
@@ -999,13 +1059,17 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     if (!shellMode) {
       const atMatch = rawText.substring(0, cursorPosition).match(/@(\S*)$/)
       const slashMatch = rawText.match(/^\/(\S*)$/)
+      const skillMatch = rawText.substring(0, cursorPosition).match(/(?:^|\s)\$(?:([a-z][a-zA-Z0-9_-]*))?$/)
 
       if (atMatch) {
         atOnInput(atMatch[1])
         setStore({ popover: "at", slashMenu: false, slashMenuQuery: "" })
+      } else if (skillMatch) {
+        skillOnInput(skillMatch[1] ?? "")
+        setStore({ popover: "slash", slashMenu: false, slashMenuQuery: "", slashKind: "skill" })
       } else if (slashMatch) {
         slashOnInput(slashMatch[1])
-        setStore({ popover: "slash", slashMenu: false, slashMenuQuery: "" })
+        setStore({ popover: "slash", slashMenu: false, slashMenuQuery: "", slashKind: "command" })
       } else {
         closePopover()
       }
@@ -1333,7 +1397,8 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
           return
         }
         if (store.popover === "slash") {
-          slashOnKeyDown(event)
+          if (store.slashKind === "skill") skillOnKeyDown(event)
+          else slashOnKeyDown(event)
           if (event.key === "ArrowUp" || event.key === "ArrowDown" || ctrlNav) {
             scrollSlashActiveIntoView()
           }
@@ -1443,10 +1508,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         atKey={atKey}
         setAtActive={setAtActive}
         onAtSelect={handleAtSelect}
-        slashFlat={slashFlat()}
-        slashActive={slashActive() ?? undefined}
-        setSlashActive={setSlashActive}
-        onSlashSelect={handleSlashSelect}
+        slashFlat={store.slashKind === "skill" ? skillFlat() : slashFlat()}
+        slashActive={store.slashKind === "skill" ? (skillActive() ?? undefined) : (slashActive() ?? undefined)}
+        setSlashActive={store.slashKind === "skill" ? setSkillActive : setSlashActive}
+        onSlashSelect={store.slashKind === "skill" ? handleSkillSelect : handleSlashSelect}
         slashMenu={store.slashMenu}
         slashMenuQuery={store.slashMenuQuery}
         onSlashMenuInput={(value) => {

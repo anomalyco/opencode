@@ -7,6 +7,7 @@ export type PromptInputV2InteractionState = {
     | { type: "context"; query: string; activeID?: string }
     | { type: "command-inline"; query: string; activeID?: string }
     | { type: "command-menu"; query: string; activeID?: string }
+    | { type: "skill-inline"; query: string; activeID?: string }
   drag: "idle" | "active"
   focus: "editor" | "command-search" | "external"
   activeContextID?: string
@@ -35,7 +36,7 @@ export type PromptInputV2InteractionEvent =
 export type PromptInputV2InteractionCommand =
   | { type: "draft.setText"; value: string }
   | { type: "mention.add"; item: PromptInputV2Suggestion }
-  | { type: "popover.filter"; popover: "command" | "context"; query: string }
+  | { type: "popover.filter"; popover: "command" | "context" | "skill"; query: string }
   | { type: "suggestion.select"; id: string }
   | { type: "focus.editor" }
   | { type: "focus.command-search" }
@@ -102,6 +103,18 @@ function inputChanged(
     ])
   }
 
+  const skill =
+    state.mode === "normal"
+      ? value.slice(0, cursor ?? value.length).match(/(?:^|\s)\$(?:([a-z][a-zA-Z0-9_-]*))?$/)
+      : undefined
+  if (skill) {
+    const query = skill[1] ?? ""
+    return changed({ ...state, popover: { type: "skill-inline", query }, focus: "editor" }, [
+      ...setText,
+      { type: "popover.filter", popover: "skill", query },
+    ])
+  }
+
   const command = value.match(/^\/(\S*)$/)
   if (command) {
     const query = command[1] ?? ""
@@ -147,7 +160,8 @@ function openContext(
 
 function queryChanged(state: PromptInputV2InteractionState, query: string): PromptInputV2Transition {
   if (state.popover.type === "closed") return unchanged(state)
-  const popover = state.popover.type === "context" ? "context" : "command"
+  const popover =
+    state.popover.type === "context" ? "context" : state.popover.type === "skill-inline" ? "skill" : "command"
   return changed({ ...state, popover: { ...state.popover, query, activeID: undefined } }, [
     { type: "popover.filter", popover, query },
   ])
@@ -172,7 +186,12 @@ function suggestionSelected(
 ): PromptInputV2Transition {
   const current = promptText(persisted)
   const commands: PromptInputV2InteractionCommand[] = []
-  if (item.kind === "command") {
+  if (item.kind === "skill") {
+    commands.push({
+      type: "draft.setText",
+      value: replaceSkillTrigger(current, persisted.cursor, `${item.label} `),
+    })
+  } else if (item.kind === "command") {
     commands.push({
       type: "draft.setText",
       value:
@@ -242,6 +261,16 @@ function populated(persisted: PromptInputV2PersistedState) {
 function replaceTrigger(value: string, trigger: "@" | "/", replacement: string) {
   const index = trigger === "/" ? value.indexOf(trigger) : value.lastIndexOf(trigger)
   return index < 0 ? replacement : value.slice(0, index) + replacement
+}
+
+function replaceSkillTrigger(value: string, cursor: number | undefined, replacement: string) {
+  const end = Math.max(0, Math.min(cursor ?? value.length, value.length))
+  const before = value.slice(0, end)
+  const after = value.slice(end)
+  const match = before.match(/(?:^|\s)\$(?:[a-z][a-zA-Z0-9_-]*)?$/)
+  if (!match || match.index === undefined) return before + replacement + after
+  const tokenStart = match.index + (match[0].startsWith("$") ? 0 : 1)
+  return before.slice(0, tokenStart) + replacement + after
 }
 
 function changed(

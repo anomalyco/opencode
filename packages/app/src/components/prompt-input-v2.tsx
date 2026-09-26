@@ -318,6 +318,16 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
       keybind: command.keybindParts(item.id),
     })),
   )
+  const skills = createMemo<PromptInputV2Suggestion[]>(() =>
+    sync().data.skill.map((item) => ({
+      id: `skill:${item.name}`,
+      kind: "skill" as const,
+      label: `/${item.name}`,
+      trigger: item.name,
+      title: item.name,
+      description: item.description,
+    })),
+  )
   const variants = createMemo(() => ["default", ...props.controls.model.selection.variant.list()])
   const controller = createPromptInputV2Controller({
     store: () => prompt.capture().store,
@@ -335,6 +345,7 @@ export function usePromptInputV2Controller(props: PromptInputV2ControllerProps):
     },
     commands,
     context,
+    skills,
     searchContextFiles: async (query) =>
       (await files.searchFilesAndDirectories(query)).map((path) => ({
         id: `file:${path}`,

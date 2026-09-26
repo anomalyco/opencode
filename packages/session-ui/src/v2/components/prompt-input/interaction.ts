@@ -60,6 +60,7 @@ export function createPromptInputV2Controller(input: {
   history?: PromptInputV2History
   commands: Accessor<PromptInputV2Suggestion[]>
   context: Accessor<PromptInputV2Suggestion[]>
+  skills?: Accessor<PromptInputV2Suggestion[]>
   searchContextFiles: (query: string) => PromptInputV2Suggestion[] | Promise<PromptInputV2Suggestion[]>
   openAttachment?: (attachment: PromptInputV2Attachment) => void
   openContext?: (key: string) => void
@@ -135,7 +136,17 @@ export function createPromptInputV2Controller(input: {
     key: (item) => item.id,
     filterKeys: ["trigger", "title"],
   })
-  const list = () => (state.popover.type === "context" ? contextList : commandList)
+  const skillList = useFilteredList<PromptInputV2Suggestion>({
+    items: () => input.skills?.() ?? [],
+    key: (item) => item.id,
+    filterKeys: ["trigger", "title"],
+  })
+  const list = () =>
+    state.popover.type === "context"
+      ? contextList
+      : state.popover.type === "skill-inline"
+        ? skillList
+        : commandList
   const suggestions = () => list().flat()
 
   const execute = (command: PromptInputV2InteractionCommand) => {
@@ -148,7 +159,9 @@ export function createPromptInputV2Controller(input: {
       return
     }
     if (command.type === "popover.filter") {
-      ;(command.popover === "command" ? commandList : contextList).onInput(command.query)
+      ;(command.popover === "command" ? commandList : command.popover === "skill" ? skillList : contextList).onInput(
+        command.query,
+      )
       return
     }
     if (command.type === "suggestion.select") {
