@@ -274,6 +274,13 @@ const layer = () =>
         yield* hooks.trigger("shell", "create.before", invocation)
         if (before) yield* before(invocation)
 
+        // The OS rejects a NUL in any argument, and the spawn call throws rather than failing; say why up front.
+        if (invocation.command.includes("\0"))
+          return yield* new AppProcess.AppProcessError({
+            command: invocation.command,
+            cause: new Error("The command contains a NUL character (U+0000), which cannot be passed to a shell. Remove it and retry."),
+          })
+
         const id = Shell.ID.ascending()
         const args = ShellSelect.args(invocation.shell, invocation.command)
         const file = path.join(outputDir, `${id}.out`)
@@ -427,7 +434,14 @@ const layer = () =>
               // release (kill) the process before its exit is observed.
               yield* Deferred.await(command.done).pipe(Effect.catch(() => Effect.void))
             }),
-          ).pipe(Effect.catchTag("AppProcessError", (error) => Deferred.fail(ready, error))),
+          ).pipe(
+            Effect.catchTag("AppProcessError", (error) => Deferred.fail(ready, error)),
+            // A defect before `ready` settles (such as spawn throwing synchronously) must still settle it, or
+            // create waits forever: no process is registered, so no timeout or backgrounding can end the wait.
+            Effect.catchDefect((defect) =>
+              Deferred.fail(ready, new AppProcess.AppProcessError({ command: invocation.command, cause: defect })),
+            ),
+          ),
         )
 
         const command = yield* Deferred.await(ready)
