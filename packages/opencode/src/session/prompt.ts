@@ -101,10 +101,16 @@ function isOrphanedInterruptedTool(part: SessionV1.ToolPart) {
 
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
-  readonly prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error>
-  readonly loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts>
-  readonly shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError>
-  readonly command: (input: CommandInput) => Effect.Effect<SessionV1.WithParts, Image.Error>
+  readonly prompt: (
+    input: PromptInput,
+  ) => Effect.Effect<SessionV1.WithParts, Image.Error | SessionRunState.LeaseLostError>
+  readonly loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts, SessionRunState.LeaseLostError>
+  readonly shell: (
+    input: ShellInput,
+  ) => Effect.Effect<SessionV1.WithParts, Session.BusyError | SessionRunState.LeaseLostError>
+  readonly command: (
+    input: CommandInput,
+  ) => Effect.Effect<SessionV1.WithParts, Image.Error | SessionRunState.LeaseLostError>
   readonly resolvePromptParts: (template: string) => Effect.Effect<PromptInput["parts"]>
 }
 
@@ -145,7 +151,12 @@ const layer = Layer.effect(
       return {
         cancel: (sessionID: SessionID) => cancel(sessionID),
         resolvePromptParts: (template: string) => resolvePromptParts(template),
-        prompt: (input: PromptInput) => prompt(input).pipe(Effect.catch(Effect.die)),
+        prompt: (input: PromptInput) =>
+          prompt(input).pipe(
+            Effect.catch((error) =>
+              error instanceof SessionRunState.LeaseLostError ? Effect.fail(error) : Effect.die(error),
+            ),
+          ),
       } satisfies TaskPromptOps
     })
 
@@ -1049,7 +1060,9 @@ const layer = Layer.effect(
       return { info, parts }
     }, Effect.scoped)
 
-    const prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error> = Effect.fn(
+    const prompt: (
+      input: PromptInput,
+    ) => Effect.Effect<SessionV1.WithParts, Image.Error | SessionRunState.LeaseLostError> = Effect.fn(
       "SessionPrompt.prompt",
     )(function* (input: PromptInput) {
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
@@ -1078,14 +1091,18 @@ const layer = Layer.effect(
       throw new Error("Impossible")
     })
 
-    const runLoop: (sessionID: SessionID) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.run")(
-      function* (sessionID: SessionID) {
+    const runLoop: (sessionID: SessionID) => Effect.Effect<SessionV1.WithParts, SessionRunState.LeaseLostError> =
+      Effect.fn("SessionPrompt.run")(function* (sessionID: SessionID) {
         const ctx = yield* InstanceState.context
         let structured: unknown
         let step = 0
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
 
         while (true) {
+          if (!(yield* state.owns(sessionID))) {
+            yield* Effect.logWarning("session run lease lost", { "session.id": sessionID })
+            return yield* new SessionRunState.LeaseLostError({ sessionID })
+          }
           yield* status.set(sessionID, { type: "busy" })
           yield* Effect.logInfo("loop", { "session.id": sessionID, step })
 
@@ -1337,16 +1354,17 @@ const layer = Layer.effect(
 
         yield* compaction.prune({ sessionID }).pipe(Effect.ignore, Effect.forkIn(scope))
         return yield* lastAssistant(sessionID)
-      },
-    )
+      })
 
-    const loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.loop")(function* (
-      input: LoopInput,
-    ) {
+    const loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts, SessionRunState.LeaseLostError> = Effect.fn(
+      "SessionPrompt.loop",
+    )(function* (input: LoopInput) {
       return yield* state.ensureRunning(input.sessionID, lastAssistant(input.sessionID), runLoop(input.sessionID))
     })
 
-    const shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError> = Effect.fn(
+    const shell: (
+      input: ShellInput,
+    ) => Effect.Effect<SessionV1.WithParts, Session.BusyError | SessionRunState.LeaseLostError> = Effect.fn(
       "SessionPrompt.shell",
     )(function* (input: ShellInput) {
       const ready = yield* Latch.make()

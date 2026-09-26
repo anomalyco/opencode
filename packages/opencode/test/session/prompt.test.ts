@@ -1,13 +1,20 @@
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
+import { EffectFlock } from "@opencode-ai/core/util/effect-flock"
+import { Hash } from "@opencode-ai/core/util/hash"
+import { Global } from "@opencode-ai/core/global"
+import { ProjectTable } from "@opencode-ai/core/project/sql"
+import { ProjectV2 } from "@opencode-ai/core/project"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { eq } from "drizzle-orm"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { expect } from "bun:test"
-import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Logger, Option, Scope } from "effect"
 import path from "path"
+import { rm } from "node:fs/promises"
 import { fileURLToPath } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Agent as AgentSvc } from "../../src/agent/agent"
@@ -36,7 +43,7 @@ import { Instruction } from "../../src/session/instruction"
 import { SessionProcessor } from "../../src/session/processor"
 import { SessionPrompt } from "../../src/session/prompt"
 import { SessionRevert } from "../../src/session/revert"
-import { SessionRunState } from "../../src/session/run-state"
+import { SessionRunState, LeaseTiming } from "../../src/session/run-state"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
 import { SessionStatus } from "../../src/session/status"
 import { SessionV2 } from "@opencode-ai/core/session"
@@ -50,7 +57,7 @@ import { Truncate } from "@/tool/truncate"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { Format } from "../../src/format"
-import { TestInstance } from "../fixture/fixture"
+import { TestInstance, withTmpdirInstance } from "../fixture/fixture"
 import { awaitWithTimeout, pollWithTimeout, testEffect } from "../lib/effect"
 import { reply, TestLLMServer } from "../lib/llm-server"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -188,6 +195,8 @@ const promptRoot = LayerNode.group([
   BackgroundJob.node,
   SessionStatus.node,
   SessionRunState.node,
+  EffectFlock.node,
+  Global.node,
   Database.node,
   EventV2Bridge.node,
   Question.node,
@@ -208,7 +217,11 @@ const promptRoot = LayerNode.group([
   RuntimeFlags.node,
 ])
 
-function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+function makePrompt(input?: {
+  mcpInstructions?: MCP.ServerInstructions[]
+  processor?: "blocking"
+  databasePath?: string
+}) {
   const replacements = [
     [SessionSummary.node, summary],
     [LSP.node, lsp],
@@ -218,6 +231,8 @@ function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; proces
   if (input?.processor === "blocking") {
     return LayerNode.compile(promptRoot, [...replacements, [SessionProcessor.node, blockingProcessor]])
   }
+  if (input?.databasePath)
+    return LayerNode.compile(promptRoot, [...replacements, [Database.node, Database.layerFromPath(input.databasePath)]])
   return LayerNode.compile(promptRoot, replacements)
 }
 
@@ -235,7 +250,11 @@ function makeHttp(input?: { mcpInstructions?: MCP.ServerInstructions[]; processo
   return LayerNode.compile(root, replacements)
 }
 
-function makeHttpNoLLMServer(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+function makeHttpNoLLMServer(input?: {
+  mcpInstructions?: MCP.ServerInstructions[]
+  processor?: "blocking"
+  databasePath?: string
+}) {
   return makePrompt(input)
 }
 
@@ -443,6 +462,500 @@ const boot = Effect.fn("test.boot")(function* (input?: { title?: string }) {
 })
 
 // Loop semantics
+
+noLLMServer.live("independent session runners serialize work, publish busy, and warn while waiting", () =>
+  Effect.gen(function* () {
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    const seeded = yield* seed(chat.id, { finish: "stop" })
+    const result = { info: seeded.assistant, parts: [] }
+    const firstScope = yield* Scope.make()
+    const secondScope = yield* Scope.make()
+    yield* Effect.addFinalizer(() => Scope.close(firstScope, Exit.void))
+    yield* Effect.addFinalizer(() => Scope.close(secondScope, Exit.void))
+    const first = yield* Layer.buildWithMemoMap(makeHttpNoLLMServer(), Layer.makeMemoMapUnsafe(), firstScope)
+    const second = yield* Layer.buildWithMemoMap(makeHttpNoLLMServer(), Layer.makeMemoMapUnsafe(), secondScope)
+    const firstRun = Effect.provide(SessionRunState.Service, first)
+    const secondRun = Effect.provide(SessionRunState.Service, second)
+    expect(yield* firstRun).not.toBe(yield* secondRun)
+    const secondStatus = Effect.provide(SessionStatus.Service, second)
+    const flock = yield* Effect.provide(EffectFlock.Service, first)
+    const entered = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    const intervals: string[] = []
+    const warnings: unknown[] = []
+    const a = yield* firstRun.pipe(
+      Effect.flatMap((run) =>
+        run.ensureRunning(
+          chat.id,
+          Effect.succeed(result),
+          Effect.gen(function* () {
+            intervals.push("A:start")
+            yield* Deferred.succeed(entered, undefined)
+            yield* Deferred.await(release)
+            intervals.push("A:end")
+            return result
+          }),
+        ),
+      ),
+      Effect.forkChild,
+    )
+    yield* Deferred.await(entered)
+    const b = yield* secondRun.pipe(
+      Effect.flatMap((run) =>
+        run.ensureRunning(
+          chat.id,
+          Effect.succeed(result),
+          Effect.sync(() => {
+            intervals.push("B:start", "B:end")
+            return result
+          }),
+        ),
+      ),
+      Effect.provideService(LeaseTiming, { minimum: 5, maximum: 5, warning: 10, repeat: 100 }),
+      Effect.provide(
+        Logger.layer([
+          Logger.make<unknown, void>((options) => {
+            warnings.push(options.message)
+          }),
+        ]),
+      ),
+      Effect.forkChild,
+    )
+    yield* Effect.promise(() => Bun.sleep(250))
+    expect(yield* secondStatus.pipe(Effect.flatMap((status) => status.get(chat.id)))).toEqual({ type: "busy" })
+    expect(intervals).toEqual(["A:start"])
+    const holder = Option.getOrThrow(yield* flock.holder(`session-run:${chat.id}`))
+    expect(JSON.stringify(warnings)).toContain(chat.id)
+    expect(JSON.stringify(warnings)).toContain(String(holder.pid))
+    expect(JSON.stringify(warnings)).toContain(holder.hostname)
+    expect(
+      warnings.filter((message) => JSON.stringify(message).includes("session run lease wait")).length,
+    ).toBeGreaterThanOrEqual(2)
+    yield* Deferred.succeed(release, undefined)
+    yield* Fiber.join(a)
+    yield* Fiber.join(b)
+    expect(intervals).toEqual(["A:start", "A:end", "B:start", "B:end"])
+  }).pipe(withTmpdirInstance({ config: cfg })),
+)
+
+noLLMServer.live("canceling a waiting runner returns promptly without releasing the live holder", () =>
+  Effect.gen(function* () {
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    const seeded = yield* seed(chat.id, { finish: "stop" })
+    const result = { info: seeded.assistant, parts: [] }
+    const firstScope = yield* Scope.make()
+    const secondScope = yield* Scope.make()
+    yield* Effect.addFinalizer(() => Scope.close(firstScope, Exit.void))
+    yield* Effect.addFinalizer(() => Scope.close(secondScope, Exit.void))
+    const first = yield* Layer.buildWithMemoMap(makeHttpNoLLMServer(), Layer.makeMemoMapUnsafe(), firstScope)
+    const second = yield* Layer.buildWithMemoMap(makeHttpNoLLMServer(), Layer.makeMemoMapUnsafe(), secondScope)
+    const runA = yield* Effect.provide(SessionRunState.Service, first)
+    const runB = yield* Effect.provide(SessionRunState.Service, second)
+    const flock = yield* Effect.provide(EffectFlock.Service, first)
+    const statusB = yield* Effect.provide(SessionStatus.Service, second)
+    const entered = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    const a = yield* runA
+      .ensureRunning(
+        chat.id,
+        Effect.succeed(result),
+        Effect.gen(function* () {
+          yield* Deferred.succeed(entered, undefined)
+          yield* Deferred.await(release)
+          return result
+        }),
+      )
+      .pipe(Effect.forkChild)
+    yield* Deferred.await(entered)
+    const b = yield* runB.ensureRunning(chat.id, Effect.succeed(result), Effect.succeed(result)).pipe(Effect.forkChild)
+    yield* Effect.promise(() => Bun.sleep(50))
+    expect(yield* statusB.get(chat.id)).toEqual({ type: "busy" })
+    expect(Option.isSome(yield* flock.holder(`session-run:${chat.id}`))).toBe(true)
+    const started = Date.now()
+    yield* awaitWithTimeout(runB.cancel(chat.id), "waiter cancel exceeded 1 second", "1 second")
+    yield* awaitWithTimeout(Fiber.join(b), "waiter caller did not return", "1 second")
+    expect(Date.now() - started).toBeLessThan(1_000)
+    expect(yield* statusB.get(chat.id)).toEqual({ type: "idle" })
+    expect(Option.isSome(yield* flock.holder(`session-run:${chat.id}`))).toBe(true)
+    expect(a.pollUnsafe()).toBeUndefined()
+    yield* Deferred.succeed(release, undefined)
+    yield* Fiber.join(a)
+  }).pipe(withTmpdirInstance({ config: cfg })),
+)
+
+noLLMServer.live("a background child waits after its parent releases its own lease", () =>
+  Effect.gen(function* () {
+    const sessions = yield* Session.Service
+    const parent = yield* sessions.create({ title: "Parent" })
+    const child = yield* sessions.create({ parentID: parent.id, title: "Child" })
+    const seeded = yield* seed(parent.id, { finish: "stop" })
+    const result = { info: seeded.assistant, parts: [] }
+    const firstScope = yield* Scope.make()
+    const secondScope = yield* Scope.make()
+    yield* Effect.addFinalizer(() => Scope.close(firstScope, Exit.void))
+    yield* Effect.addFinalizer(() => Scope.close(secondScope, Exit.void))
+    const first = yield* Layer.buildWithMemoMap(makeHttpNoLLMServer(), Layer.makeMemoMapUnsafe(), firstScope)
+    const second = yield* Layer.buildWithMemoMap(makeHttpNoLLMServer(), Layer.makeMemoMapUnsafe(), secondScope)
+    const firstRun = yield* Effect.provide(SessionRunState.Service, first)
+    const secondRun = yield* Effect.provide(SessionRunState.Service, second)
+    const holderEntered = yield* Deferred.make<void>()
+    const holderRelease = yield* Deferred.make<void>()
+    const childEntered = yield* Deferred.make<void>()
+    const holder = yield* secondRun
+      .ensureRunning(
+        child.id,
+        Effect.succeed(result),
+        Effect.gen(function* () {
+          yield* Deferred.succeed(holderEntered, undefined)
+          yield* Deferred.await(holderRelease)
+          return result
+        }),
+      )
+      .pipe(Effect.forkChild)
+    yield* Deferred.await(holderEntered)
+    const parentScope = yield* Scope.Scope
+    const spawned = yield* Deferred.make<Fiber.Fiber<SessionV1.WithParts, SessionRunState.LeaseLostError>>()
+    yield* firstRun.ensureRunning(
+      parent.id,
+      Effect.succeed(result),
+      Effect.gen(function* () {
+        const background = yield* firstRun
+          .ensureRunning(
+            child.id,
+            Effect.succeed(result),
+            Effect.gen(function* () {
+              yield* Deferred.succeed(childEntered, undefined)
+              return result
+            }),
+          )
+          .pipe(Effect.forkIn(parentScope))
+        yield* Deferred.succeed(spawned, background)
+        return result
+      }),
+    )
+    const background = yield* Deferred.await(spawned)
+    expect(Option.isNone(yield* Deferred.poll(childEntered))).toBe(true)
+    expect(background.pollUnsafe()).toBeUndefined()
+    yield* Deferred.succeed(holderRelease, undefined)
+    yield* Fiber.join(holder)
+    yield* awaitWithTimeout(Fiber.join(background), "background child did not run after release", "3 seconds")
+    expect(Option.isSome(yield* Deferred.poll(childEntered))).toBe(true)
+  }).pipe(withTmpdirInstance({ config: cfg })),
+)
+
+it.instance(
+  "two independent prompt loops answer the latest persisted parent once without overlapping turns",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const firstScope = yield* Scope.make()
+      const secondScope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(firstScope, Exit.void))
+      yield* Effect.addFinalizer(() => Scope.close(secondScope, Exit.void))
+      const databasePath = path.join((yield* TestInstance).directory, "shared.sqlite")
+      const first = yield* Layer.buildWithMemoMap(
+        makeHttpNoLLMServer({ databasePath }),
+        Layer.makeMemoMapUnsafe(),
+        firstScope,
+      )
+      const second = yield* Layer.buildWithMemoMap(
+        makeHttpNoLLMServer({ databasePath }),
+        Layer.makeMemoMapUnsafe(),
+        secondScope,
+      )
+      const shared = yield* Effect.provide(Database.Service, first)
+      yield* shared.db
+        .insert(ProjectTable)
+        .values({
+          id: ProjectV2.ID.global,
+          worktree: AbsolutePath.make("/"),
+          time_created: Date.now(),
+          time_updated: Date.now(),
+          sandboxes: [],
+        })
+        .onConflictDoNothing()
+        .run()
+        .pipe(Effect.orDie)
+      const firstSessions = yield* Effect.provide(Session.Service, first)
+      const chat = yield* firstSessions
+        .create({
+          title: "Pinned",
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        })
+        .pipe(Effect.provide(first))
+      const promptA = yield* Effect.provide(SessionPrompt.Service, first)
+      const promptB = yield* Effect.provide(SessionPrompt.Service, second)
+      expect(promptA).not.toBe(promptB)
+      const release = defer<void>()
+      yield* llm.hold("first answer", release.promise)
+      yield* llm.text("second answer")
+      const initial = yield* user(chat.id, "first question").pipe(Effect.provide(first))
+      const a = yield* promptA.loop({ sessionID: chat.id }).pipe(Effect.provide(first), Effect.forkChild)
+      yield* awaitWithTimeout(llm.wait(1), "first loop did not reach provider", "10 seconds")
+      const latest = yield* user(chat.id, "second question").pipe(Effect.provide(second))
+      const b = yield* promptB.loop({ sessionID: chat.id }).pipe(Effect.provide(second), Effect.forkChild)
+      yield* Effect.promise(() => Bun.sleep(50))
+      expect(yield* llm.hits).toHaveLength(1)
+      release.resolve(undefined)
+      const firstResult = yield* awaitWithTimeout(Fiber.join(a), "first loop did not exit", "10 seconds")
+      const secondResult = yield* awaitWithTimeout(Fiber.join(b), "second loop did not exit", "10 seconds")
+      expect(firstResult.info.id).toBe(secondResult.info.id)
+      const messages = yield* firstSessions.messages({ sessionID: chat.id }).pipe(Effect.provide(first))
+      const answers = messages.flatMap((item) =>
+        item.info.role === "assistant" && item.info.finish === "stop" ? [item.info] : [],
+      )
+      expect(answers.map((item) => item.parentID)).toContain(initial.id)
+      expect(answers.filter((item) => item.parentID === latest.id)).toHaveLength(1)
+      expect(answers.some((item, index) => index > 0 && item.parentID === answers[index - 1]?.parentID)).toBe(false)
+      const intervals = answers
+        .map((item) => ({ parentID: item.parentID, start: item.time.created, end: item.time.completed }))
+        .sort((a, b) => a.start - b.start)
+      expect(intervals.map((interval) => interval.parentID)).toContain(latest.id)
+      expect(
+        intervals.every((interval, index) => index === 0 || (intervals[index - 1]?.end ?? Infinity) <= interval.start),
+      ).toBe(true)
+      expect(yield* llm.hits).toHaveLength(2)
+    }),
+  20_000,
+)
+
+it.instance(
+  "a prompt persisted after the holder's final check is answered after lease release",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const firstScope = yield* Scope.make()
+      const secondScope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(firstScope, Exit.void))
+      yield* Effect.addFinalizer(() => Scope.close(secondScope, Exit.void))
+      const databasePath = path.join((yield* TestInstance).directory, "stranded.sqlite")
+      const first = yield* Layer.buildWithMemoMap(
+        makeHttpNoLLMServer({ databasePath }),
+        Layer.makeMemoMapUnsafe(),
+        firstScope,
+      )
+      const second = yield* Layer.buildWithMemoMap(
+        makeHttpNoLLMServer({ databasePath }),
+        Layer.makeMemoMapUnsafe(),
+        secondScope,
+      )
+      const shared = yield* Effect.provide(Database.Service, first)
+      yield* shared.db
+        .insert(ProjectTable)
+        .values({
+          id: ProjectV2.ID.global,
+          worktree: AbsolutePath.make("/"),
+          time_created: Date.now(),
+          time_updated: Date.now(),
+          sandboxes: [],
+        })
+        .onConflictDoNothing()
+        .run()
+        .pipe(Effect.orDie)
+      const sessions = yield* Effect.provide(Session.Service, first)
+      const chat = yield* sessions
+        .create({ title: "Pinned", permission: [{ permission: "*", pattern: "*", action: "allow" }] })
+        .pipe(Effect.provide(first))
+      const initial = yield* seed(chat.id, { finish: "stop" }).pipe(Effect.provide(first))
+      const holder = yield* Effect.provide(EffectFlock.Service, first)
+      const leaseScope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(leaseScope, Exit.void))
+      expect(
+        Option.isSome(
+          yield* holder.tryAcquire(`session-run:${chat.id}`).pipe(Effect.provideService(Scope.Scope, leaseScope)),
+        ),
+      ).toBe(true)
+      yield* llm.text("answer after release")
+      const promptB = yield* Effect.provide(SessionPrompt.Service, second)
+      const statusB = yield* Effect.provide(SessionStatus.Service, second)
+      const pending = yield* promptB
+        .prompt({
+          sessionID: chat.id,
+          agent: "build",
+          model: ref,
+          parts: [{ type: "text", text: "late question" }],
+        })
+        .pipe(Effect.provide(second), Effect.forkChild)
+      yield* pollWithTimeout(
+        statusB.get(chat.id).pipe(Effect.map((s) => (s.type === "busy" ? true : undefined))),
+        "late prompt did not begin waiting",
+        "3 seconds",
+      )
+      const before = yield* sessions.messages({ sessionID: chat.id }).pipe(Effect.provide(first))
+      const late = before.find(
+        (item) =>
+          item.info.role === "user" && item.parts.some((part) => part.type === "text" && part.text === "late question"),
+      )
+      if (!late) throw new Error("late prompt was not persisted before lease release")
+      yield* Effect.promise(() => Bun.sleep(900))
+      expect(yield* llm.hits).toHaveLength(0)
+      yield* Scope.close(leaseScope, Exit.void)
+      const answer = yield* awaitWithTimeout(Fiber.join(pending), "late prompt remained stranded", "5 seconds")
+      expect(answer.info.role).toBe("assistant")
+      if (answer.info.role === "assistant") expect(answer.info.parentID).toBe(late.info.id)
+      const messages = yield* sessions.messages({ sessionID: chat.id }).pipe(Effect.provide(first))
+      const finished = messages.flatMap((item) =>
+        item.info.role === "assistant" && item.info.finish === "stop" ? [item.info] : [],
+      )
+      expect(finished.map((item) => item.parentID)).toContain(initial.user.id)
+      expect(finished.filter((item) => item.parentID === late.info.id)).toHaveLength(1)
+      expect(finished.some((item, index) => index > 0 && item.parentID === finished[index - 1]?.parentID)).toBe(false)
+      expect(yield* llm.hits).toHaveLength(1)
+    }),
+  20_000,
+)
+
+it.instance(
+  "a holder that loses its lock during a tool turn completes that turn and starts no next provider turn",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const firstScope = yield* Scope.make()
+      const secondScope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(firstScope, Exit.void))
+      yield* Effect.addFinalizer(() => Scope.close(secondScope, Exit.void))
+      const databasePath = path.join((yield* TestInstance).directory, "takeover.sqlite")
+      const first = yield* Layer.buildWithMemoMap(
+        makeHttpNoLLMServer({ databasePath }),
+        Layer.makeMemoMapUnsafe(),
+        firstScope,
+      )
+      const second = yield* Layer.buildWithMemoMap(
+        makeHttpNoLLMServer({ databasePath }),
+        Layer.makeMemoMapUnsafe(),
+        secondScope,
+      )
+      const shared = yield* Effect.provide(Database.Service, first)
+      yield* shared.db
+        .insert(ProjectTable)
+        .values({
+          id: ProjectV2.ID.global,
+          worktree: AbsolutePath.make("/"),
+          time_created: Date.now(),
+          time_updated: Date.now(),
+          sandboxes: [],
+        })
+        .onConflictDoNothing()
+        .run()
+        .pipe(Effect.orDie)
+      const sessions = yield* Effect.provide(Session.Service, first)
+      const chat = yield* sessions
+        .create({ title: "Pinned", permission: [{ permission: "*", pattern: "*", action: "allow" }] })
+        .pipe(Effect.provide(first))
+      yield* user(chat.id, "find files").pipe(Effect.provide(first))
+      const promptA = yield* Effect.provide(SessionPrompt.Service, first)
+      const promptB = yield* Effect.provide(SessionPrompt.Service, second)
+      const dir = (yield* TestInstance).directory
+      const started = path.join(dir, "tool-started")
+      const release = path.join(dir, "tool-release")
+      yield* Effect.addFinalizer(() => Effect.promise(() => Bun.write(release, "go")).pipe(Effect.asVoid))
+      yield* llm.tool("bash", {
+        command: `touch "${started}"; while [ ! -f "${release}" ]; do sleep 0.02; done; printf done`,
+        description: "Wait for lease takeover",
+        timeout: 10_000,
+      })
+      yield* llm.text("takeover answer")
+      const warnings: unknown[] = []
+      const a = yield* promptA.loop({ sessionID: chat.id }).pipe(
+        Effect.provide(first),
+        Effect.provide(
+          Logger.layer([
+            Logger.make<unknown, void>((options) => {
+              warnings.push(options.message)
+            }),
+          ]),
+        ),
+        Effect.forkChild,
+      )
+      yield* awaitWithTimeout(llm.wait(1), "holder never reached tool response", "10 seconds")
+      const fs = yield* FSUtil.Service
+      yield* Effect.gen(function* () {
+        while (!(yield* fs.existsSafe(started))) yield* Effect.promise(() => Bun.sleep(10))
+      }).pipe(Effect.timeout("5 seconds"))
+      expect(a.pollUnsafe()).toBeUndefined()
+      const beforeTakeover = yield* sessions.messages({ sessionID: chat.id }).pipe(Effect.provide(first))
+      const holderMessage = beforeTakeover.find((item) => item.info.role === "assistant")
+      expect(holderMessage?.info.id).toBeDefined()
+      const global = yield* Effect.provide(Global.Service, first)
+      yield* Effect.promise(() =>
+        rm(path.join(global.state, "locks", Hash.fast(`session-run:${chat.id}`) + ".lock"), { recursive: true }),
+      )
+      const b = yield* promptB.loop({ sessionID: chat.id }).pipe(Effect.provide(second), Effect.forkChild)
+      const acquired = yield* awaitWithTimeout(Fiber.join(b), "takeover did not complete", "10 seconds")
+      yield* user(chat.id, "after takeover").pipe(Effect.provide(second))
+      yield* llm.text("old owner must not answer")
+      yield* Effect.promise(() => Bun.write(release, "go"))
+      const lost = yield* awaitWithTimeout(Fiber.await(a), "old holder did not exit", "10 seconds")
+      expect(Exit.isFailure(lost)).toBe(true)
+      if (Exit.isFailure(lost)) expect(Cause.pretty(lost.cause)).toContain("another opencode process took over")
+      const messages = yield* sessions.messages({ sessionID: chat.id }).pipe(Effect.provide(first))
+      const toolPart = messages
+        .flatMap((item) => item.parts)
+        .find((part) => part.type === "tool" && part.state.status === "completed")
+      expect(toolPart?.messageID).toBe(holderMessage?.info.id)
+      const newOwnerMessage = messages.find((item) => item.info.id === acquired.info.id)
+      expect(newOwnerMessage?.info.id).not.toBe(holderMessage?.info.id)
+      expect(newOwnerMessage?.parts.some((part) => part.type === "tool" && part.state.status === "completed")).toBe(
+        false,
+      )
+      expect(yield* llm.hits).toHaveLength(2)
+      expect(JSON.stringify(warnings)).toContain("session run lease lost")
+      expect(JSON.stringify(warnings)).toContain(chat.id)
+    }),
+  20_000,
+)
+
+it.instance(
+  "a lease taken during the provider stream stops its holder at the next iteration",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const sessions = yield* Session.Service
+      const prompt = yield* SessionPrompt.Service
+      const chat = yield* sessions.create({
+        title: "Pinned",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      yield* user(chat.id, "first turn")
+      const release = defer<void>()
+      yield* llm.push(reply().tool("first", { value: "first" }).wait(release.promise))
+      yield* llm.text("second turn must not start")
+      const warnings: unknown[] = []
+      const a = yield* prompt.loop({ sessionID: chat.id }).pipe(
+        Effect.provide(
+          Logger.layer([
+            Logger.make<unknown, void>((options) => {
+              warnings.push(options.message)
+            }),
+          ]),
+        ),
+        Effect.forkChild,
+      )
+      yield* awaitWithTimeout(llm.wait(1), "provider stream never started", "10 seconds")
+      const nextScope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(nextScope, Exit.void))
+      const next = yield* Layer.buildWithMemoMap(makeHttpNoLLMServer(), Layer.makeMemoMapUnsafe(), nextScope)
+      const global = yield* Global.Service
+      yield* Effect.promise(() =>
+        rm(path.join(global.state, "locks", Hash.fast(`session-run:${chat.id}`) + ".lock"), { recursive: true }),
+      )
+      const flock = yield* Effect.provide(EffectFlock.Service, next)
+      const stolen = yield* flock
+        .tryAcquire(`session-run:${chat.id}`)
+        .pipe(Effect.provideService(Scope.Scope, nextScope))
+      expect(Option.isSome(stolen)).toBe(true)
+      release.resolve(undefined)
+      const lost = yield* awaitWithTimeout(Fiber.await(a), "holder did not exit after lease loss", "10 seconds")
+      expect(Exit.isFailure(lost)).toBe(true)
+      if (Exit.isFailure(lost)) expect(Cause.pretty(lost.cause)).toContain("another opencode process took over")
+      expect(yield* llm.hits).toHaveLength(1)
+      expect(JSON.stringify(warnings)).toContain("session run lease lost")
+      expect(JSON.stringify(warnings)).toContain(chat.id)
+    }),
+  20_000,
+)
 
 noLLMServer.instance(
   "loop exits immediately when last assistant has stop finish",
