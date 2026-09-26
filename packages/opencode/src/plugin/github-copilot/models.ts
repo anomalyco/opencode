@@ -79,6 +79,68 @@ type CopilotModel = Omit<Model, "api"> & {
 const decodeModels = Schema.decodeUnknownSync(schema)
 const decodeItem = Schema.decodeUnknownOption(item)
 
+const AUTO_CONTEXT_FALLBACK = 128_000
+const AUTO_OUTPUT_FALLBACK = 16_384
+
+/**
+ * Ask Copilot which models Auto may route to. This is the only authoritative
+ * source: `/models` lists everything the account can see, including utility
+ * models Auto never selects.
+ */
+async function routable(baseURL: string, headers: HeadersInit): Promise<string[] | undefined> {
+  return fetch(`${baseURL}/models/session`, {
+    method: "POST",
+    headers: { ...headers, "Content-Type": "text/plain;charset=UTF-8" },
+    body: JSON.stringify({ auto_mode: { model_hints: ["auto"] } }),
+    signal: AbortSignal.timeout(5_000),
+  })
+    .then(async (res) => {
+      if (!res.ok) return undefined
+      const data = (await res.json()) as { available_models?: unknown }
+      if (!Array.isArray(data.available_models)) return undefined
+      const models = data.available_models.filter((id): id is string => typeof id === "string")
+      return models.length > 0 ? models : undefined
+    })
+    .catch(() => undefined)
+}
+
+/**
+ * Copilot routes "Auto" only within the models a plan is entitled to, and never
+ * lists it in `/models`. Size it from the routable models so compaction triggers
+ * at the right point; without that list fall back to conservative defaults rather
+ * than the smallest model on the account, since Copilot also lists tiny utility
+ * models (search, compaction, legacy gpt-3.5) that Auto never routes to.
+ */
+function autoModel(remote: Map<string, SelectableItem>, available?: readonly string[]): SelectableItem {
+  const limits = (available ?? []).flatMap((id) => {
+    const entry = remote.get(id)
+    return entry ? [entry.capabilities.limits] : []
+  })
+  const min = (pick: (limit: (typeof limits)[number]) => number | undefined, fallback: number) => {
+    const values = limits.map(pick).filter((value): value is number => typeof value === "number" && value > 0)
+    return values.length > 0 ? Math.min(...values) : fallback
+  }
+  const prompt = min((limit) => limit.max_prompt_tokens, AUTO_CONTEXT_FALLBACK)
+  return {
+    model_picker_enabled: true,
+    id: "auto",
+    name: "Auto",
+    version: "auto",
+    capabilities: {
+      family: "auto",
+      limits: {
+        max_context_window_tokens: min((limit) => limit.max_context_window_tokens ?? limit.max_prompt_tokens, prompt),
+        max_output_tokens: min((limit) => limit.max_output_tokens, AUTO_OUTPUT_FALLBACK),
+        max_prompt_tokens: prompt,
+      },
+      supports: {
+        streaming: true,
+        tool_calls: true,
+      },
+    },
+  }
+}
+
 function build(key: string, remote: SelectableItem, url: string, prev?: Model): Model {
   const reasoning =
     !!remote.capabilities.supports.adaptive_thinking ||
@@ -252,9 +314,26 @@ export async function get(
     result[id] = build(id, m, baseURL)
   }
 
+  // "Auto" is a routing service, not a listed model, so synthesize it. Free and
+  // Student plans report `model_picker_enabled: false` on every model, which
+  // would otherwise leave the picker empty and drop the provider entirely.
+  const auto = autoModel(remote, await routable(baseURL, headers))
+  result.auto = build("auto", auto, baseURL)
+  result.auto.options = {
+    ...result.auto.options,
+    // Routed models keep their own transport; remember which to use for each.
+    endpoints: Object.fromEntries(
+      Object.values(result).flatMap((model) => {
+        if (model.id === "auto") return []
+        if (!("endpoint" in model.api) || !model.api.endpoint) return []
+        return [[model.api.id, model.api.endpoint]]
+      }),
+    ),
+  }
+
   return {
     models: result,
-    pickerEnabled: new Set([...remote].filter(([, item]) => item.model_picker_enabled).map(([id]) => id)),
+    pickerEnabled: new Set(["auto", ...[...remote].filter(([, item]) => item.model_picker_enabled).map(([id]) => id)]),
   }
 }
 
