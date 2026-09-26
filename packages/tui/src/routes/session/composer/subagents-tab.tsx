@@ -1,6 +1,7 @@
 import { createMemo, For, Show, createEffect, onMount, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { TextAttributes, ScrollBoxRenderable } from "@opentui/core"
+import { useTerminalDimensions } from "@opentui/solid"
 import type { SessionInfo } from "@opencode/client"
 import { useRoute, useRouteData } from "../../../context/route"
 import { useData } from "../../../context/data"
@@ -11,12 +12,14 @@ import { Keymap } from "../../../context/keymap"
 import { useComposerTab } from "./context"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import { sessionFamily } from "../../../util/session"
+import { subagentModelDisplay } from "./subagents-tab.model"
 
 interface SubagentEntry {
   sessionID: string
   agent: string
   title: string
   status: string
+  model?: ReturnType<typeof subagentModelDisplay>
   current: boolean
   prefix: string
 }
@@ -29,6 +32,7 @@ export function SubagentsTab(props: { sessionID: string }) {
   const navigate = useRoute().navigate
   const composer = useComposerTab()
   const shortcuts = Keymap.useShortcuts()
+  const dimensions = useTerminalDimensions()
 
   const session = createMemo(() => data.session.get(props.sessionID))
   const [store, setStore] = createStore({ selected: 0, active: true })
@@ -50,6 +54,7 @@ export function SubagentsTab(props: { sessionID: string }) {
               : "Subagent",
           title: agentMatch ? title.replace(agentMatch[0], "").trim() || title : title,
           status: data.session.status(session.id),
+          model: subagentModelDisplay(session.model, data.location.model.list(session.location)),
           current: session.id === route.sessionID,
           prefix,
         }
@@ -232,11 +237,39 @@ export function SubagentsTab(props: { sessionID: string }) {
                       }
                       attributes={active() ? TextAttributes.BOLD : undefined}
                       wrapMode="none"
+                      truncate
+                      flexShrink={1}
+                      minWidth={0}
                     >
                       {entry.prefix}
                       {entry.agent}: {entry.title}
                     </text>
                   </box>
+                  <Show when={entry.model}>
+                    {(model) => (
+                      <box flexDirection="row" gap={1} flexShrink={0} paddingRight={1}>
+                        <text fg={active() ? theme.text.action.primary.focused : theme.text.muted} wrapMode="none">
+                          {Locale.truncateWidth(
+                            model().name,
+                            Math.max(8, Math.min(24, Math.floor(dimensions().width / 4))),
+                          )}
+                        </text>
+                        <Show when={model().variant}>
+                          {(variant) => (
+                            <>
+                              <text fg={active() ? theme.text.action.primary.focused : theme.text.muted}>·</text>
+                              <text
+                                fg={active() ? theme.text.action.primary.focused : theme.text.feedback.warning.base}
+                                attributes={TextAttributes.BOLD}
+                              >
+                                {variant()}
+                              </text>
+                            </>
+                          )}
+                        </Show>
+                      </box>
+                    )}
+                  </Show>
                   <Show when={status()}>
                     <text fg={active() ? theme.text.action.primary.focused : theme.text.muted} wrapMode="none">
                       {status()}
