@@ -1,11 +1,17 @@
-import { expect, test } from "bun:test"
+import { afterEach, expect, mock, test } from "bun:test"
 import type { Hooks } from "@opencode-ai/plugin"
 import { CopilotAuthPlugin } from "@/plugin/github-copilot/copilot"
 
 type ChatHeaders = NonNullable<Hooks["chat.headers"]>
 
-async function hook() {
-  const hooks = await CopilotAuthPlugin({
+const originalFetch = globalThis.fetch
+
+afterEach(() => {
+  globalThis.fetch = originalFetch
+})
+
+async function plugin() {
+  return CopilotAuthPlugin({
     directory: "",
     project: {} as never,
     worktree: "",
@@ -19,7 +25,10 @@ async function hook() {
       },
     } as never,
   })
-  return hooks["chat.headers"]!
+}
+
+async function hook() {
+  return (await plugin())["chat.headers"]!
 }
 
 function input(sessionID: string, providerID: string, npm: string) {
@@ -53,4 +62,47 @@ test("does not add interaction headers to other providers", async () => {
   const output = { headers: { "x-existing": "preserved" } }
   await headers(input("ses_one", "openai", "@ai-sdk/openai"), output)
   expect(output.headers).toEqual({ "x-existing": "preserved" })
+})
+
+test("pins the Copilot integration header on oauth inference requests", async () => {
+  const hooks = await plugin()
+  const { fetch: copilotFetch } = await hooks.auth!.loader!(
+    async () =>
+      ({
+        type: "oauth",
+        refresh: "refresh-token",
+        access: "access-token",
+        expires: Date.now() + 60_000,
+      } as never),
+    {} as never,
+  )
+
+  let seen: Record<string, string> | undefined
+  globalThis.fetch = mock(async (_input: unknown, init?: RequestInit) => {
+    seen = init?.headers as Record<string, string>
+    return new Response("")
+  }) as unknown as typeof fetch
+
+  await copilotFetch("https://api.githubcopilot.com/chat/completions", {
+    method: "POST",
+    headers: { "x-api-key": "stale" },
+    body: JSON.stringify({ messages: [{ role: "user", content: "hi" }] }),
+  })
+
+  expect(seen).toMatchObject({
+    "Copilot-Integration-Id": "vscode-chat",
+    Authorization: "Bearer refresh-token",
+    "Openai-Intent": "conversation-edits",
+  })
+  expect(seen?.["x-api-key"]).toBeUndefined()
+})
+
+test("does not provide a fetch override for non-oauth auth", async () => {
+  const hooks = await plugin()
+  const result = await hooks.auth!.loader!(
+    async () => ({ type: "api", key: "sk-test" } as never),
+    {} as never,
+  )
+
+  expect(result).toEqual({})
 })
