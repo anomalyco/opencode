@@ -218,6 +218,8 @@ async function run(input: {
   messages?: (inboxID: string) => SessionMessageInfo[]
   wait?: () => Promise<void>
   terminalDelay?: number
+  message?: string
+  skills?: { id: string; name: string }[]
 }) {
   const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
   const values: V2Event[] = [{ id: "evt_connected", type: "server.connected", data: {} }]
@@ -240,6 +242,7 @@ async function run(input: {
     }
   })()
   spyOn(sdk.event, "subscribe").mockImplementation(() => stream)
+  spyOn(sdk.skill, "list").mockImplementation(() => ok({ location, data: input.skills ?? [] }) as never)
   spyOn(sdk.permission, "list").mockImplementation(() => ok([]) as never)
   spyOn(sdk.session.form, "list").mockImplementation(
     (request) => ok(input.pendingForms?.filter((item) => item.sessionID === request.sessionID) ?? []) as never,
@@ -272,7 +275,7 @@ async function run(input: {
     client: sdk,
     sessionID: "ses_1",
     location,
-    message: "hello",
+    message: input.message ?? "hello",
     files: [],
     thinking: false,
     format: input.format ?? "default",
@@ -312,6 +315,61 @@ afterEach(() => {
 })
 
 describe("runNonInteractivePrompt", () => {
+  test("attaches skills mentioned by ID to prompts", async () => {
+    const sdk = await run({
+      message: "@skl_review check this",
+      skills: [{ id: "skl_review", name: "review" }],
+      turn: (id) => [prompted(id), settled()],
+    })
+    expect(sdk.session.prompt).toHaveBeenCalledWith(
+      expect.objectContaining({ text: "@skl_review check this", skills: [{ id: "skl_review" }] }),
+      { signal: expect.any(AbortSignal) },
+    )
+  })
+
+  test("attaches multiple skill mentions once each", async () => {
+    const sdk = await run({
+      message: "Use @effect and @testing with @effect",
+      skills: [
+        { id: "effect", name: "Effect" },
+        { id: "testing", name: "Testing" },
+      ],
+      turn: (id) => [prompted(id), settled()],
+    })
+    expect(sdk.session.prompt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: "Use @effect and @testing with @effect",
+        skills: [{ id: "effect" }, { id: "testing" }],
+      }),
+      { signal: expect.any(AbortSignal) },
+    )
+  })
+
+  test("does not resolve slash names as skills", async () => {
+    const sdk = await run({
+      message: "/review check this",
+      skills: [{ id: "review", name: "review" }],
+      turn: (id) => [prompted(id), settled()],
+    })
+    expect(sdk.skill.list).not.toHaveBeenCalled()
+    expect(sdk.session.prompt).toHaveBeenCalledWith(
+      expect.objectContaining({ text: "/review check this", skills: undefined }),
+      { signal: expect.any(AbortSignal) },
+    )
+  })
+
+  test("preserves unknown skill mentions as prompt text", async () => {
+    const sdk = await run({
+      message: "@review check this",
+      skills: [{ id: "skl_review", name: "review" }],
+      turn: (id) => [prompted(id), settled()],
+    })
+    expect(sdk.session.prompt).toHaveBeenCalledWith(
+      expect.objectContaining({ text: "@review check this", skills: undefined }),
+      { signal: expect.any(AbortSignal) },
+    )
+  })
+
   test("keeps formatted tool output and compact tool metadata in JSON", async () => {
     const output = await capture({ format: "json", turn: successfulGrep })
     const events = output.stdout

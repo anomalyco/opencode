@@ -33,6 +33,15 @@ other workflows that need model output directly in the terminal.
 opencode run "Explain this repository"
 ```
 
+Mention `@skill-id` in the prompt to attach a skill:
+
+```bash
+opencode run "@my-skill help with this task"
+```
+
+Skills are matched by ID, just like skill mentions in the interactive prompt. Multiple mentions are supported; repeated
+mentions attach the skill once. Unrecognized skill mentions remain ordinary prompt text.
+
 ## Mini
 
 Use `opencode mini` to start OpenCode's minimal interactive interface instead of the full-screen TUI.
