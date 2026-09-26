@@ -12,6 +12,14 @@ export const password = Config.redacted("OPENCODE_PASSWORD").pipe(
   Config.withDefault(undefined),
 )
 
+// Opt-in escape hatch for deployments that intentionally run without authentication. There is no
+// loopback restriction: this also disables auth for non-loopback binds, which is the intended
+// behaviour for trusted-LAN use.
+export const disableAuth = Config.string("OPENCODE_DISABLE_AUTH").pipe(
+  Config.withDefault(""),
+  Config.map((value) => value === "1" || value.toLowerCase() === "true"),
+)
+
 export function session() {
   return Object.fromEntries(
     Object.entries(process.env).filter(
