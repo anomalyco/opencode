@@ -10,11 +10,18 @@ import type {
   LanguageModelV3FinishReason,
   LanguageModelV3FunctionTool,
   LanguageModelV3Message,
-  LanguageModelV3Prompt,
   LanguageModelV3StreamPart,
   LanguageModelV3ToolChoice,
+  LanguageModelV3FilePart,
+  LanguageModelV3ToolResultPart,
   SharedV3ProviderOptions,
 } from "@ai-sdk/provider"
+import type {
+  LanguageModelV4,
+  LanguageModelV4CallOptions,
+  LanguageModelV4FilePart,
+  LanguageModelV4StreamPart,
+} from "@ai-sdk/provider-v4"
 import {
   FinishReason,
   LLMEvent,
@@ -41,9 +48,27 @@ import { Provider } from "./provider.js"
 import { State } from "./state.js"
 
 type SDK = any
-type UserContent = Extract<LanguageModelV3Message, { role: "user" }>["content"]
-type AssistantContent = Extract<LanguageModelV3Message, { role: "assistant" }>["content"]
-type ToolResultContent = Extract<AssistantContent[number], { type: "tool-result" }>
+type SDKLanguage = LanguageModelV3 | LanguageModelV4
+type Version = SDKLanguage["specificationVersion"]
+type FilePart = Omit<LanguageModelV3FilePart, "data"> & {
+  data: LanguageModelV3FilePart["data"] | LanguageModelV4FilePart["data"]
+}
+type ToolResultContent = Omit<LanguageModelV3ToolResultPart, "output"> & {
+  output: ReturnType<typeof toolOutput>
+}
+type UserContent = Array<
+  Exclude<Extract<LanguageModelV3Message, { role: "user" }>["content"][number], { type: "file" }> | FilePart
+>
+type AssistantContent = Array<
+  | Exclude<Extract<LanguageModelV3Message, { role: "assistant" }>["content"][number], { type: "file" | "tool-result" }>
+  | FilePart
+  | ToolResultContent
+>
+type PromptMessage =
+  | Extract<LanguageModelV3Message, { role: "system" }>
+  | { role: "user"; content: UserContent }
+  | { role: "assistant"; content: AssistantContent }
+  | { role: "tool"; content: ToolResultContent[] }
 
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 
@@ -58,7 +83,7 @@ export interface LanguageEvent {
   readonly model: RuntimeInfo
   readonly sdk: SDK
   readonly options: Record<string, any>
-  language?: LanguageModelV3
+  language?: SDKLanguage
 }
 
 function wrapSSE(res: Response, ms: number, ctl: AbortController) {
@@ -235,7 +260,7 @@ export interface Interface {
   }
   readonly runSDK: (event: SDKEvent) => Effect.Effect<SDKEvent>
   readonly runLanguage: (event: LanguageEvent) => Effect.Effect<LanguageEvent>
-  readonly language: (model: RuntimeInfo) => Effect.Effect<LanguageModelV3, InitError>
+  readonly language: (model: RuntimeInfo) => Effect.Effect<SDKLanguage, InitError>
   readonly model: (model: RuntimeInfo) => Effect.Effect<LanguageModel, InitError>
 }
 
@@ -246,7 +271,7 @@ export const locationLayer = Layer.effect(
   Effect.gen(function* () {
     let sdkHooks: ((event: SDKEvent) => Effect.Effect<void> | void)[] = []
     let languageHooks: ((event: LanguageEvent) => Effect.Effect<void> | void)[] = []
-    const languages = new Map<string, LanguageModelV3>()
+    const languages = new Map<string, SDKLanguage>()
     const sdks = new Map<string, SDK>()
     const functionIDs = new WeakMap<object, number>()
     let nextFunctionID = 0
@@ -355,7 +380,7 @@ export const locationLayer = Layer.effect(
   }),
 )
 
-function modelFromLanguage(info: RuntimeInfo, language: LanguageModelV3) {
+function modelFromLanguage(info: RuntimeInfo, language: SDKLanguage) {
   const packageName = Provider.packageName(info.package!)
   const projected = mapBodyToProviderOptions(info, packageName)
   const providerID = info.canonical ?? info.providerID
@@ -390,7 +415,8 @@ function modelFromLanguage(info: RuntimeInfo, language: LanguageModelV3) {
       schema: Schema.Unknown,
       from: (request) =>
         Effect.try({
-          try: () => callOptions(request, packageName, info.modelID ?? info.id, optionKey),
+          try: () =>
+            callOptions(request, packageName, info.modelID ?? info.id, optionKey, language.specificationVersion),
           catch: (cause) =>
             cause instanceof AIError ? cause : ProviderShared.invalidRequest("Invalid AI SDK request", cause),
         }),
@@ -400,7 +426,7 @@ function modelFromLanguage(info: RuntimeInfo, language: LanguageModelV3) {
       LanguageModel.make({ ...input, provider: "provider" in input ? input.provider : providerID, route }),
     prepareTransport: (body) => Effect.succeed(body),
     streamPrepared: (prepared, _request, _runtime, options) =>
-      streamLanguage(language, prepared as LanguageModelV3CallOptions, options?.http),
+      streamLanguage(language, prepared as ReturnType<typeof callOptions>, options?.http),
   }
   return LanguageModel.make({
     id: info.modelID ?? info.id,
@@ -476,10 +502,11 @@ function callOptions(
   packageName: string | undefined,
   modelID: ID,
   optionKey: string,
-): LanguageModelV3CallOptions {
+  version: Version,
+) {
   const flattened = ProviderShared.flattenToolRequest(request)
   return {
-    prompt: prompt(flattened.request),
+    prompt: prompt(flattened.request, version),
     maxOutputTokens: request.generation?.maxTokens,
     temperature: request.generation?.temperature,
     stopSequences: request.generation?.stop === undefined ? undefined : [...request.generation.stop],
@@ -495,15 +522,15 @@ function callOptions(
   }
 }
 
-function prompt(request: LLMRequest): LanguageModelV3Prompt {
+function prompt(request: LLMRequest, version: Version): PromptMessage[] {
   const system = request.system
     .map((part) => part.text)
     .filter(Boolean)
     .join("\n\n")
   const pending: UserContent = []
   const messages = request.messages.flatMap((input, index) => {
-    if (input.role !== "tool") return message(input)
-    const lowered = toolMessage(input)
+    if (input.role !== "tool") return message(input, version)
+    const lowered = toolMessage(input, version)
     pending.push(...lowered.media)
     if (request.messages[index + 1]?.role === "tool" || pending.length === 0) return lowered.messages
     const media = [...pending]
@@ -520,7 +547,7 @@ function prompt(request: LLMRequest): LanguageModelV3Prompt {
   return [{ role: "system", content: system }, ...messages]
 }
 
-function message(input: LLMRequest["messages"][number]): LanguageModelV3Message[] {
+function message(input: LLMRequest["messages"][number], version: Version): PromptMessage[] {
   switch (input.role) {
     case "system":
       // The initial privileged prompt lives in `request.system` and is prepended above. A system message here is a
@@ -538,39 +565,42 @@ function message(input: LLMRequest["messages"][number]): LanguageModelV3Message[
         },
       ]
     case "user":
-      return [{ role: "user", content: input.content.flatMap(userPart) }]
+      return [{ role: "user", content: input.content.flatMap((part) => userPart(part, version)) }]
     case "assistant":
-      return [{ role: "assistant", content: input.content.flatMap(assistantPart) }]
+      return [{ role: "assistant", content: input.content.flatMap((part) => assistantPart(part, version)) }]
     case "tool":
-      return toolMessage(input).messages
+      return toolMessage(input, version).messages
   }
 }
 
-function toolMessage(input: LLMRequest["messages"][number]) {
+function toolMessage(input: LLMRequest["messages"][number], version: Version) {
   const media: UserContent = []
   const content = input.content.flatMap((part) => {
-    if (part.type !== "tool-result" || part.result.type !== "content") return toolResultPart(part)
+    if (part.type !== "tool-result" || part.result.type !== "content") return toolResultPart(part, version)
     const value = part.result.value.filter((item) => {
       if (item.type !== "file") return true
       if (!item.mime.startsWith("image/") && item.mime !== "application/pdf") return true
       media.push({
         type: "file",
         mediaType: item.mime,
-        data: fileData(ProviderShared.toolFileMedia(item).media),
+        data: fileData(ProviderShared.toolFileMedia(item).media, version),
         filename: item.name,
       })
       return false
     })
-    return toolResultPart({
-      ...part,
-      result:
-        value.length === 0
-          ? { type: "text", value: "Media attached in the following user message." }
-          : { ...part.result, value },
-    })
+    return toolResultPart(
+      {
+        ...part,
+        result:
+          value.length === 0
+            ? { type: "text", value: "Media attached in the following user message." }
+            : { ...part.result, value },
+      },
+      version,
+    )
   })
   return {
-    messages: content.length ? ([{ role: "tool", content }] satisfies LanguageModelV3Message[]) : [],
+    messages: content.length ? ([{ role: "tool", content }] satisfies PromptMessage[]) : [],
     media,
   }
 }
@@ -579,14 +609,16 @@ function text(part: ContentPart) {
   return part.type === "text" ? [part.text] : []
 }
 
-function userPart(part: ContentPart): UserContent {
+function userPart(part: ContentPart, version: Version): UserContent {
   if (part.type === "text") return [{ type: "text", text: part.text }]
   if (part.type === "media")
-    return [{ type: "file", mediaType: part.media.mediaType, data: fileData(part.media), filename: part.filename }]
+    return [
+      { type: "file", mediaType: part.media.mediaType, data: fileData(part.media, version), filename: part.filename },
+    ]
   return []
 }
 
-function assistantPart(part: ContentPart): AssistantContent {
+function assistantPart(part: ContentPart, version: Version): AssistantContent {
   switch (part.type) {
     case "compaction":
       throw ProviderShared.unsupportedOperation({
@@ -597,7 +629,9 @@ function assistantPart(part: ContentPart): AssistantContent {
     case "text":
       return [{ type: "text", text: part.text, providerOptions: metadataProviderOptions(part.providerMetadata) }]
     case "media":
-      return [{ type: "file", mediaType: part.media.mediaType, data: fileData(part.media), filename: part.filename }]
+      return [
+        { type: "file", mediaType: part.media.mediaType, data: fileData(part.media, version), filename: part.filename },
+      ]
     case "reasoning":
       return [{ type: "reasoning", text: part.text, providerOptions: metadataProviderOptions(part.providerMetadata) }]
     case "tool-call":
@@ -612,7 +646,7 @@ function assistantPart(part: ContentPart): AssistantContent {
         },
       ]
     case "tool-result":
-      return toolResultPart(part)
+      return toolResultPart(part, version)
     case "effort":
       throw ProviderShared.unsupportedContent("AI SDK", "assistant", [
         "text",
@@ -624,10 +658,12 @@ function assistantPart(part: ContentPart): AssistantContent {
   }
 }
 
-function fileData(media: Media.Asset) {
+function fileData(media: Media.Asset, version: Version) {
   const source = media.source
-  if (source.type === "bytes" || source.type === "base64") return source.data
-  if (source.type === "url") return new URL(source.url)
+  if (source.type === "bytes" || source.type === "base64")
+    return version === "v4" ? { type: "data" as const, data: source.data } : source.data
+  if (source.type === "url")
+    return version === "v4" ? { type: "url" as const, url: new URL(source.url) } : new URL(source.url)
   throw ProviderShared.unsupportedOperation({
     operation: "media-ref",
     provider: source.provider,
@@ -635,20 +671,20 @@ function fileData(media: Media.Asset) {
   })
 }
 
-function toolResultPart(part: ContentPart): ToolResultContent[] {
+function toolResultPart(part: ContentPart, version: Version): ToolResultContent[] {
   if (part.type !== "tool-result") return []
   return [
     {
       type: "tool-result",
       toolCallId: part.id,
       toolName: part.name,
-      output: toolOutput(part.result),
+      output: toolOutput(part.result, version),
       providerOptions: metadataProviderOptions(part.providerMetadata),
     },
   ]
 }
 
-function toolOutput(result: ToolResultValue) {
+function toolOutput(result: ToolResultValue, version: Version) {
   switch (result.type) {
     case "text":
     case "error":
@@ -658,6 +694,13 @@ function toolOutput(result: ToolResultValue) {
         type: "content" as const,
         value: result.value.map((item) => {
           if (item.type === "text") return { type: "text" as const, text: item.text }
+          if (version === "v4")
+            return {
+              type: "file" as const,
+              mediaType: item.mime,
+              filename: item.name,
+              data: fileData(ProviderShared.toolFileMedia(item).media, version),
+            }
           const data = /^data:[^;,]+(?:;[^,]*)*;base64,(.*)$/s.exec(item.uri)?.[1]
           const image = item.mime.toLowerCase().startsWith("image/")
           if (data !== undefined)
@@ -705,7 +748,12 @@ function metadataProviderOptions(input: ProviderMetadata | undefined): SharedV3P
   return Object.fromEntries(Object.entries(input).map(([key, value]) => [key, jsonObject(value)]))
 }
 
-function streamLanguage(language: LanguageModelV3, options: LanguageModelV3CallOptions, http?: HttpMiddleware) {
+function streamLanguage(language: SDKLanguage, options: ReturnType<typeof callOptions>, http?: HttpMiddleware) {
+  // The prompt is lowered with this same model's specificationVersion.
+  const run = async () =>
+    language.specificationVersion === "v4"
+      ? language.doStream(options as LanguageModelV4CallOptions)
+      : language.doStream(options as LanguageModelV3CallOptions)
   const state: StreamState = { step: 0, toolNames: {}, open: {} }
   return Stream.concat(
     Stream.make(LLMEvent.stepStart({ index: state.step })),
@@ -713,13 +761,12 @@ function streamLanguage(language: LanguageModelV3, options: LanguageModelV3CallO
       Effect.gen(function* () {
         const context = yield* Effect.context<never>()
         return yield* Effect.tryPromise({
-          try: () =>
-            http ? httpMiddleware.run({ http, context }, () => language.doStream(options)) : language.doStream(options),
+          try: () => (http ? httpMiddleware.run({ http, context }, run) : run()),
           catch: (error) => llmError(error, "request"),
         })
       }).pipe(
         Effect.map((result) =>
-          Stream.fromReadableStream({
+          Stream.fromReadableStream<LanguageModelV3StreamPart | LanguageModelV4StreamPart, AIError>({
             evaluate: () => result.stream,
             onError: (error) => llmError(error, "read"),
           }).pipe(
@@ -742,13 +789,15 @@ type StreamState = {
 
 function streamPartEvents(
   state: StreamState,
-  event: LanguageModelV3StreamPart,
+  event: LanguageModelV3StreamPart | LanguageModelV4StreamPart,
 ): Effect.Effect<ReadonlyArray<LLMEvent>, AIError> {
   switch (event.type) {
     case "stream-start":
     case "response-metadata":
     case "raw":
     case "file":
+    case "reasoning-file":
+    case "custom":
     case "source":
     case "tool-approval-request":
       return Effect.succeed([])
@@ -877,7 +926,9 @@ function fragmentEnd(kind: Fragment, id: string, providerMetadata?: ProviderMeta
   return kind === "text" ? LLMEvent.textEnd({ id, providerMetadata }) : LLMEvent.reasoningEnd({ id, providerMetadata })
 }
 
-function usage(input: Extract<LanguageModelV3StreamPart, { type: "finish" }>["usage"]): UsageInput | undefined {
+function usage(
+  input: Extract<LanguageModelV3StreamPart | LanguageModelV4StreamPart, { type: "finish" }>["usage"],
+): UsageInput | undefined {
   const output = {
     inputTokens: input.inputTokens.total,
     nonCachedInputTokens: input.inputTokens.noCache,
