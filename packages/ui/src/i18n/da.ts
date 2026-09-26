@@ -164,6 +164,7 @@ export const dict = {
   "ui.message.copyMessage": "Kopier besked",
   "ui.message.forkMessage": "Forgren til ny session",
   "ui.message.revertMessage": "Nulstil til dette punkt",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "Kopier svar",
   "ui.message.copied": "Kopieret!",
   "ui.message.interrupted": "Afbrudt",
@@ -213,4 +214,7 @@ export const dict = {
   "ui.promptInput.stop": "Stop",
 
   "ui.tabs.close": "Luk fane",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

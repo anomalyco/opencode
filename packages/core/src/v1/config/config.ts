@@ -16,6 +16,7 @@ import { ConfigPluginV1 } from "./plugin"
 import { ConfigProviderV1 } from "./provider"
 import { ConfigServerV1 } from "./server"
 import { ConfigSkillsV1 } from "./skills"
+import { ConfigModelRace } from "../../config/model-race"
 
 export type Layout = ConfigLayoutV1.Layout
 
@@ -166,6 +167,9 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
+  modelRace: Schema.optional(ConfigModelRace.Info).annotate({
+    description: "Optional model racing configuration for LLM generations",
+  }),
   experimental: Schema.optional(
     Schema.Struct({
       disable_paste_summary: Schema.optional(Schema.Boolean),

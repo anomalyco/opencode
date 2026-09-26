@@ -191,6 +191,7 @@ export const dict = {
   "ui.message.copyMessage": "Mesajı kopyala",
   "ui.message.forkMessage": "Yeni oturuma dallandır",
   "ui.message.revertMessage": "Bu noktaya sıfırla",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "Yanıtı kopyala",
   "ui.message.copied": "Kopyalandı",
   "ui.message.interrupted": "Kesildi",
@@ -220,4 +221,7 @@ export const dict = {
   "ui.toolErrorCard.copyError": "Hatayı kopyala",
   "ui.message.duration.seconds": "{{count}} sn",
   "ui.message.duration.minutesSeconds": "{{minutes}} dk {{seconds}} sn",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 } satisfies Partial<Record<Keys, string>>

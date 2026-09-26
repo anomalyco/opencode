@@ -22,6 +22,7 @@ import { compareMessages, messageKey, normalizeSessionMessages } from "@/utils/s
 import { dropSessionCaches, pickSessionCacheEvictions, SESSION_CACHE_LIMIT } from "./global-sync/session-cache"
 import { createV2SessionReducer, type V2SessionReduction } from "./server-session-v2-reducer"
 import type { ServerApi } from "@/utils/server"
+import type { ModelRaceStatus } from "@/components/session/model-race-status"
 
 type MessageApi = ServerApi["message"]
 
@@ -204,6 +205,7 @@ export function createServerSession(
     session_message: {} as Record<string, SessionMessageInfo[]>,
     part: {} as Record<string, Part[]>,
     part_text_accum_delta: {} as Record<string, string>,
+    model_race: {} as Record<string, ModelRaceStatus>,
     session_working(id: string) {
       return (this.session_status[id]?.type ?? "idle") !== "idle"
     },
@@ -1025,6 +1027,11 @@ export function createServerSession(
       case "session.status": {
         const props = event.properties as { sessionID: string; status: SessionStatus }
         setData("session_status", props.sessionID, reconcile(props.status))
+        return
+      }
+      case "session.next.model-race.updated": {
+        const race = event.properties as ModelRaceStatus
+        setData("model_race", race.messageID, reconcile(race))
         return
       }
       case "message.updated": {

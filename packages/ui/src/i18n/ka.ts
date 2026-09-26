@@ -177,6 +177,7 @@ export const dict: Record<string, string> = {
   "ui.message.copyMessage": "წერილის კოპირება",
   "ui.message.forkMessage": "ახალ სესიად განშტოება",
   "ui.message.revertMessage": "წერილის დაბრუნება",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "პასუხის კოპირება",
   "ui.message.copied": "კოპირებულია",
   "ui.message.duration.seconds": "{{count}} წმ",
@@ -194,4 +195,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "აირჩიეთ ყველა შესაბამისი პასუხი",
   "ui.question.singleHint": "აირჩიეთ ერთი პასუხი",
   "ui.question.custom.placeholder": "აკრიფეთ თქვენი პასუხი...",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

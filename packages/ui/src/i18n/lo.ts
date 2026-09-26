@@ -177,6 +177,7 @@ export const dict = {
   "ui.message.copyMessage": "ສຳເນົາຂໍ້ຄວາມ",
   "ui.message.forkMessage": "ແຍກໄປຫາເຊດຊັນໃໝ່",
   "ui.message.revertMessage": "ກັບຄືນຂໍ້ຄວາມ",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "ສຳເນົາຄຳຕອບ",
   "ui.message.copied": "ສຳເນົາແລ້ວ",
   "ui.message.duration.seconds": "{{count}}s",
@@ -194,4 +195,7 @@ export const dict = {
   "ui.question.multiHint": "ເລືອກຄຳຕອບທັງໝົດທີ່ນຳໃຊ້",
   "ui.question.singleHint": "ເລືອກຫນຶ່ງຄໍາຕອບ",
   "ui.question.custom.placeholder": "ພິມຄຳຕອບຂອງເຈົ້າ...",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

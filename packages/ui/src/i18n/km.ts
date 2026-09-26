@@ -178,6 +178,7 @@ export const dict = {
   "ui.message.copyMessage": "ចម្លងសារ",
   "ui.message.forkMessage": "បំបែកទៅសម័យថ្មី។",
   "ui.message.revertMessage": "ត្រឡប់សារ",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "ចម្លងការឆ្លើយតប",
   "ui.message.copied": "ចម្លង",
   "ui.message.duration.seconds": "{{count}}s",
@@ -195,4 +196,7 @@ export const dict = {
   "ui.question.multiHint": "ជ្រើសរើសចម្លើយទាំងអស់ដែលអនុវត្ត",
   "ui.question.singleHint": "ជ្រើសរើសចម្លើយមួយ។",
   "ui.question.custom.placeholder": "វាយបញ្ចូលចម្លើយរបស់អ្នក...",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

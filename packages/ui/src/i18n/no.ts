@@ -164,6 +164,7 @@ export const dict: Record<Keys, string> = {
   "ui.message.copyMessage": "Kopier melding",
   "ui.message.forkMessage": "Forgren til ny sesjon",
   "ui.message.revertMessage": "Tilbakestill til dette punktet",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "Kopier svar",
   "ui.message.copied": "Kopiert!",
   "ui.message.interrupted": "Avbrutt",
@@ -218,4 +219,7 @@ export const dict: Record<Keys, string> = {
   "ui.sessionTurn.diffs.showAll": "Vis alle",
   "ui.sessionTurn.diffs.showLess": "Vis færre",
   "ui.sessionTurn.diffs.more": "+{{count}} filer til",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

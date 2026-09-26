@@ -298,16 +298,17 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         if (!entry) return
         model.set({ providerID: entry.provider.id, modelID: entry.id })
       },
-      set(item: ModelKey | undefined, options?: { recent?: boolean }) {
+      set(item: ModelKey | undefined, options?: { recent?: boolean; preserveVariant?: boolean }) {
         startTransition(() =>
           batch(() => {
+            const variant = options?.preserveVariant === false ? null : selected()
             setStore("last", {
               type: "model",
               agent: agent.current()?.name,
               model: item ?? null,
-              variant: selected(),
+              variant,
             })
-            write({ model: item })
+            write({ model: item, ...(options?.preserveVariant === false ? { variant: null } : {}) })
             if (!item) return
             models.setVisibility(item, true)
             if (!options?.recent) return

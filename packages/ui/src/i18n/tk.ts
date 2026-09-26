@@ -177,6 +177,7 @@ export const dict: Record<string, string> = {
   "ui.message.copyMessage": "Habary göçüriň",
   "ui.message.forkMessage": "Täze sessiýa şahalandyr",
   "ui.message.revertMessage": "Habary yzyna öwürmek",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "Jogap göçüriň",
   "ui.message.copied": "Göçürildi",
   "ui.message.duration.seconds": "{{count}}",
@@ -194,4 +195,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "Appliceshli jogaplary saýlaň",
   "ui.question.singleHint": "Bir jogap saýlaň",
   "ui.question.custom.placeholder": "Jogabyňyzy ýazyň ...",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

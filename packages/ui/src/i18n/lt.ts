@@ -185,6 +185,7 @@ export const dict: Record<string, string> = {
   "ui.message.copyMessage": "Nukopijuokite pranešimą",
   "ui.message.forkMessage": "Atskirti į naują seansą",
   "ui.message.revertMessage": "Grąžinti pranešimą",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "Nukopijuokite atsakymą",
   "ui.message.copied": "Nukopijuota",
   "ui.message.duration.seconds": "{{count}}s",
@@ -202,4 +203,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "Pasirinkite visus tinkamus atsakymus",
   "ui.question.singleHint": "Pasirinkite vieną atsakymą",
   "ui.question.custom.placeholder": "Įveskite savo atsakymą...",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

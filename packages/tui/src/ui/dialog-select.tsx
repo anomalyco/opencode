@@ -2,6 +2,7 @@ import {
   InputRenderable,
   RGBA,
   ScrollBoxRenderable,
+  TextRenderable,
   TextAttributes,
   type KeyEvent,
   type Renderable,
@@ -86,6 +87,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   const { theme } = useTheme()
   const tuiConfig = useTuiConfig()
   const scrollAcceleration = createMemo(() => getScrollAcceleration(tuiConfig))
+  const nativeSubmit = () =>
+    tuiConfig.keybinds.get("dialog.select.submit").some((binding) => binding.key === "return")
 
   const [store, setStore] = createStore({
     selected: 0,
@@ -97,6 +100,7 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   let selection: { value: T; category?: string } | undefined
   let resetSelection = false
   let visibilityGeneration = 0
+  let submitLocked = false
 
   createEffect(
     on(
@@ -342,7 +346,11 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
   }
 
   function submit() {
-    if (props.locked) return
+    if (props.locked || submitLocked) return
+    submitLocked = true
+    setTimeout(() => {
+      submitLocked = false
+    }, 100)
     setStore("input", "keyboard")
     const index = focusedAction()
     if (index !== undefined) {
@@ -570,6 +578,15 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
         <Show when={props.renderFilter !== false}>
           <box paddingTop={1}>
             <input
+              onSubmit={() => {
+                if (nativeSubmit()) submit()
+              }}
+              onKeyDown={(event) => {
+                if (!nativeSubmit()) return
+                if (event.name !== "return" && event.name !== "enter") return
+                event.preventDefault()
+                submit()
+              }}
               onInput={(e) => {
                 if (props.locked) return
                 batch(() => {
@@ -764,7 +781,7 @@ function Option(props: {
         </box>
       </Show>
       <text
-        flexGrow={1}
+        flexShrink={0}
         fg={text()}
         attributes={props.active && !props.muted ? TextAttributes.BOLD : undefined}
         overflow="hidden"
@@ -777,15 +794,81 @@ function Option(props: {
             : props.truncateTitle === "left"
               ? Locale.truncateLeft(props.title, props.titleWidth ?? 61)
               : Locale.truncate(props.title, props.titleWidth ?? 61))}
-        <Show when={props.description}>
-          <span style={{ fg: props.active && !props.muted ? fg : theme.textMuted }}> {props.description}</span>
-        </Show>
       </text>
+      <Show when={props.description} fallback={<box flexGrow={1} />}>
+        {(description) => (
+          <MarqueeText
+            text={` ${description()}`}
+            fg={props.active && !props.muted ? fg : theme.textMuted}
+            active={props.active && !props.muted}
+          />
+        )}
+      </Show>
       <Show when={props.footer}>
         <box flexShrink={0}>
           <text fg={props.active && !props.muted ? fg : theme.textMuted}>{props.footer}</text>
         </box>
       </Show>
     </>
+  )
+}
+
+function MarqueeText(props: { text: string; fg: RGBA; active?: boolean }) {
+  const [target, setTarget] = createSignal<TextRenderable>()
+  let timer: ReturnType<typeof setInterval> | undefined
+  let hold = 0
+
+  const stop = () => {
+    if (timer === undefined) return
+    clearInterval(timer)
+    timer = undefined
+  }
+
+  createEffect(() => {
+    const element = target()
+    const active = props.active
+    props.text
+    stop()
+    hold = 0
+    if (!element || element.isDestroyed) return
+    element.scrollX = 0
+    if (!active) return
+    timer = setInterval(() => {
+      if (element.isDestroyed) {
+        stop()
+        return
+      }
+      const max = element.maxScrollX
+      if (max <= 0) {
+        element.scrollX = 0
+        return
+      }
+      if (hold > 0) {
+        hold -= 1
+        return
+      }
+      if (element.scrollX >= max) {
+        element.scrollX = 0
+        hold = 8
+      } else {
+        element.scrollX = Math.min(max, element.scrollX + 1)
+      }
+      element.requestRender()
+    }, 120)
+  })
+
+  onCleanup(stop)
+
+  return (
+    <text
+      ref={(value: TextRenderable) => setTarget(value)}
+      flexGrow={1}
+      flexShrink={1}
+      fg={props.fg}
+      overflow="hidden"
+      wrapMode="none"
+    >
+      {props.text}
+    </text>
   )
 }

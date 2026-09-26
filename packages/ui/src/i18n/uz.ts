@@ -180,6 +180,7 @@ export const dict: Record<string, string> = {
   "ui.message.copyMessage": "Xabarni nusxalash",
   "ui.message.forkMessage": "Yangi seansga tarmoqlash",
   "ui.message.revertMessage": "Xabarni qaytarish",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "Javobni nusxalash",
   "ui.message.copied": "Koʻchirildi",
   "ui.message.duration.seconds": "{{count}}s",
@@ -197,4 +198,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "Barcha tegishli javoblarni tanlang",
   "ui.question.singleHint": "Bitta javobni tanlang",
   "ui.question.custom.placeholder": "Javobingizni yozing...",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

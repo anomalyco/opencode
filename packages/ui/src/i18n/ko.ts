@@ -161,6 +161,7 @@ export const dict = {
   "ui.message.copyMessage": "메시지 복사",
   "ui.message.forkMessage": "새 세션으로 분기",
   "ui.message.revertMessage": "메시지 되돌리기",
+  "ui.message.resendMessage": "메시지 다시 보내기",
   "ui.message.copyResponse": "응답 복사",
   "ui.message.copied": "복사됨!",
   "ui.message.interrupted": "중단됨",
@@ -215,4 +216,7 @@ export const dict = {
   "ui.sessionTurn.diffs.showAll": "모두 표시",
   "ui.sessionTurn.diffs.showLess": "간략히 표시",
   "ui.sessionTurn.diffs.more": "+{{count}}개 더 보기",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

@@ -177,6 +177,7 @@ export const dict: Record<string, string> = {
   "ui.message.copyMessage": "Պատճենել հաղորդագրությունը",
   "ui.message.forkMessage": "Ստեղծել նոր նիստի ճյուղ",
   "ui.message.revertMessage": "Վերադարձնել հաղորդագրությունը",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "Պատճենել պատասխանը",
   "ui.message.copied": "Պատճենված",
   "ui.message.duration.seconds": "{{count}} վ",
@@ -194,4 +195,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "Ընտրեք բոլոր համապատասխան պատասխանները",
   "ui.question.singleHint": "Ընտրեք մեկ պատասխան",
   "ui.question.custom.placeholder": "Մուտքագրեք ձեր պատասխանը...",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

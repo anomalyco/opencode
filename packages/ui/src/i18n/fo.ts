@@ -177,6 +177,7 @@ export const dict: Record<string, string> = {
   "ui.message.copyMessage": "Avrita boð",
   "ui.message.forkMessage": "Greina í nýggja setu",
   "ui.message.revertMessage": "Send boðum aftur",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "Avrita svar",
   "ui.message.copied": "Avritað",
   "ui.message.duration.seconds": "{{count}}s",
@@ -194,4 +195,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "Vel øll svar, sum eru galdandi",
   "ui.question.singleHint": "Vel eitt svar",
   "ui.question.custom.placeholder": "Skriva títt svar...",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

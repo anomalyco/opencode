@@ -64,10 +64,11 @@ export function createPromptModelSelection(input: { agent: () => { model?: Model
       const next = items[(index + direction + items.length) % items.length]
       if (next) selection.set({ providerID: next.provider.id, modelID: next.id })
     },
-    set(item: ModelKey | undefined, options?: { recent?: boolean }) {
+    set(item: ModelKey | undefined, options?: { recent?: boolean; preserveVariant?: boolean }) {
       startTransition(() =>
         batch(() => {
-          prompt.model.set(item ? { ...item, variant: prompt.model.current()?.variant } : undefined)
+          const variant = options?.preserveVariant === false ? undefined : prompt.model.current()?.variant
+          prompt.model.set(item ? { ...item, variant } : undefined)
           if (!item) return
           models.setVisibility(item, true)
           if (options?.recent) models.recent.push(item)

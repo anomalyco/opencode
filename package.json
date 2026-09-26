@@ -100,6 +100,7 @@
     "@tsconfig/bun": "catalog:",
     "@types/mime-types": "3.0.1",
     "@typescript/native-preview": "catalog:",
+    "electron": "44.3.0",
     "glob": "13.0.5",
     "husky": "9.1.7",
     "oxlint": "1.60.0",

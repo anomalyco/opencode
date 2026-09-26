@@ -177,6 +177,7 @@ export const dict: Record<string, string> = {
   "ui.message.copyMessage": "Mesajı kopyala",
   "ui.message.forkMessage": "Yeni sessiyaya fork et",
   "ui.message.revertMessage": "Mesajı geri al",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "Cavabı kopyala",
   "ui.message.copied": "Kopyalandı",
   "ui.message.duration.seconds": "{{count}} san",
@@ -194,4 +195,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "Uyğun gələn bütün cavabları seçin",
   "ui.question.singleHint": "Bir cavab seçin",
   "ui.question.custom.placeholder": "Cavabınızı yazın...",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

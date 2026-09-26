@@ -38,6 +38,7 @@ import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
+import { latestRace, raceActive, raceModelID } from "../../util/model-race"
 import { Locale } from "../../util/locale"
 import { errorMessage } from "../../util/error"
 import { formatDuration } from "../../util/format"
@@ -45,6 +46,7 @@ import { createColors, createFrames } from "../../ui/spinner"
 import { useDialog } from "../../ui/dialog"
 import { DialogProvider as DialogProviderConnect } from "../dialog-provider"
 import { DialogAlert } from "../../ui/dialog-alert"
+import { DialogRaceStatus } from "../dialog-race-status"
 import { useToast } from "../../ui/toast"
 import { useKV } from "../../context/kv"
 import { createFadeIn } from "../../util/signal"
@@ -211,6 +213,26 @@ export function Prompt(props: PromptProps) {
   const move = usePromptMove({ projectID: project.project, sessionID: () => props.sessionID })
   const [cursorVersion, setCursorVersion] = createSignal(0)
   const currentProviderLabel = createMemo(() => local.model.parsed().provider)
+  const raceEnabled = createMemo(() => sync.data.config.modelRace?.enabled === true)
+  const race = createMemo(() => (raceEnabled() ? latestRace(sync.data.model_race, props.sessionID) : undefined))
+  let syncedRaceWinner: string | undefined
+  createEffect(
+    on(
+      () => props.sessionID,
+      () => {
+        syncedRaceWinner = undefined
+      },
+      { defer: true },
+    ),
+  )
+  createEffect(() => {
+    const winner = race()?.winner
+    if (!winner) return
+    const key = `${winner.providerID}/${winner.modelID}`
+    if (syncedRaceWinner === key) return
+    syncedRaceWinner = key
+    local.model.set({ providerID: winner.providerID, modelID: winner.modelID })
+  })
   const hasRightContent = createMemo(() => Boolean(props.right))
 
   function promptModelWarning() {
@@ -1458,8 +1480,19 @@ export function Prompt(props: PromptProps) {
                           <text
                             flexShrink={0}
                             fg={fadeColor(leader() ? theme.textMuted : theme.text, modelMetaAlpha())}
+                            onMouseUp={() =>
+                              dialog.replace(() => <DialogRaceStatus sessionID={props.sessionID} />)
+                            }
                           >
                             {local.model.parsed().model}
+                            <Show when={raceEnabled()}>
+                              <span style={{ fg: theme.textMuted }}>
+                                {" "}
+                                {raceModelID(race())
+                                  ? `· race ${race()!.winner ? "winner" : raceActive(race()) ? "leader" : race()!.phase}`
+                                  : "· race waiting"}
+                              </span>
+                            </Show>
                           </text>
                           <text fg={fadeColor(theme.textMuted, modelMetaAlpha())}>{currentProviderLabel()}</text>
                           <Show when={showVariant()}>

@@ -193,6 +193,7 @@ export const dict = {
   "ui.message.copyMessage": "Kopiraj poruku",
   "ui.message.forkMessage": "Forkaj u novu sesiju",
   "ui.message.revertMessage": "Vrati na ovu poruku",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "Kopiraj odgovor",
   "ui.message.copied": "Kopirano!",
   "ui.message.interrupted": "Prekinuto",
@@ -222,4 +223,7 @@ export const dict = {
   "ui.toolErrorCard.copyError": "Kopiraj grešku",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 } satisfies Partial<Record<Keys, string>>

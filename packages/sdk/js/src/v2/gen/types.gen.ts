@@ -51,6 +51,7 @@ export type Event =
   | EventMessagePartDelta
   | EventSessionDiff
   | EventSessionError
+  | EventSessionNextModelRaceUpdated
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
   | EventFileEdited
@@ -1227,6 +1228,36 @@ export type GlobalEvent = {
       }
     | {
         id: string
+        type: "session.next.model-race.updated"
+        properties: {
+          sessionID: string
+          messageID: string
+          raceID: string
+          phase: "dispatching" | "waiting-first-token" | "measuring" | "locked" | "completed" | "failed"
+          candidates: Array<{
+            providerID: string
+            modelID: string
+            state: "pending" | "streaming" | "leader" | "winner" | "failed" | "cancelled" | "completed"
+            ttft?: number
+            tokenCount: number
+            tokensPerSecond?: number
+            toolCallAt?: number
+          }>
+          leader?: {
+            providerID: string
+            modelID: string
+          }
+          winner?: {
+            providerID: string
+            modelID: string
+          }
+          reason?: "first-token" | "throughput" | "tool-call" | "completed" | "fallback"
+          startedAt: number
+          updatedAt: number
+        }
+      }
+    | {
+        id: string
         type: "installation.updated"
         properties: {
           version: string
@@ -1886,6 +1917,23 @@ export type AttachmentConfig = {
   image?: ImageAttachmentConfig
 }
 
+export type ModelRaceConfig = {
+  enabled?: boolean
+  models?: Array<string>
+  strategy?: {
+    firstToken?: boolean
+    throughput?: boolean
+    toolCall?: boolean
+  }
+  throughput?: {
+    warmupTokens?: number
+    measurementWindowMs?: number
+  }
+  switch?: {
+    enabled?: boolean
+  }
+}
+
 export type Config = {
   $schema?: string
   shell?: string
@@ -2021,6 +2069,7 @@ export type Config = {
     preserve_recent_tokens?: number
     reserved?: number
   }
+  modelRace?: ModelRaceConfig
   experimental?: {
     disable_paste_summary?: boolean
     batch_tool?: boolean
@@ -2902,6 +2951,7 @@ export type V2Event =
   | MessagePartDelta
   | SessionDiff
   | SessionError
+  | SessionNextModelRaceUpdated
   | InstallationUpdated
   | InstallationUpdateAvailable
   | FileEdited
@@ -5368,6 +5418,46 @@ export type SessionError = {
   }
 }
 
+export type SessionNextModelRaceUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "session.next.model-race.updated"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    sessionID: string
+    messageID: string
+    raceID: string
+    phase: "dispatching" | "waiting-first-token" | "measuring" | "locked" | "completed" | "failed"
+    candidates: Array<{
+      providerID: string
+      modelID: string
+      state: "pending" | "streaming" | "leader" | "winner" | "failed" | "cancelled" | "completed"
+      ttft?: number
+      tokenCount: number
+      tokensPerSecond?: number
+      toolCallAt?: number
+    }>
+    leader?: {
+      providerID: string
+      modelID: string
+    }
+    winner?: {
+      providerID: string
+      modelID: string
+    }
+    reason?: "first-token" | "throughput" | "tool-call" | "completed" | "fallback"
+    startedAt: number
+    updatedAt: number
+  }
+}
+
 export type InstallationUpdated = {
   id: string
   metadata?: {
@@ -6690,6 +6780,37 @@ export type EventSessionError = {
       | ContextOverflowError
       | ContentFilterError
       | ApiError
+  }
+}
+
+export type EventSessionNextModelRaceUpdated = {
+  id: string
+  type: "session.next.model-race.updated"
+  properties: {
+    sessionID: string
+    messageID: string
+    raceID: string
+    phase: "dispatching" | "waiting-first-token" | "measuring" | "locked" | "completed" | "failed"
+    candidates: Array<{
+      providerID: string
+      modelID: string
+      state: "pending" | "streaming" | "leader" | "winner" | "failed" | "cancelled" | "completed"
+      ttft?: number
+      tokenCount: number
+      tokensPerSecond?: number
+      toolCallAt?: number
+    }>
+    leader?: {
+      providerID: string
+      modelID: string
+    }
+    winner?: {
+      providerID: string
+      modelID: string
+    }
+    reason?: "first-token" | "throughput" | "tool-call" | "completed" | "fallback"
+    startedAt: number
+    updatedAt: number
   }
 }
 
