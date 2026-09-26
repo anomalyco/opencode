@@ -58,12 +58,30 @@ export async function tracingLayer() {
   const OTLP = await import("@opentelemetry/exporter-trace-otlp-http")
   const SdkBase = await import("@opentelemetry/sdk-trace-base")
   const { AsyncLocalStorageContextManager } = await import("@opentelemetry/context-async-hooks")
-  const { context } = await import("@opentelemetry/api")
+  const { context, propagation, trace } = await import("@opentelemetry/api")
 
   // The Effect Node SDK does not register a global context manager, but the AI SDK uses it to parent spans.
   const manager = new AsyncLocalStorageContextManager()
   manager.enable()
   context.setGlobalContextManager(manager)
+
+  // Register a W3C trace context propagator so propagation.inject() writes
+  // traceparent/tracestate headers on outbound HTTP requests.
+  propagation.setGlobalPropagator({
+    inject(ctx, carrier, setter) {
+      const spanContext = trace.getSpanContext(ctx)
+      if (!spanContext) return
+      const { traceId, spanId, traceFlags } = spanContext
+      const flags = (traceFlags ?? 0).toString(16).padStart(2, "0")
+      setter.set(carrier, "traceparent", `00-${traceId}-${spanId}-${flags}`)
+      if (spanContext.traceState) {
+        const serialized = spanContext.traceState.serialize()
+        if (serialized) setter.set(carrier, "tracestate", serialized)
+      }
+    },
+    extract(ctx) { return ctx },
+    fields() { return ["traceparent", "tracestate"] },
+  })
 
   return NodeSdk.layer(() => ({
     resource: resource(),
