@@ -119,6 +119,7 @@ OpenCode can be triggered by the following GitHub events:
 | ----------------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `issue_comment`               | Comment on an issue or PR              | Mention `/opencode` or `/oc` in your comment. OpenCode reads context and can create branches, open PRs, or reply. |
 | `pull_request_review_comment` | Comment on specific code lines in a PR | Mention `/opencode` or `/oc` while reviewing code. OpenCode receives file path, line numbers, and diff context.   |
+| `pull_request_review`         | Review submitted on a PR               | Mention `/opencode` or `/oc` in the review body (Submit review, then Comment or Approve).                         |
 | `issues`                      | Issue opened or edited                 | Automatically trigger OpenCode when issues are created or modified. Requires `prompt` input.                      |
 | `pull_request`                | PR opened or updated                   | Automatically trigger OpenCode when PRs are opened, synchronized, or reopened. Useful for automated reviews.      |
 | `schedule`                    | Cron-based schedule                    | Run OpenCode on a schedule. Requires `prompt` input. Output goes to logs and PRs (no issue to comment on).        |

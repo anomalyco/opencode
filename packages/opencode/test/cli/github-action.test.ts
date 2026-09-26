@@ -1,6 +1,6 @@
 import { test, expect, describe } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { extractResponseText, formatPromptTooLargeError } from "../../src/cli/cmd/github"
+import { extractResponseText, formatPromptTooLargeError, resolveTriggerBody } from "../../src/cli/cmd/github"
 import type { MessageV2 } from "../../src/session/message-v2"
 import { SessionID, MessageID, PartID } from "../../src/session/schema"
 
@@ -195,5 +195,45 @@ describe("formatPromptTooLargeError", () => {
     expect(result).toInclude("img1.png (3 KB)")
     expect(result).toInclude("img2.jpg (6 KB)")
     expect(result).toInclude("img3.gif (9 KB)")
+  })
+})
+
+describe("resolveTriggerBody", () => {
+  test("reads the comment body for comment events", () => {
+    const payload = { comment: { id: 1, body: "  /oc fix this  " } }
+
+    expect(resolveTriggerBody("issue_comment", payload)).toBe("/oc fix this")
+    expect(resolveTriggerBody("pull_request_review_comment", payload)).toBe("/oc fix this")
+  })
+
+  test("reads the review body for a submitted review", () => {
+    // A review payload has no `comment` field at all: the instruction is in `review.body`
+    const payload = { review: { id: 5, body: "  /oc please review this  " }, pull_request: { number: 7 } }
+
+    expect(resolveTriggerBody("pull_request_review", payload)).toBe("/oc please review this")
+  })
+
+  test("a review does not read the comment body", () => {
+    // A workflow condition that matched a review still carries a comment on some events
+    const payload = { review: { body: "/oc from the review" }, comment: { body: "/oc from the comment" } }
+
+    expect(resolveTriggerBody("pull_request_review", payload)).toBe("/oc from the review")
+  })
+
+  test("a comment event does not read the review body", () => {
+    const payload = { comment: { body: "/oc from the comment" }, review: { body: "/oc from the review" } }
+
+    expect(resolveTriggerBody("issue_comment", payload)).toBe("/oc from the comment")
+  })
+
+  test("returns an empty string for a review submitted without a body", () => {
+    expect(resolveTriggerBody("pull_request_review", { review: { body: "" } })).toBe("")
+    expect(resolveTriggerBody("pull_request_review", { review: { body: null } })).toBe("")
+  })
+
+  test("returns undefined when the event carries no body", () => {
+    expect(resolveTriggerBody("pull_request_review", { pull_request: { number: 7 } })).toBeUndefined()
+    expect(resolveTriggerBody("issue_comment", { issue: { number: 4 } })).toBeUndefined()
+    expect(resolveTriggerBody("pull_request", undefined)).toBeUndefined()
   })
 })
