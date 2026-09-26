@@ -28,7 +28,8 @@ export type Info = import("../service.js").Info
 // Never spawns; escalation to ensure() is the caller's policy.
 /** Discover a healthy, compatible local service without starting one. */
 export const discover = Effect.fn("service.discover")(function* (options: DiscoverOptions = {}) {
-  const found = (yield* registered(options.file)).service
+  const file = options.file ?? fallback(options.channel)
+  const found = (yield* registered(file)).service
   if (found?.state !== "ready") return undefined
   if (!found.compatible) return undefined
   if (!matchesVersion(found.version, options)) return undefined
@@ -39,7 +40,8 @@ export const discover = Effect.fn("service.discover")(function* (options: Discov
 export const incumbent = Effect.fn("service.incumbent")(function* (
   options: DiscoverOptions & { readonly url: string },
 ) {
-  const info = yield* read(options.file)
+  const file = options.file ?? fallback(options.channel)
+  const info = yield* read(file)
   const found = info === undefined ? undefined : yield* probe({ ...info, url: options.url })
   if (found === undefined) return undefined
   if (!found.compatible) return undefined
@@ -52,6 +54,7 @@ export const incumbent = Effect.fn("service.incumbent")(function* (
 // becomes discoverable. A contender is never killed merely for slow startup.
 /** Ensure a healthy, compatible local service is running. */
 export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOptions = {}) {
+  const file = options.file ?? fallback(options.channel)
   const timing = ensureTiming(options)
   const contenders = new Set<ServiceContender>()
   let timeouts: { readonly info: Info; readonly count: number } | undefined
@@ -67,7 +70,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
   const spawnContender = Effect.gen(function* () {
     const [command, ...args] = options.command ?? ["opencode", "serve", "--service"]
     if (command === undefined) return yield* Effect.fail(new Error("Missing service command"))
-    const env = yield* Effect.tryPromise(() => PtyHandoff.environment(options.file ?? fallback(), options.env))
+    const env = yield* Effect.tryPromise(() => PtyHandoff.environment(file, options.env))
     return yield* Effect.try({
       try: () => {
         return spawnServiceContender(command, args, env)
@@ -76,7 +79,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     })
   })
   const found = yield* Effect.gen(function* () {
-    const registration = yield* registered(options.file, timing.requestTimeout)
+    const registration = yield* registered(file, timing.requestTimeout)
     const info = registration.info
     const service = registration.service
     if (registration.timedOut && info !== undefined) {
@@ -87,8 +90,8 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
       if (timeouts.count >= 3) {
         yield* announce("missing")
         yield* Effect.logWarning("Background service is unresponsive; recovery cannot preserve persistent terminals")
-        yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback()))
-        yield* terminate(info, options, timing)
+        yield* Effect.tryPromise(() => PtyHandoff.clear(file))
+        yield* terminate(info, { ...options, file }, timing)
         timeouts = undefined
         lastSpawn = Date.now() - spawnDelay
       }
@@ -97,7 +100,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
       spawnDelay = timing.spawnDelay
       const compatible = service.compatible && matchesVersion(service.version, options)
       if (compatible && service.state === "ready") {
-        yield* Effect.tryPromise(() => PtyHandoff.complete(options.file ?? fallback(), service.info))
+        yield* Effect.tryPromise(() => PtyHandoff.complete(file, service.info))
         return Option.some(service)
       }
       if (compatible && service.state === "failed")
@@ -107,7 +110,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
       if (service.state !== "ready")
         yield* Effect.logWarning("Background service is not ready; replacement cannot preserve persistent terminals")
       yield* stop({
-        file: options.file,
+        file,
         pty: service.state === "ready" ? "handoff" : "clear",
       }).pipe(Effect.ignore)
       lastSpawn = 0
@@ -144,18 +147,24 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
 
 /** Stop the registered local service. */
 export const stop = Effect.fn("service.stop")(function* (options: StopOptions = {}) {
-  const info = yield* read(options.file)
+  const file = options.file ?? fallback(options.channel)
+  const info = yield* read(file)
   if (options.pty === "handoff" && info !== undefined)
-    yield* Effect.tryPromise(() =>
-      PtyHandoff.prepare(options.file ?? fallback(), info, defaultEnsureTiming.requestTimeout),
-    )
-  else yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback()))
-  if (info !== undefined) yield* terminate(info, options, defaultEnsureTiming)
+    yield* Effect.tryPromise(() => PtyHandoff.prepare(file, info, defaultEnsureTiming.requestTimeout))
+  else yield* Effect.tryPromise(() => PtyHandoff.clear(file))
+  if (info !== undefined) yield* terminate(info, { ...options, file }, defaultEnsureTiming)
 })
 
-function fallback() {
+// Mirrors the CLI writer's registration filename rule (packages/cli/src/services/service-config.ts:29-32):
+// shared channels use service.json, every other channel uses service-<sanitized-channel>.json. Omitting the
+// channel keeps the historical service.json default.
+function fallback(channel?: string) {
+  const name =
+    channel === undefined || channel === "latest" || channel === "dev" || channel === "beta" || channel === "next"
+      ? "service.json"
+      : `service-${channel.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
   const state = process.env["XDG_STATE_HOME"] ?? join(homedir(), ".local", "state")
-  return join(state, "opencode", "service.json")
+  return join(state, "opencode", name)
 }
 
 /** Create HTTP authentication headers for a service endpoint. */
@@ -183,9 +192,9 @@ const decodeInfo = Schema.decodeUnknownOption(
 
 // A missing or corrupt file means no valid info; callers treat both
 // the same (the registering server self-evicts, clients rediscover).
-const read = Effect.fnUntraced(function* (file?: string) {
+const read = Effect.fnUntraced(function* (file: string) {
   const fs = yield* FileSystem.FileSystem
-  const text = yield* fs.readFileString(file ?? fallback()).pipe(Effect.option)
+  const text = yield* fs.readFileString(file).pipe(Effect.option)
   if (Option.isNone(text)) return undefined
   return yield* decode(text.value).pipe(Effect.option, Effect.map(Option.getOrUndefined))
 })
@@ -260,7 +269,7 @@ const probeResult = Effect.fnUntraced(function* (
   return { service: undefined, timedOut: false }
 })
 
-const registered = Effect.fnUntraced(function* (file?: string, timeout?: number) {
+const registered = Effect.fnUntraced(function* (file: string, timeout?: number) {
   const info = yield* read(file)
   if (info === undefined) return { info: undefined, service: undefined, timedOut: false }
   return { info, ...(yield* probeResult(info, timeout)) }
@@ -286,7 +295,7 @@ function same(left: Info, right: Info) {
   return left.id === right.id && left.version === right.version && left.url === right.url && left.pid === right.pid
 }
 
-const terminate = Effect.fnUntraced(function* (info: Info, options: { readonly file?: string }, timing: EnsureTiming) {
+const terminate = Effect.fnUntraced(function* (info: Info, options: { readonly file: string }, timing: EnsureTiming) {
   const current = yield* read(options.file)
   if (current === undefined || !same(current, info)) return
   yield* signal(info.pid, "SIGTERM")
@@ -300,7 +309,7 @@ const terminate = Effect.fnUntraced(function* (info: Info, options: { readonly f
   const latest = yield* read(options.file)
   if (latest === undefined || !same(latest, info)) return
   const fs = yield* FileSystem.FileSystem
-  yield* fs.remove(options.file ?? fallback()).pipe(Effect.ignore)
+  yield* fs.remove(options.file).pipe(Effect.ignore)
 })
 
 /** Effect-based local service lifecycle operations. */

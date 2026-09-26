@@ -22,7 +22,8 @@ export * from "../service.js"
 
 /** Discover a healthy, compatible local service without starting one. */
 export async function discover(options: DiscoverOptions = {}) {
-  const found = (await registered(options.file)).service
+  const file = options.file ?? fallback(options.channel)
+  const found = (await registered(file)).service
   if (found?.state !== "ready") return undefined
   if (!found.compatible) return undefined
   if (!matchesVersion(found.version, options)) return undefined
@@ -31,6 +32,7 @@ export async function discover(options: DiscoverOptions = {}) {
 
 /** Ensure a healthy, compatible local service is running. */
 export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
+  const file = options.file ?? fallback(options.channel)
   const timing = ensureTiming(options)
   const deadline = Date.now() + timing.promiseTimeout
   const contenders = new Set<ServiceContender>()
@@ -48,7 +50,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
     const [command, ...args] = options.command ?? ["opencode", "serve", "--service"]
     if (command === undefined) throw new Error("Missing service command")
     try {
-      return spawnServiceContender(command, args, await PtyHandoff.environment(options.file ?? fallback(), options.env))
+      return spawnServiceContender(command, args, await PtyHandoff.environment(file, options.env))
     } catch (cause) {
       throw new Error("Failed to start server", { cause })
     }
@@ -57,7 +59,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   try {
     while (true) {
       if (Date.now() >= deadline) throw new Error("Timed out waiting for the background service to start")
-      const registration = await registered(options.file, timing.requestTimeout)
+      const registration = await registered(file, timing.requestTimeout)
       if (registration.timedOut && registration.info !== undefined) {
         timeouts = {
           info: registration.info,
@@ -66,8 +68,8 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
         if (timeouts.count >= 3) {
           announce("missing")
           console.warn("Background service is unresponsive; recovery cannot preserve persistent terminals")
-          await PtyHandoff.clear(options.file ?? fallback())
-          await terminate(registration.info, options, timing)
+          await PtyHandoff.clear(file)
+          await terminate(registration.info, { ...options, file }, timing)
           timeouts = undefined
           lastSpawn = Date.now() - spawnDelay
         }
@@ -78,7 +80,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
         const service = registration.service
         const compatible = service.compatible && matchesVersion(service.version, options)
         if (compatible && service.state === "ready") {
-          await PtyHandoff.complete(options.file ?? fallback(), service.info)
+          await PtyHandoff.complete(file, service.info)
           return service.endpoint
         }
         if (compatible && service.state === "failed") throw new Error("Background service failed to start")
@@ -87,7 +89,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
           if (service.state !== "ready")
             console.warn("Background service is not ready; replacement cannot preserve persistent terminals")
           await stop({
-            file: options.file,
+            file,
             pty: service.state === "ready" ? "handoff" : "clear",
           }).catch(() => undefined)
           lastSpawn = 0
@@ -117,15 +119,23 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
 
 /** Stop the registered local service. */
 export async function stop(options: StopOptions = {}) {
-  const info = await read(options.file)
+  const file = options.file ?? fallback(options.channel)
+  const info = await read(file)
   if (options.pty === "handoff" && info !== undefined)
-    await PtyHandoff.prepare(options.file ?? fallback(), info, defaultEnsureTiming.requestTimeout)
-  else await PtyHandoff.clear(options.file ?? fallback())
-  if (info !== undefined) await terminate(info, options, defaultEnsureTiming)
+    await PtyHandoff.prepare(file, info, defaultEnsureTiming.requestTimeout)
+  else await PtyHandoff.clear(file)
+  if (info !== undefined) await terminate(info, { ...options, file }, defaultEnsureTiming)
 }
 
-function fallback() {
-  return join(process.env["XDG_STATE_HOME"] ?? join(homedir(), ".local", "state"), "opencode", "service.json")
+// Mirrors the CLI writer's registration filename rule (packages/cli/src/services/service-config.ts:29-32):
+// shared channels use service.json, every other channel uses service-<sanitized-channel>.json. Omitting the
+// channel keeps the historical service.json default.
+function fallback(channel?: string) {
+  const name =
+    channel === undefined || channel === "latest" || channel === "dev" || channel === "beta" || channel === "next"
+      ? "service.json"
+      : `service-${channel.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
+  return join(process.env["XDG_STATE_HOME"] ?? join(homedir(), ".local", "state"), "opencode", name)
 }
 
 /** Create HTTP authentication headers for a service endpoint. */
@@ -136,8 +146,8 @@ export function headers(endpoint: Endpoint) {
   }
 }
 
-async function read(file?: string) {
-  const text = await readFile(file ?? fallback(), "utf8").catch(() => undefined)
+async function read(file: string) {
+  const text = await readFile(file, "utf8").catch(() => undefined)
   if (text === undefined) return undefined
   try {
     return JSON.parse(text) as Info
@@ -213,7 +223,7 @@ function decodeInfo(input: unknown) {
   return { version: input.version, pid: input.pid }
 }
 
-async function registered(file?: string, timeout?: number) {
+async function registered(file: string, timeout?: number) {
   const info = await read(file)
   if (info === undefined) return { info: undefined, service: undefined, timedOut: false }
   return { info, ...(await probeResult(info, timeout)) }
@@ -246,7 +256,7 @@ function same(left: Info, right: Info) {
   return left.id === right.id && left.version === right.version && left.url === right.url && left.pid === right.pid
 }
 
-async function terminate(info: Info, options: { readonly file?: string }, timing: EnsureTiming) {
+async function terminate(info: Info, options: { readonly file: string }, timing: EnsureTiming) {
   const current = await read(options.file)
   if (current === undefined || !same(current, info)) return
   signal(info.pid, "SIGTERM")
@@ -258,7 +268,7 @@ async function terminate(info: Info, options: { readonly file?: string }, timing
   }
   const latest = await read(options.file)
   if (latest === undefined || !same(latest, info)) return
-  await rm(options.file ?? fallback(), { force: true })
+  await rm(options.file, { force: true })
 }
 
 function delay(milliseconds: number) {

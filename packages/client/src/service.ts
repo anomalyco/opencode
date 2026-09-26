@@ -17,6 +17,12 @@ export type Endpoint = {
 export type DiscoverOptions = {
   /** Absolute registration file path. Defaults to the XDG state directory. */
   readonly file?: string
+  /**
+   * Release channel used to derive the default registration filename. Channels
+   * `latest`, `dev`, `beta`, and `next` share `service.json`; every other channel
+   * registers as `service-<channel>.json`. Omitting it preserves the `service.json` default.
+   */
+  readonly channel?: string
   /** Required exact service version or compatibility predicate. */
   readonly version?: string | ((version: string) => boolean)
 }
@@ -38,6 +44,12 @@ export type EnsureOptions = DiscoverOptions & {
 export type StopOptions = {
   /** Absolute registration file path. Defaults to the XDG state directory. */
   readonly file?: string
+  /**
+   * Release channel used to derive the default registration filename. Channels
+   * `latest`, `dev`, `beta`, and `next` share `service.json`; every other channel
+   * registers as `service-<channel>.json`. Omitting it preserves the `service.json` default.
+   */
+  readonly channel?: string
   /** How to handle persistent terminals before stopping the service. */
   readonly pty?: "clear" | "handoff"
 }
