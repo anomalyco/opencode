@@ -100,7 +100,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
   const path = () => `${location.pathname}${location.search}${location.hash}`
   const creating = createMemo(() => {
     const route = layout.route()
-    if (route.type === "draft" || route.type === "dir-new-sesssion") return true
+    if (route.type === "draft" || route.type === "dir-new-session") return true
     if (!params.dir) return false
     if (params.id) return false
     const parts = location.pathname.replace(/\/+$/, "").split("/")

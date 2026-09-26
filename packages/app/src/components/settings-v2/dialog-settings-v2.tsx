@@ -28,7 +28,7 @@ export const DialogSettings: Component<{
   const [tab, setTab] = createSignal(props.defaultValue ?? "general")
   const directory = createMemo(() => {
     const route = layout.route()
-    if (route.type === "dir-new-sesssion") return route.dir
+    if (route.type === "dir-new-session") return route.dir
     if (route.type === "draft") {
       const draft = tabs.store.find((item) => item.type === "draft" && item.draftID === route.draftID)
       return draft?.type === "draft" ? draft.directory : undefined
