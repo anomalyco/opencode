@@ -11,12 +11,27 @@ import { UpdatePreflight } from "../../services/update-preflight"
 import { Npm } from "@opencode/util/npm"
 import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_VERSION } from "../../version"
 import { Env } from "../../env"
+import { errorMessage } from "../../util/error"
 
 export default Runtime.handler(Commands, (input) =>
   Effect.gen(function* () {
     const requestedDirectory = Option.getOrUndefined(input.directory)
     const requestedServer = Option.getOrUndefined(input.server)
-    if (requestedDirectory !== undefined) process.chdir(requestedDirectory)
+    if (requestedDirectory !== undefined) {
+      const changed = yield* Effect.try(() => process.chdir(requestedDirectory)).pipe(
+        Effect.match({
+          onSuccess: () => true,
+          onFailure: (error) => {
+            process.stderr.write(
+              `Cannot open directory "${requestedDirectory}": ${errorMessage(error.cause)}\nRun "opencode --help" for usage.\n`,
+            )
+            process.exitCode = 1
+            return false
+          },
+        }),
+      )
+      if (!changed) return
+    }
     const preflight = UpdatePreflight.make()
     yield* Effect.addFinalizer(() => Effect.promise(() => preflight.close()))
     const serviceStarts = yield* Queue.unbounded<{
