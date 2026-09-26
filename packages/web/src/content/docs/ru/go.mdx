@@ -91,6 +91,7 @@ OpenCode Go работает так же, как и любой другой пр
 - **Hy4 preview**
 - **Hy3**
 - **Space Bunny Free** (ограниченное время)
+- **LongCat 2.5 Preview Free** (ограниченное время)
 
 Список моделей может меняться по мере того, как мы тестируем и добавляем новые.
 
@@ -188,6 +189,7 @@ OpenCode Go предназначен для [OpenCode](https://opencode.ai) и �
 | Hy4 preview                             | $0.834 | $2.501 | $0.042      | -            | **$30**                                                    |
 | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | **$60**                                                    |
 | Space Bunny Free                        | Free   | Free   | Free        | -            | **Без ограничений**<br /><small>ограниченное время</small> |
+| LongCat 2.5 Preview Free                | Free   | Free   | Free        | -            | **Без ограничений**<br /><small>ограниченное время</small> |
 | Grok 4.7 (≤ 200K tokens)                | $2.00  | $6.00  | $0.50       | -            | **$15**                                                    |
 | Grok 4.7 (> 200K tokens)                | $4.00  | $12.00 | $1.00       | -            | **$15**                                                    |
 | Grok 4.6 (≤ 200K tokens)                | $2.00  | $6.00  | $0.50       | -            | **$15**                                                    |
@@ -198,6 +200,8 @@ OpenCode Go предназначен для [OpenCode](https://opencode.ai) и �
 | GPT 5.6 Luna (> 272K tokens)            | $0.40  | $1.80  | $0.04       | $0.50        | **$15**                                                    |
 
 **Space Bunny Free:** Бесплатно в течение ограниченного времени.
+
+**LongCat 2.5 Preview Free:** Бесплатно в течение ограниченного времени.
 
 **DeepSeek V4.1 Flash / V4 Pro / V4 Flash / V4 Flash Vision Exp:** Часы Peak с понедельника по пятницу: 01:00-04:00 и 06:00-10:00 UTC; все остальные часы, включая выходные, относятся к Off-Peak. [Подробнее](https://api-docs.deepseek.com/quick_start/pricing/).
 
@@ -237,6 +241,7 @@ OpenCode Go предназначен для [OpenCode](https://opencode.ai) и �
 | Hy4 preview                  | 1,350               | 3,380             | 6,770            |
 | Hy3                          | 4,300               | 10,750            | 21,500           |
 | Space Bunny Free             | Без ограничений     | Без ограничений   | Без ограничений  |
+| LongCat 2.5 Preview Free     | Без ограничений     | Без ограничений   | Без ограничений  |
 | Grok 4.7                     | 169                 | 423               | 845              |
 | Grok 4.6                     | 169                 | 423               | 845              |
 | GPT 6 Luna                   | 4,230               | 10,560            | 21,130           |
@@ -341,6 +346,7 @@ OpenCode Go предназначен для [OpenCode](https://opencode.ai) и �
 | Hy4 preview                  | hy4-preview                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Space Bunny Free             | space-bunny-free             | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| LongCat 2.5 Preview Free     | longcat-2.5-preview-free     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 [ID модели](/docs/config/#models) в вашем конфиге OpenCode
 использует формат `opencode-go/<model-id>`. Например, для Kimi K3 вам нужно
@@ -394,6 +400,7 @@ https://opencode.ai/zen/go/v1/models
 | Hy4 preview                  | Не используется  | 0 дней          |
 | Hy3                          | Не используется  | 0 дней          |
 | Space Bunny Free             | Не используется  | 0 дней          |
+| LongCat 2.5 Preview Free     | Не используется  | 0 дней          |
 
 - **Grok 4.7/4.6:** ZDR отключает важные функции API, зависящие от сохраненных данных, включая Responses API с сохранением состояния, Files and Collections и Batch API. [Подробнее](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 6 Luna / GPT 5.6 Luna:** Журналы мониторинга злоупотреблений создаются при любом использовании функций API и хранятся до 30 дней. [Подробнее](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).
