@@ -42,6 +42,10 @@ export function loadDialogSessionList<T>(input: {
   )
 }
 
+export function sessionScopeLabel(filter: SessionListFilter) {
+  return filter.path || "project"
+}
+
 export function DialogSessionList() {
   const dialog = useDialog()
   const route = useRoute()
@@ -58,6 +62,7 @@ export function DialogSessionList() {
   const deleteHint = useCommandShortcut("session.delete")
   const quickSwitch1 = useCommandShortcut("session.quick_switch.1")
   const quickSwitch9 = useCommandShortcut("session.quick_switch.9")
+  const directoryFilterHint = useCommandShortcut("app.toggle.session_directory_filter")
 
   const [browseResults, { refetch: refetchBrowse }] = createResource(
     () => sync.session.query(),
@@ -203,6 +208,11 @@ export function DialogSessionList() {
   const quickSwitchFooterHints = createMemo(() => {
     const hint = quickSwitchHint()
     return hint && local.session.slots().length > 0 ? [{ title: "switch", label: hint }] : []
+  })
+  const scopeFooterHints = createMemo(() => {
+    const shortcut = directoryFilterHint()
+    const scope = sessionScopeLabel(sync.session.query())
+    return [{ title: "scope", label: shortcut ? `${scope} · ${shortcut}` : scope }]
   })
 
   const options = createMemo(() => {
@@ -352,7 +362,7 @@ export function DialogSessionList() {
           },
         },
       ]}
-      footerHints={quickSwitchFooterHints()}
+      footerHints={[...scopeFooterHints(), ...quickSwitchFooterHints()]}
     />
   )
 }
