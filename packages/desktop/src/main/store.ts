@@ -5,6 +5,7 @@ import { join } from "node:path"
 
 import { SETTINGS_STORE } from "./store-keys"
 import { deleteStoreFileIfEmpty } from "./store-cleanup"
+import { enqueueStore } from "./store-write"
 
 const cache = new Map<string, Store>()
 
@@ -25,11 +26,17 @@ export function getStore(name = SETTINGS_STORE) {
   return next
 }
 
+export function storeFile(name: string) {
+  return join(electron.app.getPath("userData"), name)
+}
+
 export async function removeStoreFileIfEmpty(name: string) {
-  if (await deleteStoreFileIfEmpty(electron.app.getPath("userData"), name)) cache.delete(name)
+  return enqueueStore(name, async () => {
+    if (await deleteStoreFileIfEmpty(electron.app.getPath("userData"), name)) cache.delete(name)
+  })
 }
 
 export function removeStoreFile(name: string) {
-  rmSync(join(electron.app.getPath("userData"), name), { force: true })
+  rmSync(storeFile(name), { force: true })
   cache.delete(name)
 }
