@@ -2,6 +2,8 @@ import { expect, test } from "@playwright/test"
 import { fixture, pageMessages } from "../smoke/session-timeline.fixture"
 import { mockOpenCodeServer } from "../utils/mock-server"
 
+test.use({ permissions: ["clipboard-read", "clipboard-write"] })
+
 test.beforeEach(async ({ page }) => {
   const sessions = fixture.sessions.map((session) => ({ ...session }))
   await mockOpenCodeServer(page, {
@@ -95,7 +97,7 @@ test("renames and closes the session tab from its context menu", async ({ page }
   await expect(tab).toBeFocused()
   await tab.press("Shift+F10")
   await page.getByRole("menuitem", { name: "Rename", exact: true }).click()
-  const input = page.locator('[data-slot="tab-title"][contenteditable="true"]')
+  const input = page.locator('[data-slot="tab-title"][contenteditable="plaintext-only"]')
   await expect(input).toBeFocused()
   await input.fill("Renamed from tab")
   await input.press("Enter")
@@ -112,6 +114,28 @@ test("renames and closes the session tab from its context menu", async ({ page }
   ).toBeVisible()
 })
 
+test("pastes rich text into the session tab title as plain text", async ({ page }) => {
+  const tab = page.locator('[data-slot="titlebar-tabs"] a').filter({ hasText: fixture.expected.targetTitle })
+  await tab.click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Rename", exact: true }).click()
+  const input = page.locator('[data-slot="tab-title"][contenteditable="plaintext-only"]')
+  await expect(input).toBeFocused()
+  await page.evaluate(async () => {
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        "text/html": new Blob(['<span style="font-size: 48px">Rich title</span>'], { type: "text/html" }),
+        "text/plain": new Blob(["Rich title"], { type: "text/plain" }),
+      }),
+    ])
+  })
+  await input.press("ControlOrMeta+A")
+  await input.press("ControlOrMeta+V")
+  await expect(input).toHaveText("Rich title")
+  await expect(input.locator("*")).toHaveCount(0)
+  await input.press("Enter")
+  await expect(page.getByRole("heading", { name: "Rich title", exact: true })).toBeVisible()
+})
+
 test("renames an inactive tab without switching sessions", async ({ page }) => {
   await page.getByRole("button", { name: "Home", exact: true }).click()
   await page.locator('[data-component="home-session-row"]').filter({ hasText: fixture.expected.sourceTitle }).click()
@@ -119,7 +143,7 @@ test("renames an inactive tab without switching sessions", async ({ page }) => {
   const tab = page.locator('[data-slot="titlebar-tabs"] a').filter({ hasText: fixture.expected.targetTitle })
   await tab.click({ button: "right" })
   await page.getByRole("menuitem", { name: "Rename", exact: true }).click()
-  const input = page.locator('[data-slot="tab-title"][contenteditable="true"]')
+  const input = page.locator('[data-slot="tab-title"][contenteditable="plaintext-only"]')
   await expect(input).toBeFocused()
   await input.fill("Inactive tab renamed")
   await input.press("Tab")
