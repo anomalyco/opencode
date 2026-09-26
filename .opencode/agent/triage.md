@@ -1,7 +1,7 @@
 ---
 mode: primary
 hidden: true
-model: opencode/gpt-5.4-mini
+model: opencode/gpt-6-luna
 color: "#44BA81"
 tools:
   "*": false
