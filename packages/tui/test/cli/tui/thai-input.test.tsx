@@ -420,6 +420,95 @@ describe("thai typing", () => {
     }
   })
 
+  test("english selection collapse does not take an extra step", async () => {
+    const editor = await mountTextarea()
+    try {
+      await editor.app.mockInput.typeText("abc")
+      await editor.app.renderOnce()
+      while (editor.textarea.cursorOffset > 0) editor.app.mockInput.pressArrow("left")
+      editor.app.mockInput.pressArrow("right", { shift: true })
+      await editor.app.renderOnce()
+      editor.app.mockInput.pressArrow("right")
+      await editor.app.renderOnce()
+      console.log(`thai-english-collapse caret ${editor.textarea.cursorOffset}`)
+      expect(editor.textarea.cursorOffset).toBe(1)
+      expect(editor.textarea.plainText).toBe("abc")
+    } finally {
+      await editor.cleanup()
+    }
+  })
+
+  test("cjk and emoji right arrow stay on the native stops", async () => {
+    const editor = await mountTextarea()
+    try {
+      await editor.app.mockInput.typeText("中文")
+      await editor.app.renderOnce()
+      const cjkEnd = editor.textarea.cursorOffset
+      while (editor.textarea.cursorOffset > 0) editor.app.mockInput.pressArrow("left")
+      editor.app.mockInput.pressArrow("right")
+      await editor.app.renderOnce()
+      const cjkStep = editor.textarea.cursorOffset
+      editor.app.mockInput.pressArrow("right")
+      await editor.app.renderOnce()
+      console.log(`thai-cjk-right ${cjkStep} end ${editor.textarea.cursorOffset}`)
+      expect(cjkStep).toBe(Bun.stringWidth("中"))
+      expect(editor.textarea.cursorOffset).toBe(cjkEnd)
+      expect(editor.textarea.plainText).toBe("中文")
+    } finally {
+      await editor.cleanup()
+    }
+
+    const emoji = await mountTextarea()
+    try {
+      await emoji.app.mockInput.pasteBracketedText("👍ab")
+      await emoji.app.renderOnce()
+      while (emoji.textarea.cursorOffset > 0) emoji.app.mockInput.pressArrow("left")
+      emoji.app.mockInput.pressArrow("right")
+      await emoji.app.renderOnce()
+      const first = emoji.textarea.cursorOffset
+      emoji.app.mockInput.pressArrow("right")
+      await emoji.app.renderOnce()
+      console.log(`thai-emoji-right ${first} then ${emoji.textarea.cursorOffset}`)
+      expect(first).toBe(Bun.stringWidth("👍"))
+      expect(emoji.textarea.cursorOffset).toBe(first + 1)
+      expect(emoji.textarea.plainText).toBe("👍ab")
+    } finally {
+      await emoji.cleanup()
+    }
+  })
+
+  test("mixed thai does not change english word motion", async () => {
+    const editor = await mountTextarea()
+    try {
+      await editor.app.mockInput.typeText("hello world ไทย")
+      await editor.app.renderOnce()
+      editor.textarea.cursorOffset = "hello ".length
+      editor.app.mockInput.pressArrow("left", { ctrl: true })
+      await editor.app.renderOnce()
+      console.log(`thai-mixed-word-left caret ${editor.textarea.cursorOffset}`)
+      expect(editor.textarea.cursorOffset).toBe(0)
+      expect(editor.textarea.plainText).toBe("hello world ไทย")
+    } finally {
+      await editor.cleanup()
+    }
+  })
+
+  test("thai word right crosses a newline", async () => {
+    const editor = await mountTextarea()
+    try {
+      await editor.app.mockInput.typeText(`${thai.saraAmTone}\n${thai.leadingVowel}`)
+      await editor.app.renderOnce()
+      const firstLine = promptOffsetWidth(thai.saraAmTone)
+      editor.textarea.cursorOffset = firstLine
+      editor.app.mockInput.pressArrow("right", { ctrl: true })
+      await editor.app.renderOnce()
+      console.log(`thai-word-right-line caret ${editor.textarea.cursorOffset}`)
+      expect(editor.textarea.cursorOffset).toBeGreaterThan(firstLine)
+    } finally {
+      await editor.cleanup()
+    }
+  })
+
   test("english word motion stays on whitespace", async () => {
     const editor = await mountTextarea()
     try {

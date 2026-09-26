@@ -40,29 +40,26 @@ index 0ddf03bf666a05f50c66bef32af65b1403ed0192..1cd52ecee9c28ccd812813cef29e9207
  //# sourceMappingURL=index.node.js.map
 diff --git a/node_modules/@opentui/core/thai-caret.js b/thai-caret.js
 new file mode 100644
-index 0000000000000000000000000000000000000000..62153df00981090a8405630e6ffd98415a66c0bc
+index 0000000000000000000000000000000000000000..01ad206104f0df3479a520e23f26b2863e351e61
 --- /dev/null
 +++ b/thai-caret.js
-@@ -0,0 +1,168 @@
+@@ -0,0 +1,176 @@
 +const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" })
 +const thaiWords = new Intl.Segmenter("th", { granularity: "word" })
 +const THAI = /[\u0E00-\u0E7F]/
 +const SARA_AM = "\u0E33"
 +const installed = Symbol.for("opentui.thai-caret")
 +
-+function columnWidth(text) {
-+  let width = 0
-+  for (const part of graphemes.segment(text)) {
-+    width += part.segment === "\n" ? 1 : Bun.stringWidth(part.segment)
-+  }
-+  return width
++function columnWidth(segment) {
++  return segment === "\n" ? 1 : Bun.stringWidth(segment)
 +}
 +
 +function clusterEnd(text, offset, onlyInside) {
 +  let col = 0
 +  for (const part of graphemes.segment(text)) {
-+    const next = col + (part.segment === "\n" ? 1 : Bun.stringWidth(part.segment))
-+    if (onlyInside ? offset > col && offset < next : next > offset) return next
++    const next = col + columnWidth(part.segment)
++    const hit = onlyInside ? offset > col && offset < next : next > offset
++    if (hit && THAI.test(part.segment)) return next
 +    col = next
 +  }
 +  return offset
@@ -78,28 +75,39 @@ index 0000000000000000000000000000000000000000..62153df00981090a8405630e6ffd9841
 +  return bounds
 +}
 +
-+function lineEnd(editor) {
-+  return editor.editorView.getEOL().offset
++function sliceColumns(text, start, end) {
++  const low = Math.min(start, end)
++  const high = Math.max(start, end)
++  let col = 0
++  let out = ""
++  for (const part of graphemes.segment(text)) {
++    const next = col + columnWidth(part.segment)
++    if (next > low && col < high) out += part.segment
++    col = next
++    if (col >= high) break
++  }
++  return out
 +}
 +
-+// The native buffer can leave the caret one cell inside a wide grapheme.
-+// Snap forward to that grapheme's end when the column exists. A boundary is left alone.
++function spanHasThai(text, from, to) {
++  if (from === to) return false
++  return THAI.test(sliceColumns(text, from, to))
++}
++
 +function placeCaret(editor, next) {
-+  const limit = lineEnd(editor)
-+  if (next > editor.cursorOffset && next <= limit) editor.cursorOffset = next
++  if (next > editor.cursorOffset) editor.cursorOffset = next
 +}
 +
 +function snapCaret(editor) {
 +  placeCaret(editor, clusterEnd(editor.plainText, editor.cursorOffset, true))
 +}
 +
-+// Native right-arrow can refuse the last column of a leading vowel plus consonant (`เก`).
-+// Step to the next grapheme edge when the column exists.
 +function stepCaret(editor) {
 +  placeCaret(editor, clusterEnd(editor.plainText, editor.cursorOffset, false))
 +}
 +
 +export function installThaiCaretFixes(Renderable) {
++  if (typeof Bun === "undefined" || typeof Bun.stringWidth !== "function") return
 +  const proto = Renderable.prototype
 +  if (proto[installed]) return
 +  proto[installed] = true
@@ -112,11 +120,14 @@ index 0000000000000000000000000000000000000000..62153df00981090a8405630e6ffd9841
 +  const deleteWordForward = proto.deleteWordForward
 +
 +  proto.moveCursorRight = function (options) {
++    const selecting = options?.select ?? false
++    const collapsing = !selecting && this.hasSelection()
 +    const before = this.cursorOffset
 +    const result = moveCursorRight.call(this, options)
++    if (collapsing) return result
 +    snapCaret(this)
 +    if (this.cursorOffset === before) stepCaret(this)
-+    if (options?.select && this.cursorOffset !== before) this.updateSelectionForMovement(true, false)
++    if (selecting && this.cursorOffset !== before) this.updateSelectionForMovement(true, false)
 +    return result
 +  }
 +
@@ -127,8 +138,8 @@ index 0000000000000000000000000000000000000000..62153df00981090a8405630e6ffd9841
 +      return result
 +    }
 +    if (this.hasSelection()) this.deleteSelectedText()
-+    // Bulk insert measures สระอำ as zero width. Keep it in its own insertChar so the
-+    // column table matches text typed one code point at a time, then snap to the cluster edge.
++    // Bulk insert measures สระอำ as zero width. Insert that grapheme code point
++    // by code point so the column exists, then snap only if the caret is inside it.
 +    let chunk = ""
 +    const flush = () => {
 +      if (!chunk) return
@@ -149,27 +160,23 @@ index 0000000000000000000000000000000000000000..62153df00981090a8405630e6ffd9841
 +  }
 +
 +  proto.moveWordForward = function (options) {
-+    if (!THAI.test(this.plainText)) return moveWordForward.call(this, options)
-+    const select = options?.select ?? false
-+    this.updateSelectionForMovement(select, true)
-+    const bounds = wordBounds(this.plainText)
-+    const next = bounds.find((bound) => bound > this.cursorOffset) ?? this.cursorOffset
-+    this.cursorOffset = Math.min(next, lineEnd(this))
-+    snapCaret(this)
-+    this.updateSelectionForMovement(select, false)
++    const before = this.cursorOffset
++    const result = moveWordForward.call(this, options)
++    if (!spanHasThai(this.plainText, before, this.cursorOffset)) return result
++    const next = wordBounds(this.plainText).find((bound) => bound > before) ?? before
++    this.cursorOffset = next
++    if (options?.select) this.updateSelectionForMovement(true, false)
 +    this.requestRender()
 +    return true
 +  }
 +
 +  proto.moveWordBackward = function (options) {
-+    if (!THAI.test(this.plainText)) return moveWordBackward.call(this, options)
-+    const select = options?.select ?? false
-+    this.updateSelectionForMovement(select, true)
-+    const bounds = wordBounds(this.plainText)
-+    const prev = bounds.findLast((bound) => bound < this.cursorOffset) ?? 0
++    const before = this.cursorOffset
++    const result = moveWordBackward.call(this, options)
++    if (!spanHasThai(this.plainText, before, this.cursorOffset)) return result
++    const prev = wordBounds(this.plainText).findLast((bound) => bound < before) ?? 0
 +    this.cursorOffset = prev
-+    snapCaret(this)
-+    this.updateSelectionForMovement(select, false)
++    if (options?.select) this.updateSelectionForMovement(true, false)
 +    this.requestRender()
 +    return true
 +  }
@@ -179,11 +186,12 @@ index 0000000000000000000000000000000000000000..62153df00981090a8405630e6ffd9841
 +      this.deleteSelectedText()
 +      return true
 +    }
-+    if (!THAI.test(this.plainText)) return deleteWordBackward.call(this)
++    const before = this.cursorOffset
++    const nativeTarget = this.editBuffer.getPrevWordBoundary().offset
++    if (!spanHasThai(this.plainText, before, nativeTarget)) return deleteWordBackward.call(this)
 +    const current = this.editBuffer.getCursorPosition()
-+    const bounds = wordBounds(this.plainText)
-+    const target = bounds.findLast((bound) => bound < this.cursorOffset) ?? 0
-+    if (target >= this.cursorOffset) return true
++    const target = wordBounds(this.plainText).findLast((bound) => bound < before) ?? 0
++    if (target >= before) return true
 +    this.cursorOffset = target
 +    const prev = this.editBuffer.getCursorPosition()
 +    this.editBuffer.deleteRange(prev.row, prev.col, current.row, current.col)
@@ -197,15 +205,15 @@ index 0000000000000000000000000000000000000000..62153df00981090a8405630e6ffd9841
 +      this.deleteSelectedText()
 +      return true
 +    }
-+    if (!THAI.test(this.plainText)) return deleteWordForward.call(this)
++    const before = this.cursorOffset
++    const nativeTarget = this.editBuffer.getNextWordBoundary().offset
++    if (!spanHasThai(this.plainText, before, nativeTarget)) return deleteWordForward.call(this)
 +    const current = this.editBuffer.getCursorPosition()
-+    const bounds = wordBounds(this.plainText)
-+    const target = bounds.find((bound) => bound > this.cursorOffset)
-+    if (target === undefined || target <= this.cursorOffset) return true
-+    const saved = this.cursorOffset
-+    this.cursorOffset = Math.min(target, lineEnd(this))
++    const target = wordBounds(this.plainText).find((bound) => bound > before)
++    if (target === undefined || target <= before) return true
++    this.cursorOffset = target
 +    const next = this.editBuffer.getCursorPosition()
-+    this.cursorOffset = saved
++    this.cursorOffset = before
 +    this.editBuffer.deleteRange(current.row, current.col, next.row, next.col)
 +    this._ctx.clearSelection()
 +    this.requestRender()
