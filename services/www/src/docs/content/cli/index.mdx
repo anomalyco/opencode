@@ -33,6 +33,16 @@ other workflows that need model output directly in the terminal.
 opencode run "Explain this repository"
 ```
 
+Use `--command` to invoke a registered command. The message and any piped input become its arguments:
+
+```bash
+opencode run --command review "check the latest changes"
+opencode run --command review
+```
+
+Unknown commands fail with an error. Without `--command`, the message is sent as ordinary prompt text, including any
+leading `/name`.
+
 ## Mini
 
 Use `opencode mini` to start OpenCode's minimal interactive interface instead of the full-screen TUI.

@@ -359,6 +359,10 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           Argument.withDescription("Message to send"),
           Argument.variadic({ min: 0 }),
         ),
+        command: Flag.string("command").pipe(
+          Flag.withDescription("Command to run; use the message for arguments"),
+          Flag.optional,
+        ),
         continue: Flag.boolean("continue").pipe(
           Flag.withAlias("c"),
           Flag.withDescription("Continue the last session"),

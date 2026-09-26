@@ -218,6 +218,8 @@ async function run(input: {
   messages?: (inboxID: string) => SessionMessageInfo[]
   wait?: () => Promise<void>
   terminalDelay?: number
+  message?: string
+  command?: string
 }) {
   const sdk = OpenCode.make({ baseUrl: "https://opencode.test" })
   const values: V2Event[] = [{ id: "evt_connected", type: "server.connected", data: {} }]
@@ -268,11 +270,19 @@ async function run(input: {
     wake = undefined
     return ok({ id: messageID, sessionID: "ses_1", time: { created: 1 } }) as never
   })
+  spyOn(sdk.session, "command").mockImplementation(() => {
+    promptID = "msg_command"
+    values.push(...input.turn(promptID))
+    wake?.()
+    wake = undefined
+    return ok(undefined)
+  })
   await runNonInteractivePrompt({
     client: sdk,
     sessionID: "ses_1",
     location,
-    message: "hello",
+    message: input.message ?? "hello",
+    command: input.command,
     files: [],
     thinking: false,
     format: input.format ?? "default",
@@ -312,6 +322,43 @@ afterEach(() => {
 })
 
 describe("runNonInteractivePrompt", () => {
+  test("runs explicit commands using server-owned prompt IDs", async () => {
+    const sdk = await run({
+      message: "some arguments",
+      command: "review",
+      turn: (id) => [prompted(id), settled()],
+    })
+    expect(sdk.session.command).toHaveBeenCalledWith(
+      { sessionID: "ses_1", name: "review", text: "some arguments", files: [], delivery: "steer" },
+      { signal: expect.any(AbortSignal) },
+    )
+    expect(sdk.session.prompt).not.toHaveBeenCalled()
+  })
+
+  test("streams command output even though the server assigns the prompt ID", async () => {
+    const output = await capture({
+      message: "",
+      command: "review",
+      format: "json",
+      turn: successfulGrep,
+    })
+    expect(JSON.parse(output.stdout)).toMatchObject({ type: "tool_use", part: { tool: "grep" } })
+    expect(output.exitCode ?? 0).toBe(0)
+  })
+
+  test("preserves slash names as prompt text without a command flag", async () => {
+    const sdk = await run({ message: "/unknown text", turn: (id) => [prompted(id), settled()] })
+    expect(sdk.session.prompt).toHaveBeenCalledWith(
+      expect.objectContaining({ text: "/unknown text" }),
+      { signal: expect.any(AbortSignal) },
+    )
+  })
+
+  test("finishes commands that do not submit a prompt", async () => {
+    const sdk = await run({ message: "", command: "noop", turn: () => [], wait: async () => {} })
+    expect(sdk.session.command).toHaveBeenCalled()
+  })
+
   test("keeps formatted tool output and compact tool metadata in JSON", async () => {
     const output = await capture({ format: "json", turn: successfulGrep })
     const events = output.stdout

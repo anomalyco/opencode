@@ -15,6 +15,7 @@ export default Runtime.handler(Commands.commands.run, (input) =>
       runNonInteractive({
         server,
         message: [...input.message, ...(separator === -1 ? [] : process.argv.slice(separator + 1))],
+        command: Option.getOrUndefined(input.command),
         continue: input.continue,
         session: Option.getOrUndefined(input.session),
         fork: input.fork,
