@@ -43,6 +43,15 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2Bridge.Service
+    const cleanup = Effect.fn("Permission.cleanup")(function* (pending: State["pending"], item: PendingEntry) {
+      if (!pending.delete(item.info.id)) return
+      yield* events.publish(Event.Replied, {
+        sessionID: item.info.sessionID,
+        requestID: item.info.id,
+        reply: "reject",
+      })
+      yield* Deferred.fail(item.deferred, new PermissionV1.RejectedError())
+    })
     const state = yield* InstanceState.make<State>(
       Effect.fn("Permission.state")(function* (ctx) {
         void ctx
@@ -54,9 +63,8 @@ const layer = Layer.effect(
         yield* Effect.addFinalizer(() =>
           Effect.gen(function* () {
             for (const item of state.pending.values()) {
-              yield* Deferred.fail(item.deferred, new PermissionV1.RejectedError())
+              yield* cleanup(state.pending, item)
             }
-            state.pending.clear()
           }),
         )
 
@@ -96,14 +104,10 @@ const layer = Layer.effect(
       yield* Effect.logInfo("asking", { id, permission: info.permission, patterns: info.patterns })
 
       const deferred = yield* Deferred.make<void, PermissionV1.RejectedError | PermissionV1.CorrectedError>()
-      pending.set(id, { info, deferred })
+      const item = { info, deferred }
+      pending.set(id, item)
       yield* events.publish(Event.Asked, info)
-      return yield* Effect.ensuring(
-        Deferred.await(deferred),
-        Effect.sync(() => {
-          pending.delete(id)
-        }),
-      )
+      return yield* Effect.ensuring(Deferred.await(deferred), cleanup(pending, item))
     })
 
     const reply = Effect.fn("Permission.reply")(function* (input: PermissionV1.ReplyInput) {

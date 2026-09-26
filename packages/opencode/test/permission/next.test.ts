@@ -49,6 +49,34 @@ const waitForPending = (count: number) =>
     )
   })
 
+type ReplyEvent = {
+  sessionID: SessionID
+  requestID: PermissionV1.ID
+  reply: PermissionV1.Reply
+}
+
+const captureReplyEvent = (requestID: PermissionV1.ID) =>
+  Effect.gen(function* () {
+    const events = yield* EventV2Bridge.Service
+    const seen = yield* Deferred.make<ReplyEvent>()
+    const unsub = yield* events.listen((event) => {
+      if (event.type !== Permission.Event.Replied.type) return Effect.void
+      const data = event.data as ReplyEvent
+      if (data.requestID === requestID) Deferred.doneUnsafe(seen, Effect.succeed(data))
+      return Effect.void
+    })
+    yield* Effect.addFinalizer(() => unsub)
+    return seen
+  })
+
+const waitForReplyEvent = (seen: Deferred.Deferred<ReplyEvent>) =>
+  Deferred.await(seen).pipe(
+    Effect.timeoutOrElse({
+      duration: "1 second",
+      orElse: () => Effect.fail(new Error("timed out waiting for permission reply event")),
+    }),
+  )
+
 const fail = <A, E, R>(self: Effect.Effect<A, E, R>) =>
   Effect.gen(function* () {
     const exit = yield* self.pipe(Effect.exit)
@@ -694,6 +722,35 @@ it.instance(
   { git: true },
 )
 
+it.instance(
+  "ask - publishes rejected reply event when interrupted",
+  () =>
+    Effect.gen(function* () {
+      const seen = yield* captureReplyEvent(PermissionV1.ID.make("per_interrupt"))
+
+      const fiber = yield* ask({
+        id: PermissionV1.ID.make("per_interrupt"),
+        sessionID: SessionID.make("session_interrupt"),
+        permission: "bash",
+        patterns: ["ls"],
+        metadata: {},
+        always: [],
+        ruleset: [],
+      }).pipe(Effect.forkScoped)
+
+      yield* waitForPending(1)
+      yield* Fiber.interrupt(fiber)
+
+      expect(yield* waitForReplyEvent(seen)).toEqual({
+        sessionID: SessionID.make("session_interrupt"),
+        requestID: PermissionV1.ID.make("per_interrupt"),
+        reply: "reject",
+      })
+      expect(yield* list()).toHaveLength(0)
+    }),
+  { git: true },
+)
+
 // reply tests
 
 it.instance(
@@ -1016,11 +1073,12 @@ it.live("permission requests stay isolated by directory", () =>
 )
 
 it.instance(
-  "pending permission rejects on instance dispose",
+  "pending permission rejects and publishes reply event on instance dispose",
   () =>
     Effect.gen(function* () {
       const test = yield* TestInstance
       const store = yield* InstanceStore.Service
+      const seen = yield* captureReplyEvent(PermissionV1.ID.make("per_dispose"))
       const fiber = yield* ask({
         id: PermissionV1.ID.make("per_dispose"),
         sessionID: SessionID.make("session_dispose"),
@@ -1038,6 +1096,11 @@ it.instance(
       const exit = yield* Fiber.await(fiber)
       expect(Exit.isFailure(exit)).toBe(true)
       if (Exit.isFailure(exit)) expect(Cause.squash(exit.cause)).toBeInstanceOf(PermissionV1.RejectedError)
+      expect(yield* waitForReplyEvent(seen)).toEqual({
+        sessionID: SessionID.make("session_dispose"),
+        requestID: PermissionV1.ID.make("per_dispose"),
+        reply: "reject",
+      })
     }),
   { git: true },
 )
