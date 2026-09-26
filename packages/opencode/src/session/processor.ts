@@ -24,7 +24,8 @@ import { errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Database } from "@opencode-ai/core/database/database"
-import { Usage, type LLMEvent } from "@opencode-ai/llm"
+import { Usage, isStaleReasoningFailure, type LLMEvent } from "@opencode-ai/llm"
+import { SessionStaleReasoning } from "./stale-reasoning"
 
 const DOOM_LOOP_THRESHOLD = 3
 export type Result = "compact" | "stop" | "continue"
@@ -72,6 +73,7 @@ interface ProcessorContext extends Input {
   needsCompaction: boolean
   currentText: SessionV1.TextPart | undefined
   reasoningMap: Record<string, SessionV1.ReasoningPart>
+  recoveredStaleReasoning: boolean
 }
 
 type StreamEvent = LLMEvent
@@ -111,6 +113,7 @@ const layer = Layer.effect(
         needsCompaction: false,
         currentText: undefined,
         reasoningMap: {},
+        recoveredStaleReasoning: false,
       }
       let aborted = false
 
@@ -638,6 +641,28 @@ const layer = Layer.effect(
         yield* status.set(ctx.sessionID, { type: "idle" })
       })
 
+      const outputStarted = () =>
+        ctx.currentText !== undefined || Object.keys(ctx.reasoningMap).length > 0 || Object.keys(ctx.toolcalls).length > 0
+
+      const recoverStaleReasoning = Effect.fn("SessionProcessor.recoverStaleReasoning")(function* (
+        streamInput: LLM.StreamInput,
+      ) {
+        SessionStaleReasoning.stripRequest(streamInput.messages)
+        yield* SessionStaleReasoning.persist(session, ctx.sessionID)
+        yield* Effect.logInfo("recovered stale encrypted reasoning", {
+          "session.id": ctx.sessionID,
+          messageID: ctx.assistantMessage.id,
+        })
+        ctx.currentText = undefined
+        ctx.reasoningMap = {}
+        yield* status.set(ctx.sessionID, { type: "busy" })
+        yield* llm.stream(streamInput).pipe(
+          Stream.tap((event) => handleEvent(event)),
+          Stream.takeUntil(() => ctx.needsCompaction),
+          Stream.runDrain,
+        )
+      })
+
       const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.StreamInput) {
         yield* Effect.logInfo("process", {
           "session.id": input.sessionID,
@@ -685,6 +710,14 @@ const layer = Layer.effect(
                   })
                 },
               }),
+            ),
+            Effect.catchIf(
+              (error) => !ctx.recoveredStaleReasoning && !outputStarted() && isStaleReasoningFailure(error),
+              () =>
+                Effect.gen(function* () {
+                  ctx.recoveredStaleReasoning = true
+                  yield* recoverStaleReasoning(streamInput)
+                }).pipe(Effect.catch(halt)),
             ),
             Effect.catch(halt),
             Effect.ensuring(cleanup()),
