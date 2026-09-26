@@ -64,6 +64,7 @@ type Active = {
 
 type State = {
   jobs: SynchronizedRef.SynchronizedRef<Map<string, Active>>
+  deliveries: SynchronizedRef.SynchronizedRef<Map<SessionMessage.ID, Deferred.Deferred<void>>>
   scope: Scope.Scope
 }
 
@@ -135,6 +136,7 @@ export interface Interface {
   readonly cancel: (id: string) => Effect.Effect<Info | undefined>
   readonly pendingBackground: Effect.Effect<readonly Background[]>
   readonly completeBackground: (notificationID: SessionMessage.ID) => Effect.Effect<void>
+  readonly awaitBackground: (notificationID: SessionMessage.ID) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Job") {}
@@ -180,6 +182,7 @@ export const make = Effect.gen(function* () {
   const kv = yield* KV.Service
   const state: State = {
     jobs: yield* SynchronizedRef.make(new Map()),
+    deliveries: yield* SynchronizedRef.make(new Map()),
     scope: yield* Scope.Scope,
   }
 
@@ -455,6 +458,14 @@ export const make = Effect.gen(function* () {
     SynchronizedRef.updateEffect(state.jobs, (jobs) =>
       Effect.gen(function* () {
         yield* kv.remove(`${backgroundPrefix}${notificationID}`)
+        const waiter = yield* SynchronizedRef.modify(state.deliveries, (waiters) => {
+          const deferred = waiters.get(notificationID)
+          if (!deferred) return [undefined, waiters] as const
+          const next = new Map(waiters)
+          next.delete(notificationID)
+          return [deferred, next] as const
+        })
+        if (waiter) yield* Deferred.succeed(waiter, undefined)
         const entry = [...jobs].find(([, job]) => job.info.notificationID === notificationID)
         if (!entry || entry[1].info.status === "running") return jobs
         const next = new Map(jobs)
@@ -463,6 +474,27 @@ export const make = Effect.gen(function* () {
       }),
     ),
   )
+
+  /**
+   * Resolves once a durable background notification has been admitted, which is
+   * when its marker clears. Waiting on the job itself only observes settlement;
+   * the wake-up notification is admitted asynchronously after that.
+   */
+  const awaitBackground: Interface["awaitBackground"] = Effect.fn("Job.awaitBackground")(function* (notificationID) {
+    const waiter = yield* SynchronizedRef.modifyEffect(
+      state.deliveries,
+      Effect.fnUntraced(function* (waiters) {
+        // Marker read and waiter registration are atomic here; completeBackground
+        // clears the marker before resolving, so no separate recheck is needed.
+        if (!(yield* kv.get(`${backgroundPrefix}${notificationID}`))) return [undefined, waiters] as const
+        const existing = waiters.get(notificationID)
+        if (existing) return [existing, waiters] as const
+        const deferred = Deferred.makeUnsafe<void>()
+        return [deferred, new Map(waiters).set(notificationID, deferred)] as const
+      }),
+    )
+    if (waiter) yield* Deferred.await(waiter)
+  })
 
   return Service.of({
     get,
@@ -474,6 +506,7 @@ export const make = Effect.gen(function* () {
     cancel,
     pendingBackground,
     completeBackground,
+    awaitBackground,
   })
 })
 
