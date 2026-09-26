@@ -151,7 +151,12 @@ export function partToContentChunks(part: ReplayPart): ContentChunk[] {
 }
 
 function resourceLinkToPart(link: ResourceLink): PromptPart {
-  const parsed = uriToFilePart(link.uri, link.mimeType ?? "text/plain", link.name)
+  const mime = link.mimeType ?? "text/plain"
+  const parsed = uriToFilePart(
+    link.uri,
+    mime === "application/json" || mime.endsWith("+json") ? "text/plain" : mime,
+    link.name,
+  )
   if (parsed.type === "file") return parsed
   return { type: "text", text: parsed.text }
 }
