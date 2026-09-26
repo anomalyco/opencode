@@ -235,6 +235,21 @@ describe("ConfigNormalize", () => {
     ])
   })
 
+  test("normalizes every file-modifying tool name onto the shared edit action", () => {
+    expect(
+      normalized({
+        tools: { write: false, patch: false, apply_patch: false },
+        permission: { edit: "allow", apply_patch: { "secret/**": "deny" } },
+      }).encoded.permissions,
+    ).toEqual([
+      { action: "edit", resource: "*", effect: "deny" },
+      { action: "edit", resource: "*", effect: "deny" },
+      { action: "edit", resource: "*", effect: "deny" },
+      { action: "edit", resource: "*", effect: "allow" },
+      { action: "edit", resource: "secret/**", effect: "deny" },
+    ])
+  })
+
   test("redacts permission resource keys from invalid diagnostics", () => {
     const result = normalized({
       permission: { bash: { "curl -H Authorization:Bearer TOPSECRET *": "bogus" } },
