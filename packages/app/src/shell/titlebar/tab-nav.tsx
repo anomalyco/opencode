@@ -21,6 +21,30 @@ import "./tab-nav.css"
 // MouseEvent.button uses 1 for the middle/wheel button.
 const MIDDLE_MOUSE_BUTTON = 1
 
+function ServerTabBadge(props: { server: ServerConnection.Key }) {
+  const servers = useServers()
+  const name = createMemo(() => {
+    if (servers.list.length <= 1) return
+    const conn = servers.list.find((item) => ServerConnection.key(item) === props.server)
+    return conn ? serverName(conn) : undefined
+  })
+
+  return (
+    <Show when={name()}>
+      {(label) => (
+        <span
+          data-slot="tab-server"
+          class="max-w-20 shrink-0 truncate rounded-[3px] border border-v2-border-border-base px-1 text-[10px] leading-4 text-v2-text-text-muted"
+          title={label()}
+          dir="auto"
+        >
+          {label()}
+        </span>
+      )}
+    </Show>
+  )
+}
+
 export function TabNavItem(props: {
   ref?: Ref<HTMLDivElement>
   href: string
@@ -298,6 +322,9 @@ export function TabNavItem(props: {
             event.preventDefault()
           }}
         />
+        <Show when={!editing()}>
+          <ServerTabBadge server={props.server} />
+        </Show>
       </Menu.Context.Trigger>
 
       <div data-slot="tab-close">
@@ -362,6 +389,7 @@ export function TabNavItem(props: {
 export function DraftTabItem(props: {
   ref?: Ref<HTMLDivElement>
   href: string
+  server: ServerConnection.Key
   title: string
   active?: boolean
   onNavigate: () => void
@@ -445,6 +473,7 @@ export function DraftTabItem(props: {
         >
           {props.title}
         </span>
+        <ServerTabBadge server={props.server} />
       </a>
       <div data-slot="tab-close">
         <IconButton

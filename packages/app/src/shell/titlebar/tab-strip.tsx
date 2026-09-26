@@ -220,6 +220,7 @@ function DraftTabSlot(props: {
           ref = el
         }}
         href={tabHref(props.tab)}
+        server={props.tab.server}
         title={props.title}
         onNavigate={() => props.onNavigate(ref)}
         onClose={props.onClose}
