@@ -65,7 +65,7 @@ export const Plugin = define({
                 if (config.api !== undefined) model.api = { ...model.api, ...config.api }
                 if (config.capabilities !== undefined) {
                   model.capabilities = {
-                    tools: config.capabilities.tools,
+                    tools: config.capabilities.tools ?? false,
                     input: [...config.capabilities.input],
                     output: [...config.capabilities.output],
                   }
