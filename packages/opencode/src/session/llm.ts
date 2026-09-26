@@ -6,7 +6,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Context, Effect, Layer } from "effect"
 import * as Stream from "effect/Stream"
-import { streamText, wrapLanguageModel, type ModelMessage, type Tool } from "ai"
+import { streamText, type ModelMessage, type Tool } from "ai"
 import type { LLMEvent } from "@opencode-ai/llm"
 import { LLMClient } from "@opencode-ai/llm/route"
 import type { LLMClientService } from "@opencode-ai/llm/route"
@@ -321,26 +321,8 @@ const live: Layer.Layer<
           abortSignal: input.abort,
           headers: prepared.headers,
           maxRetries: input.retries ?? 0,
-          messages: prepared.messages,
-          model: wrapLanguageModel({
-            model: language,
-            middleware: [
-              {
-                specificationVersion: "v3" as const,
-                async transformParams(args) {
-                  if (args.type === "stream") {
-                    // @ts-expect-error
-                    args.params.prompt = ProviderTransform.message(
-                      args.params.prompt,
-                      input.model,
-                      prepared.messageTransformOptions,
-                    )
-                  }
-                  return args.params
-                },
-              },
-            ],
-          }),
+          messages: ProviderTransform.message(prepared.messages, input.model, prepared.messageTransformOptions),
+          model: language,
           experimental_telemetry: {
             isEnabled: cfg.experimental?.openTelemetry,
             functionId: "session.llm",
