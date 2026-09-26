@@ -373,7 +373,14 @@ EOF
     fi
     cat > "$INSTALL_DIR/opencode2" <<'EOF'
 #!/bin/sh
-exec "$(dirname "$0")/opencode" "$@"
+TARGET="$0"
+while [ -L "$TARGET" ]; do
+  DIR="$(cd -P "$(dirname "$TARGET")" >/dev/null 2>&1 && pwd)"
+  TARGET="$(readlink "$TARGET")"
+  [[ $TARGET != /* ]] && TARGET="$DIR/$TARGET"
+done
+DIR="$(cd -P "$(dirname "$TARGET")" >/dev/null 2>&1 && pwd)"
+exec "$DIR/opencode" "$@"
 EOF
     chmod 755 "$INSTALL_DIR/opencode2"
 }
