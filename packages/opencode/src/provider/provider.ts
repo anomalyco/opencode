@@ -7,6 +7,7 @@ import { mapValues, mergeDeep, omit, pickBy, sortBy } from "remeda"
 import { NoSuchModelError, type Provider as SDK } from "ai"
 import { Npm } from "@opencode-ai/core/npm"
 import { Hash } from "@opencode-ai/core/util/hash"
+import { createUndiciDispatcher } from "@opencode-ai/core/util/undici-dispatcher"
 import { Plugin } from "../plugin"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { type LanguageModelV3 } from "@ai-sdk/provider"
@@ -1800,6 +1801,7 @@ const layer = Layer.effect(
         const headerTimeout = options["headerTimeout"] ?? 300_000
         delete options["chunkTimeout"]
         delete options["headerTimeout"]
+        const dispatcher = customFetch ? undefined : createUndiciDispatcher(options["timeout"])
 
         options["fetch"] = async (input: any, init?: BunFetchRequestInit) => {
           const fetchFn = customFetch ?? fetch
@@ -1820,9 +1822,10 @@ const layer = Layer.effect(
 
           const res = await fetchFn(input, {
             ...opts,
+            ...(dispatcher ? { dispatcher } : {}),
             // @ts-ignore see here: https://github.com/oven-sh/bun/issues/16682
             timeout: false,
-          }).finally(() => headerTimeoutCtl?.clear())
+          } as BunFetchRequestInit).finally(() => headerTimeoutCtl?.clear())
 
           if (!chunkAbortCtl) return res
           return wrapSSE(res, chunkTimeout, chunkAbortCtl)

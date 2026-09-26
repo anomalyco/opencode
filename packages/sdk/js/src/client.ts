@@ -4,6 +4,7 @@ import { createClient } from "./gen/client/client.gen.js"
 import { type Config } from "./gen/client/types.gen.js"
 import { OpencodeClient } from "./gen/sdk.gen.js"
 import { wrapClientError } from "./error-interceptor.js"
+import { nodeFetchWithDispatcher } from "./node-fetch.js"
 export { type Config as OpencodeClientConfig, OpencodeClient }
 
 function pick(value: string | null, fallback?: string) {
@@ -32,11 +33,7 @@ function rewrite(request: Request, directory?: string) {
 
 export function createOpencodeClient(config?: Config & { directory?: string }) {
   if (!config?.fetch) {
-    const customFetch: any = (req: any) => {
-      // @ts-ignore
-      req.timeout = false
-      return fetch(req)
-    }
+    const customFetch: any = (req: any) => nodeFetchWithDispatcher(req)
     config = {
       ...config,
       fetch: customFetch,

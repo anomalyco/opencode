@@ -355,6 +355,7 @@
         "open": "11.0.4",
         "semver": "^7.6.3",
         "turndown": "7.2.0",
+        "undici": "8.3.0",
         "venice-ai-sdk-provider": "2.1.1",
         "which": "6.0.1",
         "xdg-basedir": "5.1.0",
@@ -658,6 +659,7 @@
         "tree-sitter-powershell": "0.25.10",
         "turndown": "7.2.0",
         "ulid": "catalog:",
+        "undici": "8.3.0",
         "venice-ai-sdk-provider": "2.1.1",
         "vscode-jsonrpc": "8.2.1",
         "web-tree-sitter": "0.25.10",
@@ -771,6 +773,7 @@
       "version": "1.18.32",
       "dependencies": {
         "cross-spawn": "catalog:",
+        "undici": "8.3.0",
       },
       "devDependencies": {
         "@hey-api/openapi-ts": "0.90.10",

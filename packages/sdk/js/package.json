@@ -31,6 +31,7 @@
     "typescript": "catalog:"
   },
   "dependencies": {
-    "cross-spawn": "catalog:"
+    "cross-spawn": "catalog:",
+    "undici": "8.3.0"
   }
 }
