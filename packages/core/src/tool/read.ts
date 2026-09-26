@@ -17,6 +17,10 @@ export const name = "read"
 const SUPPORTED_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"])
 const LocationInput = Schema.Struct({
   path: Schema.String,
+  reason: Schema.String.pipe(Schema.optional).annotate({
+    description:
+      "Optional brief explanation of why this read is needed for the user's task. Provide it when permission may be requested.",
+  }),
   offset: ReadToolFileSystem.PageInput.fields.offset.annotate({
     description: "The 1-based directory entry or text line offset to start reading from",
   }),
@@ -65,6 +69,7 @@ const layer = Layer.effectDiscard(
                   sessionID: context.sessionID,
                   agent: context.agent,
                   source,
+                  reason: input.reason,
                 })
               const resource = target.resource
               const absolute = AbsolutePath.make(target.canonical)
@@ -76,6 +81,7 @@ const layer = Layer.effectDiscard(
                 sessionID: context.sessionID,
                 agent: context.agent,
                 source,
+                reason: input.reason,
               })
               if (type === "directory")
                 return yield* reader.list(absolute, { offset: input.offset, limit: input.limit })

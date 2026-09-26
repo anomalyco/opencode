@@ -32,10 +32,50 @@ import type {
   StreamCommit,
 } from "@/cli/cmd/run/types"
 import { RunQuestionBody } from "@/cli/cmd/run/footer.question"
-import { RejectField } from "@/cli/cmd/run/footer.permission"
+import { RejectField, RunPermissionBody } from "@/cli/cmd/run/footer.permission"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
 const tuiConfig = createTuiResolvedConfig()
+
+test.each([undefined, "", " \t\n", "Run tests for the requested change.", "<b>Run tests</b> **literally**"])(
+  "permission footer renders optional reason %j alongside the command",
+  async (reason) => {
+    const app = await testRender(
+      () => (
+        <RunPermissionBody
+          request={{
+            id: "permission-reason",
+            sessionID: "session-reason",
+            permission: "bash",
+            patterns: ["npm test"],
+            always: ["npm test"],
+            metadata: { command: "npm test" },
+            reason,
+          }}
+          theme={RUN_THEME_FALLBACK.footer}
+          block={RUN_THEME_FALLBACK.block}
+          onReply={() => {}}
+        />
+      ),
+      { width: 100, height: 22 },
+    )
+    try {
+      await app.renderOnce()
+      const frame = app.captureCharFrame()
+      expect(frame).toContain("npm test")
+      expect(frame).toContain("Allow once")
+      expect(frame).toContain("Reject")
+      if (reason?.trim()) {
+        expect(frame).toContain("Reason:")
+        expect(frame).toContain(reason)
+        return
+      }
+      expect(frame).not.toContain("Reason:")
+    } finally {
+      app.renderer.destroy()
+    }
+  },
+)
 
 function command(input: { name: string; description: string; source?: "command" | "mcp" | "skill" }) {
   return {

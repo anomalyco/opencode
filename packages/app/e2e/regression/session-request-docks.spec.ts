@@ -73,7 +73,7 @@ test("shows a pending question dock", async ({ page }) => {
   expect((await reply).postDataJSON()).toEqual({ answers: [["Minimal"]] })
 })
 
-test("shows a pending permission dock", async ({ page }) => {
+test("shows a pending permission dock", async ({ page }, testInfo) => {
   await mockServer(page, {
     permissions: [
       {
@@ -81,6 +81,7 @@ test("shows a pending permission dock", async ({ page }) => {
         sessionID,
         permission: "bash",
         patterns: ["git status", "git diff"],
+        reason: "Inspect the changes before committing.",
         metadata: {},
         always: [],
       },
@@ -94,8 +95,12 @@ test("shows a pending permission dock", async ({ page }) => {
   await expect(permission).toBeVisible()
   await expect(permission.getByText("git status")).toBeVisible()
   await expect(permission.getByText("git diff")).toBeVisible()
+  await expect(permission.getByText("Reason:")).toBeVisible()
+  await expect(permission.getByText("Inspect the changes before committing.")).toBeVisible()
   await expect(permission.locator('[data-slot="permission-footer-actions"] button')).toHaveCount(3)
   await expect(page.locator('[data-component="session-composer"]')).toHaveCount(0)
+
+  await testInfo.attach("permission-reason", { body: await permission.screenshot(), contentType: "image/png" })
 
   const reply = page.waitForRequest((request) => request.method() === "POST")
   await permission.getByRole("button", { name: "Allow once" }).click()
@@ -103,6 +108,42 @@ test("shows a pending permission dock", async ({ page }) => {
   expect(new URL(request.url()).pathname).toBe(`/api/session/${sessionID}/permission/permission-request/reply`)
   expect(request.postDataJSON()).toEqual({ reply: "once" })
 })
+
+for (const reason of [undefined, "", " \n\t", '<img src=x onerror="alert(1)"> **Review changes**']) {
+  test(`renders permission reason ${JSON.stringify(reason) ?? "absent"} as plain text or omits its section`, async ({
+    page,
+  }) => {
+    await mockServer(page, {
+      permissions: [
+        {
+          id: "permission-request",
+          sessionID,
+          permission: "bash",
+          patterns: ["git status", "git diff"],
+          reason,
+          metadata: {},
+          always: [],
+        },
+      ],
+    })
+
+    await page.goto(`/${base64Encode(directory)}/session/${sessionID}`)
+    await expectSessionTitle(page, title)
+
+    const permission = page.locator('[data-component="dock-prompt"][data-kind="permission"]')
+    await expect(permission.getByText("git status", { exact: true })).toBeVisible()
+    await expect(permission.getByText("git diff", { exact: true })).toBeVisible()
+    await expect(permission.locator('[data-slot="permission-footer-actions"] button')).toHaveCount(3)
+    if (!reason?.trim()) {
+      await expect(permission.getByText("Reason:", { exact: true })).toHaveCount(0)
+      return
+    }
+
+    await expect(permission.getByText("Reason:", { exact: true })).toBeVisible()
+    await expect(permission.getByText(reason, { exact: true })).toBeVisible()
+    await expect(permission.locator("img")).toHaveCount(0)
+  })
+}
 
 test("restores the draft caret before typing after a request dock closes", async ({ page }) => {
   const transport = await installSseTransport(page, {

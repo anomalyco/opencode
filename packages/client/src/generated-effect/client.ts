@@ -408,6 +408,7 @@ type Endpoint9_3Input = {
   readonly resources: Endpoint9_3Request["payload"]["resources"]
   readonly save?: Endpoint9_3Request["payload"]["save"]
   readonly metadata?: Endpoint9_3Request["payload"]["metadata"]
+  readonly reason?: Endpoint9_3Request["payload"]["reason"]
   readonly source?: Endpoint9_3Request["payload"]["source"]
   readonly agent?: Endpoint9_3Request["payload"]["agent"]
 }
@@ -420,6 +421,7 @@ const Endpoint9_3 = (raw: RawClient["server.permission"]) => (input: Endpoint9_3
       resources: input["resources"],
       save: input["save"],
       metadata: input["metadata"],
+      reason: input["reason"],
       source: input["source"],
       agent: input["agent"],
     },
