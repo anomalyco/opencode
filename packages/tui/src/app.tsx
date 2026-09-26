@@ -149,6 +149,7 @@ export type TuiInput = {
   headers?: RequestInit["headers"]
   events?: EventSource
   pluginHost: TuiPluginHost
+  stdin?: NodeJS.ReadStream
 }
 
 function errorMessage(error: unknown) {
@@ -203,6 +204,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
               consoleOptions: {
                 keyBindings: [{ name: "y", ctrl: true, action: "copy-selection" }],
               },
+              stdin: input.stdin,
             }),
           catch: (error) => (error instanceof Error ? error : new Error(String(error))),
         }),
@@ -211,7 +213,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
             destroyRenderer(renderer)
           }),
       )
-      win32DisableProcessedInput()
+      win32DisableProcessedInput(input.stdin)
       const keymap = createDefaultOpenTuiKeymap(renderer)
       yield* Effect.acquireRelease(
         Effect.sync(() => registerOpencodeKeymap(keymap, renderer, input.config)),
@@ -355,7 +357,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
     }),
   )
   yield* Effect.sync(() => {
-    win32FlushInputBuffer()
+    win32FlushInputBuffer(input.stdin)
     if (result.reason !== undefined) {
       process.stderr.write((cliErrorMessage(result.reason) ?? errorFormat(result.reason)) + "\n")
       process.exitCode = 1
