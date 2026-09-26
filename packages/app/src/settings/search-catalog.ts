@@ -44,6 +44,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "general",
+    label: "settings.general.row.newTabProject.title",
+    target: "settings-new-tab-project",
+    description: "settings.general.row.newTabProject.description",
+    keywords: "new tab session directory project last selected",
+  },
+  {
+    tab: "general",
     label: "settings.workspaces.default.title",
     target: "settings-workspace-destination",
     description: "settings.workspaces.default.description",

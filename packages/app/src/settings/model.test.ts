@@ -76,6 +76,7 @@ describe("settings schema", () => {
         mobileDiffWrap: true,
         terminalPlacement: "side",
         followUpBehavior: "steer",
+        newTabProject: "current-tab",
       },
       sessionSummary: { projectExpanded: true, serverExpanded: true },
       appearance: {
@@ -100,6 +101,12 @@ describe("settings schema", () => {
     })
   })
 
+  test("round trips the new tab project choice and retains the previous default", () => {
+    expect(decode({ general: {} }).general.newTabProject).toBe("current-tab")
+    const settings = decode({ general: { newTabProject: "last-selected" } })
+    expect(decode(encode(settings)).general.newTabProject).toBe("last-selected")
+  })
+
   test("defaults invalid preferences locally while retaining valid siblings", () => {
     const settings = decode({
       general: {
@@ -108,6 +115,7 @@ describe("settings schema", () => {
         releaseNotes: undefined,
         reasoningMode: 3,
         followUpBehavior: "invalid",
+        newTabProject: "invalid",
       },
       appearance: { fontSize: "large", mono: "Custom Mono", tabLayout: "vertical", showProjectName: true },
       permissions: { autoApprove: true },
@@ -122,6 +130,7 @@ describe("settings schema", () => {
       releaseNotes: true,
       timelineDetail: timelinePresets[2].value,
       followUpBehavior: "steer",
+      newTabProject: "current-tab",
     })
     expect(settings.appearance).toEqual({
       fontSize: 14,

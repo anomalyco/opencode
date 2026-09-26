@@ -12,6 +12,7 @@ export type WorkspaceDefaultDestination = Settings["workspaces"]["defaultDestina
 export type WorkspaceLastUsed = Settings["workspaces"]["lastUsed"][string]
 export type TerminalPlacement = Settings["general"]["terminalPlacement"]
 export type FollowUpBehavior = Settings["general"]["followUpBehavior"]
+export type NewTabProject = Settings["general"]["newTabProject"]
 export type TabLayout = Settings["appearance"]["tabLayout"]
 export type NotificationSettings = Settings["notifications"]
 export type SoundSettings = Settings["sounds"]
@@ -93,6 +94,7 @@ const generalSchema = Persistence.struct({
   mobileDiffWrap: Schema.Boolean,
   terminalPlacement: Schema.Literals(["side", "bottom"]),
   followUpBehavior: Schema.Literals(["queue", "steer"]),
+  newTabProject: Schema.Literals(["current-tab", "last-selected"]),
 })
 
 const appearanceSchema = Persistence.struct({
@@ -247,6 +249,7 @@ export const defaultSettings: Settings = {
     mobileDiffWrap: true,
     terminalPlacement: "side",
     followUpBehavior: "steer",
+    newTabProject: "current-tab",
   },
   sessionSummary: { projectExpanded: true, serverExpanded: true },
   appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal" },
@@ -349,6 +352,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         followUpBehavior: withFallback(() => store.general?.followUpBehavior, defaultSettings.general.followUpBehavior),
         setFollowUpBehavior(value: FollowUpBehavior) {
           setStore("general", "followUpBehavior", value)
+        },
+        newTabProject: withFallback(() => store.general?.newTabProject, defaultSettings.general.newTabProject),
+        setNewTabProject(value: NewTabProject) {
+          setStore("general", "newTabProject", value)
         },
       },
       sessionSummary: {

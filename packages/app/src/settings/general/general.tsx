@@ -10,6 +10,7 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { useUpdaterAction } from "@/shell/updates/action"
 import {
   type FollowUpBehavior,
+  type NewTabProject,
   type TerminalPlacement,
   type WorkspaceDefaultDestination,
   useSettings,
@@ -184,6 +185,33 @@ const FollowUpBehaviorSetting: Component = () => {
   )
 }
 
+const NewTabProjectSetting: Component = () => {
+  const language = useLanguage()
+  const settings = useSettings()
+  const options = createMemo((): { value: NewTabProject; label: string }[] => [
+    { value: "current-tab", label: language.t("settings.general.row.newTabProject.currentTab") },
+    { value: "last-selected", label: language.t("settings.general.row.newTabProject.lastSelected") },
+  ])
+
+  return (
+    <SettingsRow
+      title={language.t("settings.general.row.newTabProject.title")}
+      description={language.t("settings.general.row.newTabProject.description")}
+    >
+      <Select
+        data-action="settings-new-tab-project"
+        options={options()}
+        current={options().find((option) => option.value === settings.general.newTabProject())}
+        value={(option) => option.value}
+        label={(option) => option.label}
+        placement="bottom-end"
+        gutter={6}
+        onSelect={(option) => option && settings.general.setNewTabProject(option.value)}
+      />
+    </SettingsRow>
+  )
+}
+
 const AppearanceSection: Component<{ controller: AppearanceSettingsController }> = (props) => {
   const language = useLanguage()
   return (
@@ -348,6 +376,7 @@ export const SettingsGeneral: Component = () => {
       <SettingsList>
         <LanguageSetting />
         <TabLayoutSetting />
+        <NewTabProjectSetting />
 
         <WorkspaceDestinationSetting />
         <AutoApprovePermissionsSetting />

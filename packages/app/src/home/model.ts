@@ -116,7 +116,9 @@ export function createHomeController() {
             .some((project) => project.worktree === directory)
         )
           return
-        setSelection(toggleHomeProjectSelection(selection(), key, directory))
+        const next = toggleHomeProjectSelection(selection(), key, directory)
+        if (next.directory) global.ensureServerCtx(conn).projects.touch(directory)
+        setSelection(next)
       },
       add: (conn: ServerConnection.Any, directories: string[]) => {
         const directory = addProjects(global.ensureServerCtx(conn), directories)
