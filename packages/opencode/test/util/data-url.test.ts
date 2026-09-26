@@ -8,6 +8,10 @@ describe("decodeDataUrl", () => {
     expect(decodeDataUrl(url)).toBe(body)
   })
 
+  test("decodes case-insensitive base64 markers", () => {
+    expect(decodeDataUrl("data:text/plain;BASE64,SGVsbG8=")).toBe("Hello")
+  })
+
   test("decodes plain data URLs", () => {
     expect(decodeDataUrl("data:text/plain,hello%20world")).toBe("hello world")
   })
