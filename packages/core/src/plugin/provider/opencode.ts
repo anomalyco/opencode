@@ -9,6 +9,7 @@ import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
 import { IntegrationConnection } from "../../integration/connection.js"
 import { ManagedPolicy } from "../../managed-policy.js"
+import { Model } from "../../model.js"
 import { Provider } from "../../provider.js"
 import { WebSearch } from "../../websearch.js"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
@@ -223,11 +224,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
             model.package = config.package ?? (item.package !== undefined ? undefined : model.package)
             if (item.settings?.baseURL !== undefined && model.settings) delete model.settings.baseURL
             if (config.capabilities !== undefined)
-              model.capabilities = {
-                ...config.capabilities,
-                input: [...config.capabilities.input],
-                output: [...config.capabilities.output],
-              }
+              model.capabilities = Model.mergeCapabilities(config.capabilities, model.capabilities)
             model.settings = Provider.mergeOverlay(
               withoutCredentials(model.settings),
               withoutCredentials(config.settings),

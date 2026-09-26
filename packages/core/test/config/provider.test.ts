@@ -255,6 +255,70 @@ describe("ConfigProviderPlugin.Plugin", () => {
     }),
   )
 
+  it.effect("merges partial config capabilities onto the base model's existing fields", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const providerID = Provider.ID.make("custom")
+      const modelID = Model.ID.make("partial")
+      yield* providers.transform((editor) => {
+        editor.models.update(providerID, modelID, (model) => {
+          model.capabilities = { tools: false, input: ["text"], output: ["text"] }
+        })
+      })
+      const entries = [
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              custom: {
+                package: "aisdk:@ai-sdk/openai-compatible",
+                models: { partial: { capabilities: { input: ["text", "image"] } } },
+              },
+            },
+          }),
+        }),
+      ]
+
+      yield* addPlugin(entries)
+
+      expect((yield* models.get(providerID, modelID))?.capabilities).toEqual({
+        tools: false,
+        input: ["text", "image"],
+        output: ["text"],
+      })
+    }),
+  )
+
+  it.effect("resolves a config model with only input/output capabilities using default tools", () =>
+    Effect.gen(function* () {
+      const models = yield* Model.Service
+      const providerID = Provider.ID.make("custom")
+      const modelID = Model.ID.make("demo")
+      const entries = [
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              custom: {
+                package: "aisdk:@ai-sdk/openai-compatible",
+                models: { demo: { name: "Demo", capabilities: { input: ["text"], output: ["text"] } } },
+              },
+            },
+          }),
+        }),
+      ]
+
+      yield* addPlugin(entries)
+
+      expect((yield* models.get(providerID, modelID))?.capabilities).toEqual({
+        tools: true,
+        input: ["text"],
+        output: ["text"],
+      })
+    }),
+  )
+
   for (const scenario of [
     { name: "omitted capabilities", legacy: {}, overrides: {} },
     {
