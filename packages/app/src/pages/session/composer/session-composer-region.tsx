@@ -33,8 +33,15 @@ export function SessionComposerRegion(props: {
       <div
         classList={{
           "w-full px-3 pointer-events-auto": true,
-          "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": controller.centered(),
+          "md:mx-auto": controller.centered() && settings.appearance.contentMaxWidth() > 0,
         }}
+        style={
+          controller.centered() && settings.appearance.contentMaxWidth() > 0
+            ? { "max-width": `${settings.appearance.contentMaxWidth()}px` }
+            : controller.centered()
+              ? { "max-width": "1000px" }
+              : undefined
+        }
       >
         <Show when={controller.state.questionRequest()} keyed>
           {(request) => (

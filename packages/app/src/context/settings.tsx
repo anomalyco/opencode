@@ -45,6 +45,8 @@ export interface Settings {
     mono: string
     sans: string
     terminal: string
+    /** 0 = full width, >0 = max width in px */
+    contentMaxWidth: number
   }
   keybinds: Record<string, string>
   permissions: {
@@ -201,6 +203,7 @@ const defaultSettings: Settings = {
     mono: "",
     sans: "",
     terminal: "",
+    contentMaxWidth: 0,
   },
   keybinds: {},
   permissions: {
@@ -474,6 +477,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         terminalFont: withFallback(() => store.appearance?.terminal, defaultSettings.appearance.terminal),
         setTerminalFont(value: string) {
           setStore("appearance", "terminal", value.trim() ? value : "")
+        },
+        contentMaxWidth: withFallback(() => store.appearance?.contentMaxWidth, defaultSettings.appearance.contentMaxWidth),
+        setContentMaxWidth(value: number) {
+          setStore("appearance", "contentMaxWidth", value)
         },
       },
       keybinds: {

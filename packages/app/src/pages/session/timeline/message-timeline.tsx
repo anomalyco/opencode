@@ -1049,6 +1049,7 @@ export function MessageTimeline(props: {
       const row = input.row()
       return row._tag === "AssistantPart" && row.previousAssistantPart
     }
+    const contentMaxWidth = () => settings.appearance.contentMaxWidth()
 
     return (
       <div
@@ -1057,10 +1058,16 @@ export function MessageTimeline(props: {
         data-timeline-row={input.row()._tag}
         classList={{
           "min-w-0 w-full max-w-full": true,
-          "md:max-w-200 2xl:max-w-[1000px]": props.centered,
-          "md:mx-auto": props.centered,
+          "md:mx-auto": props.centered && contentMaxWidth() > 0,
           "pt-3": previousAssistantPart(),
         }}
+        style={
+          props.centered && contentMaxWidth() > 0
+            ? { "max-width": `${contentMaxWidth()}px` }
+            : props.centered
+              ? { "max-width": "1000px" }
+              : undefined
+        }
       >
         <div data-component="session-turn" class="min-w-0 w-full relative" style={{ height: "auto" }}>
           {input.children}
@@ -1381,8 +1388,15 @@ export function MessageTimeline(props: {
               "pr-3": true,
               "pl-2.5": settings.general.newLayoutDesigns(),
               "pl-2 md:pl-4": !settings.general.newLayoutDesigns(),
-              "md:max-w-200 md:mx-auto 2xl:max-w-[1000px]": props.centered && !settings.general.newLayoutDesigns(),
+              "md:mx-auto": props.centered && !settings.general.newLayoutDesigns() && contentMaxWidth() > 0,
             }}
+            style={
+              props.centered && !settings.general.newLayoutDesigns()
+                ? contentMaxWidth() > 0
+                  ? { "max-width": `${contentMaxWidth()}px` }
+                  : { "max-width": "1000px" }
+                : undefined
+            }
           >
             <div class="h-12 w-full flex items-center justify-between gap-2">
               <div

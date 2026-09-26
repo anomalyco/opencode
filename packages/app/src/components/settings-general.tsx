@@ -570,6 +570,29 @@ export const SettingsGeneral: Component = () => {
             />
           </div>
         </SettingsRow>
+
+        <SettingsRow
+          title={language.t("settings.general.row.contentMaxWidth.title")}
+          description={language.t("settings.general.row.contentMaxWidth.description")}
+        >
+          <div class="w-full sm:w-[220px] flex items-center gap-2">
+            <input
+              type="range"
+              min={0}
+              max={2000}
+              step={50}
+              value={settings.appearance.contentMaxWidth()}
+              onInput={(e) => settings.appearance.setContentMaxWidth(Number(e.currentTarget.value))}
+              class="flex-1 accent-primary"
+              data-action="settings-content-max-width"
+            />
+            <span class="text-12-regular text-text-muted w-16 text-right shrink-0">
+              {settings.appearance.contentMaxWidth() === 0
+                ? language.t("settings.general.row.contentMaxWidth.fullWidth")
+                : `${settings.appearance.contentMaxWidth()}px`}
+            </span>
+          </div>
+        </SettingsRow>
       </SettingsList>
     </div>
   )
