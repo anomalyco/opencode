@@ -51,7 +51,8 @@ import {
   currentToolOutput,
   executeToolFailed,
 } from "../message/current-tool-state"
-import { AssistantReasoningContent, writeClipboard } from "../message/message-content"
+import { AssistantReasoningContent } from "../message/message-content"
+import { writeClipboard } from "../components/clipboard"
 import { followShellOutput } from "./shell-output"
 
 function ShellSubmessage(props: { text: string; animate?: boolean }) {
