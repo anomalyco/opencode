@@ -305,6 +305,17 @@ export function pickerParent(input: string) {
   return value.slice(0, index)
 }
 
+export function pickerBrowseDirectory(value: string, home: string) {
+  const normalized = normalizePickerDrive(value)
+  if (!normalized) return ""
+  const root = pickerRoot(normalized)
+  const tilde = normalized === "~" || normalized.startsWith("~/")
+  const browsing = tilde || (root !== "" && (normalized === root || normalized.endsWith("/")))
+  if (!browsing) return ""
+  const absolute = normalized === "~" ? home : normalized.startsWith("~/") ? home + normalized.slice(1) : normalized
+  return trimPickerPath(absolute)
+}
+
 function pickerTilde(absolute: string, home: string) {
   const path = trimPickerPath(absolute)
   if (!home) return ""
