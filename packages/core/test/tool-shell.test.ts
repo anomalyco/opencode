@@ -1462,7 +1462,7 @@ describe("ShellTool", () => {
               },
               {
                 type: "text",
-                text: "You will be notified automatically when the command finishes. The notification will include the command's output. Unless the user explicitly asks otherwise, DO NOT poll for completion, even if you need the final result to continue. Repeatedly sleeping and reading or searching the output file is polling, not useful work. You may read the current output if it lets you do useful work now, but do not repeatedly check it while waiting for the command to finish. Keep working on anything that does not depend on the result. If you have nothing else to do, end your response; you will be resumed automatically when the command finishes.",
+                text: "You will automatically receive a notification with the command's output when it finishes. DO NOT poll or check on the command while it runs, even if your next step needs its output. NEVER use `sleep`, `ps`, or `pgrep` to wait for it. Every check wastes a turn. Continue with any work that does not depend on the result. If you have nothing else to do, end your turn and the notification will resume you. The output file shown above contains the output so far. Read it only when your work needs its contents. NEVER read it to check whether the command has finished or how far it has gotten.",
               },
             ])
             expect((yield* shell.list()).map((info) => info.id)).toContain(id)
@@ -1728,7 +1728,7 @@ describe("ShellTool", () => {
             })
             expect(settled.content?.[1]).toEqual({
               type: "text",
-              text: "You will be notified automatically when the command finishes. The notification will include the command's output. Unless the user explicitly asks otherwise, DO NOT poll for completion, even if you need the final result to continue. Repeatedly sleeping and reading or searching the output file is polling, not useful work. You may read the current output if it lets you do useful work now, but do not repeatedly check it while waiting for the command to finish. Keep working on anything that does not depend on the result. If you have nothing else to do, end your response; you will be resumed automatically when the command finishes.",
+              text: "You will automatically receive a notification with the command's output when it finishes. DO NOT poll or check on the command while it runs, even if your next step needs its output. NEVER use `sleep`, `ps`, or `pgrep` to wait for it. Every check wastes a turn. Continue with any work that does not depend on the result. If you have nothing else to do, end your turn and the notification will resume you. The output file shown above contains the output so far. Read it only when your work needs its contents. NEVER read it to check whether the command has finished or how far it has gotten.",
             })
             yield* Effect.sleep(Duration.millis(100))
             expect((yield* shell.get(id)).status).toBe("running")
