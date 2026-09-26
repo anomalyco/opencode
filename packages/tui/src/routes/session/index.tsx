@@ -18,7 +18,7 @@ import path from "node:path"
 import { mkdir, writeFile } from "node:fs/promises"
 import { useRoute, useRouteData } from "../../context/route"
 import { useProject } from "../../context/project"
-import { useSync } from "../../context/sync"
+import { useSync, type AutoApprovalTrace } from "../../context/sync"
 import { useEvent } from "../../context/event"
 import { SplitBorder } from "../../ui/border"
 import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
@@ -1708,7 +1708,17 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
 
 function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMessage }) {
   const ctx = use()
+  const sync = useSync()
   const display = createMemo(() => toolDisplay(props.part.tool))
+  const classifier = createMemo(() => sync.autoApprove.get(props.message.id, props.part.callID))
+  // A verdict the TUI never acted on and cannot explain has nothing to report: rendering it
+  // would put an approval-coloured row beside the dialog still asking for that same action.
+  const reportable = createMemo(() => {
+    const trace = classifier()
+    if (!trace) return undefined
+    if (trace.applied || trace.input !== undefined || trace.output !== undefined) return trace
+    return undefined
+  })
 
   // Hide tool if showDetails is false and tool completed successfully
   const shouldHide = createMemo(() => {
@@ -1736,55 +1746,119 @@ function ToolPart(props: { last: boolean; part: ToolPart; message: AssistantMess
   }
 
   return (
-    <Show when={!shouldHide()}>
-      <Switch>
-        <Match when={display() === "bash"}>
-          <Shell {...toolprops} />
-        </Match>
-        <Match when={display() === "glob"}>
-          <Glob {...toolprops} />
-        </Match>
-        <Match when={display() === "read"}>
-          <Read {...toolprops} />
-        </Match>
-        <Match when={display() === "grep"}>
-          <Grep {...toolprops} />
-        </Match>
-        <Match when={display() === "webfetch"}>
-          <WebFetch {...toolprops} />
-        </Match>
-        <Match when={display() === "websearch"}>
-          <WebSearch {...toolprops} />
-        </Match>
-        <Match when={display() === "write"}>
-          <Write {...toolprops} />
-        </Match>
-        <Match when={display() === "edit"}>
-          <Edit {...toolprops} />
-        </Match>
-        <Match when={display() === "task"}>
-          <Task {...toolprops} />
-        </Match>
-        <Match when={display() === "execute"}>
-          <Execute {...toolprops} />
-        </Match>
-        <Match when={display() === "apply_patch"}>
-          <ApplyPatch {...toolprops} />
-        </Match>
-        <Match when={display() === "todowrite"}>
-          <TodoWrite {...toolprops} />
-        </Match>
-        <Match when={display() === "question"}>
-          <Question {...toolprops} />
-        </Match>
-        <Match when={display() === "skill"}>
-          <Skill {...toolprops} />
-        </Match>
-        <Match when={true}>
-          <GenericTool {...toolprops} />
-        </Match>
-      </Switch>
-    </Show>
+    <>
+      <Show when={!shouldHide()}>
+        <Switch>
+          <Match when={display() === "bash"}>
+            <Shell {...toolprops} />
+          </Match>
+          <Match when={display() === "glob"}>
+            <Glob {...toolprops} />
+          </Match>
+          <Match when={display() === "read"}>
+            <Read {...toolprops} />
+          </Match>
+          <Match when={display() === "grep"}>
+            <Grep {...toolprops} />
+          </Match>
+          <Match when={display() === "webfetch"}>
+            <WebFetch {...toolprops} />
+          </Match>
+          <Match when={display() === "websearch"}>
+            <WebSearch {...toolprops} />
+          </Match>
+          <Match when={display() === "write"}>
+            <Write {...toolprops} />
+          </Match>
+          <Match when={display() === "edit"}>
+            <Edit {...toolprops} />
+          </Match>
+          <Match when={display() === "task"}>
+            <Task {...toolprops} />
+          </Match>
+          <Match when={display() === "execute"}>
+            <Execute {...toolprops} />
+          </Match>
+          <Match when={display() === "apply_patch"}>
+            <ApplyPatch {...toolprops} />
+          </Match>
+          <Match when={display() === "todowrite"}>
+            <TodoWrite {...toolprops} />
+          </Match>
+          <Match when={display() === "question"}>
+            <Question {...toolprops} />
+          </Match>
+          <Match when={display() === "skill"}>
+            <Skill {...toolprops} />
+          </Match>
+          <Match when={true}>
+            <GenericTool {...toolprops} />
+          </Match>
+        </Switch>
+      </Show>
+      <Show when={reportable()}>{(trace) => <AutoApproveTrace trace={trace()} />}</Show>
+    </>
+  )
+}
+
+function AutoApproveTrace(props: { trace: AutoApprovalTrace }) {
+  const { theme } = useTheme()
+  const renderer = useRenderer()
+  const [expanded, setExpanded] = createSignal(false)
+  const syntax = createSyntaxStyleMemo(() => generateSubtleSyntax(theme))
+  const details = createMemo(() => props.trace.input !== undefined || props.trace.output !== undefined)
+  const label = createMemo(() => (props.trace.applied ? "Auto-approved" : "Classifier"))
+  const summary = createMemo(() => {
+    // an approved action is often the only thing left on screen once the tool row
+    // collapses, so name the action rather than echoing the classifier token
+    if (props.trace.applied)
+      return `${props.trace.request.permission} ${props.trace.request.patterns.join(", ")}`
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 200)
+    return props.trace.output?.replace(/\s+/g, " ").trim() || "(empty)"
+  })
+
+  return (
+    <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={3} marginTop={1} flexDirection="column">
+      <box
+        onMouseUp={
+          details()
+            ? () => {
+                if (renderer.getSelection()?.getSelectedText()) return
+                setExpanded((value) => !value)
+              }
+            : undefined
+        }
+      >
+        <text fg={props.trace.approved ? theme.success : theme.warning} wrapMode="none">
+          {details() ? (expanded() ? "- " : "+ ") : ""}
+          {label()}: {summary()}
+        </text>
+      </box>
+      <Show when={expanded() && details()}>
+        <box paddingLeft={2} marginTop={1} flexDirection="column" gap={1}>
+          <text fg={theme.textMuted}>Input</text>
+          <code
+            filetype="json"
+            drawUnstyledText={false}
+            syntaxStyle={syntax()}
+            content={props.trace.input ?? ""}
+            conceal={false}
+            fg={theme.textMuted}
+          />
+          <text fg={theme.textMuted}>Output</text>
+          <code
+            filetype="text"
+            drawUnstyledText={false}
+            syntaxStyle={syntax()}
+            content={props.trace.output || "(empty)"}
+            conceal={false}
+            fg={theme.textMuted}
+          />
+        </box>
+      </Show>
+    </box>
   )
 }
 
