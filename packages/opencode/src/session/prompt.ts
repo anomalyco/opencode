@@ -1359,6 +1359,74 @@ const layer = Layer.effect(
         command: input.command,
         agent: input.agent,
       })
+
+      // Command reply messages published here convey ephemeral UI status and are not persisted to storage.
+      if (input.command === "telegram" || input.command === "tg") {
+        const { dispatchTelegramCommand } = yield* Effect.promise(() => import("@/telegram/bridge"))
+        const res = yield* Effect.promise(() => dispatchTelegramCommand(input.arguments, input.sessionID))
+        const responseText = res.text
+
+        const now = Date.now()
+        const userMsgID = input.messageID ?? MessageID.ascending()
+        const currentMdl = yield* currentModel(input.sessionID)
+        const userMsgInfo: SessionV1.User = {
+          id: userMsgID,
+          role: "user",
+          sessionID: input.sessionID,
+          time: { created: now },
+          agent: input.agent ?? "build",
+          model: currentMdl,
+        }
+        const userPartID = PartID.ascending()
+        const userPart: SessionV1.TextPart = {
+          id: userPartID,
+          sessionID: input.sessionID,
+          messageID: userMsgID,
+          type: "text",
+          text: `/${input.command} ${input.arguments}`.trim(),
+        }
+
+        const replyMsgID = MessageID.ascending()
+        const replyMsgInfo: SessionV1.Assistant = {
+          id: replyMsgID,
+          role: "assistant",
+          sessionID: input.sessionID,
+          time: { created: now, completed: now },
+          parentID: userMsgID,
+          modelID: currentMdl.modelID,
+          providerID: currentMdl.providerID,
+          mode: userMsgInfo.agent,
+          agent: userMsgInfo.agent,
+          path: { cwd: (yield* InstanceState.context).directory, root: (yield* InstanceState.context).worktree },
+          cost: 0,
+          tokens: { total: 0, input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        }
+        const replyPartID = PartID.ascending()
+        const replyPart: SessionV1.TextPart = {
+          id: replyPartID,
+          sessionID: input.sessionID,
+          messageID: replyMsgID,
+          type: "text",
+          text: responseText,
+        }
+
+        yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID: input.sessionID, info: userMsgInfo })
+        yield* events.publish(SessionV1.Event.PartUpdated, { sessionID: input.sessionID, part: userPart, time: now })
+        yield* events.publish(SessionV1.Event.MessageUpdated, { sessionID: input.sessionID, info: replyMsgInfo })
+        yield* events.publish(SessionV1.Event.PartUpdated, { sessionID: input.sessionID, part: replyPart, time: now })
+        yield* events.publish(Command.Event.Executed, {
+          name: input.command,
+          sessionID: input.sessionID,
+          arguments: input.arguments,
+          messageID: replyMsgID,
+        })
+
+        return {
+          info: replyMsgInfo,
+          parts: [replyPart],
+        }
+      }
+
       const cmd = yield* commands.get(input.command)
       if (!cmd) {
         const available = (yield* commands.list()).map((c) => c.name)
