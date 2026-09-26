@@ -64,6 +64,8 @@ export const SessionTable = sqliteTable(
     time_archived: integer(),
     /** The execution claim timestamp (historical column name; see SessionStore.claim). */
     time_suspended: integer(),
+    /** Process that holds the execution claim; recovery skips claims whose process is still alive. */
+    claim_pid: integer(),
     resume_attempts: integer().notNull().default(0),
   },
   (table) => [

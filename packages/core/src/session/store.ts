@@ -63,11 +63,14 @@ export interface Interface {
    * children are resumed separately through their durable Job records.
    */
   readonly listSuspended: () => Effect.Effect<ReadonlyArray<Session.ID>>
+  /** Claimed Sessions whose claim records the process that holds it. */
+  readonly listClaimOwners: () => Effect.Effect<ReadonlyArray<{ readonly sessionID: Session.ID; readonly pid: number }>>
   /**
    * Records the execution claim: the durable write-ahead intent that a turn is
    * (or was) in flight. Set when execution starts; a claim that survives to the
    * next boot marks a turn that never completed — its process crashed or shut
-   * down mid-turn.
+   * down mid-turn. Every claim records the current process, so a resumed claim
+   * moves to the process that resumed it.
    */
   readonly claim: (sessionID: Session.ID) => Effect.Effect<void>
   /** Releases the claim and resets resume accounting. Terminal events call this on commit. */
@@ -202,22 +205,42 @@ const layer = Layer.effect(
             Effect.map((rows) => rows.map((row) => row.sessionID)),
           )
       }),
+      listClaimOwners: Effect.fn("SessionStore.listClaimOwners")(function* () {
+        return yield* db
+          .select({ sessionID: SessionTable.id, pid: SessionTable.claim_pid })
+          .from(SessionTable)
+          .where(and(isNotNull(SessionTable.time_suspended), isNotNull(SessionTable.claim_pid)))
+          .all()
+          .pipe(
+            Effect.orDie,
+            Effect.map((rows) => rows.flatMap((row) => (row.pid === null ? [] : [{ ...row, pid: row.pid }]))),
+          )
+      }),
       claim: Effect.fn("SessionStore.claim")(function* (sessionID) {
-        // The null guard makes re-claiming a still-claimed Session a zero-row
-        // no-op (a resumed turn re-claims through the same started hook).
+        // Re-claiming keeps the original claim time (a resumed turn re-claims
+        // through the same started hook) but moves the claim to this process.
         // Claim bookkeeping never counts as user activity: time_updated is
         // pinned so session ordering only moves on real changes.
         yield* db
           .update(SessionTable)
-          .set({ time_suspended: Date.now(), time_updated: sql`${SessionTable.time_updated}` })
-          .where(and(eq(SessionTable.id, sessionID), isNull(SessionTable.time_suspended)))
+          .set({
+            time_suspended: sql`coalesce(${SessionTable.time_suspended}, ${Date.now()})`,
+            claim_pid: process.pid ?? null,
+            time_updated: sql`${SessionTable.time_updated}`,
+          })
+          .where(eq(SessionTable.id, sessionID))
           .run()
           .pipe(Effect.orDie)
       }),
       release: Effect.fn("SessionStore.release")(function* (sessionID) {
         yield* db
           .update(SessionTable)
-          .set({ time_suspended: null, resume_attempts: 0, time_updated: sql`${SessionTable.time_updated}` })
+          .set({
+            time_suspended: null,
+            claim_pid: null,
+            resume_attempts: 0,
+            time_updated: sql`${SessionTable.time_updated}`,
+          })
           .where(eq(SessionTable.id, sessionID))
           .run()
           .pipe(Effect.orDie)
@@ -225,7 +248,12 @@ const layer = Layer.effect(
       releaseChildClaims: Effect.fn("SessionStore.releaseChildClaims")((recoverable) =>
         db
           .update(SessionTable)
-          .set({ time_suspended: null, resume_attempts: 0, time_updated: sql`${SessionTable.time_updated}` })
+          .set({
+            time_suspended: null,
+            claim_pid: null,
+            resume_attempts: 0,
+            time_updated: sql`${SessionTable.time_updated}`,
+          })
           .where(
             and(
               isNotNull(SessionTable.time_suspended),

@@ -28,6 +28,7 @@ const Background = Schema.Struct({
   status: Schema.Literals(["running", "completed", "error", "cancelled"]),
   output: Schema.optionalKey(Schema.String),
   error: Schema.optionalKey(Schema.String),
+  pid: Schema.optionalKey(Schema.Int),
 })
 
 export type Background = typeof Background.Type
@@ -205,6 +206,7 @@ export const make = Effect.gen(function* () {
       status: job.info.status,
       ...(job.info.output !== undefined ? { output: job.info.output } : {}),
       ...(job.info.error !== undefined ? { error: job.info.error } : {}),
+      ...(process.pid !== undefined ? { pid: process.pid } : {}),
     })
   })
 
