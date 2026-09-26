@@ -20,6 +20,7 @@ import { ServerRowMenuView, serverMenuLabels } from "@/components/server/server-
 import { ServerHealthIndicator } from "@/components/server/server-row"
 import { type ServerHealth } from "@/utils/server-health"
 import { fileManagerApp } from "@/utils/file-manager"
+import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 
 const HOME_PROJECT_NAV_LABEL = "min-w-0 flex-1 overflow-hidden text-ellipsis whitespace-nowrap"
 
@@ -58,6 +59,8 @@ export type HomeProjectsViewProps = {
   onCloseProject: (server: ServerConnection.Any, directory: string) => void
   onOpenSettings: () => void
   onOpenHelp: () => void
+  projectsWidth: Accessor<number>
+  onResizeProjects: (width: number) => void
 }
 
 export function HomeProjectsView(props: HomeProjectsViewProps) {
@@ -69,7 +72,7 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
   return (
     <aside
       class={`
-        mt-6 flex min-h-0 min-w-0 flex-col gap-4 overflow-hidden
+        relative mt-6 flex min-h-0 min-w-0 flex-col gap-4 overflow-visible
         lg:sticky lg:top-14 lg:mt-14 lg:h-[calc(100cqh-56px)] lg:self-start lg:pt-[52px]
       `}
       aria-label={props.language.t("home.projects")}
@@ -78,6 +81,17 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
         props.onWheel(event)
       }}
     >
+      <div class="pointer-events-none absolute inset-y-0 -end-4 z-10 hidden w-8 lg:block">
+        <ResizeHandle
+          direction="horizontal"
+          size={props.projectsWidth()}
+          min={220}
+          max={420}
+          onResize={props.onResizeProjects}
+          class="pointer-events-auto absolute inset-y-0 end-0 w-2 cursor-col-resize"
+          aria-label="Resize projects panel"
+        />
+      </div>
       <div class="flex h-7 min-w-0 shrink-0 items-center justify-between pl-1.5 pr-3">
         <div class="text-v2-text-text-muted [font-weight:530]">{props.language.t("home.projects")}</div>
         <Show
