@@ -86,6 +86,8 @@ export function createTuiAttention(input: {
   renderer: AttentionRenderer
   config: Pick<Config.Resolved, "attention">
   audio?: Pick<typeof TuiAudio, "loadSoundFile" | "play">
+  /** Claims a shared key so only one running TUI emits a duplicate alert. */
+  claim?: (key: string) => Promise<boolean>
 }): AttentionHost {
   let focus: FocusState = "unknown"
   let disposed = false
@@ -125,6 +127,18 @@ export function createTuiAttention(input: {
     }
   }
 
+  // Claim a shared key so only one running TUI emits a duplicate alert. Fail open:
+  // when storage is unavailable the alert still fires rather than being lost.
+  async function claimed(scope: "notification" | "sound", key: string | undefined) {
+    if (key === undefined || !input.claim) return true
+    try {
+      return await input.claim(`${scope}:${key}`)
+    } catch (error) {
+      console.debug("failed to claim attention alert", { error })
+      return true
+    }
+  }
+
   return {
     async notify(request) {
       try {
@@ -138,19 +152,20 @@ export function createTuiAttention(input: {
         const notificationSkip = focusSkip(requestedNotification?.when ?? "blurred", focus)
         const notificationRequested = input.config.attention.notifications && request.notification !== false
         const shouldNotify = notificationRequested && !notificationSkip
-        const notification = shouldNotify
-          ? (() => {
-              try {
-                return input.renderer.triggerNotification(
-                  message,
-                  normalizeText(request.title, DEFAULT_TITLE, TITLE_LIMIT),
-                )
-              } catch (error) {
-                console.debug("failed to trigger attention notification", { error })
-                return false
-              }
-            })()
-          : false
+        const notification =
+          shouldNotify && (await claimed("notification", request.key))
+            ? (() => {
+                try {
+                  return input.renderer.triggerNotification(
+                    message,
+                    normalizeText(request.title, DEFAULT_TITLE, TITLE_LIMIT),
+                  )
+                } catch (error) {
+                  console.debug("failed to trigger attention notification", { error })
+                  return false
+                }
+              })()
+            : false
         const volume = soundVolume(request, input.config)
         const requestedSound = typeof request.sound === "object" ? request.sound : undefined
         const soundSkip = volume === undefined ? undefined : focusSkip(requestedSound?.when ?? "always", focus)
@@ -158,7 +173,12 @@ export function createTuiAttention(input: {
           requestedSound?.name && Schema.is(Config.AttentionSoundName)(requestedSound.name)
             ? requestedSound.name
             : "default"
-        const sound = volume === undefined || soundSkip ? false : await playSound(soundName, volume)
+        const sound =
+          volume === undefined || soundSkip
+            ? false
+            : (await claimed("sound", request.key))
+              ? await playSound(soundName, volume)
+              : false
 
         if (!notification && !sound) {
           if (notificationRequested && notificationSkip) return skipped(notificationSkip)
