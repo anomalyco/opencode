@@ -12,6 +12,7 @@ import { fileURLToPath } from "url"
 import { Image } from "../image.js"
 import { Instance } from "../instance/service.js"
 import { Mime } from "../mime.js"
+import { Permission } from "../permission.js"
 import { Plugin } from "../plugin/service.js"
 import { PluginHooks } from "../plugin/hooks.js"
 import { Skill } from "../skill.js"
@@ -57,6 +58,7 @@ export const prepare = Effect.fn("SessionPrompt.prepare")(function* (request: {
     const selected = yield* Effect.gen(function* () {
       if (!requested?.length) return undefined
       const skillService = yield* Skill.Service
+      const permission = yield* Permission.Service
       const prepared = new Map<Skill.ID, Skill.Name>()
       return yield* Effect.forEach(requested, (attachment) =>
         Effect.gen(function* () {
@@ -64,11 +66,27 @@ export const prepare = Effect.fn("SessionPrompt.prepare")(function* (request: {
           if (name !== undefined) return { id: attachment.id, name, mention: attachment.mention }
           const skill = yield* skillService.get(attachment.id)
           if (!skill) return yield* new SkillNotFoundError({ skill: attachment.id })
+          // Mentions load through the same `skill` permission as the skill tool. Without
+          // this check a denied skill's full body enters the model context via @mention.
+          // `ask` cannot block admission, so the attachment records the mention without
+          // the prepared body while the request awaits the user's answer.
+          const decision = yield* permission
+            .ask({
+              action: "skill",
+              resources: [skill.id],
+              sessionID: request.session.id,
+              agent: request.session.agent,
+            })
+            .pipe(Effect.orDie)
+          if (decision.effect === "deny")
+            return yield* new Permission.BlockedError({ rules: [], permission: "skill", resources: [skill.id] })
           prepared.set(skill.id, skill.name)
           return {
             id: skill.id,
             name: skill.name,
-            text: (yield* Skill.prepare(fs, skill).pipe(Effect.orDie)).output,
+            ...(decision.effect === "allow"
+              ? { text: (yield* Skill.prepare(fs, skill).pipe(Effect.orDie)).output }
+              : {}),
             mention: attachment.mention,
           }
         }),

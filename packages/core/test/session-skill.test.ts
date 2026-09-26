@@ -11,6 +11,7 @@ import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import type { LocationServices } from "@opencode/core/location-services"
 import { Project } from "@opencode/core/project"
+import { Permission } from "@opencode/core/permission"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -24,6 +25,7 @@ import { SessionInbox } from "@opencode/core/session/inbox"
 import { Skill } from "@opencode/core/skill"
 import { Event } from "@opencode/schema/event"
 import { testEffect } from "./lib/effect"
+import { location as locationFixture } from "./fixture/location"
 import { globalProjectNode } from "./lib/project"
 
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
@@ -38,21 +40,31 @@ const locations = makeGlobalNode({
   service: LocationServiceMap.Service,
   layer: Layer.effect(
     LocationServiceMap.Service,
-    LayerMap.make(
-      (_ref: Location.Ref) =>
-        // These tests need skill activation and prompt preparation from the same location services.
-        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-        Layer.mergeAll(
-          LayerNode.compile(LayerNode.group([PluginHooks.node, Image.node])),
-          Layer.mock(Skill.Service, {
-            get: (id) => Effect.succeed(id === info.id ? info : undefined),
-            list: () => Effect.succeed([info]),
-          }),
-          Layer.mock(Plugin.Service, { awaitActivation: Effect.void }),
-        ) as unknown as Layer.Layer<LocationServices>,
-    ),
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      return yield* LayerMap.make(
+        (_ref: Location.Ref) =>
+          // These tests need skill activation and prompt preparation from the same location services.
+          // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+          Layer.mergeAll(
+            LayerNode.compile(LayerNode.group([PluginHooks.node, Image.node, Permission.node]), {
+              replacements: [
+                Bus.node.replace(Layer.succeed(Bus.Service, bus)),
+                Location.node.replace(
+                  Layer.succeed(Location.Service, Location.Service.of(locationFixture(_ref))),
+                ),
+              ],
+            }),
+            Layer.mock(Skill.Service, {
+              get: (id) => Effect.succeed(id === info.id ? info : undefined),
+              list: () => Effect.succeed([info]),
+            }),
+            Layer.mock(Plugin.Service, { awaitActivation: Effect.void }),
+          ) as unknown as Layer.Layer<LocationServices>,
+      )
+    }),
   ),
-  deps: [],
+  deps: [Bus.node],
 })
 const it = testEffect(
   AppNodeBuilder.build(
@@ -66,12 +78,15 @@ const it = testEffect(
 )
 
 describe("Session.skill", () => {
+  const allowAll = [{ action: "*", resource: "*", effect: "allow" as const }]
+  const skillRules = (effect: "allow" | "deny" | "ask") => [{ action: "skill", resource: "*", effect }]
+
   it.effect("materializes mentioned skills on their owning prompt", () =>
     Effect.gen(function* () {
       const sessions = yield* Session.Service
       const database = yield* Database.Service
       const bus = yield* Bus.Service
-      const session = yield* sessions.create({ location })
+      const session = yield* sessions.create({ location, permissions: allowAll })
       const id = SessionMessage.ID.make("msg_skill_attachment")
 
       yield* sessions.prompt({
@@ -115,7 +130,7 @@ describe("Session.skill", () => {
       const sessions = yield* Session.Service
       const database = yield* Database.Service
       const bus = yield* Bus.Service
-      const session = yield* sessions.create({ location })
+      const session = yield* sessions.create({ location, permissions: allowAll })
       const initial = SessionMessage.ID.make("msg_before_skill_attachment")
       const selected = SessionMessage.ID.make("msg_fork_skill_attachment")
 
@@ -133,6 +148,54 @@ describe("Session.skill", () => {
 
       expect(yield* sessions.messages({ sessionID: forked.id })).toEqual([
         expect.objectContaining({ type: "user", text: "Before the skill" }),
+      ])
+    }),
+  )
+
+  it.effect("rejects a prompt whose denied skill is mentioned", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const session = yield* sessions.create({ location, permissions: skillRules("deny") })
+
+      const failure = yield* sessions
+        .prompt({
+          sessionID: session.id,
+          text: "Apply @effect",
+          skills: [{ id: info.id, mention: { start: 6, end: 13, text: "@effect" } }],
+          resume: false,
+        })
+        .pipe(Effect.flip)
+
+      expect(failure._tag).toBe("Permission.BlockedError")
+      expect(failure.message).toBe("Permission denied: skill")
+      expect(yield* sessions.inbox(session.id)).toEqual([])
+    }),
+  )
+
+  it.effect("mentions an unapproved skill without injecting its body", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const session = yield* sessions.create({ location, permissions: skillRules("ask") })
+      const id = SessionMessage.ID.make("msg_unapproved_skill_attachment")
+
+      yield* sessions.prompt({
+        id,
+        sessionID: session.id,
+        text: "Apply @effect",
+        skills: [{ id: info.id, mention: { start: 6, end: 13, text: "@effect" } }],
+        resume: false,
+      })
+      yield* SessionInbox.promote(database.db, bus, session.id, "steer")
+
+      expect(yield* sessions.messages({ sessionID: session.id })).toEqual([
+        expect.objectContaining({
+          id,
+          type: "user",
+          text: "Apply @effect",
+          skills: [{ id: "effect", name: "Effect", mention: { start: 6, end: 13, text: "@effect" } }],
+        }),
       ])
     }),
   )
