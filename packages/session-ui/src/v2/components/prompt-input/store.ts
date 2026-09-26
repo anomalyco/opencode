@@ -74,13 +74,10 @@ export function createPromptInputV2Store(input: PromptInputV2StoreInput) {
       setStore()("context", "items", (items) => items.filter((item) => item.key !== key))
     },
     addMention(mention: PromptInputV2FilePart | PromptInputV2AgentPart) {
-      const text = store()
-        .prompt.map((part) => ("content" in part ? part.content : ""))
-        .join("")
-      const end = store().cursor ?? text.length
-      const start = text.slice(0, end).lastIndexOf("@")
-      setStore()("prompt", insertMention(store().prompt, start < 0 ? end : start, end, mention))
-      setStore()("cursor", (start < 0 ? end : start) + mention.content.length + 1)
+      const end = store().cursor ?? promptLength(store().prompt)
+      const start = mentionQueryStart(store().prompt, end)
+      setStore()("prompt", insertMention(store().prompt, start, end, mention))
+      setStore()("cursor", start + mention.content.length + 1)
     },
     addAttachment(attachment: PromptInputV2Attachment) {
       setStore()("prompt", (prompt) => [...prompt, attachment])
@@ -121,20 +118,39 @@ function insertMention(
   mention: PromptInputV2FilePart | PromptInputV2AgentPart,
 ): PromptInputV2Prompt {
   let position = 0
+  let inserted = false
   const parts = prompt.flatMap<PromptInputV2Prompt[number]>((part) => {
     if (part.type === "image") return [part]
+    if (inserted) return [part]
     const partStart = position
     position += part.content.length
-    if (part.type !== "text" || start < partStart || end > position) return [part]
-    const before = part.content.slice(0, start - partStart)
-    const after = part.content.slice(end - partStart)
+    if (part.type !== "text" || end < partStart || start > position) return [part]
+    const from = Math.max(start, partStart)
+    const to = Math.min(end, position)
+    inserted = true
     return [
-      ...(before ? [{ type: "text" as const, content: before, start: 0, end: 0 }] : []),
+      ...(from > partStart
+        ? [{ type: "text" as const, content: part.content.slice(0, from - partStart), start: 0, end: 0 }]
+        : []),
       mention,
-      { type: "text" as const, content: ` ${after}`, start: 0, end: 0 },
+      { type: "text" as const, content: ` ${part.content.slice(to - partStart)}`, start: 0, end: 0 },
     ]
   })
+  if (!inserted) parts.push(mention, { type: "text" as const, content: " ", start: 0, end: 0 })
   return withOffsets(parts)
+}
+
+function mentionQueryStart(prompt: PromptInputV2Prompt, end: number) {
+  let position = 0
+  for (const part of prompt) {
+    if (part.type === "image") continue
+    const partStart = position
+    position += part.content.length
+    if (part.type !== "text" || end < partStart || end > position) continue
+    const match = part.content.slice(0, end - partStart).match(/@(\S*)$/)
+    return match ? partStart + match.index! : end
+  }
+  return end
 }
 
 function withOffsets(prompt: PromptInputV2Prompt): PromptInputV2Prompt {
