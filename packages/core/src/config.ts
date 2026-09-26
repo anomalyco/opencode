@@ -6,6 +6,7 @@ import { type ParseError, parse } from "jsonc-parser"
 import { Context, Effect, Layer, Option, Schema } from "effect"
 import { Permission } from "@opencode-ai/schema/permission"
 import { FSUtil } from "./fs-util"
+import { Flag } from "./flag/flag"
 import { Global } from "./global"
 import { Location } from "./location"
 import { Policy } from "./policy"
@@ -174,15 +175,19 @@ const layer = Layer.effect(
     const locationIsGlobal = path.resolve(location.directory) === path.resolve(global.config)
     // Read configuration once when this location opens. Later calls reuse these
     // values until the location is reopened.
-    const discovered = locationIsGlobal
-      ? []
-      : yield* fs
-          .up({
-            targets: [".opencode", ...names.toReversed()],
-            start: location.directory,
-            stop: location.project.directory,
-          })
-          .pipe(Effect.orDie)
+    // `OPENCODE_DISABLE_PROJECT_CONFIG` opts out of project configuration, so the
+    // `.opencode` directories and `opencode.json` files between the location and the
+    // project boundary are skipped. The global config directory is always loaded.
+    const discovered =
+      locationIsGlobal || Flag.OPENCODE_DISABLE_PROJECT_CONFIG
+        ? []
+        : yield* fs
+            .up({
+              targets: [".opencode", ...names.toReversed()],
+              start: location.directory,
+              stop: location.project.directory,
+            })
+            .pipe(Effect.orDie)
     const directories = [
       globalDirectory,
       ...discovered

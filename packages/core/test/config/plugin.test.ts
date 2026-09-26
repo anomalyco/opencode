@@ -236,6 +236,68 @@ describe("ConfigExternalPlugin", () => {
       })
     }),
   )
+
+  it.live("skips external plugins in pure mode", () => {
+    const previous = process.env.OPENCODE_PURE
+    return Effect.gen(function* () {
+      const plugins = yield* PluginV2.Service
+      const agents = yield* AgentV2.Service
+      const fs = yield* FSUtil.Service
+      const location = yield* Location.Service
+      const npm = yield* Npm.Service
+      const host = yield* PluginHost.make(plugins)
+      const run = ConfigExternalPlugin.Plugin.effect(host).pipe(
+        Effect.provideService(PluginV2.Service, plugins),
+        Effect.provideService(FSUtil.Service, fs),
+        Effect.provideService(Location.Service, location),
+        Effect.provideService(Npm.Service, npm),
+        Effect.provideService(
+          Config.Service,
+          Config.Service.of({
+            entries: () =>
+              Effect.succeed([
+                new Config.Document({
+                  type: "document",
+                  path: path.join(import.meta.dir, "opencode.json"),
+                  info: decode({
+                    plugins: [
+                      {
+                        package: "../plugin/fixtures/config-promise-plugin.ts",
+                        options: { description: "Loaded from config" },
+                      },
+                    ],
+                  }),
+                }),
+                new Config.Directory({
+                  type: "directory",
+                  path: AbsolutePath.make(path.join(import.meta.dir, "fixtures")),
+                }),
+              ]),
+          }),
+        ),
+      )
+
+      process.env.OPENCODE_PURE = "1"
+      yield* run
+      // Loading happens in the background, so wait long enough for the same
+      // fixtures to load below before asserting that nothing was registered.
+      yield* Effect.sleep("200 millis")
+      expect(yield* agents.all()).toEqual([])
+
+      if (previous === undefined) delete process.env.OPENCODE_PURE
+      else process.env.OPENCODE_PURE = previous
+      yield* run
+      expect(yield* waitForAgent(agents, "configured")).toMatchObject({ description: "Loaded from config" })
+      expect(yield* waitForAgent(agents, "directory")).toMatchObject({ description: "Loaded from plugin directory" })
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          if (previous === undefined) delete process.env.OPENCODE_PURE
+          else process.env.OPENCODE_PURE = previous
+        }),
+      ),
+    )
+  })
 })
 
 const waitForAgent = Effect.fnUntraced(function* (agents: AgentV2.Interface, id: string) {
