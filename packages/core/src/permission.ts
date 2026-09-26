@@ -42,6 +42,12 @@ export type Reply = typeof Reply.Type
 export const AssertInput = Schema.Struct({
   id: ID.pipe(Schema.optional),
   ...RequestFields,
+  saveByResource: Schema.Array(
+    Schema.Struct({
+      resource: Schema.String,
+      pattern: Schema.String,
+    }),
+  ).pipe(Schema.optional),
   agent: Agent.ID.pipe(Schema.optional),
 }).annotate({ identifier: "Permission.AssertInput" })
 export type AssertInput = typeof AssertInput.Type
@@ -185,16 +191,22 @@ const layer = Layer.effect(
         source: input.source,
         effect,
       })
-      return { effect: event.effect, message: event.message, rules: all }
+      const save =
+        event.effect === "ask" && effect === "ask" && input.saveByResource
+          ? input.saveByResource
+              .filter((item) => evaluate(input.action, item.resource, all).effect === "ask")
+              .map((item) => item.pattern)
+          : (input.saveByResource?.map((item) => item.pattern) ?? input.save)
+      return { effect: event.effect, message: event.message, rules: all, save }
     })
 
-    function request(input: AssertInput, message?: string): Request {
+    function request(input: AssertInput, message?: string, save = input.save): Request {
       return {
         id: input.id ?? ID.create(),
         sessionID: input.sessionID,
         action: input.action,
         resources: input.resources,
-        save: input.save,
+        save,
         metadata: input.metadata,
         source: input.source,
         message,
@@ -223,7 +235,7 @@ const layer = Layer.effect(
     const ask = Effect.fn("Permission.ask")(function* (input: AssertInput) {
       if (closed) return { id: input.id ?? ID.create(), effect: "deny" as const }
       const result = yield* evaluateInput(input)
-      const value = request(input, result.message)
+      const value = request(input, result.message, result.save)
       if (result.effect === "ask") yield* create(value, input.agent)
       return { id: value.id, effect: result.effect }
     })
@@ -243,7 +255,7 @@ const layer = Layer.effect(
               })
             }
             if (result.effect === "allow") return
-            const item = yield* create(request(input, result.message), input.agent)
+            const item = yield* create(request(input, result.message, result.save), input.agent)
             return yield* restore(Deferred.await(item.deferred)).pipe(
               // Deliberate defect tunnel: leaves wrap execution in blanket `mapError`, which
               // must not convert a user's decline into model-facing tool output. The decline

@@ -573,7 +573,7 @@ describe("ShellTool conditional process substitution", () => {
               const command = '[[ -n <(printf reached > marker) ]]; wait "$!"'
               const result = yield* runPermissionCommand(registry, command, marker, [reply])
               expect(result.requests).toMatchObject([
-                { action: "shell", resources: ["printf reached > marker", 'wait "$!"'], save: ["printf *", "wait *"] },
+                { action: "shell", resources: ["printf reached > marker", 'wait "$!"'], save: ["printf *"] },
               ])
               if (reply === "reject") {
                 expect(Exit.isFailure(result.exit)).toBe(true)
@@ -917,7 +917,12 @@ describe("ShellTool", () => {
                   source: { type: "tool", messageID: toolIdentity.messageID, id: "call-shell" },
                 },
               ])
-              expect(assertions[0]?.save).toEqual([isWindows ? "Start-Sleep *" : "printf *"])
+              expect(assertions[0]?.saveByResource).toEqual([
+                {
+                  resource: isWindows ? "Start-Sleep -Milliseconds 100" : helloCommand,
+                  pattern: isWindows ? "Start-Sleep *" : "printf *",
+                },
+              ])
             }),
           )
         },
@@ -1018,7 +1023,10 @@ describe("ShellTool", () => {
                 expect(assertions).toHaveLength(1)
                 expect(assertions[0]).toMatchObject({
                   resources: ["printf one", "printf two"],
-                  save: ["printf *", "printf *"],
+                  saveByResource: [
+                    { resource: "printf one", pattern: "printf *" },
+                    { resource: "printf two", pattern: "printf *" },
+                  ],
                 })
               }),
             ),
@@ -1282,9 +1290,18 @@ describe("ShellTool", () => {
                     "shell",
                   ])
                   expect(assertions[1]?.resources).toEqual([path.join(realpathSync(os.homedir()), "*")])
-                  expect(assertions[0]).toMatchObject({ resources: ["echo $((1 + 1))"], save: ["echo *"] })
-                  expect(assertions[2]).toMatchObject({ resources: ["pwd"], save: ["pwd *"] })
-                  expect(assertions[3]).toMatchObject({ resources: ["pwd"], save: ["pwd *"] })
+                  expect(assertions[0]).toMatchObject({
+                    resources: ["echo $((1 + 1))"],
+                    saveByResource: [{ resource: "echo $((1 + 1))", pattern: "echo *" }],
+                  })
+                  expect(assertions[2]).toMatchObject({
+                    resources: ["pwd"],
+                    saveByResource: [{ resource: "pwd", pattern: "pwd *" }],
+                  })
+                  expect(assertions[3]).toMatchObject({
+                    resources: ["pwd"],
+                    saveByResource: [{ resource: "pwd", pattern: "pwd *" }],
+                  })
                   return assertions.slice()
                 }),
               (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),

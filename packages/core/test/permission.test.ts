@@ -9,6 +9,7 @@ import { Location } from "@opencode/core/location"
 import { Permission } from "@opencode/core/permission"
 import { PermissionTable } from "@opencode/core/permission/sql"
 import { PermissionSaved } from "@opencode/core/permission/saved"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -26,7 +27,15 @@ const current = Layer.succeed(
 )
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, SessionStore.node, PermissionSaved.node, Agent.node, Permission.node]),
+    LayerNode.group([
+      Database.node,
+      Bus.node,
+      SessionStore.node,
+      PermissionSaved.node,
+      Agent.node,
+      PluginHooks.node,
+      Permission.node,
+    ]),
     [Location.node.replace(current)],
   ),
 )
@@ -338,6 +347,109 @@ describe("Permission", () => {
     }),
   )
 
+  it.effect("only offers and saves patterns for resources that require approval", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "shell", resource: "git status", effect: "allow" }])
+      const saved = yield* PermissionSaved.Service
+      yield* saved.add({ projectID: Project.ID.global, action: "shell", resources: ["pwd *"] })
+
+      const pending = yield* waitForRequest({
+        action: "shell",
+        resources: ["git status", "pwd -P", "npm test"],
+        saveByResource: [
+          { resource: "git status", pattern: "git status *" },
+          { resource: "pwd -P", pattern: "pwd *" },
+          { resource: "npm test", pattern: "npm test *" },
+        ],
+      })
+      expect(pending.request.resources).toEqual(["git status", "pwd -P", "npm test"])
+      expect(pending.request.save).toEqual(["npm test *"])
+
+      yield* pending.service.reply({ requestID: pending.request.id, reply: "always" })
+      yield* Fiber.join(pending.fiber)
+      expect((yield* saved.list({ projectID: Project.ID.global })).map((item) => item.resource).sort()).toEqual([
+        "npm test *",
+        "pwd *",
+      ])
+    }),
+  )
+
+  it.effect("retains an independent aggregate save pattern for multiple resources", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "patch", resource: "src/allowed.ts", effect: "allow" }])
+      const pending = yield* waitForRequest({
+        action: "patch",
+        resources: ["src/allowed.ts", "src/approval-needed.ts"],
+        save: ["*"],
+      })
+
+      expect(pending.request.save).toEqual(["*"])
+      yield* pending.service.reply({ requestID: pending.request.id, reply: "always" })
+      yield* Fiber.join(pending.fiber)
+      const saved = yield* PermissionSaved.Service
+      expect((yield* saved.list({ projectID: Project.ID.global })).map((item) => item.resource)).toEqual(["*"])
+    }),
+  )
+
+  it.effect("retains reordered independent save patterns when array lengths match", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "patch", resource: "src/allowed.ts", effect: "allow" }])
+      const pending = yield* waitForRequest({
+        action: "patch",
+        resources: ["src/allowed.ts", "src/approval-needed.ts"],
+        save: ["src/approval-needed.ts", "src/allowed.ts"],
+      })
+
+      expect(pending.request.save).toEqual(["src/approval-needed.ts", "src/allowed.ts"])
+      yield* pending.service.reply({ requestID: pending.request.id, reply: "once" })
+      yield* Fiber.join(pending.fiber)
+    }),
+  )
+
+  it.effect("filters explicitly associated save patterns by their resources", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "shell", resource: "git status", effect: "allow" }])
+      const pending = yield* waitForRequest({
+        action: "shell",
+        resources: ["git status", "npm test"],
+        saveByResource: [
+          { resource: "npm test", pattern: "npm test *" },
+          { resource: "git status", pattern: "git status *" },
+        ],
+      })
+
+      expect(pending.request.save).toEqual(["npm test *"])
+      yield* pending.service.reply({ requestID: pending.request.id, reply: "once" })
+      yield* Fiber.join(pending.fiber)
+    }),
+  )
+
+  it.effect("keeps all save patterns when an evaluation hook changes allow to ask", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "shell", resource: "*", effect: "allow" }])
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register("permission", "evaluate", (event) =>
+        Effect.sync(() => {
+          expect(event.resources).toEqual(["git status", "npm test"])
+          expect(event.effect).toBe("allow")
+          event.effect = "ask"
+        }),
+      )
+
+      const pending = yield* waitForRequest({
+        action: "shell",
+        resources: ["git status", "npm test"],
+        saveByResource: [
+          { resource: "git status", pattern: "git status *" },
+          { resource: "npm test", pattern: "npm test *" },
+        ],
+      })
+      expect(pending.request.save).toEqual(["git status *", "npm test *"])
+      yield* pending.service.reply({ requestID: pending.request.id, reply: "once" })
+      yield* Fiber.join(pending.fiber)
+    }),
+  )
+
   for (const guard of ["configured deny", "missing Session"] as const) {
     it.effect(`skips pending auto-approval after always for ${guard}`, () =>
       Effect.gen(function* () {
@@ -469,6 +581,7 @@ describe("shell scanner permission impact", () => {
       savedEffect: ["ask", "allow"],
       exactEffect: ["ask", "allow"],
       deniedEffect: ["deny", "allow"],
+      approvedSave: [["printf *"], []],
     },
     {
       name: "assignment redirect with an approved command substitution",
@@ -480,6 +593,7 @@ describe("shell scanner permission impact", () => {
       savedEffect: ["ask", "allow"],
       exactEffect: ["ask", "allow"],
       deniedEffect: ["deny", "allow"],
+      approvedSave: [[" *"], []],
     },
     {
       name: "substitution in a saved prefix",
@@ -513,6 +627,7 @@ describe("shell scanner permission impact", () => {
       savedEffect: ["allow", "ask"],
       exactEffect: ["allow", "ask"],
       deniedEffect: ["allow", "deny"],
+      approvedSave: [[], ["git\tstatus *"]],
     },
     {
       name: "PowerShell equals-joined argument",
@@ -524,29 +639,39 @@ describe("shell scanner permission impact", () => {
       savedEffect: ["allow", "ask"],
       exactEffect: ["allow", "ask"],
       deniedEffect: ["deny", "allow"],
+      approvedSave: [[], ["git --work-tree=src *"]],
     },
   ] as const) {
     for (const scenario of [
-      { name: "no approval", saved: [], rules: [], expected: ["ask", "ask"] },
-      { name: "saved wildcard", saved: ["*"], rules: [], expected: ["allow", "allow"] },
-      { name: "saved command approvals", saved: fixture.approved, rules: [], expected: fixture.savedEffect },
+      { name: "no approval", saved: [], rules: [], expected: ["ask", "ask"], expectedSave: undefined },
+      { name: "saved wildcard", saved: ["*"], rules: [], expected: ["allow", "allow"], expectedSave: [[], []] },
+      {
+        name: "saved command approvals",
+        saved: fixture.approved,
+        rules: [],
+        expected: fixture.savedEffect,
+        expectedSave: "approvedSave" in fixture ? fixture.approvedSave : [[], []],
+      },
       {
         name: "exact configured approvals",
         saved: [],
         rules: fixture.exact.map((resource): Permission.Rule => ({ action: "shell", resource, effect: "allow" })),
         expected: fixture.exactEffect,
+        expectedSave: "approvedSave" in fixture ? fixture.approvedSave : [[], []],
       },
       {
         name: "exact saved approvals",
         saved: fixture.exact,
         rules: [],
         expected: fixture.exactEffect,
+        expectedSave: "approvedSave" in fixture ? fixture.approvedSave : [[], []],
       },
       {
         name: "configured deny despite saved wildcard",
         saved: ["*"],
         rules: [{ action: "shell", resource: fixture.denied, effect: "deny" }] satisfies Permission.Ruleset,
         expected: fixture.deniedEffect,
+        expectedSave: [[], []],
       },
     ] as const) {
       it.live(`${fixture.name}: ${scenario.name}`, () =>
@@ -564,7 +689,10 @@ describe("shell scanner permission impact", () => {
               assertion({
                 action: "shell",
                 resources: parsed.commands.map((command) => command.resource),
-                save: parsed.commands.map((command) => command.save),
+                saveByResource: parsed.commands.map((command) => ({
+                  resource: command.resource,
+                  pattern: command.save,
+                })),
               }),
             )
             expect(result.effect, portable ? "native" : "legacy").toBe(scenario.expected[index])
@@ -572,7 +700,9 @@ describe("shell scanner permission impact", () => {
             expect(pending).toHaveLength(result.effect === "ask" ? 1 : 0)
             if (result.effect !== "ask") continue
             expect(pending[0]?.resources).toEqual(parsed.commands.map((command) => command.resource))
-            expect(pending[0]?.save).toEqual(parsed.commands.map((command) => command.save))
+            expect(pending[0]?.save).toEqual(
+              scenario.expectedSave?.[index] ?? parsed.commands.map((command) => command.save),
+            )
             yield* service.reply({ requestID: result.id, reply: "once" })
             expect(yield* service.list()).toEqual([])
           }
@@ -674,7 +804,10 @@ describe("shell scanner permission impact", () => {
             assertion({
               action: "shell",
               resources: parsed.commands.map((command) => command.resource),
-              save: parsed.commands.map((command) => command.save),
+              saveByResource: parsed.commands.map((command) => ({
+                resource: command.resource,
+                pattern: command.save,
+              })),
             }),
           )
           expect(first.effect).toBe("ask")
@@ -692,7 +825,10 @@ describe("shell scanner permission impact", () => {
                 assertion({
                   action: "shell",
                   resources: parsed.commands.map((command) => command.resource),
-                  save: parsed.commands.map((command) => command.save),
+                  saveByResource: parsed.commands.map((command) => ({
+                    resource: command.resource,
+                    pattern: command.save,
+                  })),
                 }),
               )
               expect(result.effect, `${target ? "native" : "legacy"}: ${command}`).toBe(
