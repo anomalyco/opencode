@@ -25,6 +25,7 @@ import { ConfigToolOutput } from "./config/tool-output"
 import { ConfigWatcher } from "./config/watcher"
 import { ConfigV1 } from "./v1/config/config"
 import { ConfigMigrateV1 } from "./v1/config/migrate"
+import { ConfigJevV1 } from "./v1/config/jev"
 
 export class Info extends Schema.Class<Info>("Config.Info")({
   $schema: Schema.optional(Schema.String).annotate({
@@ -38,6 +39,10 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   }),
   default_agent: Schema.String.pipe(Schema.optional).annotate({
     description: "Default primary agent to use when no session agent is selected",
+  }),
+  jev: ConfigJevV1.Info.pipe(Schema.optional).annotate({
+    description:
+      "Confidence-gated model tier routing (default: disabled). The decision engine defaults to Typesafe Jev; any System One decision model can be configured via `jev.engine`.",
   }),
   autoupdate: Schema.Union([Schema.Boolean, Schema.Literal("notify")])
     .pipe(Schema.optional)

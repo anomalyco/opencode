@@ -35,6 +35,8 @@ import { Tool } from "@/tool/tool"
 import { Permission } from "@/permission"
 import { SessionStatus } from "./status"
 import { LLM } from "./llm"
+import { Jev } from "./jev"
+import { Auth } from "../auth"
 import { Shell } from "@opencode-ai/core/shell"
 import { ShellID } from "@/tool/shell/id"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -139,6 +141,7 @@ const layer = Layer.effect(
     const llm = yield* LLM.Service
     const events = yield* EventV2Bridge.Service
     const flags = yield* RuntimeFlags.Service
+    const auth = yield* Auth.Service
     const database = yield* Database.Service
     const { db } = database
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
@@ -631,6 +634,27 @@ const layer = Layer.effect(
       if (Option.isSome(match) && match.value.info.role === "user") return match.value.info.model
       return yield* provider.defaultModel().pipe(Effect.orDie)
     })
+    // Jev routing. `jev` is disabled unless explicitly enabled in config; any
+    // config read failure resolves to undefined and routing stays off.
+    const jevConfig = Effect.fnUntraced(function* () {
+      const cfg = yield* config.get().pipe(Effect.orElseSucceed(() => undefined))
+      return Jev.resolveConfig(cfg?.jev)
+    })
+
+    // Credential resolution — three existing routes, in order:
+    // 1. the engine's `apiKeyEnv` environment variable (default `TYPESAFE_API_KEY`)
+    // 2. `auth.json` entry for the engine's `authProvider` id (opencode credential store)
+    // 3. a custom `provider.<authProvider>` config entry's `options.apiKey`
+    const jevKeyResolver = (engineCfg: Jev.SystemOneConfig) => async () => {
+      const fromEnv = process.env[engineCfg.apiKeyEnv]
+      if (fromEnv) return fromEnv
+      const stored = await Effect.runPromise(auth.get(engineCfg.authProvider)).catch(() => undefined)
+      if (stored?.type === "api") return stored.key
+      const cfg = await Effect.runPromise(config.get()).catch(() => undefined)
+      const option = cfg?.provider?.[engineCfg.authProvider]?.options?.apiKey
+      if (typeof option === "string" && option) return option
+      return undefined
+    }
 
     const createUserMessage = Effect.fn("SessionPrompt.createUserMessage")(function* (input: PromptInput) {
       const agentName = input.agent
@@ -643,7 +667,33 @@ const layer = Layer.effect(
         throw error
       }
 
-      const model = input.model ?? ag.model ?? (yield* currentModel(input.sessionID))
+      let model = input.model ?? ag.model ?? (yield* currentModel(input.sessionID))
+      // Jev routing: when the model was not chosen explicitly for this message,
+      // let the router pick the tier for the turn. Any router failure (disabled,
+      // unavailable, unsure) keeps `model` — fail-open means fail expensive.
+      if (!input.model) {
+        const jev = yield* jevConfig()
+        if (jev) {
+          const routed = yield* Effect.promise((signal) =>
+            Jev.routeWith(
+              jev,
+              { request: Jev.requestText(input.parts), defaultModel: model, signal },
+              Jev.engine({ timeoutMs: jev.timeoutMs, keyResolver: jevKeyResolver(jev.engine), engine: jev.engine }),
+            ).catch(() => undefined),
+          )
+          if (routed) {
+            model = {
+              providerID: ProviderV2.ID.make(routed.model.providerID),
+              modelID: ModelV2.ID.make(routed.model.modelID),
+            }
+            yield* Effect.logInfo("jev route", {
+              "session.id": input.sessionID,
+              tier: routed.decision.tier,
+              reason: routed.decision.reason,
+            })
+          }
+        }
+      }
       const same = ag.model && model.providerID === ag.model.providerID && model.modelID === ag.model.modelID
       const full =
         !input.variant && ag.variant && same
@@ -1084,6 +1134,10 @@ const layer = Layer.effect(
         let structured: unknown
         let step = 0
         const session = yield* sessions.get(sessionID).pipe(Effect.orDie)
+        // Per-turn Jev routing state. An escalation override (set after a failed
+        // verification) wins and disables further down-routing for the rest of
+        // the turn.
+        const routing: Jev.TurnState = { escalations: 0 }
 
         while (true) {
           yield* status.set(sessionID, { type: "busy" })
@@ -1096,6 +1150,8 @@ const layer = Layer.effect(
           const { user: lastUser, assistant: lastAssistant, finished: lastFinished, tasks } = MessageV2.latest(msgs)
 
           if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
+          const lastUserMsg = msgs.findLast((m) => m.info.role === "user" && m.info.id === lastUser.id)
+          const lastUserParts = lastUserMsg?.parts ?? []
 
           const lastAssistantMsg = msgs.findLast(
             (msg) => msg.info.role === "assistant" && msg.info.id === lastAssistant?.id,
@@ -1138,7 +1194,55 @@ const layer = Layer.effect(
               history: msgs,
             }).pipe(Effect.ignore, Effect.forkIn(scope))
 
-          const model = yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID)
+          let model = yield* getModel(lastUser.model.providerID, lastUser.model.modelID, sessionID)
+
+          // Jev routing. An escalation override (set after a failed verification)
+          // wins and disables further down-routing for the rest of the turn.
+          // Otherwise steps after the first re-resolve the tier — complexity can
+          // grow once tool results are in context. Fail-open: router trouble keeps
+          // the model the turn already resolved.
+          if (routing.override) {
+            model = yield* getModel(
+              ProviderV2.ID.make(routing.override.providerID),
+              ModelV2.ID.make(routing.override.modelID),
+              sessionID,
+            ).pipe(Effect.orElseSucceed(() => model))
+          } else if (step > 1) {
+            const jev = yield* jevConfig()
+            if (jev) {
+              const routed = yield* Effect.promise((signal) =>
+                Jev.routeWith(
+                  jev,
+                  {
+                    request: Jev.requestText(lastUserParts),
+                    defaultModel: lastUser.model,
+                    contextTokens: lastFinished
+                      ? lastFinished.tokens.input +
+                        lastFinished.tokens.output +
+                        lastFinished.tokens.reasoning +
+                        lastFinished.tokens.cache.read +
+                        lastFinished.tokens.cache.write
+                      : undefined,
+                    signal,
+                  },
+                  Jev.engine({ timeoutMs: jev.timeoutMs, keyResolver: jevKeyResolver(jev.engine), engine: jev.engine }),
+                ).catch(() => undefined),
+              )
+              if (routed) {
+                model = yield* getModel(
+                  ProviderV2.ID.make(routed.model.providerID),
+                  ModelV2.ID.make(routed.model.modelID),
+                  sessionID,
+                ).pipe(Effect.orElseSucceed(() => model))
+                yield* Effect.logInfo("jev route", {
+                  "session.id": sessionID,
+                  step,
+                  tier: routed.decision.tier,
+                  reason: routed.decision.reason,
+                })
+              }
+            }
+          }
           const task = tasks.pop()
 
           if (task?.type === "subtask") {
@@ -1313,6 +1417,51 @@ const layer = Layer.effect(
                 }).toObject()
                 yield* sessions.updateMessage(handle.message)
                 return "break" as const
+              }
+            }
+
+            // Jev verify-and-escalate: a down-routed step that finished inadequate is
+            // re-run from the original state on the next stronger tier. The inadequate
+            // attempt is discarded; tool side effects from earlier steps are retained
+            // (they are irreversible and part of the true state the re-run sees).
+            if (result === "stop" && !handle.message.error && !routing.override) {
+              const jev = yield* jevConfig()
+              if (jev) {
+                const stored = yield* sessions
+                  .findMessage(sessionID, (m) => m.info.id === handle.message.id)
+                  .pipe(Effect.orElseSucceed(() => Option.none<SessionV1.WithParts>()))
+                const output = Option.isSome(stored)
+                  ? stored.value.parts
+                      .filter((p): p is SessionV1.TextPart => p.type === "text")
+                      .map((p) => p.text)
+                      .join("\n")
+                  : ""
+                const verdict = yield* Effect.promise((signal) =>
+                  Jev.verifyWith(
+                    jev,
+                    {
+                      request: Jev.requestText(lastUserParts),
+                      output,
+                      model: { providerID: handle.message.providerID, modelID: handle.message.modelID },
+                      escalations: routing.escalations,
+                      signal,
+                    },
+                    Jev.engine({ timeoutMs: jev.timeoutMs, keyResolver: jevKeyResolver(jev.engine), engine: jev.engine }),
+                  ).catch(() => undefined),
+                )
+                if (verdict?.escalate && verdict.model) {
+                  yield* sessions
+                    .removeMessage({ sessionID, messageID: handle.message.id })
+                    .pipe(Effect.ignore)
+                  routing.escalations += 1
+                  routing.override = verdict.model
+                  yield* Effect.logInfo("jev escalate", {
+                    "session.id": sessionID,
+                    tier: verdict.tier,
+                    escalations: routing.escalations,
+                  })
+                  return "continue" as const
+                }
               }
             }
 
@@ -1623,6 +1772,7 @@ export const node = LayerNode.make({
     SystemPrompt.node,
     LLM.node,
     EventV2Bridge.node,
+    Auth.node,
     RuntimeFlags.node,
     Database.node,
   ],

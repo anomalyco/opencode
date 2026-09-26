@@ -8,6 +8,7 @@ import { ConfigAgentV1 } from "./agent"
 import { ConfigAttachmentV1 } from "./attachment"
 import { ConfigCommandV1 } from "./command"
 import { ConfigFormatterV1 } from "./formatter"
+import { ConfigJevV1 } from "./jev"
 import { ConfigLayoutV1 } from "./layout"
 import { ConfigLSPV1 } from "./lsp"
 import { ConfigMCPV1 } from "./mcp"
@@ -76,6 +77,10 @@ export const Info = Schema.Struct({
   }),
   small_model: Schema.optional(Schema.String).annotate({
     description: "Small model to use for tasks like title generation in the format of provider/model",
+  }),
+  jev: Schema.optional(ConfigJevV1.Info).annotate({
+    description:
+      "Confidence-gated model tier routing (default: disabled). The decision engine answers routing questions over the System One protocol and defaults to Typesafe Jev (credentials resolve from TYPESAFE_API_KEY, the auth.json `typesafe` entry, or a custom `provider.typesafe` options.apiKey). Any other System One decision model — e.g. a laya model behind a gateway — can be plugged in via `jev.engine`.",
   }),
   default_agent: Schema.optional(Schema.String).annotate({
     description:
