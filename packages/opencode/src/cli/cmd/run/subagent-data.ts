@@ -798,6 +798,7 @@ export function reduceSubagentData(input: {
 }) {
   const event = input.event
 
+  let changed = false
   if (event.type === "message.part.updated") {
     const part = event.properties.part
     if (part.sessionID === input.sessionID) {
@@ -806,6 +807,10 @@ export function reduceSubagentData(input: {
       }
 
       return syncTaskTab(input.data, part)
+    }
+
+    if (part.type === "tool" && knownSession(input.data, part.sessionID)) {
+      changed = syncTaskTab(input.data, part)
     }
   }
 
@@ -871,6 +876,6 @@ export function reduceSubagentData(input: {
       event,
       thinking: input.thinking,
       limits: input.limits,
-    }) || cancelled
+    }) || cancelled || changed
   )
 }
