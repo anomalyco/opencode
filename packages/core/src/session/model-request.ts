@@ -39,6 +39,7 @@ import { SessionSystemPrompt } from "./system-prompt.js"
 import { toLLMMessages } from "./runner/to-llm-message.js"
 import type { SessionMessage } from "./message.js"
 
+const MALFORMED_TOOL_RESULT = "ERROR: Tool result was malformed and could not be included in the request."
 const IMAGE_BYTES_TRIGGER = 25 * 1024 * 1024 // 25 MiB
 const IMAGE_BYTES_TARGET = 15 * 1024 * 1024 // 15 MiB
 const IMAGE_REMOVED =
@@ -118,6 +119,10 @@ export const unsupportedParts = (messages: LLMRequest["messages"], capabilities:
           return unsupportedMedia(part.media.mediaType, part.filename, capabilities) ?? part
         }
         if (part.type !== "tool-result" || part.result.type !== "content") return part
+        // A malformed tool result (non-array content value) must not crash the
+        // session drain; degrade it to visible text instead.
+        if (!Array.isArray(part.result.value))
+          return { ...part, result: { type: "text" as const, value: MALFORMED_TOOL_RESULT } }
         return {
           ...part,
           result: {
@@ -145,7 +150,8 @@ export const boundImages = (messages: LLMRequest["messages"]) => {
       total +
       message.content.reduce((sum, part) => {
         if (part.type === "media" && isImage(part.media.mediaType)) return sum + size(part.media)
-        if (part.type !== "tool-result" || part.result.type !== "content") return sum
+        if (part.type !== "tool-result" || part.result.type !== "content" || !Array.isArray(part.result.value))
+          return sum
         return (
           sum +
           part.result.value.reduce(
@@ -169,6 +175,8 @@ export const boundImages = (messages: LLMRequest["messages"]) => {
           return Message.text(IMAGE_REMOVED)
         }
         if (part.type !== "tool-result" || part.result.type !== "content") return part
+        if (!Array.isArray(part.result.value))
+          return { ...part, result: { type: "text" as const, value: MALFORMED_TOOL_RESULT } }
         return {
           ...part,
           result: {
