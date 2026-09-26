@@ -30,7 +30,7 @@ import { createTimelineSearchController } from "./timeline/search-controller"
 import { TimelineSearchBar } from "./timeline/search-bar"
 import { ActiveSessionComposerRegion, createActiveSessionRegion } from "./composer/region"
 import { SessionIdentityHeader } from "./session-identity-header"
-import { SessionReviewToggle } from "./header/session-header-actions"
+import { SessionHeaderToggles } from "./header/session-header-actions"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
 import { createSessionBrowser } from "./browser/model"
 import { createTimelineCache } from "./timeline/cache"
@@ -341,7 +341,7 @@ function SessionScreenContent(props: { session: SessionModel; browser: ReturnTyp
               onPointerDown={hideTimelineScrollbar}
               onClick={hideTimelineScrollbar}
             >
-              <SessionReviewToggle />
+              <SessionHeaderToggles />
             </div>
           </Show>
           <div

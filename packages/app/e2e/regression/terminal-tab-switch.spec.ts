@@ -16,6 +16,32 @@ const PROBE = "original"
 
 test.use({ viewport: { width: 1440, height: 900 } })
 
+// The session header must expose the terminal toggle with state synced to the
+// shared terminal panel, regardless of how it was opened.
+test("header button toggles the terminal panel", async ({ page }) => {
+  await setup(page)
+
+  await page.goto(sessionHref(sessionA))
+  await expectSessionTitle(page, titleA)
+
+  const toggle = page.getByRole("button", { name: "Toggle terminal" })
+  const terminal = page.locator('[data-component="terminal"]')
+  await expect(toggle).toBeVisible()
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+
+  await toggle.click()
+  await expect(terminal).toBeVisible()
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+
+  await toggle.click()
+  await expect(terminal).toBeHidden()
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+
+  await page.keyboard.press("Control+Backquote")
+  await expect(terminal).toBeVisible()
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+})
+
 // Terminal processes are workspace-scoped, but panel visibility belongs to each
 // session tab. Switching tabs must keep the PTY alive without opening its panel.
 test("keeps terminal visibility per tab and the PTY alive across tab switches", async ({ page }) => {
