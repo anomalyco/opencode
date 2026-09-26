@@ -166,6 +166,25 @@ export const Info = Schema.Struct({
       }),
     }),
   ),
+  telemetry: Schema.optional(
+    Schema.Struct({
+      otlp: Schema.optional(
+        Schema.Struct({
+          endpoint: Schema.optional(Schema.String).annotate({
+            description: "OTLP HTTP base endpoint for managed OpenCode logs and traces",
+          }),
+          headers: Schema.optional(Schema.String).annotate({
+            description: "Comma-separated OTLP exporter headers in key=value form",
+          }),
+          resourceAttributes: Schema.optional(Schema.String).annotate({
+            description: "Comma-separated OpenTelemetry resource attributes in key=value form",
+          }),
+        }),
+      ),
+    }),
+  ).annotate({
+    description: "Managed telemetry exporter settings",
+  }),
   experimental: Schema.optional(
     Schema.Struct({
       disable_paste_summary: Schema.optional(Schema.Boolean),

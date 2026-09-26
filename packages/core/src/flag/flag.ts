@@ -13,8 +13,12 @@ function enabledByExperimental(key: string) {
 }
 
 export const Flag = {
-  OTEL_EXPORTER_OTLP_ENDPOINT: process.env["OTEL_EXPORTER_OTLP_ENDPOINT"],
-  OTEL_EXPORTER_OTLP_HEADERS: process.env["OTEL_EXPORTER_OTLP_HEADERS"],
+  get OTEL_EXPORTER_OTLP_ENDPOINT() {
+    return process.env["OTEL_EXPORTER_OTLP_ENDPOINT"]
+  },
+  get OTEL_EXPORTER_OTLP_HEADERS() {
+    return process.env["OTEL_EXPORTER_OTLP_HEADERS"]
+  },
 
   OPENCODE_AUTO_HEAP_SNAPSHOT: truthy("OPENCODE_AUTO_HEAP_SNAPSHOT"),
   OPENCODE_GIT_BASH_PATH: process.env["OPENCODE_GIT_BASH_PATH"],

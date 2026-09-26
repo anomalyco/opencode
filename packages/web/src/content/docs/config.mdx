@@ -249,6 +249,25 @@ opencode debug config
 
 All managed preference keys appear in the resolved config and cannot be overridden by user or project configuration.
 
+Managed settings can also configure the OTLP HTTP exporter before OpenCode initializes observability:
+
+```json title="managed opencode.json"
+{
+  "telemetry": {
+    "otlp": {
+      "endpoint": "https://otel.example.com",
+      "headers": "Authorization=Bearer token",
+      "resourceAttributes": "deployment.environment.name=production"
+    }
+  },
+  "experimental": {
+    "openTelemetry": true
+  }
+}
+```
+
+The same `telemetry` dictionary can be placed directly in an `ai.opencode.managed` payload. As with every setting supplied by the profile, each OTLP value present in the mobileconfig has the highest precedence. Profile values override the system-managed file and `OTEL_EXPORTER_OTLP_ENDPOINT`, `OTEL_EXPORTER_OTLP_HEADERS`, and `OTEL_RESOURCE_ATTRIBUTES` inherited from the process. Values omitted from the profile can fall back to the system-managed file or process environment. User and project configuration cannot set these exporter values.
+
 ---
 
 ## Schema
