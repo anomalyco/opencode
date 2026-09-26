@@ -927,6 +927,21 @@ const registration = await ctx.tool.transform((editor) => {
 })
 ```
 
+Tools default to Code Mode (`codemode: true`). The catalog entry `tools.acme.greeting` is a function available inside
+the `execute` tool's code, not a native model tool name. Set `codemode: false` to expose a tool directly to the model:
+
+```ts
+await ctx.tool.transform((editor) => {
+  editor.update("acme_greeting", (tool) => {
+    tool.options = { namespace: "acme", codemode: false }
+  })
+})
+```
+
+The model can now call `acme_greeting` directly. Without a namespace, its direct name is `greeting`; neither direct
+name has a `tools.` prefix. Direct tools do not require `execute` to be allowed, but remain subject to their own
+permissions. Setting `pinned: true` keeps a tool's definition in the Code Mode catalog; it does not make it a direct tool.
+
 Promise tool executors receive `context.signal`. Pass it to cancellable work such as `fetch` so stopping the Session
 also stops the underlying operation.
 
