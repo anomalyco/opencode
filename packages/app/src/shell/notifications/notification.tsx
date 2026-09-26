@@ -280,7 +280,37 @@ export function createServerNotificationState(input: {
     })
   }
 
+  const handlePermissionAsked = (sessionID: string, eventID: string) => {
+    void lookup(sessionID).then((session) => {
+      if (meta.disposed) return
+      if (!session) return
+      if (session.parentID) return
+
+      if (sessionIDHasOpenTab(tabs.store, input.key, sessionID) && settings.sounds.permissionsEnabled()) {
+        void input.coordinator.sound(`${input.key}\0${eventID}`, () => playSoundById(settings.sounds.permissions()))
+      }
+
+      if (settings.notifications.permissions()) {
+        const project = input.data.project.get(session.projectID)
+        void input.coordinator.system(`${input.key}\0${eventID}`, () =>
+          platform.notify(
+            language.t("notification.permission.title"),
+            language.t("notification.permission.description", {
+              sessionTitle: session.title ?? sessionID,
+              projectName: project?.name ?? project?.canonical ?? session.projectID,
+            }),
+            () => openNotificationSession(tabs, input.key, sessionID),
+          ),
+        )
+      }
+    })
+  }
+
   const unsub = input.sdk.event.listen((event) => {
+    if (event.type === "permission.asked") {
+      handlePermissionAsked(event.data.sessionID, event.id)
+      return
+    }
     if (event.type !== "session.execution.succeeded" && event.type !== "session.execution.failed") return
 
     const time = Date.now()
