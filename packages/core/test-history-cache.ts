@@ -16,8 +16,12 @@ import { HistoryCache } from "./src/session/history-cache.js"
 import { SessionMessageTable, SessionTable } from "./src/session/sql.js"
 import { SessionMessage } from "@opencode/schema/session-message"
 
-const SRC = process.argv[2] ?? "/tmp/memstudy/bench.db"
-const DB_PATH = "/tmp/memstudy/test-cache.db"
+const SRC = process.argv[2]
+const DB_PATH = process.argv[3] ?? "./test-cache.db"
+if (!SRC) {
+  console.error("usage: bun test-history-cache.ts <source-session.db> [dest.db]")
+  process.exit(1)
+}
 await Bun.write(DB_PATH, new Uint8Array(await Bun.file(SRC).arrayBuffer()))
 
 const encodeMessage = Schema.encodeSync(SessionMessage.Info)

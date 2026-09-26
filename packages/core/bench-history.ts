@@ -14,7 +14,11 @@ import { SessionMessageTable } from "./src/session/sql.js"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { toLLMMessages } from "./src/session/runner/to-llm-message.js"
 
-const DB_PATH = process.argv[2] ?? "/tmp/memstudy/bench.db"
+const DB_PATH = process.argv[2]
+if (!DB_PATH) {
+  console.error("usage: bun bench-history.ts <copy-of-a-session.db>")
+  process.exit(1)
+}
 
 const program = Effect.gen(function* () {
   const { db } = yield* Database.Service
