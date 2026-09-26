@@ -34,7 +34,7 @@ import { Model } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Money } from "@opencode/schema/money"
-import { Deferred, Effect, Fiber, Layer, Stream } from "effect"
+import { Deferred, Effect, Fiber, Layer, Logger, Stream } from "effect"
 import { testEffect } from "./lib/effect"
 
 let requests: LLMRequest[] = []
@@ -101,6 +101,7 @@ const models = Layer.mock(SessionRunnerModel.Service)({
   },
 })
 const smallModels = Layer.mock(Model.Service, {
+  get: () => Effect.succeed(undefined),
   small: () => Effect.succeed(selectedSmall),
 })
 const it = testEffect(
@@ -194,6 +195,18 @@ const enableTitleAgent = Effect.gen(function* () {
       agent.mode = "primary"
       agent.hidden = true
       agent.system = "You are a title generator."
+    })
+  })
+})
+const enableTitleAgentWithUnavailableModel = Effect.gen(function* () {
+  yield* enableTitleAgent
+  const agents = yield* Agent.Service
+  yield* agents.transform((editor) => {
+    editor.update(Agent.ID.make("title"), (agent) => {
+      agent.model = Model.Ref.make({
+        providerID: Provider.ID.make("test"),
+        id: Model.ID.make("deprecated-small"),
+      })
     })
   })
 })
@@ -300,6 +313,34 @@ it.effect("uses a small model from the primary provider", () =>
     expect(selections[1]?.variant).toBe(Model.VariantID.make("none"))
     const store = yield* SessionStore.Service
     expect((yield* store.get(sessionID))?.title).toBe("Generated Title")
+  }),
+)
+
+it.effect("warns when a configured title model is unavailable before falling back", () =>
+  Effect.gen(function* () {
+    yield* enableTitleAgentWithUnavailableModel
+    const sessionID = Session.ID.make("ses_title_unavailable_configured_model")
+    yield* insertSession(
+      sessionID,
+      undefined,
+      undefined,
+      Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make("title-model") }),
+    )
+    yield* prompt(sessionID, "Keep the configured title model visible")
+
+    const logged: string[] = []
+    const title = yield* SessionTitle.Service
+    yield* title.generate(sessionID).pipe(
+      Effect.provideService(
+        Logger.CurrentLoggers,
+        new Set([Logger.make((entry) => logged.push(String(entry.message)))]),
+      ),
+    )
+
+    expect(requests.map((request) => String(request.model.id))).toEqual(["title-model"])
+    expect(logged).toContain(
+      "configured title model test/deprecated-small is unavailable; falling back to the session model",
+    )
   }),
 )
 
