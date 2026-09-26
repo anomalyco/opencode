@@ -263,19 +263,40 @@ export namespace Timeline {
         )
       }),
     ]
+    const groupedRows = detail
+      ? groupMessages(
+          rows,
+          detail,
+          new Set(
+            messages
+              .filter((message) => message.type === "compaction" || message.type === "model-switched")
+              .map((message) => message.id),
+          ),
+        )
+      : rows
     return {
       activeMessageID,
-      rows: detail
-        ? groupMessages(
-            rows,
-            detail,
-            new Set(
-              messages
-                .filter((message) => message.type === "compaction" || message.type === "model-switched")
-                .map((message) => message.id),
-            ),
+      rows: groupedRows.filter((row, index) => {
+        if (status.type !== "busy" || row.userMessageID !== activeMessageID) return true
+        if (row._tag !== "AssistantPart" || row.group.type !== "context") return true
+        const previous = groupedRows[index - 1]
+        if (
+          previous?.userMessageID === activeMessageID &&
+          previous._tag !== "TurnGap" &&
+          previous._tag !== "UserMessage"
+        )
+          return true
+        if (groupedRows[index + 1]?.userMessageID === activeMessageID) return true
+        return row.group.refs.some((ref) => {
+          const message = messages.find((item) => item.id === ref.messageID)
+          return (
+            message?.type !== "assistant" ||
+            !!message.error ||
+            !!message.retry ||
+            resolveContent(message, ref.partID)?.type !== "reasoning"
           )
-        : rows,
+        })
+      }),
     }
   }
 

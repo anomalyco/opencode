@@ -5,6 +5,7 @@ import type {
   SessionMessageInfo,
 } from "@opencode/client/promise"
 import { storyDocument, storyTool } from "../storybook/current-session-scenarios"
+import { timelinePresets } from "./detail"
 import { createTimelineProjection, Timeline, TimelineRow } from "./projection"
 
 describe("current session timeline rows", () => {
@@ -265,6 +266,54 @@ describe("current session timeline rows", () => {
       })
       expect(result.rows.some((row) => row._tag === "Thinking")).toBe(reasoningMode !== "hidden" && profile.thinking)
     })
+  })
+
+  test("omits a grouped reasoning-only row while busy until other content or completion", () => {
+    const thought = { type: "reasoning", text: "Thinking", time: { created: 1, completed: 2 } } as const
+    const rows = (content: SessionMessageAssistant["content"], busy: boolean) =>
+      createTimelineProjection({
+        sessionMessages: storyDocument(content, busy).messages,
+        status: { type: busy ? "busy" : "idle" },
+        reasoningMode: "compact",
+        timelineDetail: timelinePresets[2].value,
+      }).rows
+
+    expect(rows([{ ...thought, time: { created: 1 } }], true).map((row) => row._tag)).toEqual(["UserMessage"])
+    expect(rows([thought], true).map((row) => row._tag)).toEqual(["UserMessage"])
+    expect(rows([thought, { type: "text", text: "" }], true).map((row) => row._tag)).toEqual(["UserMessage"])
+    expect(rows([thought, { type: "text", text: "Answer" }], true).map((row) => row._tag)).toEqual([
+      "UserMessage",
+      "AssistantPart",
+      "AssistantPart",
+    ])
+    expect(
+      rows([thought, storyTool("read", "read", "running", { filePath: "package.json" })], true).map((row) => row._tag),
+    ).toEqual(["UserMessage", "AssistantPart"])
+    expect(rows([thought], false).map((row) => row._tag)).toEqual(["UserMessage", "AssistantPart"])
+
+    const failed = storyDocument([thought], true)
+    const messages = failed.messages.map((message) =>
+      message.type === "assistant" ? { ...message, error: { type: "provider.error", message: "Failed" } } : message,
+    )
+    expect(
+      createTimelineProjection({
+        sessionMessages: messages,
+        status: failed.status,
+        reasoningMode: "compact",
+        timelineDetail: timelinePresets[2].value,
+      }).rows.map((row) => row._tag),
+    ).toEqual(["UserMessage", "AssistantPart", "Error"])
+
+    expect(
+      createTimelineProjection({
+        sessionMessages: failed.messages.map((message) =>
+          message.type === "assistant" ? { ...message, error: { type: "Interrupted", message: "Stopped" } } : message,
+        ),
+        status: failed.status,
+        reasoningMode: "compact",
+        timelineDetail: { ...timelinePresets[2].value, notices: { placement: "hidden" } },
+      }).rows.map((row) => row._tag),
+    ).toEqual(["UserMessage", "AssistantPart"])
   })
 
   test("stops thinking on idle, message completion, errors and retries", () => {

@@ -51,6 +51,30 @@ for (const width of [1400, 390]) {
   })
 }
 
+for (const width of [1400, 390]) {
+  test(`keeps Working instead of Used 1 Thought while reasoning is the only activity at ${width}px`, async ({ page }) => {
+    const timeline = await setupTimeline(page, {
+      messages: [
+        userMessage(),
+        assistantMessage([reasoningPart("prt_only_thought", "Still considering the answer.")], { completed: false }),
+      ],
+      settings: { timelineDetail: timelinePresets[2].value },
+      viewport: { width, height: 900 },
+    })
+    const working = page.locator('[data-component="session-working"]')
+    const group = page.locator('[data-component="collapsed-tool-group"]')
+    await expect(working).toBeVisible()
+    await expect(group).toHaveCount(0)
+    await expect(page.getByRole("button", { name: "Used 1 Thought" })).toHaveCount(0)
+
+    if (width === 390) return
+    await timeline.send(partUpdated(toolPart("prt_after_thought", "read", "running", { filePath: "package.json" })))
+    await expect(group).toBeVisible()
+    await expect(group).toHaveAttribute("data-timeline-part-ids", `${assistantID}:reasoning:0,prt_after_thought`)
+    await expect(working).toBeVisible()
+  })
+}
+
 for (const name of ["shell", "patch", "subagent"] as const) {
   test(`hides Working during ${name} input and execution, then restores it on completion`, async ({ page }) => {
     const timeline = await setupTimeline(page, {
