@@ -2,7 +2,7 @@ import { Effect } from "effect"
 import { Arr, Callable, coerceToInteger, coerceToString, get, Obj, type Value } from "./objects.js"
 import { arrayGlobal } from "../stdlib/array.js"
 import { textDecoderGlobal, textEncoderGlobal, uint8ArrayGlobal } from "../stdlib/bytes.js"
-import { mapGlobal, setGlobal } from "../stdlib/collections.js"
+import { mapGlobal, setGlobal, weakMapGlobal, weakSetGlobal } from "../stdlib/collections.js"
 import { consoleGlobal } from "../stdlib/console.js"
 import { dateGlobal } from "../stdlib/date.js"
 import { jsonGlobal } from "../stdlib/json.js"
@@ -111,6 +111,8 @@ const table: Record<string, Factory> = {
   RegExp: (ctx) => regexpGlobal(ctx),
   Map: (ctx) => mapGlobal(ctx),
   Set: (ctx) => setGlobal(ctx),
+  WeakMap: (ctx) => weakMapGlobal(ctx),
+  WeakSet: (ctx) => weakSetGlobal(ctx),
   URL: (ctx) => urlGlobal(ctx),
   URLSearchParams: (ctx) => urlSearchParamsGlobal(ctx),
   Headers: (ctx) => headersGlobal(ctx),

@@ -70,6 +70,7 @@ import { useToast } from "../../ui/toast"
 import stripAnsi from "strip-ansi"
 import { usePromptRef } from "../../context/prompt"
 import { projectedPromptInput } from "../../prompt/codec"
+import { appendPrompt } from "../../prompt/history"
 import { deduplicateVisibleImages } from "../../prompt/attachment"
 import { useEpilogue } from "../../context/epilogue"
 import { normalizePath } from "../../util/path"
@@ -211,7 +212,9 @@ export function Session(props: {
   )
   const pendingDeliveries = createMemo(() => new Map(pendingUsers().map((item) => [item.id, item.delivery])))
   const queuedPrompts = createMemo(() =>
-    pendingUsers().flatMap((item) => (item.delivery === "queue" ? [{ id: item.id, text: item.payload.text }] : [])),
+    pendingUsers().flatMap((item) =>
+      item.delivery === "queue" ? [{ id: item.id, text: item.payload.text, payload: item.payload }] : [],
+    ),
   )
   const [composer, setComposer] = createStore({
     open: false,
@@ -608,7 +611,7 @@ export function Session(props: {
   const dialog = useDialog()
   const renderer = useRenderer()
   const runPendingAction = createSingleFlight<string>()
-  const mutatePending = async (action: PendingAction, inboxID: string) => {
+  const mutatePending = async (action: PendingAction, inboxID: string, failureLabel?: string) => {
     const result = await runPendingAction(inboxID, async () => {
       const request =
         action === "steer"
@@ -621,7 +624,7 @@ export function Session(props: {
         (error) => error,
       )
       if (!error) return true
-      const label = action === "cancel" ? "delete" : action
+      const label = failureLabel ?? (action === "cancel" ? "delete" : action)
       toast.show({ title: `Failed to ${label} pending prompt`, message: errorMessage(error), variant: "error" })
       return false
     })
@@ -649,6 +652,26 @@ export function Session(props: {
               const last = queuedPrompts().length === 1
               void mutatePending("cancel", option.value).then((cancelled) => {
                 if (cancelled && last) dialog.clear()
+              })
+            },
+          },
+          {
+            command: "queued_prompt.undo",
+            title: "undo",
+            onTrigger: (option) => {
+              const target = prompt()
+              const queued = queuedPrompts().find((item) => item.id === option.value)
+              if (!target || !queued) return
+              if (target.mode === "shell" && target.current.text) {
+                toast.show({ message: "Leave shell mode before undoing a queued prompt", variant: "error" })
+                return
+              }
+              void mutatePending("cancel", queued.id, "undo").then((undone) => {
+                if (!undone) return
+                target.setMode("normal")
+                target.set(appendPrompt(target.current, { ...projectedPromptInput(queued.payload), pasted: [] }))
+                dialog.clear()
+                target.focus()
               })
             },
           },

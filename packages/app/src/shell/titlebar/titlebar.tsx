@@ -29,7 +29,6 @@ import { MobileDrawer, MobileDrawerContent, MobileDrawerLabel, MobileDrawerTrigg
 import { sessionTabTitle } from "./tab-title"
 import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
-import { projectForSession } from "@/shell/layout/helpers"
 import { useSettingsDialog } from "@/settings/command"
 import { updaterAction } from "@/shell/updates/action"
 import type { UpdaterState } from "@/shell/updates/types"
@@ -441,7 +440,7 @@ export function Titlebar(props: {
               const value = session()
               if (!tab || !value) return
               const conn = global.servers.list().find((item) => ServerConnection.key(item) === tab.server)
-              return projectForSession(value, conn ? global.ensureServerCtx(conn).projects.list() : [])
+              return conn ? global.ensureServerCtx(conn).projects.forSession(value) : undefined
             })
             const currentTitle = () => {
               const tab = currentTab()

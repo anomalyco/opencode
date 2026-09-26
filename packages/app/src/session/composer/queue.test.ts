@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionInboxInfo } from "@opencode/client/promise"
-import { queuedPromptAttachments, queuedPromptRows } from "./queue"
+import { queuedPromptAttachments, queuedPromptUndoDraft, queuedPromptRows } from "./queue"
 
 const queued = [
   {
@@ -102,5 +102,45 @@ describe("queuedPromptAttachments", () => {
     } satisfies SessionInboxInfo
 
     expect(queuedPromptAttachments(item)).toEqual([])
+  })
+})
+
+describe("queuedPromptUndoDraft", () => {
+  test("keeps full text, structured mentions, and inline images", () => {
+    const item = {
+      ...queued[0],
+      payload: {
+        text: "inspect @main.ts with @build",
+        files: [
+          {
+            data: "aGk=",
+            mime: "text/plain",
+            source: { type: "uri" as const, uri: "file:///repo/main.ts" },
+            name: "main.ts",
+            mention: { start: 8, end: 16, text: "@main.ts" },
+          },
+          { data: "aGk=", mime: "image/png", source: { type: "inline" as const }, name: "shot.png" },
+        ],
+        agents: [{ name: "build", mention: { start: 22, end: 28, text: "@build" } }],
+      },
+    } satisfies SessionInboxInfo
+    expect(queuedPromptUndoDraft(item)).toMatchObject([
+      { type: "text", content: "inspect " },
+      { type: "file", content: "@main.ts", url: "data:text/plain;base64,aGk=" },
+      { type: "text", content: " with " },
+      { type: "agent", content: "@build", name: "build" },
+      { type: "image", filename: "shot.png" },
+    ])
+  })
+
+  test("does not drop hidden file context", () => {
+    const item = {
+      ...queued[0],
+      payload: {
+        text: "inspect this",
+        files: [{ data: "aGk=", mime: "text/plain", source: { type: "uri" as const, uri: "file:///repo/main.ts" } }],
+      },
+    } satisfies SessionInboxInfo
+    expect(queuedPromptUndoDraft(item)).toBeUndefined()
   })
 })

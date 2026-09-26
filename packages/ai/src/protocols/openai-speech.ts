@@ -61,6 +61,9 @@ interface State extends SpeechStream.Audio {
 const supportsSse = (model: string) => !/^tts-1(-hd)?(-|$)/.test(model)
 
 const fromRequest = Effect.fn("OpenAISpeech.fromRequest")(function* (request: MediaProtocol.Addressed<Request>) {
+  // Not in `unsupported`: that list would also reject `timestamps: false`, which asks for nothing.
+  if (request.timestamps === true)
+    return yield* route.unsupported("media.timestamps", `${route.name} does not return timestamps`)
   return MediaProtocol.json(
     mergeJsonRecords(
       {
@@ -121,7 +124,7 @@ const finish = (state: State, context: MediaProtocol.ResponseContext<Request>) =
 // ---------------------------------------------------------------------------
 
 export const protocol = MediaProtocol.stream<Request, SpeechEvent, string | Uint8Array, State>(route, {
-  unsupported: ["language", "timestamps"],
+  unsupported: ["language"],
   body: { from: fromRequest },
   frames: (bytes, context) => (isSse(context.body) ? Framing.sse.frame(bytes) : bytes),
   initial: () => ({ chunks: [], done: false }),

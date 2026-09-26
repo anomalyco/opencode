@@ -576,7 +576,7 @@ describe("Video / Runway", () => {
   const model = runway.video("gen4.5")
   const taskUrl = "https://runway.test/v1/tasks/task_1"
 
-  it.effect("submits image_to_video with the API version header, polls the task, and reports credits", () =>
+  it.effect("submits image_to_video, polls the task, reports credits, and keeps the finished task on cancel", () =>
     Effect.gen(function* () {
       const calls: Array<Call> = []
       const program = Effect.gen(function* () {
@@ -624,7 +624,7 @@ describe("Video / Runway", () => {
                 return json(input, { id: "task_1", estimatedCost: { credits: 25 } })
               }
               expect(call.url).toBe(taskUrl)
-              if (call.method === "DELETE") return input.respond(null, { status: 204 })
+              if (call.method === "DELETE") return yield* Effect.die("cancel deleted a finished Runway task")
               if (nth === 1) return json(input, { id: "task_1", status: "PENDING", estimatedCost: { credits: 25 } })
               if (nth === 2) return json(input, { id: "task_1", status: "THROTTLED", estimatedCost: { credits: 25 } })
               if (nth === 3) return json(input, { id: "task_1", status: "RUNNING", progress: 0.5 })
@@ -652,6 +652,32 @@ describe("Video / Runway", () => {
         `GET ${taskUrl}`,
         `GET ${taskUrl}`,
         `GET ${taskUrl}`,
+        `GET ${taskUrl}`,
+        `GET ${taskUrl}`,
+      ])
+    }),
+  )
+
+  it.effect("cancels a task that is still running", () =>
+    Effect.gen(function* () {
+      const calls: Array<Call> = []
+      yield* Effect.gen(function* () {
+        const generation = yield* Video.start({ model, prompt: "x" })
+        yield* generation.cancel()
+      }).pipe(
+        Effect.provide(
+          layer((input) =>
+            Effect.gen(function* () {
+              const { call } = yield* observe(calls, input)
+              if (call.method === "POST") return json(input, { id: "task_1" })
+              if (call.method === "DELETE") return input.respond(null, { status: 204 })
+              return json(input, { id: "task_1", status: "RUNNING", progress: 0.2 })
+            }),
+          ),
+        ),
+      )
+      expect(calls.map((call) => `${call.method} ${call.url}`)).toEqual([
+        "POST https://runway.test/v1/text_to_video",
         `GET ${taskUrl}`,
         `DELETE ${taskUrl}`,
       ])
@@ -810,5 +836,57 @@ describe("Video / Runway", () => {
       expect(error.reason._tag).toBe("Timeout")
       expect(error.message).toContain("task_1")
     }),
+  )
+})
+
+// ---------------------------------------------------------------------------
+// Shared queued behavior
+// ---------------------------------------------------------------------------
+
+describe("Video / queued result", () => {
+  for (const pending of [
+    {
+      model: Google.configure({ apiKey: "test", baseURL: "https://google.test/v1beta" }).video("veo-3.1"),
+      token: { operation: "models/veo-3.1/operations/op_1" },
+      body: { name: "models/veo-3.1/operations/op_1", done: false },
+      name: "Google Veo",
+    },
+    {
+      model: XAI.configure({ apiKey: "test", baseURL: "https://xai.test/v1" }).video("grok-imagine-video-1.5"),
+      token: { requestID: "req_1" },
+      body: { status: "pending", progress: 40 },
+      name: "xAI Video",
+    },
+    {
+      model: Runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5"),
+      token: { taskID: "task_1" },
+      body: { status: "RUNNING", progress: 0.5 },
+      name: "Runway",
+    },
+  ]) {
+    it.effect(`rejects reading a ${pending.model.provider} result before the generation finishes`, () =>
+      Effect.gen(function* () {
+        const generation = yield* Video.resume(pending.model, pending.token)
+        const error = yield* generation.result().pipe(Effect.flip)
+        expect(error.reason._tag).toBe("InvalidRequest")
+        expect(error.message).toBe(
+          `${pending.name} generation ${generation.id} has not finished; await it before reading the result`,
+        )
+        expect(error.reason.body).toBe(JSON.stringify(pending.body))
+        expect(error.reason.http?.status).toBe(200)
+      }).pipe(Effect.provide(layer((input) => Effect.succeed(json(input, pending.body))))),
+    )
+  }
+
+  it.effect("rejects a status that only matches an inherited property", () =>
+    Effect.gen(function* () {
+      const error = yield* Video.resume(
+        XAI.configure({ apiKey: "test", baseURL: "https://xai.test/v1" }).video("grok-imagine-video-1.5"),
+        { requestID: "req_1" },
+      ).pipe(Effect.flip)
+      expect(error.reason._tag).toBe("InvalidProviderOutput")
+      expect(error.message).toBe('Unknown generation status "constructor"')
+      expect(error.reason.body).toBe(JSON.stringify({ status: "constructor" }))
+    }).pipe(Effect.provide(layer((input) => Effect.succeed(json(input, { status: "constructor" }))))),
   )
 })

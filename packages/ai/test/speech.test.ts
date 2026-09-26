@@ -28,10 +28,49 @@ const cartesia = Cartesia.configure({ apiKey: "test", baseURL: "https://cartesia
 const google = Google.configure({ apiKey: "test", baseURL: "https://google.test/v1beta" }).speech(
   "gemini-2.5-flash-preview-tts",
 )
+const google38 = Google.configure({ apiKey: "test", baseURL: "https://google.test/v1beta" }).speech(
+  "gemini-3.8-flash-tts",
+)
+const google38Lite = Google.configure({ apiKey: "test", baseURL: "https://google.test/v1beta" }).speech(
+  "gemini-3.8-flash-lite-tts",
+)
 const deepgram = Deepgram.configure({ apiKey: "test", baseURL: "https://deepgram.test" }).speech("aura-2-thalia-en")
 const voice = "JBFqnCBsd6RMkjVDRZzb"
 
 describe("Speech", () => {
+  it.effect("preserves Google's WAV output instead of describing it as raw PCM", () =>
+    Effect.gen(function* () {
+      const bytes = new TextEncoder().encode("RIFF....WAVEfmt ")
+      const response = yield* Speech.generate({ model: google38, text: "Hi" }).pipe(
+        Effect.provide(
+          respond(
+            JSON.stringify({
+              candidates: [
+                { content: { parts: [{ inlineData: { mimeType: "audio/wav", data: Encoding.encodeBase64(bytes) } }] } },
+              ],
+            }),
+            "application/json",
+          ),
+        ),
+      )
+      expect(response.audio.mediaType).toBe("audio/wav")
+      expect(response.audio.info?.format).toBe("wav")
+      expect(response.audio.info?.encoding).toBeUndefined()
+      expect(yield* response.audio.bytes()).toEqual(bytes)
+    }),
+  )
+
+  it.effect("rejects raw PCM for Gemini 3.8 unary requests before sending", () =>
+    Effect.gen(function* () {
+      const errors = yield* Effect.all(
+        [google38, google38Lite].map((model) =>
+          Speech.generate({ model, text: "Hi", format: "pcm" }).pipe(Effect.flip),
+        ),
+      ).pipe(Effect.provide(layer(() => Effect.die("An unsupported request reached the network"))))
+      expect(errors.map((error) => error.reason._tag)).toEqual(["UnsupportedOperation", "UnsupportedOperation"])
+    }),
+  )
+
   it.effect("rejects what a provider cannot produce before sending anything", () =>
     Effect.gen(function* () {
       const errors = yield* Effect.all(
@@ -56,6 +95,42 @@ describe("Speech", () => {
       )
       expect(errors[1].reason).toMatchObject({ provider: "google", route: "google-speech" })
     }).pipe(Effect.provide(layer(() => Effect.die("an unsupported request reached the network")))),
+  )
+
+  it.effect("treats timestamps: false as not asking for timestamps on routes that cannot return them", () =>
+    Effect.gen(function* () {
+      const bytes = Uint8Array.from([1, 2, 3])
+      const gemini = JSON.stringify({
+        candidates: [
+          { content: { parts: [{ inlineData: { mimeType: "audio/L16;codec=pcm;rate=24000", data: "AQID" } }] } },
+        ],
+      })
+      const responses = yield* Effect.all([
+        Speech.generate({ model: openai, text: "Hi", timestamps: false }).pipe(
+          Effect.provide(respond(new Blob([bytes]).stream(), "audio/mpeg")),
+        ),
+        Speech.generate({ model: google, text: "Hi", timestamps: false }).pipe(
+          Effect.provide(respond(gemini, "application/json")),
+        ),
+        Speech.generate({ model: deepgram, text: "Hi", timestamps: false }).pipe(
+          Effect.provide(respond(new Blob([bytes]).stream(), "audio/mpeg")),
+        ),
+      ])
+      for (const response of responses) expect(yield* response.audio.bytes()).toEqual(bytes)
+
+      const errors = yield* Effect.all(
+        [openai, google, deepgram].map((model) =>
+          Speech.generate({ model, text: "Hi", timestamps: true }).pipe(Effect.flip),
+        ),
+      ).pipe(Effect.provide(layer(() => Effect.die("an unsupported request reached the network"))))
+      expect(errors.map((error) => [error.reason._tag, "operation" in error.reason && error.reason.operation])).toEqual(
+        [
+          ["UnsupportedOperation", "media.timestamps"],
+          ["UnsupportedOperation", "media.timestamps"],
+          ["UnsupportedOperation", "media.timestamps"],
+        ],
+      )
+    }),
   )
 
   it.effect("classifies stream failures and keeps the provider payload and HTTP context", () =>

@@ -3,10 +3,11 @@ import { createStore } from "solid-js/store"
 import { useMutation } from "@tanstack/solid-query"
 import type { SessionInboxInfo } from "@opencode/client/promise"
 import { SessionMessage } from "@opencode/schema/session-message"
+import { Skill } from "@opencode/schema/skill"
 import type { ComposerDelivery } from "@/composer/adapter"
 import type { ComposerStateTarget } from "@/composer/submission-state"
 import type { ImageAttachmentPart, PathAttachmentPart, Prompt } from "@/composer/state"
-import { clonePrompt, isAttachment, promptLength } from "@/composer/prompt-parts"
+import { appendPrompt, clonePrompt, isAttachment, promptLength } from "@/composer/prompt-parts"
 import { buildPromptRequest } from "@/composer/request"
 import { blobDataUrl, createLegacyBlobReference } from "@/runtime/persistence/drafts"
 import { readPromptPresentation } from "@/composer/comment-note"
@@ -42,6 +43,7 @@ export function createSessionQueue(input: {
     mutationFn: async (
       change:
         | { type: "reorder"; inboxIDs: string[] }
+        | { type: "undo"; item: QueuedPrompt; prompt: Prompt }
         | {
             type: "edit"
             inboxIDs: string[]
@@ -54,6 +56,16 @@ export function createSessionQueue(input: {
           },
     ) => {
       if (change.type === "reorder") return rewrite(change.inboxIDs)
+      if (change.type === "undo") {
+        await server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: change.item.id })
+        const draft = input.draft.current()
+        const prompt = promptLength(draft)
+          ? appendPrompt(draft, change.prompt)
+          : [...change.prompt, ...draft.filter(isAttachment)]
+        input.draft.set(prompt, promptLength(prompt))
+        input.restoreFocus(promptLength(prompt))
+        return
+      }
       const replacement = await editedPromptInput(
         input.sessionID,
         location().directory,
@@ -138,6 +150,21 @@ export function createSessionQueue(input: {
   const remove = (id: string) => {
     if (state.editing?.id === id) cancelEdit()
     return server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: id }).catch(() => notify())
+  }
+  const undo = (id: string) => {
+    if (mutation.isPending || state.editing) return
+    const item = queued().find((entry) => entry.id === id)
+    if (!item) return
+    if (input.draft.mode.current() !== "normal") {
+      showToast({ title: language.t("session.queue.undoShell") })
+      return
+    }
+    const prompt = queuedPromptUndoDraft(item)
+    if (!prompt) {
+      showToast({ title: language.t("session.queue.undoUnavailable") })
+      return
+    }
+    mutation.mutate({ type: "undo", item, prompt })
   }
   const reorder = (inboxIDs: string[]) => {
     if (mutation.isPending) return Promise.resolve()
@@ -226,9 +253,11 @@ export function createSessionQueue(input: {
     editFirst,
     rows,
     busy: () => mutation.isPending,
+    undoing: () => mutation.isPending && mutation.variables?.type === "undo",
     working: input.working,
     steer,
     remove,
+    undo,
     edit,
     reorder,
   }
@@ -239,7 +268,7 @@ export type SessionQueue = ReturnType<typeof createSessionQueue>
 // The slice of the queue the panel renders and drives.
 export type SessionQueueView = Pick<
   SessionQueue,
-  "rows" | "editing" | "working" | "busy" | "steer" | "remove" | "edit" | "reorder"
+  "rows" | "editing" | "working" | "busy" | "steer" | "remove" | "undo" | "edit" | "reorder"
 >
 
 export function queuedPromptRows(items: QueuedPrompt[], replacement?: { original: string; replacement: string }) {
@@ -249,7 +278,8 @@ export function queuedPromptRows(items: QueuedPrompt[], replacement?: { original
     .map((item) => ({
       id: item.id,
       text: queuedPromptText(item),
-      attachments: (item.payload.files?.length ?? 0) + (readPromptPresentation(item.payload.metadata)?.attachments.length ?? 0),
+      attachments:
+        (item.payload.files?.length ?? 0) + (readPromptPresentation(item.payload.metadata)?.attachments.length ?? 0),
     }))
 }
 
@@ -284,6 +314,88 @@ export function queuedPromptAttachments(item: QueuedPrompt): (ImageAttachmentPar
         path: file.path,
       }),
     ),
+  ]
+}
+
+// Use the full model-visible text so comment notes and path references remain
+// in the draft. Convert mentioned files, agents, and skills back into editor
+// parts; a detached draft cannot represent non-mentioned file context.
+export function queuedPromptUndoDraft(item: QueuedPrompt): Prompt | undefined {
+  if (
+    item.payload.files?.some((file) => !isComposerAttachment(file) && !file.mention) ||
+    item.payload.agents?.some((agent) => !agent.mention) ||
+    item.payload.skills?.some((skill) => !skill.mention)
+  )
+    return
+  const text = item.payload.text
+  const references = [
+    ...(item.payload.files ?? []).flatMap((file) =>
+      file.mention
+        ? [
+            {
+              type: "file" as const,
+              content: file.mention.text,
+              start: file.mention.start,
+              end: file.mention.end,
+              path: file.name ?? file.mention.text.replace(/^@/, ""),
+              filename: file.name,
+              mime: file.mime,
+              url: `data:${file.mime};base64,${file.data}`,
+            },
+          ]
+        : [],
+    ),
+    ...(item.payload.agents ?? []).flatMap((agent) =>
+      agent.mention
+        ? [
+            {
+              type: "agent" as const,
+              content: agent.mention.text,
+              start: agent.mention.start,
+              end: agent.mention.end,
+              name: agent.name,
+            },
+          ]
+        : [],
+    ),
+    ...(item.payload.skills ?? []).flatMap((skill) =>
+      skill.mention
+        ? [
+            {
+              type: "skill" as const,
+              content: skill.mention.text,
+              start: skill.mention.start,
+              end: skill.mention.end,
+              id: Skill.ID.make(skill.id),
+              name: Skill.Name.make(skill.name),
+            },
+          ]
+        : [],
+    ),
+  ].sort((left, right) => left.start - right.start)
+  if (
+    references.some(
+      (part, index) =>
+        part.start < (references[index - 1]?.end ?? 0) || text.slice(part.start, part.end) !== part.content,
+    )
+  )
+    return
+  const parts: Prompt = references.flatMap((part, index) => {
+    const start = references[index - 1]?.end ?? 0
+    return [
+      ...(part.start > start
+        ? [{ type: "text" as const, content: text.slice(start, part.start), start, end: part.start }]
+        : []),
+      part,
+    ]
+  })
+  const start = references.at(-1)?.end ?? 0
+  return [
+    ...parts,
+    ...(text.length > start || !parts.length
+      ? [{ type: "text" as const, content: text.slice(start), start, end: text.length }]
+      : []),
+    ...queuedPromptAttachments(item).filter((part) => part.type === "image"),
   ]
 }
 

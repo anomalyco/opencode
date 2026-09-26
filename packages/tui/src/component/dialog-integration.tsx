@@ -11,7 +11,7 @@ import type {
   FormValue,
   LocationRef,
 } from "@opencode/client"
-import open from "open"
+import { openUrl } from "@opencode/util/open"
 import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { useClipboard } from "../context/clipboard"
 import { useData } from "../context/data"
@@ -590,7 +590,7 @@ function OAuthAuto(props: {
         title: "Open authorization URL",
         group: "Dialog",
         run: () => {
-          open(props.attempt.url).catch(() =>
+          openUrl(props.attempt.url).catch(() =>
             toast.show({
               message: "Could not open the browser. Copy the URL and continue manually.",
               variant: "error",
@@ -985,7 +985,7 @@ async function externalAnswer(
         () => <OAuthView title={formLabel(field) || title} message="Opening link…" />,
         () => resolve(CANCELLED),
       )
-      void open(field.url).then(
+      void openUrl(field.url).then(
         () => resolve(true),
         () => resolve(false),
       )

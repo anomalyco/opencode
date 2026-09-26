@@ -15,7 +15,9 @@ import {
   copilotEntitlementError,
   copilotFetch,
   GithubCopilotPlugin,
+  utilityTitle,
 } from "@opencode/core/plugin/provider/github-copilot"
+import { Message, SystemPart } from "@opencode/ai"
 import { Provider } from "@opencode/core/provider"
 import { Integration } from "@opencode/core/integration"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
@@ -234,6 +236,73 @@ describe("GithubCopilotPlugin", () => {
         headers: {},
       })
       expect(event.headers).toEqual({})
+    }),
+  )
+
+  const titleRequest = {
+    sessionID: Session.ID.make("ses_title"),
+    system: [SystemPart.make("You are a title generator.")],
+    messages: [Message.user("how do I make my python script faster")],
+    options: { maxTokens: 32 },
+  }
+  const utilityInput = (send: (init?: RequestInit) => Response | Promise<Response>) => ({
+    baseURL: "https://api.individual.githubcopilot.com",
+    token: "token",
+    model: "gpt-4o-mini",
+    app: App.make({ name: "test", version: "1.2.3", channel: "beta" }),
+    fetch: async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => send(init),
+  })
+
+  it.live("names sessions with the utility model as a free background request", () =>
+    Effect.gen(function* () {
+      const seen: Array<{ url?: string; init?: RequestInit }> = []
+      const title = yield* utilityTitle(
+        {
+          ...utilityInput(() => Response.json({ choices: [{ message: { content: "  Speed Up Python Script\n" } }] })),
+          fetch: async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+            seen.push({ url: String(input), init })
+            return Response.json({ choices: [{ message: { content: "  Speed Up Python Script\n" } }] })
+          },
+        },
+        titleRequest,
+      )
+      expect(title).toBe("Speed Up Python Script")
+      expect(seen[0]?.url).toBe("https://api.individual.githubcopilot.com/chat/completions")
+      const headers = new Headers(seen[0]?.init?.headers)
+      expect(headers.get("authorization")).toBe("Bearer token")
+      expect(headers.get("x-interaction-type")).toBe("agent-session-name-generation")
+      expect(headers.get("x-interaction-id")).toBe("ses_title")
+      expect(headers.get("x-initiator")).toBe("agent")
+      expect(headers.get("x-github-api-version")).toBe("2026-08-01")
+      expect(JSON.parse(String(seen[0]?.init?.body))).toEqual({
+        model: "gpt-4o-mini",
+        stream: false,
+        max_tokens: 32,
+        messages: [
+          { role: "system", content: "You are a title generator." },
+          { role: "user", content: "how do I make my python script faster" },
+        ],
+      })
+    }),
+  )
+
+  it.live("fails the utility title on rate limits so the billable path can run", () =>
+    Effect.gen(function* () {
+      const error = yield* utilityTitle(
+        utilityInput(() => new Response("slow down", { status: 429 })),
+        titleRequest,
+      ).pipe(Effect.flip)
+      expect(String(error)).toContain("429")
+    }),
+  )
+
+  it.live("fails the utility title on an empty completion", () =>
+    Effect.gen(function* () {
+      const error = yield* utilityTitle(
+        utilityInput(() => Response.json({ choices: [{ message: { content: null } }] })),
+        titleRequest,
+      ).pipe(Effect.flip)
+      expect(String(error)).toContain("empty")
     }),
   )
 

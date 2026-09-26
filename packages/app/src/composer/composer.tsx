@@ -16,6 +16,7 @@ export function Composer(props: {
   class?: string
   model: ComposerModel
   borderUnderlay?: boolean
+  readOnly?: boolean
   suggestionBoundary?: () => HTMLElement | undefined
 }) {
   const dialog = useDialog()
@@ -27,6 +28,7 @@ export function Composer(props: {
       <ComposerEditor
         controller={props.model}
         borderUnderlay={props.borderUnderlay}
+        readOnly={props.readOnly}
         class={props.class}
         modelControlsVisible={!props.model.model.loading}
         attachKeybind={command.keybindParts("file.attach")}

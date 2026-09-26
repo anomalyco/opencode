@@ -56,10 +56,18 @@ interface State extends SpeechStream.Audio, GeminiGenerateContent.Metadata {
 // ---------------------------------------------------------------------------
 
 const fromRequest = Effect.fn("GoogleSpeech.fromRequest")(function* (request: MediaProtocol.Addressed<Request>) {
+  // Not in `unsupported`: that list would also reject `timestamps: false`, which asks for nothing.
+  if (request.timestamps === true)
+    return yield* route.unsupported("media.timestamps", `${route.name} does not return timestamps`)
+  if (request.format === "pcm" && request.mode === "generate" && /^gemini-3\.8-.*-tts(?:-|$)/.test(request.model.id))
+    return yield* route.unsupported(
+      "media.format",
+      `${route.name} returns WAV by default for Gemini 3.8 TTS unary requests; omit the format to accept it`,
+    )
   if (request.format !== undefined && request.format !== "pcm")
     return yield* route.unsupported(
       "media.format",
-      `${route.name} only returns raw PCM; request format "pcm" or omit it, then wrap the samples yourself`,
+      `${route.name} only accepts raw PCM as an explicit format; omit it to accept the provider's default output`,
     )
   const voiceName = SpeechStream.voiceID(request.voice)
   return MediaProtocol.json(
@@ -97,10 +105,18 @@ const step = Effect.fn("GoogleSpeech.step")(function* (state: State, frame: stri
   return [next, audio.flatMap((part) => SpeechStream.delta(next, part.data)[1])] as const
 })
 
-const finish = (state: State) => {
+const finish = (state: State, context: MediaProtocol.ResponseContext<Request>) => {
   const sampleRate = SpeechStream.sampleRate(state.mimeType) ?? DEFAULT_SAMPLE_RATE
+  const output =
+    state.mimeType?.split(";")[0]?.toLowerCase() === "audio/wav"
+      ? SpeechStream.container("wav", sampleRate)
+      : SpeechStream.pcm("pcm_s16le", sampleRate, state.mimeType ?? `audio/L16;codec=pcm;rate=${sampleRate}`)
+  if (context.request.format === "pcm" && output.info.format !== "pcm")
+    return Effect.fail(
+      route.frameError(`Google Speech returned ${output.info.format} instead of the requested raw PCM`),
+    )
   return SpeechStream.finish(route, state, {
-    ...SpeechStream.pcm("pcm_s16le", sampleRate, state.mimeType ?? `audio/L16;codec=pcm;rate=${sampleRate}`),
+    ...output,
     usage: GeminiGenerateContent.usage(state.usage),
     providerMetadata: GeminiGenerateContent.providerMetadata(state),
     detail: state.finishReason === undefined ? undefined : `finish reason: ${state.finishReason}`,
@@ -112,7 +128,7 @@ const finish = (state: State) => {
 // ---------------------------------------------------------------------------
 
 export const protocol = MediaProtocol.stream<Request, SpeechEvent, string, State>(route, {
-  unsupported: ["instructions", "speed", "timestamps"],
+  unsupported: ["instructions", "speed"],
   body: { from: fromRequest },
   frames: (bytes, context) => GeminiGenerateContent.frames(bytes, context.request.mode),
   initial: () => ({ chunks: [] }),

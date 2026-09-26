@@ -53,6 +53,8 @@ export type Event = Observation | { readonly type: "generation-finished"; readon
 
 const TERMINAL: ReadonlySet<Status> = new Set(["completed", "failed", "cancelled", "expired"])
 
+export const isTerminal = (status: Status) => TERMINAL.has(status)
+
 export class Generation<Response> {
   readonly id: string
   readonly status: Status
@@ -81,7 +83,7 @@ export class Generation<Response> {
   }
 
   get terminal() {
-    return TERMINAL.has(this.status)
+    return isTerminal(this.status)
   }
 
   refresh(): Effect.Effect<Generation<Response>, AIError> {
@@ -109,9 +111,10 @@ export class Generation<Response> {
   }
 
   /**
-   * Status observations as a stream, ending after the first terminal observation. Each poll is bounded by the time
-   * remaining until `poll.timeout`, so a hung status request fails the stream instead of stalling it. (`Stream.interruptWhen`
-   * would express this directly but deadlocks under `TestClock` when the source completes while the timer sleeps.)
+   * Status observations as a stream, ending after the first terminal observation. Each poll and each sleep between polls
+   * is bounded by the time remaining until `poll.timeout`, so a hung status request or a long interval fails the stream at
+   * the deadline instead of stalling it. (`Stream.interruptWhen` would express this directly but deadlocks under
+   * `TestClock` when the source completes while the timer sleeps.)
    */
   events(options?: AwaitOptions): Stream.Stream<Event, AIError> {
     if (this.terminal) return Stream.make(this.event())
@@ -120,17 +123,26 @@ export class Generation<Response> {
       Clock.currentTimeMillis.pipe(
         Effect.map((start) => {
           const deadline = start + Duration.toMillis(timeout)
+          // Fail before polling once the deadline has passed: a fast status request could otherwise win the zero-budget
+          // race and schedule another zero-delay poll.
           const refresh = Clock.currentTimeMillis.pipe(
             Effect.flatMap((now) =>
-              this.refresh().pipe(
-                Effect.timeoutOrElse({
-                  duration: Duration.millis(Math.max(0, deadline - now)),
-                  orElse: () => this.timeoutError(timeout),
-                }),
-              ),
+              now >= deadline
+                ? this.timeoutError(timeout)
+                : this.refresh().pipe(
+                    Effect.timeoutOrElse({
+                      duration: Duration.millis(deadline - now),
+                      orElse: () => this.timeoutError(timeout),
+                    }),
+                  ),
             ),
           )
-          return Stream.fromEffectSchedule(refresh, this.schedule(options?.poll)).pipe(
+          const schedule = this.schedule(options?.poll).pipe(
+            Schedule.modifyDelay((meta) =>
+              Effect.succeed(Duration.min(meta.duration, Duration.millis(Math.max(0, deadline - meta.now)))),
+            ),
+          )
+          return Stream.fromEffectSchedule(refresh, schedule).pipe(
             Stream.takeUntil((generation) => generation.terminal),
             Stream.map((generation) => generation.event()),
           )

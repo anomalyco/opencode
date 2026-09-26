@@ -136,8 +136,7 @@ const decodeResult = Effect.fn("XAIVideo.decodeResult")(function* (
   const output = yield* decodeVideoStatus(response)
   const decoded = output.value
   const status = yield* MediaProtocol.status(STATUS, decoded.status, output)
-  if (status === "running")
-    return yield* output.invalid(`${route.name} request ${context.token.requestID} has not finished`)
+  if (status === "running") return yield* output.pending(context.token.requestID)
   if (status === "failed") {
     const code = decoded.error?.code ?? undefined
     const message = decoded.error?.message ?? undefined

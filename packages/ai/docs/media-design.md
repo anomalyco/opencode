@@ -1,6 +1,7 @@
 # Media generation in `@opencode/ai` — public API direction
 
-Status: phases 1–4 implemented (through Image queued routes and partial images); phase 5 proposal.
+Status: phases 1–4 implemented (through Image queued routes and partial images; ElevenLabs Scribe transcription
+pending); phase 5 proposal.
 
 ## Goal
 
@@ -40,7 +41,7 @@ The design below is derived from a survey of the raw provider APIs (OpenAI, Gemi
 
 ### Model selection
 
-A model value is built as `OpenAI.configure({ apiKey }).responses("gpt-5")` or `.image("gpt-image-2")`: `configure` fixes credentials, endpoint, and defaults; the selector fixes which of the provider's APIs to hit and binds the typed `providerOptions` generic. Media follows the same shape with one selector per modality — `openai.image(id)` today, `.video(id)` / `.speech(id)` / `.transcription(id)` as those modalities land — mirroring `openai.responses(id)`. `Image.request` accepts `ImageModel` only, exactly as `LLM.request` accepts `LanguageModel`.
+A model value is built as `OpenAI.configure({ apiKey }).responses("gpt-5")` or `.image("gpt-image-2")`: `configure` fixes credentials, endpoint, and defaults; the selector fixes which of the provider's APIs to hit and binds the typed `providerOptions` generic. Media follows the same shape with one selector per modality — `.image(id)`, `.video(id)`, `.speech(id)`, `.transcription(id)` on the facades that offer each — mirroring `openai.responses(id)`. `Image.request` accepts `ImageModel` only, exactly as `LLM.request` accepts `LanguageModel`.
 
 ```ts
 import { OpenAI, Google } from "@opencode/ai/providers"
@@ -135,8 +136,8 @@ Effect.gen(function* () {
 })
 ```
 
-`size` and `aspectRatio` are not interchangeable; each route rejects fields it cannot lower — see the README's Image
-portability matrix.
+`size` and `aspectRatio` are not interchangeable; each route rejects fields it cannot lower — see the portability table
+in the README's Image generation section.
 
 Editing is not a separate function; `images`/`mask` on the request select the edit path in the route (OpenAI `/images/edits`, Gemini multimodal parts, xAI `/images/edits`). Routes that cannot honor `mask` fail with `Unsupported`.
 
@@ -166,8 +167,8 @@ Effect.gen(function* () {
 
   // Simple: wait for it.
   const response = yield* Video.generate(request, { poll: { interval: "10 seconds", timeout: "10 minutes" } })
-  response.video                                     // Media.Asset: url with expiresAt (+ transient `headers` for Veo downloads)
-  response.usage                                     // credits on Runway; the other three report none
+  response.video                                     // Media.Asset: url (expiresAt on Veo and Runway; transient `headers` for Veo downloads)
+  response.usage                                     // credits on Runway; the other three report none (xAI's usage.cost_in_usd_ticks is not decoded)
   response.notices                                   // Veo raiMediaFilteredReasons → filtered, xAI respect_moderation → moderated
   yield* response.video.materialize()                // pull bytes before the URL expires
 
@@ -175,7 +176,7 @@ Effect.gen(function* () {
   const generation = yield* Video.start(request)     // Generation<VideoResponse>
   generation.id; generation.status; generation.progress; generation.position; generation.token
   yield* generation.await({ poll })                  // VideoResponse
-  yield* generation.cancel()                         // fal PUT cancel_url, Runway DELETE /tasks/{id}; no-op for Veo and xAI
+  yield* generation.cancel()                         // fal PUT cancel_url, Runway DELETE /tasks/{id}; Veo and xAI succeed without a request
 
   // Resume from another process. The token is validated against the route's codec and refreshed once. It carries no
   // route identity, so persist the provider and model ID alongside it: `resume` needs the model.
@@ -188,10 +189,11 @@ Effect.gen(function* () {
 
 Tokens are route-owned JSON: Veo `{ operation }`, xAI `{ requestID }`, Runway `{ taskID }`, fal
 `{ requestID, statusURL, responseURL, cancelURL }` (fal's follow-up URLs are authoritative and absolute). Common-field
-lowering per provider: Veo takes inline media only and rejects `audio: false` and `n > 1`; xAI rejects `seed` and
-`negativePrompt` and routes a `video` input to edits or (`providerOptions.mode: "extend"`) extensions; fal rejects
-`durationSeconds`, `references`, and `frames.last` because the field names and enums differ per model; Runway passes
-`aspectRatio` through as its pixel `ratio` and rejects `n`.
+lowering per provider: Veo takes inline media only, rejects `audio: false` and `n > 1`, and requires `frames.first`
+when `frames.last` is set; xAI rejects `n`, `seed`, and `negativePrompt` and routes a `video` input to edits or
+(`providerOptions.mode: "extend"`) extensions; fal rejects `n`, plus `durationSeconds`, `references`, and `frames.last`
+because the field names and enums differ per model; Runway passes `aspectRatio` through as its pixel `ratio` and
+rejects `n`.
 
 Deferred: `Video.complete(model, token, webhook)` (finish from a webhook payload without polling) and provider poll
 hints (none of the four providers emit one). Later providers: Luma, Kling, MiniMax, Replicate.
@@ -241,10 +243,12 @@ name→id resolution. Multi-speaker (Gemini `speechConfig.multiSpeakerVoiceConfi
 `opus_48000_64`, Cartesia `{ container, encoding, sample_rate }`, Deepgram `encoding`+`container`) and declares the
 asset's media type rather than sniffing, because headerless PCM can look like an MPEG frame sync. Headerless PCM
 always carries `info.encoding`, `info.sampleRate`, and `info.channels`; its media type is the provider's declaration
-(Gemini `audio/L16;codec=pcm;rate=24000`, Deepgram's `content-type`) or `audio/pcm`. Gemini returns PCM only, so any
-other `format` is rejected rather than wrapped as WAV by the route. Every `format` value a route cannot produce (unknown
-to it, a container on Cartesia SSE, WAV on an ElevenLabs stream, anything but PCM on Gemini) fails the same way as an
-unsupported field: `UnsupportedOperation` with `operation: "media.format"`.
+(Gemini `audio/L16;codec=pcm;rate=24000`, Deepgram's `content-type`) or `audio/pcm`. Gemini's asset follows the
+provider's declared type: WAV for Gemini 3.8 TTS `generate`, headerless PCM otherwise. The route never wraps PCM as WAV,
+so `pcm` is the only explicit `format` it accepts, and not on Gemini 3.8 `generate`. Every `format` value a route cannot
+produce (unknown to it, a container on Cartesia SSE, WAV on an ElevenLabs stream, anything but `pcm` on Gemini, `pcm` on
+Gemini 3.8 `generate`) fails the same way as an unsupported field: `UnsupportedOperation` with
+`operation: "media.format"`.
 
 **Timestamps.** `timestamps: true` on the request asks for alignment. ElevenLabs selects the `with-timestamps`
 endpoints (character-level, NDJSON when streaming); Cartesia sets `add_timestamps` on `/tts/sse` (word-level; a
@@ -277,7 +281,7 @@ const request = Transcription.request({
   language: "en",                                  // provider-native passthrough
   timestamps: "segment",                           // none | segment | word
   diarize: true,
-  speakers: 2,                                     // expected count, hint only (AssemblyAI)
+  speakers: 2,                                     // exact speaker count (AssemblyAI only)
   providerOptions: { known_speaker_names: ["agent"] },
 })
 
@@ -291,10 +295,11 @@ yield* Transcription.resume(model, token)
 Transcription is the first modality whose providers span all three protocol kinds, and it needed no fourth kind.
 Every `MediaRoute` now carries its `kind`; `TranscriptionRoute` is the union of the inline, stream, and queued routes;
 `TranscriptionModel.fromRoute` is overloaded per protocol kind (arity picks the overload: `<Options>`,
-`<Options, Frame, State>`, `<Options, Token>`) and composes through `MediaRoute.inline` / `stream` / `queued`; and
-`TranscriptionClient` dispatches on `route.kind`. `generate` on a queued route is `start` then `await`; `stream` on an
-inline route is the response as a single `finish`, and on a queued route it is the status observations followed by
-`finish`. `start` / `resume` on a non-queued route fail with `UnsupportedOperation` (`transcription.start`). The
+`<Options, Frame, State>`, `<Options, Token>`) and composes through the shared `composeRoute` (`src/media-model.ts`),
+which picks `MediaRoute.inline` / `stream` / `queued`; and `TranscriptionClient`, like every modality client, is
+`MediaClient.make` (`src/media-client.ts`), which dispatches on `route.kind`. `generate` on a queued route is `start`
+then `await`; `stream` on an inline route is the response as a single `finish`, and on a queued route it is the status
+observations followed by `finish`. `start` / `resume` on a non-queued route fail with `UnsupportedOperation` (`transcription.start`). The
 `finish` event carries the whole transcript (text, segments, words, language, duration, usage), so the stream route's
 `collect` is just "take `finish`".
 
@@ -309,11 +314,12 @@ Settled rules:
   word offsets, so segment timestamps and diarization also request word offsets there.
 - **Diarization.** `diarize` means segments (and words, where the provider labels them) carry `speaker`. Labels are
   provider-native strings — OpenAI `A` or a known speaker name, Deepgram `0`, Gemini `spk:0`, AssemblyAI `A` — with no
-  cross-provider speaker model. `speakers` is a hint; only AssemblyAI (`speakers_expected`) accepts it.
+  cross-provider speaker model. `speakers` is the exact number of speakers to label, which AssemblyAI (`speakers_expected`, the only route that
+  accepts it) treats as a constraint rather than a hint.
 - **Language** is passed through (`language`, OpenAI `gpt-transcribe` `languages[]`, Gemini `languageCodes`,
   AssemblyAI `language_code`). `response.language` is the provider's own value, lowercased but not normalized: an
-  ISO code on most routes, `english` from whisper-1, `en_us` from AssemblyAI. Deepgram and AssemblyAI assume English
-  unless asked to detect, so a missing `language` enables their detection.
+  ISO code on most routes (AssemblyAI's detection returns `en`), `english` from whisper-1. Deepgram and AssemblyAI
+  assume English unless asked to detect, so a missing `language` enables their detection.
 - **Gemini** requires a transcribe model; other model ids fail with `UnsupportedOperation` before the call, because
   general models ignore `audioTranscriptionConfig` and answer conversationally. Streamed chunks carry whole speaker
   turns (one part per turn), which join with a space.
@@ -323,7 +329,7 @@ Settled rules:
 
 | Provider | Kind | Audio input | `timestamps` | `diarize` | Unsupported | Usage |
 |---|---|---|---|---|---|---|
-| OpenAI | stream (`stream: true` in `stream` mode) | multipart `file` (inline only) | `whisper-1` (`verbose_json`); diarize model: `segment` | `gpt-4o-transcribe-diarize` (`diarized_json`) | `speakers`; `prompt` on the diarize model; streaming on `whisper-1` | `tokens` or `seconds` |
+| OpenAI | stream (`stream: true` in `stream` mode; `whisper-1` ignores `stream`, so it emits only `finish`) | multipart `file` (inline only) | `whisper-1` (`verbose_json`); diarize model: `segment` | `gpt-4o-transcribe-diarize` (`diarized_json`) | `speakers`; `prompt` on the diarize model | `tokens` or `seconds` |
 | Gemini | stream (`generateContent` / `streamGenerateContent`) | `inlineData` or Gemini Files `fileData` | `audioTranscriptionConfig.wordTimestamp` | `audioTranscriptionConfig.diarization` | `prompt`, `speakers` | `tokens` |
 | Deepgram | inline | raw body, or JSON `{ url }` | words always; `segment` → `utterances` | `diarize_model=latest` + `utterances` | `prompt`, `speakers` | `seconds` (`metadata.duration`) |
 | AssemblyAI | queued (upload → submit → poll) | `/v2/upload` then `audio_url`, or a URL | words always; `segment` → `speaker_labels` | `speaker_labels` | — | `seconds` (`audio_duration`) |
@@ -353,7 +359,7 @@ GenerationAwaitOptions = { poll?: Poll }
 Poll = { interval?: Duration; timeout?: Duration }
 ```
 
-`Generation` is not video-specific. Image routes on BFL, fal, and Replicate are queued; `Image.start` exists for them. A route declares itself `inline` or `queued`; `generate` on a queued route is `start` then `await`.
+`Generation` is not video-specific. Image routes on BFL, fal, Replicate, and Stability `upscale()` are queued; `Image.start` exists for them. A route declares itself `inline` or `queued`; `generate` on a queued route is `start` then `await`.
 
 ### Usage
 
@@ -400,14 +406,15 @@ Streams become `AsyncIterable` via `Stream.toAsyncIterable`. `AIError` is thrown
 
 ### Providers
 
-Existing facades gain per-modality selectors; the modality routes each facade provides:
+Existing facades gain per-modality selectors; the modality routes each facade provides (*italics* are not
+implemented):
 
 | Facade | llm | image | video | speech | transcription | other |
 |---|---|---|---|---|---|---|
-| `OpenAI` | responses (default), chat | Images API (stream) | Sora (deprecated 2026-09-24) | ✓ | ✓ | |
+| `OpenAI` | responses (default), chat | Images API (stream) | *Sora skipped (decision 8)* | ✓ | ✓ | |
 | `Google` | Gemini | Gemini-native | Veo | Gemini TTS | `gemini-3.5-transcribe` | |
 | `XAI` | ✓ | ✓ | ✓ | | | |
-| `ElevenLabs` | | | | ✓ | Scribe | soundEffect, music |
+| `ElevenLabs` | | | | ✓ | *Scribe (pending)* | *soundEffect, music (phase 5)* |
 | `Cartesia` | | | | ✓ | | |
 | `Deepgram` | | | | Aura | ✓ | |
 | `Fal` | | ✓ (queued) | ✓ | | | |
@@ -416,7 +423,7 @@ Existing facades gain per-modality selectors; the modality routes each facade pr
 | `Replicate` | | ✓ (queued) | | | | |
 | `Stability` | | `image` (inline), `upscale()` (queued) | | | | |
 | `Runway` | | | ✓ | | | |
-| `Luma`, `Kling`, `MiniMax` | | per provider | | | | |
+| `Luma`, `Kling`, `MiniMax` | | *deferred* | *deferred* | | | |
 
 New facades follow the existing one-file-per-provider rule. The facade selector is the public path for media models; modality-specific package entrypoints (for example `@opencode/ai/providers/openai/images`) are deferred until Core has a modality-aware model resolver.
 

@@ -48,15 +48,17 @@ const Usage = Schema.Struct({
   output_tokens_details: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 })
 
-const OpenAIImageResponse = Schema.Struct({
-  data: Schema.Array(
-    Schema.Struct({
-      b64_json: Schema.optional(Schema.String),
-      url: Schema.optional(Schema.String),
-      revised_prompt: Schema.optional(Schema.String),
-    }),
-  ),
+/** What the provider actually rendered; it can differ from the request when `auto` or a default applied. */
+const Settings = {
   output_format: Schema.optional(Schema.String),
+  size: Schema.optional(Schema.String),
+  quality: Schema.optional(Schema.String),
+  background: Schema.optional(Schema.String),
+}
+
+const OpenAIImageResponse = Schema.Struct({
+  data: Schema.Array(Schema.Struct({ b64_json: Schema.String })),
+  ...Settings,
   usage: Schema.optional(Usage),
 })
 
@@ -69,11 +71,13 @@ const StreamEvent = Schema.Union([
     type: Schema.Literals(["image_generation.partial_image", "image_edit.partial_image"]),
     b64_json: Schema.String,
     partial_image_index: Schema.Number,
+    ...Settings,
     output_format: Schema.String,
   }),
   Schema.Struct({
     type: Schema.Literals(["image_generation.completed", "image_edit.completed"]),
     b64_json: Schema.String,
+    ...Settings,
     output_format: Schema.String,
     usage: Schema.optional(Usage),
   }),
@@ -92,6 +96,9 @@ type Frame = string | { readonly document: string; readonly requested: string | 
 interface State {
   readonly completed: number
   readonly format?: string
+  readonly size?: string
+  readonly quality?: string
+  readonly background?: string
   readonly usage?: MediaUsage
 }
 
@@ -110,10 +117,6 @@ const nativeOptions = (options: OpenAIImageOptions | undefined) => {
 
 const streamOptions = (request: MediaProtocol.Addressed<Request>) => {
   if (request.mode !== "stream") return Effect.succeed(undefined)
-  if (request.model.id.startsWith("dall-e"))
-    return Effect.fail(
-      route.unsupported("media.stream", `${request.model.id} does not stream; use Image.generate or a GPT image model`),
-    )
   if (request.n !== undefined && request.n > 1)
     return Effect.fail(
       route.unsupported("media.n", `${route.name} streams one image; use Image.generate for n=${request.n}`),
@@ -194,21 +197,34 @@ const usage = (value: Schema.Schema.Type<typeof Usage> | undefined): MediaUsage 
         details: { openai: value },
       }
 
-const eventImage = (frame: string, label: string, data: string, format: string) =>
+/** `size` echoes the rendered `WIDTHxHEIGHT`; `auto` or any other value leaves the dimensions unknown. */
+const info = (format: string, size: string | undefined): Media.Info => {
+  const match = size?.match(/^(\d+)x(\d+)$/)
+  return match ? { format, width: Number(match[1]), height: Number(match[2]) } : { format }
+}
+
+const eventImage = (frame: string, label: string, data: string, format: string, size: string | undefined) =>
   MediaInput.decodedAsset((message, cause) => route.frameError(message, frame, cause), label, data, `image/${format}`, {
-    info: { format },
+    info: info(format, size),
   })
 
 const onEvent = Effect.fn("OpenAIImages.onEvent")(function* (state: State, frame: string) {
   const event = yield* decodeEvent(frame)
   const format = event.output_format
   if ("partial_image_index" in event) {
-    const image = yield* eventImage(frame, `${route.name} partial image`, event.b64_json, format)
+    const image = yield* eventImage(frame, `${route.name} partial image`, event.b64_json, format, event.size)
     return [state, [ImagePartialEvent.make({ index: event.partial_image_index, image })]] as const
   }
-  const image = yield* eventImage(frame, `${route.name} result ${state.completed}`, event.b64_json, format)
+  const image = yield* eventImage(frame, `${route.name} result ${state.completed}`, event.b64_json, format, event.size)
   return [
-    { ...state, completed: state.completed + 1, format, usage: usage(event.usage) },
+    {
+      completed: state.completed + 1,
+      format,
+      size: event.size,
+      quality: event.quality,
+      background: event.background,
+      usage: usage(event.usage),
+    },
     [ImageOutputEvent.make({ index: state.completed, image })],
   ] as const
 })
@@ -219,16 +235,20 @@ const onDocument = Effect.fn("OpenAIImages.onDocument")(function* (frame: Exclud
     Effect.mapError((cause) => invalid(`${route.name} returned an invalid response`, cause)),
   )
   const format = decoded.output_format ?? frame.requested ?? "png"
-  const mediaType = `image/${format}`
   const images = yield* Effect.forEach(decoded.data, (item, index) =>
-    MediaInput.imageOutput(invalid, `${route.name} result ${index}`, item, mediaType, {
-      info: { format },
-      providerMetadata:
-        item.revised_prompt === undefined ? undefined : { openai: { revisedPrompt: item.revised_prompt } },
+    MediaInput.decodedAsset(invalid, `${route.name} result ${index}`, item.b64_json, `image/${format}`, {
+      info: info(format, decoded.size),
     }),
   )
   if (images.length === 0) return yield* invalid(`${route.name} returned no images`)
-  const state: State = { completed: images.length, format, usage: usage(decoded.usage) }
+  const state: State = {
+    completed: images.length,
+    format,
+    size: decoded.size,
+    quality: decoded.quality,
+    background: decoded.background,
+    usage: usage(decoded.usage),
+  }
   return [state, images.map((image, index) => ImageOutputEvent.make({ index, image }))] as const
 })
 
@@ -237,7 +257,17 @@ const step = (state: State, frame: Frame) => (typeof frame === "string" ? onEven
 const finish = (state: State) => {
   if (state.completed === 0) return Effect.fail(route.incomplete())
   return Effect.succeed([
-    ImageFinishEvent.make({ usage: state.usage, providerMetadata: { openai: { outputFormat: state.format } } }),
+    ImageFinishEvent.make({
+      usage: state.usage,
+      providerMetadata: {
+        openai: {
+          outputFormat: state.format,
+          size: state.size,
+          quality: state.quality,
+          background: state.background,
+        },
+      },
+    }),
   ])
 }
 

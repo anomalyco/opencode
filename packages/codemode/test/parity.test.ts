@@ -1737,3 +1737,250 @@ describe("Date components convert through ToPrimitive", () => {
     ).toEqual([true, 0, true])
   })
 })
+
+describe("iteration callbacks receive thisArg", () => {
+  test("Array, Array.from, Map, Set, URLSearchParams, Headers, and Uint8Array pass it as this", async () => {
+    expect(
+      await value(`
+        const c = { n: 0 }
+        const count = function () { this.n++ }
+        ;[1, 2].forEach(count, c)
+        ;[1].map(count, c)
+        ;[1].filter(count, c)
+        ;[1].find(count, c)
+        ;[1].findIndex(count, c)
+        ;[1].findLast(count, c)
+        ;[1].findLastIndex(count, c)
+        ;[1].some(count, c)
+        ;[1].every(count, c)
+        ;[1].flatMap(count, c)
+        Array.from([1], count, c)
+        Array.from({ length: 1 }, count, c)
+        new Map([[1, 1]]).forEach(count, c)
+        new Set([1]).forEach(count, c)
+        new URLSearchParams("a=1").forEach(count, c)
+        new Headers({ a: "1" }).forEach(count, c)
+        new Uint8Array([1]).forEach(count, c)
+        return c.n
+      `),
+    ).toBe(18)
+    expect(await value(`return [1, 2].map(function (x) { return x + this.v }, { v: 10 })`)).toEqual([11, 12])
+  })
+
+  test("arrows keep their lexical this, reduce takes an initial value instead, and opaque values are only bound", async () => {
+    expect(await value(`return [1].map(() => typeof this, { v: 1 })`)).toEqual(["undefined"])
+    expect(
+      await value(`return [1, 2].reduce(function (a, b) { return a + b + (this === undefined ? 0 : 100) }, 0)`),
+    ).toBe(3)
+    expect(
+      await value(`
+        let seen
+        ;[1].forEach(function () { seen = this }, tools.nowhere)
+        return typeof seen
+      `),
+    ).toBe("function")
+  })
+})
+
+describe("computed property keys convert through the object's own toString", () => {
+  test("reads, writes, compound assignment, in, delete, literals, and destructuring share one conversion", async () => {
+    expect(
+      await value(`
+        const key = { toString() { return "id" } }
+        const o = {}
+        o[key] = 1
+        o[key] += 1
+        const literal = { [key]: "lit" }
+        const had = key in o
+        delete literal[key]
+        return [o.id, had, (({ [key]: v }) => v)(o), literal, o[[1, 2]] === undefined]
+      `),
+    ).toEqual([2, true, 2, {}, true])
+    expect(
+      await value(`
+        const seen = []
+        const base = { x: 1 }
+        base[{ toString() { seen.push(1); return "" } }] ^= 0
+        base[{ toString() { seen.push(2); return "x" } }]++
+        return [seen, base[""], base.x]
+      `),
+    ).toEqual([[1, 2], 0, 2])
+  })
+
+  test("valueOf is the fallback, a symbol result stays a symbol, and conversion failures surface", async () => {
+    expect(
+      await value(`
+        const o = { 7: "seven" }
+        const sym = { toString() { return Symbol.iterator } }
+        o[sym] = 1
+        return [o[{ valueOf() { return 7 }, toString: undefined }], typeof o[Symbol.iterator], Object.keys(o)]
+      `),
+    ).toEqual(["seven", "number", ["7"]])
+    expect((await error(`({})[{ toString() { throw new RangeError("bad key") } }]`)).message).toContain("bad key")
+    expect((await error(`({})[{ toString() { return {} }, valueOf() { return {} } }]`)).message).toContain(
+      "Cannot convert object to primitive value",
+    )
+    expect((await error(`const key = { toString() { return "a" } }; key in 5`)).message).toContain(
+      "requires a data object on the right-hand side",
+    )
+  })
+
+  test("a nullish base throws before the key converts, as ToObject precedes ToPropertyKey", async () => {
+    const failure = await error(`const base = null; base[{ toString() { throw new RangeError("key evaluated") } }]`)
+    expect(failure.message).toContain("Cannot read properties of null")
+  })
+
+  test("opaque values keep their built-in key form and a tool reference toString is never called", async () => {
+    expect(
+      await value(`
+        const o = { "[object Function]": 1, "[object Promise]": 2 }
+        return [o[() => 1], o[Promise.resolve("k")]]
+      `),
+    ).toEqual([1, 2])
+    expect((await error(`({})[{ toString: tools.nowhere }] = 1`)).message).toContain(
+      "Cannot convert object to primitive value",
+    )
+  })
+})
+
+describe("String and Number method arguments convert through ToPrimitive", () => {
+  test("string positions use the string hint and numeric positions the number hint", async () => {
+    expect(
+      await value(`
+        const s = { toString() { return "b" } }
+        const n = { valueOf() { return 1 } }
+        return [
+          "abc".indexOf(s), "abc".lastIndexOf(s), "abc".includes(s), "abc".startsWith(s, n), "abc".endsWith(s, 2),
+          "abc".charAt(n), "abc".at({ valueOf() { return -1 } }), "abc".slice(n), "abc".substring(n, 2),
+          "abc".charCodeAt(n), "a".padStart({ valueOf() { return 3 } }, s), "x".padEnd(3, s), "ab".repeat({ valueOf() { return 2 } }),
+          "a".concat(s, { valueOf() { return 1 }, toString() { return "T" } }), "b".localeCompare(s),
+          (1.005).toFixed({ valueOf() { return 2 } }), (255).toString({ valueOf() { return 16 } }),
+          (1234.5678).toPrecision({ valueOf() { return 6 } }), (12345).toExponential({ valueOf() { return 2 } }),
+        ]
+      `),
+    ).toEqual([
+      1,
+      1,
+      true,
+      true,
+      true,
+      "b",
+      "c",
+      "bc",
+      "b",
+      98,
+      "bba",
+      "xbb",
+      "abab",
+      "abT",
+      0,
+      "1.00",
+      "ff",
+      "1234.57",
+      "1.23e+4",
+    ])
+  })
+
+  test("split, replace, match, and search convert a plain pattern but keep a RegExp as is", async () => {
+    expect(
+      await value(`
+        const s = { toString() { return "b" } }
+        return [
+          "abc".split(s), "abc".split(/b/, { valueOf() { return 1 } }), "abc".split(undefined, { valueOf() { return undefined } }),
+          "abc".replace(s, "X"), "abc".replace(/b/, { toString() { return "R" } }), "abc".replaceAll(s, s),
+          "abc".replace(s, (m) => m.toUpperCase()), "abc".match(s)[0], "abcb".matchAll(s).length, "abc".search(s),
+        ]
+      `),
+    ).toEqual([["a", "c"], ["a"], [], "aXc", "aRc", "abc", "aBc", "b", 2, 1])
+    expect((await error(`"abc".includes(/b/)`)).message).toContain("cannot take a regular expression")
+  })
+
+  test("the receiver converts first, then each consumed argument, in spec order; extra arguments are untouched", async () => {
+    expect(
+      await value(`
+        const log = []
+        const observer = (name, string, number) => ({
+          toString() { log.push("toString:" + name); return string },
+          valueOf() { log.push("valueOf:" + name); return number },
+        })
+        const padded = String.prototype.padStart.call(observer("receiver", {}, "abc"), observer("maxLength", 11, {}), observer("fillString", {}, "def"))
+        const extra = "abc".indexOf("b", 1, { valueOf() { throw new Error("extra argument converted") } })
+        return [padded, log, extra, String.prototype.trim.call({ toString() { return " abc " } })]
+      `),
+    ).toEqual([
+      "defdefdeabc",
+      [
+        "toString:receiver",
+        "valueOf:receiver",
+        "valueOf:maxLength",
+        "toString:maxLength",
+        "toString:fillString",
+        "valueOf:fillString",
+      ],
+      1,
+      "abc",
+    ])
+  })
+
+  test("conversion failures surface and opaque arguments still reject", async () => {
+    expect((await error(`"abc".indexOf({ toString() { throw new RangeError("intostr") } })`)).message).toContain(
+      "intostr",
+    )
+    expect((await error(`(1).toString({ valueOf() { throw new SyntaxError("poison") } })`)).message).toContain("poison")
+    expect((await error(`(1).toFixed({ toString() { return {} }, valueOf() { return {} } })`)).message).toContain(
+      "Cannot convert object to primitive value",
+    )
+    expect((await error(`"abc".indexOf(tools.nowhere)`)).message).toContain("expects argument 1 to be a data value")
+    expect((await error(`"abc".indexOf(Promise.resolve("b"))`)).message).toContain(
+      "expects argument 1 to be a data value",
+    )
+  })
+})
+
+describe("WeakMap and WeakSet", () => {
+  test("hold program objects by identity and answer like JS for non-object keys", async () => {
+    expect(
+      await value(`
+        const k = {}
+        const f = () => 1
+        const wm = new WeakMap([[k, 1]])
+        const ws = new WeakSet([k])
+        return [
+          wm.set(f, "fn") === wm, wm.get(k), wm.get(f), wm.has({}), wm.get(1), wm.has(1), wm.delete("s"),
+          wm.getOrInsert(k, 9), wm.getOrInsertComputed({}, (key) => typeof key),
+          ws.add(f) === ws, ws.has(k), ws.has(f), ws.has(1), ws.delete(k), ws.has(k),
+          String(wm), wm.size, "clear" in wm, Symbol.iterator in ws, JSON.stringify(wm),
+        ]
+      `),
+    ).toEqual([
+      true,
+      1,
+      "fn",
+      false,
+      null,
+      false,
+      false,
+      1,
+      "object",
+      true,
+      true,
+      true,
+      false,
+      true,
+      false,
+      "[object WeakMap]",
+      null,
+      false,
+      false,
+      "{}",
+    ])
+  })
+
+  test("reject primitive keys, plain calls, bad receivers, and cloning", async () => {
+    expect((await error(`new WeakMap().set(1, 1)`)).message).toContain("Invalid value used as weak map key")
+    expect((await error(`new WeakSet([1])`)).message).toContain("Invalid value used in weak set")
+    expect((await error(`WeakMap()`)).message).toContain("new")
+    expect((await error(`WeakMap.prototype.get.call(new Map(), {})`)).message).toContain("incompatible receiver")
+    expect((await error(`structuredClone(new WeakSet())`)).message).toContain("DataCloneError")
+  })
+})

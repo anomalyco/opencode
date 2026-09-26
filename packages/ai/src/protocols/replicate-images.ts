@@ -132,8 +132,7 @@ const decodeResult = Effect.fn("ReplicateImages.decodeResult")(function* (
       status,
       `${route.name} prediction ${context.token.id} ${prediction.status}${typeof prediction.error === "string" ? `: ${prediction.error}` : ""}`,
     )
-  if (status !== "completed")
-    return yield* output.invalid(`${route.name} prediction ${context.token.id} has not finished`)
+  if (status !== "completed") return yield* output.pending(context.token.id)
   if (prediction.data_removed === true)
     return yield* output.ended("expired", `${route.name} removed the output of prediction ${context.token.id}`)
   if (!isOutput(prediction.output))

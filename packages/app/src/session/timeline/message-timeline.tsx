@@ -31,7 +31,6 @@ import { getReadyMarkdown, preloadMarkdown } from "@opencode/session-ui/markdown
 import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
 import { createTimelineVirtualizer } from "./virtualizer"
 import { containsDirectory, isWorkspaceDirectory } from "@/workspaces/paths"
-import { projectForSession } from "@/shell/layout/helpers"
 import { parseCommentNote, readPromptPresentation } from "@/composer/comment-note"
 import { useCommand } from "@/shell/commands/command"
 import { SessionAncestorTrail, SessionProjectMenu, SessionTitleHeader } from "../session-identity-header"
@@ -143,14 +142,14 @@ function MessageTimelineView(
     const session = props.session.data.info()
     const projects = server.ctx.sync.data.project
     return session
-      ? projectForSession(session, projects)
+      ? server.ctx.projects.detailsForSession(session)
       : projects.find((item) => containsDirectory(item.worktree, sessionDirectory()))
   })
   const workspaceSession = createMemo(() => isWorkspaceDirectory(project(), sessionDirectory()))
-  const avatarProject = createMemo(() => {
+  const headerProject = createMemo(() => {
     const session = props.session.data.info()
     if (!session) return
-    return projectForSession(session, server.ctx.projects.list()) ?? project()
+    return server.ctx.projects.forSession(session)
   })
   createEffect(() => {
     const directory = project()?.worktree
@@ -408,7 +407,7 @@ function MessageTimelineView(
               <div class="flex items-center gap-1 min-w-0 flex-1">
                 <div class="flex items-center gap-0.5 min-w-0 flex-1 w-full">
                   <SessionProjectMenu
-                    project={avatarProject()}
+                    project={headerProject()}
                     directory={sessionDirectory()}
                     workspace={workspaceSession()}
                   />

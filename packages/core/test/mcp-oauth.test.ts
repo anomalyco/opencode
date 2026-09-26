@@ -291,6 +291,14 @@ describe("MCP OAuth", () => {
     await expect(authorize("not a URL")).rejects.toThrow(TypeError)
   })
 
+  test("rejects an authorization endpoint that is not http or https", async () => {
+    const { server } = authorizationServer({ authorization_endpoint: "file:///tmp/authorize" })
+
+    await expect(Effect.runPromise(Effect.scoped(start(server))).finally(() => server.stop(true))).rejects.toThrow(
+      "returned a file: authorization URL",
+    )
+  })
+
   test("sends the configured URL as the resource when the server publishes no metadata", async () => {
     const { server, tokenRequests } = authorizationServer({})
     const url = `${server.url.origin}/mcp`

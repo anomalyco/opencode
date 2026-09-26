@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js"
-import open from "open"
+import { openPath } from "@opencode/util/open"
 import { useRenderer } from "@opentui/solid"
 import { useClipboard } from "../context/clipboard"
 import { useDialog } from "./dialog"
@@ -39,7 +39,7 @@ export function useWorkingDirectoryActions(input: { directory: () => string | un
             description: "in system file manager",
             onSelect: (dialog) => {
               dialog.clear()
-              void open(directory).catch(toast.error)
+              void openPath(directory).catch(toast.error)
             },
           },
           ...(input.onMove

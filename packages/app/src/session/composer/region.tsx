@@ -224,7 +224,12 @@ export function ActiveSessionComposerRegion(props: {
         <div class="relative">
           <SessionQueuePanel queue={props.model.queue} />
           <div class="relative z-10">
-            <Composer model={props.model.composer} borderUnderlay suggestionBoundary={props.suggestionBoundary} />
+            <Composer
+              model={props.model.composer}
+              borderUnderlay
+              readOnly={props.model.queue.undoing()}
+              suggestionBoundary={props.suggestionBoundary}
+            />
           </div>
         </div>
       }

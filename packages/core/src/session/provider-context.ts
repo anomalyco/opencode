@@ -2,7 +2,7 @@ export * as SessionProviderContext from "./provider-context.js"
 
 import { Message } from "@opencode/ai"
 import { SessionProviderContext } from "@opencode/schema/session-provider-context"
-import { Schema } from "effect"
+import { Predicate, Schema } from "effect"
 import { isDeepStrictEqual } from "node:util"
 import { Hash } from "@opencode/util/hash"
 import type { SessionMessage } from "./message.js"
@@ -54,5 +54,31 @@ export const encode = (provenance: Provenance, replacement: ReadonlyArray<Messag
   messages: Schema.decodeSync(Schema.fromJsonString(Schema.Json))(JSON.stringify(replacement)),
 })
 
-export const decode = (context: Info) => Schema.decodeUnknownSync(messages)(context.messages)
-export const validate = (context: Info) => Schema.decodeUnknownEffect(messages)(context.messages)
+export const decode = (context: Info) => Schema.decodeUnknownSync(messages)(upgradeLegacyMedia(context.messages))
+export const validate = (context: Info) => Schema.decodeUnknownEffect(messages)(upgradeLegacyMedia(context.messages))
+
+/**
+ * Before 2.0.15, version-1 checkpoints stored mediaType/data directly on media parts. Core only built
+ * those parts from prompt attachments, whose data the Prompt schema guarantees is base64.
+ */
+function upgradeLegacyMedia(input: Info["messages"]) {
+  if (!Array.isArray(input)) return input
+  return input.map((message: unknown) => {
+    if (!Predicate.isObject(message) || !Array.isArray(message.content)) return message
+    return {
+      ...message,
+      content: message.content.map((part: unknown) => {
+        if (
+          !Predicate.isObject(part) ||
+          part.type !== "media" ||
+          part.media !== undefined ||
+          typeof part.mediaType !== "string" ||
+          typeof part.data !== "string"
+        )
+          return part
+        const { mediaType, data, ...rest } = part
+        return { ...rest, media: { source: { type: "base64", data, mediaType } } }
+      }),
+    }
+  })
+}

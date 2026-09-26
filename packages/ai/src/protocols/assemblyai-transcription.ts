@@ -110,8 +110,11 @@ const fromRequest = Effect.fn("AssemblyAITranscription.fromRequest")(function* (
         language_code: request.language,
         language_detection: request.language === undefined ? true : undefined,
         prompt: request.prompt,
-        // Turn-level `utterances`, the only segments AssemblyAI returns, require speaker labels.
-        speaker_labels: request.diarize === true || request.timestamps === "segment" ? true : undefined,
+        // Turn-level `utterances`, the only segments AssemblyAI returns, and `speakers_expected` require speaker labels.
+        speaker_labels:
+          request.diarize === true || request.timestamps === "segment" || request.speakers !== undefined
+            ? true
+            : undefined,
         speakers_expected: request.speakers,
       },
       request.providerOptions,
@@ -155,8 +158,7 @@ const decodeResult = Effect.fn("AssemblyAITranscription.decodeResult")(function*
   const error = transcript.error ?? undefined
   if (status === "failed")
     return yield* output.ended("failed", `${route.name} transcription failed${error === undefined ? "" : `: ${error}`}`)
-  if (status !== "completed")
-    return yield* output.invalid(`${route.name} transcript ${context.token.transcriptID} has not finished`)
+  if (status !== "completed") return yield* output.pending(context.token.transcriptID)
   const duration = transcript.audio_duration ?? undefined
   return new TranscriptionResponse({
     text: transcript.text ?? "",

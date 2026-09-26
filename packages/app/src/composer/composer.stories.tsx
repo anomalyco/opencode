@@ -168,6 +168,7 @@ function ComposerStory(props: {
               alternate: () => props.alternate,
               editing: () => undefined,
               confirmEdit() {},
+              undoing: () => false,
               cancelEdit() {},
               editFirst: () => false,
             }

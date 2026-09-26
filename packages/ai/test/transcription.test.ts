@@ -5,7 +5,7 @@ import { HttpClientRequest } from "effect/unstable/http"
 import { Media, Transcription, TranscriptionClient } from "../src/index.js"
 import { AssemblyAI, Deepgram, Google, OpenAI } from "../src/providers.js"
 import { it } from "./lib/effect.js"
-import { dynamicResponse } from "./lib/http.js"
+import { dynamicResponse, json, observe, type Call } from "./lib/http.js"
 
 const layer = (handler: Parameters<typeof dynamicResponse>[0]) =>
   TranscriptionClient.layer.pipe(Layer.provideMerge(dynamicResponse(handler)))
@@ -25,7 +25,6 @@ describe("Transcription", () => {
     Effect.gen(function* () {
       const errors = yield* Effect.all(
         [
-          Stream.runCollect(Transcription.stream({ model: openai.transcription("whisper-1"), audio })),
           Transcription.generate({ model: openai.transcription("gpt-4o-mini-transcribe"), audio, diarize: true }),
           Transcription.generate({ model: openai.transcription("gpt-4o-mini-transcribe"), audio, timestamps: "word" }),
           Transcription.generate({ model: openai.transcription("gpt-4o-transcribe-diarize"), audio, prompt: "Names" }),
@@ -53,7 +52,6 @@ describe("Transcription", () => {
       )
       expect(errors.map((error) => [error.reason._tag, "operation" in error.reason && error.reason.operation])).toEqual(
         [
-          ["UnsupportedOperation", "media.stream"],
           ["UnsupportedOperation", "media.diarize"],
           ["UnsupportedOperation", "media.timestamps"],
           ["UnsupportedOperation", "media.prompt"],
@@ -68,6 +66,67 @@ describe("Transcription", () => {
         ],
       )
     }).pipe(Effect.provide(layer(() => Effect.die("an unsupported request reached the network")))),
+  )
+
+  it.effect("ignores unknown OpenAI stream events and fails on an error event with the frame", () =>
+    Effect.gen(function* () {
+      const sse = (...frames: ReadonlyArray<string>) => frames.map((frame) => `data: ${frame}\n\n`).join("")
+      const failure = `{"type":"error","error":{"type":"server_error","code":"server_error","message":"The server had an error"}}`
+      const bodies = [
+        sse(
+          `{"type":"transcript.text.delta","delta":"Hi"}`,
+          `{"type":"transcript.text.future","payload":1}`,
+          `{"type":"transcript.text.done","text":"Hi"}`,
+          "[DONE]",
+        ),
+        sse(`{"type":"transcript.text.delta","delta":"Hi"}`, failure),
+      ]
+      const model = openai.transcription("gpt-4o-mini-transcribe")
+      const program = Effect.gen(function* () {
+        const events = Array.from(yield* Stream.runCollect(Transcription.stream({ model, audio })))
+        const error = yield* Stream.runCollect(Transcription.stream({ model, audio })).pipe(Effect.flip)
+        return { events, error }
+      })
+      const { events, error } = yield* program.pipe(
+        Effect.provide(
+          layer((input) =>
+            Effect.sync(() =>
+              input.respond(bodies.shift() ?? "", { headers: { "content-type": "text/event-stream" } }),
+            ),
+          ),
+        ),
+      )
+
+      expect(events.map((event) => event.type)).toEqual(["text-delta", "finish"])
+      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", body: failure })
+      expect(error.message).toContain("The server had an error")
+    }),
+  )
+
+  it.effect("streams whisper-1 as a single finish from a plain request", () =>
+    Effect.gen(function* () {
+      const bodies: Array<string> = []
+      const events = Array.from(
+        yield* Stream.runCollect(Transcription.stream({ model: openai.transcription("whisper-1"), audio })).pipe(
+          Effect.provide(
+            layer((input) =>
+              Effect.sync(() => {
+                bodies.push(input.text)
+                return input.respond(
+                  JSON.stringify({ text: "Hello there.", usage: { type: "duration", seconds: 2 } }),
+                  { headers: { "content-type": "application/json" } },
+                )
+              }),
+            ),
+          ),
+        ),
+      )
+
+      expect(bodies[0]).not.toContain('name="stream"')
+      expect(events).toEqual([
+        expect.objectContaining({ type: "finish", text: "Hello there.", usage: { type: "seconds", seconds: 2 } }),
+      ])
+    }),
   )
 
   it.effect(
@@ -170,5 +229,46 @@ describe("Transcription", () => {
         })
         expect(failure.reason).toMatchObject({ _tag: "ProviderInternal", body: failed })
       }),
+  )
+
+  it.effect("enables AssemblyAI speaker labels when only an expected speaker count is given", () =>
+    Effect.gen(function* () {
+      const calls: Array<Call> = []
+      yield* Transcription.start({ model: assemblyai, audio: Media.url("https://a.test/call.mp3"), speakers: 2 }).pipe(
+        Effect.provide(
+          layer((input) => observe(calls, input).pipe(Effect.as(json(input, { id: "tr_1", status: "queued" })))),
+        ),
+      )
+      expect(calls.map((call) => JSON.parse(call.body))).toEqual([
+        {
+          audio_url: "https://a.test/call.mp3",
+          speech_models: ["universal-3-5-pro"],
+          language_detection: true,
+          speaker_labels: true,
+          speakers_expected: 2,
+        },
+      ])
+    }),
+  )
+
+  it.effect("rejects reading an AssemblyAI result before the transcript finishes", () =>
+    Effect.gen(function* () {
+      const generation = yield* Transcription.resume(assemblyai, { transcriptID: "tr_1" })
+      const error = yield* generation.result().pipe(Effect.flip)
+      expect(error.reason._tag).toBe("InvalidRequest")
+      expect(error.message).toBe("AssemblyAI generation tr_1 has not finished; await it before reading the result")
+      expect(error.reason.body).toBe(JSON.stringify({ id: "tr_1", status: "processing" }))
+      expect(error.reason.http?.status).toBe(200)
+    }).pipe(
+      Effect.provide(
+        layer((input) =>
+          Effect.succeed(
+            input.respond(JSON.stringify({ id: "tr_1", status: "processing" }), {
+              headers: { "content-type": "application/json" },
+            }),
+          ),
+        ),
+      ),
+    ),
   )
 })

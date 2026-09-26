@@ -351,10 +351,34 @@ describe("OpenAI Responses effort updates", () => {
     }),
   )
 
+  it.effect("strips markers when the body overlay selects pro reasoning mode", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenAI.configure({ apiKey: "fixture", http: { body: { reasoning: { mode: "pro" } } } }).responses(
+            "gpt-6-sol",
+          ),
+          messages: conversation,
+          providerOptions: { reasoningEffort: "low" },
+        }),
+      )
+
+      expect(updates(prepared.body)).toEqual([])
+      expect(prepared.body.reasoning).toEqual({ effort: "low" })
+    }),
+  )
+
   for (const [id, supported] of [
     ["gpt-6-astra", true],
     ["openai/gpt-6-astra", true],
+    ["gpt-6-sol", true],
+    ["openai/gpt-6-sol", true],
+    ["gpt-6-luna", true],
+    ["openai/gpt-6-luna", true],
     ["gpt-6-astra-2026-09-01", false],
+    ["gpt-6-sol-pro", false],
+    ["gpt-6-luna-pro", false],
+    ["gpt-6-sol-fast", false],
     ["gpt-5.6-sol", false],
   ] as const) {
     it.effect(`${supported ? "lowers" : "strips"} markers for ${id}`, () =>

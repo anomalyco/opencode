@@ -1,5 +1,5 @@
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
-import type { SessionRequestKind } from "@opencode/plugin/effect/session"
+import type { SessionRequestKind, SessionTitle } from "@opencode/plugin/effect/session"
 import { Effect, Option, Schema, Semaphore, Stream } from "effect"
 import { IntegrationConnection } from "../../integration/connection.js"
 import { Credential } from "../../credential.js"
@@ -8,6 +8,7 @@ import { CopilotModels } from "../../github-copilot/models.js"
 import { App } from "../../app.js"
 import { Integration } from "../../integration.js"
 import { Model } from "../../model.js"
+import { Agent } from "../../agent.js"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Provider } from "../../provider.js"
 import type { PluginInternal } from "../internal.js"
@@ -162,6 +163,7 @@ export const GithubCopilotPlugin = define({
     const loading = Semaphore.makeUnsafe(1)
     const loaded: {
       baseURL?: string
+      token?: string
       models?: CopilotModels.Snapshot
       connection?: Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
     } = {}
@@ -173,6 +175,7 @@ export const GithubCopilotPlugin = define({
         : undefined
       if (credential?.type !== "oauth") {
         loaded.baseURL = undefined
+        loaded.token = undefined
         loaded.models = undefined
         loaded.connection = undefined
         return
@@ -200,6 +203,7 @@ export const GithubCopilotPlugin = define({
       )
         return
       loaded.baseURL = url
+      loaded.token = credential.refresh
       loaded.models = remote
       loaded.connection = connection
     })
@@ -270,6 +274,29 @@ export const GithubCopilotPlugin = define({
           evt.headers["X-Interaction-Type"] = interaction
           evt.headers["X-Interaction-Id"] = evt.sessionID
           if (interaction !== "conversation-agent") evt.headers["x-initiator"] = "agent"
+        }),
+      { providerID: Provider.ID.githubCopilot },
+    )
+    // GitHub's integration guide designates session naming as a utility scenario served by
+    // free, rate-limited utility models. Any failure leaves the result unset so the normal
+    // billable title path still runs.
+    yield* ctx.session.hook(
+      "title",
+      (evt) =>
+        Effect.gen(function* () {
+          if (evt.model.providerID !== Provider.ID.githubCopilot) return
+          if (!loaded.baseURL || !loaded.token || !loaded.models) return
+          const agent = yield* ctx.agent.get({ agentID: Agent.ID.make("title") }).pipe(Effect.orElseSucceed(() => undefined))
+          if (agent?.data.model) return
+          const model = utilityTitleModels.find((id) => loaded.models?.has(id))
+          if (!model) return
+          evt.result = yield* utilityTitle(
+            { baseURL: loaded.baseURL, token: loaded.token, model, app: ctx.app },
+            evt,
+          ).pipe(
+            Effect.tapError((cause) => Effect.logDebug("Copilot utility title failed", { model, cause })),
+            Effect.orElseSucceed(() => undefined),
+          )
         }),
       { providerID: Provider.ID.githubCopilot },
     )
@@ -368,6 +395,70 @@ function request(url: string, init: RequestInit) {
 }
 
 type Fetch = (input: Parameters<typeof fetch>[0], init?: RequestInit) => Promise<Response>
+
+// Matches the Copilot client: gpt-4o-mini is the "small utility" model; when an account
+// lacks it the request falls through to the regular title path instead of another guess.
+export const utilityTitleModels = ["gpt-4o-mini"]
+
+const UtilityCompletion = Schema.Struct({
+  choices: Schema.Array(Schema.Struct({ message: Schema.Struct({ content: Schema.NullOr(Schema.String) }) })),
+})
+const decodeUtilityCompletion = Schema.decodeUnknownEffect(Schema.fromJsonString(UtilityCompletion))
+
+// This issues its own /chat/completions call instead of steering core's title request.
+// The `session.title` hook exposes `model` read-only, so pointing core at another model
+// would mean widening that contract and re-resolving inside SessionModelRequest; rewriting
+// the body in `http.request` is worse still, since the endpoint (/responses for GPT-5,
+// /v1/messages for Claude) is fixed before that hook runs and gpt-4o-mini only serves
+// /chat/completions. Utility titles are Copilot-specific, stateless, non-streaming, and
+// free, so a small request here costs less than a core seam. Trade-offs: no session
+// usage record for the title step (the call bills nothing) and no `http.*` hook visibility.
+export function utilityTitle(
+  input: { baseURL: string; token: string; model: string; app: App.Info; fetch?: Fetch },
+  request: Pick<SessionTitle, "sessionID" | "system" | "messages" | "options">,
+) {
+  const send = input.fetch ?? fetch
+  const text = (parts: ReadonlyArray<{ type: string; text?: string | null }>) =>
+    parts.flatMap((part) => (part.type === "text" && typeof part.text === "string" ? [part.text] : [])).join("\n")
+  const messages = [
+    ...(request.system.length ? [{ role: "system", content: text(request.system) }] : []),
+    ...request.messages.map((message) => ({ role: message.role, content: text(message.content) })),
+  ]
+  return Effect.tryPromise({
+    try: async (signal) => {
+      const response = await send(`${input.baseURL}/chat/completions`, {
+        method: "POST",
+        signal,
+        headers: {
+          Authorization: `Bearer ${input.token}`,
+          "Content-Type": "application/json",
+          "User-Agent": App.useragent(input.app),
+          "X-GitHub-Api-Version": apiVersion,
+          "Openai-Intent": "conversation-edits",
+          "X-Interaction-Type": "agent-session-name-generation",
+          "X-Interaction-Id": request.sessionID,
+          "x-initiator": "agent",
+        },
+        body: JSON.stringify({
+          model: input.model,
+          messages,
+          stream: false,
+          ...(typeof request.options.maxTokens === "number" ? { max_tokens: request.options.maxTokens } : {}),
+        }),
+      })
+      if (!response.ok) throw new Error(`Utility title request failed: ${response.status}`)
+      return response.text()
+    },
+    catch: (cause) => cause,
+  }).pipe(
+    Effect.timeout("20 seconds"),
+    Effect.flatMap(decodeUtilityCompletion),
+    Effect.flatMap((completion) => {
+      const title = completion.choices[0]?.message.content?.trim()
+      return title ? Effect.succeed(title) : Effect.fail(new Error("Utility title response was empty"))
+    }),
+  )
+}
 
 export function copilotFetch(token: string | undefined, upstream: Fetch | undefined, app: App.Info): Fetch {
   const send = upstream ?? fetch

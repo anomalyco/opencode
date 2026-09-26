@@ -44,7 +44,12 @@ describe("OpenAI Transcription recorded", () => {
       expect(deltas.length).toBeGreaterThan(1)
       expect(deltas.join("")).toBe(finish.text)
       expect(finish.text).toMatch(TRANSCRIPT)
-      expect(finish.usage).toMatchObject({ type: "tokens", input: expect.any(Number), output: expect.any(Number) })
+      expect(finish.usage).toMatchObject({
+        type: "tokens",
+        input: expect.any(Number),
+        output: expect.any(Number),
+        details: { openai: { input_token_details: { audio_tokens: expect.any(Number) } } },
+      })
     }),
   )
 

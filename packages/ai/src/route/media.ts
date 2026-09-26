@@ -5,7 +5,7 @@ import { Endpoint } from "./endpoint.js"
 import { RequestExecutorService, type Interface } from "./executor-service.js"
 import { RequestExecutor } from "./executor.js"
 import { MediaProtocol } from "./media-protocol.js"
-import { Generation } from "../generation.js"
+import { Generation, isTerminal } from "../generation.js"
 import type { Media } from "../media.js"
 import {
   AIError,
@@ -164,14 +164,19 @@ export const queued = <Request extends MediaRequest, Response, Token>(
       transport
         .call("GET", operation.path(token), http, execute)
         .pipe(Effect.flatMap((sent) => operation.decode(sent.response, { token, auth: sent.auth, materialize })))
+    const status = poll(protocol.status)
     const cancel = protocol.cancel
+    const send =
+      cancel === undefined
+        ? undefined
+        : transport.call(cancel.method, cancel.path(token), http, execute).pipe(Effect.asVoid)
     return {
-      status: poll(protocol.status),
+      status,
       result: poll(protocol.result),
       cancel:
-        cancel === undefined
-          ? undefined
-          : transport.call(cancel.method, cancel.path(token), http, execute).pipe(Effect.asVoid),
+        send !== undefined && cancel?.activeOnly
+          ? status.pipe(Effect.flatMap((snapshot) => (isTerminal(snapshot.status) ? Effect.void : send)))
+          : send,
     }
   }
 
@@ -380,7 +385,11 @@ const encode = (body: MediaProtocol.Body | undefined, headers: Headers.Headers) 
   }
 }
 
-/** Common fields are never silently dropped: a present field the protocol declared unsupported fails typed. */
+/**
+ * Common fields are never silently dropped: a present field the protocol declared unsupported fails typed. `false`
+ * counts as present because some booleans mean something when false (video `audio`); protocols reject opt-in
+ * booleans such as speech `timestamps` with `=== true` in `body.from` instead of listing them.
+ */
 const rejectUnsupported = <Request extends object>(
   route: string,
   provider: ProviderID,

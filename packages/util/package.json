@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/util",
-  "version": "2.0.16",
+  "version": "2.0.18",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -58,6 +58,7 @@
     "mime-types": "3.0.2",
     "minimatch": "10.2.5",
     "npm-package-arg": "13.0.2",
+    "open": "11.0.4",
     "pacote": "21.5.1"
   },
   "devDependencies": {

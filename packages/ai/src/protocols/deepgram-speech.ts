@@ -67,6 +67,9 @@ const queryParameters = (request: Request) => {
 }
 
 const fromRequest = Effect.fn("DeepgramSpeech.fromRequest")(function* (request: Request) {
+  // Not in `unsupported`: that list would also reject `timestamps: false`, which asks for nothing.
+  if (request.timestamps === true)
+    return yield* route.unsupported("media.timestamps", `${route.name} does not return timestamps`)
   if (
     request.format !== undefined &&
     FORMATS[request.format] === undefined &&
@@ -117,7 +120,7 @@ const finish = (state: State, context: MediaProtocol.ResponseContext<Request>) =
 // ---------------------------------------------------------------------------
 
 export const protocol = MediaProtocol.stream<Request, SpeechEvent, Uint8Array, State>(route, {
-  unsupported: ["voice", "language", "instructions", "timestamps"],
+  unsupported: ["voice", "language", "instructions"],
   body: { from: fromRequest },
   frames: (bytes) => bytes,
   initial: () => ({ chunks: [] }),

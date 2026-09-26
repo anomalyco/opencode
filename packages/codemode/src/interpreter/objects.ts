@@ -356,6 +356,23 @@ export class SetObj extends Wrapper {
   }
 }
 
+/** Keys are program objects, so a host WeakMap gives the same lifetime rule as JavaScript without any bookkeeping. */
+export class WeakMapObj extends Wrapper {
+  override readonly tag = "WeakMap"
+  readonly map = new WeakMap<Obj, Value>()
+  override inspect() {
+    return "WeakMap { <items unknown> }"
+  }
+}
+
+export class WeakSetObj extends Wrapper {
+  override readonly tag = "WeakSet"
+  readonly set = new WeakSet<Obj>()
+  override inspect() {
+    return "WeakSet { <items unknown> }"
+  }
+}
+
 export class URLSearchParamsObj extends Wrapper {
   override readonly tag = "URLSearchParams"
   constructor(

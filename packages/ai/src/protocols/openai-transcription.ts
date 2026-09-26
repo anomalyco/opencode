@@ -1,8 +1,9 @@
 import { Effect, Schema, Stream } from "effect"
+import { classifyProviderFailure } from "../provider-error.js"
 import { Framing } from "../route/framing.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { mergeJsonRecords, type MediaUsage } from "../schema/index.js"
+import { AIError, mergeJsonRecords, type MediaUsage } from "../schema/index.js"
 import {
   TranscriptionFinishEvent,
   TranscriptionModel,
@@ -59,6 +60,9 @@ const Usage = Schema.Union([
     input_tokens: Schema.optional(Schema.Number),
     output_tokens: Schema.optional(Schema.Number),
     total_tokens: Schema.optional(Schema.Number),
+    input_token_details: Schema.optional(
+      Schema.Struct({ audio_tokens: Schema.optional(Schema.Number), text_tokens: Schema.optional(Schema.Number) }),
+    ),
   }),
   Schema.Struct({ type: Schema.Literal("duration"), seconds: Schema.Number }),
 ])
@@ -75,14 +79,23 @@ const transcriptFields = {
   usage: Schema.optional(Usage),
 }
 
+/** OpenAI may add stream event types; frames outside `EVENT_TYPES` are ignored. */
+const EventType = Schema.Struct({ type: Schema.String })
 const Event = Schema.Union([
   Schema.Struct({ type: Schema.Literal("transcript.text.delta"), delta: Schema.String }),
   Schema.Struct({ type: Schema.Literal("transcript.text.segment"), ...Segment.fields }),
   Schema.Struct({ type: Schema.Literal("transcript.text.done"), ...transcriptFields }),
+  Schema.Struct({
+    type: Schema.Literal("error"),
+    message: Schema.optional(Schema.String),
+    error: Schema.optional(Schema.Struct({ message: Schema.optional(Schema.String) })),
+  }),
 ])
+const EVENT_TYPES = new Set(["transcript.text.delta", "transcript.text.segment", "transcript.text.done", "error"])
 const Transcript = Schema.Struct(transcriptFields)
 type Transcript = Schema.Schema.Type<typeof Transcript>
 
+const decodeEventType = route.decodeFrame(EventType)
 const decodeEvent = route.decodeFrame(Event)
 const decodeTranscript = route.decodeFrame(Transcript)
 
@@ -118,10 +131,12 @@ const capabilities = (model: string): Capabilities => {
   return TRANSCRIBE
 }
 
+/** whisper-1 ignores `stream`, so its `stream` mode sends a plain request and emits only `finish`. */
+const streamsEvents = (request: MediaProtocol.Addressed<Request>) =>
+  request.mode === "stream" && capabilities(request.model.id).stream
+
 const validate = (request: MediaProtocol.Addressed<Request>, model: Capabilities) => {
   const id = request.model.id
-  if (request.mode === "stream" && !model.stream)
-    return Effect.fail(route.unsupported("media.stream", `${id} does not stream; use Transcription.generate`))
   if (request.diarize === true && !model.diarize)
     return Effect.fail(route.unsupported("media.diarize", `${id} does not diarize; use gpt-4o-transcribe-diarize`))
   if (request.prompt !== undefined && model.diarize)
@@ -173,7 +188,7 @@ const fromRequest = Effect.fn("OpenAITranscription.fromRequest")(function* (requ
       timestamp_granularities: responseFormat === "verbose_json" ? [request.timestamps] : undefined,
       // Diarizing audio longer than 30 seconds requires a chunking strategy.
       chunking_strategy: model.diarize ? "auto" : undefined,
-      stream: request.mode === "stream" ? true : undefined,
+      stream: streamsEvents(request) ? true : undefined,
     },
     {
       overlay: mergeJsonRecords(request.providerOptions, request.http?.body),
@@ -196,7 +211,15 @@ const segment = (value: Schema.Schema.Type<typeof Segment>): TranscriptionSegmen
 })
 
 const onEvent = Effect.fn("OpenAITranscription.onEvent")(function* (state: State, frame: string) {
+  if (!EVENT_TYPES.has((yield* decodeEventType(frame)).type)) return [state, []] as const
   const event = yield* decodeEvent(frame)
+  if (event.type === "error")
+    return yield* new AIError({
+      reason: classifyProviderFailure({
+        message: `${route.name} stream failed: ${event.message ?? event.error?.message ?? "unknown error"}`,
+        rawBody: frame,
+      }),
+    })
   if (event.type === "transcript.text.done") return [{ ...state, transcript: event }, []] as const
   if (event.type === "transcript.text.delta")
     return [state, event.delta.length === 0 ? [] : [TranscriptionTextDeltaEvent.make({ delta: event.delta })]] as const
@@ -246,7 +269,7 @@ export const protocol = MediaProtocol.stream<Request, TranscriptionEvent, Frame,
   unsupported: ["speakers"],
   body: { from: fromRequest },
   frames: (bytes, context) =>
-    context.request.mode === "stream"
+    streamsEvents(context.request)
       ? Framing.sse.frame(bytes)
       : Framing.document.frame(bytes).pipe(Stream.map((document) => ({ document }))),
   initial: () => ({ segments: [] }),

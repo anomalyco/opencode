@@ -1024,6 +1024,7 @@ export function DiffViewerContent(props: {
                                         onCleanup(() => patchDiffByFileIndex.delete(entry.fileIndex))
                                       }}
                                       diff={patch()}
+                                      scroll={() => scroll}
                                       hunkFg={theme.diff.text.hunkHeader}
                                       view={entry.file.status === "modified" ? view() : "unified"}
                                       filetype={filetype(entry.file.file)}

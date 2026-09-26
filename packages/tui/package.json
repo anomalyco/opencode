@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/tui",
-  "version": "2.0.16",
+  "version": "2.0.18",
   "private": true,
   "type": "module",
   "license": "MIT",
@@ -94,7 +94,6 @@
     "effect": "catalog:",
     "fuzzysort": "catalog:",
     "get-east-asian-width": "catalog:",
-    "open": "10.1.2",
     "opentui-spinner": "catalog:",
     "remeda": "catalog:",
     "solid-js": "catalog:",

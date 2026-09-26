@@ -27,7 +27,7 @@ Without them the runner registers no tests, so CI is unaffected. Licensed under 
 manifest marks unsupported, or when its code matches one of the manifest's `boundaries` patterns. The sync checks the
 checkout is at the pinned revision, so every machine runs the same files. Boundaries are
 intentional limits of the interpreter, not compatibility work: classes, prototype objects, property descriptors,
-accessors, boxed primitives, typed arrays and buffers, weak collections, `Reflect` and `Proxy`, sloppy mode, `eval`,
+accessors, boxed primitives, typed arrays and buffers, `WeakRef` and `FinalizationRegistry`, `Reflect` and `Proxy`, sloppy mode, `eval`,
 `Symbol()`, and the `$262` host API. If one
 of those decisions changes, delete its entry and re-sync; the tests are upstream, not lost.
 

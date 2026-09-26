@@ -101,7 +101,8 @@ const decodeResponse = Effect.fn("XAIImages.decodeResponse")(function* (
   )
   if (images.length === 0) return yield* output.invalid(`${route.name} returned no images`)
   const usage = ProviderShared.isRecord(decoded.usage) ? decoded.usage : undefined
-  // xAI reports image counts rather than tokens, seconds, or credits; the raw record stays in provider metadata.
+  // xAI reports a USD cost (`cost_in_usd_ticks`) rather than tokens, seconds, or credits; the raw record stays in
+  // provider metadata.
   return new ImageResponse({
     images,
     providerMetadata: usage === undefined ? undefined : { xai: { usage } },

@@ -129,6 +129,7 @@ export const Definitions = {
   "session.aside": keybind("none", "Ask a side question"),
   "session.cd": keybind("none", "Change working directory"),
   "session.queued_prompts": keybind("<leader>q", "Manage queued prompts"),
+  "queued_prompt.undo": keybind("ctrl+u", "Undo queued prompt"),
   "queued_prompt.delete": keybind("ctrl+d", "Delete queued prompt"),
   "session.toggle.exploration_grouping": keybind("none", "Toggle related tool call grouping"),
   "session.verbosity.cycle": keybind("none", "Cycle transcript verbosity"),

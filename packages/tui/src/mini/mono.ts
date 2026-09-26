@@ -93,6 +93,11 @@ function monoCode(renderable: CodeRenderable): void {
   const onChunks = renderable.onChunks
   renderable.onChunks = async (chunks, context) => monoChunks((await onChunks?.(chunks, context)) ?? chunks)
   renderable.treeSitterClient = monoTreeSitter(renderable.treeSitterClient)
+  // Streaming markdown writes the preview buffer here, skipping the setters below.
+  const updateStreamingPreview = renderable.updateStreamingPreview.bind(renderable)
+  renderable.updateStreamingPreview = (content, initialStyledText) => {
+    updateStreamingPreview(content, monoStyledText(initialStyledText))
+  }
 
   const initialDescriptor = Object.getOwnPropertyDescriptor(CodeRenderable.prototype, "initialStyledText")
   const contentDescriptor = Object.getOwnPropertyDescriptor(CodeRenderable.prototype, "content")

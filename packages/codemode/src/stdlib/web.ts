@@ -16,6 +16,8 @@ import {
   Obj,
   RegExpObj,
   SetObj,
+  WeakMapObj,
+  WeakSetObj,
   coerceToString,
   type Value,
 } from "../interpreter/objects.js"
@@ -84,7 +86,9 @@ export const structuredCloneGlobal = <R>(ctx: Interpreter<R>) =>
         if (hasOwn(value, "cause")) define(copy, "cause", clone(getOwn(value, "cause")), hidden)
         return copy
       }
-      if (isRuntimeReference(value)) throw typeError(`DataCloneError: ${describeValue(value)} could not be cloned.`)
+      if (isRuntimeReference(value) || value instanceof WeakMapObj || value instanceof WeakSetObj) {
+        throw typeError(`DataCloneError: ${describeValue(value)} could not be cloned.`)
+      }
       const copy = remember(
         value instanceof Arr ? new Arr(builtins.Array, new Array(value.items.length)) : new Obj(builtins.Object),
       )
