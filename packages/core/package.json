@@ -119,6 +119,7 @@
     "mime-types": "3.0.2",
     "minimatch": "10.2.5",
     "npm-package-arg": "13.0.2",
+    "open": "11.0.4",
     "semver": "^7.6.3",
     "turndown": "7.2.0",
     "venice-ai-sdk-provider": "2.1.1",

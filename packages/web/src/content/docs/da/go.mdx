@@ -91,6 +91,7 @@ Den nuværende liste over modeller inkluderer:
 - **Hy4 preview**
 - **Hy3**
 - **Space Bunny Free** (i en begrænset periode)
+- **LongCat 2.5 Preview Free** (i en begrænset periode)
 
 Listen over modeller kan ændre sig, efterhånden som vi tester og tilføjer nye.
 
@@ -177,8 +178,8 @@ Tokenpriser er angivet pr. 1M tokens.
 | Qwen3.7 Plus (> 256K tokens)            | $1.20  | $4.80  | $0.12       | $1.50        | **$60**                                                   |
 | Qwen3.6 Plus (≤ 256K tokens)            | $0.50  | $3.00  | $0.05       | $0.625       | **$60**                                                   |
 | Qwen3.6 Plus (> 256K tokens)            | $2.00  | $6.00  | $0.20       | $2.50        | **$60**                                                   |
-| DeepSeek V4.1 Flash (Off-Peak)          | $0.15  | $0.60  | $0.003      | -            | ~~$15~~ **$60**<br /><small>4x · Slutter 27. sep.</small> |
-| DeepSeek V4.1 Flash (Peak)              | $0.30  | $1.20  | $0.006      | -            | ~~$15~~ **$60**<br /><small>4x · Slutter 27. sep.</small> |
+| DeepSeek V4.1 Flash (Off-Peak)          | $0.15  | $0.60  | $0.003      | -            | **$60**                                                   |
+| DeepSeek V4.1 Flash (Peak)              | $0.30  | $1.20  | $0.006      | -            | **$60**                                                   |
 | DeepSeek V4 Pro (Off-Peak)              | $0.66  | $1.98  | $0.022      | -            | **$15**                                                   |
 | DeepSeek V4 Pro (Peak)                  | $1.32  | $3.96  | $0.044      | -            | **$15**                                                   |
 | DeepSeek V4 Flash (Off-Peak)            | $0.15  | $0.60  | $0.003      | -            | **$30**                                                   |
@@ -188,6 +189,7 @@ Tokenpriser er angivet pr. 1M tokens.
 | Hy4 preview                             | $0.834 | $2.501 | $0.042      | -            | **$30**                                                   |
 | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | **$60**                                                   |
 | Space Bunny Free                        | Free   | Free   | Free        | -            | **Ubegrænset**<br /><small>i en begrænset periode</small> |
+| LongCat 2.5 Preview Free                | Free   | Free   | Free        | -            | **Ubegrænset**<br /><small>i en begrænset periode</small> |
 | Grok 4.7 (≤ 200K tokens)                | $2.00  | $6.00  | $0.50       | -            | **$15**                                                   |
 | Grok 4.7 (> 200K tokens)                | $4.00  | $12.00 | $1.00       | -            | **$15**                                                   |
 | Grok 4.6 (≤ 200K tokens)                | $2.00  | $6.00  | $0.50       | -            | **$15**                                                   |
@@ -199,6 +201,8 @@ Tokenpriser er angivet pr. 1M tokens.
 
 **Space Bunny Free:** Gratis i en begrænset periode.
 
+**LongCat 2.5 Preview Free:** Gratis i en begrænset periode.
+
 **DeepSeek V4.1 Flash / V4 Pro / V4 Flash / V4 Flash Vision Exp:** Peak-tiderne er 01:00-04:00 og 06:00-10:00 UTC fra mandag til fredag; alle andre tider, herunder weekender, er Off-Peak. [Læs mere](https://api-docs.deepseek.com/quick_start/pricing/).
 
 **DeepSeek V4 Flash Vision Exp:** Billeder konverteres til tokens baseret på deres dimensioner og afregnes som inputtokens sammen med teksttokens. [Læs mere](https://api-docs.deepseek.com/quick_start/pricing/).
@@ -207,40 +211,41 @@ Tokenpriser er angivet pr. 1M tokens.
 
 Tabellen nedenfor viser et estimeret antal anmodninger baseret på typiske Go-forbrugsmønstre:
 
-| Model                                                         | anmodninger pr. 5 timer   | anmodninger pr. uge        | anmodninger pr. måned       |
-| ------------------------------------------------------------- | ------------------------- | -------------------------- | --------------------------- |
-| GLM-5.3-Flash                                                 | 6,320                     | 15,790                     | 31,580                      |
-| GLM-5.3                                                       | 220                       | 540                        | 1,080                       |
-| GLM-5.2                                                       | 880                       | 2,150                      | 4,300                       |
-| GLM-5.1                                                       | 880                       | 2,150                      | 4,300                       |
-| Kimi K3                                                       | 110                       | 250                        | 490                         |
-| Kimi K2.7 Code                                                | 1,350                     | 3,380                      | 6,750                       |
-| Kimi K2.6                                                     | 1,150                     | 2,880                      | 5,750                       |
-| LongCat-2.0                                                   | 11,400                    | 28,600                     | 57,200                      |
-| MiMo-V2.6-Flash                                               | 30,100                    | 75,200                     | 150,400                     |
-| MiMo-V2.6-Pro                                                 | 3,250                     | 8,150                      | 16,300                      |
-| MiMo-V2.5                                                     | 30,100                    | 75,200                     | 150,400                     |
-| MiMo-V2.5-Pro                                                 | 3,250                     | 8,150                      | 16,300                      |
-| MiniMax M3                                                    | 3,200                     | 8,000                      | 16,000                      |
-| MiniMax M2.7                                                  | 3,400                     | 8,500                      | 17,000                      |
-| Muse Spark 1.3 Contributor                                    | 45,300                    | 113,300                    | 226,600                     |
-| Muse Spark 1.2 Contributor                                    | 45,300                    | 113,300                    | 226,600                     |
-| Qwen3.8 Max                                                   | 160                       | 400                        | 810                         |
-| Qwen3.8 Flash                                                 | 5,400                     | 13,500                     | 27,000                      |
-| Qwen3.7 Max                                                   | 170                       | 420                        | 840                         |
-| Qwen3.7 Plus                                                  | 4,300                     | 10,800                     | 21,600                      |
-| Qwen3.6 Plus                                                  | 3,300                     | 8,200                      | 16,300                      |
-| DeepSeek V4.1 Flash<br /><small>4x · Slutter 27. sep.</small> | ~~6,500~~<br />**26,000** | ~~16,250~~<br />**65,000** | ~~32,500~~<br />**130,000** |
-| DeepSeek V4 Pro                                               | 1,050                     | 2,600                      | 5,200                       |
-| DeepSeek V4 Flash                                             | 13,000                    | 32,500                     | 65,000                      |
-| DeepSeek V4 Flash Vision Exp                                  | 6,500                     | 16,250                     | 32,500                      |
-| Hy4 preview                                                   | 1,350                     | 3,380                      | 6,770                       |
-| Hy3                                                           | 4,300                     | 10,750                     | 21,500                      |
-| Space Bunny Free                                              | Ubegrænset                | Ubegrænset                 | Ubegrænset                  |
-| Grok 4.7                                                      | 169                       | 423                        | 845                         |
-| Grok 4.6                                                      | 169                       | 423                        | 845                         |
-| GPT 6 Luna                                                    | 4,230                     | 10,560                     | 21,130                      |
-| GPT 5.6 Luna                                                  | 2,050                     | 5,100                      | 10,250                      |
+| Model                        | anmodninger pr. 5 timer | anmodninger pr. uge | anmodninger pr. måned |
+| ---------------------------- | ----------------------- | ------------------- | --------------------- |
+| GLM-5.3-Flash                | 6,320                   | 15,790              | 31,580                |
+| GLM-5.3                      | 220                     | 540                 | 1,080                 |
+| GLM-5.2                      | 880                     | 2,150               | 4,300                 |
+| GLM-5.1                      | 880                     | 2,150               | 4,300                 |
+| Kimi K3                      | 110                     | 250                 | 490                   |
+| Kimi K2.7 Code               | 1,350                   | 3,380               | 6,750                 |
+| Kimi K2.6                    | 1,150                   | 2,880               | 5,750                 |
+| LongCat-2.0                  | 11,400                  | 28,600              | 57,200                |
+| MiMo-V2.6-Flash              | 30,100                  | 75,200              | 150,400               |
+| MiMo-V2.6-Pro                | 3,250                   | 8,150               | 16,300                |
+| MiMo-V2.5                    | 30,100                  | 75,200              | 150,400               |
+| MiMo-V2.5-Pro                | 3,250                   | 8,150               | 16,300                |
+| MiniMax M3                   | 3,200                   | 8,000               | 16,000                |
+| MiniMax M2.7                 | 3,400                   | 8,500               | 17,000                |
+| Muse Spark 1.3 Contributor   | 45,300                  | 113,300             | 226,600               |
+| Muse Spark 1.2 Contributor   | 45,300                  | 113,300             | 226,600               |
+| Qwen3.8 Max                  | 160                     | 400                 | 810                   |
+| Qwen3.8 Flash                | 5,400                   | 13,500              | 27,000                |
+| Qwen3.7 Max                  | 170                     | 420                 | 840                   |
+| Qwen3.7 Plus                 | 4,300                   | 10,800              | 21,600                |
+| Qwen3.6 Plus                 | 3,300                   | 8,200               | 16,300                |
+| DeepSeek V4.1 Flash          | 26,000                  | 65,000              | 130,000               |
+| DeepSeek V4 Pro              | 1,050                   | 2,600               | 5,200                 |
+| DeepSeek V4 Flash            | 13,000                  | 32,500              | 65,000                |
+| DeepSeek V4 Flash Vision Exp | 6,500                   | 16,250              | 32,500                |
+| Hy4 preview                  | 1,350                   | 3,380               | 6,770                 |
+| Hy3                          | 4,300                   | 10,750              | 21,500                |
+| Space Bunny Free             | Ubegrænset              | Ubegrænset          | Ubegrænset            |
+| LongCat 2.5 Preview Free     | Ubegrænset              | Ubegrænset          | Ubegrænset            |
+| Grok 4.7                     | 169                     | 423                 | 845                   |
+| Grok 4.6                     | 169                     | 423                 | 845                   |
+| GPT 6 Luna                   | 4,230                   | 10,560              | 21,130                |
+| GPT 5.6 Luna                 | 2,050                   | 5,100               | 10,250                |
 
 Estimaterne bruger følgende antal tokens pr. anmodning; det faktiske forbrug varierer.
 
@@ -341,6 +346,7 @@ Du kan også få adgang til Go-modeller gennem følgende API-endpoints.
 | Hy4 preview                  | hy4-preview                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Space Bunny Free             | space-bunny-free             | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| LongCat 2.5 Preview Free     | longcat-2.5-preview-free     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 Dit [model id](/docs/config/#models) i din OpenCode config
 bruger formatet `opencode-go/<model-id>`. For eksempel for Kimi K3, vil du
@@ -394,6 +400,7 @@ https://opencode.ai/zen/go/v1/models
 | Hy4 preview                  | Ikke brugt   | 0 dage         |
 | Hy3                          | Ikke brugt   | 0 dage         |
 | Space Bunny Free             | Ikke brugt   | 0 dage         |
+| LongCat 2.5 Preview Free     | Ikke brugt   | 0 dage         |
 
 - **Grok 4.7/4.6:** ZDR deaktiverer vigtige API-funktioner, der afhænger af lagrede data, herunder den tilstandsbevarende Responses API, Files and Collections og Batch API. [Læs mere](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 6 Luna / GPT 5.6 Luna:** Logfiler til overvågning af misbrug genereres ved al brug af API-funktioner og opbevares i op til 30 dage. [Læs mere](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).

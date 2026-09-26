@@ -1,5 +1,5 @@
 import { RGBA, TextAttributes } from "@opentui/core"
-import open from "open"
+import { openUrl } from "@opencode-ai/core/open"
 import { createSignal } from "solid-js"
 import { selectedForeground, useTheme } from "../context/theme"
 import { useDialog, type DialogContext } from "../ui/dialog"
@@ -21,7 +21,7 @@ export type DialogRetryActionProps = {
 }
 
 function runAction(props: DialogRetryActionProps, dialog: ReturnType<typeof useDialog>) {
-  if (props.link) open(props.link).catch(() => {})
+  if (props.link) openUrl(props.link).catch(() => {})
   props.onClose?.()
   dialog.clear()
 }
