@@ -643,6 +643,21 @@ Note that disabling snapshots means changes made by the agent cannot be rolled b
 
 ---
 
+### Plans directory
+
+Plan files are written to `<project>/.opencode/plans/` in git projects and to the OpenCode data directory otherwise. Use the `plans_directory` option to store plan files in a custom location instead, for example the global data directory, so project trees stay untouched. Relative and `~` paths are supported.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plans_directory": "~/.local/share/opencode/plans"
+}
+```
+
+Plan files start with a `Project: <path>` first line listing the project root path(s) they belong to, so a shared plans directory stays navigable when several projects use it.
+
+---
+
 ### Autoupdate
 
 OpenCode will automatically download any new updates when it starts up. You can disable this with the `autoupdate` option.
@@ -809,6 +824,14 @@ Place plugin files in `.opencode/plugins/` or `~/.config/opencode/plugins/`. You
 ```
 
 [Learn more here](/docs/plugins).
+
+---
+
+### Plugin dependencies
+
+When OpenCode starts, it installs the plugin SDK (`@opencode-ai/plugin`) required by local plugins into a per-directory store under the OpenCode data directory (`~/.local/share/opencode/deps/`), and config directories only get a `node_modules` symlink pointing there. Nothing is written into project trees beyond that symlink, and the generated files are covered by the `.gitignore` inside each config directory. The install only happens for config directories that actually have plugins (declared in their `opencode.json` or discovered under `plugin(s)/`); other directories keep just the `.gitignore`.
+
+Set `OPENCODE_DISABLE_PLUGIN_DEPS=1` in your environment to skip the automatic dependency install entirely. Config discovery (agents, commands, plugins) is unaffected.
 
 ---
 

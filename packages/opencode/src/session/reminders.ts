@@ -4,6 +4,7 @@ import { Effect } from "effect"
 import { Agent } from "@/agent/agent"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { InstanceState } from "@/effect/instance-state"
+import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { PartID } from "./schema"
 import { MessageV2 } from "./message-v2"
@@ -51,7 +52,8 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
   const assistantMessage = input.messages.findLast((msg) => msg.info.role === "assistant")
   if (input.agent.name !== "plan" && assistantMessage?.info.agent === "plan") {
     const ctx = yield* InstanceState.context
-    const plan = Session.plan(input.session, ctx)
+    const config = yield* Config.Service
+    const plan = Session.plan(input.session, ctx, (yield* config.get()).plans_directory)
     const exists = yield* fsys.existsSafe(plan)
     const part = yield* sessions.updatePart({
       id: PartID.ascending(),
@@ -70,7 +72,8 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
   if (input.agent.name !== "plan" || assistantMessage?.info.agent === "plan") return input.messages
 
   const ctx = yield* InstanceState.context
-  const plan = Session.plan(input.session, ctx)
+  const config = yield* Config.Service
+  const plan = Session.plan(input.session, ctx, (yield* config.get()).plans_directory)
   const exists = yield* fsys.existsSafe(plan)
   if (!exists) yield* fsys.ensureDir(path.dirname(plan)).pipe(Effect.catch(Effect.die))
   const part = yield* sessions.updatePart({
@@ -81,7 +84,7 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
     text: PLAN_MODE.replace("${planInfo}", () =>
       exists
         ? `A plan file already exists at ${plan}. You can read it and make incremental edits using the edit tool.`
-        : `No plan file exists yet. You should create your plan at ${plan} using the write tool.`,
+        : `No plan file exists yet. You should create your plan at ${plan} using the write tool. The plan file must start with a first line "Project: <path>" listing the project root path(s) it belongs to, e.g. "Project: ${ctx.worktree}". List one Project line per root when the plan spans several projects.`,
     ),
     synthetic: true,
   })

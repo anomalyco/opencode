@@ -36,6 +36,7 @@ import fs from "fs/promises"
 import os from "os"
 import { pathToFileURL } from "url"
 import { Global } from "@opencode-ai/core/global"
+import { Hash } from "@opencode-ai/core/util/hash"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { Filesystem } from "@/util/filesystem"
 import { ConfigPlugin } from "@/config/plugin"
@@ -179,6 +180,20 @@ const withGlobalConfigDir = <A, E, R>(dir: string, effect: Effect.Effect<A, E, R
       Effect.gen(function* () {
         ;(Global.Path as { config: string }).config = previous
         yield* clearEffect(true)
+      }),
+  )
+
+const withGlobalDataDir = <A, E, R>(dir: string, effect: Effect.Effect<A, E, R>) =>
+  Effect.acquireUseRelease(
+    Effect.gen(function* () {
+      const previous = Global.Path.data
+      ;(Global.Path as { data: string }).data = dir
+      return previous
+    }),
+    () => effect,
+    (previous) =>
+      Effect.gen(function* () {
+        ;(Global.Path as { data: string }).data = previous
       }),
   )
 
@@ -1101,12 +1116,17 @@ it.effect("does not try to install dependencies in read-only OPENCODE_CONFIG_DIR
     if (process.platform === "win32") return
 
     const dir = yield* tmpdirScoped()
+    const dataDir = yield* tmpdirScoped()
     const readonly = path.join(dir, "readonly")
     yield* FSUtil.use.ensureDir(readonly)
     yield* FSUtil.use.chmod(readonly, 0o555)
     yield* Effect.addFinalizer(() => FSUtil.use.chmod(readonly, 0o755).pipe(Effect.ignore))
 
-    yield* withProcessEnv("OPENCODE_CONFIG_DIR", readonly, Config.use.get().pipe(provideInstanceEffect(dir)))
+    yield* withProcessEnv(
+      "OPENCODE_CONFIG_DIR",
+      readonly,
+      withGlobalDataDir(dataDir, Config.use.get().pipe(provideInstanceEffect(dir))),
+    )
   }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
 )
 
@@ -1115,21 +1135,30 @@ it.effect("ignores an inaccessible OPENCODE_CONFIG_DIR", () =>
     if (process.platform === "win32") return
 
     const dir = yield* tmpdirScoped()
+    const dataDir = yield* tmpdirScoped()
     const configDir = path.join(dir, "inaccessible")
     yield* FSUtil.use.ensureDir(configDir)
     yield* FSUtil.use.chmod(configDir, 0o000)
     yield* Effect.addFinalizer(() => FSUtil.use.chmod(configDir, 0o755).pipe(Effect.ignore))
 
-    yield* withProcessEnv("OPENCODE_CONFIG_DIR", configDir, Config.use.get().pipe(provideInstanceEffect(dir)))
+    yield* withProcessEnvs(
+      { OPENCODE_CONFIG_DIR: configDir },
+      withGlobalDataDir(dataDir, Config.use.get().pipe(provideInstanceEffect(dir))),
+    )
   }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
 )
 
 it.effect("creates a missing OPENCODE_CONFIG_DIR", () =>
   Effect.gen(function* () {
     const dir = yield* tmpdirScoped()
+    const dataDir = yield* tmpdirScoped()
     const configDir = path.join(dir, "configdir")
 
-    yield* withProcessEnv("OPENCODE_CONFIG_DIR", configDir, Config.use.get().pipe(provideInstanceEffect(dir)))
+    yield* withProcessEnv(
+      "OPENCODE_CONFIG_DIR",
+      configDir,
+      withGlobalDataDir(dataDir, Config.use.get().pipe(provideInstanceEffect(dir))),
+    )
 
     expect(yield* FSUtil.use.readFileString(path.join(configDir, ".gitignore"))).toContain("node_modules")
   }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
@@ -1138,18 +1167,97 @@ it.effect("creates a missing OPENCODE_CONFIG_DIR", () =>
 it.effect("installs dependencies in writable OPENCODE_CONFIG_DIR", () =>
   Effect.gen(function* () {
     const dir = yield* tmpdirScoped()
+    const dataDir = yield* tmpdirScoped()
+    const configDir = path.join(dir, "configdir")
+    yield* FSUtil.use.ensureDir(configDir)
+    yield* FSUtil.use.writeWithDirs(path.join(configDir, "plugins", "hello.js"), "export default () => ({})")
+
+    yield* withGlobalDataDir(
+      dataDir,
+      withProcessEnv(
+        "OPENCODE_CONFIG_DIR",
+        configDir,
+        Config.Service.use((svc) => svc.get().pipe(Effect.andThen(svc.waitForDependencies()))).pipe(
+          provideInstanceEffect(dir),
+        ),
+      ),
+    )
+
+    expect(yield* FSUtil.use.readFileString(path.join(configDir, ".gitignore"))).toContain("package-lock.json")
+
+    const link = path.join(configDir, "node_modules")
+    expect((yield* Effect.promise(() => fs.lstat(link))).isSymbolicLink()).toBe(true)
+    const store = path.join(dataDir, "deps", Hash.fast(configDir))
+    expect(yield* Effect.promise(() => fs.readlink(link))).toBe(path.join(store, "node_modules"))
+    expect(yield* FSUtil.use.isDir(store)).toBe(true)
+    expect(yield* FSUtil.use.existsSafe(path.join(configDir, "package.json"))).toBe(false)
+  }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
+)
+
+it.effect("skips dependency install for config dirs without plugins", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped()
+    const dataDir = yield* tmpdirScoped()
     const configDir = path.join(dir, "configdir")
     yield* FSUtil.use.ensureDir(configDir)
 
-    yield* withProcessEnv(
-      "OPENCODE_CONFIG_DIR",
-      configDir,
+    yield* withGlobalDataDir(
+      dataDir,
+      withProcessEnv(
+        "OPENCODE_CONFIG_DIR",
+        configDir,
+        Config.Service.use((svc) => svc.get().pipe(Effect.andThen(svc.waitForDependencies()))).pipe(
+          provideInstanceEffect(dir),
+        ),
+      ),
+    )
+
+    expect(yield* FSUtil.use.readFileString(path.join(configDir, ".gitignore"))).toContain("node_modules")
+    expect(yield* FSUtil.use.existsSafe(path.join(configDir, "node_modules"))).toBe(false)
+    expect(yield* FSUtil.use.existsSafe(path.join(dataDir, "deps", Hash.fast(configDir)))).toBe(false)
+  }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
+)
+
+it.effect("existing real node_modules in a config dir is left untouched", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped()
+    const dataDir = yield* tmpdirScoped()
+    const configDir = path.join(dir, "configdir")
+    yield* FSUtil.use.ensureDir(configDir)
+    yield* FSUtil.use.writeWithDirs(path.join(configDir, "node_modules", "marker.txt"), "keep")
+
+    yield* withGlobalDataDir(
+      dataDir,
+      withProcessEnv(
+        "OPENCODE_CONFIG_DIR",
+        configDir,
+        Config.Service.use((svc) => svc.get().pipe(Effect.andThen(svc.waitForDependencies()))).pipe(
+          provideInstanceEffect(dir),
+        ),
+      ),
+    )
+
+    expect(yield* FSUtil.use.readFileString(path.join(configDir, "node_modules", "marker.txt"))).toBe("keep")
+    expect(yield* FSUtil.use.existsSafe(path.join(dataDir, "deps", Hash.fast(configDir)))).toBe(false)
+  }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
+)
+
+it.effect("OPENCODE_DISABLE_PLUGIN_DEPS skips dependency install and gitignore", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped()
+    const configDir = path.join(dir, "configdir")
+    yield* FSUtil.use.ensureDir(configDir)
+
+    yield* withProcessEnvs(
+      { OPENCODE_DISABLE_PLUGIN_DEPS: "1", OPENCODE_CONFIG_DIR: configDir },
       Config.Service.use((svc) => svc.get().pipe(Effect.andThen(svc.waitForDependencies()))).pipe(
         provideInstanceEffect(dir),
       ),
     )
 
-    expect(yield* FSUtil.use.readFileString(path.join(configDir, ".gitignore"))).toContain("package-lock.json")
+    expect(yield* FSUtil.use.existsSafe(path.join(configDir, ".gitignore"))).toBe(false)
+    expect(yield* FSUtil.use.existsSafe(path.join(configDir, "package.json"))).toBe(false)
+    expect(yield* FSUtil.use.existsSafe(path.join(configDir, "node_modules"))).toBe(false)
   }).pipe(Effect.provide(testInstanceStoreLayer), Effect.provide(LayerNode.compile(CrossSpawnSpawner.node))),
 )
 

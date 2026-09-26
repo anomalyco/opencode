@@ -12,6 +12,7 @@ import { Auth } from "../auth"
 import { Env } from "../env"
 import { applyEdits, modify } from "jsonc-parser"
 import { InstallationLocal, InstallationVersion } from "@opencode-ai/core/installation/version"
+import { Hash } from "@opencode-ai/core/util/hash"
 import { existsSync } from "fs"
 import { Account } from "@/account/account"
 import { isRecord } from "@/util/record"
@@ -447,28 +448,9 @@ const layer = Layer.effect(
             }
           }
 
-          yield* ensureGitignore(dir).pipe(Effect.orDie)
-
-          const dep = yield* npmSvc
-            .install(dir, {
-              add: [
-                {
-                  name: "@opencode-ai/plugin",
-                  version: InstallationLocal ? undefined : InstallationVersion,
-                },
-              ],
-            })
-            .pipe(
-              Effect.exit,
-              Effect.tap((exit) =>
-                Exit.isFailure(exit)
-                  ? Effect.logWarning("background dependency install failed", { dir, error: String(exit.cause) })
-                  : Effect.void,
-              ),
-              Effect.asVoid,
-              Effect.forkDetach,
-            )
-          deps.push(dep)
+          if (!Flag.OPENCODE_DISABLE_PLUGIN_DEPS) {
+            yield* ensureGitignore(dir).pipe(Effect.orDie)
+          }
 
           result.command = mergeDeep(result.command ?? {}, yield* Effect.promise(() => ConfigCommand.load(dir)))
           result.agent = mergeDeep(result.agent ?? {}, yield* Effect.promise(() => ConfigAgent.load(dir)))
@@ -477,6 +459,52 @@ const layer = Layer.effect(
           // returns normalized Specs and we only need to attach origin metadata here.
           const list = yield* Effect.promise(() => ConfigPlugin.load(dir))
           yield* mergePluginOrigins(dir, list)
+
+          // Only config directories that actually have plugins (declared in
+          // their opencode.json or auto-discovered under plugin(s)/) need the
+          // plugin SDK; plugin-less dirs keep just the .gitignore above.
+          const hasPlugins = (result.plugin_origins ?? []).some(
+            (origin) => origin.source === dir || FSUtil.contains(dir, origin.source),
+          )
+          if (!Flag.OPENCODE_DISABLE_PLUGIN_DEPS && hasPlugins) {
+            // Relocate the dependency tree into the XDG data dir so config
+            // dirs only get a node_modules symlink: bare imports from local
+            // plugins still resolve through parent-directory traversal while
+            // node_modules and manifests live outside ~/.config and project
+            // trees. Falls back to the config dir when symlinks are
+            // unavailable (e.g. unprivileged Windows) or when a real
+            // node_modules directory already exists there.
+            const store = path.join(Global.Path.data, "deps", Hash.fast(dir))
+            const link = path.join(dir, "node_modules")
+            const linked = yield* Effect.tryPromise(async () => {
+              const existing = await fsNode.lstat(link).catch(() => undefined)
+              if (existing?.isSymbolicLink()) return
+              if (existing) throw new Error("unmanaged node_modules in config dir")
+              await fsNode.mkdir(store, { recursive: true })
+              await fsNode.symlink(path.join(store, "node_modules"), link)
+            }).pipe(Effect.option)
+
+            const dep = yield* npmSvc
+              .install(linked._tag === "Some" ? store : dir, {
+                add: [
+                  {
+                    name: "@opencode-ai/plugin",
+                    version: InstallationLocal ? undefined : InstallationVersion,
+                  },
+                ],
+              })
+              .pipe(
+                Effect.exit,
+                Effect.tap((exit) =>
+                  Exit.isFailure(exit)
+                    ? Effect.logWarning("background dependency install failed", { dir, error: String(exit.cause) })
+                    : Effect.void,
+                ),
+                Effect.asVoid,
+                Effect.forkDetach,
+              )
+            deps.push(dep)
+          }
         }
 
         if (process.env.OPENCODE_CONFIG_CONTENT) {
