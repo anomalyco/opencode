@@ -1,7 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" version="1.1" xmlns:xlink="http://www.w3.org/1999/xlink" width="512" height="512"><svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
-<rect width="512" height="512" fill="#131010"></rect>
-<path d="M320 224V352H192V224H320Z" fill="#5A5858"></path>
-<path fill-rule="evenodd" clip-rule="evenodd" d="M384 416H128V96H384V416ZM320 160H192V352H320V160Z" fill="white"></path>
-</svg><style>@media (prefers-color-scheme: light) { :root { filter: none; } }
-@media (prefers-color-scheme: dark) { :root { filter: none; } }
-</style></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none"><rect width="512" height="512" rx="104" fill="#252B30"/><g transform="translate(51.2 51.2) scale(.8)" fill="#FFFFFF"><g transform="translate(-566 -72)"><path d="M608 369 641 220Q644 201 661 192L802 124Q819 115 836 124L949 181Q956 184 952 192L897 302Q895 307 890 312L806 387Q802 391 797 394L677 463Q672 467 668 462L618 400Q605 386 608 369Z"/><path d="M967 198Q969 192 975 195L1015 217Q1028 224 1029 239L1031 300Q1031 306 1025 306H922Q914 306 918 298Z"/><path d="M908 321H1028Q1034 321 1034 327L1035 394Q1036 405 1029 414L927 530Q922 536 917 530L822 404Q818 398 824 393L901 324Q904 321 908 321Z"/><path d="M800 410Q805 406 809 411L899 529Q903 536 896 537H748Q729 537 718 524L686 486Q681 479 689 475Z"/></g></g></svg>

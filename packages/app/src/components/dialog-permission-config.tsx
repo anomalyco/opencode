@@ -288,7 +288,7 @@ export function DialogPermissionConfig(props: PermissionFormProps) {
             </div>
 
             <span class="text-12-regular text-text-weak">
-              OpenCode 按照从上到下的顺序匹配，最后匹配命中的规则将作为最终裁决依据。
+              Basalt 按照从上到下的顺序匹配，最后匹配命中的规则将作为最终裁决依据。
             </span>
 
             <Show

@@ -1,6 +1,6 @@
 {
-  "name": "OpenCode",
-  "short_name": "OpenCode",
+  "name": "Basalt",
+  "short_name": "Basalt",
   "id": "/",
   "start_url": "/",
   "scope": "/",
@@ -33,7 +33,10 @@
   "theme_color": "#080808",
   "background_color": "#080808",
   "display": "standalone",
-  "display_override": ["window-controls-overlay", "standalone"],
+  "display_override": [
+    "window-controls-overlay",
+    "standalone"
+  ],
   "launch_handler": {
     "client_mode": "focus-existing"
   }

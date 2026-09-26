@@ -159,7 +159,7 @@ export async function copyAsImageCard(options: ImageCardOptions): Promise<boolea
     [
       el(doc, "div", { display: "flex", alignItems: "center", gap: "10px", flexShrink: "0" }, [
         mark(doc, strong, dark ? "#5a5a5a" : "#c4c4c4"),
-        el(doc, "span", { fontSize: "14px", fontWeight: "650", letterSpacing: "-0.01em", color: strong }, ["OpenCode"]),
+        el(doc, "span", { fontSize: "14px", fontWeight: "650", letterSpacing: "-0.01em", color: strong }, ["Basalt"]),
       ]),
       el(
         doc,

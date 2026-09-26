@@ -1,12 +1,12 @@
 {
   "name": "@opencode-ai/desktop",
   "private": true,
-  "version": "0.0.0-prod-202609251418",
+  "version": "0.0.0-prod-202609260205",
   "type": "module",
   "license": "MIT",
   "homepage": "https://opencode.ai",
   "author": {
-    "name": "OpenCode",
+    "name": "Basalt",
     "email": "hello@opencode.ai"
   },
   "scripts": {

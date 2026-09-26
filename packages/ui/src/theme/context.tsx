@@ -49,7 +49,7 @@ const names: Record<string, string> = {
   claude: "Claude",
   cursor: "Cursor",
   graphite: "Graphite",
-  opencode: "OpenCode",
+  opencode: "Basalt",
   orng: "Orng",
   vercel: "Vercel",
   vesper: "Vesper",

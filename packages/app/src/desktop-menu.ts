@@ -70,7 +70,7 @@ export type DesktopMenu = {
 export const DESKTOP_MENU: DesktopMenu[] = [
   {
     id: "app",
-    label: "OpenCode",
+    label: "Basalt",
     platforms: ["macos"],
     items: [
       { type: "item", role: "about" },
@@ -197,7 +197,7 @@ export const DESKTOP_MENU: DesktopMenu[] = [
     label: "Help",
     items: [
       { type: "item", label: "Open Settings", command: "settings.openFile" },
-      { type: "item", label: "OpenCode Documentation", href: "https://opencode.ai/docs" },
+      { type: "item", label: "Basalt Documentation", href: "https://opencode.ai/docs" },
       { type: "item", label: "Support Forum", href: "https://discord.com/invite/opencode" },
       { type: "item", label: "Export Logs...", command: "logs.export" },
       { type: "separator" },

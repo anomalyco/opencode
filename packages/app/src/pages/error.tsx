@@ -245,7 +245,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
       data-tauri-drag-region
     >
       <div ref={content} class="w-2/3 max-w-3xl flex flex-col items-center justify-center gap-8">
-        <Logo class="w-58.5 opacity-12 shrink-0" />
+        <Logo class="w-24 opacity-12 shrink-0" />
         <div class="flex flex-col items-center gap-2 text-center">
           <h1 class="text-lg font-medium text-text-strong">{language.t("error.page.title")}</h1>
           <p class="text-sm text-text-weak">{language.t(errorDescriptionKey(props.error))}</p>

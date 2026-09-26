@@ -378,7 +378,7 @@ function ConnectionGate(props: ParentProps<{ disableHealthCheck?: boolean; start
       <Show when={loading()}>
         <div class="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-background-base">
           <div
-            class="w-16 h-20"
+            class="w-16 h-16"
             ref={(el) => {
               const tween = gsapSplash(el)
               onCleanup(() => tween?.kill())
@@ -414,7 +414,7 @@ function ConnectionError(props: { onRetry?: () => void; onServerSelected?: (key:
       class="h-dvh w-screen flex flex-col items-center justify-center bg-background-base gap-6 p-6"
     >
       <div class="flex flex-col items-center max-w-md text-center">
-        <Splash class="w-12 h-15 mb-4" />
+        <Splash class="w-12 h-12 mb-4" />
         <p class="text-14-regular text-text-base">
           {unreachable()[0]}
           <span class="text-text-strong font-medium">{name()}</span>
