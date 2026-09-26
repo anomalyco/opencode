@@ -197,9 +197,9 @@ describe("ConfigNormalize", () => {
     expect(result.encoded.commands).toEqual({ fallback: { template: "legacy" }, valid: { template: "native" } })
     expect(result.encoded.providers).toEqual({ valid: { name: "Valid" } })
     expect(result.diagnostics.filter((item) => item.kind === "invalid").map((item) => item.path)).toEqual([
-      ["commands", "fallback"],
-      ["commands", "invalid"],
-      ["providers", "invalid"],
+      ["commands", "fallback", "template"],
+      ["commands", "invalid", "template"],
+      ["providers", "invalid", "env", "0"],
     ])
   })
 
@@ -214,6 +214,7 @@ describe("ConfigNormalize", () => {
     expect(result.diagnostics.filter((item) => item.kind === "invalid").map((item) => item.path)).toContainEqual([
       "provider",
       "azure",
+      "env",
     ])
   })
 
@@ -292,7 +293,8 @@ describe("ConfigNormalize", () => {
     expect(invalid.encoded).not.toHaveProperty("formatter")
     expect(invalid.encoded).not.toHaveProperty("lsp")
     expect(invalid.diagnostics.filter((item) => item.kind === "invalid").map((item) => item.path)).toEqual([
-      ["formatter", "prettier"],
+      ["formatter", "prettier", "command", "0"],
+      // LSP entries are a union, so the failing member is not attributed to a field.
       ["lsp", "typescript"],
     ])
 
@@ -496,6 +498,26 @@ describe("ConfigNormalize", () => {
       ["provider", "headers", "options", "headers"],
       ["provider", "body", "options", "body"],
     ])
+  })
+
+  test("localizes the field that invalidates a native provider model", () => {
+    const result = normalized({
+      providers: {
+        local: { models: { chat: { capabilities: { input: ["text"], output: ["text"] } } } },
+      },
+    })
+    expect(result.encoded.providers).toEqual({})
+    expect(result.diagnostics.filter((item) => item.kind === "invalid").map((item) => item.path)).toEqual([
+      ["providers", "local", "models", "chat", "capabilities", "tools"],
+    ])
+
+    expect(
+      normalized({
+        providers: {
+          local: { models: { chat: { capabilities: { tools: true, input: ["text"], output: ["text"] } } } },
+        },
+      }).diagnostics,
+    ).toEqual([])
   })
 
   test("preserves explicit false, zero, empty list, and empty map presence", () => {

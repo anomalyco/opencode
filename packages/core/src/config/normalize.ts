@@ -2,7 +2,7 @@ export * as ConfigNormalize from "./normalize.js"
 
 import { isDeepStrictEqual } from "node:util"
 import { isRecord } from "@opencode/ai/utils/record"
-import { Option, Schema } from "effect"
+import { Option, Result, Schema, SchemaIssue, SchemaParser } from "effect"
 import { Info } from "@opencode/schema/config"
 import { ConfigAgent } from "@opencode/schema/config/agent"
 import { ConfigCommand } from "@opencode/schema/config/command"
@@ -674,9 +674,9 @@ function decodeValue<S extends Schema.Codec<unknown, unknown, never, never>>(
   path: string[],
   diagnostics: Diagnostic[],
 ) {
-  const decoded = Schema.decodeUnknownOption(schema, options)(value)
-  if (Option.isSome(decoded)) return decoded.value
-  invalid(path, diagnostics)
+  const decoded = SchemaParser.decodeUnknownResult(schema, options)(value)
+  if (Result.isSuccess(decoded)) return decoded.success
+  invalid(path, diagnostics, decoded.failure)
   return undefined
 }
 
@@ -686,15 +686,17 @@ function decodeEncoded<S extends Schema.Codec<unknown, unknown, never, never>>(
   path: string[],
   diagnostics: Diagnostic[],
 ) {
-  const decoded = Schema.decodeUnknownOption(schema, options)(value)
-  if (Option.isNone(decoded)) {
-    invalid(path, diagnostics)
+  const decoded = SchemaParser.decodeUnknownResult(schema, options)(value)
+  if (Result.isFailure(decoded)) {
+    invalid(path, diagnostics, decoded.failure)
     return undefined
   }
-  const encoded = Schema.encodeUnknownOption(schema, options)(decoded.value)
-  if (Option.isSome(encoded)) return plain(encoded.value)
-  invalid(path, diagnostics)
-  return undefined
+  const encoded = SchemaParser.encodeUnknownResult(schema, options)(decoded.success)
+  if (Result.isFailure(encoded)) {
+    invalid(path, diagnostics, encoded.failure)
+    return undefined
+  }
+  return plain(encoded.success)
 }
 
 function canonical<S extends Schema.Codec<unknown, unknown, never, never>>(schema: S, value: unknown) {
@@ -773,8 +775,21 @@ function unsupportedIfPresent(value: Record<string, unknown>, key: string, path:
   diagnostics.push({ kind: "unsupported", path, message: "omitted unsupported legacy setting" })
 }
 
-function invalid(path: string[], diagnostics: Diagnostic[]) {
-  diagnostics.push({ kind: "invalid", path, message: "skipped malformed recognized value" })
+function invalid(path: string[], diagnostics: Diagnostic[], issue?: SchemaIssue.Issue) {
+  diagnostics.push({
+    kind: "invalid",
+    path: issue === undefined ? path : [...path, ...issuePath(issue)],
+    message: "skipped malformed recognized value",
+  })
+}
+
+// Recovers the failing field path from a decode issue. Union alternatives are not guessed, so a value
+// wrapped in a union keeps the enclosing path instead of reporting an arbitrary branch.
+function issuePath(issue: SchemaIssue.Issue): string[] {
+  if (issue._tag === "Pointer") return [...issue.path.map((key) => String(key)), ...issuePath(issue.issue)]
+  if (issue._tag === "Composite") return issuePath(issue.issues[0])
+  if (issue._tag === "Encoding" || issue._tag === "Filter") return issuePath(issue.issue)
+  return []
 }
 
 function conflict(path: string[], diagnostics: Diagnostic[]) {
