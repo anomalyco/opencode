@@ -217,6 +217,7 @@ export function agentHost(agent: Agent.Interface): Plugin.Context["agent"] {
               update(current)
               Object.assign(value, current, { id: Agent.ID.make(current.id) })
             }),
+          add: (info) => editor.add(agentInfo(info) as never),
           remove: (id) => editor.remove(Agent.ID.make(id)),
         }),
       ),

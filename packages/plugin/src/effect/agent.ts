@@ -8,6 +8,7 @@ export interface AgentEditor {
   get(id: string): Types.DeepMutable<Agent.Info> | undefined
   default(id: string | undefined): void
   update(id: string, update: (agent: Types.DeepMutable<Agent.Info>) => void): void
+  add(agent: Types.DeepMutable<Agent.Info>): void
   remove(id: string): void
 }
 
