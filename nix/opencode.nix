@@ -85,14 +85,21 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   '';
 
   postInstall = lib.optionalString (stdenvNoCC.buildPlatform.canExecute stdenvNoCC.hostPlatform) ''
-    # trick yargs into also generating zsh completions
+    $out/bin/opencode --completions bash > opencode.bash
+    $out/bin/opencode --completions zsh > _opencode
+
     installShellCompletion --cmd opencode \
-      --bash <($out/bin/opencode completion) \
-      --zsh <(SHELL=/bin/zsh $out/bin/opencode completion)
+      --bash opencode.bash \
+      --zsh _opencode
+
+    substitute opencode.bash opencode2.bash \
+      --replace-fail opencode opencode2
+    substitute _opencode _opencode2 \
+      --replace-fail opencode opencode2
 
     installShellCompletion --cmd opencode2 \
-      --bash <($out/bin/opencode2 completion) \
-      --zsh <(SHELL=/bin/zsh $out/bin/opencode2 completion)
+      --bash opencode2.bash \
+      --zsh _opencode2
   '';
 
   nativeInstallCheckInputs = [
