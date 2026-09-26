@@ -14,64 +14,80 @@
     "nightOwlMuted": "#5f7e97",
     "nightOwlGray": "#637777",
     "nightOwlLightGray": "#89a4bb",
-    "nightOwlPanel": "#0b253a"
+    "nightOwlPanel": "#0b253a",
+    "nightOwlComment": "#637777",
+    "nightOwlLine": "#5f7e97",
+    "lightOwlBg": "#FBFBFB",
+    "lightOwlPanel": "#F0F0F0",
+    "lightOwlElement": "#F6F6F6",
+    "lightOwlFg": "#403f53",
+    "lightOwlFgMuted": "#989fb1",
+    "lightOwlBlue": "#4876d6",
+    "lightOwlRed": "#de3d3b",
+    "lightOwlGreen": "#2aa298",
+    "lightOwlOrange": "#daaa01",
+    "lightOwlPurple": "#994cc3",
+    "lightOwlBorder": "#d9d9d9",
+    "lightOwlBorderActive": "#7e57c2",
+    "lightOwlDiffAdd": "#2aa298",
+    "lightOwlDiffDelete": "#de3d3b"
   },
   "theme": {
     "primary": {
       "dark": "nightOwlBlue",
-      "light": "nightOwlBlue"
+      "light": "lightOwlBlue"
     },
     "secondary": {
-      "dark": "nightOwlCyan",
-      "light": "nightOwlCyan"
+      "dark": "nightOwlPurple",
+      "light": "lightOwlPurple"
     },
     "accent": {
-      "dark": "nightOwlPurple",
-      "light": "nightOwlPurple"
+      "dark": "nightOwlYellow",
+      "light": "lightOwlOrange"
     },
     "error": {
       "dark": "nightOwlRed",
-      "light": "nightOwlRed"
+      "light": "lightOwlRed"
     },
     "warning": {
-      "dark": "nightOwlYellow",
-      "light": "nightOwlYellow"
+      "dark": "nightOwlOrange",
+      "light": "lightOwlOrange"
     },
     "success": {
       "dark": "nightOwlGreen",
-      "light": "nightOwlGreen"
+      "light": "lightOwlGreen"
     },
     "info": {
       "dark": "nightOwlBlue",
-      "light": "nightOwlBlue"
+      "light": "lightOwlBlue"
     },
     "text": {
       "dark": "nightOwlFg",
-      "light": "nightOwlFg"
+      "light": "lightOwlFg"
     },
     "textMuted": {
-      "dark": "nightOwlMuted",
-      "light": "nightOwlMuted"
+      "dark": "nightOwlComment",
+      "light": "lightOwlFgMuted"
     },
     "background": {
       "dark": "nightOwlBg",
-      "light": "nightOwlBg"
+      "light": "lightOwlBg"
     },
     "backgroundPanel": {
-      "dark": "nightOwlPanel",
-      "light": "nightOwlPanel"
+      "dark": "#01121f",
+      "light": "lightOwlPanel"
     },
     "backgroundElement": {
-      "dark": "nightOwlPanel",
-      "light": "nightOwlPanel"
+      "dark": "#0b253a",
+      "light": "lightOwlElement"
     },
     "border": {
-      "dark": "nightOwlMuted",
-      "light": "nightOwlMuted"
+      "dark": "nightOwlLine",
+      "light": "lightOwlBorder"
     },
     "borderActive": {
       "dark": "nightOwlBlue",
-      "light": "nightOwlBlue"
+      "light": "lightOwlBorderActive"
     },
     "borderSubtle": {
       "dark": "nightOwlMuted",
@@ -79,11 +95,11 @@
     },
     "diffAdded": {
       "dark": "nightOwlGreen",
-      "light": "nightOwlGreen"
+      "light": "lightOwlDiffAdd"
     },
     "diffRemoved": {
       "dark": "nightOwlRed",
-      "light": "nightOwlRed"
+      "light": "lightOwlDiffDelete"
     },
     "diffContext": {
       "dark": "nightOwlMuted",
@@ -182,40 +198,40 @@
       "light": "nightOwlFg"
     },
     "syntaxComment": {
-      "dark": "nightOwlGray",
-      "light": "nightOwlGray"
+      "dark": "nightOwlComment",
+      "light": "lightOwlFgMuted"
     },
     "syntaxKeyword": {
       "dark": "nightOwlPurple",
-      "light": "nightOwlPurple"
+      "light": "lightOwlPurple"
     },
     "syntaxFunction": {
       "dark": "nightOwlBlue",
-      "light": "nightOwlBlue"
+      "light": "lightOwlBlue"
     },
     "syntaxVariable": {
       "dark": "nightOwlFg",
-      "light": "nightOwlFg"
+      "light": "lightOwlFg"
     },
     "syntaxString": {
       "dark": "nightOwlYellow",
-      "light": "nightOwlYellow"
+      "light": "lightOwlGreen"
     },
     "syntaxNumber": {
       "dark": "nightOwlOrange",
-      "light": "nightOwlOrange"
+      "light": "lightOwlPurple"
     },
     "syntaxType": {
       "dark": "nightOwlGreen",
-      "light": "nightOwlGreen"
+      "light": "lightOwlBlue"
     },
     "syntaxOperator": {
       "dark": "nightOwlCyan",
-      "light": "nightOwlCyan"
+      "light": "lightOwlPurple"
     },
     "syntaxPunctuation": {
       "dark": "nightOwlFg",
-      "light": "nightOwlFg"
+      "light": "lightOwlFg"
     }
   }
 }
