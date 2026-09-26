@@ -122,6 +122,7 @@ import { SessionGroupView } from "./group-view"
 import { useEntryAnchor } from "./anchor-view"
 import { containsAnchor, createTimelineAnchors } from "./anchors"
 import { rowsAfter, rowsBefore, rowWeight } from "./mount-budget"
+import { adjacentPageTop, createPagedScroll, PAGED_OUTPUT_OVERLAP_LINES } from "./paged-scroll"
 export { InlineToolRow } from "./message-parts"
 export { toolDisplay } from "./message-parts"
 
@@ -234,6 +235,7 @@ export function Session(props: {
   const dimensions = useTerminalDimensions()
   const thinkingMode = createMemo<ThinkingMode>(() => config.session?.thinking ?? "hide")
   const showScrollbar = createMemo(() => config.session?.scrollbar ?? false)
+  const pagedOutput = createMemo(() => config.experimental?.paged_output === true)
   const markdownMode = createMemo(() => config.session?.markdown ?? "rendered")
   const diffWrapMode = createMemo(() => config.diffs?.wrap ?? "word")
   const groupExploration = createMemo(() => config.session?.grouping !== "none")
@@ -447,7 +449,7 @@ export function Session(props: {
     setHiddenRows(rowsBefore(weights(), current, TRANSCRIPT_BACKFILL_CHUNK))
     afterLayout(() => {
       scroll.scrollBy(scroll.scrollHeight - before + scrollBy)
-      scroll.stickyScroll = !navigationMessage()
+      scroll.stickyScroll = !pagedOutput() && !navigationMessage()
       revealingOlderRows = false
     })
     return true
@@ -502,6 +504,9 @@ export function Session(props: {
       firstJump()
     )
       return true
+    // Paged follow applies its padding a frame after content grows, so the unpadded maximum is
+    // briefly below the viewport. While the reader is still following, that is not them leaving.
+    if (pagedOutput() && paged.following()) return false
     if (visibleEnd() < rows.length) return true
     return scroll.scrollTop < Math.max(0, scroll.scrollHeight - scroll.viewport.height)
   }
@@ -516,7 +521,8 @@ export function Session(props: {
       setAwayFromBottom(away)
       if (!away) {
         if (!renderer.getSelection()) setHiddenRows(undefined)
-        scroll.stickyScroll = true
+        if (!pagedOutput()) scroll.stickyScroll = true
+        paged.setFollowing(true)
       }
       saveScrollAnchor()
     })
@@ -557,20 +563,24 @@ export function Session(props: {
     if (!anchor || index === -1) {
       scroll.scrollTo(scroll.scrollHeight)
       setAwayFromBottom(false)
+      paged.setFollowing(true)
       return
     }
     setHiddenRows(rowsBefore(weights(), index, TRANSCRIPT_BACKFILL_CHUNK))
     const end = rowsAfter(weights(), index, TRANSCRIPT_BACKFILL_CHUNK)
     setVisibleRowsEnd(end === rows.length ? undefined : end)
     scroll.stickyScroll = false
+    // A restored anchor is an away position; paged follow must not pull it back to the bottom.
+    paged.setFollowing(false)
     const restore = () =>
       afterLayout(() => {
         const boundary = anchors.get(anchor.target)
         if (!boundary) {
           sessionTabs.setScrollAnchor(sessionID, undefined)
-          scroll.stickyScroll = true
+          if (!pagedOutput()) scroll.stickyScroll = true
           scroll.scrollTo(scroll.scrollHeight)
           setAwayFromBottom(false)
+          paged.setFollowing(true)
           return
         }
         const contentY = scroll.scrollTop + boundary.node.y - scroll.viewport.y
@@ -587,7 +597,7 @@ export function Session(props: {
             messageNavigationSlack({
               top: target,
               viewportHeight: scroll.viewport.height,
-              scrollHeight: scroll.scrollHeight,
+              scrollHeight: scroll.scrollHeight - paged.padding(),
               currentSlack: scroll.getRenderable(NAVIGATION_SLACK_ID)?.height ?? 0,
             }),
           )
@@ -610,6 +620,21 @@ export function Session(props: {
   })
   const dialog = useDialog()
   const renderer = useRenderer()
+  const paged = createPagedScroll({
+    enabled: pagedOutput,
+    scroll: () => scroll,
+    suspended: () =>
+      Boolean(
+        navigationMessage() ||
+          navigationSlack() ||
+          firstJump() ||
+          ensureAllRowsPending ||
+          revealingOlderRows ||
+          revealingNewerRows,
+      ),
+    overlap: () => PAGED_OUTPUT_OVERLAP_LINES,
+    renderer,
+  })
   const runPendingAction = createSingleFlight<string>()
   const mutatePending = async (action: PendingAction, inboxID: string, failureLabel?: string) => {
     const result = await runPendingAction(inboxID, async () => {
@@ -692,7 +717,7 @@ export function Session(props: {
       messageNavigationSlack({
         top,
         viewportHeight: scroll.viewport.height,
-        scrollHeight: scroll.scrollHeight,
+        scrollHeight: scroll.scrollHeight - paged.padding(),
         currentSlack: scroll.getRenderable(NAVIGATION_SLACK_ID)?.height ?? 0,
       }),
     )
@@ -744,9 +769,10 @@ export function Session(props: {
     sessionTabs.setScrollAnchor(route.sessionID, undefined)
     setHiddenRows(undefined)
     setVisibleRowsEnd(undefined)
+    paged.setFollowing(true)
     setTimeout(() => {
       if (!scroll || scroll.isDestroyed) return
-      scroll.stickyScroll = true
+      if (!pagedOutput()) scroll.stickyScroll = true
       scroll.scrollTo(scroll.scrollHeight)
     }, 50)
   }
@@ -766,20 +792,40 @@ export function Session(props: {
     dialog.clear()
   }
 
+  /** Page navigation snaps onto the same page boundaries paged follow generated, so a page looks
+   *  the way it did while it was streaming. */
+  function moveTranscriptPage(direction: -1 | 1) {
+    const geometry = paged.geometry()
+    if (!geometry || !scroll || scroll.isDestroyed) return
+    clearMessageNavigation()
+    const current = scroll.scrollTop
+    if (direction < 0 && current <= 0) {
+      // Already at the top of the mounted window; load more history instead of snapping.
+      moveTranscript(-scroll.viewport.height)
+      return
+    }
+    const target = Math.min(adjacentPageTop(current, geometry.step, direction), geometry.latest)
+    if (target !== current) scroll.scrollTo(target)
+    updateAwayFromBottom()
+    // Scrolling ourselves is ignored by the controller, so set follow after the move.
+    paged.setFollowing(target >= geometry.latest)
+    dialog.clear()
+  }
+
   const globalCommands = [
     {
       id: "session.page.up",
       title: "Page up",
       group: "Session",
       palette: undefined,
-      run: () => moveTranscript(-scroll.height / 2),
+      run: () => (pagedOutput() ? moveTranscriptPage(-1) : moveTranscript(-scroll.height / 2)),
     },
     {
       id: "session.page.down",
       title: "Page down",
       group: "Session",
       palette: undefined,
-      run: () => moveTranscript(scroll.height / 2),
+      run: () => (pagedOutput() ? moveTranscriptPage(1) : moveTranscript(scroll.height / 2)),
     },
     {
       id: "session.line.up",
@@ -1403,7 +1449,7 @@ export function Session(props: {
                     foregroundColor: theme.border.base,
                   },
                 }}
-                stickyScroll={!navigationMessage() && !navigationSlack()}
+                stickyScroll={!pagedOutput() && !navigationMessage() && !navigationSlack()}
                 stickyStart="bottom"
                 flexGrow={1}
                 scrollAcceleration={scrollAcceleration()}
