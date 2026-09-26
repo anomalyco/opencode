@@ -65,7 +65,6 @@ import { DialogConfig } from "./component/dialog-config"
 import { DialogDebug } from "./component/dialog-debug"
 import { DialogPair } from "./component/dialog-pair"
 import { DialogThemeList } from "./component/dialog-theme-list"
-import { DialogHelp } from "./ui/dialog-help"
 import { DialogAgent } from "./component/dialog-agent"
 import { DialogSessionList } from "./component/dialog-session-list"
 import { DialogOpen, DialogOpenKey, moveOpenSession } from "./component/dialog-open"
@@ -163,7 +162,6 @@ const appBindingCommands = [
   "theme.switch",
   "theme.switch_mode",
   "theme.mode.lock",
-  "help.show",
   "docs.open",
   "diff.open",
   "app.debug",
@@ -1076,15 +1074,6 @@ function App() {
           if (locked()) unlock()
           else lock()
           dialog.clear()
-        },
-        category: "System",
-      },
-      {
-        name: "help.show",
-        title: "Help",
-        slash: { name: "help" },
-        run: () => {
-          dialog.replace(() => <DialogHelp />)
         },
         category: "System",
       },
