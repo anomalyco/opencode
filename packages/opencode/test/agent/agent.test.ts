@@ -256,6 +256,35 @@ it.instance(
 )
 
 it.instance(
+  "custom agent permission config denies unspecified actions",
+  () =>
+    Effect.gen(function* () {
+      const review = yield* load((svc) => svc.get("review"))
+      expect(review).toBeDefined()
+      expect(evalPerm(review, "read")).toBe("allow")
+      expect(evalPerm(review, "edit")).toBe("deny")
+      expect(Permission.evaluate("bash", "grep file", review!.permission).action).toBe("allow")
+      expect(Permission.evaluate("bash", "stat /tmp/file", review!.permission).action).toBe("deny")
+    }),
+  {
+    config: {
+      agent: {
+        review: {
+          mode: "subagent",
+          permission: {
+            read: "allow",
+            edit: "deny",
+            bash: {
+              "grep *": "allow",
+            },
+          },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
   "agent permission config merges with defaults",
   () =>
     Effect.gen(function* () {
