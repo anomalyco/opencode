@@ -182,7 +182,9 @@ function dispatch(
     const state = yield* status.current
     const app = yield* Ref.get(application)
     const ready = state.type === "ready" && Option.isSome(app)
-    if (request.method === "GET" && url.pathname === "/api/info" && !ready) {
+    // Already-running clients probe the previous health path and replace the
+    // registered server on 404, even when reconnecting without a version check.
+    if (request.method === "GET" && (url.pathname === "/api/status" || (url.pathname === "/api/info" && !ready))) {
       if (!(yield* authorizedRequest(request, auth))) return unauthorizedResponse(request)
       return yield* infoResponse(status, version, urls, tmp)
     }
