@@ -65,6 +65,22 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
       providerMetadata,
     })
   }
+  // A persisted turn can still hold a pending or running tool: a provider transport failure or a
+  // crash mid tool-call leaves it unsettled, and the recovery that would have failed it never ran.
+  // Lowering the call without a result strands it, so every later request for the session carries
+  // a dangling tool call. Synthesize the failure the interrupted turn never recorded.
+  return ToolResultPart.make({
+    id: tool.id,
+    name: tool.name,
+    result: {
+      error: { type: "unknown", message: "Tool call did not complete" },
+      content: tool.state.status === "running" ? tool.state.content : [],
+      structured: tool.state.status === "running" ? tool.state.structured : {},
+    },
+    resultType: "error",
+    providerExecuted: tool.provider?.executed,
+    providerMetadata,
+  })
 }
 
 const assistant = (message: SessionMessage.Assistant, model: Model) => {
@@ -87,11 +103,10 @@ const assistant = (message: SessionMessage.Assistant, model: Model) => {
           : []
     const call = toolCall(item, reuseProviderMetadata ? item.provider?.metadata : undefined)
     if (item.provider?.executed !== true) return [call]
-    const result = toolResult(
-      item,
-      reuseProviderMetadata ? (item.provider.resultMetadata ?? item.provider.metadata) : undefined,
-    )
-    return result ? [call, result] : [call]
+    return [
+      call,
+      toolResult(item, reuseProviderMetadata ? (item.provider.resultMetadata ?? item.provider.metadata) : undefined),
+    ]
   })
   const meaningful = content.filter((part) => {
     if (part.type === "text") return part.text !== ""
@@ -103,7 +118,6 @@ const assistant = (message: SessionMessage.Assistant, model: Model) => {
     .map((item) =>
       toolResult(item, reuseProviderMetadata ? (item.provider?.resultMetadata ?? item.provider?.metadata) : undefined),
     )
-    .filter((message) => message !== undefined)
     .map(Message.tool)
   if (meaningful.length === 0) return results
   return [

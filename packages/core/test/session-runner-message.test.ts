@@ -232,7 +232,7 @@ Recent work
       model,
     )
 
-    expect(messages.map((message) => message.role)).toEqual(["assistant", "tool"])
+    expect(messages.map((message) => message.role)).toEqual(["assistant", "tool", "tool", "tool"])
     expect(messages[0]?.content).toEqual([
       { type: "text", text: "Checking" },
       { type: "reasoning", text: "Think", providerMetadata: { anthropic: { signature: "sig_1" } } },
@@ -283,6 +283,32 @@ Recent work
     expect(messages[1]?.content).toEqual([
       {
         type: "tool-result",
+        id: "pending",
+        name: "read",
+        result: {
+          type: "error",
+          value: { error: { type: "unknown", message: "Tool call did not complete" }, content: [], structured: {} },
+        },
+      },
+    ])
+    expect(messages[2]?.content).toEqual([
+      {
+        type: "tool-result",
+        id: "running",
+        name: "read",
+        result: {
+          type: "error",
+          value: {
+            error: { type: "unknown", message: "Tool call did not complete" },
+            content: [],
+            structured: { type: "media", mime: "image/png" },
+          },
+        },
+      },
+    ])
+    expect(messages[3]?.content).toEqual([
+      {
+        type: "tool-result",
         id: "completed",
         name: "read",
         result: {
@@ -291,6 +317,47 @@ Recent work
             { type: "text", text: "Hello" },
             { type: "file", uri: "data:image/png;base64,aGVsbG8=", mime: "image/png", name: "hello.png" },
           ],
+        },
+      },
+    ])
+  })
+
+  test("settles a tool call left unsettled by a provider transport failure", () => {
+    const messages = toLLMMessages(
+      [
+        SessionMessage.Assistant.make({
+          id: id("assistant"),
+          type: "assistant",
+          agent: "build",
+          model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
+          error: { type: "unknown", message: "Decode error (200 POST https://proxy/v1/chat/completions)" },
+          content: [
+            SessionMessage.AssistantTool.make({
+              type: "tool",
+              id: "chatcmpl-tool-1",
+              name: "shell",
+              state: SessionMessage.ToolStatePending.make({ status: "pending", input: "" }),
+              time: { created },
+            }),
+          ],
+          time: { created, completed: created },
+        }),
+      ],
+      model,
+    )
+
+    // Every lowered tool call has to be answered, or the provider rejects the request and the
+    // session can never drain again.
+    const parts = messages.flatMap((message) => message.content)
+    expect(parts.flatMap((part) => (part.type === "tool-call" ? [part.id] : []))).toEqual(["chatcmpl-tool-1"])
+    expect(parts.flatMap((part) => (part.type === "tool-result" ? [part] : []))).toEqual([
+      {
+        type: "tool-result",
+        id: "chatcmpl-tool-1",
+        name: "shell",
+        result: {
+          type: "error",
+          value: { error: { type: "unknown", message: "Tool call did not complete" }, content: [], structured: {} },
         },
       },
     ])
