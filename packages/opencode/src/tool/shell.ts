@@ -132,6 +132,13 @@ function unquote(text: string) {
   return text
 }
 
+// Bash treats `\<char>` as a literal escape in unquoted words (e.g. `/tmp/my\ project/x`),
+// but the tree-sitter word still carries the backslash. Strip it before resolving paths so
+// `mkdir -p /tmp/my\ project/sub` and `mkdir -p "/tmp/my project/sub"` resolve identically.
+function unescape(text: string) {
+  return text.replace(/\\(.)/g, "$1")
+}
+
 function home(text: string) {
   if (text === "~") return os.homedir()
   if (text.startsWith("~/") || text.startsWith("~\\")) return path.join(os.homedir(), text.slice(2))
@@ -367,7 +374,7 @@ export const ShellTool = Tool.define(
     })
 
     const argPath = Effect.fn("ShellTool.argPath")(function* (arg: string, cwd: string, ps: boolean, shell: string) {
-      const text = ps ? expand(arg, cwd, shell) : home(unquote(arg))
+      const text = ps ? expand(arg, cwd, shell) : home(unescape(unquote(arg)))
       const file = text && prefix(text)
       if (!file || dynamic(file, ps)) return
       const next = ps ? provider(file) : file
