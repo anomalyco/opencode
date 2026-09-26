@@ -36,6 +36,13 @@ import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../pro
 import { usePromptStash } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
+import {
+  VoiceRecorder,
+  findRecorder,
+  transcribeAudio,
+  shouldDiscardTap,
+  VOICE_MAX_RECORD_MS,
+} from "./voice"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { AssistantMessage, FilePart, UserMessage } from "@opencode-ai/sdk/v2"
 import { Locale } from "../../util/locale"
@@ -628,8 +635,91 @@ export function Prompt(props: PromptProps) {
     if (store.prompt.input) {
       stashed = { prompt: unwrap(store.prompt), cursor: input.cursorOffset }
     }
+    voiceRecorder?.dispose()
+    voiceRecorder = undefined
     setInputTarget(undefined)
     props.ref?.(undefined)
+  })
+
+  // Push-to-talk voice input: hold the configured key to record, release to transcribe.
+  const [voiceRecording, setVoiceRecording] = createSignal(false)
+  let voiceRecorder: VoiceRecorder | undefined
+  let voiceStartTime = 0
+  let voiceStopTimer: ReturnType<typeof setTimeout> | undefined
+
+  function startVoiceRecording() {
+    if (voiceRecorder?.recording) return
+    if (!tuiConfig.voice?.transcribe_command) {
+      toast.show({ variant: "error", message: "Voice input needs tui.voice.transcribe_command to be set" })
+      return
+    }
+    const spec = findRecorder()
+    if (!spec) {
+      toast.show({ variant: "error", message: "Voice input needs ffmpeg or sox installed to record audio" })
+      return
+    }
+    voiceRecorder = new VoiceRecorder()
+    voiceRecorder.start(spec)
+    voiceStartTime = Date.now()
+    setVoiceRecording(true)
+    voiceStopTimer = setTimeout(() => void stopVoiceRecording(""), VOICE_MAX_RECORD_MS)
+  }
+
+  async function stopVoiceRecording(tapInsert: string) {
+    if (voiceStopTimer) {
+      clearTimeout(voiceStopTimer)
+      voiceStopTimer = undefined
+    }
+    const recorder = voiceRecorder
+    voiceRecorder = undefined
+    setVoiceRecording(false)
+    if (!recorder) return
+    const holdMs = Date.now() - voiceStartTime
+    try {
+      const wavFile = await recorder.stop()
+      if (!wavFile) return
+      if (shouldDiscardTap(holdMs)) {
+        if (tapInsert) input.insertText(tapInsert)
+        return
+      }
+      const text = await transcribeAudio(wavFile, tuiConfig.voice?.transcribe_command ?? "")
+      if (!text) return
+      input.insertText(text.endsWith("\n") ? text : text + " ")
+      setTimeout(() => {
+        if (!input || input.isDestroyed) return
+        input.getLayoutNode().markDirty()
+        renderer.requestRender()
+      }, 0)
+    } catch (error) {
+      toast.error(error)
+    } finally {
+      recorder.dispose()
+    }
+  }
+
+  useBindings(() => {
+    const press = tuiConfig.keybinds.get("prompt.voice.push_to_talk").filter((binding) => binding.event !== "release")
+    return {
+      target: inputTarget,
+      enabled: inputTarget() !== undefined && !props.disabled && press.length > 0,
+      bindings: [
+        ...press.map((binding) => ({
+          ...binding,
+          desc: "Start voice recording (release to transcribe)",
+          group: "Prompt",
+          cmd: () => startVoiceRecording(),
+        })),
+        // Releasing the same key stops the recording, so one configured key
+        // covers both halves of push-to-talk without extra configuration.
+        ...press.map((binding) => ({
+          ...binding,
+          event: "release" as const,
+          desc: "Stop voice recording and transcribe",
+          group: "Prompt",
+          cmd: () => stopVoiceRecording(binding.key === "space" ? " " : ""),
+        })),
+      ],
+    }
   })
 
   createEffect(() => {
@@ -1309,6 +1399,7 @@ export function Prompt(props: PromptProps) {
   const borderHighlight = createMemo(() => tint(theme.border, highlight(), agentMetaAlpha()))
 
   const placeholderText = createMemo(() => {
+    if (voiceRecording()) return "Recording voice… release to transcribe"
     if (props.showPlaceholder === false) return undefined
     if (store.mode === "shell") {
       if (!shell().length) return undefined

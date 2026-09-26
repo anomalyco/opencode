@@ -58,6 +58,13 @@ export const Prompt = Schema.Struct({
   }),
 }).annotate({ description: "Prompt size settings" })
 
+export const Voice = Schema.Struct({
+  transcribe_command: Schema.optional(Schema.String).annotate({
+    description:
+      "Shell command that transcribes push-to-talk voice recordings. The recorded wav file path replaces {file} in the command, or is appended as the last argument when {file} is absent. The command's stdout is inserted into the prompt.",
+  }),
+}).annotate({ description: "Voice input settings" })
+
 export const Info = Schema.Struct({
   $schema: Schema.optional(Schema.String),
   theme: Schema.optional(Schema.String),
@@ -67,6 +74,7 @@ export const Info = Schema.Struct({
   leader_timeout: Schema.optional(LeaderTimeout),
   attention: Schema.optional(Attention),
   prompt: Schema.optional(Prompt),
+  voice: Schema.optional(Voice),
   scroll_speed: Schema.optional(ScrollSpeed).annotate({ description: "TUI scroll speed" }),
   scroll_acceleration: Schema.optional(ScrollAcceleration),
   diff_style: Schema.optional(DiffStyle),
