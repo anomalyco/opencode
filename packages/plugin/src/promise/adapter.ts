@@ -591,6 +591,13 @@ export function fromPromise(plugin: Plugin) {
             move: adaptApiMethod(SessionEndpoints["session.move"], host.session.move),
             wait: adaptApiMethod(SessionEndpoints["session.wait"], host.session.wait),
             context: adaptApiMethod(SessionEndpoints["session.context"], host.session.context),
+            form: {
+              list: adaptApiMethod(SessionEndpoints["session.form.list"], host.session.form.list),
+              create: adaptApiMethod(SessionEndpoints["session.form.create"], host.session.form.create),
+              get: adaptApiMethod(SessionEndpoints["session.form.get"], host.session.form.get),
+              reply: adaptApiMethod(SessionEndpoints["session.form.reply"], host.session.form.reply),
+              cancel: adaptApiMethod(SessionEndpoints["session.form.cancel"], host.session.form.cancel),
+            },
           },
           shell: {
             hook: (name, callback) =>
