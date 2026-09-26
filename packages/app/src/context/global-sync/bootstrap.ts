@@ -150,6 +150,7 @@ export async function bootstrapGlobal(input: {
   formatMoreCount: (count: number) => string
   setGlobalStore: SetStoreFunction<GlobalStore>
   queryClient: QueryClient
+  onProjectUpdated?: (project: Project) => void
 }) {
   const slow = [
     () => input.queryClient.fetchQuery(loadGlobalConfigQuery(input.scope, input.serverSDK, input.protocol)),
@@ -161,7 +162,10 @@ export async function bootstrapGlobal(input: {
     () =>
       input.queryClient
         .fetchQuery(loadProjectsQuery(input.scope, input.serverAPI.project))
-        .then((data) => input.setGlobalStore("project", data)),
+        .then((data) => {
+          input.setGlobalStore("project", data)
+          data.filter((project) => project.id !== "global").forEach((project) => input.onProjectUpdated?.(project))
+        }),
   ]
   await runAll(slow)
   // showErrors({
@@ -346,7 +350,7 @@ export async function bootstrapDirectory(input: {
   store: Store<State>
   setStore: SetStoreFunction<State>
   vcsCache: VcsCache
-  loadSessions: (directory: string) => Promise<void> | void
+  loadSessions: (directory: string) => Promise<boolean> | boolean
   translate: (key: string, vars?: Record<string, string | number>) => string
   global: {
     config: Config

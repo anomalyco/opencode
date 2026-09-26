@@ -39,6 +39,7 @@ export function applyGlobalEvent(input: {
   project: Project[]
   setGlobalProject: (next: Project[] | ((draft: Project[]) => Project[])) => void
   refresh: () => void
+  onProjectUpdated?: (project: Project) => void
 }) {
   if (input.event.type === "global.disposed" || input.event.type === "server.connected") {
     input.refresh()
@@ -54,6 +55,7 @@ export function applyGlobalEvent(input: {
         draft[result.index] = { ...draft[result.index], ...properties }
       }),
     )
+    input.onProjectUpdated?.(properties)
     return
   }
   input.setGlobalProject(
@@ -61,6 +63,7 @@ export function applyGlobalEvent(input: {
       draft.splice(result.index, 0, properties)
     }),
   )
+  input.onProjectUpdated?.(properties)
 }
 
 function cleanupSessionCaches(
