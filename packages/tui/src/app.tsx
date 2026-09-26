@@ -103,6 +103,7 @@ import { SessionTerminalsProvider } from "./context/session-terminals"
 import { PanelProvider, usePanel } from "./context/panel"
 import { SessionFrame } from "./component/session-frame"
 import { createTuiClipboard } from "./clipboard"
+import { bootstrap } from "./bootstrap"
 
 registerOpencodeSpinner()
 
@@ -207,13 +208,8 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const config = Config.resolve(yield* Effect.tryPromise(() => input.config.get()), {
     terminalSuspend: process.platform !== "win32",
   })
-  const options = { baseUrl: input.server.endpoint.url, headers: Service.headers(input.server.endpoint) }
-  const api = OpenCode.make(options)
-  const location = yield* Effect.tryPromise(() => api.file.list({ location: { directory: process.cwd() } })).pipe(
-    Effect.map((response) => response.location),
-    Effect.catch(() => Effect.tryPromise(() => api.location.get())),
-  )
-  const directory = location.directory
+  const connection = yield* bootstrap(input.server, process.cwd())
+  const directory = connection.location.directory
   const pluginDirectories = yield* Effect.promise(() => localPluginDirectories(process.cwd(), global.config))
   const handoff = input.terminalHandoff ? yield* Effect.promise(input.terminalHandoff) : undefined
   const managed = input.server.service
@@ -376,7 +372,11 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                 : undefined
                                             }
                                           >
-                                            <ClientProvider api={api} url={input.server.endpoint.url} service={service}>
+                                            <ClientProvider
+                                              api={connection.api}
+                                              url={connection.endpoint.url}
+                                              service={service}
+                                            >
                                               <PermissionProvider>
                                                 <DataProvider directory={directory}>
                                                   <LocationProvider>
