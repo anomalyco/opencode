@@ -607,10 +607,10 @@ type StepResult = readonly [ParserState, ReadonlyArray<LLMEvent>]
 const NO_EVENTS: StepResult["1"] = []
 
 // `response.completed` / `response.incomplete` are clean finishes that emit a
-// `finish` event; `response.failed` is a hard failure that emits a
-// `provider-error`. All three end the stream — kept in one set so `step` and
-// the protocol's `terminal` predicate stay in sync.
-const TERMINAL_TYPES = new Set(["response.completed", "response.incomplete", "response.failed"])
+// `finish` event; `response.failed` and `error` are hard failures that emit a
+// `provider-error`. All terminal events stay in one set so `step` and the
+// protocol's `terminal` predicate remain in sync.
+const TERMINAL_TYPES = new Set(["response.completed", "response.incomplete", "response.failed", "error"])
 
 const onOutputTextDelta = (state: ParserState, event: OpenAIResponsesEvent): StepResult => {
   if (!event.delta) return [state, NO_EVENTS]
