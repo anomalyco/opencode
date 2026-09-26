@@ -16,6 +16,7 @@ import { Session } from "@opencode/core/session"
 import { SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
 import { ShellParse } from "@opencode/core/shell/parse"
+import path from "path"
 import { eq } from "drizzle-orm"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
@@ -24,6 +25,7 @@ const current = Layer.succeed(
   Location.Service,
   Location.Service.of(location({ directory: AbsolutePath.make("/project") })),
 )
+const project = path.resolve("/project")
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, SessionStore.node, PermissionSaved.node, Agent.node, Permission.node]),
@@ -98,6 +100,39 @@ function waitForRequest(input: Partial<Permission.AssertInput> = {}) {
 }
 
 describe("Permission", () => {
+  for (const action of ["read", "edit"]) {
+    it.effect(`matches absolute ${action} rules against Location-relative resources`, () =>
+      Effect.gen(function* () {
+        yield* setup([
+          { action, resource: "*", effect: "deny" },
+          { action, resource: path.join(project, ".opencode", "plan", "*"), effect: "allow" },
+        ])
+        const service = yield* Permission.Service
+        expect(yield* service.ask(assertion({ action, resources: [".opencode/plan/work.md"] }))).toMatchObject({
+          effect: "allow",
+        })
+        expect(yield* service.ask(assertion({ action, resources: ["source.ts"] }))).toMatchObject({ effect: "deny" })
+      }),
+    )
+  }
+
+  it.effect("preserves rule order across relative and absolute file patterns", () =>
+    Effect.gen(function* () {
+      yield* setup([
+        { action: "edit", resource: path.join(project, "*"), effect: "allow" },
+        { action: "edit", resource: "src/*", effect: "deny" },
+        { action: "edit", resource: path.join(project, "src", "generated", "*"), effect: "allow" },
+      ])
+      const service = yield* Permission.Service
+      expect(yield* service.ask(assertion({ action: "edit", resources: ["src/index.ts"] }))).toMatchObject({
+        effect: "deny",
+      })
+      expect(yield* service.ask(assertion({ action: "edit", resources: ["src/generated/index.ts"] }))).toMatchObject({
+        effect: "allow",
+      })
+    }),
+  )
+
   it.effect("returns the evaluated effect and only queues prompts", () =>
     Effect.gen(function* () {
       yield* setup([{ action: "read", resource: "*", effect: "allow" }])
