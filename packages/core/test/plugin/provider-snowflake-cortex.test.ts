@@ -1,7 +1,6 @@
 import { Message } from "@opencode/ai"
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { Agent } from "@opencode/core/agent"
-import { Catalog } from "@opencode/core/catalog"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { Location } from "@opencode/core/location"
@@ -47,19 +46,20 @@ const fixture = Effect.fn(function* () {
       return HttpClientResponse.fromWeb(request, response)
     }),
   )
-  const catalog = yield* Catalog.Service
+  const providers = yield* Provider.Service
+  const models = yield* Model.Service
   const integrations = yield* Integration.Service
   const sessions = yield* Session.Service
   const location = yield* Location.Service
   const hooks = yield* PluginHooks.Service
   const plugin = yield* Plugin.Service
   const host = yield* PluginHost.make(plugin)
-  yield* catalog.transform((editor) => {
-    editor.provider.update(providerID, (provider) => {
-      provider.package = Provider.aisdk("@ai-sdk/openai-compatible")
+  yield* providers.transform((editor) => {
+    editor.update(providerID, (provider) => {
+      provider.package = "@opencode/ai/providers/openai-compatible"
       provider.settings = { baseURL: "https://${SNOWFLAKE_ACCOUNT}.snowflakecomputing.com/api/v2/cortex/v1" }
     })
-    editor.model.update(providerID, modelID, () => {})
+    editor.models.update(providerID, modelID, () => {})
   })
   yield* SnowflakeCortexPlugin.effect(host).pipe(Effect.provideService(HttpClient.HttpClient, http))
   const session = yield* sessions.create({ location: Location.Ref.make({ directory: location.directory }) })
@@ -70,8 +70,8 @@ const fixture = Effect.fn(function* () {
   }
   const send = Effect.gen(function* () {
     const model = yield* Effect.gen(function* () {
-      const model = yield* catalog.model.get(providerID, modelID)
-      if (!model || String(model.settings?.baseURL).includes("${")) return yield* Effect.fail("Catalog pending")
+      const model = yield* models.get(providerID, modelID)
+      if (!model || String(model.settings?.baseURL).includes("${")) return yield* Effect.fail("Model pending")
       return model
     }).pipe(Effect.retry(polling))
     const resolver = yield* ModelResolver.Service
@@ -98,7 +98,7 @@ const fixture = Effect.fn(function* () {
     integrations.oauth
       .status({ integrationID, attemptID })
       .pipe(Effect.repeat({ ...polling, until: (status) => status.status !== "pending" }))
-  return { requests, replies, catalog, integrations, hooks, scope, send, stop, status }
+  return { requests, replies, providers, integrations, hooks, scope, send, stop, status }
 })
 
 it.live("browser OAuth supplies the native endpoint/token and refreshes a rejected token once", () =>
@@ -225,8 +225,8 @@ it.live("uses environment tokens rather than the account identifier and bypasses
           type: "env",
           name: "SNOWFLAKE_CORTEX_TOKEN",
         })
-        expect((yield* test.catalog.provider.get(providerID))?.package).toBe(
-          Provider.aisdk("@ai-sdk/openai-compatible"),
+        expect((yield* test.providers.get(providerID))?.package).toBe(
+          "@opencode/ai/providers/openai-compatible",
         )
         expect(yield* test.hooks.has("aisdk", "sdk", providerID)).toBe(false)
 

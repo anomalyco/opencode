@@ -6,6 +6,8 @@
 - Tool schemas are the model-facing Interface. Keep arguments minimal and natural to the operation; never add unrelated IDs as ambient capability tokens.
 - State model-visible diagnostics, logs, tool descriptions, and instructions directly. The execution context is already clear; do not repeat `Code Mode` or `CodeMode` unless the distinction is necessary.
 - When interpreter behavior or support changes, update `interpreter-support.md` and direct tests in the same PR.
+- Program values are `Value` (`src/interpreter/objects.ts`); host values are `unknown` and are copied in at the boundaries (`fromHost`, `fromJson`). Do not widen program-facing signatures back to `unknown`.
+- A built-in kind of object is one `Obj` subclass (`Wrapper` for host-backed data such as Date or Map, `Opaque` for machinery such as functions and promises) that overrides `tag`, `toString`, `toPrimitive`, `inspect`, `toHost`, and `iterator` as needed. Do not add `instanceof` ladders over the built-in classes elsewhere; ask the object.
 
 ## OpenAPI
 

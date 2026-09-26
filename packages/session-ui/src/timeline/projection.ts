@@ -16,7 +16,7 @@ export { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap }
 
 export type ReasoningMode = "hidden" | "compact" | "full"
 
-type Notice = Exclude<SessionMessageInfo, { type: "user" | "assistant" | "shell" }>
+type Notice = Exclude<SessionMessageInfo, { type: "user" | "assistant" | "shell" | "idle" }>
 type Entry = { type: "assistant"; message: SessionMessageAssistant } | { type: "notice"; message: Notice }
 type Content = SessionMessageAssistant["content"][number]
 type GroupRow = Extract<TimelineRow.TimelineRow, { _tag: "AssistantPart" }>
@@ -763,7 +763,8 @@ function record(value: unknown): value is Record<string, unknown> {
 }
 
 function isNotice(message: SessionMessageInfo): message is Notice {
-  if (message.type === "user" || message.type === "assistant" || message.type === "shell") return false
+  if (message.type === "user" || message.type === "assistant" || message.type === "shell" || message.type === "idle")
+    return false
   if (message.type !== "synthetic") return true
   return !!message.description?.trim() || timelineNoticeRequired(message)
 }

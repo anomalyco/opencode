@@ -29,7 +29,7 @@ export default Runtime.handler(
 
     yield* Effect.forEach(
       credentials,
-      (connection) => Effect.promise(() => client.credential.remove({ credentialID: connection.id, location })),
+      (connection) => Effect.promise(() => client.credential.remove({ credentialID: connection.id })),
       { discard: true },
     )
     process.stdout.write(`Removed OAuth credentials for ${input.name}` + EOL)

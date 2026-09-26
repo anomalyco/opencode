@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/cli",
-  "version": "2.0.0",
+  "version": "2.0.18",
   "type": "module",
   "license": "MIT",
   "bin": {
@@ -21,10 +21,11 @@
     "build:node": "bun run script/build-node.ts",
     "dev": "bun run src/index.ts",
     "test": "bun test --timeout 30000 --only-failures",
-    "typecheck": "tsgo --noEmit"
+    "typecheck": "tsgo -b"
   },
   "dependencies": {
     "@agentclientprotocol/sdk": "1.2.1",
+    "@clack/core": "1.0.0-alpha.1",
     "@clack/prompts": "1.0.0-alpha.1",
     "@effect/platform-node": "catalog:",
     "@opencode/client": "workspace:*",
@@ -41,7 +42,7 @@
     "effect": "catalog:",
     "immer": "11.1.4",
     "jsonc-parser": "3.3.1",
-    "open": "10.1.2",
+    "picocolors": "1.1.1",
     "solid-js": "catalog:",
     "tree-sitter-bash": "0.25.0",
     "tree-sitter-powershell": "0.25.10",

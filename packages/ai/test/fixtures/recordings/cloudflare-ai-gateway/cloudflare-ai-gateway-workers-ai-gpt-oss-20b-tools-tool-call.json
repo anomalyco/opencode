@@ -4,9 +4,9 @@
     "name": "cloudflare-ai-gateway/cloudflare-ai-gateway-workers-ai-gpt-oss-20b-tools-tool-call",
     "recordedAt": "2026-05-08T17:20:08.287Z",
     "provider": "cloudflare-ai-gateway",
-    "route": "cloudflare-ai-gateway",
+    "route": "cloudflare-ai-gateway-chat",
     "transport": "http",
-    "model": "workers-ai/@cf/openai/gpt-oss-20b",
+    "model": "@cf/openai/gpt-oss-20b",
     "tags": ["prefix:cloudflare-ai-gateway", "provider:cloudflare-ai-gateway", "tool", "tool-call", "golden"]
   },
   "interactions": [
@@ -14,11 +14,11 @@
       "transport": "http",
       "request": {
         "method": "POST",
-        "url": "https://gateway.ai.cloudflare.com/v1/{account}/{gateway}/compat/chat/completions",
+        "url": "https://api.cloudflare.com/client/v4/accounts/{account}/ai/v1/chat/completions",
         "headers": {
           "content-type": "application/json"
         },
-        "body": "{\"model\":\"workers-ai/@cf/openai/gpt-oss-20b\",\"messages\":[{\"role\":\"system\",\"content\":\"Call tools exactly as requested.\"},{\"role\":\"user\",\"content\":\"Call get_weather with city exactly Paris.\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false}}}],\"tool_choice\":{\"type\":\"function\",\"function\":{\"name\":\"get_weather\"}},\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":120,\"temperature\":0}"
+        "body": "{\"model\":\"@cf/openai/gpt-oss-20b\",\"messages\":[{\"role\":\"system\",\"content\":\"Call tools exactly as requested.\"},{\"role\":\"user\",\"content\":\"Call get_weather with city exactly Paris.\"}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false}}}],\"tool_choice\":{\"type\":\"function\",\"function\":{\"name\":\"get_weather\"}},\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":120,\"temperature\":0}"
       },
       "response": {
         "status": 200,

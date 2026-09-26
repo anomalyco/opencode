@@ -9,6 +9,7 @@ import { ServerConnection, serverName } from "@/runtime/server/registry"
 import { useSettingsServers } from "@/settings/servers/inventory"
 import { displayName } from "@/shell/layout/helpers"
 import { ProjectIcon } from "@/shell/layout/project-icon"
+import { ProjectOptions } from "./project-options"
 import { SettingsList } from "@/settings/list"
 import { SettingsRow } from "@/settings/row"
 import { createEditProjectModel } from "./project-model"
@@ -18,6 +19,7 @@ export const SettingsProjectGeneral: Component<{
   project: LocalProject
   server: ServerConnection.Any
   onOpenServer: () => void
+  onClose: () => void
 }> = (props) => {
   const language = useLanguage()
   const model = createEditProjectModel(props)
@@ -27,16 +29,29 @@ export const SettingsProjectGeneral: Component<{
     <>
       <div class="settings-tab-header">
         <div class="settings-tab-header-row">
-          <div class="flex min-w-0 flex-col gap-1">
-            <h2 class="settings-tab-title truncate">
-              <bdi dir="auto">{model.store.name || displayName(props.project)}</bdi>
-            </h2>
-            <Show when={servers().length > 1}>
-              <button type="button" class="project-settings-server-link" onClick={() => props.onOpenServer()}>
-                <bdi dir="auto">{serverName(props.server) || ServerConnection.key(props.server)}</bdi>
-              </button>
-            </Show>
+          <div class="flex min-w-0 items-center gap-3">
+            <ProjectIcon
+              project={props.project}
+              fallback={model.store.name || model.defaultName()}
+              icon={{
+                color: model.store.color,
+                url: props.project.icon?.url,
+                override: model.store.iconOverride,
+              }}
+              class="!size-8 shrink-0 [&_[data-slot=project-avatar-surface]]:!rounded-[6px] [&_[data-slot=project-avatar-surface]]:!text-[16px]"
+            />
+            <div class="flex min-w-0 flex-col gap-1">
+              <h2 class="settings-tab-title truncate">
+                <bdi dir="auto">{model.store.name || displayName(props.project)}</bdi>
+              </h2>
+              <Show when={servers().length > 1}>
+                <button type="button" class="project-settings-server-link" onClick={() => props.onOpenServer()}>
+                  <bdi dir="auto">{serverName(props.server) || ServerConnection.key(props.server)}</bdi>
+                </button>
+              </Show>
+            </div>
           </div>
+          <ProjectOptions server={props.server} project={props.project} size="large" onClose={props.onClose} />
         </div>
       </div>
 
@@ -48,6 +63,7 @@ export const SettingsProjectGeneral: Component<{
           >
             <div class="project-settings-name">
               <TextInput
+                data-action="settings-project-name"
                 type="text"
                 appearance="base"
                 value={model.store.name}
@@ -64,6 +80,7 @@ export const SettingsProjectGeneral: Component<{
             description={language.t("project.settings.icon.description")}
           >
             <button
+              data-action="settings-project-icon"
               type="button"
               aria-label={language.t("dialog.project.edit.icon.alt")}
               class="project-settings-icon"
@@ -103,14 +120,16 @@ export const SettingsProjectGeneral: Component<{
               title={language.t("dialog.project.edit.color")}
               description={language.t("project.settings.color.description")}
             >
-              <div class="project-settings-colors">
+              <div class="project-settings-colors" data-action="settings-project-color">
                 <For each={PROJECT_AVATAR_VARIANTS}>
                   {(color) => {
                     const selected = () => getProjectAvatarVariant(model.store.color) === color
                     return (
                       <button
                         type="button"
-                        aria-label={language.t("dialog.project.edit.color.select", { color })}
+                        aria-label={language.t("dialog.project.edit.color.select", {
+                          color: language.t(`common.color.${color}`),
+                        })}
                         aria-pressed={selected()}
                         class="project-settings-color"
                         classList={{ "project-settings-color--selected": selected() }}

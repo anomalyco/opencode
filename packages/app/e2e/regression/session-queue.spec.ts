@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
-import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
+import type { OpenCodeEvent, SessionInboxInfo, SessionMessageInfo } from "@opencode/client/promise"
 import { base64Encode } from "@opencode/util/encode"
 import { mockOpenCodeServer } from "../utils/mock-server"
 import { expectAppVisible } from "../utils/waits"
@@ -12,9 +12,14 @@ const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${pr
 type InboxRow = {
   id: string
   sessionID: string
-  timeCreated: number
+  time: { created: number }
   type: "user"
-  payload: { text: string; metadata?: Record<string, unknown> }
+  payload: {
+    text: string
+    metadata?: Record<string, unknown>
+    files?: Extract<SessionInboxInfo, { type: "user" }>["payload"]["files"]
+    agents?: Extract<SessionInboxInfo, { type: "user" }>["payload"]["agents"]
+  }
   delivery: "steer" | "queue"
 }
 
@@ -22,14 +27,14 @@ function createQueueMock(seed: string[], messages: SessionMessageInfo[] = []) {
   const rows: InboxRow[] = seed.map((text, index) => ({
     id: `inb_seed_${index + 1}`,
     sessionID,
-    timeCreated: 1700000000000 + index,
+    time: { created: 1700000000000 + index },
     type: "user",
     payload: { text },
     delivery: "queue",
   }))
   const events: OpenCodeEvent[] = []
   const prompts: Record<string, unknown>[] = []
-  const changes: { inboxID: string; action: "cancel" | "steer" }[] = []
+  const changes: { inboxID: string; action: "cancel" | "steer" | "queue" }[] = []
   const log: string[] = []
   let sequence = 0
   const emit = <Type extends OpenCodeEvent["type"]>(
@@ -59,7 +64,7 @@ function createQueueMock(seed: string[], messages: SessionMessageInfo[] = []) {
       const row: InboxRow = {
         id: typeof input.body.id === "string" ? input.body.id : `inb_mock_${sequence}`,
         sessionID: input.sessionID,
-        timeCreated: Date.now(),
+        time: { created: Date.now() },
         type: "user",
         payload: {
           text: typeof input.body.text === "string" ? input.body.text : "",
@@ -74,7 +79,7 @@ function createQueueMock(seed: string[], messages: SessionMessageInfo[] = []) {
         item: { type: "user", payload: row.payload, delivery: row.delivery },
       })
     },
-    onInboxChange: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" }) => {
+    onInboxChange: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" | "queue" }) => {
       changes.push({ inboxID: input.inboxID, action: input.action })
       log.push(`${input.action}:${input.inboxID}`)
       const index = rows.findIndex((row) => row.id === input.inboxID)
@@ -85,11 +90,11 @@ function createQueueMock(seed: string[], messages: SessionMessageInfo[] = []) {
         emit("session.inbox.cancelled", { sessionID: input.sessionID, inboxID: input.inboxID })
         return
       }
-      row.delivery = "steer"
+      row.delivery = input.action
       emit("session.inbox.delivery.changed", {
         sessionID: input.sessionID,
         inboxID: input.inboxID,
-        delivery: "steer",
+        delivery: input.action,
       })
     },
   }
@@ -234,6 +239,108 @@ test("editing restores the existing draft and replaces only the original queue p
   expect(mock.log[0]).toBe("prompt:queue")
 })
 
+test("Undo cancels only the selected queued prompt and focuses the restored input", async ({ page }) => {
+  const mock = createQueueMock(["first queued prompt", "second queued prompt", "third queued prompt"])
+  const view = await openSession(page, mock)
+  await expect(view.rows).toHaveCount(3)
+
+  const row = view.rows.filter({ hasText: "second queued prompt" })
+  const actions = row.locator('[data-slot="session-queue-actions"] button')
+  await expect(actions).toHaveCount(3)
+  expect(
+    await actions.evaluateAll((buttons) =>
+      buttons.map((button) => button.getAttribute("aria-label") ?? button.textContent?.trim()),
+    ),
+  ).toEqual(["Steer", "Undo", "Remove"])
+  const undo = row.getByRole("button", { name: "Undo" })
+  await expect(undo).toHaveText("")
+  await expect(undo.locator("svg use")).toHaveAttribute("href", "#opencode-v2-icon-arrow-down-to-line")
+  await undo.hover()
+  await expect(page.getByRole("tooltip")).toHaveText("Undo")
+  await undo.click()
+  await expect(view.rows.locator('[data-action="session-queue-edit"]')).toHaveText([
+    "first queued prompt",
+    "third queued prompt",
+  ])
+  await expect(view.input).toHaveText("second queued prompt")
+  await expect(view.input).toBeFocused()
+  expect(mock.changes).toEqual([{ inboxID: "inb_seed_2", action: "cancel" }])
+  expect(mock.prompts).toEqual([])
+})
+
+test("Undo appends to an existing draft and restores inline attachments", async ({ page }) => {
+  const mock = createQueueMock(["queued with image"])
+  mock.rows[0].payload.files = [
+    {
+      data: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL/nwAAAABJRU5ErkJggg==",
+      mime: "image/png",
+      source: { type: "inline" },
+      name: "shot.png",
+    },
+  ]
+  const view = await openSession(page, mock)
+  await view.input.fill("my draft")
+  await view.rows.getByRole("button", { name: "Undo" }).click()
+  await expect(view.rows).toHaveCount(0)
+  await expect(view.input).toHaveText("my draft\n\nqueued with image")
+  await expect(view.input).toBeFocused()
+  await expect(view.composer.getByRole("img", { name: "shot.png" })).toBeVisible()
+  expect(mock.changes).toEqual([{ inboxID: "inb_seed_1", action: "cancel" }])
+})
+
+test("Undo stays usable with a long queue on a narrow screen", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  const text = "Review the detailed error report and check every step of the retry path ".repeat(4)
+  const mock = createQueueMock([text, ...Array.from({ length: 6 }, (_, index) => `queued follow-up ${index + 1}`)])
+  const view = await openSession(page, mock)
+  await expect(view.rows).toHaveCount(7)
+  const row = view.rows.filter({ hasText: text })
+  await row.getByRole("button", { name: "Undo" }).hover()
+  await expect(page.getByRole("tooltip")).toHaveText("Undo")
+  await page.screenshot({ path: testInfo.outputPath("undo-narrow-queue.png") })
+  await row.getByRole("button", { name: "Undo" }).click()
+  await expect(view.rows).toHaveCount(6)
+  await expect(view.input).toHaveText(text)
+  await expect(view.input).toBeFocused()
+  expect(mock.changes).toEqual([{ inboxID: "inb_seed_1", action: "cancel" }])
+})
+
+test("Undo preserves mentioned file and agent references on resubmission", async ({ page }) => {
+  const mock = createQueueMock(["inspect @main.ts with @build"])
+  mock.rows[0].payload.files = [
+    {
+      data: "aGk=",
+      mime: "text/plain",
+      source: { type: "uri", uri: "file:///repo/main.ts" },
+      name: "main.ts",
+      mention: { start: 8, end: 16, text: "@main.ts" },
+    },
+  ]
+  mock.rows[0].payload.agents = [{ name: "build", mention: { start: 22, end: 28, text: "@build" } }]
+  const view = await openSession(page, mock)
+  await view.rows.getByRole("button", { name: "Undo" }).click()
+  await expect(view.input).toHaveText("inspect @main.ts with @build")
+  await view.input.press("Enter")
+  await expect.poll(() => mock.prompts.length).toBe(1)
+  expect(mock.prompts[0].files).toMatchObject([
+    { uri: "data:text/plain;base64,aGk=", mention: { text: "@main.ts", start: 8, end: 16 } },
+  ])
+  expect(mock.prompts[0].agents).toMatchObject([{ name: "build", mention: { text: "@build" } }])
+})
+
+test("Undo does not discard hidden file context", async ({ page }) => {
+  const mock = createQueueMock(["inspect this file"])
+  mock.rows[0].payload.files = [
+    { data: "aGk=", mime: "text/plain", source: { type: "uri", uri: "file:///repo/main.ts" }, name: "main.ts" },
+  ]
+  const view = await openSession(page, mock)
+  await view.rows.getByRole("button", { name: "Undo" }).click()
+  await expect(page.getByText("Edit this prompt in the queue to preserve its file context")).toBeVisible()
+  await expect(view.rows).toHaveCount(1)
+  await expect(view.input).toHaveText("")
+  expect(mock.changes).toEqual([])
+})
+
 for (const delivery of ["steer", "queue"] as const) {
   test(`keeps finished tools above a pending ${delivery === "queue" ? "queue-to-steer" : "steer"} follow-up`, async ({
     page,
@@ -284,7 +391,13 @@ for (const delivery of ["steer", "queue"] as const) {
     await expect(thinking).toHaveCount(0)
 
     // The next assistant step still belongs to U1: U2 has been admitted, not delivered.
-    mock.emit("session.step.started", { sessionID, assistantMessageID: assistantID, agent: "build", model })
+    mock.emit("session.step.started", {
+      sessionID,
+      assistantMessageID: assistantID,
+      agent: "build",
+      model,
+      started: Date.now(),
+    })
     for (const tool of [
       { id: "tool_queue_read", name: "read", input: { path: "src/queue.ts" } },
       { id: "tool_queue_grep", name: "grep", input: { pattern: "retry", path: "src" } },
@@ -309,7 +422,10 @@ for (const delivery of ["steer", "queue"] as const) {
     const tools = page.locator('[data-timeline-part-ids="tool_queue_read,tool_queue_grep"]')
     await expect(tools).toBeVisible()
     await expect(tools).toHaveText(/^Used\s*2\s*Read, Grep$/)
-    await expect(tools.locator('[data-slot="basic-tool-tool-title"]')).toHaveText("Read, Grep")
+    await expect(tools.locator('[data-component="context-tool-group-trigger"]')).toHaveAttribute(
+      "aria-label",
+      "Used 2 Read, Grep",
+    )
     await expect(thinking).toHaveCount(0)
     await expect(pending).toBeVisible()
     expect(mock.rows.map((row) => ({ id: row.id, delivery: row.delivery }))).toEqual([
@@ -341,7 +457,7 @@ for (const delivery of ["steer", "queue"] as const) {
     )
 
     const later = { sessionID, assistantMessageID: "msg_queue_follow_up_assistant" }
-    mock.emit("session.step.started", { ...later, agent: "build", model })
+    mock.emit("session.step.started", { ...later, agent: "build", model, started: Date.now() })
     mock.emit("session.text.started", { ...later, ordinal: 0 })
     mock.emit("session.text.ended", { ...later, ordinal: 0, text: "A3: Now checking the retry path for U2." })
     const response = transcript

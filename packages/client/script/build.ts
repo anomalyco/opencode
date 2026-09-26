@@ -35,7 +35,6 @@ import { Shell } from "@opencode/schema/shell"
 import { Skill } from "@opencode/schema/skill"
 import { Vcs } from "@opencode/schema/vcs"
 import { WebSearch } from "@opencode/schema/websearch"
-import { Workspace } from "@opencode/schema/workspace"
 import { Effect, Schema } from "effect"
 import { fileURLToPath } from "url"
 
@@ -53,7 +52,8 @@ const effectTypeReferences = [
   ...namespaceTypes("Form", "@opencode/schema/form", Form),
   ...namespaceTypes("InstructionEntry", "@opencode/schema/instruction-entry", InstructionEntry),
   ...namespaceTypes("Integration", "@opencode/schema/integration", Integration),
-  ...namespaceTypes("Location", "@opencode/schema/location", Location),
+  typeReference("Location.PublicRef", "@opencode/schema/location", Location.PublicRef),
+  typeReference("Location.PublicInfo", "@opencode/schema/location", Location.PublicInfo),
   ...namespaceTypes("Mcp", "@opencode/schema/mcp", Mcp),
   ...namespaceTypes("Model", "@opencode/schema/model", Model),
   ...namespaceTypes("Permission", "@opencode/schema/permission", Permission),
@@ -74,7 +74,6 @@ const effectTypeReferences = [
   ...namespaceTypes("Skill", "@opencode/schema/skill", Skill),
   ...namespaceTypes("Vcs", "@opencode/schema/vcs", Vcs),
   ...namespaceTypes("WebSearch", "@opencode/schema/websearch", WebSearch),
-  ...namespaceTypes("Workspace", "@opencode/schema/workspace", Workspace),
   typeReference("Prompt", "@opencode/schema/prompt", Prompt),
   typeReference("PromptMention", "@opencode/schema/prompt", PromptMention),
   typeReference("FileAttachment", "@opencode/schema/prompt", FileAttachment),

@@ -2,7 +2,7 @@ import { checksum } from "@opencode/util/encode"
 import { parseSmallMarkdown } from "@opencode/ui/context/marked-base"
 import DOMPurify from "dompurify"
 import { MarkdownWorkerDisposedError, parseMarkdown } from "./markdown-worker"
-import { localImagePath } from "./markdown-image"
+import { localImagePath, localLinkPath } from "./markdown-image"
 
 export type MarkdownCacheEntry = {
   raw: string
@@ -29,6 +29,18 @@ const config = {
 
 if (typeof window !== "undefined" && purifier.isSupported) {
   purifier.addHook("beforeSanitizeAttributes", (node) => {
+    if (node instanceof HTMLAnchorElement) {
+      // Local file links never navigate the document; the host decides how to open them.
+      node.removeAttribute("data-local-link")
+      const path = localLinkPath(node.getAttribute("href") ?? "")
+      if (!path) return
+      node.setAttribute("data-local-link", path)
+      node.setAttribute("role", "link")
+      node.setAttribute("tabindex", "0")
+      node.removeAttribute("href")
+      node.removeAttribute("target")
+      return
+    }
     if (!(node instanceof HTMLImageElement)) return
     // Local paths are not browser URLs. Keep them inert until the host reads them.
     node.removeAttribute("data-local-image")

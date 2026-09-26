@@ -10,7 +10,7 @@ import { useRoute } from "../context/route"
 import { useData } from "../context/data"
 import { Keymap } from "../context/keymap"
 import { Locale } from "../util/locale"
-import { useTheme, useThemes } from "../context/theme"
+import { useTheme } from "../context/theme"
 import { useClient } from "../context/client"
 import { useLocal } from "../context/local"
 import { createDebouncedSignal } from "../util/signal"
@@ -29,9 +29,7 @@ export function DialogSessionList() {
   const dialog = useDialog()
   const route = useRoute()
   const data = useData()
-  const themes = useThemes()
-  const theme = useTheme("elevated")
-  const mode = themes.mode
+  const theme = useTheme().surface("dialog")
   const client = useClient()
   const local = useLocal()
   const sessionTabs = useSessionTabs()
@@ -178,7 +176,7 @@ export function DialogSessionList() {
             ? (color: RGBA) => <Spinner color={color} />
             : slot === undefined
               ? undefined
-              : () => <text fg={theme.hue.accent[mode() === "light" ? 800 : 200]}>{slot}</text>,
+              : () => <text fg={theme.hue.accent[200]}>{slot}</text>,
       }
     }
 
@@ -199,11 +197,11 @@ export function DialogSessionList() {
       title="Sessions"
       titleView={
         <box flexDirection="row">
-          <text fg={theme.text.default} attributes={TextAttributes.BOLD}>
+          <text fg={theme.text.base} attributes={TextAttributes.BOLD}>
             Sessions
           </text>
           <Show when={!allProjects() && currentProjectName()}>
-            <text fg={theme.text.subdued}> for {currentProjectName()}</text>
+            <text fg={theme.text.muted}> for {currentProjectName()}</text>
           </Show>
         </box>
       }
@@ -228,14 +226,14 @@ export function DialogSessionList() {
       ]}
       emptyView={
         <box paddingLeft={4} paddingRight={4}>
-          <text fg={searchState().error ? theme.text.feedback.error.default : theme.text.subdued}>
+          <text fg={searchState().error ? theme.text.feedback.error.base : theme.text.muted}>
             {searchState().message}
           </text>
         </box>
       }
       noMatchView={
         <box paddingLeft={4} paddingRight={4}>
-          <text fg={searchState().error ? theme.text.feedback.error.default : theme.text.subdued}>
+          <text fg={searchState().error ? theme.text.feedback.error.base : theme.text.muted}>
             {searchState().message}
           </text>
         </box>

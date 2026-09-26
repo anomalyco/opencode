@@ -36,7 +36,7 @@ export default defineConfig({
   },
   build: {
     ...(process.env.VITE_OPENCODE_TEST_FIXTURES === "1"
-      ? { rolldownOptions: { input: ["index.html", "e2e/utils/settings-wsl.html"] } }
+      ? { rolldownOptions: { input: ["index.html", "e2e/utils/settings-wsl.html", "e2e/utils/app-direction.html"] } }
       : {}),
     assetsDir: "_assets",
     target: "esnext",

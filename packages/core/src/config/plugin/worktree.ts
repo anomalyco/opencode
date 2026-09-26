@@ -7,7 +7,7 @@ import { Config } from "../../config.js"
 import { Global } from "@opencode/util/global"
 import { Location } from "../../location.js"
 import { AbsolutePath } from "../../schema.js"
-import { Worktree } from "../../worktree.js"
+import { WorktreeStrategies } from "../../worktree/strategies.js"
 import { ConfigEntryObserver } from "./entry-observer.js"
 
 export const Plugin = define({
@@ -16,7 +16,7 @@ export const Plugin = define({
     const config = yield* Config.Service
     const location = yield* Location.Service
     const global = yield* Global.Service
-    const worktrees = yield* Worktree.Service
+    const worktrees = yield* WorktreeStrategies.Service
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, worktrees.reload())
     yield* worktrees.transform((editor) => {
       for (const entry of loaded.entries) {

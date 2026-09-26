@@ -46,14 +46,14 @@ describe("ToolOutput", () => {
           expect(yield* fs.readFileString(outputPath)).toBe("one\ntwo\nthree")
           expect(result.content).toEqual([
             { type: "text", text: "one\ntwo" },
-            { type: "text", text: `... 1 line truncated; full content saved to ${outputPath} ...` },
+            { type: "text", text: `[showing lines 1-2 of 3; full output saved to ${outputPath}]` },
           ])
         }),
       { maxLines: 2, maxBytes: 1_000 },
     ),
   )
 
-  it.live("reports bytes omitted by the byte limit", () =>
+  it.live("reports lines shown under the byte limit", () =>
     withStore(
       (output) =>
         Effect.gen(function* () {
@@ -62,7 +62,7 @@ describe("ToolOutput", () => {
             { type: "text", text: "one" },
             {
               type: "text",
-              text: expect.stringMatching(/^\.\.\. 4 bytes truncated; full content saved to .+ \.\.\.$/),
+              text: expect.stringMatching(/^\[showing lines 1-1 of 2; full output saved to .+\]$/),
             },
           ])
         }),
@@ -82,7 +82,7 @@ describe("ToolOutput", () => {
             { type: "text", text: "before" },
             file,
             { type: "text", text: "after" },
-            { type: "text", text: expect.stringMatching(/^\.\.\. 1 line truncated; full content saved to /) },
+            { type: "text", text: expect.stringMatching(/^\[showing lines 1-2 of 3; full output saved to /) },
           ])
         }),
       { maxLines: 2, maxBytes: 1_000 },
@@ -130,7 +130,7 @@ describe("ToolOutput", () => {
           const result = yield* output.truncate({ content: [{ type: "text", text: "one\n" }] })
           expect(result.content).toEqual([
             { type: "text", text: "one" },
-            { type: "text", text: expect.stringMatching(/^\.\.\. 1 byte truncated; full content saved to /) },
+            { type: "text", text: expect.stringMatching(/^\[showing lines 1-1 of 1; full output saved to /) },
           ])
         }),
       { maxLines: 2, maxBytes: 3 },

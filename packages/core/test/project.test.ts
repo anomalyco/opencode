@@ -18,7 +18,7 @@ import { testEffect } from "./lib/effect"
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([Project.node, Database.node, Bus.node])))
 
 describe("Project.list", () => {
-  it.effect("returns complete projects ordered by recent update", () =>
+  it.effect("returns complete projects ordered by recent activity", () =>
     Effect.gen(function* () {
       const db = (yield* Database.Service).db
       const project = yield* Project.Service
@@ -35,6 +35,7 @@ describe("Project.list", () => {
             sandboxes: [abs("/older/sandbox")],
             time_created: 1,
             time_updated: 1,
+            time_active: 4,
           },
           {
             id: Project.ID.make("newer"),
@@ -43,17 +44,12 @@ describe("Project.list", () => {
             time_created: 2,
             time_updated: 2,
             time_initialized: 3,
+            time_active: 3,
           },
         ])
         .run()
 
       expect(yield* project.list()).toEqual([
-        {
-          id: Project.ID.make("newer"),
-          canonical: abs("/newer"),
-          time: { created: 2, updated: 2, initialized: 3 },
-          sandboxes: [],
-        },
         {
           id: Project.ID.make("older"),
           canonical: abs("/older"),
@@ -61,8 +57,14 @@ describe("Project.list", () => {
           name: "Older",
           icon: { color: "#000000" },
           commands: { start: "bun dev" },
-          time: { created: 1, updated: 1 },
+          time: { created: 1, updated: 1, active: 4 },
           sandboxes: [abs("/older/sandbox")],
+        },
+        {
+          id: Project.ID.make("newer"),
+          canonical: abs("/newer"),
+          time: { created: 2, updated: 2, active: 3 },
+          sandboxes: [],
         },
       ])
     }),
@@ -83,6 +85,7 @@ describe("Project.update", () => {
           sandboxes: [],
           time_created: 1,
           time_updated: 1,
+          time_active: 1,
         })
         .run()
 
@@ -111,9 +114,32 @@ describe("Project.update", () => {
       expect((yield* project.list())[0]).toEqual({
         id,
         canonical: abs("/update"),
-        time: { created: 1, updated: expect.any(Number) },
+        time: { created: 1, updated: expect.any(Number), active: 1 },
         sandboxes: [],
       })
+    }),
+  )
+})
+
+describe("Project.activate", () => {
+  it.effect("records activity without editing metadata time and throttles repeats", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      const project = yield* Project.Service
+      const id = Project.ID.make("activate")
+      yield* db
+        .insert(ProjectTable)
+        .values({ id, worktree: abs("/activate"), sandboxes: [], time_created: 1, time_updated: 1, time_active: 1 })
+        .run()
+
+      yield* project.activate(id)
+      const first = (yield* project.list())[0]
+      expect(first?.time.updated).toBe(1)
+      expect(first?.time.active).toBeGreaterThan(1)
+
+      yield* db.update(ProjectTable).set({ time_active: 2, time_updated: 1 }).run()
+      yield* project.activate(id)
+      expect((yield* project.list())[0]?.time).toEqual({ created: 1, updated: 1, active: 2 })
     }),
   )
 })
@@ -551,7 +577,7 @@ describe("Project.resolve", () => {
         icon: { color: "#123456" },
         commands: { start: "bun dev" },
         sandboxes: [abs("/preserved-sandbox")],
-        time: { created: 1, initialized: 2 },
+        time: { created: 1 },
       })
     }),
   )

@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "jev-latest",
+    "tags": [
+      "prefix:typesafe-evaluation",
+      "provider:typesafe-ai",
+      "protocol:system-one"
+    ],
+    "name": "typesafe-evaluation/evaluates-choice-score-and-boolean-questions",
+    "recordedAt": "2026-09-22T03:44:28.626Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.typesafe.ai/v1/systemone",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"jev-latest\",\"state\":\"I was charged twice for the same invoice. Please refund the duplicate payment today.\",\"questions\":{\"department\":{\"type\":\"choice\",\"instructions\":\"Which team should handle this support request?\",\"criteria\":{\"billing\":\"Payments, invoices, refunds, or failed charges\",\"technical\":\"Bugs, outages, or integrations\",\"sales\":\"Pricing, upgrades, or new accounts\"}},\"urgency\":{\"type\":\"score\",\"instructions\":\"How urgent is this support request?\",\"criteria\":[\"Can wait for normal support\",\"Needs prompt attention\",\"Actively blocking revenue\"]},\"refund\":{\"type\":\"noul\",\"instructions\":\"Is the customer asking for a refund?\"}}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"jev-1.13.0\",\"answers\":{\"department\":{\"type\":\"choice\",\"choice\":\"billing\",\"confidence\":1.0,\"probabilities\":{\"billing\":1.0,\"sales\":0.0,\"technical\":0.0}},\"urgency\":{\"type\":\"score\",\"score\":1.01,\"confidence\":0.97,\"legend\":{\"0\":\"Can wait for normal support\",\"1\":\"Needs prompt attention\",\"2\":\"Actively blocking revenue\"},\"probabilities\":{\"0\":0.0,\"1\":0.98,\"2\":0.02}},\"refund\":{\"type\":\"noul\",\"noul\":0.99}},\"usage\":{\"input_tokens\":422,\"output_tokens\":69}}"
+      }
+    }
+  ]
+}

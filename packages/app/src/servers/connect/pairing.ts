@@ -1,13 +1,5 @@
-import { Option, Schema } from "effect"
+import { OpenCode } from "@opencode/client/promise"
 import { normalizeServerUrl } from "@/runtime/server/registry"
-
-const pairing = Schema.fromJsonString(
-  Schema.Struct({
-    urls: Schema.Array(Schema.String),
-    username: Schema.Literal("opencode"),
-    password: Schema.String,
-  }),
-)
 
 export function serverAddress(value: string) {
   if (value.includes("://") && !/^https?:\/\//.test(value.trim())) return
@@ -19,10 +11,23 @@ export function serverAddress(value: string) {
   return normalized
 }
 
-export function decodePairingCode(value: string) {
-  const result = Schema.decodeUnknownOption(pairing)(value)
-  if (Option.isNone(result)) return
-  const urls = [...new Set(result.value.urls.map(serverAddress).filter((url) => url !== undefined))]
-  if (!urls.length) return
-  return { urls, password: result.value.password }
+// Links printed by `opencode pair` carry a single-use code that the server exchanges for a session token.
+export function pairingLink(value: string) {
+  const url = URL.parse(value.trim())
+  if (!url || (url.protocol !== "http:" && url.protocol !== "https:")) return
+  const code = /^\/auth\/connect\/([A-Za-z0-9_-]+)$/.exec(url.pathname)?.[1]
+  const address = serverAddress(url.origin)
+  if (!code || !address) return
+  return { url: address, code }
+}
+
+export type Pairing = { readonly url: string; readonly password: string }
+
+export function redeemPairingLink(link: { url: string; code: string }) {
+  return OpenCode.make({ baseUrl: link.url })
+    .server.connect({ code: link.code })
+    .then(
+      (session): Pairing => ({ url: link.url, password: session.token }),
+      () => undefined,
+    )
 }

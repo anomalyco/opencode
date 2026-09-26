@@ -10,6 +10,7 @@ import { LayoutProvider } from "@/shell/state/layout"
 import { SettingsSurfaceProvider } from "@/settings/surface"
 import Shell from "@/shell/shell"
 import { requireServerKey } from "./session"
+import { DesktopPairingCommand } from "@/shell/commands/desktop"
 
 export const File = lazy(() => import("@opencode/session-ui/file").then((module) => ({ default: module.File })))
 const loadSessionRoute = () => Promise.all([import("@/session/route"), File.preload()]).then(([module]) => module)
@@ -75,10 +76,18 @@ function TargetServerRoute(props: ParentProps) {
 
 function AppLayout(props: ParentProps) {
   const servers = useServers()
+  const global = useGlobal()
+  // A lone server that rejects our credentials (e.g. the web app before pairing) has nothing else to show.
+  const signedOut = () => {
+    const only = servers.list.length === 1 ? servers.list[0] : undefined
+    if (only?.type !== "http") return
+    return global.servers.health[ServerConnection.key(only)]?.unauthorized ? only : undefined
+  }
   return (
-    <Show when={servers.list.length > 0} fallback={<ConnectServerScreen />}>
+    <Show when={servers.list.length > 0 && !signedOut()} fallback={<ConnectServerScreen url={signedOut()?.http.url} />}>
       <LayoutProvider>
         <SettingsSurfaceProvider>
+          <DesktopPairingCommand />
           <BrowserAttachmentsProvider>
             <Shell>{props.children}</Shell>
           </BrowserAttachmentsProvider>

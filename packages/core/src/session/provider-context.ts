@@ -2,7 +2,7 @@ export * as SessionProviderContext from "./provider-context.js"
 
 import { Message } from "@opencode/ai"
 import { SessionProviderContext } from "@opencode/schema/session-provider-context"
-import { Schema } from "effect"
+import { Predicate, Schema } from "effect"
 import { isDeepStrictEqual } from "node:util"
 import { Hash } from "@opencode/util/hash"
 import type { SessionMessage } from "./message.js"
@@ -45,25 +45,40 @@ export const isCheckpoint = (
   message.type === "compaction" && message.status === "completed" && message.providerContext !== undefined
 
 /** Stores the canonical replacement, not a local summary or transport continuation.
- * Provider and attachment metadata can contain optional undefined entries. Use JSON's
- * omission semantics, while preserving canonical binary media as equivalent base64.
+ * Provider and attachment metadata can contain optional undefined entries, which the Schema JSON
+ * codec rejects, so use JSON's omission semantics; `Media.Asset.toJSON` keeps binary media as base64.
  */
 export const encode = (provenance: Provenance, replacement: ReadonlyArray<Message>): Info => ({
   version: 1,
   provenance,
-  messages: Schema.decodeSync(Schema.fromJsonString(Schema.Json))(
-    JSON.stringify(
-      replacement.map((message) => ({
-        ...message,
-        content: message.content.map((part) =>
-          part.type === "media" && part.data instanceof Uint8Array
-            ? { ...part, data: Buffer.from(part.data).toString("base64") }
-            : part,
-        ),
-      })),
-    ),
-  ),
+  messages: Schema.decodeSync(Schema.fromJsonString(Schema.Json))(JSON.stringify(replacement)),
 })
 
-export const decode = (context: Info) => Schema.decodeUnknownSync(messages)(context.messages)
-export const validate = (context: Info) => Schema.decodeUnknownEffect(messages)(context.messages)
+export const decode = (context: Info) => Schema.decodeUnknownSync(messages)(upgradeLegacyMedia(context.messages))
+export const validate = (context: Info) => Schema.decodeUnknownEffect(messages)(upgradeLegacyMedia(context.messages))
+
+/**
+ * Before 2.0.15, version-1 checkpoints stored mediaType/data directly on media parts. Core only built
+ * those parts from prompt attachments, whose data the Prompt schema guarantees is base64.
+ */
+function upgradeLegacyMedia(input: Info["messages"]) {
+  if (!Array.isArray(input)) return input
+  return input.map((message: unknown) => {
+    if (!Predicate.isObject(message) || !Array.isArray(message.content)) return message
+    return {
+      ...message,
+      content: message.content.map((part: unknown) => {
+        if (
+          !Predicate.isObject(part) ||
+          part.type !== "media" ||
+          part.media !== undefined ||
+          typeof part.mediaType !== "string" ||
+          typeof part.data !== "string"
+        )
+          return part
+        const { mediaType, data, ...rest } = part
+        return { ...rest, media: { source: { type: "base64", data, mediaType } } }
+      }),
+    }
+  })
+}

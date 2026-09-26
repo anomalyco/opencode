@@ -100,6 +100,7 @@ for (const fixture of [
       )
       const result = yield* steps
         .attempt({
+          isLocationClosed: () => false,
           sessionID,
           assistantMessageID,
           agent: Agent.defaultID,

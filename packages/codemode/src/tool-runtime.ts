@@ -1,5 +1,6 @@
 import { Cause, Effect, Exit, Formatter, Schema } from "effect"
-import { fromData, toData, ToolRuntimeError } from "./data.js"
+import type { Json } from "./data.js"
+import type { DiagnosticKind } from "./codemode.js"
 import { toolError } from "./tool-error.js"
 import {
   decodeInput as decodeToolInput,
@@ -35,26 +36,48 @@ export type ToolCall = {
   readonly name: string
 }
 
-export type ToolCallStarted = {
-  readonly index: number
+/** A tool call the program is making, with its decoded input. */
+export type ToolInvocation = { readonly name: string; readonly input: unknown }
+
+/** A call the program is making to an extension global, with its arguments. */
+export type ExtensionInvocation = {
+  readonly extension: string
   readonly name: string
-  readonly input: unknown
+  readonly args: ReadonlyArray<unknown>
 }
 
-export type ToolCallEnded = {
-  readonly index: number
-  readonly name: string
-  readonly input: unknown
-  readonly durationMs: number
-  readonly outcome: "success" | "failure" | "interrupted"
-  readonly message?: string
+/** How a call ended; `after` hooks observe it and cannot change it. */
+export type CallResult =
+  | { readonly status: "success"; readonly value: unknown }
+  | { readonly status: "failure"; readonly error: unknown }
+  | { readonly status: "interrupted" }
+
+/** Hooks around every call the program makes into the host. A failing `before` denies the call. */
+export type Hooks<R = never> = {
+  readonly "tool.before"?: ((call: ToolInvocation) => Effect.Effect<void, unknown, R>) | undefined
+  readonly "tool.after"?: ((call: ToolInvocation, result: CallResult) => Effect.Effect<void, never, R>) | undefined
+  readonly "extension.before"?: ((call: ExtensionInvocation) => Effect.Effect<void, unknown, R>) | undefined
+  readonly "extension.after"?:
+    | ((call: ExtensionInvocation, result: CallResult) => Effect.Effect<void, never, R>)
+    | undefined
 }
 
-export type ToolCallHooks<R = never> = {
-  /** Observes decoded tool input immediately before tool execution. */
-  readonly onToolCallStart?: ((call: ToolCallStarted) => Effect.Effect<void, never, R>) | undefined
-  /** Observes each admitted tool call as it succeeds, fails, or is interrupted. */
-  readonly onToolCallEnd?: ((call: ToolCallEnded) => Effect.Effect<void, never, R>) | undefined
+/** Runs `before`, then `run`, then `after` with how it ended, including when interrupted. */
+export const hooked = <Call, A, R>(
+  call: Call,
+  before: ((call: Call) => Effect.Effect<void, unknown, R>) | undefined,
+  after: ((call: Call, result: CallResult) => Effect.Effect<void, never, R>) | undefined,
+  run: Effect.Effect<A, unknown, R>,
+): Effect.Effect<A, unknown, R> => {
+  const observed =
+    after === undefined
+      ? run
+      : Effect.onExit(run, (exit) => {
+          if (Exit.isSuccess(exit)) return after(call, { status: "success", value: exit.value })
+          if (Cause.hasInterruptsOnly(exit.cause)) return after(call, { status: "interrupted" })
+          return after(call, { status: "failure", error: Cause.squash(exit.cause) })
+        })
+  return before === undefined ? observed : Effect.andThen(before(call), observed)
 }
 
 export type ToolDescription = {
@@ -143,15 +166,24 @@ const flattenTools = <R>(
   ]
 }
 
-const describeTool = <R>(visible: VisibleTool<R>): ToolDescription => ({
-  path: visible.path,
-  description: visible.tool.description,
-  signature: isEmptyInput(visible.tool)
-    ? `${toolExpression(visible.path)}(): Promise<${outputTypeScript(visible.tool, true)}>`
-    : `${toolExpression(visible.path)}(input: ${inputTypeScript(visible.tool, true)}): Promise<${outputTypeScript(visible.tool, true)}>`,
-})
+const describeTool = <R>(visible: VisibleTool<R>): ToolDescription => {
+  let signature: string | undefined
+  return {
+    path: visible.path,
+    description: visible.tool.description,
+    get signature() {
+      // Search ranks paths and descriptions first; only returned matches need their schemas rendered.
+      // Joining the final fragments avoids retaining the rendering's intermediate string ropes in JSC.
+      return (signature ??= [
+        toolExpression(visible.path),
+        isEmptyInput(visible.tool) ? "()" : `(${inputTypeScript(visible.tool, true)})`,
+        `: Promise<${outputTypeScript(visible.tool, true)}>`,
+      ].join(""))
+    },
+  }
+}
 
-/** Tools indexed once per runtime: the lookup trie plus the model-facing catalog and search index. */
+/** Tools indexed once per runtime, with discovery materialized on demand. */
 export type Prepared<R = never> = {
   readonly root: ToolNode<R>
   readonly catalog: ReadonlyArray<ToolDescription>
@@ -160,6 +192,8 @@ export type Prepared<R = never> = {
 
 export type SearchEntry = {
   readonly description: ToolDescription
+  /** The path split into words, so `zones` matches `get_zones` as a word rather than as a substring of `timezones`. */
+  readonly pathWords: ReadonlyArray<string>
   readonly searchText: string
 }
 
@@ -177,6 +211,32 @@ const termForms = (term: string): Array<string> => {
   return forms
 }
 
+const rank = (entries: ReadonlyArray<SearchEntry>, query: string): Array<SearchEntry> => {
+  const terms = tokenize(query).map(termForms)
+  return entries
+    .map((entry) => {
+      const path = entry.description.path.toLowerCase()
+      const description = entry.description.description.toLowerCase()
+      const score = terms.reduce(
+        (total, forms) =>
+          total +
+          (forms.some((form) => path === form || path.endsWith(`.${form}`)) ? 20 : 0) +
+          (forms.some((form) => entry.pathWords.includes(form)) ? 12 : 0) +
+          (forms.some((form) => path.includes(form)) ? 8 : 0) +
+          (forms.some((form) => description.includes(form)) ? 4 : 0) +
+          (forms.some((form) => entry.searchText.includes(form)) ? 2 : 0),
+        0,
+      )
+      return { entry, score }
+    })
+    .filter(({ score }) => terms.length === 0 || score > 0)
+    .sort(
+      (left, right) =>
+        right.score - left.score || compareText(left.entry.description.path, right.entry.description.path),
+    )
+    .map(({ entry }) => entry)
+}
+
 const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>): Tool => ({
   _tag: "CodeModeTool",
   description: "Search available tools",
@@ -187,14 +247,15 @@ const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>): Tool => ({
       const request = input as typeof SearchInput.Type
       const query = request.query ?? ""
       const offset = request.offset ?? 0
+      let ns = request.namespace
+      if (ns !== undefined && !searchIndex.some((entry) => entry.description.path.startsWith("tools."))) {
+        if (ns === "tools") ns = undefined
+        else if (ns.startsWith("tools.")) ns = ns.slice("tools.".length)
+      }
       const scoped =
-        request.namespace === undefined
+        ns === undefined
           ? searchIndex
-          : searchIndex.filter(
-              (entry) =>
-                entry.description.path === request.namespace ||
-                entry.description.path.startsWith(`${request.namespace}.`),
-            )
+          : searchIndex.filter((entry) => entry.description.path === ns || entry.description.path.startsWith(`${ns}.`))
       const trimmed = query.trim()
       const pathQuery = trimmed.startsWith("tools.") ? trimmed.slice("tools.".length) : trimmed
       const exact =
@@ -203,31 +264,7 @@ const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>): Tool => ({
           : scoped.find(
               (entry) => entry.description.path === pathQuery || toolExpression(entry.description.path) === trimmed,
             )
-      const terms = tokenize(query).map(termForms)
-      const ranked =
-        exact !== undefined
-          ? [exact]
-          : scoped
-              .map((entry) => {
-                const path = entry.description.path.toLowerCase()
-                const description = entry.description.description.toLowerCase()
-                const score = terms.reduce(
-                  (total, forms) =>
-                    total +
-                    (forms.some((form) => path === form || path.endsWith(`.${form}`)) ? 20 : 0) +
-                    (forms.some((form) => path.includes(form)) ? 8 : 0) +
-                    (forms.some((form) => description.includes(form)) ? 4 : 0) +
-                    (forms.some((form) => entry.searchText.includes(form)) ? 2 : 0),
-                  0,
-                )
-                return { entry, score }
-              })
-              .filter(({ score }) => terms.length === 0 || score > 0)
-              .sort(
-                (left, right) =>
-                  right.score - left.score || compareText(left.entry.description.path, right.entry.description.path),
-              )
-              .map(({ entry }) => entry)
+      const ranked = exact !== undefined ? [exact] : rank(scoped, query)
       const items = ranked.slice(offset, offset + (request.limit ?? defaultSearchLimit)).map(({ description }) => ({
         ...description,
         path: toolExpression(description.path),
@@ -244,11 +281,12 @@ const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>): Tool => ({
 /** Exact callable signature of the built-in `search` function, for host-owned instructions. */
 export const searchSignature = (() => {
   const tool = makeSearchTool([])
-  return `search(input: ${inputTypeScript(tool, true)}): ${outputTypeScript(tool, true)}`
+  return `search(${inputTypeScript(tool, true)}): ${outputTypeScript(tool, true)}`
 })()
 
 const toSearchEntry = <R>(visible: VisibleTool<R>): SearchEntry => ({
   description: describeTool(visible),
+  pathWords: tokenize(visible.path),
   searchText: [
     visible.path,
     visible.tool.description,
@@ -263,12 +301,20 @@ const toSearchEntry = <R>(visible: VisibleTool<R>): SearchEntry => ({
 
 export const prepare = <R>(tools: Tools<R>): Prepared<R> => {
   const root = toolTrie(tools)
-  // Discovery bytes are durable instructions, so order only after canonical-path collisions settle.
-  const visible = flattenTools(root).sort((left, right) => compareText(left.path, right.path))
+  let searchIndex: ReadonlyArray<SearchEntry> | undefined
+  let catalog: ReadonlyArray<ToolDescription> | undefined
   return {
     root,
-    catalog: visible.map(describeTool),
-    searchIndex: visible.map(toSearchEntry),
+    get catalog() {
+      return (catalog ??= this.searchIndex.map((entry) => entry.description))
+    },
+    get searchIndex() {
+      // Executing known tools only needs the trie. Render discovery when it is actually read,
+      // ordering after canonical-path collisions settle so instruction bytes stay deterministic.
+      return (searchIndex ??= flattenTools(root)
+        .sort((left, right) => compareText(left.path, right.path))
+        .map(toSearchEntry))
+    },
   }
 }
 
@@ -284,13 +330,23 @@ const namespaceKeys = <R>(root: ToolNode<R>, path: ReadonlyArray<string>): Reado
   return Array.from(node.children.keys())
 }
 
-const resolve = <R>(root: ToolNode<R>, path: ReadonlyArray<string>): Tool<R> => {
+const resolve = <R>(root: ToolNode<R>, path: ReadonlyArray<string>, index: ReadonlyArray<SearchEntry>): Tool<R> => {
   const segments = canonicalSegments(path)
   const node = lookup(root, segments)
   if (node === undefined) {
-    throw new ToolRuntimeError("UnknownTool", `Unknown tool '${segments.join(".")}'.`, [
-      "The tool may have been removed or renamed. Use search to find available tools.",
-    ])
+    const name = segments.join(".")
+    const ns = segments.length > 1 && root.children.has(segments[0]) ? segments[0] : undefined
+    const closest = rank(
+      ns ? index.filter((entry) => entry.description.path.startsWith(`${ns}.`)) : index,
+      ns ? segments.slice(1).join(" ") : name,
+    )[0]
+    throw new ToolRuntimeError(
+      "UnknownTool",
+      closest
+        ? `Unknown tool '${name}'. Did you mean ${toolExpression(closest.description.path)}?`
+        : `Unknown tool '${name}'.`,
+      ["Use search to find available tools."],
+    )
   }
   if (node.tool === undefined) {
     throw new ToolRuntimeError("UnknownTool", `Tool '${segments.join(".")}' is not callable.`)
@@ -298,10 +354,29 @@ const resolve = <R>(root: ToolNode<R>, path: ReadonlyArray<string>): Tool<R> => 
   return node.tool
 }
 
+export class ToolRuntimeError extends Error {
+  constructor(
+    readonly kind: Extract<
+      DiagnosticKind,
+      "UnknownTool" | "InvalidToolInput" | "InvalidToolOutput" | "ToolCallLimitExceeded"
+    >,
+    message: string,
+    readonly suggestions: ReadonlyArray<string> = [],
+  ) {
+    super(message)
+    this.name = "ToolRuntimeError"
+  }
+}
+
+/** The tool bridge of one execution. Arguments arrive and results leave as JSON; program values never enter. */
 export type ToolRuntime<R = never> = {
   readonly calls: Array<ToolCall>
-  readonly execute: (path: ReadonlyArray<string>, args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
-  readonly search: (args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
+  readonly hooks: Hooks<R>
+  readonly execute: (
+    path: ReadonlyArray<string>,
+    args: Array<Json | undefined>,
+  ) => Effect.Effect<Json | undefined, unknown, R>
+  readonly search: (args: Array<Json | undefined>) => Effect.Effect<Json | undefined, unknown, R>
   readonly keys: (path: ReadonlyArray<string>) => ReadonlyArray<string>
 }
 
@@ -309,27 +384,10 @@ export type ToolRuntime<R = never> = {
 export const make = <R>(
   prepared: Prepared<R>,
   maxToolCalls: number | undefined,
-  hooks?: ToolCallHooks<R>,
+  hooks: Hooks<R> = {},
 ): ToolRuntime<R> => {
   const calls: Array<ToolCall> = []
   const root = prepared.root
-  const searchTool = makeSearchTool(prepared.searchIndex)
-
-  const observeEnd = <A, E>(effect: Effect.Effect<A, E, R>, call: ToolCallStarted): Effect.Effect<A, E, R> => {
-    const onEnd = hooks?.onToolCallEnd
-    if (onEnd === undefined) return effect
-    const startedAt = Date.now()
-    return effect.pipe(
-      Effect.onExit((exit) => {
-        const durationMs = Date.now() - startedAt
-        if (Exit.isSuccess(exit)) return onEnd({ ...call, durationMs, outcome: "success" })
-        if (Cause.hasInterruptsOnly(exit.cause)) return onEnd({ ...call, durationMs, outcome: "interrupted" })
-        const error = Cause.squash(exit.cause)
-        const message = error instanceof Error ? error.message : Cause.pretty(exit.cause)
-        return onEnd({ ...call, durationMs, outcome: "failure", message })
-      }),
-    )
-  }
 
   const recordCall = (call: ToolCall): void => {
     if (maxToolCalls !== undefined && calls.length >= maxToolCalls) {
@@ -338,9 +396,9 @@ export const make = <R>(
     calls.push(call)
   }
 
-  const executeTool = (name: string, tool: Tool<R>, externalArgs: Array<unknown>) =>
+  const executeTool = (name: string, tool: Tool<R>, args: Array<Json | undefined>) =>
     Effect.gen(function* () {
-      const normalized = externalArgs.length === 0 ? [{}] : externalArgs
+      const normalized = args.length === 0 ? [{}] : args
       if (normalized.length !== 1)
         throw new ToolRuntimeError("InvalidToolInput", `Tool '${name}' expects at most one input object.`)
       const input = yield* Effect.try({
@@ -352,14 +410,12 @@ export const make = <R>(
             name === "search" ? [] : ["The signature may have changed. Use search to get the current signature."],
           ),
       })
-      const index = yield* Effect.sync(() => {
-        recordCall({ name })
-        return calls.length - 1
-      })
-      const call = { index, name, input }
-      return yield* observeEnd(
+      yield* Effect.sync(() => recordCall({ name }))
+      return yield* hooked(
+        { name, input },
+        hooks["tool.before"],
+        hooks["tool.after"],
         Effect.gen(function* () {
-          if (hooks?.onToolCallStart !== undefined) yield* hooks.onToolCallStart(call)
           const raw = yield* Effect.suspend(() => tool.execute(input)).pipe(
             Effect.catchCause((cause) => {
               if (Cause.hasInterruptsOnly(cause)) return Effect.interrupt
@@ -372,28 +428,30 @@ export const make = <R>(
               )
             }),
           )
+          // The same round trip a tool result would take through text: exact JSON.stringify semantics.
           return yield* Effect.try({
-            try: () => fromData(decodeToolOutput(tool, raw), `Result from tool '${name}'`),
+            try: (): Json | undefined => {
+              const text = JSON.stringify(decodeToolOutput(tool, raw))
+              return text === undefined ? undefined : JSON.parse(text)
+            },
             catch: (cause) => new ToolRuntimeError("InvalidToolOutput", `Invalid output from tool '${name}': ${cause}`),
           })
         }),
-        call,
       )
     })
 
   return {
     calls,
+    hooks,
     keys: (path) => namespaceKeys(root, path),
-    search: (args) =>
-      Effect.suspend(() =>
-        executeTool("search", searchTool, args.map((arg) => toData(arg, "Arguments for tool 'search'"))),
-      ),
+    search: (args) => Effect.suspend(() => executeTool("search", makeSearchTool(prepared.searchIndex), args)),
     execute: (path, args) =>
-      Effect.gen(function* () {
-        const name = canonicalSegments(path).join(".")
-        const externalArgs = args.map((arg) => toData(arg, `Arguments for tool '${name}'`))
-        const tool = resolve(root, path)
-        return yield* executeTool(name, tool, externalArgs)
+      Effect.suspend(() => {
+        const segments = canonicalSegments(path)
+        // Models often write `tools.search(...)` for the bare `search(...)`; honor it unless a tool owns that path.
+        if (segments.length === 1 && segments[0] === "search" && lookup(root, segments) === undefined)
+          return executeTool("search", makeSearchTool(prepared.searchIndex), args)
+        return executeTool(segments.join("."), resolve(root, path, prepared.searchIndex), args)
       }),
   }
 }

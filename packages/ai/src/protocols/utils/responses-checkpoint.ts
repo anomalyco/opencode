@@ -1,7 +1,7 @@
 import { Effect, Schema, Stream } from "effect"
 import { Route, type RouteBody, type TriggerCompactOperation } from "../../route/client.js"
 import { Protocol } from "../../route/protocol.js"
-import { CompactionCheckpointResponse, HttpOptions, LLMEvent, LLMRequest } from "../../schema/index.js"
+import { CompactionCheckpointResponse, LLMEvent, LLMRequest } from "../../schema/index.js"
 import { OpenResponses } from "../open-responses.js"
 import { ProviderShared } from "../shared.js"
 
@@ -109,12 +109,8 @@ export const make = <Body>(body: RouteBody<Body>): TriggerCompactOperation =>
       transport: source.transport,
     })
     const native = yield* body.from(request)
-    // The body builder already applied and validated overlays. Do not let transport reapply them.
-    const preparedRequest = LLMRequest.update(request, {
-      http: request.http === undefined ? undefined : new HttpOptions({ ...request.http, body: undefined }),
-    })
-    const prepared = yield* route.prepareTransport(native, preparedRequest, options)
-    yield* route.streamPrepared(prepared, preparedRequest, { http: executor }, options).pipe(Stream.runDrain)
+    const prepared = yield* route.prepareTransport(native, request, options)
+    yield* route.streamPrepared(prepared, request, { http: executor }, options).pipe(Stream.runDrain)
     if (!result) return yield* ProviderShared.eventError(source.id, "Compaction response ended without a checkpoint")
     return result
   })

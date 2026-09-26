@@ -18,7 +18,7 @@ import type { ProjectAvatarVariant } from "@opencode/ui/project-avatar"
 import { SessionStateKey } from "@/runtime/server/scope"
 import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./helpers"
 import { requireServerKey } from "@/shell/routes/session"
-import { closeSessionTab, openSessionTab, previewSessionTab, type SessionTabs } from "./session-tabs"
+import { closeSessionTab, openSessionTab, previewSessionTab, SESSION_BTW_TAB, type SessionTabs } from "./session-tabs"
 
 export { createSessionKeyReader, ensureSessionKey, pruneSessionKeys }
 
@@ -67,6 +67,7 @@ export type TabPanes = {
 export type LayoutRoute =
   | { type: "home" }
   | { type: "settings" }
+  | { type: "connect" }
   | { type: "draft"; draftID: string }
   | { type: "session"; sessionId: string; server: ServerConnection.Key }
 
@@ -97,8 +98,9 @@ const normalizeSessionTabList = (path: ReturnType<typeof createPathHelpers> | un
 const normalizeStoredSessionTabs = (key: string, tabs: SessionTabs) => {
   const path = sessionPath(key)
   return {
-    all: normalizeSessionTabList(path, tabs.all),
-    active: tabs.active ? normalizeSessionTab(path, tabs.active) : tabs.active,
+    all: normalizeSessionTabList(path, tabs.all).filter((tab) => tab !== SESSION_BTW_TAB),
+    active:
+      tabs.active === SESSION_BTW_TAB ? undefined : tabs.active ? normalizeSessionTab(path, tabs.active) : tabs.active,
   }
 }
 
@@ -106,6 +108,7 @@ export const currentRoute = (pathname: string, search: string): LayoutRoute => {
   const parts = pathname.split("/").filter(Boolean)
   if (parts.length === 0) return { type: "home" }
   if (parts[0] === "settings") return { type: "settings" }
+  if (parts[0] === "connect") return { type: "connect" }
 
   if (parts[0] === "new-session") {
     const draftID = new URLSearchParams(search).get("draftId")

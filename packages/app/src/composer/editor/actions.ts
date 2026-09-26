@@ -7,7 +7,7 @@ import type {
   ComposerPersistedState,
   ComposerPrompt,
 } from "../types"
-import { promptLength } from "../prompt-parts"
+import { isAttachment, promptLength } from "../prompt-parts"
 
 export type ComposerStateStore = [
   Store<ComposerPersistedState> | Accessor<Store<ComposerPersistedState>>,
@@ -48,7 +48,7 @@ export function createComposerEditorActions(input: ComposerStateStoreInput) {
         setStore()((state) => ({
           prompt: [
             { type: "text", content, start: 0, end: content.length },
-            ...state.prompt.filter((part) => part.type === "image"),
+            ...state.prompt.filter(isAttachment),
           ],
           cursor: content.length,
           retry: undefined,
@@ -83,7 +83,7 @@ export function createComposerEditorActions(input: ComposerStateStoreInput) {
       clearRetry()
     },
     removeAttachment(id: string) {
-      setStore()("prompt", (parts) => parts.filter((part) => part.type !== "image" || part.id !== id))
+      setStore()("prompt", (parts) => parts.filter((part) => !isAttachment(part) || part.id !== id))
       clearRetry()
     },
   }
@@ -93,7 +93,7 @@ function insertText(prompt: ComposerPrompt, cursor: number, content: string): Co
   let position = 0
   let inserted = false
   const parts = prompt.flatMap<ComposerPrompt[number]>((part) => {
-    if (part.type === "image") return [part]
+    if (isAttachment(part)) return [part]
     const start = position
     position += part.content.length
     if (inserted) return [part]
@@ -121,7 +121,7 @@ function insertMention(
   }
   let position = 0
   const parts = prompt.flatMap<ComposerPrompt[number]>((part) => {
-    if (part.type === "image") return [part]
+    if (isAttachment(part)) return [part]
     const partStart = position
     position += part.content.length
     if (part.type !== "text" || start < partStart || end > position) return [part]
@@ -139,7 +139,7 @@ function insertMention(
 function withOffsets(prompt: ComposerPrompt): ComposerPrompt {
   let offset = 0
   return prompt.map((part) => {
-    if (part.type === "image") return part
+    if (isAttachment(part)) return part
     const next = { ...part, start: offset, end: offset + part.content.length }
     offset = next.end
     return next

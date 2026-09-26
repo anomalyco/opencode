@@ -5,6 +5,8 @@ title: "Overview"
 Plugins can modify OpenCode's behavior and add new features. To change the terminal UI, build a [CLI
 plugin](/build/plugins/cli).
 
+Migrating an existing OpenCode 1 plugin? Follow the [V1 plugin migration guide](/build/plugins/migrate-v1).
+
 ```ts title=".opencode/plugins/example/index.ts"
 import { Plugin } from "@opencode/plugin"
 
@@ -117,28 +119,36 @@ export default Plugin.define({
 
 ## Transforms
 
-Transforms are synchronous edits to OpenCode's domain state, and each builds on earlier registrations.
-Registry reads such as `ctx.catalog.model.list()` reflect every registration so far, including during plugin setup;
+Transforms are synchronous edits to OpenCode's domain state, and each builds on earlier registrations in its domain.
+Registry reads such as `ctx.model.list()` reflect every registration so far, including during plugin setup;
 startup batching only coalesces update notifications and never delays what a read returns. Resource status APIs still
 report the state of running resources: a registered definition does not mean its connection or other resource work has
 completed.
 
-Say we have a plugin that adds one model to the catalog.
+Sources contribute providers and immutable model definitions through `ctx.provider.transform`.
 
 ```ts title="plugins/models/index.ts"
-import { Plugin } from "@opencode/plugin"
+import { Model, Plugin, Provider } from "@opencode/plugin"
 
 export default Plugin.define({
   id: "company.models",
   async setup(ctx) {
-    await ctx.catalog.transform((catalog) => {
-      catalog.model.update("acme", "reasoner", (model) => {
-        model.name = "Acme Reasoner"
-        model.cost = [{ input: 2, output: 12, cache: { read: 0.2, write: 2 } }]
+    const providerID = Provider.ID.make("acme")
+    const models = [{ ...Model.Info.default(providerID, Model.ID.make("reasoner")), name: "Acme Reasoner" }]
+    await ctx.provider.transform((editor) => {
+      editor.add({
+        info: {
+          ...Provider.Info.empty(providerID),
+          name: "Acme",
+          activation: "enabled",
+          package: "@opencode/ai/providers/openai-compatible",
+          settings: { baseURL: "http://127.0.0.1:8000/v1" },
+        },
+        models,
       })
     })
 
-    const models = await ctx.catalog.model.list() // Includes the model registered above.
+    const available = await ctx.model.list()
   },
 })
 ```
@@ -147,7 +157,9 @@ Any registration, removal, or `reload()` marks the registry changed; the next re
 active transform in registration order onto a fresh value. Keep transforms cheap and repeatable. A value you have
 already read is never modified by later rebuilds.
 
-A later plugin can enforce a maximum output price across every model, including models added by earlier plugins.
+After provider transforms and availability are resolved, OpenCode materializes the active providers' models and replays
+every model transform in order. A model policy can inspect the whole candidate collection, including newly refreshed
+sources.
 
 ```ts title="plugins/model-budget/index.ts"
 import { Plugin } from "@opencode/plugin"
@@ -155,21 +167,21 @@ import { Plugin } from "@opencode/plugin"
 export default Plugin.define({
   id: "company.model-budget",
   async setup(ctx) {
-    await ctx.catalog.transform((catalog) => {
-      for (const provider of catalog.provider.list()) {
-        for (const model of provider.models.values()) {
-          if (model.cost.some((tier) => tier.output > 20)) {
-            catalog.model.remove(model.providerID, model.id)
-          }
-        }
-      }
+    await ctx.model.transform((editor) => {
+      editor
+        .list()
+        .filter((model) => model.cost.some((tier) => tier.output > 20))
+        .forEach((model) => {
+          editor.remove(model.providerID, model.id)
+        })
     })
   },
 })
 ```
 
 Captured inputs are not watched automatically. Load external data before the synchronous callback, then call
-`reload()` after those inputs change.
+`reload()` after those inputs change. Here, `loadFromSource()` returns
+`{ info: Provider.Info, models: readonly Model.Info[] }` entries.
 
 ```ts title="plugins/models/index.ts"
 import { Plugin } from "@opencode/plugin"
@@ -177,20 +189,15 @@ import { Plugin } from "@opencode/plugin"
 export default Plugin.define({
   id: "company.models",
   async setup(ctx) {
-    let models = await loadFromSource()
+    const source = { providers: await loadFromSource() }
 
-    await ctx.catalog.transform((catalog) => {
-      for (const item of models) {
-        catalog.model.update(item.providerID, item.id, (model) => {
-          model.name = item.name
-          model.cost = [{ input: item.input, output: item.output, cache: { read: 0, write: 0 } }]
-        })
-      }
+    await ctx.provider.transform((editor) => {
+      source.providers.forEach((provider) => editor.add(provider))
     })
 
     const refresh = async () => {
-      models = await loadFromSource()
-      await ctx.catalog.reload()
+      source.providers = await loadFromSource()
+      await ctx.provider.reload()
     }
 
     const timer = setInterval(() => void refresh().catch(console.error), 60_000)
@@ -199,7 +206,8 @@ export default Plugin.define({
 })
 ```
 
-`reload` replays every catalog transform in order, so the output-price policy still filters the refreshed models.
+Provider changes invalidate the whole active model result, so the output-price policy still filters the refreshed models.
+Use `ctx.model.reload()` when only an input captured by a model transform changes.
 
 ## API
 
@@ -258,41 +266,53 @@ interface Registration {
 }
 ```
 
-### Catalog
+### Providers
 
-Read the available providers, models, and default model.
+Read available providers or inspect one provider's metadata by ID.
 
 ```ts
-const providers = await ctx.catalog.provider.list()
-const provider = await ctx.catalog.provider.get({ providerID: "anthropic" })
-const models = await ctx.catalog.model.list()
-const defaults = await ctx.catalog.model.default()
+const providers = await ctx.provider.list()
+const provider = await ctx.provider.get({ providerID: "anthropic" })
 ```
 
-Register a transform to inspect, update, remove, or select providers and models.
+Provider transforms edit provider settings and source definitions. Editor reads include inactive providers and expose
+immutable definitions; `models.update` edits an owned copy of a source model.
 
 ```ts
-await ctx.catalog.transform((catalog) => {
-  const providers = catalog.provider.list()
-  const anthropic = catalog.provider.get("anthropic")
-  const sonnet = catalog.model.get("anthropic", "claude-sonnet-4-5")
-
-  catalog.provider.update("anthropic", (provider) => {
-    provider.name = "Anthropic"
+await ctx.provider.transform((editor) => {
+  editor.update("anthropic", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
   })
-  catalog.model.update("anthropic", "claude-sonnet-4-5", (model) => {
-    model.name = "Claude Sonnet 4.5"
+  editor.models.update("anthropic", "claude-sonnet-4-5", (model) => {
+    model.name = "Team Sonnet"
   })
-  catalog.model.default.set("anthropic", "claude-sonnet-4-5")
-  catalog.model.remove("anthropic", "legacy-model")
-  catalog.provider.remove("legacy-provider")
+  editor.models.remove("anthropic", "legacy-model")
+  editor.remove("legacy-provider")
 })
 ```
 
-Reload the catalog after external state used by a transform changes.
+Replace a provider's source inventory with `models.set`, then reload after the captured definitions change.
 
 ```ts
-await ctx.catalog.reload()
+const source = { models: await loadModels() }
+await ctx.provider.transform((editor) => {
+  editor.models.set("acme", source.models)
+})
+
+source.models = await loadModels()
+await ctx.provider.reload()
+```
+
+For account-specific discovery, pass the connection used to load the inventory as `sourceConnection`. OpenCode excludes
+that provider while another connection is selected, until your plugin publishes its refreshed inventory.
+
+```ts
+const connection = await ctx.integration.connection.active("acme")
+if (!connection) return
+const inventory = await loadInventory(connection)
+await ctx.provider.transform((editor) => {
+  editor.add({ info: inventory.provider, models: inventory.models, sourceConnection: connection })
+})
 ```
 
 #### Reference
@@ -300,40 +320,94 @@ await ctx.catalog.reload()
 Schemas: [`Provider.Info`](/api#schema-Provider.Info), [`Model.Info`](/api#schema-Model.Info)
 
 ```ts
-interface CatalogContext {
-  provider: {
-    list(input?: ProviderListInput, requestOptions?: RequestOptions): Promise<ProviderListOutput>
-    get(input: ProviderGetInput, requestOptions?: RequestOptions): Promise<ProviderGetOutput>
-  }
-  model: {
-    list(input?: ModelListInput, requestOptions?: RequestOptions): Promise<ModelListOutput>
-    default(input?: ModelDefaultInput, requestOptions?: RequestOptions): Promise<ModelDefaultOutput>
-  }
-  transform(callback: (editor: CatalogEditor) => void): Promise<Registration>
+interface ProviderDomain extends ProviderApi {
+  transform(callback: (editor: ProviderEditor) => void): Promise<Registration>
   reload(): Promise<void>
 }
 
-interface CatalogEditor {
-  provider: {
-    list(): readonly CatalogProviderRecord[]
-    get(providerID: string): CatalogProviderRecord | undefined
-    update(providerID: string, update: (provider: ProviderInfo) => void): void
-    remove(providerID: string): void
-  }
-  model: {
-    get(providerID: string, modelID: string): ModelInfo | undefined
-    update(providerID: string, modelID: string, update: (model: ModelInfo) => void): void
-    remove(providerID: string, modelID: string): void
-    default: {
-      get(): { providerID: string; modelID: string } | undefined
-      set(providerID: string, modelID: string): void
-    }
-  }
+interface ProviderRecord {
+  readonly provider: Provider.Info
+  readonly models: ReadonlyMap<string, Model.Info>
+  readonly sourceConnection?: ConnectionInfo
 }
 
-interface CatalogProviderRecord {
-  provider: ProviderInfo
-  models: ReadonlyMap<string, ModelInfo>
+interface ProviderEditor {
+  list(): readonly ProviderRecord[]
+  get(providerID: string): ProviderRecord | undefined
+  add(input: { info: Provider.Info; models: readonly Model.Info[]; sourceConnection?: ConnectionInfo }): void
+  update(providerID: string, update: (provider: DeepMutable<Provider.Info>) => void): void
+  remove(providerID: string): void
+  readonly models: {
+    set(providerID: string, models: readonly Model.Info[]): void
+    update(providerID: string, modelID: string, update: (model: DeepMutable<Model.Info>) => void): void
+    remove(providerID: string, modelID: string): void
+  }
+}
+```
+
+### Models
+
+Read available models and the default selection.
+
+```ts
+const models = await ctx.model.list()
+const selected = await ctx.model.default()
+```
+
+Model transforms edit the entire active-provider candidate collection. Disabled candidates remain editable until all
+transforms finish; `update` can add a model only under an available provider.
+
+```ts
+await ctx.model.transform((editor) => {
+  editor.list("anthropic").forEach((model) => {
+    editor.update(model.providerID, model.id, (draft) => {
+      draft.enabled = draft.capabilities.tools
+    })
+  })
+  editor.default.set("anthropic", "claude-sonnet-4-5")
+  editor.remove("anthropic", "legacy-model")
+})
+```
+
+Callbacks edit raw model overrides. Provider defaults are merged once when OpenCode commits the result; unchanged reads
+reuse that result. `editor.provider` exposes immutable source definitions, including inactive templates, rather than
+model-transform output.
+
+```ts
+await ctx.model.transform((editor) => {
+  const source = editor.provider.get("anthropic")?.models.get("claude-sonnet-4-5")
+  if (!source) return
+  editor.update("anthropic", source.id, (model) => {
+    model.limit.context = Math.min(model.limit.context, source.limit.context)
+  })
+})
+
+await ctx.model.reload()
+```
+
+#### Reference
+
+Schema: [`Model.Info`](/api#schema-Model.Info)
+
+```ts
+interface ModelDomain extends ModelApi {
+  transform(callback: (editor: ModelEditor) => void): Promise<Registration>
+  reload(): Promise<void>
+}
+
+interface ModelEditor {
+  list(providerID?: string): readonly DeepMutable<Model.Info>[]
+  get(providerID: string, modelID: string): DeepMutable<Model.Info> | undefined
+  update(providerID: string, modelID: string, update: (model: DeepMutable<Model.Info>) => void): void
+  remove(providerID: string, modelID: string): void
+  readonly default: {
+    get(): { providerID: string; modelID: string } | undefined
+    set(providerID: string, modelID: string): void
+  }
+  readonly provider: {
+    list(): readonly ProviderRecord[]
+    get(providerID: string): ProviderRecord | undefined
+  }
 }
 ```
 
@@ -818,6 +892,14 @@ interface StorageScanResult {
 
 ### Tools
 
+Read the tools currently registered, after every transform, outside of a transform callback. Each tool has an `id`
+containing its effective name.
+
+```ts
+const tools = await ctx.tool.list()
+const read = tools.find((tool) => tool.id === "read")
+```
+
 Register, update, and remove tools with a synchronous transform, including in Promise plugins. Load external data
 before registering or reloading. A later valid registration overrides the same effective tool name.
 
@@ -837,12 +919,22 @@ const registration = await ctx.tool.transform((editor) => {
       additionalProperties: false,
     },
     options: { namespace: "acme", codemode: true },
-    execute: async (input, tool) => {
-      await tool.progress({ status: "greeting" })
+    execute: async (input, context) => {
+      await context.progress({ status: "greeting" })
       return { content: `Hello ${(input as { name: string }).name}!` }
     },
   })
 })
+```
+
+Promise tool executors receive `context.signal`. Pass it to cancellable work such as `fetch` so stopping the Session
+also stops the underlying operation.
+
+```ts
+execute: async ({ url }, context) => {
+  const response = await fetch(url, { signal: context.signal })
+  return { content: await response.text() }
+}
 ```
 
 Call `reload()` after changing source data captured by the callback. Reload replays the active transforms without
@@ -890,6 +982,7 @@ Schemas: [`Tool.Content`](/api#schema-Tool.Content), [`Tool.TextContent`](/api#s
 
 ```ts
 interface ToolContext {
+  list(): Promise<readonly (ToolInfo & { readonly id: string })[]>
   transform(callback: (editor: ToolEditor) => void): Promise<Registration>
   reload(): Promise<void>
 }
@@ -997,34 +1090,36 @@ Load the plugin through `plugins` and configure the common destination separatel
 
 #### Operations
 
-The plugin context exposes the same worktree operations as the client. Every operation uses the plugin's current
-location unless overridden. `list` discovers worktrees through that location's strategies and returns the full inventory
-for the resolved project, including known worktrees from other checkouts of the same project.
+The plugin context exposes the same project-based worktree operations as the client. Every operation requires a
+`projectID`. `list` reads only saved inventory, including known checkouts of the same project; it does not load
+configuration, start plugins, or discover filesystem changes.
 
 ```ts
-const created = await ctx.worktree.create({ name: "task" })
-const inventory = await ctx.worktree.list()
-await ctx.worktree.refresh()
-await ctx.worktree.remove({ directory: created.directory, force: false })
+const projectID = ctx.location.project.id
+const created = await ctx.worktree.create({ projectID, name: "task" })
+const inventory = await ctx.worktree.list({ projectID })
+await ctx.worktree.refresh({ projectID })
+await ctx.worktree.remove({ projectID, directory: created.directory, force: false })
 ```
 
-Create accepts optional explicit `strategy`, destination `directory`, source `from`, and starting `branch` overrides.
-All worktree operations derive the project from their location; none takes a `projectID`.
-The source defaults to the location's checkout, and a `from` override must belong to that project.
+Create loads configuration and plugins from the project's saved `canonical` directory and uses their selected strategy.
+It accepts an optional parent `directory`, source `from`, starting `branch`, and `name`.
+The source defaults to the canonical checkout, and a `from` override must belong to that project. Choosing a source
+does not change the configuration root.
 A supplied starting ref must be supported by the selected strategy;
 Rift's native snapshot operation, for example, has no ref-selection option.
 
-Calls targeting another location wait for its plugins to activate. Calls in the current plugin's location during setup
-see registrations made so far and do not wait for their own activation; prefer lifecycle actions after setup completes.
+Create and refresh wait for the canonical checkout's plugins to activate. Calls made during that checkout's plugin
+setup see registrations made so far and do not wait for their own activation.
 
-Configuration is derived from the operation's location; no configuration directory is stored in the database.
-To remove a worktree through a checkout-local plugin, select a location where that plugin is configured.
-The worktree's destination can be elsewhere:
+Remove loads the canonical configuration and activates its plugins, then uses the worktree's recorded strategy rather
+than the currently selected default. An unavailable recorded owner produces an error. The worktree's destination can
+be elsewhere:
 
 ```ts
 await ctx.worktree.remove({
   directory: "/worktrees/task",
-  location: { directory: "/repos/app" },
+  projectID,
   force: false,
 })
 ```
@@ -1032,6 +1127,15 @@ await ctx.worktree.remove({
 Missing owners fail removal rather than falling back to Git. A strategy can throw `new Worktree.OperationError({
 message: "Uncommitted changes", forceRequired: true })`, importing `Worktree` from `@opencode/plugin`, to request
 force confirmation without depending on Core or Git errors.
+
+Refresh loads canonical configuration and asks all available strategies to find worktrees across known checkout roots.
+It combines results, preserves recorded ownership, and prunes missing directories. A failed discovery source is logged
+while other sources continue. Existing directories remain saved even if no available strategy reports them. Observe
+`worktree.updated` and call `list` again to read changed inventory.
+
+```ts
+await ctx.worktree.refresh({ projectID })
+```
 
 #### Reference
 
@@ -1067,8 +1171,8 @@ interface WorktreeDomain extends WorktreeApi {
 ```
 
 Promise callbacks must cooperate with `signal` cancellation. Effect callbacks return Effects and use Effect interruption
-instead. Registration and defaults are location-scoped; core configuration adapters feed the directory setting into
-Worktree's state without giving the Worktree service a Config dependency.
+instead. Registrations remain scoped to the plugin runtime; project operations use the canonical checkout's registry.
+Core configuration adapters feed directory settings into that registry.
 
 ### Websearch
 
@@ -1304,6 +1408,53 @@ await ctx.session.hook("http.response", (event) => {
 })
 ```
 
+#### Native WebSocket (experimental)
+
+Providers that stream over a WebSocket open one connection per session and reuse it across requests, so
+`http.request` and `http.response` never see that traffic. The `experimental.ws.handshake` hook runs once per model
+call before the connection is selected. It carries the same `sessionID`, `agent`, `model`, and `kind` as the HTTP
+hooks, plus the connection `url` and `headers`. Changing `url` or `headers` changes which socket the request uses, so a
+rotated bearer token reopens the connection.
+
+HTTP hooks still run for every HTTP request, including the request a WebSocket route falls back to.
+
+```ts
+await ctx.session.hook(
+  "experimental.ws.handshake",
+  async (event) => {
+    event.headers.authorization = `Bearer ${await mintToken(event.url)}`
+    delete event.headers["api-key"]
+  },
+  { providerID: "azure" },
+)
+```
+
+`experimental.ws.send` and `experimental.ws.receive` expose the frames themselves, the WebSocket counterpart of
+editing an HTTP request or response body. `send` runs after the provider driver builds an outbound frame and before it
+is written; `receive` runs on each inbound frame before the driver observes it. Both carry the frame as a string and
+send whatever `frame` holds when the hook returns.
+
+OpenCode does not validate rewritten frames. The driver tracks state from the provider's replies, so a rewrite that
+changes protocol meaning is the plugin's responsibility, just as a rewritten HTTP body is.
+
+```ts
+await ctx.session.hook(
+  "experimental.ws.send",
+  (event) => {
+    const body = JSON.parse(event.frame)
+    if (body.type === "response.create") body.metadata = { ...body.metadata, session: event.sessionID }
+    event.frame = JSON.stringify(body)
+  },
+  { providerID: "openai" },
+)
+
+await ctx.session.hook("experimental.ws.receive", (event) => {
+  if (event.frame.includes('"type":"error"')) console.error(event.frame)
+})
+```
+
+These hooks are experimental and their names or shapes may change.
+
 #### Retry policy
 
 Override the retry decision for a provider failure or replace its delay in milliseconds. The hook runs after OpenCode
@@ -1349,7 +1500,35 @@ interface SessionHooks {
   "model.request": SessionModelRequestHook
   "http.request": SessionHttpRequestHook
   "http.response": SessionHttpResponseHook
+  "experimental.ws.handshake": SessionWebSocketHandshakeHook
+  "experimental.ws.send": SessionWebSocketSendHook
+  "experimental.ws.receive": SessionWebSocketReceiveHook
   retry: SessionRetryHook
+}
+
+interface SessionWebSocketHandshakeHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  url: string
+  headers: Record<string, string>
+}
+
+interface SessionWebSocketSendHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  frame: string
+}
+
+interface SessionWebSocketReceiveHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly model: { providerID: string; id: string; variant?: string }
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  frame: string
 }
 
 type RetryDecision = { retry: false } | { retry: true; delay: number }

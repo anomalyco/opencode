@@ -57,6 +57,8 @@ function ComposerStory(props: {
   continueOnStop?: boolean
   longLabels?: boolean
   alternate?: "queue" | "steer"
+  manySuggestions?: boolean
+  suggestionBoundary?: () => HTMLElement | undefined
 }) {
   const [draft, setDraft] = createStore<ComposerPersistedState>({
     prompt: props.prompt ?? [{ type: "text", content: "", start: 0, end: 0 }],
@@ -93,6 +95,15 @@ function ComposerStory(props: {
   const commands: ComposerSuggestion[] = [
     { id: "command.test", kind: "command", label: "/test", trigger: "test", title: "Run tests" },
     { id: "command.review", kind: "command", label: "/review", trigger: "review", title: "Review changes" },
+    ...(props.manySuggestions
+      ? Array.from({ length: 12 }, (_, index) => ({
+          id: `command.example-${index}`,
+          kind: "command" as const,
+          label: `/example-${index}`,
+          trigger: `example-${index}`,
+          title: `Run example ${index}`,
+        }))
+      : []),
   ]
   const context: ComposerSuggestion[] = [
     {
@@ -157,6 +168,7 @@ function ComposerStory(props: {
               alternate: () => props.alternate,
               editing: () => undefined,
               confirmEdit() {},
+              undoing: () => false,
               cancelEdit() {},
               editFirst: () => false,
             }
@@ -187,7 +199,7 @@ function ComposerStory(props: {
           )
         },
         onStop: () =>
-          setStory("activity", props.continueOnStop ? "POST /interrupt · continue: true" : "Stop requested"),
+          setStory("activity", props.continueOnStop ? "POST /interrupt · resume: true" : "Stop requested"),
       },
     },
   })
@@ -206,7 +218,7 @@ function ComposerStory(props: {
       <output class="text-12-regular text-text-weak" aria-live="polite">
         {story.activity}
       </output>
-      <Composer model={model} borderUnderlay />
+      <Composer model={model} borderUnderlay suggestionBoundary={props.suggestionBoundary} />
     </div>
   )
 }
@@ -272,6 +284,25 @@ export const ModelAndVariant = { render: () => <ComposerStory prompt={text("Comp
 export const SlashSuggestions = { render: () => <ComposerStory suggestions="command" /> }
 
 export const ContextSuggestions = { render: () => <ComposerStory suggestions="context" /> }
+
+function ConstrainedCommandSuggestionsStory() {
+  let boundary: HTMLDivElement | undefined
+  return (
+    <div class="mx-auto w-full max-w-200">
+      <div ref={boundary} data-slot="composer-suggestion-boundary-story" class="h-60" />
+      <ComposerStory suggestions="command" manySuggestions suggestionBoundary={() => boundary} />
+    </div>
+  )
+}
+
+export const ConstrainedCommandSuggestions = { render: () => <ConstrainedCommandSuggestionsStory /> }
+
+export const DetachedCommandSuggestionBoundary = {
+  render: () => {
+    const detached = document.createElement("div")
+    return <ComposerStory suggestions="command" manySuggestions suggestionBoundary={() => detached} />
+  },
+}
 
 export const RunningAndStopping = { render: () => <ComposerStory working stopping label="Session is running" /> }
 

@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import { resolveNewSessionBranch, resolveNewSessionGit, resolveNewSessionWorktree } from "./controller"
+import {
+  cycleNewSessionWorktree,
+  resolveNewSessionBranch,
+  resolveNewSessionGit,
+  resolveNewSessionWorktree,
+} from "./controller"
 
 describe("new session workspace selection", () => {
   test("uses main when the workspace bar is unavailable", () => {
@@ -63,5 +68,17 @@ describe("new session workspace selection", () => {
     expect(resolveNewSessionGit({ branch: "dev" })).toBe(true)
     expect(resolveNewSessionGit({ projectVcs: "git" })).toBe(true)
     expect(resolveNewSessionGit({})).toBe(false)
+  })
+
+  test("cycles between local and a new worktree", () => {
+    expect(cycleNewSessionWorktree({ current: "main" })).toBe("create")
+    expect(cycleNewSessionWorktree({ current: "create" })).toBe("main")
+  })
+
+  test("includes the selected existing worktree in the cycle", () => {
+    const existing = "/project/feature"
+    expect(cycleNewSessionWorktree({ current: existing, existing })).toBe("main")
+    expect(cycleNewSessionWorktree({ current: "main", existing })).toBe("create")
+    expect(cycleNewSessionWorktree({ current: "create", existing })).toBe(existing)
   })
 })

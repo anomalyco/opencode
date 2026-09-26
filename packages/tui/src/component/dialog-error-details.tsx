@@ -1,6 +1,6 @@
-import { CliRenderEvents, TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
-import { useKeyboard, useRenderer, useTerminalDimensions } from "@opentui/solid"
-import { createEffect, createMemo, createSignal, onCleanup, Show } from "solid-js"
+import { TextAttributes, type ScrollBoxRenderable } from "@opentui/core"
+import { useKeyboard, useTerminalDimensions } from "@opentui/solid"
+import { createSignal, Show } from "solid-js"
 import { useConfig } from "../config"
 import { useClipboard } from "../context/clipboard"
 import { Keymap } from "../context/keymap"
@@ -27,35 +27,11 @@ export function DialogErrorDetails(props: {
   const location = useLocation()
   const route = useRoute()
   const toast = useToast()
-  const theme = useTheme("elevated")
-  const renderer = useRenderer()
+  const theme = useTheme().surface("dialog")
   const dimensions = useTerminalDimensions()
   const config = useConfig().data
   const [copied, setCopied] = createSignal(false)
-  const [scrollable, setScrollable] = createSignal(false)
-  const [height, setHeight] = createSignal(1)
-  const maxHeight = createMemo(() => Math.max(3, Math.floor(dimensions().height / 2) - 5))
   let scroll: ScrollBoxRenderable | undefined
-  let measure: (() => void) | undefined
-
-  createEffect(() => {
-    dimensions()
-    props.error
-    if (measure) renderer.off(CliRenderEvents.FRAME, measure)
-    measure = () => {
-      measure = undefined
-      if (!scroll) return
-      const next = Math.max(1, Math.min(maxHeight(), scroll.scrollHeight))
-      setHeight(next)
-      setScrollable(scroll.scrollHeight > next)
-    }
-    renderer.once(CliRenderEvents.FRAME, measure)
-    renderer.requestRender()
-  })
-
-  onCleanup(() => {
-    if (measure) renderer.off(CliRenderEvents.FRAME, measure)
-  })
 
   const copy = () => {
     void clipboard
@@ -86,11 +62,10 @@ export function DialogErrorDetails(props: {
   }))
 
   useKeyboard((event) => {
-    if (!scrollable()) return
     if (event.name === "up") return scroll?.scrollBy(-1)
     if (event.name === "down") return scroll?.scrollBy(1)
-    if (event.name === "pageup") return scroll?.scrollBy(-maxHeight())
-    if (event.name === "pagedown") return scroll?.scrollBy(maxHeight())
+    if (event.name === "pageup") return scroll?.scrollBy(-20)
+    if (event.name === "pagedown") return scroll?.scrollBy(20)
     if (event.name === "home") return scroll?.scrollTo(0)
     if (event.name === "end" && scroll) return scroll.scrollTo(scroll.scrollHeight)
   })
@@ -101,7 +76,7 @@ export function DialogErrorDetails(props: {
         <box flexDirection="row" gap={2}>
           <text
             attributes={TextAttributes.BOLD}
-            fg={theme.text.default}
+            fg={theme.text.base}
             flexGrow={1}
             minWidth={0}
             wrapMode="none"
@@ -109,7 +84,7 @@ export function DialogErrorDetails(props: {
           >
             {props.title}
           </text>
-          <text fg={theme.text.subdued} flexShrink={0} onMouseUp={props.onBack}>
+          <text fg={theme.text.muted} flexShrink={0} onMouseUp={props.onBack}>
             esc
           </text>
         </box>
@@ -118,7 +93,7 @@ export function DialogErrorDetails(props: {
             <FilePath
               value={source()}
               maxWidth={Math.min(dialogWidth(dialog.size), dimensions().width - 2) - 4}
-              fg={theme.text.subdued}
+              fg={theme.text.muted}
             />
           )}
         </Show>
@@ -126,34 +101,33 @@ export function DialogErrorDetails(props: {
       <box>
         <scrollbox
           ref={(element: ScrollBoxRenderable) => (scroll = element)}
-          height={height()}
+          maxHeight={20}
+          contentOptions={{ minHeight: 0 }}
           scrollbarOptions={{ visible: false }}
           scrollAcceleration={getScrollAcceleration(config)}
         >
-          <text fg={theme.text.default} wrapMode="word">
+          <text fg={theme.text.base} wrapMode="word">
             {props.error}
           </text>
         </scrollbox>
         <Show when={props.diagnosticRef}>
-          <text fg={theme.text.subdued}>Reference: {props.diagnosticRef}</text>
+          <text fg={theme.text.muted}>Reference: {props.diagnosticRef}</text>
         </Show>
       </box>
       <box flexDirection="row" gap={3} flexWrap="wrap">
         <text onMouseUp={investigate}>
-          <span style={{ fg: theme.text.default }}>
+          <span style={{ fg: theme.text.base }}>
             <b>i</b>
           </span>
-          <span style={{ fg: theme.text.subdued }}> investigate</span>
+          <span style={{ fg: theme.text.muted }}> investigate</span>
         </text>
         <text onMouseUp={copy}>
-          <span style={{ fg: copied() ? theme.text.feedback.success.default : theme.text.default }}>
+          <span style={{ fg: copied() ? theme.text.feedback.success.base : theme.text.base }}>
             <b>{copied() ? "✓ copied" : "c"}</b>
           </span>
-          <span style={{ fg: theme.text.subdued }}>{copied() ? "" : " copy details"}</span>
+          <span style={{ fg: theme.text.muted }}>{copied() ? "" : " copy details"}</span>
         </text>
-        <Show when={scrollable()}>
-          <text fg={theme.text.subdued}>↑/↓ scroll</text>
-        </Show>
+        <text fg={theme.text.muted}>↑/↓ scroll</text>
       </box>
     </box>
   )

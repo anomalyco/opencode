@@ -9,6 +9,7 @@ import { useMcpToggle } from "@/providers/connect/mcp"
 import { pluginLabels } from "@/providers/catalog/plugin"
 import { ExternalLink } from "@/runtime/platform/external-link"
 import { SettingsList } from "@/settings/list"
+import type { SettingsView } from "@/settings/surface"
 import "@/settings/settings.css"
 
 interface McpRowItem {
@@ -20,7 +21,10 @@ interface PluginRowItem {
   name: string
 }
 
-export const SettingsExtensions: Component = () => {
+export const SettingsExtensions: Component<{
+  subtab?: SettingsView["subtab"]
+  onSubtab: (value: SettingsView["subtab"]) => void
+}> = (props) => {
   const language = useLanguage()
   const serverSdk = useServerSDK()
   const data = useData()
@@ -67,7 +71,14 @@ export const SettingsExtensions: Component = () => {
       </div>
 
       <div class="settings-tab-body">
-        <Tabs variant="pill" defaultValue="mcps" class="settings-extensions-tabs settings-subtabs">
+        <Tabs
+          variant="pill"
+          value={props.subtab ?? "mcps"}
+          onChange={(value) => {
+            if (value === "mcps" || value === "plugins" || value === "skills") props.onSubtab(value)
+          }}
+          class="settings-extensions-tabs settings-subtabs"
+        >
           <Tabs.List>
             <Tabs.Trigger value="mcps">{language.t("settings.extensions.tab.mcps")}</Tabs.Trigger>
             <Tabs.Trigger value="plugins">{language.t("status.popover.tab.plugins")}</Tabs.Trigger>

@@ -21,8 +21,9 @@ export function applyPath(
   }
 
   const active = state.stack[state.index]
-  if (current.url === active.url) {
-    if (!state.action && current.state === active.state) return state
+  const sameUrl = current.url === active.url
+  if (sameUrl || (isSettingsPath(current.url) && isSettingsPath(active.url))) {
+    if (sameUrl && !state.action && current.state === active.state) return state
     return {
       ...state,
       stack: state.stack.map((entry, index) => (index === state.index ? current : entry)),
@@ -33,6 +34,10 @@ export function applyPath(
   if (state.action) return { ...state, action: undefined }
 
   return pushPath(state, current, max)
+}
+
+function isSettingsPath(url: string) {
+  return url.split(/[?#]/, 1)[0] === "/settings"
 }
 
 export function pushPath(state: TitlebarHistory, path: HistoryLocation, max = MAX_TITLEBAR_HISTORY): TitlebarHistory {

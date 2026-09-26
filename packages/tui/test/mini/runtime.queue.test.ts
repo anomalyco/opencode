@@ -61,7 +61,7 @@ describe("run runtime queue", () => {
     await task
   })
 
-  test("treats /exit as a close command", async () => {
+  test.each(["/exit", "/quit", "/q", ":q"])("treats %s as a close command", async (text) => {
     const ui = createFooterApiFixture()
     let calls = 0
 
@@ -72,7 +72,7 @@ describe("run runtime queue", () => {
       },
     })
 
-    ui.submit("/exit")
+    ui.submit(text)
     await task
 
     expect(calls).toBe(0)
@@ -249,27 +249,6 @@ describe("run runtime queue", () => {
 
     expect(seen).toEqual(["  hello  "])
     expect(ui.commits).toEqual([])
-  })
-
-  test("skill commands retain their local input echo", async () => {
-    const ui = createFooterApiFixture()
-    const task = runPromptQueue({
-      footer: ui.api,
-      onSend: (_prompt, emittedUser) => expect(emittedUser).toBe(true),
-      run: async () => ui.api.close(),
-    })
-
-    ui.submit({ text: "/review", parts: [], command: { name: "review", arguments: "", source: "skill" } })
-    await task
-    expect(ui.commits).toEqual([
-      {
-        kind: "user",
-        text: "/review",
-        phase: "start",
-        source: "system",
-        messageID: expect.any(String),
-      },
-    ])
   })
 
   test("demo commands own their local input echo", async () => {

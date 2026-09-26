@@ -2,6 +2,7 @@ export * as EmbeddedHost from "./host"
 
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
+import { Session } from "@opencode/core/session"
 import { Workspace } from "@opencode/core/workspace"
 import { WorkspaceDriver } from "@opencode/core/workspace/driver"
 import { createEmbeddedRoutes } from "@opencode/server/routes"
@@ -58,6 +59,7 @@ export const create = Effect.fn("EmbeddedHost.create")(function* <R = never>(
       runtime,
       fetch: transport.fetch,
       plugins: Context.get(services, SdkPlugins.Service),
+      sessions: Context.get(services, Session.Service),
       workspace: Context.get(services, Workspace.Service),
       close: transport.close,
     }

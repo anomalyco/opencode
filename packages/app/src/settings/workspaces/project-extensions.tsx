@@ -27,10 +27,10 @@ import "./project.css"
 
 type SkillItem = {
   name: string
-  location: string
+  path: string
 }
 
-const skillKey = (item: SkillItem) => `${item.name}\n${item.location}`
+const skillKey = (item: SkillItem) => `${item.name}\n${item.path}`
 
 const ExtensionCard: Component<{ children: JSX.Element }> = (props) => (
   <SettingsList variant="catalog">{props.children}</SettingsList>
@@ -205,7 +205,10 @@ const ProjectLanguageServers: Component = () => {
   )
 }
 
-export const ProjectSettingsExtensions: Component = () => {
+export const ProjectSettingsExtensions: Component<{
+  subtab?: "mcps" | "plugins" | "skills" | "lsps"
+  onSubtab: (value: "mcps" | "plugins" | "skills" | "lsps") => void
+}> = (props) => {
   const language = useLanguage()
   const serverSDK = useServerSDK()
   const directorySDK = useWorkspaceLocation()
@@ -301,7 +304,14 @@ export const ProjectSettingsExtensions: Component = () => {
       </div>
 
       <div class="settings-tab-body">
-        <Tabs variant="pill" defaultValue="mcps" class="project-settings-extension-tabs settings-subtabs">
+        <Tabs
+          variant="pill"
+          value={props.subtab ?? "mcps"}
+          onChange={(value) => {
+            if (value === "mcps" || value === "plugins" || value === "skills" || value === "lsps") props.onSubtab(value)
+          }}
+          class="project-settings-extension-tabs settings-subtabs"
+        >
           <Tabs.List>
             <Tabs.Trigger value="mcps">{language.t("settings.extensions.tab.mcps")}</Tabs.Trigger>
             <Tabs.Trigger value="plugins">{language.t("status.popover.tab.plugins")}</Tabs.Trigger>

@@ -17,8 +17,8 @@ import { Plugin } from "@opencode/plugin"
 export default Plugin.define({
   id: "example",
   setup: async (ctx) => {
-    await ctx.catalog.transform((catalog) => {
-      catalog.provider.update("example", (provider) => {
+    await ctx.provider.transform((editor) => {
+      editor.update("example", (provider) => {
         provider.name = "Example"
       })
     })
@@ -42,7 +42,7 @@ Configuration supplied for the plugin is available as `ctx.options`.
 A registration may be removed early through `dispose`:
 
 ```ts
-const registration = await ctx.catalog.transform(applyCatalog)
+const registration = await ctx.model.transform(applyModelPolicy)
 await registration.dispose()
 ```
 
@@ -66,15 +66,31 @@ Available transform hooks are namespaced by domain:
 
 ```ts
 ctx.agent.transform
-ctx.catalog.transform
 ctx.command.transform
 ctx.integration.transform
 ctx.mcp.transform
+ctx.model.transform
+ctx.provider.transform
 ctx.reference.transform
 ctx.skill.transform
 ctx.tool.transform
 ctx.vcs.transform
 ctx.websearch.transform
+```
+
+Provider transforms contribute provider settings and immutable model definitions. After provider availability is resolved,
+model transforms edit the complete active-provider candidate collection in order. Use `ctx.model.transform` for runtime
+model restrictions; `editor.provider.get()` reads source templates even when their provider is inactive.
+
+```ts
+await ctx.model.transform((editor) => {
+  editor
+    .list()
+    .filter((model) => model.cost.some((tier) => tier.output > 20))
+    .forEach((model) => {
+      editor.remove(model.providerID, model.id)
+    })
+})
 ```
 
 ## Runtime Hooks
@@ -129,24 +145,29 @@ await ctx.tool.transform((tools) => {
 When data captured by a transform changes, reload the affected domain:
 
 ```ts
-let data = await loadCatalog()
+const source = { providers: await loadProviders() }
 
-await ctx.catalog.transform((catalog) => {
-  applyCatalog(data, catalog)
+await ctx.provider.transform((editor) => {
+  source.providers.forEach((provider) => editor.add(provider))
 })
 
-data = await loadCatalog()
-await ctx.catalog.reload()
+source.providers = await loadProviders()
+await ctx.provider.reload()
 ```
+
+`loadProviders()` returns entries shaped as `{ info: Provider.Info, models: readonly Model.Info[] }`. Provider reloads
+also invalidate the active model result, so every model transform runs again with the refreshed definitions. Model
+callbacks edit raw overrides; provider defaults are merged once when the result is committed.
 
 Available reload operations are:
 
 ```ts
 ctx.agent.reload()
-ctx.catalog.reload()
 ctx.command.reload()
 ctx.integration.reload()
 ctx.mcp.reload()
+ctx.model.reload()
+ctx.provider.reload()
 ctx.reference.reload()
 ctx.skill.reload()
 ctx.tool.reload()

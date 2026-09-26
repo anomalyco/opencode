@@ -103,7 +103,7 @@ async function renderComposer(
   const app = await testRender(
     () => (
       <TestTuiContexts directory={directory}>
-        <ConfigProvider config={createTuiResolvedConfig({ keybinds, session: { terminal: false } })}>
+        <ConfigProvider config={createTuiResolvedConfig({ keybinds }, { terminal: false })}>
           <Keymap.Provider>
             <ClientProvider api={createApi(calls.fetch)}>
               <DataProvider directory={process.cwd()}>

@@ -5,7 +5,8 @@ import { OpenAIChat } from "../protocols/openai-chat.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
-import { HttpOptions, ProviderID, type ModelID } from "../schema/index.js"
+import { MediaRoute } from "../route/media.js"
+import { ProviderID, type ModelID } from "../schema/index.js"
 
 export const id = ProviderID.make("zai")
 
@@ -48,14 +49,8 @@ export const configure = (input: Config = {}) => {
         auth: auth(input),
       })
       .model<ChatOptionsInput>({ id: modelID, compatibility: ZAIChat.compatibility })
-  const image = (modelID: string | ModelID) =>
-    ZAIImages.model({
-      id: modelID,
-      auth: auth(input),
-      baseURL: input.baseURL,
-      headers: input.headers,
-      http: input.http === undefined ? undefined : HttpOptions.make(input.http),
-    })
+  const media = MediaRoute.deployment(input, auth(input))
+  const image = (modelID: string | ModelID) => ZAIImages.model({ ...media, id: modelID })
 
   return {
     id,

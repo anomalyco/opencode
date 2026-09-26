@@ -37,7 +37,7 @@ export function createActiveComposerAdapter(input: {
     }),
     interrupt: () =>
       server.api.session
-        .interrupt({ sessionID: id, continue: true })
+        .interrupt({ sessionID: id, resume: true })
         .then(() => undefined)
         .catch(() => undefined),
   }

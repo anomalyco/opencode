@@ -1,178 +1,118 @@
 export * as Data from "./data.js"
 
-import type { DiagnosticKind } from "./codemode.js"
+import { Effect, type Schema } from "effect"
+import type { Interpreter } from "./interpreter/interpreter.js"
+import { MAX_VALUE_DEPTH } from "./interpreter/limits.js"
+import { invalidData, rangeError, typeError } from "./interpreter/model.js"
 import {
+  Arr,
+  Bytes,
+  Callable,
+  define,
+  ErrorObj,
   get,
-  ownEntries,
-  parseArrayIndex,
-  ProgramArray,
-  ProgramError,
-  ProgramFunction,
-  ProgramObject,
-  set,
+  keys,
+  Obj,
+  PromiseObj,
+  record,
+  type Value,
+  SetObj,
+  URLSearchParamsObj,
+  HeadersObj,
 } from "./interpreter/objects.js"
-import { Values } from "./values.js"
+import { typeofValue } from "./interpreter/references.js"
 
-const MAX_VALUE_DEPTH = 32
+export type Json = Schema.Json
 
-export class ToolRuntimeError extends Error {
-  constructor(
-    readonly kind: Extract<
-      DiagnosticKind,
-      "UnknownTool" | "InvalidToolInput" | "InvalidToolOutput" | "InvalidDataValue" | "ToolCallLimitExceeded"
-    >,
-    message: string,
-    readonly suggestions: ReadonlyArray<string> = [],
-  ) {
-    super(message)
-    this.name = "ToolRuntimeError"
-  }
-}
+type Replacer<R> = (args: Array<Value>, holder: Obj) => Effect.Effect<Value, unknown, R>
 
 /**
- * Brings a host-produced value into the program: program and runtime values pass through, their
- * host counterparts (Date, RegExp, Map, Set, URL, URLSearchParams) are wrapped, and host objects
- * and arrays are copied.
+ * What `JSON.stringify` would serialize for a program value, as host JSON: `toJSON` is honored, functions and
+ * `undefined` vanish, non-finite numbers become null, and everything else is copied. Two departures from JS
+ * so a mistake is not a silent `{}`: an Error serializes as `{ name, message, ...own }`, and a promise throws.
  */
-export const toProgram = (value: unknown, label: string): unknown => copy(value, label, "program", 0, new Set())
+export const toJson = <R>(ctx: Interpreter<R>, value: Value, replacer?: Replacer<R>) =>
+  walk(ctx, value, replacer, false)
 
 /**
- * Brings host data into the program: Date and URL become strings, other host collections become
- * empty objects, and objects become program copies. Used for tool results and parsed JSON.
+ * The host boundary: `toJson`, plus what a program most likely meant when a value cannot be JSON. A promise is
+ * awaited, a Set crosses as an array, a URLSearchParams as its query string, a Uint8Array asks to be encoded as
+ * text first, and a `__proto__` key is dropped so host code can never receive one.
  */
-export const fromData = (value: unknown, label: string): unknown => copy(value, label, "data", 0, new Set())
+export const toBoundary = <R>(ctx: Interpreter<R>, value: Value) => walk(ctx, value, undefined, true)
 
-/**
- * Takes a program value out as plain JSON: runtime values serialize like `JSON.stringify` would,
- * non-finite numbers become null, and array holes become null. `undefined` object properties are
- * dropped ("json") or become null ("result", for program results where the consumer must never see
- * undefined); a bare `undefined` follows the same rule.
- */
-export const toData = (value: unknown, label: string, undefinedAs: "json" | "result" = "json"): unknown =>
-  copy(value, label, undefinedAs, 0, new Set())
-
-// "program" and "data" build program objects; "json" and "result" build ordinary objects for the host.
-type Mode = "program" | "data" | "json" | "result"
-
-const copy = (value: unknown, label: string, mode: Mode, depth: number, seen: Set<object>): unknown => {
-  if (depth > MAX_VALUE_DEPTH) {
-    throw new ToolRuntimeError("InvalidDataValue", `${label} exceeds the maximum value depth of ${MAX_VALUE_DEPTH}.`)
-  }
-  if (value === undefined) return mode === "result" ? null : undefined
-  if (typeof value === "number") return (mode === "json" || mode === "result") && !Number.isFinite(value) ? null : value
-  if (value === null || typeof value === "string" || typeof value === "boolean") return value
-  if (typeof value !== "object") {
-    throw new ToolRuntimeError("InvalidDataValue", `${label} must contain data only.`)
-  }
-  if (value instanceof Values.Promise) {
-    throw new ToolRuntimeError(
-      "InvalidDataValue",
-      `${label} contains an un-awaited Promise; await tool calls (e.g. \`const result = await tools.ns.tool(...)\`) before using their results.`,
-    )
-  }
-  if (value instanceof ProgramFunction && mode !== "program") {
-    throw new ToolRuntimeError("InvalidDataValue", `${label} must contain data only.`)
-  }
-
-  const plain = mode === "program" || mode === "data"
-  if (mode === "program") {
-    if (value instanceof ProgramObject || Values.isValue(value)) return value
-    if (value instanceof Date) return new Values.Date(value.getTime())
-    if (value instanceof RegExp) return new Values.RegExp(value.source, value.flags)
-    if (value instanceof Map) {
-      const wrapped = new Values.Map()
-      for (const [key, item] of value.entries()) {
-        wrapped.map.set(copy(key, label, mode, depth + 1, seen), copy(item, label, mode, depth + 1, seen))
+const walk = <R>(
+  ctx: Interpreter<R>,
+  value: Value,
+  replacer: Replacer<R> | undefined,
+  boundary: boolean,
+): Effect.Effect<Json | undefined, unknown, R> => {
+  const stack = new Set<object>()
+  const visit = (holder: Obj, key: string, depth: number): Effect.Effect<Json | undefined, unknown, R> =>
+    Effect.gen(function* () {
+      if (depth > MAX_VALUE_DEPTH) throw rangeError(`Value exceeds the maximum depth of ${MAX_VALUE_DEPTH}.`)
+      const raw = get(holder, key)
+      if (raw instanceof PromiseObj && !boundary) {
+        throw invalidData(
+          "JSON.stringify received an un-awaited Promise; await it first - e.g. `const result = await tools.ns.tool(...)`.",
+        )
       }
-      return wrapped
-    }
-    if (value instanceof Set) {
-      const wrapped = new Values.Set()
-      for (const item of value.values()) wrapped.set.add(copy(item, label, mode, depth + 1, seen))
-      return wrapped
-    }
-    if (value instanceof URL) return new Values.URL(new URL(value.href))
-    if (value instanceof URLSearchParams) return new Values.URLSearchParams(new URLSearchParams(value))
-  }
-
-  if (value instanceof Values.Date) return Number.isFinite(value.time) ? new Date(value.time).toISOString() : null
-  if (value instanceof Date) return Number.isFinite(value.getTime()) ? value.toISOString() : null
-  if (value instanceof Values.URL) return value.url.href
-  if (value instanceof URL) return value.href
-  // Remaining runtime values and their host counterparts serialize as empty objects, like JSON.stringify.
-  if (
-    Values.isValue(value) ||
-    value instanceof RegExp ||
-    value instanceof Map ||
-    value instanceof Set ||
-    value instanceof URLSearchParams
-  ) {
-    return plain ? new ProgramObject() : {}
-  }
-
-  if (seen.has(value)) {
-    throw new ToolRuntimeError("InvalidDataValue", `${label} contains a circular value.`)
-  }
-  seen.add(value)
-
-  if (value instanceof ProgramArray) {
-    const copied = Array.from(value.items, (item) => copy(item, label, mode, depth + 1, seen) ?? null)
-    seen.delete(value)
-    return copied
-  }
-  if (value instanceof ProgramObject) {
-    const copied: Record<string, unknown> = {}
-    // Errors serialize as { name, message, ...own }: both may be inherited, and neither is enumerable in JS.
-    if (value instanceof ProgramError) {
-      define(copied, "name", copy(get(value, "name"), label, mode, depth + 1, seen))
-      define(copied, "message", copy(get(value, "message"), label, mode, depth + 1, seen))
-    }
-    for (const [key, item] of ownEntries(value)) {
-      const next = copy(item, label, mode, depth + 1, seen)
-      if (next === undefined && mode === "json") continue
-      define(copied, key, next)
-    }
-    seen.delete(value)
-    return copied
-  }
-
-  if (Array.isArray(value)) {
-    if (plain) {
-      const copied = new ProgramArray(value.map((item) => copy(item, label, mode, depth + 1, seen)))
-      for (const [key, item] of Object.entries(value)) {
-        if (parseArrayIndex(key) === undefined) set(copied, key, copy(item, label, mode, depth + 1, seen))
+      const settled = raw instanceof PromiseObj ? yield* ctx.await(raw) : raw
+      const toJSON = settled instanceof Obj ? get(settled, "toJSON") : undefined
+      const own = toJSON instanceof Callable ? yield* ctx.call(toJSON, settled, [key]) : settled
+      const value = replacer === undefined ? own : yield* replacer([key, own], holder)
+      if (value === undefined || typeofValue(value) === "function") return undefined
+      if (typeof value === "number") return Number.isFinite(value) ? value : null
+      if (value === null || typeof value === "string" || typeof value === "boolean") return value
+      if (!(value instanceof Obj)) return {}
+      if (boundary && value instanceof Bytes) {
+        throw invalidData(
+          "A Uint8Array cannot cross to the host; pass text instead, e.g. `new TextDecoder().decode(bytes)` or `bytes.toBase64()`.",
+        )
       }
-      seen.delete(value)
+      if (boundary && value instanceof URLSearchParamsObj) return value.params.toString()
+      if (value instanceof HeadersObj) return Object.fromEntries(value.headers)
+      const target = boundary && value instanceof SetObj ? new Arr(ctx.builtins.Array, [...value.set]) : value
+      if (stack.has(target)) throw typeError("Converting circular structure to JSON.")
+      stack.add(target)
+      if (target instanceof Arr) {
+        const items: Array<Json> = []
+        for (let index = 0; index < target.items.length; index += 1) {
+          items.push((yield* visit(target, String(index), depth + 1)) ?? null)
+        }
+        stack.delete(target)
+        return items
+      }
+      const copied: Record<string, Json> = {}
+      // Own data property regardless of the key, so "__proto__" never reaches the Object.prototype setter.
+      const put = (name: string, item: Json | undefined) => {
+        if (item !== undefined)
+          Object.defineProperty(copied, name, { value: item, enumerable: true, writable: true, configurable: true })
+      }
+      // Errors serialize as { name, message, ...own }: both may be inherited, and neither is enumerable in JS.
+      if (target instanceof ErrorObj) {
+        put("name", yield* visit(target, "name", depth + 1))
+        put("message", yield* visit(target, "message", depth + 1))
+      }
+      for (const name of keys(target)) {
+        if (boundary && name === "__proto__") continue
+        put(name, yield* visit(target, name, depth + 1))
+      }
+      stack.delete(target)
       return copied
-    }
-    const copied = Array.from(value, (item) => copy(item, label, mode, depth + 1, seen) ?? null)
-    seen.delete(value)
-    return copied
-  }
-
-  const prototype = Object.getPrototypeOf(value)
-  if (prototype !== Object.prototype && prototype !== null) {
-    throw new ToolRuntimeError("InvalidDataValue", `${label} must contain plain objects only.`)
-  }
-
-  if (plain) {
-    const copied = new ProgramObject()
-    for (const [key, item] of Object.entries(value)) set(copied, key, copy(item, label, mode, depth + 1, seen))
-    seen.delete(value)
-    return copied
-  }
-  const copied: Record<string, unknown> = {}
-  for (const [key, item] of Object.entries(value)) {
-    const next = copy(item, label, mode, depth + 1, seen)
-    if (next === undefined && mode === "json") continue
-    define(copied, key, next)
-  }
-  seen.delete(value)
-  return copied
+    })
+  return visit(record(ctx.builtins.Object, { "": value }), "", 0)
 }
 
-// Own data property regardless of the target's prototype, so a "__proto__" key on a host object
-// never reaches the Object.prototype setter.
-const define = (target: object, key: string, value: unknown): void => {
-  Object.defineProperty(target, key, { value, enumerable: true, writable: true, configurable: true })
+/** Host JSON as program values: objects and arrays are copied, primitives pass through. */
+export const fromJson = <R>(ctx: Interpreter<R>, value: Json | undefined): Value => {
+  if (value === null || typeof value !== "object") return value
+  if (Array.isArray(value))
+    return new Arr(
+      ctx.builtins.Array,
+      value.map((item) => fromJson(ctx, item)),
+    )
+  const copied = new Obj(ctx.builtins.Object)
+  for (const [key, item] of Object.entries(value)) define(copied, key, fromJson(ctx, item))
+  return copied
 }

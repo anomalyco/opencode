@@ -1,7 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import { Skill } from "@opencode/schema/skill"
-import type { Prompt } from "@/composer/state"
+import type { ImageAttachmentPart, Prompt } from "@/composer/state"
 import { buildPromptRequest } from "./request"
+
+function inline(filename: string, mime: string, extra?: Partial<ImageAttachmentPart>) {
+  return { type: "image" as const, id: `img_${filename}`, filename, mime, dataUrl: `data:${mime};base64,AAA`, ...extra }
+}
 
 describe("buildPromptRequest", () => {
   test("builds text, files, and agents from the prompt", () => {
@@ -21,9 +25,7 @@ describe("buildPromptRequest", () => {
     const result = buildPromptRequest({
       prompt,
       context: [{ key: "ctx:1", type: "file", path: "src/bar.ts", comment: "check this" }],
-      images: [
-        { type: "image", id: "img_1", filename: "a.png", mime: "image/png", dataUrl: "data:image/png;base64,AAA" },
-      ],
+      images: [inline("a.png", "image/png")],
       text: "hello @src/foo.ts @planner",
       sessionDirectory: "/repo",
     })
@@ -45,16 +47,7 @@ describe("buildPromptRequest", () => {
     const result = buildPromptRequest({
       prompt: [{ type: "text", content: "check these", start: 0, end: 11 }],
       context: [],
-      images: [
-        { type: "image", id: "img_1", filename: "a.png", mime: "image/png", dataUrl: "data:image/png;base64,AAA" },
-        {
-          type: "image",
-          id: "img_2",
-          filename: "b.pdf",
-          mime: "application/pdf",
-          dataUrl: "data:application/pdf;base64,BBB",
-        },
-      ],
+      images: [inline("a.png", "image/png"), inline("b.pdf", "application/pdf")],
       text: "check these",
       sessionDirectory: "/repo",
     })
@@ -70,14 +63,9 @@ describe("buildPromptRequest", () => {
       prompt: [],
       context: [],
       images: [
-        {
-          type: "image",
-          id: "img_external",
-          filename: "opencode.global.dat",
+        inline("opencode.global.dat", "text/plain", {
           sourcePath: "C:\\Users\\Luke\\AppData\\Roaming\\ai.opencode.desktop.beta\\opencode.global.dat",
-          mime: "text/plain",
-          dataUrl: "data:text/plain;base64,AAA",
-        },
+        }),
       ],
       text: "inspect this",
       sessionDirectory: "C:\\Repos\\sst\\opencode",

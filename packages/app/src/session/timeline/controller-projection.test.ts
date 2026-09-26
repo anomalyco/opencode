@@ -23,7 +23,7 @@ describe("visibleTimelineMessages", () => {
   const steer = {
     id: "msg_3",
     sessionID: "ses_1",
-    timeCreated: 3,
+    time: { created: 3 },
     type: "user",
     delivery: "steer",
     payload: { text: "queued" },
@@ -135,7 +135,7 @@ describe("visibleTimelineMessages", () => {
       {
         id: "msg_3",
         sessionID: "ses_1",
-        timeCreated: 3,
+        time: { created: 3 },
         type: "user",
         delivery: "queue",
         payload: { text: "queued" },

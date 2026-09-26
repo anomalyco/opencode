@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import path from "node:path"
 import { OPENCODE_VERSION } from "../src/version"
+import type { FormFields } from "@opencode/client"
+
+const consoleForm = [
+  { type: "string", key: "server", hidden: true, format: "uri", default: "https://opencode.ai/console" },
+] satisfies FormFields
 
 describe("auth command", () => {
   test("registers authentication commands", async () => {
@@ -15,12 +20,12 @@ describe("auth command", () => {
     expect(auth.stdout).toContain("list")
     expect(auth.stdout).toContain("login")
     expect(auth.stdout).toContain("logout")
-    expect(auth.stdout).toContain("manage AI providers and credentials")
-    expect(auth.stdout).toContain("list providers and credentials")
-    expect(auth.stdout).toContain("log in to a provider")
+    expect(auth.stdout).toContain("manage integrations and credentials")
+    expect(auth.stdout).toContain("list integrations and credentials")
+    expect(auth.stdout).toContain("connect an integration")
     expect(auth.stdout).toContain("log out of a saved account")
     expect(auth.stdout).toContain("switch the active account for an integration")
-    expect(auth.stdout).not.toContain("connect")
+    expect(auth.stdout).not.toMatch(/^  connect\s/m)
     expect(list.exitCode).toBe(0)
     expect(list.stdout).toContain("opencode auth list [flags]")
     expect(list.stdout).toContain("--format")
@@ -28,6 +33,7 @@ describe("auth command", () => {
     expect(login.stdout).toContain("opencode auth login [flags] [<target>]")
     expect(login.stdout).toContain("Integration ID, name, or well-known provider URL")
     expect(login.stdout).toContain("--method")
+    expect(login.stdout).toContain("--answer")
     expect(logout.exitCode).toBe(0)
     expect(logout.stdout).toContain("opencode auth logout [flags] [<target>] [<credential>]")
   })
@@ -43,7 +49,7 @@ describe("auth command", () => {
               name: "Anthropic",
               methods: [],
               connections: [
-                { type: "credential", id: "cred_test", label: "default" },
+                { type: "credential", method: "key", id: "cred_test", label: "default" },
                 { type: "env", name: "ANTHROPIC_API_KEY" },
               ],
             },
@@ -61,7 +67,7 @@ describe("auth command", () => {
         id: "anthropic",
         name: "Anthropic",
         connections: [
-          { type: "credential", id: "cred_test", label: "default" },
+          { type: "credential", method: "key", id: "cred_test", label: "default" },
           { type: "env", name: "ANTHROPIC_API_KEY" },
         ],
       },
@@ -135,23 +141,52 @@ describe("auth command", () => {
     expect(requests).toContainEqual({ method: "DELETE", path: "/api/integration/company/connect/command/con_test" })
   })
 
-  test("completes automatic OAuth authentication", async () => {
+  test.each([
+    { id: "openai", method: "browser", form: undefined, args: [], answer: undefined },
+    {
+      id: "opencode",
+      method: "device",
+      form: consoleForm,
+      args: [],
+      answer: { server: "https://opencode.ai/console" },
+    },
+    {
+      id: "opencode",
+      method: "device",
+      form: consoleForm,
+      args: ["--answer", "server=https://staging.example.com/console"],
+      answer: { server: "https://staging.example.com/console" },
+    },
+    {
+      id: "company",
+      method: "browser",
+      form: [
+        { type: "string", key: "tenant", required: true },
+        { type: "boolean", key: "enabled", required: true },
+      ] satisfies FormFields,
+      args: ["--answer", "tenant=team=one", "--answer", "enabled=false"],
+      answer: { tenant: "team=one", enabled: false },
+    },
+  ])("completes $id/$method OAuth with supplied answers $args", async (input) => {
     const requests: Array<{ method: string; path: string }> = []
-    using server = authServer((request, url) => {
+    const bodies: unknown[] = []
+    const endpoint = `/api/integration/${input.id}/connect/oauth`
+    using server = authServer(async (request, url) => {
       requests.push({ method: request.method, path: url.pathname })
       if (url.pathname === "/api/integration") {
         return Response.json(
           located([
             {
-              id: "openai",
-              name: "OpenAI",
-              methods: [{ id: "browser", type: "oauth", label: "Browser" }],
+              id: input.id,
+              name: input.id,
+              methods: [{ id: input.method, type: "oauth", label: "Browser", form: input.form }],
               connections: [],
             },
           ]),
         )
       }
-      if (url.pathname === "/api/integration/openai/connect/oauth" && request.method === "POST") {
+      if (url.pathname === endpoint && request.method === "POST") {
+        bodies.push(await request.json())
         return Response.json(
           located({
             attemptID: "con_oauth",
@@ -162,25 +197,27 @@ describe("auth command", () => {
           }),
         )
       }
-      if (url.pathname === "/api/integration/openai/connect/oauth/con_oauth" && request.method === "GET") {
+      if (url.pathname === `${endpoint}/con_oauth` && request.method === "GET") {
         return Response.json(located({ status: "complete", time: { created: 1, expires: 2 } }))
       }
-      if (url.pathname === "/api/integration/openai/connect/oauth/con_oauth" && request.method === "DELETE") {
+      if (url.pathname === `${endpoint}/con_oauth` && request.method === "DELETE") {
         return new Response(null, { status: 204 })
       }
       return new Response("Not found", { status: 404 })
     })
 
-    const result = await cli(["auth", "login", "openai", "--server", server.url.toString()])
+    const result = await cli(["auth", "login", input.id, "--server", server.url.toString(), ...input.args])
     expect({ exitCode: result.exitCode, stderr: result.stderr }).toEqual({ exitCode: 0, stderr: "" })
     expect(result.stdout).toContain("https://example.com/authorize")
-    expect(result.stdout).toContain("Connected to OpenAI")
-    expect(requests).toContainEqual({ method: "POST", path: "/api/integration/openai/connect/oauth" })
-    expect(requests).toContainEqual({ method: "GET", path: "/api/integration/openai/connect/oauth/con_oauth" })
-    expect(requests).toContainEqual({ method: "DELETE", path: "/api/integration/openai/connect/oauth/con_oauth" })
+    expect(result.stdout).toContain(`Connected to ${input.id}`)
+    expect(bodies).toEqual([{ methodID: input.method, ...(input.answer ? { answer: input.answer } : {}) }])
+    expect(requests).toContainEqual({ method: "POST", path: endpoint })
+    expect(requests).toContainEqual({ method: "GET", path: `${endpoint}/con_oauth` })
+    expect(requests).toContainEqual({ method: "DELETE", path: `${endpoint}/con_oauth` })
   })
 
-  test("settles the OAuth spinner when status polling fails", async () => {
+  test("reports OAuth status polling failures and cancels the attempt", async () => {
+    let cancelled = false
     using server = authServer((request, url) => {
       if (url.pathname === "/api/integration") {
         return Response.json(
@@ -209,6 +246,7 @@ describe("auth command", () => {
         return new Response("Unavailable", { status: 500 })
       }
       if (url.pathname === "/api/integration/openai/connect/oauth/con_oauth" && request.method === "DELETE") {
+        cancelled = true
         return new Response(null, { status: 204 })
       }
       return new Response("Not found", { status: 404 })
@@ -216,8 +254,10 @@ describe("auth command", () => {
 
     const result = await cli(["auth", "login", "openai", "--server", server.url.toString()])
     expect(result.exitCode).toBe(1)
-    expect(result.stdout).toContain("Authentication failed")
+    expect(result.stdout).toContain("Waiting for authorization...")
+    expect(result.stdout).toContain("UnexpectedStatus: 500")
     expect(result.stdout).toContain("Failed")
+    expect(cancelled).toBe(true)
     expect(result.stdout).not.toContain("\n    at ")
   })
 
@@ -231,7 +271,7 @@ describe("auth command", () => {
               id: "anthropic",
               name: "Anthropic",
               methods: [{ type: "key" }],
-              connections: [{ type: "credential", id: "cred_test", label: "default" }],
+              connections: [{ type: "credential", method: "key", id: "cred_test", label: "default" }],
             },
           ]),
         )
@@ -272,15 +312,15 @@ function authServer(fetch: (request: Request, url: URL) => Response | Promise<Re
     fetch(request) {
       const url = new URL(request.url)
       requests?.push(url.pathname)
-      if (url.pathname === "/api/health") return health()
+      if (url.pathname === "/api/info") return status()
       if (url.pathname === "/api/model/default") return Response.json(located(null))
       return fetch(request, url)
     },
   })
 }
 
-function health() {
-  return Response.json({ healthy: true, version: OPENCODE_VERSION, pid: process.pid })
+function status() {
+  return Response.json({ version: OPENCODE_VERSION, pid: process.pid, urls: [], paths: { tmp: "/tmp/opencode" } })
 }
 
 function located<T>(data: T) {

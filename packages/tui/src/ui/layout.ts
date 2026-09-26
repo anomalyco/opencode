@@ -3,9 +3,10 @@ export const SESSION_TABS_COMPACT_WIDTH = 5
 export const SESSION_TABS_COMPACT_BREAKPOINT = 12
 export const SESSION_SIDEBAR_MAX_WIDTH = 72
 const SESSION_CONTENT_MIN_WIDTH = 44
+const SESSION_CONTENT_PREFERRED_WIDTH = 64
 
 export function sessionTabsFitVertically(total: number, width = SESSION_SIDEBAR_WIDTH) {
-  return total >= width + SESSION_CONTENT_MIN_WIDTH
+  return total >= width + SESSION_CONTENT_PREFERRED_WIDTH
 }
 
 export function clampSessionTabsWidth(width: number, total: number) {

@@ -179,6 +179,26 @@ matching resource.
 
 See the [permissions guide](/permissions) for rule matching and available actions.
 
+### Policies
+
+Allow or deny use of a provider, or hard-deny a permission check, with ordered
+statements that broader configuration can override.
+
+```jsonc
+{
+  "experimental": {
+    "policies": [
+      { "action": "provider.use", "resource": "*", "effect": "deny" },
+      { "action": "provider.use", "resource": "anthropic", "effect": "allow" },
+      { "action": "permission", "resource": "shell:git push *", "effect": "deny" },
+    ],
+  },
+}
+```
+
+See the [policies guide](/policies) for matching, precedence across configuration
+files, and Console-managed policy.
+
 ### Agents
 
 Override built-in agents or define specialized agents with their own model,
@@ -328,18 +348,17 @@ automatic and manual requests with a provider or model policy:
 {
   "providers": {
     "openai": {
-      "compaction": { "mode": "provider", "threshold": 120000 },
+      "settings": { "compaction": { "type": "native" } },
       "models": {
-        "gpt-4.1": { "compaction": { "mode": "local" } },
+        "gpt-4.1": { "settings": { "compaction": { "type": "summary" } } },
       },
     },
   },
 }
 ```
 
-A model policy replaces the whole provider policy. The optional positive integer
-`threshold` defaults to the selected model's usable input budget and cannot exceed
-its safe ceiling. Provider checkpoints keep recent user messages within the same
+A model setting overrides the provider setting. Automatic compaction uses the
+selected model's usable input budget. Provider checkpoints keep recent user messages within the same
 `compaction.tokens` budget that local summaries use for their retained tail.
 Top-level `compaction.auto: false` disables new automatic compaction without
 discarding installed checkpoints. See the [compaction guide](/compaction) for
@@ -440,8 +459,8 @@ Set the parent directory for new local worktrees. OpenCode appends the requested
 }
 ```
 
-Relative paths resolve against the project's primary checkout, including when called from a subdirectory or linked
-worktree. This applies to global and project configuration alike; absolute paths are used as-is, and `~/` resolves
+Relative paths resolve against the project's saved canonical checkout. This applies to global and project
+configuration alike; absolute paths are used as-is, and `~/` resolves
 against the user's home directory.
 
 For example, this global configuration places new worktrees under each project's own `.lane/trees/` directory:
@@ -455,10 +474,12 @@ For example, this global configuration places new worktrees under each project's
 ```
 
 Without this setting, creation uses the server's data directory under `worktree/<first-six-project-ID-characters>`.
-Configuration applies to the caller's location, not every clone sharing a project ID. Changing it does not move existing worktrees.
+Worktree creation and refresh load configuration from the project's saved canonical checkout, including when other
+clones share its project ID. Changing it does not move existing worktrees.
 
 Git is the built-in default. A [plugin](/build/plugins#worktrees) that registers a strategy automatically becomes the
-default for its location. Strategy-specific options belong to that plugin, not the `worktree` config object.
+default in that plugin runtime. Project operations use the canonical checkout's runtime. Strategy-specific options
+belong to that plugin, not the `worktree` config object.
 
 ### Plugins
 
@@ -505,7 +526,6 @@ headers, and model variants.
 }
 ```
 
-`websocket: true` on a provider or model opts into its supported session
-WebSocket; a model policy overrides the provider policy.
+Provider `settings.transport: "websocket"` selects its session WebSocket.
 
 See the [providers guide](/providers) for credentials, custom endpoints, provider packages, the WebSocket transport, and model configuration.

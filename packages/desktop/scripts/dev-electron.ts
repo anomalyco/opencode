@@ -27,6 +27,7 @@ export async function prepareDevElectron() {
     await $`plutil -replace ${key} -string ${"OpenCode Dev"} ${plist}`
   }
   await $`plutil -replace CFBundleIdentifier -string ai.opencode.desktop.dev ${plist}`
+  await $`plutil -insert NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac -bool true ${plist}`
   await Bun.write(join(bundle, "Contents/Resources/electron.icns"), icon)
   // Changing the bundle resources invalidates Electron's signature.
   await $`codesign --force --deep --sign - ${bundle}`
