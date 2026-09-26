@@ -1349,6 +1349,31 @@ it.instance(
 )
 
 it.instance(
+  "custom github-copilot models use the bundled Copilot SDK",
+  Effect.gen(function* () {
+    yield* set("GITHUB_TOKEN", "test-token")
+    const providers = yield* list
+    const model = providers[ProviderV2.ID.githubCopilot].models["copilot-grok-4.6"]
+    expect(model).toBeDefined()
+    expect(model.api.npm).toBe("@ai-sdk/github-copilot")
+  }),
+  {
+    config: {
+      provider: {
+        "github-copilot": {
+          models: {
+            "copilot-grok-4.6": {
+              name: "Copilot Grok 4.6",
+              limit: { context: 128000, output: 64000 },
+            },
+          },
+        },
+      },
+    },
+  },
+)
+
+it.instance(
   "custom model inherits api.url from models.dev provider",
   Effect.gen(function* () {
     yield* set("OPENROUTER_API_KEY", "test-api-key")

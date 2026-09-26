@@ -8,6 +8,7 @@ import { NoSuchModelError, type Provider as SDK } from "ai"
 import { Npm } from "@opencode-ai/core/npm"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { Plugin } from "../plugin"
+import { CopilotModels } from "../plugin/github-copilot/models"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { type LanguageModelV3 } from "@ai-sdk/provider"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
@@ -237,8 +238,7 @@ function custom(dep: CustomDep): Record<string, CustomLoader> {
             if (model.api.endpoint === "responses" && sdk.responses) return sdk.responses(modelID)
             if (model.api.endpoint === "chat" && sdk.chat) return sdk.chat(modelID)
           }
-          const match = /^gpt-(\d+)/.exec(modelID)
-          if (match && Number(match[1]) >= 5 && !modelID.startsWith("gpt-5-mini")) return sdk.responses(modelID)
+          if (CopilotModels.fallbackEndpoint(modelID) === "responses") return sdk.responses(modelID)
           return sdk.chat(modelID)
         },
         options: {},
@@ -1497,11 +1497,15 @@ const layer = Layer.effect(
               model.provider?.npm ??
               provider.npm ??
               existingModel?.api.npm ??
-              // Config-defined gateway models bypass fromModelsDevModel, so resolve the
-              // native passthrough npm here before falling back to the catalog default.
-              cloudflareGatewayNpm(providerID, apiID) ??
-              modelsDev[providerID]?.npm ??
-              "@ai-sdk/openai-compatible"
+              // Provider-specific SDKs that must not inherit the models.dev catalog
+              // default: GitHub Copilot needs its bundled SDK, and gateway models
+              // bypass fromModelsDevModel so they resolve their native passthrough npm
+              // before falling back to the catalog default.
+              (providerID === ProviderV2.ID.githubCopilot
+                ? "@ai-sdk/github-copilot"
+                : (cloudflareGatewayNpm(providerID, apiID) ??
+                  modelsDev[providerID]?.npm ??
+                  "@ai-sdk/openai-compatible"))
             const name = iife(() => {
               if (model.name) return model.name
               if (model.id && model.id !== modelID) return modelID
