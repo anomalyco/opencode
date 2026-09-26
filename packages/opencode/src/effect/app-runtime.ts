@@ -4,6 +4,7 @@ import * as Observability from "@opencode-ai/core/observability"
 
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Database } from "@opencode-ai/core/database/database"
+import { Memory } from "@opencode-ai/core/memory"
 import { Auth } from "@/auth"
 import { Account } from "@/account/account"
 import { Config } from "@/config/config"
@@ -60,6 +61,7 @@ export const AppLayer = AppNodeBuilderV1.build(
     Npm.node,
     FSUtil.node,
     Database.node,
+    Memory.node,
     Auth.node,
     Account.node,
     Config.node,
