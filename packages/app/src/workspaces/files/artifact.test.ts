@@ -3,6 +3,7 @@ import {
   artifactKind,
   bytesToBase64,
   contentBytes,
+  fenceFrontmatter,
   fileContentFromBytes,
   MAX_MEDIA_BYTES,
   parseDelimited,
@@ -91,6 +92,24 @@ describe("parseDelimited", () => {
     expect(parsed.rows).toHaveLength(2)
     expect(parsed.total).toBe(4)
   })
+})
+
+describe("fenceFrontmatter", () => {
+  test.each([
+    ["---\nname: a\ntools:\n  write: false\n---\n\n# T", "```yaml\nname: a\ntools:\n  write: false\n```\n\n# T"],
+    ["---\r\nname: a\r\n---\r\n# T", "```yaml\nname: a\r\n```\r\n# T"],
+    ["--- \nname: a\n---", "```yaml\nname: a\n```"],
+    ["---\n---\n# T\n\n---\n", "\n# T\n\n---\n"],
+  ])("fences %j", (text, expected) => {
+    expect(fenceFrontmatter(text)).toBe(expected)
+  })
+
+  test.each(["---\nnot closed\n\nText", "----\nname: a\n---\n", "# T\n---\nname: a\n---\n", "Text\n\n---\n\nMore"])(
+    "leaves %j unchanged",
+    (text) => {
+      expect(fenceFrontmatter(text)).toBe(text)
+    },
+  )
 })
 
 describe("resolveArtifactPath", () => {

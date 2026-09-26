@@ -180,6 +180,13 @@ export function parseDelimited(text: string, delimiter: string, limit = 1000) {
   return { rows, total, columns }
 }
 
+/** Fence leading YAML frontmatter, which Markdown would otherwise render as a rule and a heading. */
+export function fenceFrontmatter(text: string) {
+  return text.replace(/^---[ \t]*\r?\n((?:.*\r?\n)*?)---[ \t]*(?=\r?\n|$)/, (_, yaml: string) =>
+    yaml.trim() ? `\`\`\`yaml\n${yaml}\`\`\`` : "",
+  )
+}
+
 /** Build a blob URL from loaded content. Callers revoke it when the viewer unmounts. */
 export function blobUrlFromContent(content: FileContent) {
   const type = content.mimeType ?? "application/octet-stream"
