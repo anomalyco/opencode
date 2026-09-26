@@ -91,7 +91,10 @@ async function mountSelect<T>(
   initial: DialogSelectOption<T>[],
   current?: T,
   focusCurrent?: boolean,
-  select?: Pick<DialogSelectProps<T>, "flat" | "ref" | "onFilter" | "renderFilter" | "onCancel" | "focusTarget">,
+  select?: Pick<
+    DialogSelectProps<T>,
+    "flat" | "ref" | "onFilter" | "renderFilter" | "onCancel" | "focusTarget" | "footerHints"
+  >,
 ) {
   const state = path.join(root, "state")
   await mkdir(state, { recursive: true })
@@ -622,3 +625,31 @@ test("keeps the first row selected when current is only a marker", async () => {
     select.app.renderer.destroy()
   }
 })
+
+test("aligns right footer hints with dialog header esc", async () => {
+  await using tmp = await tmpdir()
+  const select = await mountSelect(
+    tmp.path,
+    [{ title: "Alpha", value: "alpha" }],
+    undefined,
+    undefined,
+    {
+      footerHints: [{ title: "all projects", label: "ctrl+a", side: "right" }],
+    },
+  )
+
+  try {
+    await select.app.waitForFrame((frame) => frame.includes("ctrl+a"))
+    const lines = select.app.captureCharFrame().split("\n")
+    const headerLine = lines.find((line) => line.includes("esc"))
+    const footerLine = lines.find((line) => line.includes("ctrl+a"))
+    expect(headerLine).toBeDefined()
+    expect(footerLine).toBeDefined()
+    const headerEnd = headerLine!.indexOf("esc") + "esc".length
+    const footerEnd = footerLine!.indexOf("ctrl+a") + "ctrl+a".length
+    expect(footerEnd).toBe(headerEnd)
+  } finally {
+    select.app.renderer.destroy()
+  }
+})
+
