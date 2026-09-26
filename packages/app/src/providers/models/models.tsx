@@ -3,6 +3,7 @@ import { filter, firstBy, flat, groupBy, mapValues, pipe, uniqueBy, values } fro
 import { createSimpleContext } from "@opencode/ui/context"
 import { useProviders } from "@/providers/catalog/providers"
 import { useGlobal } from "@/runtime/server/runtime"
+import { applyProviderVisibility } from "./visibility"
 
 export type ModelKey = { providerID: string; modelID: string }
 
@@ -106,6 +107,16 @@ const createModelsController = (directory: Accessor<string | undefined>) => {
     update(model, state ? "show" : "hide")
   }
 
+  // One store write for the whole provider. A per-model write flushes every mounted switch each time.
+  const setProviderVisibility = (providerID: string, state: boolean) => {
+    const targets: ModelKey[] = []
+    for (const model of available()) {
+      if (model.provider.id === providerID) targets.push({ providerID, modelID: model.id })
+    }
+    const next = applyProviderVisibility(store.user, targets, state ? "show" : "hide")
+    if (next !== store.user) setStore("user", next)
+  }
+
   const push = (model: ModelKey) => {
     const uniq = uniqueBy([model, ...store.recent], (x) => `${x.providerID}:${x.modelID}`)
     if (uniq.length > RECENT_LIMIT) uniq.pop()
@@ -130,6 +141,7 @@ const createModelsController = (directory: Accessor<string | undefined>) => {
     find,
     visible,
     setVisibility,
+    setProviderVisibility,
     recent: {
       list: models.recent,
       push,
