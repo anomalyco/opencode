@@ -59,6 +59,7 @@ function BodyTypography() {
 export function AppBaseProviders(
   props: ParentProps<{
     locale?: Locale
+    onError?: (error: unknown) => void
     onNativeTranslations?: Parameters<typeof LanguageProvider>[0]["onNativeTranslations"]
     onThemeApplied?: (mode: "light" | "dark", scheme: "system" | "light" | "dark") => void
   }>,
@@ -76,6 +77,7 @@ export function AppBaseProviders(
           <UiI18nBridge>
             <ErrorBoundary
               fallback={(error) => {
+                props.onError?.(error)
                 void import("@sentry/solid").then(({ captureException }) => captureException(error))
                 return <ErrorPage error={error} />
               }}

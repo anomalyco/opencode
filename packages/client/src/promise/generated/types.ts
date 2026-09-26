@@ -2484,6 +2484,22 @@ export type UnauthorizedError = { readonly _tag: "UnauthorizedError"; readonly m
 export const isUnauthorizedError = (value: unknown): value is UnauthorizedError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "UnauthorizedError"
 
+export type LocationDirectoryNotFoundError = {
+  readonly _tag: "LocationDirectoryNotFoundError"
+  readonly directory: string
+  readonly message: string
+}
+export const isLocationDirectoryNotFoundError = (value: unknown): value is LocationDirectoryNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "LocationDirectoryNotFoundError"
+
+export type LocationPermissionDeniedError = {
+  readonly _tag: "LocationPermissionDeniedError"
+  readonly directory: string
+  readonly message: string
+}
+export const isLocationPermissionDeniedError = (value: unknown): value is LocationPermissionDeniedError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "LocationPermissionDeniedError"
+
 export type ServiceUnavailableError = {
   readonly _tag: "ServiceUnavailableError"
   readonly message: string

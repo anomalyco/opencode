@@ -1,8 +1,18 @@
 import { Location } from "@opencode/core/location"
-import { LocationServiceMap } from "@opencode/core/location-services"
+import {
+  checkDirectory,
+  DirectoryNotFoundError,
+  LocationServiceMap,
+  PermissionDeniedError,
+} from "@opencode/core/location-services"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
-import { InvalidRequestError } from "@opencode/protocol/errors"
+import {
+  InvalidRequestError,
+  LocationDirectoryNotFoundError,
+  LocationPermissionDeniedError,
+} from "@opencode/protocol/errors"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Effect, Layer, Schema } from "effect"
 import { HttpServerRequest } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
@@ -12,6 +22,7 @@ export type LocationServices = Layer.Success<ReturnType<(typeof LocationServiceM
 
 export class LocationMiddleware extends HttpApiMiddleware.Service<LocationMiddleware, { provides: LocationServices }>()(
   "@opencode/HttpApiLocation",
+  { error: [LocationDirectoryNotFoundError, LocationPermissionDeniedError] },
 ) {}
 
 export function response<A, E, R>(data: Effect.Effect<A, E, R>) {
@@ -54,15 +65,32 @@ function decode(input: string) {
   }
 }
 
-export const layer = Layer.effect(
-  LocationMiddleware,
-  Effect.gen(function* () {
-    const locations = yield* LocationServiceMap.Service
-    return LocationMiddleware.of((effect) =>
-      Effect.gen(function* () {
-        const request = yield* HttpServerRequest.HttpServerRequest
-        return yield* effect.pipe(Effect.provide(locations.get(requestRef(request))))
-      }),
-    )
-  }),
-)
+export const layer = (directoryCheck = true) =>
+  Layer.effect(
+    LocationMiddleware,
+    Effect.gen(function* () {
+      const locations = yield* LocationServiceMap.Service
+      const fs = yield* FSUtil.Service
+      return LocationMiddleware.of((effect, options) =>
+        Effect.gen(function* () {
+          const request = yield* HttpServerRequest.HttpServerRequest
+          const ref = requestRef(request)
+          // An explicit location.get is the client's access check. A Location may have booted
+          // before the directory was removed; cached Location services do not probe again.
+          if (directoryCheck && !ref.workspaceID && options.endpoint.identifier === "location.get")
+            yield* checkDirectory(fs, ref).pipe(Effect.catch(locationFailure))
+          return yield* effect.pipe(Effect.provide(locations.get(ref)), Effect.catchDefect(locationFailure))
+        }),
+      )
+    }),
+  )
+
+export function locationFailure(
+  defect: unknown,
+): Effect.Effect<never, LocationDirectoryNotFoundError | LocationPermissionDeniedError> {
+  if (defect instanceof DirectoryNotFoundError)
+    return Effect.fail(new LocationDirectoryNotFoundError({ directory: defect.directory, message: defect.message }))
+  if (defect instanceof PermissionDeniedError)
+    return Effect.fail(new LocationPermissionDeniedError({ directory: defect.directory, message: defect.message }))
+  return Effect.die(defect)
+}

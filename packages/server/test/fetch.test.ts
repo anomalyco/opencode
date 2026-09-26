@@ -5,8 +5,10 @@ import path from "node:path"
 import { Agent } from "@opencode/schema/agent"
 import { Integration } from "@opencode/schema/integration"
 import { ServerInfo } from "@opencode/protocol/groups/server"
-import { Effect, Schedule, Schema } from "effect"
-import { tmpdir } from "../../core/test/fixture/tmpdir"
+import { FSUtil } from "@opencode/util/fs-util"
+import { NodeFileSystem } from "@effect/platform-node"
+import { Context, Effect, Layer, Schedule, Schema } from "effect"
+import { tmpdir, tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { ServerFetch } from "../src/fetch"
 
@@ -105,7 +107,9 @@ it.live("serves the HttpApi and enforces Basic auth like the Node server", () =>
       ),
     )
     expect(response.status).toBe(200)
-    const body = yield* Effect.promise(() => response.json()).pipe(Effect.flatMap(Schema.decodeUnknownEffect(ServerInfo)))
+    const body = yield* Effect.promise(() => response.json()).pipe(
+      Effect.flatMap(Schema.decodeUnknownEffect(ServerInfo)),
+    )
     expect(body.version).toBe("test-version")
     expect(body.paths.tmp).toEndWith("opencode")
   }),
@@ -118,6 +122,189 @@ it.live("activates credentials through the HttpApi", () =>
       handler(new Request("http://opencode.local/api/credential/cred_missing/activate", { method: "POST" })),
     )
     expect(response.status).toBe(204)
+  }),
+)
+
+it.live("reports a missing project directory and recovers when it returns", () =>
+  Effect.gen(function* () {
+    const handler = yield* ServerFetch.make(options)
+    const directory = yield* tmpdirScoped()
+    const missing = path.join(directory.path, "moved-project")
+    const request = (endpoint: string) =>
+      handler(
+        new Request(`http://opencode.local${endpoint}`, {
+          headers: { "x-opencode-directory": encodeURIComponent(missing) },
+        }),
+      )
+
+    const response = yield* Effect.promise(() => request("/api/integration"))
+    expect(response.status).toBe(400)
+    expect(yield* Effect.promise(() => response.json())).toMatchObject({
+      _tag: "LocationDirectoryNotFoundError",
+      directory: missing,
+    })
+    expect((yield* Effect.promise(() => request("/api/location"))).status).toBe(400)
+
+    yield* Effect.promise(() => fs.mkdir(missing))
+    expect((yield* Effect.promise(() => request("/api/integration"))).status).toBe(200)
+  }),
+)
+
+it.live("checks a directory once per location boot, not on every request", () =>
+  Effect.gen(function* () {
+    const directory = yield* tmpdirScoped()
+    const checked: string[] = []
+    const filesystem = FSUtil.layer.pipe(
+      Layer.provide(NodeFileSystem.layer),
+      Layer.flatMap((context) => {
+        const fs = Context.get(context, FSUtil.Service)
+        return Layer.succeed(
+          FSUtil.Service,
+          FSUtil.Service.of({
+            ...fs,
+            realPath: (input) => {
+              if (input === directory.path) checked.push(input)
+              return fs.realPath(input)
+            },
+          }),
+        )
+      }),
+    )
+    const handler = yield* ServerFetch.make(options, { overrides: [FSUtil.node.replace(filesystem)] })
+    const request = (endpoint: string, method = "GET") =>
+      handler(
+        new Request(`http://opencode.local${endpoint}`, {
+          method,
+          headers: { "x-opencode-directory": encodeURIComponent(directory.path) },
+        }),
+      )
+
+    expect((yield* Effect.promise(() => request("/api/integration"))).status).toBe(200)
+    const afterBoot = checked.length
+    expect(afterBoot).toBeGreaterThan(0)
+    expect((yield* Effect.promise(() => request("/api/integration"))).status).toBe(200)
+    expect(checked).toHaveLength(afterBoot)
+    expect((yield* Effect.promise(() => request("/api/location"))).status).toBe(200)
+    expect(checked).toHaveLength(afterBoot + 1)
+
+    expect((yield* Effect.promise(() => request("/api/location/reload", "POST"))).status).toBe(204)
+    const afterReload = checked.length
+    expect(afterReload).toBeGreaterThan(afterBoot)
+    expect((yield* Effect.promise(() => request("/api/integration"))).status).toBe(200)
+    expect(checked).toHaveLength(afterReload)
+  }),
+)
+
+it.live("re-checks a booted project directory on location.get", () =>
+  Effect.gen(function* () {
+    const handler = yield* ServerFetch.make(options)
+    const root = yield* tmpdirScoped()
+    const directory = path.join(root.path, "project")
+    yield* Effect.promise(() => fs.mkdir(directory))
+    const request = (endpoint: string) =>
+      handler(
+        new Request(`http://opencode.local${endpoint}`, {
+          headers: { "x-opencode-directory": encodeURIComponent(directory) },
+        }),
+      )
+    expect((yield* Effect.promise(() => request("/api/integration"))).status).toBe(200)
+
+    yield* Effect.promise(() => fs.rm(directory, { recursive: true }))
+    // Warm requests reuse the booted Location without probing the directory.
+    expect((yield* Effect.promise(() => request("/api/integration"))).status).toBe(200)
+    const response = yield* Effect.promise(() => request("/api/location"))
+    expect(response.status).toBe(400)
+    expect(yield* Effect.promise(() => response.json())).toMatchObject({
+      _tag: "LocationDirectoryNotFoundError",
+      directory,
+    })
+  }),
+)
+
+it.live("reports a missing session directory and still moves the session", () =>
+  Effect.gen(function* () {
+    const handler = yield* ServerFetch.make(options)
+    const root = yield* tmpdirScoped()
+    const source = path.join(root.path, "source")
+    const destination = path.join(root.path, "destination")
+    yield* Effect.promise(() => Promise.all([fs.mkdir(source), fs.mkdir(destination)]))
+    const created = (yield* Effect.promise(() =>
+      handler(
+        new Request("http://opencode.local/api/session", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ location: { directory: source } }),
+        }),
+      ).then((response) => response.json()),
+    )) as { data: { id: string } }
+    const forms = () =>
+      Effect.promise(() => handler(new Request(`http://opencode.local/api/session/${created.data.id}/form`)))
+
+    yield* Effect.promise(() => fs.rm(source, { recursive: true }))
+    const response = yield* forms()
+    expect(response.status).toBe(400)
+    expect(yield* Effect.promise(() => response.json())).toMatchObject({
+      _tag: "LocationDirectoryNotFoundError",
+      directory: source,
+    })
+    // Session execution routes use a different middleware from form routes.
+    const action = yield* Effect.promise(() =>
+      handler(new Request(`http://opencode.local/api/session/${created.data.id}/background`, { method: "POST" })),
+    )
+    expect(action.status).toBe(400)
+    expect(yield* Effect.promise(() => action.json())).toMatchObject({
+      _tag: "LocationDirectoryNotFoundError",
+      directory: source,
+    })
+    const pending = yield* Effect.promise(() =>
+      handler(new Request(`http://opencode.local/api/session/${created.data.id}/permission`)),
+    )
+    expect(pending.status).toBe(400)
+    expect(yield* Effect.promise(() => pending.json())).toMatchObject({
+      _tag: "LocationDirectoryNotFoundError",
+      directory: source,
+    })
+
+    const moved = yield* Effect.promise(() =>
+      handler(
+        new Request(`http://opencode.local/api/session/${created.data.id}/move`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ directory: destination }),
+        }),
+      ),
+    )
+    expect(moved.status).toBe(204)
+    expect((yield* forms()).status).toBe(200)
+  }),
+)
+
+it.live("reports denied project access without breaking other locations", () =>
+  Effect.gen(function* () {
+    if (process.platform === "win32") return
+    const handler = yield* ServerFetch.make(options)
+    const root = yield* tmpdirScoped()
+    const parent = path.join(root.path, "private")
+    const directory = path.join(parent, "project")
+    yield* Effect.promise(() => fs.mkdir(directory, { recursive: true }))
+    yield* Effect.addFinalizer(() => Effect.promise(() => fs.chmod(parent, 0o700)))
+    yield* Effect.promise(() => fs.chmod(parent, 0o000))
+
+    const request = () =>
+      handler(
+        new Request("http://opencode.local/api/plugin", {
+          headers: { "x-opencode-directory": encodeURIComponent(directory) },
+        }),
+      )
+    const response = yield* Effect.promise(request)
+    expect(response.status).toBe(403)
+    expect(yield* Effect.promise(() => response.json())).toMatchObject({
+      _tag: "LocationPermissionDeniedError",
+      directory,
+    })
+
+    yield* Effect.promise(() => fs.chmod(parent, 0o700))
+    expect((yield* Effect.promise(request)).status).toBe(200)
   }),
 )
 

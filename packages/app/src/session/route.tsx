@@ -6,10 +6,11 @@ import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { CommentsProvider } from "@/composer/comments"
 import { readPromptPresentation } from "@/composer/comment-note"
 import { FileProvider } from "@/workspaces/files/model"
-import { LocationProvider } from "@/workspaces/location"
+import { LocationProvider, useWorkspaceLocation } from "@/workspaces/location"
 import { ModelsProvider } from "@/providers/models/models"
 import { useProviders } from "@/providers/catalog/providers"
 import { useLanguage } from "@/runtime/i18n/language"
+import { usePlatform } from "@/runtime/platform/platform"
 import { useNotification } from "@/shell/notifications/notification"
 import { ComposerPersistenceProvider } from "@/composer/persistence"
 import { useData, useServer } from "@/runtime/server/current"
@@ -26,6 +27,7 @@ import { IncompatibleServerPanel } from "./incompatible-server-panel"
 import { SessionErrorFallback } from "./route-error"
 import { createSessionResolution } from "./session-resolution"
 import { SessionScreen } from "./screen"
+import { SessionLocationUnavailable } from "./location-unavailable"
 import { PreparingComposer } from "./preparing-composer"
 
 export function TargetSessionRouteContent() {
@@ -164,18 +166,31 @@ function SessionStatePanel(props: ParentProps) {
 }
 
 function TargetSessionPage() {
+  const params = useParams<{ id: string }>()
+  const platform = usePlatform()
+  const server = useServer()
+  const location = useWorkspaceLocation()
   return (
-    // These providers select their scoped state reactively and retain bounded caches,
-    // so keep their owners alive while navigating between workspaces on this server.
-    <TerminalProvider>
-      <FileProvider>
-        <ComposerPersistenceProvider>
-          <CommentsProvider>
-            <SessionPage />
-          </CommentsProvider>
-        </ComposerPersistenceProvider>
-      </FileProvider>
-    </TerminalProvider>
+    <Show
+      when={platform.platform === "desktop" && server.isLocal && location().error}
+      fallback={
+        // These providers select their scoped state reactively and retain bounded caches,
+        // so keep their owners alive while navigating between workspaces on this server.
+        <TerminalProvider>
+          <FileProvider>
+            <ComposerPersistenceProvider>
+              <CommentsProvider>
+                <SessionPage />
+              </CommentsProvider>
+            </ComposerPersistenceProvider>
+          </FileProvider>
+        </TerminalProvider>
+      }
+    >
+      <SessionStatePanel>
+        <SessionLocationUnavailable sessionID={params.id} />
+      </SessionStatePanel>
+    </Show>
   )
 }
 

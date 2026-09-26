@@ -62,7 +62,7 @@ export function serverOptions(options: Options): ServerOptions {
   return {
     app: options.app,
     password: options.password,
-    fs: { filewatcher: false, fff: false },
+    fs: { filewatcher: false, fff: false, directoryCheck: false },
     // Durable event history is how a turn orphaned by eviction is recovered:
     // the boot-time resume replays it. A runtime that dies without teardown
     // cannot opt out of it, so this is not exposed as an option.

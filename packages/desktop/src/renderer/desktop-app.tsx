@@ -28,7 +28,7 @@ import { bindDesktopMenu } from "./platform/menu"
 import { createSidecarResolver, initializationData, sidecarHttp } from "./startup/initialization"
 import { preloadStoredLocale } from "./startup/locale"
 import { LoadingSplash } from "./startup/splash"
-import { getLastActiveUrl } from "./window/route-storage"
+import { getLastActiveUrl, setLastActiveUrl } from "./window/route-storage"
 import { DesktopMemoryRouter } from "./window/router"
 import { availableStartupServer, readyWslConnections } from "./wsl/connections"
 import { createSshConnections } from "./ssh/connections"
@@ -148,6 +148,7 @@ export function DesktopApp(props: { api: ElectronAPI; updater: UpdaterPlatform; 
   return (
     <PlatformProvider value={platform}>
       <AppBaseProviders
+        onError={() => setLastActiveUrl(windowState.id, "/")}
         locale={locale.latest}
         onNativeTranslations={(bundle) => void props.api.setNativeTranslations(bundle).catch(() => undefined)}
         onThemeApplied={(mode, scheme) => {

@@ -17,6 +17,8 @@ import type { HomeController } from "../model"
 import { useGlobal } from "@/runtime/server/runtime"
 import { SessionTransfer } from "@opencode/schema/session-transfer"
 import { useSshAuthenticate } from "@/servers/ssh/authenticate"
+import { getFilename } from "@opencode/util/path"
+import { formatProjectLocationError, projectLocationError } from "@/runtime/server/errors"
 import { useRevealProject } from "./reveal"
 
 export const HomeServersSchema = Schema.Struct({
@@ -44,12 +46,73 @@ export function createHomeProjectsController(home: HomeController) {
     return [project.worktree, ...(project.sandboxes ?? [])]
   }
 
+  function closeProject(conn: ServerConnection.Any, directory: string) {
+    const next = closeHomeProject(
+      home.selection.value(),
+      ServerConnection.key(conn),
+      home.server.context(conn).projects,
+      directory,
+    )
+    if (next) home.selection.set(next)
+  }
+
+  function accessible(conn: ServerConnection.Any, directory: string) {
+    return home.server
+      .context(conn)
+      .sdk.api.location.get({ location: { directory } })
+      .then(
+        () => true,
+        (error: unknown) => {
+          showUnavailable(conn, directory, error)
+          return false
+        },
+      )
+  }
+
+  function showUnavailable(conn: ServerConnection.Any, directory: string, error: unknown) {
+    const location = projectLocationError(error)
+    if (!location) {
+      showToast({
+        variant: "error",
+        title: language.t("toast.project.reloadFailed.title", { project: getFilename(directory) }),
+        description: language.t("error.project.unavailable", { directory }),
+      })
+      return
+    }
+    const saved = home.server
+      .context(conn)
+      .projects.list()
+      .some((project) => project.worktree === directory)
+    showToast({
+      variant: "error",
+      persistent: true,
+      title: language.t(
+        location.type === "missing" ? "toast.project.missing.title" : "toast.project.permissionDenied.title",
+      ),
+      description: formatProjectLocationError(location, language.t),
+      actions:
+        location.type === "missing" && saved
+          ? [{ label: language.t("toast.project.missing.remove"), onClick: () => closeProject(conn, directory) }]
+          : undefined,
+    })
+  }
+
+  function add(conn: ServerConnection.Any, directories: string[]) {
+    if (platform.platform !== "desktop" || !ServerConnection.local(conn)) return home.project.add(conn, directories)
+    void Promise.all(directories.map((directory) => accessible(conn, directory))).then((available) =>
+      home.project.add(
+        conn,
+        directories.filter((_, index) => available[index]),
+      ),
+    )
+  }
+
   function choose(conn: ServerConnection.Any) {
     pickDirectory({
       server: conn,
       title: language.t("command.project.open"),
       multiple: true,
-      onSelect: (result) => home.project.add(conn, homeProjectDirectories(result)),
+      onSelect: (result) => add(conn, homeProjectDirectories(result)),
     })
   }
 
@@ -93,13 +156,29 @@ export function createHomeProjectsController(home: HomeController) {
       recentlyClosed: home.project.recentlyClosed,
       homedir: home.project.homedir,
       select: (conn: ServerConnection.Any, directory: string) => {
-        if (authenticate(conn, () => home.project.select(conn, directory))) return
-        home.project.select(conn, directory)
+        const select = () => {
+          const selected = home.selection.value()
+          if (selected.server === ServerConnection.key(conn) && selected.directory === directory)
+            return home.project.select(conn, directory)
+          if (platform.platform !== "desktop" || !ServerConnection.local(conn)) return home.project.select(conn, directory)
+          void accessible(conn, directory).then((ok) => {
+            if (ok) home.project.select(conn, directory)
+          })
+        }
+        if (authenticate(conn, select)) return
+        select()
       },
-      add: home.project.add,
+      add,
       openNewSession: (conn: ServerConnection.Any, directory: string) => {
-        if (authenticate(conn, () => home.project.openProjectNewSession(conn, directory))) return
-        home.project.openProjectNewSession(conn, directory)
+        const open = () => {
+          if (platform.platform !== "desktop" || !ServerConnection.local(conn))
+            return home.project.openProjectNewSession(conn, directory)
+          void accessible(conn, directory).then((ok) => {
+            if (ok) home.project.openProjectNewSession(conn, directory)
+          })
+        }
+        if (authenticate(conn, open)) return
+        open()
       },
       canImportSession: !!platform.openAttachmentPickerDialog,
       importSession: (conn: ServerConnection.Any, project: LocalProject) => {
@@ -131,9 +210,11 @@ export function createHomeProjectsController(home: HomeController) {
           })
       },
       edit: (conn: ServerConnection.Any, project: LocalProject) => {
-        settings.openProject({
-          server: ServerConnection.key(conn),
-          project: project.worktree,
+        if (platform.platform !== "desktop" || !ServerConnection.local(conn))
+          return settings.openProject({ server: ServerConnection.key(conn), project: project.worktree })
+        void accessible(conn, project.worktree).then((ok) => {
+          if (!ok) return
+          settings.openProject({ server: ServerConnection.key(conn), project: project.worktree })
         })
       },
       unseenCount: (conn: ServerConnection.Any, project: LocalProject) => {
@@ -151,15 +232,7 @@ export function createHomeProjectsController(home: HomeController) {
         if (home.server.health(conn)?.healthy === false) return
         choose(conn)
       },
-      close: (conn: ServerConnection.Any, directory: string) => {
-        const next = closeHomeProject(
-          home.selection.value(),
-          ServerConnection.key(conn),
-          home.server.context(conn).projects,
-          directory,
-        )
-        if (next) home.selection.set(next)
-      },
+      close: closeProject,
       move: (conn: ServerConnection.Any, worktree: string, index: number) => {
         home.server.context(conn).projects.move(worktree, index)
       },

@@ -25,7 +25,7 @@ export const AppIsFirstLaunchOnboardingPending = Rpc.make("AppIsFirstLaunchOnboa
 })
 export const AppFinishFirstLaunchOnboarding = Rpc.make("AppFinishFirstLaunchOnboarding", {
   payload: { createDefaultProject: Schema.Boolean },
-  success: Schema.NullOr(Schema.String),
+  success: Schema.NullOr(Schema.Union([Schema.String, Schema.Struct({ permissionDenied: Schema.String })])),
 })
 export const AppCheckAppExists = Rpc.make("AppCheckAppExists", {
   payload: { appName: Schema.String },

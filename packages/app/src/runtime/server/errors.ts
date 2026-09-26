@@ -1,3 +1,6 @@
+import { isLocationDirectoryNotFoundError, isLocationPermissionDeniedError } from "@opencode/client/promise"
+import { dict } from "../i18n/en"
+
 export type ConfigInvalidError = {
   name: "ConfigInvalidError"
   data: {
@@ -25,7 +28,23 @@ function tr(translator: Translator | undefined, key: string, text: string, vars?
   return out
 }
 
+export function projectLocationError(error: unknown) {
+  const unwrapped = unwrapNamedError(error)
+  if (isLocationDirectoryNotFoundError(unwrapped)) return { type: "missing" as const, directory: unwrapped.directory }
+  if (isLocationPermissionDeniedError(unwrapped)) return { type: "denied" as const, directory: unwrapped.directory }
+}
+
+export function formatProjectLocationError(
+  info: NonNullable<ReturnType<typeof projectLocationError>>,
+  translate?: Translator,
+) {
+  const key = info.type === "missing" ? "error.project.missing" : "error.project.permissionDenied"
+  return tr(translate, key, dict[key].replace("{{directory}}", info.directory), { directory: info.directory })
+}
+
 export function formatServerError(error: unknown, translate?: Translator, fallback?: string) {
+  const location = projectLocationError(error)
+  if (location) return formatProjectLocationError(location, translate)
   const unwrapped = unwrapNamedError(error)
   if (isConfigInvalidErrorLike(unwrapped)) return parseReadableConfigInvalidError(unwrapped, translate)
   if (isProviderModelNotFoundErrorLike(unwrapped)) return parseReadableProviderModelNotFoundError(unwrapped, translate)

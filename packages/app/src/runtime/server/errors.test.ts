@@ -1,7 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import type { FileNotFoundError, SessionNotFoundError } from "@opencode/client/promise"
 import type { ConfigInvalidError, ProviderModelNotFoundError } from "./errors"
-import { formatServerError, isSessionNotFoundError, parseReadableConfigInvalidError } from "./errors"
+import {
+  formatServerError,
+  isSessionNotFoundError,
+  parseReadableConfigInvalidError,
+  projectLocationError,
+} from "./errors"
 
 function fill(text: string, vars?: Record<string, string | number>) {
   if (!vars) return text
@@ -95,6 +100,29 @@ describe("formatServerError", () => {
     } satisfies FileNotFoundError
 
     expect(formatServerError(error, language.t)).toBe("File not found: deleted.txt")
+  })
+
+  test("explains missing and inaccessible project folders", () => {
+    const sdkError = (body: unknown) => new Error("Request failed", { cause: { body } })
+    const missing = sdkError({
+      _tag: "LocationDirectoryNotFoundError",
+      directory: "C:\\Users\\Test User\\Projects\\moved-project",
+      message: "Project directory not found",
+    })
+    const denied = sdkError({
+      _tag: "LocationPermissionDeniedError",
+      directory: "/Users/example/Documents/private-project",
+      message: "Cannot access project directory",
+    })
+
+    expect(projectLocationError(missing)).toEqual({
+      type: "missing",
+      directory: "C:\\Users\\Test User\\Projects\\moved-project",
+    })
+    expect(formatServerError(missing)).toContain("C:\\Users\\Test User\\Projects\\moved-project was moved")
+    expect(projectLocationError(denied)?.type).toBe("denied")
+    expect(formatServerError(denied)).toContain("Privacy & Security")
+    expect(projectLocationError(new Error("Request failed"))).toBeUndefined()
   })
 
   test("returns provided string errors", () => {

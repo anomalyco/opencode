@@ -4,19 +4,35 @@ import { Instance } from "./instance.js"
 import { Location } from "./location.js"
 import { LocationLifecycle } from "./location-lifecycle.js"
 import { LocationServiceMap } from "./location-service-map.js"
+import { FSUtil } from "@opencode/util/fs-util"
+import type { PlatformError } from "effect/PlatformError"
 
 export { LocationServiceMap } from "./location-service-map.js"
 
 export type LocationServices = Instance.Services
 export type LocationError = Instance.Error
 
+export class DirectoryNotFoundError extends Error {
+  constructor(readonly directory: string) {
+    super(`Project directory not found: ${directory}`)
+  }
+}
+
+export class PermissionDeniedError extends Error {
+  constructor(readonly directory: string) {
+    super(`Cannot access project directory: ${directory}`)
+  }
+}
+
 export function buildLocationServiceMap(
   replacements: LayerNode.Replacements = [],
+  options: { readonly directoryCheck?: boolean } = {},
 ): Layer.Layer<LocationServiceMap.Service> {
   return Layer.effect(
     LocationServiceMap.Service,
     Effect.gen(function* () {
       const owner = yield* Effect.scope
+      const fs = yield* Effect.serviceOption(FSUtil.Service)
       const builds = MutableHashMap.empty<Location.Ref, { close?: Effect.Effect<void> }>()
       const inner: LayerMap.LayerMap<Location.Ref, LocationServices> = yield* LayerMap.make(
         (ref: Location.Ref) => {
@@ -24,7 +40,13 @@ export function buildLocationServiceMap(
           MutableHashMap.set(builds, ref, build)
           return Layer.fromBuild((memoMap, scope) =>
             Effect.suspend(() =>
-              Layer.buildWithMemoMap(Instance.layer(ref, { replacements: bindings }), memoMap, scope),
+              (options.directoryCheck === false || ref.workspaceID || Option.isNone(fs)
+                ? Effect.void
+                : checkDirectory(fs.value, ref)
+              ).pipe(
+                Effect.orDie,
+                Effect.andThen(Layer.buildWithMemoMap(Instance.layer(ref, { replacements: bindings }), memoMap, scope)),
+              ),
             ).pipe(
               Effect.onExit((exit) => {
                 const finish = Effect.suspend(() => {
@@ -52,8 +74,7 @@ export function buildLocationServiceMap(
             ),
           )
         },
-        // Retain healthy graphs. Boot failures, not local filesystem probes,
-        // decide whether a location (including workspace placement) can retry.
+        // Retain healthy graphs; failed checks and boot failures retry on the next use.
         { idleTimeToLive: Duration.infinity },
       )
       const map = {
@@ -84,5 +105,28 @@ export function buildLocationServiceMap(
       ]
       return map
     }),
+  )
+}
+
+export function checkDirectory(fs: FSUtil.Interface, ref: Location.Ref) {
+  return fs.realPath(ref.directory).pipe(
+    Effect.asVoid,
+    Effect.catchReason("PlatformError", "NotFound", () => Effect.fail(new DirectoryNotFoundError(ref.directory))),
+    Effect.catchTag("PlatformError", (error) =>
+      isPermissionDenied(error) ? Effect.fail(new PermissionDeniedError(ref.directory)) : Effect.die(error),
+    ),
+  )
+}
+
+// Effect maps EACCES to PermissionDenied, but macOS privacy blocks report EPERM as Unknown.
+export function isPermissionDenied(error: PlatformError) {
+  if (error.reason._tag === "PermissionDenied") return true
+  const cause = error.cause
+  return (
+    error.reason._tag === "Unknown" &&
+    typeof cause === "object" &&
+    cause !== null &&
+    "code" in cause &&
+    cause.code === "EPERM"
   )
 }

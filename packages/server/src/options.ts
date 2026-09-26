@@ -41,6 +41,8 @@ export const ServerOptions = Schema.Struct({
     Schema.Struct({
       filewatcher: Schema.optional(Schema.Boolean),
       fff: Schema.optional(Schema.Boolean),
+      // Hosts without a local project filesystem (workerd, simulation) opt out of the boot probe.
+      directoryCheck: Schema.optional(Schema.Boolean),
     }),
   ),
 })

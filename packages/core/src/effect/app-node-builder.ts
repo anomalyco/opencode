@@ -2,6 +2,7 @@ import { buildLocationServiceMap } from "../location-services.js"
 import { LocationServiceMap } from "../location-service-map.js"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Effect, Layer } from "effect"
 import { Instance } from "../instance/service.js"
 
@@ -19,10 +20,23 @@ const instances = makeGlobalNode({
   deps: [LocationServiceMap.node],
 })
 
-export function build<A, E>(root: LayerNode.Graph<A, E>, replacements: LayerNode.Replacements = []) {
+export function build<A, E>(
+  root: LayerNode.Graph<A, E>,
+  replacements: LayerNode.Replacements = [],
+  options: { readonly directoryCheck?: boolean } = {},
+) {
   const bindings = [Instance.node.replace(instances), ...replacements]
   return LayerNode.compile(root, {
-    replacements: [LocationServiceMap.node.replace(buildLocationServiceMap(bindings)), ...bindings],
+    replacements: [
+      LocationServiceMap.node.replace(
+        makeGlobalNode({
+          service: LocationServiceMap.Service,
+          layer: buildLocationServiceMap(bindings, options),
+          deps: [FSUtil.node],
+        }),
+      ),
+      ...bindings,
+    ],
   })
 }
 

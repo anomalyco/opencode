@@ -42,7 +42,7 @@ export type ElectronAPI = {
   getDefaultServerUrl(): Promise<string | null>
   setDefaultServerUrl(url: string | null): Promise<void>
   isFirstLaunchOnboardingPending(): Promise<boolean>
-  finishFirstLaunchOnboarding(createDefaultProject: boolean): Promise<string | null>
+  finishFirstLaunchOnboarding(createDefaultProject: boolean): Promise<string | null | { permissionDenied: string }>
   checkAppExists(appName: string): Promise<boolean>
   resolveAppPath(appName: string): Promise<string | null>
   storeItems(name: string): Promise<{ items: Record<string, string>; revision: number }>

@@ -13,6 +13,7 @@ it.live("boots the workerd profile over durable object storage", () =>
       password: "secret",
       app: { version: "workerd-test" },
       config: { content: "{}" },
+      models: { fetch: false },
     })
 
     const unauthorized = yield* Effect.promise(() => handler(new Request("http://opencode.local/api/info")))
@@ -29,5 +30,19 @@ it.live("boots the workerd profile over durable object storage", () =>
 
     const body: unknown = yield* Effect.promise(() => status.json())
     expect(body).toMatchObject({ version: "workerd-test" })
+
+    // The host does not have this project directory; Location boot must not probe its host filesystem.
+    const directory = "/workerd-project-only"
+    const location = yield* Effect.promise(() =>
+      handler(
+        new Request("http://opencode.local/api/location", {
+          headers: {
+            authorization: `Basic ${btoa("opencode:secret")}`,
+            "x-opencode-directory": encodeURIComponent(directory),
+          },
+        }),
+      ),
+    )
+    expect(location.status).toBe(200)
   }),
 )
