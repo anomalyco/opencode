@@ -1,15 +1,17 @@
 import { SessionV1 } from "@opencode-ai/core/v1/session"
+import type { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { expect } from "bun:test"
 import { tool } from "ai"
-import { Cause, Effect, Exit, Fiber, Layer, Stream } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Stream } from "effect"
 import path from "path"
 import z from "zod"
 import type { Agent } from "../../src/agent/agent"
 import { Provider } from "@/provider/provider"
 
+import { Permission } from "@/permission"
 import { Session } from "@/session/session"
 import { LLM } from "../../src/session/llm"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -19,7 +21,7 @@ import { SessionStatus } from "../../src/session/status"
 import { SessionSummary } from "../../src/session/summary"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { provideTmpdirInstance, provideTmpdirServer } from "../fixture/fixture"
-import { testEffect } from "../lib/effect"
+import { awaitWithTimeout, testEffect } from "../lib/effect"
 import { raw, reply, TestLLMServer } from "../lib/llm-server"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -167,6 +169,7 @@ const assistant = Effect.fn("TestSession.assistant")(function* (
 
 const root = LayerNode.group([
   SessionProcessor.node,
+  Permission.node,
   Session.node,
   SessionProjector.node,
   Provider.node,
@@ -1116,6 +1119,392 @@ itProviderError.live("session.processor effect tests fail provider-executed erro
     { config: cfg },
   ),
 )
+
+const periodicCalls = [
+  { id: "call-a1", name: "lookup", input: { query: "a" } },
+  { id: "call-b1", name: "search", input: { query: "b" } },
+  { id: "call-a2", name: "lookup", input: { query: "a" } },
+  { id: "call-b2", name: "search", input: { query: "b" } },
+  { id: "call-a3", name: "lookup", input: { query: "a" } },
+  { id: "call-b3", name: "search", input: { query: "b" } },
+]
+
+type DoomLoopFixture = {
+  name: string
+  calls: typeof periodicCalls
+  delivery?: "duplicate" | "out-of-order"
+  history?: boolean
+  metadata?: boolean | "overlap"
+  action?: "allow" | "deny"
+  reply?: "once" | "reject"
+}
+
+const doomLoopFixtures: DoomLoopFixture[] = [
+  {
+    name: "session.processor asks doom_loop permission after three period-2 repetitions",
+    calls: periodicCalls,
+  },
+  {
+    name: "session.processor preserves period-1 doom_loop ask behavior",
+    calls: [
+      { id: "call-a1", name: "lookup", input: { query: "a" } },
+      { id: "call-a2", name: "lookup", input: { query: "a" } },
+      { id: "call-a3", name: "lookup", input: { query: "a" } },
+    ],
+  },
+  {
+    name: "session.processor doom_loop counts repeated active IDs once and preserves part mapping",
+    calls: periodicCalls,
+    delivery: "duplicate",
+    reply: "once",
+  },
+  {
+    name: "session.processor doom_loop does not seed a new detector from stored tool parts",
+    calls: [periodicCalls[0]],
+    history: true,
+  },
+  {
+    name: "session.processor doom_loop counts call order despite out-of-order results and concurrent completion",
+    calls: periodicCalls,
+    delivery: "out-of-order",
+    reply: "reject",
+  },
+  {
+    name: "session.processor doom_loop allows period-2 continuation",
+    calls: periodicCalls,
+    action: "allow",
+  },
+  {
+    name: "session.processor doom_loop denies period-2 calls with clean termination",
+    calls: periodicCalls,
+    action: "deny",
+  },
+  {
+    name: "session.processor doom_loop rejects period-2 calls with clean termination",
+    calls: periodicCalls,
+    reply: "reject",
+  },
+  ...([undefined, "deny"] as const).map((action) => ({
+    name: `session.processor doom_loop ${action ?? "asks"} after metadata starts calls before normalized delivery`,
+    calls: periodicCalls.filter((call) => call.name === "lookup"),
+    metadata: true,
+    action,
+  })),
+  {
+    name: "session.processor doom_loop counts metadata-prestarted active duplicates once and eventually asks",
+    calls: periodicCalls.filter((call) => call.name === "lookup"),
+    metadata: true,
+    delivery: "duplicate",
+  },
+  {
+    name: "session.processor doom_loop metadata overlap asks only on the third unique normalized call",
+    calls: periodicCalls.filter((call) => call.name === "lookup"),
+    metadata: "overlap",
+    delivery: "duplicate",
+  },
+  ...(["allow", "deny"] as const).map((action) => ({
+    name: `session.processor doom_loop preserves period-1 ${action} behavior`,
+    calls: periodicCalls.filter((call) => call.name === "lookup"),
+    action,
+  })),
+]
+
+for (const fixture of doomLoopFixtures) {
+  const overlap =
+    fixture.metadata === "overlap"
+      ? {
+          armed: true,
+          normalized: false,
+          committed: Deferred.makeUnsafe<void>(),
+          release: Deferred.makeUnsafe<void>(),
+          admitted: Deferred.makeUnsafe<void>(),
+          joined: Deferred.makeUnsafe<void>(),
+        }
+      : undefined
+  const metadata = fixture.metadata
+    ? (overlap ? fixture.calls.slice(0, 1) : fixture.calls).map((call) => ({
+        call,
+        ready: Deferred.makeUnsafe<void>(),
+        resume: Deferred.makeUnsafe<void>(),
+      }))
+    : []
+  const result = (call: (typeof periodicCalls)[number]) =>
+    LLMEvent.toolResult({
+      id: call.id,
+      name: call.name,
+      result: { type: "json", value: { title: call.name, output: `done:${call.id}`, metadata: {} } },
+    })
+  const llm = Layer.mock(LLM.Service, {
+    stream: () =>
+      Stream.fromIterable([
+        // No step boundary between stored history and the current call: the old DB suffix would match.
+        ...(fixture.history ? [] : [LLMEvent.stepStart({ index: 0 })]),
+        ...(fixture.delivery === "out-of-order"
+          ? [
+              ...fixture.calls.slice(0, -1).map((call) => LLMEvent.toolCall(call)),
+              ...[1, 3, 0, 4, 2].map((index) => result(fixture.calls[index])),
+              LLMEvent.toolCall(fixture.calls[5]),
+              result(fixture.calls[5]),
+            ]
+          : fixture.calls.flatMap((call) => [
+              LLMEvent.toolInputStart({ id: call.id, name: call.name }),
+              LLMEvent.toolInputEnd({ id: call.id, name: call.name }),
+              LLMEvent.toolCall(call),
+              ...(fixture.delivery === "duplicate" ? [LLMEvent.toolCall(call), LLMEvent.toolCall(call)] : []),
+              result(call),
+            ])),
+        LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+        LLMEvent.finish({ reason: "tool-calls" }),
+      ]).pipe(
+        Stream.rechunk(1),
+        Stream.mapEffect((event) => {
+          if (overlap && event.type === "tool-call" && event.id === fixture.calls[0].id) {
+            if (!overlap.normalized) {
+              overlap.normalized = true
+              return Effect.succeed(event)
+            }
+            // rechunk(1): this pull proves the first normalized handler returned, not just that its write committed.
+            return Deferred.succeed(overlap.admitted, undefined).pipe(
+              Effect.andThen(Deferred.await(overlap.joined)),
+              Effect.as(event),
+            )
+          }
+          const next = event.type === "tool-input-end" ? metadata.find((item) => item.call.id === event.id) : undefined
+          if (!next) return Effect.succeed(event)
+          // Input-start was consumed; overlap admits after commit while the older callback is still suspended.
+          return Deferred.succeed(next.ready, undefined).pipe(
+            Effect.andThen(Deferred.await(overlap?.committed ?? next.resume)),
+            Effect.as(event),
+          )
+        }),
+      ),
+  })
+  const itDoomLoop = testEffect(LayerNode.compile(root, [...replacements, [LLM.node, llm]]))
+
+  itDoomLoop.live(fixture.name, () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const { processors, session, provider } = yield* boot()
+          const events = yield* EventV2Bridge.Service
+          const database = yield* Database.Service
+          const chat = yield* session.create({})
+          const parent = yield* user(chat.id, "repeated tool calls")
+          const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+          const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+          const permission = yield* Permission.Service
+          const last = fixture.calls[fixture.calls.length - 1]
+          const history = fixture.history
+            ? [0, 1].map((index) => ({
+                id: PartID.ascending(),
+                messageID: msg.id,
+                sessionID: chat.id,
+                type: "tool" as const,
+                tool: last.name,
+                callID: `stored-${index}`,
+                state: {
+                  status: "completed" as const,
+                  input: last.input,
+                  title: last.name,
+                  output: "stored",
+                  metadata: {},
+                  time: { start: 1, end: 2 },
+                },
+              }))
+            : []
+          yield* Effect.forEach(history, (part) => session.updatePart(part))
+
+          const asked = yield* Deferred.make<PermissionV1.Request>()
+          const suffix = yield* Deferred.make<SessionV1.Part[]>()
+          const completed = yield* Deferred.make<void>()
+          const requests: PermissionV1.Request[] = []
+          const pending = new Map<string, PartID>()
+          const settlements: string[] = []
+          const off = yield* events.listen((event) => {
+            if (event.type === MessageV2.Event.PartUpdated.type) {
+              const { part } = event.data as typeof MessageV2.Event.PartUpdated.data.Type
+              if (part.sessionID !== chat.id || part.type !== "tool") return Effect.void
+              if (part.state.status === "pending") pending.set(part.callID, part.id)
+              if (overlap?.armed && part.callID === fixture.calls[0].id && part.state.status === "running") {
+                // Disarm before yielding: normalized writes must pass while this older metadata write is held.
+                overlap.armed = false
+                return Deferred.succeed(overlap.committed, undefined).pipe(
+                  Effect.andThen(Deferred.await(overlap.release)),
+                )
+              }
+              if (fixture.history && part.state.status === "running") {
+                return Effect.gen(function* () {
+                  // Capture the unfiltered persisted suffix at admission, exactly where the old predicate read it.
+                  yield* Deferred.succeed(suffix, (yield* MessageV2.parts(msg.id)).slice(-3))
+                }).pipe(Effect.provideService(Database.Service, database))
+              }
+              if (part.state.status !== "completed") return Effect.void
+              settlements.push(part.callID)
+              if (part.callID === last.id) return Deferred.succeed(completed, undefined).pipe(Effect.asVoid)
+              return Effect.void
+            }
+            if (event.type !== Permission.Event.Asked.type) return Effect.void
+            const request = event.data as PermissionV1.Request
+            if (request.sessionID !== chat.id) return Effect.void
+            requests.push(request)
+            return Deferred.succeed(asked, request).pipe(Effect.asVoid)
+          })
+          yield* Effect.addFinalizer(() => off)
+
+          const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
+          const worker = yield* Effect.forEach(metadata, (item) =>
+            Effect.gen(function* () {
+              yield* Deferred.await(item.ready)
+              const part = yield* handle.updateToolCall(item.call.id, (match) => {
+                expect(match.state.status).toBe("pending")
+                // Mirror session/tools.ts metadata(): execution can start before normalized stream consumption.
+                return {
+                  ...match,
+                  state: {
+                    title: "metadata progress",
+                    metadata: { progress: true },
+                    status: "running",
+                    input: item.call.input,
+                    time: { start: Date.now() },
+                  },
+                }
+              })
+              expect(part?.state.status).toBe("running")
+              yield* Deferred.succeed(item.resume, undefined)
+            }),
+          ).pipe(Effect.forkScoped)
+          // Keep the processor alive for assertions; scope exit interrupts any pending permission, even on failure.
+          const fiber = yield* handle
+            .process({
+              user: parent,
+              sessionID: chat.id,
+              model: mdl,
+              agent: agent(),
+              system: [],
+              messages: [{ role: "user", content: "repeated tool calls" }],
+              tools: {},
+            })
+            .pipe(Effect.forkScoped)
+          if (overlap) {
+            expect(
+              yield* awaitWithTimeout(
+                Effect.raceFirst(
+                  Deferred.await(overlap.admitted).pipe(Effect.as("admitted")),
+                  Fiber.join(fiber).pipe(Effect.as("completed")),
+                ),
+                "first normalized call did not return while metadata was suspended",
+              ),
+            ).toBe("admitted")
+            yield* Deferred.succeed(overlap.release, undefined)
+            yield* awaitWithTimeout(Fiber.join(worker), "overlapping metadata callback did not finish")
+            // Join the stale record installation before delivering any active duplicate.
+            yield* Deferred.succeed(overlap.joined, undefined)
+          }
+          // An absent ask produces a completion result, not a timeout waiting for an event that never arrives.
+          const outcome = yield* awaitWithTimeout(
+            Effect.raceFirst(
+              Deferred.await(asked).pipe(Effect.map((request) => ({ type: "permission" as const, request }))),
+              Fiber.join(fiber).pipe(Effect.map((result) => ({ type: "completed" as const, result }))),
+            ),
+            "processor neither asked permission nor finished",
+          )
+
+          if (fixture.history) {
+            expect(
+              yield* awaitWithTimeout(Deferred.await(suffix), "current call did not publish a running part"),
+            ).toMatchObject([
+              ...history,
+              { callID: last.id, type: "tool", tool: last.name, state: { status: "running", input: last.input } },
+            ])
+          }
+          const parts = yield* MessageV2.parts(msg.id)
+          const tools = parts.filter(
+            (part): part is SessionV1.ToolPart => part.type === "tool" && !part.callID.startsWith("stored-"),
+          )
+          expect(tools).toHaveLength(fixture.calls.length)
+          expect(fixture.calls.map((call) => pending.get(call.id))).toEqual(tools.map((part) => part.id))
+          expect(tools.slice(0, -1)).toMatchObject(
+            fixture.calls.slice(0, -1).map((call) => ({
+              callID: call.id,
+              tool: call.name,
+              state: { status: "completed", input: call.input },
+            })),
+          )
+          if (!fixture.history && !fixture.action) {
+            expect(outcome).toMatchObject({
+              type: "permission",
+              request: {
+                sessionID: chat.id,
+                permission: "doom_loop",
+                patterns: [last.name],
+                metadata: { tool: last.name, input: last.input },
+                always: [last.name],
+              },
+            })
+            expect(tools[tools.length - 1]).toMatchObject({
+              callID: last.id,
+              tool: last.name,
+              state: { status: "running", input: last.input },
+            })
+            if (outcome.type !== "permission") throw new Error("expected doom_loop permission")
+            if (fixture.delivery === "out-of-order") {
+              expect(settlements).toEqual([1, 3, 0, 4, 2].map((index) => fixture.calls[index].id))
+              // A tool can finish while the serialized stream is blocked in Permission.ask.
+              const worker = yield* handle
+                .completeToolCall(last.id, {
+                  title: last.name,
+                  output: `done:${last.id}`,
+                  metadata: { concurrent: true },
+                })
+                .pipe(Effect.forkScoped)
+              yield* awaitWithTimeout(Deferred.await(completed), "concurrent tool did not publish completion")
+              yield* awaitWithTimeout(Fiber.join(worker), "concurrent tool did not settle")
+            }
+            yield* permission.reply({ requestID: outcome.request.id, reply: fixture.reply ?? "once" })
+          }
+
+          yield* awaitWithTimeout(Fiber.join(worker), "metadata callbacks did not finish")
+          const value = yield* awaitWithTimeout(Fiber.join(fiber), "processor did not finish after permission decision")
+          const stopped = fixture.action === "deny" || fixture.reply === "reject"
+          expect(value).toBe(stopped ? "stop" : "continue")
+          expect(Boolean(handle.message.error)).toBe(stopped)
+          expect(requests).toHaveLength(fixture.history || fixture.action ? 0 : 1)
+          expect(yield* permission.list()).toEqual([])
+          const stored = (yield* MessageV2.parts(msg.id)).filter(
+            (part): part is SessionV1.ToolPart => part.type === "tool",
+          )
+          expect(stored).toHaveLength(history.length + fixture.calls.length)
+          expect(stored.slice(0, history.length)).toEqual(history)
+          expect(stored.slice(history.length)).toMatchObject(
+            fixture.calls.map((call) => ({
+              id: pending.get(call.id),
+              callID: call.id,
+              tool: call.name,
+              state: {
+                input: call.input,
+                ...(stopped && call.id === last.id && fixture.delivery !== "out-of-order"
+                  ? { status: "error", error: "Tool execution aborted", metadata: { interrupted: true } }
+                  : { status: "completed", output: `done:${call.id}` }),
+              },
+            })),
+          )
+          if (fixture.delivery === "out-of-order") {
+            expect(stored[stored.length - 1].state).toMatchObject({ metadata: { concurrent: true } })
+            expect(settlements).toEqual([1, 3, 0, 4, 2, 5].map((index) => fixture.calls[index].id))
+          }
+          for (const call of fixture.calls) {
+            expect(yield* handle.updateToolCall(call.id, (part) => part)).toBeUndefined()
+          }
+        }).pipe(Effect.scoped),
+      {
+        config: {
+          ...cfg,
+          ...(fixture.action ? { permission: { doom_loop: fixture.action } } : {}),
+        },
+      },
+    ),
+  )
+}
 
 itFragmentFailure.live("session.processor effect tests retain partial legacy parts without v2 events", () =>
   provideTmpdirInstance(
