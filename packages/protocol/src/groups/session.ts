@@ -55,8 +55,12 @@ const ParentIDFilter = Schema.Union([
   description: "Filter by parent session. Use null to return only root sessions.",
 })
 
+// Shared by SessionsProjectQuery, where `project` is required, and SessionsQuery, where it is
+// optional. The store only applies the predicate when `project` is present, so say so here rather
+// than in only one of the two places, or the documented contract over-promises.
 const SubpathFilter = RelativePath.pipe(Schema.optional).annotate({
-  description: "Match session.path exactly, relative to the project root. An empty value applies no path filter.",
+  description:
+    "Match a session's subpath exactly, relative to the project root. Empty or omitted applies no path filter. Ignored unless `project` is also set.",
 })
 
 const SessionsQueryFields = {
