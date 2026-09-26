@@ -158,6 +158,9 @@ async function writeConfig(dir: string, config: object, name = "opencode.json") 
 const writeConfigEffect = (dir: string, config: object, name = "opencode.json") =>
   FSUtil.use.writeWithDirs(path.join(dir, name), JSON.stringify(config))
 
+const writeFragmentEffect = (dir: string, name: string, config: object | string) =>
+  FSUtil.use.writeWithDirs(path.join(dir, "config.d", name), typeof config === "string" ? config : JSON.stringify(config))
+
 const withInstanceDir = <A, E, R>(dir: string, effect: Effect.Effect<A, E, R>) =>
   effect.pipe(
     Effect.provideService(TestInstance, { directory: dir }),
@@ -713,6 +716,142 @@ it.instance("preserves env variables when adding $schema to config", () =>
       expect(content).toContain("$schema")
     }),
   ),
+)
+
+it.effect("loads global config.d fragments after main config", () =>
+  withGlobalConfig({ config: { model: "test/base", username: "base-user" } }, ({ dir }) =>
+    Effect.gen(function* () {
+      yield* writeFragmentEffect(dir, "10-user.jsonc", {
+        username: "fragment-user",
+        permission: {
+          bash: {
+            "git status *": "allow",
+          },
+        },
+      })
+      const project = yield* tmpdirScoped()
+      const config = yield* withInstanceDir(project, Config.use.get())
+
+      expect(config.model).toBe("test/base")
+      expect(config.username).toBe("fragment-user")
+      expect(config.permission?.bash).toEqual({
+        "git status *": "allow",
+      })
+    }),
+  ),
+)
+
+it.effect("loads .opencode config.d fragments in alphabetical order", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped()
+    const cfg = path.join(dir, ".opencode")
+    yield* writeConfigEffect(
+      cfg,
+      {
+        $schema: "https://opencode.ai/config.json",
+        username: "main-user",
+        permission: {
+          bash: {
+            "git status *": "allow",
+            "git diff *": "allow",
+            "npm test *": "ask",
+            "docker inspect *": "deny",
+          },
+        },
+        plugin: ["main-plugin"],
+        instructions: ["main.md"],
+      },
+      "opencode.json",
+    )
+    yield* writeFragmentEffect(cfg, "10-base.jsonc", {
+      permission: {
+        bash: {
+          "pytest *": "allow",
+        },
+      },
+      plugin: ["base-plugin"],
+      instructions: ["base.md"],
+    })
+    yield* writeFragmentEffect(cfg, "20-override.json", {
+      username: "fragment-user",
+      permission: {
+        bash: {
+          "npm test *": "allow",
+          "docker inspect *": "ask",
+        },
+      },
+      plugin: ["extra-plugin"],
+      instructions: ["extra.md"],
+    })
+
+    const config = yield* withInstanceDir(dir, Config.use.get())
+    expect(config.username).toBe("fragment-user")
+    expect(config.permission?.bash).toEqual({
+      "git status *": "allow",
+      "git diff *": "allow",
+      "npm test *": "allow",
+      "docker inspect *": "ask",
+      "pytest *": "allow",
+    })
+    expect(config.plugin?.some((item) => item.includes("main-plugin"))).toBe(true)
+    expect(config.plugin?.some((item) => item.includes("base-plugin"))).toBe(true)
+    expect(config.plugin?.some((item) => item.includes("extra-plugin"))).toBe(true)
+    expect(config.instructions).toEqual(["main.md", "base.md", "extra.md"])
+  }),
+)
+
+it.effect("supports env and file substitutions in config.d fragments", () =>
+  withProcessEnv(
+    "TEST_CONFIG_D_VAR",
+    "test-user",
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const cfg = path.join(dir, ".opencode")
+      yield* FSUtil.use.writeWithDirs(path.join(cfg, "config.d", "secret.txt"), "test/model")
+      yield* writeFragmentEffect(
+        cfg,
+        "10-subst.jsonc",
+        `{
+          "$schema": "https://opencode.ai/config.json",
+          "username": "{env:TEST_CONFIG_D_VAR}",
+          "model": "{file:secret.txt}"
+        }`,
+      )
+
+      const config = yield* withInstanceDir(dir, Config.use.get())
+      expect(config.username).toBe("test-user")
+      expect(config.model).toBe("test/model")
+    }),
+  ),
+)
+
+it.effect("throws for invalid config.d fragments", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped()
+    yield* writeFragmentEffect(path.join(dir, ".opencode"), "10-bad.json", "{ invalid json }")
+
+    const exit = yield* withInstanceDir(dir, Config.use.get().pipe(Effect.exit))
+    expect(Exit.isFailure(exit)).toBe(true)
+  }),
+)
+
+it.effect("loads config.d fragments from OPENCODE_CONFIG_DIR", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped()
+    const custom = yield* tmpdirScoped()
+    yield* writeFragmentEffect(custom, "10-user.json", {
+      username: "custom-user",
+    })
+
+    yield* withProcessEnv(
+      "OPENCODE_CONFIG_DIR",
+      custom,
+      Effect.gen(function* () {
+        const config = yield* withInstanceDir(dir, Config.use.get())
+        expect(config.username).toBe("custom-user")
+      }),
+    )
+  }),
 )
 
 it.instance("handles file inclusion substitution", () =>
@@ -2032,6 +2171,22 @@ describe("OPENCODE_DISABLE_PROJECT_CONFIG", () => {
         const config = yield* Config.use.get()
         expect(config).toBeDefined()
         expect(config.username).toBeDefined()
+      }),
+    ),
+  )
+
+  it.instance("skips project config.d fragments when flag is set", () =>
+    withProcessEnv(
+      "OPENCODE_DISABLE_PROJECT_CONFIG",
+      "true",
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* writeFragmentEffect(path.join(test.directory, ".opencode"), "10-user.json", {
+          username: "project-user",
+        })
+
+        const config = yield* Config.use.get()
+        expect(config.username).not.toBe("project-user")
       }),
     ),
   )
