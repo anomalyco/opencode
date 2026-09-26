@@ -588,6 +588,7 @@ export function AppInterface(props: {
             <Show when={useSettings().general.newLayoutDesigns().toString()} keyed>
               <Dynamic
                 component={props.router ?? Router}
+                base={import.meta.env.BASE_URL.replace(/\/$/, "") || undefined}
                 root={(routerProps) => (
                   <TabsProvider>
                     <PermissionProvider>
