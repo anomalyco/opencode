@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { LLMClient, LanguageModel, Message, ToolDefinition, Usage } from "@opencode/ai"
+import { LLMClient, LanguageModel, Message, ToolDefinition } from "@opencode/ai"
 import { OpenAI } from "@opencode/ai/providers"
 import { Agent } from "@opencode/core/agent"
 import { Bus } from "@opencode/core/bus"
@@ -7,7 +7,6 @@ import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { llmClient } from "@opencode/core/effect/app-node-platform"
 import { Instructions } from "@opencode/core/instructions/index"
-import { NativeCompactionPlugin } from "@opencode/core/plugin/compaction"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
@@ -27,7 +26,6 @@ import { SessionStore } from "@opencode/core/session/store"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { DateTime, Deferred, Effect, Fiber, Schema } from "effect"
 import { testEffect } from "./lib/effect"
-import { host } from "./plugin/host"
 
 const it = testEffect(
   AppNodeBuilder.build(
@@ -46,7 +44,7 @@ const it = testEffect(
   ),
 )
 
-const setup = Effect.fnUntraced(function* (options: { endpoint?: boolean; plugin?: boolean } = {}) {
+const setup = Effect.fnUntraced(function* (options: { endpoint?: boolean } = {}) {
   const endpoint = options.endpoint ?? false
   const db = (yield* Database.Service).db
   const bus = yield* Bus.Service
@@ -57,7 +55,7 @@ const setup = Effect.fnUntraced(function* (options: { endpoint?: boolean; plugin
   const hooks = yield* PluginHooks.Service
   const blocked = Deferred.makeUnsafe<void>()
   const hanging = Promise.withResolvers<Response>()
-  const state = { failure: false, flaky: false, hang: false, overflow: false, localFailure: false, calls: 0 }
+  const state = { failure: false, flaky: false, hang: false, overflow: false, calls: 0 }
   const bodies: Record<string, unknown>[] = []
   const headers: Headers[] = []
   const server = yield* Effect.acquireRelease(
@@ -87,7 +85,7 @@ const setup = Effect.fnUntraced(function* (options: { endpoint?: boolean; plugin
             )
           }
           const trigger = JSON.stringify(bodies.at(-1)).includes("compaction_trigger")
-          if (state.overflow && (trigger || state.localFailure))
+          if (state.overflow && trigger)
             return Response.json(
               {
                 error: {
@@ -114,26 +112,8 @@ const setup = Effect.fnUntraced(function* (options: { endpoint?: boolean; plugin
               usage: { input_tokens: 20, output_tokens: 4, total_tokens: 24 },
             })
           const output = trigger ? [checkpoint] : []
-          const summary = state.overflow
-            ? [
-                {
-                  type: "response.output_item.added",
-                  output_index: 0,
-                  item: { type: "message", id: "summary", role: "assistant", content: [] },
-                },
-                {
-                  type: "response.output_text.delta",
-                  item_id: "summary",
-                  output_index: 0,
-                  content_index: 0,
-                  delta: "## Objective\n- Recovered locally",
-                },
-              ]
-                .map((event) => `data: ${JSON.stringify(event)}\n\n`)
-                .join("")
-            : ""
           return new Response(
-            `${summary}data: ${JSON.stringify({
+            `data: ${JSON.stringify({
               type: "response.completed",
               response: {
                 id: `resp_${state.calls}`,
@@ -188,7 +168,6 @@ const setup = Effect.fnUntraced(function* (options: { endpoint?: boolean; plugin
     render: { initial: String, changed: (_previous, value) => value, removed: () => "removed" },
   })
   yield* InstructionState.prepare(db, bus, instructions, sessionID)
-  if (options.plugin !== false) yield* NativeCompactionPlugin.Plugin.effect(host())
   yield* hooks.register("session", "model.request", (event) =>
     Effect.sync(() => {
       event.headers["x-test-hook"] = event.kind
@@ -218,7 +197,6 @@ const setup = Effect.fnUntraced(function* (options: { endpoint?: boolean; plugin
       model,
       initial: history.initial,
       messages: history.messages,
-      instructionUpdate: history.instructionUpdate,
       agent: { id: Agent.defaultID, info: Agent.Info.default(Agent.defaultID) },
       tools: {
         definitions: [
@@ -228,14 +206,11 @@ const setup = Effect.fnUntraced(function* (options: { endpoint?: boolean; plugin
       },
     }
   })
+  // Opens the compaction's message as the runner does when it delivers `/compact`.
   const compact = Effect.gen(function* () {
-    return yield* compaction.compactManual({
-      session,
-      messages: yield* store.context(sessionID),
-      inputID: SessionMessage.ID.create(),
-      resolveContext: () => load,
-      prepare: requests.compaction,
-    })
+    const inputID = SessionMessage.ID.create()
+    yield* bus.publish(SessionEvent.Compaction.Started, { sessionID, reason: "manual", recent: "", inputID })
+    return yield* compaction.compact({ reason: "manual", context: yield* load, inputID })
   })
   const checkpoint = Effect.gen(function* () {
     const messages = (yield* load).messages
@@ -250,8 +225,9 @@ const setup = Effect.fnUntraced(function* (options: { endpoint?: boolean; plugin
   })
   return {
     compact,
-    automatic: Effect.gen(function* () {
-      return yield* compaction.compact({ context: yield* load, prepare: requests.compaction })
+    // An automatic compaction that skips the "is it due" check, which a context this small never passes.
+    overflow: Effect.gen(function* () {
+      return yield* compaction.compact({ reason: "overflow", context: yield* load })
     }),
     checkpoint,
     prompt,
@@ -356,7 +332,8 @@ it.live("manual and automatic endpoint compaction keep the provider replacement 
     const fixture = yield* setup({ endpoint: true })
     yield* fixture.prompt("Original user")
     expect(yield* fixture.compact).toEqual({ status: "completed" })
-    expect(yield* fixture.automatic).toEqual({ status: "completed" })
+    yield* fixture.prompt("Later user")
+    expect(yield* fixture.overflow).toEqual({ status: "completed" })
     const replacement = SessionProviderContext.decode(yield* fixture.checkpoint)
     expect(replacement[0]?.content).toEqual([Message.text("endpoint retained")])
     expect(JSON.stringify(replacement)).not.toContain("Original user")
@@ -367,7 +344,7 @@ it.live("manual and automatic endpoint compaction keep the provider replacement 
   }),
 )
 
-it.live("only known automatic native overflow falls back locally and failed recovery retains the checkpoint", () =>
+it.live("automatic native failures, interruptions, and overflows retain the checkpoint", () =>
   Effect.gen(function* () {
     const fixture = yield* setup()
     yield* fixture.prompt("Original durable request")
@@ -375,12 +352,12 @@ it.live("only known automatic native overflow falls back locally and failed reco
     const installed = yield* fixture.checkpoint
     yield* fixture.prompt("Recent request")
     fixture.state.failure = true
-    expect(yield* fixture.automatic).toMatchObject({ status: "failed", error: { type: "provider.rate-limit" } })
+    expect(yield* fixture.overflow).toMatchObject({ status: "failed", error: { type: "provider.rate-limit" } })
     expect(fixture.state.calls).toBe(2)
     expect(yield* fixture.checkpoint).toEqual(installed)
     fixture.state.failure = false
     fixture.state.hang = true
-    const pending = yield* fixture.automatic.pipe(Effect.forkScoped)
+    const pending = yield* fixture.overflow.pipe(Effect.forkScoped)
     yield* Deferred.await(fixture.blocked)
     yield* Fiber.interrupt(pending)
     expect((yield* fixture.load).messages.at(-1)).toMatchObject({
@@ -390,21 +367,12 @@ it.live("only known automatic native overflow falls back locally and failed reco
     })
     expect(yield* fixture.checkpoint).toEqual(installed)
     fixture.state.hang = false
+    // Overflow retries natively, with the provider's window, and gives up once nothing is left to shrink.
     fixture.state.overflow = true
-    fixture.state.localFailure = true
-    expect(yield* fixture.automatic).toMatchObject({ status: "failed" })
-    expect(fixture.state.calls).toBe(6)
+    expect(yield* fixture.overflow).toMatchObject({ status: "failed", error: { type: "compaction.failed" } })
+    expect(fixture.state.calls).toBe(4)
+    expect(JSON.stringify(fixture.bodies[3])).toContain("encrypted_1")
     expect(yield* fixture.checkpoint).toEqual(installed)
-    expect(JSON.stringify(fixture.bodies[4])).toContain("Original durable request")
-    expect(JSON.stringify(fixture.bodies[4])).not.toContain("encrypted_1")
-    expect(JSON.stringify(fixture.bodies[5])).toContain("Original durable request")
-    expect(JSON.stringify(fixture.bodies[5])).not.toContain("encrypted_1")
-    fixture.state.localFailure = false
-    expect(yield* fixture.automatic).toEqual({ status: "completed", recoveredOverflow: true })
-    expect(fixture.state.calls).toBe(8)
-    expect((yield* fixture.load).messages).toContainEqual(
-      expect.objectContaining({ type: "compaction", summary: "## Objective\n- Recovered locally" }),
-    )
   }),
 )
 
@@ -450,31 +418,6 @@ it.live("rejects request-hook route rewrites before provider compaction", () =>
       error: { type: "provider.unsupported-operation" },
     })
     expect(fixture.state.calls).toBe(0)
-  }),
-)
-
-it.live("provider compaction fails without a native strategy and persists a registered strategy's window", () =>
-  Effect.gen(function* () {
-    const fixture = yield* setup({ plugin: false })
-    yield* fixture.prompt("Original user")
-    expect(yield* fixture.compact).toMatchObject({
-      status: "failed",
-      error: { type: "provider.unsupported-operation", message: expect.stringContaining("openai/openai-responses") },
-    })
-    yield* fixture.compaction.transform((editor) => {
-      editor.native(() =>
-        Effect.succeed({
-          replacement: [Message.assistant("plugin window")],
-          usage: new Usage({ nonCachedInputTokens: 20, outputTokens: 4 }),
-        }),
-      )
-    })
-    expect(yield* fixture.compact).toEqual({ status: "completed" })
-    expect(fixture.state.calls).toBe(0)
-    const installed = yield* fixture.checkpoint
-    expect(installed.provenance).toEqual(SessionProviderContext.provenance(fixture.model)!)
-    expect(SessionProviderContext.decode(installed)).toEqual([Message.assistant("plugin window")])
-    expect(yield* fixture.store.get(fixture.sessionID)).toMatchObject({ tokens: { input: 20, output: 4 } })
   }),
 )
 

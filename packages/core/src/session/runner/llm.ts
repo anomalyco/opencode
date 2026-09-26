@@ -20,6 +20,7 @@ import { SessionSchema } from "../schema.js"
 import { SessionStore } from "../store.js"
 import { SessionMessageTable } from "../sql.js"
 import { SessionTitle } from "../title.js"
+import { toSessionError } from "../to-session-error.js"
 import { DrainResult, Service, type Interface } from "./index.js"
 import { Snapshot } from "../../snapshot.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
@@ -109,39 +110,39 @@ const layer = Layer.effect(
               if (pending?.type === "move")
                 return DrainResult.Moved({ continuation: continuing ? { step } : undefined })
               if (pending?.type === "compaction") {
-                const session = yield* store.get(sessionID)
-                if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
                 const compacted = yield* restore(
                   Effect.gen(function* () {
-                    return yield* compaction.compactManual({
-                      session,
-                      resolveContext: (session) =>
-                        Effect.gen(function* () {
-                          const selected = yield* context.select(session.id)
-                          const model = yield* context.resolveModel(selected.session)
-                          // Preview updates without admitting them after the already-delivered compaction marker.
-                          const history = yield* SessionHistory.preview(
-                            db,
-                            session.id,
-                            selected.instructions,
-                            SessionProviderContext.provenance(model) ?? "local",
-                          )
-                          return {
-                            session: selected.session,
-                            agent: selected.agent,
-                            tools: selected.tools,
-                            model,
-                            initial: history.initial,
-                            messages: history.messages,
-                            instructionUpdate: history.instructionUpdate,
-                          }
-                        }),
-                      prepare: context.request.compaction,
-                      messages: yield* store.context(sessionID),
+                    const selected = yield* context.select(sessionID)
+                    const model = yield* context.resolveModel(selected.session)
+                    // Preview updates without admitting them after the already-delivered compaction marker.
+                    const history = yield* SessionHistory.preview(
+                      db,
+                      sessionID,
+                      selected.instructions,
+                      SessionProviderContext.provenance(model) ?? "local",
+                    )
+                    return yield* compaction.compact({
+                      reason: "manual",
                       inputID: pending.id,
-                      started: true,
+                      context: {
+                        session: selected.session,
+                        agent: selected.agent,
+                        tools: selected.tools,
+                        model,
+                        initial: history.initial,
+                        messages: history.messages,
+                      },
                     })
-                  }),
+                  }).pipe(
+                    Effect.catch((error) =>
+                      bus.publish(SessionEvent.Compaction.Failed, {
+                        sessionID,
+                        reason: "manual",
+                        inputID: pending.id,
+                        error: toSessionError(error),
+                      }),
+                    ),
+                  ),
                 ).pipe(Effect.exit)
                 if (Exit.isFailure(compacted)) {
                   yield* bus.publish(SessionEvent.Compaction.Failed, {
@@ -213,14 +214,9 @@ const layer = Layer.effect(
         // Reuse boundary preparation once; retries refresh context without delivering more input.
         const loaded = initial ?? (yield* prepareContext(sessionID).pipe(Effect.flatMap(context.load)))
         initial = undefined
-        const compactionInput = {
-          context: loaded,
-          prepare: context.request.compaction,
-        }
-        if (compaction.required({ messages: loaded.messages, context: loaded })) {
-          const result = yield* compaction.compact(compactionInput)
-          if (result.status !== "completed") return yield* new StepFailedError({ error: result.error })
-          if (result.recoveredOverflow) recoverOverflow = false
+        const compacted = yield* compaction.compact({ reason: "auto", context: loaded })
+        if (compacted.status === "failed") return yield* new StepFailedError({ error: compacted.error })
+        if (compacted.status === "completed") {
           assistantMessageID = SessionMessage.ID.create()
           continue
         }
@@ -263,9 +259,9 @@ const layer = Layer.effect(
             }),
           recoverContinuation,
           recoverOverflow: Effect.suspend(() =>
-            recoverOverflow && compaction.enabled()
+            recoverOverflow
               ? compaction
-                  .compact({ ...compactionInput, overflow: true })
+                  .compact({ reason: "overflow", context: loaded })
                   .pipe(Effect.map((result) => result.status === "completed"))
               : Effect.succeed(false),
           ),
