@@ -283,6 +283,7 @@ new sst.cloudflare.x.SolidStart("Console", {
     ZEN_LITE_PRICE,
     new sst.Secret("ZEN_LIMITS"),
     new sst.Secret("ZEN_SESSION_SECRET"),
+    new sst.Secret("CLOUDFLARE_ACCESS_CLIENT_ID"),
     ...ZEN_MODELS,
     ...($dev
       ? [

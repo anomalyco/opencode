@@ -2,7 +2,7 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
-  "go.promo.unionAlpha": "Union Alpha jest dostępny bezpłatnie przez ograniczony czas",
+  "go.promo.spaceBunny": "Space Bunny Free, nowy anonimowy model, jest dostępny przez ograniczony czas",
   "go.graph.bonus": "{{count}}× większy limit",
   "nav.github": "GitHub",
   "nav.docs": "Dokumentacja",
@@ -287,7 +287,6 @@ export const dict = {
   "go.graph.showLess": "Pokaż mniej modeli",
   "go.graph.limitedRegions": "ograniczone regiony",
   "go.graph.limitedTime": "ograniczony czas",
-  "go.graph.unlimited": "bez limitu",
   "go.graph.usageLimits": "Limity użycia",
   "go.graph.aria": "Żądania na 5h: {{free}} vs {{go}}",
 
