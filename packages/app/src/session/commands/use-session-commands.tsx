@@ -9,6 +9,8 @@ import { useServerSDK } from "@/runtime/server/client"
 import { useSettings } from "@/settings/model"
 import { useTerminal } from "@/session/terminal/context"
 import { showToast } from "@/shell/notifications/toast"
+import { formatServerError } from "@/runtime/server/errors"
+import { useData } from "@/runtime/server/current"
 import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "@/session/commands/export"
 import { usePlatform } from "@/runtime/platform/platform"
 import type { SessionModel } from "@/session/model"
@@ -44,6 +46,7 @@ const withCategory = (category: string) => {
 export const useSessionCommands = (actions: SessionCommandContext) => {
   const command = useCommand()
   const dialog = useDialog()
+  const data = useData()
   const file = useFile()
   const language = useLanguage()
   const prompt = useComposerState()
@@ -245,6 +248,33 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     )
   }
 
+  // Palette and keybind open the dialog. `/rename <title>` sets the title
+  // directly, and a bare `/rename` asks the server to generate a new one.
+  const rename = (input?: string) => {
+    const sessionID = actions.session.identity.params.id
+    if (!sessionID) return
+    if (input === undefined) {
+      void openDialog(
+        () => import("@/session/commands/rename-dialog"),
+        (x) => dialog.show(() => <x.DialogRename sessionID={sessionID} />),
+      )
+      return
+    }
+    const title = input.trim()
+    void serverSDK.api.session
+      .update({ sessionID, title })
+      .then(() => {
+        const current = data.session.get(sessionID)
+        if (title && current) data.session.remember({ ...current, title })
+      })
+      .catch((error) =>
+        showToast({
+          title: language.t("common.requestFailed"),
+          description: formatServerError(error, language.t, language.t("common.requestFailed")),
+        }),
+      )
+  }
+
   const sessionCmds = () => [
     sessionCommand({
       id: "session.new",
@@ -291,6 +321,15 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       slash: "fork",
       disabled: !actions.session.identity.params.id || actions.session.history.visibleUserMessages().length === 0,
       onSelect: fork,
+    }),
+    sessionCommand({
+      id: "session.rename",
+      title: language.t("command.session.rename"),
+      description: language.t("command.session.rename.description"),
+      slash: "rename",
+      slashArguments: true,
+      disabled: !actions.session.identity.params.id || !!actions.session.data.info()?.parentID,
+      onSelect: (_, input) => rename(input),
     }),
     sessionCommand({
       id: "session.export",

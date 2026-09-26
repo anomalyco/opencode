@@ -154,6 +154,8 @@ export const dict = {
   "command.session.fork.description": "Create a new session from a previous message",
   "command.session.btw": "Ask a side question",
   "command.session.btw.description": "Get a one-shot answer without adding to the conversation",
+  "command.session.rename": "Rename session",
+  "command.session.rename.description": "Set a title, or leave it empty to generate one",
   "command.session.export": "Export session",
   "command.session.export.description": "Export the full session transcript as JSON",
   "command.session.import": "Import session",
@@ -459,6 +461,9 @@ export const dict = {
   "mcp.auth.interactiveForm": "MCP server {{name}} requires an interactive authentication form",
 
   "dialog.fork.empty": "No messages to fork from",
+
+  "dialog.rename.title.label": "Session title",
+  "dialog.rename.title.placeholder": "Session title",
 
   "dialog.directory.search.placeholder": "Search folders",
   "dialog.directory.empty": "No folders found",
