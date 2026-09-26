@@ -131,7 +131,7 @@ export const Plugin = {
                 source: { type: "tool", messageID: context.messageID, id: context.id },
               })
 
-              const { body, contentType } = yield* Effect.gen(function* () {
+              const { body, contentType, status } = yield* Effect.gen(function* () {
                 const response = yield* execute(http, input.url, input.format).pipe(
                   Effect.catchIf(isCloudflareChallenge, () => execute(http, input.url, input.format, "opencode")),
                 )
@@ -141,7 +141,7 @@ export const Plugin = {
                   return yield* Effect.fail(new Error(`Unsupported fetched image content type: ${mime}`))
                 if (!isTextualMime(mime))
                   return yield* Effect.fail(new Error(`Unsupported fetched file content type: ${mime}`))
-                return { body: yield* collectBody(response), contentType }
+                return { body: yield* collectBody(response), contentType, status: response.status }
               }).pipe(
                 Effect.timeoutOrElse({
                   duration: Duration.seconds(input.timeout ?? DEFAULT_TIMEOUT_SECONDS),
@@ -153,13 +153,20 @@ export const Plugin = {
                 try: () => convert(content, contentType, input.format),
                 catch: (error) => error,
               })
+              // A non-200 success (202 Accepted, 204 No Content, ...) often carries a throttle
+              // or interstitial page instead of the requested content. Only `output` reaches the
+              // model, so the status has to be stated there for it to adapt.
+              const statusNotice =
+                status === 200
+                  ? ""
+                  : `[HTTP ${status} — response may be a throttle or interstitial page, not the requested content]\n\n`
               const result = {
                 url: input.url,
                 contentType,
                 format: input.format,
-                output,
+                output: statusNotice + output,
               }
-              return { output: result, content: result.output, metadata: { contentType: result.contentType } }
+              return { output: result, content: result.output, metadata: { contentType: result.contentType, status } }
             }).pipe(Effect.mapError((error) => new ToolFailure({ message: `Unable to fetch ${input.url}`, error }))),
         }),
       )
