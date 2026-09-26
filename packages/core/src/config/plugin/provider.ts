@@ -31,6 +31,7 @@ export const Plugin = define({
         }
         integrations.update(integrationID, (integration) => {
           integration.name = provider.name ?? integration.name
+          integration.configured = true
         })
         if (provider.env !== undefined) {
           integrations.method.update({
