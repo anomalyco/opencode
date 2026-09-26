@@ -541,7 +541,17 @@ const layer = Layer.effectDiscard(
       }),
     )
     yield* bus.project(SessionEvent.Deleted, (event) =>
-      db.delete(SessionTable).where(eq(SessionTable.id, event.data.sessionID)).run().pipe(Effect.orDie),
+      Effect.gen(function* () {
+        yield* db.delete(SessionTable).where(eq(SessionTable.id, event.data.sessionID)).run().pipe(Effect.orDie)
+        // Databases migrated from V1 keep the legacy session/message/part/todo store
+        // alongside session_v2; fresh and renamed-lineage V2 databases have no `session`
+        // table, so the legacy delete is guarded by a schema lookup. The legacy foreign
+        // keys cascade the child rows once the parent row goes.
+        const legacy = yield* db
+          .get<{ name: string }>(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session'`)
+          .pipe(Effect.orDie)
+        if (legacy) yield* db.run(sql`DELETE FROM session WHERE id = ${event.data.sessionID}`).pipe(Effect.orDie)
+      }),
     )
     yield* bus.project(SessionEvent.AgentSelected, (event) =>
       Effect.gen(function* () {
