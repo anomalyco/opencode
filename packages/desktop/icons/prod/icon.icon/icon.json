@@ -1,0 +1,25 @@
+{
+  "groups": [
+    {
+      "name": "OpenCode",
+      "layers": [
+        {
+          "name": "OpenCode",
+          "image-name": "icon.png",
+          "glass": false
+        }
+      ],
+      "shadow": {
+        "kind": "none",
+        "opacity": 0
+      },
+      "translucency": {
+        "enabled": false,
+        "value": 0.5
+      }
+    }
+  ],
+  "supported-platforms": {
+    "squares": ["macOS"]
+  }
+}
