@@ -123,6 +123,25 @@ export const make = Effect.gen(function* () {
     scope: yield* Scope.Scope,
   }
 
+  yield* Effect.addFinalizer(() =>
+    SynchronizedRef.get(state.jobs).pipe(
+      Effect.flatMap((jobs) =>
+        Effect.forEach(
+          [...jobs.values()],
+          (job) => {
+            if (job.info.status !== "running") return Effect.void
+            return Deferred.succeed(job.done, {
+              ...job.info,
+              status: "cancelled" as const,
+              completed_at: Date.now(),
+            }).pipe(Effect.ignore)
+          },
+          { discard: true },
+        ),
+      ),
+    ),
+  )
+
   const settle = Effect.fn("BackgroundJob.settle")(function* (
     id: string,
     token: object,
