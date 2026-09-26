@@ -36,3 +36,13 @@ RELEASE_REVIEW.md
 logs/
 *.bun-build
 tsconfig.tsbuildinfo
+
+# IDE noise (Geany)
+.geanyprj
+new.geanywb
+opencode.geany
+*.geany*
+
+# External / separate projects
+.workbuddy-ai/
+build-catcheer-browser/
