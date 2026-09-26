@@ -8,7 +8,12 @@ import { createMemo, createResource, createSignal } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/server"
 import { useGlobal } from "@/context/global"
-import { cleanPickerInput, createDirectorySearch, displayPickerPath } from "./directory-picker-domain"
+import {
+  cleanPickerInput,
+  createDirectorySearch,
+  displayPickerPath,
+  resolvePickerStart,
+} from "./directory-picker-domain"
 import type { Path } from "@opencode-ai/sdk/v2/client"
 
 interface DialogSelectDirectoryProps {
@@ -59,9 +64,9 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const [filter, setFilter] = createSignal("")
   let list: ListRef | undefined
 
-  const missingHome = createMemo(() => !sync.data.path.home)
+  const missingBase = createMemo(() => !(sync.data.path.home || sync.data.path.directory))
   const [fallbackPath] = createResource(
-    () => (missingHome() ? true : undefined),
+    () => (missingBase() ? true : undefined),
     async (): Promise<Path | undefined> => {
       if ((await sdk.protocol) !== "v1") return
       return sdk.client.path
@@ -73,8 +78,14 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   )
 
   const home = createMemo(() => sync.data.path.home || fallbackPath()?.home || "")
-  const start = createMemo(
-    () => sync.data.path.home || sync.data.path.directory || fallbackPath()?.home || fallbackPath()?.directory,
+  const start = createMemo(() =>
+    resolvePickerStart(
+      undefined,
+      sync.data.path.directory,
+      sync.data.path.home,
+      fallbackPath()?.directory,
+      fallbackPath()?.home,
+    ),
   )
 
   const directories = createDirectorySearch({

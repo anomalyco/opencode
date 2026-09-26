@@ -80,6 +80,19 @@ export function pickerAbsoluteInput(input: string, home: string, current: string
   return canonicalPickerPath(absolute)
 }
 
+// Explicit start wins, then the server/current directory, then home, then
+// fallback values. The server directory must beat home so the project picker
+// opens where the server runs instead of the OS user home (e.g. another drive).
+export function resolvePickerStart(
+  explicit?: string,
+  directory?: string,
+  home?: string,
+  fallbackDirectory?: string,
+  fallbackHome?: string,
+) {
+  return explicit || directory || home || fallbackDirectory || fallbackHome
+}
+
 export function treePathWithin(base: string | undefined, path: string) {
   return pickerRelativePath(base, path) !== undefined
 }

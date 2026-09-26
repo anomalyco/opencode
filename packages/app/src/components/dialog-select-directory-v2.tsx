@@ -26,6 +26,7 @@ import {
   displayPickerPath,
   pickerParent,
   pickerRoot,
+  resolvePickerStart,
 } from "./directory-picker-domain"
 import "./dialog-select-directory-v2.css"
 import { DividerV2 } from "@opencode-ai/ui/v2/divider-v2"
@@ -79,13 +80,14 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
     { initialValue: undefined },
   )
   const home = createMemo(() => sync.data.path.home || fallbackPath()?.home || "")
-  const start = createMemo(
-    () =>
-      props.start ||
-      sync.data.path.home ||
-      sync.data.path.directory ||
-      fallbackPath()?.home ||
+  const start = createMemo(() =>
+    resolvePickerStart(
+      props.start,
+      sync.data.path.directory,
+      sync.data.path.home,
       fallbackPath()?.directory,
+      fallbackPath()?.home,
+    ),
   )
   const search = createDirectorySearch({ sdk, home, base: () => root() || start() })
   const [suggestions] = createResource(input, async (value) => {
