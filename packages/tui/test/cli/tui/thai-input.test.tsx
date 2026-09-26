@@ -176,6 +176,7 @@ describe("thai typing", () => {
       await editor.app.mockInput.pasteBracketedText(thai.saraAmTone)
       await editor.app.renderOnce()
       expect(editor.textarea.plainText).toBe(thai.saraAmTone)
+      expect(editor.textarea.cursorOffset).toBe(promptOffsetWidth(thai.saraAmTone))
       console.log(
         `thai-paste ${JSON.stringify(thai.saraAmTone)} text ${JSON.stringify(editor.textarea.plainText)} caret ${editor.textarea.cursorOffset}`,
       )
@@ -239,8 +240,9 @@ describe("thai typing", () => {
         }
         if (!singleCell) {
           arrows.app.mockInput.pressArrow("right")
-          console.log(`thai-arrow-right ${JSON.stringify(sample)} -> ${arrows.textarea.cursorOffset}`)
+          expect(arrows.textarea.cursorOffset).toBe(promptOffsetWidth(parts[0] ?? ""))
           expect(arrows.textarea.plainText).toBe(sample)
+          console.log(`thai-arrow-right ${JSON.stringify(sample)} -> ${arrows.textarea.cursorOffset}`)
         }
       } finally {
         await arrows.cleanup()
@@ -286,10 +288,12 @@ describe("thai typing", () => {
       editor.app.mockInput.pressBackspace({ ctrl: true })
       await editor.app.renderOnce()
       const text = editor.textarea.plainText
+      const kept = thai.noSpaces.slice(0, thai.noSpaces.length - "คำ".length)
       console.log(
         `thai-word-delete ${JSON.stringify(thai.noSpaces)} -> ${JSON.stringify(text)} caret ${editor.textarea.cursorOffset}`,
       )
-      expect(isGraphemePrefix(thai.noSpaces, text)).toBe(true)
+      expect(text).toBe(kept)
+      expect(editor.textarea.cursorOffset).toBe(promptOffsetWidth(kept))
       expect(startsWithThaiMark(text)).toBe(false)
     } finally {
       await editor.cleanup()
@@ -370,23 +374,33 @@ describe("thai typing", () => {
       await editor.app.mockInput.pasteBracketedText(thai.noSpaces)
       await editor.app.renderOnce()
       const typed = editor.textarea.plainText
+      const beforeLastWord = typed.slice(0, typed.length - "คำ".length)
+      expect(editor.textarea.cursorOffset).toBe(promptOffsetWidth(typed))
       editor.app.mockInput.pressArrow("left", { ctrl: true })
       await editor.app.renderOnce()
-      if (editor.textarea.cursorOffset === promptOffsetWidth(typed)) {
-        editor.app.mockInput.pressArrow("left", { meta: true })
-        await editor.app.renderOnce()
-      }
       console.log(`thai-word-left caret ${editor.textarea.cursorOffset}`)
-      const afterLeft = editor.textarea.cursorOffset
+      expect(editor.textarea.cursorOffset).toBe(promptOffsetWidth(beforeLastWord))
       editor.app.mockInput.pressArrow("right", { ctrl: true })
       await editor.app.renderOnce()
-      if (editor.textarea.cursorOffset === afterLeft) {
-        editor.app.mockInput.pressArrow("right", { meta: true })
-        await editor.app.renderOnce()
-      }
       console.log(`thai-word-right caret ${editor.textarea.cursorOffset}`)
+      expect(editor.textarea.cursorOffset).toBe(promptOffsetWidth(typed))
       expect(editor.textarea.plainText).toBe(typed)
       assertWholeClusters(typed, editor.textarea.plainText)
+    } finally {
+      await editor.cleanup()
+    }
+  })
+
+  test("english word motion stays on whitespace", async () => {
+    const editor = await mountTextarea()
+    try {
+      await editor.app.mockInput.typeText("hello world")
+      await editor.app.renderOnce()
+      editor.app.mockInput.pressArrow("left", { ctrl: true })
+      await editor.app.renderOnce()
+      console.log(`thai-english-word-left caret ${editor.textarea.cursorOffset}`)
+      expect(editor.textarea.cursorOffset).toBe("hello ".length)
+      expect(editor.textarea.plainText).toBe("hello world")
     } finally {
       await editor.cleanup()
     }
