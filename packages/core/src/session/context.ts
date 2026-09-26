@@ -132,7 +132,8 @@ const layer = Layer.effect(
       const loaded = yield* Effect.all(
         {
           tools: registry.snapshot(permissions),
-          builtins: builtins.load(sessionID),
+          builtins: builtins.load(),
+          sessionBlock: builtins.session(sessionID),
           discovery: discovery.load(),
           skills: skillInstructions.load(permissions),
           references: referenceInstructions.load(),
@@ -152,6 +153,9 @@ const layer = Layer.effect(
           loaded.references,
           loaded.mcp,
           loaded.entries,
+          // Last so the per-session ID does not break the cross-session cacheable
+          // prefix shared by everything above it.
+          loaded.sessionBlock,
         ]),
         tools: loaded.tools,
       }

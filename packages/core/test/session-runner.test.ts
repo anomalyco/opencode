@@ -355,6 +355,7 @@ const layer = Layer.unwrap(
             },
           }),
         ),
+      session: () => Effect.succeed(Instructions.empty),
     })
     const instructionContext = Layer.mock(InstructionDiscovery.Service, {
       project: true,

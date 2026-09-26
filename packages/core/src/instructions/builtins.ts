@@ -8,7 +8,8 @@ import { Location } from "../location.js"
 import { Instructions } from "./index.js"
 
 export interface Interface {
-  readonly load: (sessionID: Session.ID) => Effect.Effect<Instructions.List>
+  readonly load: () => Effect.Effect<Instructions.List>
+  readonly session: (sessionID: Session.ID) => Effect.Effect<Instructions.List>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/InstructionBuiltIns") {}
@@ -19,7 +20,7 @@ const layer = Layer.effect(
     const global = yield* Global.Service
     const location = yield* Location.Service
     return Service.of({
-      load: (sessionID) =>
+      load: () =>
         Effect.succeed(
           Instructions.combine([
             Instructions.make({
@@ -52,8 +53,14 @@ const layer = Layer.effect(
                 changed: (_previous, date) => `Today's date is now: ${date}`,
               },
             }),
-            // The session ID is unique per session; keeping it out of the shared
-            // prefix lets provider prompt caches match across sessions.
+          ]),
+        ),
+      // The session ID is unique per session. Consumers render this block last in the combined
+      // instruction list so the shared prefix (env, date, Code Mode catalog, AGENTS.md, skills,
+      // MCP) stays cacheable across sessions; anything after the first unique byte is uncachable.
+      session: (sessionID) =>
+        Effect.succeed(
+          Instructions.combine([
             Instructions.make({
               key: Instructions.Key.make("core/session"),
               codec: Schema.toCodecJson(Schema.String),

@@ -74,7 +74,7 @@ const models = Layer.mock(SessionRunnerModel.Service)({
       }),
     ),
 })
-const systemContext = Layer.mock(InstructionBuiltIns.Service, { load: () => Effect.succeed(Instructions.empty) })
+const systemContext = Layer.mock(InstructionBuiltIns.Service, { load: () => Effect.succeed(Instructions.empty), session: () => Effect.succeed(Instructions.empty) })
 const instructionContext = Layer.mock(InstructionDiscovery.Service, {
   project: true,
   global: true,
