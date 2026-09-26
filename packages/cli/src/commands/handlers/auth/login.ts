@@ -1,8 +1,9 @@
-import { autocomplete, intro, log, outro, select, spinner, text } from "@clack/prompts"
+import { intro, log, outro, select, spinner, text } from "@clack/prompts"
 import { Effect, Option } from "effect"
 import type { FormAnswer, IntegrationInfo, OpenCodeClient } from "@opencode/client"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
+import { selectIntegration, type IntegrationChoice } from "../../../ui/integration-picker"
 import { handlePromptErrors, openUrl, prompt, requireInteractive } from "../../../ui/prompt"
 import { answerForm, secret } from "./form"
 import {
@@ -21,10 +22,8 @@ const integrationPriority = new Map([
   ["opencode", 1],
   ["openai", 2],
   ["github-copilot", 3],
-  ["google", 4],
-  ["anthropic", 5],
-  ["openrouter", 6],
-  ["vercel", 7],
+  ["anthropic", 4],
+  ["google", 5],
 ])
 
 export default Runtime.handler(
@@ -74,30 +73,35 @@ const findIntegration = Effect.fn("cli.auth.login.integration")(function* (clien
   }
   const integrations = yield* loadIntegrations(client)
   if (target) return yield* resolveIntegration(integrations, target)
-  const available = integrations
+  const choices = loginChoices(integrations)
+  if (choices.length === 0) return yield* Effect.fail(new Error("No authentication integrations are available"))
+  const id = yield* prompt<string>(() => selectIntegration(choices))
+  return yield* resolveIntegration(integrations, id)
+})
+
+export function loginChoices(integrations: IntegrationInfo[]): IntegrationChoice[] {
+  return integrations
     .filter((integration) => connectMethods(integration).length > 0)
     .toSorted(
       (a, b) =>
+        Number(b.metadata?.source === "mcp") - Number(a.metadata?.source === "mcp") ||
         (integrationPriority.get(a.id) ?? integrationPriority.size) -
           (integrationPriority.get(b.id) ?? integrationPriority.size) ||
         a.name.localeCompare(b.name) ||
         a.id.localeCompare(b.id),
     )
-  if (available.length === 0) return yield* Effect.fail(new Error("No authentication integrations are available"))
-  const id = yield* prompt<string>(() =>
-    autocomplete({
-      message: "Select integration",
-      maxItems: 8,
-      options: available.map((integration) => {
-        const option = { value: integration.id, label: integration.name, hint: integration.id }
-        if (integration.connections.length > 0) return { ...option, hint: "connected" }
-        if (integration.id === "opencode") return { ...option, hint: "recommended" }
-        return option
-      }),
-    }),
-  )
-  return yield* resolveIntegration(available, id)
-})
+    .map((integration) => ({
+      value: integration.id,
+      label: integration.name,
+      category:
+        integration.metadata?.source === "mcp"
+          ? "MCP"
+          : integrationPriority.has(integration.id)
+            ? "Popular"
+            : "Services",
+      connected: integration.connections.length > 0,
+    }))
+}
 
 const chooseMethod = Effect.fn("cli.auth.login.method")(function* (methods: ConnectMethod[], target?: string) {
   if (target) return yield* resolveMethod(methods, target)
@@ -143,17 +147,18 @@ const keyLogin = Effect.fn("cli.auth.login.key")(function* (
   )
 })
 
-const oauthLogin = Effect.fn("cli.auth.login.oauth")(function* (
+export const oauthLogin = Effect.fn("cli.auth.login.oauth")(function* (
   client: OpenCodeClient,
   integration: IntegrationInfo,
   method: Extract<ConnectMethod, { type: "oauth" }>,
   answer?: FormAnswer,
+  label?: string,
 ) {
   const progress = spinner()
   progress.start("Starting authorization...")
   const started = yield* request((signal) =>
     client.integration.oauth.connect(
-      { integrationID: integration.id, methodID: method.id, answer, location },
+      { integrationID: integration.id, methodID: method.id, answer, label, location },
       { signal },
     ),
   ).pipe(Effect.tapCause(() => Effect.sync(() => progress.stop("Authentication failed", 1))))
@@ -190,16 +195,14 @@ const oauthLogin = Effect.fn("cli.auth.login.oauth")(function* (
     return
   }
 
-  const waiting = spinner()
-  waiting.start("Waiting for authorization...")
-  const status = yield* waitForOAuth(client, integration.id, attempt.attemptID).pipe(
-    Effect.tapCause(() => Effect.sync(() => waiting.stop("Authentication failed", 1))),
-  )
+  // Clack's spinner captures Ctrl+C and exits the process directly, which would skip the finalizer that
+  // cancels the attempt. Waits that can last minutes use plain log lines so Ctrl+C interrupts normally.
+  log.step("Waiting for authorization...")
+  const status = yield* waitForOAuth(client, integration.id, attempt.attemptID)
   if (status.status === "complete") {
-    waiting.stop(`Connected to ${integration.name}`)
+    log.success(`Connected to ${integration.name}`)
     return
   }
-  waiting.stop("Authentication failed", 1)
   if (status.status === "failed") yield* Effect.fail(new Error(status.message))
   yield* Effect.fail(new Error("Authorization expired"))
 })
@@ -226,14 +229,21 @@ const commandLogin = Effect.fn("cli.auth.login.command")(function* (
       ),
     ).pipe(Effect.ignore),
   )
-  const status = yield* waitForCommand(client, integration.id, started.data.attemptID, (message) =>
-    progress.message(message.trim() || "Waiting for authentication command..."),
-  ).pipe(Effect.tapCause(() => Effect.sync(() => progress.stop("Authentication failed", 1))))
+  progress.stop("Authentication command started")
+  // The status message accumulates the command's stderr; print each completed line once.
+  let printed = 0
+  log.step("Waiting for authentication command...")
+  const status = yield* waitForCommand(client, integration.id, started.data.attemptID, (message) => {
+    const end = message.lastIndexOf("\n") + 1
+    if (end <= printed) return
+    const output = message.slice(printed, end).trim()
+    printed = end
+    if (output) log.message(output)
+  })
   if (status.status === "complete") {
-    progress.stop(`Connected to ${integration.name}`)
+    log.success(`Connected to ${integration.name}`)
     return
   }
-  progress.stop("Authentication failed", 1)
   if (status.status === "failed") yield* Effect.fail(new Error(status.message))
   yield* Effect.fail(new Error("Authentication expired"))
 })

@@ -119,6 +119,7 @@
       },
       "dependencies": {
         "@agentclientprotocol/sdk": "1.2.1",
+        "@clack/core": "1.0.0-alpha.1",
         "@clack/prompts": "1.0.0-alpha.1",
         "@effect/platform-node": "catalog:",
         "@opencode-ai/pty": "0.1.13",
@@ -135,6 +136,7 @@
         "effect": "catalog:",
         "immer": "11.1.4",
         "jsonc-parser": "3.3.1",
+        "picocolors": "1.1.1",
         "solid-js": "catalog:",
         "tree-sitter-bash": "0.25.0",
         "tree-sitter-powershell": "0.25.10",

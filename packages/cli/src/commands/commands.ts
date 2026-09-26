@@ -142,10 +142,10 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
       ],
     }),
     Spec.make("auth", {
-      description: "manage AI providers and credentials",
+      description: "manage integrations and credentials",
       commands: [
         Spec.make("list", {
-          description: "list providers and credentials",
+          description: "list integrations and credentials",
           params: {
             ...ServerParams,
             format: Flag.choice("format", ["default", "json"]).pipe(
@@ -155,7 +155,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
           },
         }),
         Spec.make("login", {
-          description: "log in to a provider",
+          description: "connect an integration",
           params: {
             ...ServerParams,
             target: Argument.string("target").pipe(
@@ -228,7 +228,9 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         }),
         Spec.make("auth", {
           description: "Authenticate with an OAuth-capable remote MCP server",
-          params: { name: Argument.string("name").pipe(Argument.withDescription("Name of the MCP server")) },
+          params: {
+            name: Argument.string("name").pipe(Argument.withDescription("Name of the MCP server"), Argument.optional),
+          },
         }),
         Spec.make("logout", {
           description: "Remove stored OAuth credentials for an MCP server",
