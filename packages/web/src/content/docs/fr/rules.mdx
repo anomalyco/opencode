@@ -3,7 +3,7 @@ title: Règles
 description: Définissez des instructions personnalisées pour opencode.
 ---
 
-Vous pouvez fournir des instructions personnalisées à opencode en créant un fichier `AGENTS.md`. Ceci est similaire aux règles du curseur. Il contient des instructions qui seront incluses dans le contexte du LLM pour personnaliser son comportement pour votre projet spécifique.
+Vous pouvez fournir des instructions personnalisées à opencode en créant un fichier `AGENTS.md`. Ceci est similaire aux règles de Cursor. Il contient des instructions qui seront incluses dans le contexte du LLM pour personnaliser son comportement pour votre projet spécifique.
 
 ---
 
@@ -60,13 +60,13 @@ opencode prend également en charge la lecture du fichier `AGENTS.md` à partir 
 
 Placez un `AGENTS.md` à la racine de votre projet pour les règles spécifiques au projet. Celles-ci ne s'appliquent que lorsque vous travaillez dans ce répertoire ou ses sous-répertoires.
 
-### Mondial
+### Global
 
 Vous pouvez également avoir des règles globales dans un fichier `~/.config/opencode/AGENTS.md`. Ceci est appliqué à toutes les sessions opencode.
 
 Étant donné que cela n'est pas validé par Git ni partagé avec votre équipe, nous vous recommandons de l'utiliser pour spécifier les règles personnelles que le LLM doit suivre.
 
-### Compatibilité des codes Claude
+### Compatibilité Claude Code
 
 Pour les utilisateurs migrant depuis Claude Code, OpenCode prend en charge les conventions de fichiers de Claude Code comme solutions de secours :
 
