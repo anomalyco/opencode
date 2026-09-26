@@ -85,12 +85,12 @@ type State = {
 }
 
 type DiscoveryState = {
-  matches: string[]
+  matches: Array<{ match: string; source?: string }>
   dirs: string[]
 }
 
 type ScanState = {
-  matches: Set<string>
+  matches: Map<string, string | undefined>
   dirs: Set<string>
 }
 
@@ -102,7 +102,12 @@ export interface Interface {
   readonly available: (agent?: Agent.Info) => Effect.Effect<Info[]>
 }
 
-const add = Effect.fnUntraced(function* (state: State, match: string, events: EventV2Bridge.Service["Service"]) {
+const add = Effect.fnUntraced(function* (
+  state: State,
+  match: string,
+  events: EventV2Bridge.Service["Service"],
+  source?: string,
+) {
   const md = yield* Effect.tryPromise({
     try: () => ConfigMarkdown.parse(match),
     catch: (err) => err,
@@ -122,17 +127,18 @@ const add = Effect.fnUntraced(function* (state: State, match: string, events: Ev
 
   if (!isSkillFrontmatter(md.data)) return
 
-  if (state.skills[md.data.name]) {
+  const name = source ? `${source}/${md.data.name}` : md.data.name
+  if (state.skills[name]) {
     yield* Effect.logWarning("duplicate skill name", {
-      name: md.data.name,
-      existing: state.skills[md.data.name].location,
+      name,
+      existing: state.skills[name].location,
       duplicate: match,
     })
   }
 
   state.dirs.add(path.dirname(match))
-  state.skills[md.data.name] = {
-    name: md.data.name,
+  state.skills[name] = {
+    name,
     description: md.data.description,
     location: match,
     content: md.content,
@@ -143,7 +149,7 @@ const scan = Effect.fnUntraced(function* (
   state: ScanState,
   root: string,
   pattern: string,
-  opts?: { dot?: boolean; scope?: string },
+  opts?: { dot?: boolean; scope?: string; source?: string },
 ) {
   const matches = yield* Effect.tryPromise({
     try: () =>
@@ -165,7 +171,7 @@ const scan = Effect.fnUntraced(function* (
   )
 
   for (const match of matches) {
-    state.matches.add(match)
+    if (!state.matches.has(match)) state.matches.set(match, opts?.source)
     state.dirs.add(path.dirname(match))
   }
 })
@@ -180,10 +186,14 @@ const discoverSkills = Effect.fnUntraced(function* (
   directory: string,
   worktree: string,
 ) {
-  const state: ScanState = { matches: new Set(), dirs: new Set() }
+  const state: ScanState = { matches: new Map(), dirs: new Set() }
 
-  const externalDirs: string[] = []
-  if (!disableExternalSkills) {
+  const cfg = yield* config.get()
+  const explicitSources = cfg.skills?.sources?.filter((source) => source.enabled !== false) ?? []
+  const sourceQualified = cfg.skills?.collision === "source-qualified"
+
+  if (explicitSources.length === 0 && !disableExternalSkills) {
+    const externalDirs: string[] = []
     if (!disableClaudeCodeSkills) externalDirs.push(CLAUDE_EXTERNAL_DIR)
     externalDirs.push(AGENTS_EXTERNAL_DIR)
 
@@ -202,12 +212,22 @@ const discoverSkills = Effect.fnUntraced(function* (
     }
   }
 
-  const configDirs = yield* config.directories()
-  for (const dir of configDirs) {
-    yield* scan(state, dir, OPENCODE_SKILL_PATTERN)
+  for (const source of explicitSources) {
+    const expanded = source.path.startsWith("~/") ? path.join(global.home, source.path.slice(2)) : source.path
+    const dir = path.isAbsolute(expanded) ? expanded : path.join(directory, expanded)
+    if (!(yield* fsys.isDir(dir))) {
+      yield* Effect.logWarning("skill source path not found", { id: source.id, path: dir })
+      continue
+    }
+    yield* scan(state, dir, SKILL_PATTERN, { source: sourceQualified ? source.id : undefined })
   }
 
-  const cfg = yield* config.get()
+  if (explicitSources.length === 0) {
+    const configDirs = yield* config.directories()
+    for (const dir of configDirs) {
+      yield* scan(state, dir, OPENCODE_SKILL_PATTERN)
+    }
+  }
   for (const item of cfg.skills?.paths ?? []) {
     const expanded = item.startsWith("~/") ? path.join(global.home, item.slice(2)) : item
     const dir = path.isAbsolute(expanded) ? expanded : path.join(directory, expanded)
@@ -227,7 +247,7 @@ const discoverSkills = Effect.fnUntraced(function* (
   }
 
   return {
-    matches: Array.from(state.matches),
+    matches: Array.from(state.matches, ([match, source]) => ({ match, source })),
     dirs: Array.from(state.dirs),
   }
 })
@@ -237,10 +257,11 @@ const loadSkills = Effect.fnUntraced(function* (
   discovered: DiscoveryState,
   events: EventV2Bridge.Service["Service"],
 ) {
-  yield* Effect.forEach(discovered.matches, (match) => add(state, match, events), {
-    concurrency: "unbounded",
-    discard: true,
-  })
+  for (const item of discovered.matches.toSorted(
+    (a, b) => (a.source ?? "").localeCompare(b.source ?? "") || a.match.localeCompare(b.match),
+  )) {
+    yield* add(state, item.match, events, item.source)
+  }
 
   yield* Effect.logInfo("init", { count: Object.keys(state.skills).length })
 })
