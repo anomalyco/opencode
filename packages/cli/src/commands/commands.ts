@@ -419,6 +419,28 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
             sessionID: Argument.string("sessionID").pipe(Argument.withDescription("Session ID to delete")),
           },
         }),
+        Spec.make("prune", {
+          description: "Delete old session families after a preview",
+          params: {
+            ...ServerParams,
+            duration: Argument.string("duration").pipe(
+              Argument.withDescription("Age threshold such as 12h, 30d, or 2w"),
+            ),
+            dryRun: Flag.boolean("dry-run").pipe(
+              Flag.withDescription("Show candidates without deleting them"),
+              Flag.withDefault(false),
+            ),
+            force: Flag.boolean("force").pipe(
+              Flag.withAlias("f"),
+              Flag.withDescription("Skip confirmation prompts"),
+              Flag.withDefault(false),
+            ),
+            includeArchived: Flag.boolean("include-archived").pipe(
+              Flag.withDescription("Include archived sessions"),
+              Flag.withDefault(false),
+            ),
+          },
+        }),
         Spec.make("export", {
           description: "Export session data as JSON",
           params: {
