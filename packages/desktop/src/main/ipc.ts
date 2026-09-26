@@ -10,7 +10,8 @@ import type { FatalRendererError, ServerReadyData, TitlebarTheme } from "../prel
 import { runDesktopMenuAction } from "./desktop-menu-actions"
 import { setForceFocus } from "./debug"
 import { assertAttachmentBudget, createPickedFileAuthorizations } from "./attachment-picker"
-import { getStore, removeStoreFileIfEmpty } from "./store"
+import { getStore, removeStoreFileIfEmpty, storeFile } from "./store"
+import { mutateStore } from "./store-write"
 import {
   getPinchZoomEnabled,
   getWindowID,
@@ -121,15 +122,15 @@ export function registerIpcHandlers(deps: Deps) {
       return null
     }
   })
-  ipcMain.handle("store-set", (_event: IpcMainInvokeEvent, name: string, key: string, value: string) => {
-    getStore(name).set(key, value)
-  })
-  ipcMain.handle("store-delete", (_event: IpcMainInvokeEvent, name: string, key: string) => {
-    getStore(name).delete(key)
+  ipcMain.handle("store-set", (_event: IpcMainInvokeEvent, name: string, key: string, value: string) =>
+    mutateStore({ name, file: storeFile(name), store: getStore(name) }, (store) => store.set(key, value)),
+  )
+  ipcMain.handle("store-delete", async (_event: IpcMainInvokeEvent, name: string, key: string) => {
+    await mutateStore({ name, file: storeFile(name), store: getStore(name) }, (store) => store.delete(key))
     void removeStoreFileIfEmpty(name)
   })
-  ipcMain.handle("store-clear", (_event: IpcMainInvokeEvent, name: string) => {
-    getStore(name).clear()
+  ipcMain.handle("store-clear", async (_event: IpcMainInvokeEvent, name: string) => {
+    await mutateStore({ name, file: storeFile(name), store: getStore(name) }, (store) => store.clear())
     void removeStoreFileIfEmpty(name)
   })
   ipcMain.handle("store-keys", (_event: IpcMainInvokeEvent, name: string) => {
