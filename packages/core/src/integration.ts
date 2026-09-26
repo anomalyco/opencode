@@ -25,6 +25,12 @@ import { IntegrationConnection } from "./integration/connection.js"
 import { AppProcess } from "@opencode/util/process"
 import { ChildProcess } from "effect/unstable/process"
 import { Form } from "./form.js"
+import { EffectFlock } from "@opencode/util/effect-flock"
+import { Database } from "./database/database.js"
+import { FSUtil } from "@opencode/util/fs-util"
+import { Global } from "@opencode/util/global"
+import { Hash } from "@opencode/util/hash"
+import path from "path"
 
 export const ID = Integration.ID
 export type ID = Integration.ID
@@ -230,6 +236,9 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/In
 const attemptLifetime = Duration.toMillis(Duration.minutes(10))
 const terminalRetention = Duration.toMillis(Duration.minutes(1))
 const scrubInterval = Duration.seconds(30)
+/** OAuth credentials expose only absolute expiry, so keep the margin bounded for short-lived tokens. */
+const refreshMargin = Duration.toMillis(Duration.seconds(30))
+const refreshTimeout = Duration.minutes(1)
 
 type AttemptTime = { created: number; expires: number }
 type PendingAttempt = {
@@ -276,6 +285,11 @@ const layer = Layer.effect(
     const credentials = yield* Credential.Service
     const bus = yield* Bus.Service
     const processes = yield* AppProcess.Service
+    const flock = yield* EffectFlock.Service
+    const database = yield* Database.Service
+    const fs = yield* FSUtil.Service
+    const global = yield* Global.Service
+    const refreshLockRoot = database.path ? `${database.path}.locks` : path.join(global.state, "locks")
     const scope = yield* Scope.Scope
     const attempts = SynchronizedRef.makeUnsafe(new Map<AttemptID, AttemptEntry>())
     const commandAttempts = SynchronizedRef.makeUnsafe(new Map<AttemptID, CommandAttemptEntry>())
@@ -684,19 +698,48 @@ const layer = Layer.effect(
             const key = process.env[connection.name]
             return key ? Credential.Key.make({ type: "key", key }) : undefined
           }
-          const credential = yield* credentials.get(connection.id)
-          if (!credential) return undefined
-          if (credential.value.type === "key") return credential.value
-          const implementation = state
-            .get()
-            .integrations.get(credential.integrationID)
-            ?.implementations.get(credential.value.methodID)
-          if (!implementation?.refresh) return credential.value
-          const now = yield* Clock.currentTimeMillis
-          if (credential.value.expires > now + Duration.toMillis(Duration.minutes(5))) return credential.value
-          const value = yield* authorize(implementation.refresh(credential.value))
-          yield* credentials.update(credential.id, { value })
-          return value
+          const lockKey = `credential:${connection.id}`
+          return yield* flock
+            .withLock(
+              Effect.gen(function* () {
+                const credential = yield* credentials.get(connection.id)
+                if (!credential) return undefined
+                if (credential.value.type === "key") return credential.value
+                const current = credential.value
+                const implementation = state
+                  .get()
+                  .integrations.get(credential.integrationID)
+                  ?.implementations.get(current.methodID)
+                const refresh = implementation?.refresh
+                if (!refresh) return current
+                const now = yield* Clock.currentTimeMillis
+                if (current.expires > now + refreshMargin) return current
+                const marker = path.join(refreshLockRoot, `${Hash.fast(lockKey)}.refresh`)
+                const fingerprint = Hash.sha256(current.refresh)
+                const blocked = yield* fs
+                  .readFileString(marker)
+                  .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined))
+                if (blocked === fingerprint)
+                  return yield* Effect.fail(new Error("OAuth refresh previously failed; reconnect the credential"))
+                yield* fs.writeFileString(marker, fingerprint)
+                const result = yield* refresh(current).pipe(Effect.timeout(refreshTimeout), Effect.exit)
+                if (Exit.isFailure(result)) return yield* Effect.failCause(result.cause)
+                return yield* Effect.gen(function* () {
+                  const value = result.value
+                  if (yield* credentials.updateValue(credential.id, current, value)) {
+                    yield* fs.remove(marker).pipe(Effect.ignore)
+                    return value
+                  }
+                  const winner = (yield* credentials.get(credential.id))?.value
+                  if (!winner || winner.type !== "oauth" || Hash.sha256(winner.refresh) !== fingerprint)
+                    yield* fs.remove(marker).pipe(Effect.ignore)
+                  return winner
+                }).pipe(Effect.uninterruptible)
+              }),
+              lockKey,
+              refreshLockRoot,
+            )
+            .pipe(authorize)
         }),
         key: Effect.fn("Integration.connection.key")(function* (input) {
           const method = state
@@ -809,5 +852,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Credential.node, Bus.node, AppProcess.node],
+  deps: [Credential.node, Bus.node, AppProcess.node, EffectFlock.node, FSUtil.node, Global.node, Database.node],
 })

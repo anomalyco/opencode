@@ -14,6 +14,8 @@ type DatabaseShape = Effect.Success<typeof makeDatabase>
 
 export interface Interface {
   db: DatabaseShape
+  /** Absolute backing file used to coordinate operations across processes. */
+  path?: string
 }
 
 export const Options = Schema.Struct({
@@ -28,7 +30,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/st
 // releasing a shared semaphore resumes the waiting object's fiber inside the
 // releasing object's I/O context, where its first storage call is rejected as
 // cross-object I/O.
-const databaseLayer = (lock: Effect.Effect<Semaphore.Semaphore>) =>
+const databaseLayer = (lock: Effect.Effect<Semaphore.Semaphore>, path?: string) =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -46,7 +48,7 @@ const databaseLayer = (lock: Effect.Effect<Semaphore.Semaphore>) =>
       const semaphore = yield* lock
       yield* semaphore.withPermit(DatabaseMigration.apply(db))
 
-      return { db }
+      return { db, path }
     }).pipe(Effect.orDie),
   )
 
@@ -66,9 +68,10 @@ export function layer(options: Options = { path: ":memory:" }) {
   return Layer.unwrap(
     Effect.gen(function* () {
       const provide = (filename: string) =>
-        databaseLayer(filename === ":memory:" ? Semaphore.make(1) : Effect.succeed(lockFor(filename))).pipe(
-          Layer.provide(sqliteLayer({ filename })),
-        )
+        databaseLayer(
+          filename === ":memory:" ? Semaphore.make(1) : Effect.succeed(lockFor(filename)),
+          filename === ":memory:" ? undefined : filename,
+        ).pipe(Layer.provide(sqliteLayer({ filename })))
       const filename = options.path ?? ":memory:"
       if (filename === ":memory:" || isAbsolute(filename)) return provide(filename)
       const global = yield* Global.Service

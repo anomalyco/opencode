@@ -47,6 +47,7 @@ const memoryCredentials = (initial: Credential.Info[]) => {
         const row = rows.get(id)
         if (row) rows.set(id, new Credential.Info({ ...row, ...updates }))
       }),
+    updateValue: unused,
     remove: (id) => Effect.sync(() => void rows.delete(id)),
   })
   return { rows, service }
