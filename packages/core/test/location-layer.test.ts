@@ -698,4 +698,102 @@ describe("LocationServiceMap", () => {
       ),
     ),
   )
+
+  it.live("applies an agent variant when the session uses that model without one", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const providerID = Provider.ID.make("example")
+          const modelID = Model.ID.make("chat")
+          const plainID = Model.ID.make("plain")
+          const resolved = yield* Effect.gen(function* () {
+            const agents = yield* Agent.Service
+            const providers = yield* Provider.Service
+            const modelState = yield* Model.Service
+            yield* providers.transform((editor) => {
+              editor.update(providerID, (provider) => {
+                provider.package = "@opencode/ai/providers/openai-compatible"
+                provider.settings = { baseURL: "https://example.test/v1" }
+              })
+              editor.models.update(providerID, modelID, (model) => {
+                model.package = "@opencode/ai/providers/openai-compatible"
+                model.settings = { baseURL: "https://example.test/v1" }
+                model.variants = [
+                  { id: Model.VariantID.make("max"), body: { reasoning_effort: "max" } },
+                  { id: Model.VariantID.make("low"), body: { reasoning_effort: "low" } },
+                ]
+              })
+              editor.models.update(providerID, plainID, (model) => {
+                model.package = "@opencode/ai/providers/openai-compatible"
+                model.settings = { baseURL: "https://example.test/v1" }
+              })
+            })
+            yield* modelState.transform((editor) => {
+              editor.default.set(providerID, modelID)
+            })
+            yield* agents.transform((editor) => {
+              editor.update(Agent.ID.make("build"), (agent) => {
+                agent.model = {
+                  providerID,
+                  id: modelID,
+                  variant: Model.VariantID.make("max"),
+                }
+              })
+            })
+            const models = yield* SessionRunnerModel.Service
+            const session = (input?: { variant?: Model.VariantID; modelID?: Model.ID; agent?: Agent.ID }) =>
+              Session.Info.make({
+                id: Session.ID.make("ses_agent_variant"),
+                projectID: Project.ID.global,
+                title: "test",
+                ...(input?.agent ? { agent: input.agent } : {}),
+                ...(input?.modelID || input?.variant
+                  ? {
+                      model: {
+                        id: input.modelID ?? modelID,
+                        providerID,
+                        ...(input.variant ? { variant: input.variant } : {}),
+                      },
+                    }
+                  : {}),
+                cost: Money.USD.zero,
+                tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+                time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
+                location,
+              })
+            const build = Agent.ID.make("build")
+            const matched = yield* models.resolve(session({ agent: build, modelID }), modelState.available)
+            const implicit = yield* models.resolve(session(), modelState.available)
+            const explicit = yield* models.resolve(
+              session({ variant: Model.VariantID.make("low") }),
+              modelState.available,
+            )
+            const storedDefault = yield* models.resolve(
+              session({ variant: Model.VariantID.make("default") }),
+              modelState.available,
+            )
+            const other = yield* models.resolve(session({ modelID: plainID }), modelState.available)
+            return { matched, implicit, explicit, storedDefault, other }
+          }).pipe(Effect.provide(LocationServiceMap.Service.get(location)))
+
+          const effort = (body: unknown) =>
+            body && typeof body === "object" && "reasoning_effort" in body ? body.reasoning_effort : undefined
+          expect(resolved.matched.ref.variant).toBe(Model.VariantID.make("max"))
+          expect(effort(resolved.matched.model.route.defaults.http?.body)).toBe("max")
+          expect(resolved.implicit.ref.variant).toBe(Model.VariantID.make("max"))
+          expect(effort(resolved.implicit.model.route.defaults.http?.body)).toBe("max")
+          expect(resolved.explicit.ref.variant).toBe(Model.VariantID.make("low"))
+          expect(effort(resolved.explicit.model.route.defaults.http?.body)).toBe("low")
+          expect(resolved.storedDefault.ref.variant).toBe(Model.VariantID.make("max"))
+          expect(effort(resolved.storedDefault.model.route.defaults.http?.body)).toBe("max")
+          expect(resolved.other.ref.variant).toBeUndefined()
+          expect(effort(resolved.other.model.route.defaults.http?.body)).toBeUndefined()
+        }),
+      ),
+    ),
+  )
 })
