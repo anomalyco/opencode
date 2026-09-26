@@ -76,6 +76,13 @@ export function migrateCanonicalLocalServerState(value: unknown, canonicalLocalS
   return next
 }
 
+// Home and filesystem roots ("/", "C:/") are too broad for the file finder to index.
+export function adoptable(directory: string, home: string) {
+  if (!directory || !home) return false
+  const key = pathKey(directory)
+  return !key.endsWith("/") && key !== pathKey(home)
+}
+
 export function createServerProjects<T extends ServerProjectState>(input: {
   scope: Accessor<ServerScope>
   store: Store<T>
@@ -108,6 +115,16 @@ export function createServerProjects<T extends ServerProjectState>(input: {
       }
       if (current().some((project) => project.worktree === directory)) return
       setStore("projects", scope, [{ worktree: directory, expanded: true }, ...current()])
+    },
+    // Opens a directory only when this server has no open projects, so a fresh client
+    // lands somewhere without reordering an existing list. Directories the user closed
+    // stay closed.
+    adopt(directory: string) {
+      if (current().length > 0) return
+      const key = pathKey(directory)
+      if (currentClosed().some((worktree) => pathKey(worktree) === key)) return
+      setStore("projects", input.scope(), [{ worktree: directory, expanded: true }])
+      setStore("lastProject", input.scope(), directory)
     },
     // User-initiated close: removes the project and records it in recently closed.
     // Internal, non-user removals (e.g. sandbox/worktree normalization) should use remove().
