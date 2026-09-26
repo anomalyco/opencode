@@ -4,6 +4,7 @@ type Keys = keyof typeof en
 
 export const dict = {
   "desktop.menu.app": "OpenCode",
+  "desktop.menu.about": "关于",
   "desktop.menu.file": "文件",
   "desktop.menu.edit": "编辑",
   "desktop.menu.view": "视图",

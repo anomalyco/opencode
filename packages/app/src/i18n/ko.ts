@@ -1068,6 +1068,7 @@ export const dict = {
     "새 디자인은 아직 Git Worktrees를 지원하지 않지만 곧 지원할 예정입니다. 이전 레이아웃을 계속 사용하려면 설정에서 레이아웃을 전환할 수 있습니다. 단, 몇 주 후에는 새 레이아웃이 영구 적용됩니다.",
 
   "desktop.menu.app": "OpenCode",
+  "desktop.menu.about": "OpenCode 정보",
   "desktop.menu.file": "파일",
   "desktop.menu.edit": "편집",
   "desktop.menu.view": "보기",

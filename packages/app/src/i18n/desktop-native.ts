@@ -223,6 +223,7 @@ function locale(value: string) {
 
 export const DESKTOP_NATIVE_ENGLISH = {
   "desktop.menu.app": "OpenCode",
+  "desktop.menu.about": "About",
   "desktop.menu.file": "File",
   "desktop.menu.edit": "Edit",
   "desktop.menu.view": "View",

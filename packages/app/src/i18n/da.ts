@@ -1130,6 +1130,7 @@ export const dict = {
   "terminal.connectionLost.abnormalClose": "WebSocket lukkede unormalt: {{code}}",
 
   "desktop.menu.app": "OpenCode",
+  "desktop.menu.about": "Om",
   "desktop.menu.file": "Arkiv",
   "desktop.menu.edit": "Rediger",
   "desktop.menu.view": "Oversigt",
