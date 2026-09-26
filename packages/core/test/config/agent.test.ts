@@ -114,6 +114,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
       const reviewer = yield* agents.get(AgentV2.ID.make("reviewer"))
       if (!reviewer) throw new Error("expected configured reviewer agent")
       expect(reviewer).toMatchObject({
+        native: false,
         description: "Review changes",
         mode: "subagent",
         hidden: true,
@@ -184,6 +185,7 @@ describe("ConfigAgentPlugin.Plugin", () => {
       const reviewer = yield* agents.get(AgentV2.ID.make("reviewer"))
       if (!reviewer) throw new Error("expected configured reviewer agent")
       expect(reviewer).toMatchObject({
+        native: false,
         system: "Review carefully.",
         description: "Reviews changes",
         mode: "subagent",

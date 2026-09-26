@@ -124,6 +124,7 @@ describe("AgentV2", () => {
         "title",
       ])
       for (const item of agents) {
+        expect(item.native).toBe(true)
         expect(item.permissions.some((rule) => rule.action === "bash" && rule.effect !== "deny")).toBe(false)
       }
     }),
