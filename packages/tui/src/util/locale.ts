@@ -58,24 +58,47 @@ export function duration(input: number) {
   return `${days}d ${hours}h`
 }
 
+const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" })
+
+// Keep the existing UTF-16 length budget, but discard a whole grapheme if it does not fit.
 export function truncate(str: string, len: number): string {
+  if (len <= 0) return ""
   if (str.length <= len) return str
-  return str.slice(0, len - 1) + "…"
+  return takeGraphemePrefix(str, len - 1) + "…"
 }
 
 export function truncateLeft(str: string, len: number): string {
+  if (len <= 0) return ""
   if (str.length <= len) return str
-  return "…" + str.slice(-(len - 1))
+  return "…" + takeGraphemeSuffix(str, len - 1)
 }
 
 export function truncateMiddle(str: string, maxLength: number = 35): string {
+  if (maxLength <= 0) return ""
   if (str.length <= maxLength) return str
 
   const ellipsis = "…"
   const keepStart = Math.ceil((maxLength - ellipsis.length) / 2)
   const keepEnd = Math.floor((maxLength - ellipsis.length) / 2)
 
-  return str.slice(0, keepStart) + ellipsis + str.slice(-keepEnd)
+  return takeGraphemePrefix(str, keepStart) + ellipsis + takeGraphemeSuffix(str, keepEnd)
+}
+
+function takeGraphemePrefix(str: string, budget: number) {
+  if (budget <= 0) return ""
+  for (const part of graphemes.segment(str)) {
+    if (part.index + part.segment.length > budget) return str.slice(0, part.index)
+  }
+  return str
+}
+
+function takeGraphemeSuffix(str: string, budget: number) {
+  if (budget <= 0) return ""
+  const start = str.length - budget
+  for (const part of graphemes.segment(str)) {
+    if (part.index >= start) return str.slice(part.index)
+  }
+  return ""
 }
 
 export function pluralize(count: number, singular: string, plural: string): string {
