@@ -1,9 +1,32 @@
 import { describe, expect, test } from "bun:test"
 import { contrastRatio } from "../color"
+import { DEFAULT_THEMES, oneDarkProTheme } from "../default-themes"
 import type { DesktopTheme, HexColor, ResolvedV2Theme } from "../types"
 import { resolveThemeV2, resolveThemeVariantV2, themeV2ToCss } from "./resolve"
 
 const theme: DesktopTheme = await Bun.file(new URL("../themes/oc-2.json", import.meta.url)).json()
+
+describe("accent text contrast", () => {
+  test.each(Object.entries(DEFAULT_THEMES).flatMap(([name, value]) => ([
+    { name, value, mode: "light" as const },
+    { name, value, mode: "dark" as const },
+  ])))("$name $mode keeps workspace text readable", ({ value, mode }) => {
+    expectAccentContrast(resolveThemeV2(value)[mode])
+  })
+
+  test.each([false, true])("custom palette without v2 overrides receives an accent foreground (dark: %s)", (dark) => {
+    expectAccentContrast(resolveThemeVariantV2({ ...oneDarkProTheme[dark ? "dark" : "light"], v2Overrides: undefined }, dark))
+  })
+
+  test("custom accent background overrides select the foreground from the effective surface", () => {
+    const tokens = resolveThemeVariantV2(
+      { ...oneDarkProTheme.dark, v2Overrides: { "v2-background-bg-accent": "#3eacff" } },
+      true,
+    )
+    expectAccentContrast(tokens)
+    expect(tokens["v2-text-text-on-accent"]).not.toBe(tokens["v2-text-text-contrast"])
+  })
+})
 
 describe("icon emphasis", () => {
   test.each(["light", "dark"] as const)("OC-2 %s icons increase in contrast from faint to base", (mode) => {
@@ -63,4 +86,10 @@ function expectIconEmphasis(tokens: ResolvedV2Theme) {
   const contrast = (role: string) => contrastRatio(resolve(tokens[`v2-icon-icon-${role}`]), background)
   expect(contrast("faint")).toBeLessThan(contrast("muted"))
   expect(contrast("muted")).toBeLessThan(contrast("base"))
+}
+
+function expectAccentContrast(tokens: ResolvedV2Theme) {
+  const resolve = (value: string): HexColor =>
+    value.startsWith("var(--") ? resolve(tokens[value.slice(6, -1)]) : (value as HexColor)
+  expect(contrastRatio(resolve(tokens["v2-text-text-on-accent"]), resolve(tokens["v2-background-bg-accent"]))).toBeGreaterThanOrEqual(4.5)
 }

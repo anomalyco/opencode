@@ -20,6 +20,21 @@ const inventory: WorktreeDirectory[] = [
 
 test.use({ serviceWorkers: "block" })
 
+test("One Dark Pro keeps workspace user messages readable", async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    localStorage.setItem("opencode-theme-id", "onedarkpro")
+    localStorage.setItem("opencode-color-scheme", "dark")
+  })
+  await openSession(page, workspace)
+  const message = page.locator('[data-slot="user-message-text"]')
+  await expect(message).toHaveText("Check this fixture workspace.")
+  await expectToken(message, "background-color", "--v2-background-bg-accent")
+  await expectToken(message, "color", "--v2-text-text-on-accent")
+  const path = testInfo.outputPath("onedarkpro-workspace-message.png")
+  await message.screenshot({ path })
+  await testInfo.attach("onedarkpro-workspace-message", { path, contentType: "image/png" })
+})
+
 for (const theme of ["light", "dark"] as const) {
   test.describe(theme, () => {
     test.beforeEach(async ({ page }) => {
@@ -83,7 +98,7 @@ for (const theme of ["light", "dark"] as const) {
         await expectToken(
           message,
           "color",
-          scenario.accent ? "--v2-text-text-contrast" : theme === "light" ? "--v2-blue-700" : "--v2-blue-300",
+          scenario.accent ? "--v2-text-text-on-accent" : theme === "light" ? "--v2-blue-700" : "--v2-blue-300",
         )
       })
     }
