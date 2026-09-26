@@ -10,6 +10,26 @@ import {
 import { SessionMessage } from "../message"
 import type { FileAttachment } from "../prompt"
 
+// Mirrors ToolOutputStore.MAX_BYTES. Session shell output must obey the same
+// bounded preview as normal tool output; without this cap a large shell command
+// is injected in full into the next model request, which can exceed the context
+// window, fail as `provider.unknown`, and strand the session (issue #45099).
+const SHELL_OUTPUT_MAX_BYTES = 50 * 1024
+
+const truncateShellOutput = (value: string) => {
+  const total = Buffer.byteLength(value, "utf-8")
+  if (total <= SHELL_OUTPUT_MAX_BYTES) return value
+  let bytes = 0
+  let head = ""
+  for (const char of value) {
+    const size = Buffer.byteLength(char, "utf-8")
+    if (bytes + size > SHELL_OUTPUT_MAX_BYTES) break
+    head += char
+    bytes += size
+  }
+  return `${head}\n[truncated: ${total - bytes} bytes omitted]`
+}
+
 const media = (file: FileAttachment): ContentPart => ({
   type: "media",
   mediaType: file.mime,
@@ -138,7 +158,7 @@ function toLLMMessage(message: SessionMessage.Message, model: Model): Message[] 
         Message.make({
           id: message.id,
           role: "user",
-          content: `Shell command: ${message.command}\n\n${message.output}`,
+          content: `Shell command: ${message.command}\n\n${truncateShellOutput(message.output)}`,
           metadata: message.metadata,
         }),
       ]

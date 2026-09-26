@@ -139,6 +139,55 @@ Recent work
     ])
   })
 
+  test("bounds large shell output before it reaches the model", () => {
+    const output = "x".repeat(60 * 1024)
+    const messages = toLLMMessages(
+      [
+        SessionMessage.Shell.make({
+          id: id("shell-large"),
+          type: "shell",
+          callID: "shell-large-1",
+          command: "bun typecheck",
+          output,
+          time: { created, completed: created },
+        }),
+      ],
+      model,
+    )
+
+    const content = messages[0]?.content
+    const part = Array.isArray(content) ? content[0] : undefined
+    if (part?.type !== "text") throw new Error("expected a text content part")
+    expect(part.text.startsWith("Shell command: bun typecheck\n\n")).toBe(true)
+    expect(part.text).toContain("[truncated:")
+    expect(Buffer.byteLength(part.text, "utf-8")).toBeLessThan(output.length)
+    expect(Buffer.byteLength(part.text, "utf-8")).toBeLessThanOrEqual(50 * 1024 + 128)
+  })
+
+  test("bounds multi-byte shell output without splitting characters", () => {
+    const output = "中".repeat(30_000)
+    const messages = toLLMMessages(
+      [
+        SessionMessage.Shell.make({
+          id: id("shell-multibyte"),
+          type: "shell",
+          callID: "shell-multibyte-1",
+          command: "cat big.txt",
+          output,
+          time: { created, completed: created },
+        }),
+      ],
+      model,
+    )
+
+    const content = messages[0]?.content
+    const part = Array.isArray(content) ? content[0] : undefined
+    if (part?.type !== "text") throw new Error("expected a text content part")
+    expect(part.text).toContain("[truncated:")
+    expect(part.text).not.toContain("\uFFFD")
+    expect(Buffer.byteLength(part.text, "utf-8")).toBeLessThanOrEqual(50 * 1024 + 128)
+  })
+
   test("replays durable tool media into canonical tool messages without structured base64", () => {
     const messages = toLLMMessages(
       [

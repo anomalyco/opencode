@@ -198,6 +198,21 @@ function forceClose(state: ListenerState) {
 
 function serverLayer(opts: { port: number; hostname: string }) {
   const server = createServer()
+  // Bun 1.3.14 does not emit ServerResponse "close" when an SSE client
+  // disconnects (oven-sh/bun#14697).  @effect/platform-node waits for that
+  // event to interrupt the request fiber, so the server-side event stream
+  // stays alive and writes heartbeats into a dead socket — pinning one CPU
+  // core and making the server unresponsive (issue #36311).
+  //
+  // Bridge: destroy the response from the request "aborted" event so Bun
+  // emits the missing "close" and Effect can release the stream.
+  if (typeof process.versions.bun === "string") {
+    server.on("request", (req, res) => {
+      req.once("aborted", () => {
+        if (!res.writableEnded && !res.destroyed) res.destroy()
+      })
+    })
+  }
   const serverRef = { closeStarted: false, forceStop: false }
   const close = server.close.bind(server)
   // Keep shutdown owned by NodeHttpServer, but honor listener.stop(true) by

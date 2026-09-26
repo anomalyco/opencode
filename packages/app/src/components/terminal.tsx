@@ -227,6 +227,13 @@ export const Terminal = (props: TerminalProps) => {
   let drop: VoidFunction | undefined
   let reconn: ReturnType<typeof setTimeout> | undefined
   let tries = 0
+  let heartbeatTimer: ReturnType<typeof setInterval> | undefined
+  const clearHeartbeat = () => {
+    if (heartbeatTimer !== undefined) {
+      clearInterval(heartbeatTimer)
+      heartbeatTimer = undefined
+    }
+  }
 
   const cleanup = () => {
     if (!cleanups.length) return
@@ -528,6 +535,13 @@ export const Terminal = (props: TerminalProps) => {
 
       const once = { value: false }
       const decoder = new TextDecoder()
+      const MAX_RETRIES = 10
+      const BASE_DELAY_MS = 1_000
+      const MAX_DELAY_MS = 30_000
+      const HEARTBEAT_INTERVAL_MS = 30_000
+      let cachedToken: string | undefined
+      let tokenExpiry = 0
+      const TOKEN_TTL_MS = 5 * 60_000
 
       const fail = (err: unknown) => {
         if (disposed) return
@@ -556,7 +570,7 @@ export const Terminal = (props: TerminalProps) => {
           })
       }
 
-      const connectToken = async () => {
+      const fetchConnectToken = async () => {
         if ((await sdk().protocol) === "v1") {
           const result = await sdk()
             .client.pty.connectToken(
@@ -585,14 +599,65 @@ export const Terminal = (props: TerminalProps) => {
         //   .then((result) => result.data.ticket)
       }
 
+      const connectToken = async () => {
+        if (cachedToken && Date.now() < tokenExpiry) return cachedToken
+        const token = await fetchConnectToken()
+        if (token) {
+          cachedToken = token
+          tokenExpiry = Date.now() + TOKEN_TTL_MS
+        }
+        return token
+      }
+
+      const startHeartbeat = (socket: WebSocket) => {
+        clearHeartbeat()
+        heartbeatTimer = setInterval(() => {
+          if (socket.readyState !== WebSocket.OPEN) return
+          try {
+            // Send a zero-length binary frame as a ping; the server ignores
+            // unknown frame types, so this is safe even if the protocol does
+            // not define a dedicated ping opcode.
+            socket.send(new Uint8Array(0))
+          } catch {
+            // If the send fails the socket is likely dead; the close event
+            // will trigger reconnection.
+          }
+        }, HEARTBEAT_INTERVAL_MS)
+      }
+
+      const waitForOnline = () =>
+        new Promise<void>((resolve) => {
+          if (disposed) return resolve()
+          if (typeof navigator !== "undefined" && !navigator.onLine) {
+            const onOnline = () => {
+              window.removeEventListener("online", onOnline)
+              resolve()
+            }
+            window.addEventListener("online", onOnline)
+          } else {
+            resolve()
+          }
+        })
+
       const retry = (err: unknown) => {
         if (disposed) return
         if (reconn !== undefined) return
 
-        const ms = Math.min(250 * 2 ** Math.min(tries, 4), 4_000)
+        const delay = Math.min(BASE_DELAY_MS * 2 ** Math.min(tries, 6), MAX_DELAY_MS)
+        // Add jitter (±20%) to avoid thundering-herd reconnects.
+        const jitter = delay * (0.8 + Math.random() * 0.4)
+        debugTerminal("scheduling reconnect in %d ms (attempt %d/%d)", Math.round(jitter), tries + 1, MAX_RETRIES)
+
         reconn = setTimeout(async () => {
           reconn = undefined
           if (disposed) return
+
+          // Wait for the network to come back online before attempting to
+          // reconnect.  Without this the retry loop burns through attempts
+          // while the device has no connectivity (e.g. mobile hand-off).
+          await waitForOnline()
+          if (disposed) return
+
           if (await gone()) {
             if (disposed) return
             fail(err)
@@ -601,12 +666,21 @@ export const Terminal = (props: TerminalProps) => {
           if (disposed) return
           tries += 1
           open()
-        }, ms)
+        }, jitter)
       }
 
       const open = async () => {
         if (disposed) return
         drop?.()
+        clearHeartbeat()
+
+        // If we exhausted retries, give up.  The user can manually reopen
+        // the terminal tab to start a fresh connection.
+        if (tries >= MAX_RETRIES) {
+          debugTerminal("max reconnect attempts (%d) reached, giving up", MAX_RETRIES)
+          fail(new Error(language.t("terminal.connectionLost.abnormalClose", { code: "max retries" })))
+          return
+        }
 
         const ticket = await connectToken().catch((err) => {
           fail(err)
@@ -637,9 +711,11 @@ export const Terminal = (props: TerminalProps) => {
         const handleOpen = () => {
           if (disposed) return
           tries = 0
+          cachedToken = undefined // invalidate token on successful connect
           local.onConnect?.()
           scheduleSize(t.cols, t.rows)
           if (t.getMode(2031)) t.write("\x1b[?996n")
+          startHeartbeat(socket)
         }
 
         const handleMessage = (event: MessageEvent) => {
@@ -674,6 +750,7 @@ export const Terminal = (props: TerminalProps) => {
         }
 
         const stop = () => {
+          clearHeartbeat()
           socket.removeEventListener("open", handleOpen)
           socket.removeEventListener("message", handleMessage)
           socket.removeEventListener("error", handleError)
@@ -684,6 +761,7 @@ export const Terminal = (props: TerminalProps) => {
         }
 
         const handleClose = (event: CloseEvent) => {
+          clearHeartbeat()
           if (ws === socket) ws = undefined
           if (drop === stop) drop = undefined
           socket.removeEventListener("open", handleOpen)
@@ -692,6 +770,9 @@ export const Terminal = (props: TerminalProps) => {
           socket.removeEventListener("close", handleClose)
           if (disposed) return
           if (event.code === 1000) return
+          // Invalidate cached token on abnormal close — the server may have
+          // rotated secrets or the ticket may have expired.
+          cachedToken = undefined
           retry(new Error(language.t("terminal.connectionLost.abnormalClose", { code: event.code })))
         }
 
@@ -721,6 +802,7 @@ export const Terminal = (props: TerminalProps) => {
     if (fitFrame !== undefined) cancelAnimationFrame(fitFrame)
     if (sizeTimer !== undefined) clearTimeout(sizeTimer)
     if (reconn !== undefined) clearTimeout(reconn)
+    clearHeartbeat()
     drop?.()
     if (ws && ws.readyState !== WebSocket.CLOSED && ws.readyState !== WebSocket.CLOSING) ws.close(1000)
 
