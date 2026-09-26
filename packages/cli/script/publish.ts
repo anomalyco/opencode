@@ -50,23 +50,21 @@ async function publishDistribution(input: {
 
   await $`mkdir -p ${input.root}/${input.name}/bin`
   await $`cp ./script/postinstall.mjs ${input.root}/${input.name}/postinstall.mjs`
-  await Bun.file(`${input.root}/${input.name}/bin/${input.command}.exe`).write(
-    [
-      `echo "Error: ${input.name}'s postinstall script was not run." >&2`,
-      'echo "" >&2',
-      'echo "This occurs when installation scripts are disabled." >&2',
-      'echo "Run the package postinstall script or reinstall with scripts enabled." >&2',
-      "exit 1",
-      "",
-    ].join("\n"),
-  )
+  await $`cp ./bin/opencode.cjs ${input.root}/${input.name}/bin/${input.command}.cjs`
+  await chmod(`${input.root}/${input.name}/bin/${input.command}.cjs`, 0o755)
+  if (input.legacyCommand) {
+    await Bun.file(`${input.root}/${input.name}/bin/${input.legacyCommand}.cjs`).write(
+      `#!/usr/bin/env node\n\nrequire("./${input.command}.cjs")\n`,
+    )
+    await chmod(`${input.root}/${input.name}/bin/${input.legacyCommand}.cjs`, 0o755)
+  }
   await Bun.file(`${input.root}/${input.name}/package.json`).write(
     JSON.stringify(
       {
         name: input.name,
         bin: {
-          [input.command]: `./bin/${input.command}.exe`,
-          ...(input.legacyCommand ? { [input.legacyCommand]: `./bin/${input.command}.exe` } : {}),
+          [input.command]: `./bin/${input.command}.cjs`,
+          ...(input.legacyCommand ? { [input.legacyCommand]: `./bin/${input.legacyCommand}.cjs` } : {}),
         },
         ...(input.command !== input.binary ? { opencodeSourceBinary: input.binary } : {}),
         scripts: { postinstall: "node ./postinstall.mjs" },
