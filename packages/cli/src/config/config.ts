@@ -22,91 +22,113 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/cl
 const decode = Schema.decodeUnknownOption(Info)
 const decodeRecord = Schema.decodeUnknownOption(Schema.Record(Schema.String, Schema.Unknown))
 const empty: Info = {}
+// Priority order: cli.jsonc wins when both exist. When neither exists, cli.json is created.
+const filenames = ["cli.jsonc", "cli.json"] as const
+const defaultFilename = "cli.json"
 
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
     const global = yield* Global.Service
-    const file = path.join(global.config, "cli.json")
     const content = process.env.OPENCODE_CLI_CONFIG_CONTENT
       ? Option.getOrUndefined(decode(parseRecord(process.env.OPENCODE_CLI_CONFIG_CONTENT)))
       : undefined
 
-    const readJson = Effect.fnUntraced(function* () {
-      const text = yield* fs.readFileString(file).pipe(Effect.orElseSucceed(() => undefined))
+    // Resolve per operation so a cli.jsonc created while the process is running is picked up.
+    const resolveFile = Effect.fnUntraced(function* () {
+      const existing = yield* Effect.filter(
+        filenames.map((name) => path.join(global.config, name)),
+        (candidate) => fs.exists(candidate).pipe(Effect.orElseSucceed(() => false)),
+      )
+      return existing[0] ?? path.join(global.config, defaultFilename)
+    })
+    // Resolved once for display and the TUI watcher directory.
+    const file = yield* resolveFile()
+
+    const readJson = Effect.fnUntraced(function* (target: string) {
+      const text = yield* fs.readFileString(target).pipe(Effect.orElseSucceed(() => undefined))
       if (text === undefined) return undefined
       return parseRecord(text)
     })
 
-    const write = Effect.fnUntraced(function* (text: string) {
-      const temp = file + ".tmp"
-      yield* fs.makeDirectory(path.dirname(file), { recursive: true })
+    const write = Effect.fnUntraced(function* (target: string, text: string) {
+      const temp = target + ".tmp"
+      yield* fs.makeDirectory(path.dirname(target), { recursive: true })
       yield* fs.writeFileString(temp, text, { mode: 0o600 })
-      yield* fs.rename(temp, file)
+      yield* fs.rename(temp, target)
     })
 
-    const migrate = ConfigMigration.run({ file, config: global.config, state: global.state }).pipe(
-      Effect.provideService(FileSystem.FileSystem, fs),
-    )
-    const withLock = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    const migrate = (target: string) =>
+      ConfigMigration.run({ file: target, config: global.config, state: global.state }).pipe(
+        Effect.provideService(FileSystem.FileSystem, fs),
+      )
+    const withLock = <A, E, R>(target: string, effect: Effect.Effect<A, E, R>) =>
       Effect.scoped(
         Effect.uninterruptibleMask((restore) =>
           Effect.gen(function* () {
             const lock = yield* restore(
-              Effect.promise((signal) => Flock.acquire(file, { dir: path.join(global.state, "locks"), signal })),
+              Effect.promise((signal) => Flock.acquire(target, { dir: path.join(global.state, "locks"), signal })),
             )
             yield* Effect.addFinalizer(() => Effect.promise(() => lock.release()))
             return yield* restore(effect)
           }),
         ),
       )
-    const load = Effect.fnUntraced(function* (migration?: Info) {
-      return merge(migration ?? Option.getOrUndefined(decode(yield* readJson())), content)
+    const load = Effect.fnUntraced(function* (target: string, migration?: Info) {
+      return merge(migration ?? Option.getOrUndefined(decode(yield* readJson(target))), content)
     })
 
     const get = Effect.fn("cli.config.get")(() =>
-      withLock(
-        Effect.gen(function* () {
-          const migration = yield* migrate.pipe(
-            Effect.catchCause((cause) =>
-              Effect.logWarning("failed to migrate cli config", { cause }).pipe(Effect.as(undefined)),
-            ),
-          )
-          if (migration?.cause)
-            yield* Effect.logWarning("failed to persist migrated cli config", { cause: migration.cause })
-          return yield* load(migration?.info)
-        }),
-      ),
+      Effect.gen(function* () {
+        const target = yield* resolveFile()
+        return yield* withLock(
+          target,
+          Effect.gen(function* () {
+            const migration = yield* migrate(target).pipe(
+              Effect.catchCause((cause) =>
+                Effect.logWarning("failed to migrate cli config", { cause }).pipe(Effect.as(undefined)),
+              ),
+            )
+            if (migration?.cause)
+              yield* Effect.logWarning("failed to persist migrated cli config", { cause: migration.cause })
+            return yield* load(target, migration?.info)
+          }),
+        )
+      }),
     )
 
     const update = Effect.fn("cli.config.update")((update: (draft: Draft<Info>) => void) =>
-      withLock(
-        Effect.gen(function* () {
-          const migration = yield* migrate
-          if (migration?.cause) return yield* Effect.failCause(migration.cause)
-          const current = yield* load(migration?.info)
-          const next = produce(current, update)
-          const edits = changes(current, next)
-          if (!edits.length) return current
-          const text = yield* fs
-            .readFileString(file)
-            .pipe(Effect.orElseSucceed(() => JSON.stringify({ $schema: SchemaURL }, null, 2)))
-          const updated = edits.reduce(
-            (text, edit) =>
-              applyEdits(
-                text,
-                modify(text, edit.path, edit.value, { formattingOptions: { tabSize: 2, insertSpaces: true } }),
-              ),
-            text,
-          )
-          const errors: ParseError[] = []
-          const config = Option.getOrUndefined(decode(parse(updated, errors, { allowTrailingComma: true })))
-          if (errors.length || config === undefined) return yield* Effect.fail(new Error("Invalid CLI config update"))
-          yield* write(updated.endsWith("\n") ? updated : updated + "\n")
-          return merge(config, content)
-        }),
-      ).pipe(Effect.mapError((cause) => new Error("Failed to update CLI config", { cause }))),
+      Effect.gen(function* () {
+        const target = yield* resolveFile()
+        return yield* withLock(
+          target,
+          Effect.gen(function* () {
+            const migration = yield* migrate(target)
+            if (migration?.cause) return yield* Effect.failCause(migration.cause)
+            const current = yield* load(target, migration?.info)
+            const next = produce(current, update)
+            const edits = changes(current, next)
+            if (!edits.length) return current
+            const text = yield* fs
+              .readFileString(target)
+              .pipe(Effect.orElseSucceed(() => JSON.stringify({ $schema: SchemaURL }, null, 2)))
+            const updated = edits.reduce(
+              (text, edit) =>
+                applyEdits(
+                  text,
+                  modify(text, edit.path, edit.value, { formattingOptions: { tabSize: 2, insertSpaces: true } }),
+                ),
+              text,
+            )
+            const errors: ParseError[] = []
+            const config = Option.getOrUndefined(decode(parse(updated, errors, { allowTrailingComma: true })))
+            if (errors.length || config === undefined) return yield* Effect.fail(new Error("Invalid CLI config update"))
+            yield* write(target, updated.endsWith("\n") ? updated : updated + "\n")
+            return merge(config, content)
+          }),
+        )
+      }).pipe(Effect.mapError((cause) => new Error("Failed to update CLI config", { cause }))),
     )
 
     return Service.of({ path: file, get, update })
