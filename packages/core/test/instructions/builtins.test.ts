@@ -36,17 +36,16 @@ const it = testEffect(
 )
 
 describe("InstructionBuiltIns", () => {
-  it.effect("loads location-scoped environment and host-local date instructions", () =>
+  it.effect("loads location-scoped environment and host-local date instructions without the session ID", () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(timestamp)
       const context = yield* InstructionBuiltIns.Service
-      const initialized = yield* readInitial(yield* context.load(sessionID))
+      const initialized = yield* readInitial(yield* context.load())
 
       expect(initialized.text).toBe(
         [
           "Here is some useful information about the environment you are running in:",
           "<env>",
-          `  Current conversation session ID: ${sessionID}`,
           `  Working directory: ${directory}`,
           `  Workspace root folder: ${projectDirectory}`,
           "  Is directory a git repo: yes",
@@ -60,14 +59,24 @@ describe("InstructionBuiltIns", () => {
     }),
   )
 
+  it.effect("renders the session ID as a separate trailing block", () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(timestamp)
+      const context = yield* InstructionBuiltIns.Service
+      const initialized = yield* readInitial(yield* context.session(sessionID))
+
+      expect(initialized.text).toBe(`Current conversation session ID: ${sessionID}`)
+    }),
+  )
+
   it.effect("updates the date without repeating unchanged environment instructions", () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(timestamp)
       const context = yield* InstructionBuiltIns.Service
-      const initialized = yield* readInitial(yield* context.load(sessionID))
+      const initialized = yield* readInitial(yield* context.load())
 
       yield* TestClock.setTime(timestamp + 24 * 60 * 60 * 1000)
-      const refreshed = yield* readUpdate(yield* context.load(sessionID), initialized)
+      const refreshed = yield* readUpdate(yield* context.load(), initialized)
 
       expect(refreshed.text).toBe(`Today's date is now: ${localDate(timestamp + 24 * 60 * 60 * 1000)}`)
     }),
@@ -77,10 +86,10 @@ describe("InstructionBuiltIns", () => {
     Effect.gen(function* () {
       yield* TestClock.setTime(timestamp)
       const context = yield* InstructionBuiltIns.Service
-      const initialized = yield* readInitial(yield* context.load(sessionID))
+      const initialized = yield* readInitial(yield* context.load())
 
       yield* TestClock.setTime(timestamp + 60 * 60 * 1000)
-      expect((yield* readUpdate(yield* context.load(sessionID), initialized)).changed).toBe(false)
+      expect((yield* readUpdate(yield* context.load(), initialized)).changed).toBe(false)
     }),
   )
 })

@@ -8,7 +8,8 @@ import { Location } from "../location.js"
 import { Instructions } from "./index.js"
 
 export interface Interface {
-  readonly load: (sessionID: Session.ID) => Effect.Effect<Instructions.List>
+  readonly load: () => Effect.Effect<Instructions.List>
+  readonly session: (sessionID: Session.ID) => Effect.Effect<Instructions.List>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/InstructionBuiltIns") {}
@@ -19,7 +20,7 @@ const layer = Layer.effect(
     const global = yield* Global.Service
     const location = yield* Location.Service
     return Service.of({
-      load: (sessionID) =>
+      load: () =>
         Effect.succeed(
           Instructions.combine([
             Instructions.make({
@@ -28,7 +29,6 @@ const layer = Layer.effect(
               read: Effect.sync(() =>
                 [
                   "<env>",
-                  `  Current conversation session ID: ${sessionID}`,
                   `  Working directory: ${location.directory}`,
                   `  Workspace root folder: ${location.project.directory}`,
                   `  Is directory a git repo: ${location.vcs?.type === "git" ? "yes" : "no"}`,
@@ -51,6 +51,23 @@ const layer = Layer.effect(
               render: {
                 initial: (date) => `Today's date: ${date}`,
                 changed: (_previous, date) => `Today's date is now: ${date}`,
+              },
+            }),
+          ]),
+        ),
+      // The session ID is unique per session. Consumers render this block last in the combined
+      // instruction list so the shared prefix (env, date, Code Mode catalog, AGENTS.md, skills,
+      // MCP) stays cacheable across sessions; anything after the first unique byte is uncachable.
+      session: (sessionID) =>
+        Effect.succeed(
+          Instructions.combine([
+            Instructions.make({
+              key: Instructions.Key.make("core/session"),
+              codec: Schema.toCodecJson(Schema.String),
+              read: Effect.sync(() => sessionID),
+              render: {
+                initial: (id) => `Current conversation session ID: ${id}`,
+                changed: (_previous, id) => `Current conversation session ID: ${id}`,
               },
             }),
           ]),

@@ -105,6 +105,7 @@ const builtins = Layer.mock(InstructionBuiltIns.Service, {
         },
       }),
     ),
+  session: () => Effect.succeed(Instructions.empty),
 })
 const discovery = Layer.mock(InstructionDiscovery.Service, {
   project: true,
@@ -236,7 +237,7 @@ const setup = Effect.gen(function* () {
     db,
     bus,
     session,
-    instructions: yield* instructionBuiltIns.load(sessionID),
+    instructions: yield* Effect.all([instructionBuiltIns.load(), instructionBuiltIns.session(sessionID)]).pipe(Effect.map(([early, late]) => Instructions.combine([early, late]))),
     instances: Instance.Service.of({
       // Generation only exercises the Location's model context.
       provide: () =>
