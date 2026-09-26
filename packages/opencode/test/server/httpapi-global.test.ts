@@ -43,24 +43,48 @@ const apiLayer = HttpRouter.serve(
 const it = testEffect(apiLayer)
 
 describe("global HttpApi", () => {
-  it.live("upgrades to latest when the request body is omitted", () =>
+  it.live("upgrades to the requested version", () =>
     Effect.gen(function* () {
-      const response = yield* HttpClient.post(GlobalPaths.upgrade)
+      const response = yield* HttpClientRequest.post(GlobalPaths.upgrade).pipe(
+        HttpClientRequest.bodyJsonUnsafe({ target: "9.9.9" }),
+        HttpClient.execute,
+      )
 
       expect(response.status).toBe(200)
       expect(yield* response.json).toEqual({ success: true, version: "9.9.9" })
     }),
   )
 
-  it.live("rejects malformed upgrade payloads", () =>
+  it.live("rejects invalid upgrade payloads", () =>
     Effect.gen(function* () {
       const response = yield* HttpClientRequest.post(GlobalPaths.upgrade).pipe(
-        HttpClientRequest.setBody(HttpBody.text("{", "application/json")),
+        HttpClientRequest.bodyJsonUnsafe({ target: 1 }),
         HttpClient.execute,
       )
 
       expect(response.status).toBe(400)
-      expect(yield* response.json).toEqual({ success: false, error: "Invalid request body" })
+    }),
+  )
+
+  it.live("rejects invalid upgrade target versions", () =>
+    Effect.gen(function* () {
+      const response = yield* HttpClientRequest.post(GlobalPaths.upgrade).pipe(
+        HttpClientRequest.bodyJsonUnsafe({ target: "latest" }),
+        HttpClient.execute,
+      )
+
+      expect(response.status).toBe(400)
+    }),
+  )
+
+  it.live("rejects unsupported upgrade content types", () =>
+    Effect.gen(function* () {
+      const response = yield* HttpClientRequest.post(GlobalPaths.upgrade).pipe(
+        HttpClientRequest.setBody(HttpBody.text('{"target":"1.0.0"}', "text/plain")),
+        HttpClient.execute,
+      )
+
+      expect(response.status).toBe(415)
     }),
   )
 })

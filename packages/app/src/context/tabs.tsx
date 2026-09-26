@@ -101,7 +101,10 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     }
 
     const removeDraftPersisted = (draftID: string) => {
-      for (const key of draftPersistedKeys()) removePersisted(Persist.draft(draftID, key), platform)
+      for (const key of draftPersistedKeys()) {
+        const target = Persist.draft(draftID, key)
+        removePersisted(key === "prompt" ? Persist.prompt(target) : target, platform)
+      }
     }
 
     const removeInfo = (key: string) => {

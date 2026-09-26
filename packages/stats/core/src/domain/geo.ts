@@ -7,6 +7,7 @@ import { RETIRED_STAT_MODELS, RETIRED_STAT_PROVIDERS } from "./model-normalizati
 import {
   chunks,
   collapseRows,
+  DATA_SITE_TIERS,
   inserted,
   isMissingUniqueUsersColumn,
   omitUniqueUsers,
@@ -93,7 +94,7 @@ export class GeoStatRepo extends Context.Service<GeoStatRepo, GeoStatRepo.Servic
                   eq(geoStat.grain, "day"),
                   eq(geoStat.client, "all"),
                   eq(geoStat.source, "all"),
-                  inArray(geoStat.tier, ["Go", "go"]),
+                  inArray(geoStat.tier, DATA_SITE_TIERS),
                   scope,
                 ),
               )
@@ -206,7 +207,11 @@ export class GeoStatRepo extends Context.Service<GeoStatRepo, GeoStatRepo.Servic
                   inArray(geoStat.dataset, scope.datasets),
                   inArray(geoStat.client, scope.clients),
                   inArray(geoStat.source, scope.sources),
-                  or(inArray(geoStat.provider, RETIRED_STAT_PROVIDERS), inArray(geoStat.model, RETIRED_STAT_MODELS)),
+                  or(
+                    inArray(geoStat.provider, RETIRED_STAT_PROVIDERS),
+                    inArray(geoStat.model, RETIRED_STAT_MODELS),
+                    and(eq(geoStat.provider, "unknown"), eq(geoStat.model, "hy4-preview")),
+                  ),
                 ),
               ),
           catch: (cause) => DatabaseError.make({ cause }),

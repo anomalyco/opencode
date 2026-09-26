@@ -18,11 +18,7 @@ export function SessionFollowupDock(props: {
 
   const toggle = () => setStore("collapsed", (value) => !value)
   const total = createMemo(() => props.items.length)
-  const label = createMemo(() =>
-    language.t(total() === 1 ? "session.followupDock.summary.one" : "session.followupDock.summary.other", {
-      count: total(),
-    }),
-  )
+  const label = createMemo(() => language.plural("session.followupDock.summary", total()))
   const preview = createMemo(() => props.items[0]?.text ?? "")
 
   return (

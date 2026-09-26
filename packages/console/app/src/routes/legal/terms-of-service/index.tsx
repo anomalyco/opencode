@@ -21,7 +21,7 @@ export default function TermsOfService() {
           <section data-component="brand-content">
             <article data-component="terms-of-service">
               <h1>Terms of Use</h1>
-              <p class="effective-date">Effective date: Mar 6, 2026</p>
+              <p class="effective-date">Effective date: Aug 15, 2026</p>
 
               <p>
                 Welcome to OpenCode. Please read on to learn the rules and restrictions that govern your use of
@@ -153,6 +153,11 @@ export default function TermsOfService() {
                 <li>
                   is dangerous, harmful, fraudulent, deceptive, threatening, harassing, defamatory, obscene, or
                   otherwise objectionable;
+                </li>
+                <li>
+                  creates, maintains, or uses accounts in bulk, or creates, maintains, or uses multiple accounts to
+                  circumvent usage limits, access restrictions, billing obligations, promotions, suspensions, or any
+                  other restriction or policy applicable to the Services;
                 </li>
                 <li>automatically or programmatically extracts data or Output (defined below);</li>
                 <li>Represent that the Output was human-generated when it was not;</li>

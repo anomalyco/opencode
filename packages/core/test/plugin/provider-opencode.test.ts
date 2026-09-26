@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
+import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Credential } from "@opencode-ai/core/credential"
 import { EventV2 } from "@opencode-ai/core/event"
@@ -14,14 +15,16 @@ import { PluginTestLayer } from "./fixture"
 
 const it = testEffect(PluginTestLayer)
 
-const addPlugin = Effect.fn(function* () {
+const addPlugin = Effect.fn(function* (http?: HttpClient.HttpClient) {
   const plugin = yield* PluginV2.Service
   const host = yield* PluginHost.make(plugin)
   const events = yield* EventV2.Service
   const integration = yield* Integration.Service
+  const client = yield* HttpClient.HttpClient
   yield* OpencodePlugin.effect(host).pipe(
     Effect.provideService(EventV2.Service, events),
     Effect.provideService(Integration.Service, integration),
+    Effect.provideService(HttpClient.HttpClient, http ?? client),
   )
 })
 
@@ -79,6 +82,63 @@ describe("OpencodePlugin", () => {
         },
         { type: "key", label: "API key (service account)" },
       ])
+    }),
+  )
+
+  it.effect("resolves origin-rooted device verification URLs", () =>
+    Effect.gen(function* () {
+      const http = HttpClient.make((request) =>
+        Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            Response.json({
+              device_code: "device",
+              user_code: "user",
+              verification_uri_complete: "/console/device?user_code=user&client_id=opencode-cli",
+              expires_in: 60,
+              interval: 60,
+            }),
+          ),
+        ),
+      )
+      yield* addPlugin(http)
+      const integration = yield* Integration.Service
+      const attempt = yield* integration.connection.oauth({
+        integrationID: Integration.ID.make("opencode"),
+        methodID: Integration.MethodID.make("device"),
+        inputs: {},
+      })
+      expect(attempt.url).toBe("https://opencode.ai/console/device?user_code=user&client_id=opencode-cli")
+    }),
+  )
+
+  it.effect("rejects malformed device verification URLs", () =>
+    Effect.gen(function* () {
+      const http = HttpClient.make((request) =>
+        Effect.succeed(
+          HttpClientResponse.fromWeb(
+            request,
+            Response.json({
+              device_code: "device",
+              user_code: "user",
+              verification_uri_complete: "http://[::1",
+              expires_in: 60,
+              interval: 60,
+            }),
+          ),
+        ),
+      )
+      yield* addPlugin(http)
+      const integration = yield* Integration.Service
+      const error = yield* integration.connection
+        .oauth({
+          integrationID: Integration.ID.make("opencode"),
+          methodID: Integration.MethodID.make("device"),
+          inputs: {},
+        })
+        .pipe(Effect.flip)
+      expect(error).toBeInstanceOf(Integration.AuthorizationError)
+      expect(String(error.cause)).toContain("Invalid device verification URL")
     }),
   )
 

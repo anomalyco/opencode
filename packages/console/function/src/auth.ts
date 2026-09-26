@@ -7,16 +7,16 @@ import { THEME_OPENAUTH } from "@openauthjs/openauth/ui/theme"
 import { GithubProvider } from "@openauthjs/openauth/provider/github"
 import { GoogleOidcProvider } from "@openauthjs/openauth/provider/google"
 import { CloudflareStorage } from "@openauthjs/openauth/storage/cloudflare"
-import { Account } from "@opencode-ai/console-core/account.js"
-import { Workspace } from "@opencode-ai/console-core/workspace.js"
 import { Actor } from "@opencode-ai/console-core/actor.js"
 import { Resource } from "@opencode-ai/console-resource"
 import { User } from "@opencode-ai/console-core/user.js"
-import { and, Database, eq, isNull, or } from "@opencode-ai/console-core/drizzle/index.js"
+import { and, Database, eq, isNotNull, isNull, or } from "@opencode-ai/console-core/drizzle/index.js"
 import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.js"
 import { UserTable } from "@opencode-ai/console-core/schema/user.sql.js"
 import { AuthTable } from "@opencode-ai/console-core/schema/auth.sql.js"
+import { BillingTable } from "@opencode-ai/console-core/schema/billing.sql.js"
 import { Identifier } from "@opencode-ai/console-core/identifier.js"
+import { isAllowedAuthorizationRedirect } from "./auth-redirect.js"
 
 type Env = {
   AuthStorage: KVNamespace
@@ -41,6 +41,17 @@ const MY_THEME: Theme = {
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    const requestURL = new URL(request.url)
+    if (requestURL.pathname === "/authorize") {
+      const redirectURI = requestURL.searchParams.get("redirect_uri")
+      if (
+        redirectURI !== null &&
+        !isAllowedAuthorizationRedirect(requestURL.searchParams.get("client_id") ?? "", redirectURI)
+      ) {
+        return new Response("Unauthorized client", { status: 400 })
+      }
+    }
+
     const result = await issuer({
       theme: MY_THEME,
       providers: {
@@ -102,7 +113,8 @@ export default {
         namespace: env.AuthStorage,
       }),
       subjects,
-      async success(ctx, response) {
+      allow: ({ clientID, redirectURI }) => Promise.resolve(isAllowedAuthorizationRedirect(clientID, redirectURI)),
+      async success(ctx, response, request) {
         console.log(response)
 
         let subject: string | undefined
@@ -142,85 +154,62 @@ export default {
           throw new Error("Invalid email")
         }
 
-        // Get account
-        let newAccount = false
-        const accountID = await (async () => {
-          const matches = await Database.use(async (tx) =>
-            tx
-              .select({
-                provider: AuthTable.provider,
-                accountID: AuthTable.accountID,
-              })
-              .from(AuthTable)
-              .where(
-                or(
-                  and(eq(AuthTable.provider, response.provider), eq(AuthTable.subject, subject)),
-                  and(eq(AuthTable.provider, "email"), eq(AuthTable.subject, email)),
-                ),
+        const matches = await Database.use((tx) =>
+          tx
+            .select({ provider: AuthTable.provider, accountID: AuthTable.accountID })
+            .from(AuthTable)
+            .where(
+              or(
+                and(eq(AuthTable.provider, response.provider), eq(AuthTable.subject, subject)),
+                and(eq(AuthTable.provider, "email"), eq(AuthTable.subject, email)),
               ),
-          )
-          const idByProvider = matches.find((x) => x.provider === response.provider)?.accountID
-          const idByEmail = matches.find((x) => x.provider === "email")?.accountID
-          if (idByProvider && idByEmail) return idByProvider
+            ),
+        )
+        const accountID =
+          matches.find((match) => match.provider === response.provider)?.accountID ??
+          matches.find((match) => match.provider === "email")?.accountID
+        if (!accountID) return redirectToNewConsole(request)
 
-          // create account if not found
-          let accountID = idByProvider ?? idByEmail
-          if (!accountID) {
-            console.log("creating account for", email)
-            accountID = await Account.create({})
-            newAccount = true
-          }
-
-          await Database.use(async (tx) =>
-            tx
-              .insert(AuthTable)
-              .values([
-                {
-                  id: Identifier.create("auth"),
-                  accountID,
-                  provider: response.provider,
-                  subject,
-                },
-                {
-                  id: Identifier.create("auth"),
-                  accountID,
-                  provider: "email",
-                  subject: email,
-                },
-              ])
-              .onDuplicateKeyUpdate({
-                set: {
-                  timeDeleted: null,
-                },
-              }),
-          )
-
-          return accountID
-        })()
-
-        // Get workspace
-        await Actor.provide("account", { accountID, email }, async () => {
+        const black = await Actor.provide("account", { accountID, email }, async () => {
           await User.joinInvitedWorkspaces()
-          const workspaces = await Database.use((tx) =>
+          return Database.use((tx) =>
             tx
-              .select({ id: WorkspaceTable.id })
-              .from(WorkspaceTable)
-              .innerJoin(UserTable, eq(UserTable.workspaceID, WorkspaceTable.id))
+              .select({ id: UserTable.id })
+              .from(UserTable)
+              .innerJoin(WorkspaceTable, eq(WorkspaceTable.id, UserTable.workspaceID))
+              .innerJoin(BillingTable, eq(BillingTable.workspaceID, UserTable.workspaceID))
               .where(
                 and(
                   eq(UserTable.accountID, accountID),
                   isNull(UserTable.timeDeleted),
                   isNull(WorkspaceTable.timeDeleted),
+                  isNotNull(BillingTable.subscriptionID),
                 ),
-              ),
+              )
+              .limit(1)
+              .then((rows) => rows[0]),
           )
-          if (workspaces.length === 0) {
-            await Workspace.create({ name: "Default" })
-          }
         })
-        return ctx.subject("account", accountID, { accountID, email, newAccount })
+        if (!black) return redirectToNewConsole(request)
+
+        await Database.use((tx) =>
+          tx
+            .insert(AuthTable)
+            .values([
+              { id: Identifier.create("auth"), accountID, provider: response.provider, subject },
+              { id: Identifier.create("auth"), accountID, provider: "email", subject: email },
+            ])
+            .onDuplicateKeyUpdate({ set: { timeDeleted: null } }),
+        )
+        return ctx.subject("account", accountID, { accountID, email, newAccount: false })
       },
     }).fetch(request, env, ctx)
     return result
   },
+}
+
+function redirectToNewConsole(request: Request) {
+  const destination = new URL("/console", request.url)
+  destination.hostname = destination.hostname.replace(/^auth\./, "")
+  return Response.redirect(destination.toString(), 302)
 }

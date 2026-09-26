@@ -16,6 +16,7 @@ export interface ToolErrorCardProps extends Omit<ComponentProps<typeof Card>, "c
   onOpenChange?: (open: boolean) => void
   subtitle?: string
   href?: string
+  onSubtitleClick?: (event: MouseEvent) => void
 }
 
 export function ToolErrorCard(props: ToolErrorCardProps) {
@@ -35,6 +36,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
     "onOpenChange",
     "subtitle",
     "href",
+    "onSubtitleClick",
   ])
   const setOpen = (value: boolean) => {
     if (props.open === undefined) setState("open", value)
@@ -113,7 +115,10 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
                         data-slot="basic-tool-tool-subtitle"
                         class="clickable subagent-link"
                         href={split.href!}
-                        onClick={(e) => e.stopPropagation()}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          split.onSubtitleClick?.(event)
+                        }}
                       >
                         {subtitle()}
                       </a>

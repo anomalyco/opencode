@@ -184,7 +184,7 @@ function makeQueryOptionsApi(
   protocol: Promise<"v1" | "v2">,
 ) {
   return {
-    globalConfig: () => loadGlobalConfigQuery(scope, serverSDK()),
+    globalConfig: () => loadGlobalConfigQuery(scope, serverSDK(), protocol),
     projects: () => loadProjectsQuery(scope, serverAPI.project),
     providers: (directory: PathKey | null) =>
       loadProvidersQuery(scope, directory, serverAPI, directory ? sdkFor(directory) : serverSDK(), protocol),

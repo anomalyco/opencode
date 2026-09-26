@@ -7,6 +7,7 @@ import { RETIRED_STAT_MODELS, RETIRED_STAT_PROVIDERS } from "./model-normalizati
 import {
   chunks,
   collapseRows,
+  DATA_SITE_TIERS,
   inserted,
   isMissingUniqueUsersColumn,
   omitUniqueUsers,
@@ -194,6 +195,7 @@ export class ModelStatRepo extends Context.Service<ModelStatRepo, ModelStatRepo.
                   or(
                     inArray(modelStat.provider, RETIRED_STAT_PROVIDERS),
                     inArray(modelStat.model, RETIRED_STAT_MODELS),
+                    and(eq(modelStat.provider, "unknown"), eq(modelStat.model, "hy4-preview")),
                   ),
                 ),
               ),
@@ -211,7 +213,7 @@ function modelDailyScope() {
     eq(modelStat.grain, "day"),
     eq(modelStat.client, "all"),
     eq(modelStat.source, "all"),
-    inArray(modelStat.tier, ["Go", "go"]),
+    inArray(modelStat.tier, DATA_SITE_TIERS),
   )
 }
 

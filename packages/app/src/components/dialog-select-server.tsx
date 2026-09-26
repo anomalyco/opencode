@@ -145,7 +145,7 @@ function ServerForm(props: ServerFormProps) {
           type="text"
           label={language.t("dialog.server.add.name")}
           placeholder={language.t("dialog.server.add.namePlaceholder")}
-          value={props.name}
+          defaultValue={props.name}
           disabled={props.busy}
           onChange={props.onNameChange}
           onKeyDown={keyDown}
@@ -155,7 +155,7 @@ function ServerForm(props: ServerFormProps) {
             type="text"
             label={language.t("dialog.server.add.username")}
             placeholder={language.t("dialog.server.add.usernamePlaceholder")}
-            value={props.username}
+            defaultValue={props.username}
             disabled={props.busy}
             onChange={props.onUsernameChange}
             onKeyDown={keyDown}
@@ -164,7 +164,7 @@ function ServerForm(props: ServerFormProps) {
             type="password"
             label={language.t("dialog.server.add.password")}
             placeholder={language.t("dialog.server.add.passwordPlaceholder")}
-            value={props.password}
+            defaultValue={props.password}
             disabled={props.busy}
             onChange={props.onPasswordChange}
             onKeyDown={keyDown}

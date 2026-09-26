@@ -1548,6 +1548,33 @@ test("models.dev reasoning options replace generated variants and unsupported to
   expect(models["gemini-3-pro-fast"].variants).toEqual(models.override.variants)
 })
 
+test("MERGE Gateway exposes declared effort variants without model-specific handling", () => {
+  const provider = {
+    id: "merge-gateway",
+    name: "MERGE Gateway",
+    env: ["MERGE_GATEWAY_API_KEY"],
+    npm: "merge-gateway-ai-sdk-provider",
+    models: {
+      "openai/gpt-5.6-sol": {
+        id: "openai/gpt-5.6-sol",
+        name: "GPT-5.6 Sol",
+        reasoning: true,
+        reasoning_options: [{ type: "effort", values: ["none", "low", "medium", "high", "xhigh", "max"] }],
+        limit: { context: 128_000, output: 64_000 },
+      },
+    },
+  } as unknown as ModelsDev.Provider
+
+  expect(Provider.fromModelsDevProvider(provider).models["openai/gpt-5.6-sol"].variants).toEqual({
+    none: { reasoningEffort: "none" },
+    low: { reasoningEffort: "low" },
+    medium: { reasoningEffort: "medium" },
+    high: { reasoningEffort: "high" },
+    xhigh: { reasoningEffort: "xhigh" },
+    max: { reasoningEffort: "max" },
+  })
+})
+
 test("public provider info omits invalid models", () => {
   const provider = Provider.fromModelsDevProvider({
     id: "test",
@@ -1878,6 +1905,32 @@ it.instance("Google Vertex: keeps regional Claude endpoints unchanged", () =>
     const language = yield* provider.getLanguage(model)
     expect(languageBaseURL(language)).toBe(
       "https://europe-west1-aiplatform.googleapis.com/v1/projects/test-project/locations/europe-west1/publishers/anthropic/models",
+    )
+  }),
+)
+
+it.instance("Google Vertex: uses REP endpoint for Gemini continental multi-regions", () =>
+  Effect.gen(function* () {
+    yield* set("GOOGLE_CLOUD_PROJECT", "test-project")
+    yield* set("VERTEX_LOCATION", "eu")
+    const provider = yield* Provider.Service
+    const model = yield* provider.getModel(ProviderV2.ID.make("google-vertex"), ModelV2.ID.make("gemini-3.5-flash"))
+    const language = yield* provider.getLanguage(model)
+    expect(languageBaseURL(language)).toBe(
+      "https://aiplatform.eu.rep.googleapis.com/v1beta1/projects/test-project/locations/eu/publishers/google",
+    )
+  }),
+)
+
+it.instance("Google Vertex: keeps regional Gemini endpoints unchanged", () =>
+  Effect.gen(function* () {
+    yield* set("GOOGLE_CLOUD_PROJECT", "test-project")
+    yield* set("VERTEX_LOCATION", "europe-west1")
+    const provider = yield* Provider.Service
+    const model = yield* provider.getModel(ProviderV2.ID.make("google-vertex"), ModelV2.ID.make("gemini-3.5-flash"))
+    const language = yield* provider.getLanguage(model)
+    expect(languageBaseURL(language)).toBe(
+      "https://europe-west1-aiplatform.googleapis.com/v1beta1/projects/test-project/locations/europe-west1/publishers/google",
     )
   }),
 )

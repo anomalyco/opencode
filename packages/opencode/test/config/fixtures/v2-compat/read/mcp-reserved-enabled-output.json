@@ -1,0 +1,10 @@
+{
+  "mcp": {
+    "servers": {
+      "enabled": false
+    },
+    "timeout": {
+      "enabled": true
+    }
+  }
+}

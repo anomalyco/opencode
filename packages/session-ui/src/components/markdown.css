@@ -98,8 +98,8 @@
   ol {
     margin-top: 8px;
     margin-bottom: 12px;
-    margin-left: 0;
-    padding-left: 32px;
+    margin-inline-start: 0;
+    padding-inline-start: 32px;
     list-style-position: outside;
   }
 
@@ -109,7 +109,7 @@
 
   ol {
     list-style-type: decimal;
-    padding-left: 2.25rem;
+    padding-inline-start: 2.25rem;
   }
 
   li {
@@ -131,7 +131,7 @@
   li > p > input[type="checkbox"] {
     position: absolute;
     top: 4px;
-    left: -20px;
+    inset-inline-start: -20px;
     margin: 0;
   }
 
@@ -149,18 +149,18 @@
   li > ol {
     margin-top: 0.25rem;
     margin-bottom: 0.25rem;
-    padding-left: 1rem; /* Minimal indent for nesting only */
+    padding-inline-start: 1rem; /* Minimal indent for nesting only */
   }
 
   li > ol {
-    padding-left: 1.75rem;
+    padding-inline-start: 1.75rem;
   }
 
   /* Blockquotes */
   blockquote {
-    border-left: 0.5px solid var(--v2-border-border-base);
+    border-inline-start: 0.5px solid var(--v2-border-border-base);
     margin: 1rem 0;
-    padding-left: 0.5rem;
+    padding-inline-start: 0.5rem;
     color: var(--v2-text-text-muted);
     font-style: normal;
   }
@@ -183,6 +183,8 @@
 
   [data-component="markdown-code"] {
     position: relative;
+    direction: ltr;
+    unicode-bidi: isolate;
   }
 
   [data-component="markdown-code"][data-code-kind="shell"] .shiki {
@@ -202,7 +204,7 @@
   [data-slot="markdown-copy-button"] {
     position: absolute;
     top: 4px;
-    right: 4px;
+    inset-inline-end: 4px;
     opacity: 0;
     transition: opacity 0.15s ease;
     z-index: 1;
@@ -237,6 +239,8 @@
   }
 
   :not(pre) > code {
+    direction: ltr;
+    unicode-bidi: isolate;
     font-family: var(--font-family-mono);
     font-feature-settings: var(--font-family-mono--font-feature-settings);
     color: var(--v2-text-text-base);
@@ -278,7 +282,7 @@
     /* Minimal borders for structure, matching TUI "lines" roughly but keeping it web-clean */
     border-bottom: 0.5px solid var(--v2-border-border-muted);
     padding: 12px;
-    text-align: left;
+    text-align: start;
     vertical-align: top;
   }
 
@@ -296,6 +300,10 @@
     margin: 1.5rem 0;
     display: block;
   }
+}
+
+[data-component="markdown"] > * {
+  unicode-bidi: plaintext;
 }
 
 body[data-new-layout] [data-component="markdown"] {
@@ -345,7 +353,7 @@ body:not([data-new-layout]) [data-component="markdown"] {
   }
 
   blockquote {
-    border-left: 2px solid var(--border-weak-base);
+    border-inline-start: 2px solid var(--border-weak-base);
     color: var(--text-weak);
   }
 

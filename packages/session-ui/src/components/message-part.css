@@ -30,7 +30,7 @@
     gap: 8px;
     width: fit-content;
     max-width: min(82%, 64ch);
-    margin-left: auto;
+    margin-inline-start: auto;
   }
 
   [data-slot="user-message-attachment"] {
@@ -127,7 +127,7 @@
   [data-slot="user-message-body"] {
     width: fit-content;
     max-width: min(82%, 64ch);
-    margin-left: auto;
+    margin-inline-start: auto;
     display: flex;
     flex-direction: column;
     align-items: flex-end;
@@ -138,6 +138,7 @@
     white-space: pre-wrap;
     word-break: break-word;
     overflow: hidden;
+    unicode-bidi: plaintext;
     background: var(--v2-background-bg-layer-02);
     border: none;
     padding: 8px 12px;
@@ -145,10 +146,14 @@
 
     [data-highlight="file"] {
       color: var(--syntax-property);
+      direction: ltr;
+      unicode-bidi: isolate;
     }
 
     [data-highlight="agent"] {
       color: var(--syntax-type);
+      direction: ltr;
+      unicode-bidi: isolate;
     }
 
     max-width: 100%;
@@ -175,7 +180,7 @@
 
   [data-slot="user-message-meta"] {
     user-select: none;
-    text-align: right;
+    text-align: end;
     flex: 1 1 auto;
     min-width: 0;
     overflow: hidden;
@@ -197,7 +202,7 @@
     user-select: none;
     flex: 0 0 auto;
     white-space: nowrap;
-    text-align: right;
+    text-align: end;
   }
 
   &:hover [data-slot="user-message-copy-wrapper"],
@@ -364,6 +369,8 @@
 }
 
 [data-component="bash-output"] {
+  direction: ltr;
+  unicode-bidi: isolate;
   width: 100%;
   border: 0.5px solid var(--v2-border-border-base);
   border-radius: 6px;
@@ -473,6 +480,8 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-weight: var(--font-weight-regular);
+    direction: ltr;
+    unicode-bidi: isolate;
   }
 
   [data-slot="message-part-path"] {
@@ -480,6 +489,8 @@
     flex-grow: 1;
     min-width: 0;
     font-weight: var(--font-weight-regular);
+    direction: ltr;
+    unicode-bidi: isolate;
   }
 
   [data-slot="message-part-directory"] {
@@ -1240,6 +1251,8 @@
     flex-grow: 1;
     min-width: 0;
     overflow: hidden;
+    direction: ltr;
+    unicode-bidi: isolate;
   }
 
   [data-slot="apply-patch-directory"] {

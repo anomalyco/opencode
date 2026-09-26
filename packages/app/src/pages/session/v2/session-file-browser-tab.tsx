@@ -1,5 +1,5 @@
 import { createMemo, createSignal, createUniqueId, Show } from "solid-js"
-import { createQuery } from "@tanstack/solid-query"
+import { createQuery, keepPreviousData } from "@tanstack/solid-query"
 import { Icon } from "@opencode-ai/ui/icon"
 import { SessionFilePanelV2, SessionFilePanelV2Empty } from "@opencode-ai/session-ui/v2/session-file-panel-v2"
 import { SessionReviewV2Sidebar } from "@opencode-ai/session-ui/v2/session-review-v2"
@@ -50,6 +50,7 @@ export function SessionFileBrowserTab(props: {
       queryKey: ["session-open-file", workspaceKey(), value] as const,
       enabled: value.length > 0,
       queryFn: ({ signal }) => file.searchFiles(value, { limit: 200, signal }),
+      placeholderData: keepPreviousData,
     }
   })
   const files = createMemo(() => {
