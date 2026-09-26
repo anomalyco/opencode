@@ -35,7 +35,7 @@ import { useData } from "../context"
 import { useFileComponent } from "@opencode-ai/ui/context/file"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { type UiI18n, useI18n } from "@opencode-ai/ui/context/i18n"
-import { BasicTool, GenericTool } from "./basic-tool"
+import { BasicTool, GenericTool, ToolElapsed } from "./basic-tool"
 import { Accordion } from "@opencode-ai/ui/accordion"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
@@ -1040,6 +1040,12 @@ export function AssistantMessageDisplay(props: {
   )
 }
 
+function partTimeOf(part: ToolPart | undefined) {
+  const state = part?.state
+  if (!state || !("time" in state)) return undefined
+  return state.time as { start?: number; end?: number } | undefined
+}
+
 export function ContextToolGroup(props: {
   parts: ToolPart[]
   busy?: boolean
@@ -1055,6 +1061,33 @@ export function ContextToolGroup(props: {
       !!props.busy || props.parts.some((part) => part.state.status === "pending" || part.state.status === "running"),
   )
   const summary = createMemo(() => contextToolSummary(props.parts))
+  // Group time range: earliest start to latest end across parts that carry
+  // timestamps. The end only counts once every part finished; otherwise the
+  // badge keeps ticking live (see ToolElapsed).
+  const groupTime = createMemo(() => {
+    let start: number | undefined
+    let end: number | undefined
+    let allDone = props.parts.length > 0
+    for (const part of props.parts) {
+      const state = part.state
+      if (!state || !("time" in state)) {
+        allDone = false
+        continue
+      }
+      const time = state.time as { start?: number; end?: number } | undefined
+      if (time?.start === undefined) {
+        allDone = false
+        continue
+      }
+      start = start === undefined ? time.start : Math.min(start, time.start)
+      if (time.end === undefined) {
+        allDone = false
+      } else {
+        end = end === undefined ? time.end : Math.max(end, time.end)
+      }
+    }
+    return { start, end: allDone ? end : undefined }
+  })
   const handleOpenChange = (value: boolean) => {
     if (props.open === undefined) setLocalOpen(value)
     props.onOpenChange?.(value)
@@ -1083,6 +1116,7 @@ export function ContextToolGroup(props: {
                 split={false}
               />
             </span>
+            <ToolElapsed startedAt={groupTime().start} endedAt={groupTime().end} running={pending()} tight />
             <span
               data-slot="context-tool-group-summary"
               class="min-w-0 overflow-hidden text-ellipsis whitespace-nowrap font-normal text-text-base"
@@ -1135,6 +1169,12 @@ export function ContextToolGroup(props: {
                                 {(arg) => <span data-slot="basic-tool-tool-arg">{arg}</span>}
                               </For>
                             </Show>
+                            <ToolElapsed
+                              startedAt={partTimeOf(partAccessor())?.start}
+                              endedAt={partTimeOf(partAccessor())?.end}
+                              running={running()}
+                              tight
+                            />
                           </div>
                         </div>
                       </div>
@@ -1460,6 +1500,10 @@ export interface ToolProps {
   sessionID?: string
   output?: string
   status?: string
+  // Millisecond timestamps backing the per-tool elapsed badge. Pending parts
+  // carry no timestamps yet; leave both unset then.
+  startedAt?: number
+  endedAt?: number
   hideDetails?: boolean
   defaultOpen?: boolean
   open?: boolean
@@ -1566,6 +1610,13 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
   const render = createMemo(() => ToolRegistry.render(part().tool) ?? GenericTool)
   const controlledOpen = () => (props.onToolOpenChange ? (props.toolOpen ?? props.defaultOpen) : undefined)
   const handleToolOpenChange = (open: boolean) => props.onToolOpenChange?.(open)
+  // Millisecond timestamps for the per-tool elapsed badge. Pending parts
+  // have no time object yet, so the badge stays hidden until the run starts.
+  const partTime = () => {
+    const state = part().state
+    if (!state || !("time" in state)) return undefined
+    return state.time as { start?: number; end?: number } | undefined
+  }
 
   return (
     <Show when={!hideQuestion()}>
@@ -1617,6 +1668,8 @@ PART_MAPPING["tool"] = function ToolPartDisplay(props) {
               // @ts-expect-error
               output={part().state.output}
               status={part().state.status}
+              startedAt={partTime()?.start}
+              endedAt={partTime()?.end}
               hideDetails={props.hideDetails}
               defaultOpen={props.defaultOpen}
               open={controlledOpen()}
@@ -2109,12 +2162,14 @@ ToolRegistry.register({
         {...props}
         icon="console"
         allowOpenWhilePending
+        hideElapsedBadge
         trigger={(open) => (
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
               <span data-slot="basic-tool-tool-title">
                 <TextShimmer text={i18n.t("ui.tool.shell")} active={pending()} />
               </span>
+              <ToolElapsed startedAt={props.startedAt} endedAt={props.endedAt} running={pending()} tight />
               <Show when={!open() && props.input.command}>
                 <ShellSubmessage text={props.input.command} animate={sawPending} />
               </Show>
@@ -2201,18 +2256,20 @@ ToolRegistry.register({
     })
 
     return (
-      <div data-component="edit-tool">
+      <div data-component="write-tool">
         <BasicTool
           {...props}
           icon="code-lines"
           defer={props.deferContent !== false}
+          hideElapsedBadge
           trigger={
-            <div data-component="edit-trigger">
+            <div data-component="write-trigger">
               <div data-slot="message-part-title-area">
                 <div data-slot="message-part-title">
                   <span data-slot="message-part-title-text">
-                    <TextShimmer text={i18n.t("ui.messagePart.title.edit")} active={pending()} />
+                    <TextShimmer text={i18n.t("ui.messagePart.title.write")} active={pending()} />
                   </span>
+                  <ToolElapsed startedAt={props.startedAt} endedAt={props.endedAt} running={pending()} tight />
                   <Show when={!pending()}>
                     <span data-slot="message-part-title-filename">{filename()}</span>
                   </Show>
@@ -2273,6 +2330,7 @@ ToolRegistry.register({
           {...props}
           icon="code-lines"
           defer={props.deferContent !== false}
+          hideElapsedBadge
           trigger={
             <div data-component="write-trigger">
               <div data-slot="message-part-title-area">
@@ -2280,6 +2338,7 @@ ToolRegistry.register({
                   <span data-slot="message-part-title-text">
                     <TextShimmer text={i18n.t("ui.messagePart.title.write")} active={pending()} />
                   </span>
+                  <ToolElapsed startedAt={props.startedAt} endedAt={props.endedAt} running={pending()} tight />
                   <Show when={!pending()}>
                     <span data-slot="message-part-title-filename">{filename()}</span>
                   </Show>

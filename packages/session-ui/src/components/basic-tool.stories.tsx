@@ -131,3 +131,45 @@ export const SubtitleAction = {
     )
   },
 }
+
+export const RunningElapsed = {
+  args: {
+    status: "running",
+    startedAt: Date.now() - 5000,
+    trigger: {
+      title: "Running tool",
+      subtitle: "Working...",
+    },
+    children: "Progress details",
+  },
+}
+
+export const CompletedElapsed = {
+  args: {
+    status: "completed",
+    startedAt: 1_700_000_000_000,
+    endedAt: 1_700_000_003_200,
+    trigger: {
+      title: "Finished tool",
+      subtitle: "Done",
+    },
+    children: "Result details",
+  },
+}
+
+// Function triggers (e.g. the shell renderer) bypass the title branch, so
+// the badge needs its own slot there. Regression coverage for that path.
+// The inline-flex wrapper mirrors the real shell trigger layout so the
+// screenshot proves the badge sits inline after the command, not wrapped.
+export const FunctionTriggerElapsed = {
+  args: {
+    status: "running",
+    startedAt: Date.now() - 5000,
+    trigger: () => (
+      <div style={{ display: "inline-flex", "align-items": "center", gap: "8px" }}>
+        <span>Shell</span> <span>sleep 10</span>
+      </div>
+    ),
+    children: "Progress details",
+  },
+}

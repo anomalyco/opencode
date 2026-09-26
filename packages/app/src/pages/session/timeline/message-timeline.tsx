@@ -40,6 +40,7 @@ import { DialogFooter, DialogHeader, DialogTitleGroup, DialogV2 } from "@opencod
 import { InlineInput } from "@opencode-ai/ui/inline-input"
 import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { SessionRetry } from "@opencode-ai/session-ui/session-retry"
+import { ToolElapsed } from "@opencode-ai/session-ui/basic-tool"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner, ScrollView } from "@opencode-ai/ui/scroll-view"
 import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { TextField } from "@opencode-ai/ui/text-field"
@@ -129,12 +130,19 @@ const markBoundaryGesture = (input: {
   }
 }
 
-function TimelineThinkingRow(props: { reasoningHeading?: string; showReasoningSummaries: boolean }) {
+function TimelineThinkingRow(props: {
+  reasoningHeading?: string
+  showReasoningSummaries: boolean
+  startedAt?: number
+  endedAt?: number
+  running: boolean
+}) {
   const language = useLanguage()
 
   return (
     <div data-slot="session-turn-thinking">
-      <TextShimmer text={language.t("ui.sessionTurn.status.thinking")} />
+      <TextShimmer text={language.t("ui.sessionTurn.status.thinking")} active={props.running} />
+      <ToolElapsed startedAt={props.startedAt} endedAt={props.endedAt} running={props.running} tight />
       <Show when={!props.showReasoningSummaries}>
         <TextReveal text={props.reasoningHeading} class="session-turn-thinking-heading" travel={25} duration={700} />
       </Show>
@@ -1186,6 +1194,9 @@ export function MessageTimeline(props: {
               <TimelineThinkingRow
                 reasoningHeading={thinkingRow().reasoningHeading}
                 showReasoningSummaries={settings.general.showReasoningSummaries()}
+                startedAt={thinkingRow().startedAt}
+                endedAt={thinkingRow().endedAt}
+                running={thinkingRow().running}
               />
             </div>
           </TimelineRowFrame>
