@@ -7,7 +7,8 @@ const directory = "C:/OpenCode/PromptThinkingLevelRegression"
 const projectID = "proj_prompt_thinking_level_regression"
 const sessionID = "ses_prompt_thinking_level_regression"
 
-test("shows the V2 thinking level control while relevant", async ({ page }) => {
+test("keeps V2 prompt controls and submit accessible on narrow displays", async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 800 })
   await mockOpenCodeServer(page, {
     directory,
     project: {
@@ -26,7 +27,7 @@ test("shows the V2 thinking level control while relevant", async ({ page }) => {
           models: {
             "thinking-model": {
               id: "thinking-model",
-              name: "Thinking Model",
+              name: "A long thinking model name for narrow layouts",
               limit: { context: 200_000 },
               variants: { high: {} },
             },
@@ -57,9 +58,16 @@ test("shows the V2 thinking level control while relevant", async ({ page }) => {
   const composer = page.locator('[data-component="prompt-input-v2"]')
   const input = composer.locator('[data-component="prompt-input"]')
   const control = composer.getByRole("button", { name: "Choose model variant" })
+  const controls = composer.locator('[data-slot="prompt-controls"]')
+  const submit = composer.locator('[data-action="prompt-submit"]')
   await expectAppVisible(composer)
 
   await idleComposer(page)
+  await expect(submit).toBeVisible()
+  const [controlsBox, submitBox] = await Promise.all([controls.boundingBox(), submit.boundingBox()])
+  expect(controlsBox).not.toBeNull()
+  expect(submitBox).not.toBeNull()
+  expect(submitBox!.x).toBeGreaterThanOrEqual(controlsBox!.x + controlsBox!.width)
   await expect(control).toBeVisible()
 
   await control.click()
