@@ -49,6 +49,18 @@ export function sanitize(pkg: string) {
   return Array.from(pkg, (char) => (illegal.has(char) || char.charCodeAt(0) < 32 ? "_" : char)).join("")
 }
 
+// Canonical cache root for a specifier (#48514): bare names share the
+// @latest root so plugin, provider and V1 config-ref loaders all resolve
+// the same install instead of keying the cache by raw specifier string.
+export function cacheKey(pkg: string) {
+  try {
+    const parsed = npa(pkg)
+    return parsed.name && parsed.raw === parsed.name ? `${parsed.name}@latest` : pkg
+  } catch {
+    return pkg
+  }
+}
+
 const resolveEntryPoint = (name: string, dir: string): EntryPoint => {
   let entrypoint: string | undefined
   try {
@@ -121,7 +133,7 @@ const layer = Layer.effect(
       )
 
     const add = Effect.fn("Npm.add")(function* (pkg: string) {
-      const dir = directory(pkg)
+      const dir = directory(cacheKey(pkg))
       const name = (() => {
         try {
           return npa(pkg).name ?? pkg
@@ -198,7 +210,7 @@ const layer = Layer.effect(
     }, Effect.scoped)
 
     const which = Effect.fn("Npm.which")(function* (pkg: string, bin?: string) {
-      const dir = directory(pkg)
+      const dir = directory(cacheKey(pkg))
       const binDir = path.join(dir, "node_modules", ".bin")
 
       const pick = Effect.fnUntraced(function* () {
