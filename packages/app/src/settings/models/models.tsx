@@ -63,10 +63,7 @@ export const SettingsModels: Component<{
   const searching = () => list.filter().length > 0
   const expanded = (key: string) => searching() || !store.collapsed[key]
   const setProviderVisibility = (providerID: string, visible: boolean) =>
-    models
-      .list()
-      .filter((item) => item.provider.id === providerID)
-      .forEach((item) => models.setVisibility({ providerID, modelID: item.id }, visible))
+    models.setProviderVisibility(providerID, visible)
 
   function ModelRows(props: { items: ModelItem[] }) {
     return (
