@@ -328,10 +328,12 @@ const layer = Layer.effect(
       yield* Effect.forEach(
         entries,
         (name) => {
+          const isStaging = name.includes(".staging-")
           const timestamp = /^\d+$/.test(name)
             ? Number(name)
             : Number(name.match(/^\.staging-(\d+)-/)?.[1] ?? Number.NaN)
-          const maximumAge = name.startsWith(".staging-") ? stagingRetention : retention
+          const maximumAge = isStaging ? stagingRetention : retention
+          if (isStaging && !Number.isFinite(timestamp)) return remove(path.join(dir, name), dir).pipe(Effect.ignore)
           if (!Number.isFinite(timestamp) || keep.has(name) || now - timestamp <= maximumAge) return Effect.void
           return remove(path.join(dir, name), dir).pipe(
             Effect.catchCause((cause) => Effect.logWarning("failed to remove stale npm generation", { dir, name, cause })),

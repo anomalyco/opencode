@@ -397,6 +397,8 @@ describe("Npm.check and Npm.update", () => {
       const outdated = yield* npm.check(mutable)
       const before = yield* Effect.promise(() => Bun.file(path.join(installed.directory, "index.js")).text())
       yield* Effect.promise(() => Promise.all([fs.mkdir(path.join(root, "1")), fs.mkdir(path.join(root, "2"))]))
+      const orphan = `${path.basename(root)}.staging-orphan`
+      yield* Effect.promise(() => fs.mkdir(path.join(root, orphan)))
       const updated = yield* npm.update(mutable)
       const unchanged = yield* npm.update(mutable)
       return {
@@ -408,6 +410,7 @@ describe("Npm.check and Npm.update", () => {
         changedDirectory: installed.directory !== updated.directory,
         unchangedDirectory: unchanged.directory === updated.directory,
         generations: yield* Effect.promise(() => fs.readdir(root)),
+        orphan,
         updated: yield* npm.check(mutable),
       }
     }).pipe(Effect.scoped, Effect.provide(npmLayer(cache)), Effect.runPromise)
@@ -421,6 +424,7 @@ describe("Npm.check and Npm.update", () => {
     expect(result.unchangedDirectory).toBeTrue()
     expect(result.generations).not.toContain("1")
     expect(result.generations).not.toContain("2")
+    expect(result.generations).not.toContain(result.orphan)
     expect(result.updated).toBeFalse()
   })
 
