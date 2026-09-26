@@ -1,12 +1,14 @@
 import { createMemo, For, Show, createEffect, onMount, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { TextAttributes, ScrollBoxRenderable } from "@opentui/core"
+import { useTerminalDimensions } from "@opentui/solid"
 import type { SessionInfo } from "@opencode/client"
 import { useRoute, useRouteData } from "../../../context/route"
 import { useData } from "../../../context/data"
 import { useClient } from "../../../context/client"
 import { useTheme } from "../../../context/theme"
 import { Locale } from "../../../util/locale"
+import { stringWidth } from "../../../util/string-width"
 import { Keymap } from "../../../context/keymap"
 import { useComposerTab } from "./context"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
@@ -16,6 +18,7 @@ interface SubagentEntry {
   sessionID: string
   agent: string
   title: string
+  modelLabel?: string
   status: string
   current: boolean
   prefix: string
@@ -29,6 +32,7 @@ export function SubagentsTab(props: { sessionID: string }) {
   const navigate = useRoute().navigate
   const composer = useComposerTab()
   const shortcuts = Keymap.useShortcuts()
+  const dimensions = useTerminalDimensions()
 
   const session = createMemo(() => data.session.get(props.sessionID))
   const [store, setStore] = createStore({ selected: 0, active: true })
@@ -41,6 +45,13 @@ export function SubagentsTab(props: { sessionID: string }) {
       ({ session, prefix }): SubagentEntry => {
         const title = withTimestampedFallback(session)
         const agentMatch = title.match(/@(\w+) subagent/)
+        const model = session.model
+        const modelName = model
+          ? (data.location.model
+              .list(session.location)
+              ?.find((item) => item.providerID === model.providerID && item.id === model.id)?.name ??
+            `${model.providerID}/${model.id}`)
+          : undefined
         return {
           sessionID: session.id,
           agent: session.agent
@@ -49,6 +60,7 @@ export function SubagentsTab(props: { sessionID: string }) {
               ? Locale.titlecase(agentMatch[1])
               : "Subagent",
           title: agentMatch ? title.replace(agentMatch[0], "").trim() || title : title,
+          modelLabel: modelName ? `${modelName}${model?.variant ? ` (${model.variant})` : ""}` : undefined,
           status: data.session.status(session.id),
           current: session.id === route.sessionID,
           prefix,
@@ -203,6 +215,20 @@ export function SubagentsTab(props: { sessionID: string }) {
                 if (entry.status === "running") return "Running"
                 return ""
               })
+              const modelLabel = createMemo(() =>
+                entry.modelLabel
+                  ? Locale.truncateWidth(entry.modelLabel, Math.max(8, Math.floor(dimensions().width / 3)))
+                  : undefined,
+              )
+              const titleLabel = createMemo(() =>
+                Locale.truncateWidth(
+                  `${entry.prefix}${entry.agent}: ${entry.title}`,
+                  Math.max(
+                    1,
+                    dimensions().width - stringWidth(modelLabel() ?? "") - (status() ? status().length + 3 : 0) - 8,
+                  ),
+                ),
+              )
               return (
                 <box
                   flexDirection="row"
@@ -221,7 +247,7 @@ export function SubagentsTab(props: { sessionID: string }) {
                     navigate({ type: "session", sessionID: entry.sessionID })
                   }}
                 >
-                  <box flexGrow={1} minWidth={0} flexDirection="row">
+                  <box flexGrow={1} flexShrink={1} minWidth={0} flexDirection="row">
                     <text
                       fg={
                         active()
@@ -232,16 +258,30 @@ export function SubagentsTab(props: { sessionID: string }) {
                       }
                       attributes={active() ? TextAttributes.BOLD : undefined}
                       wrapMode="none"
+                      truncate
+                      flexShrink={1}
+                      minWidth={0}
                     >
-                      {entry.prefix}
-                      {entry.agent}: {entry.title}
+                      {titleLabel()}
                     </text>
                   </box>
-                  <Show when={status()}>
-                    <text fg={active() ? theme.text.action.primary.focused : theme.text.muted} wrapMode="none">
-                      {status()}
-                    </text>
-                  </Show>
+                  <box flexDirection="row" gap={1}>
+                    <Show when={modelLabel()}>
+                      {(label) => (
+                        <text fg={active() ? theme.text.action.primary.focused : theme.text.muted} wrapMode="none">
+                          {label()}
+                        </text>
+                      )}
+                    </Show>
+                    <Show when={status()}>
+                      <Show when={modelLabel()}>
+                        <text fg={active() ? theme.text.action.primary.focused : theme.text.muted}>·</text>
+                      </Show>
+                      <text fg={active() ? theme.text.action.primary.focused : theme.text.muted} wrapMode="none">
+                        {status()}
+                      </text>
+                    </Show>
+                  </box>
                 </box>
               )
             }}
