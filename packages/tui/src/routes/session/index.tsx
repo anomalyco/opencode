@@ -224,7 +224,8 @@ export function Session() {
               part.type === "tool" &&
               part.tool === "task" &&
               part.state.status === "running" &&
-              part.state.metadata?.background !== true,
+              part.state.metadata?.background !== true &&
+              part.metadata?.background !== true,
           ),
         )
       : [],
