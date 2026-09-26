@@ -273,19 +273,15 @@ export function createRoutes(
 ): Layer.Layer<never, EffectConfig.ConfigError, RouteRequirements> {
   const locationServiceMapV2 = buildLocationServiceMap()
 
-  return Layer.mergeAll(
-    rootApiRoutes,
-    eventApiRoutes,
-    ptyConnectApiRoutes,
-    instanceRoutes,
-    serverRoutes,
-    docRoute,
-    uiRoute,
+  // Every router-registering layer must be fresh per listener.
+  // cors(corsOptions) already is because each call creates a new layer.
+  return Layer.fresh(
+    Layer.mergeAll(rootApiRoutes, eventApiRoutes, ptyConnectApiRoutes, instanceRoutes, serverRoutes, docRoute, uiRoute),
   ).pipe(
     Layer.provide([
       errorLayer,
       compressionLayer,
-      corsVaryFix,
+      Layer.fresh(corsVaryFix),
       fenceLayer,
       cors(corsOptions),
       AppNodeBuilderV1.build(MoveSession.node, [[LocationServiceMap.node, locationServiceMapV2]]),

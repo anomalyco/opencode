@@ -1,13 +1,13 @@
 import { describe, expect } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
-import { Deferred, Effect, Fiber, Layer } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { registerDisposer } from "../../src/effect/instance-registry"
 import { InstanceBootstrap } from "../../src/project/bootstrap"
 import { InstanceStore } from "../../src/project/instance-store"
 import { tmpdirScoped } from "../fixture/fixture"
-import { testEffect } from "../lib/effect"
+import { awaitWithTimeout, testEffect } from "../lib/effect"
 
 let bootstrapRun: Effect.Effect<void> = Effect.void
 const noopBootstrap = Layer.succeed(
@@ -39,6 +39,106 @@ const registerDisposerScoped = (disposer: (directory: string) => Promise<void>) 
   )
 
 describe("InstanceStore", () => {
+  it.live("closing the store scope interrupts an in-flight load and its waiters", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const started = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      const storeScope = yield* Scope.make()
+      const testLayer = LayerNode.compile(LayerNode.group([InstanceStore.node, CrossSpawnSpawner.node]), [
+        [
+          InstanceStore.bootstrapNode,
+          Layer.succeed(
+            InstanceBootstrap.Service,
+            InstanceBootstrap.Service.of({
+              run: Effect.gen(function* () {
+                yield* Deferred.succeed(started, undefined)
+                yield* Deferred.await(release)
+              }),
+            }),
+          ),
+        ],
+      ])
+      const services = yield* Layer.buildWithMemoMap(testLayer, Layer.makeMemoMapUnsafe(), storeScope)
+      const store = Context.get(services, InstanceStore.Service)
+      const load = yield* store.load({ directory: dir }).pipe(Effect.exit, Effect.forkScoped)
+      yield* Deferred.await(started)
+      const waiter = yield* store
+        .load({ directory: dir })
+        .pipe(Effect.exit, Effect.forkScoped({ startImmediately: true }))
+      const closing = yield* Scope.close(storeScope, Exit.void).pipe(Effect.forkScoped)
+      const exit = yield* awaitWithTimeout(Fiber.join(waiter), "load waiter never saw scope interruption").pipe(
+        Effect.ensuring(Deferred.succeed(release, undefined)),
+      )
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) expect(Cause.hasInterruptsOnly(exit.cause)).toBe(true)
+      yield* awaitWithTimeout(Fiber.join(closing), "store scope close remained blocked")
+      const initial = yield* awaitWithTimeout(Fiber.join(load), "initial load remained blocked")
+      expect(Exit.isFailure(initial)).toBe(true)
+      if (Exit.isFailure(initial)) expect(Cause.hasInterruptsOnly(initial.cause)).toBe(true)
+    }),
+  )
+
+  it.live("evicts interrupted bootstraps so the same directory can retry", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const store = yield* InstanceStore.Service
+      let attempts = 0
+      yield* setBootstrap(
+        Effect.gen(function* () {
+          attempts++
+          if (attempts === 1) yield* Effect.interrupt
+        }),
+      )
+      const first = yield* Effect.exit(store.load({ directory: dir }))
+      expect(Exit.isFailure(first)).toBe(true)
+      if (Exit.isFailure(first)) expect(Cause.hasInterruptsOnly(first.cause)).toBe(true)
+      expect((yield* store.load({ directory: dir })).directory).toBe(dir)
+      expect(attempts).toBe(2)
+    }),
+  )
+
+  it.live("disposes an uncached context after its cache entry is removed", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const store = yield* InstanceStore.Service
+      const ctx = yield* store.load({ directory: dir })
+      yield* store.dispose(ctx)
+      yield* store.dispose(ctx)
+      expect(yield* store.load({ directory: dir })).not.toBe(ctx)
+    }),
+  )
+
+  it.live("unblocks all disposal paths when an in-flight reload is interrupted", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped({ git: true })
+      const store = yield* InstanceStore.Service
+      const first = yield* store.load({ directory: dir })
+      const started = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      yield* setBootstrap(
+        Effect.gen(function* () {
+          yield* Deferred.succeed(started, undefined)
+          yield* Deferred.await(release)
+          yield* Effect.interrupt
+        }),
+      )
+      const reloading = yield* store.reload({ directory: dir }).pipe(Effect.exit, Effect.forkScoped)
+      yield* Deferred.await(started)
+      const disposing = yield* store.dispose(first).pipe(Effect.forkScoped({ startImmediately: true }))
+      const directory = yield* store.disposeDirectory(dir).pipe(Effect.forkScoped({ startImmediately: true }))
+      const all = yield* store.disposeAll().pipe(Effect.forkScoped({ startImmediately: true }))
+      yield* Deferred.succeed(release, undefined)
+      const exit = yield* awaitWithTimeout(Fiber.join(reloading), "reload remained blocked after interruption")
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) expect(Cause.hasInterruptsOnly(exit.cause)).toBe(true)
+      yield* awaitWithTimeout(
+        Effect.all([Fiber.join(disposing), Fiber.join(directory), Fiber.join(all)]),
+        "dispose remained blocked",
+      )
+    }),
+  )
+
   it.live("loads instance context", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
