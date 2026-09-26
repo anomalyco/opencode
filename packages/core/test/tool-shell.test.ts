@@ -1433,6 +1433,51 @@ describe("ShellTool", () => {
     { timeout: 15_000 },
   )
 
+  for (const timeout of [undefined, 6_000]) {
+    it.live(
+      `automatically backgrounds a command with timeout ${timeout ?? "default"}`,
+      () =>
+        Effect.acquireUseRelease(
+          Effect.promise(() => tmpdir()),
+          (tmp) => {
+            reset()
+            return withSession(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                const bus = yield* Bus.Service
+                const admitted = yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
+                  Stream.filter((event) => event.data.sessionID === sessionID && event.data.item.type === "synthetic"),
+                  Stream.runHead,
+                  Effect.forkScoped({ startImmediately: true }),
+                )
+                const release = path.join(tmp.path, "release")
+                const command = timeout === undefined ? progressOverflowCommand(1, release) + "; exit 7" : idleCommand
+                const result = yield* executeTool(
+                  registry,
+                  call({ command, ...(timeout === undefined ? {} : { timeout }) }),
+                ).pipe(Effect.timeout("8 seconds"))
+                expect(result.metadata?.status).toBe("running")
+                const id = ID.make(String(result.metadata?.shellID))
+                const shell = yield* Shell.Service
+                expect((yield* shell.get(id)).status).toBe("running")
+                if (timeout === undefined) yield* Effect.promise(() => Bun.write(release, "done"))
+                expect((yield* shell.wait(id)).status).toBe(timeout === undefined ? "exited" : "timeout")
+                expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.item.payload).toMatchObject({
+                  metadata: {
+                    source: "shell",
+                    shellID: id,
+                    state: "completed",
+                    ...(timeout === undefined ? { exit: 7 } : { timeout: true }),
+                  },
+                })
+              }),
+            )
+          },
+          (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+        ),
+      { timeout: 15_000 },
+    )
+  }
+
   it.live("returns the shell id for a background command", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
