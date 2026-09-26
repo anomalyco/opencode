@@ -25,6 +25,8 @@ export type {
   ToolSchema,
   ToolToModelOutput,
 } from "./tool"
+export { applySecretShield, resolveMode as resolveSecretShieldMode } from "./secret-shield"
+export type { SecretShieldMode, ShieldResult, ShieldReport } from "./secret-shield"
 export * as LLM from "./llm"
 export type {
   Definition as ProviderDefinition,
