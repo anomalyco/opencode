@@ -19,7 +19,15 @@ export const FileSource = Schema.Union([
 export type FileSource = typeof FileSource.Type
 
 export const Base64 = Schema.String.check(
-  Schema.isPattern(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/),
+  Schema.makeFilter((value) => {
+    // Linear validation: a grouped `(?:X{4})*` pattern recurses per group and breaks on
+    // multi-MB payloads (silently mismatches on JSC, stack-overflows on V8).
+    const n = value.length
+    if (n % 4 !== 0) return false
+    if (!/^[A-Za-z0-9+/]*={0,2}$/.test(value)) return false
+    const pads = value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0
+    return (n - pads) % 4 !== 1
+  }),
 ).annotate({ identifier: "Prompt.Base64" })
 export type Base64 = typeof Base64.Type
 
