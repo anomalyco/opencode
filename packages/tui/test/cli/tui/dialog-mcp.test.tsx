@@ -22,6 +22,7 @@ test.each(["enter", "space"])("starts OAuth with %s for an MCP server requiring 
 
   try {
     await fixture.app.waitForFrame((frame) => frame.includes("Sign in required"))
+    expect(fixture.app.captureCharFrame()).not.toContain("enter to view error")
     if (key === "enter") fixture.app.mockInput.pressEnter()
     else fixture.app.mockInput.pressKey(" ")
     await fixture.app.waitForFrame((frame) => frame.includes("Waiting for authorization"))
@@ -79,7 +80,7 @@ async function renderMcp(options?: { failed?: boolean; location?: { directory: s
             name: "linear",
             status: options?.failed
               ? { status: "failed", error: "MCP error -32000: Connection closed" }
-              : { status: "needs_auth" },
+              : { status: "needs_auth", error: "Authentication required" },
             integrationID: "mcp_linear",
           },
         ],

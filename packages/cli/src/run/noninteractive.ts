@@ -145,7 +145,7 @@ export async function runNonInteractivePrompt(input: Input) {
       .reply({
         sessionID: input.sessionID,
         requestID: request.id,
-        reply: input.auto ? "once" : "reject",
+        decision: input.auto ? "once" : "reject",
       })
       .catch(() => {})
     if (!input.auto) {
@@ -155,7 +155,7 @@ export async function runNonInteractivePrompt(input: Input) {
 
   const cancelForm = async (request: Pick<FormRequest, "id" | "sessionID">) => {
     try {
-      await input.client.form.cancel(
+      await input.client.session.form.cancel(
         { sessionID: request.sessionID, formID: request.id },
         ...formRequestOptions(request.sessionID === GLOBAL_FORM_SESSION_ID ? input.location : undefined),
       )
@@ -695,10 +695,10 @@ export async function runNonInteractivePrompt(input: Input) {
 
     const [permissions, forms, globals] = await Promise.all([
       input.client.permission.list({ sessionID: input.sessionID }).catch(() => undefined),
-      input.client.form.list({ sessionID: input.sessionID }).catch(() => undefined),
+      input.client.session.form.list({ sessionID: input.sessionID }).catch(() => undefined),
       input.attached
         ? Promise.resolve(undefined)
-        : input.client.form.request
+        : input.client.form
             .list({
               location: { directory: input.location.directory },
             })

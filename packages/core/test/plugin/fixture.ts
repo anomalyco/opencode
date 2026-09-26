@@ -14,6 +14,7 @@ import { Generate } from "@opencode/core/generate"
 import { Integration } from "@opencode/core/integration"
 import { KV } from "@opencode/core/kv"
 import { Location } from "@opencode/core/location"
+import { ManagedPolicy } from "@opencode/core/managed-policy"
 import { Mcp } from "@opencode/core/mcp/index"
 import { Model } from "@opencode/core/model"
 import { Npm } from "@opencode/util/npm"
@@ -34,6 +35,7 @@ import { Tool } from "@opencode/core/tool"
 import { Vcs } from "@opencode/core/vcs"
 import { WebSearch } from "@opencode/core/websearch"
 import { Worktree } from "@opencode/core/worktree"
+import { WorktreeStrategies } from "@opencode/core/worktree/strategies"
 import { Effect, Layer } from "effect"
 import { tempLocationLayer } from "../fixture/location"
 import { emptyMcpLayer } from "../fixture/mcp"
@@ -54,6 +56,7 @@ const generateLayer = Layer.succeed(Generate.Service, Generate.Service.of({ text
 const permissionLayer = Layer.succeed(
   Permission.Service,
   Permission.Service.of({
+    close: Effect.void,
     ask: (input) => Effect.succeed({ id: input.id ?? Permission.ID.create(), effect: "ask" }),
     assert: () => Effect.void,
     reply: () => Effect.void,
@@ -83,6 +86,7 @@ export const PluginTestLayer = AppNodeBuilder.build(
     Command.node,
     Integration.node,
     KV.node,
+    ManagedPolicy.node,
     Mcp.node,
     Session.node,
     PersistentPty.node,
@@ -98,6 +102,7 @@ export const PluginTestLayer = AppNodeBuilder.build(
     Watcher.node,
     WebSearch.node,
     Worktree.node,
+    WorktreeStrategies.node,
   ]),
   [
     Location.node.replace(tempLocationLayer),

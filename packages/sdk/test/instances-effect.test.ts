@@ -83,7 +83,7 @@ it.live(
                               Effect.gen(function* () {
                                 executed.push(generation)
                                 yield* ctx.session
-                                  .rename({ sessionID: tool.sessionID, title: `${key}:${generation}` })
+                                  .update({ sessionID: tool.sessionID, title: `${key}:${generation}` })
                                   .pipe(Effect.orDie)
                                 return { output: key, content: key }
                               }),

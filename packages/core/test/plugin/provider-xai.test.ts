@@ -75,7 +75,7 @@ describe("XAIPlugin", () => {
       const providerID = Provider.ID.make("xai")
       yield* providers.transform((editor) => {
         editor.update(providerID, (provider) => {
-          provider.package = Provider.aisdk("@ai-sdk/xai")
+          provider.package = "@opencode/ai/providers/xai"
           provider.activation = "enabled"
         })
         editor.models.update(providerID, Model.ID.make("grok-4.6"), () => {})
@@ -83,9 +83,10 @@ describe("XAIPlugin", () => {
 
       yield* addPlugin()
 
+      const provider = yield* providers.get(providerID)
       const model = yield* models.get(providerID, Model.ID.make("grok-4.6"))
-      expect(model?.capabilities.responsesWebsockets).toBe(true)
-      expect(model?.websocket).toBe(true)
+      expect(provider?.settings?.transport).toBe("websocket")
+      expect(model?.settings?.transport).toBeUndefined()
     }),
   )
 })

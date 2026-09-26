@@ -7,9 +7,9 @@ import type {
   AgentInfo,
   CommandInfo,
   ConfigEntry,
-  FormCancelInput,
+  SessionFormCancelInput,
   FormInfo,
-  FormReplyInput,
+  SessionFormReplyInput,
   IntegrationInfo,
   LocationRef,
   LocationGetOutput,
@@ -252,6 +252,7 @@ export function createData(config: CreateDataInput) {
   const messageIndex = new Map<string, Map<string, number>>()
   const sync = createSync()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
+  const pendingUpdates = new Map<string, Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>>()
 
   function setSessionActive(sessionID: string, status: DataSessionStatus) {
     activeUpdates?.set(sessionID, status)
@@ -260,6 +261,7 @@ export function createData(config: CreateDataInput) {
 
   function removePending(sessionID: string, inboxID?: string) {
     if (!inboxID) return
+    pendingUpdates.get(sessionID)?.set(inboxID, undefined)
     if (store.session.pending[sessionID]?.some((item) => item.id === inboxID))
       setStore(
         "session",
@@ -294,7 +296,7 @@ export function createData(config: CreateDataInput) {
     return true
   }
 
-  function settleForm(input: FormCancelInput, ref: LocationRef | undefined, request: Promise<void>) {
+  function settleForm(input: SessionFormCancelInput, ref: LocationRef | undefined, request: Promise<void>) {
     return request
       .catch((error: unknown) => {
         if ((!isFormNotFoundError(error) && !isFormAlreadySettledError(error)) || error.id !== input.formID) throw error
@@ -309,6 +311,7 @@ export function createData(config: CreateDataInput) {
   function updatePending(sessionID: string, inboxID: string, delivery: SessionInbox.Delivery) {
     const index = store.session.pending[sessionID]?.findIndex((item) => item.id === inboxID) ?? -1
     const item = store.session.pending[sessionID]?.[index]
+    pendingUpdates.get(sessionID)?.set(inboxID, item ? { ...item, delivery } : delivery)
     if (index < 0 || !item || item.delivery === delivery) return
     setStore("session", "pending", sessionID, index, { ...item, delivery })
   }
@@ -389,8 +392,8 @@ export function createData(config: CreateDataInput) {
     message.update(item.sessionID, (draft, index) => {
       const row =
         item.type === "user"
-          ? { id: item.id, type: "user" as const, ...item.payload, time: { created: item.timeCreated } }
-          : { id: item.id, type: "synthetic" as const, ...item.payload, time: { created: item.timeCreated } }
+          ? { id: item.id, type: "user" as const, ...item.payload, time: { created: item.time.created } }
+          : { id: item.id, type: "synthetic" as const, ...item.payload, time: { created: item.time.created } }
       const position = index.get(item.id)
       if (position === undefined) return message.append(draft, index, row)
       draft[position] = row
@@ -671,7 +674,7 @@ export function createData(config: CreateDataInput) {
         })
         refresh(() =>
           api()
-            .session.message({ sessionID: event.data.sessionID, messageID: messageIDFromEvent(event.id) })
+            .session.message.get({ sessionID: event.data.sessionID, messageID: messageIDFromEvent(event.id) })
             .then((item) => {
               message.update(event.data.sessionID, (draft, index) => {
                 const position = index.get(item.id)
@@ -694,7 +697,7 @@ export function createData(config: CreateDataInput) {
         })
         return
       }
-      case "session.permissions.updated":
+      case "session.permissions":
         if (store.session.info[event.data.sessionID])
           setStore("session", "info", event.data.sessionID, "permissions", event.data.permissions)
         return
@@ -769,12 +772,14 @@ export function createData(config: CreateDataInput) {
       }
       case "session.inbox.enqueued": {
         outbox.delete(event.data.inboxID)
-        admitLocal({
+        const item = {
           id: event.data.inboxID,
           sessionID: event.data.sessionID,
-          timeCreated: event.created,
+          time: { created: event.created },
           ...event.data.item,
-        })
+        }
+        pendingUpdates.get(item.sessionID)?.set(item.id, item)
+        admitLocal(item)
         if (event.data.item.type === "compaction") {
           const active = compacting.get(event.data.sessionID)
           active?.observed.add(event.data.inboxID)
@@ -842,6 +847,7 @@ export function createData(config: CreateDataInput) {
             existing.finish = undefined
             existing.rawFinish = undefined
             existing.providerState = undefined
+            existing.time.created = event.data.started
             existing.time.streamed = undefined
             existing.time.completed = undefined
             if (event.data.snapshot) existing.snapshot = { ...existing.snapshot, start: event.data.snapshot }
@@ -860,7 +866,7 @@ export function createData(config: CreateDataInput) {
             metadata: event.metadata,
             content: [],
             snapshot: event.data.snapshot ? { start: event.data.snapshot } : undefined,
-            time: { created: event.created },
+            time: { created: event.data.started },
           })
         })
         return
@@ -1037,6 +1043,18 @@ export function createData(config: CreateDataInput) {
                 : "interrupted",
           time: { created: event.created },
         })
+        if (
+          store.session.message[event.data.sessionID]?.some(
+            (item) =>
+              item.type === "assistant" &&
+              item.content.some(
+                (part) => part.type === "tool" && (part.state.status === "streaming" || part.state.status === "running"),
+              ),
+          )
+        ) {
+          sync.invalidate(`session.message:${event.data.sessionID}`)
+          refresh(() => result.session.message.sync(event.data.sessionID))
+        }
         // An event can overtake the first read; queue a revalidation when that read is still active.
         if (!store.session.info[event.data.sessionID] && !sync.has(`session:${event.data.sessionID}`)) return
         result.session.invalidate(event.data.sessionID)
@@ -1379,23 +1397,40 @@ export function createData(config: CreateDataInput) {
         },
         sync(sessionID: string) {
           return sync.run(`session.pending:${sessionID}`, async () => {
-            const pending = await api().session.inbox.list({ sessionID })
-            // A positive read acknowledges admission even when its SSE echo is delayed.
-            pending.forEach((item) => outbox.delete(item.id))
-            // Compactions also coalesce by Session, not just by the proposed ID.
-            if (pending.some((item) => item.type === "compaction"))
-              store.session.pending[sessionID]
-                ?.filter((item) => item.type === "compaction")
-                .forEach((item) => outbox.delete(item.id))
-            // Keep optimistic rows still awaiting their echo: this fetch may
-            // have raced ahead of an in-flight admission the server does not
-            // know about yet.
-            const inflight = (store.session.pending[sessionID] ?? []).filter((item) => outbox.has(item.id))
-            const merged = inflight.length === 0 ? pending : [...pending, ...inflight]
-            batch(() => {
-              setStore("session", "pending", sessionID, reconcile(merged))
-              merged.forEach(materializeInboxMessage)
-            })
+            const updates = new Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>()
+            pendingUpdates.set(sessionID, updates)
+            try {
+              const snapshot = await api().session.inbox.list({ sessionID })
+              // Events can overtake this HTTP response on a remote connection.
+              // Reconcile them before an older snapshot can resurrect delivered input.
+              const current = new Map(snapshot.map((item) => [item.id, item]))
+              updates.forEach((item, id) => {
+                if (item === undefined) current.delete(id)
+                else if (typeof item === "string") {
+                  const existing = current.get(id)
+                  if (existing) current.set(id, { ...existing, delivery: item })
+                } else current.set(id, item)
+              })
+              const pending = [...current.values()]
+              // A positive read acknowledges admission even when its SSE echo is delayed.
+              pending.forEach((item) => outbox.delete(item.id))
+              // Compactions also coalesce by Session, not just by the proposed ID.
+              if (pending.some((item) => item.type === "compaction"))
+                store.session.pending[sessionID]
+                  ?.filter((item) => item.type === "compaction")
+                  .forEach((item) => outbox.delete(item.id))
+              // Keep optimistic rows still awaiting their echo: this fetch may
+              // have raced ahead of an in-flight admission the server does not
+              // know about yet.
+              const inflight = (store.session.pending[sessionID] ?? []).filter((item) => outbox.has(item.id))
+              const merged = inflight.length === 0 ? pending : [...pending, ...inflight]
+              batch(() => {
+                setStore("session", "pending", sessionID, reconcile(merged))
+                merged.forEach(materializeInboxMessage)
+              })
+            } finally {
+              if (pendingUpdates.get(sessionID) === updates) pendingUpdates.delete(sessionID)
+            }
           })
         },
         invalidate(sessionID: string) {
@@ -1469,7 +1504,7 @@ export function createData(config: CreateDataInput) {
           admitLocal({
             id,
             sessionID: input.sessionID,
-            timeCreated: Date.now(),
+            time: { created: Date.now() },
             type: "compaction",
             delivery: "steer",
             payload: {},
@@ -1520,7 +1555,7 @@ export function createData(config: CreateDataInput) {
           admitLocal({
             id,
             sessionID: request.sessionID,
-            timeCreated: Date.now(),
+            time: { created: Date.now() },
             type: "user",
             delivery: request.delivery ?? "steer",
             // Files and skills stay off the optimistic row: their durable
@@ -1720,7 +1755,7 @@ export function createData(config: CreateDataInput) {
           const key = `session.form:${sessionID}:${sessionID === "global" ? locationKey(ref ?? defaultLocation()) : ""}`
           return sync.run(key, async () => {
             if (sessionID === "global") {
-              const response = await api().form.request.list({
+              const response = await api().form.list({
                 location: locationQuery(ref ?? defaultLocation()),
               })
               const location = {
@@ -1735,7 +1770,7 @@ export function createData(config: CreateDataInput) {
               ])
               return
             }
-            setStore("session", "form", sessionID, await api().form.list({ sessionID }))
+            setStore("session", "form", sessionID, await api().session.form.list({ sessionID }))
           })
         },
         invalidate(sessionID: string, ref?: LocationRef) {
@@ -1743,17 +1778,17 @@ export function createData(config: CreateDataInput) {
             `session.form:${sessionID}:${sessionID === "global" ? locationKey(ref ?? defaultLocation()) : ""}`,
           )
         },
-        reply(input: FormReplyInput, ref?: LocationRef) {
-          return settleForm(input, ref, api().form.reply(input, formRequestOptions(input.sessionID, ref)))
+        reply(input: SessionFormReplyInput, ref?: LocationRef) {
+          return settleForm(input, ref, api().session.form.reply(input, formRequestOptions(input.sessionID, ref)))
         },
-        cancel(input: FormCancelInput, ref?: LocationRef) {
-          return settleForm(input, ref, api().form.cancel(input, formRequestOptions(input.sessionID, ref)))
+        cancel(input: SessionFormCancelInput, ref?: LocationRef) {
+          return settleForm(input, ref, api().session.form.cancel(input, formRequestOptions(input.sessionID, ref)))
         },
       },
     },
     project: {
       list() {
-        return Object.values(store.project.info).toSorted((a, b) => b.time.updated - a.time.updated)
+        return Object.values(store.project.info).toSorted((a, b) => b.time.active - a.time.active)
       },
       get(projectID: string) {
         return store.project.info[projectID]

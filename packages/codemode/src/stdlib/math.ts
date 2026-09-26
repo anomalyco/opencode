@@ -1,8 +1,9 @@
 import { Effect } from "effect"
 import { constants, type Method, methods } from "../interpreter/native.js"
 import { typeError } from "../interpreter/model.js"
-import { ProgramObject } from "../interpreter/objects.js"
-import { preserveConsumerError, type Runner } from "../interpreter/runner.js"
+import { Obj, coerceToNumber } from "../interpreter/objects.js"
+import { preserveConsumerError, withPrimitives } from "../interpreter/callback.js"
+import type { Interpreter } from "../interpreter/interpreter.js"
 
 // Bun exposes ES2026 Math.sumPrecise before TypeScript's standard library types.
 declare global {
@@ -11,38 +12,27 @@ declare global {
   }
 }
 
-// Validate only the arguments a method consumes; like JS, extras are ignored
-// (so built-ins work as callbacks receiving (element, index, array)).
-const number = (name: string, args: Array<unknown>, index: number): number => {
-  if (index >= args.length) return Number.NaN
-  const arg = args[index]
-  if (typeof arg !== "number") throw typeError(`Math.${name} expects number arguments.`)
-  return arg
-}
-
-const unary = (name: string, op: (a: number) => number): Method => [name, 1, (_, args) => op(number(name, args, 0))]
-
-const binary = (name: string, op: (a: number, b: number) => number): Method => [
-  name,
-  2,
-  (_, args) => op(number(name, args, 0), number(name, args, 1)),
-]
-
-const variadic = (name: string, op: (...values: Array<number>) => number): Method => [
-  name,
-  2,
-  (_, args) =>
-    op(
-      ...args.map((arg) => {
-        if (typeof arg !== "number") throw typeError(`Math.${name} expects number arguments.`)
-        return arg
-      }),
-    ),
-]
-
-export const mathGlobal = <R>(runner: Runner<R>) => {
-  const protos = runner.prototypes
-  const math = new ProgramObject(protos.Object)
+export const mathGlobal = <R>(ctx: Interpreter<R>) => {
+  const builtins = ctx.builtins
+  const math = new Obj(builtins.Object)
+  // Convert only the arguments a method consumes; like JS, extras are ignored
+  // (so built-ins work as callbacks receiving (element, index, array)).
+  const unary = (name: string, op: (a: number) => number): Method => [
+    name,
+    1,
+    (_, args) => withPrimitives(ctx, "number", [args[0]], ([a]) => op(coerceToNumber(a))),
+  ]
+  const binary = (name: string, op: (a: number, b: number) => number): Method => [
+    name,
+    2,
+    (_, args) =>
+      withPrimitives(ctx, "number", [args[0], args[1]], ([a, b]) => op(coerceToNumber(a), coerceToNumber(b))),
+  ]
+  const variadic = (name: string, op: (...values: Array<number>) => number): Method => [
+    name,
+    2,
+    (_, args) => withPrimitives(ctx, "number", args, (values) => op(...values.map(coerceToNumber))),
+  ]
   constants(math, {
     PI: Math.PI,
     E: Math.E,
@@ -53,7 +43,7 @@ export const mathGlobal = <R>(runner: Runner<R>) => {
     SQRT2: Math.SQRT2,
     SQRT1_2: Math.SQRT1_2,
   })
-  methods(protos, math, [
+  methods(builtins, math, [
     ["random", 0, () => Math.random()],
     variadic("max", Math.max),
     variadic("min", Math.min),
@@ -95,7 +85,7 @@ export const mathGlobal = <R>(runner: Runner<R>) => {
       1,
       (_, args) =>
         Effect.gen(function* () {
-          const cursor = yield* runner.syncIterator(args[0])
+          const cursor = yield* ctx.iterate(args[0])
           if (cursor === undefined) {
             throw typeError("Math.sumPrecise expects a synchronous iterable.")
           }
@@ -104,7 +94,7 @@ export const mathGlobal = <R>(runner: Runner<R>) => {
             const step = yield* cursor.next
             if (step.done) return Math.sumPrecise(numbers)
             yield* preserveConsumerError(
-              cursor,
+              cursor.close,
               Effect.sync(() => {
                 if (typeof step.value !== "number") {
                   throw typeError("Math.sumPrecise expects an iterable of numbers.")

@@ -7,7 +7,14 @@ import { type Services, type ToolDescription, ToolRuntime } from "./tool-runtime
 import type { Tools } from "./tools.js"
 
 /** A tool call admitted during an execution. */
-export type { ToolCall, ToolCallEnded, ToolCallHooks, ToolCallStarted, ToolDescription } from "./tool-runtime.js"
+export type {
+  CallResult,
+  ExtensionInvocation,
+  Hooks,
+  ToolCall,
+  ToolDescription,
+  ToolInvocation,
+} from "./tool-runtime.js"
 /** Signature-construction helpers for host-owned catalog instructions. */
 export { searchSignature, toolExpression } from "./tool-runtime.js"
 
@@ -34,10 +41,12 @@ export type ResolvedExecutionLimits = {
 }
 
 /** Configuration shared by `CodeMode.make` and `CodeMode.execute`. */
-export type Options<Provided extends Record<string, unknown> = {}> = ToolRuntime.ToolCallHooks<Services<Provided>> & {
+export type Options<Provided extends Record<string, unknown> = {}> = {
   /** Explicit tools exposed to the program as `tools`. */
   tools?: Provided & Tools<Services<Provided>>
-  /** Host classes and functions exposed as globals; see `Extension.make`. */
+  /** Hooks around every tool and extension call the program makes; see `Hooks`. */
+  hooks?: ToolRuntime.Hooks<Services<Provided>>
+  /** Host functions exposed as globals; see `Extension.make`. */
   extensions?: ReadonlyArray<Extension>
   /** Resource limits enforced on each execution. */
   limits?: ExecutionLimits
@@ -147,7 +156,10 @@ export const make = <const Provided extends Record<string, unknown> = {}>(
     }
   }
   return {
-    catalog: prepared.catalog,
-    execute: (code) => executeProgram(code, prepared, limits, options, (host) => extensionGlobals(host, extensions)),
+    get catalog() {
+      return prepared.catalog
+    },
+    execute: (code) =>
+      executeProgram(code, prepared, limits, options.hooks ?? {}, (ctx) => extensionGlobals(ctx, extensions)),
   }
 }

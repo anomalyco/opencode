@@ -155,6 +155,26 @@ export interface MenuSubTriggerProps extends ComponentProps<typeof DropdownMenu.
   badge?: JSX.Element | string
 }
 
+export interface MenuSubProps extends ComponentProps<typeof DropdownMenu.Sub> {
+  placement?:
+    | "top"
+    | "top-start"
+    | "top-end"
+    | "bottom"
+    | "bottom-start"
+    | "bottom-end"
+    | "left"
+    | "left-start"
+    | "left-end"
+    | "right"
+    | "right-start"
+    | "right-end"
+}
+
+function MenuSub(props: MenuSubProps) {
+  return <DropdownMenu.Sub {...props} />
+}
+
 function MenuSubTrigger(props: ParentProps<MenuSubTriggerProps>) {
   const ctx = useMenuContext()
   const [s, r] = splitProps(props, ["class", "classList", "children", "shortcut", "badge"])
@@ -282,7 +302,7 @@ export const Menu = Object.assign(MenuRoot, {
   Group: DropdownMenu.Group,
   GroupLabel: MenuGroupLabel,
   Separator: MenuSeparator,
-  Sub: DropdownMenu.Sub,
+  Sub: MenuSub,
   SubTrigger: MenuSubTrigger,
   SubContent: MenuSubContent,
   Context: MenuContext,

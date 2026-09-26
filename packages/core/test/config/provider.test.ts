@@ -10,6 +10,9 @@ import { Model } from "@opencode/core/model"
 import { ModelResolver } from "@opencode/core/model-resolver"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
+import { AzurePlugin } from "@opencode/core/plugin/provider/azure"
+import { OpenAIPlugin } from "@opencode/core/plugin/provider/openai"
+import { XAIPlugin } from "@opencode/core/plugin/provider/xai"
 import { Provider } from "@opencode/core/provider"
 import { withEnv } from "../fixture/env"
 import { testEffect } from "../lib/effect"
@@ -31,9 +34,10 @@ function required<T>(value: T | undefined): T {
 const decode = Schema.decodeUnknownSync(Info)
 
 describe("ConfigProviderPlugin.Plugin", () => {
-  it.effect("inherits provider compaction policy with model overrides and rejects unsupported routes", () =>
+  it.effect("inherits the provider compaction setting with model overrides and rejects unsupported routes", () =>
     Effect.gen(function* () {
       const models = yield* Model.Service
+      const providers = yield* Provider.Service
       yield* addPlugin([
         new Document({
           type: "document",
@@ -41,12 +45,10 @@ describe("ConfigProviderPlugin.Plugin", () => {
             providers: {
               custom: {
                 package: "@opencode/ai/providers/openai/responses",
-                compaction: { mode: "provider", threshold: 120_000 },
+                settings: { compaction: { type: "native" } },
                 models: {
                   native: {},
-                  reset: { compaction: { mode: "provider" } },
-                  threshold: { compaction: { mode: "provider", threshold: 90_000 } },
-                  local: { compaction: { mode: "local" }, package: "@opencode/ai/providers/openai/chat" },
+                  local: { settings: { compaction: { type: "summary" } }, package: "@opencode/ai/providers/openai/chat" },
                   unsupported: { package: "@opencode/ai/providers/openai/chat" },
                 },
               },
@@ -59,16 +61,10 @@ describe("ConfigProviderPlugin.Plugin", () => {
       const local = required(yield* models.get(Provider.ID.make("custom"), Model.ID.make("local")))
       const unsupported = required(yield* models.get(Provider.ID.make("custom"), Model.ID.make("unsupported")))
       const defaultModel = required(yield* models.get(Provider.ID.make("default"), Model.ID.make("chat")))
-      expect(native.compaction).toEqual({ mode: "provider", threshold: 120_000 })
-      expect((yield* models.get(Provider.ID.make("custom"), Model.ID.make("reset")))?.compaction).toEqual({
-        mode: "provider",
-      })
-      expect((yield* models.get(Provider.ID.make("custom"), Model.ID.make("threshold")))?.compaction).toEqual({
-        mode: "provider",
-        threshold: 90_000,
-      })
-      expect(local.compaction).toEqual({ mode: "local" })
-      expect(defaultModel.compaction).toBeUndefined()
+      expect(native.settings?.compaction).toEqual({ type: "native" })
+      expect(local.settings?.compaction).toEqual({ type: "summary" })
+      expect(defaultModel.settings?.compaction).toBeUndefined()
+      expect((yield* providers.get(Provider.ID.make("custom")))?.settings?.compaction).toEqual({ type: "native" })
       yield* ModelResolver.fromCatalogModel(native)
       yield* ModelResolver.fromCatalogModel(local)
       yield* ModelResolver.fromCatalogModel(defaultModel)
@@ -79,8 +75,9 @@ describe("ConfigProviderPlugin.Plugin", () => {
     }),
   )
 
-  it.effect("inherits the provider websocket policy with model overrides", () =>
+  it.effect("keeps the provider websocket policy out of model settings", () =>
     Effect.gen(function* () {
+      const providers = yield* Provider.Service
       const models = yield* Model.Service
       yield* addPlugin([
         new Document({
@@ -89,8 +86,12 @@ describe("ConfigProviderPlugin.Plugin", () => {
             providers: {
               custom: {
                 package: "@opencode/ai/providers/openai/responses",
-                websocket: false,
-                models: { inherited: {}, override: { websocket: true } },
+                settings: { transport: "http", timeout: 100, chunkTimeout: 200, shared: "provider" },
+                models: {
+                  inherited: {
+                    settings: { transport: "websocket", timeout: 1, chunkTimeout: 2, model: true },
+                  },
+                },
               },
               default: { package: "@opencode/ai/providers/openai/responses", models: { untouched: {} } },
             },
@@ -98,13 +99,58 @@ describe("ConfigProviderPlugin.Plugin", () => {
         }),
       ])
       const inherited = required(yield* models.get(Provider.ID.make("custom"), Model.ID.make("inherited")))
-      const override = required(yield* models.get(Provider.ID.make("custom"), Model.ID.make("override")))
       const untouched = required(yield* models.get(Provider.ID.make("default"), Model.ID.make("untouched")))
-      expect(inherited.websocket).toBe(false)
-      expect(override.websocket).toBe(true)
-      expect(untouched.websocket).toBeUndefined()
+      expect((yield* providers.get(Provider.ID.make("custom")))?.settings?.transport).toBe("http")
+      expect(inherited.settings).toEqual({ shared: "provider", model: true })
+      expect(untouched.settings?.transport).toBeUndefined()
     }),
   )
+
+  for (const builtin of [
+    { id: "openai", model: "gpt-5.6-sol", package: "@opencode/ai/providers/openai/responses", plugin: OpenAIPlugin },
+    { id: "xai", model: "grok-4.6", package: "@opencode/ai/providers/xai", plugin: XAIPlugin },
+    { id: "azure", model: "gpt-5.6-sol", package: "@opencode/ai/providers/azure/responses", plugin: AzurePlugin },
+    { id: "custom-azure", model: "deployment", package: "@opencode/ai/providers/azure/responses", plugin: AzurePlugin },
+  ]) {
+    it.live(`configured provider transport overrides ${builtin.id} defaults`, () =>
+      Effect.gen(function* () {
+        const providers = yield* Provider.Service
+        const models = yield* Model.Service
+        const plugin = yield* Plugin.Service
+        const host = yield* PluginHost.make(plugin)
+        const providerID = Provider.ID.make(builtin.id)
+        const modelID = Model.ID.make(builtin.model)
+        yield* providers.transform((editor) => {
+          editor.update(providerID, (provider) => {
+            provider.activation = "enabled"
+            provider.package = builtin.package
+          })
+          editor.models.update(providerID, modelID, () => {})
+        })
+        yield* builtin.plugin.effect(host)
+        expect((yield* providers.get(providerID))?.settings?.transport).toBe("websocket")
+        expect((yield* models.get(providerID, modelID))?.settings?.transport).toBeUndefined()
+
+        yield* addPlugin([
+          new Document({
+            type: "document",
+            info: decode({
+              providers: {
+                [builtin.id]: {
+                  settings: { transport: "http" },
+                  models: { override: { modelID: builtin.model } },
+                },
+              },
+            }),
+          }),
+        ])
+
+        expect((yield* providers.get(providerID))?.settings?.transport).toBe("http")
+        expect((yield* models.get(providerID, modelID))?.settings?.transport).toBeUndefined()
+        expect((yield* models.get(providerID, Model.ID.make("override")))?.settings?.transport).toBeUndefined()
+      }),
+    )
+  }
 
   it.effect("adds key auth for custom providers without env credentials", () =>
     Effect.gen(function* () {
@@ -371,6 +417,40 @@ describe("ConfigProviderPlugin.Plugin", () => {
       expect(result.diagnostics).toEqual([])
       yield* addPlugin([new Document({ type: "document", info: decode(result.encoded) })])
       expect(yield* models.get(providerID, modelID)).toEqual(before)
+    }),
+  )
+
+  it.effect("generates variants after rewriting a configured model package", () =>
+    Effect.gen(function* () {
+      const models = yield* Model.Service
+      yield* addPlugin([
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              custom: {
+                package: "aisdk:@ai-sdk/openai",
+                models: {
+                  claude: {
+                    modelID: "claude-opus-4-8",
+                    package: "aisdk:@ai-sdk/anthropic",
+                  },
+                },
+              },
+            },
+          }),
+        }),
+      ])
+
+      const model = required(yield* models.get(Provider.ID.make("custom"), Model.ID.make("claude")))
+      expect(model.package).toBe("@opencode/ai/providers/anthropic")
+      expect(model.variants.map((variant) => variant.id)).toEqual([
+        Model.VariantID.make("low"),
+        Model.VariantID.make("medium"),
+        Model.VariantID.make("high"),
+        Model.VariantID.make("xhigh"),
+        Model.VariantID.make("max"),
+      ])
     }),
   )
 

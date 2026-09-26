@@ -291,6 +291,14 @@ describe("MCP OAuth", () => {
     await expect(authorize("not a URL")).rejects.toThrow(TypeError)
   })
 
+  test("rejects an authorization endpoint that is not http or https", async () => {
+    const { server } = authorizationServer({ authorization_endpoint: "file:///tmp/authorize" })
+
+    await expect(Effect.runPromise(Effect.scoped(start(server))).finally(() => server.stop(true))).rejects.toThrow(
+      "returned a file: authorization URL",
+    )
+  })
+
   test("sends the configured URL as the resource when the server publishes no metadata", async () => {
     const { server, tokenRequests } = authorizationServer({})
     const url = `${server.url.origin}/mcp`
@@ -324,6 +332,44 @@ describe("MCP OAuth", () => {
     expect(probes.some((probe) => probe.includes("codemode"))).toBe(false)
   })
 
+  test("keeps the configured URL as the resource when metadata echoes the dialed query", async () => {
+    const tokenRequests: URLSearchParams[] = []
+    const server = Bun.serve({
+      port: 0,
+      async fetch(request) {
+        const url = new URL(request.url)
+        if (url.pathname === "/.well-known/oauth-authorization-server")
+          return Response.json({
+            issuer: url.origin,
+            authorization_endpoint: `${url.origin}/authorize`,
+            token_endpoint: `${url.origin}/token`,
+            response_types_supported: ["code"],
+          })
+        if (url.pathname === "/.well-known/oauth-protected-resource/mcp")
+          return Response.json({ resource: `${url.origin}/mcp${url.search}`, authorization_servers: [url.origin] })
+        if (request.method === "POST" && url.pathname === "/token") {
+          tokenRequests.push(new URLSearchParams(await request.text()))
+          return Response.json({ access_token: "next", token_type: "Bearer" })
+        }
+        return new Response(null, { status: 404 })
+      },
+    })
+    const url = `${server.url.origin}/mcp`
+    const oauthProvider = await connectProvider(
+      remote(url),
+      memoryCredentials([credential({ access: "expired", refresh: "refresh", url })]),
+    )
+
+    // The transport dials with ?codemode=false and follows the 401 challenge to metadata that echoes it.
+    await auth(oauthProvider, {
+      serverUrl: `${url}?codemode=false`,
+      resourceMetadataUrl: new URL(`${server.url.origin}/.well-known/oauth-protected-resource/mcp?codemode=false`),
+    }).finally(() => server.stop(true))
+
+    expect(tokenRequests[0]?.get("grant_type")).toBe("refresh_token")
+    expect(tokenRequests[0]?.get("resource")).toBe(url)
+  })
+
   test("finds resource metadata through the 401 header when the well-known path is not served", async () => {
     const server = Bun.serve({
       port: 0,
@@ -350,6 +396,47 @@ describe("MCP OAuth", () => {
       Effect.scoped(start(`${server.url.origin}/mcp`, { client_id: "client" })),
     ).finally(() => server.stop(true))
     expect(url.pathname).toBe("/as/authorize")
+  })
+
+  test("uses configured authorization server metadata when the resource publishes none", async () => {
+    const { server: issuer } = authorizationServer({})
+    const resource = Bun.serve({ port: 0, fetch: () => new Response(null, { status: 404 }) })
+    const url = `${resource.url.origin}/mcp`
+    const oauth = {
+      client_id: "client",
+      auth_server_metadata_url: `${issuer.url.origin}/.well-known/oauth-authorization-server`,
+    }
+
+    const { url: authorization } = await Effect.runPromise(Effect.scoped(start(url, oauth)))
+    expect(authorization.origin).toBe(issuer.url.origin)
+    expect(authorization.pathname).toBe("/authorize")
+    expect(authorization.searchParams.get("resource")).toBe(url)
+
+    const { server, tokenRequests } = authorizationServer({})
+    const store = memoryCredentials([credential({ access: "expired", refresh: "refresh", url })])
+    const oauthProvider = await connectProvider(
+      new ConfigMCP.Remote({
+        type: "remote",
+        url,
+        oauth: { ...oauth, auth_server_metadata_url: `${server.url.origin}/.well-known/oauth-authorization-server` },
+      }),
+      store,
+    )
+    await auth(oauthProvider, { serverUrl: url }).finally(() => {
+      resource.stop(true)
+      issuer.stop(true)
+      server.stop(true)
+    })
+    expect(tokenRequests[0]?.get("grant_type")).toBe("refresh_token")
+  })
+
+  test("requests offline_access without forcing a consent prompt", async () => {
+    const { server } = authorizationServer({ scopes_supported: ["read", "offline_access"] })
+    const { url } = await Effect.runPromise(
+      Effect.scoped(start(server, { client_id: "client", scope: "read" })),
+    ).finally(() => server.stop(true))
+    expect(url.searchParams.get("scope")).toBe("read offline_access")
+    expect(url.searchParams.has("prompt")).toBe(false)
   })
 
   test("forwards iss from the redirect so issuer-advertising servers can complete", async () => {

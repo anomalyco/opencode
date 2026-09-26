@@ -163,6 +163,10 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
               Argument.optional,
             ),
             method: Flag.string("method").pipe(Flag.withDescription("Authentication method ID"), Flag.optional),
+            answer: Flag.string("answer").pipe(
+              Flag.withDescription("Provider form answer (key=value; repeat for multiple fields)"),
+              Flag.atMost(100),
+            ),
           },
         }),
         Spec.make("logout", {
@@ -484,11 +488,17 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         }),
       ],
     }),
+    Spec.make("reload", {
+      description: "Reload configuration",
+      params: {
+        ...ServerParams,
+      },
+    }),
     Spec.make("pair", {
-      description: "Show server pairing information",
+      description: "Print one-time links to connect a browser or app",
       params: {
         url: Flag.string("url").pipe(
-          Flag.withDescription("Advertise an external HTTP(S) server URL in the pairing QR code"),
+          Flag.withDescription("Use an external HTTP(S) server URL in pairing links"),
           Flag.mapTryCatch(
             (value) => {
               const url = new URL(value)

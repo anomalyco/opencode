@@ -12,7 +12,7 @@ type Entry<Tab> = {
   description?: Label
   section?: Label
   subtab?: "mcps" | "plugins" | "skills" | "lsps"
-  available?: "desktop" | "browser" | "dev" | "mobile-dev"
+  available?: "desktop" | "browser" | "mobile"
 }
 
 export const clientSettings: Entry<SettingsRootTab>[] = [
@@ -20,9 +20,28 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   { tab: "appearance", label: "settings.general.section.appearance" },
   { tab: "notifications", label: "settings.tab.notifications" },
   { tab: "shortcuts", label: "settings.shortcuts.title", keywords: "keybind keyboard hotkey" },
-  { tab: "experimental", label: "settings.tab.experimental" },
+  {
+    tab: "pairing",
+    label: "settings.pairing.title",
+    keywords: "pair device qr local",
+    available: "desktop",
+  },
+  {
+    tab: "pairing",
+    label: "pair.screenActive.title",
+    description: "pair.screenActive.description",
+    target: "settings-keep-screen-active",
+    keywords: "display sleep awake local",
+    available: "desktop",
+  },
   { tab: "about", label: "settings.tab.about", keywords: "version license credits" },
   { tab: "general", label: "settings.general.row.language.title", target: "settings-language" },
+  {
+    tab: "general",
+    label: "settings.appearance.row.tabs.title",
+    target: "settings-tab-layout",
+    keywords: "vertical horizontal tabs",
+  },
   {
     tab: "general",
     label: "settings.workspaces.default.title",
@@ -64,7 +83,7 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     tab: "general",
     label: "settings.general.row.mobileTitlebarBottom.title",
     target: "settings-mobile-titlebar-bottom",
-    available: "mobile-dev",
+    available: "mobile",
   },
   {
     tab: "general",
@@ -165,25 +184,6 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     section: "settings.general.section.sounds",
     description: "settings.general.sounds.errors.description",
     keywords: "sound audio errors",
-  },
-  {
-    tab: "experimental",
-    label: "settings.general.row.browserPane.title",
-    target: "settings-experimental-browser",
-    available: "browser",
-  },
-  {
-    tab: "experimental",
-    label: "settings.appearance.row.tabs.title",
-    target: "settings-tab-layout",
-    keywords: "vertical horizontal tabs",
-  },
-  { tab: "experimental", label: "settings.appearance.row.projectName.title", target: "settings-show-project-name" },
-  {
-    tab: "experimental",
-    label: "settings.general.row.showProjectIcon.title",
-    target: "settings-show-project-icon",
-    available: "dev",
   },
 ]
 

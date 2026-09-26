@@ -3,10 +3,11 @@ export * as SubagentTool from "./subagent.js"
 import { ToolFailure } from "@opencode/ai"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
-import { Effect, Schema } from "effect"
+import { Effect, Predicate, Schema } from "effect"
 import { Agent } from "../../agent.js"
 import { Config } from "../../config.js"
 import { Job } from "../../job.js"
+import { Model } from "../../model.js"
 import { Permission } from "../../permission.js"
 import { Session } from "../../session.js"
 import { SessionSchema } from "../../session/schema.js"
@@ -26,9 +27,16 @@ const backgroundResult = (sessionID: SessionSchema.ID) => ({
 })
 
 export const Input = Schema.Struct({
-  agent: Schema.String.annotate({ description: "The type of specialized agent to use for this task" }),
+  agent: Schema.String.annotate({
+    description:
+      "The type of specialized agent to use for this task. If the user asks for a subagent by a name that is not one of the available subagents, they most likely mean a model: pick a suitable agent and pass the name through the model parameter instead.",
+  }),
   description: Schema.String.annotate({ description: "A short 3-5 word label for the task, displayed to the user" }),
   prompt: Schema.String.annotate({ description: "The task for the subagent to perform" }),
+  model: Schema.optionalKey(Schema.String).annotate({
+    description:
+      'NEVER set this unless the user explicitly asks for a particular model or variant. The value is written as "providerID/modelID", or "providerID/modelID#variant" to include a variant. Do not guess the ID: look the model up with the models tool, filtering to your own provider first.',
+  }),
   sessionID: Schema.optionalKey(SessionSchema.ID).annotate({
     description:
       "Continue a specific previous subagent conversation by passing its sessionID. Calls without a sessionID start a new conversation.",
@@ -61,7 +69,33 @@ export const Plugin = {
     const agents = yield* Agent.Service
     const config = yield* Config.Service
     const permission = yield* Permission.Service
+    const models = yield* Model.Service
     const subagents = yield* SubagentJob.make
+
+    const resolveModel = Effect.fn("SubagentTool.resolveModel")(function* (input: string) {
+      const ref = yield* Effect.try({
+        try: () => Model.Ref.parse(input),
+        catch: () =>
+          new ToolFailure({
+            message: `Invalid model "${input}". Use "providerID/modelID" or "providerID/modelID#variant".`,
+          }),
+      })
+      const model = (yield* models.available()).find(
+        (model) => model.providerID === ref.providerID && model.id === ref.id,
+      )
+      if (model === undefined)
+        return yield* new ToolFailure({
+          message: `Model "${ref.providerID}/${ref.id}" is not available. Use the models tool to see what is available.`,
+        })
+      if (ref.variant !== undefined && !model.variants.some((variant) => variant.id === ref.variant))
+        return yield* new ToolFailure({
+          message:
+            model.variants.length === 0
+              ? `Model "${ref.providerID}/${ref.id}" has no variants. Omit the variant.`
+              : `Variant "${ref.variant}" is not available for "${ref.providerID}/${ref.id}". Available: ${model.variants.map((variant) => variant.id).join(", ")}.`,
+        })
+      return ref
+    })
 
     yield* ctx.tool
       .transform((editor) =>
@@ -131,24 +165,23 @@ export const Plugin = {
                 return yield* new ToolFailure({
                   message: `Session ${existing.id} is not a child of the current session`,
                 })
+              const override = input.model === undefined ? undefined : yield* resolveModel(input.model)
               // Continuing with a different agent switches the child, mirroring create semantics
-              // where the agent's configured model wins over the inherited one.
-              if (existing !== undefined && existing.agent !== agent.id) {
-                yield* sessions.switchAgent({ sessionID: existing.id, agent: agent.id }).pipe(
-                  Effect.andThen(
-                    agent.model === undefined
-                      ? Effect.void
-                      : sessions.switchModel({ sessionID: existing.id, model: agent.model }),
-                  ),
+              // where an explicit model wins over the agent's configured model, which wins over the inherited one.
+              if (existing !== undefined) {
+                const switched = existing.agent !== agent.id
+                const model = override ?? (switched ? agent.model : undefined)
+                yield* Effect.all([
+                  switched ? sessions.switchAgent({ sessionID: existing.id, agent: agent.id }) : Effect.void,
+                  model === undefined ? Effect.void : sessions.switchModel({ sessionID: existing.id, model }),
+                ]).pipe(
                   Effect.mapError(
-                    (error) =>
-                      new ToolFailure({ message: `Failed to switch subagent session agent: ${existing.id}`, error }),
+                    (error) => new ToolFailure({ message: `Failed to switch subagent session: ${existing.id}`, error }),
                   ),
                 )
               }
 
-              // Model selection is policy/config/session state, not an LLM-facing tool argument.
-              const model = agent.model ?? parent.model
+              const model = override ?? agent.model ?? parent.model
               const child =
                 existing ??
                 (yield* sessions
@@ -234,6 +267,17 @@ export const Plugin = {
         }),
       )
       .pipe(Effect.orDie)
+
+    yield* ctx.tool.hook("execute.before", (event) =>
+      Effect.sync(() => {
+        if (event.tool !== name || !Predicate.isObject(event.input)) return
+        if (event.input.model !== "" && event.input.sessionID !== "") return
+        const input = { ...event.input }
+        if (input.model === "") delete input.model
+        if (input.sessionID === "") delete input.sessionID
+        event.input = input
+      }),
+    )
 
     const hook = (event: SessionHooks["context"]) =>
       Effect.gen(function* () {

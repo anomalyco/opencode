@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Cause, Clock, Duration, Effect, Exit, Fiber, Layer, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Credential } from "@opencode/core/credential"
@@ -599,16 +599,19 @@ describe("Integration", () => {
           expect((yield* integrations.get(integrationID))?.connections).toEqual([
             {
               type: "credential",
+              method: "key",
               id: personal.id,
               label: "Personal",
             },
             {
               type: "credential",
+              method: "key",
               id: work.id,
               label: "Work",
             },
             {
               type: "credential",
+              method: "key",
               id: archived.id,
               label: "Archived",
             },
@@ -616,6 +619,7 @@ describe("Integration", () => {
           ])
           expect(yield* integrations.connection.active(integrationID)).toEqual({
             type: "credential",
+            method: "key",
             id: personal.id,
             label: "Personal",
           })
@@ -627,6 +631,7 @@ describe("Integration", () => {
 
           expect(yield* integrations.connection.active(integrationID)).toEqual({
             type: "credential",
+            method: "key",
             id: work.id,
             label: "Work",
           })
@@ -649,6 +654,7 @@ describe("Integration", () => {
           yield* integrations.connection.remove(work.id)
           expect(yield* integrations.connection.active(integrationID)).toEqual({
             type: "credential",
+            method: "key",
             id: personal.id,
             label: "Personal",
           })
@@ -672,5 +678,18 @@ describe("Integration", () => {
           else process.env.INTEGRATION_TEST_ACME_KEY = previous
         }),
     )
+  })
+})
+
+describe("AuthorizationError", () => {
+  test("reports the underlying cause message", () => {
+    expect(new Integration.AuthorizationError({ cause: new Error("Request failed: 401") }).message).toBe(
+      "Request failed: 401",
+    )
+  })
+
+  test("falls back when the cause carries no message", () => {
+    expect(new Integration.AuthorizationError({ cause: new Error() }).message).toBe("Authorization failed")
+    expect(new Integration.AuthorizationError({ cause: undefined }).message).toBe("Authorization failed")
   })
 })

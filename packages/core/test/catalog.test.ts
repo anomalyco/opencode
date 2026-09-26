@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { LanguageModel } from "@opencode/ai"
 import { OpenAIChat } from "@opencode/ai/protocols"
-import { Effect, Fiber, Layer, Stream } from "effect"
+import { Effect, Fiber, Layer, Ref, Stream } from "effect"
 import { Integration } from "@opencode/core/integration"
 import { Credential } from "@opencode/core/credential"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -148,6 +148,156 @@ describe("Provider and Model", () => {
     }).pipe(Effect.scoped, Effect.provide(localProviderLayer))
   })
 
+  it.effect("reuses the model catalog across credential switches", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const integrations = yield* Integration.Service
+      const credentials = yield* Credential.Service
+      const bus = yield* Bus.Service
+      const providerID = Provider.ID.make("switchable")
+      const integrationID = Integration.ID.make(providerID)
+      yield* integrations.transform((editor) => editor.update(integrationID, () => {}))
+      yield* providers.transform((editor) =>
+        editor.add({
+          info: Provider.Info.empty(providerID),
+          models: [Model.Info.default(providerID, Model.ID.make("chat"))],
+        }),
+      )
+      expect(yield* models.available()).toEqual([])
+      const log = yield* Ref.make<string[]>([])
+      yield* bus.subscribe().pipe(
+        Stream.runForEach((event) => Ref.update(log, (types) => [...types, event.type])),
+        Effect.forkScoped({ startImmediately: true }),
+      )
+      yield* Effect.yieldNow
+      const updates = Ref.get(log).pipe(
+        Effect.map((types) => types.filter((type) => type === Model.Event.Updated.type).length),
+      )
+
+      const first = yield* credentials.create({
+        integrationID,
+        value: Credential.Key.make({ type: "key", key: "first" }),
+      })
+      const materialized = yield* models.available()
+      expect(materialized).toHaveLength(1)
+      // Credential events reach Model on other fibers; let the connect land before switching.
+      yield* settle(updates.pipe(Effect.map((count) => count >= 1)))
+
+      const second = yield* credentials.create({
+        integrationID,
+        value: Credential.Key.make({ type: "key", key: "second" }),
+      })
+      expect(yield* models.available()).toBe(materialized)
+      yield* credentials.activate(first.id)
+      expect(yield* models.available()).toBe(materialized)
+      yield* credentials.remove(first.id)
+      expect(yield* models.available()).toBe(materialized)
+
+      // Disconnecting is a real change whose model.updated follows every earlier one in the log,
+      // so once it has arrived the total shows whether any switch above published as well.
+      yield* credentials.remove(second.id)
+      expect(yield* models.available()).toEqual([])
+      yield* settle(
+        Ref.get(log).pipe(
+          Effect.map(
+            (types) =>
+              types.lastIndexOf(Model.Event.Updated.type) > types.lastIndexOf(Credential.Event.Updated.type),
+          ),
+        ),
+      )
+      expect(yield* updates).toBe(2)
+    }),
+  )
+
+  it.effect("persists direct edits to models returned by list and get", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const providerID = Provider.ID.make("direct")
+      const listed = Model.ID.make("listed")
+      const fetched = Model.ID.make("fetched")
+      const definitions = [Model.Info.default(providerID, listed), Model.Info.default(providerID, fetched)]
+      yield* providers.transform((editor) =>
+        editor.add({ info: { ...Provider.Info.empty(providerID), activation: "enabled" }, models: definitions }),
+      )
+      yield* models.transform((editor) => {
+        editor.list(providerID).forEach((model) => {
+          model.limit.context = 4096
+        })
+        required(editor.get(providerID, fetched)).capabilities.input.push("pdf")
+      })
+
+      expect(yield* models.get(providerID, listed)).toMatchObject({
+        limit: { context: 4096 },
+        capabilities: { input: ["text", "image"] },
+      })
+      expect(yield* models.get(providerID, fetched)).toMatchObject({
+        limit: { context: 4096 },
+        capabilities: { input: ["text", "image", "pdf"] },
+      })
+      expect(definitions.map((model) => model.limit.context)).toEqual([200_000, 200_000])
+    }),
+  )
+
+  it.effect("gives foreign definitions the registering provider's identity", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const source = Provider.ID.make("source")
+      const mirror = Provider.ID.make("mirror")
+      const modelID = Model.ID.make("chat")
+      const definitions = [Model.Info.default(source, modelID)]
+      yield* providers.transform((editor) => {
+        editor.add({ info: { ...Provider.Info.empty(source), activation: "enabled" }, models: definitions })
+        editor.add({ info: { ...Provider.Info.empty(mirror), activation: "enabled" }, models: definitions })
+      })
+
+      expect((yield* models.available()).map((model) => model.providerID).toSorted()).toEqual([mirror, source])
+      expect(yield* models.get(mirror, modelID)).toMatchObject({ id: modelID, providerID: mirror })
+      expect((yield* providers.snapshot()).records.get(source)?.models.get(modelID)).toBe(definitions[0])
+    }),
+  )
+
+  it.effect("keeps materialized models when another provider becomes available", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const integrations = yield* Integration.Service
+      const credentials = yield* Credential.Service
+      const existing = Provider.ID.make("existing")
+      const added = Provider.ID.make("added")
+      const edited = Model.ID.make("edited")
+      const untouched = Model.ID.make("untouched")
+      yield* integrations.transform((editor) => editor.update(Integration.ID.make(added), () => {}))
+      yield* providers.transform((editor) => {
+        editor.add({
+          info: { ...Provider.Info.empty(existing), activation: "enabled" },
+          models: [Model.Info.default(existing, edited), Model.Info.default(existing, untouched)],
+        })
+        editor.add({ info: Provider.Info.empty(added), models: [Model.Info.default(added, Model.ID.make("chat"))] })
+      })
+      yield* models.transform((editor) =>
+        editor.update(existing, edited, (model) => {
+          model.limit.context = 1
+        }),
+      )
+      const before = required(yield* models.get(existing, untouched))
+
+      yield* credentials.create({
+        integrationID: Integration.ID.make(added),
+        value: Credential.Key.make({ type: "key", key: "secret" }),
+      })
+      expect((yield* models.available()).map((model) => model.providerID).toSorted()).toEqual([
+        added,
+        existing,
+        existing,
+      ])
+      expect(yield* models.get(existing, untouched)).toBe(before)
+      expect(yield* models.get(existing, edited)).toMatchObject({ limit: { context: 1 } })
+    }),
+  )
+
   it.effect("derives availability from a provider's integration", () => {
     const integrationID = Integration.ID.make("gateway")
     const providerID = Provider.ID.make("remote")
@@ -244,13 +394,13 @@ describe("Provider and Model", () => {
       const providerID = Provider.ID.make("test")
       yield* providers.transform((editor) =>
         editor.update(providerID, (provider) => {
-          provider.package = Provider.aisdk("@ai-sdk/openai-compatible")
+          provider.package = Provider.aisdk("custom-sdk")
           provider.settings = { baseURL: "https://override.example.com" }
         }),
       )
 
       expect(required(yield* providers.get(providerID))).toMatchObject({
-        package: Provider.aisdk("@ai-sdk/openai-compatible"),
+        package: Provider.aisdk("custom-sdk"),
         settings: { baseURL: "https://override.example.com" },
       })
     }),
@@ -264,21 +414,21 @@ describe("Provider and Model", () => {
       const modelID = Model.ID.make("model")
       yield* providers.transform((editor) => {
         editor.update(providerID, (provider) => {
-          provider.package = Provider.aisdk("@ai-sdk/openai-compatible")
+          provider.package = Provider.aisdk("custom-sdk")
           provider.settings = { baseURL: "https://provider.example.com" }
         })
       })
       yield* models.transform((editor) => {
         editor.update(providerID, modelID, (model) => {
           model.modelID = Model.ID.make("upstream-model")
-          model.package = Provider.aisdk("@ai-sdk/openai-compatible")
+          model.package = Provider.aisdk("custom-sdk")
           model.settings = { baseURL: "https://override.example.com" }
         })
       })
 
       expect(required(yield* models.get(providerID, modelID))).toMatchObject({
         modelID: Model.ID.make("upstream-model"),
-        package: Provider.aisdk("@ai-sdk/openai-compatible"),
+        package: Provider.aisdk("custom-sdk"),
         settings: { baseURL: "https://override.example.com" },
       })
     }),
@@ -292,20 +442,76 @@ describe("Provider and Model", () => {
       const modelID = Model.ID.make("model")
       yield* providers.transform((editor) => {
         editor.update(providerID, (provider) => {
-          provider.package = Provider.aisdk("@ai-sdk/openai-compatible")
+          provider.package = Provider.aisdk("custom-sdk")
           provider.settings = { baseURL: "https://provider.example.com" }
         })
         editor.models.update(providerID, modelID, () => {})
       })
 
       expect(required(yield* models.get(providerID, modelID))).toMatchObject({
-        package: Provider.aisdk("@ai-sdk/openai-compatible"),
+        package: Provider.aisdk("custom-sdk"),
         settings: { baseURL: "https://provider.example.com" },
       })
     }),
   )
 
-  it.effect("resolves provider and model overlay merges", () =>
+  it.effect("rewrites AI SDK packages and their options on write", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const models = yield* Model.Service
+      const providerID = Provider.ID.make("bedrock")
+      const modelID = Model.ID.make("claude")
+      yield* providers.transform((editor) => {
+        editor.update(providerID, (provider) => {
+          provider.package = Provider.aisdk("@ai-sdk/amazon-bedrock")
+          provider.settings = { region: "us-east-1", extraBody: { tag: "provider" } }
+        })
+        editor.models.update(providerID, modelID, () => {})
+        editor.update(Provider.ID.make("gitlab"), (provider) => {
+          provider.package = Provider.aisdk("@ai-sdk/gitlab")
+          provider.settings = { extraBody: { kept: true } }
+        })
+      })
+      yield* models.transform((editor) => {
+        editor.update(providerID, modelID, (model) => {
+          model.modelID = Model.ID.make("anthropic.claude-opus-4-8")
+          model.package = Provider.aisdk("@ai-sdk/amazon-bedrock")
+          model.settings = { reasoningConfig: { type: "adaptive", maxReasoningEffort: "high" } }
+          model.variants = [
+            {
+              id: Model.VariantID.make("max"),
+              settings: { reasoningConfig: { type: "adaptive", maxReasoningEffort: "max" } },
+            },
+          ]
+        })
+      })
+
+      expect(required(yield* providers.get(providerID))).toMatchObject({
+        package: "@opencode/ai/providers/amazon-bedrock",
+        settings: { region: "us-east-1" },
+        body: { tag: "provider" },
+      })
+      const model = required(yield* models.get(providerID, modelID))
+      expect(model.package).toBe("@opencode/ai/providers/amazon-bedrock")
+      expect(model.settings).not.toHaveProperty("reasoningConfig")
+      expect(model.body).toMatchObject({
+        additionalModelRequestFields: { thinking: { type: "adaptive" }, output_config: { effort: "high" } },
+      })
+      expect(model.variants).toEqual([
+        {
+          id: Model.VariantID.make("max"),
+          settings: {},
+          body: { additionalModelRequestFields: { thinking: { type: "adaptive" }, output_config: { effort: "max" } } },
+        },
+      ])
+      expect(required(yield* providers.get(Provider.ID.make("gitlab")))).toMatchObject({
+        package: Provider.aisdk("@ai-sdk/gitlab"),
+        settings: { extraBody: { kept: true } },
+      })
+    }),
+  )
+
+  it.effect("keeps settings scoped while resolving request overlay merges", () =>
     Effect.gen(function* () {
       const providers = yield* Provider.Service
       const models = yield* Model.Service
@@ -327,6 +533,7 @@ describe("Provider and Model", () => {
       })
 
       const model = required(yield* models.get(providerID, modelID))
+      expect((yield* providers.get(providerID))?.settings).toEqual({ provider: true, shared: "provider" })
       expect(model.settings).toEqual({ provider: true, shared: "model", model: true })
       expect(model.headers).toEqual({ provider: "provider", shared: "model", model: "model" })
       expect(model.body).toEqual({ provider: true, shared: "model", model: true })
@@ -454,4 +661,13 @@ describe("Provider and Model", () => {
       expect(yield* models.small(providerID)).toBeUndefined()
     }),
   )
+})
+
+// Bus subscribers run on their own fibers, so give them turns until the condition holds.
+const settle = Effect.fnUntraced(function* (condition: Effect.Effect<boolean>) {
+  for (let attempt = 0; attempt < 100; attempt++) {
+    if (yield* condition) return
+    yield* Effect.yieldNow
+  }
+  return yield* Effect.die("Timed out waiting for catalog events")
 })

@@ -1,14 +1,16 @@
-import { constructor, constants, methods } from "../interpreter/native.js"
+import { constructor, constants, type Method, methods } from "../interpreter/native.js"
+import { coerceToNumber, type Value } from "../interpreter/objects.js"
 import { rangeError, typeError } from "../interpreter/model.js"
-import type { Runner } from "../interpreter/runner.js"
-import { coercion, coerceToString } from "./value.js"
+import type { Interpreter } from "../interpreter/interpreter.js"
+import { withPrimitives } from "../interpreter/callback.js"
+import { coerce, coercion } from "./value.js"
 
-export const numberGlobal = <R>(runner: Runner<R>) => {
-  const protos = runner.prototypes
-  const number = constructor<R>(protos, protos.Number, {
+export const numberGlobal = <R>(ctx: Interpreter<R>) => {
+  const builtins = ctx.builtins
+  const number = constructor<R>(builtins, builtins.Number, {
     name: "Number",
     length: 1,
-    call: coercion(runner, "Number").call,
+    call: coercion(ctx, "Number").call,
   })
   constants(number, {
     MAX_SAFE_INTEGER: Number.MAX_SAFE_INTEGER,
@@ -20,79 +22,58 @@ export const numberGlobal = <R>(runner: Runner<R>) => {
     POSITIVE_INFINITY: Number.POSITIVE_INFINITY,
     NEGATIVE_INFINITY: Number.NEGATIVE_INFINITY,
   })
-  methods(protos, number, [
+  methods(builtins, number, [
     ["isInteger", 1, (_, args) => Number.isInteger(args[0])],
     ["isFinite", 1, (_, args) => Number.isFinite(args[0])],
     ["isNaN", 1, (_, args) => Number.isNaN(args[0])],
     ["isSafeInteger", 1, (_, args) => Number.isSafeInteger(args[0])],
-    [
-      "parseInt",
-      2,
-      (_, args) => {
-        const radix = args[1]
-        if (radix !== undefined && typeof radix !== "number") {
-          throw typeError("Number.parseInt expects a numeric radix.")
-        }
-        return parseInt(coerceToString(args[0]), radix)
-      },
-    ],
-    ["parseFloat", 1, (_, args) => parseFloat(coerceToString(args[0]))],
+    ["parseInt", 2, (_, args) => coerce(ctx, "parseInt", args)],
+    ["parseFloat", 1, (_, args) => coerce(ctx, "parseFloat", args)],
   ])
 
-  const self = (thisValue: unknown, name: string): number => {
+  const self = (thisValue: Value, name: string): number => {
     if (typeof thisValue === "number") return thisValue
     throw typeError(`Number.prototype.${name} requires that 'this' be a Number.`)
   }
-  const optNum = (name: string, arg: unknown): number | undefined => {
-    if (arg === undefined) return undefined
-    if (typeof arg !== "number") throw typeError(`Number.${name} expects a number argument.`)
-    return arg
-  }
-  methods(protos, protos.Number, [
-    ["toFixed", 1, (thisValue, args) => self(thisValue, "toFixed").toFixed(optNum("toFixed", args[0]))],
-    [
-      "toExponential",
-      1,
-      (thisValue, args) => self(thisValue, "toExponential").toExponential(optNum("toExponential", args[0])),
-    ],
-    [
-      "toPrecision",
-      1,
-      (thisValue, args) => {
-        const value = self(thisValue, "toPrecision")
-        const digits = optNum("toPrecision", args[0])
-        return digits === undefined ? value.toString() : value.toPrecision(digits)
-      },
-    ],
-    [
-      "toString",
-      1,
-      (thisValue, args) => {
-        const value = self(thisValue, "toString")
-        const radix = optNum("toString", args[0])
-        if (radix !== undefined && (radix < 2 || radix > 36)) {
-          throw rangeError("Number.toString radix must be between 2 and 36.")
-        }
-        return value.toString(radix)
-      },
-    ],
+  // The receiver is checked first, then the one argument converts through ToPrimitive with the number hint.
+  const formatting = (name: string, op: (value: number, digits: number | undefined) => string): Method => [
+    name,
+    1,
+    (thisValue, args) => {
+      const value = self(thisValue, name)
+      return withPrimitives(ctx, "number", [args[0]], ([digits]) =>
+        op(value, digits === undefined ? undefined : coerceToNumber(digits)),
+      )
+    },
+  ]
+  methods(builtins, builtins.Number, [
+    formatting("toFixed", (value, digits) => value.toFixed(digits)),
+    ["toLocaleString", 0, (thisValue) => self(thisValue, "toLocaleString").toLocaleString("en-US")],
+    formatting("toExponential", (value, digits) => value.toExponential(digits)),
+    formatting("toPrecision", (value, digits) => (digits === undefined ? value.toString() : value.toPrecision(digits))),
+    formatting("toString", (value, radix) => {
+      if (radix !== undefined && (radix < 2 || radix > 36)) {
+        throw rangeError("Number.toString radix must be between 2 and 36.")
+      }
+      return value.toString(radix)
+    }),
     ["valueOf", 0, (thisValue) => self(thisValue, "valueOf")],
   ])
   return number
 }
 
-export const booleanGlobal = <R>(runner: Runner<R>) => {
-  const protos = runner.prototypes
-  const boolean = constructor<R>(protos, protos.Boolean, {
+export const booleanGlobal = <R>(ctx: Interpreter<R>) => {
+  const builtins = ctx.builtins
+  const boolean = constructor<R>(builtins, builtins.Boolean, {
     name: "Boolean",
     length: 1,
-    call: coercion(runner, "Boolean").call,
+    call: coercion(ctx, "Boolean").call,
   })
-  const self = (thisValue: unknown, name: string): boolean => {
+  const self = (thisValue: Value, name: string): boolean => {
     if (typeof thisValue === "boolean") return thisValue
     throw typeError(`Boolean.prototype.${name} requires that 'this' be a Boolean.`)
   }
-  methods(protos, protos.Boolean, [
+  methods(builtins, builtins.Boolean, [
     ["toString", 0, (thisValue) => String(self(thisValue, "toString"))],
     ["valueOf", 0, (thisValue) => self(thisValue, "valueOf")],
   ])

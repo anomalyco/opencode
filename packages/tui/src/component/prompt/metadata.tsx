@@ -43,25 +43,25 @@ export function PromptMetadataRow(props: {
           {(agent) => <text fg={fade(props.highlight, props.agentAlpha)}>{agent()}</text>}
         </Show>
         <Show when={props.mode === "normal" && layout().auto}>
-          <text fg={fade(theme.text.subdued, props.agentAlpha)}>auto</text>
+          <text fg={fade(theme.text.muted, props.agentAlpha)}>auto</text>
         </Show>
         <Show when={props.mode === "normal" && layout().model}>
           <box flexDirection="row" gap={1} flexGrow={1} flexShrink={1} minWidth={0}>
             <Show when={layout().agent}>
-              <text fg={fade(theme.text.subdued, props.modelAlpha)}>·</text>
+              <text fg={fade(theme.text.muted, props.modelAlpha)}>·</text>
             </Show>
             <text
               flexShrink={1}
               minWidth={0}
               wrapMode="none"
               truncate
-              fg={fade(props.muted ? theme.text.subdued : theme.text.default, props.modelAlpha)}
+              fg={fade(props.muted ? theme.text.muted : theme.text.base, props.modelAlpha)}
             >
               {layout().model}
             </text>
             <Show when={layout().provider}>
               {(provider) => (
-                <text flexShrink={0} fg={fade(theme.text.subdued, props.modelAlpha)}>
+                <text flexShrink={0} fg={fade(theme.text.muted, props.modelAlpha)}>
                   {provider()}
                 </text>
               )}
@@ -69,9 +69,9 @@ export function PromptMetadataRow(props: {
             <Show when={layout().variant}>
               {(variant) => (
                 <>
-                  <text fg={fade(theme.text.subdued, props.variantAlpha)}>·</text>
+                  <text fg={fade(theme.text.muted, props.variantAlpha)}>·</text>
                   <text
-                    fg={fade(theme.text.feedback.warning.default, props.variantAlpha)}
+                    fg={fade(theme.text.feedback.warning.base, props.variantAlpha)}
                     attributes={TextAttributes.BOLD}
                   >
                     {variant()}

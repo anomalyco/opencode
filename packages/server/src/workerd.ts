@@ -113,6 +113,7 @@ const fileSystemLayer = Layer.succeed(
     read: () => unavailable("FileSystem.read"),
     list: () => unavailable("FileSystem.list"),
     find: () => unavailable("FileSystem.find"),
+    write: () => unavailable("FileSystem.write"),
   }),
 )
 

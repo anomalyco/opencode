@@ -1,6 +1,8 @@
 import { Effect } from "effect"
+import { Arr, Callable, coerceToInteger, coerceToString, get, Obj, type Value } from "./objects.js"
 import { arrayGlobal } from "../stdlib/array.js"
-import { mapGlobal, setGlobal } from "../stdlib/collections.js"
+import { textDecoderGlobal, textEncoderGlobal, uint8ArrayGlobal } from "../stdlib/bytes.js"
+import { mapGlobal, setGlobal, weakMapGlobal, weakSetGlobal } from "../stdlib/collections.js"
 import { consoleGlobal } from "../stdlib/console.js"
 import { dateGlobal } from "../stdlib/date.js"
 import { jsonGlobal } from "../stdlib/json.js"
@@ -10,33 +12,45 @@ import { objectGlobal } from "../stdlib/object.js"
 import { regexpGlobal } from "../stdlib/regexp.js"
 import { stringGlobal } from "../stdlib/string.js"
 import { uriGlobal, urlGlobal, urlSearchParamsGlobal } from "../stdlib/url.js"
+import { headersGlobal } from "../stdlib/headers.js"
+import { iteratorGlobals } from "../stdlib/iterator.js"
 import { coercion } from "../stdlib/value.js"
-import { base64Global, cryptoGlobal } from "../stdlib/web.js"
+import { base64Global, cryptoGlobal, structuredCloneGlobal } from "../stdlib/web.js"
 import { ToolReference } from "../tool-runtime.js"
 import { errorGlobal } from "./errors.js"
 import { errorTypes } from "./intrinsics.js"
-import { constants, constructor, native } from "./native.js"
+import { constants, constructor, methods, native, receiver } from "./native.js"
 import { AsyncIteratorSymbol, IteratorSymbol, typeError } from "./model.js"
+import { checkArrayLength } from "./limits.js"
 import { generatorGlobals } from "./generators.js"
-import { promiseGlobal, type PromiseRuntime } from "./promises.js"
-import type { Runner } from "./runner.js"
-
-/** What the built-in globals need from the interpreter that owns them. */
-export type Host<R> = {
-  readonly runner: Runner<R>
-  readonly promises: PromiseRuntime<R>
-  readonly search: (args: Array<unknown>) => Effect.Effect<unknown, unknown, R>
-  readonly toolKeys: (path: ReadonlyArray<string>) => ReadonlyArray<string>
-  readonly logs: Array<string>
-}
+import { promiseGlobal } from "./promises.js"
+import type { Interpreter } from "./interpreter.js"
 
 // Function.prototype.constructor exists so `fn.constructor === Function` holds; dynamic code is unsupported.
-const functionGlobal = <R>(runner: Runner<R>) => {
+const functionGlobal = <R>(ctx: Interpreter<R>) => {
   const reject = () =>
     Effect.sync(() => {
       throw typeError("The Function constructor is not supported; write the function inline.")
     })
-  return constructor<R>(runner.prototypes, runner.prototypes.Function, {
+  const target = (thisValue: Value, method: string) => receiver(Callable, thisValue, `Function.prototype.${method}`)
+  methods(ctx.builtins, ctx.builtins.Function, [
+    ["call", 1, (thisValue, args) => ctx.call(target(thisValue, "call"), args[0], args.slice(1))],
+    ["apply", 2, (thisValue, args) => ctx.call(target(thisValue, "apply"), args[0], listFromArrayLike(args[1]))],
+    [
+      "bind",
+      1,
+      (thisValue, args) => {
+        const fn = target(thisValue, "bind")
+        const bound = args.slice(1)
+        return native<R>(ctx.builtins, {
+          name: `bound ${coerceToString(get(fn, "name"))}`,
+          length: Math.max(0, fn.length - bound.length),
+          call: (_, rest) => ctx.call(fn, args[0], [...bound, ...rest]),
+        })
+      },
+    ],
+  ])
+  return constructor<R>(ctx.builtins, ctx.builtins.Function, {
     name: "Function",
     length: 1,
     call: reject,
@@ -44,8 +58,18 @@ const functionGlobal = <R>(runner: Runner<R>) => {
   })
 }
 
-const symbolGlobal = <R>(runner: Runner<R>) => {
-  const symbol = native<R>(runner.prototypes, {
+// CreateListFromArrayLike: `apply` reads `length` and the indexed properties of any object.
+const listFromArrayLike = (value: Value): Array<Value> => {
+  if (value === undefined || value === null) return []
+  if (value instanceof Arr) return [...value.items]
+  if (!(value instanceof Obj)) throw typeError("Function.prototype.apply expects an array-like argument list.")
+  const length = Math.max(0, coerceToInteger(get(value, "length")))
+  checkArrayLength(length)
+  return Array.from({ length }, (_, index) => get(value, String(index)))
+}
+
+const symbolGlobal = <R>(ctx: Interpreter<R>) => {
+  const symbol = native<R>(ctx.builtins, {
     name: "Symbol",
     call: () =>
       Effect.sync(() => {
@@ -57,52 +81,60 @@ const symbolGlobal = <R>(runner: Runner<R>) => {
   return symbol
 }
 
-type Factory = <R>(host: Host<R>) => unknown
+type Factory = <R>(ctx: Interpreter<R>) => Value
 
 // A table rather than a list so the names are known before any runtime exists.
 const table: Record<string, Factory> = {
   tools: () => new ToolReference([]),
-  search: (host) =>
-    native(host.runner.prototypes, { name: "search", call: (_, args) => host.search(args), callback: false }),
+  search: (ctx) =>
+    native(ctx.builtins, { name: "search", call: (_, args) => ctx.tool(ctx.tools.search, args), callback: false }),
   undefined: () => undefined,
   NaN: () => NaN,
   Infinity: () => Infinity,
-  Object: (host) => objectGlobal(host.runner, host.toolKeys),
-  Function: (host) => functionGlobal(host.runner),
-  Array: (host) => arrayGlobal(host.runner),
-  Math: (host) => mathGlobal(host.runner),
-  JSON: (host) => jsonGlobal(host.runner),
-  console: (host) => consoleGlobal(host.runner, host.logs),
-  Promise: (host) => promiseGlobal(host.runner, host.promises),
-  Symbol: (host) => symbolGlobal(host.runner),
-  Number: (host) => numberGlobal(host.runner),
-  String: (host) => stringGlobal(host.runner),
-  Boolean: (host) => booleanGlobal(host.runner),
-  parseInt: (host) => coercion(host.runner, "parseInt", 2),
-  parseFloat: (host) => coercion(host.runner, "parseFloat"),
-  isFinite: (host) => coercion(host.runner, "isFinite"),
-  isNaN: (host) => coercion(host.runner, "isNaN"),
-  Date: (host) => dateGlobal(host.runner),
-  RegExp: (host) => regexpGlobal(host.runner),
-  Map: (host) => mapGlobal(host.runner),
-  Set: (host) => setGlobal(host.runner),
-  URL: (host) => urlGlobal(host.runner),
-  URLSearchParams: (host) => urlSearchParamsGlobal(host.runner),
-  encodeURI: (host) => uriGlobal(host.runner, "encodeURI"),
-  encodeURIComponent: (host) => uriGlobal(host.runner, "encodeURIComponent"),
-  decodeURI: (host) => uriGlobal(host.runner, "decodeURI"),
-  decodeURIComponent: (host) => uriGlobal(host.runner, "decodeURIComponent"),
-  atob: (host) => base64Global(host.runner, "atob"),
-  btoa: (host) => base64Global(host.runner, "btoa"),
-  crypto: (host) => cryptoGlobal(host.runner),
-  ...Object.fromEntries(errorTypes.map((type) => [type, <R>(host: Host<R>) => errorGlobal(type, host.runner)])),
+  Object: (ctx) => objectGlobal(ctx),
+  Function: (ctx) => functionGlobal(ctx),
+  Array: (ctx) => arrayGlobal(ctx),
+  Math: (ctx) => mathGlobal(ctx),
+  JSON: (ctx) => jsonGlobal(ctx),
+  console: (ctx) => consoleGlobal(ctx),
+  Promise: (ctx) => promiseGlobal(ctx),
+  Symbol: (ctx) => symbolGlobal(ctx),
+  Iterator: (ctx) => iteratorGlobals(ctx),
+  Number: (ctx) => numberGlobal(ctx),
+  String: (ctx) => stringGlobal(ctx),
+  Boolean: (ctx) => booleanGlobal(ctx),
+  parseInt: (ctx) => coercion(ctx, "parseInt", 2),
+  parseFloat: (ctx) => coercion(ctx, "parseFloat"),
+  isFinite: (ctx) => coercion(ctx, "isFinite"),
+  isNaN: (ctx) => coercion(ctx, "isNaN"),
+  Date: (ctx) => dateGlobal(ctx),
+  RegExp: (ctx) => regexpGlobal(ctx),
+  Map: (ctx) => mapGlobal(ctx),
+  Set: (ctx) => setGlobal(ctx),
+  WeakMap: (ctx) => weakMapGlobal(ctx),
+  WeakSet: (ctx) => weakSetGlobal(ctx),
+  URL: (ctx) => urlGlobal(ctx),
+  URLSearchParams: (ctx) => urlSearchParamsGlobal(ctx),
+  Headers: (ctx) => headersGlobal(ctx),
+  Uint8Array: (ctx) => uint8ArrayGlobal(ctx),
+  TextEncoder: (ctx) => textEncoderGlobal(ctx),
+  TextDecoder: (ctx) => textDecoderGlobal(ctx),
+  encodeURI: (ctx) => uriGlobal(ctx, "encodeURI"),
+  encodeURIComponent: (ctx) => uriGlobal(ctx, "encodeURIComponent"),
+  decodeURI: (ctx) => uriGlobal(ctx, "decodeURI"),
+  decodeURIComponent: (ctx) => uriGlobal(ctx, "decodeURIComponent"),
+  atob: (ctx) => base64Global(ctx, "atob"),
+  btoa: (ctx) => base64Global(ctx, "btoa"),
+  crypto: (ctx) => cryptoGlobal(ctx),
+  structuredClone: (ctx) => structuredCloneGlobal(ctx),
+  ...Object.fromEntries(errorTypes.map((type) => [type, <R>(ctx: Interpreter<R>) => errorGlobal(type, ctx)])),
 }
 
 /** Names bound in every program before extensions apply. */
 export const globalNames: ReadonlySet<string> = new Set(Object.keys(table))
 
 /** The immutable global bindings of every program, in declaration order. */
-export const globals = <R>(host: Host<R>): ReadonlyArray<readonly [string, unknown]> => {
-  generatorGlobals(host.runner, host.promises)
-  return Object.entries(table).map(([name, factory]) => [name, factory(host)] as const)
+export const globals = <R>(ctx: Interpreter<R>): ReadonlyArray<readonly [string, Value]> => {
+  generatorGlobals(ctx)
+  return Object.entries(table).map(([name, factory]) => [name, factory(ctx)] as const)
 }

@@ -75,7 +75,6 @@ export function SettingsSearch() {
       servers: inventory(),
       desktop: platform.platform === "desktop",
       browser: !!platform.browserPane,
-      dev: import.meta.env.VITE_OPENCODE_CHANNEL !== "prod",
       mobile: mobile(),
       translate: language.t,
     }),

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "2.0.3",
+  "version": "2.0.18",
   "name": "@opencode/core",
   "type": "module",
   "license": "MIT",
@@ -81,6 +81,7 @@
     }
   },
   "devDependencies": {
+    "@ai-sdk/openai-compatible": "2.0.41",
     "@effect/platform-node": "catalog:",
     "@effect/sql-sqlite-bun": "catalog:",
     "@modelcontextprotocol/server": "2.0.0",
@@ -100,14 +101,8 @@
     "drizzle-kit": "catalog:"
   },
   "dependencies": {
-    "@ai-sdk/alibaba": "1.0.17",
-    "@ai-sdk/anthropic": "3.0.82",
-    "@ai-sdk/azure": "3.0.88",
     "@ai-sdk/cohere": "3.0.27",
     "@ai-sdk/gateway": "3.0.104",
-    "@ai-sdk/google-vertex": "4.0.128",
-    "@ai-sdk/mistral": "3.0.51",
-    "@ai-sdk/openai-compatible": "2.0.41",
     "@ai-sdk/perplexity": "3.0.26",
     "@ai-sdk/provider": "3.0.8",
     "@ai-sdk/provider-utils": "4.0.23",
@@ -116,6 +111,7 @@
     "@ff-labs/fff-node": "0.10.5",
     "@lydell/node-pty": "catalog:",
     "@modelcontextprotocol/client": "2.0.0",
+    "@modelcontextprotocol/core": "2.0.0",
     "@opencode-ai/pty": "0.1.13",
     "@opencode/ai": "workspace:*",
     "@opencode/codemode": "workspace:*",
@@ -126,13 +122,12 @@
     "@parcel/watcher": "2.5.1",
     "@silvia-odwyer/photon-node": "0.3.4",
     "@standard-schema/spec": "catalog:",
-    "ai-gateway-provider": "3.1.2",
     "bun-pty": "0.4.8",
     "diff": "catalog:",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "fuzzysort": "3.1.0",
-    "gitlab-ai-provider": "6.12.1",
+    "gitlab-ai-provider": "6.18.0",
     "google-auth-library": "10.5.0",
     "gray-matter": "4.0.3",
     "htmlparser2": "8.0.2",

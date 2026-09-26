@@ -4,6 +4,7 @@ import { describe, expect } from "bun:test"
 import { Effect, Encoding, Ref, Schema, Stream } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import {
+  Media,
   CacheHint,
   GenerationOptions,
   type LanguageModel,
@@ -221,6 +222,48 @@ describe("Bedrock Converse route", () => {
       // additionalModelRequestFields as top_k.
       expect(prepared.body.inferenceConfig).toEqual({ maxTokens: 64, temperature: 0 })
       expect(prepared.body.additionalModelRequestFields).toEqual({ top_k: 40 })
+    }),
+  )
+
+  it.effect("omits maxTokens only for Nova 2 at high reasoning effort", () =>
+    Effect.gen(function* () {
+      const inferenceConfig = (modelID: string, maxReasoningEffort: string) =>
+        compileRequest(
+          LLMRequest.update(baseRequest, {
+            model: AmazonBedrock.model(modelID, {
+              baseURL: "https://bedrock-runtime.test",
+              apiKey: "test-bearer",
+              body: { additionalModelRequestFields: { reasoningConfig: { type: "enabled", maxReasoningEffort } } },
+            }),
+          }),
+        ).pipe(Effect.map((prepared) => prepared.body.inferenceConfig))
+
+      expect(yield* inferenceConfig("us.amazon.nova-2-lite-v1:0", "high")).toEqual({ temperature: 0 })
+      expect(yield* inferenceConfig("us.amazon.nova-2-lite-v1:0", "low")).toEqual({ maxTokens: 64, temperature: 0 })
+      expect(yield* inferenceConfig("us.xai.grok-4.6", "high")).toEqual({ maxTokens: 64, temperature: 0 })
+    }),
+  )
+
+  it.effect("fits a Claude thinking budget below maxTokens", () =>
+    Effect.gen(function* () {
+      const fields = (maxTokens: number, budgetTokens: number, topK?: number) =>
+        compileRequest(
+          LLMRequest.update(baseRequest, {
+            model: AmazonBedrock.model("us.anthropic.claude-haiku-4-5-20251001-v1:0", {
+              baseURL: "https://bedrock-runtime.test",
+              apiKey: "test-bearer",
+              thinking: { type: "enabled", budgetTokens },
+            }),
+            generation: GenerationOptions.make({ maxTokens, topK }),
+          }),
+        ).pipe(Effect.map((prepared) => prepared.body.additionalModelRequestFields))
+
+      expect(yield* fields(64_000, 31_999)).toEqual({ thinking: { type: "enabled", budget_tokens: 31_999 } })
+      expect(yield* fields(20_000, 31_999, 40)).toEqual({
+        top_k: 40,
+        thinking: { type: "enabled", budget_tokens: 10_000 },
+      })
+      expect(yield* fields(1_500, 31_999)).toEqual({ thinking: { type: "enabled", budget_tokens: 1_024 } })
     }),
   )
 
@@ -1678,10 +1721,10 @@ describe("Bedrock Converse route", () => {
           messages: [
             Message.user([
               { type: "text", text: "What is in this image?" },
-              { type: "media", mediaType: "image/png", data: "AAAA" },
-              { type: "media", mediaType: "image/jpeg", data: "BBBB" },
-              { type: "media", mediaType: "image/jpg", data: "CCCC" },
-              { type: "media", mediaType: "image/webp", data: "DDDD" },
+              { type: "media", media: Media.base64("AAAA", "image/png") },
+              { type: "media", media: Media.base64("BBBB", "image/jpeg") },
+              { type: "media", media: Media.base64("CCCC", "image/jpg") },
+              { type: "media", media: Media.base64("DDDD", "image/webp") },
             ]),
           ],
           cache: "none",
@@ -1712,7 +1755,9 @@ describe("Bedrock Converse route", () => {
         LLM.request({
           id: "req_image_bytes",
           model,
-          messages: [Message.user([{ type: "media", mediaType: "image/png", data: new Uint8Array([1, 2, 3, 4, 5]) }])],
+          messages: [
+            Message.user([{ type: "media", media: Media.bytes(new Uint8Array([1, 2, 3, 4, 5]), "image/png") }]),
+          ],
         }),
       )
 
@@ -1733,12 +1778,31 @@ describe("Bedrock Converse route", () => {
       const error = yield* compileRequest(
         LLM.request({
           model,
-          messages: [Message.user({ type: "media", mediaType: "image/png", data: "https://example.test/image.png" })],
+          messages: [Message.user({ type: "media", media: Media.base64("not base64!", "image/png") })],
         }),
       ).pipe(Effect.flip)
 
       expect(error).toMatchObject({ reason: { _tag: "InvalidRequest" } })
       expect(error.message).toContain("Bedrock Converse media data must be valid base64")
+    }),
+  )
+
+  it.effect("rejects remote image URLs that were not materialized", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user({
+              type: "media",
+              media: Media.url("https://example.test/image.png", { mediaType: "image/png" }),
+            }),
+          ],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error).toMatchObject({ reason: { _tag: "InvalidRequest" } })
+      expect(error.message).toContain("requires inline media")
     }),
   )
 
@@ -1752,8 +1816,8 @@ describe("Bedrock Converse route", () => {
           messages: [
             Message.user([
               { type: "text", text: "Summarize these documents." },
-              { type: "media", mediaType: "application/pdf", data: "UERGREFUQQ==", filename: "report.pdf" },
-              { type: "media", mediaType: "text/csv", data: "Q1NWREFUQQ==", filename: "data.csv" },
+              { type: "media", media: Media.base64("UERGREFUQQ==", "application/pdf"), filename: "report.pdf" },
+              { type: "media", media: Media.base64("Q1NWREFUQQ==", "text/csv"), filename: "data.csv" },
             ]),
           ],
         }),
@@ -1828,7 +1892,7 @@ describe("Bedrock Converse route", () => {
           messages: [
             Message.user([
               { type: "text", text: "Read this document" },
-              { type: "media", mediaType: "application/pdf", data: "UERGREFUQQ==", filename: item.filename },
+              { type: "media", media: Media.base64("UERGREFUQQ==", "application/pdf"), filename: item.filename },
             ]),
             Message.assistant([ToolCallPart.make({ id: "call_read", name: "read", input: {} })]),
             Message.tool({
@@ -1878,8 +1942,7 @@ describe("Bedrock Converse route", () => {
               { type: "text", text: "Read these documents" },
               ...["report_v1.txt", "report#v1.txt", "report v1 2.txt", "report v1.txt"].map((filename) => ({
                 type: "media" as const,
-                mediaType: "text/plain",
-                data: "SGVsbG8=",
+                media: Media.base64("SGVsbG8=", "text/plain"),
                 filename,
               })),
             ]),
@@ -1908,8 +1971,7 @@ describe("Bedrock Converse route", () => {
           messages: [
             Message.user({
               type: "media",
-              mediaType: "application/pdf",
-              data: "UERGREFUQQ==",
+              media: Media.base64("UERGREFUQQ==", "application/pdf"),
               filename: "report.pdf",
             }),
           ],
@@ -1939,8 +2001,7 @@ describe("Bedrock Converse route", () => {
               { type: "text", text: "Read these documents" },
               ...["report", undefined, 'report "final"\n.pdf'].map((filename) => ({
                 type: "media" as const,
-                mediaType: "text/plain",
-                data: "SGVsbG8=",
+                media: Media.base64("SGVsbG8=", "text/plain"),
                 filename,
               })),
             ]),
@@ -2037,7 +2098,7 @@ describe("Bedrock Converse route", () => {
       ).pipe(Effect.flip)
 
       expect(error).toMatchObject({ reason: { _tag: "InvalidRequest" } })
-      expect(error.message).toContain("Bedrock Converse media data must be valid base64")
+      expect(error.message).toContain("requires inline media")
     }),
   )
 
@@ -2047,7 +2108,7 @@ describe("Bedrock Converse route", () => {
         LLM.request({
           id: "req_bad_image",
           model,
-          messages: [Message.user([{ type: "media", mediaType: "image/svg+xml", data: "x" }])],
+          messages: [Message.user([{ type: "media", media: Media.base64("x", "image/svg+xml") }])],
         }),
       ).pipe(Effect.flip)
 
@@ -2061,7 +2122,9 @@ describe("Bedrock Converse route", () => {
         LLM.request({
           id: "req_bad_doc",
           model,
-          messages: [Message.user([{ type: "media", mediaType: "application/x-tar", data: "x", filename: "a.tar" }])],
+          messages: [
+            Message.user([{ type: "media", media: Media.base64("x", "application/x-tar"), filename: "a.tar" }]),
+          ],
         }),
       ).pipe(Effect.flip)
 

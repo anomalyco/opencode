@@ -2,28 +2,65 @@
 title: "Intro"
 ---
 
-These docs describe OpenCode and its APIs, configuration, and plugin system.
+OpenCode is an open source AI coding agent. It’s available as a terminal-based interface, desktop app, or web app.
 
-OpenCode installs and runs as `opencode`.
 
-## Install
+## CLI
 
-<div data-install-code>
-  <CodeBlock
-    code={`$ npm install -g @opencode/cli
-$ bun install -g --trust @opencode/cli
-$ pnpm add -g --allow-build=@opencode/cli @opencode/cli
-$ yarn global add @opencode/cli
-$ curl -fsSL https://opencode.ai/v2/install | bash`}
-  />
-</div>
+<CodeTabs
+  id="install"
+  label="Install method"
+  tabs={[
+    { label: "curl", code: "curl -fsSL https://opencode.ai/v2/install | bash" },
+    { label: "homebrew", code: "brew install anomalyco/tap/opencode-v2" },
+    { label: "npm", code: "npm install -g @opencode/cli" },
+    { label: "bun", code: "bun install -g --trust @opencode/cli" },
+    { label: "pnpm", code: "pnpm add -g --allow-build=@opencode/cli @opencode/cli" },
+    { label: "yarn", code: "yarn global add @opencode/cli" },
+    { label: "vite+", code: "vp install -g @opencode/cli" },
+    { label: "aur", code: "paru -S opencode-beta" },
+  ]}
+/>
 
-The npm package uses a trusted postinstall script to select the native `opencode` binary for your platform. The Bun and pnpm
-commands above explicitly allow that script to run.
+The npm package uses a postinstall script to select the native `opencode` binary for your platform. The Bun and pnpm commands
+explicitly allow the required script; Vite+ requires no additional flag.
+
+Windows package managers are not supported.
+
+
+Download a standalone CLI binary for your platform.
+
+- **macOS:** [Apple silicon](https://opencode.ai/files/bin/2.0.6/opencode-darwin-arm64.zip) · [Intel](https://opencode.ai/files/bin/2.0.6/opencode-darwin-x64.zip) · [Intel (baseline)](https://opencode.ai/files/bin/2.0.6/opencode-darwin-x64-baseline.zip)
+- **Windows:** [ARM64](https://opencode.ai/files/bin/2.0.6/opencode-windows-arm64.zip) · [x64](https://opencode.ai/files/bin/2.0.6/opencode-windows-x64.zip) · [x64 (baseline)](https://opencode.ai/files/bin/2.0.6/opencode-windows-x64-baseline.zip)
+- **Linux (glibc):** [ARM64](https://opencode.ai/files/bin/2.0.6/opencode-linux-arm64.tar.gz) · [x64](https://opencode.ai/files/bin/2.0.6/opencode-linux-x64.tar.gz) · [x64 (baseline)](https://opencode.ai/files/bin/2.0.6/opencode-linux-x64-baseline.tar.gz)
+- **Linux (musl):** [ARM64](https://opencode.ai/files/bin/2.0.6/opencode-linux-arm64-musl.tar.gz) · [x64](https://opencode.ai/files/bin/2.0.6/opencode-linux-x64-musl.tar.gz) · [x64 (baseline)](https://opencode.ai/files/bin/2.0.6/opencode-linux-x64-baseline-musl.tar.gz)
+
+## Desktop
+
+Download the latest OpenCode Desktop build for your platform.
+
+- **macOS:** [Apple silicon](https://opencode.ai/files/bin/2.0.6/opencode-desktop-mac-arm64.dmg) · [Intel](https://opencode.ai/files/bin/2.0.6/opencode-desktop-mac-x64.dmg)
+- **Windows:** [x64](https://opencode.ai/files/bin/2.0.6/opencode-desktop-win-x64.exe) · [ARM64](https://opencode.ai/files/bin/2.0.6/opencode-desktop-win-arm64.exe)
+- **Linux (.deb):** [x64](https://opencode.ai/files/bin/2.0.6/opencode-desktop-linux-amd64.deb) · [ARM64](https://opencode.ai/files/bin/2.0.6/opencode-desktop-linux-arm64.deb)
+- **Linux (.rpm):** [x64](https://opencode.ai/files/bin/2.0.6/opencode-desktop-linux-x86_64.rpm) · [ARM64](https://opencode.ai/files/bin/2.0.6/opencode-desktop-linux-aarch64.rpm)
+- **Linux (AppImage):** [x64](https://opencode.ai/files/bin/2.0.6/opencode-desktop-linux-x86_64.AppImage) · [ARM64](https://opencode.ai/files/bin/2.0.6/opencode-desktop-linux-arm64.AppImage)
+
+
+## Web
+
+Access the OpenCode web interface with the `opencode pair` command.
+
+```bash
+$ opencode pair
+
+  URLs      http://127.0.0.1:49374
+  Username  opencode
+  Password  ********
+```
+
+## Docker
 
 Docker images use versioned tags, for example `ghcr.io/anomalyco/opencode:2.0.0`.
-
-Homebrew, AUR, Windows package managers, and standalone binaries are not supported.
 
 ---
 
@@ -46,4 +83,4 @@ plan that grants you access to the best open source models.
 
 Make OpenCode your own by editing the [OpenCode config](/config), [loading plugins](/plugins), [connecting MCP
 servers](/mcp-servers), or [creating commands](/commands). For terminal interface themes and keybindings, see [CLI
-configuration](/cli/config).
+settings](/cli/config).

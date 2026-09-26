@@ -29,7 +29,7 @@ import { useData } from "../context/data"
 import { errorMessage } from "../util/error"
 import { createPluginContext, usePluginHost, type Dispose, type RegisteredSlot, type SlotRender } from "./api"
 import { createSourceWatcher } from "./watch"
-import { discoverPluginTargets, localSource } from "./discovery"
+import { discoverPluginTargets, localSource, mergePluginTargets } from "./discovery"
 import { createPluginSources } from "./source"
 import { isMissingPath } from "../util/config-directories"
 import { createMarkdownRenderer } from "./markdown"
@@ -285,23 +285,28 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
     await trace("watch", { reconciliation: id, directories: props.directories }, () =>
       Promise.all(props.directories.map(watcher.wait)).then(() => undefined),
     )
-    const entries = [
-      ...(
-        await trace("discover", { reconciliation: id, directories: props.directories }, () =>
-          discoverPluginTargets(props.directories),
-        )
-      ).map((entry) => ({
-        entry,
-        install: true,
-        optional: true,
-      })),
-      ...serverTuiPlugins().map((plugin) => ({
-        entry: plugin.source.type === "package" ? plugin.source.target : path.dirname(plugin.source.path),
-        install: false,
-        optional: true,
-      })),
-      ...(config.data.plugins ?? []).map((entry) => ({ entry, install: true, optional: false })),
-    ]
+    // Discovery admits TUI-only plugins while server inventory carries combined plugins.
+    // Their overlap is intentional; explicit configuration remains the final authority.
+    const entries = mergePluginTargets(
+      [
+        ...(
+          await trace("discover", { reconciliation: id, directories: props.directories }, () =>
+            discoverPluginTargets(props.directories),
+          )
+        ).map((entry) => ({
+          entry,
+          install: true,
+          optional: true,
+        })),
+        ...serverTuiPlugins().map((plugin) => ({
+          entry: plugin.source.type === "package" ? plugin.source.target : path.dirname(plugin.source.path),
+          install: false,
+          optional: true,
+        })),
+        ...(config.data.plugins ?? []).map((entry) => ({ entry, install: true, optional: false })),
+      ],
+      directory,
+    )
 
     // Resolve: fold entries into one desired generation. A source that fails
     // to import keeps its running previous version and only reports failure.

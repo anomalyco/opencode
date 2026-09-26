@@ -1,9 +1,9 @@
 import type {
   AgentInfo,
   CommandInfo,
-  FormCancelInput,
+  SessionFormCancelInput,
   FormInfo,
-  FormReplyInput,
+  SessionFormReplyInput,
   IntegrationInfo,
   LocationRef,
   McpResource,
@@ -95,8 +95,8 @@ export interface Data {
       list(sessionID: string, location?: LocationRef): Array<FormInfo & { readonly location?: LocationRef }> | undefined
       sync(sessionID: string, location?: LocationRef): Promise<void>
       invalidate(sessionID: string, location?: LocationRef): void
-      reply(input: FormReplyInput, location?: LocationRef): Promise<void>
-      cancel(input: FormCancelInput, location?: LocationRef): Promise<void>
+      reply(input: SessionFormReplyInput, location?: LocationRef): Promise<void>
+      cancel(input: SessionFormCancelInput, location?: LocationRef): Promise<void>
     }
   }
   readonly project: {
@@ -273,6 +273,8 @@ export interface ToastOptions {
   readonly message: string
   readonly variant?: ToastVariant
   readonly duration?: number
+  /** When this session's family is not open, the title defaults to the session title and the toast offers to open it. */
+  readonly sessionID?: string
 }
 
 export interface Toast {
@@ -496,6 +498,16 @@ export interface UI {
     move(sessionID: string, index: number): boolean
     /** Closes an open tab, or the active tab when omitted, and returns false when no tab matched. */
     close(sessionID?: string): boolean
+  }
+  readonly model: {
+    /** The prompt's selected model; variant is undefined for the model default. Reactive when read in a Solid computation. */
+    current(): { readonly providerID: string; readonly modelID: string; readonly variant?: string } | undefined
+    readonly variant: {
+      /** Variant IDs of the selected model. Reactive when read in a Solid computation. */
+      list(): readonly string[]
+      /** Selects a variant of the selected model, or the model default when undefined. Returns false when no model is selected or the variant is unavailable. */
+      set(variant: string | undefined): boolean
+    }
   }
   /** Claims a place in the slot tree; see SlotClaim. */
   readonly slot: (claim: SlotClaim) => () => void

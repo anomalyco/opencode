@@ -107,8 +107,8 @@ function build(id: Model.ID, remote: RemoteModel, baseURL: string, previous?: Mo
       remote.interleaved === undefined
         ? previous?.compatibility
         : (Model.compatibility(remote.interleaved) ?? previous?.compatibility),
-    package: Provider.aisdk("@ai-sdk/openai-compatible"),
-    settings: Provider.mergeOverlay(previous?.settings, { baseURL }),
+    package: "@opencode/ai/providers/openai-compatible",
+    settings: Provider.mergeOverlay(previous?.settings, { baseURL, provider: providerID }),
     headers: previous?.headers,
     body: previous?.body,
     capabilities: {

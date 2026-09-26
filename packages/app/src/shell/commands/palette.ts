@@ -11,7 +11,7 @@ import { useLayout, type LocalProject } from "@/shell/state/layout"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useServerSDK } from "@/runtime/server/client"
 import { useTabs } from "@/shell/tabs/tabs"
-import { displayName, projectForSession } from "@/shell/layout/helpers"
+import { displayName, resolveProjectForSession } from "@/shell/layout/helpers"
 import { createSessionTabs } from "@/session/helpers"
 import { useSessionLayout } from "@/session/session-layout"
 import { useServer } from "@/runtime/server/current"
@@ -166,7 +166,7 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
     state.cleanup = undefined
     dialog.close()
     if (item.type === "command") {
-      item.option?.onSelect?.("palette")
+      void item.option?.onSelect?.("palette")
       return
     }
     if (item.type === "session") {
@@ -253,9 +253,7 @@ export function createServerSessionEntries(props: {
     })
     if (current.signal.aborted) return []
     const opened = props.opened()
-    const openedByID = new Map(opened.flatMap((project) => (project.id ? [[project.id, project] as const] : [])))
     const stored = props.stored().map((project) => ({ ...project, expanded: false }))
-    const storedByID = new Map(stored.map((project) => [project.id, project] as const))
     return Promise.all([
       props.load(search, current.signal).then(
         (result) => result.data,
@@ -271,8 +269,7 @@ export function createServerSessionEntries(props: {
       [...new Map([...exact, ...listed].map((session) => [session.id, session] as const)).values()]
         .filter((session) => !session.time.archived)
         .map((session) => {
-          const project =
-            projectForSession(session, opened, openedByID) ?? projectForSession(session, stored, storedByID)
+          const project = resolveProjectForSession(session, opened, stored)
           return {
             id: `session:${props.server}:${session.id}`,
             type: "session" as const,

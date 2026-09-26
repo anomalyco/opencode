@@ -1,4 +1,4 @@
-import { Wordmark } from "@opencode/ui/wordmark"
+import { Logo } from "@opencode/ui/logo"
 import "./wordmark.css"
 
 export function NewSessionWordmark() {
@@ -8,9 +8,9 @@ export function NewSessionWordmark() {
       aria-hidden="true"
       class="pointer-events-none mx-auto w-full max-w-[720px] text-v2-background-bg-inverse"
     >
-      <div data-slot="wordmark-reveal" class="relative">
-        <Wordmark fade={false} class="block h-auto w-full opacity-60 [[data-color-scheme=dark]_&]:opacity-50" />
-        <Wordmark fade={false} muted={false} class="wordmark-shimmer absolute inset-0 h-auto w-full" />
+      <div data-slot="wordmark-reveal" class="relative mx-auto w-4/5">
+        <Logo class="block aspect-[720/129] w-full opacity-[0.16]" />
+        <Logo class="wordmark-shimmer absolute inset-0 aspect-[720/129] w-full" />
       </div>
     </div>
   )

@@ -3,12 +3,17 @@ import type { Scope } from "effect"
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import { define } from "@opencode/plugin/effect/plugin"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { App } from "../../app.js"
 import { Bus } from "../../bus.js"
 import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
+import { IntegrationConnection } from "../../integration/connection.js"
+import { ManagedPolicy } from "../../managed-policy.js"
 import { Provider } from "../../provider.js"
 import { WebSearch } from "../../websearch.js"
+import { ConfigPolicy } from "@opencode/schema/config/policy"
 import { ConfigProvider } from "@opencode/schema/config/provider"
+import { Mcp } from "@opencode/schema/mcp"
 import { Money } from "@opencode/schema/money"
 
 const defaultServer = "https://opencode.ai/console"
@@ -18,6 +23,19 @@ const RemoteResponse = Schema.Struct({
   providers: Schema.Record(Schema.String, ConfigProvider.Info),
   websearch: Schema.Struct({
     providerID: WebSearch.ID,
+  }).pipe(Schema.optional),
+  // MCP servers by name, in the same shape as a remote server in local config. Only remote servers are
+  // accepted so the Console can never make the client run a command. `auth: "console"` asks the client
+  // to attach its own Console credential to that server's requests.
+  mcp: Schema.Struct({
+    servers: Schema.Record(
+      Schema.String,
+      Schema.Struct({ ...Mcp.RemoteConfig.fields, auth: Schema.Literal("console").pipe(Schema.optional) }),
+    ),
+  }).pipe(Schema.optional),
+  // Organization policy compiled for the authenticated caller; omitted when there is none.
+  experimental: Schema.Struct({
+    policies: Schema.Array(ConfigPolicy.Info).pipe(Schema.optional),
   }).pipe(Schema.optional),
 })
 const Device = Schema.Struct({
@@ -45,6 +63,15 @@ function oauth(http: HttpClient.HttpClient) {
       id: methodID,
       type: "oauth",
       label: "OpenCode Console account",
+      form: [
+        {
+          key: "server",
+          type: "string",
+          format: "uri",
+          hidden: true,
+          default: defaultServer,
+        },
+      ],
     },
     authorize: (answer) =>
       Effect.gen(function* () {
@@ -102,42 +129,70 @@ function oauth(http: HttpClient.HttpClient) {
   } satisfies IntegrationOAuthMethodRegistration
 }
 
-export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope.Scope>({
+export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | ManagedPolicy.Service | Scope.Scope>({
   id: "opencode.provider.opencode",
   effect: Effect.fn(function* (ctx) {
     const bus = yield* Bus.Service
-    const http = yield* HttpClient.HttpClient
+    const client = yield* HttpClient.HttpClient
+    // Every request here goes to the Console, which reads the User-Agent to tell which OpenCode a member runs
+    // and whether it evaluates the policies it is being sent.
+    const http = HttpClient.mapRequest(client, HttpClientRequest.setHeader("User-Agent", App.useragent(ctx.app)))
+    const managed = yield* ManagedPolicy.Service
     const loading = Semaphore.makeUnsafe(1)
     type ActiveConnection = Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
     let snapshot: {
       config: typeof RemoteResponse.Type | undefined
       connection: ActiveConnection
-    } = { config: undefined, connection: undefined }
+      organization: string | undefined
+      // Console MCP servers carry the credential in their headers, so a rotated token changes the snapshot.
+      mcp:
+        | { servers: NonNullable<typeof RemoteResponse.Type.mcp>["servers"]; headers: Record<string, string> }
+        | undefined
+    } = { config: undefined, connection: undefined, organization: undefined, mcp: undefined }
 
     const load = Effect.fn("OpencodePlugin.load")(function* () {
       const connection = yield* ctx.integration.connection.active("opencode")
-      const credential = connection
-        ? yield* ctx.integration.connection.resolve(connection).pipe(Effect.orElseSucceed(() => undefined))
-        : undefined
-      const config = credential
-        ? yield* fetchConfig(http, credential).pipe(
-            Effect.catch((cause) =>
-              Effect.logWarning("failed to load OpenCode provider config", { cause }).pipe(Effect.as(undefined)),
-            ),
+      if (!connection) return { config: undefined, connection, organization: undefined, mcp: undefined }
+      return yield* ctx.integration.connection.resolve(connection).pipe(
+        Effect.flatMap((credential) => {
+          if (!credential)
+            return Effect.succeed({ config: undefined, connection, organization: undefined, mcp: undefined })
+          return fetchConfig(http, credential).pipe(
+            Effect.map((config) => ({
+              config,
+              connection,
+              organization: typeof credential.metadata?.orgName === "string" ? credential.metadata.orgName : undefined,
+              mcp: config?.mcp && { servers: config.mcp.servers, headers: credentialHeaders(credential) },
+            })),
           )
-        : undefined
-      return { config, connection }
+        }),
+        Effect.catch((cause) =>
+          Effect.logWarning("failed to load OpenCode provider config", { cause }).pipe(
+            // A load that fails for the connection already in place keeps its last config: dropping it
+            // would lift organization policy while personal credentials keep working.
+            Effect.as(
+              IntegrationConnection.key(connection) === IntegrationConnection.key(snapshot.connection)
+                ? { config: snapshot.config, connection, organization: snapshot.organization, mcp: snapshot.mcp }
+                : { config: undefined, connection, organization: undefined, mcp: undefined },
+            ),
+          ),
+        ),
+      )
     })
+    // Statements ride on the snapshot, so a credential switch, disconnect, or 404 replaces them too.
+    const publish = (next: typeof snapshot) =>
+      managed.set({ statements: next.config?.experimental?.policies ?? [], organization: next.organization })
 
     yield* ctx.integration.transform((editor) => {
       editor.update("opencode", (integration) => {
-        integration.name = "OpenCode"
+        integration.name = "OpenCode Console"
       })
       editor.method.update(oauth(http))
       editor.method.update({ integrationID: "opencode", method: { type: "key", label: "API key (service account)" } })
     })
 
     snapshot = yield* load()
+    yield* publish(snapshot)
     yield* ctx.provider.transform((providers) => {
       for (const [providerID, item] of Object.entries(snapshot.config?.providers ?? {})) {
         const source = providers.get(item.canonical ?? providerID)
@@ -298,9 +353,24 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
       editor.default.set(descriptor.providerID)
     })
 
+    yield* ctx.mcp.transform((editor) => {
+      const mcp = snapshot.mcp
+      if (!mcp) return
+      for (const [name, server] of Object.entries(mcp.servers)) {
+        // A server the user configured under the same name wins.
+        if (editor.get(name)) continue
+        const { auth, ...config } = server
+        editor.set(name, auth === "console" ? { ...config, headers: { ...config.headers, ...mcp.headers } } : config)
+      }
+    })
+
     const apply = Effect.fn("OpencodePlugin.apply")(function* (next: typeof snapshot) {
       snapshot = next
-      yield* Effect.all([ctx.provider.reload(), ctx.websearch.reload()], { concurrency: 2, discard: true })
+      yield* publish(next)
+      yield* Effect.all([ctx.provider.reload(), ctx.websearch.reload(), ctx.mcp.reload()], {
+        concurrency: 3,
+        discard: true,
+      })
     })
     const refresh = () => loading.withPermit(load().pipe(Effect.andThen(apply)))
     yield* bus.subscribe(Credential.Event.Switched).pipe(
@@ -311,7 +381,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
 
     // Console config can change independently of local credential activity, so re-fetch
     // periodically and only rebuild the catalog and search providers when the snapshot differs.
-    yield* Effect.sleep(Duration.minutes(10)).pipe(
+    yield* Effect.sleep(Duration.minutes(1)).pipe(
       Effect.andThen(
         loading.withPermit(
           load().pipe(Effect.flatMap((next) => (Equal.equals(snapshot, next) ? Effect.void : apply(next)))),
@@ -324,15 +394,11 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Scope
 })
 
 function fetchConfig(http: HttpClient.HttpClient, value: Credential.Value) {
-  const metadata = value.metadata
-  const orgID = typeof metadata?.orgID === "string" ? metadata.orgID : undefined
-  const token = value.type === "oauth" ? value.access : value.key
   return http
     .execute(
       HttpClientRequest.get(`${serverUrl(value)}/api/v2/config`).pipe(
         HttpClientRequest.acceptJson,
-        HttpClientRequest.bearerToken(token),
-        HttpClientRequest.setHeaders(orgID ? { "x-org-id": orgID } : {}),
+        HttpClientRequest.setHeaders(credentialHeaders(value)),
       ),
     )
     .pipe(
@@ -343,6 +409,14 @@ function fetchConfig(http: HttpClient.HttpClient, value: Credential.Value) {
         )
       }),
     )
+}
+
+function credentialHeaders(value: Credential.Value): Record<string, string> {
+  const orgID = value.metadata?.orgID
+  return {
+    authorization: `Bearer ${value.type === "oauth" ? value.access : value.key}`,
+    ...(typeof orgID === "string" ? { "x-org-id": orgID } : {}),
+  }
 }
 
 function serverUrl(value: Credential.Value) {

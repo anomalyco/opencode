@@ -28,6 +28,7 @@ import { ToolErrorCard } from "../components/tool-error-card"
 import { DiffChanges } from "@opencode/ui/diff-changes"
 import { Markdown } from "../components/markdown"
 import { createMarkdownImages } from "../components/markdown-image"
+import { createImagePreview } from "../components/image-preview"
 import { useMarkdown } from "../context/markdown"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import { checksum } from "@opencode/util/encode"
@@ -259,15 +260,13 @@ function agentColor(value: string | undefined, themeColors: Record<string, strin
 
 function webSearchProviderLabel(provider: unknown, i18n: ReturnType<typeof useI18n>) {
   const name =
-    provider === "parallel"
-      ? "Parallel"
-      : provider === "exa"
-        ? "Exa"
-        : provider === "firecrawl"
-          ? "Firecrawl"
-          : provider === "tavily"
-            ? "Tavily"
-            : undefined
+    typeof provider !== "string" || !provider
+      ? undefined
+      : provider === "tinyfish"
+        ? "TinyFish"
+        : provider === "opencode"
+          ? "OpenCode"
+          : `${provider[0].toUpperCase()}${provider.slice(1)}`
   if (name) return i18n.t("ui.tool.websearch.provider", { provider: name })
   return i18n.t("ui.tool.websearch")
 }
@@ -379,7 +378,7 @@ export function getToolInfo(
         title: i18n.t("ui.tool.patch"),
         subtitle:
           Array.isArray(input.files) && input.files.length
-            ? `${input.files.length} ${i18n.plural("ui.common.file", input.files.length)}`
+            ? i18n.plural("ui.common.fileCount", input.files.length)
             : undefined,
       }
     case "todowrite":
@@ -515,7 +514,7 @@ export function CurrentContextToolGroup(props: {
     () => props.busy || tools().some((tool) => tool.state.status === "streaming" || tool.state.status === "running"),
   )
   const names = createMemo(() =>
-    [
+    i18n.list([
       ...new Set(
         props.parts.flatMap((part) => {
           if (part.type !== "tool" && part.type !== "shell") return []
@@ -531,7 +530,7 @@ export function CurrentContextToolGroup(props: {
           ]
         }),
       ),
-    ].join(", "),
+    ]),
   )
   const label = createMemo(() => {
     const thoughts = props.parts.filter((part) => part.type === "reasoning").length
@@ -616,18 +615,13 @@ export function CurrentContextToolGroup(props: {
               <Show when={label().before || label().count || label().between}>
                 <span data-slot="context-tool-group-usage">
                   <Show when={label().before}>
-                    {(before) => (
-                      <span data-slot="context-tool-group-prefix">
-                        {before()}
-                        {label().title ? " " : ""}
-                      </span>
-                    )}
+                    {(before) => <span data-slot="context-tool-group-prefix">{before()}</span>}
                   </Show>
                   <Show when={label().count}>
-                    {(count) => <span data-slot="context-tool-group-count">{count()} </span>}
+                    {(count) => <span data-slot="context-tool-group-count">{count()}</span>}
                   </Show>
                   <Show when={label().between}>
-                    {(between) => <span data-slot="context-tool-group-prefix">{between()} </span>}
+                    {(between) => <span data-slot="context-tool-group-prefix">{between()}</span>}
                   </Show>
                 </span>
               </Show>
@@ -1368,8 +1362,10 @@ ToolRegistry.register({
 
 function ReadImage(props: { path: string; onContentRendered?: () => void }) {
   const markdown = useMarkdown()
+  const previewImages = createImagePreview()
   let root!: HTMLDivElement
   createEffect(() => {
+    previewImages(root)
     if (!markdown?.readImage) return
     const images = createMarkdownImages(markdown.readImage)
     images.update(root)

@@ -1,4 +1,4 @@
-import type { AgentSideConnection } from "@agentclientprotocol/sdk"
+import type { SessionNotification } from "@agentclientprotocol/sdk"
 import {
   OpenCode,
   type AgentInfo,
@@ -114,7 +114,7 @@ export function makeSession(
 
 export function makeACPFixture(options: FixtureOptions = {}) {
   const requests: FixtureRequest[] = []
-  const updates: Parameters<AgentSideConnection["sessionUpdate"]>[0][] = []
+  const updates: SessionNotification[] = []
   const encoder = new TextEncoder()
   let eventController: ReadableStreamDefaultController<Uint8Array> | undefined
   const models = options.models ?? [testModel, secondModel]

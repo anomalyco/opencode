@@ -7,6 +7,7 @@ import {
   discoverOAuthServerInfo,
   extractWWWAuthenticateParams,
   parseErrorResponse,
+  resourceUrlFromServerUrl,
   UnauthorizedError,
   type FetchLike,
   type OAuthClientProvider,
@@ -14,6 +15,7 @@ import {
   type StoredOAuthClientInformation,
   type StoredOAuthTokens,
 } from "@modelcontextprotocol/client"
+import { OAuthMetadataSchema, OpenIdProviderDiscoveryMetadataSchema } from "@modelcontextprotocol/core"
 import { Cause, Deferred, Effect } from "effect"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { Credential } from "../credential.js"
@@ -99,6 +101,25 @@ export const loggedFetch = (fields: { readonly server: string; readonly director
     return request
   })
 
+// A configured authorization server document stands in for RFC 9728 discovery: the SDK reuses this
+// state instead of probing the resource server, whose well-known path may not exist.
+export const configuredDiscovery = async (input: {
+  readonly config: typeof ConfigMCP.Remote.Type
+  readonly fetchFn: FetchLike
+}): Promise<OAuthDiscoveryState | undefined> => {
+  const url = input.config.oauth ? input.config.oauth.auth_server_metadata_url : undefined
+  if (!url) return undefined
+  const response = await input.fetchFn(url, { headers: { accept: "application/json" } })
+  if (!response.ok) throw new Error(`HTTP ${response.status} trying to load OAuth authorization server metadata`)
+  const body = await response.json()
+  const metadata = OAuthMetadataSchema.safeParse(body).data ?? OpenIdProviderDiscoveryMetadataSchema.parse(body)
+  return {
+    authorizationServerUrl: metadata.issuer,
+    authorizationServerMetadata: metadata,
+    resourceMetadata: { resource: resourceUrlFromServerUrl(input.config.url).toString() },
+  }
+}
+
 export interface Store {
   readonly tokens: () => Promise<StoredOAuthTokens | undefined>
   readonly saveTokens: (tokens: StoredOAuthTokens) => Promise<void>
@@ -134,7 +155,10 @@ export const provider = (options: Options): OAuthClientProvider => {
   let discovery: OAuthDiscoveryState | undefined = options.discovery
   return {
     redirectUrl,
-    discoveryState: () => discovery,
+    discoveryState: async () => {
+      discovery ??= await configuredDiscovery({ config: options.config, fetchFn: send })
+      return discovery
+    },
     saveDiscoveryState: (state) => {
       discovery = state
     },
@@ -144,7 +168,12 @@ export const provider = (options: Options): OAuthClientProvider => {
       if (!resource) return identity
       if (!checkResourceAllowed({ requestedResource: identity, configuredResource: resource }))
         throw new Error(`Protected resource ${resource} does not cover ${identity}`)
-      return new URL(resource)
+      const canonical = new URL(resource)
+      // The transport dials the configured URL with extra query parameters and some servers echo
+      // that back as the resource. Query is transport detail, not identity: the token stays bound
+      // to the configured URL so a later refresh names the same resource the login did.
+      if (canonical.origin === identity.origin && canonical.pathname === identity.pathname) return identity
+      return canonical
     },
     ...(options.clientMetadataUrl ? { clientMetadataUrl: options.clientMetadataUrl } : {}),
     ...(redirect ? { state: () => redirect.state } : {}),
@@ -168,6 +197,8 @@ export const provider = (options: Options): OAuthClientProvider => {
     saveTokens: (tokens) => options.store.saveTokens(tokens),
     redirectToAuthorization: (url) => {
       if (!redirect) throw refuse("user authorization")
+      if (url.protocol !== "http:" && url.protocol !== "https:")
+        throw new Error(`MCP server "${options.config.url}" returned a ${url.protocol} authorization URL; only http and https are supported`)
       return redirect.open(url)
     },
     ...(options.invalidate ? { invalidateCredentials: options.invalidate } : {}),
@@ -388,7 +419,9 @@ export const authorize = (input: {
     // CIMD needs the server to advertise it and accept public clients, and our published document only
     // lists the loopback redirect; a configured client_id always wins.
     const discovery = yield* Effect.tryPromise({
-      try: () => discoverOAuthServerInfo(input.config.url, { resourceMetadataUrl, fetchFn }),
+      try: async () =>
+        (await configuredDiscovery({ config: input.config, fetchFn })) ??
+        discoverOAuthServerInfo(input.config.url, { resourceMetadataUrl, fetchFn }),
       catch: (error) => (error instanceof Error ? error : new Error(String(error))),
     })
     const cimd =

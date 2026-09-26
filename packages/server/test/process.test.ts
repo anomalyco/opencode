@@ -1,10 +1,10 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { HttpServer, HttpServerError, HttpServerResponse } from "effect/unstable/http"
+import { HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { it } from "../../core/test/lib/effect"
 import { ServerProcess } from "../src/process"
 
-it.live("authenticates API and frontend requests while allowing browser preflight", () =>
+it.live("authenticates API requests behind the frontend transform while allowing browser preflight", () =>
   Effect.gen(function* () {
     const fallback = "fallback".repeat(256)
     const server = yield* ServerProcess.start<never, never>(
@@ -18,15 +18,16 @@ it.live("authenticates API and frontend requests while allowing browser prefligh
       },
       undefined,
       (api) =>
-        api.pipe(
-          Effect.catchIf(
-            (error) => error instanceof HttpServerError.HttpServerError && error.reason._tag === "RouteNotFound",
-            () => Effect.succeed(HttpServerResponse.raw(fallback, { contentType: "text/plain" })),
-          ),
-        ),
+        Effect.gen(function* () {
+          const request = yield* HttpServerRequest.HttpServerRequest
+          const url = new URL(request.url, "http://localhost")
+          if (url.pathname === "/api" || url.pathname.startsWith("/api/") || url.pathname === "/openapi.json")
+            return yield* api
+          return HttpServerResponse.raw(fallback, { contentType: "text/plain" })
+        }),
     )
     const response = yield* Effect.promise(() =>
-      fetch(new URL("/api/status", HttpServer.formatAddress(server.address)), {
+      fetch(new URL("/api/info", HttpServer.formatAddress(server.address)), {
         method: "OPTIONS",
         headers: {
           origin: "http://localhost:3000",
@@ -41,7 +42,7 @@ it.live("authenticates API and frontend requests while allowing browser prefligh
     expect(response.headers.get("access-control-allow-headers")).toBe("authorization")
 
     const status = yield* Effect.promise(() =>
-      fetch(new URL("/api/status", HttpServer.formatAddress(server.address)), {
+      fetch(new URL("/api/info", HttpServer.formatAddress(server.address)), {
         headers: {
           authorization: `Basic ${btoa("opencode:secret")}`,
           origin: "http://localhost:3000",
@@ -59,7 +60,7 @@ it.live("authenticates API and frontend requests while allowing browser prefligh
         Effect.gen(function* () {
           const allowed = origin === "https://untrusted.example.com" ? null : origin
           const preflight = yield* Effect.promise(() =>
-            fetch(new URL("/api/status", HttpServer.formatAddress(server.address)), {
+            fetch(new URL("/api/info", HttpServer.formatAddress(server.address)), {
               method: "OPTIONS",
               headers: {
                 origin,
@@ -72,7 +73,7 @@ it.live("authenticates API and frontend requests while allowing browser prefligh
           expect(preflight.headers.get("access-control-allow-origin")).toBe(allowed)
 
           const status = yield* Effect.promise(() =>
-            fetch(new URL("/api/status", HttpServer.formatAddress(server.address)), {
+            fetch(new URL("/api/info", HttpServer.formatAddress(server.address)), {
               headers: { origin, authorization: `Basic ${btoa("opencode:secret")}` },
             }),
           )
@@ -81,7 +82,7 @@ it.live("authenticates API and frontend requests while allowing browser prefligh
           yield* Effect.promise(() => status.arrayBuffer())
 
           const denied = yield* Effect.promise(() =>
-            fetch(new URL("/api/status", HttpServer.formatAddress(server.address)), { headers: { origin } }),
+            fetch(new URL("/api/info", HttpServer.formatAddress(server.address)), { headers: { origin } }),
           )
           expect(denied.status).toBe(401)
           expect(denied.headers.get("access-control-allow-origin")).toBe(allowed)
@@ -127,7 +128,10 @@ it.live("authenticates API and frontend requests while allowing browser prefligh
       Effect.gen(function* () {
         const response = yield* Effect.promise(() => fetch(new URL(pathname, HttpServer.formatAddress(server.address))))
         expect(response.status).toBe(401)
-        expect(yield* Effect.promise(() => response.text())).toBe("")
+        expect(yield* Effect.promise(() => response.json())).toEqual({
+          _tag: "UnauthorizedError",
+          message: "Authentication required",
+        })
       }),
     )
 
@@ -143,9 +147,9 @@ it.live("authenticates API and frontend requests while allowing browser prefligh
                     headers: authorization ? { authorization } : undefined,
                   }),
                 )
-                expect(response.status).toBe(401)
-                expect(response.headers.get("www-authenticate")).toBe('Basic realm="Secure Area"')
-                expect(yield* Effect.promise(() => response.text())).toBe("")
+                expect(response.status).toBe(200)
+                expect(response.headers.get("www-authenticate")).toBeNull()
+                expect(yield* Effect.promise(() => response.text())).toBe(method === "HEAD" ? "" : fallback)
               }),
             )
             const response = yield* Effect.promise(() =>
@@ -160,6 +164,68 @@ it.live("authenticates API and frontend requests while allowing browser prefligh
         )
       }),
     )
+  }),
+)
+
+it.live("pairing links sign in browsers with a cookie and API clients with a token", () =>
+  Effect.gen(function* () {
+    const server = yield* ServerProcess.start<never, never>({
+      hostname: "127.0.0.1",
+      port: 0,
+      password: "secret",
+      app: { version: "test-version" },
+      database: { path: ":memory:" },
+    })
+    const base = HttpServer.formatAddress(server.address)
+    const request = (pathname: string, init?: RequestInit) =>
+      Effect.promise(() => fetch(new URL(pathname, base), { redirect: "manual", ...init }))
+    const pair = Effect.gen(function* () {
+      const response = yield* request("/api/pair", {
+        method: "POST",
+        headers: { authorization: `Basic ${btoa("opencode:secret")}` },
+      })
+      expect(response.status).toBe(200)
+      return (yield* Effect.promise(() => response.json())) as { code: string; expires_in: number }
+    })
+
+    const rejected = yield* request("/api/pair", { method: "POST" })
+    expect(rejected.status).toBe(401)
+    expect(rejected.headers.get("www-authenticate")).toBe('Basic realm="Secure Area"')
+    // A Basic challenge on fetch makes browsers show a native prompt instead of the app's sign-in screen.
+    const fetched = yield* request("/api/info", { headers: { "sec-fetch-mode": "cors" } })
+    expect(fetched.status).toBe(401)
+    expect(fetched.headers.get("www-authenticate")).toBeNull()
+
+    const browser = yield* pair
+    expect(browser.expires_in).toBe(300)
+    const redirect = yield* request(`/auth/connect/${browser.code}`, { headers: { accept: "text/html" } })
+    expect(redirect.status).toBe(302)
+    expect(redirect.headers.get("location")).toBe("/")
+    const setCookie = redirect.headers.get("set-cookie") ?? ""
+    expect(setCookie).toContain(`opencode_session_${new URL(base).port}=`)
+    expect(setCookie).toContain("HttpOnly")
+    expect(setCookie).toContain("SameSite=Lax")
+    const cookie = setCookie.split(";")[0]
+
+    const reused = yield* request(`/auth/connect/${browser.code}`, { headers: { accept: "text/html" } })
+    expect(reused.status).toBe(401)
+    expect(yield* Effect.promise(() => reused.text())).toContain("opencode pair")
+
+    expect((yield* request("/api/info", { headers: { cookie } })).status).toBe(200)
+    expect((yield* request("/api/info", { headers: { cookie, origin: base } })).status).toBe(200)
+    expect((yield* request("/api/info", { headers: { cookie, origin: "http://127.0.0.1:1" } })).status).toBe(401)
+    expect((yield* request("/api/info", { headers: { cookie: `${cookie}x` } })).status).toBe(401)
+
+    const client = yield* pair
+    const redeemed = yield* request(`/auth/connect/${client.code}`)
+    expect(redeemed.status).toBe(200)
+    const session = (yield* Effect.promise(() => redeemed.json())) as { token: string }
+    expect(
+      (yield* request("/api/info", { headers: { authorization: `Basic ${btoa(`opencode:${session.token}`)}` } }))
+        .status,
+    ).toBe(200)
+    expect((yield* request(`/auth/connect/${client.code}`)).status).toBe(401)
+    expect((yield* request("/auth/connect/unknown")).status).toBe(401)
   }),
 )
 

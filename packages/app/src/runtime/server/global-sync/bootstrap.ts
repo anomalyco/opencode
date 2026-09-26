@@ -1,9 +1,5 @@
 import type { Config, Path, Project, ProviderAuthResponse } from "@/runtime/server/types"
-import type {
-  LocationGetInput,
-  LocationGetOutput,
-  ProjectListOutput,
-} from "@opencode/client/promise"
+import type { LocationGetInput, LocationGetOutput, ProjectListOutput } from "@opencode/client/promise"
 import { showToast } from "@/shell/notifications/toast"
 import { getFilename } from "@opencode/util/path"
 import { retry } from "@opencode/util/retry"
@@ -97,7 +93,7 @@ export async function bootstrapGlobal(input: {
           data.map((project) =>
             withWorktreeInventory(
               project,
-              input.queryClient.getQueryData(worktreeInventoryKey(input.scope, project.worktree)),
+              input.queryClient.getQueryData(worktreeInventoryKey(input.scope, project.id)),
             ),
           ),
         ),

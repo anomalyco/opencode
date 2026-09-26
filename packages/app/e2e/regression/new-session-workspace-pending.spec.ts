@@ -491,7 +491,8 @@ async function openDraft(
     if (request.method() !== "POST") return
     const path = new URL(request.url()).pathname
     if (path === "/api/worktree") {
-      expect(new URL(request.url()).searchParams.get("location[directory]")).toBe(directory)
+      expect(new URL(request.url()).searchParams.has("location[directory]")).toBe(false)
+      expect(request.postDataJSON()).toMatchObject({ projectID })
       calls.push("worktree")
       worktreeRequests.push(request.postDataJSON())
     }

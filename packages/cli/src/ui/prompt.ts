@@ -16,8 +16,8 @@ export function requireInteractive(message: string) {
 }
 
 export const openUrl = Effect.fn("cli.prompt.open-url")(function* (url: string) {
-  const { default: open } = yield* Effect.promise(() => import("open"))
-  yield* Effect.promise(() => open(url)).pipe(Effect.ignore)
+  const browser = yield* Effect.promise(() => import("@opencode/util/open"))
+  yield* Effect.promise(() => browser.openUrl(url)).pipe(Effect.ignore)
 })
 
 export function handlePromptErrors<A, E, R>(effect: Effect.Effect<A, E, R>) {

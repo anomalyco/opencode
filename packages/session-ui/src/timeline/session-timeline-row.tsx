@@ -8,7 +8,7 @@ import { useI18n } from "@opencode/ui/context/i18n"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { For, Show, createMemo, type Accessor, type JSX } from "solid-js"
 import { Dynamic } from "solid-js/web"
-import type { SessionUserActions, SessionUserComment } from "../actions"
+import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
 import { useData } from "../context"
 import { TimelineSeparator } from "../components/timeline-separator"
 import {
@@ -41,6 +41,7 @@ type FramedTimelineRow = Exclude<TimelineRow.TimelineRow, TimelineRow.TurnGap>
 export type SessionUserPresentation = {
   displayText?: string
   comments?: SessionUserComment[]
+  references?: SessionUserAttachmentReference[]
 }
 
 export function createSessionTimelineRowRenderer(input: {
@@ -315,6 +316,11 @@ export function createSessionTimelineRowRenderer(input: {
     if (message.type === "model-switched") return undefined
     if (message.type === "skill") return { label: i18n.t("ui.tool.skill"), data: message.name }
     if (message.type === "system") {
+      const sources = Array.isArray(message.metadata?.instructionSources)
+        ? message.metadata.instructionSources.filter((item): item is string => typeof item === "string")
+        : undefined
+      if (message.metadata?.notice === "instructions" && sources?.length)
+        return { label: i18n.t("ui.sessionTimeline.notice.instructionsUpdated"), items: sources }
       const prefix = "Instructions updated: "
       if (message.description?.startsWith(prefix)) {
         const keys = message.description
@@ -330,7 +336,9 @@ export function createSessionTimelineRowRenderer(input: {
       return { label: message.description ?? message.text }
     }
     if (message.type !== "synthetic") return undefined
-    if (message.description === "Continuing after restart") return { label: message.description }
+    if (message.metadata?.notice === "restart") return { label: i18n.t("ui.sessionTimeline.notice.restart") }
+    if (message.description === "Continuing after restart")
+      return { label: i18n.t("ui.sessionTimeline.notice.restart") }
     const source = typeof message.metadata?.source === "string" ? message.metadata.source : undefined
     const state = typeof message.metadata?.state === "string" ? message.metadata.state : undefined
     if (source === "subagent" || source === "shell") {
@@ -596,6 +604,7 @@ export function createSessionTimelineRowRenderer(input: {
                       message={message()}
                       displayText={presentation()?.displayText}
                       comments={presentation()?.comments}
+                      references={presentation()?.references}
                       historicalAgent={context()?.agent ?? ""}
                       historicalModel={context()?.model ?? { id: "", providerID: "" }}
                       actions={input.actions}

@@ -2,7 +2,7 @@ import type { Node } from "acorn"
 import { Context } from "effect"
 import type { ErrorType } from "./intrinsics.js"
 import type { DiagnosticKind } from "../codemode.js"
-import type { ProgramError } from "./objects.js"
+import type { ErrorObj, Value } from "./objects.js"
 
 /** Any parsed node; the interpreter narrows on `type` and reads `loc` for diagnostics. */
 export type AstNode = Node
@@ -14,13 +14,13 @@ export const CallSite = Context.Reference<{ readonly node?: AstNode; readonly de
 
 export type Binding = {
   mutable: boolean
-  value: unknown
+  value: Value
   initialized?: boolean
 }
 
 export type StatementResult =
   | { kind: "none" }
-  | { kind: "return"; value: unknown }
+  | { kind: "return"; value: Value }
   | { kind: "break"; label?: string }
   | { kind: "continue"; label?: string }
 
@@ -30,12 +30,12 @@ export const AsyncIteratorSymbol: unique symbol = Symbol("codemode.async-iterato
 export const IteratorSymbol: unique symbol = Symbol("codemode.iterator")
 export const IteratorSymbols = [AsyncIteratorSymbol, IteratorSymbol] as const
 
-export class ProgramThrow {
-  constructor(readonly value: unknown) {}
+export class Throw {
+  constructor(readonly value: Value) {}
 }
 
 export class GeneratorReturn {
-  constructor(readonly value: unknown) {}
+  constructor(readonly value: Value) {}
 }
 
 export const OptionalShortCircuit: unique symbol = Symbol("codemode.optional-short-circuit")
@@ -46,7 +46,7 @@ export const OptionalShortCircuit: unique symbol = Symbol("codemode.optional-sho
  */
 export class PendingThrow {
   node?: AstNode
-  value?: ProgramError
+  value?: ErrorObj
 
   constructor(
     /** The JS error class a program sees when it catches this failure. */
@@ -72,7 +72,7 @@ export const uriError = failure("URIError")
 
 // Orient the agent rather than enumerate JavaScript; interpreter-support.md is the full matrix.
 export const supportedSyntaxMessage =
-  "This is a restricted JavaScript-like language. Supported: plain and async functions, data literals, destructuring, standard control flow, await and Promise, and built-ins such as Array, Object, Math, JSON, Date, RegExp, Map, Set, and URL. Unsupported: classes, this, getters/setters, tagged templates, BigInt, and custom Symbols. Use plain functions and data objects instead."
+  "This is a restricted JavaScript-like language. Supported: plain and async functions, data literals, destructuring, standard control flow, await and Promise, and built-ins such as Array, Object, Math, JSON, Date, RegExp, Map, Set, and URL. Unsupported: classes, getters/setters, BigInt, and custom Symbols. Use plain functions and data objects instead."
 
 export const unsupportedSyntax = (kind: string, node: AstNode): PendingThrow =>
   new PendingThrow(
@@ -83,12 +83,10 @@ export const unsupportedSyntax = (kind: string, node: AstNode): PendingThrow =>
     [supportedSyntaxMessage],
   )
 
-export const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null
-
+// Acorn lines are 1-based and its columns are 0-based. Diagnostics use 1-based columns of the submitted source.
 export const sourceLocation = (node: AstNode): { readonly line: number; readonly column: number } => ({
-  line: Math.max(1, (node.loc?.start.line ?? 2) - 1),
-  column: Math.max(1, (node.loc?.start.column ?? 4) - 3),
+  line: node.loc?.start.line ?? 1,
+  column: (node.loc?.start.column ?? 0) + 1,
 })
 
 export const formatLocation = (node?: AstNode): string => {

@@ -81,6 +81,8 @@ type ServerEntry = {
 // persisted session row, so their forms are owned by this opaque sentinel session identifier.
 const GLOBAL_ELICITATION_SESSION_ID = "global"
 const URL_ELICITATION_FIELD_KEY = "elicitation"
+// Connections remain Location-scoped, but shared remote endpoints should not receive concurrent startup bursts.
+const endpointLoads = KeyedMutex.makeUnsafe<string>()
 
 type Data = {
   servers: Map<ServerName, Types.DeepMutable<Mcp.ServerConfig>>
@@ -118,10 +120,11 @@ export interface Interface extends State.Transformable<Editor> {
     readonly args?: Record<string, string>
   }) => Effect.Effect<PromptResult | undefined, NotFoundError>
   readonly resourceCatalog: () => Effect.Effect<ResourceCatalog>
+  readonly resources: (input: { readonly server: ServerName | string }) => Effect.Effect<ResourceCatalog, Error>
   readonly readResource: (input: {
     readonly server: ServerName | string
     readonly uri: string
-  }) => Effect.Effect<ResourceContent | undefined, NotFoundError>
+  }) => Effect.Effect<ResourceContent | undefined, Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/MCP") {}
@@ -350,6 +353,41 @@ export const layer = (options?: Options) =>
           ),
         )
 
+      const loadCatalog = (name: ServerName, entry: ServerEntry, connection: McpClient.Connection) =>
+        recovering(name, entry, connection, (connection) =>
+          Effect.all(
+            {
+              resources: connection.resources(),
+              // Some servers declare resources without implementing template listing.
+              templates: connection.resourceTemplates().pipe(Effect.orElseSucceed(() => [])),
+            },
+            { concurrency: "unbounded" },
+          ),
+        ).pipe(
+          Effect.map((catalog) =>
+            ResourceCatalog.make({
+              resources: catalog.resources.map((resource) =>
+                Resource.make({
+                  server: name,
+                  name: resource.name,
+                  uri: resource.uri,
+                  description: resource.description,
+                  mimeType: resource.mimeType,
+                }),
+              ),
+              templates: catalog.templates.map((template) =>
+                ResourceTemplate.make({
+                  server: name,
+                  name: template.name,
+                  uriTemplate: template.uriTemplate,
+                  description: template.description,
+                  mimeType: template.mimeType,
+                }),
+              ),
+            }),
+          ),
+        )
+
       const watch = (name: ServerName, entry: ServerEntry, connection: McpClient.Connection) => {
         const live = whenLive(name, entry, connection)
         connection.onClose(() =>
@@ -387,7 +425,7 @@ export const layer = (options?: Options) =>
           const { McpClient } = yield* Effect.promise(() => import("./client.js"))
           // List tools as part of connect so a failure here marks the server failed rather than
           // leaving it connected with a silently empty tool list and no path to recover.
-          const result = yield* McpClient.connect(
+          const load = McpClient.connect(
             name,
             entry.config,
             location.directory,
@@ -399,8 +437,10 @@ export const layer = (options?: Options) =>
             // A stdio server is spawned on this location's execution plane, not the host's.
             Effect.provideService(Environment.Service, environment),
             Scope.provide(scope),
-            Effect.exit,
           )
+          const result = yield* (
+            entry.config.type === "remote" ? endpointLoads.withLock(entry.config.url)(load) : load
+          ).pipe(Effect.exit)
           if (Exit.isSuccess(result)) {
             entry.client = result.value.connection
             entry.tools = result.value.tools.map((tool) => toTool(name, entry, tool))
@@ -658,57 +698,22 @@ export const layer = (options?: Options) =>
           return { ...result, server: target.name, name: input.name }
         }),
         resourceCatalog: Effect.fn("MCP.resourceCatalog")(function* () {
+          const empty = ResourceCatalog.make({ resources: [], templates: [] })
           const catalogs = yield* Effect.forEach(
             Array.from(entries),
-            ([name, entry]) => {
-              if (!entry.client) return Effect.succeed({ resources: [], templates: [] })
-              return Effect.all(
-                {
-                  resources: entry.client.resources().pipe(Effect.orElseSucceed(() => [])),
-                  templates: entry.client.resourceTemplates().pipe(Effect.orElseSucceed(() => [])),
-                },
-                { concurrency: "unbounded" },
-              ).pipe(
-                Effect.map((catalog) => ({
-                  resources: catalog.resources.map((resource) =>
-                    Resource.make({
-                      server: name,
-                      name: resource.name,
-                      uri: resource.uri,
-                      description: resource.description,
-                      mimeType: resource.mimeType,
-                    }),
-                  ),
-                  templates: catalog.templates.map((template) =>
-                    ResourceTemplate.make({
-                      server: name,
-                      name: template.name,
-                      uriTemplate: template.uriTemplate,
-                      description: template.description,
-                      mimeType: template.mimeType,
-                    }),
-                  ),
-                })),
-              )
-            },
+            ([name, entry]) =>
+              entry.client
+                ? loadCatalog(name, entry, entry.client).pipe(Effect.orElseSucceed(() => empty))
+                : Effect.succeed(empty),
             { concurrency: "unbounded" },
           )
-          return ResourceCatalog.make({
-            resources: catalogs
-              .flatMap((catalog) => catalog.resources)
-              .toSorted(
-                (a, b) =>
-                  a.server.localeCompare(b.server) || a.name.localeCompare(b.name) || a.uri.localeCompare(b.uri),
-              ),
-            templates: catalogs
-              .flatMap((catalog) => catalog.templates)
-              .toSorted(
-                (a, b) =>
-                  a.server.localeCompare(b.server) ||
-                  a.name.localeCompare(b.name) ||
-                  a.uriTemplate.localeCompare(b.uriTemplate),
-              ),
-          })
+          return mergeCatalogs(catalogs)
+        }),
+        resources: Effect.fn("MCP.resources")(function* (input) {
+          const target = yield* requireServer(input.server)
+          yield* target.entry.startup.await
+          if (!target.entry.client) return ResourceCatalog.make({ resources: [], templates: [] })
+          return mergeCatalogs([yield* loadCatalog(target.name, target.entry, target.entry.client)])
         }),
         readResource: Effect.fn("MCP.readResource")(function* (input) {
           const target = yield* requireServer(input.server)
@@ -716,7 +721,7 @@ export const layer = (options?: Options) =>
           if (!target.entry.client) return undefined
           const result = yield* recovering(target.name, target.entry, target.entry.client, (connection) =>
             connection.readResource({ uri: input.uri }),
-          ).pipe(Effect.orElseSucceed(() => undefined))
+          )
           if (!result) return undefined
           return ResourceContent.make({
             server: target.name,
@@ -731,6 +736,24 @@ export const layer = (options?: Options) =>
       })
     }),
   )
+
+function mergeCatalogs(catalogs: ReadonlyArray<ResourceCatalog>) {
+  return ResourceCatalog.make({
+    resources: catalogs
+      .flatMap((catalog) => catalog.resources)
+      .toSorted(
+        (a, b) => a.server.localeCompare(b.server) || a.name.localeCompare(b.name) || a.uri.localeCompare(b.uri),
+      ),
+    templates: catalogs
+      .flatMap((catalog) => catalog.templates)
+      .toSorted(
+        (a, b) =>
+          a.server.localeCompare(b.server) ||
+          a.name.localeCompare(b.name) ||
+          a.uriTemplate.localeCompare(b.uriTemplate),
+      ),
+  })
+}
 
 export function configured(options?: Options) {
   return makeLocationNode({

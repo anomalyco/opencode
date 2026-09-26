@@ -98,7 +98,7 @@ describe("createRequestQueue", () => {
 
   test("classifies git and worktree endpoints as slow", () => {
     expect(isSlowRequest("/api/vcs")).toBe(true)
-    expect(isSlowRequest("/api/vcs/branches")).toBe(true)
+    expect(isSlowRequest("/api/vcs/branch")).toBe(true)
     expect(isSlowRequest("/api/worktree")).toBe(true)
     expect(isSlowRequest("/api/vcsx")).toBe(false)
     expect(isSlowRequest("/api/session")).toBe(false)
@@ -195,7 +195,7 @@ describe("createRequestQueue", () => {
     input.tick(50)
     input.queue.fetch("http://server/api/worktree?location[directory]=%2Fc").catch(() => undefined)
     input.tick(100)
-    input.queue.fetch("http://server/api/status").catch(() => undefined)
+    input.queue.fetch("http://server/api/info").catch(() => undefined)
     expect(input.logs).toEqual([])
     input.tick(2_000)
     await new Promise((resolve) => setTimeout(resolve, 20))
@@ -210,7 +210,7 @@ describe("createRequestQueue", () => {
           ],
           queued: [
             { method: "GET", url: "http://server/api/worktree?location[directory]=%2Fc", ms: 2_100 },
-            { method: "GET", url: "http://server/api/status", ms: 2_000 },
+            { method: "GET", url: "http://server/api/info", ms: 2_000 },
           ],
         },
       },

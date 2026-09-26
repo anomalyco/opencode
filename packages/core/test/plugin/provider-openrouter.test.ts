@@ -27,7 +27,7 @@ describe("OpenRouterPlugin", () => {
       const catalog = yield* Provider.Service
       yield* catalog.transform((catalog) => {
         catalog.update(Provider.ID.openrouter, (provider) => {
-          provider.package = Provider.aisdk("@openrouter/ai-sdk-provider")
+          provider.package = "@opencode/ai/providers/openrouter"
           provider.headers = { Existing: "value" }
         })
         catalog.update(Provider.ID.make("nvidia"), () => {})
@@ -49,7 +49,7 @@ describe("OpenRouterPlugin", () => {
       const models = yield* Model.Service
       yield* catalog.transform((catalog) => {
         catalog.update(Provider.ID.openrouter, (provider) => {
-          provider.package = Provider.aisdk("@openrouter/ai-sdk-provider")
+          provider.package = "@opencode/ai/providers/openrouter"
         })
         catalog.update(Provider.ID.openai, () => {})
         catalog.models.update(Provider.ID.openrouter, Model.ID.make("openai/gpt-5-chat"), () => {})

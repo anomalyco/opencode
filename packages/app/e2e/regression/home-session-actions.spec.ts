@@ -72,7 +72,8 @@ test("renames, exports, and deletes a home session from its context menu", async
   expect(await container.evaluate((element) => getComputedStyle(element).outlineStyle)).toBe("none")
   await title.fill("Renamed from Home")
   const renamed = page.waitForRequest(
-    (request) => request.method() === "POST" && new URL(request.url()).pathname.endsWith("/rename"),
+    (request) =>
+      request.method() === "PATCH" && new URL(request.url()).pathname.endsWith(`/session/${fixture.targetID}`),
   )
   await title.press("Enter")
   expect((await renamed).postDataJSON()).toEqual({ title: "Renamed from Home" })

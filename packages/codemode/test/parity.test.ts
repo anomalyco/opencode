@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { CodeMode } from "../src/index.js"
-import { Data } from "../src/data.js"
 
 // Runs a CodeMode program with no host tools and returns the CodeMode.Result. These tests pin the
 // JS-parity behaviors for the "99% of ordinary defensive JavaScript just works" goal: cases where
@@ -219,6 +218,19 @@ describe("property deletion", () => {
     ).toEqual([true, true, { keep: 1 }])
   })
 
+  test("a non-reference operand is evaluated and the result is true; a variable cannot be deleted", async () => {
+    expect(
+      await value(`
+        let called = false
+        const results = [delete 0, delete null, delete { x: 1 }, delete void 0, delete (() => { called = true })()]
+        let variable = 1
+        let failure
+        try { delete variable } catch (error) { failure = error.constructor.name }
+        return [results, called, failure]
+      `),
+    ).toEqual([[true, true, true, true, true], true, "TypeError"])
+  })
+
   test("evaluates computed object and key expressions once", async () => {
     expect(
       await value(`
@@ -301,25 +313,22 @@ describe("H1: NaN/Infinity flow as intermediates and normalize to null at the bo
     expect(await value(`return JSON.stringify({ x: Number("z") })`)).toBe('{"x":null}')
   })
 
-  test("copyOut normalizes non-finite numbers to null (the shared return + tool-arg boundary)", () => {
-    // Tool-call arguments funnel through copyOut too, so this one function pins both boundaries.
-    expect(Data.toData(NaN, "value")).toBeNull()
-    expect(Data.toData(Infinity, "value")).toBeNull()
-    expect(Data.toData(-Infinity, "value", "result")).toBeNull()
-    expect(Data.toData(42, "value")).toBe(42)
-    expect(Data.toData({ a: NaN, b: [Infinity, 1] }, "value")).toEqual({ a: null, b: [null, 1] })
+  test("the boundary normalizes non-finite numbers to null like JSON.stringify", async () => {
+    expect(await value(`return { a: Number("z"), b: [Infinity, -Infinity, 1] }`)).toEqual({
+      a: null,
+      b: [null, null, 1],
+    })
   })
 })
 
-describe("copyOut undefined handling per boundary mode", () => {
-  test("json mode mirrors JSON.stringify for undefined", () => {
-    expect(Data.toData({ q: undefined, keep: 1 }, "value")).toStrictEqual({ keep: 1 })
-    expect(Data.toData([1, undefined, 2], "value")).toStrictEqual([1, null, 2])
-    expect(Data.toData({ nested: { a: undefined, b: [undefined] } }, "value")).toStrictEqual({
+describe("undefined at the boundary", () => {
+  test("vanishes like JSON.stringify", async () => {
+    expect(await value(`return { q: undefined, keep: 1, nested: { a: undefined, b: [undefined] } }`)).toStrictEqual({
+      keep: 1,
       nested: { b: [null] },
     })
-    expect(Data.toData(undefined, "value")).toBeUndefined()
-    expect(Data.toData({ a: undefined }, "value", "result")).toStrictEqual({ a: null })
+    expect(await value(`return [1, undefined, 2]`)).toStrictEqual([1, null, 2])
+    expect(await value(`return undefined`)).toBeNull()
   })
 })
 
@@ -352,6 +361,16 @@ describe("Error values and instanceof", () => {
       ),
     ).toEqual([true, true, false])
     expect(await value(`return new Error("e") instanceof TypeError`)).toBe(false)
+  })
+
+  test("new Error(message, { cause }) installs a non-enumerable cause only when the option is present", async () => {
+    expect(
+      await value(`
+        const inner = new Error("root")
+        const e = new TypeError("m", { cause: inner })
+        const agg = new AggregateError([], "a", { cause: 3 })
+        return [e.cause === inner, Object.keys(e), "cause" in new Error("m"), "cause" in new Error("m", { cause: undefined }), agg.cause]`),
+    ).toEqual([true, [], false, true, 3])
   })
 
   test("thrown errors keep instanceof through try/catch", async () => {
@@ -451,7 +470,9 @@ describe("Error values and instanceof", () => {
     expect(await value(`return new Error("m")`)).toEqual({ name: "Error", message: "m" })
     expect(await value(`return JSON.stringify(new Error("m"))`)).toBe('{"name":"Error","message":"m"}')
     expect(
-      await value(`try { throw new Error("m") } catch (e) { return [Object.keys(e), e.name, e.hasOwnProperty("message")] }`),
+      await value(
+        `try { throw new Error("m") } catch (e) { return [Object.keys(e), e.name, e.hasOwnProperty("message")] }`,
+      ),
     ).toEqual([[], "Error", true])
     expect(await value(`return new Error().hasOwnProperty("message")`)).toBe(false)
   })
@@ -494,9 +515,15 @@ describe("CodeMode-specific array behavior", () => {
     expect(err.message).toContain("circular")
   })
 
-  test("keys/values/entries return arrays usable with for...of and spread", async () => {
+  test("indexOf and lastIndexOf with no argument search for undefined", async () => {
+    expect(await value(`return [1, undefined, 3].indexOf()`)).toBe(1)
+    expect(await value(`return [1, undefined, 3].lastIndexOf()`)).toBe(1)
+    expect(await value(`return [1, 2, 3].indexOf()`)).toBe(-1)
+  })
+
+  test("keys/values/entries return iterators usable with for...of and spread", async () => {
     expect(await value(`return [...["x","y","z"].keys()]`)).toEqual([0, 1, 2])
-    expect(await value(`return ["x","y"].values()`)).toEqual(["x", "y"])
+    expect(await value(`return [...["x","y"].values()]`)).toEqual(["x", "y"])
     expect(
       await value(`
       const out = []
@@ -757,9 +784,17 @@ describe("destructuring assignment", () => {
     ).toEqual({ declared: "a", declarationRest: { 1: "b" }, assigned: "c", assignmentRest: { 1: "d" } })
   })
 
-  test("rejects computed keys that are not confined property keys", async () => {
-    const err = await error(`const key = {}; const { [key]: value } = {}`)
-    expect(err.message).toContain("Property key must be a string or number")
+  test("computed keys of any type become their string form, as in JS", async () => {
+    expect(
+      await value(`
+        const counts = {}
+        for (const category of ["a", null, undefined, "a", true, 1.5]) counts[category] = (counts[category] ?? 0) + 1
+        const key = {}
+        const { [key]: value } = { "[object Object]": 7 }
+        const o = { null: 1, "1,2": 2 }
+        return [counts, value, o[null], o[[1, 2]], undefined in o]
+      `),
+    ).toEqual([{ a: 2, null: 1, undefined: 1, true: 1, "1.5": 1 }, 7, 1, 2, false])
   })
 })
 
@@ -801,6 +836,36 @@ describe("coercion parity: global isFinite and isNaN", () => {
   test("work as array callbacks", async () => {
     expect(await value(`return [1, "2", "x", Infinity].filter(isFinite)`)).toEqual([1, "2"])
     expect(await value(`return ["1", "x"].map(isNaN)`)).toEqual([false, true])
+  })
+})
+
+describe("coercion parity: built-in arguments coerce as in JS", () => {
+  test("numeric arguments apply ToIntegerOrInfinity", async () => {
+    expect(
+      await value(`
+        return [
+          [1, 2, 3].indexOf(2, "1"), [1, 2, 3].lastIndexOf(3, "5"), [1, 2, 3].includes(1, "1"),
+          [1, 2, 3, 4].slice("1", "3"), [1, 2, 3].at(null), [1, 2, 3].at(1.7),
+          [1, [2, [3]]].flat(1.9), [1, 2, 3].with(1.5, 9), [1, 2, 3, 4].splice("1", "2"),
+          Math.max("3", "2"), Math.floor(null), Math.hypot("3", "4"),
+          parseInt("11", "2"), Number.parseInt("ff", "16"), (1.5).toFixed("2"), (255).toString("16"),
+          String.fromCharCode("65", 66.9), new Uint8Array([1, 2, 3]).indexOf(2, "1"),
+        ]
+      `),
+    ).toEqual([1, 2, false, [2, 3], 1, 2, [1, 2, [3]], [1, 9, 3], [2, 3], 3, 0, 5, 3, 255, "1.50", "ff", "AB", 1])
+  })
+
+  test("join separators, JSON.parse text, and Array.from length coerce", async () => {
+    expect(
+      await value(`
+        return [
+          [1, 2].join(null), [1, 2].join(0), [1, 2].join(undefined), new Uint8Array([1, 2]).join(null),
+          JSON.parse(123), JSON.parse(true),
+          Array.from({ length: "2" }), Array.from({ length: 2.5 }), Array.from({ length: -1 }), Array.from({}),
+        ]
+      `),
+    ).toEqual(["1null2", "102", "1,2", "1null2", 123, true, [null, null], [null, null], [], []])
+    expect((await error(`return JSON.parse(undefined)`)).message).toContain("JSON")
   })
 })
 
@@ -899,7 +964,7 @@ describe("coercion parity: unknown static members read as undefined", () => {
     expect(await value(`return typeof Math.sum`)).toBe("undefined")
     expect(await value(`return RegExp.quote === undefined`)).toBe(true)
     expect(await value(`return Number.range === undefined`)).toBe(true)
-    expect(await value(`return String.raw === undefined`)).toBe(true)
+    expect(await value(`return String.dedent === undefined`)).toBe(true)
     expect(await value(`return isFinite.something === undefined`)).toBe(true)
     expect(await value(`return console.group === undefined`)).toBe(true)
     expect(await value(`return Date.moment === undefined`)).toBe(true)
@@ -932,6 +997,12 @@ describe("coercion parity: unknown static members read as undefined", () => {
     expect(await value(`try { JSON.rawJSON("1") } catch (e) { return e.message }`)).toBe(
       "JSON.rawJSON is not a function.",
     )
+    expect(await value(`try { search({ query: "star" }).catch(() => 1) } catch (e) { return e.message }`)).toBe(
+      "search(...).catch is not a function.",
+    )
+    expect(
+      await value(`const foo = () => ({ bar: () => ({}) }); try { foo().bar().baz() } catch (e) { return e.message }`),
+    ).toBe("foo(...).bar(...).baz is not a function.")
   })
 
   test("built-ins are objects on a real prototype chain", async () => {
@@ -950,6 +1021,17 @@ describe("coercion parity: unknown static members read as undefined", () => {
         ]
       `),
     ).toEqual([true, true, true, "push", 1, 2, [], "function", true])
+  })
+})
+
+describe("async function line breaks", () => {
+  test("a line break between function and the name is an async function", async () => {
+    expect(await value(`async function\nfoo() { return 1 }\nreturn await foo()`)).toBe(1)
+  })
+
+  test("a line break between async and function is not an async function", async () => {
+    const failure = await error(`async\nfunction foo() { return 1 }\nreturn foo()`)
+    expect(failure.message).toContain("Unknown identifier 'async'")
   })
 })
 
@@ -995,5 +1077,910 @@ describe("functions are objects", () => {
         return [fn.count, Object.keys(fn), "count" in fn, "name" in fn, name, count, renamed, delete fn.count, fn.count]
       `),
     ).toEqual([3, ["count"], true, true, "fn", 3, true, true, null])
+  })
+})
+
+describe("tagged templates", () => {
+  test("the tag receives the cooked strings, their raw forms, and the substitutions in order", async () => {
+    expect(
+      await value(`
+        const tag = (strings, ...values) => [strings, strings.raw, values, Object.keys(strings)]
+        return tag\`a\${1}b\\n\${2}c\`
+      `),
+    ).toEqual([
+      ["a", "b\n", "c"],
+      ["a", "b\\n", "c"],
+      [1, 2],
+      ["0", "1", "2"],
+    ])
+  })
+
+  test("an invalid escape cooks to undefined and keeps its raw text", async () => {
+    expect(await value(`return ((strings) => [strings[0] === undefined, strings.raw[0]])\`\\unicode\``)).toEqual([
+      true,
+      "\\unicode",
+    ])
+  })
+
+  test("each site has one template object; different sites differ", async () => {
+    expect(
+      await value(`
+        const seen = []
+        const tag = (strings) => { seen.push(strings) }
+        for (let i = 0; i < 2; i++) tag\`x\${i}\`
+        tag\`x\${0}\`
+        return [seen[0] === seen[1], seen[0] === seen[2]]
+      `),
+    ).toEqual([true, false])
+  })
+
+  test("the tag is read like a callee: members, chained tags, async tags, and the not-a-function error", async () => {
+    expect(
+      await value(`
+        const o = { tag: (strings) => strings[0].toUpperCase() }
+        const chain = () => chain
+        const asyncTag = async (strings, value) => strings[0] + value
+        let failure
+        try { (1)\`x\` } catch (error) { failure = error instanceof TypeError }
+        return [o.tag\`abc\`, typeof chain\`a\`\`b\`, await asyncTag\`n=\${1}\`, failure]
+      `),
+    ).toEqual(["ABC", "function", "n=1", true])
+  })
+
+  test("raw is read-only", async () => {
+    expect(await value(`try { ((strings) => { strings.raw = 1 })\`a\` } catch (error) { return error.name }`)).toBe(
+      "TypeError",
+    )
+  })
+})
+
+describe("String.raw", () => {
+  test("joins the raw strings with the substitutions", async () => {
+    expect(await value(`return [String.raw\`a\\n\${1}b\`, String.raw({ raw: ["x", "y", "z"] }, 1, 2, 3)]`)).toEqual([
+      "a\\n1b",
+      "x1y2z",
+    ])
+  })
+
+  test("extra substitutions are dropped, missing ones are skipped, and a program object's toString is used", async () => {
+    expect(
+      await value(`
+        const shout = { toString() { return "!" } }
+        return [String.raw({ raw: ["x", "y"] }, 1, 2), String.raw({ raw: ["x", "y", "z"] }, shout), String.raw({ raw: { length: 0 } })]
+      `),
+    ).toEqual(["x1y", "x!yz", ""])
+  })
+
+  test("a template without a raw array is a TypeError", async () => {
+    const failure = await error(`String.raw(1)`)
+    expect(failure.message).toContain("String.raw expects a template object with a raw array")
+  })
+})
+
+describe("sloppy duplicate parameters and for...in targets", () => {
+  test("a repeated parameter name binds the last argument", async () => {
+    expect(await value(`function f(a, b, a) { return [a, b] } return [f(1, 2, 3), f(1)]`)).toEqual([
+      [3, 2],
+      [null, null],
+    ])
+  })
+
+  test("for...in assigns to any target: members, computed members, and patterns", async () => {
+    expect(
+      await value(`
+        const x = {}, seen = [], a = []
+        let i = 0, first
+        for (x.y in { p: 1, q: 2 }) seen.push(x.y)
+        for (a[i++] in { p: 1, q: 2 });
+        for ([first] in { ab: 1 });
+        return [seen, x.y, a, first]
+      `),
+    ).toEqual([["p", "q"], "q", ["p", "q"], "a"])
+  })
+})
+
+describe("loose equality and operator gates on opaque references", () => {
+  test("== follows IsLooselyEqual for data values", async () => {
+    expect(
+      await value(`
+        return [null == undefined, "1" == 1, true == 1, "" == 0, [1] == 1, [1, 2] == "1,2",
+          ({}) == "[object Object]", NaN == NaN, ({}) == ({}), null == 0, new Date(0) == 0]
+      `),
+    ).toEqual([true, true, true, true, true, true, true, false, false, false, false])
+  })
+
+  test("functions and tool references compare by identity and are never equal to nullish", async () => {
+    expect(
+      await value(`
+        const fn = () => 1, other = () => 2
+        return [fn == null, fn != null, fn == undefined, fn == fn, fn == other, [fn] == null, ({ f: fn }) == null,
+          [fn] == [fn], tools == null, tools == tools]
+      `),
+    ).toEqual([false, true, false, true, false, false, false, false, false, true])
+  })
+
+  test("coercing an opaque reference against a non-nullish primitive still rejects", async () => {
+    expect((await error(`const fn = () => 1; return fn == 1`)).message).toContain(
+      "Binary operators require data values",
+    )
+    expect((await error(`const fn = () => 1; return fn + ""`)).message).toContain(
+      "Binary operators require data values",
+    )
+    expect((await error(`const fn = () => 1; return -fn`)).message).toContain("Unary operators require data values")
+    expect((await error(`let fn = () => 1; fn++`)).message).toContain("'++' requires a data value")
+  })
+
+  test("switch and Object.is match opaque references by identity", async () => {
+    expect(
+      await value(`
+        const fn = () => 1, other = () => 2
+        const pick = (v) => { switch (v) { case fn: return "fn"; case other: return "other"; default: return "none" } }
+        return [pick(fn), pick(other), pick(1), Object.is(fn, fn), Object.is(fn, other), Object.is(NaN, NaN), Object.is(0, -0)]
+      `),
+    ).toEqual(["fn", "other", "none", true, false, true, false])
+  })
+
+  test("operators look only at their direct operands, so nested functions coerce like other data", async () => {
+    expect(
+      await value(`
+        const fn = () => 1
+        let x = [fn]
+        x++
+        return [[1, [2]] + "", ({ a: 1 }) * 2, [fn] + "", Number.isNaN(-[fn]), Number.isNaN(x), typeof fn, !fn]
+      `),
+    ).toEqual(["1,2", null, "[object Function]", true, true, "function", false])
+  })
+})
+
+describe("Object.freeze, seal, and preventExtensions", () => {
+  test("a frozen object rejects writes, additions, and deletes with TypeErrors", async () => {
+    expect(
+      await value(`
+        const o = Object.freeze({ a: 1 })
+        const errors = []
+        try { o.a = 2 } catch (e) { errors.push(e.name + ": " + e.message) }
+        try { o.b = 2 } catch (e) { errors.push(e.name + ": " + e.message) }
+        try { delete o.a } catch (e) { errors.push(e.name + ": " + e.message) }
+        return [errors, o.a, Object.isFrozen(o), Object.isSealed(o), Object.isExtensible(o)]
+      `),
+    ).toEqual([
+      [
+        "TypeError: Cannot assign to read only property 'a'.",
+        "TypeError: Cannot add property b, object is not extensible.",
+        "TypeError: Cannot delete property 'a'.",
+      ],
+      1,
+      true,
+      true,
+      false,
+    ])
+  })
+
+  test("seal keeps writes, preventExtensions keeps deletes, and each returns its argument", async () => {
+    expect(
+      await value(`
+        const s = { a: 1 }, p = { a: 1 }
+        const errors = []
+        Object.seal(s).a = 2
+        try { delete s.a } catch (e) { errors.push(e.name) }
+        delete Object.preventExtensions(p).a
+        try { p.b = 1 } catch (e) { errors.push(e.name) }
+        return [errors, s.a, Object.keys(p), Object.isSealed(s), Object.isFrozen(s), Object.isSealed(p), Object.isFrozen(p)]
+      `),
+    ).toEqual([["TypeError", "TypeError"], 2, [], true, false, true, true])
+  })
+
+  test("primitives pass through, and Object.assign honors the flags", async () => {
+    expect(
+      await value(`
+        return [Object.freeze(1) === 1, Object.isFrozen(1), Object.isSealed("a"), Object.isExtensible(null), Object.isFrozen({}), Object.isExtensible({})]
+      `),
+    ).toEqual([true, true, true, false, false, true])
+    const failure = await error(`Object.assign(Object.freeze({ a: 1 }), { b: 1 })`)
+    expect(failure.message).toContain("Cannot add property b, object is not extensible")
+  })
+
+  test("frozen arrays reject element, length, and mutating-method writes like JS", async () => {
+    expect(
+      await value(`
+        const a = Object.freeze([1, 2])
+        const attempt = (f) => { try { f(); return "ok" } catch (e) { return e.name + ": " + e.message } }
+        return [
+          attempt(() => a.push(3)),
+          attempt(() => { a[0] = 9 }),
+          attempt(() => { a[5] = 9 }),
+          attempt(() => { a.length = 0 }),
+          attempt(() => a.pop()),
+          attempt(() => a.sort()),
+          attempt(() => a.reverse()),
+          attempt(() => a.fill(0)),
+          attempt(() => a.copyWithin(0, 1)),
+          attempt(() => a.splice(0, 1)),
+          attempt(() => a.unshift(0)),
+          a, a.map((x) => x * 2), Object.isFrozen(a), Object.isFrozen(Object.freeze([])),
+        ]
+      `),
+    ).toEqual([
+      "TypeError: Cannot add property 2, object is not extensible.",
+      "TypeError: Cannot assign to read only property '0'.",
+      "TypeError: Cannot add property 5, object is not extensible.",
+      "TypeError: Cannot assign to read only property 'length'.",
+      "TypeError: Cannot delete property '1'.",
+      "TypeError: Cannot assign to read only property '0'.",
+      "TypeError: Cannot assign to read only property '0'.",
+      "TypeError: Cannot assign to read only property '0'.",
+      "TypeError: Cannot assign to read only property '0'.",
+      "TypeError: Cannot delete property '1'.",
+      "TypeError: Cannot add property 2, object is not extensible.",
+      [1, 2],
+      [2, 4],
+      true,
+      true,
+    ])
+  })
+
+  test("sealed and non-extensible arrays allow exactly the writes JS does", async () => {
+    expect(
+      await value(`
+        const s = Object.seal([1, 2]), p = Object.preventExtensions([1, 2, 3])
+        const attempt = (f) => { try { f(); return "ok" } catch (e) { return e.name } }
+        const results = [attempt(() => { s[0] = 5 }), attempt(() => s.pop()), attempt(() => { s.length = 0 }), attempt(() => s.push(1))]
+        p.pop(); p.sort(); p.reverse(); p.fill(0, 1); p.copyWithin(0, 1); p.length = 5
+        results.push(attempt(() => p.push(1)), attempt(() => p.splice(0, 1, 7, 8)), p.splice(0, 1, 7), attempt(() => { p[9] = 1 }))
+        return [results, s, p, Object.isSealed(p), Object.isFrozen(p), Object.isSealed(Object.preventExtensions([])), Object.isFrozen(Object.preventExtensions([]))]
+      `),
+    ).toEqual([
+      ["ok", "TypeError", "TypeError", "TypeError", "TypeError", "TypeError", [0], "TypeError"],
+      [5, 2],
+      [7, 0, null, null, null],
+      false,
+      false,
+      true,
+      false,
+    ])
+  })
+
+  test("typed arrays with elements cannot be frozen; wrappers freeze their properties only", async () => {
+    const failure = await error(`Object.freeze(new Uint8Array([1]))`)
+    expect(failure.message).toContain("Cannot freeze array buffer views with elements")
+    expect(
+      await value(`
+        const empty = Object.freeze(new Uint8Array(0))
+        const bytes = Object.preventExtensions(new Uint8Array([1]))
+        const m = Object.freeze(new Map()); m.set(1, 2)
+        const f = Object.freeze(() => 1)
+        let named = "ok"
+        try { f.x = 1 } catch (e) { named = e.name }
+        return [Object.isFrozen(empty), Object.isFrozen(bytes), Object.isExtensible(bytes), m.size, Object.isFrozen(f), named, f()]
+      `),
+    ).toEqual([true, false, false, 1, true, "TypeError", 1])
+  })
+})
+
+describe("Object.getPrototypeOf and Object.create", () => {
+  test("getPrototypeOf returns the built-in prototypes for objects and primitives", async () => {
+    expect(
+      await value(`
+        return [
+          Object.getPrototypeOf([]) === Array.prototype,
+          Object.getPrototypeOf({}) === Object.prototype,
+          Object.getPrototypeOf(Object.prototype),
+          Object.getPrototypeOf("a") === String.prototype,
+          Object.getPrototypeOf(1) === Number.prototype,
+          Object.getPrototypeOf(true) === Boolean.prototype,
+          Object.getPrototypeOf(new TypeError("x")) === TypeError.prototype,
+          Object.getPrototypeOf(TypeError.prototype) === Error.prototype,
+          Object.getPrototypeOf(() => 1) === Function.prototype,
+        ]
+      `),
+    ).toEqual([true, true, null, true, true, true, true, true, true])
+  })
+
+  test("getPrototypeOf rejects null, undefined, and symbols", async () => {
+    expect((await error(`Object.getPrototypeOf(null)`)).message).toContain("cannot convert null to an object")
+    expect((await error(`Object.getPrototypeOf(undefined)`)).message).toContain("cannot convert undefined to an object")
+    expect((await error(`Object.getPrototypeOf(Symbol.iterator)`)).message).toContain("cannot convert a symbol")
+  })
+
+  test("Object.create links the prototype: inherited reads, in, and own-only keys", async () => {
+    expect(
+      await value(`
+        const p = { greet(name) { return "hi " + name }, a: 1 }
+        const c = Object.create(p)
+        c.name = "x"
+        const seen = []
+        for (const key in c) seen.push(key)
+        return ["greet" in c, Object.keys(c), c.hasOwnProperty("a"), c.a, c.greet(c.name), Object.getPrototypeOf(c) === p, Object.getPrototypeOf(Object.create(null)), seen]
+      `),
+    ).toEqual([true, ["name"], false, 1, "hi x", true, null, ["name"]])
+  })
+
+  test("Object.create rejects non-object prototypes and property descriptors", async () => {
+    expect((await error(`Object.create(1)`)).message).toContain("Object prototype may only be an Object or null")
+    expect((await error(`Object.create()`)).message).toContain("Object prototype may only be an Object or null")
+    expect((await error(`Object.create(null, { a: { value: 1 } })`)).message).toContain(
+      "Object.create property descriptors are not supported",
+    )
+    expect(await value(`return Object.keys(Object.create({}, undefined))`)).toEqual([])
+  })
+})
+
+describe("structuredClone", () => {
+  test("deep-copies data values and keeps shared references shared", async () => {
+    expect(
+      await value(`
+        const shared = { n: 1 }
+        const source = { a: shared, b: shared, list: [1, , shared], map: new Map([[1, { a: [1, 2] }]]), set: new Set([shared]), when: new Date(5), bytes: new Uint8Array([1, 2]) }
+        const c = structuredClone(source)
+        c.a.n = 2
+        return [
+          c !== source, c.a === c.b, c.a !== shared, shared.n, c.list[2] === c.a, 1 in c.list, c.list.length,
+          c.map.get(1).a, c.map !== source.map, c.set.has(c.a), c.when.getTime(), c.when instanceof Date,
+          c.bytes instanceof Uint8Array, c.bytes[1], Array.isArray(c.list),
+        ]
+      `),
+    ).toEqual([true, true, true, 1, true, false, 3, [1, 2], true, true, 5, true, true, 2, true])
+  })
+
+  test("regexps reset lastIndex, errors keep name, message, and cause, and extras are dropped", async () => {
+    expect(
+      await value(`
+        const r = /a/g
+        r.lastIndex = 3
+        const e = new TypeError("boom", { cause: { code: 1 } })
+        e.extra = 1
+        const custom = new Error("x")
+        custom.name = "Custom"
+        const [cr, ce, cc] = [structuredClone(r), structuredClone(e), structuredClone(custom)]
+        return [cr.source, cr.flags, cr.lastIndex, ce instanceof TypeError, ce.name, ce.message, ce.cause, ce.cause !== e.cause, ce.extra, Object.keys(ce), cc.name]
+      `),
+    ).toEqual(["a", "g", 0, true, "TypeError", "boom", { code: 1 }, true, null, [], "Error"])
+  })
+
+  test("the clone is a plain extensible object: prototypes, symbols, undefined fields, and frozen state drop", async () => {
+    expect(
+      await value(`
+        const c = structuredClone(Object.freeze(Object.assign(Object.create({ inherited: 1 }), { a: undefined, [Symbol.iterator]: 1, b: 2 })))
+        return [Object.isFrozen(c), Object.getPrototypeOf(c) === Object.prototype, "a" in c, Symbol.iterator in c, c.b, c.inherited]
+      `),
+    ).toEqual([false, true, true, false, 2, null])
+  })
+
+  test("functions, symbols, promises, wrappers, and tool references throw a DataCloneError TypeError", async () => {
+    for (const code of [
+      `structuredClone(() => 1)`,
+      `structuredClone({ deep: [Symbol.iterator] })`,
+      `structuredClone(Promise.resolve(1))`,
+      `structuredClone(new URL("http://x"))`,
+      `structuredClone(tools)`,
+    ]) {
+      const failure = await error(code)
+      expect(failure.message).toMatch(/^TypeError: DataCloneError: .* could not be cloned\./)
+    }
+    expect(await value(`try { structuredClone(() => 1) } catch (e) { return e.name }`)).toBe("TypeError")
+    expect((await error(`structuredClone()`)).message).toContain("structuredClone requires 1 argument")
+  })
+})
+
+describe("error constructor prototype chain", () => {
+  test("derived error constructors extend Error and inherit its statics", async () => {
+    expect(
+      await value(`
+        const derived = [TypeError, RangeError, SyntaxError, ReferenceError, EvalError, URIError, AggregateError]
+        return [
+          derived.every((ctor) => Object.getPrototypeOf(ctor) === Error),
+          Object.getPrototypeOf(Error) === Function.prototype,
+          TypeError.isError(new RangeError("x")),
+          new TypeError("x") instanceof Error,
+        ]
+      `),
+    ).toEqual([true, true, true, true])
+  })
+})
+
+describe("this, arguments, and Function.prototype.call/apply/bind", () => {
+  test("this is the call receiver for non-arrow functions and lexical for arrows", async () => {
+    expect(
+      await value(`
+        const o = { n: 1, m() { return this.n }, a() { return (() => this.n)() }, bare() { return this } }
+        const detached = o.bare
+        function f() { return this }
+        return [o.m(), o["m"](), o?.m(), (o.m)(), o.a(), o.bare() === o, detached(), f(), (0, o.bare)(), this, (() => this)()]
+      `),
+    ).toEqual([1, 1, 1, 1, 1, true, null, null, null, null, null])
+  })
+
+  test("this reaches generator and async methods and plain-function callbacks", async () => {
+    expect(
+      await value(`
+        const o = { n: 2, *g() { yield this.n }, async m() { return this.n }, xs: [1, 2], go() { return this.xs.map(function (x) { return [x, this] }) } }
+        return [[...o.g()], await o.m(), o.go()]
+      `),
+    ).toEqual([
+      [2],
+      2,
+      [
+        [1, null],
+        [2, null],
+      ],
+    ])
+  })
+
+  test("arguments is an unmapped array-like that arrows and parameters interact with as in JS", async () => {
+    expect(
+      await value(`
+        function f(a) { arguments[0] = 9; return [arguments.length, arguments[1], a, [...arguments], Array.isArray(arguments), JSON.stringify(arguments), typeof arguments.map, (() => arguments[1])()] }
+        function shadow(arguments) { return arguments }
+        function hoisted() { var arguments; return arguments.length }
+        let outer
+        try { outer = arguments } catch (error) { outer = error.name }
+        return [f(1, 2), shadow(7), hoisted(1, 2, 3), outer]
+      `),
+    ).toEqual([[2, 2, 1, [9, 2], false, '{"0":9,"1":2}', "undefined", 2], 7, 3, "ReferenceError"])
+  })
+
+  test("call, apply, and bind set this and arguments on program functions and built-ins", async () => {
+    expect(
+      await value(`
+        function f(a, b, c) { return [this, a, b, c] }
+        const g = f.bind({ k: 1 }, "A")
+        const arr = [1]
+        Array.prototype.push.call(arr, 2, 3)
+        return [
+          f.call("t", 1, 2),
+          f.apply({ k: 2 }, [1, 2]),
+          f.apply(null, { length: 2, 0: "x", 1: "y" }),
+          f.apply(null).length,
+          g("B", "C"), g.name, g.length,
+          f.bind(1).bind(2)()[0],
+          arr,
+          Math.max.apply(null, [1, 5, 3]),
+          Math.max.bind(null, 10)(3),
+          [1, 2].map(f.bind(null, 0)).map((r) => r[1]),
+        ]
+      `),
+    ).toEqual([
+      ["t", 1, 2, null],
+      [{ k: 2 }, 1, 2, null],
+      [null, "x", "y", null],
+      4,
+      [{ k: 1 }, "A", "B", "C"],
+      "bound f",
+      2,
+      1,
+      [1, 2, 3],
+      5,
+      10,
+      [0, 0],
+    ])
+  })
+
+  test("call and apply reject non-callable receivers and non-array-like argument lists", async () => {
+    expect((await error(`Function.prototype.call.call(1)`)).message).toContain(
+      "Function.prototype.call called on incompatible receiver",
+    )
+    expect((await error(`(() => 1).apply(null, 5)`)).message).toContain("expects an array-like argument list")
+    expect((await error(`(() => 1).apply(null, { length: 1e9 })`)).message).toContain("Invalid array length")
+    expect(
+      await value(
+        `function f() { return arguments.length } return [f.apply(null, { length: -5 }), f.apply(null, { length: "2" })]`,
+      ),
+    ).toEqual([0, 2])
+    expect((await error(`function f(n) { return f.call(null, n + 1) } f(0)`)).message).toContain(
+      "Maximum call stack size exceeded",
+    )
+  })
+})
+
+describe("ToPrimitive: operators and conversions honor program valueOf and toString", () => {
+  test("program-installed valueOf and toString on opaque values are ignored at every site", async () => {
+    expect(
+      await value(`
+        const f = () => 1
+        f.toString = () => "custom"
+        f.valueOf = () => 5
+        return [String(f), \`\${f}\`, [f].join(), new Error(f).message, isNaN(Number(f)), isNaN(Math.abs(f))]
+      `),
+    ).toEqual(["[object Function]", "[object Function]", "[object Function]", "[object Function]", true, true])
+  })
+
+  test("== converts an object facing a non-nullish primitive through its own valueOf", async () => {
+    expect(
+      await value(`
+        const one = { valueOf() { return 1 } }
+        return [one == 1, 1 == one, one == true, one == "1", one == null, one == one, one == { valueOf() { return 1 } }, [1] == 1]
+      `),
+    ).toEqual([true, true, true, true, false, true, false, true])
+    expect((await error(`(() => 1) == 1`)).message).toContain("Binary operators require data values")
+  })
+
+  test("operators, unary, template literals, and conversion functions use the object's own methods", async () => {
+    expect(
+      await value(`
+        const money = { valueOf() { return 7 } }
+        return [money * 2, money + 1, money + "", -money, +money, ~money, money < 8, money ** 2, money | 8,
+          Number(money), Math.max(money, 1), \`\${money}\`, String(money), isNaN(money), isFinite(money),
+          parseInt({ toString() { return "42px" } }), parseInt("ff", { valueOf() { return 16 } }),
+          Number.parseFloat({ toString() { return "1.5" } })]
+      `),
+    ).toEqual([
+      14,
+      8,
+      "7",
+      -7,
+      7,
+      -8,
+      true,
+      49,
+      15,
+      7,
+      7,
+      "[object Object]",
+      "[object Object]",
+      false,
+      true,
+      42,
+      255,
+      1.5,
+    ])
+  })
+
+  test("the hint picks the method: + and Number prefer valueOf, template literals and String prefer toString", async () => {
+    expect(
+      await value(`
+        const both = { valueOf() { return 1 }, toString() { return "s" } }
+        return [both + "", \`\${both}\`, String(both), both * 2, new Error(both).message, [both].join(), [both, 2] + ""]
+      `),
+    ).toEqual(["1", "s", "s", 2, "s", "s", "s,2"])
+  })
+
+  test("operands convert left then right, and a throwing valueOf surfaces as the program error", async () => {
+    expect(
+      await value(`
+        const order = []
+        const a = { valueOf() { order.push("a"); return 1 } }, b = { valueOf() { order.push("b"); return 2 } }
+        a + b; a < b; a - b
+        return order
+      `),
+    ).toEqual(["a", "b", "a", "b", "a", "b"])
+    expect(
+      await value(`
+        const bad = { valueOf() { throw new RangeError("nope") } }
+        const names = []
+        try { bad + 1 } catch (e) { names.push(e.name) }
+        try { Number(bad) } catch (e) { names.push(e.name) }
+        try { Math.abs(bad) } catch (e) { names.push(e.name) }
+        return names
+      `),
+    ).toEqual(["RangeError", "RangeError", "RangeError"])
+  })
+
+  test("arrays keep their built-in join form unless the program replaces toString", async () => {
+    expect(
+      await value(`
+        const arr = [1, 2]
+        const before = [arr + "", [] + [], [1, , 3].join("-"), [1, { toString() { return "q" } }].join("-")]
+        arr.toString = () => "x"
+        return [...before, arr + "", \`\${arr}\`, String(arr)]
+      `),
+    ).toEqual(["1,2", "", "1--3", "1-q", "x", "x", "x"])
+  })
+
+  test("update and compound assignment convert the current value", async () => {
+    expect(
+      await value(`
+        let x = { valueOf() { return 5 } }
+        const o = { n: { valueOf() { return 4 } } }
+        const after = x++
+        o.n += 1
+        o.n++
+        let s = { valueOf() { return 2 } }
+        s *= 3
+        return [after, x, o.n, s]
+      `),
+    ).toEqual([5, 6, 6, 6])
+  })
+
+  test("functions and other opaque values still reject arithmetic, and an object without a primitive form throws", async () => {
+    expect((await error(`const f = () => 1; return f + 1`)).message).toContain("Binary operators require data values")
+    expect((await error(`return -(() => 1)`)).message).toContain("Unary operators require data values")
+    const failure = await error(`return { valueOf() { return {} }, toString() { return [] } } + 1`)
+    expect(failure.message).toContain("Cannot convert object to primitive value")
+  })
+})
+
+describe("object destructuring from primitives", () => {
+  test("reads through the primitive's prototype like member access", async () => {
+    expect(
+      await value(`
+        const { length, 0: first, toUpperCase } = "abc"
+        const { toFixed } = 1.5
+        const {} = true
+        const { 0: a, ...rest } = "xyz"
+        const { ...none } = 42
+        let n
+        ;({ length: n } = "hello")
+        return [length, first, toUpperCase.call("q"), toFixed.call(2.345, 1), a, rest, none, n]
+      `),
+    ).toEqual([3, "a", "Q", "2.3", "x", { 1: "y", 2: "z" }, {}, 5])
+  })
+
+  test("only null and undefined sources throw", async () => {
+    expect((await error(`const { a } = null`)).message).toContain("Cannot destructure null as it is null")
+    expect((await error(`const {} = undefined`)).message).toContain("Cannot destructure undefined")
+    expect((await error(`let a; ({ a } = undefined)`)).message).toContain("Cannot destructure undefined")
+  })
+})
+
+describe("Date components convert through ToPrimitive", () => {
+  test("construction and Date.UTC ask each of the first seven arguments in order", async () => {
+    expect(
+      await value(`
+        const seen = []
+        const part = (n) => ({ valueOf() { seen.push(n); return n } })
+        const time = new Date(part(2024), part(1), part(2), part(3), part(4), part(5), part(6), part(99)).getTime()
+        const utc = Date.UTC(2024, { valueOf() { return 0 } }, 15)
+        return [seen, time === new Date(2024, 1, 2, 3, 4, 5, 6).getTime(), utc === Date.UTC(2024, 0, 15)]
+      `),
+    ).toEqual([[2024, 1, 2, 3, 4, 5, 6], true, true])
+    expect((await error(`new Date(2024, { valueOf() { throw new RangeError("boom") } })`)).message).toContain("boom")
+  })
+
+  test("setters on an invalid Date answer NaN without overwriting a time set during coercion", async () => {
+    expect(
+      await value(`
+        const d = new Date(NaN)
+        const result = d.setDate({ valueOf() { d.setTime(0); return 1 } })
+        const y = new Date(NaN)
+        return [Number.isNaN(result), d.getTime(), y.setFullYear(2020) === Date.UTC(2020, 0, 1) - y.getTimezoneOffset() * 60000]
+      `),
+    ).toEqual([true, 0, true])
+  })
+})
+
+describe("iteration callbacks receive thisArg", () => {
+  test("Array, Array.from, Map, Set, URLSearchParams, Headers, and Uint8Array pass it as this", async () => {
+    expect(
+      await value(`
+        const c = { n: 0 }
+        const count = function () { this.n++ }
+        ;[1, 2].forEach(count, c)
+        ;[1].map(count, c)
+        ;[1].filter(count, c)
+        ;[1].find(count, c)
+        ;[1].findIndex(count, c)
+        ;[1].findLast(count, c)
+        ;[1].findLastIndex(count, c)
+        ;[1].some(count, c)
+        ;[1].every(count, c)
+        ;[1].flatMap(count, c)
+        Array.from([1], count, c)
+        Array.from({ length: 1 }, count, c)
+        new Map([[1, 1]]).forEach(count, c)
+        new Set([1]).forEach(count, c)
+        new URLSearchParams("a=1").forEach(count, c)
+        new Headers({ a: "1" }).forEach(count, c)
+        new Uint8Array([1]).forEach(count, c)
+        return c.n
+      `),
+    ).toBe(18)
+    expect(await value(`return [1, 2].map(function (x) { return x + this.v }, { v: 10 })`)).toEqual([11, 12])
+  })
+
+  test("arrows keep their lexical this, reduce takes an initial value instead, and opaque values are only bound", async () => {
+    expect(await value(`return [1].map(() => typeof this, { v: 1 })`)).toEqual(["undefined"])
+    expect(
+      await value(`return [1, 2].reduce(function (a, b) { return a + b + (this === undefined ? 0 : 100) }, 0)`),
+    ).toBe(3)
+    expect(
+      await value(`
+        let seen
+        ;[1].forEach(function () { seen = this }, tools.nowhere)
+        return typeof seen
+      `),
+    ).toBe("function")
+  })
+})
+
+describe("computed property keys convert through the object's own toString", () => {
+  test("reads, writes, compound assignment, in, delete, literals, and destructuring share one conversion", async () => {
+    expect(
+      await value(`
+        const key = { toString() { return "id" } }
+        const o = {}
+        o[key] = 1
+        o[key] += 1
+        const literal = { [key]: "lit" }
+        const had = key in o
+        delete literal[key]
+        return [o.id, had, (({ [key]: v }) => v)(o), literal, o[[1, 2]] === undefined]
+      `),
+    ).toEqual([2, true, 2, {}, true])
+    expect(
+      await value(`
+        const seen = []
+        const base = { x: 1 }
+        base[{ toString() { seen.push(1); return "" } }] ^= 0
+        base[{ toString() { seen.push(2); return "x" } }]++
+        return [seen, base[""], base.x]
+      `),
+    ).toEqual([[1, 2], 0, 2])
+  })
+
+  test("valueOf is the fallback, a symbol result stays a symbol, and conversion failures surface", async () => {
+    expect(
+      await value(`
+        const o = { 7: "seven" }
+        const sym = { toString() { return Symbol.iterator } }
+        o[sym] = 1
+        return [o[{ valueOf() { return 7 }, toString: undefined }], typeof o[Symbol.iterator], Object.keys(o)]
+      `),
+    ).toEqual(["seven", "number", ["7"]])
+    expect((await error(`({})[{ toString() { throw new RangeError("bad key") } }]`)).message).toContain("bad key")
+    expect((await error(`({})[{ toString() { return {} }, valueOf() { return {} } }]`)).message).toContain(
+      "Cannot convert object to primitive value",
+    )
+    expect((await error(`const key = { toString() { return "a" } }; key in 5`)).message).toContain(
+      "requires a data object on the right-hand side",
+    )
+  })
+
+  test("a nullish base throws before the key converts, as ToObject precedes ToPropertyKey", async () => {
+    const failure = await error(`const base = null; base[{ toString() { throw new RangeError("key evaluated") } }]`)
+    expect(failure.message).toContain("Cannot read properties of null")
+  })
+
+  test("opaque values keep their built-in key form and a tool reference toString is never called", async () => {
+    expect(
+      await value(`
+        const o = { "[object Function]": 1, "[object Promise]": 2 }
+        return [o[() => 1], o[Promise.resolve("k")]]
+      `),
+    ).toEqual([1, 2])
+    expect((await error(`({})[{ toString: tools.nowhere }] = 1`)).message).toContain(
+      "Cannot convert object to primitive value",
+    )
+  })
+})
+
+describe("String and Number method arguments convert through ToPrimitive", () => {
+  test("string positions use the string hint and numeric positions the number hint", async () => {
+    expect(
+      await value(`
+        const s = { toString() { return "b" } }
+        const n = { valueOf() { return 1 } }
+        return [
+          "abc".indexOf(s), "abc".lastIndexOf(s), "abc".includes(s), "abc".startsWith(s, n), "abc".endsWith(s, 2),
+          "abc".charAt(n), "abc".at({ valueOf() { return -1 } }), "abc".slice(n), "abc".substring(n, 2),
+          "abc".charCodeAt(n), "a".padStart({ valueOf() { return 3 } }, s), "x".padEnd(3, s), "ab".repeat({ valueOf() { return 2 } }),
+          "a".concat(s, { valueOf() { return 1 }, toString() { return "T" } }), "b".localeCompare(s),
+          (1.005).toFixed({ valueOf() { return 2 } }), (255).toString({ valueOf() { return 16 } }),
+          (1234.5678).toPrecision({ valueOf() { return 6 } }), (12345).toExponential({ valueOf() { return 2 } }),
+        ]
+      `),
+    ).toEqual([
+      1,
+      1,
+      true,
+      true,
+      true,
+      "b",
+      "c",
+      "bc",
+      "b",
+      98,
+      "bba",
+      "xbb",
+      "abab",
+      "abT",
+      0,
+      "1.00",
+      "ff",
+      "1234.57",
+      "1.23e+4",
+    ])
+  })
+
+  test("split, replace, match, and search convert a plain pattern but keep a RegExp as is", async () => {
+    expect(
+      await value(`
+        const s = { toString() { return "b" } }
+        return [
+          "abc".split(s), "abc".split(/b/, { valueOf() { return 1 } }), "abc".split(undefined, { valueOf() { return undefined } }),
+          "abc".replace(s, "X"), "abc".replace(/b/, { toString() { return "R" } }), "abc".replaceAll(s, s),
+          "abc".replace(s, (m) => m.toUpperCase()), "abc".match(s)[0], "abcb".matchAll(s).length, "abc".search(s),
+        ]
+      `),
+    ).toEqual([["a", "c"], ["a"], [], "aXc", "aRc", "abc", "aBc", "b", 2, 1])
+    expect((await error(`"abc".includes(/b/)`)).message).toContain("cannot take a regular expression")
+  })
+
+  test("the receiver converts first, then each consumed argument, in spec order; extra arguments are untouched", async () => {
+    expect(
+      await value(`
+        const log = []
+        const observer = (name, string, number) => ({
+          toString() { log.push("toString:" + name); return string },
+          valueOf() { log.push("valueOf:" + name); return number },
+        })
+        const padded = String.prototype.padStart.call(observer("receiver", {}, "abc"), observer("maxLength", 11, {}), observer("fillString", {}, "def"))
+        const extra = "abc".indexOf("b", 1, { valueOf() { throw new Error("extra argument converted") } })
+        return [padded, log, extra, String.prototype.trim.call({ toString() { return " abc " } })]
+      `),
+    ).toEqual([
+      "defdefdeabc",
+      [
+        "toString:receiver",
+        "valueOf:receiver",
+        "valueOf:maxLength",
+        "toString:maxLength",
+        "toString:fillString",
+        "valueOf:fillString",
+      ],
+      1,
+      "abc",
+    ])
+  })
+
+  test("conversion failures surface and opaque arguments still reject", async () => {
+    expect((await error(`"abc".indexOf({ toString() { throw new RangeError("intostr") } })`)).message).toContain(
+      "intostr",
+    )
+    expect((await error(`(1).toString({ valueOf() { throw new SyntaxError("poison") } })`)).message).toContain("poison")
+    expect((await error(`(1).toFixed({ toString() { return {} }, valueOf() { return {} } })`)).message).toContain(
+      "Cannot convert object to primitive value",
+    )
+    expect((await error(`"abc".indexOf(tools.nowhere)`)).message).toContain("expects argument 1 to be a data value")
+    expect((await error(`"abc".indexOf(Promise.resolve("b"))`)).message).toContain(
+      "expects argument 1 to be a data value",
+    )
+  })
+})
+
+describe("WeakMap and WeakSet", () => {
+  test("hold program objects by identity and answer like JS for non-object keys", async () => {
+    expect(
+      await value(`
+        const k = {}
+        const f = () => 1
+        const wm = new WeakMap([[k, 1]])
+        const ws = new WeakSet([k])
+        return [
+          wm.set(f, "fn") === wm, wm.get(k), wm.get(f), wm.has({}), wm.get(1), wm.has(1), wm.delete("s"),
+          wm.getOrInsert(k, 9), wm.getOrInsertComputed({}, (key) => typeof key),
+          ws.add(f) === ws, ws.has(k), ws.has(f), ws.has(1), ws.delete(k), ws.has(k),
+          String(wm), wm.size, "clear" in wm, Symbol.iterator in ws, JSON.stringify(wm),
+        ]
+      `),
+    ).toEqual([
+      true,
+      1,
+      "fn",
+      false,
+      null,
+      false,
+      false,
+      1,
+      "object",
+      true,
+      true,
+      true,
+      false,
+      true,
+      false,
+      "[object WeakMap]",
+      null,
+      false,
+      false,
+      "{}",
+    ])
+  })
+
+  test("reject primitive keys, plain calls, bad receivers, and cloning", async () => {
+    expect((await error(`new WeakMap().set(1, 1)`)).message).toContain("Invalid value used as weak map key")
+    expect((await error(`new WeakSet([1])`)).message).toContain("Invalid value used in weak set")
+    expect((await error(`WeakMap()`)).message).toContain("new")
+    expect((await error(`WeakMap.prototype.get.call(new Map(), {})`)).message).toContain("incompatible receiver")
+    expect((await error(`structuredClone(new WeakSet())`)).message).toContain("DataCloneError")
   })
 })

@@ -2,7 +2,7 @@ import { Effect } from "effect"
 import { HttpClient } from "effect/unstable/http"
 import type { Tool, JsonSchema } from "../tool.js"
 
-/** A parsed OpenAPI 3.x document. YAML must be parsed by the host. */
+/** A parsed OpenAPI 3.x document. YAML must be parsed by the ctx. */
 export type Document = Record<string, unknown>
 
 /** The operation identity handed to auth resolution and errors. */

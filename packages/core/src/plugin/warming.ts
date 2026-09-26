@@ -57,6 +57,9 @@ export const Plugin = define({
 
     const hook = (event: SessionHooks["context"]) =>
       Effect.gen(function* () {
+        const session = yield* ctx.session.get({ sessionID: event.sessionID }).pipe(Effect.orDie)
+        if (session.parentID) return
+
         const active = sessions.get(event.sessionID)
         const settings = yield* loadSettings()
         if (!settings) {

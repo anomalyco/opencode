@@ -71,13 +71,16 @@ const source = {
   "ui.sessionTurn.retry.attemptLine": "{{line}} - attempt #{{attempt}}",
   "ui.sessionTurn.retry.attemptLabel": "Attempt {{attempt}}",
   "ui.sessionTurn.retry.attemptRetrying": "Attempt {{attempt}} - {{line}}",
+  "ui.sessionTurn.retry.attemptWaiting.one": "Attempt {{attempt}} - retrying in {{count}}s",
+  "ui.sessionTurn.retry.attemptWaiting.other": "Attempt {{attempt}} - retrying in {{count}}s",
+  "ui.sessionTurn.retry.attemptRetryingNow": "Attempt {{attempt}} - retrying",
   "ui.sessionTurn.retry.geminiHot": "gemini is way too hot right now",
   "ui.sessionTurn.error.freeUsageExceeded": "Free usage exceeded",
   "ui.sessionTurn.error.addCredits": "Add credits",
 
   "dialog.usageExceeded.freeTier.title": "Free limit reached",
   "dialog.usageExceeded.freeTier.description":
-    "Subscribe to OpenCode Go for reliable access to the best open-source models, starting at $5/month.",
+    "Subscribe to OpenCode Go for reliable access to the best open-source models for $10/month.",
   "dialog.usageExceeded.freeTier.actionLabel": "Subscribe",
   "dialog.usageExceeded.accountRateLimit.title": "Go limit reached",
   "dialog.usageExceeded.accountRateLimit.description":
@@ -147,6 +150,8 @@ const source = {
   "ui.promptInput.dropFiles.pdf": "Drop PDFs or files to add",
   "ui.promptInput.dropFiles.imagePdf": "Drop images, PDFs, or files to add",
   "ui.promptInput.removeAttachment": "Remove attachment",
+  "ui.promptInput.cancelUpload": "Cancel upload",
+  "ui.promptInput.uploading": "{{percent}}%",
   "ui.promptInput.label": "Prompt",
   "ui.promptInput.placeholder.shell": "Enter shell command…",
   "ui.promptInput.placeholder.normal": "Ask anything, {{slash}} for commands, {{at}} for context…",
@@ -208,6 +213,8 @@ const source = {
 
   "ui.common.file.one": "file",
   "ui.common.file.other": "files",
+  "ui.common.fileCount.one": "{{count}} file",
+  "ui.common.fileCount.other": "{{count}} files",
   "ui.common.question.one": "question",
   "ui.common.question.other": "questions",
 
@@ -250,6 +257,7 @@ const source = {
   "ui.sessionTimeline.notice.cancelled": "{{actor}} cancelled",
   "ui.sessionTimeline.notice.finished": "{{actor}} finished",
   "ui.sessionTimeline.notice.instructionsUpdated": "Instructions updated",
+  "ui.sessionTimeline.notice.restart": "Continuing after restart",
   "ui.message.queued": "Queued",
   "ui.message.attachment.alt": "attachment",
 

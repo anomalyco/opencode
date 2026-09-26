@@ -275,6 +275,7 @@ it.effect(
         assistantMessageID: settledAssistant,
         agent: Agent.ID.make("build"),
         model: { id: ID.make("generate-model"), providerID: Provider.ID.make("test") },
+        started: 0,
       })
       yield* bus.publish(SessionEvent.Text.Started, {
         sessionID,
@@ -293,6 +294,7 @@ it.effect(
         assistantMessageID: activeAssistant,
         agent: Agent.ID.make("build"),
         model: { id: ID.make("generate-model"), providerID: Provider.ID.make("test") },
+        started: 0,
       })
       yield* bus.publish(SessionEvent.Tool.Input.Started, {
         sessionID,

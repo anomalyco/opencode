@@ -4,7 +4,6 @@ import { makeLocationNode } from "@opencode/util/effect/app-node"
 import type { FSUtil } from "@opencode/util/fs-util"
 import path from "path"
 import { Context, Effect, Layer, Types } from "effect"
-import type { Agent } from "@opencode/schema/agent"
 import { Skill } from "@opencode/schema/skill"
 import { Bus } from "./bus.js"
 import { Permission } from "./permission.js"
@@ -31,8 +30,8 @@ export type Name = Skill.Name
 
 export { Event } from "@opencode/schema/skill"
 
-export const available = (skills: ReadonlyArray<Info>, agent: Agent.Info) =>
-  skills.filter((skill) => Permission.evaluate("skill", skill.id, agent.permissions).effect !== "deny")
+export const available = (skills: ReadonlyArray<Info>, permissions: Permission.Ruleset) =>
+  skills.filter((skill) => Permission.evaluate("skill", skill.id, permissions).effect !== "deny")
 
 export const toModelOutput = (skill: Info, files: ReadonlyArray<string>) => {
   const directory = path.dirname(skill.path)

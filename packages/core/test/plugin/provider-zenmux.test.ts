@@ -31,7 +31,7 @@ describe("ZenmuxPlugin", () => {
       const catalog = yield* Provider.Service
       yield* catalog.transform((catalog) => {
         catalog.update(Provider.ID.make("zenmux"), (provider) => {
-          provider.package = Provider.aisdk("@ai-sdk/openai-compatible")
+          provider.package = "@opencode/ai/providers/openai-compatible"
           provider.settings = { ...provider.settings, baseURL: "https://zenmux.ai/api/v1" }
         })
       })
@@ -47,7 +47,7 @@ describe("ZenmuxPlugin", () => {
       const catalog = yield* Provider.Service
       yield* catalog.transform((catalog) => {
         catalog.update(Provider.ID.make("zenmux"), (provider) => {
-          provider.package = Provider.aisdk("@ai-sdk/openai-compatible")
+          provider.package = "@opencode/ai/providers/openai-compatible"
           provider.settings = { ...provider.settings, baseURL: "https://zenmux.ai/api/v1" }
           provider.headers = { ...provider.headers, Existing: "value" }
         })
@@ -67,7 +67,7 @@ describe("ZenmuxPlugin", () => {
       const catalog = yield* Provider.Service
       yield* catalog.transform((catalog) => {
         catalog.update(Provider.ID.make("zenmux"), (provider) => {
-          provider.package = Provider.aisdk("@ai-sdk/openai-compatible")
+          provider.package = "@opencode/ai/providers/openai-compatible"
           provider.settings = { ...provider.settings, baseURL: "https://zenmux.ai/api/v1" }
           provider.headers = { "HTTP-Referer": "https://example.com/", "X-Title": "custom-title" }
         })

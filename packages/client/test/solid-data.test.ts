@@ -52,6 +52,80 @@ test("uses the configured initial window and retains normal cursor page sizes", 
   }
 })
 
+test("reconciles a stale running tool when execution settles", async () => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  let completed = false
+  let requests = 0
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async () => {
+      requests++
+      return Response.json({
+        data: [
+          {
+            id: "msg_assistant",
+            type: "assistant",
+            agent: "build",
+            model: { providerID: "provider", id: "model" },
+            time: { created: 1, ...(completed ? { completed: 2 } : {}) },
+            content: [
+              {
+                type: "tool",
+                id: "call_execute",
+                name: "execute",
+                time: { created: 1, ran: 1, ...(completed ? { completed: 2 } : {}) },
+                state: completed
+                  ? { status: "completed", input: {}, metadata: {}, content: [] }
+                  : { status: "running", input: {}, metadata: {} },
+              },
+            ],
+          },
+        ],
+        cursor: {},
+      })
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+      connection: { status: () => "connected" },
+    }),
+    dispose,
+  }))
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    completed = true
+    const interrupted: OpenCodeEvent = {
+      id: "evt_interrupted",
+      created: 3,
+      type: "session.execution.interrupted",
+      durable: { aggregateID: "ses_refresh", seq: 1, version: 1 },
+      data: { sessionID: "ses_refresh", reason: "user" },
+    }
+    listeners.forEach((listener) => listener({ name: interrupted.type, details: interrupted }))
+
+    await wait(
+      () =>
+        setup.data.session.message.get("ses_refresh", "msg_assistant")?.content[0]?.type === "tool" &&
+        setup.data.session.message.get("ses_refresh", "msg_assistant")?.content[0]?.state.status === "completed",
+    )
+    expect(requests).toBe(2)
+    expect(setup.data.session.message.get("ses_refresh", "msg_assistant")?.content[0]).toMatchObject({
+      state: { status: "completed" },
+    })
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("revalidates after an event overtakes an active session read", async () => {
   let release!: () => void
   const gate = new Promise<void>((resolve) => (release = resolve))

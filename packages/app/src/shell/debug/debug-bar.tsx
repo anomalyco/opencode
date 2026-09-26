@@ -1,10 +1,20 @@
-import { useIsRouting, useLocation } from "@solidjs/router"
-import { batch, createEffect, onCleanup, onMount, Show } from "solid-js"
+import { useIsRouting, useLocation, useParams } from "@solidjs/router"
+import { batch, createEffect, createMemo, on, onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
+import { useGlobal } from "@/runtime/server/runtime"
+import { ServerConnection } from "@/runtime/server/registry"
+import { base64Encode } from "@opencode/util/encode"
+import {
+  applyProviderMetricEvent,
+  isProviderMetricEvent,
+  projectedProviderMetrics,
+  type ProviderMetrics,
+  type ProviderMetricState,
+} from "./provider-metrics"
 
 type Mem = Performance & {
   memory?: {
@@ -39,10 +49,21 @@ const time = (n?: number) => {
   return `${Math.round(n)}`
 }
 
+const fixed = (n?: number, digits = 0) => {
+  if (n === undefined || Number.isNaN(n)) return
+  return n.toFixed(digits)
+}
+
 const mb = (n?: number) => {
   if (n === undefined || Number.isNaN(n)) return
   const v = n / 1024 / 1024
   return `${v >= 1024 ? v.toFixed(0) : v.toFixed(1)}MB`
+}
+
+const duration = (n?: number) => {
+  if (n === undefined || Number.isNaN(n)) return
+  if (n < 1_000) return `${Math.round(n)}ms`
+  return `${(n / 1_000).toFixed(n < 10_000 ? 1 : 0)}s`
 }
 
 const bad = (n: number | undefined, limit: number, low = false) => {
@@ -80,6 +101,7 @@ function Cell(props: {
         }}
       >
         <div
+          dir="ltr"
           classList={{
             "text-[10px] leading-none font-black uppercase tracking-[0.04em] opacity-70": true,
           }}
@@ -87,6 +109,7 @@ function Cell(props: {
           {props.label}
         </div>
         <div
+          dir="ltr"
           classList={{
             "uppercase font-bold tabular-nums": true,
             "text-[11px] leading-text-tight": !!props.inline,
@@ -136,8 +159,12 @@ function ToggleCell(props: {
           "flex-col items-center": !props.inline,
         }}
       >
-        <span class="text-[10px] leading-none font-black tracking-[0.04em] opacity-70">{props.label}</span>
-        <span class="text-[11px] leading-none font-bold">{props.value}</span>
+        <span dir="ltr" class="text-[10px] leading-none font-black tracking-[0.04em] opacity-70">
+          {props.label}
+        </span>
+        <span dir="ltr" class="text-[11px] leading-none font-bold">
+          {props.value}
+        </span>
       </span>
     </button>
   )
@@ -149,9 +176,11 @@ function ToggleCell(props: {
   )
 }
 
-export function DebugBar(props: { inline?: boolean } = {}) {
+export function DebugBar(props: { diagnostics?: boolean; inline?: boolean } = {}) {
   const language = useLanguage()
   const platform = usePlatform()
+  const global = useGlobal()
+  const params = useParams<{ serverKey?: string; id?: string }>()
   const location = useLocation()
   const routing = useIsRouting()
   const [state, setState] = createStore({
@@ -175,7 +204,54 @@ export function DebugBar(props: { inline?: boolean } = {}) {
       dur: undefined as number | undefined,
       pending: false,
     },
+    live: undefined as ProviderMetrics | undefined,
   })
+
+  const target = createMemo(
+    () => {
+      if (!params.serverKey || !params.id) return
+      const connection = global.servers
+        .list()
+        .find((item) => base64Encode(ServerConnection.key(item)) === params.serverKey)
+      if (!connection) return
+      return { ctx: global.ensureServerCtx(connection), id: params.id }
+    },
+    undefined,
+    { equals: (a, b) => a?.ctx === b?.ctx && a?.id === b?.id },
+  )
+  // History comes from the already-loaded message projection; live requests refine it in place.
+  const projected = createMemo(() => {
+    const current = target()
+    if (!current) return
+    return projectedProviderMetrics(current.ctx.data.session.message.list(current.id))
+  })
+  const metrics = () => state.live ?? projected()
+
+  // Missed events during an outage are never replayed; the refreshed projection must win.
+  createEffect(
+    on(
+      () => target()?.ctx.sdk.connection.status(),
+      (status) => {
+        if (status !== "connected") setState("live", undefined)
+      },
+      { defer: true },
+    ),
+  )
+
+  createEffect(
+    on(target, (current) => {
+      setState("live", undefined)
+      if (!current) return
+      const accumulator: ProviderMetricState = {}
+      onCleanup(
+        current.ctx.sdk.event.listen((event) => {
+          if (!isProviderMetricEvent(event) || event.data.sessionID !== current.id) return
+          applyProviderMetricEvent(accumulator, event)
+          if (accumulator.latest) setState("live", accumulator.latest)
+        }),
+      )
+    }),
+  )
 
   const na = () => language.t("debugBar.na").toUpperCase()
   const heap = () => (state.heap.limit ? (state.heap.used ?? 0) / state.heap.limit : undefined)
@@ -204,6 +280,7 @@ export function DebugBar(props: { inline?: boolean } = {}) {
   let two = 0
 
   createEffect(() => {
+    if (!props.diagnostics) return
     const busy = routing()
     const next = `${location.pathname}${location.search}`
 
@@ -248,6 +325,7 @@ export function DebugBar(props: { inline?: boolean } = {}) {
   })
 
   onMount(() => {
+    if (!props.diagnostics) return
     const obs: PerformanceObserver[] = []
     const fps: Array<{ at: number; dur: number }> = []
     const long: Array<{ at: number; dur: number }> = []
@@ -448,7 +526,7 @@ export function DebugBar(props: { inline?: boolean } = {}) {
 
   return (
     <aside
-      aria-label={language.t("debugBar.ariaLabel")}
+      aria-label={language.t(props.diagnostics ? "debugBar.ariaLabel" : "debugBar.providerAriaLabel")}
       classList={{
         "pointer-events-auto hidden overflow-hidden text-text-strong md:block": true,
         "mt-[-6px] w-full shrink-0 px-3 py-1": !!props.inline,
@@ -467,102 +545,132 @@ export function DebugBar(props: { inline?: boolean } = {}) {
         }}
       >
         <Cell
-          label={language.t("debugBar.nav.label")}
-          tip={language.t("debugBar.nav.tip")}
-          value={navv()}
-          bad={bad(state.nav.dur, 400)}
-          dim={state.nav.dur === undefined && !state.nav.pending}
+          label={language.t("debugBar.tps.label")}
+          tip={language.t("debugBar.tps.tip")}
+          value={fixed(metrics()?.tps, 1) ?? na()}
+          dim={metrics()?.tps === undefined}
           inline={props.inline}
         />
         <Cell
-          label={language.t("debugBar.fps.label")}
-          tip={language.t("debugBar.fps.tip")}
-          value={state.fps === undefined ? na() : `${Math.round(state.fps)}`}
-          bad={bad(state.fps, 50, true)}
-          dim={state.fps === undefined}
+          label={language.t("debugBar.ttft.label")}
+          tip={language.t("debugBar.ttft.tip")}
+          value={duration(metrics()?.ttft) ?? na()}
+          dim={metrics()?.ttft === undefined}
           inline={props.inline}
         />
         <Cell
-          label={language.t("debugBar.frame.label")}
-          tip={language.t("debugBar.frame.tip")}
-          value={time(state.gap) ?? na()}
-          bad={bad(state.gap, 50)}
-          dim={state.gap === undefined}
+          label={language.t("debugBar.ttfa.label")}
+          tip={language.t("debugBar.ttfa.tip")}
+          value={duration(metrics()?.ttfa) ?? na()}
+          dim={metrics()?.ttfa === undefined}
           inline={props.inline}
         />
         <Cell
-          label={language.t("debugBar.jank.label")}
-          tip={language.t("debugBar.jank.tip")}
-          value={state.jank === undefined ? na() : `${state.jank}`}
-          bad={bad(state.jank, 8)}
-          dim={state.jank === undefined}
+          label={language.t("debugBar.e2e.label")}
+          tip={language.t("debugBar.e2e.tip")}
+          value={duration(metrics()?.e2e) ?? na()}
+          dim={metrics()?.e2e === undefined}
           inline={props.inline}
         />
-        <Cell
-          label={language.t("debugBar.long.label")}
-          tip={language.t("debugBar.long.tip", { max: ms(state.long.max) ?? na() })}
-          value={longv()}
-          bad={bad(state.long.block, 200)}
-          dim={state.long.count === undefined}
-          inline={props.inline}
-        />
-        <Cell
-          label={language.t("debugBar.delay.label")}
-          tip={language.t("debugBar.delay.tip")}
-          value={time(state.delay) ?? na()}
-          bad={bad(state.delay, 100)}
-          dim={state.delay === undefined}
-          inline={props.inline}
-        />
-        <Cell
-          label={language.t("debugBar.inp.label")}
-          tip={language.t("debugBar.inp.tip")}
-          value={time(state.inp) ?? na()}
-          bad={bad(state.inp, 200)}
-          dim={state.inp === undefined}
-          inline={props.inline}
-        />
-        <Cell
-          label={language.t("debugBar.cls.label")}
-          tip={language.t("debugBar.cls.tip")}
-          value={state.cls === undefined ? na() : state.cls.toFixed(2)}
-          bad={bad(state.cls, 0.1)}
-          dim={state.cls === undefined}
-          inline={props.inline}
-        />
-        <Cell
-          label={language.t("debugBar.mem.label")}
-          tip={
-            state.heap.used === undefined
-              ? language.t("debugBar.mem.tipUnavailable")
-              : language.t("debugBar.mem.tip", {
-                  used: mb(state.heap.used) ?? na(),
-                  limit: mb(state.heap.limit) ?? na(),
-                })
-          }
-          value={heapv()}
-          bad={bad(heap(), 0.8)}
-          dim={state.heap.used === undefined}
-          inline={props.inline}
-          span={platform.setForceFocus ? 2 : 3}
-        />
-        <ToggleCell
-          active={language.direction() === "rtl"}
-          inline={props.inline}
-          label={language.t("debugBar.direction.label")}
-          tip={language.t("debugBar.direction.tip")}
-          value={language.t(`debugBar.direction.${language.direction()}`)}
-          onClick={() => language.setDirection(language.direction() === "rtl" ? "ltr" : "rtl")}
-        />
-        <Show when={platform.setForceFocus}>
-          <ToggleCell
-            active={state.focus}
+        <Show when={props.diagnostics}>
+          <Cell
+            label={language.t("debugBar.nav.label")}
+            tip={language.t("debugBar.nav.tip")}
+            value={navv()}
+            bad={bad(state.nav.dur, 400)}
+            dim={state.nav.dur === undefined && !state.nav.pending}
             inline={props.inline}
-            label={language.t("debugBar.focus.label")}
-            tip={language.t("debugBar.focus.tip")}
-            value={language.t(state.focus ? "debugBar.focus.on" : "debugBar.focus.off")}
-            onClick={() => void toggleFocus()}
           />
+          <Cell
+            label={language.t("debugBar.fps.label")}
+            tip={language.t("debugBar.fps.tip")}
+            value={state.fps === undefined ? na() : `${Math.round(state.fps)}`}
+            bad={bad(state.fps, 50, true)}
+            dim={state.fps === undefined}
+            inline={props.inline}
+          />
+          <Cell
+            label={language.t("debugBar.frame.label")}
+            tip={language.t("debugBar.frame.tip")}
+            value={time(state.gap) ?? na()}
+            bad={bad(state.gap, 50)}
+            dim={state.gap === undefined}
+            inline={props.inline}
+          />
+          <Cell
+            label={language.t("debugBar.jank.label")}
+            tip={language.t("debugBar.jank.tip")}
+            value={state.jank === undefined ? na() : `${state.jank}`}
+            bad={bad(state.jank, 8)}
+            dim={state.jank === undefined}
+            inline={props.inline}
+          />
+          <Cell
+            label={language.t("debugBar.long.label")}
+            tip={language.t("debugBar.long.tip", { max: ms(state.long.max) ?? na() })}
+            value={longv()}
+            bad={bad(state.long.block, 200)}
+            dim={state.long.count === undefined}
+            inline={props.inline}
+          />
+          <Cell
+            label={language.t("debugBar.delay.label")}
+            tip={language.t("debugBar.delay.tip")}
+            value={time(state.delay) ?? na()}
+            bad={bad(state.delay, 100)}
+            dim={state.delay === undefined}
+            inline={props.inline}
+          />
+          <Cell
+            label={language.t("debugBar.inp.label")}
+            tip={language.t("debugBar.inp.tip")}
+            value={time(state.inp) ?? na()}
+            bad={bad(state.inp, 200)}
+            dim={state.inp === undefined}
+            inline={props.inline}
+          />
+          <Cell
+            label={language.t("debugBar.cls.label")}
+            tip={language.t("debugBar.cls.tip")}
+            value={state.cls === undefined ? na() : state.cls.toFixed(2)}
+            bad={bad(state.cls, 0.1)}
+            dim={state.cls === undefined}
+            inline={props.inline}
+          />
+          <Cell
+            label={language.t("debugBar.mem.label")}
+            tip={
+              state.heap.used === undefined
+                ? language.t("debugBar.mem.tipUnavailable")
+                : language.t("debugBar.mem.tip", {
+                    used: mb(state.heap.used) ?? na(),
+                    limit: mb(state.heap.limit) ?? na(),
+                  })
+            }
+            value={heapv()}
+            bad={bad(heap(), 0.8)}
+            dim={state.heap.used === undefined}
+            inline={props.inline}
+            span={platform.setForceFocus ? 2 : 3}
+          />
+          <ToggleCell
+            active={language.direction() === "rtl"}
+            inline={props.inline}
+            label={language.t("debugBar.direction.label")}
+            tip={language.t("debugBar.direction.tip")}
+            value={language.t(`debugBar.direction.${language.direction()}`)}
+            onClick={() => language.setDirection(language.direction() === "rtl" ? "ltr" : "rtl")}
+          />
+          <Show when={platform.setForceFocus}>
+            <ToggleCell
+              active={state.focus}
+              inline={props.inline}
+              label={language.t("debugBar.focus.label")}
+              tip={language.t("debugBar.focus.tip")}
+              value={language.t(state.focus ? "debugBar.focus.on" : "debugBar.focus.off")}
+              onClick={() => void toggleFocus()}
+            />
+          </Show>
         </Show>
       </div>
     </aside>

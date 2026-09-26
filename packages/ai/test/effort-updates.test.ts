@@ -263,9 +263,9 @@ describe("OpenAI Responses effort updates", () => {
 
       expect(prepared.body.reasoning).toEqual({ effort: "high" })
       expect(prepared.body.input).toEqual([
-        { role: "user", content: [{ type: "input_text", text: "Before." }] },
+        { type: "message", role: "user", content: [{ type: "input_text", text: "Before." }] },
         { type: "configuration_update", reasoning: { effort: "low" } },
-        { role: "user", content: [{ type: "input_text", text: "After." }] },
+        { type: "message", role: "user", content: [{ type: "input_text", text: "After." }] },
       ])
     }),
   )
@@ -287,9 +287,9 @@ describe("OpenAI Responses effort updates", () => {
 
       expect(prepared.body.reasoning).toEqual({ effort: "medium" })
       expect(prepared.body.input).toEqual([
-        { role: "user", content: [{ type: "input_text", text: "Before." }] },
+        { type: "message", role: "user", content: [{ type: "input_text", text: "Before." }] },
         { type: "configuration_update", reasoning: { effort: "xhigh" } },
-        { role: "user", content: [{ type: "input_text", text: "After." }] },
+        { type: "message", role: "user", content: [{ type: "input_text", text: "After." }] },
       ])
     }),
   )
@@ -351,10 +351,34 @@ describe("OpenAI Responses effort updates", () => {
     }),
   )
 
+  it.effect("strips markers when the body overlay selects pro reasoning mode", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenAI.configure({ apiKey: "fixture", http: { body: { reasoning: { mode: "pro" } } } }).responses(
+            "gpt-6-sol",
+          ),
+          messages: conversation,
+          providerOptions: { reasoningEffort: "low" },
+        }),
+      )
+
+      expect(updates(prepared.body)).toEqual([])
+      expect(prepared.body.reasoning).toEqual({ effort: "low" })
+    }),
+  )
+
   for (const [id, supported] of [
     ["gpt-6-astra", true],
     ["openai/gpt-6-astra", true],
+    ["gpt-6-sol", true],
+    ["openai/gpt-6-sol", true],
+    ["gpt-6-luna", true],
+    ["openai/gpt-6-luna", true],
     ["gpt-6-astra-2026-09-01", false],
+    ["gpt-6-sol-pro", false],
+    ["gpt-6-luna-pro", false],
+    ["gpt-6-sol-fast", false],
     ["gpt-5.6-sol", false],
   ] as const) {
     it.effect(`${supported ? "lowers" : "strips"} markers for ${id}`, () =>
@@ -404,9 +428,9 @@ describe("OpenAI Responses effort updates", () => {
         const body = JSON.parse(text)
         expect(body.reasoning).toEqual({ effort: "high" })
         expect(body.input).toEqual([
-          { role: "user", content: [{ type: "input_text", text: "Before." }] },
+          { type: "message", role: "user", content: [{ type: "input_text", text: "Before." }] },
           { type: "configuration_update", reasoning: { effort: "low" } },
-          { role: "user", content: [{ type: "input_text", text: "After." }] },
+          { type: "message", role: "user", content: [{ type: "input_text", text: "After." }] },
           { type: "compaction_trigger" },
         ])
         return respond(sseEvents({ type: "response.completed", response: { id: "resp_1", output: [checkpoint] } }), {
@@ -426,8 +450,8 @@ describe("OpenAI Responses effort updates", () => {
       Effect.sync(() => {
         expect(new URL(request.url).pathname).toEndWith("/responses/compact")
         expect(JSON.parse(text).input).toEqual([
-          { role: "user", content: [{ type: "input_text", text: "Before." }] },
-          { role: "user", content: [{ type: "input_text", text: "After." }] },
+          { type: "message", role: "user", content: [{ type: "input_text", text: "Before." }] },
+          { type: "message", role: "user", content: [{ type: "input_text", text: "After." }] },
         ])
         return respond(JSON.stringify({ object: "response.compaction", output: [checkpoint] }))
       }),

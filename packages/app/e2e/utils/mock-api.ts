@@ -1,5 +1,6 @@
 import { Schema, SchemaGetter } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiGroup, HttpApiSchema } from "effect/unstable/httpapi"
+import { Worktree } from "@opencode/schema/worktree"
 
 const Json = Schema.Json.pipe(
   Schema.decodeTo(Schema.Unknown, {
@@ -32,7 +33,7 @@ export class MockBadRequest extends Schema.TaggedError<MockBadRequest>()("MockBa
 }) {}
 
 const Group = HttpApiGroup.make("mock")
-  .add(HttpApiEndpoint.get("status", "/api/status", { success: Json }))
+  .add(HttpApiEndpoint.get("info", "/api/info", { success: Json }))
   .add(
     HttpApiEndpoint.get("event", "/api/event", {
       success: Schema.String.pipe(HttpApiSchema.asText({ contentType: "text/event-stream" })),
@@ -87,31 +88,34 @@ const Group = HttpApiGroup.make("mock")
   .add(HttpApiEndpoint.get("websearchProviders", "/api/websearch/provider", { success: Json }))
   .add(
     HttpApiEndpoint.get("worktreeList", "/api/worktree", {
+      query: Schema.Struct({ projectID: Schema.String }),
       success: Json,
     }),
   )
   .add(
     HttpApiEndpoint.post("worktreeCreate", "/api/worktree", {
-      payload: JsonPayload,
+      payload: Worktree.CreateInput,
       success: Json,
     }),
   )
   .add(
     HttpApiEndpoint.delete("worktreeRemove", "/api/worktree", {
+      payload: Worktree.RemoveInput,
       success: NoContent,
     }),
   )
   .add(
     HttpApiEndpoint.post("worktreeRefresh", "/api/worktree/refresh", {
+      payload: Schema.Struct({ projectID: Schema.String }),
       success: NoContent,
     }),
   )
   .add(HttpApiEndpoint.get("location", "/api/location", { success: Json }))
   .add(HttpApiEndpoint.get("permissionRequests", "/api/permission/request", { success: Json }))
-  .add(HttpApiEndpoint.get("formRequests", "/api/form/request", { success: Json }))
+  .add(HttpApiEndpoint.get("formRequests", "/api/form", { success: Json }))
   .add(HttpApiEndpoint.get("vcs", "/api/vcs", { success: Json }))
   .add(HttpApiEndpoint.get("vcsStatus", "/api/vcs/status", { success: Json }))
-  .add(HttpApiEndpoint.get("vcsBranches", "/api/vcs/branches", { success: Json }))
+  .add(HttpApiEndpoint.get("vcsBranches", "/api/vcs/branch", { success: Json }))
   .add(HttpApiEndpoint.get("vcsDiff", "/api/vcs/diff", { success: Json }))
   .add(HttpApiEndpoint.get("fsList", "/api/fs/list", { query: Query, success: Json }))
   .add(
@@ -169,7 +173,7 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(
-    HttpApiEndpoint.post("sessionFormCancel", "/api/session/:sessionID/form/:formID/cancel", {
+    HttpApiEndpoint.delete("sessionFormCancel", "/api/session/:sessionID/form/:formID", {
       params: { ...SessionParams, formID: Schema.String },
       success: NoContent,
     }),
@@ -194,6 +198,13 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(
+    HttpApiEndpoint.post("sessionGenerate", "/api/session/:sessionID/generate", {
+      params: SessionParams,
+      payload: Schema.Struct({ prompt: Schema.String }),
+      success: Json,
+    }),
+  )
+  .add(
     HttpApiEndpoint.post("sessionSwitchAgent", "/api/session/:sessionID/agent", {
       params: SessionParams,
       payload: JsonPayload,
@@ -214,8 +225,9 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(
-    HttpApiEndpoint.post("sessionInboxSteer", "/api/session/:sessionID/inbox/:inboxID/steer", {
+    HttpApiEndpoint.patch("sessionInboxUpdate", "/api/session/:sessionID/inbox/:inboxID", {
       params: { ...SessionParams, inboxID: Schema.String },
+      payload: Schema.Struct({ delivery: Schema.Literals(["steer", "queue"]) }),
       success: NoContent,
     }),
   )
@@ -254,7 +266,7 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(
-    HttpApiEndpoint.post("sessionRevertClear", "/api/session/:sessionID/revert/clear", {
+    HttpApiEndpoint.delete("sessionRevertClear", "/api/session/:sessionID/revert", {
       params: SessionParams,
       success: NoContent,
     }),

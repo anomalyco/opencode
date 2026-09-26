@@ -38,7 +38,7 @@ const discovery = Effect.gen(function* () {
   const models = yield* Model.Service
   yield* providers.transform((draft) => {
     draft.update(providerID, (provider) => {
-      provider.package = Provider.aisdk("@ai-sdk/openai-compatible")
+      provider.package = "@opencode/ai/providers/openai-compatible"
       provider.settings = { baseURL: "https://inference.do-ai.run/v1" }
     })
     draft.models.update(providerID, Model.ID.make("snapshot-model"), () => {})
@@ -109,7 +109,7 @@ describe("DigitalOceanPlugin", () => {
       expect(yield* fixture.models.get(providerID, Model.ID.make("router:alpha"))).toMatchObject({
         name: "alpha",
         family: "digitalocean-inference-routers",
-        package: "aisdk:@ai-sdk/openai-compatible",
+        package: "@opencode/ai/providers/openai-compatible",
         settings: { baseURL: "https://inference.do-ai.run/v1" },
         capabilities: { tools: true, input: ["text"], output: ["text"] },
         limit: { context: 128_000, output: 8_192 },

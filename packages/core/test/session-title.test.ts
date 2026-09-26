@@ -441,6 +441,7 @@ it.effect("regenerates an existing title using the title agent", () =>
       assistantMessageID,
       agent: Agent.ID.make("build"),
       model: Model.Ref.make({ id: Model.ID.make("title-model"), providerID: Provider.ID.make("test") }),
+      started: 0,
     })
     yield* events.publish(SessionEvent.Reasoning.Started, { sessionID, assistantMessageID, ordinal: 0 })
     yield* events.publish(SessionEvent.Reasoning.Ended, {

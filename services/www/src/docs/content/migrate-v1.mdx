@@ -415,7 +415,8 @@ Most fields that keep the same shape, including `shell`, `model`, `default_agent
 V2 accepts and preserves `lsp` configuration, but it does not run language servers, expose LSP tools, or produce LSP
 diagnostics. Replace workflows that depend on those capabilities with the project's lint, typecheck, or compiler commands.
 
-The V1 provider filters do not have one-to-one native V2 config fields, but their behavior remains supported:
+The V1 provider filters do not have one-to-one native V2 config fields, but their behavior remains supported through
+[policies](/policies):
 
 - `enabled_providers` becomes an internal deny-by-default provider policy followed by allows for the listed providers.
 - `disabled_providers` becomes internal deny policies for the listed providers.
@@ -524,7 +525,7 @@ V2 replaces layered V1 `tui.json(c)` files with one global terminal client confi
 The terminal client owns this file; the background service does not load it. When `cli.json` is absent, the first V2
 terminal client startup migrates supported global `tui.json` settings and persisted preferences while leaving V1 files
 unchanged. Project-local client configuration is not migrated because V2 client configuration is global. See
-[CLI config](/cli/config) for current client settings.
+[CLI settings](/cli/config) for the current client settings reference.
 
 ## Plugins
 

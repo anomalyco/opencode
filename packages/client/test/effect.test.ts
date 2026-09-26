@@ -15,21 +15,31 @@ import {
 
 const synced = { type: "log.synced" as const, aggregateID: "ses_test", seq: Event.Seq.make(1) }
 
-test("server.status decodes the readiness response", async () => {
+test("server.info decodes the readiness response", async () => {
   const httpClient = HttpClient.make((request) =>
     Effect.succeed(
       HttpClientResponse.fromWeb(
         request,
-        Response.json({ version: "current", pid: 123, urls: ["http://localhost:3000"] }),
+        Response.json({
+          version: "current",
+          pid: 123,
+          urls: ["http://localhost:3000"],
+          paths: { tmp: "/tmp/opencode" },
+        }),
       ),
     ),
   )
   const result = await Effect.gen(function* () {
     const client = yield* OpenCode.make({ baseUrl: "http://localhost:3000" })
-    return yield* client.server.status()
+    return yield* client.server.info()
   }).pipe(Effect.provideService(HttpClient.HttpClient, httpClient), Effect.runPromise)
 
-  expect(result).toEqual({ version: "current", pid: 123, urls: ["http://localhost:3000"] })
+  expect(result).toEqual({
+    version: "current",
+    pid: 123,
+    urls: ["http://localhost:3000"],
+    paths: { tmp: "/tmp/opencode" },
+  })
 })
 
 test("vcs.base decodes nullable review-base metadata", async () => {
@@ -99,17 +109,17 @@ test("session instructions methods use the public HTTP contract", async () => {
   expect(requests).toEqual([
     {
       method: "GET",
-      url: "http://localhost:3000/api/session/ses_test/instructions/entries",
+      url: "http://localhost:3000/api/experimental/session/ses_test/instructions/entries",
       body: undefined,
     },
     {
       method: "PUT",
-      url: "http://localhost:3000/api/session/ses_test/instructions/entries/review-notes",
+      url: "http://localhost:3000/api/experimental/session/ses_test/instructions/entries/review-notes",
       body: { value: { text: "Check the diff", priority: 1 } },
     },
     {
       method: "DELETE",
-      url: "http://localhost:3000/api/session/ses_test/instructions/entries/review-notes",
+      url: "http://localhost:3000/api/experimental/session/ses_test/instructions/entries/review-notes",
       body: undefined,
     },
   ])
@@ -257,7 +267,7 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
       .log({ sessionID: Session.ID.make("ses_test"), after: Event.Seq.make(0) })
       .pipe(Stream.runCollect)
     const interrupted = yield* client.session.interrupt({ sessionID: Session.ID.make("ses_test") })
-    const message = yield* client.session.message({
+    const message = yield* client.session.message.get({
       sessionID: Session.ID.make("ses_test"),
       messageID: SessionMessage.ID.make("msg_model"),
     })
@@ -276,7 +286,7 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
   expect(result.created.id).toBe("ses_test")
   expect(Object.getPrototypeOf(result.admitted)).toBe(Object.prototype)
   expect(Object.getPrototypeOf(result.admitted.payload)).toBe(Object.prototype)
-  expect(DateTime.toEpochMillis(result.admitted.timeCreated)).toBe(1_717_171_717_000)
+  expect(DateTime.toEpochMillis(result.admitted.time.created)).toBe(1_717_171_717_000)
   expect(result.context).toEqual([])
   expect(logQueries[0]).toEqual({ after: "0" })
   expect(requests).toContainEqual({ method: "POST", url: "http://localhost:3000/api/session/ses_test/view" })
@@ -336,7 +346,7 @@ const admission = {
     type: "user",
     payload: { text: "Hello" },
     delivery: "steer",
-    timeCreated: 1_717_171_717_000,
+    time: { created: 1_717_171_717_000 },
   },
 }
 
@@ -347,7 +357,7 @@ const compactionAdmission = {
     delivery: "queue",
     id: "msg_compaction",
     sessionID: "ses_test",
-    timeCreated: 1_717_171_717_000,
+    time: { created: 1_717_171_717_000 },
   },
 }
 

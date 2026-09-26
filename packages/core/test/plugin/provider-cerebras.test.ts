@@ -21,7 +21,7 @@ describe("CerebrasPlugin", () => {
       const catalog = yield* Provider.Service
       yield* catalog.transform((catalog) => {
         catalog.update(Provider.ID.make("cerebras"), (item) => {
-          item.package = Provider.aisdk("@ai-sdk/cerebras")
+          item.package = "@opencode/ai/providers/cerebras"
           item.headers = { ...item.headers, Existing: "1" }
         })
       })

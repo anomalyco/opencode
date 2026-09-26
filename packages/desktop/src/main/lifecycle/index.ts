@@ -8,10 +8,11 @@ import { emitIpcEvent } from "../ipc-events"
 import { DesktopLogging, scoped } from "../native/logging"
 import { DesktopStorage } from "../storage"
 import { safeWebContentsURL } from "../windows/state"
-import { getLastFocusedWindow, makeMainWindows, setAppQuitting, setRelaunchHandler } from "../windows"
-import { acquireApplicationLock, configureApplication } from "./environment"
+import { getLastFocusedWindow, getWindowByID, makeMainWindows, setAppQuitting, setRelaunchHandler } from "../windows"
+import { marks } from "./marks"
 import { initializeFirstLaunchOnboarding } from "./onboarding"
 import { Shutdown } from "./shutdown"
+import { consoleReturnWindow } from "./deep-link"
 
 export interface Interface {
   readonly relaunch: () => void
@@ -34,11 +35,23 @@ const runtime = Layer.effect(
     const pendingDeepLinks: string[] = []
     let shutdownReady = false
     const prepareToRestart = shutdown.run.pipe(Effect.ensuring(Effect.sync(() => (shutdownReady = true))))
+    const focusWindow = (win: BrowserWindow | null) => {
+      if (!win) return
+      if (win.isMinimized()) win.restore()
+      win.show()
+      win.focus()
+    }
     const emitDeepLinks = (urls: string[]) => {
       if (!urls.length) return
       pendingDeepLinks.push(...urls)
-      const win = getLastFocusedWindow()
+      const target = urls.flatMap((url) => {
+        const id = consoleReturnWindow(url)
+        const win = id ? getWindowByID(id) : null
+        return win ? [win] : []
+      })[0]
+      const win = target ?? getLastFocusedWindow()
       if (win) emitIpcEvent(win.webContents, new DeepLinksOpened({ urls }))
+      return win
     }
     const relaunch = () => {
       setAppQuitting()
@@ -57,17 +70,14 @@ const runtime = Layer.effect(
       const urls = argv.filter((arg) => arg.startsWith("opencode://"))
       if (urls.length) {
         runFork(Effect.logInfo("deep link received via second-instance", { urls }))
-        emitDeepLinks(urls)
+        focusWindow(emitDeepLinks(urls) ?? null)
       }
-      const win = getLastFocusedWindow()
-      if (!win) return
-      win.show()
-      win.focus()
+      if (!urls.length) focusWindow(getLastFocusedWindow())
     }
     const openUrl = (event: Event, url: string) => {
       event.preventDefault()
       runFork(Effect.logInfo("deep link received via open-url", { url }))
-      emitDeepLinks([url])
+      focusWindow(emitDeepLinks([url]) ?? null)
     }
     const beforeQuit = (event: Event) => {
       setAppQuitting()
@@ -145,7 +155,7 @@ const runtime = Layer.effect(
   }),
 )
 
-// Storage opens after configureApplication has set userData and before windows exist, so window
+// Storage opens after the entry module has set userData and before the renderer loads, so window
 // teardown can clear a window's persisted state and every renderer request finds it ready.
 const platform = Layer.mergeAll(
   DesktopLogging.layer,
@@ -155,12 +165,10 @@ const platform = Layer.mergeAll(
 
 export const layer = Layer.unwrap(
   Effect.gen(function* () {
-    // Electron scopes the single-instance lock to userData.
-    yield* configureApplication()
-    if (!acquireApplicationLock()) return yield* Effect.interrupt
     // Decide first-launch state before the storage layer creates drafts.sqlite, which would
     // otherwise read as evidence of an earlier launch on a fresh install.
     yield* initializeFirstLaunchOnboarding(app.getPath("userData"))
+    marks.onboarding = Date.now()
     return runtime.pipe(Layer.provideMerge(platform))
   }),
 )

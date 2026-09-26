@@ -107,7 +107,6 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       list: () => Effect.die("unused permission.list"),
       get: () => Effect.die("unused permission.get"),
       reply: () => Effect.die("unused permission.reply"),
-      rules: () => Effect.die("unused permission.rules"),
     },
     plugin: overrides.plugin ?? {
       list: () => Effect.die("unused plugin.list"),
@@ -134,12 +133,15 @@ export function host(overrides: Overrides = {}): Plugin.Context {
     tool: overrides.tool ?? {
       transform: () => Effect.die("unused tool.transform"),
       reload: () => Effect.die("unused tool.reload"),
+      list: () => Effect.die("unused tool.list"),
       hook: () => Effect.die("unused tool.hook"),
     },
     vcs: overrides.vcs ?? {
       base: () => Effect.die("unused vcs.base"),
       get: () => Effect.die("unused vcs.get"),
-      branches: () => Effect.die("unused vcs.branches"),
+      branch: {
+        list: () => Effect.die("unused vcs.branch.list"),
+      },
       status: () => Effect.die("unused vcs.status"),
       diff: () => Effect.die("unused vcs.diff"),
       transform: () => Effect.die("unused vcs.transform"),
@@ -168,7 +170,7 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       prompt: overrides.session?.prompt ?? (() => Effect.die("unused session.prompt")),
       generate: overrides.session?.generate ?? (() => Effect.die("unused session.generate")),
       command: overrides.session?.command ?? (() => Effect.die("unused session.command")),
-      rename: overrides.session?.rename ?? (() => Effect.die("unused session.rename")),
+      update: overrides.session?.update ?? (() => Effect.die("unused session.update")),
       move: overrides.session?.move ?? (() => Effect.die("unused session.move")),
       synthetic: overrides.session?.synthetic ?? (() => Effect.die("unused session.synthetic")),
       interrupt: overrides.session?.interrupt ?? (() => Effect.die("unused session.interrupt")),
@@ -250,6 +252,14 @@ export function providerHost(providers: Provider.Interface): Plugin.Context["pro
         }),
       ),
   }
+}
+
+/** Empty catalog for hosts that only need provider lookups to fall back. */
+export const noProviders: Plugin.Context["provider"] = {
+  list: () => Effect.succeed(located([])),
+  get: () => Effect.die("unused provider.get"),
+  transform: () => Effect.die("unused provider.transform"),
+  reload: () => Effect.die("unused provider.reload"),
 }
 
 export function modelHost(models: Model.Interface): Plugin.Context["model"] {

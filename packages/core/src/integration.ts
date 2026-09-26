@@ -111,7 +111,13 @@ export class CodeRequiredError extends Schema.TaggedError<CodeRequiredError>()("
 
 export class AuthorizationError extends Schema.TaggedError<AuthorizationError>()("Integration.Authorization", {
   cause: Schema.Defect(),
-}) {}
+}) {
+  override get message() {
+    const cause = this.cause
+    if (cause instanceof Error && cause.message) return cause.message
+    return "Authorization failed"
+  }
+}
 
 export class AttemptNotFoundError extends Schema.TaggedError<AttemptNotFoundError>()("Integration.AttemptNotFound", {
   integrationID: ID,
@@ -355,6 +361,7 @@ const layer = Layer.effect(
           type: "credential" as const,
           id: credential.id,
           label: credential.label,
+          method: credential.value.type,
         }))
         .toReversed()
       const env = (entry?.methods ?? [])
@@ -725,8 +732,7 @@ const layer = Layer.effect(
         connect: connectOAuth,
         status: Effect.fn("Integration.oauth.status")(function* (input) {
           const attempt = (yield* SynchronizedRef.get(attempts)).get(input.attemptID)
-          if (!attempt || attempt.integrationID !== input.integrationID)
-            return yield* new AttemptNotFoundError(input)
+          if (!attempt || attempt.integrationID !== input.integrationID) return yield* new AttemptNotFoundError(input)
           if (attempt.status === "failed") {
             return { status: attempt.status, message: attempt.message ?? "Authorization failed", time: attempt.time }
           }
@@ -771,8 +777,7 @@ const layer = Layer.effect(
         connect: connectCommand,
         status: Effect.fn("Integration.command.status")(function* (input) {
           const attempt = (yield* SynchronizedRef.get(commandAttempts)).get(input.attemptID)
-          if (!attempt || attempt.integrationID !== input.integrationID)
-            return yield* new AttemptNotFoundError(input)
+          if (!attempt || attempt.integrationID !== input.integrationID) return yield* new AttemptNotFoundError(input)
           if (attempt.status === "pending") {
             return {
               status: attempt.status,

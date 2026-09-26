@@ -193,7 +193,7 @@ describe("xAI Responses route", () => {
       expect(prepared.body.input).toEqual([
         items[0],
         items[1],
-        { role: "user", content: [{ type: "input_text", text: JSON.stringify(items[2]) }] },
+        { type: "message", role: "user", content: [{ type: "input_text", text: JSON.stringify(items[2]) }] },
       ])
     }),
   )
@@ -252,7 +252,7 @@ describe("xAI Responses route", () => {
         store: true,
         include: ["reasoning.encrypted_content"],
         previous_response_id: "resp_1",
-        input: [{ role: "user", content: [{ type: "input_text", text: "Second" }] }],
+        input: [{ type: "message", role: "user", content: [{ type: "input_text", text: "Second" }] }],
       })
 
       // The connection cache only serves stored responses, so the default store: false never chains.
@@ -262,8 +262,8 @@ describe("xAI Responses route", () => {
         instructions: "You are terse.",
         store: false,
         input: [
-          { role: "user", content: [{ type: "input_text", text: "First" }] },
-          { role: "user", content: [{ type: "input_text", text: "Second" }] },
+          { type: "message", role: "user", content: [{ type: "input_text", text: "First" }] },
+          { type: "message", role: "user", content: [{ type: "input_text", text: "Second" }] },
         ],
       })
       expect(JSON.parse(unstored.message).previous_response_id).toBeUndefined()

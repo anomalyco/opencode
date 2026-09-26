@@ -78,7 +78,7 @@ export const MessageGroup = HttpApiGroup.make("server.message")
       error: [InvalidCursorError, SessionNotFoundError, UnknownError],
     }).annotateMerge(
       OpenApi.annotations({
-        identifier: "message.list",
+        identifier: "session.message.list",
         summary: "Get session messages",
         description:
           "Retrieve projected messages for a session, optionally filtered by type. Items keep the requested order across pages; use cursor.next or cursor.previous to move through the ordered timeline, passing the same type filter on each page.",

@@ -271,10 +271,8 @@ describe("still-rejected callables get the wrap hint", () => {
   test("built-in references work as replacers", async () => {
     // Like real JS: JSON.stringify(match, offset, string) quotes the match.
     expect(await value(`return "abc".replace(/b/, JSON.stringify)`)).toBe('a"b"c')
-    // Math methods stay strict about consumed arguments: a match string is not coerced.
-    expect((await error(`return "3.7".replace(/\\d\\.\\d/, Math.floor)`)).message).toContain(
-      "Math.floor expects number arguments",
-    )
+    // Math methods coerce the match string, as in JS.
+    expect(await value(`return "3.7".replace(/\\d\\.\\d/, Math.floor)`)).toBe("3")
   })
 
   test("non-callables still get the plain callback error", async () => {

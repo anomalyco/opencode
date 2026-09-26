@@ -115,7 +115,7 @@ export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data
     if (state.disposed || !enabled() || state.responded.has(permission.id)) return
     remember(permission.id)
     input.sdk.api.permission
-      .reply({ sessionID: permission.sessionID, requestID: permission.id, reply: "once" })
+      .reply({ sessionID: permission.sessionID, requestID: permission.id, decision: "once" })
       .catch(() => {
         // A reply failure leaves the request pending but invisible (the UI
         // hides prompts while auto-approve is on), so retry a bounded number

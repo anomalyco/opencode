@@ -1,4 +1,5 @@
 import { createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useKeyboard, useRenderer } from "@opentui/solid"
 import { isDeepEqual } from "remeda"
 import { createSimpleContext } from "./helper"
@@ -13,6 +14,7 @@ import { useStorage } from "./storage"
 import { useTuiPaths } from "./runtime"
 import { newSessionLocation } from "../config/new-session-location"
 import { createSessionRetention } from "./session-retention"
+import { anchorKey, type AnchorTarget } from "../routes/session/anchors"
 import {
   closeSessionTab,
   cycleSessionTab,
@@ -39,8 +41,8 @@ type PersistedState = {
   cwd: Record<string, TabsState>
 }
 
-type ScrollAnchor = {
-  messageID: string
+export type ScrollAnchor = {
+  target: AnchorTarget
   screenY: number
 }
 
@@ -87,6 +89,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     // the mark.
     const cancelledTabs = new Set<string>()
     const scrollAnchors = new Map<string, ScrollAnchor>()
+    const [expandedGroups, setExpandedGroups] = createStore<Record<string, Record<string, boolean> | undefined>>({})
 
     const onFocus = () => setFocused(true)
     const onBlur = () => setFocused(false)
@@ -322,7 +325,10 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     function remove(sessionID: string, navigate: boolean) {
       const target = root(sessionID)
       cancelledTabs.add(target)
-      family(target).forEach((id) => scrollAnchors.delete(id))
+      family(target).forEach((id) => {
+        scrollAnchors.delete(id)
+        setExpandedGroups(id, undefined)
+      })
       const closed = closeSessionTab(state().tabs, target)
       const selected = navigate && current() === target
       if (closed.tabs === state().tabs && !selected) return
@@ -365,8 +371,15 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
           return
         }
         const current = scrollAnchors.get(sessionID)
-        if (current?.messageID === anchor.messageID && current.screenY === anchor.screenY) return
+        if (current && anchorKey(current.target) === anchorKey(anchor.target) && current.screenY === anchor.screenY)
+          return
         scrollAnchors.set(sessionID, anchor)
+      },
+      groupExpanded(sessionID: string, groupID: string) {
+        return expandedGroups[sessionID]?.[groupID]
+      },
+      setGroupExpanded(sessionID: string, groupID: string, expanded: boolean) {
+        setExpandedGroups(sessionID, (current) => ({ ...current, [groupID]: expanded }))
       },
       select(sessionID: string) {
         if (!enabled()) return

@@ -154,13 +154,13 @@ test("mobile drawer exposes close controls and navigates between tabs", async ({
   }
 })
 
-test("vertical tabs show project details, resize, and navigate", async ({ page }) => {
+test("vertical tabs resize and navigate without retired project labels", async ({ page }) => {
   await mockServer(page)
   await page.addInitScript(
     ({ server, sessionA, sessionB }) => {
       localStorage.setItem(
         "settings.v3",
-        JSON.stringify({ appearance: { tabLayout: "vertical", showProjectName: true }, general: { showStatus: true } }),
+        JSON.stringify({ appearance: { tabLayout: "vertical" }, general: { showStatus: true } }),
       )
       localStorage.setItem(
         "opencode.window.browser.dat:tabs",
@@ -183,7 +183,7 @@ test("vertical tabs show project details, resize, and navigate", async ({ page }
   await expect(sidebar).toHaveCSS("width", "260px")
   await expect(tabA).toContainText(sessionA.title)
   await expect(tabB).toContainText(sessionB.title)
-  await expect(tabB.locator('[data-slot="tab-project"]')).toHaveText("tab-project")
+  await expect(tabB.locator('[data-slot="tab-project"]')).toHaveCount(0)
   await expect(
     sidebar.getByRole("button", { name: "Home", exact: true }).getByText("Home", { exact: true }),
   ).toBeVisible()
@@ -209,7 +209,7 @@ test("vertical tabs show project details, resize, and navigate", async ({ page }
   await page.mouse.move(box.x + box.width / 2 - 80, box.y + box.height / 2)
   await page.mouse.up()
   await expect(sidebar).toHaveCSS("width", "180px")
-  await expect(tabB.locator('[data-slot="tab-project"]')).toHaveText("tab-project")
+  await expect(tabB.locator('[data-slot="tab-project"]')).toHaveCount(0)
 
   const resized = await handle.boundingBox()
   if (!resized) throw new Error("resized vertical tab handle has no bounding box")
@@ -432,7 +432,7 @@ for (const profile of [
   })
 }
 
-test("dedicated experimental settings control vertical tab details", async ({ page }) => {
+test("preferences control vertical tab layout and hide empty experimental settings", async ({ page }) => {
   await mockServer(page)
   await page.addInitScript(
     ({ server, sessionA }) => {
@@ -452,15 +452,20 @@ test("dedicated experimental settings control vertical tab details", async ({ pa
   await expect(settings).toBeVisible()
   await expect(settings.getByRole("tablist").getByText("OpenCode Desktop", { exact: true })).toHaveCount(0)
   await expect(settings.getByRole("tablist").getByText(/^v\d+\./)).toHaveCount(0)
-  await settings.getByRole("tab", { name: "Appearance" }).click()
-  await expect(settings.getByRole("heading", { name: "Appearance", exact: true })).toBeVisible()
-  await expect(settings.locator('[data-action="settings-tab-layout"]')).toHaveCount(0)
+  await expect(settings.getByRole("heading", { name: "Preferences", exact: true })).toBeVisible()
+  await expect(settings.getByRole("tab", { name: "Experimental", exact: true })).toHaveCount(0)
   await expect(settings.getByRole("switch", { name: "Show project names", exact: true })).toHaveCount(0)
-  await settings.getByRole("tab", { name: "Experimental", exact: true }).click()
-  await expect(settings.getByRole("heading", { name: "Experimental", level: 2, exact: true })).toBeVisible()
 
+  const language = settings.locator('[data-action="settings-language"]')
   const layout = settings.locator('[data-action="settings-tab-layout"]')
+  await expect(language).toBeVisible()
   await expect(layout).toContainText("Horizontal")
+  await expect
+    .poll(async () => {
+      const [languageBox, layoutBox] = await Promise.all([language.boundingBox(), layout.boundingBox()])
+      return !!languageBox && !!layoutBox && layoutBox.y > languageBox.y
+    })
+    .toBe(true)
   await layout.click()
   await page.getByRole("option", { name: "Vertical" }).click()
 
@@ -469,42 +474,38 @@ test("dedicated experimental settings control vertical tab details", async ({ pa
   await expect(page.locator('[data-slot="titlebar-tabs"]')).toHaveCount(0)
   const projectNames = page.locator('[data-slot="vertical-tabs-sidebar"] [data-slot="tab-project"]')
   await expect(projectNames).toHaveCount(0)
-  const projectNameSwitch = settings.getByRole("switch", { name: "Show project names", exact: true })
-  await settings.locator('[data-action="settings-show-project-name"] [data-slot="switch-control"]').click()
-  await expect(projectNameSwitch).toBeChecked()
-  await expect(projectNames).toHaveText(["tab-project"])
   await expect(settings.getByRole("complementary")).toHaveCSS("width", "240px")
 
   await page.setViewportSize({ width: 920, height: 720 })
   await expect(page.locator('[data-slot="vertical-tabs-sidebar"]')).toHaveCSS("width", "260px")
   await expect(settings.getByRole("tablist")).toBeHidden()
-  await expect(settings.getByRole("button", { name: "Experimental", exact: true })).toBeVisible()
+  await expect(settings.getByRole("button", { name: "Preferences", exact: true })).toBeVisible()
 
   await page.setViewportSize({ width: 800, height: 720 })
   await expect(settings.getByRole("tablist")).toBeHidden()
-  await expect(settings.getByRole("button", { name: "Experimental", exact: true })).toBeVisible()
+  await expect(settings.getByRole("button", { name: "Preferences", exact: true })).toBeVisible()
 
   await page.setViewportSize({ width: 390, height: 720 })
-  await settings.getByRole("button", { name: "Experimental", exact: true }).click()
+  await settings.getByRole("button", { name: "Preferences", exact: true }).click()
+  await expect(page.getByRole("menuitemradio", { name: "Experimental", exact: true })).toHaveCount(0)
   await page.getByRole("menuitemradio", { name: "Appearance", exact: true }).click()
   await expect(settings.getByRole("heading", { name: "Appearance", exact: true })).toBeVisible()
   await expect(layout).toHaveCount(0)
   await settings.getByRole("button", { name: "Appearance", exact: true }).click()
-  await page.getByRole("menuitemradio", { name: "Experimental", exact: true }).click()
-  await expect(settings.getByRole("heading", { name: "Experimental", level: 2, exact: true })).toBeVisible()
+  await page.getByRole("menuitemradio", { name: "Preferences", exact: true }).click()
+  await expect(settings.getByRole("heading", { name: "Preferences", level: 2, exact: true })).toBeVisible()
   await expect(layout).toContainText("Vertical")
-  await expect(projectNameSwitch).toBeChecked()
   await settings.evaluate((element) => element.setAttribute("dir", "rtl"))
-  await expect(settings.getByRole("button", { name: "Experimental", exact: true })).toBeInViewport()
+  await expect(settings.getByRole("button", { name: "Preferences", exact: true })).toBeInViewport()
 
   await page.setViewportSize({ width: 390, height: 360 })
-  await expect(settings.getByRole("button", { name: "Experimental", exact: true })).toBeInViewport()
+  await expect(settings.getByRole("button", { name: "Preferences", exact: true })).toBeInViewport()
 
   // Reload the UI-selected preference without seeding settings storage.
   await page.reload()
   const href = `/server/${base64Encode(server)}/session/${sessionA.id}`
   await page.getByRole("button", { name: "Tabs", exact: true }).click()
-  await expect(page.locator('[data-slot="mobile-tabs-drawer"] [data-slot="tab-project"]')).toHaveText(["tab-project"])
+  await expect(page.locator('[data-slot="mobile-tabs-drawer"] [data-slot="tab-project"]')).toHaveCount(0)
   await expect(
     page
       .locator('[data-slot="mobile-tabs-drawer"]')
@@ -522,7 +523,7 @@ test("dedicated experimental settings control vertical tab details", async ({ pa
   ).toBeVisible()
   await expect(page.locator('[data-slot="titlebar-tabs"]')).toHaveCount(0)
   await page.keyboard.press("Control+,")
-  await settings.getByRole("tab", { name: "Experimental", exact: true }).click()
+  await expect(settings.getByRole("heading", { name: "Preferences", exact: true })).toBeVisible()
   await expect(layout).toContainText("Vertical")
 })
 
@@ -587,7 +588,7 @@ async function mockServer(page: Page) {
       return json(route, { location: { directory: sessionA.directory }, data: [] })
     if (url.pathname === "/api/model/default")
       return json(route, { location: { directory: sessionA.directory }, data: null })
-    if (url.pathname === "/api/permission/request" || url.pathname === "/api/form/request")
+    if (url.pathname === "/api/permission/request" || url.pathname === "/api/form")
       return json(route, { location: { directory: sessionA.directory }, data: [] })
     if (url.pathname === "/api/mcp") return json(route, { location: { directory: sessionA.directory }, data: [] })
     if (url.pathname === "/api/mcp/resource")

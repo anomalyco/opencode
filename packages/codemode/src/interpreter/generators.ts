@@ -1,30 +1,29 @@
 import { Effect } from "effect"
 import { fn, type Method, methods, receiver } from "./native.js"
 import { AsyncIteratorSymbol, type GeneratorRequestKind, IteratorSymbol } from "./model.js"
-import { define, hidden, ProgramGenerator } from "./objects.js"
-import type { PromiseRuntime } from "./promises.js"
-import type { Runner } from "./runner.js"
+import { define, hidden, GeneratorObj, type Value } from "./objects.js"
+import type { Interpreter } from "./interpreter.js"
 
 /** `next`/`return`/`throw` on the generator prototypes; async generators answer with promises. */
-export const generatorGlobals = <R>(runner: Runner<R>, promises: PromiseRuntime<R>): void => {
-  const protos = runner.prototypes
+export const generatorGlobals = <R>(ctx: Interpreter<R>): void => {
+  const builtins = ctx.builtins
   const install = (asynchronous: boolean) => {
-    const proto = asynchronous ? protos.AsyncGenerator : protos.Generator
+    const proto = asynchronous ? builtins.AsyncGenerator : builtins.Generator
     const label = asynchronous ? "AsyncGenerator" : "Generator"
     const request = (kind: GeneratorRequestKind): Method => [
       kind,
       1,
-      (thisValue: unknown, args: Array<unknown>) => {
-        const generator = receiver(ProgramGenerator, thisValue, `${label}.prototype.${kind}`)
-        const requested = generator.request(kind, args[0]) as Effect.Effect<unknown, unknown, R>
-        return generator.asynchronous ? promises.create(requested) : requested
+      (thisValue: Value, args: Array<Value>) => {
+        const generator = receiver(GeneratorObj, thisValue, `${label}.prototype.${kind}`)
+        const requested = generator.request(kind, args[0]) as Effect.Effect<Value, unknown, R>
+        return generator.asynchronous ? ctx.pending.create(requested) : requested
       },
     ]
-    methods(protos, proto, [request("next"), request("return"), request("throw")])
+    methods(builtins, proto, [request("next"), request("return"), request("throw")])
     define(
-      asynchronous ? protos.AsyncIterator : protos.Iterator,
+      asynchronous ? builtins.AsyncIterator : builtins.Iterator,
       asynchronous ? AsyncIteratorSymbol : IteratorSymbol,
-      fn(protos, asynchronous ? "[Symbol.asyncIterator]" : "[Symbol.iterator]", 0, (thisValue) => thisValue),
+      fn(builtins, asynchronous ? "[Symbol.asyncIterator]" : "[Symbol.iterator]", 0, (thisValue) => thisValue),
       hidden,
     )
   }

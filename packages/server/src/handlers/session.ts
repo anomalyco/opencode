@@ -3,6 +3,7 @@ import { SessionStats } from "@opencode/core/session/stats"
 import { SessionTitle } from "@opencode/core/session/title"
 import { SessionTransfer } from "@opencode/core/session/transfer"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
+import { Form } from "@opencode/core/form"
 import { DateTime, Effect, Stream } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
@@ -11,6 +12,9 @@ import {
   ConflictError,
   CommandExecutionError,
   CommandNotFoundError,
+  FormAlreadySettledError,
+  FormInvalidAnswerError,
+  FormNotFoundError,
   InvalidRequestError,
   InvalidCursorError,
   MessageNotFoundError,
@@ -23,10 +27,20 @@ import { failedMessageDecode, failedSnapshot, missingMessage, missingSession } f
 
 const DefaultSessionsLimit = 50
 
+function missingForm(id: Form.ID) {
+  return new FormNotFoundError({ id, message: `Form not found: ${id}` })
+}
+
 export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handlers) =>
   Effect.gen(function* () {
     const session = yield* Session.Service
     const transfer = yield* SessionTransfer.Service
+    const requireOwnedForm = Effect.fnUntraced(function* (sessionID: Form.Info["sessionID"], formID: Form.ID) {
+      const form = yield* Form.Service
+      const info = yield* form.get(formID).pipe(Effect.catchTag("Form.NotFoundError", () => missingForm(formID)))
+      if (info.sessionID !== sessionID) return yield* missingForm(formID)
+      return { form, info }
+    })
     const busySession = (error: Session.BusyError) =>
       new SessionBusyError({
         sessionID: error.sessionID,
@@ -239,16 +253,27 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         }),
       )
       .handle(
-        "session.rename",
+        "session.update",
         Effect.fn(function* (ctx) {
-          if (ctx.payload.title) {
-            yield* session
-              .rename({ sessionID: ctx.params.sessionID, title: ctx.payload.title })
-              .pipe(Effect.catchTag("Session.NotFoundError", missingSession))
-            return HttpApiSchema.NoContent.make()
+          yield* session.get(ctx.params.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+          if (ctx.payload.title !== undefined) {
+            if (ctx.payload.title) {
+              yield* session
+                .rename({ sessionID: ctx.params.sessionID, title: ctx.payload.title })
+                .pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+            } else {
+              const title = yield* SessionTitle.Service
+              yield* title.generate(ctx.params.sessionID)
+            }
           }
-          const title = yield* SessionTitle.Service
-          yield* title.generate(ctx.params.sessionID)
+          if (ctx.payload.metadata !== undefined)
+            yield* session
+              .setMetadata({ sessionID: ctx.params.sessionID, metadata: ctx.payload.metadata })
+              .pipe(Effect.catchTag("Session.NotFoundError", missingSession))
+          if (ctx.payload.permissions !== undefined)
+            yield* session
+              .setPermissions({ sessionID: ctx.params.sessionID, permissions: ctx.payload.permissions })
+              .pipe(Effect.catchTag("Session.NotFoundError", missingSession))
           return HttpApiSchema.NoContent.make()
         }),
       )
@@ -517,27 +542,21 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.inbox.cancel",
         Effect.fn(function* (ctx) {
-          return yield* pendingMutation(
-            session.cancelInbox({ sessionID: ctx.params.sessionID, inboxID: ctx.params.inboxID }),
-            "Pending input can no longer be cancelled",
+          yield* session.cancelInbox({ sessionID: ctx.params.sessionID, inboxID: ctx.params.inboxID }).pipe(
+            Effect.catchTag("Session.NotFoundError", missingSession),
+            Effect.catchTag("Session.InboxConflictError", () => Effect.void),
           )
+          return HttpApiSchema.NoContent.make()
         }),
       )
       .handle(
-        "session.inbox.steer",
+        "session.inbox.update",
         Effect.fn(function* (ctx) {
           return yield* pendingMutation(
-            session.steerInbox({ sessionID: ctx.params.sessionID, inboxID: ctx.params.inboxID }),
-            "Pending input is no longer queued",
-          )
-        }),
-      )
-      .handle(
-        "session.inbox.queue",
-        Effect.fn(function* (ctx) {
-          return yield* pendingMutation(
-            session.queueInbox({ sessionID: ctx.params.sessionID, inboxID: ctx.params.inboxID }),
-            "Pending input is no longer a steer",
+            ctx.payload.delivery === "steer"
+              ? session.steerInbox({ sessionID: ctx.params.sessionID, inboxID: ctx.params.inboxID })
+              : session.queueInbox({ sessionID: ctx.params.sessionID, inboxID: ctx.params.inboxID }),
+            `Pending input cannot change to ${ctx.payload.delivery}`,
           )
         }),
       )
@@ -612,6 +631,75 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
             messageID: ctx.params.messageID,
             message: `Message not found: ${ctx.params.messageID}`,
           })
+        }),
+      )
+      .handle(
+        "session.form.list",
+        Effect.fn(function* (ctx) {
+          const form = yield* Form.Service
+          return { data: yield* form.list({ sessionID: ctx.params.sessionID }) }
+        }),
+      )
+      .handle(
+        "session.form.create",
+        Effect.fn(function* (ctx) {
+          const form = yield* Form.Service
+          const created = yield* form
+            .create({
+              id: ctx.payload.id,
+              sessionID: ctx.params.sessionID,
+              title: ctx.payload.title,
+              metadata: ctx.payload.metadata,
+              fields: ctx.payload.fields,
+            })
+            .pipe(
+              Effect.catchTags({
+                "Form.AlreadyExistsError": (error) => new ConflictError({ resource: error.id, message: error.message }),
+                "Form.InvalidFormError": (error) =>
+                  new InvalidRequestError({ message: error.message, field: "fields" }),
+              }),
+            )
+          return { data: created }
+        }),
+      )
+      .handle(
+        "session.form.get",
+        Effect.fn(function* (ctx) {
+          const owned = yield* requireOwnedForm(ctx.params.sessionID, ctx.params.formID)
+          const state = yield* owned.form
+            .state(ctx.params.formID)
+            .pipe(Effect.catchTag("Form.NotFoundError", () => missingForm(ctx.params.formID)))
+          return { data: { ...owned.info, state } }
+        }),
+      )
+      .handle(
+        "session.form.reply",
+        Effect.fn(function* (ctx) {
+          const owned = yield* requireOwnedForm(ctx.params.sessionID, ctx.params.formID)
+          yield* owned.form.reply({ id: ctx.params.formID, answer: ctx.payload.answer }).pipe(
+            Effect.catchTags({
+              "Form.AlreadySettledError": (error) =>
+                new FormAlreadySettledError({ id: error.id, message: error.message }),
+              "Form.InvalidAnswerError": (error) =>
+                new FormInvalidAnswerError({ id: error.id, message: error.message }),
+              "Form.NotFoundError": () => missingForm(ctx.params.formID),
+            }),
+          )
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
+        "session.form.cancel",
+        Effect.fn(function* (ctx) {
+          const owned = yield* requireOwnedForm(ctx.params.sessionID, ctx.params.formID)
+          yield* owned.form.cancel(ctx.params.formID).pipe(
+            Effect.catchTags({
+              "Form.AlreadySettledError": (error) =>
+                new FormAlreadySettledError({ id: error.id, message: error.message }),
+              "Form.NotFoundError": () => missingForm(ctx.params.formID),
+            }),
+          )
+          return HttpApiSchema.NoContent.make()
         }),
       )
   }),

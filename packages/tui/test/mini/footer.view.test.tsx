@@ -1,6 +1,13 @@
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
-import { BoxRenderable, ImageRenderable, RGBA, type CliRenderer, type RootRenderable } from "@opentui/core"
+import {
+  BoxRenderable,
+  ImageRenderable,
+  RGBA,
+  TextareaRenderable,
+  type CliRenderer,
+  type RootRenderable,
+} from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 import { testRender } from "@opentui/solid"
 import { createSignal } from "solid-js"
@@ -51,7 +58,7 @@ const tuiConfig = createTuiResolvedConfig()
 
 async function nativeLightTheme() {
   await using tmp = await tmpdir()
-  await Bun.write(`${tmp.path}/themes/mini-native-light.json`, JSON.stringify({ version: 2, light: {} }))
+  await Bun.write(`${tmp.path}/themes/mini-native-light.json`, JSON.stringify({ light: {} }))
   const previous = process.env.OPENCODE_CONFIG_DIR
   process.env.OPENCODE_CONFIG_DIR = tmp.path
   try {
@@ -1268,7 +1275,7 @@ test.each(["queue", "steer"] as const)("direct footer toggles and deletes pendin
     expect(frame).toContain("Pending prompts")
     expect(frame).toContain("follow up")
     expect(frame).toContain(delivery === "queue" ? "queued" : "steering")
-    expect(frame).toContain(`enter ${delivery === "queue" ? "steer" : "queue"} · ctrl+d delete`)
+    expect(frame).toContain(`enter ${delivery === "queue" ? "steer" : "queue"} · ctrl+d delete · ctrl+u undo`)
     expect(frame).not.toContain("┌")
     expect(frame).not.toContain("┃")
     expectPaletteList(list, 0)
@@ -1289,6 +1296,129 @@ test.each(["queue", "steer"] as const)("direct footer toggles and deletes pendin
     expect(actions.at(-1)).toBe("cancel:m-1")
     expect(app.captureCharFrame()).not.toContain("Pending prompts")
     expect(app.captureCharFrame()).not.toContain("1 pending")
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("undo appends a pending prompt to the draft", async () => {
+  const actions: string[] = []
+  const submitted: RunPrompt[] = []
+  const queued: FooterQueuedPrompt = {
+    messageID: "m-1",
+    prompt: {
+      messageID: "m-1",
+      text: "look at main.ts",
+      parts: [],
+    },
+    delivery: "queue",
+  }
+  const app = await renderFooter({
+    queuedPrompts: [queued],
+    onSubmit: (prompt) => {
+      submitted.push(prompt)
+      return true
+    },
+    onQueuedPromptAction: async (action, inboxID) => {
+      actions.push(`${action}:${inboxID}`)
+      app.setQueuedPrompts([])
+    },
+  })
+  try {
+    await app.renderOnce()
+    await app.mockInput.typeText("existing draft")
+    app.mockInput.pressKey("x", { ctrl: true })
+    app.mockInput.pressKey("q")
+    await app.renderOnce()
+    app.mockInput.pressKey("u", { ctrl: true })
+    await Bun.sleep(0)
+    await app.renderOnce()
+    expect(actions).toEqual(["cancel:m-1"])
+    expect(app.captureCharFrame()).toContain("existing draft")
+    expect(app.captureCharFrame()).toContain("look at main.ts")
+    expect(app.captureCharFrame()).not.toContain("Pending prompts")
+    await app.waitFor(() => app.renderer.currentFocusedEditor instanceof TextareaRenderable)
+    app.mockInput.pressEnter()
+    await Bun.sleep(0)
+    await app.renderOnce()
+    expect(submitted).toMatchObject([{ text: "existing draft\n\nlook at main.ts" }])
+    expect(submitted[0].messageID).toBeUndefined()
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("undo leaves the queue and input alone when cancellation fails", async () => {
+  const statuses: string[] = []
+  const app = await renderFooter({
+    queuedPrompts: [{ messageID: "m-1", prompt: { text: "still queued", parts: [] }, delivery: "queue" }],
+    onStatus: (status) => statuses.push(status),
+    onQueuedPromptAction: async () => {
+      throw new Error("cancel failed")
+    },
+  })
+  try {
+    await app.renderOnce()
+    app.mockInput.pressKey("x", { ctrl: true })
+    app.mockInput.pressKey("q")
+    await app.renderOnce()
+    app.mockInput.pressKey("u", { ctrl: true })
+    await Bun.sleep(0)
+    await app.renderOnce()
+    expect(statuses.at(-1)).toContain("failed to undo pending prompt: cancel failed")
+    expect(app.captureCharFrame()).toContain("Pending prompts")
+    app.mockInput.pressKey("ESCAPE")
+    await app.renderOnce()
+    expect(app.captureCharFrame()).not.toContain("still queued")
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("undo retains mentioned files when the prompt is sent again", async () => {
+  const submitted: RunPrompt[] = []
+  const app = await renderFooter({
+    queuedPrompts: [
+      {
+        messageID: "m-1",
+        delivery: "queue",
+        prompt: {
+          messageID: "m-1",
+          text: "inspect @src/main.ts please",
+          parts: [
+            {
+              type: "file",
+              url: "file:///src/main.ts",
+              filename: "main.ts",
+              source: { type: "file", path: "src/main.ts", text: { start: 8, end: 20, value: "@src/main.ts" } },
+            },
+          ],
+        },
+      },
+    ],
+    onQueuedPromptAction: async () => {
+      app.setQueuedPrompts([])
+    },
+    onSubmit: (prompt) => {
+      submitted.push(prompt)
+      return true
+    },
+  })
+  try {
+    await app.renderOnce()
+    app.mockInput.pressKey("x", { ctrl: true })
+    app.mockInput.pressKey("q")
+    await app.renderOnce()
+    app.mockInput.pressKey("u", { ctrl: true })
+    await Bun.sleep(0)
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("inspect @src/main.ts please")
+    app.mockInput.pressEnter()
+    await Bun.sleep(0)
+    expect(submitted).toMatchObject([
+      { text: "inspect @src/main.ts please", parts: [{ type: "file", url: "file:///src/main.ts" }] },
+    ])
+    expect(submitted[0].messageID).toBeUndefined()
   } finally {
     app.cleanup()
   }

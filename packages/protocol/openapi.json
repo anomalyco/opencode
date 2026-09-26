@@ -6,19 +6,19 @@
     "description": "Experimental HttpApi surface for selected instance routes."
   },
   "paths": {
-    "/api/status": {
+    "/api/info": {
       "get": {
         "tags": ["server"],
-        "operationId": "server.status",
+        "operationId": "server.info",
         "parameters": [],
         "security": [],
         "responses": {
           "200": {
-            "description": "ServerStatus",
+            "description": "ServerInfo",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ServerStatus"
+                  "$ref": "#/components/schemas/ServerInfo"
                 }
               }
             }
@@ -44,8 +44,8 @@
             }
           }
         },
-        "description": "Return the server identity, connection URLs, and readiness status.",
-        "summary": "Get server status"
+        "description": "Return the server identity, connection URLs, paths, and readiness status.",
+        "summary": "Get server info"
       }
     },
     "/api/location": {
@@ -119,6 +119,51 @@
         },
         "description": "Resolve the requested location or the server default location.",
         "summary": "Get location"
+      }
+    },
+    "/api/location/reload": {
+      "post": {
+        "tags": ["location"],
+        "operationId": "location.reload",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Shut down and rebuild every loaded location. Pending permissions and forms are cancelled; running sessions continue with fresh services at the next step boundary. Emits location.shutdown for client recovery and responds once all replacement builds settle.",
+        "summary": "Reload configuration"
       }
     },
     "/api/agent": {
@@ -1064,10 +1109,10 @@
         "summary": "Get session statistics"
       }
     },
-    "/api/session/import": {
+    "/api/experimental/session/import": {
       "post": {
         "tags": ["session"],
-        "operationId": "session.import",
+        "operationId": "experimental.session.import",
         "parameters": [],
         "security": [],
         "responses": {
@@ -1166,10 +1211,10 @@
         }
       }
     },
-    "/api/session/{sessionID}/export": {
+    "/api/experimental/session/{sessionID}/export": {
       "get": {
         "tags": ["session"],
-        "operationId": "session.export",
+        "operationId": "experimental.session.export",
         "parameters": [
           {
             "name": "sessionID",
@@ -1438,7 +1483,7 @@
       },
       "patch": {
         "tags": ["session"],
-        "operationId": "session.rename",
+        "operationId": "session.update",
         "parameters": [
           {
             "name": "sessionID",
@@ -1493,8 +1538,8 @@
             }
           }
         },
-        "description": "Update the session title.",
-        "summary": "Rename session",
+        "description": "Update mutable session properties.",
+        "summary": "Update session",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1502,10 +1547,36 @@
                 "type": "object",
                 "properties": {
                   "title": {
-                    "type": "string"
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "metadata": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Session.Metadata"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "permissions": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Permission.Ruleset"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
-                "required": ["title"],
                 "additionalProperties": false
               }
             }
@@ -2804,8 +2875,8 @@
         }
       }
     },
-    "/api/session/{sessionID}/revert/clear": {
-      "post": {
+    "/api/session/{sessionID}/revert": {
+      "delete": {
         "tags": ["session"],
         "operationId": "session.revert.clear",
         "parameters": [
@@ -3314,26 +3385,14 @@
                 }
               }
             }
-          },
-          "409": {
-            "description": "ConflictError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConflictErrorEncoded"
-                }
-              }
-            }
           }
         },
-        "description": "Cancel an inbox item that has not yet been delivered.",
+        "description": "Cancel an inbox item that has not yet been delivered. Unavailable items are a no-op.",
         "summary": "Cancel inbox input"
-      }
-    },
-    "/api/session/{sessionID}/inbox/{inboxID}/steer": {
-      "post": {
+      },
+      "patch": {
         "tags": ["session"],
-        "operationId": "session.inbox.steer",
+        "operationId": "session.inbox.update",
         "parameters": [
           {
             "name": "sessionID",
@@ -3400,88 +3459,31 @@
             }
           }
         },
-        "description": "Change a queued inbox item to steer delivery and wake session execution.",
-        "summary": "Steer queued item"
+        "description": "Change a pending inbox item's delivery mode. Steering wakes session execution.",
+        "summary": "Update inbox item",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "delivery": {
+                    "$ref": "#/components/schemas/Session.Inbox.Delivery"
+                  }
+                },
+                "required": ["delivery"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
       }
     },
-    "/api/session/{sessionID}/inbox/{inboxID}/queue": {
-      "post": {
-        "tags": ["session"],
-        "operationId": "session.inbox.queue",
-        "parameters": [
-          {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          },
-          {
-            "name": "inboxID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^msg_"
-            },
-            "required": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "204": {
-            "description": "<No Content>"
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "SessionNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "ConflictError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConflictErrorEncoded"
-                }
-              }
-            }
-          }
-        },
-        "description": "Change a steered inbox item to queued delivery.",
-        "summary": "Queue steered item"
-      }
-    },
-    "/api/session/{sessionID}/instructions/entries": {
+    "/api/experimental/session/{sessionID}/instructions/entries": {
       "get": {
         "tags": ["session"],
-        "operationId": "session.instructions.entry.list",
+        "operationId": "experimental.session.instructions.entry.list",
         "parameters": [
           {
             "name": "sessionID",
@@ -3557,10 +3559,10 @@
         "summary": "List instruction entries"
       }
     },
-    "/api/session/{sessionID}/instructions/entries/{key}": {
+    "/api/experimental/session/{sessionID}/instructions/entries/{key}": {
       "put": {
         "tags": ["session"],
-        "operationId": "session.instructions.entry.put",
+        "operationId": "experimental.session.instructions.entry.put",
         "parameters": [
           {
             "name": "sessionID",
@@ -3653,7 +3655,7 @@
       },
       "delete": {
         "tags": ["session"],
-        "operationId": "session.instructions.entry.remove",
+        "operationId": "experimental.session.instructions.entry.remove",
         "parameters": [
           {
             "name": "sessionID",
@@ -4140,7 +4142,7 @@
     "/api/session/{sessionID}/message/{messageID}": {
       "get": {
         "tags": ["session"],
-        "operationId": "session.message",
+        "operationId": "session.message.get",
         "parameters": [
           {
             "name": "sessionID",
@@ -4222,10 +4224,456 @@
         "summary": "Get session message"
       }
     },
-    "/api/experimental/session/{sessionID}/environment": {
+    "/api/session/{sessionID}/form": {
+      "get": {
+        "tags": ["session"],
+        "operationId": "session.form.list",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Form.Info"
+                      }
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Retrieve pending forms for a session.",
+        "summary": "List session forms"
+      },
+      "post": {
+        "tags": ["session"],
+        "operationId": "session.form.create",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Form.Info"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ConflictError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Create a form for a session.",
+        "summary": "Create session form",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Form.CreatePayload"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/session/{sessionID}/form/{formID}": {
+      "get": {
+        "tags": ["session"],
+        "operationId": "session.form.get",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "formID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^frm_"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Form.Detail"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError | FormNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/FormNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Retrieve a form and its current state for a session.",
+        "summary": "Get session form"
+      },
+      "delete": {
+        "tags": ["session"],
+        "operationId": "session.form.cancel",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "formID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^frm_"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError | FormNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/FormNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "FormAlreadySettledError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FormAlreadySettledErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Cancel a pending form.",
+        "summary": "Cancel form"
+      }
+    },
+    "/api/session/{sessionID}/form/{formID}/reply": {
+      "post": {
+        "tags": ["session"],
+        "operationId": "session.form.reply",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          },
+          {
+            "name": "formID",
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "pattern": "^frm_"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "FormInvalidAnswerError | InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/FormInvalidAnswerErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SessionNotFoundError | FormNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/FormNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "FormAlreadySettledError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FormAlreadySettledErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Submit an answer to a pending form.",
+        "summary": "Reply to form",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Form.Reply"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/session/{sessionID}/environment": {
       "put": {
         "tags": ["session"],
-        "operationId": "experimental.session.environment",
+        "operationId": "session.environment",
         "parameters": [
           {
             "name": "sessionID",
@@ -4372,7 +4820,7 @@
     "/api/session/{sessionID}/message": {
       "get": {
         "tags": ["session"],
-        "operationId": "message.list",
+        "operationId": "session.message.list",
         "parameters": [
           {
             "name": "sessionID",
@@ -4721,10 +5169,10 @@
         "summary": "Get default model"
       }
     },
-    "/api/generate": {
+    "/api/experimental/generate": {
       "post": {
         "tags": ["generate"],
-        "operationId": "generate.text",
+        "operationId": "experimental.generate.text",
         "parameters": [],
         "security": [],
         "responses": {
@@ -7012,10 +7460,10 @@
         }
       }
     },
-    "/api/form/request": {
+    "/api/form": {
       "get": {
         "tags": ["form"],
-        "operationId": "form.request.list",
+        "operationId": "form.list",
         "parameters": [
           {
             "name": "location",
@@ -7095,535 +7543,7 @@
           }
         },
         "description": "Retrieve pending forms for a location.",
-        "summary": "List pending form requests"
-      }
-    },
-    "/api/session/{sessionID}/form": {
-      "get": {
-        "tags": ["form"],
-        "operationId": "session.form.list",
-        "parameters": [
-          {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "type": "array",
-                      "items": {
-                        "$ref": "#/components/schemas/Form.Info"
-                      }
-                    }
-                  },
-                  "required": ["data"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "SessionNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                }
-              }
-            }
-          }
-        },
-        "description": "Retrieve pending forms for a session.",
-        "summary": "List session forms"
-      },
-      "post": {
-        "tags": ["form"],
-        "operationId": "session.form.create",
-        "parameters": [
-          {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/Form.Info"
-                    }
-                  },
-                  "required": ["data"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "SessionNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "ConflictError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ConflictErrorEncoded"
-                }
-              }
-            }
-          }
-        },
-        "description": "Create a form for a session.",
-        "summary": "Create session form",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Form.CreatePayload"
-              }
-            }
-          },
-          "required": true
-        }
-      }
-    },
-    "/api/session/{sessionID}/form/{formID}": {
-      "get": {
-        "tags": ["form"],
-        "operationId": "session.form.get",
-        "parameters": [
-          {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
-          },
-          {
-            "name": "formID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^frm_"
-            },
-            "required": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/Form.Info"
-                    }
-                  },
-                  "required": ["data"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "SessionNotFoundError | FormNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/FormNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    }
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "description": "Retrieve a form for a session.",
-        "summary": "Get session form"
-      }
-    },
-    "/api/session/{sessionID}/form/{formID}/state": {
-      "get": {
-        "tags": ["form"],
-        "operationId": "session.form.state",
-        "parameters": [
-          {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
-          },
-          {
-            "name": "formID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^frm_"
-            },
-            "required": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "data": {
-                      "$ref": "#/components/schemas/Form.State"
-                    }
-                  },
-                  "required": ["data"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "SessionNotFoundError | FormNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/FormNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    }
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "description": "Retrieve the current state for a form.",
-        "summary": "Get form state"
-      }
-    },
-    "/api/session/{sessionID}/form/{formID}/reply": {
-      "post": {
-        "tags": ["form"],
-        "operationId": "session.form.reply",
-        "parameters": [
-          {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
-          },
-          {
-            "name": "formID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^frm_"
-            },
-            "required": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "204": {
-            "description": "<No Content>"
-          },
-          "400": {
-            "description": "FormInvalidAnswerError | InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/FormInvalidAnswerErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "SessionNotFoundError | FormNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/FormNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "FormAlreadySettledError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FormAlreadySettledErrorEncoded"
-                }
-              }
-            }
-          }
-        },
-        "description": "Submit an answer to a pending form.",
-        "summary": "Reply to form",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Form.Reply"
-              }
-            }
-          },
-          "required": true
-        }
-      }
-    },
-    "/api/session/{sessionID}/form/{formID}/cancel": {
-      "post": {
-        "tags": ["form"],
-        "operationId": "session.form.cancel",
-        "parameters": [
-          {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string"
-            },
-            "required": true
-          },
-          {
-            "name": "formID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^frm_"
-            },
-            "required": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "204": {
-            "description": "<No Content>"
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "SessionNotFoundError | FormNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/FormNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "FormAlreadySettledError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FormAlreadySettledErrorEncoded"
-                }
-              }
-            }
-          }
-        },
-        "description": "Cancel a pending form.",
-        "summary": "Cancel form"
+        "summary": "List pending forms"
       }
     },
     "/api/permission/request": {
@@ -8203,7 +8123,7 @@
               "schema": {
                 "type": "object",
                 "properties": {
-                  "reply": {
+                  "decision": {
                     "$ref": "#/components/schemas/Permission.Reply"
                   },
                   "message": {
@@ -8217,86 +8137,7 @@
                     ]
                   }
                 },
-                "required": ["reply"],
-                "additionalProperties": false
-              }
-            }
-          },
-          "required": true
-        }
-      }
-    },
-    "/api/session/{sessionID}/permission/rules": {
-      "put": {
-        "tags": ["permission"],
-        "operationId": "session.permission.rules",
-        "parameters": [
-          {
-            "name": "sessionID",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^ses"
-            },
-            "required": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "204": {
-            "description": "<No Content>"
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "SessionNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
-                    }
-                  ]
-                }
-              }
-            }
-          }
-        },
-        "description": "Replace the session-scoped permission rules. Rules are evaluated after the agent's rules, and the last matching rule wins.",
-        "summary": "Replace session permission rules",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "permissions": {
-                    "$ref": "#/components/schemas/Permission.Ruleset"
-                  }
-                },
-                "required": ["permissions"],
+                "required": ["decision"],
                 "additionalProperties": false
               }
             }
@@ -8607,6 +8448,109 @@
         },
         "description": "Find recursively ranked filesystem entries relative to the requested location.",
         "summary": "Find files"
+      }
+    },
+    "/api/experimental/fs/write": {
+      "post": {
+        "tags": ["filesystem"],
+        "operationId": "experimental.fs.write",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "description": "An absolute path or a path relative to the requested location. Missing parent directories are created."
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/Location.PublicRef"
+                    },
+                    "data": {
+                      "$ref": "#/components/schemas/FileSystem.Write"
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Write the raw request body to an absolute path or a path relative to the requested location, creating parent directories, and return the resolved absolute path. Unlike read, the target is not confined to the location. Experimental: may change without compatibility guarantees.",
+        "summary": "Write file",
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          },
+          "required": true
+        }
       }
     },
     "/api/command": {
@@ -10827,7 +10771,7 @@
                     "type": "object"
                   }
                 },
-                "required": ["command", "timeout"],
+                "required": ["command"],
                 "additionalProperties": false
               }
             }
@@ -11005,140 +10949,10 @@
                 }
               }
             }
-          },
-          "404": {
-            "description": "ShellNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ShellNotFoundErrorEncoded"
-                }
-              }
-            }
           }
         },
         "description": "Terminate and remove one shell command and its retained output.",
         "summary": "Remove shell command"
-      }
-    },
-    "/api/shell/{id}/timeout": {
-      "patch": {
-        "tags": ["shell"],
-        "operationId": "shell.timeout",
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "schema": {
-              "type": "string",
-              "pattern": "^sh_"
-            },
-            "required": true
-          },
-          {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "location": {
-                      "$ref": "#/components/schemas/Location.PublicRef"
-                    },
-                    "data": {
-                      "$ref": "#/components/schemas/Shell.Info"
-                    }
-                  },
-                  "required": ["location", "data"],
-                  "additionalProperties": false
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "ShellNotFoundError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ShellNotFoundErrorEncoded"
-                }
-              }
-            }
-          }
-        },
-        "description": "Replace a running shell command's timeout from now, or clear it with zero.",
-        "summary": "Update shell timeout",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "timeout": {
-                    "type": "integer",
-                    "minimum": 0
-                  }
-                },
-                "required": ["timeout"],
-                "additionalProperties": false
-              }
-            }
-          },
-          "required": true
-        }
       }
     },
     "/api/shell/{id}/output": {
@@ -11371,34 +11185,12 @@
         "operationId": "worktree.list",
         "parameters": [
           {
-            "name": "location",
+            "name": "projectID",
             "in": "query",
             "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "type": "string"
             },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
+            "required": true
           }
         ],
         "security": [],
@@ -11414,18 +11206,11 @@
             }
           },
           "400": {
-            "description": "WorktreeError | InvalidRequestError",
+            "description": "InvalidRequestError",
             "content": {
               "application/json": {
                 "schema": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/WorktreeErrorEncoded"
-                    },
-                    {
-                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
                 }
               }
             }
@@ -11439,46 +11224,25 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "ProjectNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectNotFoundErrorEncoded"
+                }
+              }
+            }
           }
         },
-        "description": "Discover worktrees through the requested location's strategies and return its project's inventory.",
+        "description": "Return the project's saved worktree inventory without loading configuration or running discovery.",
         "summary": "List worktrees"
       },
       "post": {
         "tags": ["worktree"],
         "operationId": "worktree.create",
-        "parameters": [
-          {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
-          }
-        ],
+        "parameters": [],
         "security": [],
         "responses": {
           "200": {
@@ -11517,9 +11281,19 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "ProjectNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectNotFoundErrorEncoded"
+                }
+              }
+            }
           }
         },
-        "description": "Create a local worktree using the location's registered strategy and directory defaults, then run the project's setup script.",
+        "description": "Load the project's canonical configuration, create a local worktree using its selected strategy, then run the project's setup script.",
         "summary": "Create worktree",
         "requestBody": {
           "content": {
@@ -11535,38 +11309,7 @@
       "delete": {
         "tags": ["worktree"],
         "operationId": "worktree.remove",
-        "parameters": [
-          {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
-          }
-        ],
+        "parameters": [],
         "security": [],
         "responses": {
           "204": {
@@ -11598,9 +11341,19 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "ProjectNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectNotFoundErrorEncoded"
+                }
+              }
+            }
           }
         },
-        "description": "Remove a managed worktree from the requested location's project using its recorded strategy.",
+        "description": "Load the project's canonical configuration and remove a saved worktree using its recorded strategy.",
         "summary": "Remove worktree",
         "requestBody": {
           "content": {
@@ -11618,38 +11371,7 @@
       "post": {
         "tags": ["worktree"],
         "operationId": "worktree.refresh",
-        "parameters": [
-          {
-            "name": "location",
-            "in": "query",
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "directory": {
-                      "anyOf": [
-                        {
-                          "type": "string"
-                        },
-                        {
-                          "type": "null"
-                        }
-                      ]
-                    }
-                  },
-                  "additionalProperties": false
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "required": false,
-            "style": "deepObject",
-            "explode": true
-          }
-        ],
+        "parameters": [],
         "security": [],
         "responses": {
           "204": {
@@ -11681,10 +11403,37 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "ProjectNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectNotFoundErrorEncoded"
+                }
+              }
+            }
           }
         },
-        "description": "Discover worktrees from the requested location and reconcile the shared project inventory.",
-        "summary": "Refresh worktrees"
+        "description": "Load the project's canonical configuration, discover worktrees across known checkout roots using all available strategies, and reconcile saved state.",
+        "summary": "Refresh worktrees",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "projectID": {
+                    "type": "string"
+                  }
+                },
+                "required": ["projectID"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
       }
     },
     "/api/vcs": {
@@ -11956,10 +11705,10 @@
         "summary": "VCS status"
       }
     },
-    "/api/vcs/branches": {
+    "/api/vcs/branch": {
       "get": {
         "tags": ["vcs"],
-        "operationId": "vcs.branches",
+        "operationId": "vcs.branch.list",
         "parameters": [
           {
             "name": "location",
@@ -13422,7 +13171,7 @@
                   "properties": {
                     "action": {
                       "type": "string",
-                      "enum": ["provider.use"]
+                      "enum": ["provider.use", "permission"]
                     },
                     "resource": {
                       "type": "string"
@@ -13512,15 +13261,30 @@
         "required": ["input", "output"],
         "additionalProperties": false
       },
-      "Config.ModelEncoded": {
+      "Config.Model.Settings": {
         "type": "object",
         "properties": {
           "compaction": {
             "$ref": "#/components/schemas/Provider.Compaction"
-          },
-          "websocket": {
-            "type": "boolean"
-          },
+          }
+        },
+        "allOf": [
+          {
+            "type": "object",
+            "additionalProperties": {
+              "anyOf": [
+                {},
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "Config.ModelEncoded": {
+        "type": "object",
+        "properties": {
           "modelID": {
             "type": "string"
           },
@@ -13537,7 +13301,7 @@
             "type": "string"
           },
           "settings": {
-            "type": "object"
+            "$ref": "#/components/schemas/Config.Model.Settings"
           },
           "headers": {
             "type": "object",
@@ -13560,7 +13324,7 @@
                   "type": "string"
                 },
                 "settings": {
-                  "type": "object"
+                  "$ref": "#/components/schemas/Config.Model.Settings"
                 },
                 "headers": {
                   "type": "object",
@@ -13640,15 +13404,47 @@
         "required": ["package"],
         "additionalProperties": false
       },
-      "Config.ProviderEncoded": {
+      "Config.Provider.Settings": {
         "type": "object",
         "properties": {
+          "timeout": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean",
+                "enum": [false]
+              }
+            ]
+          },
+          "chunkTimeout": {
+            "type": "number"
+          },
           "compaction": {
             "$ref": "#/components/schemas/Provider.Compaction"
           },
-          "websocket": {
-            "type": "boolean"
-          },
+          "transport": {
+            "$ref": "#/components/schemas/Provider.Transport"
+          }
+        },
+        "allOf": [
+          {
+            "type": "object",
+            "additionalProperties": {
+              "anyOf": [
+                {},
+                {
+                  "type": "null"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "Config.ProviderEncoded": {
+        "type": "object",
+        "properties": {
           "canonical": {
             "type": "string"
           },
@@ -13665,7 +13461,7 @@
             "type": "string"
           },
           "settings": {
-            "type": "object"
+            "$ref": "#/components/schemas/Config.Provider.Settings"
           },
           "headers": {
             "type": "object",
@@ -13816,9 +13612,13 @@
           },
           "label": {
             "type": "string"
+          },
+          "method": {
+            "type": "string",
+            "enum": ["key", "oauth"]
           }
         },
-        "required": ["type", "id", "label"],
+        "required": ["type", "id", "label", "method"],
         "additionalProperties": false
       },
       "Connection.EnvInfo": {
@@ -13901,6 +13701,16 @@
         "required": ["path", "type"],
         "additionalProperties": false
       },
+      "FileSystem.Write": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": ["path"],
+        "additionalProperties": false
+      },
       "ForbiddenErrorEncoded": {
         "type": "object",
         "properties": {
@@ -13934,6 +13744,9 @@
             "type": "string"
           },
           "required": {
+            "type": "boolean"
+          },
+          "hidden": {
             "type": "boolean"
           },
           "when": {
@@ -13974,10 +13787,36 @@
             "$ref": "#/components/schemas/Form.Metadata"
           },
           "fields": {
-            "$ref": "#/components/schemas/Form.Fields_2"
+            "$ref": "#/components/schemas/Form.Fields"
           }
         },
         "required": ["title", "fields"],
+        "additionalProperties": false
+      },
+      "Form.Detail": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^frm_"
+          },
+          "sessionID": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/Form.Metadata"
+          },
+          "fields": {
+            "$ref": "#/components/schemas/Form.Fields"
+          },
+          "state": {
+            "$ref": "#/components/schemas/Form.State"
+          }
+        },
+        "required": ["id", "sessionID", "title", "fields", "state"],
         "additionalProperties": false
       },
       "Form.ExternalField": {
@@ -14078,7 +13917,7 @@
             "$ref": "#/components/schemas/Form.Metadata"
           },
           "fields": {
-            "$ref": "#/components/schemas/Form.Fields_2"
+            "$ref": "#/components/schemas/Form.Fields"
           }
         },
         "required": ["id", "sessionID", "title", "fields"],
@@ -14097,6 +13936,9 @@
             "type": "string"
           },
           "required": {
+            "type": "boolean"
+          },
+          "hidden": {
             "type": "boolean"
           },
           "when": {
@@ -14164,6 +14006,9 @@
           "required": {
             "type": "boolean"
           },
+          "hidden": {
+            "type": "boolean"
+          },
           "when": {
             "type": "array",
             "items": {
@@ -14214,6 +14059,9 @@
             "type": "string"
           },
           "required": {
+            "type": "boolean"
+          },
+          "hidden": {
             "type": "boolean"
           },
           "when": {
@@ -14342,6 +14190,9 @@
             "type": "string"
           },
           "required": {
+            "type": "boolean"
+          },
+          "hidden": {
             "type": "boolean"
           },
           "when": {
@@ -15060,7 +14911,7 @@
             "type": "string"
           },
           "form": {
-            "$ref": "#/components/schemas/Form.Fields_1"
+            "$ref": "#/components/schemas/Form.Fields_2"
           }
         },
         "required": ["type"],
@@ -15096,7 +14947,7 @@
             "type": "string"
           },
           "form": {
-            "$ref": "#/components/schemas/Form.Fields"
+            "$ref": "#/components/schemas/Form.Fields_1"
           }
         },
         "required": ["id", "type", "label"],
@@ -15314,6 +15165,9 @@
             "maximum": 65535
           },
           "redirect_uri": {
+            "type": "string"
+          },
+          "auth_server_metadata_url": {
             "type": "string"
           }
         },
@@ -15592,9 +15446,6 @@
             "items": {
               "type": "string"
             }
-          },
-          "responsesWebsockets": {
-            "type": "boolean"
           }
         },
         "required": ["tools", "input", "output"],
@@ -15616,6 +15467,9 @@
             "type": "boolean"
           },
           "requireAssistantAfterTool": {
+            "type": "boolean"
+          },
+          "supportsPromptCacheKey": {
             "type": "boolean"
           }
         },
@@ -15688,14 +15542,8 @@
           "package": {
             "type": "string"
           },
-          "compaction": {
-            "$ref": "#/components/schemas/Provider.Compaction"
-          },
-          "websocket": {
-            "type": "boolean"
-          },
           "settings": {
-            "type": "object"
+            "$ref": "#/components/schemas/Model.Settings"
           },
           "headers": {
             "type": "object",
@@ -15801,6 +15649,20 @@
         "required": ["id", "providerID"],
         "additionalProperties": false
       },
+      "Model.Settings": {
+        "type": "object",
+        "properties": {
+          "compaction": {
+            "$ref": "#/components/schemas/Provider.Compaction"
+          }
+        },
+        "allOf": [
+          {
+            "type": "object",
+            "additionalProperties": {}
+          }
+        ]
+      },
       "Model.Variant": {
         "type": "object",
         "properties": {
@@ -15808,7 +15670,7 @@
             "type": "string"
           },
           "settings": {
-            "type": "object"
+            "$ref": "#/components/schemas/Model.Settings"
           },
           "headers": {
             "type": "object",
@@ -15950,9 +15812,22 @@
           },
           "resource": {
             "type": "string"
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              },
+              "updated": {
+                "type": "number"
+              }
+            },
+            "required": ["created", "updated"],
+            "additionalProperties": false
           }
         },
-        "required": ["id", "projectID", "action", "resource"],
+        "required": ["id", "projectID", "action", "resource", "time"],
         "additionalProperties": false
       },
       "PersistentPty.CreateInput": {
@@ -16443,9 +16318,13 @@
           "updated": {
             "type": "integer",
             "minimum": 0
+          },
+          "active": {
+            "type": "integer",
+            "minimum": 0
           }
         },
-        "required": ["created", "updated"],
+        "required": ["created", "updated", "active"],
         "additionalProperties": false
       },
       "Project.Vcs": {
@@ -16612,27 +16491,23 @@
           {
             "type": "object",
             "properties": {
-              "mode": {
+              "type": {
                 "type": "string",
-                "enum": ["local"]
+                "enum": ["summary"]
               }
             },
-            "required": ["mode"],
+            "required": ["type"],
             "additionalProperties": false
           },
           {
             "type": "object",
             "properties": {
-              "mode": {
+              "type": {
                 "type": "string",
-                "enum": ["provider"]
-              },
-              "threshold": {
-                "type": "integer",
-                "exclusiveMinimum": 0
+                "enum": ["native"]
               }
             },
-            "required": ["mode"],
+            "required": ["type"],
             "additionalProperties": false
           }
         ]
@@ -16659,14 +16534,8 @@
           "package": {
             "type": "string"
           },
-          "compaction": {
-            "$ref": "#/components/schemas/Provider.Compaction"
-          },
-          "websocket": {
-            "type": "boolean"
-          },
           "settings": {
-            "type": "object"
+            "$ref": "#/components/schemas/Provider.Settings"
           },
           "headers": {
             "type": "object",
@@ -16701,7 +16570,39 @@
         "additionalProperties": false
       },
       "Provider.Settings": {
-        "type": "object"
+        "type": "object",
+        "properties": {
+          "timeout": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean",
+                "enum": [false]
+              }
+            ]
+          },
+          "chunkTimeout": {
+            "type": "number"
+          },
+          "compaction": {
+            "$ref": "#/components/schemas/Provider.Compaction"
+          },
+          "transport": {
+            "$ref": "#/components/schemas/Provider.Transport"
+          }
+        },
+        "allOf": [
+          {
+            "type": "object",
+            "additionalProperties": {}
+          }
+        ]
+      },
+      "Provider.Transport": {
+        "type": "string",
+        "enum": ["http", "websocket"]
       },
       "ProviderNotFoundErrorEncoded": {
         "type": "object",
@@ -16917,7 +16818,7 @@
         "required": ["_tag", "type", "message"],
         "additionalProperties": false
       },
-      "ServerStatus": {
+      "ServerInfo": {
         "type": "object",
         "properties": {
           "version": {
@@ -16932,9 +16833,19 @@
             "items": {
               "type": "string"
             }
+          },
+          "paths": {
+            "type": "object",
+            "properties": {
+              "tmp": {
+                "type": "string"
+              }
+            },
+            "required": ["tmp"],
+            "additionalProperties": false
           }
         },
-        "required": ["version", "pid", "urls"],
+        "required": ["version", "pid", "urls", "paths"],
         "additionalProperties": false
       },
       "ServiceUnavailableErrorEncoded": {
@@ -17006,8 +16917,15 @@
             "type": "string",
             "pattern": "^ses"
           },
-          "timeCreated": {
-            "type": "number"
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
           },
           "type": {
             "type": "string",
@@ -17020,7 +16938,7 @@
             "$ref": "#/components/schemas/Session.Inbox.Delivery"
           }
         },
-        "required": ["id", "sessionID", "timeCreated", "type", "payload", "delivery"],
+        "required": ["id", "sessionID", "time", "type", "payload", "delivery"],
         "additionalProperties": false
       },
       "Session.Inbox.CompactionPayload": {
@@ -17064,8 +16982,15 @@
             "type": "string",
             "pattern": "^ses"
           },
-          "timeCreated": {
-            "type": "number"
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
           },
           "type": {
             "type": "string",
@@ -17078,7 +17003,7 @@
             "$ref": "#/components/schemas/Session.Inbox.MovePayload"
           }
         },
-        "required": ["id", "sessionID", "timeCreated", "type", "delivery", "payload"],
+        "required": ["id", "sessionID", "time", "type", "delivery", "payload"],
         "additionalProperties": false
       },
       "Session.Inbox.MovePayload": {
@@ -17108,8 +17033,15 @@
             "type": "string",
             "pattern": "^ses"
           },
-          "timeCreated": {
-            "type": "number"
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
           },
           "type": {
             "type": "string",
@@ -17122,7 +17054,7 @@
             "$ref": "#/components/schemas/Session.Inbox.Delivery"
           }
         },
-        "required": ["id", "sessionID", "timeCreated", "type", "payload", "delivery"],
+        "required": ["id", "sessionID", "time", "type", "payload", "delivery"],
         "additionalProperties": false
       },
       "Session.Inbox.SyntheticPayload": {
@@ -17152,8 +17084,15 @@
             "type": "string",
             "pattern": "^ses"
           },
-          "timeCreated": {
-            "type": "number"
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "number"
+              }
+            },
+            "required": ["created"],
+            "additionalProperties": false
           },
           "type": {
             "type": "string",
@@ -17166,7 +17105,7 @@
             "$ref": "#/components/schemas/Session.Inbox.Delivery"
           }
         },
-        "required": ["id", "sessionID", "timeCreated", "type", "payload", "delivery"],
+        "required": ["id", "sessionID", "time", "type", "payload", "delivery"],
         "additionalProperties": false
       },
       "Session.Inbox.UserPayload": {
@@ -18703,7 +18642,8 @@
             "type": "object",
             "properties": {
               "started": {
-                "type": "number"
+                "type": "number",
+                "description": "Start time in milliseconds since the Unix epoch"
               },
               "completed": {
                 "type": "number"
@@ -18957,6 +18897,9 @@
       "Vcs.Info": {
         "type": "object",
         "properties": {
+          "provider": {
+            "type": "string"
+          },
           "branch": {
             "$ref": "#/components/schemas/Vcs.Branch"
           }
@@ -19025,7 +18968,7 @@
       "Worktree.CreateInput": {
         "type": "object",
         "properties": {
-          "strategy": {
+          "projectID": {
             "type": "string"
           },
           "from": {
@@ -19041,6 +18984,7 @@
             "type": "string"
           }
         },
+        "required": ["projectID"],
         "additionalProperties": false
       },
       "Worktree.Directory": {
@@ -19075,6 +19019,9 @@
       "Worktree.RemoveInput": {
         "type": "object",
         "properties": {
+          "projectID": {
+            "type": "string"
+          },
           "directory": {
             "type": "string"
           },
@@ -19082,7 +19029,7 @@
             "type": "boolean"
           }
         },
-        "required": ["directory", "force"],
+        "required": ["projectID", "directory", "force"],
         "additionalProperties": false
       },
       "WorktreeErrorEncoded": {
@@ -19171,7 +19118,7 @@
     },
     {
       "name": "form",
-      "description": "Session form routes."
+      "description": "Location form routes."
     },
     {
       "name": "permission",
@@ -19207,7 +19154,7 @@
     },
     {
       "name": "shell",
-      "description": "Experimental location-scoped shell command routes."
+      "description": "Location-scoped shell command routes."
     },
     {
       "name": "reference",
@@ -19215,7 +19162,7 @@
     },
     {
       "name": "worktree",
-      "description": "Location-scoped worktree management routes."
+      "description": "Project-based worktree management routes."
     },
     {
       "name": "vcs",

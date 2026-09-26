@@ -128,7 +128,7 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
   const model = target.model ? { providerID: target.model.providerID, modelID: target.model.id } : undefined
   const variant = target.model?.variant
   if (!target.resume && input.title !== undefined) {
-    await client.session.rename({
+    await client.session.update({
       sessionID: target.session.id,
       title: input.title || prepared.message.slice(0, 50) + (prepared.message.length > 50 ? "..." : ""),
     })

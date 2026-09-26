@@ -9,15 +9,39 @@ import {
   completePrevious,
   groupRefs,
   hasPart,
+  messagePath,
   partitionPending,
+  partPath,
   projectEntries,
   type AppendPart,
   type CacheUsage,
   type PartRef,
   type ProjectionEntry,
   type SessionRow,
+  type Verbosity,
+  defaultVerbosity,
 } from "./grouping/session"
 export type { CacheUsage, PartRef, SessionRow } from "./grouping/session"
+
+/**
+ * A page boundary can cut a group in half, which would show a partial summary and
+ * give the group a provisional ID (derived from its first part). While the oldest
+ * row is a group, keep loading older pages until something precedes it.
+ */
+export async function completeGroupBoundary(input: {
+  rows: readonly SessionRow[]
+  messages: () => number
+  more: () => boolean
+  loadMore: () => Promise<void>
+  active: () => boolean
+}) {
+  while (input.active() && input.rows[0]?.type === "group" && input.more()) {
+    const before = input.messages()
+    await input.loadMore()
+    // A page that adds nothing would otherwise loop forever.
+    if (input.messages() === before) return
+  }
+}
 
 export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessionID: string) => void) {
   const data = useData()
@@ -26,6 +50,7 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
   const [rows, setRows] = createStore<SessionRow[]>([])
   const revertBoundary = () => data.session.get(sessionID())?.revert?.messageID
   const turnTokens = () => Boolean(config.data.debug?.turn_tokens)
+  const verbosity = () => config.data.session?.verbosity ?? defaultVerbosity
 
   function reduce() {
     const messages = data.session.message.list(sessionID())
@@ -40,6 +65,7 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
       boundary ? visible.filter((message) => message.id < boundary) : visible,
       inputs,
       turnTokens(),
+      verbosity(),
     )
     partitionPending(rows, pendingPermissions())
     const position = rows.findIndex((row) => row.type === "message" && inputs.has(row.messageID))
@@ -75,14 +101,22 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
       if (status !== "connected") return
       setRows(reconcile(reduce()))
       void data.session.pending.sync(id).catch(() => undefined)
-      void data.session.message.sync(id).then(
-        () => {
+      void data.session.message
+        .sync(id)
+        .then(async () => {
           if (sessionID() !== id) return
           setRows(reconcile(reduce()))
-          onSynced?.(id)
-        },
-        () => undefined,
-      )
+          // Restoration waits for complete boundary groups so saved group IDs resolve.
+          await completeGroupBoundary({
+            rows,
+            messages: () => data.session.message.list(id).length,
+            more: () => data.session.message.more(id),
+            loadMore: () => data.session.message.loadMore(id),
+            active: () => sessionID() === id,
+          }).catch(() => undefined)
+          if (sessionID() === id) onSynced?.(id)
+        })
+        .catch(() => undefined)
     }),
   )
 
@@ -137,7 +171,7 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
     ),
   )
 
-  createEffect(on(turnTokens, () => setRows(reconcile(reduce())), { defer: true }))
+  createEffect(on([turnTokens, verbosity], () => setRows(reconcile(reduce())), { defer: true }))
 
   const appendMessage = (messageID: string) =>
     setRows(
@@ -156,7 +190,7 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
     setRows(
       produce((draft) => {
         if (!hasPart(draft, ref)) {
-          append(draft, ref, part, queuedStart(draft))
+          append(draft, ref, part, queuedStart(draft), verbosity())
           return
         }
         if (part.type !== "reasoning" || part.time?.completed === undefined) return
@@ -276,7 +310,12 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
   return rows
 }
 
-export function reduceSessionRows(messages: SessionMessageInfo[], inputs = new Set<string>(), turnTokens = false) {
+export function reduceSessionRows(
+  messages: SessionMessageInfo[],
+  inputs = new Set<string>(),
+  turnTokens = false,
+  verbosity: Verbosity = defaultVerbosity,
+) {
   const isInput = (message: SessionMessageInfo) => inputs.has(message.id)
   const pendingCompactions = messages.filter((message) => message.type === "compaction" && message.status === "running")
   const pending = new Set([...pendingCompactions.map((message) => message.id), ...inputs])
@@ -313,7 +352,11 @@ export function reduceSessionRows(messages: SessionMessageInfo[], inputs = new S
       }
       if (message.type === "synthetic" && !message.description?.trim()) return rows
       if (message.type === "compaction" && message.status === "completed" && usage) usage.previousTurnCache = undefined
-      rows.push({ entry: { type: "message", messageID: message.id }, closesPrevious: !pending.has(message.id) })
+      rows.push({
+        entry: { type: "message", messageID: message.id },
+        path: messagePath(message, verbosity),
+        closesPrevious: !pending.has(message.id),
+      })
       return rows
     }
     usage?.steps.push(message)
@@ -321,7 +364,11 @@ export function reduceSessionRows(messages: SessionMessageInfo[], inputs = new S
     message.content.forEach((part) => {
       const partID = part.type === "tool" ? part.id : `${part.type}:${ordinals[part.type]++}`
       if ((part.type === "text" || part.type === "reasoning") && !part.text.trim()) return
-      rows.push({ entry: { type: "part", ref: { messageID: message.id, partID } }, part })
+      rows.push({
+        entry: { type: "part", ref: { messageID: message.id, partID } },
+        part,
+        path: partPath(part, verbosity),
+      })
     })
     const terminal = (message.finish && !["tool-calls", "unknown"].includes(message.finish)) || message.error
     if (terminal || message.retry) {
@@ -378,9 +425,10 @@ export function turnTokensPerSecond(
     step.time.streamed === undefined ? [] : [Math.max(0, step.time.streamed - step.time.created)],
   )
   if (steps.length === 0 || durations.length !== steps.length) return
-  const output = steps.reduce((total, step) => total + (step.tokens?.output ?? 0), 0)
+  const output = steps.reduce((total, step) => total + (step.tokens?.output ?? 0) + (step.tokens?.reasoning ?? 0), 0)
   const duration = durations.reduce((total, value) => total + value, 0)
   if (output <= 0 || duration <= 0) return
+  // Aggregate before dividing so each step is weighted by its provider-active duration.
   return output / (duration / 1_000)
 }
 

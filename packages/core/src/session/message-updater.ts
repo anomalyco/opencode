@@ -131,7 +131,8 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
           )
         }),
       "session.renamed": () => Effect.void,
-      "session.permissions.updated": () => Effect.void,
+      "session.metadata.updated": () => Effect.void,
+      "session.permissions": () => Effect.void,
       "session.deleted": () => Effect.void,
       "session.forked": () => Effect.void,
       "session.inbox.delivered": () => Effect.void,
@@ -152,7 +153,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
             type: "system",
             text: event.data.text,
             description: `Instructions updated: ${Object.keys(event.data.delta).join(", ")}`,
-            metadata: event.metadata,
+            metadata: { ...event.metadata, notice: "instructions", instructionSources: Object.keys(event.data.delta) },
             time: { created },
           }),
         )
@@ -223,6 +224,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
                 draft.finish = undefined
                 draft.rawFinish = undefined
                 draft.providerState = undefined
+                draft.time.created = DateTime.makeUnsafe(event.data.started)
                 draft.time.streamed = undefined
                 draft.time.completed = undefined
                 if (event.data.snapshot) draft.snapshot = { ...draft.snapshot, start: event.data.snapshot }
@@ -246,7 +248,7 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
               agent: event.data.agent,
               model: event.data.model,
               metadata: event.metadata,
-              time: { created },
+              time: { created: DateTime.makeUnsafe(event.data.started) },
               content: [],
               snapshot: event.data.snapshot ? { start: event.data.snapshot } : undefined,
             }),

@@ -1,6 +1,8 @@
 import { children, createMemo, Show } from "solid-js"
 import type { JSX } from "solid-js"
 import { useSortable } from "@dnd-kit/solid/sortable"
+import { Icon } from "@opencode/ui/icon"
+import { IconButton } from "@opencode/ui/icon-button"
 import { Keybind } from "@opencode/ui/keybind"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Tabs } from "@opencode/ui/tabs"
@@ -69,9 +71,19 @@ export function SortableTab(props: {
               placement="bottom"
               gutter={10}
             >
-              <Tabs.CloseButton
-                class="h-5 w-5"
-                onClick={() => props.onTabClose(props.tab)}
+              <IconButton
+                size="small"
+                variant="ghost-muted"
+                onPointerDown={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                }}
+                onClick={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  props.onTabClose(props.tab)
+                }}
+                icon={<Icon name="xmark-small" />}
                 aria-label={language.t("common.closeTab")}
               />
             </Tooltip>

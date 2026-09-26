@@ -6,7 +6,7 @@ import { Global } from "@opencode/util/global"
 import { createEventStream, createFetch, directory, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
 
-test.each([40, 120])("completion notices do not navigate at width %s", async (width) => {
+test.each([40, 120])("shell completion notices do not navigate at width %s", async (width) => {
   await using state = await tmpdir()
   const setup = await createTestRenderer({ width, height: 36, useThread: false, kittyKeyboard: true })
   setup.renderer.start()
@@ -34,15 +34,6 @@ test.each([40, 120])("completion notices do not navigate at width %s", async (wi
       shellID: "shell-1",
       label: "Shell cancelled",
       description: "Cancelled command",
-    },
-    { source: "subagent", state: "completed", sessionID: "child-1", label: "Subagent finished", description: "Done" },
-    { source: "subagent", state: "error", sessionID: "child-1", label: "Subagent failed", description: "Failed" },
-    {
-      source: "subagent",
-      state: "cancelled",
-      sessionID: "child-1",
-      label: "Subagent cancelled",
-      description: "Cancelled",
     },
   ]
   const messages = [
@@ -98,7 +89,7 @@ test.each([40, 120])("completion notices do not navigate at width %s", async (wi
       app: { name: "test", version: "test", channel: "test" },
       server: { endpoint: { url: server.url.toString() } },
       config: {
-        get: async () => ({ animations: false, tabs: { enabled: false } }),
+        get: async () => ({ animations: false, tabs: { mode: "off" } }),
         update: async () => ({}),
       },
       packages: { prepare: async () => ({ directory: "" }) },
@@ -108,7 +99,7 @@ test.each([40, 120])("completion notices do not navigate at width %s", async (wi
     }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
   )
   try {
-    await setup.waitForFrame((frame) => frame.includes("Subagent cancelled"))
+    await setup.waitForFrame((frame) => frame.includes("Shell cancelled"))
     await setup.waitForVisualIdle()
     const find = (root: Renderable): ScrollBoxRenderable | undefined =>
       root instanceof ScrollBoxRenderable && root.getRenderable("history-19")
@@ -129,6 +120,73 @@ test.each([40, 120])("completion notices do not navigate at width %s", async (wi
       expect(setup.renderer.currentFocusedRenderable?.id).toBe(scroll.id)
       expect(setup.captureCharFrame()).toContain(notice.label)
     }
+  } finally {
+    setup.renderer.destroy()
+    await task
+    await server.stop()
+  }
+})
+
+test.each([40, 120])("subagent completion notices navigate to the child session at width %s", async (width) => {
+  await using state = await tmpdir()
+  const setup = await createTestRenderer({ width, height: 20, useThread: false, kittyKeyboard: true })
+  setup.renderer.start()
+  const parent = {
+    id: "ses_parent",
+    title: "Parent session",
+    projectID: "project",
+    location: { directory },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 0, updated: 0 },
+  }
+  const child = { ...parent, id: "ses_child", title: "Diagnose authentication", parentID: parent.id }
+  const messages = [
+    { id: "user-0", type: "user", text: "Run a background subagent", time: { created: 0 } },
+    {
+      id: "notice-0",
+      type: "synthetic",
+      text: "Subagent result",
+      description: "Diagnose subagent search auth",
+      metadata: { source: "subagent", childID: child.id, agent: "general", state: "completed" },
+      time: { created: 1 },
+    },
+  ]
+  const childMessages = [{ id: "child-user", type: "user", text: "Investigate authentication", time: { created: 0 } }]
+  const calls = createFetch((url) => {
+    if (url.pathname === "/api/session") return json({ data: [parent, child], cursor: {} })
+    if (url.pathname === `/api/session/${parent.id}`) return json({ data: parent })
+    if (url.pathname === `/api/session/${child.id}`) return json({ data: child })
+    if (url.pathname === `/api/session/${parent.id}/message`) return json({ data: messages.toReversed(), cursor: {} })
+    if (url.pathname === `/api/session/${child.id}/message`)
+      return json({ data: childMessages.toReversed(), cursor: {} })
+    if (url.pathname.endsWith("/inbox") || url.pathname.endsWith("/permission")) return json({ data: [] })
+    return undefined
+  }, createEventStream())
+  const server = Bun.serve({ port: 0, idleTimeout: 0, fetch: (request) => calls.fetch(request) })
+  const { run } = await import("../src/app")
+  const task = Effect.runPromise(
+    run({
+      app: { name: "test", version: "test", channel: "test" },
+      server: { endpoint: { url: server.url.toString() } },
+      config: {
+        get: async () => ({ animations: false, tabs: { mode: "off" } }),
+        update: async () => ({}),
+      },
+      packages: { prepare: async () => ({ directory: "" }) },
+      args: { sessionID: parent.id },
+      terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
+      log: () => {},
+    }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
+  )
+  try {
+    await setup.waitForFrame((frame) => frame.includes("General finished"))
+    await setup.waitForVisualIdle()
+    const lines = setup.captureCharFrame().split("\n")
+    const y = lines.findIndex((line) => line.includes("General finished"))
+    const x = lines[y].indexOf("General finished")
+    await setup.mockMouse.click(x + 1, y)
+    await setup.waitForFrame((frame) => frame.includes("Investigate authentication"))
   } finally {
     setup.renderer.destroy()
     await task

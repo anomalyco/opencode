@@ -8,8 +8,10 @@ import type { ComposerAdapter, ComposerDelivery, ComposerSelection, ComposerSess
 import { createComposerSubmission } from "./submission-state"
 import { buildPromptRequest } from "./request"
 import { setCursorPosition } from "./editor/dom"
-import { blobDataUrl } from "@/runtime/persistence/drafts"
+import { blobDataUrl, resolveBlobUrl } from "@/runtime/persistence/drafts"
+import { isAttachment } from "./prompt-parts"
 import type { ModelSelection } from "@/providers/models/selection"
+import { parseSlashCommand } from "./client-slash-command"
 
 const submitting = new WeakSet<object>()
 
@@ -31,10 +33,12 @@ type ComposerSubmitInput = {
   editor: () => HTMLDivElement | undefined
   queueScroll: () => void
   addToHistory: (prompt: Prompt, mode: "normal" | "shell") => void
+  removeFromHistory: (prompt: Prompt, mode: "normal" | "shell", comments: PromptHistoryComment[]) => void
   resetHistory: () => void
   setMode: (mode: "normal" | "shell") => void
   closePopover: () => void
   delivery?: (alternate: boolean) => ComposerDelivery
+  clientCommand?: (text: string) => (() => void | Promise<void>) | undefined
   notify: {
     missingSelection: () => void
     failed: (kind: "shell" | "command" | "prompt", error: unknown) => void
@@ -50,20 +54,46 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
   const submit = async (event: globalThis.Event, options?: { alternate?: boolean }) => {
     event.preventDefault()
 
+    const prompt = clonePrompt(input.adapter.state.current())
+    const text = submissionText(prompt)
+    const clientCommand = input.mode() === "normal" ? input.clientCommand?.(text) : undefined
+    if (clientCommand) {
+      if (submitting.has(input.adapter.state)) return
+      submitting.add(input.adapter.state)
+      try {
+        clearClientCommand(input, prompt)
+        await clientCommand()
+      } catch (error) {
+        input.notify.failed("command", error)
+      } finally {
+        submitting.delete(input.adapter.state)
+      }
+      return
+    }
     const submission = createComposerSubmission({
       target: input.adapter.state,
-      prompt: clonePrompt(input.adapter.state.current()),
+      prompt,
       context: input.adapter.state.context.items().map((item) => ({
         ...item,
         selection: item.selection ? { ...item.selection } : undefined,
       })),
     })
-    const value = readSubmission(input, submission.prompt, submission.context, options?.alternate ?? false)
-    if (!value) {
+    const read = readSubmission(input, submission.prompt, submission.context, text, options?.alternate ?? false)
+    if (!read) {
       if (input.adapter.working() && input.adapter.kind === "active-session") void input.adapter.interrupt()
       return
     }
     if (submitting.has(input.adapter.state)) return
+    // Images restored from a draft or history carry ids only; the optimistic message shows their URLs.
+    const value = {
+      ...read,
+      images: await Promise.all(
+        read.images.map(async (image) => ({
+          ...image,
+          blob: { ...image.blob, url: (await resolveBlobUrl(image.blob)) ?? image.blob.url },
+        })),
+      ),
+    }
     submitting.add(input.adapter.state)
     const comments = input.comments.capture()
     // Capture command intent before starting a session in a worktree whose catalog has not loaded.
@@ -138,6 +168,17 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
   }
 }
 
+function clearClientCommand(input: ComposerSubmitInput, prompt: Prompt) {
+  input.adapter.state.set([{ type: "text", content: "", start: 0, end: 0 }, ...prompt.filter(isAttachment)], 0)
+  input.adapter.state.mode.set("normal")
+  input.setMode("normal")
+  input.closePopover()
+}
+
+function submissionText(prompt: Prompt) {
+  return prompt.map((part) => ("content" in part ? part.content : "")).join("")
+}
+
 function handoffMessage(value: ComposerSubmission): SessionMessageUser {
   return {
     id: value.id,
@@ -151,6 +192,9 @@ function handoffMessage(value: ComposerSubmission): SessionMessageUser {
     })),
     metadata: {
       displayText: value.text,
+      attachments: value.prompt.flatMap((part) =>
+        part.type === "path" ? [{ name: part.filename, mime: part.mime, path: part.path }] : [],
+      ),
       comments: value.context.flatMap((item) =>
         item.comment?.trim()
           ? [
@@ -178,14 +222,14 @@ function readSubmission(
   input: ComposerSubmitInput,
   prompt: Prompt,
   context: ComposerSubmission["context"],
+  text: string,
   alternate: boolean,
 ): ComposerSubmission | undefined {
-  const text = prompt.map((part) => ("content" in part ? part.content : "")).join("")
   const mode = input.mode()
   if (mode === "shell" && !text.trim()) return
   const images = prompt.filter((part): part is ImageAttachmentPart => part.type === "image")
   const comments = context.filter((item) => !!item.comment?.trim()).length
-  if (!text.trim() && images.length === 0 && comments === 0) return
+  if (!text.trim() && !prompt.some(isAttachment) && comments === 0) return
 
   const controls = input.adapter.controls()
   const model = controls.model.selection.current()
@@ -236,6 +280,8 @@ function restoreSubmission(
 ) {
   const restored = submission.restore()
   if (!restored) return false
+  // The prompt is back in the composer; its history entry would only keep attachments referenced.
+  input.removeFromHistory(value.prompt, value.mode, comments)
   restored.target.set(restored.prompt, promptLength(restored.prompt))
   restored.target.mode.set(value.mode)
   restored.target.context.replaceComments(
@@ -281,13 +327,10 @@ async function sendShell(session: ComposerSession, value: ComposerSubmission) {
 }
 
 function findCommand(commands: ReturnType<ComposerSubmitInput["commands"]>, text: string) {
-  if (!text.startsWith("/")) return
-  const [name, ...arguments_] = text.split(" ")
-  const command = name.slice(1)
-  if (!commands?.some((item) => item.name === command)) return
-  return { command, arguments: arguments_.join(" ") }
+  const parsed = parseSlashCommand(text)
+  if (!parsed || !commands?.some((item) => item.name === parsed.name)) return
+  return { command: parsed.name, arguments: parsed.input }
 }
-
 
 async function sendCommand(
   session: ComposerSession,
@@ -358,6 +401,7 @@ async function sendPrompt(
     metadata: {
       displayText: request.displayText,
       comments: request.comments,
+      attachments: request.attachments,
       agent: value.selection.agent,
       model: {
         ...value.selection.model,
@@ -377,14 +421,13 @@ async function buildSubmissionRequest(session: ComposerSession, value: ComposerS
       dataUrl: await blobDataUrl(attachment.blob, attachment.mime),
     })),
   )
-  const request = buildPromptRequest({
+  return buildPromptRequest({
     prompt: value.prompt,
     context: value.context,
     images,
     text: value.text,
     sessionDirectory: session.directory,
   })
-  return request
 }
 
 function failSubmission(

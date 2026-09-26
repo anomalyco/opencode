@@ -14,6 +14,7 @@ import { InstallationEvent } from "./installation-event.js"
 import { Integration } from "./integration.js"
 import { LegacyEventV1 } from "./legacy-event.js"
 import { LspEvent } from "./lsp-event.js"
+import { LocationEvent } from "./location-event.js"
 import { McpEvent } from "./mcp-event.js"
 import { Model } from "./model.js"
 import { ModelsDev } from "./models-dev.js"
@@ -40,6 +41,7 @@ import { WebSearch } from "./websearch.js"
 const coreDefinitions = Event.inventory(...SessionEvent.Definitions)
 
 const foundationDefinitions = Event.inventory(
+  ...LocationEvent.Definitions,
   ...ModelsDev.Event.Definitions,
   ...Credential.Event.Definitions,
   ...Integration.Event.Definitions,

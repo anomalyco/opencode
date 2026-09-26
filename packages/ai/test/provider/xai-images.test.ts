@@ -17,9 +17,9 @@ describe("xAI Images", () => {
           http: { body: { configured: true }, headers: { "x-default": "yes" } },
         }).image("grok-imagine-image"),
         prompt: "A robot tending a rooftop garden",
-        options: {
-          n: 2,
-          aspectRatio: "16:9",
+        n: 2,
+        aspectRatio: "16:9",
+        providerOptions: {
           aspect_ratio: "4:3",
           resolution: "1k",
           responseFormat: "url",
@@ -34,16 +34,16 @@ describe("xAI Images", () => {
       })
 
       expect(response.images).toHaveLength(2)
-      expect(response.image?.mediaType).toBe("image/jpeg")
-      expect(response.image?.data).toEqual(Uint8Array.from([1, 2, 3]))
-      expect(response.images[1]?.mediaType).toBe("application/octet-stream")
-      expect(response.images[1]?.data).toBe("https://api.xai.test/image.jpg")
-      expect(response.usage?.providerMetadata).toEqual({ xai: { num_images: 2 } })
+      expect(response.image.mediaType).toBe("image/jpeg")
+      expect(yield* response.image.bytes()).toEqual(Uint8Array.from([1, 2, 3]))
+      expect(response.images[1].mediaType).toBe("application/octet-stream")
+      expect(response.images[1].source).toEqual({ type: "url", url: "https://api.xai.test/image.jpg" })
+      expect(response.usage).toBeUndefined()
       expect(response.providerMetadata).toEqual({ xai: { usage: { num_images: 2 } } })
     }).pipe(
       Effect.provide(
         ImageClient.layer.pipe(
-          Layer.provide(
+          Layer.provideMerge(
             dynamicResponse((input) =>
               Effect.gen(function* () {
                 const request = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)

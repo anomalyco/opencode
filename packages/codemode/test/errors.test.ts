@@ -15,7 +15,23 @@ const error = async (code: string) => {
   return result.error
 }
 
+describe("source syntax", () => {
+  test("rejects TypeScript-only syntax", async () => {
+    expect((await error(`const value: number = 1; return value`)).kind).toBe("ParseError")
+  })
+})
+
 describe("error identity", () => {
+  test("Error.isError is true for every Error value and nothing else", async () => {
+    expect(
+      await value(`
+        const caught = (() => { try { null.foo } catch (error) { return error } })()
+        return [Error.isError(new Error("x")), Error.isError(new RangeError("x")), Error.isError(caught),
+          Error.isError({ name: "Error", message: "x" }), Error.isError("Error"), Error.isError(null)]
+      `),
+    ).toEqual([true, true, true, false, false, false])
+  })
+
   test("awaiting the same rejected promise twice yields the same error object", async () => {
     expect(
       await value(`
@@ -52,9 +68,9 @@ describe("error identity", () => {
 
 describe("rethrown interpreter failures", () => {
   test("keep their diagnostic kind and source location", async () => {
-    const failure = await error(`try { switch (Symbol) {} } catch (e) { throw e }`)
+    const failure = await error(`try { Symbol + 1 } catch (e) { throw e }`)
     expect(failure.kind).toBe("InvalidDataValue")
-    expect(failure.message).toStartWith("TypeError: Switch discriminants must be data values. (line ")
+    expect(failure.message).toStartWith("TypeError: Binary operators require data values. (line ")
     expect(failure.location).toBeDefined()
   })
 
@@ -89,6 +105,24 @@ describe("uncaught program throws", () => {
   })
 })
 
+describe("source locations", () => {
+  test("uses the submitted line and 1-based column", async () => {
+    const failure = await error("const value = 1\nreturn value()")
+    expect(failure.location).toEqual({ line: 2, column: 8 })
+    expect(failure.message).toBe("TypeError: value is not a function. (line 2, col 8)")
+  })
+
+  test("names a missing method on a call instead of the previous line", async () => {
+    const failure = await error(`// Try search with different namespaces
+for (const ns of ["github", "tools.github", "tools", ""]) {
+  const s = await search({query: "star", namespace: ns, limit: 100}).catch(e=>({items:[],error:String(e)}));
+  return s
+}`)
+    expect(failure.location).toEqual({ line: 3, column: 19 })
+    expect(failure.message).toBe("TypeError: search(...).catch is not a function. (line 3, col 19)")
+  })
+})
+
 describe("host errors escaping built-ins", () => {
   test("become the same-named program error", async () => {
     expect(
@@ -115,14 +149,14 @@ describe("host errors escaping built-ins", () => {
       "(line 1, col 14)",
     )
     expect((await error(`let p; p = Promise.resolve().then(() => p); return await p`)).message).toEndWith(
-      "(line 2, col 5)",
+      "(line 1, col 12)",
     )
   })
 
   test("an un-awaited rejection born inside promise machinery keeps its location in the warning", async () => {
     const result = await run(`Promise.all(1); return 1`)
     expect(result.ok && result.warnings?.[0]?.message).toEndWith(
-      "TypeError: Promise.all expects an array or other synchronous iterable. (line 1, col 1)",
+      "TypeError: Promise.all expects a synchronous iterable, received a number. (line 1, col 1)",
     )
   })
 

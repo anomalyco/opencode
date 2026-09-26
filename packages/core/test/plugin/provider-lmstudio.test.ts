@@ -304,7 +304,7 @@ describe("LMStudioPlugin", () => {
           yield* providers.transform((editor) => {
             editor.update(providerID, (provider) => {
               provider.name = "LMStudio"
-              provider.package = "aisdk:@ai-sdk/openai-compatible"
+              provider.package = "@opencode/ai/providers/openai-compatible"
               provider.integrationID = Integration.ID.make("lmstudio")
             })
             editor.models.update(providerID, Model.ID.make("static-model"), () => {})

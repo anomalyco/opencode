@@ -106,9 +106,12 @@ describe("callable namespaces", () => {
     const diagnostic = await failure(runtime, `return await tools.issues.missing({})`)
     expect(diagnostic.kind).toBe("UnknownTool")
     expect(diagnostic.message).toContain("Unknown tool 'issues.missing'")
-    expect(diagnostic.suggestions).toEqual([
-      "The tool may have been removed or renamed. Use search to find available tools.",
-    ])
+    expect(diagnostic.suggestions).toEqual(["Use search to find available tools."])
+  })
+
+  test("an unknown tool names the closest match", async () => {
+    const diagnostic = await failure(runtime, `return await tools.issues["get-list"]({})`)
+    expect(diagnostic.message).toBe("Unknown tool 'issues.get-list'. Did you mean tools.issues.list?")
   })
 
   test("a namespace without its own tool stays non-callable", async () => {
@@ -310,5 +313,58 @@ describe("tool argument prototype safety", () => {
     const runtime = CodeMode.make({ tools: {} })
     expect(await value(runtime, `return { __proto__: { polluted: true }, a: 2 }`)).toEqual({ a: 2 })
     expect(await value(runtime, `return [{ __proto__: 1 }]`)).toEqual([{}])
+  })
+})
+
+describe("tool arguments cross in a useful form where JSON.stringify would give {}", () => {
+  test("Set and URLSearchParams; RegExp and Map stay {} like JSON", async () => {
+    let seen: unknown
+    const runtime = CodeMode.make({
+      tools: {
+        inspect: Tool.make({
+          description: "Inspect",
+          input: Schema.Struct({ v: Schema.Unknown }),
+          output: Schema.Unknown,
+          execute: (input) =>
+            Effect.sync(() => {
+              seen = input.v
+              return null
+            }),
+        }),
+      },
+    })
+    await value(
+      runtime,
+      `return await tools.inspect({ v: { s: new Set([1, 2]), r: /x/g, p: new URLSearchParams("a=1&b=2"), m: new Map([["k", 1]]) } })`,
+    )
+    expect(seen).toEqual({ s: [1, 2], r: {}, p: "a=1&b=2", m: {} })
+  })
+})
+
+describe("tools.search alias", () => {
+  test("tools.search(...) behaves like the bare search(...) when no tool owns that path", async () => {
+    const runtime = CodeMode.make({ tools: { api: { list: echo("List things", "listed") } } })
+    const direct = await value(runtime, `return search({ query: "list" })`)
+    expect(await value(runtime, `return tools.search({ query: "list" })`)).toStrictEqual(direct)
+    expect(await value(runtime, `return (await tools.search({ query: "list" })).items[0].path`)).toBe("tools.api.list")
+  })
+
+  test("a registered root-level search tool takes precedence", async () => {
+    const runtime = CodeMode.make({ tools: { search: echo("Custom search", "custom") } })
+    expect(await value(runtime, `return await tools.search({})`)).toBe("custom")
+  })
+})
+
+describe("tool references under ==", () => {
+  test("compare by identity against data objects without converting them", async () => {
+    const runtime = CodeMode.make({ tools: { probe: echo("Probe", "ok") } })
+    expect(
+      await value(
+        runtime,
+        `let calls = 0
+         const o = { valueOf() { calls++; return 1 } }
+         return [o == tools.probe, tools == { a: 1 }, tools.probe == null, calls]`,
+      ),
+    ).toEqual([false, false, false, 0])
   })
 })

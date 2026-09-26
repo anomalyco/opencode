@@ -19,6 +19,24 @@ export function primitiveInputSummary(input: Record<string, unknown>, omit: read
   return `[${entries.map(([key, value]) => `${key}=${String(value)}`).join(", ")}]`
 }
 
+export type ExecuteCall = { tool: string; status: "running" | "completed" | "error"; input?: Record<string, unknown> }
+
+export function executeCalls(value: unknown): ExecuteCall[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap((call) => {
+    if (!isRecord(call)) return []
+    const tool = call.tool
+    const status = call.status
+    if (typeof tool !== "string" || (status !== "running" && status !== "completed" && status !== "error")) return []
+    return [{ tool, status, input: isRecord(call.input) ? call.input : undefined }]
+  })
+}
+
+export function executeCallSummary(call: ExecuteCall) {
+  const args = primitiveInputSummary(call.input ?? {}).replace(/\s+/g, " ")
+  return `${call.tool}${args ? ` ${args}` : ""}`
+}
+
 export function webSearchProviderName(provider: unknown) {
   if (typeof provider !== "string" || !provider) return ""
   if (provider === "opencode") return "OpenCode"
@@ -49,3 +67,4 @@ export function nonEmptyToolContent<T>(content: ReadonlyArray<T> | undefined): [
   return first === undefined ? undefined : [first, ...rest]
 }
 import type { SessionMessageAssistantTool } from "@opencode/client/promise"
+import { isRecord } from "./record"

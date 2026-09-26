@@ -9,6 +9,7 @@ export interface MockServerConfig {
   server?: string
   provider: unknown | (() => unknown)
   integrationMethods?: Record<string, unknown[]>
+  integrations?: unknown[]
   onConnectKey?: (input: { integrationID: string; body: unknown }) => void
   shells?: unknown[]
   configEntries?: unknown[]
@@ -42,7 +43,8 @@ export interface MockServerConfig {
   sessionStatus?: Record<string, unknown> | (() => Record<string, unknown>)
   inbox?: unknown[] | (() => unknown[])
   onPrompt?: (input: { sessionID: string; body: Record<string, unknown> }) => void
-  onInboxChange?: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" }) => void
+  generate?: (input: { sessionID: string; prompt: string }) => { text: string } | Promise<{ text: string }>
+  onInboxChange?: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" | "queue" }) => void
 }
 
 type MockStreamWindow = Window & {
@@ -219,7 +221,13 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
         }),
       )
       .handleAll({
-        status: () => Effect.succeed({ version: "2.0.0", pid: 1, urls: config.server ? [config.server] : [] }),
+        info: () =>
+          Effect.succeed({
+            version: "2.0.0",
+            pid: 1,
+            urls: config.server ? [config.server] : [],
+            paths: { tmp: "/tmp/opencode" },
+          }),
         config: () => Effect.succeed(configEntries),
         reference: () =>
           Effect.succeed({
@@ -251,11 +259,13 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
         model: () => Effect.succeed({ location: location(config), data: currentModels(providerConfig(config)) }),
         modelDefault: () =>
           Effect.succeed({ location: location(config), data: currentDefaultModel(providerConfig(config)) }),
-        integrationList: () => Effect.succeed({ location: location(config), data: [] }),
+        integrationList: () => Effect.succeed({ location: location(config), data: config.integrations ?? [] }),
         integrationGet: (ctx) =>
           Effect.succeed({
             location: location(config),
-            data: {
+            data: config.integrations
+              ?.filter(record)
+              .find((integration) => integration.id === ctx.params.integrationID) ?? {
               id: ctx.params.integrationID,
               name: ctx.params.integrationID,
               methods: config.integrationMethods?.[ctx.params.integrationID] ?? [{ type: "key", label: "API key" }],
@@ -297,7 +307,7 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
             })),
           ]),
         worktreeCreate: (ctx) => {
-          const input = record(ctx.payload) ? ctx.payload : {}
+          const input = ctx.payload
           return Effect.succeed({
             directory: `${typeof input.directory === "string" ? input.directory : config.directory}/${
               typeof input.name === "string" ? input.name : "copy"
@@ -437,7 +447,7 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
               data: {
                 id: typeof body.id === "string" ? body.id : `inb_mock_${Date.now()}`,
                 sessionID: ctx.params.sessionID,
-                timeCreated: Date.now(),
+                time: { created: Date.now() },
                 type: "user",
                 payload: {
                   text: typeof body.text === "string" ? body.text : "",
@@ -450,13 +460,23 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
               },
             }
           }),
+        sessionGenerate: (ctx) =>
+          Effect.promise(async () => ({
+            data: (await config.generate?.({ sessionID: ctx.params.sessionID, prompt: ctx.payload.prompt })) ?? {
+              text: "Side-question answer",
+            },
+          })),
         sessionInboxCancel: (ctx) =>
           Effect.sync(() =>
             config.onInboxChange?.({ sessionID: ctx.params.sessionID, inboxID: ctx.params.inboxID, action: "cancel" }),
           ).pipe(Effect.andThen(noContent)),
-        sessionInboxSteer: (ctx) =>
+        sessionInboxUpdate: (ctx) =>
           Effect.sync(() =>
-            config.onInboxChange?.({ sessionID: ctx.params.sessionID, inboxID: ctx.params.inboxID, action: "steer" }),
+            config.onInboxChange?.({
+              sessionID: ctx.params.sessionID,
+              inboxID: ctx.params.inboxID,
+              action: ctx.payload.delivery,
+            }),
           ).pipe(Effect.andThen(noContent)),
         sessionSwitchAgent: () => noContent,
         sessionSwitchModel: () => noContent,
