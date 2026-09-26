@@ -248,9 +248,9 @@ export function fromPromise(plugin: Plugin) {
 
         const run = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromiseWith(runtime)(effect)
 
-        const promiseExecutor =
-          (execute: Tool.Info["execute"]): Info["execute"] =>
-          (input, context) =>
+        const effectExecutors = new WeakMap<Info["execute"], Tool.Info["execute"]>()
+        const promiseExecutor = (execute: Tool.Info["execute"]): Info["execute"] => {
+          const wrapped: Info["execute"] = (input, context) =>
             Effect.runPromiseWith(runtime)(
               execute(input, {
                 ...context,
@@ -258,6 +258,11 @@ export function fromPromise(plugin: Plugin) {
               }),
               { signal: context.signal },
             )
+          effectExecutors.set(wrapped, execute)
+          return wrapped
+        }
+        const effectExecutor = (tool: Info): Tool.Info["execute"] =>
+          effectExecutors.get(tool.execute) ?? ((input, context) => executePromiseTool(tool, input, context))
 
         const adaptApiMethod = <PromiseMethod>(
           endpoint: HttpApiEndpoint.Top,
@@ -477,23 +482,20 @@ export function fromPromise(plugin: Plugin) {
                       return tool ? { ...tool, execute: promiseExecutor(tool.execute) } : undefined
                     },
                     namespace: editor.namespace,
-                    add: (tool: Info) =>
-                      editor.add({
-                        ...tool,
-                        execute: (input, context) => executePromiseTool(tool, input, context),
-                      }),
+                    add: (tool: Info) => editor.add({ ...tool, execute: effectExecutor(tool) }),
                     update: (id, update) =>
                       editor.update(id, (tool) => {
+                        const current = tool.execute
+                        const execute = promiseExecutor(current)
                         const value: Info = {
                           ...tool,
-                          execute: promiseExecutor(tool.execute),
+                          execute,
                         }
                         update(value)
                         Object.assign(tool, value, {
                           output: value.output,
                           options: value.options,
-                          execute: (input: Parameters<Info["execute"]>[0], context: Tool.Context) =>
-                            executePromiseTool(value, input, context),
+                          execute: value.execute === execute ? current : effectExecutor(value),
                         })
                       }),
                     remove: editor.remove,

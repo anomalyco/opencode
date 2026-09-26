@@ -5,6 +5,7 @@ import type { IntegrationMethodRegistration } from "@opencode/plugin/effect/inte
 import { EventManifest } from "@opencode/schema/event-manifest"
 import type { Event } from "@opencode/schema/event"
 import { ServerConfig } from "@opencode/schema/mcp"
+import type { Info } from "@opencode/schema/tool"
 import { App } from "../app.js"
 import { Effect, Schema, Stream } from "effect"
 import { Agent } from "../agent.js"
@@ -36,6 +37,7 @@ import { Permission } from "../permission.js"
 import { PluginHooks } from "./hooks.js"
 import type { Interface } from "../plugin.js"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { effectiveName } from "../tool/runtime.js"
 
 const mutable = <T>(value: T) => value as DeepMutable<T>
 type RpcEvent = Event.Payload & {
@@ -47,6 +49,7 @@ const isRpcEvent = (event: Event.Payload): event is RpcEvent => event.type.start
 export const make = Effect.fn("PluginHost.make")(function* (
   plugin: Pick<Interface, "list">,
   pluginID: string = "test",
+  options?: { readonly authorizeTools?: boolean },
 ) {
   const app = yield* App.Metadata
   const agents = yield* Agent.Service
@@ -92,6 +95,38 @@ export const make = Effect.fn("PluginHost.make")(function* (
     ref.directory === location.directory && ref.workspaceID === location.workspaceID
   const response = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(Effect.map((data) => ({ location: locationInfo(), data })))
+  const authorizedExecutors = new WeakMap<Info["execute"], Info["execute"]>()
+  const authorizeTool = (tool: Info, defaultAction = effectiveName(tool)): Info => {
+    const execute = authorizedExecutors.get(tool.execute) ?? tool.execute
+    const action = tool.options?.permission ?? defaultAction
+    const wrapped: Info["execute"] = (input, context) =>
+      permission
+        .assert({
+          action,
+          resources: ["*"],
+          save: ["*"],
+          metadata: {},
+          sessionID: context.sessionID,
+          agent: context.agent,
+          source: {
+            type: "tool",
+            messageID: context.messageID,
+            id: context.id,
+          },
+        })
+        .pipe(
+          Effect.mapError(
+            (error) =>
+              new Tool.Error({
+                message: error instanceof Permission.CorrectedError ? error.feedback : error.message,
+                error,
+              }),
+          ),
+          Effect.andThen(Effect.suspend(() => execute(input, context))),
+        )
+    authorizedExecutors.set(wrapped, execute)
+    return { ...tool, execute: wrapped }
+  }
 
   const decodeWorktree = Schema.decodeUnknownEffect(Worktree.Info)
   const decodeWorktrees = Schema.decodeUnknownEffect(Schema.Array(Worktree.ListEntry))
@@ -451,7 +486,25 @@ export const make = Effect.fn("PluginHost.make")(function* (
       hook: (name, callback) => hooks.register("shell", name, callback),
     },
     tool: {
-      transform: tools.transform,
+      transform: options?.authorizeTools
+        ? (callback) =>
+            tools.transform((editor) =>
+              callback({
+                ...editor,
+                add: (tool) => editor.add(authorizeTool(tool)),
+                update: (id, update) =>
+                  editor.update(id, (tool) => {
+                    const previous = tool.execute
+                    const original = authorizedExecutors.get(previous)
+                    update(tool)
+                    if (!original) return
+                    const execute =
+                      tool.execute === previous ? original : (authorizedExecutors.get(tool.execute) ?? tool.execute)
+                    tool.execute = authorizeTool({ ...tool, execute }, id).execute
+                  }),
+              }),
+            )
+        : tools.transform,
       reload: tools.reload,
       list: tools.list,
       hook: (name, callback) => hooks.register("tool", name, callback),
