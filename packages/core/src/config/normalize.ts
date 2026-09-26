@@ -2,7 +2,7 @@ export * as ConfigNormalize from "./normalize.js"
 
 import { isDeepStrictEqual } from "node:util"
 import { isRecord } from "@opencode/ai/utils/record"
-import { Option, Schema } from "effect"
+import { Option, Result, Schema, SchemaIssue, SchemaParser } from "effect"
 import { Info } from "@opencode/schema/config"
 import { ConfigAgent } from "@opencode/schema/config/agent"
 import { ConfigCommand } from "@opencode/schema/config/command"
@@ -674,9 +674,9 @@ function decodeValue<S extends Schema.Codec<unknown, unknown, never, never>>(
   path: string[],
   diagnostics: Diagnostic[],
 ) {
-  const decoded = Schema.decodeUnknownOption(schema, options)(value)
-  if (Option.isSome(decoded)) return decoded.value
-  invalid(path, diagnostics)
+  const decoded = SchemaParser.decodeUnknownResult(schema, options)(value)
+  if (Result.isSuccess(decoded)) return decoded.success
+  invalid(path, diagnostics, decoded.failure)
   return undefined
 }
 
@@ -686,12 +686,12 @@ function decodeEncoded<S extends Schema.Codec<unknown, unknown, never, never>>(
   path: string[],
   diagnostics: Diagnostic[],
 ) {
-  const decoded = Schema.decodeUnknownOption(schema, options)(value)
-  if (Option.isNone(decoded)) {
-    invalid(path, diagnostics)
+  const decoded = SchemaParser.decodeUnknownResult(schema, options)(value)
+  if (Result.isFailure(decoded)) {
+    invalid(path, diagnostics, decoded.failure)
     return undefined
   }
-  const encoded = Schema.encodeUnknownOption(schema, options)(decoded.value)
+  const encoded = Schema.encodeUnknownOption(schema, options)(decoded.success)
   if (Option.isSome(encoded)) return plain(encoded.value)
   invalid(path, diagnostics)
   return undefined
@@ -773,8 +773,26 @@ function unsupportedIfPresent(value: Record<string, unknown>, key: string, path:
   diagnostics.push({ kind: "unsupported", path, message: "omitted unsupported legacy setting" })
 }
 
-function invalid(path: string[], diagnostics: Diagnostic[]) {
-  diagnostics.push({ kind: "invalid", path, message: "skipped malformed recognized value" })
+const formatIssue = SchemaIssue.makeFormatterStandardSchemaV1()
+
+function invalid(path: string[], diagnostics: Diagnostic[], issue?: SchemaIssue.Issue) {
+  const field = issue ? firstIssuePath(issue) : []
+  diagnostics.push({
+    kind: "invalid",
+    path: field.length ? [...path, ...field] : path,
+    message: "skipped malformed recognized value",
+  })
+}
+
+function firstIssuePath(issue: SchemaIssue.Issue) {
+  const formatted = formatIssue(issue)
+  const path = formatted.issues?.[0]?.path
+  if (!path) return []
+  return path.flatMap((segment) => {
+    const key = typeof segment === "object" && segment !== null && "key" in segment ? segment.key : segment
+    if (typeof key === "string" || typeof key === "number") return [String(key)]
+    return []
+  })
 }
 
 function conflict(path: string[], diagnostics: Diagnostic[]) {

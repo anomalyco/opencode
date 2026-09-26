@@ -179,6 +179,36 @@ describe("ConfigProviderPlugin.Plugin", () => {
     }),
   )
 
+  it.effect("defaults omitted capability tools for configured models", () =>
+    Effect.gen(function* () {
+      const models = yield* Model.Service
+      const providerID = Provider.ID.make("acme")
+      const modelID = Model.ID.make("coder")
+      yield* addPlugin([
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              acme: {
+                package: "aisdk:@ai-sdk/openai-compatible",
+                models: {
+                  coder: {
+                    limit: { context: 262144, output: 32768 },
+                    capabilities: { input: ["text", "image"], output: ["text"] },
+                  },
+                },
+              },
+            },
+          }),
+        }),
+      ])
+
+      const model = required(yield* models.get(providerID, modelID))
+      expect(model.capabilities).toEqual({ tools: true, input: ["text", "image"], output: ["text"] })
+      expect(model.limit).toEqual({ context: 262144, output: 32768 })
+    }),
+  )
+
   it.effect("defaults custom model metadata", () =>
     Effect.gen(function* () {
       const models = yield* Model.Service
