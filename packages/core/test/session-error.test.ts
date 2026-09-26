@@ -87,6 +87,15 @@ describe("toSessionError", () => {
     })
   })
 
+  test("preserves rejection feedback through nested tool failures", () => {
+    const feedback = "Ne lis pas ce fichier.\nUse only the information already provided."
+    const corrected = new Permission.CorrectedError({ feedback })
+    const wrapped = new ToolFailure({ message: "Unable to read fixture.txt", error: corrected })
+    for (const error of [corrected, wrapped, new Tool.Error({ message: "Unable to run tool", error: wrapped })]) {
+      expect(toSessionError(error)).toEqual({ type: "permission.rejected", message: feedback })
+    }
+  })
+
   test("preserves provider HTTP status without exposing runtime diagnostics", () => {
     const http = new HttpContext({
       url: "https://example.com",

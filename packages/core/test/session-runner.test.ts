@@ -4849,6 +4849,7 @@ describe("SessionRunnerLLM", () => {
   })
 
   scenario("returns permission corrections to the model and continues", function* (s) {
+    const feedback = "Ne lis pas ce fichier.\nUse only the information already provided."
     const registry = yield* Tool.Service
     yield* transformTools(
       registry,
@@ -4859,8 +4860,8 @@ describe("SessionRunnerLLM", () => {
           input: Schema.Struct({}),
           output: Schema.Struct({}),
           execute: () =>
-            Effect.fail(new Permission.CorrectedError({ feedback: "Use another tool" })).pipe(
-              Effect.mapError(() => new Tool.Error({ message: "Use another tool" })),
+            Effect.fail(new Permission.CorrectedError({ feedback })).pipe(
+              Effect.mapError((error) => new ToolFailure({ message: "Unable to read fixture.txt", error })),
             ),
         },
       },
@@ -4873,10 +4874,22 @@ describe("SessionRunnerLLM", () => {
     yield* s.resume
 
     expect(s.requests).toHaveLength(2)
+    expect(s.requests[1].messages).toContainEqual({
+      role: "tool",
+      content: [
+        {
+          type: "tool-result",
+          id: "call-corrected",
+          name: "corrected",
+          result: { type: "error", value: { error: { type: "permission.rejected", message: feedback }, content: [] } },
+          providerExecuted: false,
+        },
+      ],
+    })
     expect(yield* s.context).toMatchObject([
       Expected.user("Call corrected"),
       Expected.assistant({}, [
-        Expected.failedTool({ id: "call-corrected" }, { error: { message: "Use another tool" } }),
+        Expected.failedTool({ id: "call-corrected" }, { error: { type: "permission.rejected", message: feedback } }),
       ]),
       { type: "assistant", finish: "stop" },
     ])
