@@ -1,5 +1,5 @@
 import { EOL } from "node:os"
-import { intro } from "@clack/prompts"
+import { intro, outro } from "@clack/prompts"
 import { Effect, Option } from "effect"
 import {
   OpenCode,
@@ -15,7 +15,9 @@ import { Service } from "@opencode/client/effect/service"
 import { ServiceConfig } from "../../../services/service-config"
 import { selectIntegration, type IntegrationChoice } from "../../../ui/integration-picker"
 import { handlePromptErrors, prompt, requireInteractive } from "../../../ui/prompt"
-import { loadIntegrations } from "../auth/shared"
+import { answerForm } from "../auth/form"
+import { oauthLogin } from "../auth/login"
+import { loadIntegrations, request } from "../auth/shared"
 import { resolveIntegration } from "./resolve"
 
 const location = { directory: process.cwd() }
@@ -37,20 +39,26 @@ const createClient = Effect.fn("cli.mcp.auth.client")(function* () {
 
 const interactive = Effect.fn("cli.mcp.auth.interactive")(function* () {
   yield* requireInteractive("Pass an MCP server name when running without an interactive terminal")
-  intro("Connect an integration")
+  intro("Authenticate an MCP server")
   const client = yield* createClient()
-  const name = yield* chooseServer(client)
-  return yield* authenticate(client, name)
-})
-
-const chooseServer = Effect.fn("cli.mcp.auth.select")(function* (client: OpenCodeClient) {
   const integrations = yield* loadIntegrations(client)
-  const servers = yield* Effect.promise(() => client.mcp.list({ location }))
+  const servers = yield* request((signal) => client.mcp.list({ location }, { signal }))
   const choices = mcpAuthChoices(servers.data, integrations)
-  if (choices.length === 0) return yield* Effect.fail(new Error("No OAuth-capable remote MCP servers available"))
-  return yield* prompt<string>(() => selectIntegration(choices, "MCP server"))
+  if (choices.length === 0)
+    return yield* Effect.fail(
+      new Error("No OAuth-capable remote MCP servers are configured. Add one with `opencode mcp add`"),
+    )
+  const id = yield* prompt<string>(() => selectIntegration(choices, "MCP server"))
+  const integration = integrations.find((item) => item.id === id)
+  const method = integration?.methods.find(
+    (candidate): candidate is IntegrationOAuthMethod => candidate.type === "oauth",
+  )
+  if (!integration || !method) return yield* Effect.fail(new Error(`Integration not found: ${id}`))
+  yield* oauthLogin(client, integration, method, yield* answerForm(method.form))
+  outro("Done")
 })
 
+// Choices carry the server-owned integration ID so provider integrations with colliding names never match.
 export function mcpAuthChoices(servers: McpServer[], integrations: IntegrationInfo[]): IntegrationChoice[] {
   const byID = new Map(integrations.map((integration) => [integration.id, integration]))
   return servers
@@ -59,7 +67,7 @@ export function mcpAuthChoices(servers: McpServer[], integrations: IntegrationIn
       if (!integration?.methods.some((method) => method.type === "oauth")) return []
       return [
         {
-          value: server.name,
+          value: integration.id,
           label: server.name,
           category: "MCP" as const,
           connected: integration.connections.length > 0,

@@ -147,7 +147,7 @@ const keyLogin = Effect.fn("cli.auth.login.key")(function* (
   )
 })
 
-const oauthLogin = Effect.fn("cli.auth.login.oauth")(function* (
+export const oauthLogin = Effect.fn("cli.auth.login.oauth")(function* (
   client: OpenCodeClient,
   integration: IntegrationInfo,
   method: Extract<ConnectMethod, { type: "oauth" }>,

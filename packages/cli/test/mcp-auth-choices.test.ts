@@ -34,8 +34,8 @@ test("offers only OAuth-capable MCP servers by their server identity", () => {
       ],
     ),
   ).toEqual([
-    { value: "GitHub", label: "GitHub", category: "MCP", connected: false },
-    { value: "Linear", label: "Linear", category: "MCP", connected: true },
+    { value: "mcp_github", label: "GitHub", category: "MCP", connected: false },
+    { value: "mcp_linear", label: "Linear", category: "MCP", connected: true },
   ])
 })
 
