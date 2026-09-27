@@ -66,7 +66,7 @@ from source:
 
 ```bash
 flatpak remote-add --user opencode \
-  https://anomalyco.github.io/opencode/opencode.flatpakrepo
+  https://akbar30bill.github.io/opencode/opencode.flatpakrepo
 flatpak install --user opencode ai.opencode.desktop
 flatpak run ai.opencode.desktop
 ```
@@ -81,7 +81,7 @@ Notes on the CI job:
 - It runs on the `blacksmith-4vcpu-ubuntu-2404` self-hosted runner and installs
   `flatpak`/`flatpak-builder` itself.
 - It deploys `site/` (the `repo/` output plus `opencode.flatpakrepo`) to the
-  `gh-pages` branch. GitHub Pages must be enabled for `anomalyco/opencode` once.
+  `gh-pages` branch. GitHub Pages must be enabled for `Akbar30Bill/opencode` once.
 - The Freedesktop runtime/SDK, `node22` extension, and Electron BaseApp are
   pulled from Flathub at build time (`--install-deps-from=flathub`); end users
   still need Flathub configured for the runtime.
