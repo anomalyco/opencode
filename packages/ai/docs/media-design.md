@@ -402,7 +402,7 @@ for await (const event of ai.llm.stream(request)) { … }
 await ai.dispose()
 ```
 
-Streams become `AsyncIterable` via `Stream.toAsyncIterable`. `AIError` is thrown as-is. `AbortSignal` maps to interruption. Nothing in `src/*` except this entrypoint knows about promises.
+Streams become `AsyncIterable` via `Stream.toAsyncIterable`. `AIError` is thrown as-is. Aborting an `AbortSignal` interrupts the work and, like `fetch`, rejects the Promise or throws from the stream with `signal.reason` instead of ending the stream as if complete. Nothing in `src/*` except this entrypoint knows about promises.
 
 ### Providers
 

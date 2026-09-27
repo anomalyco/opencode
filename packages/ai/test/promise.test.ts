@@ -22,7 +22,8 @@ const chatBody = sseEvents(
 /**
  * Executor layer that answers chat completions with SSE text, image generations with one base64 PNG, Runway video
  * tasks with a queued submission that succeeds on the second poll, speech with raw audio or SSE audio deltas, OpenAI
- * transcription with JSON or SSE text deltas, and AssemblyAI transcripts that complete on the first poll.
+ * transcription with JSON or SSE text deltas, AssemblyAI transcripts that complete on the first poll, and `slow.test`
+ * chat completions that send one text delta and never finish.
  */
 const executor = (seen: Array<string>) =>
   RequestExecutor.layer.pipe(
@@ -55,6 +56,18 @@ const executor = (seen: Array<string>) =>
               output: "https://replicate.test/a.webp",
               urls: { get: "https://replicate.test/p_1", cancel: "https://replicate.test/p_1/cancel" },
             })
+          if (web.url.startsWith("https://slow.test"))
+            return input.respond(
+              new ReadableStream({
+                start: (controller) =>
+                  controller.enqueue(
+                    new TextEncoder().encode(
+                      `data: ${JSON.stringify({ choices: [{ delta: { content: "Hello" } }] })}\n\n`,
+                    ),
+                  ),
+              }),
+              { headers: { "content-type": "text/event-stream" } },
+            )
           if (web.url.endsWith("/chat/completions"))
             return input.respond(chatBody, { headers: { "content-type": "text/event-stream" } })
           if (web.url.endsWith("/audio/speech"))
@@ -301,6 +314,77 @@ describe("AI promise client", () => {
       .catch(() => "aborted")
     expect(aborted).toBe("aborted")
 
+    await ai.dispose()
+  })
+
+  test("aborted calls reject and aborted streams throw with the signal's reason", async () => {
+    const ai = AI.make({ layer: executor([]) })
+    const slow = OpenAI.configure({ apiKey: "test", baseURL: "https://slow.test/v1" }).chat("gpt-4o-mini")
+    const aborted = new AbortController()
+    aborted.abort()
+    const reason = new Error("mine")
+
+    const rejected = await ai.run(Effect.never, { signal: aborted.signal }).catch((error: unknown) => error)
+    expect(rejected).toBe(aborted.signal.reason)
+    expect(rejected).toMatchObject({ name: "AbortError" })
+
+    const inFlight = new AbortController()
+    setTimeout(() => inFlight.abort(reason), 10)
+    expect(
+      await ai.llm
+        .generate({ model: slow, prompt: "Hello" }, { signal: inFlight.signal })
+        .catch((error: unknown) => error),
+    ).toBe(reason)
+
+    const preAborted = await Array.fromAsync(
+      ai.speech.stream({ model: openai.speech("gpt-4o-mini-tts"), text: "Hello" }, { signal: aborted.signal }),
+    ).catch((error: unknown) => error)
+    expect(preAborted).toBe(aborted.signal.reason)
+    expect(preAborted).toMatchObject({ name: "AbortError" })
+
+    const midStream = new AbortController()
+    const deltas: Array<string> = []
+    const midStreamFailure = await Array.fromAsync(
+      ai.llm.stream({ model: slow, prompt: "Hello" }, { signal: midStream.signal }),
+      (event) => {
+        if (!LLMEvent.is.textDelta(event)) return
+        deltas.push(event.text)
+        midStream.abort()
+      },
+    ).catch((error: unknown) => error)
+    expect(deltas).toEqual(["Hello"])
+    expect(midStreamFailure).toBe(midStream.signal.reason)
+    expect(midStreamFailure).toMatchObject({ name: "AbortError" })
+
+    const model = Runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5")
+    const generation = await ai.video.start({ model, prompt: "A kite" })
+    const polling = new AbortController()
+    const events: Array<string> = []
+    const eventsFailure = await Array.fromAsync(
+      generation.events({ poll: { interval: 60_000 }, signal: polling.signal }),
+      (event) => {
+        events.push(event.type)
+        polling.abort(reason)
+      },
+    ).catch((error: unknown) => error)
+    expect(events).toEqual(["generation-progress"])
+    expect(eventsFailure).toBe(reason)
+
+    await ai.dispose()
+  })
+
+  test("breaking out of an abortable stream cleans up without throwing", async () => {
+    const ai = AI.make({ layer: executor([]) })
+    const slow = OpenAI.configure({ apiKey: "test", baseURL: "https://slow.test/v1" }).chat("gpt-4o-mini")
+    const controller = new AbortController()
+    const deltas: Array<string> = []
+    for await (const event of ai.llm.stream({ model: slow, prompt: "Hello" }, { signal: controller.signal })) {
+      if (!LLMEvent.is.textDelta(event)) continue
+      deltas.push(event.text)
+      break
+    }
+    controller.abort()
+    expect(deltas).toEqual(["Hello"])
     await ai.dispose()
   })
 

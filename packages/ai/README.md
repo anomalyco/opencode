@@ -773,7 +773,9 @@ Provider notes:
 The promise client exposes the same surface: `ai.video.start(...)` resolves to a handle with `await`, `events`,
 `result`, `refresh`, `cancel`, and `token`; `ai.video.generate`, `ai.video.resume(model, token)`, and
 `ai.video.stream` mirror the Effect API. The handle's `status` and `progress` are a snapshot from when it was
-created; `refresh()` resolves to a new handle.
+created; `refresh()` resolves to a new handle. Every promise method and stream accepts `{ signal }`: like `fetch`,
+aborting rejects the Promise or throws from the `for await` loop with `signal.reason` (an `AbortError` `DOMException`
+unless `abort(reason)` passed one), while `break` stops a stream without throwing.
 
 ```ts
 import { ai } from "@opencode/ai/promise"
