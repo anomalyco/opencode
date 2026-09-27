@@ -48,11 +48,12 @@ export const layer = Layer.effect(
                 output: (tool.outputSchema ?? {}) as JsonSchema.JsonSchema,
                 execute: (input, context) =>
                   Effect.gen(function* () {
+                    const args = (input ?? {}) as Record<string, unknown>
                     yield* permission.assert({
                       action: name(tool.server, tool.name),
                       resources: ["*"],
                       save: ["*"],
-                      metadata: {},
+                      metadata: args,
                       sessionID: context.sessionID,
                       agent: context.agent,
                       source: {
@@ -65,7 +66,7 @@ export const layer = Layer.effect(
                       .callTool({
                         server: tool.server,
                         name: tool.name,
-                        args: (input ?? {}) as Record<string, unknown>,
+                        args,
                         sessionID: context.sessionID,
                       })
                       .pipe(

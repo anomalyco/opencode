@@ -2366,6 +2366,29 @@ it.effect("forwards the invoking session through direct and Code Mode MCP tools"
   }),
 )
 
+it.effect("passes MCP tool arguments to the permission request", () =>
+  Effect.gen(function* () {
+    assertion = yield* Deferred.make<Permission.AssertInput>()
+    decision = Effect.void
+    invocations = []
+    const registry = yield* Tool.Service
+    const registration = yield* McpTool.Service
+    yield* registration.flush
+    const toolSet = yield* registry.snapshot()
+
+    yield* toolSet.execute({
+      sessionID: Session.ID.make("ses_mcp_permission_args"),
+      ...toolIdentity,
+      call: { type: "tool-call", id: "call_mcp_permission_args", name: "direct_lookup", input: { query: "hello" } },
+    })
+
+    expect(yield* Deferred.await(assertion)).toMatchObject({
+      action: "direct_lookup",
+      metadata: { query: "hello" },
+    })
+  }),
+)
+
 it.effect("returns content-only MCP results through Code Mode", () =>
   Effect.gen(function* () {
     assertion = yield* Deferred.make<Permission.AssertInput>()
