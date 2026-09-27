@@ -50,7 +50,11 @@ type InterruptReason = "user" | "shutdown" | "inactivity"
 
 export function terminal(exit: Exit.Exit<void, SessionRunner.RunError>, reason?: InterruptReason) {
   if (Exit.isSuccess(exit)) return { type: "succeeded" as const }
-  if (Cause.hasInterrupts(exit.cause)) return { type: "interrupted" as const, reason: reason ?? "shutdown" }
+  // Only a pure interruption is a deliberate stop. A cause that mixes an
+  // interruption with a real failure (inactivity eviction or location close
+  // racing the unwind) must still settle as failed, or the error never reaches
+  // the durable failure event and the Session looks merely stopped.
+  if (Cause.hasInterruptsOnly(exit.cause)) return { type: "interrupted" as const, reason: reason ?? "shutdown" }
   const failure = Cause.squash(exit.cause)
   if (failure instanceof UserInterruptedError) return { type: "interrupted" as const, reason: "user" as const }
   return { type: "failed" as const, error: toSessionError(failure) }
@@ -99,10 +103,15 @@ export const layer = Layer.effect(
         runner.drain({ sessionID, force, continuation, promotable }),
       ).pipe(
         instances.provide(session),
+        // The durable `Execution.Failed` terminal is written by the settled hook, once per
+        // busy period. The catch path shapes the cause with the same `toSessionError` mapping
+        // so the log line correlates with the durable event's error envelope.
         Effect.tapCause((cause) =>
           Cause.hasInterruptsOnly(cause)
             ? Effect.void
-            : Effect.logError("Failed to drain Session", cause).pipe(Effect.annotateLogs({ sessionID })),
+            : Effect.logError("Failed to drain Session", cause).pipe(
+                Effect.annotateLogs({ sessionID, error: toSessionError(Cause.squash(cause)) }),
+              ),
         ),
       )
       return yield* SessionRunner.DrainResult.$match(result, {
