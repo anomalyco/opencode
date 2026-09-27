@@ -16,6 +16,17 @@ describe("inlineCodeKind", () => {
     expect(inlineCodeKind(`1.2`)).toBeUndefined()
   })
 
+  test("leaves prose shorthand with slashes as normal inline code", () => {
+    expect(inlineCodeKind(`write/edit`)).toBeUndefined()
+    expect(inlineCodeKind(`Style/tool`)).toBeUndefined()
+    expect(inlineCodeKind(`session/status`)).toBeUndefined()
+    expect(inlineCodeKind(`and/or`)).toBeUndefined()
+    expect(inlineCodeKind(`input/output`)).toBeUndefined()
+    expect(inlineCodeKind(`read/write`)).toBeUndefined()
+    expect(inlineCodeKind(`client/server`)).toBeUndefined()
+    expect(inlineCodeKind(`src/components`)).toBeUndefined()
+  })
+
   test("detects file and directory paths", () => {
     expect(inlineCodeKind(`app.tsx`)).toBe("path")
     expect(inlineCodeKind(`vite.config.mjs`)).toBe("path")
@@ -33,8 +44,14 @@ describe("inlineCodeKind", () => {
     expect(inlineCodeKind(`pnpm-lock.yaml`)).toBe("path")
     expect(inlineCodeKind(`packages/desktop-electron`)).toBe("path")
     expect(inlineCodeKind(`~/.config/opencode`)).toBe("path")
+    expect(inlineCodeKind(`packages/app/src`)).toBe("path")
+    expect(inlineCodeKind(`./scripts/setup`)).toBe("path")
+    expect(inlineCodeKind(`../shared/utils`)).toBe("path")
+    expect(inlineCodeKind(`dist/`)).toBe("path")
+    expect(inlineCodeKind(`/usr/local/bin`)).toBe("path")
+    expect(inlineCodeKind(`C:\\Users\\opencode`)).toBe("path")
     expect(inlineCodeKind(`@opencode-ai/app`)).toBe("path")
-    expect(inlineCodeKind(`session/status`)).toBe("path")
+    expect(inlineCodeKind(`@scope/pkg`)).toBe("path")
   })
 
   test("detects urls", () => {
