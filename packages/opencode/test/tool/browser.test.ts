@@ -92,11 +92,12 @@ describe("tool.browser", () => {
 
         const openExit = yield* Effect.exit(tool.execute({ action: "open" }, ctx))
         if (Exit.isFailure(openExit)) {
-          // Playwright is an optional dependency: without it the tool must say
-          // so explicitly — never simulate a browser result.
+          // Playwright is optional and runtime-sensitive: the tool must say
+          // honestly why no browser exists (not installed, or launcher blocked
+          // in this runtime) — never simulate a browser result (Fase 40).
           const message = failureMessage(openExit)
           expect(message).toContain("playwright")
-          expect(message).toContain("install")
+          expect(/install|BLOCKED/i.test(message)).toBe(true)
           return
         }
 

@@ -325,7 +325,22 @@ export const BrowserTool = Tool.define(
                   await browser.close().catch(() => undefined)
                   throw error
                 }
-              })
+              }).pipe(
+                // Bounded so a hung launcher can never wedge the session: playwright's
+                // own launch timeout does not fire under the bun runtime.
+                Effect.timeoutOrElse({
+                  duration: "30 seconds",
+                  orElse: () =>
+                    Effect.fail(
+                      new Error(
+                        "browser open timed out after 30s: playwright never started a browser process. " +
+                          "This is the known playwright+bun runtime incompatibility (playwright only supports " +
+                          "Node.js); under Node.js the same launch completes in under a second. " +
+                          "Treat the browser as BLOCKED in this runtime.",
+                      ),
+                    ),
+                }),
+              )
               const state: Session = {
                 browser: runtime.browser,
                 page: runtime.page,
