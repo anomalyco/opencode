@@ -564,6 +564,44 @@ Assign your identity the inference role required by the deployment: **Cognitive 
 
 ---
 
+### Bee by HEOSSI
+
+[Bee by HEOSSI](https://bee.heossi.com) exposes an OpenAI-compatible API for its
+six production model tiers. Create an API key in
+[Bee Workspace](https://workspace.bee.heossi.com/account/api-keys), export it as
+`BEE_API_KEY`, and add the provider to your OpenCode config:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "bee/bee-cell",
+  "provider": {
+    "bee": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "Bee by HEOSSI",
+      "options": {
+        "baseURL": "https://api.bee.heossi.com/bee",
+        "apiKey": "{env:BEE_API_KEY}"
+      },
+      "models": {
+        "bee-cell": { "name": "Bee Cell 1.0" },
+        "bee-brood": { "name": "Bee Brood 1.0", "reasoning": true },
+        "bee-comb": { "name": "Bee Comb 2.0", "reasoning": true },
+        "bee-buzz": { "name": "Bee Buzz 1.0", "reasoning": true },
+        "bee-hive": { "name": "Bee Hive 1.0", "reasoning": true },
+        "bee-swarm": { "name": "Bee Swarm 1.0", "reasoning": true }
+      }
+    }
+  }
+}
+```
+
+OpenCode reads the API key from your environment, so it is not stored in
+`opencode.json`. Bee also publishes the complete, current configuration at
+[`bee.heossi.com/opencode.json`](https://bee.heossi.com/opencode.json).
+
+---
+
 ### Cerebras
 
 1. Head over to the [Cerebras console](https://inference.cerebras.ai/), create an account, and generate an API key.
