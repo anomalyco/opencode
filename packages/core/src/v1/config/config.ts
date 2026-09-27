@@ -164,6 +164,10 @@ export const Info = Schema.Struct({
       reserved: Schema.optional(NonNegativeInt).annotate({
         description: "Token buffer for compaction. Leaves enough window to avoid overflow during compaction.",
       }),
+      mode: Schema.optional(Schema.Literals(["summary", "transcript"])).annotate({
+        description:
+          "Compaction strategy. 'summary' (default) asks the model to rewrite the conversation head into a structured prose summary. 'transcript' preserves user and assistant text verbatim and condenses only tool calls, tool results and reasoning into one-line summaries.",
+      }),
     }),
   ),
   experimental: Schema.optional(

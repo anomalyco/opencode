@@ -8,6 +8,7 @@ import { SessionEvent } from "./event"
 import { SessionMessage } from "./message"
 import { SessionSchema } from "./schema"
 import { Token } from "../util/token"
+import { buildTranscriptCompaction, parseSummaries, type Segment } from "./compaction-transcript"
 
 const DEFAULT_BUFFER = 20_000
 const DEFAULT_KEEP_TOKENS = 8_000
@@ -63,6 +64,7 @@ type Settings = {
   readonly auto: boolean
   readonly buffer: number
   readonly tokens: number
+  readonly mode: "summary" | "transcript"
 }
 
 type Dependencies = {
@@ -129,32 +131,75 @@ const settings = (documents: readonly Config.Entry[]) => {
       auto: current.auto ?? result.auto,
       buffer: current.buffer ?? result.buffer,
       tokens: current.keep?.tokens ?? result.tokens,
+      mode: current.mode ?? result.mode,
     }),
-    { auto: true, buffer: DEFAULT_BUFFER, tokens: DEFAULT_KEEP_TOKENS },
+    { auto: true, buffer: DEFAULT_BUFFER, tokens: DEFAULT_KEEP_TOKENS, mode: "summary" },
   )
 }
 
 const select = (
   entries: readonly Entry[],
   tokens: number,
-): { readonly head: string; readonly recent: string } | undefined => {
-  const conversation = entries
-    .filter((entry) => entry.message.type !== "compaction")
-    .map((entry) => serialize(entry.message))
-    .filter(Boolean)
-  if (conversation.length === 0) return
+): {
+  readonly head: string
+  readonly recent: string
+  readonly split: number
+  readonly filtered: readonly Entry[]
+} | undefined => {
+  const filtered = entries.filter((entry) => entry.message.type !== "compaction")
+  const rendered = filtered.map((entry) => serialize(entry.message))
+  if (rendered.every((item) => !item)) return
   let total = 0
-  let split = conversation.length
-  for (let index = conversation.length - 1; index >= 0; index--) {
-    const next = total + Token.estimate(conversation[index])
+  let split = filtered.length
+  for (let index = filtered.length - 1; index >= 0; index--) {
+    const item = rendered[index] ?? ""
+    if (!item) continue
+    const next = total + Token.estimate(item)
     if (next > tokens) break
     total = next
     split = index
   }
   return {
-    head: conversation.slice(0, split).join("\n\n"),
-    recent: conversation.slice(split).join("\n\n"),
+    head: rendered.slice(0, split).filter(Boolean).join("\n\n"),
+    recent: rendered.slice(split).filter(Boolean).join("\n\n"),
+    split,
+    filtered,
   }
+}
+
+/** Split head messages into transcript segments: user/assistant text verbatim, everything else condensable. */
+const toSegments = (messages: readonly SessionMessage.Message[]): Segment[] => {
+  const segments: Segment[] = []
+  for (const message of messages) {
+    if (message.type === "user") {
+      if (message.text) segments.push({ type: "text", role: "user", text: message.text })
+      for (const file of message.files ?? []) segments.push({ type: "file", mime: file.mime, filename: file.name })
+      continue
+    }
+    if (message.type === "assistant") {
+      for (const part of message.content) {
+        if (part.type === "text" && part.text) segments.push({ type: "text", role: "assistant", text: part.text })
+        if (part.type === "reasoning" && part.text) segments.push({ type: "reasoning", text: part.text })
+        if (part.type !== "tool") continue
+        const call = { type: "tool", tool: part.name, input: part.state.input } as const
+        if (part.state.status === "completed") {
+          segments.push({ ...call, status: "completed", output: truncate(serializeToolContent(part.state.content)) })
+          continue
+        }
+        if (part.state.status === "error") {
+          segments.push({ ...call, status: "error", error: part.state.error.message })
+          continue
+        }
+        segments.push({ ...call, status: part.state.status })
+      }
+      continue
+    }
+    if (message.type === "system") segments.push({ type: "note", label: "system", text: message.text })
+    if (message.type === "synthetic") segments.push({ type: "note", label: "synthetic", text: message.text })
+    if (message.type === "shell")
+      segments.push({ type: "note", label: "shell", text: `${message.command}\n${truncate(message.output)}` })
+  }
+  return segments
 }
 
 export const buildPrompt = (input: { readonly previousSummary?: string; readonly context: readonly string[] }) => {
@@ -182,11 +227,71 @@ export const make = (dependencies: Dependencies) => {
     const selected = select(input.entries, config.tokens)
     const previousSummary = input.entries.find((entry) => entry.message.type === "compaction")?.message
     if (!selected || (selected.head.length === 0 && previousSummary?.type !== "compaction")) return false
+    const summaryOutput = Math.min(output || SUMMARY_OUTPUT_TOKENS, SUMMARY_OUTPUT_TOKENS)
+
+    if (config.mode === "transcript") {
+      const transcript = buildTranscriptCompaction({
+        segments: toSegments(selected.filtered.slice(0, selected.split).map((entry) => entry.message)),
+        previousSummary:
+          previousSummary?.type === "compaction"
+            ? [previousSummary.summary, previousSummary.recent].filter(Boolean).join("\n\n")
+            : undefined,
+      })
+      // Keep the transcript inside the same window the classic summary prompt may occupy.
+      if (transcript.estimateTokens <= context - summaryOutput) {
+        const messageID = SessionMessage.ID.create()
+        yield* dependencies.events.publish(SessionEvent.Compaction.Started, {
+          sessionID: input.sessionID,
+          messageID,
+          timestamp: yield* DateTime.now,
+          reason: "auto",
+        })
+        let summaries = new Map<number, string>()
+        // Skip the model call when the item list itself would not fit the
+        // window; mechanical lines keep the transcript compaction running.
+        if (transcript.prompt && Token.estimate(transcript.prompt) <= context - summaryOutput) {
+          const chunks: string[] = []
+          let failed = false
+          const summarized = yield* dependencies.llm
+            .stream(
+              LLM.request({
+                model: input.model,
+                http: input.request.http,
+                messages: [Message.user(transcript.prompt)],
+                tools: [],
+                generation: { maxTokens: summaryOutput },
+              }),
+            )
+            .pipe(
+              Stream.runForEach((event) => {
+                if (LLMEvent.is.providerError(event)) failed = true
+                if (LLMEvent.is.textDelta(event)) chunks.push(event.text)
+                return Effect.void
+              }),
+              Effect.as(true),
+              Effect.catchTag("LLM.Error", () => Effect.succeed(false)),
+            )
+          // A failed or empty summarization pass degrades to deterministic
+          // mechanical lines; transcript compaction itself never fails here.
+          if (summarized && !failed) summaries = parseSummaries(chunks.join(""))
+        }
+        const text = transcript.assemble(summaries)
+        yield* dependencies.events.publish(SessionEvent.Compaction.Ended, {
+          sessionID: input.sessionID,
+          messageID,
+          timestamp: yield* DateTime.now,
+          reason: "auto",
+          text,
+          recent: selected.recent,
+        })
+        return true
+      }
+    }
+
     const summaryPrompt = buildPrompt({
       previousSummary: previousSummary?.type === "compaction" ? previousSummary.summary : undefined,
       context: [previousSummary?.type === "compaction" ? previousSummary.recent : "", selected.head].filter(Boolean),
     })
-    const summaryOutput = Math.min(output || SUMMARY_OUTPUT_TOKENS, SUMMARY_OUTPUT_TOKENS)
     if (Token.estimate(summaryPrompt) > context - summaryOutput) return false
     const messageID = SessionMessage.ID.create()
     yield* dependencies.events.publish(SessionEvent.Compaction.Started, {

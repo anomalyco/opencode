@@ -1973,3 +1973,253 @@ describe("SessionNs.getUsage", () => {
     expect(result.tokens.cache.write).toBe(300)
   })
 })
+
+describe("session.compaction.process transcript mode", () => {
+  function summaryTextOf(messages: readonly SessionV1.WithParts[]) {
+    const summary = messages.findLast((message) => message.info.role === "assistant" && message.info.summary)
+    return (summary?.parts ?? [])
+      .filter((part): part is SessionV1.TextPart => part.type === "text")
+      .map((part) => part.text)
+      .filter(Boolean)
+      .join("\n")
+  }
+
+  function createAssistantWithTool(sessionID: SessionID, parentID: MessageID, root: string) {
+    return SessionNs.Service.use((ssn) =>
+      Effect.gen(function* () {
+        const assistant = yield* createAssistantMessage(sessionID, parentID, root)
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.id,
+          sessionID,
+          type: "text",
+          text: "I will check the file.",
+        })
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.id,
+          sessionID,
+          type: "tool",
+          callID: crypto.randomUUID(),
+          tool: "read",
+          state: {
+            status: "completed",
+            input: { path: "src/a.ts" },
+            output: "A".repeat(5000),
+            title: "done",
+            metadata: {},
+            time: { start: Date.now(), end: Date.now() },
+          },
+        })
+        yield* ssn.updatePart({
+          id: PartID.ascending(),
+          messageID: assistant.id,
+          sessionID,
+          type: "reasoning",
+          text: "The build fails because of a missing import",
+          time: { start: Date.now(), end: Date.now() },
+        })
+        return assistant
+      }),
+    )
+  }
+
+  itCompaction.instance(
+    "stores a verbatim transcript with condensed tool and reasoning lines",
+    () => {
+      const stub = llm()
+      let captured = ""
+      stub.push(
+        reply(
+          "1. read src/a.ts — full file, 5000 chars\n2. build fails on a missing import",
+          (input) => {
+            captured = JSON.stringify(input.messages)
+          },
+        ),
+      )
+      return Effect.gen(function* () {
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        const user = yield* createUserMessage(session.id, "Fix the failing build")
+        yield* createAssistantWithTool(session.id, user.id, "/tmp")
+        yield* createCompactionMarker(session.id)
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        const parent = msgs.at(-1)?.info.id
+        expect(parent).toBeTruthy()
+
+        const result = yield* SessionCompaction.use.process({
+          parentID: parent!,
+          messages: msgs,
+          sessionID: session.id,
+          auto: false,
+        })
+
+        const all = yield* ssn.messages({ sessionID: session.id })
+        const text = summaryTextOf(all)
+        expect(result).toBe("continue")
+        expect(text).toContain("[User]: Fix the failing build")
+        expect(text).toContain("[Assistant]: I will check the file.")
+        expect(text).toContain("[tool]: read src/a.ts — full file, 5000 chars")
+        expect(text).toContain("[thinking]: build fails on a missing import")
+        expect(text).not.toContain("A".repeat(100))
+        // The summarizer sees only the condensable items, never the verbatim text.
+        expect(captured).toContain("[tool] read(")
+        expect(captured).not.toContain("Fix the failing build")
+      }).pipe(withCompaction({ llm: stub.llmLayer, config: cfg({ mode: "transcript" }) }))
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
+    "skips the model call when the head has nothing to condense",
+    () => {
+      const stub = llm()
+      stub.push(
+        reply("should not be reached", () => {
+          throw new Error("model must not be called")
+        }),
+      )
+      return Effect.gen(function* () {
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        const user = yield* createUserMessage(session.id, "just talking")
+        yield* createAssistantMessage(session.id, user.id, "/tmp")
+        yield* createCompactionMarker(session.id)
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        const parent = msgs.at(-1)?.info.id
+
+        const result = yield* SessionCompaction.use.process({
+          parentID: parent!,
+          messages: msgs,
+          sessionID: session.id,
+          auto: false,
+        })
+
+        const all = yield* ssn.messages({ sessionID: session.id })
+        const summary = all.find((message) => message.info.role === "assistant" && message.info.summary)
+        expect(result).toBe("continue")
+        expect(summary?.info.role).toBe("assistant")
+        if (summary?.info.role === "assistant") expect(summary.info.finish).toBe("end_turn")
+        const text = summaryTextOf(all)
+        expect(text).toContain("[User]: just talking")
+        expect(text).not.toContain("should not be reached")
+      }).pipe(withCompaction({ llm: stub.llmLayer, config: cfg({ mode: "transcript" }) }))
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
+    "falls back to mechanical lines when the model output is unusable",
+    () => {
+      const stub = llm()
+      stub.push(reply("Sorry, I cannot produce numbered lines today."))
+      return Effect.gen(function* () {
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        const user = yield* createUserMessage(session.id, "Fix the failing build")
+        yield* createAssistantWithTool(session.id, user.id, "/tmp")
+        yield* createCompactionMarker(session.id)
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        const parent = msgs.at(-1)?.info.id
+
+        const result = yield* SessionCompaction.use.process({
+          parentID: parent!,
+          messages: msgs,
+          sessionID: session.id,
+          auto: false,
+        })
+
+        const all = yield* ssn.messages({ sessionID: session.id })
+        const text = summaryTextOf(all)
+        expect(result).toBe("continue")
+        expect(text).toContain("[User]: Fix the failing build")
+        expect(text).toContain("[tool]: read(")
+        expect(text).toContain("A".repeat(120))
+        expect(text).not.toContain("A".repeat(200))
+        expect(text).toContain("[thinking]: The build fails because of a missing import")
+      }).pipe(withCompaction({ llm: stub.llmLayer, config: cfg({ mode: "transcript" }) }))
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
+    "carries the previous transcript forward on repeated compactions",
+    () => {
+      const stub = llm()
+      stub.push(reply("1. read src/a.ts — full file"))
+      return Effect.gen(function* () {
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        const first = yield* createUserMessage(session.id, "older context")
+        yield* createAssistantWithTool(session.id, first.id, "/tmp")
+        yield* createCompactionMarker(session.id)
+        let msgs = yield* ssn.messages({ sessionID: session.id })
+        let parent = msgs.at(-1)?.info.id
+        yield* SessionCompaction.use.process({
+          parentID: parent!,
+          messages: msgs,
+          sessionID: session.id,
+          auto: false,
+        })
+
+        const text1 = summaryTextOf(yield* ssn.messages({ sessionID: session.id }))
+        expect(text1).toContain("[User]: older context")
+
+        yield* createUserMessage(session.id, "latest turn")
+        yield* createCompactionMarker(session.id)
+        msgs = MessageV2.filterCompacted(yield* MessageV2.stream(session.id))
+        parent = msgs.at(-1)?.info.id
+        yield* SessionCompaction.use.process({
+          parentID: parent!,
+          messages: msgs,
+          sessionID: session.id,
+          auto: false,
+        })
+
+        const text2 = summaryTextOf(yield* ssn.messages({ sessionID: session.id }))
+        expect(text2).toContain("[Earlier compaction]")
+        expect(text2).toContain("[User]: older context")
+        expect(text2).toContain("[User]: latest turn")
+      }).pipe(withCompaction({ llm: stub.llmLayer, config: cfg({ mode: "transcript" }) }))
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
+    "falls back to the summary pipeline when the transcript would not fit",
+    () => {
+      const stub = llm()
+      let captured = ""
+      stub.push(
+        reply("prose summary", (input) => {
+          captured = JSON.stringify(input.messages)
+        }),
+      )
+      return Effect.gen(function* () {
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        yield* createUserMessage(session.id, `a`.repeat(2000))
+        yield* createCompactionMarker(session.id)
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        const parent = msgs.at(-1)?.info.id
+
+        yield* SessionCompaction.use.process({
+          parentID: parent!,
+          messages: msgs,
+          sessionID: session.id,
+          auto: false,
+        })
+
+        expect(captured).toContain("Create a new anchored summary")
+        expect(captured).not.toContain("[tool] read(")
+      }).pipe(
+        withCompaction({
+          llm: stub.llmLayer,
+          provider: ProviderTest.fake({ model: createModel({ context: 500, output: 100 }) }),
+          config: cfg({ mode: "transcript" }),
+        }),
+      )
+    },
+    { git: true },
+  )
+})
