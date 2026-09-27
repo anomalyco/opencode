@@ -197,6 +197,11 @@ describe("public exports", () => {
     expect(Google.configure({ apiKey: "fixture" }).transcription("gemini-3.5-transcribe").route.kind).toBe("stream")
     expect(Deepgram.configure({ apiKey: "fixture" }).transcription("nova-3").route.kind).toBe("inline")
     expect(AssemblyAI.configure({ apiKey: "fixture" }).transcription("universal-3-5-pro").route.kind).toBe("queued")
+    expect(ElevenLabs.configure({ apiKey: "fixture" }).transcription("scribe_v2").route.id).toBe(
+      "elevenlabs-transcription",
+    )
+    expect(ElevenLabs.configure({ apiKey: "fixture" }).transcription("scribe_v2").route.kind).toBe("inline")
+    expect(ElevenLabs.provider.transcription).toBe(ElevenLabs.transcription)
   })
 
   test("protocol barrels expose supported low-level routes", () => {

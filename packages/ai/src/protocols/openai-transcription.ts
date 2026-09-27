@@ -193,7 +193,7 @@ const fromRequest = Effect.fn("OpenAITranscription.fromRequest")(function* (requ
     {
       overlay: mergeJsonRecords(request.providerOptions, request.http?.body),
       reserved: RESERVED_FORM_FIELDS,
-      repeatArrays: true,
+      repeatArrays: "key[]",
     },
   )
   return MediaProtocol.multipart(form)

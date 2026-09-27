@@ -1,7 +1,6 @@
 # Media generation in `@opencode/ai` — public API direction
 
-Status: phases 1–4 implemented (through Image queued routes and partial images; ElevenLabs Scribe transcription
-pending); phase 5 proposal.
+Status: phases 1–4 implemented (through Image queued routes and partial images); phase 5 proposal.
 
 ## Goal
 
@@ -271,8 +270,8 @@ Deferred: `Speech.session(...)` — input-streaming TTS where text arrives incre
 #### Transcription (STT)
 
 Shipped as the second half of phase 3 (`src/transcription.ts`, `src/transcription-client.ts`, protocols
-`openai-transcription`, `google-transcription`, `deepgram-transcription`, `assemblyai-transcription`; new `AssemblyAI`
-facade).
+`openai-transcription`, `google-transcription`, `deepgram-transcription`, `elevenlabs-transcription`,
+`assemblyai-transcription`; new `AssemblyAI` facade).
 
 ```ts
 const request = Transcription.request({
@@ -281,7 +280,7 @@ const request = Transcription.request({
   language: "en",                                  // provider-native passthrough
   timestamps: "segment",                           // none | segment | word
   diarize: true,
-  speakers: 2,                                     // exact speaker count (AssemblyAI only)
+  speakers: 2,                                     // speaker count (AssemblyAI exact, ElevenLabs maximum)
   providerOptions: { known_speaker_names: ["agent"] },
 })
 
@@ -309,17 +308,23 @@ upload); `packages/ai/AGENTS.md` (Media Routes) describes both.
 Settled rules:
 
 - **Timestamps.** A granularity the selected route or model cannot produce fails as `UnsupportedOperation`
-  (`media.timestamps`), following Speech; a route that returns more than asked (Deepgram and AssemblyAI always return
-  words) is not stripped. Segments always carry start and end times: Gemini times each transcription part from its
+  (`media.timestamps`), following Speech; a route that returns more than asked (Deepgram, ElevenLabs, and AssemblyAI
+  always return words) is not stripped. Segments always carry start and end times: Gemini times each transcription part from its
   word offsets, so segment timestamps and diarization also request word offsets there.
 - **Diarization.** `diarize` means segments (and words, where the provider labels them) carry `speaker`. Labels are
-  provider-native strings — OpenAI `A` or a known speaker name, Deepgram `0`, Gemini `spk:0`, AssemblyAI `A` — with no
-  cross-provider speaker model. `speakers` is the exact number of speakers to label, which AssemblyAI (`speakers_expected`, the only route that
-  accepts it) treats as a constraint rather than a hint.
+  provider-native strings — OpenAI `A` or a known speaker name, Deepgram `0`, Gemini `spk:0`, AssemblyAI `A`,
+  ElevenLabs `speaker_0` — with no cross-provider speaker model. `speakers` is the number of speakers to label:
+  AssemblyAI (`speakers_expected`) treats it as an exact constraint rather than a hint, and ElevenLabs
+  (`num_speakers`) as the maximum. Both turn on diarization for it; the other routes reject it.
+- **Segments from words.** ElevenLabs returns only a token list (`word`, `spacing`, `audio_event`), so its segments
+  are speaker turns: consecutive words and spacing with one `speaker_id`, text joined from the provider's own spacing
+  tokens. `words` drops spacing and audio events. Segments therefore need diarization, which `timestamps: "segment"`
+  turns on, as AssemblyAI's utterances need speaker labels.
 - **Language** is passed through (`language`, OpenAI `gpt-transcribe` `languages[]`, Gemini `languageCodes`,
-  AssemblyAI `language_code`). `response.language` is the provider's own value, lowercased but not normalized: an
-  ISO code on most routes (AssemblyAI's detection returns `en`), `english` from whisper-1. Deepgram and AssemblyAI
-  assume English unless asked to detect, so a missing `language` enables their detection.
+  AssemblyAI and ElevenLabs `language_code`). `response.language` is the provider's own value, lowercased but not
+  normalized: an ISO code on most routes (AssemblyAI's detection returns `en`, ElevenLabs ISO 639-3 `eng`), `english`
+  from whisper-1. Deepgram and AssemblyAI assume English unless asked to detect, so a missing `language` enables their
+  detection.
 - **Gemini** requires a transcribe model; other model ids fail with `UnsupportedOperation` before the call, because
   general models ignore `audioTranscriptionConfig` and answer conversationally. Streamed chunks carry whole speaker
   turns (one part per turn), which join with a space.
@@ -332,11 +337,12 @@ Settled rules:
 | OpenAI | stream (`stream: true` in `stream` mode; `whisper-1` ignores `stream`, so it emits only `finish`) | multipart `file` (inline only) | `whisper-1` (`verbose_json`); diarize model: `segment` | `gpt-4o-transcribe-diarize` (`diarized_json`) | `speakers`; `prompt` on the diarize model | `tokens` or `seconds` |
 | Gemini | stream (`generateContent` / `streamGenerateContent`) | `inlineData` or Gemini Files `fileData` | `audioTranscriptionConfig.wordTimestamp` | `audioTranscriptionConfig.diarization` | `prompt`, `speakers` | `tokens` |
 | Deepgram | inline | raw body, or JSON `{ url }` | words always; `segment` → `utterances` | `diarize_model=latest` + `utterances` | `prompt`, `speakers` | `seconds` (`metadata.duration`) |
+| ElevenLabs | inline | multipart `file`, or `source_url` | words always; `segment` → `diarize` (speaker turns) | `diarize` | `prompt`; `webhook`, per-channel `use_multi_channel` | `seconds` (`audio_duration_secs`) |
 | AssemblyAI | queued (upload → submit → poll) | `/v2/upload` then `audio_url`, or a URL | words always; `segment` → `speaker_labels` | `speaker_labels` | — | `seconds` (`audio_duration`) |
 
 Deferred: `Transcription.session(...)` — realtime STT over WebSocket (Deepgram live, AssemblyAI streaming, ElevenLabs
 realtime, OpenAI realtime transcription) — is the same future scoped `session` shape as input-streaming TTS and ships
-with the realtime work in phase 5. ElevenLabs Scribe is not implemented yet.
+with the realtime work in phase 5.
 
 ### `Generation` — shared async execution
 
@@ -414,7 +420,7 @@ implemented):
 | `OpenAI` | responses (default), chat | Images API (stream) | *Sora skipped (decision 8)* | ✓ | ✓ | |
 | `Google` | Gemini | Gemini-native | Veo | Gemini TTS | `gemini-3.5-transcribe` | |
 | `XAI` | ✓ | ✓ | ✓ | | | |
-| `ElevenLabs` | | | | ✓ | *Scribe (pending)* | *soundEffect, music (phase 5)* |
+| `ElevenLabs` | | | | ✓ | Scribe | *soundEffect, music (phase 5)* |
 | `Cartesia` | | | | ✓ | | |
 | `Deepgram` | | | | Aura | ✓ | |
 | `Fal` | | ✓ (queued) | ✓ | | | |
@@ -467,7 +473,7 @@ Foundation + Image ship together as the reference implementation, serially. Vide
 
 1. **Foundation** — per-modality selectors, `Media`, `Generation`, `Poll`, `Usage` union, `MediaProtocol` kinds, `@opencode/ai/promise` with `llm` + `image`. Port the five existing image protocols onto it. Unify `MediaPart` and add the `media` LLM event (fixes Gemini image output being dropped).
 2. **Video** — ✅ Veo, xAI, fal, Runway shipped (`MediaProtocol.queued`, `Video.start/generate/resume/stream`, promise `ai.video`). Deferred: `Video.complete` (webhooks), Luma, Kling, MiniMax, Replicate.
-3. **Speech + Transcription** — ✅ Speech: OpenAI, Gemini TTS, ElevenLabs, Cartesia, Deepgram shipped (`MediaProtocol.stream`, `Speech.generate/stream`, promise `ai.speech`). ✅ Transcription: OpenAI, Gemini, Deepgram, AssemblyAI shipped across all three route kinds (`Transcription.generate/stream/start/resume`, promise `ai.transcription`). Pending: ElevenLabs Scribe. Deferred: `Speech.session` and `Transcription.session` (WebSocket streaming).
+3. **Speech + Transcription** — ✅ Speech: OpenAI, Gemini TTS, ElevenLabs, Cartesia, Deepgram shipped (`MediaProtocol.stream`, `Speech.generate/stream`, promise `ai.speech`). ✅ Transcription: OpenAI, Gemini, Deepgram, ElevenLabs Scribe, AssemblyAI shipped across all three route kinds (`Transcription.generate/stream/start/resume`, promise `ai.transcription`). Deferred: `Speech.session` and `Transcription.session` (WebSocket streaming).
 4. **Image queued routes and partials** — ✅ BFL, fal, Replicate, and Stability creative upscale queued; Stability generate inline; OpenAI `partial_images` streaming (`image-partial` restored). Imagen dropped: shut down on the Gemini API and discontinued on Vertex (2026-06-30). Deferred: Stability's synchronous edit and fast/conservative upscale endpoints.
 5. **Later** — ElevenLabs music/SFX, Lyria, `Speech.session` / `Transcription.session`, realtime.
 
