@@ -85,6 +85,45 @@ const serialize = (message: SessionV1.WithParts) => {
     .join("\n")
 }
 
+// local-fix: compaction-pin-precedence — decide which model summarizes. An
+// explicit plugin pin arrives on the marker as a model DIFFERENT from the working
+// model; a core-initiated overflow marker merely echoes the working model. The pin
+// wins, the configured compaction agent is the fallback, and the bare marker is the
+// last resort (pre-plugin behavior).
+export type SummarizerModelRef = {
+  readonly providerID: string
+  readonly modelID: string
+  readonly variant?: string
+}
+
+const sameModelRef = (a?: { providerID?: string; modelID?: string }, b?: { providerID?: string; modelID?: string }) =>
+  !!a && !!b && a.providerID === b.providerID && a.modelID === b.modelID
+
+export const resolveSummarizerModelRef = <T extends SummarizerModelRef>(input: {
+  readonly configured?: T
+  readonly marker: T
+  readonly working?: { readonly providerID: string; readonly modelID: string }
+}): { readonly source: "pin" | "configured" | "marker"; readonly model: T } => {
+  if (input.marker && !sameModelRef(input.marker, input.working)) {
+    return { source: "pin", model: input.marker }
+  }
+  if (input.configured) {
+    return { source: "configured", model: input.configured }
+  }
+  return { source: "marker", model: input.marker }
+}
+
+// The working model is the last real user turn before the marker, mirroring the
+// resume-identity rule below.
+export const resolveWorkingModelRef = (messages: SessionV1.WithParts[], parentID: MessageID) => {
+  const markerIndex = messages.findIndex((m) => m.info.id === parentID)
+  const history = markerIndex >= 0 ? messages.slice(0, markerIndex) : messages
+  const candidate = history.findLast(
+    (m): m is SessionV1.WithParts & { info: SessionV1.User } =>
+      m.info.role === "user" && !m.parts.some((part) => part.type === "compaction"),
+  )
+  return candidate?.info.model
+}
 function summaryText(message: SessionV1.WithParts) {
   const text = message.parts
     .filter((part): part is SessionV1.TextPart => part.type === "text")
@@ -383,20 +422,28 @@ const layer = Layer.effect(
       }
 
       const agent = yield* agents.get("compaction")
-      const configuredModel = agent.model
-      const model = configuredModel
-        ? yield* provider.getModel(configuredModel.providerID, configuredModel.modelID).pipe(Effect.orDie)
-        : yield* provider.getModel(userMessage.model.providerID, userMessage.model.modelID).pipe(Effect.orDie)
-      // local-fix: compaction-model-override — when the compaction agent pins a
-      // model, its variant pins with it; the marker's variant must not leak onto
-      // a different model family.
-      const summarizerVariant = configuredModel ? agent.variant : userMessage.model.variant
+      // local-fix: compaction-pin-precedence — an explicit plugin pin (a marker
+      // model different from the working model) is the requested summarizer and
+      // beats the configured compaction agent; the configured agent is the fallback
+      // when the marker merely echoes the working model (core-initiated overflow).
+      const summarizerDecision = resolveSummarizerModelRef({
+        configured: agent.model,
+        marker: userMessage.model,
+        working: resolveWorkingModelRef(input.messages, input.parentID),
+      })
+      const model = yield* provider
+        .getModel(summarizerDecision.model.providerID, summarizerDecision.model.modelID)
+        .pipe(Effect.orDie)
+      const summarizerVariant =
+        summarizerDecision.source === "configured" ? agent.variant : userMessage.model.variant
       // userMessage is the marker, so its model is the model this compaction was REQUESTED with
       // (a plugin-supplied pin arrives exactly this way). It is not "the session model", and
       // labelling it as such makes a working pin indistinguishable from a dead one in the logs.
       yield* Effect.logInfo("compaction model resolved", {
-        source: configuredModel ? "configured-compaction-agent" : "request-marker",
-        pin: configuredModel ? "compaction-model-override" : undefined,
+        source: summarizerDecision.source === "configured" ? "configured-compaction-agent" : "request-marker",
+        pin: summarizerDecision.source === "configured" ? "compaction-model-override" : undefined,
+        precedence: summarizerDecision.source,
+        precedenceRule: "compaction-pin-precedence",
         variant: summarizerVariant,
         providerID: model.providerID,
         modelID: model.id,

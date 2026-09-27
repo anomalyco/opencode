@@ -2207,3 +2207,62 @@ describe("SessionNs.getUsage", () => {
     expect(result.tokens.cache.write).toBe(300)
   })
 })
+
+
+// --- local-fix: compaction-pin-precedence ------------------------------------------------
+// An explicit plugin pin on the marker (a model different from the working model)
+// is the requested summarizer and beats the configured compaction agent. The
+// configured agent is the fallback when the marker merely echoes the working
+// model (core-initiated overflow) or is absent.
+
+describe("resolveSummarizerModelRef (compaction-pin-precedence)", () => {
+  const ref = (providerID: string, modelID: string, variant?: string) => ({ providerID, modelID, ...(variant ? { variant } : {}) })
+  const resolve = SessionCompaction.resolveSummarizerModelRef
+
+  test("plugin pin on the marker beats the configured compaction agent", () => {
+    const decision = resolve({
+      configured: ref("openai", "gpt-6-luna"),
+      marker: ref("zai-coding-plan", "glm-5.3-flash"),
+      working: ref("kimi-for-coding", "k3-256k"),
+    })
+    expect(decision.source).toBe("pin")
+    expect(decision.model).toEqual(ref("zai-coding-plan", "glm-5.3-flash"))
+  })
+
+  test("marker echoing the working model falls back to the configured agent", () => {
+    const decision = resolve({
+      configured: ref("openai", "gpt-6-luna"),
+      marker: ref("kimi-for-coding", "k3-256k"),
+      working: ref("kimi-for-coding", "k3-256k"),
+    })
+    expect(decision.source).toBe("configured")
+    expect(decision.model).toEqual(ref("openai", "gpt-6-luna"))
+  })
+
+  test("marker echoing the working model with no configured agent keeps the marker", () => {
+    const decision = resolve({
+      marker: ref("kimi-for-coding", "k3-256k"),
+      working: ref("kimi-for-coding", "k3-256k"),
+    })
+    expect(decision.source).toBe("marker")
+    expect(decision.model).toEqual(ref("kimi-for-coding", "k3-256k"))
+  })
+
+  test("marker with no resolvable working model is treated as an explicit pin", () => {
+    const decision = resolve({
+      configured: ref("openai", "gpt-6-luna"),
+      marker: ref("zai-coding-plan", "glm-5.3-flash"),
+    })
+    expect(decision.source).toBe("pin")
+    expect(decision.model).toEqual(ref("zai-coding-plan", "glm-5.3-flash"))
+  })
+
+  test("pin carries the marker variant; configured carries the agent variant slot", () => {
+    const pin = resolve({
+      configured: ref("openai", "gpt-6-luna"),
+      marker: { providerID: "zai-coding-plan", modelID: "glm-5.3-flash", variant: "turbo" },
+      working: ref("kimi-for-coding", "k3-256k"),
+    })
+    expect(pin.model).toEqual({ providerID: "zai-coding-plan", modelID: "glm-5.3-flash", variant: "turbo" })
+  })
+})
