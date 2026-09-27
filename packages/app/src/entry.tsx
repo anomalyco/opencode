@@ -36,10 +36,11 @@ if (!(root instanceof HTMLElement) && import.meta.env.DEV) {
   throw new Error(getRootNotFoundError())
 }
 
-const clearAuthToken = () => {
+const clearLaunchParams = () => {
   const params = new URLSearchParams(location.search)
-  if (!params.has("auth_token")) return
+  if (!params.has("auth_token") && !params.has("reauth")) return
   params.delete("auth_token")
+  params.delete("reauth")
   history.replaceState(null, "", location.pathname + (params.size ? `?${params}` : "") + location.hash)
 }
 
@@ -73,7 +74,7 @@ if (root instanceof HTMLElement && root.dataset.opencodeMounted === undefined) {
   root.dataset.opencodeMounted = ""
   void loadInitialLocale().then((locale) => {
     const auth = authFromToken(new URLSearchParams(location.search).get("auth_token"))
-    clearAuthToken()
+    clearLaunchParams()
     const standalone = isStandalone()
     root.dataset.standalone = String(standalone)
     if (standalone) restorePwaRoute()

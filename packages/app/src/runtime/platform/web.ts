@@ -1,6 +1,7 @@
 import { createBrowserDraftStore } from "@/runtime/persistence/drafts"
 import { ServerConnection } from "@/runtime/server/registry"
 import type { Platform } from "./platform"
+import { fetchThroughSignInProxy } from "./sign-in-proxy"
 
 const DEFAULT_SERVER_URL_KEY = "opencode.settings.dat:defaultServerUrl"
 
@@ -18,6 +19,7 @@ export function createWebPlatform(version: string) {
       window.open(url.href, "_blank", "noopener,noreferrer")
     },
     restart: async () => window.location.reload(),
+    fetch: fetchThroughSignInProxy,
     async notify(title, description, onClick) {
       if (!("Notification" in window)) return
 
