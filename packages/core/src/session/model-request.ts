@@ -44,14 +44,6 @@ const IMAGE_BYTES_TARGET = 15 * 1024 * 1024 // 15 MiB
 const IMAGE_REMOVED =
   "[This image was removed to reduce the request size and is no longer visible. Do not make claims about its contents from memory. If needed, retrieve it again with an available tool or ask the user to attach it again.]"
 const GENERATION_KEYS = new Set(Object.keys(GenerationOptions.fields))
-/**
- * The output limit of a compaction summary. Compaction keeps this much of the window free (see `SessionCompaction`),
- * so the summary request always has room for it.
- */
-export const SUMMARY_OUTPUT_TOKENS = 16_000
-// Titles and generate have no default output limit and keep the provider default, because their reasoning is hard to
-// budget.
-const OUTPUT_LIMITED: ReadonlySet<SessionRequestKind> = new Set(["primary", "compaction"])
 // Used when the catalog has no output limit for the model.
 const OUTPUT_TOKEN_FALLBACK = 32_000
 // Prompt text is estimated at about 4 characters per token, which can run low on dense text such as code.
@@ -88,13 +80,8 @@ export interface Input {
 }
 
 /** The default output limit: the catalog limit, fitted to the room the prompt leaves in the context window. */
-export const outputLimit = (
-  limit: Model.Info["limit"],
-  kind: "primary" | "compaction",
-  inputTokens?: Input["inputTokens"],
-) => {
-  const model = limit.output > 0 ? limit.output : OUTPUT_TOKEN_FALLBACK
-  const requested = kind === "compaction" ? Math.min(model, SUMMARY_OUTPUT_TOKENS) : model
+export const outputLimit = (limit: Model.Info["limit"], inputTokens?: Input["inputTokens"]) => {
+  const requested = limit.output > 0 ? limit.output : OUTPUT_TOKEN_FALLBACK
   if (inputTokens === undefined || limit.context <= 0) return requested
   const room = limit.context - inputTokens.measured - Math.ceil(inputTokens.estimated * (1 + ESTIMATE_ERROR))
   return Math.min(requested, Math.max(OUTPUT_TOKEN_MIN, room))
@@ -247,7 +234,8 @@ export const layer = Layer.effect(
       const given = new Map(
         tools.definitions.map((t) => [{ description: t.description, input: { ...t.inputSchema } }, t] as const),
       )
-      // Hooks see the default output limit and may change or remove it.
+      // Hooks see the default output limit and may change or remove it. Titles and generate keep the provider default,
+      // because their reasoning is hard to budget.
       const shaped = yield* shape(
         {
           sessionID: session.id,
@@ -256,7 +244,7 @@ export const layer = Layer.effect(
           messages: input.messages,
           options:
             kind === "primary" || kind === "compaction"
-              ? { maxTokens: outputLimit(model.limit, kind, input.inputTokens) }
+              ? { maxTokens: outputLimit(model.limit, input.inputTokens) }
               : {},
         },
         Object.fromEntries(Array.from(given, ([d, t]) => [t.name, d])),

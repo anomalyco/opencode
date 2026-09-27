@@ -90,6 +90,8 @@ type Streamed = {
 const NOTHING_TO_COMPACT: Failure = { error: { type: "compaction.unavailable", message: "Nothing to compact yet" } }
 /** After each "too long" rejection, the next attempt aims at this share of the first rejected request's size. */
 const SHRINK_STEPS = [0.7, 0.5, 0.35]
+// The least of the window kept free for the last reply before compaction and for the summary itself.
+const RESERVE_MIN = 16_000
 /** A common window size, assumed for the compaction request when the model's window is unknown. */
 const UNKNOWN_WINDOW = 200_000
 const TOOL_OUTPUT_MAX_CHARS = 1_250
@@ -884,9 +886,9 @@ export const estimatePrompt = (context: SessionContext.Loaded) => {
 }
 
 /**
- * The largest request the model takes while leaving room for its reply: 10% of the window, or the summary's output
- * limit when that is more, so the last reply before compaction and the summary itself always have that much. A window
- * too small to give up the summary's limit keeps 10%.
+ * The largest request the model takes while leaving room for its reply: 10% of the window, or `RESERVE_MIN` when that
+ * is more. The summary request is capped at the same size, so its output limit is whatever the reserve leaves. A window
+ * too small to give up `RESERVE_MIN` keeps 10%.
  */
 const calculateCeiling = (limit: SessionContext.Loaded["model"]["limit"], buffer: number | undefined) => {
   // Unknown limits are reported as 0. An unknown input limit falls back to the context window; with no window at
@@ -894,8 +896,7 @@ const calculateCeiling = (limit: SessionContext.Loaded["model"]["limit"], buffer
   const window = limit.input || limit.context
   if (window <= 0) return Number.POSITIVE_INFINITY
   if (buffer !== undefined) return window - buffer
-  const reserve = SessionModelRequest.SUMMARY_OUTPUT_TOKENS
-  return window - Math.max(Math.floor(window * 0.1), window >= 2 * reserve ? reserve : 0)
+  return window - Math.max(Math.floor(window * 0.1), window >= 2 * RESERVE_MIN ? RESERVE_MIN : 0)
 }
 
 /**
