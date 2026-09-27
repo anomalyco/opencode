@@ -5,6 +5,7 @@ import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { EventV2 } from "@opencode-ai/core/event"
 import { Credential } from "@opencode-ai/core/credential"
 import { PermissionSaved } from "@opencode-ai/core/permission/saved"
+import { Artifact } from "@opencode-ai/core/artifact"
 import { PtyTicket } from "@opencode-ai/core/pty/ticket"
 import { SessionV2 } from "@opencode-ai/core/session"
 import { SessionExecution } from "@opencode-ai/core/session/execution"
@@ -30,6 +31,7 @@ const applicationServices = LayerNode.group([
   ToolOutputStore.cleanupNode,
   SessionV2.node,
   PermissionSaved.node,
+  Artifact.node,
   PtyTicket.node,
   Credential.node,
   PtyEnvironment.node,

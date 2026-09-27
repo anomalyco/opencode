@@ -11,7 +11,9 @@ import { GrepTool } from "./grep"
 import { ReadTool } from "./read"
 import { TaskTool } from "./task"
 import { Database } from "@opencode-ai/core/database/database"
+import { Artifact } from "@opencode-ai/core/artifact"
 import { BrowserTool } from "./browser"
+import { ArtifactTool } from "./artifact"
 import { TodoWriteTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
@@ -108,6 +110,7 @@ const layer = Layer.effect(
     const plan = yield* PlanExitTool
     const webfetch = yield* WebFetchTool
     const browsertool = yield* BrowserTool
+    const artifacttool = yield* ArtifactTool
     const websearch = yield* WebSearchTool
     const shell = yield* ShellTool
     const globtool = yield* GlobTool
@@ -219,6 +222,7 @@ const layer = Layer.effect(
           task: Tool.init(task),
           fetch: Tool.init(webfetch),
           browser: Tool.init(browsertool),
+          artifact: Tool.init(artifacttool),
           todo: Tool.init(todo),
           search: Tool.init(websearch),
           skill: Tool.init(skilltool),
@@ -243,6 +247,7 @@ const layer = Layer.effect(
             tool.task,
             tool.fetch,
             tool.browser,
+            tool.artifact,
             tool.todo,
             tool.search,
             tool.skill,
@@ -453,6 +458,7 @@ export const node = LayerNode.make({
     MCP.node,
     Database.node,
     Ripgrep.node,
+    Artifact.node,
   ],
 })
 

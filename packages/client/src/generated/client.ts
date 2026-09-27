@@ -77,6 +77,16 @@ import type {
   PermissionsGetOutput,
   PermissionsReplyInput,
   PermissionsReplyOutput,
+  ServerArtifactListInput,
+  ServerArtifactListOutput,
+  ServerArtifactGetInput,
+  ServerArtifactGetOutput,
+  ServerArtifactCreateInput,
+  ServerArtifactCreateOutput,
+  ServerArtifactUpdateInput,
+  ServerArtifactUpdateOutput,
+  ServerArtifactCommentInput,
+  ServerArtifactCommentOutput,
   FilesListInput,
   FilesListOutput,
   FilesFindInput,
@@ -753,6 +763,91 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
+    },
+    "server.artifact": {
+      list: (input?: ServerArtifactListInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: ServerArtifactListOutput }>(
+          {
+            method: "GET",
+            path: `/api/artifact`,
+            query: {
+              projectID: input?.["projectID"],
+              type: input?.["type"],
+              status: input?.["status"],
+              agent: input?.["agent"],
+              task: input?.["task"],
+              sessionID: input?.["sessionID"],
+            },
+            successStatus: 200,
+            declaredStatuses: [401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      get: (input: ServerArtifactGetInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: ServerArtifactGetOutput }>(
+          {
+            method: "GET",
+            path: `/api/artifact/${encodeURIComponent(input.id)}`,
+            successStatus: 200,
+            declaredStatuses: [404, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      create: (input: ServerArtifactCreateInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: ServerArtifactCreateOutput }>(
+          {
+            method: "POST",
+            path: `/api/artifact`,
+            body: {
+              projectID: input["projectID"],
+              sessionID: input["sessionID"],
+              name: input["name"],
+              type: input["type"],
+              status: input["status"],
+              agent: input["agent"],
+              task: input["task"],
+              content: input["content"],
+              diff: input["diff"],
+            },
+            successStatus: 200,
+            declaredStatuses: [404, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      update: (input: ServerArtifactUpdateInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: ServerArtifactUpdateOutput }>(
+          {
+            method: "PATCH",
+            path: `/api/artifact/${encodeURIComponent(input.id)}`,
+            body: {
+              name: input["name"],
+              status: input["status"],
+              agent: input["agent"],
+              task: input["task"],
+              content: input["content"],
+              diff: input["diff"],
+            },
+            successStatus: 200,
+            declaredStatuses: [404, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      comment: (input: ServerArtifactCommentInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: ServerArtifactCommentOutput }>(
+          {
+            method: "POST",
+            path: `/api/artifact/${encodeURIComponent(input.id)}/comment`,
+            body: { author: input["author"], body: input["body"] },
+            successStatus: 200,
+            declaredStatuses: [404, 401, 400],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
     },
     files: {
       list: (input?: FilesListInput, requestOptions?: RequestOptions) =>

@@ -109,3 +109,12 @@ export class PtyNotFoundError extends Schema.TaggedErrorClass<PtyNotFoundError>(
   },
   { httpApiStatus: 404 },
 ) {}
+
+export class ArtifactNotFoundError extends Schema.TaggedErrorClass<ArtifactNotFoundError>()(
+  "ArtifactNotFoundError",
+  {
+    artifactID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}

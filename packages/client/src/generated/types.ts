@@ -82,6 +82,14 @@ export type PermissionNotFoundError = {
 export const isPermissionNotFoundError = (value: unknown): value is PermissionNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "PermissionNotFoundError"
 
+export type ArtifactNotFoundError = {
+  readonly _tag: "ArtifactNotFoundError"
+  readonly artifactID: string
+  readonly message: string
+}
+export const isArtifactNotFoundError = (value: unknown): value is ArtifactNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ArtifactNotFoundError"
+
 export type PtyNotFoundError = { readonly _tag: "PtyNotFoundError"; readonly ptyID: string; readonly message: string }
 export const isPtyNotFoundError = (value: unknown): value is PtyNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "PtyNotFoundError"
@@ -2438,6 +2446,592 @@ export type PermissionsReplyInput = {
 }
 
 export type PermissionsReplyOutput = void
+
+export type ServerArtifactListInput = {
+  readonly projectID?: {
+    readonly projectID?: string | undefined
+    readonly type?:
+      | (
+          | "PLAN"
+          | "ARCHITECTURE"
+          | "CODE_DIFF"
+          | "TEST_RESULT"
+          | "BROWSER_RECORDING"
+          | "SCREENSHOT"
+          | "LOG"
+          | "SECURITY_REPORT"
+          | "PERFORMANCE_REPORT"
+          | "DATABASE_REPORT"
+          | "BUILD_REPORT"
+          | "DEPLOY_REPORT"
+          | "FINAL_WALKTHROUGH"
+        )
+      | undefined
+    readonly status?: ("draft" | "ready" | "approved" | "rejected" | "archived") | undefined
+    readonly agent?: string | undefined
+    readonly task?: string | undefined
+    readonly sessionID?: string | undefined
+  }["projectID"]
+  readonly type?: {
+    readonly projectID?: string | undefined
+    readonly type?:
+      | (
+          | "PLAN"
+          | "ARCHITECTURE"
+          | "CODE_DIFF"
+          | "TEST_RESULT"
+          | "BROWSER_RECORDING"
+          | "SCREENSHOT"
+          | "LOG"
+          | "SECURITY_REPORT"
+          | "PERFORMANCE_REPORT"
+          | "DATABASE_REPORT"
+          | "BUILD_REPORT"
+          | "DEPLOY_REPORT"
+          | "FINAL_WALKTHROUGH"
+        )
+      | undefined
+    readonly status?: ("draft" | "ready" | "approved" | "rejected" | "archived") | undefined
+    readonly agent?: string | undefined
+    readonly task?: string | undefined
+    readonly sessionID?: string | undefined
+  }["type"]
+  readonly status?: {
+    readonly projectID?: string | undefined
+    readonly type?:
+      | (
+          | "PLAN"
+          | "ARCHITECTURE"
+          | "CODE_DIFF"
+          | "TEST_RESULT"
+          | "BROWSER_RECORDING"
+          | "SCREENSHOT"
+          | "LOG"
+          | "SECURITY_REPORT"
+          | "PERFORMANCE_REPORT"
+          | "DATABASE_REPORT"
+          | "BUILD_REPORT"
+          | "DEPLOY_REPORT"
+          | "FINAL_WALKTHROUGH"
+        )
+      | undefined
+    readonly status?: ("draft" | "ready" | "approved" | "rejected" | "archived") | undefined
+    readonly agent?: string | undefined
+    readonly task?: string | undefined
+    readonly sessionID?: string | undefined
+  }["status"]
+  readonly agent?: {
+    readonly projectID?: string | undefined
+    readonly type?:
+      | (
+          | "PLAN"
+          | "ARCHITECTURE"
+          | "CODE_DIFF"
+          | "TEST_RESULT"
+          | "BROWSER_RECORDING"
+          | "SCREENSHOT"
+          | "LOG"
+          | "SECURITY_REPORT"
+          | "PERFORMANCE_REPORT"
+          | "DATABASE_REPORT"
+          | "BUILD_REPORT"
+          | "DEPLOY_REPORT"
+          | "FINAL_WALKTHROUGH"
+        )
+      | undefined
+    readonly status?: ("draft" | "ready" | "approved" | "rejected" | "archived") | undefined
+    readonly agent?: string | undefined
+    readonly task?: string | undefined
+    readonly sessionID?: string | undefined
+  }["agent"]
+  readonly task?: {
+    readonly projectID?: string | undefined
+    readonly type?:
+      | (
+          | "PLAN"
+          | "ARCHITECTURE"
+          | "CODE_DIFF"
+          | "TEST_RESULT"
+          | "BROWSER_RECORDING"
+          | "SCREENSHOT"
+          | "LOG"
+          | "SECURITY_REPORT"
+          | "PERFORMANCE_REPORT"
+          | "DATABASE_REPORT"
+          | "BUILD_REPORT"
+          | "DEPLOY_REPORT"
+          | "FINAL_WALKTHROUGH"
+        )
+      | undefined
+    readonly status?: ("draft" | "ready" | "approved" | "rejected" | "archived") | undefined
+    readonly agent?: string | undefined
+    readonly task?: string | undefined
+    readonly sessionID?: string | undefined
+  }["task"]
+  readonly sessionID?: {
+    readonly projectID?: string | undefined
+    readonly type?:
+      | (
+          | "PLAN"
+          | "ARCHITECTURE"
+          | "CODE_DIFF"
+          | "TEST_RESULT"
+          | "BROWSER_RECORDING"
+          | "SCREENSHOT"
+          | "LOG"
+          | "SECURITY_REPORT"
+          | "PERFORMANCE_REPORT"
+          | "DATABASE_REPORT"
+          | "BUILD_REPORT"
+          | "DEPLOY_REPORT"
+          | "FINAL_WALKTHROUGH"
+        )
+      | undefined
+    readonly status?: ("draft" | "ready" | "approved" | "rejected" | "archived") | undefined
+    readonly agent?: string | undefined
+    readonly task?: string | undefined
+    readonly sessionID?: string | undefined
+  }["sessionID"]
+}
+
+export type ServerArtifactListOutput = {
+  readonly data: ReadonlyArray<{
+    readonly id: string
+    readonly projectID: string
+    readonly sessionID?: string
+    readonly name: string
+    readonly type:
+      | "PLAN"
+      | "ARCHITECTURE"
+      | "CODE_DIFF"
+      | "TEST_RESULT"
+      | "BROWSER_RECORDING"
+      | "SCREENSHOT"
+      | "LOG"
+      | "SECURITY_REPORT"
+      | "PERFORMANCE_REPORT"
+      | "DATABASE_REPORT"
+      | "BUILD_REPORT"
+      | "DEPLOY_REPORT"
+      | "FINAL_WALKTHROUGH"
+    readonly status: "draft" | "ready" | "approved" | "rejected" | "archived"
+    readonly version: number
+    readonly agent?: string
+    readonly task?: string
+    readonly content: string
+    readonly diff?: string
+    readonly timeCreated: number | "Infinity" | "-Infinity" | "NaN"
+    readonly timeUpdated: number | "Infinity" | "-Infinity" | "NaN"
+    readonly comments: ReadonlyArray<{
+      readonly id: string
+      readonly author: string
+      readonly body: string
+      readonly timeCreated: number | "Infinity" | "-Infinity" | "NaN"
+    }>
+  }>
+}["data"]
+
+export type ServerArtifactGetInput = { readonly id: { readonly id: string }["id"] }
+
+export type ServerArtifactGetOutput = {
+  readonly data: {
+    readonly id: string
+    readonly projectID: string
+    readonly sessionID?: string
+    readonly name: string
+    readonly type:
+      | "PLAN"
+      | "ARCHITECTURE"
+      | "CODE_DIFF"
+      | "TEST_RESULT"
+      | "BROWSER_RECORDING"
+      | "SCREENSHOT"
+      | "LOG"
+      | "SECURITY_REPORT"
+      | "PERFORMANCE_REPORT"
+      | "DATABASE_REPORT"
+      | "BUILD_REPORT"
+      | "DEPLOY_REPORT"
+      | "FINAL_WALKTHROUGH"
+    readonly status: "draft" | "ready" | "approved" | "rejected" | "archived"
+    readonly version: number
+    readonly agent?: string
+    readonly task?: string
+    readonly content: string
+    readonly diff?: string
+    readonly timeCreated: number | "Infinity" | "-Infinity" | "NaN"
+    readonly timeUpdated: number | "Infinity" | "-Infinity" | "NaN"
+    readonly comments: ReadonlyArray<{
+      readonly id: string
+      readonly author: string
+      readonly body: string
+      readonly timeCreated: number | "Infinity" | "-Infinity" | "NaN"
+    }>
+  }
+}["data"]
+
+export type ServerArtifactCreateInput = {
+  readonly projectID?: {
+    readonly projectID?: string | undefined
+    readonly sessionID?: string | undefined
+    readonly name: string
+    readonly type:
+      | "PLAN"
+      | "ARCHITECTURE"
+      | "CODE_DIFF"
+      | "TEST_RESULT"
+      | "BROWSER_RECORDING"
+      | "SCREENSHOT"
+      | "LOG"
+      | "SECURITY_REPORT"
+      | "PERFORMANCE_REPORT"
+      | "DATABASE_REPORT"
+      | "BUILD_REPORT"
+      | "DEPLOY_REPORT"
+      | "FINAL_WALKTHROUGH"
+    readonly status?: ("draft" | "ready" | "approved" | "rejected" | "archived") | undefined
+    readonly agent?: string | undefined
+    readonly task?: string | undefined
+    readonly content: string
+    readonly diff?: string | undefined
+  }["projectID"]
+  readonly sessionID?: {
+    readonly projectID?: string | undefined
+    readonly sessionID?: string | undefined
+    readonly name: string
+    readonly type:
+      | "PLAN"
+      | "ARCHITECTURE"
+      | "CODE_DIFF"
+      | "TEST_RESULT"
+      | "BROWSER_RECORDING"
+      | "SCREENSHOT"
+      | "LOG"
+      | "SECURITY_REPORT"
+      | "PERFORMANCE_REPORT"
+      | "DATABASE_REPORT"
+      | "BUILD_REPORT"
+      | "DEPLOY_REPORT"
+      | "FINAL_WALKTHROUGH"
+    readonly status?: ("draft" | "ready" | "approved" | "rejected" | "archived") | undefined
+    readonly agent?: string | undefined
+    readonly task?: string | undefined
+    readonly content: string
+    readonly diff?: string | undefined
+  }["sessionID"]
+  readonly name: {
+    readonly projectID?: string | undefined
+    readonly sessionID?: string | undefined
+    readonly name: string
+    readonly type:
+      | "PLAN"
+      | "ARCHITECTURE"
+      | "CODE_DIFF"
+      | "TEST_RESULT"
+      | "BROWSER_RECORDING"
+      | "SCREENSHOT"
+      | "LOG"
+      | "SECURITY_REPORT"
+      | "PERFORMANCE_REPORT"
+      | "DATABASE_REPORT"
+      | "BUILD_REPORT"
+      | "DEPLOY_REPORT"
+      | "FINAL_WALKTHROUGH"
+    readonly status?: ("draft" | "ready" | "approved" | "rejected" | "archived") | undefined
+    readonly agent?: string | undefined
+    readonly task?: string | undefined
+    readonly content: string
+    readonly diff?: string | undefined
+  }["name"]
+  readonly type: {
+    readonly projectID?: string | undefined
+    readonly sessionID?: string | undefined
+    readonly name: string
+    readonly type:
+      | "PLAN"
+      | "ARCHITECTURE"
+      | "CODE_DIFF"
+      | "TEST_RESULT"
+      | "BROWSER_RECORDING"
+      | "SCREENSHOT"
+      | "LOG"
+      | "SECURITY_REPORT"
+      | "PERFORMANCE_REPORT"
+      | "DATABASE_REPORT"
+      | "BUILD_REPORT"
+      | "DEPLOY_REPORT"
+      | "FINAL_WALKTHROUGH"
+    readonly status?: ("draft" | "ready" | "approved" | "rejected" | "archived") | undefined
+    readonly agent?: string | undefined
+    readonly task?: string | undefined
+    readonly content: string
+    readonly diff?: string | undefined
+  }["type"]
+  readonly status?: {
+    readonly projectID?: string | undefined
+    readonly sessionID?: string | undefined
+    readonly name: string
+    readonly type:
+      | "PLAN"
+      | "ARCHITECTURE"
+      | "CODE_DIFF"
+      | "TEST_RESULT"
+      | "BROWSER_RECORDING"
+      | "SCREENSHOT"
+      | "LOG"
+      | "SECURITY_REPORT"
+      | "PERFORMANCE_REPORT"
+      | "DATABASE_REPORT"
+      | "BUILD_REPORT"
+      | "DEPLOY_REPORT"
+      | "FINAL_WALKTHROUGH"
+    readonly status?: ("draft" | "ready" | "approved" | "rejected" | "archived") | undefined
+    readonly agent?: string | undefined
+    readonly task?: string | undefined
+    readonly content: string
+    readonly diff?: string | undefined
+  }["status"]
+  readonly agent?: {
+    readonly projectID?: string | undefined
+    readonly sessionID?: string | undefined
+    readonly name: string
+    readonly type:
+      | "PLAN"
+      | "ARCHITECTURE"
+      | "CODE_DIFF"
+      | "TEST_RESULT"
+      | "BROWSER_RECORDING"
+      | "SCREENSHOT"
+      | "LOG"
+      | "SECURITY_REPORT"
+      | "PERFORMANCE_REPORT"
+      | "DATABASE_REPORT"
+      | "BUILD_REPORT"
+      | "DEPLOY_REPORT"
+      | "FINAL_WALKTHROUGH"
+    readonly status?: ("draft" | "ready" | "approved" | "rejected" | "archived") | undefined
+    readonly agent?: string | undefined
+    readonly task?: string | undefined
+    readonly content: string
+    readonly diff?: string | undefined
+  }["agent"]
+  readonly task?: {
+    readonly projectID?: string | undefined
+    readonly sessionID?: string | undefined
+    readonly name: string
+    readonly type:
+      | "PLAN"
+      | "ARCHITECTURE"
+      | "CODE_DIFF"
+      | "TEST_RESULT"
+      | "BROWSER_RECORDING"
+      | "SCREENSHOT"
+      | "LOG"
+      | "SECURITY_REPORT"
+      | "PERFORMANCE_REPORT"
+      | "DATABASE_REPORT"
+      | "BUILD_REPORT"
+      | "DEPLOY_REPORT"
+      | "FINAL_WALKTHROUGH"
+    readonly status?: ("draft" | "ready" | "approved" | "rejected" | "archived") | undefined
+    readonly agent?: string | undefined
+    readonly task?: string | undefined
+    readonly content: string
+    readonly diff?: string | undefined
+  }["task"]
+  readonly content: {
+    readonly projectID?: string | undefined
+    readonly sessionID?: string | undefined
+    readonly name: string
+    readonly type:
+      | "PLAN"
+      | "ARCHITECTURE"
+      | "CODE_DIFF"
+      | "TEST_RESULT"
+      | "BROWSER_RECORDING"
+      | "SCREENSHOT"
+      | "LOG"
+      | "SECURITY_REPORT"
+      | "PERFORMANCE_REPORT"
+      | "DATABASE_REPORT"
+      | "BUILD_REPORT"
+      | "DEPLOY_REPORT"
+      | "FINAL_WALKTHROUGH"
+    readonly status?: ("draft" | "ready" | "approved" | "rejected" | "archived") | undefined
+    readonly agent?: string | undefined
+    readonly task?: string | undefined
+    readonly content: string
+    readonly diff?: string | undefined
+  }["content"]
+  readonly diff?: {
+    readonly projectID?: string | undefined
+    readonly sessionID?: string | undefined
+    readonly name: string
+    readonly type:
+      | "PLAN"
+      | "ARCHITECTURE"
+      | "CODE_DIFF"
+      | "TEST_RESULT"
+      | "BROWSER_RECORDING"
+      | "SCREENSHOT"
+      | "LOG"
+      | "SECURITY_REPORT"
+      | "PERFORMANCE_REPORT"
+      | "DATABASE_REPORT"
+      | "BUILD_REPORT"
+      | "DEPLOY_REPORT"
+      | "FINAL_WALKTHROUGH"
+    readonly status?: ("draft" | "ready" | "approved" | "rejected" | "archived") | undefined
+    readonly agent?: string | undefined
+    readonly task?: string | undefined
+    readonly content: string
+    readonly diff?: string | undefined
+  }["diff"]
+}
+
+export type ServerArtifactCreateOutput = {
+  readonly data: {
+    readonly id: string
+    readonly projectID: string
+    readonly sessionID?: string
+    readonly name: string
+    readonly type:
+      | "PLAN"
+      | "ARCHITECTURE"
+      | "CODE_DIFF"
+      | "TEST_RESULT"
+      | "BROWSER_RECORDING"
+      | "SCREENSHOT"
+      | "LOG"
+      | "SECURITY_REPORT"
+      | "PERFORMANCE_REPORT"
+      | "DATABASE_REPORT"
+      | "BUILD_REPORT"
+      | "DEPLOY_REPORT"
+      | "FINAL_WALKTHROUGH"
+    readonly status: "draft" | "ready" | "approved" | "rejected" | "archived"
+    readonly version: number
+    readonly agent?: string
+    readonly task?: string
+    readonly content: string
+    readonly diff?: string
+    readonly timeCreated: number | "Infinity" | "-Infinity" | "NaN"
+    readonly timeUpdated: number | "Infinity" | "-Infinity" | "NaN"
+    readonly comments: ReadonlyArray<{
+      readonly id: string
+      readonly author: string
+      readonly body: string
+      readonly timeCreated: number | "Infinity" | "-Infinity" | "NaN"
+    }>
+  }
+}["data"]
+
+export type ServerArtifactUpdateInput = {
+  readonly id: { readonly id: string }["id"]
+  readonly name?: {
+    readonly name?: string | undefined
+    readonly status?: ("draft" | "ready" | "approved" | "rejected" | "archived") | undefined
+    readonly agent?: string | undefined
+    readonly task?: string | undefined
+    readonly content?: string | undefined
+    readonly diff?: string | undefined
+  }["name"]
+  readonly status?: {
+    readonly name?: string | undefined
+    readonly status?: ("draft" | "ready" | "approved" | "rejected" | "archived") | undefined
+    readonly agent?: string | undefined
+    readonly task?: string | undefined
+    readonly content?: string | undefined
+    readonly diff?: string | undefined
+  }["status"]
+  readonly agent?: {
+    readonly name?: string | undefined
+    readonly status?: ("draft" | "ready" | "approved" | "rejected" | "archived") | undefined
+    readonly agent?: string | undefined
+    readonly task?: string | undefined
+    readonly content?: string | undefined
+    readonly diff?: string | undefined
+  }["agent"]
+  readonly task?: {
+    readonly name?: string | undefined
+    readonly status?: ("draft" | "ready" | "approved" | "rejected" | "archived") | undefined
+    readonly agent?: string | undefined
+    readonly task?: string | undefined
+    readonly content?: string | undefined
+    readonly diff?: string | undefined
+  }["task"]
+  readonly content?: {
+    readonly name?: string | undefined
+    readonly status?: ("draft" | "ready" | "approved" | "rejected" | "archived") | undefined
+    readonly agent?: string | undefined
+    readonly task?: string | undefined
+    readonly content?: string | undefined
+    readonly diff?: string | undefined
+  }["content"]
+  readonly diff?: {
+    readonly name?: string | undefined
+    readonly status?: ("draft" | "ready" | "approved" | "rejected" | "archived") | undefined
+    readonly agent?: string | undefined
+    readonly task?: string | undefined
+    readonly content?: string | undefined
+    readonly diff?: string | undefined
+  }["diff"]
+}
+
+export type ServerArtifactUpdateOutput = {
+  readonly data: {
+    readonly id: string
+    readonly projectID: string
+    readonly sessionID?: string
+    readonly name: string
+    readonly type:
+      | "PLAN"
+      | "ARCHITECTURE"
+      | "CODE_DIFF"
+      | "TEST_RESULT"
+      | "BROWSER_RECORDING"
+      | "SCREENSHOT"
+      | "LOG"
+      | "SECURITY_REPORT"
+      | "PERFORMANCE_REPORT"
+      | "DATABASE_REPORT"
+      | "BUILD_REPORT"
+      | "DEPLOY_REPORT"
+      | "FINAL_WALKTHROUGH"
+    readonly status: "draft" | "ready" | "approved" | "rejected" | "archived"
+    readonly version: number
+    readonly agent?: string
+    readonly task?: string
+    readonly content: string
+    readonly diff?: string
+    readonly timeCreated: number | "Infinity" | "-Infinity" | "NaN"
+    readonly timeUpdated: number | "Infinity" | "-Infinity" | "NaN"
+    readonly comments: ReadonlyArray<{
+      readonly id: string
+      readonly author: string
+      readonly body: string
+      readonly timeCreated: number | "Infinity" | "-Infinity" | "NaN"
+    }>
+  }
+}["data"]
+
+export type ServerArtifactCommentInput = {
+  readonly id: { readonly id: string }["id"]
+  readonly author: { readonly author: string; readonly body: string }["author"]
+  readonly body: { readonly author: string; readonly body: string }["body"]
+}
+
+export type ServerArtifactCommentOutput = {
+  readonly data: {
+    readonly comment: {
+      readonly id: string
+      readonly author: string
+      readonly body: string
+      readonly timeCreated: number
+    }
+    readonly delivered: boolean
+  }
+}["data"]
 
 export type FilesListInput = {
   readonly location?: {

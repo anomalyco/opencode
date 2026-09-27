@@ -1,0 +1,9 @@
+Manage first-class artifacts: durable, versioned records of the evidence and deliverables this work produces (PLAN, ARCHITECTURE, CODE_DIFF, TEST_RESULT, BROWSER_RECORDING, SCREENSHOT, LOG, SECURITY_REPORT, PERFORMANCE_REPORT, DATABASE_REPORT, BUILD_REPORT, DEPLOY_REPORT, FINAL_WALKTHROUGH).
+
+Actions:
+- list: list the current project's artifacts, filtered by type, status, agent, or task. Returns a compact index: id, type, name, version, status, and comment count.
+- get: fetch one artifact by id with its full content, diff, and every human comment. Fetch it whenever comments exist: human comments on your artifacts are actionable context — apply the change they request, then update the artifact with action "update" so its status and content stay current.
+- create: register a new artifact (name, type, and content required; diff, status, agent, and task optional). The artifact is linked to this session, so human comments on it are steered back to you as actionable context for review at the next safe point.
+- update: change the name, status, agent, task, content, or diff of an existing artifact. Every update increments the artifact version.
+
+Humans attach comments to artifacts through the API or UI; comments both arrive as steer prompts and are readable on the artifact with action "get". Never fabricate an artifact: record only results you actually obtained, and link browser evidence by path or full HTML in content.
