@@ -210,12 +210,15 @@ export const make = (dependencies: Dependencies) => {
     // local-fix-14 (marker: compaction-model-override): pin the summarize to
     // compaction.model when configured; any resolution failure falls back
     // to the session model (previous behavior) instead of blocking compaction.
-    const overrideModel =
-      config.model !== undefined && dependencies.models?.resolveRef !== undefined
-        ? yield* dependencies.models.resolveRef(config.model).pipe(
-            Effect.catchCause(() => Effect.succeed(undefined)),
-          )
-        : undefined
+    const pinnedRef = config.model
+    const noOverride = () => Effect.succeed<Model | undefined>(undefined)
+    const resolveRef: (ref: string) => Effect.Effect<Model | undefined, unknown> =
+      dependencies.models?.resolveRef ?? noOverride
+    const overrideEffect: Effect.Effect<Model | undefined, never> =
+      pinnedRef === undefined
+        ? Effect.succeed(undefined)
+        : resolveRef(pinnedRef).pipe(Effect.catchCause(() => Effect.succeed<Model | undefined>(undefined)))
+    const overrideModel = yield* overrideEffect
     const summarizeModel = overrideModel ?? input.model
     const summarized = yield* dependencies.llm
       .stream(
