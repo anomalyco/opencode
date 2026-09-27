@@ -40,6 +40,23 @@
       ],
       "tests": "test/session/compaction.test.ts",
       "why": "A summary stream that ended without finish was treated as continue, so the same marker was selected again indefinitely. Persisting an error finish and returning stop makes the failed marker terminal and prevents the retry storm."
+    },
+    {
+      "id": "compaction-model-override",
+      "title": "Pin the compaction summarizer variant from the configured compaction agent",
+      "commit": "04a1cff12d587776cd5823ebc4ce3ceabacffbf2",
+      "patch": "local-fixes/patches/compaction-model-override.patch",
+      "base": "v1.18.32",
+      "files": [
+        "packages/opencode/src/session/compaction.ts",
+        "packages/opencode/test/session/compaction.test.ts"
+      ],
+      "markers": [
+        "compaction-model-override",
+        "summarizerVariant"
+      ],
+      "tests": "test/session/compaction.test.ts",
+      "why": "The compaction agent model pin existed (configured-compaction-agent) but the summarize kept the request marker variant, so a pinned model ran at the session variant (e.g. xhigh) instead of the agents configured variant (e.g. low). Threads agent.variant onto the summarize when a model is configured; logs pin+variant for runtime verification."
     }
   ],
   "build": {
