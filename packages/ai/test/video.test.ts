@@ -1,9 +1,10 @@
 import { describe, expect } from "bun:test"
-import { Effect, Layer, Stream } from "effect"
+import { Effect, Fiber, Layer, Stream } from "effect"
+import * as TestClock from "effect/testing/TestClock"
 import { Media, Video, VideoClient, type GenerationEvent, type VideoEvent } from "../src/index.js"
 import { Fal, Google, Runway, XAI } from "../src/providers.js"
 import { it } from "./lib/effect.js"
-import { dynamicResponse, json, observe, settle, type Call } from "./lib/http.js"
+import { dynamicResponse, json, observe, settle, type Call, type HandlerInput } from "./lib/http.js"
 
 const layer = (handler: Parameters<typeof dynamicResponse>[0]) =>
   VideoClient.layer.pipe(Layer.provideMerge(dynamicResponse(handler)))
@@ -595,7 +596,10 @@ describe("Video / fal", () => {
   ]) {
     it.effect(`fails await for ${failure.name} with the response_url body and HTTP context`, () =>
       Effect.gen(function* () {
-        const error = yield* Video.generate({ model, prompt: "x" }).pipe(Effect.flip)
+        // A transient 500 on the result fetch is retried first; the body and HTTP context survive the final failure.
+        const fiber = yield* Effect.forkChild(Video.generate({ model, prompt: "x" }).pipe(Effect.flip))
+        yield* TestClock.adjust("5 minutes")
+        const error = yield* Fiber.join(fiber)
         expect(error.reason._tag).toBe(failure.tag)
         expect(error.reason.body).toBe(JSON.stringify(failure.result.body))
         expect(error.reason.http).toMatchObject({ url: urls.response, status: failure.result.status })
@@ -946,6 +950,169 @@ describe("Video / Runway", () => {
       )
       expect(error.reason._tag).toBe("Timeout")
       expect(error.message).toContain("task_1")
+    }),
+  )
+})
+
+// ---------------------------------------------------------------------------
+// Transient read failures
+// ---------------------------------------------------------------------------
+
+describe("Video / transient read failures", () => {
+  const model = Runway.configure({ apiKey: "test", baseURL: "https://runway.test/v1" }).video("gen4.5")
+  const succeeded = { id: "task_1", status: "SUCCEEDED", output: ["https://runway.test/out.mp4"] }
+  const failure = (input: HandlerInput, status: number, headers?: Record<string, string>) =>
+    json(input, { error: `HTTP ${status}` }, { status, headers })
+  const methods = (calls: ReadonlyArray<Call>) => calls.map((call) => call.method)
+
+  it.effect("retries a 503 status poll and a 503 result read, then returns the result", () =>
+    Effect.gen(function* () {
+      const calls: Array<Call> = []
+      const response = yield* settle(
+        Video.generate({ model, prompt: "x" }, { poll: { interval: "1 second" } }),
+        5,
+      ).pipe(
+        Effect.provide(
+          layer((input) =>
+            Effect.gen(function* () {
+              const { call, nth } = yield* observe(calls, input)
+              if (call.method === "POST") return json(input, { id: "task_1" })
+              // 1: status fails, 2: status succeeds, 3: result fails, 4: result succeeds.
+              if (nth === 1 || nth === 3) return failure(input, 503)
+              return json(input, succeeded)
+            }),
+          ),
+        ),
+      )
+      expect(response.video.source).toMatchObject({ type: "url", url: "https://runway.test/out.mp4" })
+      expect(methods(calls)).toEqual(["POST", "GET", "GET", "GET", "GET"])
+    }),
+  )
+
+  it.effect("waits for a 429 retry-after before polling again", () =>
+    Effect.gen(function* () {
+      const calls: Array<Call> = []
+      const fiber = yield* Effect.forkChild(
+        Video.generate({ model, prompt: "x" }, { poll: { interval: "1 second" } }).pipe(
+          Effect.provide(
+            layer((input) =>
+              Effect.gen(function* () {
+                const { call, nth } = yield* observe(calls, input)
+                if (call.method === "POST") return json(input, { id: "task_1" })
+                if (nth === 1) return failure(input, 429, { "retry-after": "10" })
+                return json(input, succeeded)
+              }),
+            ),
+          ),
+        ),
+      )
+      yield* TestClock.adjust("9 seconds")
+      expect(methods(calls)).toEqual(["POST", "GET"])
+      yield* TestClock.adjust("1 second")
+      yield* Fiber.join(fiber)
+      expect(methods(calls)).toEqual(["POST", "GET", "GET", "GET"])
+    }),
+  )
+
+  it.effect("fails a 400 status poll without retrying", () =>
+    Effect.gen(function* () {
+      const calls: Array<Call> = []
+      const error = yield* Video.generate({ model, prompt: "x" }).pipe(
+        Effect.flip,
+        Effect.provide(
+          layer((input) =>
+            Effect.gen(function* () {
+              const { call } = yield* observe(calls, input)
+              return call.method === "POST" ? json(input, { id: "task_1" }) : failure(input, 400)
+            }),
+          ),
+        ),
+      )
+      expect(error.reason._tag).toBe("InvalidRequest")
+      expect(methods(calls)).toEqual(["POST", "GET"])
+    }),
+  )
+
+  it.effect("stops retrying at poll.timeout with a Timeout reason", () =>
+    Effect.gen(function* () {
+      const calls: Array<Call> = []
+      const error = yield* settle(
+        Video.generate({ model, prompt: "x" }, { poll: { interval: "1 second", timeout: "5 seconds" } }).pipe(
+          Effect.flip,
+        ),
+        6,
+      ).pipe(
+        Effect.provide(
+          layer((input) =>
+            Effect.gen(function* () {
+              const { call } = yield* observe(calls, input)
+              return call.method === "POST" ? json(input, { id: "task_1" }) : failure(input, 503)
+            }),
+          ),
+        ),
+      )
+      expect(error.reason._tag).toBe("Timeout")
+      expect(calls.filter((call) => call.method === "GET").length).toBeGreaterThan(1)
+    }),
+  )
+
+  it.effect("bounds a streamed result read's retries by poll.timeout", () =>
+    Effect.gen(function* () {
+      const calls: Array<Call> = []
+      const error = yield* settle(
+        Video.stream({ model, prompt: "x" }, { poll: { interval: "1 second", timeout: "5 seconds" } }).pipe(
+          Stream.runCollect,
+          Effect.flip,
+        ),
+        6,
+      ).pipe(
+        Effect.provide(
+          layer((input) =>
+            Effect.gen(function* () {
+              const { call, nth } = yield* observe(calls, input)
+              if (call.method === "POST") return json(input, { id: "task_1" })
+              return nth === 1 ? json(input, succeeded) : failure(input, 503)
+            }),
+          ),
+        ),
+      )
+      expect(error.reason._tag).toBe("Timeout")
+      expect(calls.filter((call) => call.method === "GET").length).toBeGreaterThan(2)
+    }),
+  )
+
+  it.effect("never retries a failed submit", () =>
+    Effect.gen(function* () {
+      const calls: Array<Call> = []
+      const error = yield* Video.generate({ model, prompt: "x" }).pipe(
+        Effect.flip,
+        Effect.provide(layer((input) => observe(calls, input).pipe(Effect.map(() => failure(input, 503))))),
+      )
+      expect(error.reason._tag).toBe("ProviderInternal")
+      expect(methods(calls)).toEqual(["POST"])
+    }),
+  )
+
+  it.effect("never retries a failed cancel", () =>
+    Effect.gen(function* () {
+      const calls: Array<Call> = []
+      const error = yield* Effect.gen(function* () {
+        const generation = yield* Video.start({ model, prompt: "x" })
+        return yield* generation.cancel().pipe(Effect.flip)
+      }).pipe(
+        Effect.provide(
+          layer((input) =>
+            Effect.gen(function* () {
+              const { call } = yield* observe(calls, input)
+              if (call.method === "POST") return json(input, { id: "task_1" })
+              if (call.method === "DELETE") return failure(input, 503)
+              return json(input, { id: "task_1", status: "RUNNING" })
+            }),
+          ),
+        ),
+      )
+      expect(error.reason._tag).toBe("ProviderInternal")
+      expect(methods(calls)).toEqual(["POST", "GET", "DELETE"])
     }),
   )
 })

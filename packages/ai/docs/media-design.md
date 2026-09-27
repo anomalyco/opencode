@@ -361,6 +361,10 @@ Poll = { interval?: Duration; timeout?: Duration }
 
 `Generation` is not video-specific. Image routes on BFL, fal, Replicate, and Stability `upscale()` are queued; `Image.start` exists for them. A route declares itself `inline` or `queued`; `generate` on a queued route is `start` then `await`.
 
+Status polls and result reads retry transient failures (rate limits, provider 5xx, and transport errors, classified by the same `isRetryable` the Session runner uses) inside `MediaRoute.queued`. Only the HTTP exchange retries, never the decoded document: a terminal `failed` generation also surfaces as `ProviderInternal` and must not be re-read. Gaps grow exponentially from 1s with jitter, up to 30s each, honoring a provider `retry-after` up to that cap, for at most 8 retries. `await`, `events`, and `Video.stream` cut retries off at `poll.timeout` and fail with `Timeout`, so retries never extend the caller's deadline; a direct `result()` or `resume` read is bounded by the retry cap alone. `start` and `cancel` never retry: a repeated submit can start and bill a second job. The policy is internal; there is no option for it.
+
+Interrupting `await`, `events`, or `Video.stream` (or aborting the promise API's `signal`) stops waiting only. The provider job keeps running and billing; call `cancel()` explicitly to stop it.
+
 ### Usage
 
 ```ts

@@ -752,7 +752,10 @@ const events = Video.stream({ model: Runway.configure({ apiKey }).video("gen4.5"
 
 Status polls, result fetches, cancels, and asset downloads all run through the same request executor with the route's
 auth. `Generation.await` and `Generation.events` fail with a
-`Timeout` reason when `poll.timeout` (default 10 minutes) elapses. Failed,
+`Timeout` reason when `poll.timeout` (default 10 minutes) elapses. Status polls and result fetches retry transient
+failures (rate limits, provider 5xx, network errors) with backoff that honors `retry-after`, always within
+`poll.timeout`; submits and cancels never retry. Interrupting a wait (or aborting its `signal`) does not cancel the
+provider job, which keeps running and billing: call `cancel()` to stop it. Failed,
 cancelled, and expired generations fail typed with the provider's terminal document on `reason.body`; moderation
 outcomes (Veo `raiMediaFilteredReasons`, xAI `respect_moderation`, Runway `SAFETY.*` codes) surface as `notices` when
 a video is still returned and as a `ContentPolicy` reason when nothing is.
