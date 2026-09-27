@@ -48,6 +48,106 @@
         "summary": "Get server info"
       }
     },
+    "/api/pair": {
+      "post": {
+        "tags": ["server"],
+        "operationId": "server.pair",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "PairingCode",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairingCode"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Create a short-lived, single-use code for a /auth/connect/:code pairing link.",
+        "summary": "Create pairing code"
+      }
+    },
+    "/auth/connect/{code}": {
+      "get": {
+        "tags": ["server"],
+        "operationId": "server.connect",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "PairingSession",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairingSession"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Redeem a pairing code. Browsers receive a session cookie and a redirect to the web app; requests that accept JSON receive a session token to use as the password.",
+        "summary": "Redeem pairing code"
+      }
+    },
     "/api/location": {
       "get": {
         "tags": ["location"],
@@ -4897,7 +4997,8 @@
                     "skill",
                     "shell",
                     "assistant",
-                    "compaction"
+                    "compaction",
+                    "idle"
                   ]
                 },
                 {
@@ -15691,6 +15792,29 @@
       "Money.USDPerMillionTokens": {
         "type": "number"
       },
+      "PairingCode": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "expires_in": {
+            "type": "integer"
+          }
+        },
+        "required": ["code", "expires_in"],
+        "additionalProperties": false
+      },
+      "PairingSession": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          }
+        },
+        "required": ["token"],
+        "additionalProperties": false
+      },
       "Permission.Effect": {
         "type": "string",
         "enum": ["allow", "deny", "ask"]
@@ -18634,6 +18758,9 @@
           },
           "exit": {
             "type": "number"
+          },
+          "signal": {
+            "type": "string"
           },
           "metadata": {
             "type": "object"
