@@ -181,7 +181,8 @@ function workspaceEditFiles(edit: WorkspaceEdit) {
 export const Parameters = Schema.Struct({
   operation: Schema.Literals(operations).annotate({ description: "The LSP operation to perform" }),
   filePath: Schema.optional(Schema.String).annotate({
-    description: "The absolute or relative path to the file. Required for position-based operations.",
+    description:
+      "The absolute or relative path to the file. Required for position-based operations. Optional for symbol-based operations: a file in the target language picks which server answers.",
   }),
   line: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(1))).annotate({
     description: "The line number (1-based, as shown in editors) for position-based operations",
@@ -218,6 +219,10 @@ export const LspTool = Tool.define(
         Effect.gen(function* () {
           const instance = yield* InstanceState.context
           const root = instance.worktree || instance.directory
+          // Symbol operations have no file argument, so the bootstrap search is
+          // scoped to the opened directory. `worktree` can point above it for a
+          // directory outside a repository, which would sweep unrelated files.
+          const probeRoot = instance.directory
 
           const positional = (positionalOperations as readonly string[]).includes(args.operation)
 
@@ -296,40 +301,59 @@ export const LspTool = Tool.define(
               : { operation: args.operation },
           })
 
-          // A symbol query needs a live client, but the server is keyed by file
-          // extension. Touch one C# file to make sure the server is running.
-          // Start the C# server and, once per worktree, wait until the solution is
-          // loaded. A cold roslyn server answers workspace/symbol with an empty
-          // list while loading, so poll with a real query until it returns
-          // something (or give up after the deadline).
-          const startClient = Effect.fnUntraced(function* (query: string) {
-            let file = rootProbeFile.get(root)
+          // A symbol query needs a live client, but servers are keyed by file
+          // extension and these operations have no file argument. Prefer a caller
+          // supplied file in the target language; otherwise pick the project's
+          // dominant extension. Touch the probe to start that server, then (once
+          // per probe) wait until it can answer: a cold server returns an empty
+          // workspace/symbol list while it loads, so poll until it answers.
+          const hint = args.filePath
+            ? path.isAbsolute(args.filePath)
+              ? args.filePath
+              : path.join(instance.directory, args.filePath)
+            : undefined
+          if (hint) yield* assertExternalDirectoryEffect(ctx, hint)
+          const startProbe = Effect.fnUntraced(function* (query: string, preferred?: string) {
+            const key = preferred ? `${probeRoot}::${path.extname(preferred)}` : probeRoot
+            let file = preferred ?? rootProbeFile.get(key)
             if (!file) {
+              const extensions = yield* lsp.serverExtensions()
+              const pattern = extensions.length ? `**/*{${extensions.join(",")}}` : "**/*"
+              const ignored = ["obj", "bin", "node_modules", ".git"].map((part) => `${path.sep}${part}${path.sep}`)
               const files = yield* fs
-                .glob("**/*.cs", { cwd: root, absolute: true, include: "file" })
+                .glob(pattern, { cwd: probeRoot, absolute: true, include: "file" })
                 .pipe(Effect.catch(() => Effect.succeed<string[]>([])))
-              file =
-                files.find(
-                  (candidate) =>
-                    !candidate.includes(`${path.sep}obj${path.sep}`) &&
-                    !candidate.includes(`${path.sep}bin${path.sep}`),
-                ) ?? files[0]
-              if (file) rootProbeFile.set(root, file)
+              const inside = files.filter(
+                (candidate) =>
+                  candidate.startsWith(`${probeRoot}${path.sep}`) && !ignored.some((part) => candidate.includes(part)),
+              )
+              // A symbol has no file of its own, so bootstrap from the project's
+              // dominant extension. This keeps polyglot workspaces from answering
+              // a C# query from, say, the first .json file.
+              const counts = new Map<string, number>()
+              for (const candidate of inside) {
+                const ext = path.extname(candidate).toLowerCase()
+                counts.set(ext, (counts.get(ext) ?? 0) + 1)
+              }
+              const dominant = [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0]
+              file = inside.find((candidate) => path.extname(candidate).toLowerCase() === dominant)
+              if (file) rootProbeFile.set(key, file)
             }
-            if (!file) throw new Error("No C# files found to start the language server.")
+            if (!file) throw new Error("No source files for a configured LSP server were found.")
             const available = yield* lsp.hasClients(file)
-            if (!available) throw new Error("No LSP server available for C#.")
+            if (!available) throw new Error("No LSP server available for the project files.")
             yield* lsp.touchFile(file)
-            if (!query || readyRoots.has(root)) return
+            if (!query || readyRoots.has(key)) return file
             const deadline = Date.now() + 20000
             while (Date.now() < deadline) {
-              const probe = yield* lsp.searchSymbols(query)
+              const probe = yield* lsp.searchSymbols(query, file)
               if (probe.length > 0) {
-                readyRoots.add(root)
-                return
+                readyRoots.add(key)
+                return file
               }
               yield* Effect.sleep(300)
             }
+            return file
           })
 
           if (args.operation === "structure") {
@@ -344,7 +368,7 @@ export const LspTool = Tool.define(
               solution = entry ? path.join(root, entry.name) : undefined
             }
             if (!solution) throw new Error("No .sln/.slnx found in the worktree; pass `solution`.")
-            yield* startClient("")
+            const probe = yield* startProbe("", hint)
             const listed = yield* Effect.promise(() =>
               Process.text(["dotnet", "sln", solution!, "list"], { cwd: root, nothrow: true }),
             )
@@ -352,7 +376,7 @@ export const LspTool = Tool.define(
               .split("\n")
               .map((line) => line.trim())
               .filter((line) => line.length > 0)
-            const symbols = yield* lsp.searchSymbols("")
+            const symbols = yield* lsp.searchSymbols("", probe)
             const containers = new Map<string, number>()
             for (const symbol of symbols) {
               const container = symbol.containerName
@@ -381,8 +405,8 @@ export const LspTool = Tool.define(
 
           if (args.operation === "types") {
             const query = args.query ?? args.symbol ?? ""
-            yield* startClient(query)
-            const symbols = (yield* lsp.searchSymbols(query)).filter(
+            const probe = yield* startProbe(query, hint)
+            const symbols = (yield* lsp.searchSymbols(query, probe)).filter(
               (symbol) => typeKinds.has(symbol.kind) && matchesName(symbol, query),
             )
             return {
@@ -396,8 +420,8 @@ export const LspTool = Tool.define(
           if (!name) throw new Error(`operation ${args.operation} requires \`symbol\``)
 
           const short = name.split(".").at(-1) ?? name
-          yield* startClient(short)
-          const candidates = yield* lsp.searchSymbols(short)
+          const probe = yield* startProbe(short, hint)
+          const candidates = yield* lsp.searchSymbols(short, probe)
           // `members` needs a type, so restrict resolution to type kinds there.
           const matches = rankSymbols(
             name,

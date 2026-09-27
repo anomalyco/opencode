@@ -131,7 +131,8 @@ export interface Interface {
   readonly implementation: (input: LocInput) => Effect.Effect<any[]>
   readonly documentSymbol: (uri: string) => Effect.Effect<(DocumentSymbol | Symbol)[]>
   readonly workspaceSymbol: (query: string) => Effect.Effect<Symbol[]>
-  readonly searchSymbols: (query: string) => Effect.Effect<Symbol[]>
+  readonly searchSymbols: (query: string, file?: string) => Effect.Effect<Symbol[]>
+  readonly serverExtensions: () => Effect.Effect<string[]>
   readonly rename: (input: LocInput & { newName: string }) => Effect.Effect<WorkspaceEdit | null>
   readonly prepareCallHierarchy: (input: LocInput) => Effect.Effect<any[]>
   readonly incomingCalls: (input: LocInput) => Effect.Effect<any[]>
@@ -346,6 +347,13 @@ const layer = Layer.effect(
       })
     })
 
+    // Extensions covered by the enabled servers. Used to pick a bootstrap file
+    // for symbol-name operations, which have no file argument of their own.
+    const serverExtensions = Effect.fn("LSP.serverExtensions")(function* () {
+      const s = yield* InstanceState.get(state)
+      return Array.from(new Set(Object.values(s.servers).flatMap((server) => server.extensions)))
+    })
+
     const touchFile = Effect.fn("LSP.touchFile")(function* (input: string, diagnostics?: "document" | "full") {
       yield* Effect.logInfo("touching file", { file: input })
       const clients = yield* getClients(input)
@@ -447,12 +455,14 @@ const layer = Layer.effect(
 
     // Like workspaceSymbol but without the display kind filter / slice, so callers
     // can resolve a full symbol name (including properties, fields, namespaces).
-    const searchSymbols = Effect.fn("LSP.searchSymbols")(function* (query: string) {
-      const results = yield* runAll((client) =>
+    // Pass `file` to query only the servers that serve that file's extension, so a
+    // multi-language workspace does not answer from an unrelated server.
+    const searchSymbols = Effect.fn("LSP.searchSymbols")(function* (query: string, file?: string) {
+      const request = (client: LSPClient.Info) =>
         client.connection
           .sendRequest<Symbol[]>("workspace/symbol", { query })
-          .catch(() => [] as Symbol[]),
-      )
+          .catch(() => [] as Symbol[])
+      const results = file ? yield* run(file, request) : yield* runAll(request)
       return results.flat().filter((x) => x?.name && x?.location?.uri)
     })
 
@@ -519,6 +529,7 @@ const layer = Layer.effect(
       documentSymbol,
       workspaceSymbol,
       searchSymbols,
+      serverExtensions,
       rename,
       prepareCallHierarchy,
       incomingCalls,

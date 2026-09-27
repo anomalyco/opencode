@@ -56,6 +56,7 @@ const lsp = Layer.succeed(
     incomingCalls: () => Effect.succeed([]),
     outgoingCalls: () => Effect.succeed([]),
     searchSymbols: () => Effect.succeed(searchSymbolResults),
+    serverExtensions: () => Effect.succeed([".cs", ".ts", ".go"]),
     rename: () => Effect.succeed(null),
   }),
 )
@@ -215,6 +216,32 @@ describe("tool.lsp", () => {
           expect(result.output).toContain("SqlBuilder [struct]")
           expect(result.output).not.toContain("SqliteDataContextOptionsBuilderExtensions")
           expect(result.output).not.toContain("BuildSqlBuilder")
+        }),
+      { git: true },
+    )
+  })
+
+  describe("symbol bootstrap", () => {
+    it.instance(
+      "starts from a non-C# file when only that extension is present",
+      () =>
+        Effect.gen(function* () {
+          const dir = (yield* TestInstance).directory
+          const file = path.join(dir, "main.go")
+          yield* put(file)
+          searchSymbolResults.length = 0
+          searchSymbolResults.push({
+            name: "Greet",
+            kind: 12,
+            location: {
+              uri: pathToFileURL(file).href,
+              range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+            },
+          })
+
+          const result = yield* run({ operation: "symbols", symbol: "Greet" })
+
+          expect(result.output).toContain("Greet [function]")
         }),
       { git: true },
     )

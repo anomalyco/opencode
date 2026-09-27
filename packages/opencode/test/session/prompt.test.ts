@@ -154,6 +154,7 @@ const lsp = Layer.succeed(
     incomingCalls: () => Effect.succeed([]),
     outgoingCalls: () => Effect.succeed([]),
     searchSymbols: () => Effect.succeed([]),
+    serverExtensions: () => Effect.succeed([]),
     rename: () => Effect.succeed(null),
   }),
 )

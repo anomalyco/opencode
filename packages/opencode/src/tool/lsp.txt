@@ -24,7 +24,9 @@ Symbol-based operations (require `symbol`, a full or simple symbol name; no posi
 - structure: List the solution projects (`dotnet sln list`) plus symbol containers
 
 Symbol-based operations reuse the already-running language server for the file type,
-so no extra background process is started.
+so no extra background process is started. They work for any language that has an LSP
+server configured. Pass `filePath` to pick which language server answers; otherwise the
+project's dominant extension is used.
 
 Notes:
 - workspaceSymbol also accepts `query`; an empty string requests all symbols.
