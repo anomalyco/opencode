@@ -4,6 +4,7 @@ import type { DesktopNativeBundle } from "@opencode/app/i18n/desktop-native"
 import type { UpdaterState } from "@opencode/app/updater"
 import type { WslServersPlatform } from "@opencode/app/wsl/types"
 import type { SshPlatform } from "@opencode/app/ssh"
+import type { Browser } from "@opencode/plugin-browser/rpc"
 import type { BrowserPaneRequest } from "../shared/ipc-rpc/browser"
 import type { WindowBootstrap } from "../shared/window-bootstrap"
 import type {
@@ -16,6 +17,7 @@ import type {
   ServerReadyData,
   TitlebarTheme,
 } from "../shared/ipc-contract"
+import type { PairingInfo } from "../shared/ipc-rpc/app"
 
 export type WslServersAPI = WslServersPlatform
 export type UpdaterAPI = {
@@ -30,6 +32,7 @@ export type ElectronAPI = {
   browserPane: {
     request(request: BrowserPaneRequest): Promise<void>
     send(request: BrowserPaneRequest): void
+    capture(bindingID: string, tabID: Browser.TabID): Promise<ArrayBuffer | null>
     onEvent(callback: (value: { readonly bindingID: string; readonly event: BrowserPaneEvent }) => void): () => void
   }
   wslServers: WslServersAPI
@@ -65,6 +68,7 @@ export type ElectronAPI = {
   getPathForFile(file: File): string
   saveFile(opts: SaveFilePickerOptions, content: string): Promise<boolean>
   openExternal(url: string): void
+  openBrowser(url: string): Promise<boolean>
   openLocalFile(url: string): void
   openPath(path: string, app?: string): Promise<string | undefined>
   revealPath(path: string): Promise<boolean>
@@ -89,4 +93,8 @@ export type ElectronAPI = {
   setForceFocus(enabled: boolean): Promise<void>
   recordFatalRendererError(error: FatalRendererError): Promise<void>
   setNativeTranslations(bundle: DesktopNativeBundle): Promise<void>
+  pairInfo(): Promise<typeof PairingInfo.Type>
+  pairCode(): Promise<string>
+  getKeepScreenActive(): Promise<boolean>
+  setKeepScreenActive(enabled: boolean): Promise<void>
 }

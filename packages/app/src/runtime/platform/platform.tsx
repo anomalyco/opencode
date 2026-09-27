@@ -22,6 +22,10 @@ type SaveFilePickerOptions = { title?: string; defaultPath?: string }
 type PlatformName = "web" | "desktop"
 type DesktopOS = "macos" | "windows" | "linux"
 
+export type PairingInfo = {
+  readonly urls: readonly string[]
+}
+
 export type FatalRendererErrorLog = {
   error: string
   url: string
@@ -36,6 +40,9 @@ type PlatformBase = {
 
   /** Open a web or mail URL in the default system application */
   openExternal(url: string): void
+
+  /** Open an authentication page, reporting whether the browser could be launched. */
+  openBrowser?(url: string): Promise<boolean>
 
   /** Open a local path in a local app (desktop only) */
   openPath?(path: string, app?: string): Promise<void>
@@ -101,6 +108,10 @@ type PlatformBase = {
   /** Allow native pinch/Ctrl-scroll zoom gestures (desktop only) */
   setPinchZoomEnabled?(enabled: boolean): Promise<void> | void
 
+  /** Prevent the local display from sleeping while the desktop app is running. */
+  getKeepScreenActive?(): Promise<boolean>
+  setKeepScreenActive?(enabled: boolean): Promise<void>
+
   /** Run a desktop-only menu action from the app chrome */
   runDesktopMenuAction?(action: DesktopMenuAction): Promise<void> | void
 
@@ -124,6 +135,13 @@ type PlatformBase = {
 
   /** Native browser pane hosted by the platform (desktop only). */
   browserPane?: BrowserPanePlatform
+
+  /** Pair another device with the local desktop server. */
+  pair?: {
+    info(): Promise<PairingInfo>
+    /** Single-use code for an `/auth/connect/:code` link. */
+    code(): Promise<string>
+  }
 }
 
 export type Platform = PlatformBase &

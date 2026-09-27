@@ -3,7 +3,7 @@ import { Tool } from "@opencode/schema/tool"
 import { SessionError } from "@opencode/schema/session-error"
 import { Permission } from "../permission.js"
 import { Integration } from "../integration.js"
-import { AgentNotFoundError, StepFailedError, UserInterruptedError } from "./error.js"
+import { AgentNotFoundError, StepFailedError } from "./error.js"
 import { SessionRunnerModel } from "./runner/model.js"
 
 export function toSessionError(cause: unknown): SessionError.Error {
@@ -31,6 +31,8 @@ export function toSessionError(cause: unknown): SessionError.Error {
         return providerError("provider.no-route", cause.reason)
       case "UnknownProvider":
         return providerError("provider.unknown", cause.reason)
+      case "Timeout":
+        return providerError("provider.timeout", cause.reason)
       default: {
         const exhaustive: never = cause.reason
         return exhaustive
@@ -49,7 +51,6 @@ export function toSessionError(cause: unknown): SessionError.Error {
   if (cause instanceof SessionRunnerModel.UnsupportedCompactionError)
     return { type: "provider.unsupported-operation", message: cause.message }
   if (cause instanceof AgentNotFoundError) return { type: "unknown", message: cause.message }
-  if (cause instanceof UserInterruptedError) return { type: "aborted", message: cause.message }
   if (
     cause instanceof SessionRunnerModel.ModelNotSelectedError ||
     cause instanceof SessionRunnerModel.ModelUnavailableError ||

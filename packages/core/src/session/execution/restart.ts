@@ -93,6 +93,7 @@ export const layer = (options?: Options) =>
           sessionID,
           text: CONTINUE_AFTER_SERVER_RESTART,
           description: "Continuing after restart",
+          metadata: { notice: "restart" },
         })
         return true
       })

@@ -1,10 +1,11 @@
 import { expect, test } from "bun:test"
 import {
-  DEFAULT_CATEGORICAL,
   migrateV1,
   resolveThemeDocument,
   selectThemeMode,
   themeModes,
+  type HueScale,
+  type ResolvedTheme,
 } from "@opencode/theme/tui"
 import { DEFAULT_THEMES, getOpenCodeTheme, resolveTheme as resolveV1 } from "../../../src/theme"
 import opencodeSource from "../../../src/theme/assets/opencode.json" with { type: "json" }
@@ -13,6 +14,7 @@ import type { ThemeV1Json } from "@opencode/theme/tui/v1"
 const opencodeV1 = opencodeSource as ThemeV1Json
 const opencodeLight = resolveThemeDocument(getOpenCodeTheme(), "light")
 const opencodeDark = resolveThemeDocument(getOpenCodeTheme(), "dark")
+const opencodeLightHues = allHues(opencodeLight)
 
 test("migrates resolved V1 modes into V2 tokens", () => {
   const migrated = migrateV1(opencodeV1)
@@ -72,7 +74,7 @@ test("references generated hues from matching token colors", () => {
   expect(migrated.base.markdown?.emphasis).toBe("#123456")
 })
 
-test("infers chromatic hues, anchors light and dark colors, and aliases ambiguous hues to gray", () => {
+test("infers and emits only chromatic hues represented by V1 colors", () => {
   const source = structuredClone(opencodeV1)
   const ambiguous = { light: "#808080", dark: "#808080" }
   source.theme.accent = ambiguous
@@ -93,12 +95,12 @@ test("infers chromatic hues, anchors light and dark colors, and aliases ambiguou
   expect(darkRed[200]).toBe("#450000")
   expect(lightRed[100]).not.toBe(lightRed[200])
   expect(darkRed[100]).not.toBe(darkRed[200])
-  expect(migrated.light.hue?.orange).toBe("$hue.gray")
-  expect(migrated.light.hue?.yellow).toBe("$hue.gray")
-  expect(migrated.light.hue?.green).toBe("$hue.gray")
-  expect(migrated.light.hue?.cyan).toBe("$hue.gray")
-  expect(migrated.light.hue?.blue).toBe("$hue.gray")
-  expect(migrated.light.hue?.purple).toBe("$hue.gray")
+  expect(migrated.light.hue?.orange).toBeUndefined()
+  expect(migrated.light.hue?.yellow).toBeUndefined()
+  expect(migrated.light.hue?.green).toBeUndefined()
+  expect(migrated.light.hue?.cyan).toBeUndefined()
+  expect(migrated.light.hue?.blue).toBeUndefined()
+  expect(migrated.light.hue?.purple).toBeUndefined()
   expect(migrated.light.hue?.accent).toBe("$hue.gray")
   expect(migrated.light.hue?.interactive).toBe("$hue.gray")
   expect(() => resolveThemeDocument(migrated, "light")).not.toThrow()
@@ -135,21 +137,22 @@ test("orders categorical hues by V1 semantic color mapping", () => {
   source.theme.warning = mapped("yellow")
   source.theme.primary = mapped("blue")
   source.theme.error = mapped("red")
+  source.theme.info = { light: "#67e8f9", dark: "#0e7490" }
 
   const migrated = migrateV1(source)
-  expect(migrated.base.categorical).toEqual(["purple", "orange", "green", "yellow", "blue", "red"])
-  expect(migrated.dark?.categorical).toEqual(["purple", "orange", "green", "yellow", "blue", "red"])
+  expect(migrated.base.categorical).toEqual(["purple", "orange", "green", "yellow", "blue", "red", "cyan"])
+  expect(migrated.dark?.categorical).toEqual(["purple", "orange", "green", "yellow", "blue", "red", "cyan"])
 
   source.theme.accent = source.theme.secondary
-  expect(migrateV1(source).base.categorical).toEqual(["purple", "green", "yellow", "blue", "red"])
+  expect(migrateV1(source).base.categorical).toEqual(["purple", "green", "yellow", "blue", "red", "cyan"])
 })
 
 test("gives accent and primary ownership of their inferred hues", () => {
   const source = structuredClone(opencodeV1)
-  source.theme.success = hex(opencodeLight.hue.orange[700])
-  source.theme.accent = hex(opencodeLight.hue.orange[600])
-  source.theme.info = hex(opencodeLight.hue.blue[700])
-  source.theme.primary = hex(opencodeLight.hue.blue[600])
+  source.theme.success = hex(opencodeLightHues.orange[700])
+  source.theme.accent = hex(opencodeLightHues.orange[600])
+  source.theme.info = hex(opencodeLightHues.blue[700])
+  source.theme.primary = hex(opencodeLightHues.blue[600])
 
   const migrated = migrateV1(source)
   if (!migrated.light) throw new Error("Expected light mode")
@@ -162,7 +165,7 @@ test("gives accent and primary ownership of their inferred hues", () => {
   expect(migrated.light.hue?.accent).toBe("$hue.orange")
   expect(migrated.light.hue?.interactive).toBe("$hue.blue")
 
-  source.theme.primary = hex(opencodeLight.hue.orange[500])
+  source.theme.primary = hex(opencodeLightHues.orange[500])
   const collisionMode = migrateV1(source).light
   const collision = collisionMode?.hue?.orange
   if (typeof collision !== "object") throw new Error("Expected concrete orange scale")
@@ -171,7 +174,7 @@ test("gives accent and primary ownership of their inferred hues", () => {
   expect(collisionMode?.hue?.interactive).toBe("$hue.orange")
 })
 
-test("uses default categorical hues when V1 semantic colors are ambiguous", () => {
+test("uses the semantic neutral hue when V1 categorical colors are ambiguous", () => {
   const source = structuredClone(opencodeV1)
   source.theme.secondary = "transparent"
   source.theme.accent = "transparent"
@@ -179,10 +182,11 @@ test("uses default categorical hues when V1 semantic colors are ambiguous", () =
   source.theme.warning = "transparent"
   source.theme.primary = "transparent"
   source.theme.error = "transparent"
+  source.theme.info = "transparent"
 
   const migrated = migrateV1(source)
-  expect(migrated.base.categorical).toEqual(DEFAULT_CATEGORICAL)
-  expect(migrated.dark?.categorical).toEqual(DEFAULT_CATEGORICAL)
+  expect(migrated.base.categorical).toEqual(["neutral"])
+  expect(migrated.dark?.categorical).toEqual(["neutral"])
 })
 
 test("builds and extrapolates gray from V1 surfaces and text without using menus or borders", () => {
@@ -281,6 +285,10 @@ test("keeps both modes when a shared background has different contrast", () => {
 
   expect(themeModes(migrated)).toEqual(["light", "dark"])
 })
+
+function allHues(theme: ResolvedTheme) {
+  return theme.hue as typeof theme.hue & Readonly<Record<string, HueScale>>
+}
 
 function hex(color: { toInts(): [number, number, number, number] }) {
   const [r, g, b, a] = color.toInts()

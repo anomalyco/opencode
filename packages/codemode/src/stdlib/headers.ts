@@ -8,7 +8,7 @@ import {
   hidden,
   Arr,
   HeadersObj,
-  IteratorObj,
+  hostIterator,
   Obj,
   coerceToString,
   isRuntimeReference,
@@ -106,18 +106,9 @@ export const headersGlobal = <R>(ctx: Interpreter<R>) => {
         return undefined
       },
     ],
-    // Iterator.from because Bun's Headers typings predate iterator helpers; the runtime iterators already have them.
-    [
-      "keys",
-      0,
-      (thisValue) => new IteratorObj(builtins.Iterator, Iterator.from(self(thisValue, "keys").headers.keys())),
-    ],
-    [
-      "values",
-      0,
-      (thisValue) => new IteratorObj(builtins.Iterator, Iterator.from(self(thisValue, "values").headers.values())),
-    ],
-    ["entries", 0, (thisValue) => new IteratorObj(builtins.Iterator, self(thisValue, "entries").iterator(builtins))],
+    ["keys", 0, (thisValue) => hostIterator(builtins, self(thisValue, "keys").headers.keys())],
+    ["values", 0, (thisValue) => hostIterator(builtins, self(thisValue, "values").headers.values())],
+    ["entries", 0, (thisValue) => hostIterator(builtins, self(thisValue, "entries").iterator(builtins))],
     [
       "forEach",
       1,
@@ -126,7 +117,7 @@ export const headersGlobal = <R>(ctx: Interpreter<R>) => {
         const target = self(thisValue, "forEach")
         const apply = applyCollectionCallback(ctx, args[0], "Headers.forEach")
         return Effect.gen(function* () {
-          for (const [key, value] of Array.from(target.headers.entries())) yield* apply([value, key, target])
+          for (const [key, value] of Array.from(target.headers.entries())) yield* apply([value, key, target], args[1])
           return undefined
         })
       },

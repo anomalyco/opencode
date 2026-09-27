@@ -1,5 +1,5 @@
 import type { BlockStatement, Expression, Pattern } from "acorn"
-import type { Effect, Fiber } from "effect"
+import { Effect, type Fiber } from "effect"
 import { ToolReference } from "../tool-runtime.js"
 import type { Builtins } from "./intrinsics.js"
 import { checkArrayLength } from "./limits.js"
@@ -9,6 +9,8 @@ import {
   type GeneratorRequestKind,
   IteratorSymbol,
   type PendingThrow,
+  rangeError,
+  typeError,
 } from "./model.js"
 
 /** Property attributes, as in a JS property descriptor. */
@@ -41,6 +43,8 @@ export const frozen: Attributes = { writable: false, enumerable: false, configur
  */
 export class Obj {
   readonly props = new Map<string | symbol, Slot>()
+  /** [[Extensible]]: cleared by `Object.preventExtensions`, `seal`, and `freeze`. */
+  extensible = true
   constructor(public proto: Obj | null) {}
 
   /** The class name `Object.prototype.toString` reports: `[object Map]`. */
@@ -91,6 +95,8 @@ export class Obj {
 
 export class Arr extends Obj {
   override readonly tag = "Array"
+  /** The attributes every live element shares; `seal` and `freeze` narrow them since elements have no slots. */
+  elements: Attributes = data
   constructor(
     proto: Obj,
     readonly items: Array<Value> = [],
@@ -143,7 +149,11 @@ export abstract class Opaque extends Obj {
 
 export abstract class Callable extends Opaque {
   override readonly tag = "Function"
-  constructor(proto: Obj, name: string, length: number) {
+  constructor(
+    proto: Obj,
+    name: string,
+    readonly length: number,
+  ) {
     super(proto)
     define(this, "length", length, readonly)
     define(this, "name", name, readonly)
@@ -159,12 +169,29 @@ export class Fn extends Callable {
     name: string,
     readonly parameters: ReadonlyArray<Pattern>,
     readonly body: BlockStatement | Expression,
-    readonly capturedScopes: ReadonlyArray<Map<string, Binding>>,
+    readonly capturedScopes: Array<Map<string, Binding>>,
     readonly async: boolean,
     readonly generator: boolean,
+    /** Arrows have no `this` or `arguments` of their own; they read the enclosing function's. */
+    readonly arrow: boolean,
   ) {
     const optional = parameters.findIndex((p) => p.type === "AssignmentPattern" || p.type === "RestElement")
     super(proto, name, optional === -1 ? parameters.length : optional)
+  }
+}
+
+/** The strict `arguments` object: an ordinary object with indexed own properties and a hidden `length`. */
+export class Arguments extends Obj {
+  override readonly tag = "Arguments"
+  constructor(proto: Obj, args: Array<Value>) {
+    super(proto)
+    args.forEach((arg, index) => define(this, String(index), arg))
+    define(this, "length", args.length, hidden)
+  }
+  override iterator() {
+    return keys(this)
+      .map((key) => get(this, key))
+      .values()
   }
 }
 
@@ -224,22 +251,41 @@ export class GeneratorObj extends Opaque {
   }
 }
 
-/** A built-in collection iterator: live over the host collection, yielding program values. */
+/** One pull from an iterator, as `for...of` sees it. */
+export type Step = { readonly done: boolean; readonly value: Value }
+
+/** How the interpreter drives any iterator: pull the next step, or close it early. */
+export type Cursor<R = unknown> = {
+  readonly next: Effect.Effect<Step, unknown, R>
+  readonly close: Effect.Effect<void, unknown, R>
+}
+
+/** A cursor over a host iterator; there is nothing to close. */
+export const hostCursor = (iterator: Iterator<Value, undefined>): Cursor<never> => ({
+  next: Effect.sync(() => {
+    const step = iterator.next()
+    return { done: Boolean(step.done), value: step.value }
+  }),
+  close: Effect.void,
+})
+
+/** A built-in iterator: a live cursor over a host collection or an iterator helper, yielding program values. */
 export class IteratorObj extends Opaque {
   override readonly tag = "Iterator"
   constructor(
     proto: Obj,
-    readonly source: IteratorObject<Value, undefined>,
+    readonly cursor: Cursor,
   ) {
     super(proto)
   }
   override get describe() {
     return "an iterator"
   }
-  override iterator() {
-    return this.source
-  }
 }
+
+/** A built-in iterator over a host iterator, e.g. `array.values()`. */
+export const hostIterator = (builtins: Builtins, iterator: Iterator<Value, undefined>): IteratorObj =>
+  new IteratorObj(builtins.Iterator, hostCursor(iterator))
 
 /** A built-in object around a host value: data-like, so it prints as itself and crosses to extensions as a copy. */
 export abstract class Wrapper extends Obj {
@@ -307,6 +353,23 @@ export class SetObj extends Wrapper {
   }
   override iterator() {
     return this.set.values()
+  }
+}
+
+/** Keys are program objects, so a host WeakMap gives the same lifetime rule as JavaScript without any bookkeeping. */
+export class WeakMapObj extends Wrapper {
+  override readonly tag = "WeakMap"
+  readonly map = new WeakMap<Obj, Value>()
+  override inspect() {
+    return "WeakMap { <items unknown> }"
+  }
+}
+
+export class WeakSetObj extends Wrapper {
+  override readonly tag = "WeakSet"
+  readonly set = new WeakSet<Obj>()
+  override inspect() {
+    return "WeakSet { <items unknown> }"
   }
 }
 
@@ -403,6 +466,12 @@ export const coerceToNumber = (value: Value): number => {
   return value instanceof ToolReference ? Number.NaN : Number(value)
 }
 
+/** ToIntegerOrInfinity: NaN is 0, fractions truncate. */
+export const coerceToInteger = (value: Value): number => {
+  const number = coerceToNumber(value)
+  return Number.isNaN(number) ? 0 : Math.trunc(number)
+}
+
 /** Values that cannot cross the data boundary: opaque machinery and host-backed wrappers. */
 export const isRuntimeReference = (value: Value): boolean =>
   value instanceof Opaque || value instanceof Wrapper || value instanceof ToolReference
@@ -435,10 +504,11 @@ export const own = (target: Obj, key: PropertyKey): Slot | undefined => {
     const at = index(target, name)
     if (at !== undefined) {
       const items = elements(target)
-      return at in items ? { value: items[at], ...data } : undefined
+      if (!(at in items)) return undefined
+      return { value: items[at], ...(target instanceof Arr ? target.elements : data) }
     }
     if (target instanceof Arr && name === "length") {
-      return { value: target.items.length, writable: true, enumerable: false, configurable: false }
+      return { value: target.items.length, writable: target.elements.writable, enumerable: false, configurable: false }
     }
   }
   return target.props.get(name)
@@ -480,13 +550,19 @@ export const hasPrototype = (value: Value, proto: Obj): boolean => {
 const writeElement = (target: Indexed, name: string | symbol, value: Value): boolean | undefined => {
   const at = index(target, name)
   if (at !== undefined) {
-    if (target instanceof Bytes) target.bytes[at] = typeof value === "number" ? value : Number(value)
-    else target.items[at] = value
+    if (target instanceof Bytes) {
+      target.bytes[at] = typeof value === "number" ? value : Number(value)
+      return true
+    }
+    if (!(at in target.items)) rejectAddition(target, at)
+    target.items[at] = value
     return true
   }
   if (!(target instanceof Arr) || name !== "length") return undefined
   const length = typeof value === "number" ? value : Number(value)
-  if (!Number.isInteger(length) || length < 0) return false
+  if (!Number.isInteger(length) || length < 0) throw rangeError("Invalid array length")
+  // Shrinking deletes elements, which a sealed array forbids.
+  if (length < target.items.length && !target.elements.configurable) return false
   checkArrayLength(length)
   target.items.length = length
   return true
@@ -516,8 +592,15 @@ export const set = (target: Obj, key: PropertyKey, value: Value): boolean => {
     const written = writeElement(target, name, value)
     if (written !== undefined) return written
   }
+  rejectAddition(target, name)
   target.props.set(name, { value, ...data })
   return true
+}
+
+/** Creating a property on a non-extensible object is the one [[Set]] failure with its own message. */
+export const rejectAddition = (target: Obj, key: string | symbol | number): void => {
+  if (target.extensible) return
+  throw typeError(`Cannot add property ${String(key)}, object is not extensible.`)
 }
 
 /** [[DefineOwnProperty]] for a data property, ignoring the chain. */
@@ -535,7 +618,11 @@ export const remove = (target: Obj, key: PropertyKey): boolean => {
   const name = canonical(key)
   if (isIndexed(target)) {
     const at = index(target, name)
-    if (at !== undefined) return target instanceof Bytes ? !(at in target.bytes) : delete target.items[at]
+    if (at !== undefined) {
+      if (target instanceof Bytes) return !(at in target.bytes)
+      if (at in target.items && !target.elements.configurable) return false
+      return delete target.items[at]
+    }
     if (target instanceof Arr && name === "length") return false
   }
   const slot = target.props.get(name)

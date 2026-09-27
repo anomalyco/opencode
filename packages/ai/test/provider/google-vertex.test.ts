@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { LLM, Message, ToolCallPart } from "../../src/index.js"
+import { LanguageModel, LLM, Message, ToolCallPart } from "../../src/index.js"
 import { GoogleVertex, GoogleVertexChat, GoogleVertexMessages, GoogleVertexResponses } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -114,7 +114,7 @@ describe("Google Vertex providers", () => {
     }),
   )
 
-  it.effect("strips function call ids Vertex does not accept from lowered bodies", () =>
+  it.effect("preserves function call ids in lowered Vertex bodies", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
@@ -142,15 +142,14 @@ describe("Google Vertex providers", () => {
         }),
       )
 
-      expect(JSON.stringify(prepared.body.contents)).not.toContain('"id"')
       expect(prepared.body.contents).toMatchObject([
-        { role: "model", parts: [{ functionCall: { id: undefined, name: "lookup", args: { query: "weather" } } }] },
+        { role: "model", parts: [{ functionCall: { id: "call_1", name: "lookup", args: { query: "weather" } } }] },
         {
           role: "user",
           parts: [
             {
               functionResponse: {
-                id: undefined,
+                id: "call_1",
                 name: "lookup",
                 response: { name: "lookup", content: "sunny" },
               },
@@ -235,12 +234,23 @@ describe("Google Vertex providers", () => {
           parts: [
             { text: "Thinking.", thought: true, thoughtSignature: "reasoning_sig" },
             { text: "Checking.", thoughtSignature: "text_sig" },
-            { functionCall: { name: "lookup", args: { query: "weather" } }, thoughtSignature: "tool_sig" },
+            {
+              functionCall: { id: "provider_call_1", name: "lookup", args: { query: "weather" } },
+              thoughtSignature: "tool_sig",
+            },
           ],
         },
         {
           role: "user",
-          parts: [{ functionResponse: { name: "lookup", response: { name: "lookup", content: "sunny" } } }],
+          parts: [
+            {
+              functionResponse: {
+                id: "provider_call_1",
+                name: "lookup",
+                response: { name: "lookup", content: "sunny" },
+              },
+            },
+          ],
         },
       ])
     }),
@@ -333,6 +343,34 @@ describe("Google Vertex providers", () => {
     }),
   )
 
+  // Captured from xai/grok-4.6 on Vertex: one keepalive every 15s until the first token.
+  it.effect("ignores keepalives sent as data while a partner model reasons", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLM.request({
+          model: GoogleVertexChat.configure({
+            accessToken: "vertex-token",
+            location: "global",
+            project: "vertex-project",
+          }).model("xai/grok-4.6"),
+          prompt: "Say hello.",
+        }),
+      ).pipe(
+        Effect.provide(
+          fixedResponse(
+            `data: : keepalive\n\ndata: : keepalive\n\n${sseEvents(
+              deltaChunk({ role: "assistant", content: "Hello." }),
+              finishChunk("stop"),
+            )}`,
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Hello.")
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "stop" })
+    }),
+  )
+
   it.effect("sends Grok requests through Vertex Responses", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
@@ -373,6 +411,37 @@ describe("Google Vertex providers", () => {
       )
 
       expect(response.text).toBe("Hello.")
+    }),
+  )
+
+  it.effect("applies Gemini schema rules to the Gemini API and Gemini models unless opted out", () =>
+    Effect.gen(function* () {
+      const vertex = { accessToken: "vertex-token", location: "us-central1", project: "vertex-project" }
+      const inputSchema = { type: "object", required: ["query", "missing"], properties: { query: { type: "string" } } }
+      const request = (model: Parameters<typeof LLM.request>[0]["model"]) =>
+        compileRequest(
+          LLM.request({
+            model,
+            prompt: "Use the tool.",
+            tools: [{ name: "lookup", description: "Lookup.", inputSchema }],
+          }),
+        )
+
+      const normalized = { ...inputSchema, required: ["query"] }
+      const tunedModel = GoogleVertex.configure(vertex).model("endpoints/1234567890")
+      const tuned = yield* request(tunedModel)
+      expect(tuned.body.tools?.[0]?.functionDeclarations[0]?.parametersJsonSchema).toEqual(normalized)
+      const optedOut = yield* request(LanguageModel.update(tunedModel, { compatibility: { sanitizer: "none" } }))
+      expect(optedOut.body.tools?.[0]?.functionDeclarations[0]?.parametersJsonSchema).toEqual(inputSchema)
+      const geminiChat = yield* request(GoogleVertexChat.configure(vertex).model("google/gemini-3.8-flash"))
+      expect(geminiChat.body.tools?.[0]?.function.parameters).toEqual(normalized)
+
+      const chat = yield* request(GoogleVertexChat.configure(vertex).model("deepseek-ai/deepseek-v3.2-maas"))
+      expect(chat.body.tools?.[0]?.function.parameters).toEqual(inputSchema)
+      const responses = yield* request(GoogleVertexResponses.configure(vertex).model("xai/grok-4.20-reasoning"))
+      expect(responses.body.tools?.[0]).toMatchObject({ parameters: inputSchema })
+      const messages = yield* request(GoogleVertexMessages.configure(vertex).model("claude-sonnet-4-6"))
+      expect(messages.body.tools?.[0]).toMatchObject({ input_schema: inputSchema })
     }),
   )
 

@@ -23,6 +23,27 @@ const value = async (code: string) => {
 }
 
 describe("confined generators", () => {
+  test("parameters are bound at the call; only the body waits for next()", async () => {
+    expect(
+      await value(`
+        const log = []
+        function* g(a = log.push("param")) { log.push("body"); yield a }
+        const it = g()
+        log.push("created")
+        it.next()
+        function* bad({ x } = null) { yield x }
+        async function* asyncBad({ x } = null) { yield x }
+        let failures = []
+        try { bad() } catch (error) { failures.push(error.constructor.name) }
+        try { asyncBad() } catch (error) { failures.push(error.constructor.name) }
+        return [log, failures]
+      `),
+    ).toEqual([
+      ["param", "created", "body"],
+      ["TypeError", "TypeError"],
+    ])
+  })
+
   // test/built-ins/GeneratorPrototype/next/return-yield-expr.js
   test("is lazy and preserves next(value), nested suspension, return, and exhaustion", async () => {
     expect(
@@ -1245,5 +1266,28 @@ describe("confined generators", () => {
         return events
       `),
     ).toEqual(["catch", "reaction"])
+  })
+
+  test("a generator's return() through for...of or destructuring surfaces a failing close, as break does", async () => {
+    expect(
+      await value(`
+        const make = (ret) => ({ [Symbol.iterator]: () => ({ next: () => ({ done: false, value: [1] }), return: ret }) })
+        const blanks = (ret) => ({ [Symbol.iterator]: () => ({ next: () => ({ done: false }), return: ret }) })
+        const outcomes = []
+        for (const [label, ret] of [
+          ["null", () => null],
+          ["throws", () => { throw new RangeError("close") }],
+          ["ok", () => ({ done: true })],
+        ]) {
+          function* loop() { for (const [a] of make(ret)) yield a }
+          function* pattern() { for ([ {} = yield ] of [blanks(ret)]) {} }
+          for (const g of [loop(), pattern()]) {
+            g.next()
+            try { g.return(7); outcomes.push(label + " quiet") } catch (e) { outcomes.push(label + " " + e.constructor.name) }
+          }
+        }
+        return outcomes
+      `),
+    ).toEqual(["null TypeError", "null TypeError", "throws RangeError", "throws RangeError", "ok quiet", "ok quiet"])
   })
 })

@@ -1,7 +1,17 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { CacheHint, LLM, AIError, LLMRequest, Message, ToolCallPart, ToolDefinition, Usage } from "../../src/index.js"
+import {
+  CacheHint,
+  LLM,
+  AIError,
+  LLMRequest,
+  Message,
+  ToolCallPart,
+  ToolDefinition,
+  Usage,
+  Media,
+} from "../../src/index.js"
 import { Auth, Endpoint, LLMClient, Route } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages.js"
@@ -138,11 +148,13 @@ describe("Anthropic Messages route", () => {
     Effect.gen(function* () {
       const enabled = yield* compileRequest(
         LLMRequest.update(request, {
+          generation: { maxTokens: 4_096 },
           providerOptions: { thinking: { type: "enabled", budgetTokens: 1_024 } },
         }),
       )
       const legacy = yield* compileRequest(
         LLMRequest.update(request, {
+          generation: { maxTokens: 4_096 },
           providerOptions: { thinking: { type: "enabled", budget_tokens: 2_048 } },
         }),
       )
@@ -155,6 +167,22 @@ describe("Anthropic Messages route", () => {
       expect(enabled.body.thinking).toEqual({ type: "enabled", budget_tokens: 1_024 })
       expect(legacy.body.thinking).toEqual({ type: "enabled", budget_tokens: 2_048 })
       expect(disabled.body.thinking).toEqual({ type: "disabled" })
+    }),
+  )
+
+  it.effect("fits the thinking budget to half the output limit", () =>
+    Effect.gen(function* () {
+      const thinking = (maxTokens: number) =>
+        compileRequest(
+          LLMRequest.update(request, {
+            generation: { maxTokens },
+            providerOptions: { thinking: { type: "enabled", budgetTokens: 31_999 } },
+          }),
+        ).pipe(Effect.map((prepared) => prepared.body.thinking))
+
+      expect(yield* thinking(64_000)).toEqual({ type: "enabled", budget_tokens: 31_999 })
+      expect(yield* thinking(20_000)).toEqual({ type: "enabled", budget_tokens: 10_000 })
+      expect(yield* thinking(1_500)).toEqual({ type: "enabled", budget_tokens: 1_024 })
     }),
   )
 
@@ -366,7 +394,7 @@ describe("Anthropic Messages route", () => {
           model: opus48,
           messages: [
             Message.user("Before."),
-            Message.make({ role: "system", content: { type: "media", mediaType: "image/png", data: "AAECAw==" } }),
+            Message.make({ role: "system", content: { type: "media", media: Media.base64("AAECAw==", "image/png") } }),
           ],
         }),
       ).pipe(Effect.flip)
@@ -2114,8 +2142,8 @@ describe("Anthropic Messages route", () => {
           messages: [
             Message.user([
               { type: "text", text: "What is in this image?" },
-              { type: "media", mediaType: "image/png", data: "AAECAw==" },
-              { type: "media", mediaType: "application/pdf", data: "JVBERi0xLjQ=", filename: "report.pdf" },
+              { type: "media", media: Media.base64("AAECAw==", "image/png") },
+              { type: "media", media: Media.base64("JVBERi0xLjQ=", "application/pdf"), filename: "report.pdf" },
             ]),
           ],
         }),

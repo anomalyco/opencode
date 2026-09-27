@@ -9,14 +9,16 @@ import {
   hidden,
   Arr,
   Bytes,
-  IteratorObj,
+  hostIterator,
   Obj,
+  coerceToInteger,
   coerceToNumber,
   coerceToString,
   type Value,
 } from "../interpreter/objects.js"
 import { describeValue } from "../interpreter/references.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
+import { callbackMethods, sortArray } from "./array.js"
 
 /** The bytes a Uint8Array, array, or other iterable of numbers describes; the host array clamps each value. */
 const collectBytes = <R>(ctx: Interpreter<R>, source: Value, name: string): Effect.Effect<Uint8Array, unknown, R> => {
@@ -75,44 +77,28 @@ export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
   ])
 
   const self = (thisValue: Value, name: string) => receiver(Bytes, thisValue, `Uint8Array.prototype.${name}`)
-  const optNumber = (name: string, value: Value, label: string): number | undefined => {
-    if (value === undefined) return undefined
-    if (typeof value !== "number") throw typeError(`Uint8Array.${name} expects ${label} to be a number.`)
-    return value
-  }
+  const optNumber = (value: Value): number | undefined => (value === undefined ? undefined : coerceToInteger(value))
   const wrapAll = (items: Array<Value>) => new Arr(builtins.Array, items)
   defineAccessor(proto, "length", (thisValue) => self(thisValue, "length").bytes.length)
   methods(builtins, proto, [
-    ["at", 1, (thisValue, args) => self(thisValue, "at").bytes.at(optNumber("at", args[0], "index") ?? 0)],
+    ["at", 1, (thisValue, args) => self(thisValue, "at").bytes.at(optNumber(args[0]) ?? 0)],
     [
       "slice",
       2,
-      (thisValue, args) =>
-        wrap(
-          self(thisValue, "slice").bytes.slice(
-            optNumber("slice", args[0], "start"),
-            optNumber("slice", args[1], "end"),
-          ),
-        ),
+      (thisValue, args) => wrap(self(thisValue, "slice").bytes.slice(optNumber(args[0]), optNumber(args[1]))),
     ],
     // A view on the same bytes, as in JS: writes through one are visible through the other.
     [
       "subarray",
       2,
-      (thisValue, args) =>
-        wrap(
-          self(thisValue, "subarray").bytes.subarray(
-            optNumber("subarray", args[0], "start"),
-            optNumber("subarray", args[1], "end"),
-          ),
-        ),
+      (thisValue, args) => wrap(self(thisValue, "subarray").bytes.subarray(optNumber(args[0]), optNumber(args[1]))),
     ],
     [
       "set",
       1,
       (thisValue, args) => {
         const target = self(thisValue, "set")
-        const offset = optNumber("set", args[1], "offset") ?? 0
+        const offset = optNumber(args[1]) ?? 0
         return Effect.map(collectBytes(ctx, args[0], "Uint8Array.set"), (source) => {
           if (!Number.isInteger(offset) || offset < 0 || source.length + offset > target.bytes.length) {
             throw rangeError("Uint8Array.set: the source does not fit at that offset.")
@@ -127,11 +113,7 @@ export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
       1,
       (thisValue, args) => {
         const target = self(thisValue, "fill")
-        target.bytes.fill(
-          coerceToNumber(args[0]),
-          optNumber("fill", args[1], "start"),
-          optNumber("fill", args[2], "end"),
-        )
+        target.bytes.fill(coerceToNumber(args[0]), optNumber(args[1]), optNumber(args[2]))
         return target
       },
     ],
@@ -145,38 +127,46 @@ export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
       },
     ],
     [
+      "sort",
+      1,
+      (thisValue, args) => {
+        const target = self(thisValue, "sort")
+        // Without a comparator, typed arrays sort numerically rather than by string.
+        if (args[0] === undefined) {
+          target.bytes.sort()
+          return target
+        }
+        return Effect.map(sortArray(ctx, [...target.bytes], args[0], "Uint8Array.sort"), (sorted) => {
+          target.bytes.set(Uint8Array.from(sorted, coerceToNumber))
+          return target
+        })
+      },
+    ],
+    [
       "indexOf",
       1,
-      (thisValue, args) =>
-        self(thisValue, "indexOf").bytes.indexOf(coerceToNumber(args[0]), optNumber("indexOf", args[1], "start index")),
+      (thisValue, args) => self(thisValue, "indexOf").bytes.indexOf(coerceToNumber(args[0]), optNumber(args[1])),
     ],
     [
       "lastIndexOf",
       1,
       (thisValue, args) => {
         const target = self(thisValue, "lastIndexOf").bytes
-        return args[1] === undefined
+        return args.length < 2
           ? target.lastIndexOf(coerceToNumber(args[0]))
-          : target.lastIndexOf(coerceToNumber(args[0]), optNumber("lastIndexOf", args[1], "start index"))
+          : target.lastIndexOf(coerceToNumber(args[0]), optNumber(args[1]))
       },
     ],
     [
       "includes",
       1,
-      (thisValue, args) =>
-        self(thisValue, "includes").bytes.includes(
-          coerceToNumber(args[0]),
-          optNumber("includes", args[1], "start index"),
-        ),
+      (thisValue, args) => self(thisValue, "includes").bytes.includes(coerceToNumber(args[0]), optNumber(args[1])),
     ],
     [
       "join",
       1,
       (thisValue, args) => {
-        if (args.length > 1 || (args.length === 1 && typeof args[0] !== "string")) {
-          throw typeError("Uint8Array.join expects zero arguments or one string separator.")
-        }
-        const joined = self(thisValue, "join").bytes.join(args.length === 0 ? "," : (args[0] as string))
+        const joined = self(thisValue, "join").bytes.join(args[0] === undefined ? "," : coerceToString(args[0]))
         checkStringLength(joined.length)
         return joined
       },
@@ -184,19 +174,26 @@ export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
     ["toString", 0, (thisValue) => self(thisValue, "toString").bytes.join(",")],
     ["toBase64", 0, (thisValue) => self(thisValue, "toBase64").bytes.toBase64()],
     ["toHex", 0, (thisValue) => self(thisValue, "toHex").bytes.toHex()],
-    ["keys", 0, (thisValue) => new IteratorObj(builtins.Iterator, self(thisValue, "keys").bytes.keys())],
-    ["values", 0, (thisValue) => new IteratorObj(builtins.Iterator, self(thisValue, "values").bytes.values())],
+    ["keys", 0, (thisValue) => hostIterator(builtins, self(thisValue, "keys").bytes.keys())],
+    ["values", 0, (thisValue) => hostIterator(builtins, self(thisValue, "values").bytes.values())],
     [
       "entries",
       0,
       (thisValue) =>
-        new IteratorObj(
-          builtins.Iterator,
+        hostIterator(
+          builtins,
           self(thisValue, "entries")
             .bytes.entries()
             .map(([index, byte]) => wrapAll([index, byte])),
         ),
     ],
+    ...callbackMethods(
+      ctx,
+      "Uint8Array",
+      self,
+      (target) => target.bytes,
+      (values) => wrap(Uint8Array.from(values, coerceToNumber)),
+    ),
   ])
   define(proto, IteratorSymbol, get(proto, "values"), hidden)
   return uint8Array

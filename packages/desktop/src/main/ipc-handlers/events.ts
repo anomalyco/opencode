@@ -6,7 +6,7 @@ import { IpcPortHandoff } from "../ipc-transport"
 import { Shutdown } from "../lifecycle/shutdown"
 import { isRendererUrl } from "../windows/scheme"
 import { DesktopStorage } from "../storage"
-import { sender } from "./context"
+import { sender, type RpcContext } from "./context"
 
 export const eventHandlers = EventRpcs.toLayer(
   Effect.gen(function* () {
@@ -25,21 +25,29 @@ export const eventHandlers = EventRpcs.toLayer(
     })
     const remove = yield* shutdown.add(stop)
     yield* Effect.addFinalizer(() => Effect.sync(remove).pipe(Effect.andThen(stop)))
+    const owner = async (context: RpcContext) => {
+      const contents = sender(handoff, context)
+      const win = BrowserWindow.fromWebContents(contents)
+      if (!win || win.isDestroyed() || win.webContents !== contents || !isRendererUrl(contents.getURL())) {
+        throw new Error("browser.pane.owner.invalid")
+      }
+      browser ??= load()
+      return { win, pane: await browser }
+    }
     return EventRpcs.of({
       DesktopEvents: (_request, context) => ipcEventStream(sender(handoff, context).id),
       BrowserPane: ({ request }, context) =>
         Effect.tryPromise(async () => {
-          const contents = sender(handoff, context)
-          const win = BrowserWindow.fromWebContents(contents)
-          if (!win || win.isDestroyed() || win.webContents !== contents || !isRendererUrl(contents.getURL())) {
-            throw new Error("browser.pane.owner.invalid")
-          }
-          browser ??= load()
-          const pane = await browser
-          if (request.type === "register") return pane.register(win, request.bindingID, request.target)
-          if (request.type === "layout") return pane.layout(win, request.bindingID, request.layout)
-          if (request.type === "command") return pane.command(win, request.bindingID, request.command)
-          return pane.close(win, request.bindingID)
+          const target = await owner(context)
+          if (request.type === "register") return target.pane.register(target.win, request.bindingID, request.target)
+          if (request.type === "layout") return target.pane.layout(target.win, request.bindingID, request.layout)
+          if (request.type === "command") return target.pane.command(target.win, request.bindingID, request.command)
+          return target.pane.close(target.win, request.bindingID)
+        }).pipe(Effect.orDie),
+      BrowserPaneCapture: (request, context) =>
+        Effect.tryPromise(async () => {
+          const target = await owner(context)
+          return target.pane.capture(target.win, request.bindingID, request.tabID)
         }).pipe(Effect.orDie),
     })
   }),

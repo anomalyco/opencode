@@ -18,7 +18,6 @@ import {
   type CacheHint,
   type FinishReasonDetails,
   type FinishReason,
-  type JsonSchema,
   type MediaPart,
   type ProviderMetadata,
   type ProviderOptions,
@@ -31,13 +30,13 @@ import { classifyProviderFailure } from "../provider-error.js"
 import { effortUpdate, resolveEffortUpdates } from "../effort-updates.js"
 import * as Cache from "./utils/cache.js"
 import { Lifecycle } from "./utils/lifecycle.js"
-import { ToolSchemaProjection } from "./utils/tool-schema.js"
 import { ToolStream } from "./utils/tool-stream.js"
 
 const ADAPTER = "anthropic-messages"
 export const DEFAULT_BASE_URL = "https://api.anthropic.com/v1"
 export const PATH = "/messages"
 export const DEFAULT_MAX_TOKENS = 32_000
+const MIN_THINKING_BUDGET = 1_024
 const DEFAULT_EFFORT = "high"
 
 const SSE_EVENTS = new Set([
@@ -524,10 +523,10 @@ const redactedDataFromMetadata = (metadata: ProviderMetadata | undefined, key: s
   return typeof provider.redactedData === "string" ? provider.redactedData : undefined
 }
 
-const lowerTool = (breakpoints: Cache.Breakpoints, tool: ToolDefinition, inputSchema: JsonSchema): AnthropicTool => ({
+const lowerTool = (breakpoints: Cache.Breakpoints, tool: ToolDefinition): AnthropicTool => ({
   name: tool.name,
   description: tool.description,
-  input_schema: inputSchema,
+  input_schema: tool.inputSchema,
   cache_control: cacheControl(breakpoints, tool.cache),
 })
 
@@ -658,7 +657,7 @@ const lowerMedia = Effect.fn("AnthropicMessages.lowerMedia")(function* (
   part: MediaPart,
   breakpoints?: Cache.Breakpoints,
 ) {
-  const mime = part.mediaType.toLowerCase()
+  const mime = part.media.mediaType.toLowerCase()
   const cacheControlValue = breakpoints ? cacheControl(breakpoints, part.cache) : undefined
   const fileId = fileIdFromMetadata(part.metadata)
 
@@ -687,9 +686,9 @@ const lowerMedia = Effect.fn("AnthropicMessages.lowerMedia")(function* (
     } satisfies AnthropicDocumentBlock
   }
 
-  const rawString = typeof part.data === "string" ? part.data.trim() : undefined
+  const rawString = ProviderShared.mediaUrl(part.media)?.trim()
   // SDK URL sources: URLImageSource:3817 / URLPDFSource:3823 {type:"url", url}
-  if (rawString && isHttpUrl(rawString) && !rawString.startsWith("data:")) {
+  if (rawString && isHttpUrl(rawString)) {
     if (mime.startsWith("image/"))
       return {
         type: "image" as const,
@@ -714,20 +713,11 @@ const lowerMedia = Effect.fn("AnthropicMessages.lowerMedia")(function* (
       } satisfies AnthropicDocumentBlock
   }
 
+  const media = yield* ProviderShared.requireInlineMedia("Anthropic Messages", part.media)
+
   // SDK PlainTextSource:2716 {type:"text", media_type:"text/plain", data}
   if (mime === "text/plain") {
-    const textData =
-      typeof part.data !== "string"
-        ? Buffer.from(part.data).toString("utf8")
-        : part.data.startsWith("data:")
-          ? (() => {
-              const comma = part.data.indexOf(",")
-              const payload = comma >= 0 ? part.data.slice(comma + 1) : part.data
-              return part.data.includes(";base64")
-                ? Buffer.from(payload, "base64").toString("utf8")
-                : decodeURIComponent(payload)
-            })()
-          : part.data
+    const textData = Buffer.from(media.base64, "base64").toString("utf8")
     return {
       type: "document" as const,
       source: { type: "text" as const, media_type: "text/plain" as const, data: textData },
@@ -742,7 +732,6 @@ const lowerMedia = Effect.fn("AnthropicMessages.lowerMedia")(function* (
     } satisfies AnthropicDocumentBlock
   }
 
-  const media = ProviderShared.normalizeMedia(part)
   if (media.mime === "application/pdf")
     return {
       type: "document" as const,
@@ -761,7 +750,7 @@ const lowerMedia = Effect.fn("AnthropicMessages.lowerMedia")(function* (
         : { citations: citationsFromMetadata(part.metadata)! }),
     } satisfies AnthropicDocumentBlock
   if (!media.mime.startsWith("image/"))
-    return yield* invalid(`Anthropic Messages does not support media type ${part.mediaType}`)
+    return yield* invalid(`Anthropic Messages does not support media type ${part.media.mediaType}`)
   return {
     type: "image" as const,
     source: {
@@ -780,7 +769,7 @@ const lowerMedia = Effect.fn("AnthropicMessages.lowerMedia")(function* (
 // content instead of JSON-stringifying base64 into a prompt string.
 const lowerToolResultContentItem = Effect.fnUntraced(function* (item: Tool.Content) {
   if (item.type === "text") return { type: "text" as const, text: item.text } satisfies AnthropicTextBlock
-  return yield* lowerMedia({ type: "media", mediaType: item.mime, data: item.uri, filename: item.name })
+  return yield* lowerMedia(ProviderShared.toolFileMedia(item))
 })
 
 const lowerToolResultContent = Effect.fnUntraced(function* (part: ToolResultPart) {
@@ -1037,6 +1026,15 @@ const applyThinkingBindingDefault = (model: LLMRequest["model"], thinking: Anthr
   }
 }
 
+// Anthropic also requires an explicit thinking budget below `max_tokens` and at or above its minimum.
+const fitThinking = (thinking: AnthropicThinking | undefined, maxTokens: number) =>
+  thinking?.type === "enabled"
+    ? {
+        ...thinking,
+        budget_tokens: ProviderShared.fitThinkingBudget(thinking.budget_tokens, maxTokens, MIN_THINKING_BUDGET),
+      }
+    : thinking
+
 const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (request: LLMRequest) {
   const options = yield* decodeOptions(request.providerOptions ?? {})
   const management = options.contextManagement
@@ -1044,22 +1042,12 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
   const format = outputConfig?.format ?? undefined
   const updates = resolveEffortUpdates(request, options.effort ?? outputConfig?.effort ?? undefined)
   const generation = request.generation
-  const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   // Allocate the 4-breakpoint budget in invalidation order: tools → system →
   // messages. Tools live highest in the cache hierarchy, so when callers
   // over-mark we keep their tool hints and shed the message-tail ones first.
   const breakpoints = Cache.newBreakpoints(ANTHROPIC_BREAKPOINT_CAP)
   const flattened = ProviderShared.flattenToolRequest(updates.request)
-  const tools =
-    flattened.tools.length === 0
-      ? undefined
-      : flattened.tools.map((tool) =>
-          lowerTool(
-            breakpoints,
-            tool,
-            ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility),
-          ),
-        )
+  const tools = flattened.tools.length === 0 ? undefined : flattened.tools.map((tool) => lowerTool(breakpoints, tool))
   // Anthropic rejects tool_choice when tools are absent; "none" is only meaningful with tools present.
   const toolChoice = tools === undefined || !request.toolChoice ? undefined : yield* lowerToolChoice(request.toolChoice)
   const systemParts = request.system.filter((part) => part.text.length > 0)
@@ -1079,6 +1067,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
   }
   const output_config =
     updates.effort === undefined && format === undefined ? undefined : { effort: updates.effort, format }
+  const maxTokens = generation?.maxTokens ?? DEFAULT_MAX_TOKENS
   const body = {
     model: request.model.id,
     system,
@@ -1086,12 +1075,12 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
     tools,
     tool_choice: toolChoice,
     stream: true as const,
-    max_tokens: generation?.maxTokens ?? DEFAULT_MAX_TOKENS,
+    max_tokens: maxTokens,
     temperature: generation?.temperature,
     top_p: generation?.topP,
     top_k: generation?.topK,
     stop_sequences: generation?.stop,
-    thinking: applyThinkingBindingDefault(request.model, options.thinking),
+    thinking: applyThinkingBindingDefault(request.model, fitThinking(options.thinking, maxTokens)),
     output_config,
     // top-level passthrough per SDK MessageCreateParamsBase:4638,4643,4649,4654,4670
     cache_control: options.cache_control ?? options.cacheControl,

@@ -2,6 +2,7 @@ import { describe, expect } from "bun:test"
 import { ConfigProvider, Effect, Layer, Logger, Ref, Schema, Stream } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
 import {
+  Media,
   LLM,
   AIError,
   HttpContext,
@@ -195,8 +196,20 @@ describe("OpenAI Responses route", () => {
           name: "crm",
           description: "Customer management",
           tools: [
-            { type: "function", name: "lookup", description: "Look up a customer", parameters: {}, strict: false },
-            { type: "function", name: "orders", description: "List customer orders", parameters: {}, strict: false },
+            {
+              type: "function",
+              name: "lookup",
+              description: "Look up a customer",
+              parameters: { type: "object" },
+              strict: false,
+            },
+            {
+              type: "function",
+              name: "orders",
+              description: "List customer orders",
+              parameters: { type: "object" },
+              strict: false,
+            },
           ],
         },
       ])
@@ -231,7 +244,15 @@ describe("OpenAI Responses route", () => {
           type: "namespace",
           name: "crm",
           description: "Customer management",
-          tools: [{ type: "function", name: "orders_list", description: "List orders", parameters: {}, strict: false }],
+          tools: [
+            {
+              type: "function",
+              name: "orders_list",
+              description: "List orders",
+              parameters: { type: "object" },
+              strict: false,
+            },
+          ],
         },
       ])
     }),
@@ -1924,7 +1945,7 @@ describe("OpenAI Responses route", () => {
       expect(prepared.body.prompt_cache_key).toBe("session_123")
       expect(prepared.body.include).toEqual(["reasoning.encrypted_content"])
       expect(prepared.body.reasoning).toEqual({ effort: "high", summary: "auto" })
-      expect(prepared.body.text).toEqual({ verbosity: "low" })
+      expect(prepared.body.text).toBeUndefined()
       expect(prepared.body.metadata).toEqual({ environment: "test", tenant: "acme" })
       expect(prepared.body.safety_identifier).toBe("user_123")
       expect(prepared.body.stream_options).toEqual({ include_obfuscation: false })
@@ -4616,6 +4637,30 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("replays assistant media parts as portable user image input", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user("Draw a cat"),
+            Message.assistant([
+              { type: "text", text: "Here it is." },
+              { type: "media", media: Media.base64("AQID", "image/png") },
+            ]),
+            Message.user("Make it orange"),
+          ],
+        }),
+      )
+      expect(prepared.body.input).toMatchObject([
+        { type: "message", role: "user" },
+        { type: "message", role: "assistant", content: [{ type: "output_text", text: "Here it is." }] },
+        { type: "message", role: "user", content: [{ type: "input_image", image_url: "data:image/png;base64,AQID" }] },
+        { type: "message", role: "user" },
+      ])
+    }),
+  )
+
   it.effect("replays hosted image results as portable content regardless of storage", () =>
     Effect.gen(function* () {
       const item = {
@@ -4777,8 +4822,8 @@ describe("OpenAI Responses route", () => {
           model,
           messages: [
             Message.user([
-              { type: "media", mediaType: "image/png", data: "AAECAw==" },
-              { type: "media", mediaType: "application/pdf", data: "JVBERi0xLjQ=", filename: "report.pdf" },
+              { type: "media", media: Media.base64("AAECAw==", "image/png") },
+              { type: "media", media: Media.base64("JVBERi0xLjQ=", "application/pdf"), filename: "report.pdf" },
             ]),
           ],
         }),
@@ -4809,8 +4854,7 @@ describe("OpenAI Responses route", () => {
           messages: [
             Message.user({
               type: "media",
-              mediaType: "application/pdf",
-              data: "data:application/pdf;base64,JVBERi0xLjQ=",
+              media: Media.fromDataUrl("data:application/pdf;base64,JVBERi0xLjQ="),
               filename: "report.pdf",
             }),
           ],
@@ -4839,7 +4883,7 @@ describe("OpenAI Responses route", () => {
         LLM.request({
           id: "req_media",
           model,
-          messages: [Message.user({ type: "media", mediaType: "application/x-tar", data: "AAECAw==" })],
+          messages: [Message.user({ type: "media", media: Media.base64("AAECAw==", "application/x-tar") })],
         }),
       )
 
@@ -4866,11 +4910,10 @@ describe("OpenAI Responses route", () => {
           model,
           messages: [
             Message.user([
-              { type: "media", mediaType: "image/png", data: "https://example.com/image.png" },
+              { type: "media", media: Media.url("https://example.com/image.png", { mediaType: "image/png" }) },
               {
                 type: "media",
-                mediaType: "application/pdf",
-                data: "https://example.com/report.pdf",
+                media: Media.url("https://example.com/report.pdf", { mediaType: "application/pdf" }),
                 filename: "report.pdf",
               },
             ]),

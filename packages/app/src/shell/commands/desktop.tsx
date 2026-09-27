@@ -4,6 +4,7 @@ import { useCommand, type CommandOption } from "./command"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { DialogSsh } from "@/servers/ssh/dialog"
 import { useUpdaterAction } from "@/shell/updates/action"
+import { useSettingsSurface } from "@/settings/surface"
 
 export function DesktopCommands() {
   const command = useCommand()
@@ -37,6 +38,28 @@ export function DesktopCommands() {
     })
     return commands
   })
+
+  return null
+}
+
+export function DesktopPairingCommand() {
+  const command = useCommand()
+  const language = useLanguage()
+  const platform = usePlatform()
+  const settings = useSettingsSurface()
+
+  command.register("desktop-pairing", () =>
+    platform.platform === "desktop" && platform.pair
+      ? [
+          {
+            id: "server.pair",
+            title: language.t("command.server.pair"),
+            category: language.t("command.category.server"),
+            onSelect: () => settings.open("pairing"),
+          },
+        ]
+      : [],
+  )
 
   return null
 }

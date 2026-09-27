@@ -6,11 +6,13 @@ import { Money } from "@opencode/schema/money"
 import { Effect, Layer, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { App } from "@opencode/core/app"
 import { Config } from "@opencode/core/config"
 import { ConfigPolicyPlugin } from "@opencode/core/config/plugin/policy"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { ManagedPolicy } from "@opencode/core/managed-policy"
+import { Mcp } from "@opencode/core/mcp/index"
 import { Model } from "@opencode/core/model"
 import { ModelResolver } from "@opencode/core/model-resolver"
 import { Plugin } from "@opencode/core/plugin"
@@ -19,6 +21,7 @@ import { OpencodePlugin } from "@opencode/core/plugin/provider/opencode"
 import { Provider } from "@opencode/core/provider"
 import { WebSearch } from "@opencode/core/websearch"
 import { withEnv } from "../fixture/env"
+import { emptyMcp } from "../fixture/mcp"
 import { drain } from "../lib/clock"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -38,11 +41,13 @@ const noRemoteConfig = HttpClient.make((request) =>
 function consoleServer(orgID: string | null | undefined, unavailable = false) {
   const config: { authorization: string | null; orgID: string | null }[] = []
   const requests: string[] = []
+  const agents: (string | null)[] = []
   const server = Bun.serve({
     port: 0,
     fetch: async (request) => {
       const path = new URL(request.url).pathname
       requests.push(path)
+      agents.push(request.headers.get("user-agent"))
       if (path === "/auth/device/code") {
         expect(await request.json()).toEqual({ client_id: "opencode-cli", supports_org_scope: true })
         return Response.json({
@@ -74,7 +79,7 @@ function consoleServer(orgID: string | null | undefined, unavailable = false) {
       return new Response("Not found", { status: 404 })
     },
   })
-  return { server, config, requests }
+  return { server, config, requests, agents }
 }
 
 function required<T>(value: T | undefined): T {
@@ -284,7 +289,7 @@ describe("OpencodePlugin", () => {
       () =>
         Effect.acquireUseRelease(
           Effect.sync(() => consoleServer(scenario.orgID, scenario.unavailable)),
-          ({ server, config, requests }) =>
+          ({ server, config, requests, agents }) =>
             Effect.gen(function* () {
               const credentials = yield* Credential.Service
               const initial = yield* credentials.create({
@@ -320,10 +325,17 @@ describe("OpencodePlugin", () => {
               expect(config).toEqual([{ authorization: "Bearer access", orgID: scenario.orgID ?? "org-a" }])
               const integrations = yield* Integration.Service
               expect(
-                yield* integrations.connection.resolve({ type: "credential", id: initial.id, label: initial.label }),
+                yield* integrations.connection.resolve({
+                  type: "credential",
+                  method: "oauth",
+                  id: initial.id,
+                  label: initial.label,
+                }),
               ).toEqual(stored.value)
               expect(requests).toEqual(["/auth/device/token", "/api/v2/config"])
-            }),
+              // The refresh and the config fetch both say which OpenCode is asking.
+              expect(agents).toEqual(["opencode/beta/1.2.3/test", "opencode/beta/1.2.3/test"])
+            }).pipe(Effect.provideService(App.Metadata, App.make({ name: "test", version: "1.2.3", channel: "beta" }))),
           ({ server }) => Effect.promise(() => server.stop(true)),
         ),
     )
@@ -627,6 +639,110 @@ describe("OpencodePlugin", () => {
           expect(rebuilds).toEqual({ provider: initial.provider + 2, websearch: initial.websearch + 2 })
           expect(yield* websearch.providers()).toEqual([])
           expect(yield* websearch.default()).toBeUndefined()
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+  it.effect("registers the Console's MCP servers as sent, attaching the credential only where asked", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const state = { advertised: true }
+        const server = Bun.serve({
+          port: 0,
+          fetch: (request) =>
+            Response.json({
+              providers: {},
+              ...(state.advertised
+                ? {
+                    mcp: {
+                      servers: {
+                        opencode_console: {
+                          type: "remote",
+                          url: `${new URL(request.url).origin}/console/mcp`,
+                          headers: { "x-client": "opencode", authorization: "Bearer forged" },
+                          oauth: false,
+                          auth: "console",
+                        },
+                        opencode_console_oauth: {
+                          type: "remote",
+                          url: `${new URL(request.url).origin}/console/oauth/mcp`,
+                          oauth: { scope: "workspace" },
+                          timeout: { startup: 5000 },
+                        },
+                      },
+                    },
+                  }
+                : {}),
+            }),
+        })
+        return { server, state }
+      }),
+      ({ server, state }) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const transforms: Array<(editor: Mcp.Editor) => void> = []
+          const reloads = { count: 0 }
+          const servers = () => {
+            const configured = new Map<string, unknown>()
+            transforms.forEach((transform) =>
+              transform({
+                list: () => [],
+                get: (name) => (configured.has(name) ? { type: "remote", url: "user" } : undefined),
+                set: (name, config) => configured.set(name, config),
+                update: () => {},
+                remove: (name) => configured.delete(name),
+              }),
+            )
+            return Object.fromEntries(configured)
+          }
+          yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({
+              type: "key",
+              key: "secret",
+              metadata: { server: server.url.origin, orgID: "org-a" },
+            }),
+          })
+          yield* addPlugin().pipe(
+            Effect.provideService(
+              Mcp.Service,
+              Mcp.Service.of({
+                ...emptyMcp,
+                transform: (transform) =>
+                  Effect.sync(() => {
+                    transforms.push(transform)
+                    return { dispose: Effect.void }
+                  }),
+                reload: () =>
+                  Effect.sync(() => {
+                    reloads.count++
+                  }),
+              }),
+            ),
+          )
+          yield* drain
+
+          expect(servers()).toEqual({
+            opencode_console: {
+              type: "remote",
+              url: `${server.url.origin}/console/mcp`,
+              headers: { "x-client": "opencode", authorization: "Bearer secret", "x-org-id": "org-a" },
+              oauth: false,
+            },
+            opencode_console_oauth: {
+              type: "remote",
+              url: `${server.url.origin}/console/oauth/mcp`,
+              oauth: { scope: "workspace" },
+              timeout: { startup: 5000 },
+            },
+          })
+
+          state.advertised = false
+          yield* TestClock.adjust("1 minute")
+          yield* drain
+          expect(servers()).toEqual({})
+          expect(reloads.count).toBe(1)
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
     ),

@@ -24,7 +24,7 @@ test("settings project inventory reads metadata without acquiring directory stor
     name: `Project ${index}`,
     icon: { color: "orange" },
     commands: { start: "bun install" },
-    time: { created: 1, updated: 1 },
+    time: { created: 1, updated: 1, active: 1 },
     sandboxes: [],
     worktrees: [],
   }))

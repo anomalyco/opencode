@@ -61,6 +61,7 @@ export const Input = Schema.Struct({
 
 const StructuredOutput = Schema.Struct({
   exit: Schema.optionalKey(Schema.Number),
+  signal: Schema.optionalKey(Schema.String),
   shellID: Schema.optionalKey(Schema.String),
   truncated: Schema.Boolean,
   timeout: Schema.optionalKey(Schema.Boolean),
@@ -76,7 +77,7 @@ type Output = typeof Output.Type
 
 const resultMessages = (output: Output) => {
   const notice = output.status === "running" ? BACKGROUND_INSTRUCTION : ShellResult.notice(output)
-  return [output.output, ...(notice ? [notice] : [])]
+  return [...(output.output ? [output.output] : []), ...(notice ? [notice] : [])]
 }
 
 const toolResult = (output: Output) => {
@@ -165,7 +166,7 @@ export const Plugin = {
           ? resultMessages(output).join("\n\n")
           : info.status === "error"
             ? (info.error ?? "Command failed")
-            : "Command cancelled"
+            : "Cancelled"
         yield* sessions.synthetic({
           ...(info.notificationID ? { id: info.notificationID } : {}),
           sessionID,

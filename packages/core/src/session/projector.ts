@@ -573,6 +573,14 @@ const layer = Layer.effectDiscard(
         .run()
         .pipe(Effect.orDie),
     )
+    yield* bus.project(SessionEvent.MetadataUpdated, (event) =>
+      db
+        .update(SessionTable)
+        .set({ metadata: event.data.metadata, time_updated: event.created })
+        .where(eq(SessionTable.id, event.data.sessionID))
+        .run()
+        .pipe(Effect.orDie),
+    )
     yield* bus.project(SessionEvent.Permissions, (event) =>
       db
         .update(SessionTable)

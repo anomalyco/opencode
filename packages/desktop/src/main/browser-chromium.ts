@@ -361,6 +361,12 @@ export function createBrowserPage(
       visible = value
       updateVisibility()
     },
+    // Freezes the shown page so the renderer can paint it under DOM overlays while the view hides.
+    async capture() {
+      if (closed || !visible || !content) return
+      const image = await contents.capturePage()
+      return image.isEmpty() ? undefined : new Uint8Array(image.toJPEG(90))
+    },
     async execute(command: Browser.Command, signal: AbortSignal): Promise<Browser.Result> {
       await ready
       abortError(signal)

@@ -123,9 +123,6 @@ const getBase = (appId: string): Configuration => ({
     notarize: true,
     target: ["dmg", "zip"],
   },
-  dmg: {
-    sign: true,
-  },
   protocols: {
     name: "OpenCode",
     schemes: ["opencode"],

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { createMemo, createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
 import {
+  SESSION_BTW_TAB,
   SESSION_BROWSER_TAB,
   sessionBrowserTab,
   SESSION_OPEN_FILE_TAB,
@@ -232,6 +233,24 @@ describe("createSessionTabs", () => {
       expect(result.openFileOpen()).toBe(false)
       expect(result.panelTabs()).toEqual(["file://src/a.ts"])
       expect(result.activeTab()).toBe("file://src/a.ts")
+      dispose()
+    })
+  })
+
+  test("exposes the BTW tab without treating it as a file tab", () => {
+    createRoot((dispose) => {
+      const tabs = createMemo(() => ({ active: () => SESSION_BTW_TAB, all: () => [SESSION_BTW_TAB] }))
+      const result = createSessionTabs({
+        tabs,
+        pathFromTab: () => undefined,
+        normalizeTab: (tab) => tab,
+      })
+
+      expect(result.panelTabs()).toEqual([SESSION_BTW_TAB])
+      expect(result.openedTabs()).toEqual([])
+      expect(result.activeTab()).toBe(SESSION_BTW_TAB)
+      expect(result.activeFileTab()).toBeUndefined()
+      expect(result.closableTab()).toBe(SESSION_BTW_TAB)
       dispose()
     })
   })

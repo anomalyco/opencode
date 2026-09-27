@@ -1,4 +1,4 @@
-import { createEffect, createMemo, For, onCleanup, Show, useContext, createContext } from "solid-js"
+import { createEffect, createMemo, For, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { TextAttributes } from "@opentui/core"
 import { useTheme } from "../../../context/theme"
@@ -8,30 +8,9 @@ import { SubagentsTab } from "./subagents-tab"
 import { ShellTab } from "./shell-tab"
 import { TerminalsTab } from "./terminals-tab"
 import { useConfig } from "../../../config"
+import { ComposerContext, type ComposerTab } from "./context"
 
-export interface ComposerHint {
-  label: string
-  shortcut: string
-}
-
-interface Tab {
-  id: string
-  label: string
-  hints?: () => ComposerHint[]
-  onClose?: () => void
-}
-
-const ComposerContext = createContext<{
-  register: (tab: Tab) => () => void
-  active: (id: string) => boolean
-  close: () => void
-}>()
-
-export function useComposerTab() {
-  const ctx = useContext(ComposerContext)
-  if (!ctx) throw new Error("useComposerTab must be used within a Composer")
-  return ctx
-}
+export { useComposerTab, type ComposerHint } from "./context"
 
 export type ComposerProps = {
   sessionID: string
@@ -46,7 +25,7 @@ export function Composer(props: ComposerProps) {
   const config = useConfig().data
 
   const [store, setStore] = createStore({
-    tabs: {} as Record<string, Tab>,
+    tabs: {} as Record<string, ComposerTab>,
     active: "",
   })
 
@@ -70,7 +49,7 @@ export function Composer(props: ComposerProps) {
   }
 
   const ctx = {
-    register(tab: Tab) {
+    register(tab: ComposerTab) {
       setStore("tabs", tab.id, tab)
       if (!store.active) setStore("active", tab.id)
       return () => setStore("tabs", tab.id, undefined!)

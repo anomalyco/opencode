@@ -13,14 +13,14 @@ const echo: CodeModeCatalog.Tool = {
   type: "tool",
   name: "notes.echo",
   description: "Echo text",
-  signature: "tools.notes.echo(input: {\n  text: string,\n}): Promise<string>",
+  signature: "tools.notes.echo({\n  text: string,\n}): Promise<string>",
 }
 
 const lookup: CodeModeCatalog.Tool = {
   type: "tool",
   name: "orders.lookup",
   description: "Look up an order",
-  signature: "tools.orders.lookup(input: {\n  id: string,\n}): Promise<unknown>",
+  signature: "tools.orders.lookup({\n  id: string,\n}): Promise<unknown>",
 }
 
 describe("CodeModeInstructions", () => {

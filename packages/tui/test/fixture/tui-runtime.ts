@@ -8,7 +8,7 @@ type ResolvedInput = Omit<Info, "attention" | "keybinds" | "leader"> & {
 }
 
 export function createTuiResolvedConfig(input: ResolvedInput = {}, options?: { terminal?: boolean }) {
-  const config = resolve(input, { terminalSuspend: process.platform !== "win32" })
+  const config = resolve(input, { terminalSuspend: process.platform !== "win32", environment: {} })
   return {
     ...config,
     session: { ...config.session, terminal: options?.terminal ?? config.session.terminal },

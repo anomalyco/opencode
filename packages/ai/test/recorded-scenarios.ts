@@ -1,6 +1,7 @@
 import { expect } from "bun:test"
 import { Effect, Schema } from "effect"
 import {
+  Media,
   LLM,
   LLMEvent,
   LLMRequest,
@@ -330,7 +331,7 @@ const runImageScenario = (context: GoldenScenarioContext) =>
           type: "text",
           text: "The image contains exactly three lowercase English words. Read them left to right and reply with only those words.",
         },
-        { type: "media", mediaType: "image/png", data: yield* restroomImage() },
+        { type: "media", media: Media.base64(yield* restroomImage(), "image/png") },
       ]),
       assistant.expectText(/.+/, {
         system: "Read images carefully. Reply only with the visible text.",

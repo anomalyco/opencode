@@ -154,7 +154,7 @@ test("requires delete confirmation and preserves the account manager when anothe
     await fixture.app.waitForFrame((frame) => frame.includes("Connected accounts") && !frame.includes("Work"))
 
     expect(fixture.requests).toEqual([{ method: "DELETE", path: "/api/credential/cred_work" }])
-    expect(fixture.accounts).toEqual([{ type: "credential", id: "cred_personal", label: "Personal" }])
+    expect(fixture.accounts).toEqual([{ type: "credential", method: "key", id: "cred_personal", label: "Personal" }])
     expect(fixture.reads.model).toBe(0)
     expect(fixture.reads.provider).toBe(0)
     expect(fixture.app.captureCharFrame()).toContain("Add account")
@@ -198,7 +198,7 @@ test("marks the remaining account active after deleting the active credential", 
     })
 
     expect(fixture.requests).toEqual([{ method: "DELETE", path: "/api/credential/cred_personal" }])
-    expect(fixture.accounts).toEqual([{ type: "credential", id: "cred_work", label: "Work" }])
+    expect(fixture.accounts).toEqual([{ type: "credential", method: "key", id: "cred_work", label: "Work" }])
   } finally {
     fixture.app.renderer.destroy()
   }
@@ -254,8 +254,8 @@ async function renderIntegration(activeLocation?: LocationRef, form?: FormFields
   const credentialQueries: string[] = []
   const reads = { integration: 0, model: 0, provider: 0 }
   let accounts = [
-    { type: "credential" as const, id: "cred_personal", label: "Personal" },
-    { type: "credential" as const, id: "cred_work", label: "Work" },
+    { type: "credential" as const, method: "key" as const, id: "cred_personal", label: "Personal" },
+    { type: "credential" as const, method: "key" as const, id: "cred_work", label: "Work" },
   ]
 
   const calls = createFetch(async (url, request) => {

@@ -25,6 +25,8 @@ export type BrowserPaneEvent =
 export type BrowserPaneRegistration = {
   setLayout(layout?: BrowserPaneLayout): void
   command(command: BrowserPaneCommand): Promise<void>
+  /** Captures the shown page, or resolves null when nothing is on screen. */
+  capture(tabID: Browser.TabID): Promise<Blob | null>
   close(): void
 }
 

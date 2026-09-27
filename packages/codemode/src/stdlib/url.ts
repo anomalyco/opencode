@@ -8,7 +8,7 @@ import {
   get,
   hidden,
   Arr,
-  IteratorObj,
+  hostIterator,
   Obj,
   URLObj,
   URLSearchParamsObj,
@@ -129,7 +129,7 @@ const readPair = <R>(ctx: Interpreter<R>, value: Value, label: string): Effect.E
       if (step.done) return items
       items.push(
         yield* preserveConsumerError(
-          cursor,
+          cursor.close,
           Effect.sync(() => coerceToString(step.value)),
         ),
       )
@@ -155,7 +155,7 @@ export const readPairs = <R>(
         if (pairs.some((entry) => entry.length !== 2)) throw typeError(`${label} expects iterable [name, value] pairs.`)
         return pairs as Array<[string, string]>
       }
-      pairs.push(yield* preserveConsumerError(cursor, readPair(ctx, step.value, label)))
+      pairs.push(yield* preserveConsumerError(cursor.close, readPair(ctx, step.value, label)))
     }
   })
 
@@ -269,9 +269,9 @@ export const urlSearchParamsGlobal = <R>(ctx: Interpreter<R>) => {
         return undefined
       },
     ],
-    ["keys", 0, (thisValue) => new IteratorObj(builtins.Iterator, self(thisValue, "keys").params.keys())],
-    ["values", 0, (thisValue) => new IteratorObj(builtins.Iterator, self(thisValue, "values").params.values())],
-    ["entries", 0, (thisValue) => new IteratorObj(builtins.Iterator, self(thisValue, "entries").iterator(builtins))],
+    ["keys", 0, (thisValue) => hostIterator(builtins, self(thisValue, "keys").params.keys())],
+    ["values", 0, (thisValue) => hostIterator(builtins, self(thisValue, "values").params.values())],
+    ["entries", 0, (thisValue) => hostIterator(builtins, self(thisValue, "entries").iterator(builtins))],
     ["toString", 0, (thisValue) => self(thisValue, "toString").params.toString()],
     [
       "forEach",
@@ -281,7 +281,7 @@ export const urlSearchParamsGlobal = <R>(ctx: Interpreter<R>) => {
         const target = self(thisValue, "forEach")
         const apply = applyCollectionCallback(ctx, args[0], "URLSearchParams.forEach")
         return Effect.gen(function* () {
-          for (const [key, value] of Array.from(target.params.entries())) yield* apply([value, key, target])
+          for (const [key, value] of Array.from(target.params.entries())) yield* apply([value, key, target], args[1])
           return undefined
         })
       },

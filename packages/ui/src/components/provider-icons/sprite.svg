@@ -372,10 +372,8 @@
       ></path>
     </symbol>
     <symbol viewBox="0 0 24 24" fill="none" id="opencode">
-      <path
-        d="M8.40005 17.4H19.2001V21H4.80005V13.8H8.40005V17.4ZM15.6001 10.2V13.8H8.40005V10.2H15.6001ZM19.2001 10.2H15.6001V6.6H4.80005V3H19.2001V10.2Z"
-        fill="currentColor"
-      ></path>
+      <path d="M15.6 17.4H8.4V10.2H15.6V17.4Z" fill="currentColor" fill-opacity="0.4"></path>
+      <path d="M15.6 6.6H8.4V17.4H15.6V6.6ZM19.2 21H4.8V3H19.2V21Z" fill="currentColor"></path>
     </symbol>
     <symbol viewBox="0 0 24 24" fill="none" id="opencode-go">
       <path

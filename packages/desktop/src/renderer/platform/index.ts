@@ -46,6 +46,10 @@ export function createDesktopPlatform(
                 .catch(() => undefined)
           },
           command: (command) => ready.then(() => api.browserPane.request({ type: "command", bindingID, command })),
+          capture: (tabID) =>
+            ready
+              .then(() => api.browserPane.capture(bindingID, tabID))
+              .then((data) => data && new Blob([data], { type: "image/jpeg" })),
           close() {
             if (closed) return
             closed = true
@@ -79,6 +83,8 @@ export function createDesktopPlatform(
     windowFullscreen,
     getPinchZoomEnabled: () => api.getPinchZoomEnabled(),
     setPinchZoomEnabled,
+    getKeepScreenActive: () => api.getKeepScreenActive(),
+    setKeepScreenActive: (enabled) => api.setKeepScreenActive(enabled),
     onDragCancel: (callback) => {
       window.addEventListener(DragCancelEvent, callback)
       return () => window.removeEventListener(DragCancelEvent, callback)
@@ -86,6 +92,10 @@ export function createDesktopPlatform(
     runDesktopMenuAction: createDesktopMenuAction(api),
     checkAppExists: async (appName) => {
       return api.checkAppExists(appName)
+    },
+    pair: {
+      info: () => api.pairInfo(),
+      code: () => api.pairCode(),
     },
   }
 }
