@@ -290,6 +290,7 @@ describe("Video / xAI", () => {
                 status: "done",
                 video: { url: "https://vidgen.x.ai/out.mp4", duration: 10, respect_moderation: true },
                 model: "grok-imagine-video-1.5",
+                usage: { cost_in_usd_ticks: 1600000000 },
               })
             }),
           ),
@@ -302,7 +303,10 @@ describe("Video / xAI", () => {
       expect(response.video.source).toEqual({ type: "url", url: "https://vidgen.x.ai/out.mp4", mediaType: "video/mp4" })
       expect(response.video.info).toEqual({ durationSeconds: 10 })
       expect(response.notices).toBeUndefined()
-      expect(response.providerMetadata).toEqual({ xai: { requestId: "req_1", model: "grok-imagine-video-1.5" } })
+      expect(response.usage).toBeUndefined()
+      expect(response.providerMetadata).toEqual({
+        xai: { requestId: "req_1", model: "grok-imagine-video-1.5", costInUsdTicks: 1600000000 },
+      })
     }),
   )
 
@@ -509,8 +513,9 @@ describe("Video / fal", () => {
         url: "https://v3.fal.media/out.mp4",
         mediaType: "video/mp4",
       })
+      expect(response.notices).toBeUndefined()
       expect(response.providerMetadata).toEqual({
-        fal: { requestId: "r1", seed: 7, fileName: "out.mp4", fileSize: 10, has_nsfw_concepts: [false] },
+        fal: { requestId: "r1", seed: 7, fileName: "out.mp4", fileSize: 10 },
       })
       expect(calls.map((call) => `${call.method} ${call.url}`)).toEqual([
         "POST https://queue.fal.test/fal-ai/veo3.1",
@@ -522,6 +527,36 @@ describe("Video / fal", () => {
         `PUT ${urls.cancel}`,
       ])
     }),
+  )
+
+  it.effect("flags NSFW results as a moderated notice", () =>
+    Effect.gen(function* () {
+      const generation = yield* Video.resume(model, {
+        requestID: "r1",
+        statusURL: urls.status,
+        responseURL: urls.response,
+        cancelURL: urls.cancel,
+      })
+      const response = yield* generation.result()
+      expect(response.video.source).toEqual({
+        type: "url",
+        url: "https://v3.fal.media/out.mp4",
+        mediaType: "video/mp4",
+      })
+      expect(response.notices).toEqual([
+        { type: "moderated", message: "fal Video flagged the generated video as NSFW" },
+      ])
+    }).pipe(
+      Effect.provide(
+        layer((input) =>
+          Effect.succeed(
+            input.request.url === urls.status
+              ? json(input, { status: "COMPLETED" })
+              : json(input, { video: { url: "https://v3.fal.media/out.mp4" }, has_nsfw_concepts: [false, true] }),
+          ),
+        ),
+      ),
+    ),
   )
 
   it.effect("treats a COMPLETED status carrying an error as failed", () =>

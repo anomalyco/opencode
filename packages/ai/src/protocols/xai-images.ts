@@ -39,7 +39,7 @@ const XAIImageResponse = Schema.Struct({
       mime_type: optionalNull(Schema.String),
     }),
   ),
-  usage: Schema.optional(Schema.Unknown),
+  usage: optionalNull(Schema.Struct({ cost_in_usd_ticks: optionalNull(Schema.Number) })),
 })
 
 // ---------------------------------------------------------------------------
@@ -100,12 +100,11 @@ const decodeResponse = Effect.fn("XAIImages.decodeResponse")(function* (
     }),
   )
   if (images.length === 0) return yield* output.invalid(`${route.name} returned no images`)
-  const usage = ProviderShared.isRecord(decoded.usage) ? decoded.usage : undefined
-  // xAI reports a USD cost (`cost_in_usd_ticks`) rather than tokens, seconds, or credits; the raw record stays in
-  // provider metadata.
+  // xAI reports a USD cost (1 tick = 1e-10 USD) rather than tokens, seconds, or credits, so it stays in metadata.
+  const costInUsdTicks = decoded.usage?.cost_in_usd_ticks ?? undefined
   return new ImageResponse({
     images,
-    providerMetadata: usage === undefined ? undefined : { xai: { usage } },
+    providerMetadata: costInUsdTicks === undefined ? undefined : { xai: { costInUsdTicks } },
   })
 })
 

@@ -39,7 +39,7 @@ describe("xAI Images", () => {
       expect(response.images[1].mediaType).toBe("application/octet-stream")
       expect(response.images[1].source).toEqual({ type: "url", url: "https://api.xai.test/image.jpg" })
       expect(response.usage).toBeUndefined()
-      expect(response.providerMetadata).toEqual({ xai: { usage: { num_images: 2 } } })
+      expect(response.providerMetadata).toEqual({ xai: { costInUsdTicks: 200000000 } })
     }).pipe(
       Effect.provide(
         ImageClient.layer.pipe(
@@ -67,7 +67,7 @@ describe("xAI Images", () => {
                       { b64_json: "AQID", url: null, mime_type: "image/jpeg" },
                       { b64_json: null, url: "https://api.xai.test/image.jpg", mime_type: null },
                     ],
-                    usage: { num_images: 2 },
+                    usage: { cost_in_usd_ticks: 200000000 },
                   }),
                   { headers: { "content-type": "application/json" } },
                 )

@@ -866,6 +866,33 @@ describe("Image", () => {
       ),
   )
 
+  it.effect("reports fal inference time as compute usage", () =>
+    Effect.gen(function* () {
+      const generation = yield* Image.resume(Fal.configure({ apiKey: "test" }).image("fal-ai/flux/schnell"), falToken)
+      const response = yield* generation.await()
+
+      expect(response.usage).toEqual({ type: "compute", seconds: 0.67 })
+      expect(response.notices).toEqual([{ type: "moderated", message: "fal Images flagged image 0 as NSFW" }])
+      expect(response.providerMetadata).toEqual({ fal: { requestId: "r1", seed: 3, prompt: "A lighthouse" } })
+    }).pipe(
+      Effect.provide(
+        layer((input) =>
+          Effect.succeed(
+            input.request.url === falToken.statusURL
+              ? json(input, { status: "COMPLETED" })
+              : json(input, {
+                  images: [{ url: "https://v3.fal.media/out.jpg", content_type: "image/jpeg" }],
+                  timings: { inference: 0.67 },
+                  seed: 3,
+                  has_nsfw_concepts: [true],
+                  prompt: "A lighthouse",
+                }),
+          ),
+        ),
+      ),
+    ),
+  )
+
   const moderated = { id: "req_1", status: "Content Moderated" }
   const prediction = {
     id: "p_1",

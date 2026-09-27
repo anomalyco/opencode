@@ -168,8 +168,8 @@ Effect.gen(function* () {
   // Simple: wait for it.
   const response = yield* Video.generate(request, { poll: { interval: "10 seconds", timeout: "10 minutes" } })
   response.video                                     // Media.Asset: url (expiresAt on Veo and Runway; transient `headers` for Veo downloads)
-  response.usage                                     // credits on Runway; the other three report none (xAI's usage.cost_in_usd_ticks is not decoded)
-  response.notices                                   // Veo raiMediaFilteredReasons → filtered, xAI respect_moderation → moderated
+  response.usage                                     // credits on Runway; the other three report none (xAI's USD cost is providerMetadata.xai.costInUsdTicks)
+  response.notices                                   // Veo raiMediaFilteredReasons → filtered, xAI respect_moderation and fal has_nsfw_concepts → moderated
   yield* response.video.materialize()                // pull bytes before the URL expires
 
   // Explicit generation control.

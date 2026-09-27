@@ -29,6 +29,7 @@ describe("xAI Images recorded", () => {
       expect(response.images).toHaveLength(1)
       expect(response.image.mediaType.startsWith("image/")).toBe(true)
       expect((yield* response.image.bytes()).length).toBeGreaterThan(0)
+      expect(response.providerMetadata?.xai?.costInUsdTicks).toBeGreaterThan(0)
     }),
   )
 

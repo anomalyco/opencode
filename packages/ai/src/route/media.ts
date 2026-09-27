@@ -281,7 +281,18 @@ const makeTransport = <Request extends MediaRequest>(
 ) => {
   const routeHttp = input.headers === undefined ? undefined : new HttpOptions({ headers: input.headers })
   const authorize = Auth.toEffect(input.auth)
-  const baseURL = (path: string) => new URL(`${Endpoint.trimBaseUrl(input.endpoint.baseURL ?? "")}${path}`)
+  /** URL for a call beside the submit (upload, status, result, cancel), carrying the request and endpoint query. */
+  const callURL = (path: string, http: HttpOptions | undefined) => {
+    // Provider-issued absolute URLs (fal `status_url`) are used as-is; everything else resolves against the base.
+    const url = withQuery(
+      /^https?:\/\//.test(path)
+        ? new URL(path)
+        : new URL(`${Endpoint.trimBaseUrl(input.endpoint.baseURL ?? "")}${path}`),
+      http?.query,
+    )
+    for (const [key, value] of Object.entries(input.endpoint.query ?? {})) url.searchParams.set(key, value)
+    return url
+  }
   /** `auth` is only what `Auth` added or changed, never untouched deployment headers. */
   const send = Effect.fn("MediaRoute.send")(function* (
     call: {
@@ -330,7 +341,7 @@ const makeTransport = <Request extends MediaRequest>(
         protocol.prepare === undefined
           ? request
           : yield* protocol.prepare(request, (path, body) =>
-              send({ method: "POST", url: baseURL(path), headers, request, body }, execute).pipe(
+              send({ method: "POST", url: callURL(path, http), headers, request, body }, execute).pipe(
                 Effect.map((sent) => sent.response),
               ),
             )
@@ -348,12 +359,8 @@ const makeTransport = <Request extends MediaRequest>(
       return { response: sent.response, context: { request: resolved, body } }
     }),
     /** Bodiless follow-up call (status, result, cancel) with the same auth and headers as `submit`. */
-    call: (method: AuthInput["method"], path: string, http: HttpOptions | undefined, execute: Execute) => {
-      // Provider-issued absolute URLs (fal `status_url`) are used as-is; everything else resolves against the base.
-      const url = withQuery(/^https?:\/\//.test(path) ? new URL(path) : baseURL(path), http?.query)
-      for (const [key, value] of Object.entries(input.endpoint.query ?? {})) url.searchParams.set(key, value)
-      return send({ method, url, headers: Headers.fromInput(http?.headers), request: { http } }, execute)
-    },
+    call: (method: AuthInput["method"], path: string, http: HttpOptions | undefined, execute: Execute) =>
+      send({ method, url: callURL(path, http), headers: Headers.fromInput(http?.headers), request: { http } }, execute),
   }
 }
 

@@ -40,6 +40,7 @@ const QueueResult = Schema.StructWithRest(
     ),
     seed: optionalNull(Schema.Number),
     has_nsfw_concepts: optionalNull(Schema.Array(Schema.Boolean)),
+    timings: optionalNull(Schema.Struct({ inference: optionalNull(Schema.Number) })),
   }),
   [Schema.Record(Schema.String, Schema.Unknown)],
 )
@@ -111,10 +112,11 @@ const decodeResult = Effect.fn("FalImages.decodeResult")(function* (
   context: MediaProtocol.PollContext<FalQueue.Token>,
 ) {
   const output = yield* decodeQueueResult(response)
-  const { images, seed, has_nsfw_concepts, ...rest } = output.value
+  const { images, seed, has_nsfw_concepts, timings, ...rest } = output.value
   if (images.length === 0) return yield* output.invalid(`${route.name} returned no images`)
   // With the safety checker on, flagged images come back blacked out rather than omitted.
   const flagged = (has_nsfw_concepts ?? []).flatMap((value, index) => (value ? [index] : []))
+  const inference = timings?.inference ?? undefined
   return new ImageResponse({
     images: images.map((image) => {
       const info = { width: image.width ?? undefined, height: image.height ?? undefined }
@@ -131,6 +133,7 @@ const decodeResult = Effect.fn("FalImages.decodeResult")(function* (
             type: "moderated" as const,
             message: `${route.name} flagged image ${index} as NSFW`,
           })),
+    usage: inference === undefined ? undefined : { type: "compute", seconds: inference },
     providerMetadata: { fal: { requestId: context.token.requestID, seed: seed ?? undefined, ...rest } },
   })
 })

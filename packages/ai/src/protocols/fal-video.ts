@@ -38,6 +38,7 @@ const QueueResult = Schema.StructWithRest(
       file_size: optionalNull(Schema.Number),
     }),
     seed: optionalNull(Schema.Number),
+    has_nsfw_concepts: optionalNull(Schema.Array(Schema.Boolean)),
   }),
   [Schema.Record(Schema.String, Schema.Unknown)],
 )
@@ -84,9 +85,12 @@ const decodeResult = Effect.fn("FalVideo.decodeResult")(function* (
   context: MediaProtocol.PollContext<FalQueue.Token>,
 ) {
   const output = yield* decodeQueueResult(response)
-  const { video, seed, ...rest } = output.value
+  const { video, seed, has_nsfw_concepts, ...rest } = output.value
   return new VideoResponse({
     videos: [Media.url(video.url, { mediaType: video.content_type ?? "video/mp4" })],
+    notices: has_nsfw_concepts?.includes(true)
+      ? [{ type: "moderated", message: `${route.name} flagged the generated video as NSFW` }]
+      : undefined,
     providerMetadata: {
       fal: {
         requestId: context.token.requestID,

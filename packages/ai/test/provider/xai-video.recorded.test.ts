@@ -42,6 +42,7 @@ describe("xAI Video recorded", () => {
         expect(response.video.source.type).toBe("url")
         expect(response.video.info?.durationSeconds).toBe(2)
         expect((yield* response.video.bytes()).length).toBeGreaterThan(0)
+        expect(response.providerMetadata?.xai?.costInUsdTicks).toBeGreaterThan(0)
       }),
     { timeout: 15 * 60 * 1000 },
   )

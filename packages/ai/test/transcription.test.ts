@@ -47,6 +47,7 @@ describe("Transcription", () => {
           Transcription.generate({ model: deepgram, audio, prompt: "OpenCode" }),
           Transcription.generate({ model: google, audio, speakers: 2 }),
           Transcription.start({ model: deepgram, audio }),
+          Transcription.generate({ model: deepgram, audio, providerOptions: { multichannel: true } }),
           Transcription.generate({ model: deepgram, audio, http: { body: { callback: "https://hook.test" } } }),
           Transcription.generate({
             model: openai.transcription("gpt-transcribe"),
@@ -74,6 +75,7 @@ describe("Transcription", () => {
           ["UnsupportedOperation", "media.prompt"],
           ["UnsupportedOperation", "media.speakers"],
           ["UnsupportedOperation", "transcription.start"],
+          ["UnsupportedOperation", "transcription.multichannel"],
           ["InvalidRequest", false],
           ["InvalidRequest", false],
           ["InvalidRequest", false],
@@ -437,6 +439,37 @@ describe("Transcription", () => {
         })
         expect(failure.reason).toMatchObject({ _tag: "ProviderInternal", body: failed })
       }),
+  )
+
+  it.effect("sends the configured and request query on the AssemblyAI upload like the submit", () =>
+    Effect.gen(function* () {
+      const calls: Array<Call> = []
+      yield* Transcription.start({
+        model: AssemblyAI.configure({
+          apiKey: "aai-key",
+          baseURL: "https://assemblyai.test",
+          http: { query: { tenant: "t1" } },
+        }).transcription("universal-3-5-pro"),
+        audio,
+        http: { query: { trace: "1" } },
+      }).pipe(
+        Effect.provide(
+          layer((input) =>
+            observe(calls, input).pipe(
+              Effect.map(({ call }) =>
+                call.url.includes("/v2/upload")
+                  ? json(input, { upload_url: "https://cdn.assemblyai.test/upload/1" })
+                  : json(input, { id: "tr_1", status: "queued" }),
+              ),
+            ),
+          ),
+        ),
+      )
+      expect(calls.map((call) => call.url)).toEqual([
+        "https://assemblyai.test/v2/upload?tenant=t1&trace=1",
+        "https://assemblyai.test/v2/transcript?tenant=t1&trace=1",
+      ])
+    }),
   )
 
   it.effect("enables AssemblyAI speaker labels when only an expected speaker count is given", () =>

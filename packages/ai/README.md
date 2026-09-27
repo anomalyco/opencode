@@ -754,8 +754,8 @@ Status polls, result fetches, cancels, and asset downloads all run through the s
 auth. `Generation.await` and `Generation.events` fail with a
 `Timeout` reason when `poll.timeout` (default 10 minutes) elapses. Failed,
 cancelled, and expired generations fail typed with the provider's terminal document on `reason.body`; moderation
-outcomes (Veo `raiMediaFilteredReasons`, xAI `respect_moderation`, Runway `SAFETY.*` codes) surface as `notices` when
-a video is still returned and as a `ContentPolicy` reason when nothing is.
+outcomes (Veo `raiMediaFilteredReasons`, xAI `respect_moderation`, fal `has_nsfw_concepts`, Runway `SAFETY.*`
+codes) surface as `notices` when a video is still returned and as a `ContentPolicy` reason when nothing is.
 
 Provider notes:
 
@@ -921,6 +921,7 @@ Provider notes:
 - **OpenAI** takes inline audio only; `diarize` needs `gpt-4o-transcribe-diarize`, timestamps need `whisper-1`, and `whisper-1` does not stream.
 - **Gemini** needs a transcribe model (`gemini-3.5-transcribe`); `prompt` and `speakers` fail typed.
 - **Deepgram** detects the language unless `language` is set; vocabulary goes in `providerOptions.keyterm`.
+  `providerOptions.multichannel: true` fails typed, because the response holds one transcript.
 - **AssemblyAI** uploads inline audio before submitting and is the only route that accepts `speakers`.
 
 The promise client mirrors the Effect API:

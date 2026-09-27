@@ -94,6 +94,12 @@ const query = (request: Request) =>
   )
 
 const fromRequest = Effect.fn("DeepgramTranscription.fromRequest")(function* (request: Request) {
+  // The response carries one transcript per channel, but the common response holds a single transcript.
+  if (request.providerOptions?.multichannel === true)
+    return yield* route.unsupported(
+      "transcription.multichannel",
+      `${route.name} multichannel returns a transcript per channel; transcribe each channel separately`,
+    )
   const url = ProviderShared.mediaUrl(request.audio)
   if (url !== undefined)
     return MediaProtocol.json(mergeJsonRecords({ url }, request.http?.body) ?? {}, yield* query(request))

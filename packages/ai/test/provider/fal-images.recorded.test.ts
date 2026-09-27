@@ -35,6 +35,7 @@ describe("fal Images recorded", () => {
         expect(response.images).toHaveLength(1)
         expect(response.image.info).toEqual({ width: 512, height: 512 })
         expect(dimensions(yield* response.image.bytes())).toEqual({ width: 512, height: 512 })
+        expect(response.usage).toMatchObject({ type: "compute" })
       }),
     { timeout: 15 * 60 * 1000 },
   )

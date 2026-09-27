@@ -56,6 +56,7 @@ const VideoStatus = Schema.Struct({
     }),
   ),
   model: optionalNull(Schema.String),
+  usage: optionalNull(Schema.Struct({ cost_in_usd_ticks: optionalNull(Schema.Number) })),
 })
 
 const STATUS = {
@@ -165,7 +166,14 @@ const decodeResult = Effect.fn("XAIVideo.decodeResult")(function* (
       }),
     ],
     notices,
-    providerMetadata: { xai: { requestId: context.token.requestID, model: decoded.model ?? undefined } },
+    // xAI reports a USD cost (1 tick = 1e-10 USD) rather than seconds or credits, so it stays in metadata.
+    providerMetadata: {
+      xai: {
+        requestId: context.token.requestID,
+        model: decoded.model ?? undefined,
+        costInUsdTicks: decoded.usage?.cost_in_usd_ticks ?? undefined,
+      },
+    },
   })
 })
 
