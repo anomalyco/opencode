@@ -35,6 +35,12 @@ export function isRetryable(error: AIError) {
     case "RateLimit":
     case "ProviderInternal":
       return true
+    // A quota the provider schedules a retry for is a transient rate window
+    // (Gemini free tier: "Quota exceeded ... Please retry in 38.6s"); an
+    // unscheduled quota is a billing dead end, and a window beyond
+    // RETRY_AFTER_MAX (daily limits) surfaces instead of stalling the session.
+    case "QuotaExceeded":
+      return error.reason.retryAfterMs !== undefined && error.reason.retryAfterMs <= RETRY_AFTER_MAX
     // A WebSocket acknowledgment marks delivery accepted before model output may exist.
     // Read failures can still recover; the Step chooses retry versus continuation from durable output.
     case "Transport":
@@ -50,7 +56,6 @@ export function isRetryable(error: AIError) {
     case "UnknownProvider":
       return true
     case "Authentication":
-    case "QuotaExceeded":
     case "ContentPolicy":
     case "InvalidRequest":
     case "UnsupportedOperation":
@@ -68,7 +73,11 @@ export function isRetryable(error: AIError) {
 const RETRY_AFTER_MAX = Duration.toMillis("15 minutes")
 
 const retryAfter = (input: Input) => {
-  if (input.cause.reason._tag === "RateLimit" || input.cause.reason._tag === "ProviderInternal")
+  if (
+    input.cause.reason._tag === "RateLimit" ||
+    input.cause.reason._tag === "ProviderInternal" ||
+    input.cause.reason._tag === "QuotaExceeded"
+  )
     return input.cause.reason.retryAfterMs === undefined
       ? undefined
       : Math.min(input.cause.reason.retryAfterMs, RETRY_AFTER_MAX)
