@@ -1,0 +1,8 @@
+[Flatpak Repo]
+Title=OpenCode
+Url=https://anomalyco.github.io/opencode/repo/
+Homepage=https://opencode.ai
+Comment=OpenCode desktop (Flatpak)
+Description=Open source AI coding agent — desktop builds
+# Unsigned for now; set this to true (and add GPGKey) once the repo is signed.
+gpg-verify=false

@@ -58,6 +58,34 @@ flatpak run ai.opencode.desktop
 For experimental native Wayland, run with `flatpak run --socket=wayland
 ai.opencode.desktop`.
 
+## Install from the hosted repo
+
+A CI workflow (`.github/workflows/flatpak.yml`) builds the Flatpak repo and
+publishes it to GitHub Pages. Once run, anyone can install without building
+from source:
+
+```bash
+flatpak remote-add --user opencode \
+  https://anomalyco.github.io/opencode/opencode.flatpakrepo
+flatpak install --user opencode ai.opencode.desktop
+flatpak run ai.opencode.desktop
+```
+
+The repo is **unsigned** for now (the descriptor sets `gpg-verify=false`). Before
+treating this as a production distribution channel, sign the repo
+(`flatpak build-export --gpg-sign=KEYID ...`) and add the public key to
+`opencode.flatpakrepo`.
+
+Notes on the CI job:
+
+- It runs on the `blacksmith-4vcpu-ubuntu-2404` self-hosted runner and installs
+  `flatpak`/`flatpak-builder` itself.
+- It deploys `site/` (the `repo/` output plus `opencode.flatpakrepo`) to the
+  `gh-pages` branch. GitHub Pages must be enabled for `anomalyco/opencode` once.
+- The Freedesktop runtime/SDK, `node22` extension, and Electron BaseApp are
+  pulled from Flathub at build time (`--install-deps-from=flathub`); end users
+  still need Flathub configured for the runtime.
+
 ## Known limitations (verify on-device)
 
 - **Process-tree teardown:** host commands run through `flatpak-spawn` are a

@@ -28,7 +28,19 @@ esac
 mkdir -p "$VENDOR"
 
 # --- Bun ---------------------------------------------------------------------
-curl -fsSL "https://github.com/oven-sh/bun/releases/latest/download/bun-linux-${BUN_ARCH}" -o "$VENDOR/bun"
+# Pin to the version in the root package.json so --frozen-lockfile behaves.
+BUN_VERSION="$(sed -n 's/.*"packageManager": *"bun@\([^"]*\)".*/\1/p' "$ROOT/package.json")"
+if [ -z "$BUN_VERSION" ]; then
+  echo "could not determine Bun version from package.json" >&2
+  exit 1
+fi
+
+curl -fsSL \
+  "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-${BUN_ARCH}.zip" \
+  -o "$VENDOR/bun.zip"
+unzip -o "$VENDOR/bun.zip" "bun-linux-${BUN_ARCH}" -d "$VENDOR"
+mv "$VENDOR/bun-linux-${BUN_ARCH}" "$VENDOR/bun"
+rm "$VENDOR/bun.zip"
 chmod +x "$VENDOR/bun"
 
 # --- Electron ----------------------------------------------------------------
