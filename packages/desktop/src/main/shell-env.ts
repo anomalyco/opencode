@@ -4,6 +4,10 @@ import { basename } from "node:path"
 
 const TIMEOUT = 5_000
 
+// Inside a Flatpak sandbox the host's login shell is not on PATH, so the
+// environment probe must be run on the host via flatpak-spawn.
+const inFlatpak = typeof process.env.FLATPAK_ID === "string" && process.env.FLATPAK_ID !== ""
+
 type Probe = { type: "Loaded"; value: Record<string, string> } | { type: "Timeout" } | { type: "Unavailable" }
 type ShellEnvLogger = {
   log: (message: string) => void
@@ -34,7 +38,10 @@ export function parseShellEnv(out: Buffer) {
 }
 
 function probe(shell: string, mode: "-il" | "-l"): Probe {
-  const out = spawnSync(shell, [mode, "-c", "env -0"], {
+  const command = inFlatpak ? "flatpak-spawn" : shell
+  const args = inFlatpak ? ["--host", shell, mode, "-c", "env -0"] : [mode, "-c", "env -0"]
+
+  const out = spawnSync(command, args, {
     stdio: ["ignore", "pipe", "ignore"],
     timeout: TIMEOUT,
     windowsHide: true,

@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=OpenCode
+Comment=Open source AI coding agent
+Exec=opencode %U
+Icon=ai.opencode.desktop
+Terminal=false
+Categories=Development;
+StartupWMClass=ai.opencode.desktop
+X-Flatpak=ai.opencode.desktop

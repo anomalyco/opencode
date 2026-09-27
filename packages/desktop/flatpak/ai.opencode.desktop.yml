@@ -1,0 +1,100 @@
+id: ai.opencode.desktop
+runtime: org.freedesktop.Platform
+runtime-version: "24.08"
+sdk: org.freedesktop.Sdk
+base: org.electronjs.Electron2.BaseApp
+base-version: "24.08"
+command: opencode
+
+# Build-time Node is required by electron-vite and electron-builder. Bun is
+# vendored as a source (see the "bun" module) because there is no Bun SDK
+# extension.
+sdk-extensions:
+  - org.freedesktop.Sdk.Extension.node22
+
+build-options:
+  append-path: /usr/lib/sdk/node22/bin:/app/bin
+
+finish-args:
+  - --share=ipc
+  - --socket=x11
+  - --device=dri
+  - --share=network
+  - --filesystem=host
+  - --talk-name=org.freedesktop.Flatpak
+  - --env=ELECTRON_TRASH=gio
+  - --env=OPENCODE_FLATPAK_HOST=1
+  - --env=XCURSOR_PATH=/run/host/user-share/icons:/run/host/share/icons
+
+cleanup:
+  - /include
+  - /lib/pkgconfig
+  - /share/man
+  - "*.a"
+  - "*.la"
+
+modules:
+  # Bun is only needed at build time (the desktop/server bundles ship as Node),
+  # but it is simplest to install it into /app so the main module can invoke it.
+  - name: bun
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 bun /app/bin/bun
+    sources:
+      - type: file
+        path: vendor/bun
+
+  # electron-builder needs the Electron distribution to assemble the unpacked
+  # app. `electronDist` points at this extracted tree, so no network access is
+  # required at build time.
+  - name: electron
+    buildsystem: simple
+    build-commands:
+      - install -d /app/electron
+      - unzip -qo electron.zip -d /app/electron
+    sources:
+      - type: file
+        path: vendor/electron.zip
+
+  - name: opencode
+    buildsystem: simple
+    build-commands:
+      - |
+        set -eu
+
+        export OPENCODE_CHANNEL=prod
+        export ELECTRON_SKIP_BINARY_DOWNLOAD=1
+        export OPENCODE_DISABLE_MODELS_FETCH=1
+
+        cd packages/desktop
+        bun run build
+
+        npx electron-builder --dir \
+          --config electron-builder.config.ts \
+          --config.electronDist=/app/electron
+
+        cp -a dist/linux*-unpacked /app/opencode
+
+        install -Dm755 flatpak/opencode.sh /app/bin/opencode
+        install -Dm644 flatpak/ai.opencode.desktop.desktop \
+          /app/share/applications/ai.opencode.desktop.desktop
+        install -Dm644 flatpak/ai.opencode.desktop.metainfo.xml \
+          /app/share/metainfo/ai.opencode.desktop.metainfo.xml
+
+        install -Dm644 icons/prod/32x32.png \
+          /app/share/icons/hicolor/32x32/apps/ai.opencode.desktop.png
+        install -Dm644 icons/prod/64x64.png \
+          /app/share/icons/hicolor/64x64/apps/ai.opencode.desktop.png
+        install -Dm644 icons/prod/128x128.png \
+          /app/share/icons/hicolor/128x128/apps/ai.opencode.desktop.png
+        install -Dm644 icons/prod/128x128@2x.png \
+          /app/share/icons/hicolor/256x256/apps/ai.opencode.desktop.png
+        install -Dm644 icons/prod/icon.png \
+          /app/share/icons/hicolor/512x512/apps/ai.opencode.desktop.png
+    sources:
+      # Produced by ./vendor.sh: the full source tree with node_modules already
+      # vendored (see vendor.sh for details). Keeping it as a single archive
+      # avoids both network access and the absence of a Bun flatpak-node
+      # generator.
+      - type: archive
+        path: vendor/opencode-src.tar.gz
