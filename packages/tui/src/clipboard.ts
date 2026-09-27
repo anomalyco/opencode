@@ -94,6 +94,16 @@ export function copyCommand(
   }
 }
 
+const COPY_FAILED =
+  "Clipboard copy failed: install xclip or xsel (X11) or wl-clipboard (Wayland)"
+
+async function clipboardyWrite(text: string) {
+  const { default: clipboardy } = await import("clipboardy")
+  await clipboardy.write(text).catch(() => {
+    throw new Error(COPY_FAILED)
+  })
+}
+
 let copyMethod: Promise<(text: string) => Promise<void>> | undefined
 
 function getCopyMethod() {
@@ -103,21 +113,21 @@ function getCopyMethod() {
     if (native?.[0] === "osascript") {
       return async (text: string) => {
         const escaped = text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')
-        await command("osascript", ["-e", `set the clipboard to "${escaped}"`]).catch(() => undefined)
+        await command("osascript", ["-e", `set the clipboard to "${escaped}"`]).catch(() => clipboardyWrite(text))
       }
     }
     if (native) {
       return async (text: string) => {
-        await command(native[0], native.slice(1), text).catch(() => undefined)
+        await command(native[0], native.slice(1), text).catch(() => clipboardyWrite(text))
       }
     }
-    return async (text: string) => {
-      const { default: clipboardy } = await import("clipboardy")
-      await clipboardy.write(text).catch(() => undefined)
-    }
+    return clipboardyWrite
   })())
 }
 
+// Rejects when no clipboard backend accepted the text, so callers never report a copy
+// that did not happen. OSC 52 is still sent first, but many terminals (GNOME Terminal/VTE)
+// ignore it, so it is not treated as proof of success.
 export async function write(text: string) {
   writeOsc52(text)
   const method = await getCopyMethod()
