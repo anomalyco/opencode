@@ -387,11 +387,17 @@ const layer = Layer.effect(
       const model = configuredModel
         ? yield* provider.getModel(configuredModel.providerID, configuredModel.modelID).pipe(Effect.orDie)
         : yield* provider.getModel(userMessage.model.providerID, userMessage.model.modelID).pipe(Effect.orDie)
+      // local-fix: compaction-model-override — when the compaction agent pins a
+      // model, its variant pins with it; the marker's variant must not leak onto
+      // a different model family.
+      const summarizerVariant = configuredModel ? agent.variant : userMessage.model.variant
       // userMessage is the marker, so its model is the model this compaction was REQUESTED with
       // (a plugin-supplied pin arrives exactly this way). It is not "the session model", and
       // labelling it as such makes a working pin indistinguishable from a dead one in the logs.
       yield* Effect.logInfo("compaction model resolved", {
         source: configuredModel ? "configured-compaction-agent" : "request-marker",
+        pin: configuredModel ? "compaction-model-override" : undefined,
+        variant: summarizerVariant,
         providerID: model.providerID,
         modelID: model.id,
         requestedProviderID: userMessage.model.providerID,
@@ -439,7 +445,7 @@ const layer = Layer.effect(
         sessionID: input.sessionID,
         mode: "compaction",
         agent: "compaction",
-        variant: userMessage.model.variant,
+        variant: summarizerVariant,
         summary: true,
         path: {
           cwd: ctx.directory,

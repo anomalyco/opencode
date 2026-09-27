@@ -225,6 +225,15 @@ function cfg(compaction?: ConfigV1.Info["compaction"]) {
   return Layer.succeed(Config.Service, TestConfig.make({ get: () => Effect.succeed({ ...base, compaction }) }))
 }
 
+// local-fix: compaction-model-override — config layer that pins the compaction agent
+function cfgCompactionAgent(agent: NonNullable<ConfigV1.Info["agent"]>[string]) {
+  const base = Schema.decodeUnknownSync(ConfigV1.Info)({}) as ConfigV1.Info
+  return Layer.succeed(
+    Config.Service,
+    TestConfig.make({ get: () => Effect.succeed({ ...base, agent: { compaction: agent } }) }),
+  )
+}
+
 const defaultProvider = wide()
 const compactionTestNode = LayerNode.group([
   SessionCompaction.node,
@@ -1048,6 +1057,47 @@ describe("session.compaction.process", () => {
         expect(captured).toContain("recent image turn")
         expect(captured).toContain("Attached image/png: big.png")
       }).pipe(withCompaction({ llm: stub.llmLayer, config: cfg({ tail_turns: 1, preserve_recent_tokens: 100 }) }))
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
+    "compaction agent model and variant pin the summarize (local-fix: compaction-model-override)",
+    () => {
+      const stub = llm()
+      let capturedModel = ""
+      stub.push(
+        reply("summary", (input) => {
+          capturedModel = `${(input.model as any)?.providerID ?? "?"}/${(input.model as any)?.id ?? "?"}`
+        }),
+      )
+      return Effect.gen(function* () {
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        yield* createUserMessage(session.id, "pin me")
+        yield* createSummaryCompaction(session.id)
+
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        const parent = msgs.at(-1)?.info.id
+        expect(parent).toBeTruthy()
+        yield* SessionCompaction.use.process({ parentID: parent!, messages: msgs, sessionID: session.id, auto: false })
+
+        const summary = (yield* ssn.messages({ sessionID: session.id })).find(
+          (m) => m.info.role === "assistant" && m.info.summary,
+        )
+        expect(summary).toBeTruthy()
+        expect((summary!.info as any).agent).toBe("compaction")
+        expect((summary!.info as any).variant).toBe("low")
+        expect(capturedModel).toContain("test/test-model")
+      }).pipe(
+        withCompaction({
+          llm: stub.llmLayer,
+          config: cfgCompactionAgent({
+            model: "test/test-model",
+            variant: "low",
+          }),
+        }),
+      )
     },
     { git: true },
   )
