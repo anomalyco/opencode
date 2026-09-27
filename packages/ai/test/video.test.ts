@@ -162,27 +162,39 @@ describe("Video / Google Veo", () => {
     ),
   )
 
-  it.effect("surfaces an operation error as a failed generation with the provider body", () =>
-    Effect.gen(function* () {
-      const failure = {
-        name: operation,
-        done: true,
-        error: { code: 3, message: "Prompt violates policy", status: "INVALID_ARGUMENT" },
-      }
-      const error = yield* Video.generate({ model, prompt: "nope" }).pipe(
-        Effect.flip,
-        Effect.provide(
-          layer((input) =>
-            Effect.succeed(input.request.method === "POST" ? json(input, { name: operation }) : json(input, failure)),
-          ),
-        ),
-      )
-      expect(error.reason._tag).toBe("ProviderInternal")
-      expect(error.message).toBe("Google Veo operation failed: Prompt violates policy")
-      expect(error.reason.body).toBe(JSON.stringify(failure))
-      expect(error.reason.http?.status).toBe(200)
-    }),
-  )
+  for (const terminal of [
+    { error: { code: 3, message: "Prompt violates policy", status: "INVALID_ARGUMENT" }, tag: "InvalidRequest" },
+    { error: { code: 9, message: "Unsupported resolution", status: "FAILED_PRECONDITION" }, tag: "InvalidRequest" },
+    { error: { code: 11, message: "Duration out of range", status: "OUT_OF_RANGE" }, tag: "InvalidRequest" },
+    { error: { code: 7, message: "Permission denied", status: "PERMISSION_DENIED" }, tag: "Authentication" },
+    { error: { code: 16, message: "Invalid credentials", status: "UNAUTHENTICATED" }, tag: "Authentication" },
+    { error: { code: 8, message: "Quota exceeded", status: "RESOURCE_EXHAUSTED" }, tag: "RateLimit" },
+    { error: { code: 13, message: "Internal error", status: "INTERNAL" }, tag: "ProviderInternal" },
+    { error: { code: 14, message: "Service unavailable", status: "UNAVAILABLE" }, tag: "ProviderInternal" },
+    { error: { message: "Something broke" }, tag: "ProviderInternal" },
+  ]) {
+    it.effect(
+      `surfaces ${terminal.error.status ?? "an uncoded"} operation error as ${terminal.tag} with the provider body`,
+      () =>
+        Effect.gen(function* () {
+          const failure = { name: operation, done: true, error: terminal.error }
+          const error = yield* Video.generate({ model, prompt: "nope" }).pipe(
+            Effect.flip,
+            Effect.provide(
+              layer((input) =>
+                Effect.succeed(
+                  input.request.method === "POST" ? json(input, { name: operation }) : json(input, failure),
+                ),
+              ),
+            ),
+          )
+          expect(error.reason._tag).toBe(terminal.tag)
+          expect(error.message).toBe(`Google Veo operation failed: ${terminal.error.message}`)
+          expect(error.reason.body).toBe(JSON.stringify(failure))
+          expect(error.reason.http?.status).toBe(200)
+        }),
+    )
+  }
 
   it.effect("reports fully filtered output as a content policy failure", () =>
     Effect.gen(function* () {
@@ -332,12 +344,37 @@ describe("Video / xAI", () => {
   for (const terminal of [
     {
       body: { status: "failed", error: { code: "invalid_argument", message: "Prompt cannot be empty." } },
-      tag: "ProviderInternal",
+      tag: "InvalidRequest",
       message: "xAI Video generation failed (invalid_argument): Prompt cannot be empty.",
+    },
+    {
+      body: { status: "failed", error: { code: "failed_precondition", message: "Extension is not supported." } },
+      tag: "InvalidRequest",
+      message: "xAI Video generation failed (failed_precondition): Extension is not supported.",
+    },
+    {
+      body: { status: "failed", error: { code: "permission_denied", message: "Team lacks access." } },
+      tag: "Authentication",
+      message: "xAI Video generation failed (permission_denied): Team lacks access.",
+    },
+    {
+      body: { status: "failed", error: { code: "service_unavailable", message: "Overloaded." } },
+      tag: "ProviderInternal",
+      message: "xAI Video generation failed (service_unavailable): Overloaded.",
+    },
+    {
+      body: { status: "failed", error: { code: "internal_error", message: "Generation failed." } },
+      tag: "ProviderInternal",
+      message: "xAI Video generation failed (internal_error): Generation failed.",
+    },
+    {
+      body: { status: "failed", error: { code: "constructor", message: "Future code." } },
+      tag: "ProviderInternal",
+      message: "xAI Video generation failed (constructor): Future code.",
     },
     { body: { status: "expired" }, tag: "InvalidRequest", message: "xAI Video request req_1 expired" },
   ]) {
-    it.effect(`surfaces ${terminal.body.status} generations with the provider body`, () =>
+    it.effect(`surfaces ${terminal.body.error?.code ?? terminal.body.status} generations with the provider body`, () =>
       Effect.gen(function* () {
         const error = yield* Video.generate({ model, prompt: "x" }).pipe(Effect.flip)
         expect(error.reason._tag).toBe(terminal.tag)
@@ -728,6 +765,11 @@ describe("Video / Runway", () => {
       body: { status: "FAILED", failure: "Something broke", failureCode: "INTERNAL.BAD_OUTPUT.CODE01" },
       tag: "ProviderInternal",
       message: "Runway task failed (INTERNAL.BAD_OUTPUT.CODE01): Something broke",
+    },
+    {
+      body: { status: "FAILED", failure: "Unsupported dimensions", failureCode: "ASSET.INVALID" },
+      tag: "InvalidRequest",
+      message: "Runway task failed (ASSET.INVALID): Unsupported dimensions",
     },
     { body: { status: "CANCELLED" }, tag: "InvalidRequest", message: "Runway task task_1 was cancelled" },
   ]) {

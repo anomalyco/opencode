@@ -137,7 +137,12 @@ const decodeResult = Effect.fn("RunwayVideo.decodeResult")(function* (
     const message = `${route.name} task failed${code === undefined ? "" : ` (${code})`}${task.failure ? `: ${task.failure}` : ""}`
     // Runway failure codes are dotted paths; every moderation outcome carries a SAFETY segment.
     if (code !== undefined && /(^|\.)SAFETY(\.|$)/.test(code)) return yield* output.contentPolicy(message)
-    return yield* output.ended("failed", message)
+    // ASSET.INVALID rejects the caller's input media; Runway documents it as not retryable.
+    return yield* output.ended(
+      "failed",
+      message,
+      code !== undefined && /^ASSET\.INVALID(\.|$)/.test(code) ? "InvalidRequest" : "ProviderInternal",
+    )
   }
   if (status === "cancelled")
     return yield* output.ended("cancelled", `${route.name} task ${context.token.taskID} was cancelled`)
