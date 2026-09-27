@@ -19,6 +19,13 @@ export const ServeCommand = effectCmd({
     const server = yield* Effect.promise(() => Server.listen(opts))
     console.log(`opencode server listening on http://${server.hostname}:${server.port}`)
 
+    // Close the scope so MCP child processes are stopped.
+    const shutdown = () => {
+      void server.stop(true).finally(() => process.exit(0))
+    }
+    process.on("SIGTERM", shutdown)
+    process.on("SIGINT", shutdown)
+
     yield* Effect.never
   }),
 })

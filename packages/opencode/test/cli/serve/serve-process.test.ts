@@ -7,8 +7,12 @@
 // parsed off the "listening on http://..." line.
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { HttpClient } from "effect/unstable/http"
+import { HttpClient, HttpClientRequest } from "effect/unstable/http"
+import path from "node:path"
+import { waitForExit, waitForPid } from "../../lib/effect"
 import { cliIt } from "../../lib/cli-process"
+
+const mcpStdioFixture = path.join(import.meta.dir, "../../fixture/mcp-lifecycle-stdio.ts")
 
 describe("opencode serve (subprocess)", () => {
   // Smoke test: server starts, binds a port, and /global/health responds.
@@ -55,6 +59,39 @@ describe("opencode serve (subprocess)", () => {
         // (typically 143 on POSIX). We just require resolution within a sane
         // window — anything else means the kill didn't take.
         expect(typeof code === "number" || code === null).toBe(true)
+      }),
+    60_000,
+  )
+
+  // #50780: SIGTERM must also stop MCP children.
+  cliIt.live(
+    "SIGTERM to the server also terminates a connected local MCP child",
+    ({ opencode, home }) =>
+      Effect.gen(function* () {
+        const server = yield* opencode.serve()
+        const client = yield* HttpClient.HttpClient
+        const pidFile = path.join(home, "mcp.pid")
+
+        const added = yield* HttpClientRequest.post(`${server.url}/mcp`).pipe(
+          HttpClientRequest.setHeader("x-opencode-directory", home),
+          HttpClientRequest.bodyJson({
+            name: "fake-docker",
+            config: {
+              type: "local",
+              command: [process.execPath, mcpStdioFixture, "--keep-alive"],
+              environment: { MCP_LIFECYCLE_PID_FILE: pidFile },
+            },
+          }),
+          Effect.flatMap(client.execute),
+        )
+        expect(added.status).toBe(200)
+
+        const pid = yield* waitForPid(pidFile, "MCP child did not publish its pid")
+
+        server.kill()
+        yield* Effect.promise(() => server.exited)
+
+        yield* waitForExit(pid, "MCP child was not terminated after server SIGTERM")
       }),
     60_000,
   )

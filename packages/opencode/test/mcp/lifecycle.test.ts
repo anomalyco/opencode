@@ -19,7 +19,7 @@ import type { MCP as MCPNS } from "../../src/mcp/index"
 import { MCP } from "../../src/mcp/index"
 import { McpOAuthCallback } from "../../src/mcp/oauth-callback"
 import { TestInstance } from "../fixture/fixture"
-import { pollWithTimeout, testEffect } from "../lib/effect"
+import { pollWithTimeout, testEffect, waitForExit, waitForPid } from "../lib/effect"
 
 const it = testEffect(LayerNode.compile(MCP.node))
 const stdioFixture = path.join(import.meta.dir, "../fixture/mcp-lifecycle-stdio.ts")
@@ -507,24 +507,8 @@ it.instance("local stdio timeout terminates the real server process", () =>
     })
 
     expect(statusName(result.status, "hanging-stdio")).toBe("failed")
-    const pid = yield* pollWithTimeout(
-      Effect.promise(async () => {
-        const file = Bun.file(pidFile)
-        return (await file.exists()) ? Number(await file.text()) : undefined
-      }),
-      "stdio fixture did not publish its pid",
-    )
-    yield* pollWithTimeout(
-      Effect.sync(() => {
-        try {
-          process.kill(pid, 0)
-          return undefined
-        } catch {
-          return true
-        }
-      }),
-      "stdio fixture process was not terminated",
-    )
+    const pid = yield* waitForPid(pidFile, "stdio fixture did not publish its pid")
+    yield* waitForExit(pid, "stdio fixture process was not terminated")
   }),
 )
 

@@ -2,11 +2,16 @@ import { Server } from "@modelcontextprotocol/sdk/server/index.js"
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js"
 
+const pidFile = process.env.MCP_LIFECYCLE_PID_FILE
+if (pidFile) await Bun.write(pidFile, String(process.pid))
+
 if (process.argv.includes("--hang")) {
-  const pidFile = process.env.MCP_LIFECYCLE_PID_FILE
-  if (!pidFile) throw new Error("MCP_LIFECYCLE_PID_FILE is required")
-  await Bun.write(pidFile, String(process.pid))
   await new Promise(() => {})
+}
+
+// Ignores stdin EOF, like a `docker run` child. Only SIGTERM stops it.
+if (process.argv.includes("--keep-alive")) {
+  setInterval(() => {}, 1000)
 }
 
 const server = new Server({ name: "mcp-lifecycle-stdio", version: "1.0.0" }, { capabilities: { tools: {} } })
