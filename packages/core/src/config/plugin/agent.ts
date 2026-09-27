@@ -29,19 +29,9 @@ type PathAction =
   | typeof ReadTool.name
   | typeof EditTool.name
 const pathActions = ["external_directory", "read", "edit"] as const satisfies readonly PathAction[]
-const agentKeys = new Set([
-  "model",
-  "variant",
-  "request",
-  "system",
-  "description",
-  "mode",
-  "hidden",
-  "color",
-  "steps",
-  "disabled",
-  "permissions",
-])
+// Keys that only exist in the v1 agent format. Presence of one of these is what
+// actually identifies a v1 file.
+const legacyKeys = new Set(["permission", "prompt", "disable", "maxSteps", "options", "temperature", "top_p", "tools"])
 
 export const Plugin = define({
   id: "config-agent",
@@ -159,7 +149,17 @@ function decode(file: { directory: string; filepath: string; primary: boolean },
     .replace(/^(agent|agents|mode|modes)\//, "")
     .replace(/\.md$/, "")
   const body = markdown.content.trim()
-  const legacy = Object.keys(markdown.data).some((key) => !agentKeys.has(key))
+  // Only treat the file as v1 when it actually uses a v1-only key. Testing
+  // "any key the v2 schema does not recognise" misclassifies perfectly valid v2
+  // agents: the v1 schema accepts unknown keys and folds them into `options`,
+  // which the migration forwards as `request.body`, so a v2 `permissions` block
+  // ends up sent to the model provider as a junk body param and never reaches
+  // the session runner. `name:` and `tools:` both triggered this — and `tools:`
+  // is precisely what the v1 -> v2 migration guide tells users to keep, so the
+  // natural migrated agent silently lost its tool restrictions. An explicit v2
+  // `permissions` key always wins over the legacy guess.
+  const legacy =
+    markdown.data.permissions === undefined && Object.keys(markdown.data).some((key) => legacyKeys.has(key))
   const agent = Option.getOrUndefined(
     legacy
       ? Option.map(

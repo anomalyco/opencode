@@ -261,6 +261,35 @@ permissions:
 Use native v2 fields.`,
             )
             await fs.writeFile(path.join(tmp.path, "agents", "disabled.md"), "---\ndisabled: true\n---\nDisabled")
+            await fs.writeFile(
+              path.join(tmp.path, "agents", "stray-tools.md"),
+              `---
+name: stray-tools
+description: v2 permissions next to a leftover v1 tools key
+tools:
+  "sqlite_*": true
+permissions:
+  - action: "browser*"
+    resource: "*"
+    effect: deny
+  - action: "sqlite_*"
+    resource: "*"
+    effect: allow
+---
+Keep my restrictions.`,
+            )
+            await fs.writeFile(
+              path.join(tmp.path, "agents", "stray-name.md"),
+              `---
+name: stray-name
+description: v2 permissions next to a leftover v1 name key
+permissions:
+  - action: edit
+    resource: "*"
+    effect: deny
+---
+Deny edits.`,
+            )
             await fs.writeFile(path.join(tmp.path, "modes", "plan.md"), "Make a plan.")
           })
           const agents = yield* AgentV2.Service
@@ -292,6 +321,28 @@ Use native v2 fields.`,
             request: { headers: { "x-agent": "native" }, body: { effort: "high" } },
             permissions: [{ action: "edit", resource: "*", effect: "deny" }],
           })
+          // Regression: a leftover v1 `tools:`/`name:` key must not push the whole
+          // frontmatter down the v1 path, where `permissions` gets folded into
+          // `options` and shipped as a junk `request.body` param instead of being
+          // applied. https://github.com/anomalyco/opencode/issues/50598
+          const strayTools = yield* agents.get(AgentV2.ID.make("stray-tools"))
+          expect(strayTools).toMatchObject({
+            system: "Keep my restrictions.",
+            description: "v2 permissions next to a leftover v1 tools key",
+            permissions: [
+              { action: "browser*", resource: "*", effect: "deny" },
+              { action: "sqlite_*", resource: "*", effect: "allow" },
+            ],
+          })
+          expect((strayTools?.request?.body as Record<string, unknown> | undefined)?.permissions).toBeUndefined()
+
+          const strayName = yield* agents.get(AgentV2.ID.make("stray-name"))
+          expect(strayName).toMatchObject({
+            system: "Deny edits.",
+            permissions: [{ action: "edit", resource: "*", effect: "deny" }],
+          })
+          expect((strayName?.request?.body as Record<string, unknown> | undefined)?.permissions).toBeUndefined()
+
           expect(yield* agents.get(AgentV2.ID.make("disabled"))).toBeUndefined()
           expect(yield* agents.get(AgentV2.ID.make("plan"))).toMatchObject({ system: "Make a plan.", mode: "primary" })
         }),
