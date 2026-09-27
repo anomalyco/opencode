@@ -2,7 +2,7 @@ export * as PtyTicket from "./ticket.js"
 
 import type { Workspace } from "@opencode/schema/workspace"
 import { PtyTicket } from "@opencode/schema/pty-ticket"
-import { PtyID } from "./schema.js"
+import type { Pty } from "@opencode/schema/pty"
 import { Cache, Context, Duration, Effect, Layer } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 
@@ -12,7 +12,7 @@ const CAPACITY = 10_000
 export const ConnectToken = PtyTicket.ConnectToken
 
 export type Scope = {
-  readonly ptyID: PtyID
+  readonly ptyID: Pty.ID
   readonly directory?: string
   readonly workspaceID?: Workspace.ID
 }

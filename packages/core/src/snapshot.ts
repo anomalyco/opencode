@@ -3,7 +3,7 @@ export * as Snapshot from "./snapshot.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import path from "path"
 import { Context, Effect, Fiber, Layer, Schema, Scope } from "effect"
-import { File } from "./file.js"
+import { FileDiff } from "@opencode/schema/file-diff"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Git } from "./git.js"
 import { Global } from "@opencode/util/global"
@@ -58,7 +58,7 @@ export interface Interface extends State.Transformable<Editor> {
    * Generate structured per-file diffs between two captured trees. `context`
    * controls unchanged lines around each unified diff hunk.
    */
-  readonly diff: (input: DiffInput) => Effect.Effect<readonly File.Diff[], Error>
+  readonly diff: (input: DiffInput) => Effect.Effect<readonly FileDiff.Info[], Error>
 
   /**
    * Restore selected project-relative paths from their associated trees. A path
