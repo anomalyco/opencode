@@ -67,3 +67,43 @@
 - UI launcher deferred as untracked follow-up — do not force into t5b commit; leave untracked.
 - Env vars consumed from t5a convention; verify `bash -n` exit 0 before commit (`451115d861`, 2 files, 167L).
 - Source: t5b-debian-templates completion.
+
+## 2026-09-26 — t6 docs bulk exclusion, stale dirs untracked, deny clean
+- Use explicit pathspec allowlist, never `docs/` glob; docs bulk excluded.
+- Stale dirs remain untracked — do not force into t6 commit; leave untracked.
+- Gate on deny check clean (zero staged outside allowlist, `a84e7f5d66`, 7 files, 403L docs-only).
+- Source: t6-docs-findings completion.
+
+## 2026-09-26 — t7 scope-unchanged gate + t8 pending forward-port
+- t7 must leave scope unchanged (5 cherry-picks only, no t0-t6 content); verify via diff stat before handoff.
+- Do not forward-port in t7; t8 ports t0-t6 SHAs in strict order with `git cherry-pick -x`, abort on first conflict.
+- Never force-push or rebase series history; preserve `series/v2.0.16` worktree untouched.
+- Source: t7-bump-v2018 completion (tip `32237d2788`, t8 pending).
+
+## 2026-09-26 — t8 t2 conflict-aborted, t3/t4 independent, -x footers absent
+- t2 (`process.ts` unauthorized→unauthorizedResponse + pairing guard) conflict-aborts; run `git cherry-pick --abort` to preserve clean abort, do not resolve inline.
+- t3/t4 are independent of t2 — proceed to land them; t2 needs manual rebase follow-up, not a blocker.
+- Cherry-pick `-x` footers absent on landed commits — do not assume provenance trailers; verify via SHA order, not footer grep.
+- Source: t8-forward-port completion (tip `6c02774ef6`, 9/10 SHAs).
+
+## 2026-09-26 — follow-up A/B/C: docs/ + packages/opencode/ never staged
+- `docs/` bulk and `packages/opencode/` stray test never staged in A/B/C; use explicit pathspec allowlist, never `git add -A`.
+- Gate each follow-up on deny check (zero staged outside allowlist) + 4/4 pass + typecheck clean before commit.
+- Source: follow-up A/B/C completion (c6adeec9, e4f671cb, 54c82bd0).
+
+## 2026-09-26 — continuation: stray packages/opencode/ delete not ported
+- Stray `packages/opencode/` delete is not ported in continuation forward-port to v2.0.18; provenance unverified — never staged.
+- Base stays `series/v2.0.18` single-PR; t2 (`77d1413320`) needs manual rebase + verification, not cherry-pick -x.
+- Source: researcher continuation scope, plan 20260926-v2018-bump.
+
+## 2026-09-26 — t9 ABC forward-port gates: patch-id + disjoint + no-t2 + bash-n
+- Verify patch-ids identical (not SHA match) to confirm faithful `-x` forward-port; SHAs differ by design.
+- Verify pathspecs disjoint across A/B/C; overlap means scope bleed — abort and re-check allowlist.
+- Verify no t2 content in A/B/C diff; t2 needs manual rebase, never cherry-pick `-x`.
+- Gate on porcelain clean + `bash -n` 2/2; shell syntax failure blocks handoff.
+- Source: t9 ABC forward-port completion (tip `a8cb43094e`).
+## 2026-09-26 — t10 OPENCODE_DISABLE_AUTH trusted-LAN caveat + ServerAuth wrapping
+- `OPENCODE_DISABLE_AUTH` bypass is trusted-LAN only; never assume safe for untrusted network — document caveat.
+- `ServerAuth.required` must wrap `unauthorizedResponse`; pairing guard must stay intact; password stays optional; authorizationLayer is passthrough — partial port breaks auth.
+- Verify 5/5 pass + stacked on `a8cb43094e` (6 files, 177L, `1013396000`); do not cherry-pick -x t2 (t8 conflict path).
+- Source: t10 t2-manual-rebase completion.

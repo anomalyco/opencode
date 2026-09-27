@@ -69,3 +69,38 @@
 - Env vars consumed (t5a `OPENCODE_PKG` convention); electron-builder untouched.
 - UI launcher deferred as untracked follow-up, not in t5b scope.
 - Source: t5b-debian-templates completion.
+
+## 2026-09-26 — t6-docs-findings scoped allowlist verification pattern
+- Stack after t4c/t5a/t5b; verify explicit pathspec allowlist + deny check (zero staged outside allowlist) before commit.
+- Commit `a84e7f5d66`: 7 files, 403L docs-only.
+- Source: t6-docs-findings completion.
+
+## 2026-09-26 — t7-bump-v2018 strategy-B verification pattern
+- New branch `series/v2.0.18` from `cd9a14a6` (v2.0.18), then `git cherry-pick -x` 5 fork patches in order, zero conflicts.
+- Tip `32237d2788`; verify `bun typecheck` exit 0 + webfetch 88 pass + scope unchanged before handoff.
+- Keep main worktree on `series/v2.0.16` untouched; t7/t8 use fresh worktree/branch.
+- Source: t7-bump-v2018 completion.
+
+## 2026-09-26 — t8-forward-port 9/10 stacked verification pattern
+- Forward-port t0-t6 SHAs onto `series/v2.0.18` in strict order with `git cherry-pick -x`, abort on first conflict.
+- Tip `6c02774ef6` (9/10 SHAs; t2 conflict-aborted, abort preserved); verify `bun typecheck` exit 0 + full suite 35/35 pass + porcelain clean before handoff.
+- Source: t8-forward-port completion.
+
+## 2026-09-26 — follow-up A/B/C stacked verification pattern
+- Stack after t8 tip (`6c02774ef6`) on `series/v2.0.18`; land in order A→B→C with explicit pathspec + deny check before each commit.
+- A `c6adeec9` fix(tui), B `e4f671cb` chore(cli), C `54c82bd0` chore(debian) 497 ins; gate each on 4/4 pass + typecheck clean.
+- Source: follow-up A/B/C completion.
+
+## 2026-09-26 — continuation forward-port A/B/C + t2 manual rebase to v2.0.18 single-PR
+- Intent: continuation scope forward-ports A (`c6adeec9`) / B (`e4f671cb`) / C (`54c82bd0`) onto `series/v2.0.18` plus t2 (`77d1413320`) manual rebase + verification.
+- Base: `series/v2.0.18` single-PR outcome; keep `series/v2.0.16` worktree untouched.
+- Source: researcher continuation scope, plan 20260926-v2018-bump.
+
+## 2026-09-26 — t9 ABC forward-port series/v2.0.18 verification pattern
+- Forward-port A/B/C onto `series/v2.0.18` with `git cherry-pick -x` 3/3 clean, zero conflicts; tip `a8cb43094e`.
+- Verify patch-ids identical + pathspecs disjoint + no t2 content + porcelain clean + `bash -n` 2/2 before handoff.
+- Source: t9 ABC forward-port completion.
+## 2026-09-26 — t10 t2-manual-rebase stacked verification pattern
+- Manual rebase t2 (`77d1413320`) onto `a8cb43094e` (`series/v2.0.18`); `ServerAuth.required` wraps `unauthorizedResponse` + pairing guard intact, password optional, authorizationLayer passthrough.
+- Commit `1013396000`: 6 files, 177L; verify full suite 5/5 pass before commit.
+- Source: t10 t2-manual-rebase completion.

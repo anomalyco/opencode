@@ -1,0 +1,689 @@
+plan_id: 20260926-v2018-bump
+objective: Commit pending series/v2.0.16 work as ordered conventional commits, then bump via strategy B (new series/v2.0.18 from v2.0.18 + cherry-pick 5 fork patches), then forward-port the new commits (t0-t6) onto series/v2.0.18 — single-PR outcome
+created_at: '2026-09-26'
+created_by: planner
+status: pending
+research_confidence: high
+plan_metrics:
+  wave_1_task_count: 1
+  total_dependencies: 19
+  risk_score: medium
+tldr: |
+  Wave 1 (t0): .gitignore hygiene (geany/workbuddy/catcheer) before any commit.
+  Waves 2-4 (t1->t2->t3): SEQUENTIAL retry-Schedule, server disable-auth, channel contract — pathspec-restricted git add, one worktree, no parallel staging.
+  Waves 5-7 (t4a/t4b -> t4c -> t5a/t5b): split desktop attach (attach / bench rewrite / CI lane) then split debian (scripts incl. sole-owned electron-builder.config.ts / templates). t4c->t5 edge removes the file race.
+  Wave 8 (t6): scoped docs with explicit pathspec allowlist + deny check.
+  Wave 9 (t7): strategy-B series/v2.0.18 + 5 fork-patch cherry-picks + verification.
+  Wave 10 (t8): forward-port t0-t6 SHAs onto series/v2.0.18 in order + re-verify — closes the orphan scope gap (single PR).
+open_questions: []
+gaps: []
+pre_mortem:
+  overall_risk_level: medium
+  critical_failure_modes:
+    - scenario: Generated protocol/client types drift from schema after retry-Schedule change
+      likelihood: medium
+      impact: high
+      mitigation: t1 runs bun run generate from packages/client when Protocol/Server HttpApi touched; never hand-edit generated files; gate on bun typecheck exit 0 before commit.
+    - scenario: Channel triple-site contract (service+effect+promise) applied inconsistently, breaking desktop attach / debian templates
+      likelihood: medium
+      impact: high
+      mitigation: t3 owns the contract; t4a/t4c/t5b consume read-only and re-run the channel test (exit 0) before committing.
+    - scenario: Cherry-pick of 5 fork patches hits unexpected conflict despite zero-overlap prediction
+      likelihood: low
+      impact: high
+      mitigation: Abort cherry-pick on first conflict, preserve series/v2.0.16 worktree untouched, escalate for replan; never force-push or rebase series history.
+    - scenario: Forward-port (t8) of new commits conflicts against bumped upstream files on series/v2.0.18
+      likelihood: medium
+      impact: high
+      mitigation: Port in strict t0-t6 order, one SHA at a time with git cherry-pick -x; abort on conflict and escalate with conflicting SHA named; never squash (SHAs must stay traceable).
+    - scenario: Sequential staging violated — wrong files land in a commit (parallel-staging regression)
+      likelihood: medium
+      impact: medium
+      mitigation: Every commit task uses explicit pathspec allowlist in git add + pre-commit git status --porcelain deny check; t1->t2->t3 chain is sequential by dependency.
+  assumptions:
+    - Single shared worktree stays on series/v2.0.16 for t0-t6; t7/t8 use a fresh worktree/branch from v2.0.18 cd9a14a6.
+    - remote-auth disposition: 12-file worktree set claimed byte-identical to upstream a97622c801 is SKIPPED; t2 commits only the disable-auth subset and proves the skip with git diff --stat/exit-code (finding 2 fix).
+    - Excluded from all commits: docs bulk (only allowlisted findings paths), .workbuddy-ai/, geany noise, build-catcheer-browser/, stray packages/opencode test file (provenance unverified — never staged).
+    - Tags v2.0.16/v2.0.17/v2.0.18 present locally; no fetch needed.
+    - Branch-name waiver: AGENTS.md prefers short hyphen names without slashes, but series/v2.0.16 and series/v2.0.18 are pre-existing release-lineage conventions — retained verbatim; no new slash branches introduced beyond series/v2.0.18.
+    - CI lint lane and dpkg pin versions are verified, not upgraded, in this plan (no dependency bumps).
+    - Research source research_findings_v2018-bump-plan.yaml (confidence high) informs t7/t8 ancestry and zero-overlap claims.
+implementation_specification:
+  code_structure: Series-branch workflow on v2 lineage; sequential ordered conventional commits on series/v2.0.16 worktree (t0-t6), then fresh series/v2.0.18 branch from tag v2.0.18 with 5 cherry-picked fork patches (t7), then ordered forward-port of t0-t6 SHAs onto series/v2.0.18 (t8).
+  affected_areas:
+    - packages/core
+    - packages/cli
+    - packages/server
+    - packages/protocol
+    - packages/schema
+    - packages/client
+    - packages/desktop
+    - scripts
+    - debian
+  component_details:
+    - component: hygiene-ignore
+      responsibility: .gitignore coverage for geany/workbuddy/catcheer noise before any commit
+      interfaces: [.gitignore patterns]
+      dependencies: []
+      integration_points: [git status --porcelain clean check in every later task]
+    - component: retry-Schedule
+      responsibility: Per-provider retry schedule across schema, retry, resolver, llm, compaction, generated types
+      interfaces: [provider retry Schedule schema, resolver/llm/compaction consumption]
+      dependencies:
+        - component: generated client types
+          relationship: regenerated via bun run generate, never hand-edited
+      integration_points: [packages/client generate step, retry-config test]
+    - component: server-auth
+      responsibility: Optional server auth via disable-auth (cli env, server-process, service-registration)
+      interfaces: [disable-auth env flag, service registration wiring]
+      dependencies: []
+      integration_points: [server process startup, 2 auth tests, git diff --stat vs a97622c801 proof]
+    - component: service-channel
+      responsibility: Channel-aware service file triple-site contract (service+effect+promise)
+      interfaces: [channel-aware service file path and channel scheme]
+      dependencies: []
+      integration_points: [desktop attach, debian service templates, channel test]
+    - component: desktop-attach-split
+      responsibility: Attach to external server split as attach-wiring (t4a) + bench-startup rewrite (t4b) + CI channel lane (t4c); electron-builder.config.ts explicitly NOT touched here
+      interfaces: [external-server attach protocol]
+      dependencies:
+        - component: service-channel
+          relationship: consumes channel contract read-only
+      integration_points: [CI channel lane, bench-startup isolated review]
+    - component: debian-packaging-split
+      responsibility: Packaging parity split as scripts incl. sole-owned electron-builder.config.ts (t5a) + service/launcher templates (t5b)
+      interfaces: [deb package layout, launcher templates]
+      dependencies:
+        - component: service-channel
+          relationship: consumes channel contract for service templates
+      integration_points: [dpkg-deb -c verification]
+    - component: v2018-bump-plus-forward-port
+      responsibility: New series/v2.0.18 from cd9a14a6 plus cherry-pick of 5 fork patches (t7) then ordered forward-port of t0-t6 (t8) with re-verification
+      interfaces: [git refs v2.0.18, series/v2.0.18 branch]
+      dependencies:
+        - component: wave1-4 commits
+          relationship: committed first on series/v2.0.16 worktree; t8 carries them forward so no commit is orphaned
+      integration_points: [typecheck, tests, dpkg-deb -c]
+contracts:
+  - from_task: t0-gitignore-hygiene
+    to_task: t1-retry-schedule
+    interface: .gitignore commit SHA; geany/workbuddy/catcheer patterns active
+    format: commit-sha
+  - from_task: t1-retry-schedule
+    to_task: t2-server-auth
+    interface: t1 commit SHA + staged-pathspec list (proves sequential handoff, no uncommitted residue)
+    format: commit-sha
+  - from_task: t2-server-auth
+    to_task: t3-service-channel
+    interface: t2 commit SHA + remote-auth skip proof (git diff --stat vs a97622c801)
+    format: commit-sha
+  - from_task: t3-service-channel
+    to_task: t4a-desktop-attach
+    interface: Channel-aware service file path + channel scheme (service+effect+promise triple-site)
+    format: file-path-and-scheme
+  - from_task: t3-service-channel
+    to_task: t4b-bench-startup
+    interface: Channel scheme reference (bench must not alter triple-site files)
+    format: file-path-and-scheme
+  - from_task: t4a-desktop-attach
+    to_task: t4c-desktop-ci-lane
+    interface: Attach commit SHA; background-service wiring notes
+    format: commit-sha
+  - from_task: t4b-bench-startup
+    to_task: t4c-desktop-ci-lane
+    interface: Bench-rewrite commit SHA; bench entrypoint notes for CI lane
+    format: commit-sha
+  - from_task: t4c-desktop-ci-lane
+    to_task: t5a-debian-scripts
+    interface: CI-lane commit SHA + handoff that electron-builder.config.ts ownership passes to t5a ONLY
+    format: commit-sha
+  - from_task: t4c-desktop-ci-lane
+    to_task: t5b-debian-templates
+    interface: CI-lane commit SHA + channel scheme for service templates
+    format: file-path-and-scheme
+  - from_task: t3-service-channel
+    to_task: t5b-debian-templates
+    interface: Channel-aware service file path + channel scheme for debian service templates
+    format: file-path-and-scheme
+  - from_task: t5a-debian-scripts
+    to_task: t6-docs-findings
+    interface: Scripts commit SHA + files touched (for scoped docs reference)
+    format: commit-sha
+  - from_task: t5b-debian-templates
+    to_task: t6-docs-findings
+    interface: Templates commit SHA + files touched (for scoped docs reference)
+    format: commit-sha
+  - from_task: t1-retry-schedule
+    to_task: t6-docs-findings
+    interface: Retry-Schedule commit SHA + files touched (for scoped docs reference)
+    format: commit-sha
+  - from_task: t2-server-auth
+    to_task: t6-docs-findings
+    interface: Server disable-auth commit SHA + files touched (for scoped docs reference)
+    format: commit-sha
+  - from_task: t3-service-channel
+    to_task: t6-docs-findings
+    interface: Service-channel commit SHA + files touched (for scoped docs reference)
+    format: commit-sha
+  - from_task: t6-docs-findings
+    to_task: t7-bump-v2018
+    interface: Docs commit SHA + scoped dirs list (proves docs stayed scoped)
+    format: commit-sha
+  - from_task: t7-bump-v2018
+    to_task: t8-forward-port
+    interface: series/v2.0.18 branch ref + 5 cherry-picked SHAs (base for forward-port)
+    format: commit-sha-list
+  - from_task: t1-retry-schedule
+    to_task: t8-forward-port
+    interface: t1 SHA to forward-port (position 2 after t0)
+    format: commit-sha
+  - from_task: t2-server-auth
+    to_task: t8-forward-port
+    interface: t2 SHA to forward-port (position 3)
+    format: commit-sha
+  - from_task: t3-service-channel
+    to_task: t8-forward-port
+    interface: t3 SHA to forward-port (position 4)
+    format: commit-sha
+  - from_task: t4c-desktop-ci-lane
+    to_task: t8-forward-port
+    interface: t4a/t4b/t4c SHAs to forward-port (positions 5-7)
+    format: commit-sha-list
+  - from_task: t5b-debian-templates
+    to_task: t8-forward-port
+    interface: t5a/t5b SHAs to forward-port (positions 8-9)
+    format: commit-sha-list
+  - from_task: t6-docs-findings
+    to_task: t8-forward-port
+    interface: t6 SHA to forward-port (position 10, last)
+    format: commit-sha
+tasks:
+  - id: t0-gitignore-hygiene
+    title: Add .gitignore coverage for geany, workbuddy, catcheer noise
+    description: 'Hygiene commit BEFORE any Wave 1 work (chore(repo)): append .gitignore patterns for *.geany/editor noise, .workbuddy-ai/, build-catcheer-browser/ output. Verify with git status --porcelain that those paths are ignored. Single commit, targeting v2.'
+    wave: 1
+    agent: gem-implementer
+    prototype: false
+    covers: [repo hygiene, gitignore]
+    priority: high
+    status: pending
+    dependencies: []
+    conflicts_with: []
+    context_files:
+      - path: .gitignore
+        description: ignore-file to extend
+    estimated_effort: small
+    estimated_files: 1
+    estimated_lines: 30
+    focus_area: hygiene
+    verification:
+      - 'git status --porcelain shows geany/workbuddy/catcheer paths ignored (exit 0)'
+      - 'git check-ignore -q .workbuddy-ai/dummy build-catcheer-browser/dummy (exit 0)'
+    acceptance_criteria:
+      - Single chore(repo) commit targeting v2
+      - git status --porcelain no longer lists geany/workbuddy/catcheer noise as untracked
+      - No source files touched
+    success_criteria:
+      - git_log.contains(chore(repo): ignore editor and tooling noise) === true
+      - check_ignore.exit_code === 0
+      - git_status_noise_untracked.count === 0
+    failure_modes:
+      - scenario: Ignore patterns too broad, hiding real source files
+        likelihood: low
+        impact: medium
+        mitigation: 'Review git status --porcelain before commit; keep patterns scoped to *.geany, .workbuddy-ai/, build-catcheer-browser/.'
+    tech_stack: [git]
+    test_coverage: null
+    research_sources: []
+  - id: t1-retry-schedule
+    title: Commit per-provider retry Schedule with test
+    description: 'Conventional commit 1 (feat(core)): per-provider retry Schedule across schema+retry+resolver+llm+compaction+generated types plus test (~180L). Regenerate client types via bun run generate from packages/client when Protocol/Server HttpApi touched; never hand-edit generated files. SEQUENTIAL after t0 on the single worktree: use explicit pathspec allowlist in git add; pre-commit git status --porcelain must show only allowlisted paths.'
+    wave: 2
+    agent: gem-implementer
+    prototype: false
+    covers: [retry-config committable subset]
+    priority: high
+    status: pending
+    dependencies: [t0-gitignore-hygiene]
+    conflicts_with: []
+    context_files:
+      - path: packages/schema
+        description: provider retry Schedule schema source
+      - path: packages/core
+        description: retry, resolver, llm, compaction consumers + test
+    estimated_effort: medium
+    estimated_files: 3
+    estimated_lines: 180
+    focus_area: retry-config
+    verification:
+      - 'bun run generate from packages/client when Protocol/Server HttpApi touched (exit 0)'
+      - 'bun typecheck in affected package (exit 0)'
+      - 'targeted retry-config test (exit 0)'
+      - 'git status --porcelain shows only allowlisted retry paths staged (exit 0)'
+    acceptance_criteria:
+      - Single feat(core) commit on worktree branch targeting v2, stacked after t0
+      - Generated types regenerated, not hand-edited
+      - retry-config test included and passing
+      - Excluded paths untouched (docs, .workbuddy-ai, geany, build-catcheer-browser, stray packages/opencode test)
+    success_criteria:
+      - typecheck.exit_code === 0
+      - retry_test.exit_code === 0
+      - git_status_out_of_scope_staged.count === 0
+    failure_modes:
+      - scenario: Generated types committed stale or hand-edited
+        likelihood: medium
+        impact: high
+        mitigation: Re-run bun run generate from packages/client and amend before push.
+      - scenario: Staging collision from parallel work (wrong files in commit)
+        likelihood: medium
+        impact: medium
+        mitigation: Sequential execution enforced by t0->t1->t2->t3 chain; pathspec-restricted git add plus pre-commit porcelain deny check.
+    tech_stack: [typescript, bun, effect]
+    test_coverage: retry-config test passing
+    research_sources: []
+  - id: t2-server-auth
+    title: Commit optional server auth via disable-auth (with remote-auth skip proof)
+    description: 'Conventional commit 2 (feat(server)): optional auth via disable-auth across cli env + server-process + service-registration + server process plus 2 tests (~175L). SEQUENTIAL after t1. REMOTE-AUTH SKIP PROOF (required): the 12-file remote-auth worktree set claimed byte-identical to upstream a97622c801 MUST be proven with explicit file list + `git diff --stat a97622c801 -- <12 paths>` showing zero diff (exit 0) and `git diff --name-only a97622c801 -- <12 paths>` empty; those files MUST NOT be staged. If either command shows a diff, STOP and escalate (legacy-6-vs-12 layout mismatch) instead of committing. Regen check: bun run generate only when Protocol/Server HttpApi touched, else record not-needed with typecheck exit 0.'
+    wave: 3
+    agent: gem-implementer
+    prototype: false
+    covers: [remote-auth committable subset minus upstream-identical files]
+    priority: high
+    status: pending
+    dependencies: [t1-retry-schedule]
+    conflicts_with: []
+    context_files:
+      - path: packages/cli
+        description: disable-auth env wiring (allowlisted pathspec only)
+      - path: packages/server
+        description: server-process and service-registration auth path (allowlisted pathspec only)
+    estimated_effort: medium
+    estimated_files: 3
+    estimated_lines: 175
+    focus_area: remote-auth
+    verification:
+      - 'git diff --stat a97622c801 -- <12 remote-auth paths> shows zero diff (exit 0)'
+      - 'git diff --name-only a97622c801 -- <12 remote-auth paths> output empty (exit 0)'
+      - '2 new server auth tests pass (exit 0)'
+      - 'bun typecheck in affected packages (exit 0)'
+      - 'git status --porcelain shows only allowlisted disable-auth paths staged (exit 0)'
+    acceptance_criteria:
+      - Single feat(server) commit targeting v2, stacked after t1
+      - disable-auth path covered by 2 tests
+      - Explicit 12-file list recorded in commit body; skip proof commands recorded with exit 0
+      - Byte-identical upstream files (a97622c801) excluded from commit
+      - packages/opencode stray test file never staged (provenance unverified)
+    success_criteria:
+      - auth_tests.exit_code === 0
+      - typecheck.exit_code === 0
+      - remote_auth_diff_stat.exit_code === 0
+      - remote_auth_diff_name_only.lines === 0
+      - upstream_identical_files.staged === 0
+    failure_modes:
+      - scenario: Upstream-identical remote-auth files accidentally staged, duplicating a97622c801
+        likelihood: medium
+        impact: medium
+        mitigation: Enforce pathspec allowlist; verify with git diff --stat/--name-only vs a97622c801 before commit; unstage identical files.
+      - scenario: Legacy-6 vs worktree-12 layout mismatch makes skip claim unverifiable
+        likelihood: medium
+        impact: high
+        mitigation: STOP without committing; escalate with both file lists and diff output; do not guess the disposition.
+    tech_stack: [typescript, bun, effect]
+    test_coverage: 2 new server auth tests passing
+    research_sources: []
+  - id: t3-service-channel
+    title: Commit channel-aware service file triple-site fix
+    description: 'Conventional commit 3 (fix(client)): channel-aware service file across service+effect+promise plus test (~170L). Defines the channel contract consumed by t4a/t4c/t5b. SEQUENTIAL after t2 with pathspec-restricted git add. Regen check: bun run generate only when Protocol/Server HttpApi touched, else record not-needed with typecheck exit 0.'
+    wave: 4
+    agent: gem-implementer
+    prototype: false
+    covers: [external-server attach subset prerequisite]
+    priority: high
+    status: pending
+    dependencies: [t2-server-auth]
+    conflicts_with: []
+    context_files:
+      - path: packages/core
+        description: service, effect, promise triple-site (allowlisted pathspec only)
+    estimated_effort: medium
+    estimated_files: 3
+    estimated_lines: 170
+    focus_area: service-channel
+    verification:
+      - 'channel test passes (exit 0)'
+      - 'bun typecheck in affected package (exit 0)'
+      - 'git status --porcelain shows only allowlisted triple-site paths staged (exit 0)'
+    acceptance_criteria:
+      - Single fix(client) commit targeting v2, stacked after t2
+      - All three sites (service+effect+promise) updated consistently
+      - Channel contract documented in commit body for t4/t5 consumers
+    success_criteria:
+      - channel_test.exit_code === 0
+      - typecheck.exit_code === 0
+      - git_status_out_of_scope_staged.count === 0
+    failure_modes:
+      - scenario: Triple-site inconsistency (one of service/effect/promise missed)
+        likelihood: medium
+        impact: high
+        mitigation: Grep channel usages across all three sites; run channel test before commit.
+    tech_stack: [typescript, bun, effect]
+    test_coverage: channel test passing
+    research_sources: []
+  - id: t4a-desktop-attach
+    title: Commit desktop attach wiring (no bench, no CI, no electron-builder)
+    description: 'Conventional commit 4a (fix(desktop)): attach to external server — background-service wiring + index-sidecar deletion only (~200L, max 3 files). Consumes t3 channel contract read-only; MUST NOT touch bench-startup files, CI lane files, or electron-builder.config.ts (owned by t4b/t4c/t5a). Verify no orphan imports after sidecar delete.'
+    wave: 5
+    agent: gem-implementer
+    prototype: false
+    covers: [external-server attach wiring subset]
+    priority: high
+    status: pending
+    dependencies: [t3-service-channel]
+    conflicts_with: []
+    context_files:
+      - path: packages/desktop
+        description: background-service and attach wiring (bench/CI files excluded)
+    estimated_effort: medium
+    estimated_files: 3
+    estimated_lines: 200
+    focus_area: desktop-attach
+    verification:
+      - 'channel test still passes after attach change (exit 0)'
+      - 'bun typecheck in affected packages (exit 0)'
+      - 'orphan-import grep for index-sidecar returns zero hits (exit 0)'
+      - 'git status --porcelain shows only t4a allowlisted paths (exit 0)'
+    acceptance_criteria:
+      - Single fix(desktop) commit stacked after t3
+      - index-sidecar deletion included, no orphan imports
+      - bench-startup, CI lane, and electron-builder.config.ts untouched in this commit
+    success_criteria:
+      - channel_test.exit_code === 0
+      - typecheck.exit_code === 0
+      - orphan_imports.count === 0
+      - forbidden_paths.staged === 0
+    failure_modes:
+      - scenario: Channel contract misapplied, breaking attach at runtime
+        likelihood: medium
+        impact: high
+        mitigation: Re-read t3 contract; re-run channel test; do not modify triple-site files here.
+      - scenario: Sidecar deletion leaves orphan imports
+        likelihood: medium
+        impact: medium
+        mitigation: Grep sidecar symbol repo-wide before commit; remove or rewire importers in this commit only.
+    tech_stack: [typescript, bun, effect]
+    test_coverage: channel + attach-adjacent tests passing
+    research_sources: []
+  - id: t4b-bench-startup
+    title: Commit bench-startup rewrite in isolation
+    description: 'Conventional commit 4b (fix(desktop)): bench-startup rewrite ONLY (~150L, max 3 files under packages/desktop bench paths). Isolated for separate review per reviewer atomicity finding; MUST NOT touch attach wiring, CI lane, triple-site, or electron-builder.config.ts. Commit body flags behavior changes for reviewer.'
+    wave: 5
+    agent: gem-implementer
+    prototype: false
+    covers: [bench-startup rewrite isolated]
+    priority: medium
+    status: pending
+    dependencies: [t3-service-channel]
+    conflicts_with: []
+    context_files:
+      - path: packages/desktop
+        description: bench-startup files only (attach/CI files excluded)
+    estimated_effort: medium
+    estimated_files: 2
+    estimated_lines: 150
+    focus_area: desktop-attach
+    verification:
+      - 'bench-scoped test or smoke invocation passes (exit 0)'
+      - 'bun typecheck in affected packages (exit 0)'
+      - 'git status --porcelain shows only bench allowlisted paths (exit 0)'
+    acceptance_criteria:
+      - Single fix(desktop) commit for bench rewrite only
+      - Behavior deltas flagged in commit body for isolated review
+      - No attach, CI, triple-site, or electron-builder.config.ts changes
+    success_criteria:
+      - bench_check.exit_code === 0
+      - typecheck.exit_code === 0
+      - forbidden_paths.staged === 0
+    failure_modes:
+      - scenario: Bench rewrite escapes isolated review with unreviewed behavior change
+        likelihood: medium
+        impact: high
+        mitigation: Keep bench hunks in this commit only; flag deltas in commit body; reviewer re-examines bench files before merge.
+    tech_stack: [typescript, bun, effect]
+    test_coverage: bench-adjacent checks passing
+    research_sources: []
+  - id: t4c-desktop-ci-lane
+    title: Commit desktop CI channel lane plus new files
+    description: 'Conventional commit 4c (fix(desktop)): CI channel lane wiring + desktop new files from the 5-file set that belong to desktop (NOT debian templates) (~100L + new files, max 3 files). Depends on t4a AND t4b so lane covers both. MUST NOT touch electron-builder.config.ts. Validate lane config syntax.'
+    wave: 6
+    agent: gem-implementer
+    prototype: false
+    covers: [desktop CI lane, desktop new files]
+    priority: medium
+    status: pending
+    dependencies: [t4a-desktop-attach, t4b-bench-startup]
+    conflicts_with: []
+    context_files:
+      - path: packages/desktop
+        description: CI lane config + desktop-owned new files
+    estimated_effort: small
+    estimated_files: 3
+    estimated_lines: 120
+    focus_area: desktop-attach
+    verification:
+      - 'CI lane config validates (parser/lint exit 0)'
+      - 'bun typecheck in affected packages (exit 0)'
+      - 'git status --porcelain shows only t4c allowlisted paths (exit 0)'
+    acceptance_criteria:
+      - Single commit stacked after t4a and t4b
+      - CI lane carries t3 channel scheme
+      - electron-builder.config.ts untouched; debian-owned new files left for t5
+    success_criteria:
+      - ci_config_lint.exit_code === 0
+      - typecheck.exit_code === 0
+      - forbidden_paths.staged === 0
+    failure_modes:
+      - scenario: CI lane pins unpinned action or fails lint
+        likelihood: medium
+        impact: medium
+        mitigation: Pin action SHAs per critic warning; run lane lint locally before commit; do not upgrade dependencies here.
+    tech_stack: [typescript, bun]
+    test_coverage: null
+    research_sources: []
+  - id: t5a-debian-scripts
+    title: Commit debian scripts plus electron-builder config (sole owner)
+    description: 'Conventional commit 5a (chore(debian)): build-deb scripts + electron-builder.config.ts ONLY (~200L, max 3 files). SOLE OWNER of electron-builder.config.ts in the entire plan — t4a/t4b/t4c/t5b/t6 MUST NOT touch it (ordering fix for the t4/t5 race). Ordered after t4c via dependency. shellcheck or bash -n on touched scripts (exit 0).'
+    wave: 7
+    agent: gem-implementer
+    prototype: false
+    covers: [debian scripts, electron-builder config]
+    priority: medium
+    status: pending
+    dependencies: [t4c-desktop-ci-lane]
+    conflicts_with: []
+    context_files:
+      - path: scripts
+        description: build-deb scripts and packaging helpers (allowlisted only)
+    estimated_effort: medium
+    estimated_files: 3
+    estimated_lines: 200
+    focus_area: debian-packaging
+    verification:
+      - 'shellcheck or bash -n on touched scripts (exit 0)'
+      - 'git status --porcelain shows only t5a allowlisted paths incl. electron-builder.config.ts (exit 0)'
+    acceptance_criteria:
+      - Single chore(debian) commit stacked after t4c
+      - electron-builder.config.ts changed here and nowhere else in the plan
+      - No geany noise or build-catcheer-browser files staged
+    success_criteria:
+      - script_syntax.exit_code === 0
+      - git_status_out_of_scope_staged.count === 0
+    failure_modes:
+      - scenario: electron-builder.config.ts edited in another task, re-creating the race
+        likelihood: medium
+        impact: medium
+        mitigation: Ownership declared here and in t4a/t4b/t4c/t5b descriptions; pre-commit porcelain check rejects the file elsewhere.
+    tech_stack: [shell, debian-packaging]
+    test_coverage: null
+    research_sources: []
+  - id: t5b-debian-templates
+    title: Commit debian service and launcher templates
+    description: 'Conventional commit 5b (chore(debian)): service + cli pkg + build-deb-ui + launcher-templates ONLY (~200L, max 3 files). Consumes t3 channel contract for service templates (diff template channel lines against t3 before committing). Ordered after t4c; parallel-safe with t5a (disjoint pathspecs). MUST NOT touch electron-builder.config.ts.'
+    wave: 7
+    agent: gem-implementer
+    prototype: false
+    covers: [debian templates, launcher-templates]
+    priority: medium
+    status: pending
+    dependencies: [t4c-desktop-ci-lane]
+    conflicts_with: []
+    context_files:
+      - path: debian
+        description: service, control, packaging metadata (allowlisted only)
+    estimated_effort: medium
+    estimated_files: 3
+    estimated_lines: 200
+    focus_area: debian-packaging
+    verification:
+      - 'service template renders with channel from t3 contract (diff exit 0)'
+      - 'git status --porcelain shows only t5b allowlisted paths (exit 0)'
+    acceptance_criteria:
+      - Single chore(debian) commit stacked after t4c
+      - Service templates carry t3 channel scheme
+      - electron-builder.config.ts untouched here
+      - No geany noise or build-catcheer-browser files staged
+    success_criteria:
+      - template_channel_diff.exit_code === 0
+      - git_status_out_of_scope_staged.count === 0
+    failure_modes:
+      - scenario: Service template channel mismatch with t3 contract
+        likelihood: medium
+        impact: medium
+        mitigation: Diff template channel lines against t3 commit before committing.
+    tech_stack: [shell, debian-packaging]
+    test_coverage: null
+    research_sources: []
+  - id: t6-docs-findings
+    title: Commit scoped missing-upstream findings docs
+    description: 'Conventional commit 6 (docs(plans)): missing-upstream findings with EXPLICIT pathspec allowlist (e.g. docs/plans/20260926-v2018-bump/findings-*.md only) — no docs/ glob. Pre-commit deny check: `git status --porcelain` must show zero staged paths outside the allowlist and zero contact with docs bulk, .workbuddy-ai, geany, build-catcheer-browser. Depends on t4c/t5a/t5b (hence transitively t1-t3) so docs reference final SHAs.'
+    wave: 8
+    agent: gem-documentation-writer
+    prototype: false
+    covers: [missing-upstream findings docs]
+    priority: low
+    status: pending
+    dependencies: [t4c-desktop-ci-lane, t5a-debian-scripts, t5b-debian-templates]
+    conflicts_with: []
+    context_files:
+      - path: docs/plans/20260926-v2018-bump
+        description: scoped docs destination (explicit allowlisted files only)
+    estimated_effort: small
+    estimated_files: 2
+    estimated_lines: 120
+    focus_area: docs
+    verification:
+      - 'git status --porcelain shows only allowlisted findings paths staged (exit 0)'
+      - 'deny check: zero staged paths outside allowlist (exit 0)'
+    acceptance_criteria:
+      - Single docs(plans) commit, last in the series/v2.0.16 sequence
+      - Only allowlisted findings files touched; docs bulk and all noise dirs excluded
+    success_criteria:
+      - docs_allowlist_check.exit_code === 0
+      - out_of_scope_files.staged === 0
+    task_type: documentation
+    audience: developers
+    coverage_matrix: [retry-Schedule commit ref, disable-auth commit ref, channel contract commit ref, desktop/debian commit refs]
+    research_sources: []
+  - id: t7-bump-v2018
+    title: Create series/v2.0.18 and cherry-pick 5 fork patches with verification
+    description: 'Strategy B: create new branch series/v2.0.18 from v2.0.18 cd9a14a6 (NOT a rebase — v2.0.16 tag 3a103fe0af is a sibling off 0bc8b8d, not an ancestor). Cherry-pick in order d306943e71, bfb523a01b, e3a0e8bbeb, 053f16e820, 6fff8c8e66 (zero file overlap with 76-commit upstream range predicts clean apply). Then verify: bun typecheck, relevant bun tests, dpkg-deb -c on built deb. Depends on t6 so all series/v2.0.16 work is committed first; series/v2.0.16 worktree left untouched. Fresh worktree for this branch.'
+    wave: 9
+    agent: gem-implementer
+    prototype: false
+    covers: [v2.0.18 bump, fork patch carry-forward, verification]
+    priority: high
+    status: pending
+    dependencies: [t6-docs-findings]
+    conflicts_with: []
+    context_files:
+      - path: scripts
+        description: build-deb path context for dpkg verification
+    estimated_effort: medium
+    estimated_files: 1
+    estimated_lines: 50
+    focus_area: v2018-bump
+    verification:
+      - 'git merge-base confirms v2.0.16 tag not ancestor (already researched)'
+      - 'each cherry-pick applies cleanly in order (exit 0)'
+      - 'bun typecheck (exit 0)'
+      - 'relevant bun tests (exit 0)'
+      - 'dpkg-deb -c lists expected payload (exit 0)'
+    acceptance_criteria:
+      - Branch series/v2.0.18 created from cd9a14a6
+      - All 5 fork patches cherry-picked in listed order with original authorship preserved
+      - No rebase of series/v2.0.16; its worktree untouched
+      - typecheck, tests, and dpkg-deb -c all pass
+    success_criteria:
+      - git_branch.exists_series_v2018 === true
+      - cherry_picks.applied === 5
+      - cherry_picks.conflicts === 0
+      - typecheck.exit_code === 0
+      - bump_tests.exit_code === 0
+      - dpkg_deb_c.exit_code === 0
+    failure_modes:
+      - scenario: Unexpected cherry-pick conflict despite zero-overlap prediction
+        likelihood: low
+        impact: high
+        mitigation: Abort cherry-pick immediately, keep series/v2.0.16 intact, and escalate for replan; do not force-resolve or rebase.
+      - scenario: Verification (typecheck/tests/dpkg) fails on fresh bump branch
+        likelihood: medium
+        impact: medium
+        mitigation: Bisect against the 5 cherry-picks first (upstream 76-commit range has no fork-file contact); fix forward on the bump branch only.
+    tech_stack: [git, typescript, bun, debian-packaging]
+    test_coverage: webfetch status-metadata test (6fff8c8e66) plus affected suites passing
+    research_sources: [research_findings_v2018-bump-plan.yaml]
+  - id: t8-forward-port
+    title: Forward-port t0-t6 commits onto series/v2.0.18 in order with re-verification
+    description: 'SCOPE FIX (reviewer HIGH-1 / critic blocking): carry the 6 new series/v2.0.16 commits (t0 gitignore, t1 retry, t2 auth, t3 channel, t4a/t4b/t4c desktop, t5a/t5b debian, t6 docs) onto series/v2.0.18 in strict creation order via `git cherry-pick -x <SHA-t0> <SHA-t1> ... <SHA-t6>` on a fresh worktree of series/v2.0.18 (after t7). One SHA at a time; abort on first conflict and escalate with SHA named. Then re-verify on the ported branch: bun typecheck (exit 0), affected bun tests incl. retry/auth/channel (exit 0), dpkg-deb -c (exit 0). Single-PR outcome: series/v2.0.18 then contains 5 fork patches + 10 ported commits. Alternative two-PR declaration explicitly REJECTED in favor of this task.'
+    wave: 10
+    agent: gem-implementer
+    prototype: false
+    covers: [forward-port, orphan closure, re-verification]
+    priority: high
+    status: pending
+    dependencies: [t7-bump-v2018, t0-gitignore-hygiene, t1-retry-schedule, t2-server-auth, t3-service-channel, t4c-desktop-ci-lane, t5a-debian-scripts, t5b-debian-templates, t6-docs-findings]
+    conflicts_with: []
+    context_files:
+      - path: scripts
+        description: dpkg re-verification context on ported branch
+    estimated_effort: medium
+    estimated_files: 1
+    estimated_lines: 50
+    focus_area: forward-port
+    verification:
+      - 'git log --oneline on series/v2.0.18 shows 5 fork picks + ported t0-t6 in order'
+      - 'bun typecheck on ported branch (exit 0)'
+      - 'affected bun tests on ported branch (exit 0)'
+      - 'dpkg-deb -c on rebuilt deb (exit 0)'
+    acceptance_criteria:
+      - All t0-t6 SHAs present on series/v2.0.18 via cherry-pick -x in creation order
+      - No squash (individual SHAs traceable with -x references)
+      - series/v2.0.16 branch/worktree untouched by the port
+      - typecheck, tests, dpkg-deb -c all pass on the ported branch
+    success_criteria:
+      - forward_ported.commits === 10
+      - cherry_pick.conflicts === 0
+      - typecheck.exit_code === 0
+      - ported_tests.exit_code === 0
+      - dpkg_deb_c.exit_code === 0
+    failure_modes:
+      - scenario: Forward-port conflict against bumped upstream files
+        likelihood: medium
+        impact: high
+        mitigation: Abort port at conflicting SHA, keep both branches intact, escalate with SHA + conflict files; never squash or force-resolve.
+      - scenario: Re-verification fails only on ported branch (passes on both parents)
+        likelihood: medium
+        impact: medium
+        mitigation: Bisect the ported sequence; fix forward on series/v2.0.18 only; never rewrite series/v2.0.16 history.
+    tech_stack: [git, typescript, bun, debian-packaging]
+    test_coverage: retry/auth/channel suites plus webfetch status-metadata test passing on ported branch
+    research_sources: [research_findings_v2018-bump-plan.yaml]

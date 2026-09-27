@@ -49,3 +49,46 @@
 - Lib path + dash-prefix convention; env vars consumed; electron-builder untouched.
 - UI launcher deferred as untracked follow-up, not in t5b commit.
 - Source: t5b-debian-templates completion.
+
+## 2026-09-26 — t6-docs-findings stacked after t4c/t5a/t5b
+- Fix: land t6-docs-findings as `a84e7f5d66` (7 files, 403L docs-only, explicit pathspecs, deny clean).
+- Stale dirs left untracked; docs bulk excluded.
+- Source: t6-docs-findings completion.
+
+## 2026-09-26 — t7-bump-v2018 stacked via strategy B
+- Fix: create `series/v2.0.18` at `32237d2788` from `cd9a14a6` + 5 clean cherry-picks (0 conflicts).
+- Gates: typecheck exit 0, webfetch 88 pass, scope unchanged, main worktree untouched.
+- Next: t8 forward-port t0-t6 SHAs onto `series/v2.0.18` pending.
+- Source: t7-bump-v2018 completion.
+
+## 2026-09-26 — t8-forward-port 9/10 onto series/v2.0.18, t2 deferred
+- Fix: land 9/10 t0-t6 SHAs onto `series/v2.0.18` at `6c02774ef6`; t2 conflict-aborted (`process.ts` unauthorized→unauthorizedResponse + pairing guard), abort preserved.
+- Gates: typecheck 0, 35/35 pass, porcelain clean; t3/t4 independent so t2 deferral unblocks.
+- Follow-up: t2 manual rebase; note cherry-pick `-x` footers absent on landed commits.
+- Source: t8-forward-port completion.
+
+## 2026-09-26 — follow-up A fix(tui) stacked after t8
+- Fix: land `c6adeec9` fix(tui) stacked after `6c02774ef6`; gate on 4/4 pass + typecheck clean + deny check (docs/ + packages/opencode/ never staged).
+- Source: follow-up A completion.
+
+## 2026-09-26 — follow-up B chore(cli) stacked after A
+- Fix: land `e4f671cb` chore(cli) stacked after `c6adeec9`; gate on 4/4 pass + typecheck clean + deny check.
+- Source: follow-up B completion.
+
+## 2026-09-26 — follow-up C chore(debian) 497 ins stacked after B
+- Fix: land `54c82bd0` chore(debian) 497 ins stacked after `e4f671cb`; gate on 4/4 pass + typecheck clean + deny check.
+- Source: follow-up C completion.
+
+## 2026-09-26 — continuation forward-port A/B/C + t2 manual rebase onto series/v2.0.18
+- Fix: forward-port A (`c6adeec9`) / B (`e4f671cb`) / C (`54c82bd0`) onto `series/v2.0.18` plus t2 (`77d1413320`) manual rebase + verification; single-PR outcome.
+- Stray `packages/opencode/` delete not ported; verify typecheck + tests + porcelain clean before handoff.
+- Source: researcher continuation scope, plan 20260926-v2018-bump.
+
+## 2026-09-26 — t9 ABC forward-port 3/3 landed onto series/v2.0.18
+- Fix: land A/B/C onto `series/v2.0.18` at `a8cb43094e` via `cherry-pick -x` 3/3 clean; patch-ids identical, disjoint pathspecs, no t2 content.
+- Gates: porcelain clean + `bash -n` 2/2 pass.
+- Source: t9 ABC forward-port completion.
+## 2026-09-26 — t10 t2-manual-rebase landed, closes t8 deferred debt
+- Fix: land t2 manual rebase as `1013396000` (6 files, 177L, 5/5 pass) stacked on `a8cb43094e`; preserves ServerAuth.required + pairing guard + password-optional + authorizationLayer passthrough.
+- Closes t8 deferred t2 debt; manual rebase by design (cherry-pick -x conflict path from t8, not reused).
+- Source: t10 t2-manual-rebase completion.

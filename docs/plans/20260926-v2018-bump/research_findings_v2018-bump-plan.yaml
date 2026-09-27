@@ -1,0 +1,196 @@
+plan_id: 20260926-v2018-bump
+objective: Assess bump from series/v2.0.16 (v2.0.16 base 3a103fe0af + fork patches) to v2.0.18 (cd9a14a6 via v2.0.17 04f4b061)
+focus_area: v2018-bump-plan
+created_at: '2026-09-26'
+created_by: researcher
+status: completed
+tldr: |
+  - Tags v2.0.16 (3a103fe0af), v2.0.17 (04f4b061), v2.0.18 (cd9a14a6) all present locally; series/v2.0.16 at 6fff8c8e66.
+  - v2.0.16 tag is NOT an ancestor of v2.0.18 (sibling release commits off 0bc8b8dbeb); v2.0.16..v2.0.18 = 76 commits right + 1 left.
+  - Fork (5 patches, 13 files) has ZERO file overlap with the 76-commit upstream range; cherry-pick path is clean.
+  - Retry/discover/config collisions are dev-only, absent from the 76-commit range; npm @opencode/* scope unchanged.
+research_metadata:
+  methodology: git rev-list/merge-base/diff-name-only/log-grep (read-only, no checkout/fetch/rebase)
+  scope: series/v2.0.16 to v2.0.18 bump assessment
+  confidence: high
+  coverage: 100
+  decision_blockers: 0
+  research_blockers: 0
+files_analyzed:
+  - file: release topology (tags + series tip)
+    path: git refs
+    purpose: confirm tags present locally and ancestry
+    key_elements:
+      - element: v2.0.16 tag
+        type: pattern
+        location: 3a103fe0af
+        description: 'release: v2.0.16, parent 0bc8b8dbeb'
+        language: git
+      - element: v2.0.17 tag
+        type: pattern
+        location: 04f4b0610c79e3692f3b91bd7e4489c2c7010e4b
+        description: 'release: v2.0.17'
+        language: git
+      - element: v2.0.18 tag
+        type: pattern
+        location: cd9a14a6b688d4021bee381dfd39d2cef9c0f862
+        description: 'release: v2.0.18'
+        language: git
+      - element: series/v2.0.16 tip
+        type: pattern
+        location: 6fff8c8e66
+        description: test(core) webfetch status-metadata expectation; 5 fork patches atop v2.0.16 tag
+        language: git
+    lines: 6
+  - file: fork patch series (series-unique commits)
+    path: v2.0.18..series/v2.0.16
+    purpose: enumerate the 5 fork patches (+1 tag commit) to cherry-pick under strategy B
+    key_elements:
+      - element: d306943e71
+        type: pattern
+        location: series/v2.0.16~5
+        description: 'chore(debian): packaging scripts from v1.18.29 fork (scripts/*.sh, service, env)'
+        language: shell
+      - element: bfb523a01b
+        type: pattern
+        location: series/v2.0.16~4
+        description: 'fix(core): surface 2xx-but-not-200 HTTP status in webfetch output'
+        language: typescript
+      - element: e3a0e8bbeb
+        type: pattern
+        location: series/v2.0.16~3
+        description: 'chore: port provider config schema from v1.18.29 to v2.0.16'
+        language: typescript
+      - element: 053f16e820
+        type: pattern
+        location: series/v2.0.16~2
+        description: 'fix(scripts): build-deb paths packages/opencode to packages/cli'
+        language: shell
+      - element: 6fff8c8e66
+        type: pattern
+        location: series/v2.0.16
+        description: 'test(core): webfetch test expects status in metadata'
+        language: typescript
+    lines: 6
+  - file: upstream 76-commit range
+    path: v2.0.16..v2.0.18
+    purpose: verify contents, overlap, and collision presence in range
+    key_elements:
+      - element: ac2426e103 sync release versions for v2.0.16
+        type: pattern
+        location: range-base+1
+        description: sibling of v2.0.16 tag commit off shared parent 0bc8b8dbeb; explains tag non-ancestry
+        language: git
+      - element: ai media/client refactor cluster
+        type: pattern
+        location: range (e.g. 92d2b1700f, 19a9e41c28, 9810d98bc2)
+        description: media client shape, protocol plumbing, promise helpers; no fork-file contact
+        language: typescript
+      - element: compaction overflow pair
+        type: pattern
+        location: 61c2349cef + revert 16b18dff13
+        description: fit model limits / recover compaction overflow landed then reverted within range
+        language: typescript
+    lines: 76
+patterns_found:
+  - category: structure
+    pattern: sibling release commits
+    description: v2.0.16 tag (3a103fe0af) and range-base ac2426e103 share parent 0bc8b8dbeb; tag is not ancestor of v2.0.18
+    examples:
+      - file: git refs
+        location: 0bc8b8dbeb
+        snippet: merge-base(v2.0.16, v2.0.18) = 0bc8b8dbeb feat(session-ui) #51000
+    prevalence: rare
+  - category: structure
+    pattern: zero file overlap fork-vs-upstream
+    description: 13 fork-touched files vs ~300 upstream-76 files share no common path (comm -12 empty)
+    examples:
+      - file: git diff --name-only
+        location: v2.0.16..series vs v2.0.16..v2.0.18
+        snippet: overlap = (empty)
+    prevalence: occasional
+related_architecture:
+  components_relevant_to_domain:
+    - component: release lineage
+      responsibility: tag/branch ancestry for bump base selection
+      location: 0bc8b8dbeb..cd9a14a6
+      relationship_to_domain: merge-base and left-right counts define A-vs-B effort
+    - component: fork patch set
+      responsibility: debian packaging, webfetch status, provider config schema port, build-deb paths, webfetch test
+      location: series/v2.0.16 (5 commits)
+      relationship_to_domain: unit to carry forward onto v2.0.18
+    - component: upstream ai/core churn
+      responsibility: media client, providers, compaction, codemode, tui/app pairing
+      location: v2.0.16..v2.0.18 (76 commits)
+      relationship_to_domain: incoming changes the bump absorbs
+  interfaces_used_by_domain:
+    - interface: git refs v2.0.16/v2.0.17/v2.0.18 + series/v2.0.16
+      location: local repo
+      usage_pattern: rev-list/merge-base/diff read-only verification
+  data_flow_involving_domain: series/v2.0.16 (base 3a103fe0af + 5 patches) -> v2.0.18 (cd9a14a6) via strategy B cherry-pick
+  key_relationships_to_domain:
+    - from: series/v2.0.16
+      to: v2.0.18
+      relationship: composes
+related_technology_stack:
+  languages_used_in_domain: [typescript, shell]
+  frameworks_used_in_domain: []
+  libraries_used_in_domain: []
+  external_apis_used_in_domain: []
+related_conventions:
+  naming_patterns_in_domain: conventional commits (fix/chore/feat/test/refactor/docs/sync release versions)
+  structure_of_domain: series branch per upstream minor + cherry-picked fork patches
+  error_handling_in_domain: n/a
+  testing_in_domain: webfetch status-metadata test updated in fork tip (6fff8c8e66)
+  documentation_in_domain: n/a
+related_dependencies:
+  internal:
+    - component: packages/core webfetch + v1 config + schema provider config
+      relationship_to_domain: fork patch surface; untouched by upstream-76
+      direction: outbound
+    - component: scripts/build-deb* + deb service/env
+      relationship_to_domain: fork-only debian packaging surface; untouched by upstream-76
+      direction: outbound
+  external:
+    - name: upstream v2.0.17 (04f4b061, 73 commits from v2.0.16) + v2.0.18 delta (4 commits)
+      purpose_for_domain: intermediate stepping stone absorbed by direct v2.0.18 target
+domain_security_considerations:
+  sensitive_areas: []
+  authentication_patterns_in_domain: n/a (pairing-link changes in range are app/server UX, no fork contact)
+  authorization_patterns_in_domain: n/a
+  data_validation_in_domain: n/a
+testing_patterns:
+  framework: bun test (repo convention, not executed here)
+  coverage_areas: [webfetch status metadata (fork tip)]
+  test_organization: packages/core/test/tool-webfetch.test.ts
+  mock_patterns: []
+open_questions: []
+gaps:
+  - area: strategy A (rebase series/v2.0.16 onto v2.0.18)
+    description: Rebase would replay 5 fork patches PLUS the v2.0.16 tag commit (3a103fe0af release: v2.0.16) since tag is not ancestor; tag commit would conflict/duplicate against sibling ac2426e103 sync commit. Higher friction, rewrites series history.
+    impact: nice_to_know
+    affects: [strategy-selection]
+  - area: strategy B (new series/v2.0.18 from v2.0.18 + cherry-pick 5)
+    description: Clean apply expected (zero file overlap verified per-file: webfetch, v1 config x3, schema provider, webfetch test all 0 hits in 76). Preserves linear history on new branch. Recommended per prior zero-overlap finding.
+    impact: nice_to_know
+    affects: [strategy-selection]
+  - area: retry-arch divergence risk
+    description: 'No retry commits in 76-range (grep retry = 0). Retry churn exists only on dev (e.g. e0b9e68a68, 40282c1d4d, 71d08e94d5, 61aefc0759). No action for this bump.'
+    impact: nice_to_know
+    affects: [v2018-bump]
+  - area: provider discover collision (3 upstream)
+    description: 'No discover commits in 76-range (grep discover = 0). Fork provider-schema files untouched in range. Prior 3-upstream collision set is dev-only.'
+    impact: nice_to_know
+    affects: [v2018-bump]
+  - area: config collision (2 upstream)
+    description: 'Only TUI config files in range (dialog-config, config/index, keybind); fork core config files (v1/config/*, schema provider) have 0 hits in range. Prior 2-upstream config collision is dev-only.'
+    impact: nice_to_know
+    affects: [v2018-bump]
+  - area: npm scope consistency
+    description: '@opencode/* names identical v2.0.16 vs v2.0.18 (diff of all package.json names = empty; no renames in range diff). Only non-scoped names are pre-existing artifacts/glm52-rise-video and github aux packages.'
+    impact: nice_to_know
+    affects: [v2018-bump]
+  - area: counts verified
+    description: 'v2.0.16...v2.0.18 left-right = 1 left (tag commit 3a103fe0af) / 76 right. series/v2.0.16...v2.0.18 = 6 left (5 patches + tag commit) / 76 right. v2.0.16..v2.0.17 = 73, v2.0.17..v2.0.18 = 4 (incl. release commits).'
+    impact: nice_to_know
+    affects: [v2018-bump]
