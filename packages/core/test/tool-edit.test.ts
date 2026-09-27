@@ -578,6 +578,76 @@ describe("EditTool", () => {
     ),
   )
 
+  it.live("rejects equivalent candidates that differ in whitespace instead of committing the first (#41872)", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "spaces.txt")
+        const original = "alpha   beta\nalpha\tbeta\n"
+        return Effect.promise(() => fs.writeFile(target, original)).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                expect(
+                  yield* executeTool(
+                    registry,
+                    call({ path: "spaces.txt", oldString: "alpha beta", newString: "done" }),
+                  ),
+                ).toEqual({
+                  type: "error",
+                  value:
+                    "Found multiple approximate matches for oldString after exact matching failed. Provide more surrounding context so the match is unique.",
+                })
+                expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe(original)
+                expect(writes).toEqual([])
+              }),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("scores blank lines in a block as an exact match (#45199)", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "blanks.ts")
+        // Every non-blank middle line drifts, so context-aware cannot claim the
+        // block; the only strategy that can is block-anchor, whose score the
+        // blank lines used to drag below the threshold.
+        const original = [
+          "function configure() {",
+          "  const alpha = 1",
+          "",
+          "",
+          "  const beta = 2",
+          "",
+          "",
+          "  const gamma = 3",
+          "}",
+        ].join("\n")
+        const drifted = original.replaceAll(/= \d/g, "= 9")
+        const replacement = original.replace("const beta = 2", "const beta = 3")
+        return Effect.promise(() => fs.writeFile(target, `${original}\n`)).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                yield* settleTool(registry, call({ path: "blanks.ts", oldString: drifted, newString: replacement }))
+                expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe(`${replacement}\n`)
+                expect(writes).toHaveLength(1)
+              }),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   it.live("preserves BOM and CRLF line endings", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),

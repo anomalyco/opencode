@@ -99,7 +99,9 @@ const blockAnchor = (content: string, find: string) => {
         .map((line, offset) => {
           const original = contentLines[start + 1 + offset]?.trim() ?? ""
           const max = Math.max(original.length, line.trim().length)
-          if (max === 0) return 0
+          // Two blank lines are an exact match, so they must score full marks
+          // rather than being skipped and diluting the average (#45199).
+          if (max === 0) return 1
           return 1 - levenshtein(original, line.trim()) / max
         })
         .slice(0, comparable)
@@ -243,16 +245,25 @@ export const resolve = (content: string, oldString: string, replaceAll: boolean)
     return { _tag: "Matched", search: oldString, count: exact, strategy: "exact" }
   }
 
-  const usable = strategies
-    .flatMap(([strategy, produce]) => produce(content, oldString).map((search) => ({ search, strategy })))
-    .filter(({ search }) => content.includes(search))
-  if (usable.length === 0) return { _tag: "NotFound" }
-
-  for (const { search, strategy } of usable) {
+  for (const [strategy, produce] of strategies) {
+    // Dedupe by span rather than matched bytes: two candidates that normalize
+    // to the same request but sit at different offsets are two possible edits,
+    // and committing the first byte-unique one would bypass the ambiguity
+    // safeguard (#41872).
+    const spans = [
+      ...new Map(
+        produce(content, oldString)
+          .filter((search) => content.includes(search))
+          .map((search) => [content.indexOf(search), search] as const),
+      ).entries(),
+    ]
+    if (spans.length === 0) continue
+    if (spans.length > 1 && !replaceAll) return { _tag: "Ambiguous", strategy }
+    const search = spans[0][1]
     if (isDisproportionate(search, oldString)) return { _tag: "Disproportionate", search }
     const count = countOccurrences(content, search)
-    if (count > 1 && !replaceAll) continue
+    if (count > 1 && !replaceAll) return { _tag: "Ambiguous", strategy }
     return { _tag: "Matched", search, count, strategy }
   }
-  return { _tag: "Ambiguous", strategy: usable[0].strategy }
+  return { _tag: "NotFound" }
 }
