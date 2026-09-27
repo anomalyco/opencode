@@ -11,9 +11,7 @@ import { Tool } from "@/tool/tool"
 import { testEffect, pollWithTimeout } from "../lib/effect"
 
 const it = testEffect(
-  LayerNode.compile(LayerNode.group([httpClient, Truncate.node, Agent.node]), [
-    [httpClient, FetchHttpClient.layer],
-  ]),
+  LayerNode.compile(LayerNode.group([httpClient, Truncate.node, Agent.node]), [[httpClient, FetchHttpClient.layer]]),
 )
 
 const ctx = {
@@ -41,7 +39,7 @@ const PAGE =
   "<!doctype html><html><head><title>fixture</title></head><body>" +
   '<h1 id="title">hello</h1><input id="name" /><button id="go">go</button>' +
   "<script>" +
-  'console.warn("fixture-booted")' +
+  'console.warn("fixture-booted");' +
   'document.getElementById("go").addEventListener("click", () => {' +
   '  document.getElementById("title").textContent = document.getElementById("name").value || "clicked"' +
   "})" +
