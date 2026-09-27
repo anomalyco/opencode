@@ -2,10 +2,11 @@ import { describe, expect } from "bun:test"
 import { Effect, Fiber, Layer, Stream } from "effect"
 import * as TestClock from "effect/testing/TestClock"
 import { HttpClientRequest } from "effect/unstable/http"
-import { Media, Transcription, TranscriptionClient } from "../src/index.js"
+import { Media, Transcription, TranscriptionClient, type TranscriptionEvent } from "../src/index.js"
 import { AssemblyAI, Deepgram, Google, OpenAI } from "../src/providers.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse, json, observe, type Call } from "./lib/http.js"
+import { sseEvents } from "./lib/sse.js"
 
 const layer = (handler: Parameters<typeof dynamicResponse>[0]) =>
   TranscriptionClient.layer.pipe(Layer.provideMerge(dynamicResponse(handler)))
@@ -16,6 +17,21 @@ const deepgram = Deepgram.configure({ apiKey: "test", baseURL: "https://deepgram
 const google = Google.configure({ apiKey: "test", baseURL: "https://google.test/v1beta" }).transcription(
   "gemini-3.5-transcribe",
 )
+/**
+ * Multipart fields of a recorded request, with repeated names collected in order. The boundary comes from the body:
+ * each conversion of a FormData request to a web request picks a fresh one, so the recorded headers may not match.
+ */
+const formFields = (call: Call) =>
+  Effect.promise(() =>
+    new Response(call.body, {
+      headers: { "content-type": `multipart/form-data; boundary=${call.body.slice(2, call.body.indexOf("\r\n"))}` },
+    }).formData(),
+  ).pipe(
+    Effect.map((form) =>
+      Object.fromEntries([...new Set(form.keys())].map((key) => [key, form.getAll(key).map((value) => String(value))])),
+    ),
+  )
+
 const assemblyai = AssemblyAI.configure({ apiKey: "aai-key", baseURL: "https://assemblyai.test" }).transcription(
   "universal-3-5-pro",
 )
@@ -126,6 +142,198 @@ describe("Transcription", () => {
       expect(events).toEqual([
         expect.objectContaining({ type: "finish", text: "Hello there.", usage: { type: "seconds", seconds: 2 } }),
       ])
+    }),
+  )
+
+  it.effect("streams diarized segments and finishes with the accumulated segments", () =>
+    Effect.gen(function* () {
+      const calls: Array<Call> = []
+      const body = sseEvents(
+        { type: "transcript.text.segment", id: "seg_0", text: " Hello", start: 0.25, end: 0.7, speaker: "A" },
+        { type: "transcript.text.segment", id: "seg_1", text: " there.", start: 0.7, end: 1.25, speaker: "B" },
+        { type: "transcript.text.done", text: "Hello there.", usage: { type: "duration", seconds: 2 } },
+      )
+      const events = Array.from(
+        yield* Stream.runCollect(
+          Transcription.stream({ model: openai.transcription("gpt-4o-transcribe-diarize"), audio, diarize: true }),
+        ).pipe(
+          Effect.provide(
+            layer((input) =>
+              observe(calls, input).pipe(
+                Effect.as(input.respond(body, { headers: { "content-type": "text/event-stream" } })),
+              ),
+            ),
+          ),
+        ),
+      )
+
+      const form = yield* formFields(calls[0])
+      expect(form).toMatchObject({
+        model: ["gpt-4o-transcribe-diarize"],
+        response_format: ["diarized_json"],
+        chunking_strategy: ["auto"],
+        stream: ["true"],
+      })
+      const segments = [
+        { text: "Hello", startSeconds: 0.25, endSeconds: 0.7, speaker: "A" },
+        { text: "there.", startSeconds: 0.7, endSeconds: 1.25, speaker: "B" },
+      ]
+      expect(events).toEqual([
+        { type: "segment", segment: segments[0] },
+        { type: "segment", segment: segments[1] },
+        expect.objectContaining({
+          type: "finish",
+          text: "Hello there.",
+          segments,
+          usage: { type: "seconds", seconds: 2 },
+        }),
+      ])
+    }),
+  )
+
+  it.effect("requests whisper-1 segment timestamps as verbose_json", () =>
+    Effect.gen(function* () {
+      const calls: Array<Call> = []
+      const response = yield* Transcription.generate({
+        model: openai.transcription("whisper-1"),
+        audio,
+        timestamps: "segment",
+      }).pipe(
+        Effect.provide(
+          layer((input) =>
+            observe(calls, input).pipe(
+              Effect.as(
+                json(input, {
+                  text: "Hello there.",
+                  language: "English",
+                  duration: 1.25,
+                  segments: [
+                    { id: 0, text: " Hello", start: 0.25, end: 0.7 },
+                    { id: 1, text: " there.", start: 0.7, end: 1.25 },
+                  ],
+                  usage: { type: "duration", seconds: 2 },
+                }),
+              ),
+            ),
+          ),
+        ),
+      )
+
+      const form = yield* formFields(calls[0])
+      expect(form).toMatchObject({
+        model: ["whisper-1"],
+        response_format: ["verbose_json"],
+        "timestamp_granularities[]": ["segment"],
+      })
+      expect(form.stream).toBeUndefined()
+      expect(response).toMatchObject({
+        text: "Hello there.",
+        segments: [
+          { text: "Hello", startSeconds: 0.25, endSeconds: 0.7 },
+          { text: "there.", startSeconds: 0.7, endSeconds: 1.25 },
+        ],
+        language: "english",
+        durationSeconds: 1.25,
+        usage: { type: "seconds", seconds: 2 },
+      })
+    }),
+  )
+
+  it.effect("fails an OpenAI stream that ends without transcript.text.done as incomplete", () =>
+    Effect.gen(function* () {
+      const events: Array<TranscriptionEvent> = []
+      const error = yield* Transcription.stream({ model: openai.transcription("gpt-4o-mini-transcribe"), audio }).pipe(
+        Stream.runForEach((event) => Effect.sync(() => events.push(event))),
+        Effect.flip,
+        Effect.provide(
+          layer((input) =>
+            Effect.succeed(
+              input.respond(sseEvents({ type: "transcript.text.delta", delta: "Hel" }), {
+                headers: { "content-type": "text/event-stream" },
+              }),
+            ),
+          ),
+        ),
+      )
+
+      expect(events).toEqual([{ type: "text-delta", delta: "Hel" }])
+      expect(error.reason).toMatchObject({ _tag: "InvalidProviderOutput", classification: "incomplete-stream" })
+      expect(error.reason.http?.status).toBe(200)
+    }),
+  )
+
+  it.effect("sends a Deepgram URL source as a JSON body and repeats array query parameters", () =>
+    Effect.gen(function* () {
+      const calls: Array<Call> = []
+      const response = yield* Transcription.generate({
+        model: deepgram,
+        audio: Media.url("https://a.test/call.mp3", { mediaType: "audio/mpeg" }),
+        language: "en",
+        providerOptions: { keyterm: ["OpenCode", "Effect"] },
+      }).pipe(
+        Effect.provide(
+          layer((input) =>
+            observe(calls, input).pipe(
+              Effect.as(
+                json(input, {
+                  metadata: { request_id: "dg_1", duration: 2 },
+                  results: { channels: [{ alternatives: [{ transcript: "Hello there." }] }] },
+                }),
+              ),
+            ),
+          ),
+        ),
+      )
+
+      expect(calls).toHaveLength(1)
+      const url = new URL(calls[0].url)
+      expect(url.origin + url.pathname).toBe("https://deepgram.test/v1/listen")
+      expect([...url.searchParams]).toEqual([
+        ["model", "nova-3"],
+        ["smart_format", "true"],
+        ["language", "en"],
+        ["keyterm", "OpenCode"],
+        ["keyterm", "Effect"],
+      ])
+      expect(calls[0].headers.get("content-type")).toBe("application/json")
+      expect(JSON.parse(calls[0].body)).toEqual({ url: "https://a.test/call.mp3" })
+      expect(response).toMatchObject({
+        text: "Hello there.",
+        usage: { type: "seconds", seconds: 2 },
+        providerMetadata: { deepgram: { requestId: "dg_1" } },
+      })
+    }),
+  )
+
+  it.effect("transcribes an AssemblyAI URL source without uploading it first", () =>
+    Effect.gen(function* () {
+      const calls: Array<Call> = []
+      const response = yield* Transcription.generate({
+        model: assemblyai,
+        audio: Media.url("https://a.test/call.mp3", { mediaType: "audio/mpeg" }),
+      }).pipe(
+        Effect.provide(
+          layer((input) =>
+            Effect.gen(function* () {
+              const { call } = yield* observe(calls, input)
+              if (call.method === "POST") return json(input, { id: "tr_1", status: "queued" })
+              return json(input, { id: "tr_1", status: "completed", text: "Hello there.", audio_duration: 2 })
+            }),
+          ),
+        ),
+      )
+
+      expect(calls.map((call) => `${call.method} ${call.url}`)).toEqual([
+        "POST https://assemblyai.test/v2/transcript",
+        "GET https://assemblyai.test/v2/transcript/tr_1",
+        "GET https://assemblyai.test/v2/transcript/tr_1",
+      ])
+      expect(JSON.parse(calls[0].body)).toEqual({
+        audio_url: "https://a.test/call.mp3",
+        speech_models: ["universal-3-5-pro"],
+        language_detection: true,
+      })
+      expect(response).toMatchObject({ text: "Hello there.", usage: { type: "seconds", seconds: 2 } })
     }),
   )
 
