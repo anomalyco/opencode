@@ -1,4 +1,5 @@
 import type { NamedError } from "@opencode-ai/core/util/error"
+import { APICallError } from "ai"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Cause, Clock, Duration, Effect, Schedule } from "effect"
 import { MessageV2 } from "./message-v2"
@@ -80,6 +81,31 @@ export function delay(attempt: number, error?: SessionV1.APIError, random = Math
 function exponential(attempt: number, random: number) {
   const base = RETRY_INITIAL_DELAY * Math.pow(RETRY_BACKOFF_FACTOR, attempt - 1)
   return Math.ceil(base + base * RETRY_JITTER_FACTOR * random)
+}
+
+export function fromError(error: unknown, ctx: Parameters<typeof MessageV2.fromError>[1]) {
+  if (ctx.aborted) return MessageV2.fromError(new DOMException("Aborted", "AbortError"), ctx)
+  if (
+    error instanceof Error &&
+    !APICallError.isInstance(error) &&
+    "isRetryable" in error &&
+    error.isRetryable === true
+  ) {
+    const headers = "responseHeaders" in error && isRecord(error.responseHeaders) ? error.responseHeaders : undefined
+    return new SessionV1.APIError(
+      {
+        message: error.message,
+        isRetryable: true,
+        responseHeaders: headers
+          ? Object.fromEntries(
+              Object.entries(headers).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
+            )
+          : undefined,
+      },
+      { cause: error },
+    ).toObject()
+  }
+  return MessageV2.fromError(error, ctx)
 }
 
 export function retryable(error: Err, provider: string) {

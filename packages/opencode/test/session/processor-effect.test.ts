@@ -252,6 +252,22 @@ function retryStreams(streams: Stream.Stream<LLMEvent, unknown>[], snapshots?: L
 const failedStream = (...events: LLMEvent[]) =>
   Stream.make(...events).pipe(Stream.concat(Stream.fail(new ProviderError.ResponseStreamError("Service unavailable"))))
 
+const customFetchFailure = (retryable: boolean) =>
+  Stream.fromEffect(
+    Effect.tryPromise({
+      try: async () => {
+        const fetch = async (_url: string) => {
+          throw Object.assign(new Error("gateway closed connection"), {
+            isRetryable: retryable,
+            responseHeaders: { "retry-after-ms": "0" },
+          })
+        }
+        return fetch("https://gateway.example.invalid/v1/chat/completions")
+      },
+      catch: (error) => error,
+    }),
+  ).pipe(Stream.flatMap(() => Stream.empty))
+
 const runRetryCase = Effect.fn("test.retryCase")(function* (dir: string, tools: LLM.StreamInput["tools"] = {}) {
   const { processors, session, provider } = yield* boot()
   const chat = yield* session.create({})
@@ -286,6 +302,82 @@ const retryText = retryStreams([
     LLMEvent.finish({ reason: "stop" }),
   ),
 ])
+
+const retryCustomFetchBefore = retryStreams([
+  customFetchFailure(true),
+  Stream.make(LLMEvent.textStart({ id: "recovered" }), LLMEvent.textDelta({ id: "recovered", text: "ok" })),
+])
+
+retryCustomFetchBefore.it.effect("session.processor retries custom fetch failures before output", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { handle, input } = yield* runRetryCase(dir)
+        const fiber = yield* handle.process(input).pipe(Effect.forkChild)
+        yield* TestClock.adjust("10 seconds")
+        expect(retryCustomFetchBefore.calls()).toBe(2)
+        expect(yield* Fiber.join(fiber)).toBe("continue")
+      }),
+    { config: cfg },
+  ),
+)
+
+const retryCustomFetchMidstream = retryStreams([
+  Stream.make(LLMEvent.textStart({ id: "first" }), LLMEvent.textDelta({ id: "first", text: "discard" })).pipe(
+    Stream.concat(customFetchFailure(true)),
+  ),
+  Stream.make(LLMEvent.textStart({ id: "second" }), LLMEvent.textDelta({ id: "second", text: "keep" })),
+])
+
+retryCustomFetchMidstream.it.effect("session.processor discards custom fetch failure output before retry", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { handle, input, msg } = yield* runRetryCase(dir)
+        const fiber = yield* handle.process(input).pipe(Effect.forkChild)
+        yield* TestClock.adjust("10 seconds")
+        expect(yield* Fiber.join(fiber)).toBe("continue")
+        expect(retryCustomFetchMidstream.calls()).toBe(2)
+        expect(
+          (yield* MessageV2.parts(msg.id)).filter((part) => part.type === "text").map((part) => part.text),
+        ).toEqual(["keep"])
+      }),
+    { config: cfg },
+  ),
+)
+
+const retryCustomFetchTool = retryStreams([
+  Stream.make(
+    LLMEvent.toolCall({ id: "executed", name: "lookup", input: {} }),
+    LLMEvent.toolResult({ id: "executed", name: "lookup", result: { type: "text", value: "done" } }),
+  ).pipe(Stream.concat(customFetchFailure(true))),
+])
+
+retryCustomFetchTool.it.live("session.processor does not retry custom fetch failures after a tool started", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { handle, input } = yield* runRetryCase(dir)
+        expect(yield* handle.process(input)).toBe("stop")
+        expect(retryCustomFetchTool.calls()).toBe(1)
+      }),
+    { config: cfg },
+  ),
+)
+
+const nonRetryableCustomFetch = retryStreams([customFetchFailure(false)])
+
+nonRetryableCustomFetch.it.live("session.processor does not retry custom fetch errors marked false", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { handle, input } = yield* runRetryCase(dir)
+        expect(yield* handle.process(input)).toBe("stop")
+        expect(nonRetryableCustomFetch.calls()).toBe(1)
+      }),
+    { config: cfg },
+  ),
+)
 
 retryText.it.effect("session.processor discards failed text and step parts with removal events", () =>
   provideTmpdirInstance(

@@ -87,6 +87,10 @@ type Rule = {
 
 export type AuthHook = {
   provider: string
+  /** Provider options may include a custom `fetch`. To retry a transient failure, throw an Error with
+   * `isRetryable: true`; optional `responseHeaders` can carry `retry-after` or `retry-after-ms`.
+   * Retries are bounded and stop once a tool call starts. AI SDK `APICallError.isRetryable` also works.
+   */
   loader?: (auth: () => Promise<Auth>, provider: Provider) => Promise<Record<string, any>>
   methods: (
     | {

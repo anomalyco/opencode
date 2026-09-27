@@ -149,6 +149,12 @@ describe("session.retry.delay", () => {
 })
 
 describe("session.retry.retryable", () => {
+  test("does not retry a custom fetch error after the run was aborted", () => {
+    const error = Object.assign(new Error("gateway closed connection"), { isRetryable: true })
+    const result = SessionRetry.fromError(error, { providerID, aborted: true })
+    expect(SessionRetry.retryable(result, retryProvider)).toBeUndefined()
+  })
+
   test("retries serialized too_many_requests messages", () => {
     const error = wrap(JSON.stringify({ type: "error", error: { type: "too_many_requests" } }))
     expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "Too Many Requests" })
@@ -428,6 +434,23 @@ describe("session.retry.retryable", () => {
 })
 
 describe("session.message-v2.fromError", () => {
+  test("honors AI SDK APICallError retry hints and headers without matching error text", () => {
+    const result = MessageV2.fromError(
+      new APICallError({
+        message: "gateway closed connection",
+        url: "https://gateway.example.invalid/v1/chat/completions",
+        requestBodyValues: {},
+        isRetryable: true,
+        responseHeaders: { "retry-after": "3" },
+      }),
+      { providerID },
+    )
+    if (!SessionV1.APIError.isInstance(result)) throw new Error("expected APIError")
+    expect(result.data.isRetryable).toBe(true)
+    expect(SessionRetry.retryable(result, retryProvider)).toEqual({ message: "gateway closed connection" })
+    expect(SessionRetry.delay(1, result)).toBe(3000)
+  })
+
   test.concurrent(
     "converts ECONNRESET socket errors to retryable APIError",
     async () => {

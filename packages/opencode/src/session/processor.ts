@@ -116,7 +116,7 @@ const layer = Layer.effect(
       let aborted = false
 
       const parse = (e: unknown) =>
-        MessageV2.fromError(e, {
+        SessionRetry.fromError(e, {
           providerID: input.model.providerID,
           aborted,
         })
