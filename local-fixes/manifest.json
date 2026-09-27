@@ -52,8 +52,7 @@
         "packages/opencode/test/session/compaction.test.ts"
       ],
       "markers": [
-        "compaction-model-override",
-        "summarizerVariant"
+        "compaction-model-override"
       ],
       "tests": "test/session/compaction.test.ts",
       "why": "The compaction agent model pin existed (configured-compaction-agent) but the summarize kept the request marker variant, so a pinned model ran at the session variant (e.g. xhigh) instead of the agents configured variant (e.g. low). Threads agent.variant onto the summarize when a model is configured; logs pin+variant for runtime verification."
