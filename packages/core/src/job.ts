@@ -130,6 +130,8 @@ export interface Interface {
   readonly start: (input: StartInput) => Effect.Effect<Info>
   readonly wait: (input: WaitInput) => Effect.Effect<WaitResult>
   readonly block: (input: BlockInput) => Effect.Effect<BlockResult | undefined>
+  /** Whether a running job is currently blocking this Session. Background jobs do not count. */
+  readonly isBlocking: (input: BlockInput) => Effect.Effect<boolean>
   readonly background: (id: string) => Effect.Effect<Info | undefined>
   readonly backgroundAll: (input: BackgroundAllInput) => Effect.Effect<Info[]>
   readonly cancel: (id: string) => Effect.Effect<Info | undefined>
@@ -356,6 +358,11 @@ export const make = Effect.gen(function* () {
     )
   })
 
+  const isBlocking: Interface["isBlocking"] = Effect.fnUntraced(function* (input) {
+    const job = (yield* SynchronizedRef.get(state.jobs)).get(input.id)
+    return job?.blockingSessions.has(input.sessionID) ?? false
+  })
+
   const markBackground = Effect.fnUntraced(function* (job: Active) {
     const next = {
       ...job,
@@ -469,6 +476,7 @@ export const make = Effect.gen(function* () {
     start,
     wait,
     block,
+    isBlocking,
     background,
     backgroundAll,
     cancel,
