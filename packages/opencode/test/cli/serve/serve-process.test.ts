@@ -7,8 +7,12 @@
 // parsed off the "listening on http://..." line.
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { HttpClient } from "effect/unstable/http"
+import { HttpClient, HttpClientRequest } from "effect/unstable/http"
+import path from "node:path"
+import { pollWithTimeout } from "../../lib/effect"
 import { cliIt } from "../../lib/cli-process"
+
+const mcpStdioFixture = path.join(import.meta.dir, "../../fixture/mcp-lifecycle-stdio.ts")
 
 describe("opencode serve (subprocess)", () => {
   // Smoke test: server starts, binds a port, and /global/health responds.
@@ -55,6 +59,58 @@ describe("opencode serve (subprocess)", () => {
         // (typically 143 on POSIX). We just require resolution within a sane
         // window — anything else means the kill didn't take.
         expect(typeof code === "number" || code === null).toBe(true)
+      }),
+    60_000,
+  )
+
+  // A `docker run` MCP server is a real child process the server owns. If
+  // SIGTERM only kills the server itself, the MCP child is orphaned — this
+  // is the bug reported in #50780. Sending real SIGTERM (not scope close)
+  // must still run the graceful stop path and take the MCP child with it.
+  cliIt.live(
+    "SIGTERM to the server also terminates a connected local MCP child",
+    ({ opencode, home }) =>
+      Effect.gen(function* () {
+        const server = yield* opencode.serve()
+        const client = yield* HttpClient.HttpClient
+        const pidFile = path.join(home, "mcp.pid")
+
+        const added = yield* HttpClientRequest.post(`${server.url}/mcp`).pipe(
+          HttpClientRequest.setHeader("x-opencode-directory", home),
+          HttpClientRequest.bodyJson({
+            name: "fake-docker",
+            config: {
+              type: "local",
+              command: [process.execPath, mcpStdioFixture, "--keep-alive"],
+              environment: { MCP_LIFECYCLE_PID_FILE: pidFile },
+            },
+          }),
+          Effect.flatMap(client.execute),
+        )
+        expect(added.status).toBe(200)
+
+        const pid = yield* pollWithTimeout(
+          Effect.promise(async () => {
+            const file = Bun.file(pidFile)
+            return (await file.exists()) ? Number(await file.text()) : undefined
+          }),
+          "MCP child did not publish its pid",
+        )
+
+        server.kill()
+        yield* Effect.promise(() => server.exited)
+
+        yield* pollWithTimeout(
+          Effect.sync(() => {
+            try {
+              process.kill(pid, 0)
+              return undefined
+            } catch {
+              return true
+            }
+          }),
+          "MCP child was not terminated after server SIGTERM",
+        )
       }),
     60_000,
   )

@@ -19,6 +19,17 @@ export const ServeCommand = effectCmd({
     const server = yield* Effect.promise(() => Server.listen(opts))
     console.log(`opencode server listening on http://${server.hostname}:${server.port}`)
 
+    // Trap SIGTERM/SIGINT and run the real shutdown path instead of letting
+    // Node kill the process outright. `server.stop(true)` closes the root
+    // scope, which runs every MCP client finalizer (see mcp/index.ts) and
+    // sends SIGTERM to their child processes, e.g. `docker run` containers
+    // that would otherwise leak past every restart.
+    const shutdown = () => {
+      void server.stop(true).finally(() => process.exit(0))
+    }
+    process.on("SIGTERM", shutdown)
+    process.on("SIGINT", shutdown)
+
     yield* Effect.never
   }),
 })
