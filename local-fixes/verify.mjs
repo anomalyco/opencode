@@ -8,8 +8,9 @@
  *   bun run fixes:verify
  */
 import { spawnSync, execFileSync } from "node:child_process"
+import { createHash } from "node:crypto"
 import { existsSync, readFileSync, statSync, readdirSync } from "node:fs"
-import { join, dirname, basename } from "node:path"
+import { join, dirname, basename, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..")
@@ -95,7 +96,32 @@ for (const fix of fixes) {
   }
 }
 
-// 4. fix commit still in this repo
+// 3b. RUNNING binary is the staged build (2026-09-28: a launch loaded a stale
+// stable-name exe while the env var was correctly set — verify what actually runs)
+console.log(`\n[3b] running binary`)
+try {
+  const managedDir = process.env.USERPROFILE + "\\.config\\openchamber\\managed-opencode"
+  const rec = readdirSync(managedDir).filter((f) => f.endsWith(".json"))
+    .map((f) => [statSync(join(managedDir, f)).mtimeMs, f]).sort().map((s) => s[1]).at(-1)
+  if (!rec) {
+    note(`no managed-opencode record found`)
+  } else {
+    const recBinary = JSON.parse(readFileSync(join(managedDir, rec), "utf8")).binary
+    const stagedHash = createHash("sha256").update(readFileSync(stagePath)).digest("hex")
+    const check = (p, label) => {
+      try {
+        const h = createHash("sha256").update(readFileSync(p)).digest("hex")
+        if (h === stagedHash) good(`${label} matches staged build: ${p}`)
+        else warn(`${label} is a DIFFERENT build than staged (stale?): ${p}`)
+      } catch { note(`${label} not found: ${p}`) }
+    }
+    if (recBinary) check(recBinary, `record ${rec} binary`)
+    const stable = process.env.USERPROFILE + "\\.local\\bin\\opencode-patched.exe"
+    if (existsSync(stable) && resolve(stable) !== resolve(stagePath)) check(stable, `stable-name exe`)
+  }
+} catch (e) { note(`running-binary check skipped: ${e.message}`) }
+
+// 4. fix commits still in this repo
 console.log(`\n[4] fix commits`)
 for (const fix of fixes) {
   const has = spawnSync("git", ["cat-file", "-e", `${fix.commit}^{commit}`], { cwd: ROOT, encoding: "utf8" })
