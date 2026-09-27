@@ -30,7 +30,12 @@ function getNetworkIPs() {
 
 export const WebCommand = effectCmd({
   command: "web",
-  builder: (yargs) => withNetworkOptions(yargs),
+  builder: (yargs) =>
+    withNetworkOptions(yargs).option("open", {
+      type: "boolean",
+      describe: "open the web interface in a browser (--no-open for headless/service use)",
+      default: true,
+    }),
   describe: "start opencode server and open web interface",
   // Server loads instances per-request via x-opencode-directory header — no
   // ambient project InstanceContext needed at startup.
@@ -72,11 +77,11 @@ export const WebCommand = effectCmd({
       }
 
       // Open localhost in browser
-      openUrl(localhostUrl).catch(() => {})
+      if (args.open) openUrl(localhostUrl).catch(() => {})
     } else {
       const displayUrl = server.url.toString()
       UI.println(UI.Style.TEXT_INFO_BOLD + "  Web interface:    ", UI.Style.TEXT_NORMAL, displayUrl)
-      openUrl(displayUrl).catch(() => {})
+      if (args.open) openUrl(displayUrl).catch(() => {})
     }
 
     yield* Effect.never
