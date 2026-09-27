@@ -5,6 +5,7 @@ describe("file path helpers", () => {
   test("normalizes file inputs against workspace root", () => {
     const path = createPathHelpers(() => "/repo")
     expect(path.normalize("file:///repo/src/app.ts?x=1#h")).toBe("src/app.ts")
+    expect(path.normalize("FILE:///repo/src/app.ts")).toBe("src/app.ts")
     expect(path.normalize("/repo/src/app.ts")).toBe("src/app.ts")
     expect(path.normalize("./src/app.ts")).toBe("src/app.ts")
     expect(path.normalizeDir("src/components///")).toBe("src/components")
@@ -18,6 +19,7 @@ describe("file path helpers", () => {
     expect(path.normalize("C:\\repo\\src\\app.ts")).toBe("src\\app.ts")
     expect(path.normalize("C:/repo/src/app.ts")).toBe("src/app.ts")
     expect(path.normalize("file://C:/repo/src/app.ts")).toBe("src/app.ts")
+    expect(path.normalize("FiLe://C:/repo/src/app.ts")).toBe("src/app.ts")
     expect(path.normalize("c:\\repo\\src\\app.ts")).toBe("src\\app.ts")
   })
 

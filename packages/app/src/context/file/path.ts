@@ -1,5 +1,5 @@
 export function stripFileProtocol(input: string) {
-  if (!input.startsWith("file://")) return input
+  if (input.slice(0, "file://".length).toLowerCase() !== "file://") return input
   return input.slice("file://".length)
 }
 
