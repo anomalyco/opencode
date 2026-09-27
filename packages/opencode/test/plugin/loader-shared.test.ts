@@ -173,6 +173,30 @@ describe("plugin.loader.shared", () => {
     ),
   )
 
+  it.live("passes the runtime PluginInput shape to a configured v1 fixture", () =>
+    withTmp(
+      async (dir) => {
+        const fixture = path.join(import.meta.dir, "fixture", "contract.ts")
+        const inputPath = path.join(dir, "plugin-input.json")
+        const spec = pathToFileURL(fixture).href
+        await Bun.write(path.join(dir, "opencode.json"), JSON.stringify({ plugin: [[spec, { inputPath }]] }, null, 2))
+        return { inputPath }
+      },
+      (tmp) =>
+        Effect.gen(function* () {
+          yield* load(tmp.path)
+          const input = yield* Effect.promise(() => Bun.file(tmp.extra.inputPath).json())
+          expect(input).toMatchObject({
+            client: "function",
+            directory: tmp.path,
+            shell: "function",
+          })
+          expect(typeof input.worktree).toBe("string")
+          expect(typeof input.project).toBe("string")
+        }),
+    ),
+  )
+
   it.live("rejects v1 file server plugin without id", () =>
     withTmp(
       async (dir) => {
