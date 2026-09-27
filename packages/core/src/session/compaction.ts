@@ -63,6 +63,8 @@ type Settings = {
   readonly auto: boolean
   readonly buffer: number
   readonly tokens: number
+  // local-fix-14 (marker: compaction-model-override)
+  readonly model: string | undefined
 }
 
 type Dependencies = {
@@ -71,6 +73,12 @@ type Dependencies = {
     readonly stream: (request: LLMRequest) => Stream.Stream<LLMEvent, LLMError>
   }
   readonly config: readonly Config.Entry[]
+  // local-fix-14 (marker: compaction-model-override): optional model-ref
+  // resolver (structural subset of SessionRunnerModel.Interface to avoid an
+  // import cycle with the runner).
+  readonly models?: {
+    readonly resolveRef?: (ref: string) => Effect.Effect<Model, unknown> | undefined
+  } | undefined
 }
 
 type Input = {
@@ -129,8 +137,9 @@ const settings = (documents: readonly Config.Entry[]) => {
       auto: current.auto ?? result.auto,
       buffer: current.buffer ?? result.buffer,
       tokens: current.keep?.tokens ?? result.tokens,
+      model: current.model ?? result.model,
     }),
-    { auto: true, buffer: DEFAULT_BUFFER, tokens: DEFAULT_KEEP_TOKENS },
+    { auto: true, buffer: DEFAULT_BUFFER, tokens: DEFAULT_KEEP_TOKENS, model: undefined },
   )
 }
 
@@ -198,10 +207,20 @@ export const make = (dependencies: Dependencies) => {
 
     const chunks: string[] = []
     let failed = false
+    // local-fix-14 (marker: compaction-model-override): pin the summarize to
+    // compaction.model when configured; any resolution failure falls back
+    // to the session model (previous behavior) instead of blocking compaction.
+    const overrideModel =
+      config.model !== undefined && dependencies.models?.resolveRef !== undefined
+        ? yield* dependencies.models.resolveRef(config.model).pipe(
+            Effect.catchCause(() => Effect.succeed(undefined)),
+          )
+        : undefined
+    const summarizeModel = overrideModel ?? input.model
     const summarized = yield* dependencies.llm
       .stream(
         LLM.request({
-          model: input.model,
+          model: summarizeModel,
           http: input.request.http,
           messages: [Message.user(summaryPrompt)],
           tools: [],

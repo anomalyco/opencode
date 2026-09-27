@@ -106,7 +106,9 @@ const layer = Layer.effect(
     const config = yield* Config.Service
     const snapshots = yield* Snapshot.Service
     const db = (yield* Database.Service).db
-    const compaction = SessionCompaction.make({ events, llm, config: yield* config.entries() })
+    // local-fix-14 (marker: compaction-model-override): give compaction access
+    // to the model-ref resolver so compaction.model can be honored.
+    const compaction = SessionCompaction.make({ events, llm, config: yield* config.entries(), models })
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)

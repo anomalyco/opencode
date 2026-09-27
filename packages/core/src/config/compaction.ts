@@ -12,4 +12,8 @@ export class Info extends Schema.Class<Info>("ConfigV2.Compaction")({
   prune: Schema.Boolean.pipe(Schema.optional),
   keep: Keep.pipe(Schema.optional),
   buffer: NonNegativeInt.pipe(Schema.optional),
+  // local-fix-14 (marker: compaction-model-override): pin the model used for
+  // compaction summaries, "provider/model" with optional ":variant" suffix.
+  // Unset = the session's current model (previous behavior).
+  model: Schema.String.pipe(Schema.optional),
 }) {}
