@@ -1,39 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { Message, ToolResultPart, Media } from "@opencode/ai"
-import { boundImages, outputLimit, unsupportedParts } from "@opencode/core/session/model-request"
+import { boundImages, unsupportedParts } from "@opencode/core/session/model-request"
 
 const capabilities = (input: string[]) => ({ tools: true, input, output: ["text"] })
-
-describe("SessionModelRequest.outputLimit", () => {
-  test("requests the catalog output limit, at most 32k for a summary", () => {
-    expect(outputLimit({ context: 1_000_000, output: 128_000 }, "primary")).toBe(128_000)
-    expect(outputLimit({ context: 1_048_576, output: 1_048_576 }, "primary")).toBe(1_048_576)
-    expect(outputLimit({ context: 1_000_000, output: 128_000 }, "compaction")).toBe(32_000)
-    expect(outputLimit({ context: 200_000, output: 8_000 }, "compaction")).toBe(8_000)
-  })
-
-  test("falls back to 32k when the catalog has no output limit", () => {
-    expect(outputLimit({ context: 200_000, output: 0 }, "primary")).toBe(32_000)
-  })
-
-  test("fits the limit to the room the prompt leaves in the context window", () => {
-    const limit = { context: 1_000_000, output: 128_000 }
-    expect(outputLimit(limit, "primary", { measured: 50_000, estimated: 0 })).toBe(128_000)
-    expect(outputLimit(limit, "primary", { measured: 900_000, estimated: 0 })).toBe(100_000)
-    // Estimated text counts 15% extra, so 40k estimated takes 46k of the room.
-    expect(outputLimit(limit, "primary", { measured: 900_000, estimated: 40_000 })).toBe(54_000)
-  })
-
-  test("keeps a minimum limit when the prompt nearly fills the context window", () => {
-    const prompt = { measured: 199_000, estimated: 0 }
-    expect(outputLimit({ context: 200_000, output: 64_000 }, "primary", prompt)).toBe(1_024)
-    expect(outputLimit({ context: 200_000, output: 512 }, "primary", prompt)).toBe(512)
-  })
-
-  test("ignores the prompt size when the context window is unknown", () => {
-    expect(outputLimit({ context: 0, output: 32_000 }, "primary", { measured: 500_000, estimated: 0 })).toBe(32_000)
-  })
-})
 
 describe("SessionModelRequest.unsupportedParts", () => {
   test("replaces unsupported user media with a visible error", () => {

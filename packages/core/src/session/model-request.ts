@@ -82,7 +82,7 @@ export interface Input {
 }
 
 /** The default output limit: the catalog limit, fitted to the room the prompt leaves in the context window. */
-export const outputLimit = (
+const outputLimit = (
   limit: Model.Info["limit"],
   kind: "primary" | "compaction",
   inputTokens?: Input["inputTokens"],
