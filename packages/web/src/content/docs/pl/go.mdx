@@ -85,6 +85,7 @@ Obecna lista modeli obejmuje:
 - **Hy4 preview**
 - **Hy3**
 - **Space Bunny Free** (przez ograniczony czas)
+- **LongCat 2.5 Preview Free** (przez ograniczony czas)
 
 Lista modeli może ulec zmianie w miarę testowania i dodawania nowych.
 
@@ -182,6 +183,7 @@ Ceny tokenów podano za 1M tokenów.
 | Hy4 preview                             | $0.834  | $2.501  | $0.042         | -              | **$30**                                                   |
 | Hy3                                     | $0.14   | $0.58   | $0.035         | -              | **$60**                                                   |
 | Space Bunny Free                        | Free    | Free    | Free           | -              | **Bez limitu**<br /><small>przez ograniczony czas</small> |
+| LongCat 2.5 Preview Free                | Free    | Free    | Free           | -              | **Bez limitu**<br /><small>przez ograniczony czas</small> |
 | Grok 4.7 (≤ 200K tokens)                | $2.00   | $6.00   | $0.50          | -              | **$15**                                                   |
 | Grok 4.7 (> 200K tokens)                | $4.00   | $12.00  | $1.00          | -              | **$15**                                                   |
 | Grok 4.6 (≤ 200K tokens)                | $2.00   | $6.00   | $0.50          | -              | **$15**                                                   |
@@ -192,6 +194,8 @@ Ceny tokenów podano za 1M tokenów.
 | GPT 5.6 Luna (> 272K tokens)            | $0.40   | $1.80   | $0.04          | $0.50          | **$15**                                                   |
 
 **Space Bunny Free:** Bezpłatny przez ograniczony czas.
+
+**LongCat 2.5 Preview Free:** Bezpłatny przez ograniczony czas.
 
 **DeepSeek V4.1 Flash / V4 Pro / V4 Flash / V4 Flash Vision Exp:** Godziny Peak to 01:00-04:00 i 06:00-10:00 UTC od poniedziałku do piątku; wszystkie pozostałe godziny, w tym weekendy, to Off-Peak. [Dowiedz się więcej](https://api-docs.deepseek.com/quick_start/pricing/).
 
@@ -231,6 +235,7 @@ Poniższa tabela przedstawia szacunkową liczbę żądań na podstawie typowych 
 | Hy4 preview                  | 1,350               | 3,380              | 6,770              |
 | Hy3                          | 4,300               | 10,750             | 21,500             |
 | Space Bunny Free             | Bez limitu          | Bez limitu         | Bez limitu         |
+| LongCat 2.5 Preview Free     | Bez limitu          | Bez limitu         | Bez limitu         |
 | Grok 4.7                     | 169                 | 423                | 845                |
 | Grok 4.6                     | 169                 | 423                | 845                |
 | GPT 6 Luna                   | 4,230               | 10,560             | 21,130             |
@@ -333,6 +338,7 @@ Możesz również uzyskać dostęp do modeli Go za pośrednictwem następującyc
 | Hy4 preview                  | hy4-preview                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Space Bunny Free             | space-bunny-free             | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| LongCat 2.5 Preview Free     | longcat-2.5-preview-free     | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 [ID modelu](/docs/config/#models) w Twojej konfiguracji OpenCode
 używa formatu `opencode-go/<model-id>`. Na przykład dla Kimi K3 należy użyć
@@ -386,6 +392,7 @@ https://opencode.ai/zen/go/v1/models
 | Hy4 preview                  | Niewykorzystywane | 0 dni           |
 | Hy3                          | Niewykorzystywane | 0 dni           |
 | Space Bunny Free             | Niewykorzystywane | 0 dni           |
+| LongCat 2.5 Preview Free     | Niewykorzystywane | 0 dni           |
 
 - **Grok 4.7/4.6:** ZDR wyłącza ważne funkcje API zależne od przechowywanych danych, w tym stanowy Responses API, Files and Collections oraz Batch API. [Dowiedz się więcej](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr).
 - **GPT 6 Luna / GPT 5.6 Luna:** Dzienniki monitorowania nadużyć są generowane dla każdego użycia funkcji API i przechowywane przez maksymalnie 30 dni. [Dowiedz się więcej](https://developers.openai.com/api/docs/guides/your-data#data-retention-controls-for-abuse-monitoring).

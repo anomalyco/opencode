@@ -67,4 +67,13 @@ export const goModels = [
     fresh: true,
     limitedTime: true,
   },
+  {
+    id: "longcat-2.5-preview-free",
+    name: "LongCat 2.5 Preview Free",
+    requests: Infinity,
+    allowance: Infinity,
+    featured: true,
+    fresh: true,
+    limitedTime: true,
+  },
 ].sort((a, b) => a.requests - b.requests)
