@@ -88,9 +88,6 @@ export function LimitsGraph(props: { href: string }) {
                   <Show when={model.fresh}>
                     <span data-slot="badge">{i18n.t("go.graph.new")}</span>
                   </Show>
-                  <Show when={model.bonus}>
-                    <span data-slot="badge">{i18n.t("go.graph.bonus", { count: model.bonus! })}</span>
-                  </Show>
                   <Show when={model.limitedTime}>
                     <span data-slot="badge">{i18n.t("go.graph.limitedTime")}</span>
                   </Show>
@@ -117,16 +114,10 @@ export function LimitsGraph(props: { href: string }) {
                     <div data-slot="bar" style={{ "--width": `${position(model.requests)}%` }} />
                   </div>
                   <div data-slot="requests">
-                    <Show when={model.baseRequests}>
-                      <s>{format().format(model.baseRequests!)}</s>{" "}
-                    </Show>
                     <bdi>{format().format(model.requests)}</bdi>
                   </div>
                 </div>
                 <div role="cell" data-slot="allowance" data-high={model.allowance >= 60 ? "" : undefined}>
-                  <Show when={model.baseAllowance}>
-                    <s>{currency().format(model.baseAllowance!)}</s>{" "}
-                  </Show>
                   <bdi>
                     <Show when={Number.isFinite(model.allowance)} fallback="∞">
                       <For each={currency().formatToParts(model.allowance)}>
