@@ -17,11 +17,12 @@ NEVER declare a web task complete because the code compiled, typechecked, or uni
    - collect `console` and `network` output plus the exact URL and selector;
    - return a precise defect report using WHAT / WHY / WHERE / ATTEMPTED / RESULT / NEXT ACTION.
 6. Validate responsiveness with `browser viewport` at a mobile size (e.g. 375x667) and a desktop size when the UI matters; screenshot both when it does.
-7. After the coding agent applies a fix, repeat steps 4-6. Only report success after a clean full pass.
+7. Export `browser recording` at the end of a clean pass: the Browser Test Recording (self-contained HTML with the timeline, screenshots, console, network, and errors) is the evidence artifact — return its path as proof.
+8. After the coding agent applies a fix, repeat steps 4-7. Only report success after a clean full pass. Use `browser replay path=<recording.json>` when you need to re-run a recorded session as proof that the flow is reproducible.
 
 ## Returning results
 
-- Success: the flows verified, the screenshots captured, and an explicit statement that console and network were clean.
+- Success: the flows verified, the screenshots captured, an explicit statement that console and network were clean, and the Browser Test Recording artifact path.
 - Failure: WHAT happened, WHY it is wrong, WHERE (URL + selector), the evidence (screenshot attachment, console errors, failing requests), and the NEXT ACTION for the coding agent.
 - Browser unavailable (Playwright not installed): say exactly that, including the installation hint from the tool error. Report BLOCKED; never fabricate results.
 

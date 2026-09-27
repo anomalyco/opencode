@@ -1,11 +1,12 @@
 import { describe, expect } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
-import { Cause, Effect, Exit, Result, Schema } from "effect"
+import { Cause, Effect, Exit, Option, Result, Schema } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { Agent } from "../../src/agent/agent"
 import { Truncate } from "@/tool/truncate"
 import { BrowserTool, Parameters } from "../../src/tool/browser"
+import { BrowserRecording } from "../../src/tool/browser-recording"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { Tool } from "@/tool/tool"
 import { testEffect, pollWithTimeout } from "../lib/effect"
@@ -152,5 +153,168 @@ describe("tool.browser", () => {
         yield* Effect.ensuring(serve, tool.execute({ action: "close" }, ctx))
       }),
     60_000,
+  )
+
+  it.effect("renders the Browser Test Recording artifact from a recording", () =>
+    Effect.sync(() => {
+      const recording: BrowserRecording.Recording = {
+        version: 1,
+        startedAt: 1_700_000_000_000,
+        endedAt: 1_700_000_005_000,
+        url: "http://127.0.0.1:3000/",
+        steps: [
+          { at: 1_700_000_000_100, action: "open", params: { action: "open" }, ok: true, output: "Browser opened" },
+          {
+            at: 1_700_000_004_000,
+            action: "fill",
+            params: { action: "fill", selector: "#name", value: "<world> & co" },
+            ok: true,
+            url: "http://127.0.0.1:3000/",
+            shot: "data:image/png;base64,AAAA",
+          },
+          {
+            at: 1_700_000_004_500,
+            action: "click",
+            params: { action: "click", selector: "#missing" },
+            ok: false,
+            error: 'Timeout 30000ms exceeded: <div class="x">',
+          },
+        ],
+        console: [{ at: 1_700_000_001_000, type: "pageerror", text: "Unexpected token" }],
+        network: [
+          {
+            at: 1_700_000_002_000,
+            method: "GET",
+            url: "http://127.0.0.1:3000/",
+            resourceType: "document",
+            ok: true,
+            status: 200,
+          },
+        ],
+      }
+
+      const html = BrowserRecording.render(recording)
+      expect(html).toContain("<title>Browser Test Recording</title>")
+      expect(html).toContain("duration 5.0s")
+      expect(html).toContain("data:image/png;base64,AAAA")
+      expect(html).toContain("#missing")
+      expect(html).toContain("Unexpected token")
+      // Recorded page HTML is evidence, not markup: it must be escaped so it
+      // can never inject elements into the artifact (Fase 40).
+      expect(html).toContain("Timeout 30000ms exceeded")
+      expect(html).not.toContain('<div class="x">')
+      expect(html).not.toContain("<world>")
+
+      expect(Option.isSome(BrowserRecording.decode(JSON.stringify(recording)))).toBe(true)
+      expect(Option.isSome(BrowserRecording.decode("{not json"))).toBe(false)
+      expect(Option.isSome(BrowserRecording.decode('{"version":1}'))).toBe(false)
+    }),
+  )
+
+  it.instance(
+    "records the session, exports the artifact, and replays it after close",
+    () =>
+      Effect.gen(function* () {
+        const tool = yield* openTool
+
+        const openExit = yield* Effect.exit(tool.execute({ action: "open" }, ctx))
+        if (Exit.isFailure(openExit)) {
+          // Playwright is optional: report honest unavailability (Fase 40),
+          // never a simulated recording.
+          const message = failureMessage(openExit)
+          expect(message).toContain("playwright")
+          expect(/install|BLOCKED/i.test(message)).toBe(true)
+          return
+        }
+
+        const serve = Effect.acquireUseRelease(
+          Effect.sync(() =>
+            Bun.serve({
+              port: 0,
+              fetch: () => new Response(PAGE, { headers: { "content-type": "text/html" } }),
+            }),
+          ),
+          (server) =>
+            Effect.gen(function* () {
+              yield* tool.execute({ action: "goto", url: server.url.toString() }, ctx)
+              yield* tool.execute({ action: "fill", selector: "#name", value: "world" }, ctx)
+              yield* tool.execute({ action: "click", selector: "#go" }, ctx)
+              const evaluated = yield* tool.execute(
+                { action: "eval", code: "document.getElementById('title').textContent" },
+                ctx,
+              )
+              expect(evaluated.output).toBe("world")
+              yield* pollWithTimeout(
+                Effect.gen(function* () {
+                  const read = yield* tool.execute({ action: "console" }, ctx)
+                  return read.output.includes("fixture-booted") ? read.output : undefined
+                }),
+                "console buffer never showed the boot message",
+              )
+              yield* tool.execute({ action: "network" }, ctx)
+              yield* tool.execute({ action: "screenshot" }, ctx)
+
+              // Export the Browser Test Recording artifact (HTML + JSON).
+              const recorded = yield* tool.execute({ action: "recording" }, ctx)
+              expect(recorded.title).toBe("Browser Test Recording")
+              const lines = recorded.output.split("\n")
+              expect(lines[0].startsWith("Browser Test Recording saved: ")).toBe(true)
+              const htmlPath = lines[0].slice("Browser Test Recording saved: ".length)
+              const jsonPath = lines[2].slice('Replay with action "replay" path='.length)
+
+              // Visual evidence: self-contained HTML with the embedded shot.
+              const html = yield* Effect.promise(() => Bun.file(htmlPath).text())
+              expect(html).toContain("<title>Browser Test Recording</title>")
+              expect(html).toContain("fixture-booted")
+              expect(html).toContain("data:image/png;base64,")
+              expect(html).toContain("#go")
+              expect(html).toContain("duration")
+
+              // The JSON recording carries everything the phase demands:
+              // URL, actions, inputs, screenshots, errors, console, network.
+              const decoded = BrowserRecording.decode(yield* Effect.promise(() => Bun.file(jsonPath).text()))
+              expect(Option.isSome(decoded)).toBe(true)
+              if (!Option.isSome(decoded)) return
+              const rec = decoded.value
+              expect(rec.steps.length).toBeGreaterThanOrEqual(8)
+              expect(rec.steps[0]?.action).toBe("open")
+              expect(rec.steps.every((step) => typeof step.at === "number")).toBe(true)
+              expect(rec.steps.some((step) => step.action === "click" && step.ok)).toBe(true)
+              expect(rec.steps.every((step) => step.ok)).toBe(true)
+              expect(rec.url).toContain(`:${server.url.port}`)
+              expect(rec.console.some((entry) => entry.text.includes("fixture-booted"))).toBe(true)
+              expect(rec.network.some((entry) => entry.status === 200)).toBe(true)
+              const shot = rec.steps.find((step) => step.shot !== undefined)
+              expect(shot?.shot?.startsWith("data:image/png;base64,")).toBe(true)
+              expect(JSON.stringify(rec.steps.find((step) => step.action === "fill")?.params)).toContain("world")
+
+              // close persists the recording for replay without a live driver.
+              const closed = yield* tool.execute({ action: "close" }, ctx)
+              expect(closed.output).toContain("Browser closed")
+
+              // No session, no path: replay the last recorded session.
+              const fallback = yield* tool.execute({ action: "replay" }, ctx)
+              expect(fallback.title).toBe("browser replay")
+              expect(fallback.output).toContain("steps from the last recorded session")
+              expect(fallback.output).toMatch(/\(\d+ ok, 0 failed/)
+
+              // Replay the exported artifact by path and prove the browser
+              // really re-did the session: the page is back in final state.
+              const replayed = yield* tool.execute({ action: "replay", path: jsonPath }, ctx)
+              expect(replayed.output).toContain(`steps from the file ${jsonPath}`)
+              expect(replayed.output).toMatch(/\(\d+ ok, 0 failed/)
+              const after = yield* tool.execute(
+                { action: "eval", code: "document.getElementById('title').textContent" },
+                ctx,
+              )
+              expect(after.output).toBe("world")
+            }),
+          (server) => Effect.sync(() => server.stop(true)),
+        )
+
+        // The browser must be closed even when an assertion inside fails.
+        yield* Effect.ensuring(serve, tool.execute({ action: "close" }, ctx))
+      }),
+    180_000,
   )
 })

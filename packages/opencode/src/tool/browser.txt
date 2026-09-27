@@ -17,11 +17,14 @@ Actions:
 - downloads: read and clear completed downloads (saved under the system temp dir).
 - viewport: set responsive size with width and height; without them, report the current size.
 - wait: wait for selector; if selector is omitted, wait timeoutMs milliseconds (default 1000, max 30000).
+- recording: export the session recording (URL, actions, clicks, inputs, screenshots, errors, console, network, timestamps) as the "Browser Test Recording" artifact — a self-contained HTML evidence file plus the JSON recording, saved under the system temp dir.
+- replay: re-execute a recorded session step by step (path=<recording.json>, or the live/last recorded session when omitted). Every step runs through the same validation and permission requests as it did live, and replayed steps never rewrite the original recording.
 
-Permission: open, goto, and eval request permission under the "browser" permission (pattern = URL when given). All other actions run inside the already-approved session.
+Permission: open, goto, and eval request permission under the "browser" permission (pattern = URL when given). All other actions run inside the already-approved session. Replay repeats the original requests for each replayed step.
 
 Notes:
-- One browser session per workspace. Actions other than open/close fail with a clear error when no session is open.
+- One browser session per workspace. Actions other than open/close/replay fail with a clear error when no session is open.
 - console/network/downloads drain on read, so evidence is never repeated across reads.
+- Every executed step is recorded (timestamps included); close persists the recording so replay works after the browser is gone. A session that only replayed another session does not overwrite that recording.
 - If Playwright is not installed, the tool fails with installation instructions — report that honestly; never simulate browser results.
 - timeoutMs bounds navigation and interaction actions (default 30000).

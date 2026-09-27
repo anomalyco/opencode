@@ -8,12 +8,15 @@
 //   node driver.mjs <playwright-entry-url> <scratch-dir>
 //
 // Protocol — JSON lines on stdin/stdout:
-//   in : { id, action, params }
+//   in : { id, action, params, replay? }
 //   out: { id, ok: true, result } | { id, ok: false, error }
 //
+// `replay: true` marks a step re-executed by the tool's replay: it runs
+// normally but is excluded from the session recording (Fase 5).
+//
 // stdout carries ONLY protocol messages; diagnostics go to stderr. The driver
-// exits after answering "close", and cleans up the browser when stdin closes
-// (tool/process died) or on SIGTERM/SIGINT.
+// exits after answering "close" (after persisting the recording), and cleans
+// up the browser when stdin closes (tool/process died) or on SIGTERM/SIGINT.
 import fs from "node:fs"
 import path from "node:path"
 import readline from "node:readline"
@@ -40,6 +43,75 @@ const cap = (entries, entry, max) => {
 
 const stamp = (at) => new Date(at).toISOString().slice(11, 23)
 
+// Session recording — Fase 5 (browser recording). Every executed step (URL,
+// action, params, outcome, error, timestamp, screenshot) plus the cumulative
+// console/network history are kept separately from the draining evidence
+// buffers, so `console`/`network` reads never lose recorded evidence.
+// `active` pauses capture while a replay runs: replayed steps re-execute the
+// session as evidence and must not rewrite the original recording.
+const record = {
+  startedAt: Date.now(),
+  active: true,
+  url: null,
+  steps: [],
+  console: [],
+  network: [],
+  shots: 0,
+}
+const MAX_RECORD_SHOTS = 30
+const MAX_RECORD_TEXT = 2000
+
+const clip = (text) =>
+  text.length > MAX_RECORD_TEXT ? `${text.slice(0, MAX_RECORD_TEXT)}\n… (${text.length} chars total)` : text
+
+const payload = () => {
+  const url = state.page !== null ? state.page.url() : record.url
+  return {
+    version: 1,
+    startedAt: record.startedAt,
+    endedAt: Date.now(),
+    ...(url !== null ? { url } : {}),
+    steps: record.steps,
+    console: record.console,
+    network: record.network,
+  }
+}
+
+// Persists the recording so a replay can run after the driver exits (close,
+// signal, stdin end). A session that only replayed another session keeps the
+// previous file: its own recording would be empty and would destroy the
+// original evidence. Returns an error message instead of throwing so a failed
+// persist never breaks the close path — it is reported in the close output.
+const persist = () => {
+  if (record.steps.length === 0) return null
+  try {
+    fs.writeFileSync(path.join(scratch, "recording.json"), JSON.stringify(payload()))
+    return null
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error)
+  }
+}
+
+const recordStep = (action, params, outcome) => {
+  if (!record.active || action === "recording") return
+  if (state.page !== null) record.url = state.page.url()
+  const step = {
+    at: Date.now(),
+    action,
+    params,
+    ok: outcome.ok,
+    ...(record.url !== null ? { url: record.url } : {}),
+    ...(outcome.error !== undefined ? { error: outcome.error } : {}),
+    ...(outcome.output !== undefined ? { output: clip(outcome.output) } : {}),
+  }
+  const shot = outcome.attachments?.find((attachment) => attachment.mime === "image/png")?.url
+  if (shot !== undefined && record.shots < MAX_RECORD_SHOTS) {
+    step.shot = shot
+    record.shots += 1
+  }
+  record.steps.push(step)
+}
+
 const requirePage = (action) => {
   if (state.page === null)
     throw new Error(`The browser action "${action}" requires an open browser session. Call action "open" first.`)
@@ -58,49 +130,45 @@ const navigate = async (url, timeout) => {
 const observePage = () => {
   state.page.on("console", (message) => {
     const location = message.location()
-    cap(
-      state.console,
-      {
-        at: Date.now(),
-        type: message.type(),
-        text: message.text(),
-        ...(location?.url ? { url: location.url, line: location.lineNumber } : {}),
-      },
-      MAX_CONSOLE,
-    )
+    const entry = {
+      at: Date.now(),
+      type: message.type(),
+      text: message.text(),
+      ...(location?.url ? { url: location.url, line: location.lineNumber } : {}),
+    }
+    cap(state.console, entry, MAX_CONSOLE)
+    if (record.active) cap(record.console, entry, MAX_CONSOLE)
   })
-  state.page.on("pageerror", (error) =>
-    cap(state.console, { at: Date.now(), type: "pageerror", text: error.message }, MAX_CONSOLE),
-  )
+  state.page.on("pageerror", (error) => {
+    const entry = { at: Date.now(), type: "pageerror", text: error.message }
+    cap(state.console, entry, MAX_CONSOLE)
+    if (record.active) cap(record.console, entry, MAX_CONSOLE)
+  })
   state.page.on("response", (response) => {
     const request = response.request()
-    cap(
-      state.network,
-      {
-        at: Date.now(),
-        method: request.method(),
-        url: response.url(),
-        resourceType: request.resourceType(),
-        ok: response.ok(),
-        status: response.status(),
-      },
-      MAX_NETWORK,
-    )
+    const entry = {
+      at: Date.now(),
+      method: request.method(),
+      url: response.url(),
+      resourceType: request.resourceType(),
+      ok: response.ok(),
+      status: response.status(),
+    }
+    cap(state.network, entry, MAX_NETWORK)
+    if (record.active) cap(record.network, entry, MAX_NETWORK)
   })
-  state.page.on("requestfailed", (request) =>
-    cap(
-      state.network,
-      {
-        at: Date.now(),
-        method: request.method(),
-        url: request.url(),
-        resourceType: request.resourceType(),
-        ok: false,
-        failure: request.failure()?.errorText ?? "request failed",
-      },
-      MAX_NETWORK,
-    ),
-  )
+  state.page.on("requestfailed", (request) => {
+    const entry = {
+      at: Date.now(),
+      method: request.method(),
+      url: request.url(),
+      resourceType: request.resourceType(),
+      ok: false,
+      failure: request.failure()?.errorText ?? "request failed",
+    }
+    cap(state.network, entry, MAX_NETWORK)
+    if (record.active) cap(record.network, entry, MAX_NETWORK)
+  })
   state.page.on("download", (download) => {
     const filename = path.basename(download.suggestedFilename())
     const target = path.join(scratch, filename)
@@ -303,6 +371,14 @@ const handlers = {
     }
   },
 
+  // Fase 5: exports the full session recording (JSON) for the tool to write
+  // as the Browser Test Recording artifact. Never requires a page: a driver
+  // that only opened still has a valid (short) recording.
+  recording: () => ({
+    title: "browser recording",
+    output: JSON.stringify(payload()),
+  }),
+
   viewport: async (params) => {
     const page = requirePage("viewport")
     if (params.width !== undefined || params.height !== undefined) {
@@ -344,6 +420,9 @@ let closing = false
 const shutdown = async () => {
   if (closing) return
   closing = true
+  // Best effort for signal/stdin-end exits (close already persisted before
+  // its reply). Never throws: the browser cleanup below must still run.
+  persist()
   if (state.browser !== null) {
     try {
       await state.browser.close()
@@ -365,17 +444,32 @@ const handle = async (line) => {
   const id = message?.id
   const action = message?.action
   if (typeof id !== "number" || typeof action !== "string") return
+  // A replayed step re-executes the session as evidence: it (and its page
+  // events) must not be recorded over the original recording. A later normal
+  // message turns capture back on.
+  record.active = message.replay !== true
   try {
     const handler = handlers[action]
     if (handler === undefined) throw new Error(`Unknown browser action "${action}".`)
     const result = await handler(message.params ?? {})
+    // Pass the attachments so screenshot steps embed the shot in the recording
+    // (the artifact's visual evidence lives in step.shot).
+    recordStep(action, message.params ?? {}, { ok: true, output: result.output, attachments: result.attachments })
+    if (action === "close") {
+      // Persist BEFORE replying: once the tool sees close succeed, a replay
+      // without a live session must find the recording already on disk.
+      const failure = persist()
+      if (failure !== null) result.output += `\nWARNING: the recording could not be persisted: ${failure}`
+    }
     await send({ id, ok: true, result })
     if (action === "close") {
       await shutdown()
       process.exit(0)
     }
   } catch (error) {
-    await send({ id, ok: false, error: error instanceof Error ? error.message : String(error) })
+    const detail = error instanceof Error ? error.message : String(error)
+    recordStep(action, message.params ?? {}, { ok: false, error: detail })
+    await send({ id, ok: false, error: detail })
   }
 }
 

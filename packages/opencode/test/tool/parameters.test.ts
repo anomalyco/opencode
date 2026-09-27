@@ -116,6 +116,10 @@ describe("tool parameters", () => {
       expect(parsed.url).toBe("https://example.com")
       expect(parsed.timeoutMs).toBe(5000)
     })
+    test("accepts replay with a recording path", () => {
+      const parsed = parse(Browser, { action: "replay", path: "/tmp/recording.json" })
+      expect(parsed.path).toBe("/tmp/recording.json")
+    })
     test("rejects unknown action", () => {
       expect(accepts(Browser, { action: "teleport" })).toBe(false)
     })
