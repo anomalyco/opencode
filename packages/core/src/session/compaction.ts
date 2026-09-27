@@ -77,7 +77,7 @@ type Dependencies = {
   // resolver (structural subset of SessionRunnerModel.Interface to avoid an
   // import cycle with the runner).
   readonly models?: {
-    readonly resolveRef?: (ref: string) => Effect.Effect<Model, unknown> | undefined
+    readonly resolveRef?: (ref: string) => Effect.Effect<Model, unknown>
   } | undefined
 }
 

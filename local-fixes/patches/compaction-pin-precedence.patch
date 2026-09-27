@@ -1,4 +1,4 @@
-From 934f08a31d579b42dd4ba462434d2631218ac207 Mon Sep 17 00:00:00 2001
+From 286c9d2ef2405a39fc7062d31969cc77a78272ab Mon Sep 17 00:00:00 2001
 From: "Mohamed R. Khalil" <m.radwan.khalil@gmail.com>
 Date: Mon, 28 Sep 2026 01:30:00 +0300
 Subject: [PATCH] fix(compaction): plugin pin beats configured agent;

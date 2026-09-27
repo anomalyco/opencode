@@ -60,7 +60,7 @@
     {
       "id": "compaction-pin-precedence",
       "title": "Plugin pin beats the configured compaction agent; the agent is the overflow fallback",
-      "commit": "934f08a31d579b42dd4ba462434d2631218ac207",
+      "commit": "286c9d2ef2405a39fc7062d31969cc77a78272ab",
       "patch": "local-fixes/patches/compaction-pin-precedence.patch",
       "base": "v1.18.32",
       "files": [
