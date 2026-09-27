@@ -1,5 +1,5 @@
 export const dict = {
-  "go.promo.deepseek": "DeepSeek V4.1 Flash gets 4× usage limits for a limited time",
+  "go.promo.spaceBunny": "Space Bunny Free, a new anonymous model, is available for a limited time",
   "go.graph.bonus": "{{count}}× usage",
   "nav.github": "GitHub",
   "nav.docs": "Docs",
