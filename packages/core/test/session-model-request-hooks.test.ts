@@ -171,7 +171,7 @@ describe("SessionModelRequest output limit", () => {
       }
       const maxTokens = (prepared: SessionModelRequest.Prepared<unknown>) => prepared.request.generation?.maxTokens
       expect(maxTokens(yield* requests.primary(large))).toBe(384_000)
-      expect(maxTokens(yield* requests.compaction(large))).toBe(384_000)
+      expect(maxTokens(yield* requests.compaction(large))).toBe(32_000)
       // 200k window − 170k measured − 8k estimated with 5% padding
       const inputTokens = { measured: 170_000, estimated: 8_000 }
       expect(maxTokens(yield* requests.primary({ ...input, inputTokens }))).toBe(21_600)
