@@ -14,16 +14,7 @@ import { NotFoundError } from "@/storage/storage"
 
 import { Effect, Layer, Context } from "effect"
 import { InstanceState } from "@/effect/instance-state"
-import {
-  describeCompactionCheck,
-  formatCompactionCheck,
-  getCompactionBudget,
-  getRequestedOutputTokens,
-  getUsedTokens,
-  isOverflow as overflow,
-  normalizeLimits,
-  usable,
-} from "./overflow"
+import { compactionDebug, isOverflow as overflow, usable } from "./overflow"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -121,7 +112,7 @@ function completedCompactions(messages: SessionV1.WithParts[]) {
   })
 }
 
-function preserveRecentBudget(input: { cfg: ConfigV1.Info; model: Provider.Model }) {
+export function preserveRecentBudget(input: { cfg: ConfigV1.Info; model: Provider.Model }) {
   return (
     input.cfg.compaction?.preserve_recent_tokens ??
     Math.min(MAX_PRESERVE_RECENT_TOKENS, Math.max(MIN_PRESERVE_RECENT_TOKENS, Math.floor(usable(input) * 0.25)))
@@ -214,35 +205,16 @@ const layer = Layer.effect(
       model: Provider.Model
     }) {
       const cfg = yield* config.get()
-      const result = overflow({
+      const compact = overflow({
         cfg,
         tokens: input.tokens,
         model: input.model,
         outputTokenMax: flags.outputTokenMax,
       })
-      // Debug-only diagnostics: model, limits, reservation, usage, threshold, decision.
-      // Uses logDebug so normal users are not spammed.
-      const limits = normalizeLimits(input.model.limit)
-      const requested = getRequestedOutputTokens({
-        outputCapability: limits.output,
-        outputTokenMax: flags.outputTokenMax,
-      })
-      const budget = getCompactionBudget({
-        contextLimit: limits.context,
-        inputLimit: limits.input,
-        maxOutputTokens: requested,
-        configuredReserved: cfg.compaction?.reserved,
-      })
-      const used = getUsedTokens(input.tokens)
-      const check = describeCompactionCheck({
-        model: input.model,
-        usedTokens: used,
-        budget,
-        compact: result,
-        reason: result ? "used>=threshold" : "used<threshold",
-      })
-      yield* Effect.logDebug(formatCompactionCheck(check))
-      return result
+      yield* Effect.logDebug(
+        compactionDebug({ cfg, model: input.model, tokens: input.tokens, outputTokenMax: flags.outputTokenMax, compact }),
+      )
+      return compact
     })
 
     const estimate = Effect.fn("SessionCompaction.estimate")(function* (input: {
