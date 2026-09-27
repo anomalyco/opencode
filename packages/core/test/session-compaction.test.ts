@@ -212,14 +212,15 @@ it.effect("auto compaction estimates current content against the buffered prompt
     expect(yield* due(native(244_800))).toBe(true)
     expect(yield* due(native(1_000_000, { context: 0, input: undefined, output: 0 }))).toBe(false)
 
+    // The summary's 16k output limit is more than 10% of a 100k window, so it sets the ceiling.
     const contextLimited = { context: 100_000, output: 10_000 }
-    expect(yield* due(input(89_999, contextLimited))).toBe(false)
-    expect(yield* due(input(90_000, contextLimited))).toBe(true)
+    expect(yield* due(input(83_999, contextLimited))).toBe(false)
+    expect(yield* due(input(84_000, contextLimited))).toBe(true)
 
     // The reply limit does not lower the ceiling.
     const outputLimited = { context: 100_000, output: 30_000 }
-    expect(yield* due(input(89_999, outputLimited))).toBe(false)
-    expect(yield* due(input(90_000, outputLimited))).toBe(true)
+    expect(yield* due(input(83_999, outputLimited))).toBe(false)
+    expect(yield* due(input(84_000, outputLimited))).toBe(true)
 
     const assistant = input(89_000, contextLimited).messages[0]
     const tool = SessionMessage.AssistantTool.make({
@@ -452,7 +453,7 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
       "x-opencode-session": sessionID,
       "x-opencode-client": "opencode",
     })
-    expect(requests[0]?.generation).toEqual(GenerationOptions.make({ maxTokens: 32_000 }))
+    expect(requests[0]?.generation).toEqual(GenerationOptions.make({ maxTokens: 16_000 }))
     expect(JSON.stringify(requests[0]?.messages)).toContain("Manual compaction should include this short conversation.")
     expect(JSON.stringify(requests[0]?.messages)).toContain("Use Effect services and generators.")
     expect(JSON.stringify(requests[0]?.messages)).toContain("User shell pwd completed: /project")

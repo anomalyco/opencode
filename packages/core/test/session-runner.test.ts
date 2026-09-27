@@ -127,6 +127,7 @@ const unknownContextModel = testModel("unknown-context", { context: 0, output: 3
 const undersizedContextModel = testModel("undersized-context", { context: 1, output: 1_000 })
 const recoveryModel = testModel("recovery", { context: 200_000, output: 1_000 })
 const fittedOutputModel = testModel("fitted-output", { context: 100_000, output: 64_000 })
+const smallWindowModel = testModel("small-window", { context: 64_000, output: 16_000 })
 
 test("calculates step cost using the matching context tier", () => {
   expect(
@@ -3420,7 +3421,43 @@ describe("SessionRunnerLLM", () => {
 
     expect(s.requests[0]?.generation?.maxTokens).toBe(64_000)
     expect(s.requests[1]?.generation?.maxTokens).toBeLessThan(100_000 - 50_000)
-    expect(s.requests[1]?.generation?.maxTokens).toBeGreaterThan(100_000 - 50_000 - 100)
+    expect(s.requests[1]?.generation?.maxTokens).toBeGreaterThan(100_000 - 50_000 - 200)
+  })
+
+  scenario("gives the summary its full output limit when the conversation overshot the threshold", function* (s) {
+    // The conversation overshot the threshold, so the prepared summary request exceeds the budget and `deliver`
+    // shrinks it before sending. The output limit must follow the budget, not the oversized prepared request.
+    yield* s.llm.push(TestLLM.textWithUsage("Earlier answer", "text-budget-first", 185_000))
+    yield* s.runPrompt("Earlier question")
+    s.requests.length = 0
+    yield* s.llm.push(
+      TestLLM.text("## Objective\n- Preserve the task", "text-budget-summary"),
+      TestLLM.text("Continued", "text-budget-final"),
+    )
+    yield* s.runPrompt("Recent request ".repeat(400))
+
+    expect(s.requests).toHaveLength(2)
+    expect(userTexts(s.requests[0]).at(-1)).toContain("## Objective")
+    expect(s.requests[0]?.generation?.maxTokens).toBe(16_000)
+    expect(s.requests[1]?.generation?.maxTokens).toBe(32_000)
+  })
+
+  scenario("keeps the summary its room on a small window", function* (s) {
+    // 90% of 64k would leave 6.4k for the summary, so the 16k reserve sets the ceiling at 48k instead.
+    s.currentModel = smallWindowModel
+    yield* s.llm.push(TestLLM.textWithUsage("Earlier answer", "text-small-first", 59_000))
+    yield* s.runPrompt("Earlier question")
+    s.requests.length = 0
+    yield* s.llm.push(
+      TestLLM.text("## Objective\n- Preserve the task", "text-small-summary"),
+      TestLLM.text("Continued", "text-small-final"),
+    )
+    yield* s.runPrompt("Recent request ".repeat(400))
+
+    expect(s.requests).toHaveLength(2)
+    expect(userTexts(s.requests[0]).at(-1)).toContain("## Objective")
+    expect(s.requests[0]?.generation?.maxTokens).toBe(16_000)
+    expect(s.requests[1]?.generation?.maxTokens).toBe(16_000)
   })
 
   scenario("publishes the original overflow when recovery summarization fails", function* (s) {

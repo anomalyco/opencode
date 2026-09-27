@@ -265,8 +265,7 @@ export const layer = Layer.effect(
       const prompt = buildPrompt(previous !== undefined, previous?.summary.includes(LEGACY_HEADING) ?? false)
       const headings = SUMMARY_TEMPLATE.split("\n").filter((line) => line.startsWith("##"))
       const filled = (text: string) => text.split("\n").some((line) => headings.includes(line.trim()))
-      const overhead = Token.estimate(prompt) + Token.estimate(NUDGE)
-      const prepared = yield* prepare(context, split.older, undefined, overhead)
+      const prepared = yield* prepare(context, split.older, budget)
 
       // Hooks saw the request without the summary prompt, so it is appended here. A reply that ignores the
       // template gets one reminder before it counts as a failure.
@@ -289,6 +288,7 @@ export const layer = Layer.effect(
           })
         })
 
+      const overhead = Token.estimate(prompt) + Token.estimate(NUDGE)
       return yield* deliver(trigger, prepared, split.recent, budget - overhead, send)
     })
 
@@ -313,7 +313,7 @@ export const layer = Layer.effect(
       if (!context.messages.some(messageToText)) return yield* Effect.fail(NOTHING_TO_COMPACT)
       const unsupported = (message: string) =>
         Effect.fail<Failure>({ error: { type: "provider.unsupported-operation", message } })
-      const prepared = yield* prepare(context, context.messages, "session")
+      const prepared = yield* prepare(context, context.messages, budget, "session")
 
       // History is selected before request hooks, so a hook that reroutes the request cannot be honored here.
       const provenance = SessionProviderContext.provenance(context.model)
@@ -550,16 +550,21 @@ export const layer = Layer.effect(
       )
     }
 
-    /** The conversation as the runner would send it, after request hooks. */
-    /** `overhead` counts text sent outside the history, such as the summary prompt, toward the prompt size. */
+    /**
+     * The conversation as the runner would send it, after request hooks.
+     *
+     * The output limit leaves room for `budget`, the most `deliver` sends. The request prepared here can be larger
+     * when the conversation overshot the threshold, and is only shrunk to fit after hooks have seen it, so sizing the
+     * output to it would leave next to no room. A prompt the estimate undersells is rejected and shrunk like any
+     * other.
+     */
     const prepare = (
       context: SessionContext.Loaded,
       messages: ReadonlyArray<SessionMessage.Info>,
+      budget: number,
       webSocket?: "session",
-      overhead = 0,
     ) => {
       const base = transcript(context, messages)
-      const prompt = estimatePrompt({ ...context, messages })
       return requests.compaction({
         session: context.session,
         agent: context.agent.id,
@@ -568,7 +573,7 @@ export const layer = Layer.effect(
         system: base.system,
         messages: base.messages,
         webSocket,
-        inputTokens: { measured: prompt.measured, estimated: prompt.estimated + overhead },
+        inputTokens: { measured: budget, estimated: 0 },
       })
     }
 
@@ -878,13 +883,19 @@ export const estimatePrompt = (context: SessionContext.Loaded) => {
   }
 }
 
-/** The largest request the model takes while leaving room for its reply. */
+/**
+ * The largest request the model takes while leaving room for its reply: 10% of the window, or the summary's output
+ * limit when that is more, so the last reply before compaction and the summary itself always have that much. A window
+ * too small to give up the summary's limit keeps 10%.
+ */
 const calculateCeiling = (limit: SessionContext.Loaded["model"]["limit"], buffer: number | undefined) => {
   // Unknown limits are reported as 0. An unknown input limit falls back to the context window; with no window at
   // all, only a provider rejection can limit the request.
   const window = limit.input || limit.context
   if (window <= 0) return Number.POSITIVE_INFINITY
-  return buffer === undefined ? Math.floor(window * 0.9) : window - buffer
+  if (buffer !== undefined) return window - buffer
+  const reserve = SessionModelRequest.SUMMARY_OUTPUT_TOKENS
+  return window - Math.max(Math.floor(window * 0.1), window >= 2 * reserve ? reserve : 0)
 }
 
 /**

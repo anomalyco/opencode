@@ -158,7 +158,7 @@ describe("SessionModelRequest HTTP hooks", () => {
 describe("SessionModelRequest output limit", () => {
   const input = { session, agent: Agent.ID.make("build"), model, system: [], messages: [] }
 
-  it.effect("caps the default output limit per request kind", () =>
+  it.effect("defaults the output limit per request kind", () =>
     Effect.gen(function* () {
       const requests = yield* SessionModelRequest.Service.pipe(Effect.provide(SessionModelRequest.layer))
       const large = {
@@ -170,11 +170,12 @@ describe("SessionModelRequest output limit", () => {
         }),
       }
       const maxTokens = (prepared: SessionModelRequest.Prepared<unknown>) => prepared.request.generation?.maxTokens
-      expect(maxTokens(yield* requests.primary(large))).toBe(256_000)
-      expect(maxTokens(yield* requests.compaction(large))).toBe(32_000)
+      expect(maxTokens(yield* requests.primary(large))).toBe(384_000)
+      expect(maxTokens(yield* requests.compaction(large))).toBe(16_000)
+      // 200k window − 170k measured − 8k estimated with 5% padding
       const inputTokens = { measured: 170_000, estimated: 8_000 }
-      expect(maxTokens(yield* requests.primary({ ...input, inputTokens }))).toBe(20_800)
-      expect(maxTokens(yield* requests.compaction({ ...input, inputTokens }))).toBe(20_800)
+      expect(maxTokens(yield* requests.primary({ ...input, inputTokens }))).toBe(21_600)
+      expect(maxTokens(yield* requests.compaction({ ...input, inputTokens }))).toBe(16_000)
     }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
   )
 
