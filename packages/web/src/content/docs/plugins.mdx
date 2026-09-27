@@ -123,6 +123,36 @@ The plugin function receives:
 
 ---
 
+### Plugin lifecycle
+
+Server plugins are initialized per project instance. The instance owns the
+plugin hooks and their resources; instance disposal, reload, or server shutdown
+runs each returned hook's `dispose` function. On reload, the old instance is
+disposed before the replacement plugin is initialized. Use `dispose` to stop
+intervals, watchers, sockets, and other resources created for that instance.
+
+The `auth.loader` runs again whenever provider options are loaded for a project
+instance. Its returned record is merged into provider options—it is not a
+disposer or another lifecycle object. Resources created by an auth loader
+should be released by the plugin's `dispose` hook, or stopped by the next
+loader run before replacing them.
+
+```ts
+export const MyPlugin = async () => {
+  const timer = setInterval(refresh, 60_000)
+  return {
+    dispose: async () => clearInterval(timer),
+    auth: {
+      provider: "example",
+      methods: [],
+      loader: async () => ({ access: "token" }),
+    },
+  }
+}
+```
+
+---
+
 ### TypeScript support
 
 For TypeScript plugins, you can import types from the plugin package:

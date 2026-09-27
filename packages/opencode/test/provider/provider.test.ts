@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test"
+import { afterEach, expect, spyOn, test } from "bun:test"
 import { mkdir, unlink } from "fs/promises"
 import path from "path"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -1974,11 +1974,12 @@ const instanceStoreLayer = LayerNode.compile(InstanceStore.node, [
 const provideMultiInstance = <A, E, R>(eff: Effect.Effect<A, E, R>) =>
   eff.pipe(Effect.provide(instanceStoreLayer), Effect.provide(AppNodeBuilder.build(CrossSpawnSpawner.node)))
 
-it.effect("plugin config providers persist after instance dispose", () =>
+it.effect("plugin Hooks.dispose runs once before reload replacement and once on dispose", () =>
   Effect.gen(function* () {
     const dir = yield* tmpdirScoped()
     const configDir = path.join(dir, ".opencode")
     const root = path.join(configDir, "plugin")
+    const lifecycle = path.join(dir, "lifecycle.txt")
     yield* Effect.promise(() => mkdir(root, { recursive: true }))
     yield* Effect.promise(() => markPluginDependenciesReady(configDir))
     yield* Effect.promise(() => markPluginDependenciesReady(Global.Path.config))
@@ -1986,25 +1987,32 @@ it.effect("plugin config providers persist after instance dispose", () =>
       Bun.write(
         path.join(root, "demo-provider.ts"),
         [
+          'import fs from "fs/promises"',
+          "let run = 0",
           "export default {",
           '  id: "demo.plugin-provider",',
-          "  server: async () => ({",
-          "    async config(cfg) {",
-          "      cfg.provider ??= {}",
-          "      cfg.provider.demo = {",
-          '        name: "Demo Provider",',
-          '        npm: "@ai-sdk/openai-compatible",',
-          '        api: "https://example.com/v1",',
-          "        models: {",
-          "          chat: {",
-          '            name: "Demo Chat",',
-          "            tool_call: true,",
-          "            limit: { context: 128000, output: 4096 },",
+          "  server: async () => {",
+          "    run += 1",
+          `    await fs.appendFile(${JSON.stringify(lifecycle)}, \`start-\${run}\\n\`)`,
+          "    return {",
+          "      async config(cfg) {",
+          "        cfg.provider ??= {}",
+          "        cfg.provider.demo = {",
+          '          name: "Demo Provider",',
+          '          npm: "@ai-sdk/openai-compatible",',
+          '          api: "https://example.com/v1",',
+          "          models: {",
+          "            chat: {",
+          '              name: "Demo Chat",',
+          "              tool_call: true,",
+          "              limit: { context: 128000, output: 4096 },",
+          "            },",
           "          },",
-          "        },",
-          "      }",
-          "    },",
-          "  }),",
+          "        }",
+          "      },",
+          `      dispose: async () => fs.appendFile(${JSON.stringify(lifecycle)}, \`dispose-\${run}\\n\`),`,
+          "    }",
+          "  },",
           "}",
           "",
         ].join("\n"),
@@ -2022,11 +2030,59 @@ it.effect("plugin config providers persist after instance dispose", () =>
     expect(first[ProviderV2.ID.make("demo")]).toBeDefined()
     expect(first[ProviderV2.ID.make("demo")].models[ModelV2.ID.make("chat")]).toBeDefined()
 
-    yield* Effect.promise(() => disposeAllInstances())
+    yield* InstanceStore.Service.use((store) => store.reload({ directory: dir }))
 
     const second = yield* loadAndList
     expect(second[ProviderV2.ID.make("demo")]).toBeDefined()
     expect(second[ProviderV2.ID.make("demo")].models[ModelV2.ID.make("chat")]).toBeDefined()
+    yield* InstanceStore.Service.use((store) => store.disposeAll())
+    expect((yield* Effect.promise(() => Bun.file(lifecycle).text())).trim().split("\n")).toEqual([
+      "start-1",
+      "dispose-1",
+      "start-2",
+      "dispose-2",
+    ])
+  }).pipe(provideMultiInstance),
+)
+
+it.effect("warns when a plugin auth loader returns a disposer", () =>
+  Effect.gen(function* () {
+    const dir = yield* tmpdirScoped()
+    const pluginDir = path.join(dir, ".opencode", "plugin")
+    yield* Effect.promise(() => mkdir(pluginDir, { recursive: true }))
+    yield* Effect.promise(() => markPluginDependenciesReady(path.join(dir, ".opencode")))
+    yield* Effect.promise(() =>
+      Bun.write(
+        path.join(pluginDir, "auth-disposer.ts"),
+        [
+          "export default {",
+          '  id: "demo.auth-disposer",',
+          "  server: async () => ({",
+          '    auth: { provider: "opencode", methods: [], loader: async () => ({ access: "test", dispose() {} }) },',
+          "  }),",
+          "}",
+        ].join("\n"),
+      ),
+    )
+    yield* setProcessEnv("OPENCODE_AUTH_CONTENT", JSON.stringify({ opencode: { type: "api", key: "test-key" } }))
+
+    const warning = spyOn(Effect, "logWarning")
+    try {
+      yield* Provider.use.list().pipe(provideInstanceEffect(dir))
+      yield* InstanceStore.Service.use((store) => store.reload({ directory: dir }))
+      yield* Provider.use.list().pipe(provideInstanceEffect(dir))
+      const warnings = warning.mock.calls.filter(
+        ([message]) => message === "plugin auth loader returned dispose; use Hooks.dispose instead",
+      )
+      expect(warnings).toHaveLength(2)
+      expect(warnings[0]).toEqual([
+        "plugin auth loader returned dispose; use Hooks.dispose instead",
+        { plugin: "demo.auth-disposer", provider: "opencode" },
+      ])
+      expect(warnings[1]).toEqual(warnings[0])
+    } finally {
+      warning.mockRestore()
+    }
   }).pipe(provideMultiInstance),
 )
 

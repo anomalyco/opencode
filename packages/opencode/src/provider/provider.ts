@@ -1444,6 +1444,7 @@ const layer = Layer.effect(
         const configProviders = Object.entries(cfg.provider ?? {})
         const disabled = new Set(cfg.disabled_providers ?? [])
         const enabled = cfg.enabled_providers ? new Set(cfg.enabled_providers) : null
+        const warnedAuthLoaderDisposers = new Set<ProviderV2.ID>()
 
         function isProviderAllowed(providerID: ProviderV2.ID): boolean {
           if (enabled && !enabled.has(providerID)) return false
@@ -1622,6 +1623,13 @@ const layer = Layer.effect(
             ),
           )
           const opts = options ?? {}
+          if (typeof opts.dispose === "function" && !warnedAuthLoaderDisposers.has(providerID)) {
+            warnedAuthLoaderDisposers.add(providerID)
+            yield* Effect.logWarning("plugin auth loader returned dispose; use Hooks.dispose instead", {
+              plugin: Plugin.nameOf(plugin),
+              provider: plugin.auth.provider,
+            })
+          }
           const patch: Partial<Info> = providers[providerID] ? { options: opts } : { source: "custom", options: opts }
           mergeProvider(providerID, patch)
         }

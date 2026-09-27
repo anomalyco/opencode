@@ -87,6 +87,12 @@ type Rule = {
 
 export type AuthHook = {
   provider: string
+  /**
+   * Runs each time provider options are loaded for a project instance. The
+   * returned record is merged into provider options; it is not a lifecycle
+   * object. Stop resources from a previous loader run here, or return their
+   * cleanup through the plugin's `dispose` hook.
+   */
   loader?: (auth: () => Promise<Auth>, provider: Provider) => Promise<Record<string, any>>
   methods: (
     | {
@@ -220,6 +226,11 @@ export type ProviderHook = {
 export type AuthOuathResult = AuthOAuthResult
 
 export interface Hooks {
+  /**
+   * Releases resources owned by this plugin instance. Runs when its project
+   * instance is disposed or reloaded, and during shutdown; on reload it runs
+   * before the replacement plugin instance is initialized.
+   */
   dispose?: () => Promise<void>
   event?: (input: { event: Event }) => Promise<void>
   config?: (input: Config) => Promise<void>
