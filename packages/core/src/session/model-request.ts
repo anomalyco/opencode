@@ -49,7 +49,7 @@ const OUTPUT_TOKEN_FALLBACK = 32_000
 // A summary never needs more, and a request asking for more cannot be shrunk to fit a window the catalog overstates.
 const SUMMARY_OUTPUT_MAX = 32_000
 // Prompt text is estimated at about 4 characters per token, which can run low on dense text such as code.
-const ESTIMATE_ERROR = 0.05
+const ESTIMATE_ERROR = 0.15
 // Never ask for less; only reachable with automatic compaction off, since it keeps the window from filling this far.
 const OUTPUT_TOKEN_MIN = 1_024
 

@@ -20,8 +20,8 @@ describe("SessionModelRequest.outputLimit", () => {
     const limit = { context: 1_000_000, output: 128_000 }
     expect(outputLimit(limit, "primary", { measured: 50_000, estimated: 0 })).toBe(128_000)
     expect(outputLimit(limit, "primary", { measured: 900_000, estimated: 0 })).toBe(100_000)
-    // Estimated text counts 5% extra, so 40k estimated takes 42k of the room.
-    expect(outputLimit(limit, "primary", { measured: 900_000, estimated: 40_000 })).toBe(58_000)
+    // Estimated text counts 15% extra, so 40k estimated takes 46k of the room.
+    expect(outputLimit(limit, "primary", { measured: 900_000, estimated: 40_000 })).toBe(54_000)
   })
 
   test("keeps a minimum limit when the prompt nearly fills the context window", () => {
