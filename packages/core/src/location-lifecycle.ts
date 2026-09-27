@@ -6,6 +6,7 @@ import { LocationEvent } from "@opencode/schema/location-event"
 import { Bus } from "./bus.js"
 import { Form } from "./form.js"
 import { Location } from "./location.js"
+import { Mcp } from "./mcp/index.js"
 import { LocationServiceMap } from "./location-service-map.js"
 import { Permission } from "./permission.js"
 import { Project } from "./project.js"
@@ -27,6 +28,7 @@ const layer = Layer.effect(
     const permission = yield* Permission.Service
     const forms = yield* Form.Service
     const rpc = yield* Rpc.Service
+    const mcp = yield* Mcp.Service
     const project = yield* Project.Service
     const scope = yield* Effect.scope
     yield* project.activate(location.project.id)
@@ -45,6 +47,7 @@ const layer = Layer.effect(
         yield* permission.close
         yield* forms.close
         yield* rpc.close
+        yield* mcp.shutdown
         yield* bus.publish(
           LocationEvent.Shutdown,
           {},
@@ -64,5 +67,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Bus.node, Location.node, Permission.node, Project.node, Form.node, Rpc.node],
+  deps: [Bus.node, Location.node, Permission.node, Project.node, Form.node, Rpc.node, Mcp.node],
 })
