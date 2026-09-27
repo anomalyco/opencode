@@ -14,7 +14,16 @@ import { NotFoundError } from "@/storage/storage"
 
 import { Effect, Layer, Context } from "effect"
 import { InstanceState } from "@/effect/instance-state"
-import { isOverflow as overflow, usable } from "./overflow"
+import {
+  describeCompactionCheck,
+  formatCompactionCheck,
+  getCompactionBudget,
+  getRequestedOutputTokens,
+  getUsedTokens,
+  isOverflow as overflow,
+  normalizeLimits,
+  usable,
+} from "./overflow"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -204,12 +213,36 @@ const layer = Layer.effect(
       tokens: SessionV1.Assistant["tokens"]
       model: Provider.Model
     }) {
-      return overflow({
-        cfg: yield* config.get(),
+      const cfg = yield* config.get()
+      const result = overflow({
+        cfg,
         tokens: input.tokens,
         model: input.model,
         outputTokenMax: flags.outputTokenMax,
       })
+      // Debug-only diagnostics: model, limits, reservation, usage, threshold, decision.
+      // Uses logDebug so normal users are not spammed.
+      const limits = normalizeLimits(input.model.limit)
+      const requested = getRequestedOutputTokens({
+        outputCapability: limits.output,
+        outputTokenMax: flags.outputTokenMax,
+      })
+      const budget = getCompactionBudget({
+        contextLimit: limits.context,
+        inputLimit: limits.input,
+        maxOutputTokens: requested,
+        configuredReserved: cfg.compaction?.reserved,
+      })
+      const used = getUsedTokens(input.tokens)
+      const check = describeCompactionCheck({
+        model: input.model,
+        usedTokens: used,
+        budget,
+        compact: result,
+        reason: result ? "used>=threshold" : "used<threshold",
+      })
+      yield* Effect.logDebug(formatCompactionCheck(check))
+      return result
     })
 
     const estimate = Effect.fn("SessionCompaction.estimate")(function* (input: {

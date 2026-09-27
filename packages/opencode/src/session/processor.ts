@@ -12,7 +12,8 @@ import { Snapshot } from "@/snapshot"
 import { Session } from "./session"
 import { LLM } from "./llm"
 import { MessageV2 } from "./message-v2"
-import { isOverflow } from "./overflow"
+import { describeCompactionCheck, formatCompactionCheck, getCompactionBudget, getRequestedOutputTokens, getUsedTokens, isOverflow, normalizeLimits } from "./overflow"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 import { PartID } from "./schema"
 import type { SessionID } from "./schema"
 import { SessionRetry } from "./retry"
@@ -94,6 +95,7 @@ const layer = Layer.effect(
     const image = yield* Image.Service
     const events = yield* EventV2Bridge.Service
     const database = yield* Database.Service
+    const flags = yield* RuntimeFlags.Service
 
     const create = Effect.fn("SessionProcessor.create")(function* (input: Input) {
       // Pre-capture snapshot before the LLM stream starts. The AI SDK
@@ -474,11 +476,37 @@ const layer = Layer.effect(
                 messageID: ctx.assistantMessage.parentID,
               })
               .pipe(Effect.ignore, Effect.forkIn(scope))
-            if (
-              !ctx.assistantMessage.summary &&
-              isOverflow({ cfg: yield* config.get(), tokens: usage.tokens, model: ctx.model })
-            ) {
-              ctx.needsCompaction = true
+            if (!ctx.assistantMessage.summary) {
+              const cfg = yield* config.get()
+              const overflowed = isOverflow({
+                cfg,
+                tokens: usage.tokens,
+                model: ctx.model,
+                outputTokenMax: flags.outputTokenMax,
+              })
+              const limits = normalizeLimits(ctx.model.limit)
+              const requested = getRequestedOutputTokens({
+                outputCapability: limits.output,
+                outputTokenMax: flags.outputTokenMax,
+              })
+              const budget = getCompactionBudget({
+                contextLimit: limits.context,
+                inputLimit: limits.input,
+                maxOutputTokens: requested,
+                configuredReserved: cfg.compaction?.reserved,
+              })
+              yield* Effect.logDebug(
+                formatCompactionCheck(
+                  describeCompactionCheck({
+                    model: ctx.model,
+                    usedTokens: getUsedTokens(usage.tokens),
+                    budget,
+                    compact: overflowed,
+                    reason: overflowed ? "used>=threshold" : "used<threshold",
+                  }),
+                ),
+              )
+              if (overflowed) ctx.needsCompaction = true
             }
             return
           }
@@ -712,6 +740,7 @@ export const node = LayerNode.make({
     Image.node,
     EventV2Bridge.node,
     Database.node,
+    RuntimeFlags.node,
   ],
 })
 
