@@ -2,7 +2,7 @@ export * as Project from "./project.js"
 
 import { Context, Effect, Layer, Schema } from "effect"
 import { ChildProcess } from "effect/unstable/process"
-import { and, asc, desc, eq, gte, isNull, lte, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gte, isNotNull, isNull, lte, sql } from "drizzle-orm"
 import path from "path"
 import { AbsolutePath } from "./schema.js"
 import { Bus } from "./bus.js"
@@ -371,6 +371,30 @@ const layer = Layer.effect(
         return yield* persist({
           ...hg,
           canonical: hg.directory,
+        })
+      }
+
+      const stored = yield* db
+        .select({ id: WorktreeTable.project_id, directory: WorktreeTable.directory, canonical: ProjectTable.worktree })
+        .from(WorktreeTable)
+        .innerJoin(ProjectTable, eq(ProjectTable.id, WorktreeTable.project_id))
+        .where(isNotNull(WorktreeTable.strategy))
+        .all()
+        .pipe(
+          Effect.orDie,
+          Effect.map((rows) =>
+            rows
+              .filter((row) => FSUtil.contains(row.directory, directory))
+              .toSorted((a, b) => b.directory.length - a.directory.length)
+              .at(0),
+          ),
+        )
+      if (stored) {
+        return yield* persist({
+          id: stored.id,
+          directory: stored.directory,
+          canonical: stored.canonical,
+          vcs: undefined,
         })
       }
 
