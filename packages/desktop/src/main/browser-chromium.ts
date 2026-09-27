@@ -8,7 +8,14 @@ import { createDiagnostics } from "./browser/diagnostics"
 import { createProfiling } from "./browser/profiling"
 import { createCornerImages } from "./browser/corners"
 import type { BrowserNetwork } from "./browser/network"
-import { destinationOrigin, normalizeURL } from "./browser/policy"
+import {
+  allowedDestination,
+  destinationOrigin,
+  fileURLWithin,
+  localFileURL,
+  normalizeURL,
+  type Policy,
+} from "./browser/policy"
 
 type Element = { backendID: number; frameID: string; sessionID?: string }
 let nextRef = 0
@@ -40,8 +47,15 @@ export function createBrowserPage(
     initialize?: boolean
     restore?: Browser.Tab
     popupOptions?: Electron.BrowserWindowConstructorOptions
+    /** Directories whose files may load as file:// documents; empty when the server is remote. */
+    fileRoots?: () => ReadonlyArray<string>
   },
 ) {
+  const policy: Policy = {
+    get fileRoots() {
+      return options.fileRoots?.() ?? []
+    },
+  }
   const view = new electron.WebContentsView({
     ...options.popupOptions,
     webPreferences: {
@@ -103,11 +117,17 @@ export function createBrowserPage(
     revision++
   })
   let closed = false
+  // Whether the native surface holds a real document worth showing. Chromium keeps the
+  // previous document painted until the next one renders, so a shown page stays shown
+  // through later navigations; blank and failed documents hide until a real one is ready.
+  let content = false
+  let failure: { url: string; message: string } | undefined
   const state = (): Browser.Tab => ({
     id: options.id,
-    url: contents.getURL().slice(0, 16_384),
+    url: (failure?.url ?? contents.getURL()).slice(0, 16_384),
     title: contents.getTitle().slice(0, 2_048),
     loading: contents.isLoading(),
+    ...(failure ? { loadError: failure.message } : {}),
     canGoBack: contents.navigationHistory.canGoBack(),
     canGoForward: contents.navigationHistory.canGoForward(),
     generation,
@@ -115,16 +135,40 @@ export function createBrowserPage(
   const publish = () => {
     if (!closed) options.publish()
   }
-  const reset = (event: Electron.Event<{ isMainFrame: boolean; isSameDocument: boolean }>) => {
+  const reset = (event: Electron.Event<{ url: string; isMainFrame: boolean; isSameDocument: boolean }>) => {
     if (!event.isMainFrame || event.isSameDocument) return
+    failure = undefined
     generation++
     documents.clear()
     refs.clear()
     diagnostics.clear()
     publish()
   }
+  const settle = () => {
+    content = contents.getURL() !== "about:blank" && !failure
+    updateVisibility()
+  }
   contents.on("did-start-navigation", reset)
-  contents.on("did-stop-loading", publish)
+  contents.on("did-navigate", (_event, url, status, statusText) => {
+    // The server-network proxy answers an unreachable HTTP target with an empty 502. Other
+    // error statuses are real documents from the user's server and stay visible.
+    if (status === 502) failure = { url, message: `${status} ${statusText}`.trim().slice(0, 2_048) }
+    // A blank or failed document paints at commit; a real one waits for dom-ready.
+    if (url === "about:blank" || failure) settle()
+    publish()
+  })
+  contents.on("did-fail-load", (_event, code, description, url, isMainFrame) => {
+    // Cancelled navigation and failed subframes do not replace the current page.
+    if (!isMainFrame || code === -3) return
+    failure = { url, message: description.slice(0, 2_048) }
+    settle()
+    publish()
+  })
+  contents.on("dom-ready", settle)
+  contents.on("did-stop-loading", () => {
+    settle()
+    publish()
+  })
   contents.on("did-navigate-in-page", publish)
   contents.on("page-title-updated", publish)
   contents.on("render-process-gone", () => {
@@ -138,9 +182,12 @@ export function createBrowserPage(
   contents.session.setDevicePermissionHandler(() => false)
   contents.session.setDisplayMediaRequestHandler((_request, callback) => callback({}))
   contents.on("content-bounds-updated", (event) => event.preventDefault())
-  // Sub-frames keep Chromium's own rules so blob:/data: viewers and sandboxed previews still load.
+  // Sub-frames keep Chromium's own rules so blob:/data: viewers and sandboxed previews still load,
+  // except file: documents, which must stay inside the allowed roots at every depth.
   const guard = (event: Electron.Event<{ url: string; isMainFrame: boolean }>) => {
-    if (!event.isMainFrame || event.url === "about:blank" || destinationOrigin(event.url)) return
+    if (event.url === "about:blank") return
+    if (event.isMainFrame ? allowedDestination(event.url, policy) : !localFileURL(event.url)) return
+    if (!event.isMainFrame && fileURLWithin(event.url, policy.fileRoots ?? [])) return
     event.preventDefault()
     options.publish("ERR_BLOCKED_BY_CLIENT")
   }
@@ -252,12 +299,20 @@ export function createBrowserPage(
     corner.setVisible(false)
     win.contentView.addChildView(corner)
   })
+  let visible = false
+  const updateVisibility = () => {
+    // The renderer's layout requests may lag behind navigation; the page decides
+    // whether there is a document worth exposing over the themed background.
+    const show = visible && content
+    view.setVisible(show)
+    corners.forEach((corner) => corner.setVisible(show && !!cornerKey))
+  }
   const ready = Promise.all([
     files.ready,
     ...(options.initialize === false
       ? []
       : [
-          contents.loadURL(normalizeURL(options.restore?.url || "about:blank")).catch((error: Error) => {
+          contents.loadURL(normalizeURL(options.restore?.url || "about:blank", policy)).catch((error: Error) => {
             if (!options.restore) throw error
             // A dev server may have stopped while this page was unloaded. Keep its tab available to retry.
             options.publish(error.message)
@@ -302,9 +357,15 @@ export function createBrowserPage(
         )
       })
     },
-    setVisible(visible: boolean) {
-      view.setVisible(visible)
-      corners.forEach((corner) => corner.setVisible(visible && !!cornerKey))
+    setVisible(value: boolean) {
+      visible = value
+      updateVisibility()
+    },
+    // Freezes the shown page so the renderer can paint it under DOM overlays while the view hides.
+    async capture() {
+      if (closed || !visible || !content) return
+      const image = await contents.capturePage()
+      return image.isEmpty() ? undefined : new Uint8Array(image.toJPEG(90))
     },
     async execute(command: Browser.Command, signal: AbortSignal): Promise<Browser.Result> {
       await ready
@@ -401,7 +462,7 @@ export function createBrowserPage(
     }
     switch (action.type) {
       case "navigate": {
-        const url = normalizeURL(action.url)
+        const url = normalizeURL(action.url, policy)
         const cancel = () => contents.stop()
         signal.addEventListener("abort", cancel, { once: true })
         try {
@@ -750,7 +811,7 @@ export function createBrowserPage(
       resources: [
         ...new Set(
           action.type === "navigate"
-            ? [new URL(normalizeURL(action.url)).href]
+            ? [new URL(normalizeURL(action.url, policy)).href]
             : capture
               ? sourceURLs()
               : urls.length

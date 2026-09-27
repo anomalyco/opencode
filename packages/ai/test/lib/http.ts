@@ -1,4 +1,5 @@
-import { Effect, Layer, Ref } from "effect"
+import { Effect, Fiber, Layer, Ref } from "effect"
+import * as TestClock from "effect/testing/TestClock"
 import { HttpClient, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { LLMClient, RequestExecutor } from "../../src/route.js"
 import type { Service as LLMClientService } from "../../src/route/client.js"
@@ -17,7 +18,34 @@ export type Handler = (
   input: HandlerInput,
 ) => Effect.Effect<HttpClientResponse.HttpClientResponse, HttpClientError.HttpClientError>
 
-const handlerLayer = (handler: Handler): Layer.Layer<HttpClient.HttpClient> =>
+export interface Call {
+  readonly method: string
+  readonly url: string
+  readonly headers: Headers
+  readonly body: string
+}
+
+/** Record every request and tell the handler how many times this exact method+URL has been seen (1-based). */
+export const observe = (calls: Array<Call>, input: HandlerInput) =>
+  Effect.gen(function* () {
+    const web = yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie)
+    const call = { method: web.method, url: web.url, headers: web.headers, body: input.text }
+    calls.push(call)
+    return { call, nth: calls.filter((seen) => seen.method === call.method && seen.url === call.url).length }
+  })
+
+export const json = (input: HandlerInput, value: unknown, init?: ResponseInit) =>
+  input.respond(JSON.stringify(value), { ...init, headers: { "content-type": "application/json", ...init?.headers } })
+
+/** Fork the polling program, let the test clock cover `seconds` of polling, and join. */
+export const settle = <A, E, R>(program: Effect.Effect<A, E, R>, seconds: number) =>
+  Effect.gen(function* () {
+    const fiber = yield* Effect.forkChild(program)
+    yield* TestClock.adjust(`${seconds} seconds`)
+    return yield* Fiber.join(fiber)
+  })
+
+export const handlerLayer = (handler: Handler): Layer.Layer<HttpClient.HttpClient> =>
   Layer.succeed(
     HttpClient.HttpClient,
     HttpClient.make((request) =>

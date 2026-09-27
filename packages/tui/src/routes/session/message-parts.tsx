@@ -14,8 +14,30 @@ import { SplitBorder } from "../../ui/border"
 import { Locale } from "../../util/locale"
 import { use } from "./render-context"
 import { generateThinkingSyntax } from "./thinking-syntax"
+import { canonicalToolName } from "../../util/tool-display"
 
 export const INLINE_TOOL_ICON_WIDTH = 2
+
+const toolDisplays = new Set([
+  "shell",
+  "glob",
+  "read",
+  "grep",
+  "webfetch",
+  "websearch",
+  "write",
+  "edit",
+  "subagent",
+  "execute",
+  "patch",
+  "question",
+  "skill",
+])
+
+export function toolDisplay(tool: string) {
+  const normalized = canonicalToolName(tool)
+  return toolDisplays.has(normalized) ? normalized : "generic"
+}
 
 export function ReasoningPart(props: {
   last: boolean
@@ -24,7 +46,7 @@ export function ReasoningPart(props: {
 }) {
   const theme = useTheme()
   const { currentSyntax: syntax } = useThemes()
-  const thinkingSyntax = createSyntaxStyleMemo(() => generateThinkingSyntax(syntax(), theme.text.subdued))
+  const thinkingSyntax = createSyntaxStyleMemo(() => generateThinkingSyntax(syntax(), theme.text.muted))
   const ctx = use()
   // Collapsed by default in hide mode: a single line throughout, so the
   // layout never shifts. Click to open the full markdown block, click to close.
@@ -52,7 +74,7 @@ export function ReasoningPart(props: {
         <box
           border={!inMinimal() || expanded() ? ["left"] : undefined}
           customBorderChars={SplitBorder.customBorderChars}
-          borderColor={theme.raise(theme.background.default)}
+          borderColor={theme.decrease(theme.background.base)}
           paddingLeft={!inMinimal() || expanded() ? 1 : 0}
         >
           <box onMouseUp={toggle}>
@@ -70,7 +92,7 @@ export function ReasoningPart(props: {
             <box
               border={["left"]}
               customBorderChars={SplitBorder.customBorderChars}
-              borderColor={theme.raise(theme.background.default)}
+              borderColor={theme.decrease(theme.background.base)}
               paddingLeft={inMinimal() ? 3 : 1}
             >
               <code
@@ -80,7 +102,7 @@ export function ReasoningPart(props: {
                 syntaxStyle={thinkingSyntax()}
                 content={content()}
                 conceal={ctx.markdownMode() === "rendered"}
-                fg={theme.text.subdued}
+                fg={theme.text.muted}
               />
             </box>
           </box>
@@ -106,12 +128,12 @@ function ReasoningHeader(props: {
   const fg = () =>
     props.open
       ? RGBA.fromValues(
-          theme.text.feedback.warning.default.r,
-          theme.text.feedback.warning.default.g,
-          theme.text.feedback.warning.default.b,
+          theme.text.feedback.warning.base.r,
+          theme.text.feedback.warning.base.g,
+          theme.text.feedback.warning.base.b,
           0.6,
         )
-      : theme.text.feedback.warning.default
+      : theme.text.feedback.warning.base
 
   return (
     <Switch>
@@ -166,7 +188,7 @@ export function TextPart(props: {
           tableOptions={{ style: "grid", cellPaddingX: 1 }}
           conceal={ctx.markdownMode() === "rendered"}
           fg={theme.markdown.text}
-          bg={theme.background.default}
+          bg={theme.background.base}
         />
       </box>
     </Show>

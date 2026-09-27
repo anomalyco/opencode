@@ -4,6 +4,7 @@ import Callout from "./Callout.astro"
 import Card from "./Card.astro"
 import CardGroup from "./CardGroup.astro"
 import CodeBlock from "./CodeBlock.astro"
+import CodeTabs from "./CodeTabs.astro"
 import DocsLayout from "../layouts/DocsLayout.astro"
 
 interface Props {
@@ -21,5 +22,5 @@ const rendered = await render(entry)
   headings={rendered.headings}
   showTableOfContents={entry.data.tableOfContents !== false}
 >
-  <rendered.Content components={{ Callout, Card, CardGroup, CodeBlock }} />
+  <rendered.Content components={{ Callout, Card, CardGroup, CodeBlock, CodeTabs }} />
 </DocsLayout>

@@ -49,7 +49,6 @@ describe("SkillPlugin.Plugin", () => {
           description: expect.stringContaining("opencode issue"),
         }),
       )
-      expect(report?.slash).toBe(true)
       expect(report?.content).toContain("- opencode version: 1.2.3")
       expect(report?.content).toContain("- install/channel: beta")
     }),

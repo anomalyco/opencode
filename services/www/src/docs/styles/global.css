@@ -32,16 +32,16 @@
 
 :root {
   color-scheme: dark;
-  --background: #000;
-  --foreground: #ededed;
+  --background: #090909;
+  --foreground: #efefef;
   --muted: #929292;
   --border: #303030;
   --surface: #101010;
   --surface-hover: #181818;
   --link: #4d8eff;
   --header-height: 3.875rem;
-  --frame-width: 76rem;
-  --content-width: 44rem;
+  --frame-width: 96rem;
+  --content-width: 60rem;
   --gutter: 1.5rem;
 }
 
@@ -78,7 +78,7 @@ body {
   color: var(--foreground);
   font-family: "OpenTUI Mono", monospace;
   font-size: 0.875rem;
-  line-height: 1.5;
+  line-height: 1.8em;
 }
 
 button,
@@ -199,12 +199,16 @@ a:hover {
   width: min(100%, var(--frame-width));
   min-height: calc(100vh - var(--header-height));
   margin-inline: auto;
-  grid-template-columns: 15rem minmax(0, var(--content-width)) minmax(12rem, 1fr);
+  grid-template-columns: 15rem minmax(0, 1fr) 16rem;
 }
 
 .sidebar-column {
+  position: sticky;
+  top: var(--header-height);
+  height: calc(100vh - var(--header-height));
   padding: 2.25rem 2rem 3rem var(--gutter);
   border-right: 1px solid var(--border);
+  overflow-y: auto;
 }
 
 .docs-sidebar section + section {
@@ -1000,6 +1004,48 @@ main {
   background: var(--surface);
   color: var(--muted);
   font-size: 0.75rem;
+}
+
+.docs-code-tabs {
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--border);
+}
+
+.docs-code-tabs-list {
+  display: flex;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.docs-code-tabs-list button {
+  margin-bottom: -1px;
+  padding: 0.5rem 0.875rem;
+  flex-shrink: 0;
+  cursor: pointer;
+  border: 0;
+  border-bottom: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.docs-code-tabs-list button:hover,
+.docs-code-tabs-list button[aria-selected="true"] {
+  color: var(--foreground);
+}
+
+.docs-code-tabs-list button[aria-selected="true"] {
+  border-bottom-color: var(--foreground);
+}
+
+.docs-code-tabs-list button:focus-visible {
+  outline: 1px solid var(--foreground);
+  outline-offset: -3px;
+}
+
+.docs-code-tabs .docs-code-block pre {
+  margin: 0;
+  border: 0;
 }
 
 .prose h1 button {

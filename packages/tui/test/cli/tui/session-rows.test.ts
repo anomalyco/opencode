@@ -25,12 +25,13 @@ test("measures turn duration from the user prompt across assistant steps", () =>
   expect(turnDuration(final, messages)).toBe(29_000)
 })
 
-test("measures turn output throughput across model steps without tool time", () => {
+test("measures request throughput including reasoning across model changes without tool time", () => {
   const first = assistant("assistant-1", [])
-  first.time = { created: 8_000, streamed: 10_000, completed: 20_000 }
+  first.time = { created: 6_000, streamed: 10_000, completed: 20_000 }
   first.tokens = { input: 10, output: 20, reasoning: 5, cache: { read: 0, write: 0 } }
   const final = assistant("assistant-2", [])
-  final.time = { created: 27_000, streamed: 30_000, completed: 31_000 }
+  final.model = { id: "other-model", providerID: "other-provider", variant: "other-variant" }
+  final.time = { created: 24_000, streamed: 30_000, completed: 31_000 }
   final.tokens = { input: 20, output: 30, reasoning: 10, cache: { read: 0, write: 0 } }
   const messages: SessionMessageInfo[] = [
     { type: "user", id: "user-1", text: "Question", time: { created: 1_000 } },
@@ -38,7 +39,9 @@ test("measures turn output throughput across model steps without tool time", () 
     final,
   ]
 
-  expect(turnTokensPerSecond(final, messages)).toBe(10)
+  expect(turnTokensPerSecond(final, messages)).toBe(6.5)
+  first.time.streamed = undefined
+  expect(turnTokensPerSecond(final, messages)).toBeUndefined()
 })
 
 test("omits turn throughput when a stream boundary is unavailable", () => {
@@ -79,10 +82,10 @@ test.each([false, true])(
           : [],
       ),
     ).toEqual([
-      [2_000, 5],
-      [3_000, 10],
-      [6_000, 15],
-      [4_000, 6],
+      [2_000, 7],
+      [3_000, 12],
+      [6_000, 17],
+      [4_000, 7],
       [0, undefined],
     ])
   },
@@ -224,6 +227,77 @@ test("resets the cross-turn cache baseline after compaction", () => {
     { type: "turn-usage", messageIDs: ["assistant-1"] },
     { type: "turn-usage", messageIDs: ["assistant-2"] },
   ])
+})
+
+test("closes turn usage on the idle marker so steered steps share one footer", () => {
+  const step = (id: string, read: number) => ({
+    ...assistant(id, []),
+    finish: "stop" as const,
+    tokens: { input: 1, output: 0, reasoning: 0, cache: { read, write: 0 } },
+  })
+  const idle = (id: string, created: number): SessionMessageInfo => ({
+    type: "idle",
+    id,
+    outcome: "succeeded",
+    time: { created },
+  })
+  const messages: SessionMessageInfo[] = [
+    { type: "user", id: "user-1", text: "First", time: { created: 0 } },
+    step("assistant-1", 1_000),
+    { type: "user", id: "steer", text: "Also this", time: { created: 2 } },
+    step("assistant-2", 2_000),
+    idle("idle-1", 3),
+    { type: "user", id: "user-2", text: "Second", time: { created: 4 } },
+    step("assistant-3", 3_000),
+    { type: "user", id: "steer-2", text: "Wait", time: { created: 5 } },
+    step("assistant-4", 4_000),
+  ]
+
+  expect(reduceSessionRows(messages, new Set(), true)).toEqual([
+    { type: "message", messageID: "user-1" },
+    { type: "assistant-footer", messageID: "assistant-1" },
+    { type: "message", messageID: "steer" },
+    { type: "assistant-footer", messageID: "assistant-2" },
+    { type: "turn-usage", messageIDs: ["assistant-1", "assistant-2"] },
+    { type: "message", messageID: "user-2" },
+    { type: "assistant-footer", messageID: "assistant-3" },
+    { type: "message", messageID: "steer-2" },
+    { type: "assistant-footer", messageID: "assistant-4" },
+  ])
+  expect(
+    reduceSessionRows([...messages, idle("idle-2", 6)], new Set(), true).filter((row) => row.type === "turn-usage"),
+  ).toEqual([
+    { type: "turn-usage", messageIDs: ["assistant-1", "assistant-2"] },
+    {
+      type: "turn-usage",
+      messageIDs: ["assistant-3", "assistant-4"],
+      previousCache: { read: 2_000, model: { id: "model", providerID: "provider" } },
+    },
+  ])
+})
+
+test("measures a marker-era turn from its first prompt across steers", () => {
+  const step = (id: string, created: number, streamed: number, completed: number, output: number) => ({
+    ...assistant(id, []),
+    time: { created, streamed, completed },
+    tokens: { input: 1, output, reasoning: 0, cache: { read: 0, write: 0 } },
+  })
+  const messages: SessionMessageInfo[] = [
+    { type: "user", id: "old-input", text: "Old question", time: { created: 0 } },
+    step("old-step", 1_000, 2_000, 3_000, 5),
+    { type: "idle", id: "idle-1", outcome: "succeeded", time: { created: 3_500 } },
+    { type: "user", id: "input", text: "Question", time: { created: 4_000 } },
+    step("first-step", 5_000, 6_000, 7_000, 10),
+    { type: "user", id: "steer", text: "Also this", time: { created: 7_500 } },
+    step("second-step", 8_000, 9_000, 10_000, 20),
+  ]
+  const final = messages[6]
+  if (final.type !== "assistant") throw new Error("Expected an assistant")
+
+  expect(turnDuration(final, messages)).toBe(6_000)
+  expect(turnTokensPerSecond(final, messages)).toBe(15)
+  expect(turnDuration(final, messages, 6, true)).toBe(2_500)
+  expect(turnTokensPerSecond(final, messages, 6, true)).toBe(20)
 })
 
 test("assigns assistant boundaries to the first rendered row instead of the first text row", () => {

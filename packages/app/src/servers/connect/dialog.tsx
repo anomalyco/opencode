@@ -4,7 +4,17 @@ import { Divider } from "@opencode/ui/divider"
 import { TextInput } from "@opencode/ui/text-input"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { useMutation } from "@tanstack/solid-query"
-import { type Component, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js"
+import {
+  type Component,
+  Show,
+  Suspense,
+  createEffect,
+  createMemo,
+  createSignal,
+  lazy,
+  onCleanup,
+  onMount,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import {
   createServerHealthPreview,
@@ -18,7 +28,11 @@ import { useTabs } from "@/shell/tabs/tabs"
 import { useCheckServerHealth } from "@/runtime/server/health"
 import { usePlatform } from "@/runtime/platform/platform"
 import { isMixedContent } from "./browser"
+import { createCameraAvailability } from "./camera"
+import type { Pairing } from "./pairing"
 import "@/settings/settings.css"
+
+const PairingScanner = lazy(() => import("./scanner").then((module) => ({ default: module.PairingScanner })))
 
 type FormMode = "list" | "add" | "edit"
 
@@ -29,6 +43,8 @@ export const DialogServer: Component<{
 }> = (props) => {
   const dialog = useDialog()
   const language = useLanguage()
+  const platform = usePlatform()
+  const camera = createCameraAvailability()
   const form = createFormController({
     onSelect: (server) => {
       props.onSave?.(server)
@@ -75,64 +91,106 @@ export const DialogServer: Component<{
       </DialogHeader>
       <Divider />
       <DialogBody class="flex w-full min-w-0 flex-1 flex-col px-4 pt-4 pb-2">
-        <div class="flex w-full min-w-0 flex-col gap-6">
-          <div class="flex w-full min-w-0 flex-col gap-2">
-            <label class="settings-server-dialog-label">{language.t("dialog.server.add.url")}</label>
-            <TextInput
-              type="text"
-              appearance="large"
-              class="!w-full self-stretch"
-              value={form.state.value()}
-              placeholder={language.t("dialog.server.add.placeholder")}
-              invalid={!!form.state.error()}
-              disabled={form.state.busy()}
-              autofocus
-              aria-describedby={form.state.error() ? "dialog-server-error" : undefined}
-              onInput={(event) => form.change.value(event.currentTarget.value)}
-              onKeyDown={keyDown}
-            />
-            <Show when={form.state.error()}>
-              <span id="dialog-server-error" class="settings-server-dialog-error" role="alert">
-                {form.state.error()}
-              </span>
+        <Show
+          when={!form.state.scanning()}
+          fallback={
+            <Suspense fallback={<p role="status">{language.t("server.connect.camera.starting")}</p>}>
+              <PairingScanner
+                onCancel={() => {
+                  form.scan.stop()
+                  void camera.refetch()
+                }}
+                onScan={form.scan.complete}
+              />
+            </Suspense>
+          }
+        >
+          <div class="flex w-full min-w-0 flex-col gap-6">
+            <div class="flex w-full min-w-0 flex-col gap-2">
+              <label class="settings-server-dialog-label">{language.t("dialog.server.add.url")}</label>
+              <TextInput
+                type="text"
+                appearance="large"
+                class="!w-full self-stretch"
+                value={form.state.value()}
+                placeholder={language.t("dialog.server.add.placeholder")}
+                invalid={!!form.state.error()}
+                disabled={form.state.busy()}
+                autofocus
+                aria-describedby={form.state.error() ? "dialog-server-error" : undefined}
+                onInput={(event) => form.change.value(event.currentTarget.value)}
+                onKeyDown={keyDown}
+              />
+              <Show when={form.state.error()}>
+                <span id="dialog-server-error" class="settings-server-dialog-error" role="alert">
+                  {form.state.error()}
+                </span>
+              </Show>
+            </div>
+            <div class="flex w-full min-w-0 flex-col gap-2">
+              <label class="settings-server-dialog-label">{language.t("dialog.server.add.name")}</label>
+              <TextInput
+                type="text"
+                appearance="large"
+                class="!w-full self-stretch"
+                value={form.state.name()}
+                placeholder={language.t("dialog.server.add.namePlaceholder")}
+                disabled={form.state.busy()}
+                onInput={(event) => form.change.name(event.currentTarget.value)}
+                onKeyDown={keyDown}
+              />
+            </div>
+            <div class="flex w-full min-w-0 flex-col gap-2">
+              <label class="settings-server-dialog-label">{language.t("dialog.server.add.password")}</label>
+              <TextInput
+                type="password"
+                appearance="large"
+                class="!w-full self-stretch"
+                value={form.state.password()}
+                placeholder={language.t("dialog.server.add.passwordPlaceholder")}
+                disabled={form.state.busy()}
+                onInput={(event) => form.change.password(event.currentTarget.value)}
+                onKeyDown={keyDown}
+              />
+            </div>
+            <Show when={props.mode === "add" && platform.platform === "web"}>
+              <div class="flex w-full min-w-0 flex-col gap-2">
+                <Button
+                  variant="neutral"
+                  size="large"
+                  class="!w-full self-stretch"
+                  disabled={form.state.busy() || !camera.available.latest}
+                  aria-describedby={
+                    !camera.available.latest && !camera.available.loading
+                      ? "dialog-server-camera-unavailable"
+                      : undefined
+                  }
+                  onClick={form.scan.start}
+                >
+                  {language.t("server.connect.scan")}
+                </Button>
+                <Show when={!camera.available.latest && !camera.available.loading}>
+                  <span id="dialog-server-camera-unavailable" class="settings-server-dialog-hint">
+                    {language.t(
+                      window.isSecureContext ? "server.connect.camera.unavailable" : "server.connect.camera.insecure",
+                    )}
+                  </span>
+                </Show>
+              </div>
             </Show>
           </div>
-          <div class="flex w-full min-w-0 flex-col gap-2">
-            <label class="settings-server-dialog-label">{language.t("dialog.server.add.name")}</label>
-            <TextInput
-              type="text"
-              appearance="large"
-              class="!w-full self-stretch"
-              value={form.state.name()}
-              placeholder={language.t("dialog.server.add.namePlaceholder")}
-              disabled={form.state.busy()}
-              onInput={(event) => form.change.name(event.currentTarget.value)}
-              onKeyDown={keyDown}
-            />
-          </div>
-          <div class="flex w-full min-w-0 flex-col gap-2">
-            <label class="settings-server-dialog-label">{language.t("dialog.server.add.password")}</label>
-            <TextInput
-              type="password"
-              appearance="large"
-              class="!w-full self-stretch"
-              value={form.state.password()}
-              placeholder={language.t("dialog.server.add.passwordPlaceholder")}
-              disabled={form.state.busy()}
-              onInput={(event) => form.change.password(event.currentTarget.value)}
-              onKeyDown={keyDown}
-            />
-          </div>
-        </div>
+        </Show>
       </DialogBody>
-      <DialogFooter>
-        <Button variant="neutral" disabled={form.state.busy()} onClick={() => dialog.close()}>
-          {language.t("common.cancel")}
-        </Button>
-        <Button variant="contrast" disabled={form.state.busy()} onClick={form.submit}>
-          {submitLabel()}
-        </Button>
-      </DialogFooter>
+      <Show when={!form.state.scanning()}>
+        <DialogFooter>
+          <Button variant="neutral" disabled={form.state.busy()} onClick={() => dialog.close()}>
+            {language.t("common.cancel")}
+          </Button>
+          <Button variant="contrast" disabled={form.state.busy()} onClick={form.submit}>
+            {submitLabel()}
+          </Button>
+        </DialogFooter>
+      </Show>
     </Dialog>
   )
 }
@@ -149,6 +207,7 @@ function createFormController(options: { onSelect?: (server: ServerConnection.Ht
     mode: "list" as FormMode,
     originalUrl: undefined as string | undefined,
     values: { url: "", name: "", password: "" },
+    scanning: false,
     error: "",
     status: undefined as boolean | undefined,
   })
@@ -161,6 +220,7 @@ function createFormController(options: { onSelect?: (server: ServerConnection.Ht
       mode: "list",
       originalUrl: undefined,
       values: { url: "", name: "", password: "" },
+      scanning: false,
       error: "",
       status: undefined,
     })
@@ -265,6 +325,15 @@ function createFormController(options: { onSelect?: (server: ServerConnection.Ht
     setStore("error", "")
     request.mutate()
   }
+  const pair = (pairing: Pairing) => {
+    healthPreview.cancel()
+    setStore({
+      values: { ...store.values, url: pairing.url, password: pairing.password },
+      scanning: false,
+      error: "",
+    })
+    request.mutate()
+  }
 
   createEffect(() => {
     if (store.mode !== "edit") return
@@ -281,6 +350,7 @@ function createFormController(options: { onSelect?: (server: ServerConnection.Ht
       value: () => store.values.url,
       name: () => store.values.name,
       password: () => store.values.password,
+      scanning: () => store.scanning,
       error: () => store.error,
       status: () => store.status,
     },
@@ -288,6 +358,11 @@ function createFormController(options: { onSelect?: (server: ServerConnection.Ht
       value: (value: string) => change("url", value),
       name: (value: string) => change("name", value),
       password: (value: string) => change("password", value),
+    },
+    scan: {
+      start: () => setStore("scanning", true),
+      stop: () => setStore("scanning", false),
+      complete: pair,
     },
     start: { add: startAdd, edit: startEdit },
     reset,

@@ -250,6 +250,10 @@ const CompleteAgentWorkflow = {
           path: "src/new.ts",
           content: "export const stable = true",
         }),
+        storyTool("tool_family_write_extra", "write", "completed", {
+          path: "src/extra.ts",
+          content: "export const extra = true",
+        }),
         storyTool(
           "tool_family_patch",
           "patch",

@@ -59,9 +59,9 @@ it.live("returns ordered config entries for the requested directory", () =>
   }),
 )
 
-it.live("updates global preferences without replacing unrelated JSONC", () =>
+it.live("updates the global shell without replacing unrelated JSONC", () =>
   Effect.gen(function* () {
-    const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-config-preferences-")))
+    const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-config-shells-")))
     const global = path.join(tmp.path, "global")
     const config = path.join(global, "opencode.jsonc")
     yield* Effect.promise(() => fs.mkdir(global, { recursive: true }))
@@ -78,26 +78,18 @@ it.live("updates global preferences without replacing unrelated JSONC", () =>
     )
     const server = yield* startServer(global)
     const response = yield* Effect.promise(() =>
-      fetch(new URL("/api/config/preferences", server.base), {
+      fetch(new URL("/api/experimental/config", server.base), {
         method: "PATCH",
         headers: { ...server.headers, "content-type": "application/json" },
-        body: JSON.stringify({ shell: null, websearch: { provider: "random" } }),
+        body: JSON.stringify({ shell: "/bin/zsh" }),
       }),
     )
 
-    expect(response.status).toBe(200)
-    expect(yield* Effect.promise(() => response.json())).toEqual({ websearch: { provider: "random" } })
+    expect(response.status).toBe(204)
     const text = yield* Effect.promise(() => fs.readFile(config, "utf8"))
     expect(text).toContain("// keep this comment")
     expect(text).toContain('"model": "provider/model"')
-    expect(text).not.toContain('"shell"')
-    expect(text).toContain('"websearch"')
-
-    const preferences = yield* Effect.promise(() =>
-      fetch(new URL("/api/config/preferences", server.base), { headers: server.headers }),
-    )
-    expect(preferences.status).toBe(200)
-    expect(yield* Effect.promise(() => preferences.json())).toEqual({ websearch: { provider: "random" } })
+    expect(text).toContain('"shell": "/bin/zsh"')
 
     const shells = yield* Effect.promise(() =>
       fetch(new URL("/api/config/shell", server.base), { headers: server.headers }),

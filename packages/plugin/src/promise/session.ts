@@ -86,6 +86,44 @@ export interface SessionHttpResponse {
   response: Response
 }
 
+/**
+ * Connection a WebSocket-backed request opens or reuses. Runs once per model call before the
+ * Session's socket is selected; changing `url` or `headers` reopens the socket. Experimental.
+ */
+export interface SessionWebSocketHandshake {
+  readonly sessionID: Session.ID
+  readonly agent: Agent.ID
+  readonly model: Model.Ref
+  readonly kind: SessionRequestKind
+  url: string
+  headers: Record<string, string>
+}
+
+/**
+ * Outbound frame about to be written to the Session's socket, after the provider driver has built
+ * it. Replacing `frame` sends the replacement verbatim; the driver still tracks state from the
+ * provider's replies, so a rewrite that changes protocol meaning is on the plugin. Experimental.
+ */
+export interface SessionWebSocketSend {
+  readonly sessionID: Session.ID
+  readonly agent: Agent.ID
+  readonly model: Model.Ref
+  readonly kind: SessionRequestKind
+  frame: string
+}
+
+/**
+ * Inbound frame read from the Session's socket, before the provider driver observes it. Replacing
+ * `frame` hands the replacement to the driver verbatim. Experimental.
+ */
+export interface SessionWebSocketReceive {
+  readonly sessionID: Session.ID
+  readonly agent: Agent.ID
+  readonly model: Model.Ref
+  readonly kind: SessionRequestKind
+  frame: string
+}
+
 export type SessionRetryDecision = { retry: false } | { retry: true; delay: number }
 
 export interface SessionRetry {
@@ -106,6 +144,9 @@ export interface SessionHooks {
   readonly "model.request": SessionModelRequest
   readonly "http.request": SessionHttpRequest
   readonly "http.response": SessionHttpResponse
+  readonly "experimental.ws.handshake": SessionWebSocketHandshake
+  readonly "experimental.ws.send": SessionWebSocketSend
+  readonly "experimental.ws.receive": SessionWebSocketReceive
   readonly retry: SessionRetry
 }
 
@@ -120,7 +161,7 @@ export type SessionDomain = Pick<
   | "command"
   | "synthetic"
   | "interrupt"
-  | "rename"
+  | "update"
   | "move"
   | "wait"
   | "context"

@@ -568,9 +568,14 @@ it.effect("refreshes expired OAuth credentials through the context during activa
     expect(yield* plugins.list()).toMatchObject([{ id: "oauth-refresh", state: { status: "active" } }])
     expect(resolved).toEqual([refreshed])
     expect((yield* credentials.get(stored.id))?.value).toEqual(refreshed)
-    expect(yield* integrations.connection.resolve({ type: "credential", id: stored.id, label: stored.label })).toEqual(
-      refreshed,
-    )
+    expect(
+      yield* integrations.connection.resolve({
+        type: "credential",
+        method: "oauth",
+        id: stored.id,
+        label: stored.label,
+      }),
+    ).toEqual(refreshed)
     expect(refreshes).toEqual([expired])
   }),
 )

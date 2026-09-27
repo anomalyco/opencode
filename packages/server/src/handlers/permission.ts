@@ -78,17 +78,8 @@ export const PermissionHandler = HttpApiBuilder.group(Api, "server.permission", 
         Effect.fn(function* (ctx) {
           const owned = yield* requireOwnedRequest(ctx.params.sessionID, ctx.params.requestID)
           yield* owned.permission
-            .reply({ requestID: ctx.params.requestID, reply: ctx.payload.reply, message: ctx.payload.message })
+            .reply({ requestID: ctx.params.requestID, reply: ctx.payload.decision, message: ctx.payload.message })
             .pipe(Effect.catchTag("Permission.NotFoundError", () => missingRequest(ctx.params.requestID)))
-          return HttpApiSchema.NoContent.make()
-        }),
-      )
-      .handle(
-        "session.permission.rules",
-        Effect.fn(function* (ctx) {
-          yield* sessions
-            .setPermissions({ sessionID: ctx.params.sessionID, permissions: ctx.payload.permissions })
-            .pipe(Effect.catchTag("Session.NotFoundError", missingSession))
           return HttpApiSchema.NoContent.make()
         }),
       )

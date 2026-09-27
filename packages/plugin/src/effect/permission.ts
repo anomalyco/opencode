@@ -19,6 +19,6 @@ export interface PermissionHooks {
   readonly evaluate: PermissionEvaluation
 }
 
-export type PermissionDomain = Pick<PermissionApi<unknown>, "list" | "get" | "reply" | "rules"> & {
+export type PermissionDomain = Pick<PermissionApi<unknown>, "list" | "get" | "reply"> & {
   readonly hook: Hooks<PermissionHooks>
 }

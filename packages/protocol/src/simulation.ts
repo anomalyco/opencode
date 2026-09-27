@@ -340,6 +340,17 @@ export namespace Frontend {
   export const Color = Schema.Tuple([Schema.Number, Schema.Number, Schema.Number, Schema.Number])
   export type Color = Schema.Schema.Type<typeof Color>
 
+  export const CapturedImage = Schema.Struct({
+    x: Schema.Number,
+    y: Schema.Number,
+    width: Schema.Number,
+    height: Schema.Number,
+    pixelWidth: Schema.Number,
+    pixelHeight: Schema.Number,
+    rgba: Schema.String.check(Schema.isBase64()),
+  })
+  export interface CapturedImage extends Schema.Schema.Type<typeof CapturedImage> {}
+
   export const CapturedFrame = Schema.Struct({
     cols: Schema.Number,
     rows: Schema.Number,
@@ -357,6 +368,7 @@ export namespace Frontend {
         ),
       }),
     ),
+    images: Schema.optionalKey(Schema.Array(CapturedImage)),
   })
   export interface CapturedFrame extends Schema.Schema.Type<typeof CapturedFrame> {}
 

@@ -329,7 +329,9 @@ describe("Permission", () => {
       ).toMatchObject([{ action: "read", resource: "src/*" }])
       const saved = yield* PermissionSaved.Service
       const id = (yield* saved.list())[0]!.id
-      expect(yield* saved.list()).toEqual([{ id, projectID: Project.ID.global, action: "read", resource: "src/*" }])
+      expect(yield* saved.list()).toMatchObject([
+        { id, projectID: Project.ID.global, action: "read", resource: "src/*" },
+      ])
       yield* service.assert(assertion({ id: Permission.ID.create("per_next"), resources: ["src/next.ts"] }))
       yield* saved.remove(id)
       expect(yield* saved.list()).toEqual([])

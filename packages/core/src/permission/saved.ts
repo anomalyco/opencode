@@ -1,7 +1,7 @@
 export * as PermissionSaved from "./saved.js"
 
 import { eq } from "drizzle-orm"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, DateTime, Effect, Layer, Schema } from "effect"
 import { Project } from "@opencode/schema/project"
 import { Database } from "../database/database.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -52,6 +52,10 @@ const layer = Layer.effect(
           projectID: row.project_id,
           action: row.action,
           resource: row.resource,
+          time: {
+            created: DateTime.makeUnsafe(row.time_created),
+            updated: DateTime.makeUnsafe(row.time_updated),
+          },
         }),
       )
     })

@@ -1,5 +1,4 @@
 import { Bus } from "@opencode/core/bus"
-import { Catalog } from "@opencode/core/catalog"
 import { Config } from "@opencode/core/config"
 import { Integration } from "@opencode/core/integration"
 import { Model } from "@opencode/core/model"
@@ -89,36 +88,37 @@ describe("LMStudioPlugin", () => {
       ),
       (server) =>
         Effect.gen(function* () {
-          const catalog = yield* Catalog.Service
+          const providers = yield* Provider.Service
+          const modelState = yield* Model.Service
           yield* addPlugin(server.url.origin)
           const providerID = Provider.ID.make("lmstudio")
           const gemma = yield* eventually(
-            catalog.model.get(providerID, Model.ID.make("google/gemma-4-26b-a4b")),
+            modelState.get(providerID, Model.ID.make("google/gemma-4-26b-a4b")),
             (model) => model !== undefined,
           )
 
-          expect(yield* catalog.provider.get(providerID)).toEqual({
+          expect(yield* providers.get(providerID)).toEqual({
             id: providerID,
             name: "LM Studio",
             activation: "enabled",
             package: "@opencode/ai/providers/openai-compatible",
             settings: { baseURL: `${server.url.origin}/v1`, provider: "lmstudio", apiKey: "" },
           })
-          expect((yield* catalog.provider.available()).map((provider) => provider.id)).toContain(providerID)
+          expect((yield* providers.available()).map((provider) => provider.id)).toContain(providerID)
           expect(gemma).toMatchObject({
             family: "gemma4",
             name: "Gemma 4 26B A4B",
             capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
             limit: { context: 16_384, output: 32_000 },
           })
-          expect(yield* catalog.model.get(providerID, Model.ID.make("deepseek-r1"))).toMatchObject({
+          expect(yield* modelState.get(providerID, Model.ID.make("deepseek-r1"))).toMatchObject({
             capabilities: { tools: false, input: ["text"], output: ["text"] },
             limit: { context: 131_072, output: 32_000 },
           })
-          expect(yield* catalog.model.get(providerID, Model.ID.make("unknown-context"))).toMatchObject({
+          expect(yield* modelState.get(providerID, Model.ID.make("unknown-context"))).toMatchObject({
             limit: { context: 200_000, output: 32_000 },
           })
-          expect(yield* catalog.model.get(providerID, Model.ID.make("nomic-embed"))).toBeUndefined()
+          expect(yield* modelState.get(providerID, Model.ID.make("nomic-embed"))).toBeUndefined()
         }),
       (server) => Effect.promise(() => server.stop(true)),
     ),
@@ -135,10 +135,11 @@ describe("LMStudioPlugin", () => {
       }),
       ({ models, server }) =>
         Effect.gen(function* () {
-          const catalog = yield* Catalog.Service
+          const providers = yield* Provider.Service
+          const modelState = yield* Model.Service
           const providerID = Provider.ID.make("lmstudio")
           yield* addPlugin(server.url.origin, "5 millis")
-          expect(yield* catalog.provider.get(providerID)).toBeUndefined()
+          expect(yield* providers.get(providerID)).toBeUndefined()
 
           models.push({
             type: "llm",
@@ -151,13 +152,13 @@ describe("LMStudioPlugin", () => {
           })
           expect(
             yield* eventually(
-              catalog.model.get(providerID, Model.ID.make("qwen/qwen3-coder")),
+              modelState.get(providerID, Model.ID.make("qwen/qwen3-coder")),
               (model) => model !== undefined,
             ),
           ).toMatchObject({ name: "Qwen 3 Coder" })
 
           models.splice(0)
-          yield* eventually(catalog.provider.get(providerID), (provider) => provider === undefined)
+          yield* eventually(providers.get(providerID), (provider) => provider === undefined)
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
     ),
@@ -194,12 +195,13 @@ describe("LMStudioPlugin", () => {
         ({ requests, initial, configured }) =>
           Effect.gen(function* () {
             const bus = yield* Bus.Service
-            const catalog = yield* Catalog.Service
+            const providers = yield* Provider.Service
+            const modelState = yield* Model.Service
             const config = yield* Config.Test
             const providerID = Provider.ID.make("lmstudio")
             yield* addPlugin(initial.url.origin)
             yield* eventually(
-              catalog.model.get(providerID, Model.ID.make("initial-model")),
+              modelState.get(providerID, Model.ID.make("initial-model")),
               (model) => model !== undefined,
             )
 
@@ -207,13 +209,13 @@ describe("LMStudioPlugin", () => {
             yield* config.setEntries([configuration(baseURL, "secret")])
             yield* bus.publish(Event.Updated, {})
             yield* eventually(
-              catalog.model.get(providerID, Model.ID.make("configured-model")),
+              modelState.get(providerID, Model.ID.make("configured-model")),
               (model) => model !== undefined,
             )
 
             expect(requests).toContainEqual({ authorization: "Bearer secret", path: "/proxy/api/v1/models" })
-            expect(yield* catalog.model.get(providerID, Model.ID.make("initial-model"))).toBeUndefined()
-            expect((yield* catalog.provider.get(providerID))?.settings).toEqual({
+            expect(yield* modelState.get(providerID, Model.ID.make("initial-model"))).toBeUndefined()
+            expect((yield* providers.get(providerID))?.settings).toEqual({
               baseURL,
               provider: "lmstudio",
               apiKey: "secret",
@@ -222,7 +224,7 @@ describe("LMStudioPlugin", () => {
             requests.splice(0)
             yield* config.setEntries([configuration(baseURL, "secret"), configuration(baseURL, null)])
             yield* bus.publish(Event.Updated, {})
-            yield* eventually(catalog.provider.get(providerID), (provider) => provider?.settings?.apiKey === "")
+            yield* eventually(providers.get(providerID), (provider) => provider?.settings?.apiKey === "")
             expect(requests).toContainEqual({ authorization: null, path: "/proxy/api/v1/models" })
           }),
         ({ initial, configured }) => Effect.promise(() => Promise.all([initial.stop(true), configured.stop(true)])),
@@ -257,11 +259,11 @@ describe("LMStudioPlugin", () => {
       }),
       ({ requests, server }) =>
         Effect.gen(function* () {
-          const catalog = yield* Catalog.Service
+          const modelState = yield* Model.Service
           yield* addPlugin(server.url.origin)
           yield* addPlugin(server.url.origin)
           yield* eventually(
-            catalog.model.get(Provider.ID.make("lmstudio"), Model.ID.make("shared-model")),
+            modelState.get(Provider.ID.make("lmstudio"), Model.ID.make("shared-model")),
             (model) => model !== undefined,
           )
           expect(requests.count).toBe(1)
@@ -286,7 +288,8 @@ describe("LMStudioPlugin", () => {
       }),
       ({ models, server }) =>
         Effect.gen(function* () {
-          const catalog = yield* Catalog.Service
+          const providers = yield* Provider.Service
+          const modelState = yield* Model.Service
           const integrations = yield* Integration.Service
           const providerID = Provider.ID.make("lmstudio")
           yield* integrations.transform((editor) => {
@@ -298,26 +301,26 @@ describe("LMStudioPlugin", () => {
               method: { type: "env", names: ["LMSTUDIO_API_KEY"] },
             })
           })
-          yield* catalog.transform((editor) => {
-            editor.provider.update(providerID, (provider) => {
+          yield* providers.transform((editor) => {
+            editor.update(providerID, (provider) => {
               provider.name = "LMStudio"
-              provider.package = "aisdk:@ai-sdk/openai-compatible"
+              provider.package = "@opencode/ai/providers/openai-compatible"
               provider.integrationID = Integration.ID.make("lmstudio")
             })
-            editor.model.update(providerID, Model.ID.make("static-model"), () => {})
+            editor.models.update(providerID, Model.ID.make("static-model"), () => {})
           })
 
-          expect((yield* catalog.provider.available()).map((provider) => provider.id)).not.toContain(providerID)
+          expect((yield* providers.available()).map((provider) => provider.id)).not.toContain(providerID)
           yield* addPlugin(server.url.origin, "5 millis")
           yield* eventually(
-            catalog.model.get(providerID, Model.ID.make("discovered-model")),
+            modelState.get(providerID, Model.ID.make("discovered-model")),
             (model) => model !== undefined,
           )
 
           expect(yield* integrations.get(Integration.ID.make("lmstudio"))).toBeUndefined()
-          expect((yield* catalog.provider.get(providerID))?.integrationID).toBeUndefined()
-          expect(yield* catalog.model.get(providerID, Model.ID.make("static-model"))).toBeUndefined()
-          expect((yield* catalog.provider.available()).map((provider) => provider.id)).toContain(providerID)
+          expect((yield* providers.get(providerID))?.integrationID).toBeUndefined()
+          expect(yield* modelState.get(providerID, Model.ID.make("static-model"))).toBeUndefined()
+          expect((yield* providers.available()).map((provider) => provider.id)).toContain(providerID)
 
           yield* integrations.transform((editor) => {
             editor.update(Integration.ID.make("lmstudio"), (integration) => {
@@ -325,16 +328,17 @@ describe("LMStudioPlugin", () => {
             })
             editor.method.update({ integrationID: Integration.ID.make("lmstudio"), method: { type: "key" } })
           })
-          expect((yield* catalog.provider.available()).map((provider) => provider.id)).toContain(providerID)
+          expect((yield* providers.available()).map((provider) => provider.id)).toContain(providerID)
 
           models.splice(0)
           yield* eventually(
-            catalog.model.get(providerID, Model.ID.make("static-model")),
-            (model) => model !== undefined,
+            providers.snapshot(),
+            (snapshot) => snapshot.records.get(providerID)?.models.has(Model.ID.make("static-model")) === true,
           )
-          expect(yield* catalog.model.get(providerID, Model.ID.make("discovered-model"))).toBeUndefined()
+          expect(yield* modelState.get(providerID, Model.ID.make("discovered-model"))).toBeUndefined()
+          expect(yield* modelState.get(providerID, Model.ID.make("static-model"))).toBeUndefined()
           expect(yield* integrations.get(Integration.ID.make("lmstudio"))).toBeDefined()
-          expect((yield* catalog.provider.get(providerID))?.integrationID).toBe(Integration.ID.make("lmstudio"))
+          expect((yield* providers.get(providerID))?.integrationID).toBe(Integration.ID.make("lmstudio"))
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
     ),

@@ -30,16 +30,16 @@ for (const shared of [true, false]) {
       sessions: [{ id: sessionID, projectID, directory: workspace, title }],
       pageMessages: () => ({ items: [] }),
     })
-    await page.route("**/api/mcp**", async (route) => {
+    await page.route(/\/api\/(?:experimental\/)?mcp(?:[/?]|$)/, async (route) => {
       if (route.request().method() === "OPTIONS") return route.fallback()
       const url = new URL(route.request().url())
       const target = url.searchParams.get("location[directory]") ?? directory
       requests.push({ path: url.pathname, directory: target })
-      if (url.pathname === "/api/mcp/figma-desktop/connect") {
+      if (url.pathname === "/api/experimental/mcp/figma-desktop/connect") {
         connected.add(target)
         return route.fulfill({ status: 204 })
       }
-      if (url.pathname === "/api/mcp/figma-desktop/disconnect") {
+      if (url.pathname === "/api/experimental/mcp/figma-desktop/disconnect") {
         connected.delete(target)
         return route.fulfill({ status: 204 })
       }
@@ -72,7 +72,7 @@ for (const shared of [true, false]) {
     await expect(toggle).toBeChecked()
     await expect(toggle).toBeEnabled()
     expect(connected).toEqual(new Set([workspace]))
-    expect(requests).toContainEqual({ path: "/api/mcp/figma-desktop/connect", directory: workspace })
+    expect(requests).toContainEqual({ path: "/api/experimental/mcp/figma-desktop/connect", directory: workspace })
     expect(requests).toContainEqual({ path: "/api/mcp/resource", directory: workspace })
     expect(requests.every((request) => request.directory === workspace)).toBe(true)
     await testInfo.attach("workspace-connected", { body: await page.screenshot(), contentType: "image/png" })
@@ -82,7 +82,7 @@ for (const shared of [true, false]) {
     await expect(toggle).not.toBeChecked()
     await expect(toggle).toBeEnabled()
     expect(connected.size).toBe(0)
-    expect(requests).toContainEqual({ path: "/api/mcp/figma-desktop/disconnect", directory: workspace })
+    expect(requests).toContainEqual({ path: "/api/experimental/mcp/figma-desktop/disconnect", directory: workspace })
     expect(requests.every((request) => request.directory === workspace)).toBe(true)
   })
 }
@@ -109,16 +109,16 @@ for (const surface of ["popover", "dialog"] as const) {
       sessions: [{ id: sessionID, projectID, directory: workspace, title }],
       pageMessages: () => ({ items: [] }),
     })
-    await page.route("**/api/mcp**", async (route) => {
+    await page.route(/\/api\/(?:experimental\/)?mcp(?:[/?]|$)/, async (route) => {
       if (route.request().method() === "OPTIONS") return route.fallback()
       const url = new URL(route.request().url())
       const target = url.searchParams.get("location[directory]") ?? directory
       requests.push({ path: url.pathname, directory: target })
-      if (url.pathname === "/api/mcp/figma-desktop/disconnect") {
+      if (url.pathname === "/api/experimental/mcp/figma-desktop/disconnect") {
         state.status = "disabled"
         return route.fulfill({ status: 204 })
       }
-      if (url.pathname === "/api/mcp/figma-desktop/connect") {
+      if (url.pathname === "/api/experimental/mcp/figma-desktop/connect") {
         state.status = state.fail ? "failed" : "connected"
         // Connection failures are reported by the refreshed status, not the HTTP response.
         return route.fulfill({ status: 204 })
@@ -167,7 +167,7 @@ for (const surface of ["popover", "dialog"] as const) {
     await expect(toggle).toBeChecked({ checked: surface === "popover" })
     await expect(toggle).toBeEnabled()
     expect(requests.filter((request) => request.path.endsWith("/connect"))).toEqual([
-      { path: "/api/mcp/figma-desktop/connect", directory: workspace },
+      { path: "/api/experimental/mcp/figma-desktop/connect", directory: workspace },
     ])
     expect(requests.every((request) => request.directory === workspace)).toBe(true)
     await expect(toast).toHaveCSS("opacity", "1")

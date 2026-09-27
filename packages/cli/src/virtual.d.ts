@@ -1,4 +1,4 @@
 declare module "virtual:opencode-app-assets" {
-  const archive: string
+  const archive: Readonly<Record<string, string>>
   export default archive
 }

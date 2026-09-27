@@ -17,14 +17,12 @@ const milestones = [
   "electronSpawnStarted",
   "debugEndpointReady",
   "electronStarted",
+  "layersReady",
+  "windowVisible",
   "serviceEnsureStarted",
   "serviceSpawnRequested",
   "serviceReady",
-  "backgroundLoadingReady",
   "rendererViteConnected",
-  "rendererInitializationStarted",
-  "rendererInitializationReady",
-  "windowVisible",
   "homeReady",
 ] as const
 const phases = [
@@ -128,14 +126,12 @@ const milestonePatterns: ReadonlyArray<{ name: Milestone; text: string }> = [
   { name: "electronSpawnStarted", text: "starting electron app..." },
   { name: "debugEndpointReady", text: "DevTools listening on ws://" },
   { name: "electronStarted", text: "app starting" },
+  { name: "layersReady", text: "layers ready" },
+  { name: "windowVisible", text: "main window visible" },
   { name: "serviceEnsureStarted", text: "starting v2 background service" },
   { name: "serviceSpawnRequested", text: "v2 CLI background service starting" },
   { name: "serviceReady", text: "v2 CLI background service ready" },
-  { name: "backgroundLoadingReady", text: "loading task finished" },
   { name: "rendererViteConnected", text: "[vite] connected." },
-  { name: "rendererInitializationStarted", text: "awaiting server ready" },
-  { name: "rendererInitializationReady", text: "server ready" },
-  { name: "windowVisible", text: "main window visible" },
 ]
 
 async function createColdProfile() {
@@ -404,14 +400,12 @@ function requireMilestones(observed: Partial<Record<Milestone, number>>) {
     electronSpawnStarted: get("electronSpawnStarted"),
     debugEndpointReady: get("debugEndpointReady"),
     electronStarted: get("electronStarted"),
+    layersReady: get("layersReady"),
+    windowVisible: get("windowVisible"),
     serviceEnsureStarted: get("serviceEnsureStarted"),
     serviceSpawnRequested: get("serviceSpawnRequested"),
     serviceReady: get("serviceReady"),
-    backgroundLoadingReady: get("backgroundLoadingReady"),
     rendererViteConnected: get("rendererViteConnected"),
-    rendererInitializationStarted: get("rendererInitializationStarted"),
-    rendererInitializationReady: get("rendererInitializationReady"),
-    windowVisible: get("windowVisible"),
     homeReady: get("homeReady"),
   }
 }

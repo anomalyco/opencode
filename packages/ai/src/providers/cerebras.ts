@@ -44,7 +44,12 @@ export const configure = (input: LanguageModelOptions = {}) => {
     model: (modelID: string | ModelID) =>
       configured.model<OpenAIProviderOptionsInput>({
         id: modelID,
-        compatibility: { maxTokensField: "max_tokens", reasoningField: "reasoning", supportsStore: false },
+        compatibility: {
+          maxTokensField: "max_tokens",
+          reasoningField: "reasoning",
+          supportsStore: false,
+          supportsPromptCacheKey: true,
+        },
       }),
     configure,
   }

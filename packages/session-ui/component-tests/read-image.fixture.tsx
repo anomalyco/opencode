@@ -1,6 +1,7 @@
 import { createMemo, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { render } from "solid-js/web"
+import { DialogProvider } from "@opencode/ui/context/dialog"
 import { OpenCode } from "@opencode/client/promise"
 import { readLocalImage } from "../../app/src/runtime/server/image"
 import { MarkdownProvider } from "../src/context/markdown"
@@ -25,36 +26,38 @@ export function mountReadImage(options: { path: string; grouped: boolean; runnin
       ...(state.appended ? [storyTool("read_next", "read", "completed", { path: "src/next.ts" })] : []),
     ])
     return (
-      <section style={{ "max-width": "720px", padding: "24px" }}>
-        <button onClick={() => setState("running", false)}>Finish read</button>
-        <button onClick={() => setState("appended", true)}>Append read</button>
-        <button onClick={() => setState("visible", false)}>Unmount tools</button>
-        <MarkdownProvider readImage={(path, signal) => readLocalImage(api, "C:/project", path, signal)}>
-          <CurrentSessionProviders document={storyDocument(tools())}>
-            <Show when={state.visible}>
-              <Show
-                when={options.grouped}
-                fallback={
-                  <ToolDisplay
-                    id="read_image"
-                    tool="read"
-                    input={{ path: options.path }}
-                    metadata={{}}
-                    status={status()}
+      <DialogProvider>
+        <section style={{ "max-width": "720px", padding: "24px" }}>
+          <button onClick={() => setState("running", false)}>Finish read</button>
+          <button onClick={() => setState("appended", true)}>Append read</button>
+          <button onClick={() => setState("visible", false)}>Unmount tools</button>
+          <MarkdownProvider readImage={(path, signal) => readLocalImage(api, "C:/project", path, signal)}>
+            <CurrentSessionProviders document={storyDocument(tools())}>
+              <Show when={state.visible}>
+                <Show
+                  when={options.grouped}
+                  fallback={
+                    <ToolDisplay
+                      id="read_image"
+                      tool="read"
+                      input={{ path: options.path }}
+                      metadata={{}}
+                      status={status()}
+                    />
+                  }
+                >
+                  <CurrentContextToolGroup
+                    parts={tools()}
+                    busy={state.running}
+                    open={state.open}
+                    onOpenChange={(open) => setState("open", open)}
                   />
-                }
-              >
-                <CurrentContextToolGroup
-                  parts={tools()}
-                  busy={state.running}
-                  open={state.open}
-                  onOpenChange={(open) => setState("open", open)}
-                />
+                </Show>
               </Show>
-            </Show>
-          </CurrentSessionProviders>
-        </MarkdownProvider>
-      </section>
+            </CurrentSessionProviders>
+          </MarkdownProvider>
+        </section>
+      </DialogProvider>
     )
   }, host)
 }

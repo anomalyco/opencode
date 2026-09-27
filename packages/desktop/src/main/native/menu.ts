@@ -9,7 +9,7 @@ import {
 import { MenuCommandTriggered } from "../../shared/ipc-rpc/events"
 import { emitIpcEvent } from "../ipc-events"
 
-import { UPDATER_ENABLED } from "../constants"
+import { CHANNEL, UPDATER_ENABLED } from "../constants"
 import { runDesktopMenuAction } from "./menu-actions"
 import { nativeT } from "./translations"
 
@@ -58,6 +58,10 @@ function nativeItem(entry: DesktopMenuEntry, deps: Deps): MenuItemConstructorOpt
   }
   if (entry.action) {
     const action = entry.action
+    if (action === "app.checkForUpdates" && CHANNEL === "beta") {
+      item.click = () => deps.trigger(action)
+      return item
+    }
     item.click = () =>
       runDesktopMenuAction(BrowserWindow.getFocusedWindow(), action, {
         checkForUpdates: deps.checkForUpdates,

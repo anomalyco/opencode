@@ -12,14 +12,17 @@ import {
 } from "../../src/prompt/directory-completion"
 
 describe("directoryAutocomplete", () => {
-  test("lists parents and siblings through the current workspace without changing location", async () => {
-    const location = { directory: "/project/current", workspace: "workspace_1" }
+  test("lists parents and siblings without changing location", async () => {
+    const location = { directory: "/project/current" }
     const calls: unknown[] = []
     const file = {
       list: async (input: unknown) => {
         calls.push(input)
         return {
-          location: { directory: location.directory, workspaceID: location.workspace },
+          location: {
+            directory: location.directory,
+            project: { id: "proj_test", directory: "/project", canonical: "/project" },
+          },
           data: [
             { path: "./", type: "directory" },
             { path: "../sibling/", type: "directory" },
@@ -44,13 +47,16 @@ describe("directoryAutocomplete", () => {
   })
 
   test("resolves home and nested sibling completions against the current location", async () => {
-    const location = { directory: "/project/current", workspace: "workspace_1" }
+    const location = { directory: "/project/current" }
     const calls: unknown[] = []
     const file = {
       list: async (input: unknown) => {
         calls.push(input)
         return {
-          location: { directory: location.directory },
+          location: {
+            directory: location.directory,
+            project: { id: "proj_test", directory: "/project", canonical: "/project" },
+          },
           data: [{ path: "../sibling/src/", type: "directory" }],
         }
       },

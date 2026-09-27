@@ -53,6 +53,7 @@ async function setup(
     out.renderer.destroy()
   })
   out.renderer.on(CliRenderEvents.EXTERNAL_OUTPUT, () => {
+    // oxlint-disable-next-line no-restricted-globals -- RunScrollbackStream does not expose its image surface publicly.
     const surface = Reflect.get(out.scrollback, "imageSurface") as ScrollbackSurface | undefined
     if (!surface || out.previews.some((preview) => preview.surface === surface)) return
     const image = surface.root.getChildren().find((child) => child instanceof ImageRenderable)
@@ -126,6 +127,7 @@ test("reserves wrapped caption rows and allows caption-only output in a short te
 
 test("uses physical cell geometry without enlarging a small image", async () => {
   const out = await setup({ imagePreview: true })
+  // oxlint-disable-next-line no-restricted-globals -- OpenTUI does not expose test resolution mutation publicly.
   Reflect.set(out.renderer, "_resolution", { width: 800, height: 720 })
   await out.scrollback.append(image(wide))
   expect(out.previews[0]!.size).toEqual({ width: 6, height: 1 })
@@ -196,6 +198,7 @@ test.each(["stream", "renderer"])("disposes an image load when the %s is destroy
   const out = await setup({ imagePreview: true })
   const pending = out.scrollback.append(image())
   await Promise.resolve()
+  // oxlint-disable-next-line no-restricted-globals -- RunScrollbackStream does not expose its image surface publicly.
   const surface = Reflect.get(out.scrollback, "imageSurface") as ScrollbackSurface
   const preview = surface.root.getChildren().find((child) => child instanceof ImageRenderable)!
   expect(preview.loading).toBe(true)

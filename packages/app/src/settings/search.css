@@ -15,11 +15,12 @@
   visibility: hidden;
 }
 
-.settings-search [data-slot="text-input-v2-icon-button"][data-variant="clear"] {
+:is(.settings-search, .settings-filter-search) [data-slot="text-input-v2-icon-button"][data-variant="clear"] {
   color: var(--v2-icon-icon-faint);
+  cursor: default;
 }
 
-.settings-search
+:is(.settings-search, .settings-filter-search)
   [data-slot="text-input-v2-icon-button"][data-variant="clear"]:is(:hover, :active, :focus-visible):not(:disabled) {
   background: transparent;
   color: var(--v2-icon-icon-base);
@@ -37,19 +38,20 @@
   background: var(--v2-overlay-simple-overlay-hover);
 }
 
-.settings-search [data-slot="text-input-v2-input"][data-overflow-start="true"] {
+:is(.settings-search, .settings-filter-search) [data-slot="text-input-v2-input"][data-overflow-start="true"] {
   --mask-start: 16px;
 }
 
-.settings-search [data-slot="text-input-v2-input"][data-overflow-end="true"] {
+:is(.settings-search, .settings-filter-search) [data-slot="text-input-v2-input"][data-overflow-end="true"] {
   --mask-end: 16px;
 }
 
-.settings-search [data-slot="text-input-v2-input"]:dir(rtl) {
+:is(.settings-search, .settings-filter-search) [data-slot="text-input-v2-input"]:dir(rtl) {
   --mask-direction: to left;
 }
 
-.settings-search [data-slot="text-input-v2-input"]:is([data-overflow-start="true"], [data-overflow-end="true"]) {
+:is(.settings-search, .settings-filter-search)
+  [data-slot="text-input-v2-input"]:is([data-overflow-start="true"], [data-overflow-end="true"]) {
   mask-image: linear-gradient(
     var(--mask-direction, to right),
     transparent,

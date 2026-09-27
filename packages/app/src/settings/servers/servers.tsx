@@ -1,5 +1,4 @@
 import { Badge } from "@opencode/ui/badge"
-import { Select } from "@opencode/ui/select"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { createMemo, Show, type Component } from "solid-js"
 import { ServerRowMenu } from "@/servers/registry/row-menu"
@@ -11,34 +10,10 @@ import { DialogServer } from "@/servers/connect/dialog"
 import { AddServerMenu, WslServerSettings } from "@/servers/wsl/settings"
 import { SshServerSettings } from "@/servers/ssh/settings"
 import { SettingsList } from "@/settings/list"
-import { SettingsRow } from "@/settings/row"
 import { ShellSetting } from "@/settings/general/general"
-import { createServerPreferencesController } from "@/settings/general/controllers"
+import { createServerShellController } from "@/settings/general/controllers"
 import type { SettingsServer } from "./inventory"
 import "@/settings/settings.css"
-
-const WebSearchSetting: Component<{
-  controller: ReturnType<typeof createServerPreferencesController>["websearch"]
-}> = (props) => {
-  const language = useLanguage()
-  return (
-    <SettingsRow
-      title={language.t("settings.server.preferences.websearch.title")}
-      description={language.t("settings.server.preferences.websearch.description")}
-    >
-      <Select
-        data-action="settings-websearch"
-        options={props.controller.options()}
-        current={props.controller.current()}
-        value={(option) => String(option.value)}
-        label={(option) => option.label}
-        placement="bottom-end"
-        gutter={6}
-        onSelect={(option) => option && props.controller.select(option.value)}
-      />
-    </SettingsRow>
-  )
-}
 
 export const SettingsServerGeneral: Component<{
   entry: SettingsServer
@@ -118,22 +93,21 @@ export const SettingsServerGeneral: Component<{
         </section>
 
         <Show when={props.entry.connection} keyed>
-          {(server) => <ServerPreferences server={server} />}
+          {(server) => <ServerShell server={server} />}
         </Show>
       </div>
     </>
   )
 }
 
-function ServerPreferences(props: { server: ServerConnection.Any }) {
+function ServerShell(props: { server: ServerConnection.Any }) {
   const language = useLanguage()
-  const preferences = createServerPreferencesController(() => props.server)
+  const controller = createServerShellController(() => props.server)
   return (
     <section class="settings-section">
       <h3 class="settings-section-title">{language.t("settings.tab.preferences")}</h3>
       <SettingsList>
-        <ShellSetting controller={preferences.shell} />
-        <WebSearchSetting controller={preferences.websearch} />
+        <ShellSetting controller={controller} />
       </SettingsList>
     </section>
   )

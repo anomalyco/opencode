@@ -3,7 +3,7 @@ import { Effect, Option } from "effect"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
 import { handlePromptErrors, requireInteractive } from "../../../ui/prompt"
-import { createClient, loadIntegrations, location, request } from "./shared"
+import { createClient, loadIntegrations, request } from "./shared"
 import { chooseCredential, chooseIntegration } from "./account"
 
 export default Runtime.handler(
@@ -35,7 +35,7 @@ const switchAccount = Effect.fn("cli.auth.switch.run")(function* (input: {
   const credentialID = yield* chooseCredential(integration, "switch to", input.credential)
   const progress = spinner()
   progress.start("Switching account...")
-  yield* request((signal) => client.credential.activate({ credentialID, location }, { signal })).pipe(
+  yield* request((signal) => client.credential.activate({ credentialID }, { signal })).pipe(
     Effect.tap(() => Effect.sync(() => progress.stop(`Switched account for ${integration.name}`))),
     Effect.tapCause(() => Effect.sync(() => progress.stop("Failed to switch account", 1))),
   )

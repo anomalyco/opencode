@@ -111,14 +111,22 @@ The plugin definition and complete context are declared as follows.
 ```ts
 interface Context {
   readonly app: App
+  readonly location: Location.Info
   readonly options: PluginOptions
   readonly agent: AgentDomain
-  readonly catalog: CatalogDomain
+  readonly aisdk: AISDKDomain
   readonly command: CommandDomain
   readonly event: EventDomain
+  readonly experimental: {
+    readonly terminal: Pick<ExperimentalApi<unknown>["persistentPty"], "read">
+  }
   readonly integration: IntegrationDomain
   readonly mcp: MCPDomain
-  readonly plugin: PluginApi<unknown>
+  readonly model: ModelDomain
+  readonly generate: GenerateApi<unknown>
+  readonly permission: PermissionDomain
+  readonly plugin: Pick<PluginApi<unknown>, "list">
+  readonly provider: ProviderDomain
   readonly reference: ReferenceDomain
   readonly rpc: RpcDomain
   readonly session: SessionDomain
@@ -128,6 +136,7 @@ interface Context {
   readonly tool: ToolDomain
   readonly vcs: VcsDomain
   readonly websearch: WebSearchDomain
+  readonly worktree: WorktreeDomain
 }
 
 interface Plugin<R = Scope.Scope> {
@@ -169,66 +178,69 @@ export default Plugin.define({
 
 ## Transforms
 
-Transforms synchronously edit state through an editor. OpenCode applies transforms in plugin order, so later transforms see
-earlier changes. Yielding the registration keeps it in the plugin scope.
+Transforms synchronously edit state through an editor. OpenCode applies transforms in registration order within each
+domain. Sources contribute providers and immutable model definitions first; model transforms then edit the active
+providers' candidates. Yielding the registration keeps it in the plugin scope.
 
 ```ts title="plugins/models-effect/index.ts"
-import { Plugin } from "@opencode/plugin/effect"
+import { Model, Plugin, Provider } from "@opencode/plugin/effect"
 import { Effect } from "effect"
 
 export default Plugin.define({
   id: "company.models",
   effect: (ctx) =>
     Effect.gen(function* () {
-      const catalog = ctx.catalog
-      yield* catalog.transform((editor) => {
-        editor.model.update("acme", "reasoner", (model) => {
-          model.name = "Acme Reasoner"
-          model.cost = [{ input: 2, output: 12, cache: { read: 0.2, write: 2 } }]
+      const providerID = Provider.ID.make("acme")
+      const models = [{ ...Model.Info.default(providerID, Model.ID.make("reasoner")), name: "Acme Reasoner" }]
+      yield* ctx.provider.transform((editor) => {
+        editor.add({
+          info: {
+            ...Provider.Info.empty(providerID),
+            name: "Acme",
+            activation: "enabled",
+            package: "@opencode/ai/providers/openai-compatible",
+            settings: { baseURL: "http://127.0.0.1:8000/v1" },
+          },
+          models,
         })
       })
     }),
 })
 ```
 
-A later transform can enforce policy across the composed catalog.
+A model transform can enforce policy across the complete active-provider candidate collection.
 
 ```ts title="plugins/model-budget-effect/index.ts"
 effect: (ctx) =>
   Effect.gen(function* () {
-    const catalog = ctx.catalog
-    yield* catalog.transform((editor) => {
-      for (const provider of editor.provider.list()) {
-        for (const model of provider.models.values()) {
-          if (model.cost.some((tier) => tier.output > 20)) {
-            editor.model.remove(model.providerID, model.id)
-          }
-        }
-      }
+    yield* ctx.model.transform((editor) => {
+      editor
+        .list()
+        .filter((model) => model.cost.some((tier) => tier.output > 20))
+        .forEach((model) => {
+          editor.remove(model.providerID, model.id)
+        })
     })
   }),
 ```
 
-Call `reload` when external state used by a transform changes. Reload replays every transform in order.
+Call `reload` when external state used by a transform changes. Here, `loadFromSource()` returns
+`{ info: Provider.Info, models: readonly Model.Info[] }` entries; provider reloads also invalidate the entire model result.
 
 ```ts title="plugins/models-effect/index.ts"
 effect: (ctx) =>
   Effect.gen(function* () {
-    const catalog = ctx.catalog
-    const state = { models: yield* loadFromSource() }
+    const provider = ctx.provider
+    const source = { providers: yield* loadFromSource() }
 
-    yield* catalog.transform((editor) => {
-      for (const item of state.models) {
-        editor.model.update(item.providerID, item.id, (model) => {
-          model.name = item.name
-        })
-      }
+    yield* provider.transform((editor) => {
+      source.providers.forEach((provider) => editor.add(provider))
     })
 
     yield* Effect.repeat(
       Effect.gen(function* () {
-        state.models = yield* loadFromSource()
-        yield* catalog.reload()
+        source.providers = yield* loadFromSource()
+        yield* provider.reload()
       }),
       { schedule: Schedule.spaced("1 minute") },
     ).pipe(Effect.forkScoped)
@@ -283,72 +295,165 @@ interface AgentDomain extends AgentApi<unknown> {
 }
 ```
 
-### Catalog
+### Providers
 
-Read providers, models, and the default model.
+Read available providers or inspect one provider's metadata by ID.
 
 ```ts
 effect: (ctx) =>
   Effect.gen(function* () {
-    const catalog = ctx.catalog
-    const providers = yield* catalog.provider.list().pipe(Effect.orDie)
-    const anthropic = yield* catalog.provider.get({ providerID: Provider.ID.make("anthropic") }).pipe(Effect.orDie)
-    const models = yield* catalog.model.list().pipe(Effect.orDie)
-    const selected = yield* catalog.model.default().pipe(Effect.orDie)
-    yield* Effect.logInfo("catalog", {
+    const provider = ctx.provider
+    const providers = yield* provider.list().pipe(Effect.orDie)
+    const anthropic = yield* provider.get({ providerID: Provider.ID.make("anthropic") }).pipe(Effect.orDie)
+    yield* Effect.logInfo("providers", {
       providers: providers.data.length,
-      models: models.data.length,
       anthropic: anthropic.data.name,
-      selected: selected.data?.name,
     })
   }),
 ```
 
-Transform providers and models, then reload after source data changes.
+Provider transforms edit provider settings and source definitions. Editor reads include inactive providers and expose
+immutable definitions; `models.update` edits an owned copy of a source model.
 
 ```ts
 effect: (ctx) =>
   Effect.gen(function* () {
-    const catalog = ctx.catalog
-    yield* catalog.transform((editor) => {
-      editor.provider.update("anthropic", (provider) => (provider.name = "Anthropic"))
-      editor.model.update("anthropic", "claude-sonnet-4-5", (model) => (model.name = "Claude Sonnet 4.5"))
-      editor.model.default.set("anthropic", "claude-sonnet-4-5")
-      editor.model.remove("anthropic", "legacy-model")
-      editor.provider.remove("legacy-provider")
+    yield* ctx.provider.transform((editor) => {
+      editor.update("anthropic", (provider) => {
+        provider.headers = { ...provider.headers, "x-company": "engineering" }
+      })
+      editor.models.update("anthropic", "claude-sonnet-4-5", (model) => (model.name = "Team Sonnet"))
+      editor.models.remove("anthropic", "legacy-model")
+      editor.remove("legacy-provider")
     })
-    yield* catalog.reload()
   }),
+```
+
+Replace a source inventory with `models.set`, then reload after its captured definitions change.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const provider = ctx.provider
+    const source = { models: yield* loadModels() }
+    yield* provider.transform((editor) => editor.models.set("acme", source.models))
+    source.models = yield* loadModels()
+    yield* provider.reload()
+  }),
+```
+
+For account-specific discovery, pass the connection used to load the inventory as `sourceConnection`. OpenCode excludes
+that provider while another connection is selected, until your plugin publishes its refreshed inventory.
+
+```ts
+const connection = yield * ctx.integration.connection.active("acme")
+if (!connection) return
+const inventory = yield * loadInventory(connection)
+yield *
+  ctx.provider.transform((editor) => {
+    editor.add({ info: inventory.provider, models: inventory.models, sourceConnection: connection })
+  })
 ```
 
 Schemas: [`Provider.Info`](/api#schema-Provider.Info), [`Model.Info`](/api#schema-Model.Info).
 
 ```ts
-interface CatalogProviderRecord {
-  readonly provider: Types.DeepMutable<Provider.Info>
-  readonly models: ReadonlyMap<string, Types.DeepMutable<Model.Info>>
+interface ProviderRecord {
+  readonly provider: Provider.Info
+  readonly models: ReadonlyMap<string, Model.Info>
+  readonly sourceConnection?: ConnectionInfo
 }
 
-interface CatalogEditor {
-  readonly provider: {
-    list(): readonly CatalogProviderRecord[]
-    get(providerID: string): CatalogProviderRecord | undefined
-    update(providerID: string, update: (provider: Types.DeepMutable<Provider.Info>) => void): void
-    remove(providerID: string): void
-  }
-  readonly model: {
-    get(providerID: string, modelID: string): Types.DeepMutable<Model.Info> | undefined
+interface ProviderEditor {
+  list(): readonly ProviderRecord[]
+  get(providerID: string): ProviderRecord | undefined
+  add(input: { info: Provider.Info; models: readonly Model.Info[]; sourceConnection?: ConnectionInfo }): void
+  update(providerID: string, update: (provider: Types.DeepMutable<Provider.Info>) => void): void
+  remove(providerID: string): void
+  readonly models: {
+    set(providerID: string, models: readonly Model.Info[]): void
     update(providerID: string, modelID: string, update: (model: Types.DeepMutable<Model.Info>) => void): void
     remove(providerID: string, modelID: string): void
-    readonly default: {
-      get(): { providerID: string; modelID: string } | undefined
-      set(providerID: string, modelID: string): void
-    }
   }
 }
 
-interface CatalogDomain extends CatalogApi<unknown> {
-  readonly transform: Transform<CatalogEditor>
+interface ProviderDomain extends ProviderApi<unknown> {
+  readonly transform: Transform<ProviderEditor>
+  readonly reload: () => Effect.Effect<void>
+}
+```
+
+### Models
+
+Read available models and the default selection.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const model = ctx.model
+    const models = yield* model.list().pipe(Effect.orDie)
+    const selected = yield* model.default().pipe(Effect.orDie)
+    yield* Effect.logInfo("models", { count: models.data.length, selected: selected.data?.name })
+  }),
+```
+
+Model transforms edit the entire active-provider candidate collection. Disabled candidates remain editable until all
+transforms finish; `update` can add a model only under an available provider.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.model.transform((editor) => {
+      editor.list("anthropic").forEach((model) => {
+        editor.update(model.providerID, model.id, (draft) => {
+          draft.enabled = draft.capabilities.tools
+        })
+      })
+      editor.default.set("anthropic", "claude-sonnet-4-5")
+      editor.remove("anthropic", "legacy-model")
+    })
+  }),
+```
+
+Callbacks edit raw model overrides. Provider defaults are merged once when OpenCode commits the result; unchanged reads
+reuse that result. `editor.provider` reads immutable source definitions, including inactive templates, rather than
+model-transform output.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const model = ctx.model
+    yield* model.transform((editor) => {
+      const source = editor.provider.get("anthropic")?.models.get("claude-sonnet-4-5")
+      if (!source) return
+      editor.update("anthropic", source.id, (draft) => {
+        draft.limit.context = Math.min(draft.limit.context, source.limit.context)
+      })
+    })
+    yield* model.reload()
+  }),
+```
+
+Schema: [`Model.Info`](/api#schema-Model.Info).
+
+```ts
+interface ModelEditor {
+  list(providerID?: string): readonly Types.DeepMutable<Model.Info>[]
+  get(providerID: string, modelID: string): Types.DeepMutable<Model.Info> | undefined
+  update(providerID: string, modelID: string, update: (model: Types.DeepMutable<Model.Info>) => void): void
+  remove(providerID: string, modelID: string): void
+  readonly default: {
+    get(): { providerID: string; modelID: string } | undefined
+    set(providerID: string, modelID: string): void
+  }
+  readonly provider: {
+    list(): readonly ProviderRecord[]
+    get(providerID: string): ProviderRecord | undefined
+  }
+}
+
+interface ModelDomain extends ModelApi<unknown> {
+  readonly transform: Transform<ModelEditor>
   readonly reload: () => Effect.Effect<void>
 }
 ```
@@ -874,12 +979,13 @@ namespaces and unsupported characters in tool names become `_`. Missing names ar
 them rather than mutating nested values. Invalid updates are logged and leave the previous definition intact.
 
 ```ts
-yield* ctx.tool.transform((editor) => {
-  editor.update("acme_greeting", (tool) => {
-    tool.description = "Greet the user by name"
+yield *
+  ctx.tool.transform((editor) => {
+    editor.update("acme_greeting", (tool) => {
+      tool.description = "Greet the user by name"
+    })
+    editor.remove("acme_obsolete")
   })
-  editor.remove("acme_obsolete")
-})
 ```
 
 Updates and removals replay in order with additions, including after MCP catalog refreshes.
@@ -908,6 +1014,7 @@ interface ToolEditor {
 }
 
 interface ToolDomain {
+  readonly list: () => Effect.Effect<readonly (Tool.Info & { readonly id: string })[]>
   readonly transform: Transform<ToolEditor>
   readonly reload: () => Effect.Effect<void>
 }
@@ -1151,6 +1258,46 @@ effect: (ctx) =>
   }),
 ```
 
+Providers that stream over a WebSocket reuse one connection per session, so the HTTP hooks never see that traffic. The
+experimental `experimental.ws.handshake` hook runs once per model call before the connection is selected and exposes the
+connection `url` and `headers`; changing either reopens the socket. HTTP hooks still run for any request a WebSocket
+route falls back to.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.session.hook(
+      "experimental.ws.handshake",
+      (event) =>
+        Effect.gen(function* () {
+          event.headers.authorization = `Bearer ${yield* mintToken(event.url)}`
+          delete event.headers["api-key"]
+        }),
+      { providerID: "azure" },
+    )
+  }),
+```
+
+`experimental.ws.send` and `experimental.ws.receive` expose the frames themselves: `send` runs after the provider
+driver builds an outbound frame, `receive` runs on each inbound frame before the driver observes it. Whatever `frame` holds when the hook returns is what crosses the wire or reaches the driver;
+OpenCode does not validate it.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    yield* ctx.session.hook(
+      "experimental.ws.send",
+      (event) =>
+        Effect.sync(() => {
+          const body = JSON.parse(event.frame)
+          if (body.type === "response.create") body.metadata = { ...body.metadata, session: event.sessionID }
+          event.frame = JSON.stringify(body)
+        }),
+      { providerID: "openai" },
+    )
+  }),
+```
+
 Override the retry decision for a provider failure or replace its delay in milliseconds. The hook runs after OpenCode
 classifies the failure and proposes its policy, but before any retry is scheduled. It does not expose how OpenCode
 internally performs the next attempt.
@@ -1191,6 +1338,9 @@ interface SessionHooks {
   readonly "model.request": SessionModelRequest
   readonly "http.request": SessionHttpRequest
   readonly "http.response": SessionHttpResponse
+  readonly "experimental.ws.handshake": SessionWebSocketHandshake
+  readonly "experimental.ws.send": SessionWebSocketSend
+  readonly "experimental.ws.receive": SessionWebSocketReceive
   readonly retry: SessionRetry
 }
 

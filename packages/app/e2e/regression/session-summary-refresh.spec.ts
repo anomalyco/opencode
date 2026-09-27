@@ -42,7 +42,7 @@ for (const service of services) {
                       state: { status: "active" },
                     },
                   ]
-                : [{ id: service.item, name: service.item, location: "/skills/summary/SKILL.md", content: "Summary" }]
+                : [{ id: service.item, name: service.item, path: "/skills/summary/SKILL.md", content: "Summary" }]
           return route.fulfill({ json: { location: { directory: fixture.directory }, data: empty ? [] : items } })
         },
       )

@@ -21,6 +21,7 @@ const writeFileString: FileSystem.FileSystem["writeFileString"] = (target, data,
 const fs = new Proxy(node, {
   get(target, property, receiver) {
     if (property === "writeFileString") return writeFileString
+    // oxlint-disable-next-line no-restricted-globals -- Proxy forwarding requires receiver-aware property access.
     return Reflect.get(target, property, receiver)
   },
 })

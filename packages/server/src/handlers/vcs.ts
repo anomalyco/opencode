@@ -34,7 +34,7 @@ export const VcsHandler = HttpApiBuilder.group(Api, "server.vcs", (handlers) =>
           }),
         ),
       )
-      .handle("vcs.branches", (ctx) =>
+      .handle("vcs.branch.list", (ctx) =>
         response(
           Effect.gen(function* () {
             const vcs = yield* Vcs.Service

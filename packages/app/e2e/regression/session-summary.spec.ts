@@ -23,6 +23,7 @@ for (const custom of [false, true]) {
     await page.goto(stressSessionHref(fixture.sourceID))
     const trigger = page.getByRole("button", { name: "Session details", exact: true })
     const summary = page.getByRole("dialog", { name: "Session details", exact: true })
+    await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
     await expect(trigger).toBeEnabled()
     await trigger.hover()
     const tooltip = page.getByRole("tooltip")
@@ -235,11 +236,11 @@ test("catalog submenus show project plugins and skills, refresh on reopen, and d
       json: {
         location: { directory: fixture.directory },
         data: [
-          { id: "find-skills", name: "find-skills", location: "/skills/find/SKILL.md", content: "Find skills" },
+          { id: "find-skills", name: "find-skills", path: "/skills/find/SKILL.md", content: "Find skills" },
           {
             id: "review-animations",
             name: "review-animations",
-            location: "/skills/review/SKILL.md",
+            path: "/skills/review/SKILL.md",
             content: "Review animations",
           },
         ],

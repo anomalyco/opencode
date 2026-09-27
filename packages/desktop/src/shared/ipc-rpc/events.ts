@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import { Rpc, RpcGroup } from "effect/unstable/rpc"
-import { BrowserPaneEventSchema, BrowserPaneRpc } from "./browser"
+import { BrowserPaneCaptureRpc, BrowserPaneEventSchema, BrowserPaneRpc } from "./browser"
 import { UpdaterStateSchema } from "./updater"
 import { WslServersEventSchema } from "./wsl"
 import { SshState } from "@opencode/app/ssh"
@@ -63,4 +63,4 @@ export const DesktopEvent = Schema.Union([
 export type DesktopEvent = Schema.Schema.Type<typeof DesktopEvent>
 
 export const DesktopEvents = Rpc.make("DesktopEvents", { success: DesktopEvent, stream: true })
-export const EventRpcs = RpcGroup.make(DesktopEvents, BrowserPaneRpc)
+export const EventRpcs = RpcGroup.make(DesktopEvents, BrowserPaneRpc, BrowserPaneCaptureRpc)

@@ -5,11 +5,10 @@ import { LanguageModel, ProviderConfigurationError } from "@opencode/ai"
 import { Auth } from "@opencode/ai/route"
 import { Context, Effect, Layer, Schema, Struct } from "effect"
 import { AISDK } from "./aisdk.js"
-import { AISDKNative } from "./aisdk-native.js"
-import { Catalog } from "./catalog.js"
 import { Credential } from "./credential.js"
 import { Integration } from "./integration.js"
-import { Capabilities, ID, Info, Ref, VariantID } from "./model.js"
+import { Capabilities, ID, Info, Model, Ref, VariantID } from "./model.js"
+import type { RuntimeInfo } from "./model.js"
 import { Npm } from "@opencode/util/npm"
 import { Provider } from "./provider.js"
 
@@ -119,10 +118,12 @@ export interface Resolved {
   readonly cost: Info["cost"]
   /** Catalog token limits used by Core for context management. */
   readonly limit: Info["limit"]
-  /** Model policy overrides the provider policy; omitted means local compaction. */
-  readonly compaction?: Info["compaction"]
-  /** Whether the session WebSocket may carry this model's requests when the route supports it. */
-  readonly websocket: boolean
+  /** Model policy overrides the provider policy; omitted means summary compaction. */
+  readonly compaction?: Provider.Compaction
+  /** Provider transport policy; omitted means HTTP. */
+  readonly transport?: Provider.Transport
+  /** Milliseconds without streamed data before a WebSocket exchange fails. */
+  readonly chunkTimeout?: number
 }
 
 export interface Interface {
@@ -132,8 +133,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ModelResolver") {}
 
-// Catalog models are shared with the retained registry value and stay editable by later transforms, so
-// resolution copies with spreads: immer's produce would deep-freeze the unchanged subtrees it shares with its input.
+// Variant resolution adds request-local overlays without changing the committed model snapshot.
 export const withVariant = (
   model: Info,
   variantID: VariantID | undefined,
@@ -152,7 +152,7 @@ export const withVariant = (
     variant
       ? {
           ...model,
-          settings: Provider.mergeOverlay(model.settings, variant.settings),
+          settings: Provider.mergeOverlay(model.settings, Provider.modelSettings(variant.settings)),
           headers: Provider.mergeHeaders(model.headers, variant.headers),
           body: Provider.mergeOverlay(model.body, variant.body),
         }
@@ -162,11 +162,11 @@ export const withVariant = (
 
 export interface Dependencies {
   readonly loadPackage?: (specifier: string) => Effect.Effect<Provider.ProviderPackage, Provider.LoadError>
-  readonly loadAISDK?: (model: Info) => Effect.Effect<LanguageModel, AISDK.InitError>
+  readonly loadAISDK?: (model: RuntimeInfo) => Effect.Effect<LanguageModel, AISDK.InitError>
 }
 
 export const fromCatalogModel = (
-  model: Info,
+  model: RuntimeInfo,
   credential?: Credential.Value,
   dependencies?: Dependencies,
 ): Effect.Effect<
@@ -181,7 +181,11 @@ export const fromCatalogModel = (
     Effect.flatMap((resolved) => validateProviderVariables(model, resolved)),
     Effect.flatMap((resolved) => {
       // Reject provider compaction policies up front so the misconfiguration surfaces before any step runs.
-      if (model.compaction?.mode !== "provider" || resolved.route.compact?.trigger || resolved.route.compact?.endpoint)
+      if (
+        model.settings?.compaction?.type !== "native" ||
+        resolved.route.compact?.trigger ||
+        resolved.route.compact?.endpoint
+      )
         return Effect.succeed(resolved)
       return Effect.fail(
         new UnsupportedCompactionError({ providerID: model.providerID, modelID: model.id, route: resolved.route.id }),
@@ -190,24 +194,14 @@ export const fromCatalogModel = (
   )
 
 const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(function* (
-  model: Info,
+  model: RuntimeInfo,
   credential?: Credential.Value,
   dependencies?: Dependencies,
 ) {
   const resolved = prepareRuntimeModel(model, credential)
-  const packageName = Provider.packageName(resolved.package)
   const configuration = credential?.type === "key" ? credential.configuration : undefined
   const configured = { ...resolved.settings, ...credential?.metadata, ...configuration }
-  const mapping = Provider.isAISDK(resolved.package)
-    ? AISDKNative.map({
-        packageName,
-        settings: configured,
-        modelID: resolved.modelID ?? resolved.id,
-        providerID: resolved.canonical ?? resolved.providerID,
-      })
-    : undefined
-  const native = mapping?.package ?? packageName
-  if (Provider.isAISDK(resolved.package) && !mapping) {
+  if (Provider.isAISDK(resolved.package)) {
     const loadAISDK = dependencies?.loadAISDK
     if (!loadAISDK) return yield* unsupported(resolved)
     const settings = yield* prepareProviderSettings(
@@ -222,10 +216,9 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
       Effect.mapError((error) => initialization(resolved, "init", error.cause)),
     )
   }
-  if (!native) return yield* unsupported(resolved)
-
-  const specifier = native
-  const mapped = yield* prepareProviderSettings(resolved, Provider.nativeSettings(mapping?.settings ?? configured))
+  const specifier = Provider.packageName(resolved.package)
+  if (!specifier) return yield* unsupported(resolved)
+  const mapped = yield* prepareProviderSettings(resolved, Provider.nativeSettings(configured))
   const module = yield* (dependencies?.loadPackage ?? Provider.loadPackage)(specifier).pipe(
     Effect.mapError((error) => initialization(resolved, "load", error.cause)),
   )
@@ -233,8 +226,8 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
     ...(credential ? Struct.omit(mapped, ["accessToken", "apiKey", "authToken"]) : mapped),
     ...(resolved.canonical === undefined ? {} : { provider: resolved.canonical }),
     ...nativeCredentialSettings(specifier, credential),
-    headers: Provider.mergeHeaders(mapping?.headers, resolved.headers),
-    body: Provider.mergeOverlay(mapping?.body, resolved.body),
+    headers: resolved.headers,
+    body: resolved.body,
   }
   return yield* Effect.try({
     try: () => {
@@ -258,7 +251,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
   })
 })
 
-function prepareRuntimeModel(model: Info, credential: Credential.Value | undefined) {
+function prepareRuntimeModel(model: RuntimeInfo, credential: Credential.Value | undefined) {
   if (model.settings?.apiKey !== "" && (credential?.type !== "key" || credential.metadata === undefined)) return model
   return {
     ...model,
@@ -270,7 +263,7 @@ function prepareRuntimeModel(model: Info, credential: Credential.Value | undefin
 }
 
 function validateProviderVariables(
-  model: Info,
+  model: RuntimeInfo,
   resolved: LanguageModel,
 ): Effect.Effect<LanguageModel, UnresolvedProviderVariablesError> {
   const baseURL = resolved.route.endpoint.baseURL
@@ -280,7 +273,7 @@ function validateProviderVariables(
 }
 
 function prepareProviderSettings(
-  model: Info,
+  model: RuntimeInfo,
   settings: Readonly<Record<string, unknown>>,
 ): Effect.Effect<Readonly<Record<string, unknown>>, UnresolvedProviderVariablesError> {
   const baseURL = settings.baseURL
@@ -290,14 +283,14 @@ function prepareProviderSettings(
   )
 }
 
-function prepareProviderURL(model: Info, baseURL: string): Effect.Effect<string, UnresolvedProviderVariablesError> {
+function prepareProviderURL(model: RuntimeInfo, baseURL: string): Effect.Effect<string, UnresolvedProviderVariablesError> {
   if (!baseURL.includes("${")) return Effect.succeed(baseURL)
   const prepared = baseURL.replace(/\$\{([^}]+)\}/g, (placeholder, name: string) => process.env[name] ?? placeholder)
   const failure = unresolvedProviderVariables(model, prepared)
   return failure ? Effect.fail(failure) : Effect.succeed(prepared)
 }
 
-function unresolvedProviderVariables(model: Info, baseURL: string) {
+function unresolvedProviderVariables(model: RuntimeInfo, baseURL: string) {
   const variables = new Set(Array.from(baseURL.matchAll(/\$\{([^}]+)\}/g), (match) => match[1]))
   if (variables.size === 0) return
   return new UnresolvedProviderVariablesError({
@@ -320,14 +313,14 @@ const nativeCredentialSettings = (specifier: string, credential: Credential.Valu
   return { apiKey: credential.access }
 }
 
-const unsupported = (model: Info) =>
+const unsupported = (model: RuntimeInfo) =>
   new UnsupportedPackageError({
     providerID: model.providerID,
     modelID: model.id,
     package: model.package ?? "unknown",
   })
 
-const initialization = (model: Info, phase: InitializationPhase, cause: unknown) =>
+const initialization = (model: RuntimeInfo, phase: InitializationPhase, cause: unknown) =>
   new ModelInitializationError({
     providerID: model.providerID,
     modelID: model.id,
@@ -358,17 +351,22 @@ export const hasPackage = (model: Info) => Boolean(model.package)
 export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const catalog = yield* Catalog.Service
+    const providers = yield* Provider.Service
+    const models = yield* Model.Service
     const integrations = yield* Integration.Service
     const npm = yield* Npm.Service
     const aisdk = yield* AISDK.Service
     const load = Effect.fn("ModelResolver.resolveModel")(function* (selected: Info, variant?: VariantID) {
-      const provider = yield* catalog.provider.get(selected.providerID)
+      const provider = yield* providers.get(selected.providerID)
       const connection = yield* integrations.connection.active(
         provider?.integrationID ?? Integration.ID.make(selected.providerID),
       )
       const credential = connection ? yield* integrations.connection.resolve(connection) : undefined
-      const runtimeInfo = yield* withVariant(selected, variant)
+      const selectedVariant = yield* withVariant(selected, variant)
+      const runtimeInfo: RuntimeInfo = {
+        ...selectedVariant,
+        settings: Provider.mergeOverlay(provider?.settings, Provider.modelSettings(selectedVariant.settings)),
+      }
       const model = yield* fromCatalogModel(runtimeInfo, credential, {
         loadPackage: (specifier) => Provider.loadPackage(specifier, npm),
         loadAISDK: (model) => aisdk.model(model),
@@ -390,21 +388,22 @@ export const layer = Layer.effect(
         capabilities: selected.capabilities,
         cost: selected.cost,
         limit: selected.limit,
-        compaction: selected.compaction,
-        websocket: selected.websocket ?? false,
+        compaction: runtimeInfo.settings?.compaction,
+        transport: provider?.settings?.transport,
+        chunkTimeout: provider?.settings?.chunkTimeout,
       }
     })
     return Service.of({
       resolve: Effect.fn("ModelResolver.resolve")(function* (requested) {
         const selected = requested
-          ? yield* catalog.model.get(requested.providerID, requested.id)
-          : yield* catalog.model
+          ? yield* models.get(requested.providerID, requested.id)
+          : yield* models
               .default()
               .pipe(
                 Effect.flatMap((model) =>
                   model && hasPackage(model)
                     ? Effect.succeed(model)
-                    : Effect.map(catalog.model.available(), (models) => models.find(hasPackage)),
+                    : Effect.map(models.available(), (models) => models.find(hasPackage)),
                 ),
               )
         if (!selected) return undefined
@@ -415,7 +414,7 @@ export const layer = Layer.effect(
   }),
 )
 
-function hasConfiguredAuth(model: Info) {
+function hasConfiguredAuth(model: RuntimeInfo) {
   return [model.settings?.apiKey, model.settings?.authToken, model.settings?.accessToken].some(
     (value) => typeof value === "string" && value !== "",
   )
@@ -462,5 +461,5 @@ function usesAPIKeyAuth(packageName: string | undefined) {
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Catalog.node, Integration.node, Npm.node, AISDK.node],
+  deps: [Provider.node, Model.node, Integration.node, Npm.node, AISDK.node],
 })

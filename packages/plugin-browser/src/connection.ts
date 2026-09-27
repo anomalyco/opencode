@@ -51,10 +51,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
           const session = yield* ctx.session
             .get({ sessionID: input.sessionID })
             .pipe(Effect.mapError(() => call.error("unavailable", "Session not found.", {})))
-          if (
-            session.location.directory !== ctx.location.directory ||
-            session.location.workspaceID !== ctx.location.workspaceID
-          )
+          if (session.location.directory !== ctx.location.directory)
             return yield* Effect.fail(call.error("unavailable", "Session belongs to another location.", {}))
           const browser = yield* Effect.acquireRelease(
             Effect.gen(function* () {
@@ -141,7 +138,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
       if (!browser)
         return yield* new Tool.Error({
           message:
-            "[browser.disconnected] No desktop browser is connected to this session. Open this session in the desktop app, enable the experimental browser setting, and wait for it to connect. Then call browser.tabs.list({}). Repeating browser actions while disconnected will not help.",
+            "[browser.disconnected] No desktop browser is connected to this session. Open this session in the desktop app and wait for it to connect. Then call browser.tabs.list({}). Repeating browser actions while disconnected will not help.",
         })
       const tab = "tabID" in action ? browser.state.tabs.find((tab) => tab.id === action.tabID) : undefined
       if ("tabID" in action && !tab)

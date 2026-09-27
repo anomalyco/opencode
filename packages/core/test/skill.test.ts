@@ -15,7 +15,7 @@ const info = (id: string, description: string) =>
     id: Skill.ID.make(id),
     name: Skill.Name.make(id),
     description,
-    location: AbsolutePath.make(`/skills/${id}/SKILL.md`),
+    path: AbsolutePath.make(`/skills/${id}/SKILL.md`),
     content: `# ${id}`,
   })
 
@@ -119,7 +119,7 @@ describe("Skill", () => {
         }),
       )
       const agent = yield* agents.get(Agent.ID.make("reviewer"))
-      expect(Skill.available([info("deploy", "Deploy")], agent!)).toEqual([])
+      expect(Skill.available([info("deploy", "Deploy")], agent!.permissions)).toEqual([])
     }),
   )
 })

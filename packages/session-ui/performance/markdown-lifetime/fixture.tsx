@@ -127,4 +127,10 @@ render(() => {
   )
 }, document.getElementById("root")!)
 
+declare global {
+  interface Window {
+    markdownLifetime: Omit<typeof stats, "cacheChars"> & { cacheChars?: number; cacheBytes?: number }
+  }
+}
+
 Object.defineProperty(window, "markdownLifetime", { value: stats })

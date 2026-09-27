@@ -216,6 +216,33 @@ it.effect("Alibaba keeps native reasoning controls and future efforts on their s
   }),
 )
 
+it.effect("Alibaba fits explicit thinking budgets to half the output limit", () =>
+  Effect.gen(function* () {
+    const provider = Alibaba.configure({ region: "ap-southeast-1", apiKey: "fixture" })
+    const chat = (maxTokens?: number) =>
+      compileRequest(
+        LLM.request({
+          model: provider.chat("qwen3.7-plus"),
+          prompt: "hi",
+          ...(maxTokens === undefined ? {} : { generation: { maxTokens } }),
+          providerOptions: { enableThinking: true, thinkingBudget: 131_071 },
+        }),
+      ).pipe(Effect.map((prepared) => prepared.body.thinking_budget))
+    const messages = yield* compileRequest(
+      LLM.request({
+        model: provider.messages("qwen3.7-plus"),
+        prompt: "hi",
+        generation: { maxTokens: 32_000 },
+        providerOptions: { thinking: { type: "enabled", budgetTokens: 131_071 } },
+      }),
+    )
+
+    expect(yield* chat(32_000)).toBe(16_000)
+    expect(yield* chat()).toBe(131_071)
+    expect(messages.body.thinking).toEqual({ type: "enabled", budget_tokens: 16_000 })
+  }),
+)
+
 it.effect("Alibaba validates malformed options before execution", () =>
   Effect.gen(function* () {
     const provider = Alibaba.configure({ region: "ap-southeast-1", apiKey: "fixture" })

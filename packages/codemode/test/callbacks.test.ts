@@ -126,9 +126,9 @@ describe("constructors callable without new, like JS", () => {
     expect(await value(`return [7].map(Array)`)).toEqual([[7, 0, [7]]])
   })
 
-  test("array length boundaries match JS", async () => {
-    expect(await value(`return Array(4294967295).length`)).toBe(4294967295)
-    const diagnostic = await error(`return Array(4294967296)`)
+  test("array length is bounded below the JS maximum, so one call cannot materialize an unbounded array", async () => {
+    expect(await value(`return Array(10000000).length`)).toBe(10_000_000)
+    const diagnostic = await error(`return Array(10000001)`)
     expect(diagnostic.message).toContain("Invalid array length")
     expect((await error(`try { Array(-1) } catch (e) { throw Error(e.name) }`)).message).toContain("RangeError")
   })
@@ -271,10 +271,8 @@ describe("still-rejected callables get the wrap hint", () => {
   test("built-in references work as replacers", async () => {
     // Like real JS: JSON.stringify(match, offset, string) quotes the match.
     expect(await value(`return "abc".replace(/b/, JSON.stringify)`)).toBe('a"b"c')
-    // Math methods stay strict about consumed arguments: a match string is not coerced.
-    expect((await error(`return "3.7".replace(/\\d\\.\\d/, Math.floor)`)).message).toContain(
-      "Math.floor expects number arguments",
-    )
+    // Math methods coerce the match string, as in JS.
+    expect(await value(`return "3.7".replace(/\\d\\.\\d/, Math.floor)`)).toBe("3")
   })
 
   test("non-callables still get the plain callback error", async () => {

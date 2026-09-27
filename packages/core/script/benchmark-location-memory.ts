@@ -1,33 +1,36 @@
 // Measures the heap retained by Location service graphs and by the models.dev
-// catalog plugin. Everything runs against a temporary global directory with a
+// source plugin. Everything runs against a temporary global directory with a
 // temporary home, an in-memory database, no filesystem watchers, and no network,
 // so it never touches a live server, database, or user configuration.
 //
 //   bun run script/benchmark-location-memory.ts [--locations 6] [--plugins 8] [--json out.json]
 //
-// "retained" numbers are heapUsed after two forced GCs; "peak" numbers are the
-// highest heapUsed sampled without forcing GC and are reported separately.
+// "retained" numbers are heapUsed after two forced GCs. RSS is reported separately.
+// Source definitions and materialized candidates are counted independently: the
+// source plugin alone may have no available providers in an unauthenticated run.
 import fs from "fs/promises"
 import os from "os"
 import path from "path"
 import { heapStats } from "bun:jsc"
 import { Effect, Layer, Logger, Scope } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
 import { Global } from "@opencode/util/global"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { AppNodeBuilder } from "../src/effect/app-node-builder"
 import { Bus } from "../src/bus"
-import { Catalog } from "../src/catalog"
 import { Database } from "../src/database/database"
 import { Integration } from "../src/integration"
 import { Location } from "../src/location"
 import { LocationServiceMap } from "../src/location-service-map"
 import { ModelsDev } from "../src/models-dev"
+import { Model } from "../src/model"
 import { Plugin } from "../src/plugin"
 import { ModelsDevPlugin } from "../src/plugin/models-dev"
+import { Provider } from "../src/provider"
 import { AbsolutePath } from "../src/schema"
 import { Watcher } from "../src/filesystem/watcher"
 import { location } from "../test/fixture/location"
-import { catalogHost, host, integrationHost } from "../test/plugin/host"
+import { providerHost, host, integrationHost } from "../test/plugin/host"
 
 const args = process.argv.slice(2)
 const flag = (name: string, fallback: number) => {
@@ -46,6 +49,13 @@ const jsonIndex = args.indexOf("--json")
 const jsonPath = jsonIndex === -1 ? undefined : args[jsonIndex + 1]
 
 type Sample = { heapUsed: number; rss: number; objects: number }
+type Population = {
+  providers: number
+  definitions: number
+  availableProviders: number
+  models: number
+  availableModels: number
+}
 
 const sample = (): Sample => {
   Bun.gc(true)
@@ -81,6 +91,19 @@ const replacements = [
   Watcher.node.replace(Watcher.configured({ enabled: false })),
 ]
 
+const population = Effect.gen(function* () {
+  const providers = yield* Provider.Service
+  const models = yield* Model.Service
+  const snapshot = yield* providers.snapshot()
+  return {
+    providers: snapshot.records.size,
+    definitions: Array.from(snapshot.records.values()).reduce((total, record) => total + record.models.size, 0),
+    availableProviders: snapshot.available.length,
+    models: (yield* models.all()).length,
+    availableModels: (yield* models.available()).length,
+  } satisfies Population
+})
+
 // One full Location graph per directory, retained for the rest of the run, the
 // way a long-running server retains every directory a client has touched.
 const locationsProgram = Effect.gen(function* () {
@@ -89,6 +112,7 @@ const locationsProgram = Effect.gen(function* () {
   const before = sample()
   const deltas: number[] = []
   const rss: number[] = []
+  const populations: Population[] = []
   let previous = before
   for (let index = 0; index < locationCount; index++) {
     const directory = path.join(root, "projects", `location-${index}`)
@@ -98,37 +122,31 @@ const locationsProgram = Effect.gen(function* () {
       .pipe(Scope.provide(scope))
     const plugins = yield* Plugin.Service.pipe(Effect.provideContext(context))
     yield* plugins.awaitActivation
+    // Force the actual read models before sampling, including lazy materialization.
+    populations.push(yield* population.pipe(Effect.provideContext(context)))
     const current = sample()
     deltas.push(current.heapUsed - previous.heapUsed)
     rss.push(current.rss)
     previous = current
   }
-  const catalog = yield* Catalog.Service.pipe(
-    Effect.provideContext(
-      yield* locations
-        .contextEffect(Location.Ref.make({ directory: AbsolutePath.make(path.join(root, "projects", `location-0`)) }))
-        .pipe(Scope.provide(scope)),
-    ),
-  )
-  const models = yield* catalog.model.all()
-  const providers = yield* catalog.provider.all()
   return {
     before,
     after: previous,
     deltas,
     rss,
-    catalog: { providers: providers.length, models: models.length },
+    populations,
   }
 }).pipe(Effect.scoped)
 
-// The models.dev plugin alone, against a real Catalog and Integration state per
-// instance, isolates the catalog-copy contribution from the rest of the graph.
+// The models.dev plugin alone, against real Provider, Model and Integration states
+// per instance, isolates shared definitions and materialization from the full graph.
 const pluginProgram = Effect.gen(function* () {
   const modelsDev = yield* ModelsDev.Service
   const snapshot = yield* modelsDev.get()
   const scope = yield* Scope.Scope
   const before = sample()
   const deltas: number[] = []
+  const populations: Population[] = []
   let previous = before
   for (let index = 0; index < pluginCount; index++) {
     const directory = AbsolutePath.make(path.join(root, "plugins", `instance-${index}`))
@@ -137,18 +155,18 @@ const pluginProgram = Effect.gen(function* () {
       Location.Service.of(location(Location.Ref.make({ directory }))),
     )
     const context = yield* Layer.build(
-      AppNodeBuilder.build(LayerNode.group([Catalog.node, Integration.node, Bus.node]), [
+      AppNodeBuilder.build(LayerNode.group([Provider.node, Model.node, Integration.node, Bus.node]), [
         Location.node.replace(locationLayer),
         ...replacements,
       ]),
     ).pipe(Scope.provide(scope))
-    const catalog = yield* Catalog.Service.pipe(Effect.provideContext(context))
+    const providers = yield* Provider.Service.pipe(Effect.provideContext(context))
     const integration = yield* Integration.Service.pipe(Effect.provideContext(context))
     yield* ModelsDevPlugin.effect(
-      host({ catalog: catalogHost(catalog), integration: integrationHost(integration) }),
+      host({ provider: providerHost(providers), integration: integrationHost(integration) }),
     ).pipe(Effect.provideService(ModelsDev.Service, modelsDev), Effect.provideContext(context), Scope.provide(scope))
-    yield* catalog.model.all()
     yield* integration.list()
+    populations.push(yield* population.pipe(Effect.provideContext(context)))
     const current = sample()
     deltas.push(current.heapUsed - previous.heapUsed)
     previous = current
@@ -157,6 +175,7 @@ const pluginProgram = Effect.gen(function* () {
     before,
     after: previous,
     deltas,
+    populations,
     snapshot: {
       providers: snapshot.length,
       models: snapshot.reduce((total, provider) => total + provider.models.length, 0),
@@ -174,7 +193,15 @@ const program = Effect.gen(function* () {
     ),
   )
   return { plugin, locations }
-}).pipe(Effect.provide(Logger.layer([])))
+}).pipe(
+  Effect.provide(Logger.layer([])),
+  Effect.provideService(
+    FetchHttpClient.Fetch,
+    Object.assign(() => Promise.reject(new Error("Network disabled in location memory benchmark")), {
+      preconnect: () => {},
+    }),
+  ),
+)
 
 const result = await Effect.runPromise(program)
 await fs.rm(root, { recursive: true, force: true }).catch(() => undefined)
@@ -183,11 +210,11 @@ console.log(
   `models.dev snapshot: ${result.plugin.snapshot.providers} providers, ${result.plugin.snapshot.models} models`,
 )
 console.log(`ModelsDevPlugin instances: ${pluginCount}`)
+console.log(`  populations: ${JSON.stringify(result.plugin.populations)}`)
 console.log(`  retained heap per instance (MiB): ${result.plugin.deltas.map((delta) => mib(delta).trim()).join(", ")}`)
 console.log(`  median per instance: ${mib(median(result.plugin.deltas))} MiB`)
-console.log(
-  `Location graphs: ${locationCount} (catalog ${result.locations.catalog.providers} providers, ${result.locations.catalog.models} models each)`,
-)
+console.log(`Location graphs: ${locationCount}`)
+console.log(`  populations: ${JSON.stringify(result.locations.populations)}`)
 console.log(
   `  retained heap per location (MiB): ${result.locations.deltas.map((delta) => mib(delta).trim()).join(", ")}`,
 )
@@ -202,7 +229,14 @@ if (jsonPath) {
   await fs.writeFile(
     jsonPath,
     JSON.stringify(
-      { revision: process.env.OPENCODE_BENCH_REVISION, bun: Bun.version, locationCount, pluginCount, ...result },
+      {
+        revision: process.env.OPENCODE_BENCH_REVISION,
+        bun: Bun.version,
+        bunRevision: Bun.revision,
+        locationCount,
+        pluginCount,
+        ...result,
+      },
       null,
       2,
     ),

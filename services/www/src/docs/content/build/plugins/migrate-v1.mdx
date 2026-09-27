@@ -148,7 +148,7 @@ Use this table to find the closest V2 API for each V1 hook:
 | `config`                               | transforms on the affected domains                           |
 | `tool` map                             | `ctx.tool.transform(...)`                                    |
 | `auth`                                 | `ctx.integration.transform(...)` and integration APIs        |
-| `provider`                             | `ctx.catalog.transform(...)`                                 |
+| `provider`                             | `ctx.provider.transform(...)` and `ctx.model.transform(...)` |
 | `chat.message`                         | `ctx.session.hook("prompt", ...)`                            |
 | `chat.params`                          | `ctx.session.hook("context", ...)`                           |
 | `chat.headers`                         | `ctx.session.hook("model.request", ...)` or `"http.request"` |
@@ -168,7 +168,7 @@ prompt admission, while `context` runs immediately before an agent model request
 
 There is no direct V2 hook corresponding to every experimental V1 hook. Re-evaluate plugins that use
 `experimental.compaction.autocontinue`, `experimental.provider.small_model`, or `experimental.text.complete` against the
-V2 session, catalog, and event APIs rather than preserving an internal lifecycle assumption.
+V2 session, provider, model, and event APIs rather than preserving an internal lifecycle assumption.
 
 `command.execute.before` also has no one-to-one global hook. Register a command with `ctx.command.transform` when the
 plugin owns that command. Use the prompt hook when the real intent is to modify prompts submitted by commands and other
@@ -268,9 +268,24 @@ external data before registration, capture it in the callback, and call the doma
 changes. A later plugin transform sees earlier changes and may update, replace, or remove them.
 
 The same transform pattern replaces V1 `config` and `provider` hooks, but V2 does not expose one mutable global config
-object. Register the change with the domain that owns it: `ctx.agent`, `ctx.catalog`, `ctx.command`, `ctx.integration`,
-`ctx.mcp`, `ctx.reference`, `ctx.skill`, `ctx.tool`, `ctx.vcs`, `ctx.websearch`, or `ctx.worktree`. Authentication methods
-belong to integrations; provider and model metadata belong to the catalog.
+object. Register the change with the domain that owns it: `ctx.agent`, `ctx.provider`, `ctx.model`, `ctx.command`,
+`ctx.integration`, `ctx.mcp`, `ctx.reference`, `ctx.skill`, `ctx.tool`, `ctx.vcs`, `ctx.websearch`, or `ctx.worktree`.
+Authentication methods belong to integrations; provider transforms contribute source definitions and provider settings,
+while model transforms apply restrictions and overrides to the complete active-provider model collection.
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("anthropic", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+})
+
+await ctx.model.transform((editor) => {
+  editor.list("anthropic").forEach((model) => {
+    if (!model.capabilities.tools) editor.remove(model.providerID, model.id)
+  })
+})
+```
 
 ## Migrate events and cleanup
 

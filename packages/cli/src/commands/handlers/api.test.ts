@@ -8,11 +8,11 @@ describe("api request resolution", () => {
         {
           paths: {
             "/api/session/{sessionID}": {
-              get: { operationId: "v2.session.get" },
+              get: { operationId: "session.get" },
             },
           },
         },
-        "v2.session.get",
+        "session.get",
         { sessionID: "ses/a", workspace: "work" },
       ),
     ).toEqual({ method: "GET", path: "/api/session/ses%2Fa?workspace=work" })
@@ -21,8 +21,8 @@ describe("api request resolution", () => {
   test("rejects a missing path parameter", () => {
     expect(() =>
       resolveOperation(
-        { paths: { "/api/session/{sessionID}": { get: { operationId: "v2.session.get" } } } },
-        "v2.session.get",
+        { paths: { "/api/session/{sessionID}": { get: { operationId: "session.get" } } } },
+        "session.get",
         {},
       ),
     ).toThrow("Missing path parameter: sessionID")
@@ -30,6 +30,6 @@ describe("api request resolution", () => {
 
   test("resolves curl-like method and path input", () => {
     expect(rawRequest(["post", "/api/foo"])).toEqual({ method: "POST", path: "/api/foo" })
-    expect(rawRequest(["v2.session.list"])).toBeUndefined()
+    expect(rawRequest(["session.list"])).toBeUndefined()
   })
 })

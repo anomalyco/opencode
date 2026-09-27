@@ -14,13 +14,15 @@ registerOpencodeSpinner()
 export function Spinner(props: { children?: JSX.Element; color?: RGBA; shimmer?: RGBA }) {
   const theme = useTheme()
   const config = useConfig().data
-  const color = () => props.color ?? theme.text.subdued
+  const color = () => props.color ?? theme.text.muted
   const [frame, setFrame] = createSignal(0)
   createEffect(() => {
     if (!(config.animations ?? true) || !props.shimmer) return
     const timer = setInterval(() => setFrame((value) => (value + 1) % SPINNER_FRAMES.length), 80)
     onCleanup(() => clearInterval(timer))
   })
+  // A bare spinner beside a long sibling shrinks to a fractional width that rounds to 0, so the
+  // glyph paints on top of the row gap. Only a labeled spinner may shrink (to wrap its text).
   return (
     <Show
       when={config.animations ?? true}
@@ -29,8 +31,10 @@ export function Spinner(props: { children?: JSX.Element; color?: RGBA; shimmer?:
       <Show
         when={props.shimmer}
         fallback={
-          <box flexDirection="row" gap={1}>
-            <spinner frames={SPINNER_FRAMES} interval={80} color={color()} />
+          <box flexDirection="row" gap={1} flexShrink={props.children ? 1 : 0}>
+            <box flexShrink={0}>
+              <spinner frames={SPINNER_FRAMES} interval={80} color={color()} />
+            </box>
             <Show when={props.children}>
               <text fg={color()}>{props.children}</text>
             </Show>

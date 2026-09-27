@@ -1,12 +1,8 @@
-import { Option, Schema } from "effect"
-import type { LLMRequest } from "../../schema/index.js"
+import { Schema } from "effect"
+import { ReasoningEffort, ReasoningEfforts, type LLMRequest } from "../../schema/index.js"
+import { lenient } from "../shared.js"
 
-export const ReasoningEfforts = ["none", "minimal", "low", "medium", "high", "xhigh", "max"] as const
-export type ReasoningEffort = (typeof ReasoningEfforts)[number] | (string & {})
-export const ReasoningEffort = Schema.declare<ReasoningEffort>(
-  (value): value is ReasoningEffort => typeof value === "string",
-  { title: "ReasoningEffort" },
-)
+export { ReasoningEffort, ReasoningEfforts }
 
 export const TextVerbosities = ["low", "medium", "high"] as const
 export type TextVerbosity = (typeof TextVerbosities)[number] | (string & {})
@@ -54,21 +50,22 @@ export const StreamOptions = Schema.Struct({
   includeObfuscation: Schema.optional(Schema.Boolean),
 })
 
+// Malformed options are dropped one at a time so a bad `topLogprobs` cannot discard `store` or `reasoningEffort`.
 export const Options = Schema.Struct({
-  store: Schema.optional(Schema.Boolean),
-  metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-  safetyIdentifier: Schema.optional(Schema.String),
-  streamOptions: Schema.optional(StreamOptions),
-  topLogprobs: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 20 }))),
-  reasoningEffort: Schema.optional(ReasoningEffort),
-  reasoningSummary: Schema.optional(Schema.Literals(["auto", "concise", "detailed"])),
-  include: Schema.optional(Schema.Array(ResponseIncludableSchema)),
-  textVerbosity: Schema.optional(TextVerbositySchema),
-  serviceTier: Schema.optional(ServiceTierSchema),
-  truncation: Schema.optional(TruncationSchema),
-  allowedTools: Schema.optional(AllowedTools),
-  maxToolCalls: Schema.optional(Schema.Int),
-  parallelToolCalls: Schema.optional(Schema.Boolean),
+  store: lenient(Schema.Boolean),
+  metadata: lenient(Schema.Record(Schema.String, Schema.String)),
+  safetyIdentifier: lenient(Schema.String),
+  streamOptions: lenient(StreamOptions),
+  topLogprobs: lenient(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 20 }))),
+  reasoningEffort: lenient(ReasoningEffort),
+  reasoningSummary: lenient(Schema.Literals(["auto", "concise", "detailed"])),
+  include: lenient(Schema.Array(ResponseIncludableSchema)),
+  textVerbosity: lenient(TextVerbositySchema),
+  serviceTier: lenient(ServiceTierSchema),
+  truncation: lenient(TruncationSchema),
+  allowedTools: lenient(AllowedTools),
+  maxToolCalls: lenient(Schema.Int),
+  parallelToolCalls: lenient(Schema.Boolean),
 })
 export type Options = typeof Options.Type
 
@@ -76,11 +73,10 @@ export type Resolved = Omit<Options, "allowedTools"> & {
   readonly allowedTools?: AllowedTools & { readonly mode: NonNullable<AllowedTools["mode"]> }
 }
 
-const decodeOptions = Schema.decodeUnknownOption(Options)
+const decodeOptions = Schema.decodeUnknownSync(Options)
 
 export const resolve = (request: LLMRequest): Resolved => {
-  const input = Option.getOrUndefined(decodeOptions(request.providerOptions))
-  if (!input) return {}
+  const input = decodeOptions(request.providerOptions ?? {})
   return {
     ...input,
     include: input.include?.length ? input.include : undefined,

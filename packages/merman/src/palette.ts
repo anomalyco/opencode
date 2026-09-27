@@ -46,27 +46,27 @@ export function createOpenCodeDiagramPalette(input: OpenCodeDiagramPaletteInput)
 export function resolveOpenCodeDiagramPalette(
   theme: {
     readonly text: {
-      readonly default: RGBA
-      readonly subdued: RGBA
+      readonly base: RGBA
+      readonly muted: RGBA
       readonly feedback: {
-        readonly info: { readonly default: RGBA }
-        readonly success: { readonly default: RGBA }
-        readonly warning: { readonly default: RGBA }
+        readonly info: { readonly base: RGBA }
+        readonly success: { readonly base: RGBA }
+        readonly warning: { readonly base: RGBA }
       }
     }
-    readonly background: { readonly default: RGBA }
+    readonly background: { readonly base: RGBA }
     readonly categorical: readonly Readonly<Record<200 | 300 | 700 | 800, RGBA>>[]
   },
   mode: "dark" | "light",
 ) {
   const accent = theme.categorical[3] ?? theme.categorical[0]!
   return createOpenCodeDiagramPalette({
-    text: theme.text.default,
-    subdued: theme.text.subdued,
-    info: theme.text.feedback.info.default,
-    success: theme.text.feedback.success.default,
-    warning: theme.text.feedback.warning.default,
-    background: theme.background.default,
+    text: theme.text.base,
+    subdued: theme.text.muted,
+    info: theme.text.feedback.info.base,
+    success: theme.text.feedback.success.base,
+    warning: theme.text.feedback.warning.base,
+    background: theme.background.base,
     accent: {
       soft: accent[mode === "dark" ? 300 : 700],
       clear: accent[mode === "dark" ? 200 : 800],

@@ -28,8 +28,8 @@ export const ModelsDevPlugin = define({
   effect: Effect.fn(function* (ctx) {
     const modelsDev = yield* ModelsDev.Service
     const bus = yield* Bus.Service
-    // The normalized snapshot is shared by every Location and only read here; the catalog
-    // receives copies below, so retaining a second copy per Location is unnecessary.
+    // Filtering and definition indexes are shared across Locations. Only Model materialization
+    // makes mutable copies, after provider configuration and access have been resolved.
     const loaded = { data: snapshots(yield* modelsDev.get()) }
     yield* ctx.integration.transform((integrations) => {
       for (const provider of loaded.data) {
@@ -49,33 +49,27 @@ export const ModelsDevPlugin = define({
         })
       }
     })
-    yield* ctx.catalog.transform((catalog) => {
+    yield* ctx.provider.transform((providers) => {
       for (const provider of loaded.data) {
-        catalog.provider.update(provider.info.id, (draft) => {
-          Object.assign(draft, copy(provider.info))
-          draft.integrationID = Integration.ID.make(provider.info.id)
+        providers.add({
+          info: { ...provider.info, integrationID: Integration.ID.make(provider.info.id) },
+          models: provider.models,
         })
-        for (const model of provider.models) {
-          if (model.status === "deprecated") continue
-          if (
-            provider.info.id === Provider.ID.amazonBedrock &&
-            BEDROCK_PROFILE_ONLY_IDS.includes(model.modelID ?? model.id)
-          )
-            continue
-          catalog.model.update(provider.info.id, model.id, (draft) => Object.assign(draft, copy(model)))
-        }
       }
     })
+    const apply = (data: readonly ModelsDev.Snapshot[]) => {
+      loaded.data = snapshots(data)
+      return ctx.integration.reload().pipe(Effect.andThen(ctx.provider.reload()))
+    }
     yield* bus.subscribe(ModelsDev.Event.Refreshed).pipe(
-      Stream.runForEach(() =>
-        modelsDev.get().pipe(
-          Effect.tap((data) => Effect.sync(() => (loaded.data = snapshots(data)))),
-          Effect.andThen(ctx.integration.reload()),
-          Effect.andThen(ctx.catalog.reload()),
-        ),
-      ),
+      Stream.runForEach(() => modelsDev.get().pipe(Effect.flatMap(apply))),
       Effect.forkScoped({ startImmediately: true }),
     )
+    // A refresh that landed between the initial read and the subscription above published
+    // Refreshed to nobody here. On a cold cache that read served the bundled snapshot, so
+    // re-read now instead of waiting for the next TTL refresh.
+    const latest = yield* modelsDev.get()
+    if (snapshots(latest) !== loaded.data) yield* apply(latest)
   }),
 })
 
@@ -86,32 +80,32 @@ function environmentNames(provider: ModelsDev.Snapshot) {
   // Vertex. Those configure Google auth rather than carrying a key, so only the
   // Express Mode key may become a credential; GoogleVertexPlugin handles activation.
   if (provider.info.id === Provider.ID.googleVertex) return ["GOOGLE_VERTEX_API_KEY"]
+  if (provider.info.id === "cloudflare-workers-ai")
+    return ["CLOUDFLARE_API_KEY", "CLOUDFLARE_WORKERS_AI_TOKEN", "CLOUDFLARE_API_TOKEN"]
   return [...provider.environment]
 }
 
-function snapshots(data: readonly ModelsDev.Snapshot[]) {
-  return data.filter(
-    // These deprecated aliases are replaced by the canonical Azure and Google Vertex providers.
-    (provider) => provider.info.id !== "azure-cognitive-services" && provider.info.id !== "google-vertex-anthropic",
-  )
-}
+const prepared = new WeakMap<readonly ModelsDev.Snapshot[], readonly ModelsDev.Snapshot[]>()
 
-// The catalog owns and mutates its provider and model records in place, so every rebuild
-// needs fresh copies of the thousands of shared snapshot records. Snapshot data is plain
-// JSON, and a direct copy is an order of magnitude faster than structuredClone's general
-// graph walk on the startup path.
-function copy<T>(value: T): T {
-  if (Array.isArray(value)) return value.map(copy) as T
-  if (value !== null && typeof value === "object") {
-    const result: Record<string, unknown> = {}
-    for (const key of Object.keys(value)) {
-      const copied = copy((value as Record<string, unknown>)[key])
-      // Assigning this key would set the prototype rather than an own property, unlike structuredClone.
-      if (key === "__proto__")
-        Object.defineProperty(result, key, { value: copied, enumerable: true, writable: true, configurable: true })
-      else result[key] = copied
-    }
-    return result as T
-  }
-  return value
+function snapshots(data: readonly ModelsDev.Snapshot[]) {
+  const cached = prepared.get(data)
+  if (cached) return cached
+  const result = data
+    .filter(
+      // These deprecated aliases are replaced by the canonical Azure and Google Vertex providers.
+      (provider) => provider.info.id !== "azure-cognitive-services" && provider.info.id !== "google-vertex-anthropic",
+    )
+    .map((provider) => ({
+      ...provider,
+      models: provider.models.filter(
+        (model) =>
+          model.status !== "deprecated" &&
+          !(
+            provider.info.id === Provider.ID.amazonBedrock &&
+            BEDROCK_PROFILE_ONLY_IDS.includes(model.modelID ?? model.id)
+          ),
+      ),
+    }))
+  prepared.set(data, result)
+  return result
 }

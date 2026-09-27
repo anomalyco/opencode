@@ -4,47 +4,6 @@ import { makeACPFixture, makeSession, secondModel, testModel } from "./service-f
 import { flattenSelectOptions, requireSelectOption } from "./subprocess"
 
 describe("acp service directory behavior", () => {
-  test("does not cache an available model before plugin activation settles", async () => {
-    const requested = Promise.withResolvers<void>()
-    const release = Promise.withResolvers<void>()
-    let ready = false
-    await using fixture = makeACPFixture({
-      fetch(request) {
-        requested.resolve()
-        if (request.path === "/api/plugin/await-activation") {
-          return release.promise.then(() => {
-            ready = true
-            return new Response(null, { status: 204 })
-          })
-        }
-        if (!ready && request.path === "/api/model") {
-          return Response.json({ data: [{ ...testModel, providerID: "ambient" }] })
-        }
-        if (!ready && request.path === "/api/model/default") {
-          return Response.json({ data: { ...testModel, providerID: "ambient" } })
-        }
-        if (request.path === "/api/session" && request.method === "POST") {
-          return Response.json({ data: { ...makeSession("ses_ready"), model: undefined } })
-        }
-        return undefined
-      },
-    })
-    const pending = fixture.service.newSession({ cwd: "/workspace", mcpServers: [] })
-    try {
-      await requested.promise
-      expect(fixture.requests.map((request) => request.path)).toEqual(["/api/plugin/await-activation"])
-      expect(fixture.requests[0]?.query["location[directory]"]).toBe("/workspace")
-      release.resolve()
-      expect(currentValue(await pending, "model")).toBe("test/test-model")
-      expect(
-        fixture.requests.find((request) => request.path === "/api/session" && request.method === "POST")?.body,
-      ).toMatchObject({ model: { providerID: "test", id: "test-model" } })
-    } finally {
-      release.resolve()
-      await pending.catch(() => {})
-    }
-  })
-
   test("creates sessions from a catalog shared by concurrent callers in the same cwd", async () => {
     let created = 0
     await using fixture = makeACPFixture({
@@ -69,20 +28,16 @@ describe("acp service directory behavior", () => {
     expect(currentValue(first[0], "mode")).toBe("build")
     expect(
       [
-        "/api/plugin/await-activation",
         "/api/model",
         "/api/model/default",
         "/api/agent",
         "/api/command",
-        "/api/skill",
       ].map((path) =>
         fixture.requests
           .filter((request) => request.path === path)
           .map((request) => request.query["location[directory]"]),
       ),
     ).toEqual([
-      ["/workspace", "/other"],
-      ["/workspace", "/other"],
       ["/workspace", "/other"],
       ["/workspace", "/other"],
       ["/workspace", "/other"],
@@ -116,9 +71,9 @@ describe("acp service directory behavior", () => {
           : [],
       ),
     ).toEqual([
-      ["review", "verify"],
-      ["review", "verify"],
-      ["review", "verify"],
+      ["review"],
+      ["review"],
+      ["review"],
     ])
   })
 
@@ -281,6 +236,7 @@ describe("acp service directory behavior", () => {
       headers: [{ name: "Authorization", value: "Bearer x" }],
     }
     let created = 0
+    const mcp = "/api/experimental/mcp/"
     await using fixture = makeACPFixture({
       fetch(request) {
         if (request.method === "POST" && request.path === "/api/session") {
@@ -290,7 +246,7 @@ describe("acp service directory behavior", () => {
         if (request.method === "GET" && request.path === "/api/session/ses_1") {
           return Response.json({ data: makeSession("ses_1") })
         }
-        if (request.method === "PUT" && request.path.startsWith("/api/mcp/")) {
+        if (request.method === "PUT" && request.path.startsWith(mcp)) {
           return new Response(null, { status: 204 })
         }
         return undefined
@@ -302,9 +258,9 @@ describe("acp service directory behavior", () => {
     await fixture.service.resumeSession({ cwd: "/workspace", sessionId: "ses_1", mcpServers: [changed] })
     await fixture.service.newSession({ cwd: "/workspace", mcpServers: [local] })
 
-    const adds = fixture.requests.filter((request) => request.method === "PUT" && request.path.startsWith("/api/mcp/"))
+    const adds = fixture.requests.filter((request) => request.method === "PUT" && request.path.startsWith(mcp))
     expect(adds).toHaveLength(4)
-    expect(adds.filter((request) => request.path === "/api/mcp/tools").map((request) => request.body)).toEqual([
+    expect(adds.filter((request) => request.path === `${mcp}tools`).map((request) => request.body)).toEqual([
       {
         config: {
           type: "local",
@@ -327,7 +283,7 @@ describe("acp service directory behavior", () => {
         },
       },
     ])
-    expect(adds.find((request) => request.path === "/api/mcp/docs")?.body).toEqual({
+    expect(adds.find((request) => request.path === `${mcp}docs`)?.body).toEqual({
       config: {
         type: "remote",
         url: "https://example.com/mcp",

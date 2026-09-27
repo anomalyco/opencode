@@ -136,7 +136,7 @@ describe("composer persistence schemas", () => {
     ).toEqual(value)
   })
 
-  test("migrates inline images but never encodes dataUrl or unresolved references", () => {
+  test("migrates inline images, keeps store references without a URL, and never encodes dataUrl", () => {
     const value = Schema.decodeUnknownSync(
       Persistence.withInitial(ComposerStore, { prompt: DEFAULT_PROMPT, context: { items: [] } }),
     )({
@@ -149,12 +149,16 @@ describe("composer persistence schemas", () => {
         { ...image, blob: { id: "missing" }, dataUrl: "data:image/png;base64,YQ==" },
       ],
     })
-    expect(value.prompt).toHaveLength(3)
+    expect(value.prompt).toHaveLength(6)
     expect(value.prompt[0]).toEqual({
       ...image,
       sourcePath: "/image.png",
       blob: { id: "data:image/png;base64,YQ==", url: "data:image/png;base64,YQ==" },
     })
+    // Bytes still in the draft store resolve on use; a non-blob URL is discarded in favour of the id.
+    expect(value.prompt[3]).toEqual({ ...image, blob: { id: "missing", url: "" } })
+    expect(value.prompt[4]).toEqual({ ...image, blob: { id: "bad", url: "" } })
+    expect(value.prompt[5]).toEqual({ ...image, blob: { id: "missing", url: "" } })
     const encoded = Schema.encodeSync(ComposerStore)(value)
     expect(JSON.stringify(encoded)).not.toContain("dataUrl")
     expect(

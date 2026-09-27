@@ -248,20 +248,23 @@ describe("Npm.add", () => {
     expect(entries.added.directory).toContain("node_modules")
   })
 
-  test("installs a Git package from an npm ::path: subdirectory", async () => {
+  test.each(["commit", "branch"])("installs a Git package from an npm ::path: subdirectory at a %s", async (ref) => {
     await using tmp = await tmpdir()
     const fixture = await createGitFixture(tmp.path)
-    const spec = `git+file://${fixture.repository}#${fixture.commit}::path:packages/subdirectory-plugin`
-    const entry = await Effect.gen(function* () {
+    const spec = `git+file://${fixture.repository}#${ref === "commit" ? fixture.commit : "fixture-branch"}::path:packages/subdirectory-plugin`
+    const result = await Effect.gen(function* () {
       const npm = yield* Npm.Service
-      return yield* npm.add(spec)
+      return { added: yield* npm.add(spec), outdated: yield* npm.check(spec) }
     }).pipe(Effect.scoped, Effect.provide(npmLayer(path.join(tmp.path, "cache"))), Effect.runPromise)
 
-    expect(entry.directory).toEndWith(path.join("node_modules", "fixture-subdirectory-plugin"))
-    expect(entry.name).toBe("fixture-subdirectory-plugin")
+    expect(result.added.directory).toEndWith(path.join("node_modules", "fixture-subdirectory-plugin"))
+    expect(result.added.name).toBe("fixture-subdirectory-plugin")
+    expect(result.added.version).toBe(fixture.commit)
+    expect(await Bun.file(path.join(result.added.directory, "index.js")).text()).toContain("subdirectory: true")
     expect(
-      await fs.stat(path.join(path.dirname(entry.directory), "fixture-subdirectory-dependency", "package.json")),
+      await fs.stat(path.join(path.dirname(result.added.directory), "fixture-subdirectory-dependency", "package.json")),
     ).toBeTruthy()
+    expect(result.outdated).toBeFalse()
   })
 
   // Several real Git installs and updates exceed Bun's default timeout on Windows.

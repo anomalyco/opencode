@@ -2,7 +2,6 @@ import { chmod } from "node:fs/promises"
 import { Agent } from "@opencode/core/agent"
 import { describe, expect } from "bun:test"
 import { Effect, Schedule } from "effect"
-import { Catalog } from "@opencode/core/catalog"
 import { Credential } from "@opencode/core/credential"
 import { Model } from "@opencode/core/model"
 import { Plugin } from "@opencode/core/plugin"
@@ -241,21 +240,22 @@ describe("AzurePlugin", () => {
       },
       () =>
         Effect.gen(function* () {
-          const catalog = yield* Catalog.Service
+          const catalog = yield* Provider.Service
+          const models = yield* Model.Service
           yield* catalog.transform((editor) => {
-            editor.provider.update(Provider.ID.azure, (provider) => {
-              provider.package = Provider.aisdk("@ai-sdk/azure")
+            editor.update(Provider.ID.azure, (provider) => {
+              provider.package = "@opencode/ai/providers/azure/responses"
             })
-            editor.model.update(Provider.ID.azure, Model.ID.make("gpt-5-mini"), () => {})
-            editor.model.update(Provider.ID.azure, Model.ID.make("gpt-5-nano"), () => {})
+            editor.models.update(Provider.ID.azure, Model.ID.make("gpt-5-mini"), () => {})
+            editor.models.update(Provider.ID.azure, Model.ID.make("gpt-5-nano"), () => {})
           })
           yield* azureCredential
           yield* addPlugin()
 
           expect(commands).toEqual([])
-          expect((yield* catalog.provider.get(Provider.ID.azure))?.settings?.resourceName).toBe("test-resource")
-          expect(yield* catalog.model.get(Provider.ID.azure, Model.ID.make("gpt-5-mini"))).toBeDefined()
-          expect(yield* catalog.model.get(Provider.ID.azure, Model.ID.make("gpt-5-nano"))).toBeDefined()
+          expect((yield* catalog.get(Provider.ID.azure))?.settings?.resourceName).toBe("test-resource")
+          expect(yield* models.get(Provider.ID.azure, Model.ID.make("gpt-5-mini"))).toBeDefined()
+          expect(yield* models.get(Provider.ID.azure, Model.ID.make("gpt-5-nano"))).toBeDefined()
         }),
     )
   })
@@ -301,6 +301,20 @@ describe("AzurePlugin", () => {
           })
           expect(foundry.request.headers.get("authorization")).toBe("Bearer https://ai.azure.com/.default-token")
           expect(foundry.request.headers.has("x-api-key")).toBe(false)
+
+          const handshake = yield* hooks.trigger("session", "experimental.ws.handshake", {
+            sessionID: Session.ID.make("ses_azure_ws"),
+            agent: Agent.ID.make("build"),
+            model,
+            kind: "primary",
+            url: "wss://test-resource.openai.azure.com/openai/v1/responses",
+            headers: { "api-key": "stored-token", "x-keep": "yes" },
+          })
+          expect(handshake.headers).toMatchObject({
+            authorization: "Bearer https://cognitiveservices.azure.com/.default-token",
+            "x-keep": "yes",
+          })
+          expect(handshake.headers).not.toHaveProperty("api-key")
         }),
     ),
   )
@@ -308,14 +322,14 @@ describe("AzurePlugin", () => {
   it.effect("resolves resourceName from env", () =>
     withEnv({ AZURE_RESOURCE_NAME: "from-env" }, () =>
       Effect.gen(function* () {
-        const catalog = yield* Catalog.Service
+        const catalog = yield* Provider.Service
         yield* catalog.transform((catalog) => {
-          catalog.provider.update(Provider.ID.azure, (item) => {
-            item.package = Provider.aisdk("@ai-sdk/azure")
+          catalog.update(Provider.ID.azure, (item) => {
+            item.package = "@opencode/ai/providers/azure/responses"
           })
         })
         yield* addPlugin()
-        expect(required(yield* catalog.provider.get(Provider.ID.azure)).settings?.resourceName).toBe("from-env")
+        expect(required(yield* catalog.get(Provider.ID.azure)).settings?.resourceName).toBe("from-env")
       }),
     ),
   )
@@ -323,14 +337,14 @@ describe("AzurePlugin", () => {
   it.effect("resolves resourceName from the legacy env", () =>
     withEnv({ AZURE_RESOURCE_NAME: undefined, AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: "legacy-resource" }, () =>
       Effect.gen(function* () {
-        const catalog = yield* Catalog.Service
+        const catalog = yield* Provider.Service
         yield* catalog.transform((catalog) => {
-          catalog.provider.update(Provider.ID.azure, (item) => {
-            item.package = Provider.aisdk("@ai-sdk/azure")
+          catalog.update(Provider.ID.azure, (item) => {
+            item.package = "@opencode/ai/providers/azure/responses"
           })
         })
         yield* addPlugin()
-        expect(required(yield* catalog.provider.get(Provider.ID.azure)).settings?.resourceName).toBe("legacy-resource")
+        expect(required(yield* catalog.get(Provider.ID.azure)).settings?.resourceName).toBe("legacy-resource")
       }),
     ),
   )
@@ -338,16 +352,18 @@ describe("AzurePlugin", () => {
   it.effect("expands provider and model resource URLs", () =>
     withEnv({ AZURE_RESOURCE_NAME: "from-env", AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: "legacy-env" }, () =>
       Effect.gen(function* () {
-        const catalog = yield* Catalog.Service
+        const catalog = yield* Provider.Service
+        const models = yield* Model.Service
         yield* catalog.transform((catalog) => {
-          catalog.provider.update(Provider.ID.azure, (provider) => {
-            provider.package = Provider.aisdk("@ai-sdk/openai-compatible")
+          catalog.update(Provider.ID.azure, (provider) => {
+            provider.package = "@opencode/ai/providers/openai-compatible"
+            provider.activation = "enabled"
             provider.settings = {
               baseURL: "https://${AZURE_COGNITIVE_SERVICES_RESOURCE_NAME}.cognitiveservices.azure.com/openai",
             }
           })
-          catalog.model.update(Provider.ID.azure, Model.ID.make("anthropic"), (model) => {
-            model.package = Provider.aisdk("@ai-sdk/anthropic")
+          catalog.models.update(Provider.ID.azure, Model.ID.make("anthropic"), (model) => {
+            model.package = "@opencode/ai/providers/anthropic"
             model.settings = {
               resourceName: "model-resource",
               baseURL: "https://${AZURE_RESOURCE_NAME}.services.ai.azure.com/anthropic/v1",
@@ -356,13 +372,11 @@ describe("AzurePlugin", () => {
         })
         yield* addPlugin()
 
-        expect(required(yield* catalog.provider.get(Provider.ID.azure)).settings).toMatchObject({
+        expect(required(yield* catalog.get(Provider.ID.azure)).settings).toMatchObject({
           resourceName: "from-env",
           baseURL: "https://from-env.cognitiveservices.azure.com/openai",
         })
-        expect(
-          required(yield* catalog.model.get(Provider.ID.azure, Model.ID.make("anthropic"))).settings,
-        ).toMatchObject({
+        expect(required(yield* models.get(Provider.ID.azure, Model.ID.make("anthropic"))).settings).toMatchObject({
           resourceName: "model-resource",
           baseURL: "https://model-resource.services.ai.azure.com/anthropic/v1",
         })
@@ -373,17 +387,17 @@ describe("AzurePlugin", () => {
   it.effect("keeps explicit resourceName over env and ignores other providers", () =>
     withEnv({ AZURE_RESOURCE_NAME: "from-env" }, () =>
       Effect.gen(function* () {
-        const catalog = yield* Catalog.Service
+        const catalog = yield* Provider.Service
         yield* catalog.transform((catalog) => {
-          catalog.provider.update(Provider.ID.azure, (item) => {
-            item.package = Provider.aisdk("@ai-sdk/azure")
+          catalog.update(Provider.ID.azure, (item) => {
+            item.package = "@opencode/ai/providers/azure/responses"
             item.settings = { resourceName: "from-config" }
           })
-          catalog.provider.update(Provider.ID.openai, () => {})
+          catalog.update(Provider.ID.openai, () => {})
         })
         yield* addPlugin()
-        expect(required(yield* catalog.provider.get(Provider.ID.azure)).settings?.resourceName).toBe("from-config")
-        expect(required(yield* catalog.provider.get(Provider.ID.openai)).settings?.resourceName).toBeUndefined()
+        expect(required(yield* catalog.get(Provider.ID.azure)).settings?.resourceName).toBe("from-config")
+        expect(required(yield* catalog.get(Provider.ID.openai)).settings?.resourceName).toBeUndefined()
       }),
     ),
   )
@@ -391,15 +405,15 @@ describe("AzurePlugin", () => {
   it.effect("falls back to env when configured resourceName is blank", () =>
     withEnv({ AZURE_RESOURCE_NAME: "from-env" }, () =>
       Effect.gen(function* () {
-        const catalog = yield* Catalog.Service
+        const catalog = yield* Provider.Service
         yield* catalog.transform((catalog) => {
-          catalog.provider.update(Provider.ID.azure, (item) => {
-            item.package = Provider.aisdk("@ai-sdk/azure")
+          catalog.update(Provider.ID.azure, (item) => {
+            item.package = "@opencode/ai/providers/azure/responses"
             item.settings = { resourceName: "" }
           })
         })
         yield* addPlugin()
-        expect(required(yield* catalog.provider.get(Provider.ID.azure)).settings?.resourceName).toBe("from-env")
+        expect(required(yield* catalog.get(Provider.ID.azure)).settings?.resourceName).toBe("from-env")
       }),
     ),
   )
@@ -407,23 +421,24 @@ describe("AzurePlugin", () => {
   it.effect("falls back to env when configured resourceName is whitespace", () =>
     withEnv({ AZURE_RESOURCE_NAME: "from-env" }, () =>
       Effect.gen(function* () {
-        const catalog = yield* Catalog.Service
+        const catalog = yield* Provider.Service
         yield* catalog.transform((catalog) => {
-          catalog.provider.update(Provider.ID.azure, (item) => {
-            item.package = Provider.aisdk("@ai-sdk/azure")
+          catalog.update(Provider.ID.azure, (item) => {
+            item.package = "@opencode/ai/providers/azure/responses"
             item.settings = { resourceName: "   " }
           })
         })
         yield* addPlugin()
-        expect(required(yield* catalog.provider.get(Provider.ID.azure)).settings?.resourceName).toBe("from-env")
+        expect(required(yield* catalog.get(Provider.ID.azure)).settings?.resourceName).toBe("from-env")
       }),
     ),
   )
 
-  it.effect("marks only Azure v1 Responses deployments as WebSocket capable", () =>
+  it.effect("stores the Azure Responses WebSocket preference on the provider", () =>
     withEnv({ AZURE_RESOURCE_NAME: undefined, AZURE_COGNITIVE_SERVICES_RESOURCE_NAME: undefined }, () =>
       Effect.gen(function* () {
-        const catalog = yield* Catalog.Service
+        const catalog = yield* Provider.Service
+        const service = yield* Model.Service
         const models = {
           responses: Model.ID.make("responses"),
           chat: Model.ID.make("chat"),
@@ -433,39 +448,36 @@ describe("AzurePlugin", () => {
           nonAzure: Model.ID.make("non-azure"),
         }
         yield* catalog.transform((editor) => {
-          editor.provider.update(Provider.ID.azure, (provider) => {
-            provider.package = Provider.aisdk("@ai-sdk/azure")
+          editor.update(Provider.ID.azure, (provider) => {
+            provider.package = "@opencode/ai/providers/azure/responses"
+            provider.activation = "enabled"
           })
-          editor.model.update(Provider.ID.azure, models.responses, () => {})
-          editor.model.update(Provider.ID.azure, models.chat, (model) => {
-            model.settings = { useCompletionUrls: true }
+          editor.models.update(Provider.ID.azure, models.responses, () => {})
+          editor.models.update(Provider.ID.azure, models.chat, (model) => {
+            model.package = "@opencode/ai/providers/azure/chat"
           })
-          editor.model.update(Provider.ID.azure, models.preview, (model) => {
+          editor.models.update(Provider.ID.azure, models.preview, (model) => {
             model.settings = { apiVersion: "2025-04-01-preview" }
           })
-          editor.model.update(Provider.ID.azure, models.deploymentURL, (model) => {
+          editor.models.update(Provider.ID.azure, models.deploymentURL, (model) => {
             model.settings = { useDeploymentBasedUrls: true }
           })
-          editor.model.update(Provider.ID.azure, models.gateway, (model) => {
+          editor.models.update(Provider.ID.azure, models.gateway, (model) => {
             model.settings = { baseURL: "https://gateway.example/azure" }
           })
-          editor.model.update(Provider.ID.azure, models.nonAzure, (model) => {
-            model.package = Provider.aisdk("@ai-sdk/anthropic")
+          editor.models.update(Provider.ID.azure, models.nonAzure, (model) => {
+            model.package = "@opencode/ai/providers/anthropic"
           })
         })
 
         yield* addPlugin()
 
-        const responses = required(yield* catalog.model.get(Provider.ID.azure, models.responses))
-        expect(responses.capabilities.responsesWebsockets).toBe(true)
-        expect(responses.websocket).toBe(true)
-        for (const modelID of [models.chat, models.preview, models.deploymentURL, models.gateway, models.nonAzure]) {
-          const model = required(yield* catalog.model.get(Provider.ID.azure, modelID))
-          expect(model.capabilities.responsesWebsockets).toBeUndefined()
-          expect(model.websocket).toBeUndefined()
+        expect((yield* catalog.get(Provider.ID.azure))?.settings?.transport).toBe("websocket")
+        for (const modelID of [models.responses, models.chat, models.preview, models.deploymentURL, models.gateway, models.nonAzure]) {
+          const model = required(yield* service.get(Provider.ID.azure, modelID))
+          expect(model.settings?.transport).toBeUndefined()
         }
       }),
     ),
   )
-
 })

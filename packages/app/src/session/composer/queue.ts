@@ -3,12 +3,14 @@ import { createStore } from "solid-js/store"
 import { useMutation } from "@tanstack/solid-query"
 import type { SessionInboxInfo } from "@opencode/client/promise"
 import { SessionMessage } from "@opencode/schema/session-message"
+import { Skill } from "@opencode/schema/skill"
 import type { ComposerDelivery } from "@/composer/adapter"
 import type { ComposerStateTarget } from "@/composer/submission-state"
-import type { ImageAttachmentPart, Prompt } from "@/composer/state"
-import { clonePrompt, promptLength } from "@/composer/prompt-parts"
+import type { ImageAttachmentPart, PathAttachmentPart, Prompt } from "@/composer/state"
+import { appendPrompt, clonePrompt, isAttachment, promptLength } from "@/composer/prompt-parts"
 import { buildPromptRequest } from "@/composer/request"
-import { blobDataUrl } from "@/runtime/persistence/drafts"
+import { blobDataUrl, createLegacyBlobReference } from "@/runtime/persistence/drafts"
+import { readPromptPresentation } from "@/composer/comment-note"
 import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { useWorkspaceLocation } from "@/workspaces/location"
@@ -41,6 +43,7 @@ export function createSessionQueue(input: {
     mutationFn: async (
       change:
         | { type: "reorder"; inboxIDs: string[] }
+        | { type: "undo"; item: QueuedPrompt; prompt: Prompt }
         | {
             type: "edit"
             inboxIDs: string[]
@@ -53,6 +56,16 @@ export function createSessionQueue(input: {
           },
     ) => {
       if (change.type === "reorder") return rewrite(change.inboxIDs)
+      if (change.type === "undo") {
+        await server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: change.item.id })
+        const draft = input.draft.current()
+        const prompt = promptLength(draft)
+          ? appendPrompt(draft, change.prompt)
+          : [...change.prompt, ...draft.filter(isAttachment)]
+        input.draft.set(prompt, promptLength(prompt))
+        input.restoreFocus(promptLength(prompt))
+        return
+      }
       const replacement = await editedPromptInput(
         input.sessionID,
         location().directory,
@@ -130,11 +143,28 @@ export function createSessionQueue(input: {
   }
   const steer = (id: string) => {
     if (state.editing?.id === id) cancelEdit()
-    return server.api.session.inbox.steer({ sessionID: input.sessionID, inboxID: id }).catch(() => notify())
+    return server.api.session.inbox
+      .update({ sessionID: input.sessionID, inboxID: id, delivery: "steer" })
+      .catch(() => notify())
   }
   const remove = (id: string) => {
     if (state.editing?.id === id) cancelEdit()
     return server.api.session.inbox.cancel({ sessionID: input.sessionID, inboxID: id }).catch(() => notify())
+  }
+  const undo = (id: string) => {
+    if (mutation.isPending || state.editing) return
+    const item = queued().find((entry) => entry.id === id)
+    if (!item) return
+    if (input.draft.mode.current() !== "normal") {
+      showToast({ title: language.t("session.queue.undoShell") })
+      return
+    }
+    const prompt = queuedPromptUndoDraft(item)
+    if (!prompt) {
+      showToast({ title: language.t("session.queue.undoUnavailable") })
+      return
+    }
+    mutation.mutate({ type: "undo", item, prompt })
   }
   const reorder = (inboxIDs: string[]) => {
     if (mutation.isPending) return Promise.resolve()
@@ -159,7 +189,10 @@ export function createSessionQueue(input: {
     })
     const text = queuedPromptText(item)
     input.draft.mode.set("normal")
-    input.draft.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
+    input.draft.set(
+      [{ type: "text", content: text, start: 0, end: text.length }, ...queuedPromptAttachments(item)],
+      text.length,
+    )
     input.restoreFocus(text.length)
     return true
   }
@@ -179,9 +212,15 @@ export function createSessionQueue(input: {
     if (!editing || mutation.isPending) return
     const prompt = clonePrompt(input.draft.current())
     const text = prompt.map((part) => ("content" in part ? part.content : "")).join("")
-    if (!text.trim() && !prompt.some((part) => part.type === "image")) return cancelEdit()
+    const attachments = prompt.filter(isAttachment)
+    if (!text.trim() && !attachments.length) return cancelEdit()
     const item = queued().find((entry) => entry.id === editing.id)
-    const pristine = item && text.trim() === queuedPromptText(item) && !prompt.some((part) => part.type === "image")
+    const original = item ? queuedPromptAttachments(item) : []
+    const pristine =
+      item &&
+      text.trim() === queuedPromptText(item) &&
+      attachments.length === original.length &&
+      attachments.every((attachment, index) => attachment.id === original[index].id)
     if (pristine && delivery === "queue") return cancelEdit()
     mutation.mutate({
       type: "edit",
@@ -214,9 +253,11 @@ export function createSessionQueue(input: {
     editFirst,
     rows,
     busy: () => mutation.isPending,
+    undoing: () => mutation.isPending && mutation.variables?.type === "undo",
     working: input.working,
     steer,
     remove,
+    undo,
     edit,
     reorder,
   }
@@ -227,7 +268,7 @@ export type SessionQueue = ReturnType<typeof createSessionQueue>
 // The slice of the queue the panel renders and drives.
 export type SessionQueueView = Pick<
   SessionQueue,
-  "rows" | "editing" | "working" | "busy" | "steer" | "remove" | "edit" | "reorder"
+  "rows" | "editing" | "working" | "busy" | "steer" | "remove" | "undo" | "edit" | "reorder"
 >
 
 export function queuedPromptRows(items: QueuedPrompt[], replacement?: { original: string; replacement: string }) {
@@ -237,7 +278,8 @@ export function queuedPromptRows(items: QueuedPrompt[], replacement?: { original
     .map((item) => ({
       id: item.id,
       text: queuedPromptText(item),
-      attachments: item.payload.files?.length ?? 0,
+      attachments:
+        (item.payload.files?.length ?? 0) + (readPromptPresentation(item.payload.metadata)?.attachments.length ?? 0),
     }))
 }
 
@@ -246,12 +288,128 @@ export function queuedPromptText(item: QueuedPrompt) {
   return typeof display === "string" && display.length > 0 ? display : item.payload.text
 }
 
+// Inline attachments are the files the composer added itself, so they return
+// to it as image parts that an edit can remove or extend, and path references
+// return as path parts. Mentions and `file://` context stay in the payload; see
+// editedPromptInput.
+export function queuedPromptAttachments(item: QueuedPrompt): (ImageAttachmentPart | PathAttachmentPart)[] {
+  return [
+    ...(item.payload.files ?? [])
+      .filter((file) => isComposerAttachment(file))
+      .map(
+        (file, index): ImageAttachmentPart => ({
+          type: "image",
+          id: `${item.id}:file:${index}`,
+          filename: file.name ?? "attachment",
+          mime: file.mime,
+          blob: createLegacyBlobReference(`data:${file.mime};base64,${file.data}`),
+        }),
+      ),
+    ...(readPromptPresentation(item.payload.metadata)?.attachments ?? []).map(
+      (file, index): PathAttachmentPart => ({
+        type: "path",
+        id: `${item.id}:path:${index}`,
+        filename: file.name,
+        mime: file.mime,
+        path: file.path,
+      }),
+    ),
+  ]
+}
+
+// Use the full model-visible text so comment notes and path references remain
+// in the draft. Convert mentioned files, agents, and skills back into editor
+// parts; a detached draft cannot represent non-mentioned file context.
+export function queuedPromptUndoDraft(item: QueuedPrompt): Prompt | undefined {
+  if (
+    item.payload.files?.some((file) => !isComposerAttachment(file) && !file.mention) ||
+    item.payload.agents?.some((agent) => !agent.mention) ||
+    item.payload.skills?.some((skill) => !skill.mention)
+  )
+    return
+  const text = item.payload.text
+  const references = [
+    ...(item.payload.files ?? []).flatMap((file) =>
+      file.mention
+        ? [
+            {
+              type: "file" as const,
+              content: file.mention.text,
+              start: file.mention.start,
+              end: file.mention.end,
+              path: file.name ?? file.mention.text.replace(/^@/, ""),
+              filename: file.name,
+              mime: file.mime,
+              url: `data:${file.mime};base64,${file.data}`,
+            },
+          ]
+        : [],
+    ),
+    ...(item.payload.agents ?? []).flatMap((agent) =>
+      agent.mention
+        ? [
+            {
+              type: "agent" as const,
+              content: agent.mention.text,
+              start: agent.mention.start,
+              end: agent.mention.end,
+              name: agent.name,
+            },
+          ]
+        : [],
+    ),
+    ...(item.payload.skills ?? []).flatMap((skill) =>
+      skill.mention
+        ? [
+            {
+              type: "skill" as const,
+              content: skill.mention.text,
+              start: skill.mention.start,
+              end: skill.mention.end,
+              id: Skill.ID.make(skill.id),
+              name: Skill.Name.make(skill.name),
+            },
+          ]
+        : [],
+    ),
+  ].sort((left, right) => left.start - right.start)
+  if (
+    references.some(
+      (part, index) =>
+        part.start < (references[index - 1]?.end ?? 0) || text.slice(part.start, part.end) !== part.content,
+    )
+  )
+    return
+  const parts: Prompt = references.flatMap((part, index) => {
+    const start = references[index - 1]?.end ?? 0
+    return [
+      ...(part.start > start
+        ? [{ type: "text" as const, content: text.slice(start, part.start), start, end: part.start }]
+        : []),
+      part,
+    ]
+  })
+  const start = references.at(-1)?.end ?? 0
+  return [
+    ...parts,
+    ...(text.length > start || !parts.length
+      ? [{ type: "text" as const, content: text.slice(start), start, end: text.length }]
+      : []),
+    ...queuedPromptAttachments(item).filter((part) => part.type === "image"),
+  ]
+}
+
+function isComposerAttachment(file: NonNullable<QueuedPrompt["payload"]["files"]>[number]) {
+  return !file.mention && file.source.type === "inline"
+}
+
 // Confirming an edit submits the current composer content as the replacement:
-// mentions and images added during the edit are parsed like a normal
-// submission, the original's stored attachments are preserved, and the
-// review-comment notes appended to the original's model-visible text survive.
-// Ambient composer context (open review comments) stays out: it belongs to
-// the next fresh prompt, not to a queued edit.
+// mentions and attachments are parsed like a normal submission, so removed
+// attachments drop and added ones join. Stored file mentions and context files
+// the composer cannot show are preserved, and the review-comment notes appended
+// to the original's model-visible text survive. Ambient composer context (open
+// review comments) stays out: it belongs to the next fresh prompt, not to a
+// queued edit.
 async function editedPromptInput(
   sessionID: string,
   directory: string,
@@ -297,16 +455,18 @@ async function editedPromptInput(
     sessionID,
     text: request.text + notes,
     files: [
-      ...(payload?.files?.map((file) => ({
-        uri: `data:${file.mime};base64,${file.data}`,
-        name: file.name,
-        description: file.description,
-        mention: mention(file.mention),
-      })) ?? []),
+      ...(payload?.files
+        ?.filter((file) => !isComposerAttachment(file))
+        .map((file) => ({
+          uri: `data:${file.mime};base64,${file.data}`,
+          name: file.name,
+          description: file.description,
+          mention: mention(file.mention),
+        })) ?? []),
       ...request.files.map((file) => ({ uri: file.uri, name: file.name, mention: file.mention })),
     ],
     agents: agents.map((agent) => ({ name: agent.name, mention: mention(agent.mention) })),
     skills: skills.map((skill) => ({ id: skill.id, mention: mention(skill.mention) })),
-    metadata: { ...payload?.metadata, displayText: request.displayText },
+    metadata: { ...payload?.metadata, displayText: request.displayText, attachments: request.attachments },
   }
 }

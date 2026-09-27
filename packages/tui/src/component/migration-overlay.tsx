@@ -3,6 +3,7 @@ import { useClient } from "../context/client"
 import { useTheme } from "../context/theme"
 import { SplitBorder } from "../ui/border"
 import { useToast } from "../ui/toast"
+import { errorMessage } from "../util/error"
 import { Spinner } from "./spinner"
 
 type Progress = { label: string; numerator?: number; denominator?: number }
@@ -10,7 +11,7 @@ type Progress = { label: string; numerator?: number; denominator?: number }
 export function MigrationOverlay() {
   const client = useClient()
   const toast = useToast()
-  const theme = useTheme("overlay")
+  const theme = useTheme()
   const [progress, setProgress] = createSignal<Progress>()
   const abort = new AbortController()
 
@@ -30,7 +31,7 @@ export function MigrationOverlay() {
       toast.show({
         variant: "error",
         title: "Data migration failed",
-        message: error instanceof Error ? error.message : String(error),
+        message: errorMessage(error),
         duration: 10_000,
       })
     })
@@ -52,16 +53,16 @@ export function MigrationOverlay() {
           top={1}
           right={2}
           flexDirection="row"
-          backgroundColor={theme.background.default}
+          backgroundColor={theme.background.raised.high}
           border={["left"]}
-          borderColor={theme.text.feedback.info.default}
+          borderColor={theme.text.feedback.info.base}
           customBorderChars={SplitBorder.customBorderChars}
           paddingLeft={2}
           paddingRight={2}
           paddingTop={1}
           paddingBottom={1}
         >
-          <Spinner color={theme.text.feedback.info.default}>
+          <Spinner color={theme.text.feedback.info.base}>
             {value().label}
             {count(value())}
           </Spinner>

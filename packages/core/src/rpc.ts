@@ -119,7 +119,7 @@ const layer = Layer.effect(
       )
       const result = yield* Effect.suspend(() => {
         // The heterogeneous registry erases handlers after their selected schema validates input.
-        const execution: Effect.Effect<unknown, unknown> = Reflect.apply(handler, undefined, [parsed, callContext])
+        const execution: Effect.Effect<unknown, unknown> = handler(parsed, callContext)
         return execution
       }).pipe(
         Effect.catch((error) => encodeError(method, error)),

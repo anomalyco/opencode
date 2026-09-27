@@ -45,9 +45,7 @@ const context = createSimpleContext({
       const id = current()?.project.id
       if (!id || serverSDK.connection.status() !== "connected") return
       // Showing a Location is the demand for its project's worktree inventory (workspace styling, picker).
-      // Key it by the metadata root so the result merges into the same global project record.
-      const root = server.ctx.sync.data.project.find((project) => project.id === id)?.worktree
-      if (root) void server.ctx.sync.worktrees.load(root)
+      void server.ctx.sync.worktrees.list(id).then(() => server.ctx.sync.worktrees.refresh(id))
     })
 
     const location = createMemo(() => serverSDK.ensureDirSdkContext(current()?.directory ?? ref().directory))

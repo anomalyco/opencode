@@ -1,4 +1,4 @@
-import type { CliRenderer, Renderable } from "@opentui/core"
+import { ImageRenderable, type CliRenderer, type Renderable } from "@opentui/core"
 import {
   createMockKeys,
   createMockMouse,
@@ -7,7 +7,7 @@ import {
   type MockInput,
   type MockMouse,
 } from "@opentui/core/testing"
-import { Effect, Schema } from "effect"
+import { Effect, Encoding, Schema } from "effect"
 import { SimulationProtocol } from "../protocol"
 import { SimulationRenderer } from "./renderer"
 import { SimulationSemantics } from "./semantics"
@@ -50,7 +50,9 @@ function all(renderable: Renderable): Renderable[] {
 }
 
 function mouseListeners(renderable: Renderable) {
+  // oxlint-disable-next-line no-restricted-globals -- OpenTUI does not expose listener state through its public API.
   const general = Reflect.get(renderable, "_mouseListener")
+  // oxlint-disable-next-line no-restricted-globals -- OpenTUI does not expose listener state through its public API.
   const specific = Reflect.get(renderable, "_mouseListeners")
   return Boolean(general) || (specific && typeof specific === "object" && Object.keys(specific).length > 0)
 }
@@ -87,6 +89,7 @@ export function createHarness(renderer: CliRenderer): Harness {
     // captureCharFrame follows the test renderer's output sink. Recording
     // redirects that sink to the timeline, so read the live render buffer
     // instead; it is also the source used by screenshots.
+    // oxlint-disable-next-line no-restricted-globals -- OpenTUI does not expose the live render buffer publicly.
     screen: () => decoder.decode((Reflect.get(renderer, "currentRenderBuffer") as RenderBuffer).getRealCharBytes()),
   }
 }
@@ -162,8 +165,54 @@ export const capture = Effect.fn("SimulationActions.capture")(function* (harness
         width: span.width,
       })),
     })),
+    images: captureImages(harness.renderer),
   } satisfies SimulationProtocol.Frontend.CapturedFrame
 })
+
+function captureImages(renderer: CliRenderer): SimulationProtocol.Frontend.CapturedImage[] {
+  return all(renderer.root).flatMap((renderable) => {
+    if (!(renderable instanceof ImageRenderable) || !renderable.visible || renderable.isDestroyed || !renderable.image)
+      return []
+    const fitted = renderable.fit === "cover"
+      ? { width: renderable.width, height: renderable.height }
+      : renderable.getFittedSize(renderable.width, renderable.height)
+    if (fitted.width <= 0 || fitted.height <= 0) return []
+    const x = renderable.screenX + Math.floor((renderable.width - fitted.width) / 2)
+    const y = renderable.screenY + Math.floor((renderable.height - fitted.height) / 2)
+    let source = renderable.image
+    let extracted: typeof source | undefined
+    if (renderable.fit === "cover") {
+      const targetAspect = renderable.width / (renderable.height * renderable.cellAspectRatio)
+      const sourceAspect = source.width / source.height
+      const width = sourceAspect > targetAspect ? Math.max(1, Math.round(source.height * targetAspect)) : source.width
+      const height = sourceAspect > targetAspect ? source.height : Math.max(1, Math.round(source.width / targetAspect))
+      extracted = source.extract({
+        left: Math.floor((source.width - width) / 2),
+        top: Math.floor((source.height - height) / 2),
+        width,
+        height,
+      })
+      source = extracted
+    }
+    try {
+      const raw = source.raw("rgba8")
+      const rgba = new Uint8Array(raw.width * raw.height * 4)
+      for (let row = 0; row < raw.height; row++)
+        rgba.set(raw.data.subarray(row * raw.stride, row * raw.stride + raw.width * 4), row * raw.width * 4)
+      return [{
+        x,
+        y,
+        width: fitted.width,
+        height: fitted.height,
+        pixelWidth: raw.width,
+        pixelHeight: raw.height,
+        rgba: Encoding.encodeBase64(rgba),
+      }]
+    } finally {
+      extracted?.dispose()
+    }
+  })
+}
 
 export const execute = Effect.fn("SimulationActions.execute")(function* (harness: Harness, action: Action) {
   switch (action.type) {

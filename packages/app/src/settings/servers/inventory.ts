@@ -7,13 +7,18 @@ import { sshName, type SshItem } from "@/servers/ssh/types"
 import type { ServerCtx } from "@/runtime/server/runtime"
 import { pathKey } from "@/workspaces/path-key"
 
-export function settingsProjects(context: ServerCtx) {
+export function settingsProjects(context: {
+  projects: Pick<ServerCtx["projects"], "list" | "closed">
+  sync: { data: Pick<ServerCtx["sync"]["data"], "project"> }
+}) {
   const tracked = context.projects.list()
   const paths = new Set(tracked.map((project) => pathKey(project.worktree)))
+  const closed = new Set(context.projects.closed().map(pathKey))
   return [
     ...tracked,
+    // Inventory reads must not allocate directory stores: async cache hydration can trigger an eviction/reload loop.
     ...context.sync.data.project
-      .filter((project) => !paths.has(pathKey(project.worktree)))
+      .filter((project) => !paths.has(pathKey(project.worktree)) && !closed.has(pathKey(project.worktree)))
       .map((project) => ({ ...project, expanded: false })),
   ]
 }
@@ -67,6 +72,14 @@ export function settingsServers(
         }),
       ),
   ]
+}
+
+// A restored settings route must not be redirected against a partial list: WSL and SSH servers load asynchronously.
+export function useSettingsServersLoaded() {
+  const servers = useServers()
+  const wsl = useWslServers()
+  const ssh = useSsh()
+  return () => servers.hydrated() && !wsl.isLoading && !ssh.loading
 }
 
 export function useSettingsServers() {

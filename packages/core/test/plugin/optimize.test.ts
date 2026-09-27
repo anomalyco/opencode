@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { SystemPart } from "@opencode/ai"
 import { Agent } from "@opencode/core/agent"
-import { Catalog } from "@opencode/core/catalog"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginHost } from "@opencode/core/plugin/host"
@@ -10,7 +9,7 @@ import { Session } from "@opencode/core/session"
 import { SessionSystemPrompt } from "@opencode/core/session/system-prompt"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Model } from "@opencode/schema/model"
-import { Provider } from "@opencode/schema/provider"
+import { Provider } from "@opencode/core/provider"
 import { Effect } from "effect"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -59,13 +58,13 @@ describe("OptimizePlugin", () => {
 
   it.effect("selects model-lab prompts through session context hooks", () =>
     Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
+      const catalog = yield* Provider.Service
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
       yield* catalog.transform((editor) => {
-        for (const id of ["gpt-5", "gpt-4.1", "gpt-5-codex", "gpt-6-astra"])
-          editor.model.update(Provider.ID.make("test"), Model.ID.make(id), () => {})
-        editor.model.update(Provider.ID.make("test"), Model.ID.make("meta/muse-spark-1.1"), (model) => {
+        for (const id of ["gpt-5", "gpt-4.1", "gpt-5-codex", "gpt-6", "gpt-6-astra", "gpt-5-astra"])
+          editor.models.update(Provider.ID.make("test"), Model.ID.make(id), () => {})
+        editor.models.update(Provider.ID.make("test"), Model.ID.make("meta/muse-spark-1.1"), (model) => {
           model.name = "Muse Spark"
         })
       })
@@ -77,7 +76,9 @@ describe("OptimizePlugin", () => {
         ["gpt-4.1", PROMPT_GPT],
         ["o3", fallback],
         ["gpt-5-codex", PROMPT_GPT],
+        ["gpt-6", PROMPT_GPT],
         ["gpt-6-astra", PROMPT_ASTRA],
+        ["gpt-5-astra", PROMPT_ASTRA],
         ["gemini-2.5-pro", fallback],
         ["claude-sonnet-4", appended],
         ["kimi-k2", PROMPT_KIMI],
@@ -109,11 +110,11 @@ describe("OptimizePlugin", () => {
 
   it.effect("renders the OpenAI prompt without changing tools or project instructions", () =>
     Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
+      const catalog = yield* Provider.Service
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
       yield* catalog.transform((editor) =>
-        editor.model.update(Provider.ID.make("test"), Model.ID.make("gpt-5"), () => {}),
+        editor.models.update(Provider.ID.make("test"), Model.ID.make("gpt-5"), () => {}),
       )
       yield* OptimizePlugin.OpenAIPlugin.effect(pluginHost)
       const event = context("gpt-5")
@@ -133,11 +134,11 @@ describe("OptimizePlugin", () => {
 
   it.effect("appends the Anthropic prompt to the baseline without changing tools or project instructions", () =>
     Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
+      const catalog = yield* Provider.Service
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
       yield* catalog.transform((editor) =>
-        editor.model.update(Provider.ID.make("test"), Model.ID.make("claude-sonnet-4"), () => {}),
+        editor.models.update(Provider.ID.make("test"), Model.ID.make("claude-sonnet-4"), () => {}),
       )
       yield* OptimizePlugin.AnthropicPlugin.effect(pluginHost)
       const event = context("claude-sonnet-4")
@@ -221,7 +222,7 @@ describe("OptimizePlugin", () => {
 
   it.effect("uses catalog names in Meta prompts for Muse model IDs", () =>
     Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
+      const catalog = yield* Provider.Service
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
       const cases = [
@@ -232,7 +233,7 @@ describe("OptimizePlugin", () => {
       ] as const
       yield* catalog.transform((editor) => {
         for (const [id, name] of cases)
-          editor.model.update(Provider.ID.make("test"), Model.ID.make(id), (model) => {
+          editor.models.update(Provider.ID.make("test"), Model.ID.make(id), (model) => {
             model.name = name
           })
       })
@@ -315,12 +316,13 @@ describe("OptimizePlugin", () => {
 
   it.effect("preserves tools for model aliases and catalog-ID prompt selection by default", () =>
     Effect.gen(function* () {
-      const catalog = yield* Catalog.Service
+      const catalog = yield* Provider.Service
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
       const cases = [
         ["gpt-5-alias", "custom-model", undefined, PROMPT_GPT],
-        ["gpt-6-alias", "custom-model", undefined, PROMPT_ASTRA],
+        ["gpt-6-alias", "custom-model", undefined, PROMPT_GPT],
+        ["gpt-5-astra-alias", "custom-model", undefined, PROMPT_ASTRA],
         ["openai-alias", "GPT-5", undefined, fallback],
         ["codex-family-alias", "custom-deployment", "GPT-CODEX", fallback],
         ["astra-api-alias", "gpt-6-astra", undefined, fallback],
@@ -331,7 +333,7 @@ describe("OptimizePlugin", () => {
       ] as const
       yield* catalog.transform((editor) => {
         for (const [id, modelID, family] of cases)
-          editor.model.update(Provider.ID.make("test"), Model.ID.make(id), (model) => {
+          editor.models.update(Provider.ID.make("test"), Model.ID.make(id), (model) => {
             model.modelID = Model.ID.make(modelID)
             if (family) model.family = Model.Family.make(family)
           })

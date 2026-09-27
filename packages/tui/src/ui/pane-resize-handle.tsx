@@ -6,7 +6,7 @@ export function PaneResizeHandle(props: {
   left: number
   highlight?: "left" | "right"
 }) {
-  const theme = useTheme("elevated")
+  const theme = useTheme()
 
   return (
     <box
@@ -25,7 +25,7 @@ export function PaneResizeHandle(props: {
         height="100%"
         marginLeft={props.highlight === "right" ? 1 : 0}
         backgroundColor={
-          props.resize.hovered() || props.resize.resizing() ? theme.background.action.primary.hovered : undefined
+          props.resize.hovered() || props.resize.resizing() ? theme.background.raised.high : undefined
         }
       />
     </box>

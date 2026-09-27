@@ -1,10 +1,39 @@
 import { describe, expect, test } from "bun:test"
 import { AISDKNative } from "@opencode/core/aisdk-native"
 
-const map = (packageName: string, settings: Readonly<Record<string, unknown>>, modelID = "test-model") =>
-  AISDKNative.map({ packageName, settings, modelID, providerID: "test-provider" })
+function map(
+  packageName: string,
+  settings: Readonly<Record<string, unknown>>,
+  modelID = "test-model",
+  providerID = "test-provider",
+) {
+  const target: {
+    package?: string
+    settings?: Record<string, unknown>
+    headers?: Record<string, string>
+    body?: Record<string, unknown>
+  } = {
+    package: `aisdk:${packageName}`,
+    settings: { ...settings },
+  }
+  AISDKNative.rewrite(target, { specifier: target.package, providerID, modelID })
+  return target.package?.startsWith("aisdk:") ? undefined : target
+}
 
 describe("AISDKNative", () => {
+  test("keeps Cloudflare AI Gateway models on its native gateway package", () => {
+    for (const packageName of [
+      "ai-gateway-provider",
+      "@ai-sdk/openai",
+      "@ai-sdk/anthropic",
+      "@ai-sdk/openai-compatible",
+    ]) {
+      expect(map(packageName, {}, "openai/gpt-5.4", "cloudflare-ai-gateway")?.package).toBe(
+        "@opencode/ai/providers/cloudflare-ai-gateway",
+      )
+    }
+  })
+
   test("maps OpenAI-family packages and request options to native providers", () => {
     expect(
       map("@ai-sdk/openai", {
@@ -216,6 +245,17 @@ describe("AISDKNative", () => {
       additionalModelRequestFields: {
         reasoningConfig: { type: "enabled", maxReasoningEffort: "max" },
       },
+    })
+
+    expect(
+      map(
+        "@ai-sdk/amazon-bedrock",
+        { reasoningConfig: { type: "enabled", budgetTokens: 12_000 } },
+        "anthropic.claude-sonnet-4-5-20250929-v1:0",
+      ),
+    ).toEqual({
+      package: "@opencode/ai/providers/amazon-bedrock",
+      settings: { thinking: { type: "enabled", budgetTokens: 12_000 } },
     })
 
     // gpt-oss (Harmony) keeps the flat chat-completions field.

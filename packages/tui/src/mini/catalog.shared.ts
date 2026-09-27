@@ -5,13 +5,11 @@ import type {
   ModelListOutput,
   OpenCodeClient,
   ProviderListOutput,
-  SkillListOutput,
 } from "@opencode/client/promise"
 import type { RunAgent, RunCommand, RunProvider, RunReference } from "./types"
 
 type CurrentAgent = AgentListOutput["data"][number]
 type CurrentCommand = CommandListOutput["data"][number]
-type CurrentSkill = SkillListOutput["data"][number]
 type CurrentProvider = ProviderListOutput["data"][number]
 type CurrentModel = ModelListOutput["data"][number]
 
@@ -19,7 +17,6 @@ function location(ref: LocationRef) {
   return {
     location: {
       directory: ref.directory,
-      workspace: ref.workspaceID,
     },
   }
 }
@@ -44,14 +41,6 @@ function runCommand(input: CurrentCommand): RunCommand {
   return {
     name: input.name,
     description: input.description,
-  }
-}
-
-function runSkill(input: CurrentSkill): RunCommand {
-  return {
-    name: input.id,
-    description: input.description,
-    source: "skill",
   }
 }
 
@@ -96,11 +85,8 @@ export async function loadRunCommands(
   ref: LocationRef,
   signal?: AbortSignal,
 ): Promise<RunCommand[]> {
-  const [commands, skills] = await Promise.all([
-    sdk.command.list(location(ref), ...requestOptions(signal)),
-    sdk.skill.list(location(ref), ...requestOptions(signal)),
-  ])
-  return [...commands.data.map(runCommand), ...skills.data.filter((skill) => skill.slash !== false).map(runSkill)]
+  const commands = await sdk.command.list(location(ref), ...requestOptions(signal))
+  return commands.data.map(runCommand)
 }
 
 export async function loadRunReferences(

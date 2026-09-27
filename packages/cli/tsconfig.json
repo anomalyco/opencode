@@ -7,5 +7,6 @@
     "lib": ["ESNext", "DOM", "DOM.Iterable", "DOM.AsyncIterable"],
     "noUncheckedIndexedAccess": false
   },
-  "exclude": ["dist", "dist-node"]
+  "exclude": ["dist", "dist-node"],
+  "references": [{ "path": "../core" }]
 }

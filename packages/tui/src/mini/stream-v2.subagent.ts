@@ -469,7 +469,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
     for (let offset = 0; offset < messageIDs.length; offset += FAMILY_DISCOVERY_CONCURRENCY) {
       const batch = messageIDs.slice(offset, offset + FAMILY_DISCOVERY_CONCURRENCY)
       const messages = await Promise.allSettled(
-        batch.map((messageID) => sdk.session.message({ sessionID: child.sessionID, messageID }, { signal })),
+        batch.map((messageID) => sdk.session.message.get({ sessionID: child.sessionID, messageID }, { signal })),
       )
       if (!blockerCurrent(child, epoch, signal)) return permissions
       if (
@@ -541,7 +541,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
         replayBlockerEvents(child, "permission")
         input.emit()
       }),
-      sdk.form.list({ sessionID: child.sessionID }, { signal }).then((forms) => {
+      sdk.session.form.list({ sessionID: child.sessionID }, { signal }).then((forms) => {
         if (!blockerCurrent(child, epoch, signal)) return
         child.forms = forms
         replayBlockerEvents(child, "form")

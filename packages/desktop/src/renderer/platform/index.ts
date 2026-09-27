@@ -1,9 +1,4 @@
-import {
-  ACCEPTED_FILE_EXTENSIONS,
-  ServerConnection,
-  type Platform,
-  type UpdaterPlatform,
-} from "@opencode/app/desktop"
+import { ServerConnection, type Platform, type UpdaterPlatform } from "@opencode/app/desktop"
 import type { ElectronAPI } from "../api-types"
 import { setPinchZoomEnabled, webviewZoom } from "../window/zoom"
 import { windowFullscreen } from "../window/fullscreen"
@@ -29,7 +24,7 @@ export function createDesktopPlatform(
     os,
     version: windowState.version,
     windowID: windowState.id,
-    ...createDesktopFiles(api, os, ACCEPTED_FILE_EXTENSIONS),
+    ...createDesktopFiles(api, os),
     ...createDesktopStorage(api),
     browserPane: {
       register(target, onEvent) {
@@ -51,6 +46,10 @@ export function createDesktopPlatform(
                 .catch(() => undefined)
           },
           command: (command) => ready.then(() => api.browserPane.request({ type: "command", bindingID, command })),
+          capture: (tabID) =>
+            ready
+              .then(() => api.browserPane.capture(bindingID, tabID))
+              .then((data) => data && new Blob([data], { type: "image/jpeg" })),
           close() {
             if (closed) return
             closed = true
@@ -84,6 +83,8 @@ export function createDesktopPlatform(
     windowFullscreen,
     getPinchZoomEnabled: () => api.getPinchZoomEnabled(),
     setPinchZoomEnabled,
+    getKeepScreenActive: () => api.getKeepScreenActive(),
+    setKeepScreenActive: (enabled) => api.setKeepScreenActive(enabled),
     onDragCancel: (callback) => {
       window.addEventListener(DragCancelEvent, callback)
       return () => window.removeEventListener(DragCancelEvent, callback)
@@ -91,6 +92,10 @@ export function createDesktopPlatform(
     runDesktopMenuAction: createDesktopMenuAction(api),
     checkAppExists: async (appName) => {
       return api.checkAppExists(appName)
+    },
+    pair: {
+      info: () => api.pairInfo(),
+      code: () => api.pairCode(),
     },
   }
 }

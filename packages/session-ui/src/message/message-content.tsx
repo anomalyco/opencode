@@ -26,8 +26,8 @@ import type {
   SessionMessageCompaction,
   SessionMessageUser,
 } from "@opencode/client/promise"
-import type { SessionUserActions, SessionUserComment } from "../actions"
-import { typeLabel } from "../components/message-file"
+import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
+import { attached, typeLabel } from "../components/message-file"
 
 export async function writeClipboard(text: string): Promise<boolean> {
   const body = typeof document === "undefined" ? undefined : document.body
@@ -208,12 +208,14 @@ export function CurrentUserMessageDisplay(props: {
   model: SessionMessageAssistant["model"]
   actions?: SessionUserActions
   comments?: SessionUserComment[]
+  references?: SessionUserAttachmentReference[]
 }) {
   const data = useData()
   const dialog = useDialog()
   const i18n = useI18n()
   const [state, setState] = createStore({ copied: false, reverting: false })
-  const attachments = createMemo(() => (props.message.files ?? []).filter((file) => !file.mention))
+  const attachments = createMemo(() => (props.message.files ?? []).filter(attached))
+  const references = createMemo(() => props.references ?? [])
   const inlineFiles = createMemo(() => (props.message.files ?? []).filter((file) => !!file.mention))
   const agents = createMemo(() => props.message.agents ?? [])
   const comments = createMemo(() => props.comments ?? [])
@@ -242,8 +244,15 @@ export function CurrentUserMessageDisplay(props: {
     }
   }
   const renderAttachments = () => (
-    <Show when={attachments().length > 0}>
+    <Show when={attachments().length > 0 || references().length > 0}>
       <div data-slot="user-message-attachments">
+        <For each={references()}>
+          {(file) => (
+            <AttachmentCard title={file.name} hover={file.path}>
+              {typeLabel(file.name, file.mime, i18n.t("ui.common.file"))}
+            </AttachmentCard>
+          )}
+        </For>
         <For each={attachments()}>
           {(file) => {
             const url = () => (file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`)

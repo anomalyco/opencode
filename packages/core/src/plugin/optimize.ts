@@ -16,7 +16,7 @@ import PROMPT_ANTHROPIC from "./system-prompt/anthropic.txt"
 export const OpenAIPlugin = make("opencode.prompt.openai", (model) => {
   const id = model.id.toLowerCase()
   if (!id.includes("gpt")) return undefined
-  return id.includes("gpt-6") ? PROMPT_ASTRA : PROMPT_GPT
+  return id.includes("astra") ? PROMPT_ASTRA : PROMPT_GPT
 })
 
 export const AnthropicPlugin = make(
@@ -72,7 +72,7 @@ function make(
       const hook = (event: SessionHooks["context"]) =>
         Effect.gen(function* () {
           const model =
-            (yield* ctx.catalog.model.list()).data.find(
+            (yield* ctx.model.list()).data.find(
               (model) => model.providerID === event.model.providerID && model.id === event.model.id,
             ) ?? Model.Info.default(event.model.providerID, event.model.id)
           // Curate tools before rendering their guidance, including for agents with a custom system prompt.

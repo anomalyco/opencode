@@ -8,19 +8,11 @@ export const ConfigHandler = HttpApiBuilder.group(Api, "server.config", (handler
   handlers
     .handle("config.get", () => Config.Service.use((config) => config.entries()))
     .handle(
-      "config.preferences",
-      Effect.fn(function* () {
-        const config = yield* Config.Service
-        if (!config.preferences) return yield* Effect.die(new Error("Config preferences are unavailable"))
-        return yield* config.preferences().pipe(Effect.orDie)
-      }),
-    )
-    .handle(
-      "config.updatePreferences",
+      "config.update",
       Effect.fn(function* (ctx) {
         const config = yield* Config.Service
-        if (!config.updatePreferences) return yield* Effect.die(new Error("Config preference updates are unavailable"))
-        return yield* config.updatePreferences(ctx.payload).pipe(Effect.orDie)
+        if (!config.update) return yield* Effect.die(new Error("Config updates are unavailable"))
+        return yield* config.update(ctx.payload).pipe(Effect.orDie)
       }),
     )
     .handle(

@@ -63,20 +63,20 @@ for (const size of ["typical", "large"]) {
     const source = page.locator(`[data-timeline-part-id="${sourcePart}"] [data-component="markdown"]`)
     await expect(source).toHaveAttribute("data-markdown-ready", "")
     await page.locator(`[data-slot="titlebar-tabs"] a[href="${stressSessionHref(fixture.targetID)}"]`).click()
-    await page.waitForFunction(() => Reflect.get(window, "markdownGate").held)
+    await page.waitForFunction(() => window.markdownGate.held)
     await expect(page.locator(`[data-timeline-part-id="${targetPart}"]`)).toBeAttached()
     const cdp = await page.context().newCDPSession(page)
     await cdp.send("Performance.enable")
     const before = await cdp.send("Performance.getMetrics")
-    await page.evaluate(() => Reflect.get(window, "markdownGate").arm())
+    await page.evaluate(() => window.markdownGate.arm())
     await page.locator(`[data-slot="titlebar-tabs"] a[href="${stressSessionHref(fixture.sourceID)}"]`).click()
     await expect(source).toHaveAttribute("data-markdown-ready", "")
     await expect(source.getByRole("heading", { name: "Current destination" })).toBeVisible()
     await expect(page.locator(`[data-timeline-part-id="${targetPart}"]`)).toHaveCount(0)
-    await page.waitForFunction(() => Reflect.get(window, "markdownGate").settled > 0)
+    await page.waitForFunction(() => window.markdownGate.settled > 0)
     const after = await cdp.send("Performance.getMetrics")
     const stats = await page.evaluate(() => {
-      const value = Reflect.get(window, "markdownGate")
+      const value = window.markdownGate
       return {
         admitted: value.admitted,
         responses: value.responses,

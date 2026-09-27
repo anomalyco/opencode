@@ -35,10 +35,13 @@ export function isRetryable(error: AIError) {
     case "RateLimit":
     case "ProviderInternal":
       return true
-    // HTTP transport errors carry no delivery and always retry. WebSocket marks accepted and rejected
-    // requests as final; not-sent and ambiguous (no frame observed) are still pre-output.
+    // A WebSocket acknowledgment marks delivery accepted before model output may exist.
+    // Read failures can still recover; the Step chooses retry versus continuation from durable output.
     case "Transport":
-      return error.reason.delivery !== "accepted" && error.reason.delivery !== "rejected"
+      return (
+        error.reason.delivery !== "rejected" &&
+        (error.reason.delivery !== "accepted" || error.reason.operation === "read")
+      )
     case "InvalidProviderOutput":
       return error.reason.classification === "incomplete-stream"
     // Unrecognized failures retry: classification records affirmative
@@ -52,6 +55,7 @@ export function isRetryable(error: AIError) {
     case "InvalidRequest":
     case "UnsupportedOperation":
     case "NoRoute":
+    case "Timeout":
       return false
     default: {
       const exhaustive: never = error.reason
@@ -71,7 +75,13 @@ const retryAfter = (input: Input) => {
   return undefined
 }
 
-const schedule = Schedule.max([Schedule.exponential("2 seconds"), Schedule.recurs(4)]).pipe(
+// Exponential from 2s capped at 10s per gap, for 10 retries: 2, 4, 8, then 10 × 7, about 84s of
+// waiting when every attempt fails (67–101s with jitter). `min` takes the faster schedule, so the
+// cap applies per gap; `max` with `recurs` bounds the count.
+const schedule = Schedule.max([
+  Schedule.min([Schedule.exponential("2 seconds"), Schedule.spaced("10 seconds")]),
+  Schedule.recurs(10),
+]).pipe(
   Schedule.jittered,
   Schedule.setInputType<Input>(),
   Schedule.modifyDelay(({ input, duration: delay }) => {

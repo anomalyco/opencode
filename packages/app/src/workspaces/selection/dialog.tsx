@@ -77,7 +77,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
   const home = createMemo(() => sync.data.path.home || "")
   const location = createMemo(() => {
     const current = props.location ?? fallbackPath()
-    return current ? { directory: current.directory, workspace: current.workspaceID } : undefined
+    return current ? { directory: current.directory } : undefined
   })
   const start = createMemo(
     () =>

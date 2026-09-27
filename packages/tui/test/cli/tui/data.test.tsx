@@ -18,6 +18,8 @@ import { Composer } from "../../../src/routes/session/composer"
 import { DialogProvider } from "../../../src/ui/dialog"
 import { ToastProvider } from "../../../src/ui/toast"
 import { createSessionRows, type SessionRow } from "../../../src/routes/session/rows"
+import { groupRefs } from "../../../src/routes/session/grouping/session"
+import { unwrap } from "solid-js/store"
 import { createApi, createEventStream, createFetch, directory, json, worktree } from "../../fixture/tui-client"
 import { emptyThemeSource } from "../../fixture/fixture"
 import { TestTuiContexts } from "../../fixture/tui-environment"
@@ -43,7 +45,7 @@ function emitEvent(events: ReturnType<typeof createEventStream>, event: OpenCode
   events.emit({ ...event, location: { directory } })
 }
 
-const config = createTuiResolvedConfig({ session: { terminal: false } })
+const config = createTuiResolvedConfig({}, { terminal: false })
 
 function DataProvider(props: ParentProps) {
   return (
@@ -153,7 +155,7 @@ test("syncs VCS info and applies branch updates", async () => {
   }
 })
 
-test("proactively syncs project metadata newest first", async () => {
+test("proactively syncs project metadata most recently active first", async () => {
   const events = createEventStream()
   const calls = createFetch((url) => {
     if (url.pathname !== "/api/project") return
@@ -162,14 +164,14 @@ test("proactively syncs project metadata newest first", async () => {
         id: "proj_old",
         canonical: "/old/project",
         name: "Old project",
-        time: { created: 1, updated: 1 },
+        time: { created: 1, updated: 1, active: 3 },
         sandboxes: [],
       },
       {
         id: "proj_test",
         canonical: worktree,
         name: "OpenCode",
-        time: { created: 1, updated: 2 },
+        time: { created: 1, updated: 2, active: 2 },
         sandboxes: [],
       },
     ])
@@ -197,17 +199,17 @@ test("proactively syncs project metadata newest first", async () => {
     await wait(() => data.project.get("proj_test") !== undefined)
     expect(data.project.list()).toEqual([
       {
-        id: "proj_test",
-        canonical: worktree,
-        name: "OpenCode",
-        time: { created: 1, updated: 2 },
-        sandboxes: [],
-      },
-      {
         id: "proj_old",
         canonical: "/old/project",
         name: "Old project",
-        time: { created: 1, updated: 1 },
+        time: { created: 1, updated: 1, active: 3 },
+        sandboxes: [],
+      },
+      {
+        id: "proj_test",
+        canonical: worktree,
+        name: "OpenCode",
+        time: { created: 1, updated: 2, active: 2 },
         sandboxes: [],
       },
     ])
@@ -510,6 +512,7 @@ test("truncates committed revert messages without changing lifetime usage", asyn
       type: "session.step.started",
       durable: durable(sessionID, 1),
       data: {
+        started: 1,
         sessionID,
         assistantMessageID: "msg_revert_boundary",
         agent: "build",
@@ -545,6 +548,7 @@ test("truncates committed revert messages without changing lifetime usage", asyn
       type: "session.step.started",
       durable: durable(sessionID, 3),
       data: {
+        started: 3,
         sessionID,
         assistantMessageID: "msg_revert_later",
         agent: "build",
@@ -882,6 +886,7 @@ test("completes exploration when a queued prompt is promoted", async () => {
       type: "session.step.started",
       durable: durable(sessionID),
       data: {
+        started: 1,
         sessionID,
         assistantMessageID: "message-assistant",
         agent: "build",
@@ -1082,6 +1087,79 @@ test("classifies live tool rows independently of their call ID", async () => {
   }
 })
 
+test("loads older pages until the oldest exploration group is complete before reporting sync", async () => {
+  const events = createEventStream()
+  const sessionID = "session-boundary"
+  const model = { id: "model", providerID: "provider" }
+  // One prompt, then 50 single-read steps: the 20-message first page cuts the group.
+  const history = [
+    { type: "user", id: "msg_000", text: "Explore", time: { created: 0 } },
+    ...Array.from({ length: 50 }, (_, index) => ({
+      type: "assistant",
+      id: `msg_${String(index + 1).padStart(3, "0")}`,
+      agent: "build",
+      model,
+      time: { created: index + 1, completed: index + 1 },
+      finish: "tool-calls",
+      content: [
+        {
+          type: "tool",
+          id: `read-${index}`,
+          name: "read",
+          time: { created: index + 1, completed: index + 1 },
+          state: { status: "completed", input: { path: `${index}.ts` }, content: [], metadata: {} },
+        },
+      ],
+    })),
+  ]
+  const pages: string[] = []
+  const calls = createFetch((url) => {
+    if (url.pathname !== `/api/session/${sessionID}/message`) return
+    const end = Number(url.searchParams.get("cursor") ?? history.length)
+    const start = Math.max(0, end - Number(url.searchParams.get("limit") ?? 20))
+    pages.push(`${start}-${end}`)
+    return json({ data: history.slice(start, end).toReversed(), cursor: start > 0 ? { next: String(start) } : {} })
+  }, events)
+  let rows!: ReturnType<typeof createSessionRows>
+  let client!: ReturnType<typeof useClient>
+  const synced: SessionRow[] = []
+
+  function Probe() {
+    client = useClient()
+    rows = createSessionRows(
+      () => sessionID,
+      () => synced.push(structuredClone(unwrap(rows[0]))),
+    )
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await wait(() => client.connection.status() === "connected")
+    await wait(() => synced.length > 0, 4000)
+    expect(pages).toEqual(["31-51", "11-31", "0-11"])
+    // Sync is reported only once the group's true first read is loaded.
+    expect(synced[0]).toEqual({ type: "message", messageID: "msg_000" })
+    const group = rows[1]
+    if (group?.type !== "group") throw new Error("Expected exploration group")
+    expect(group.size).toBe(50)
+    expect(groupRefs(group)[0]).toEqual({ messageID: "msg_001", partID: "read-0" })
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("removes committed revert messages from local state", async () => {
   const events = createEventStream()
   const sessionID = "session-revert"
@@ -1275,6 +1353,7 @@ test("tracks session status from active sessions and execution events", async ()
       type: "session.step.started",
       durable: durable("session-live"),
       data: {
+        started: 0,
         sessionID: "session-live",
         assistantMessageID: "message-live",
         agent: "build",
@@ -1340,6 +1419,7 @@ test("tracks session status from active sessions and execution events", async ()
       type: "session.step.started",
       durable: durable("session-failed"),
       data: {
+        started: 0,
         sessionID: "session-failed",
         assistantMessageID: "message-failed",
         agent: "build",
@@ -1411,6 +1491,7 @@ test("tracks session status from active sessions and execution events", async ()
       type: "session.step.started",
       durable: durable("session-retry", 1),
       data: {
+        started: 0,
         sessionID: "session-retry",
         assistantMessageID: "message-retry",
         agent: "build",
@@ -1441,6 +1522,7 @@ test("tracks session status from active sessions and execution events", async ()
       type: "session.step.started",
       durable: durable("session-retry", 1),
       data: {
+        started: 2_000,
         sessionID: "session-retry",
         assistantMessageID: "message-retry",
         agent: "build",
@@ -1669,7 +1751,7 @@ test("restores queued compaction from durable pending input", async () => {
     {
       id: "message-compaction-queued",
       sessionID,
-      timeCreated: 1,
+      time: { created: 1 },
       type: "compaction" as const,
       payload: {},
       delivery: "queue" as const,
@@ -1677,7 +1759,7 @@ test("restores queued compaction from durable pending input", async () => {
     {
       id: "message-compaction-later",
       sessionID,
-      timeCreated: 2,
+      time: { created: 2 },
       type: "compaction" as const,
       payload: {},
       delivery: "queue" as const,
@@ -1729,6 +1811,7 @@ test("restores queued compaction from durable pending input", async () => {
       type: "session.step.started",
       durable: durable(sessionID, 3),
       data: {
+        started: 2,
         sessionID,
         assistantMessageID: "message-assistant",
         agent: "build",
@@ -1818,7 +1901,7 @@ test("refreshes integrations after integration updates", async () => {
                 id: "openai",
                 name: "OpenAI",
                 methods: [{ type: "key" }],
-                connections: [{ type: "credential", id: "cred_openai", label: "OpenAI" }],
+                connections: [{ type: "credential", method: "key", id: "cred_openai", label: "OpenAI" }],
               },
             ],
     })
@@ -1936,7 +2019,7 @@ test("refreshes MCP resources after catalog updates", async () => {
   }
 })
 
-test("refreshes effective catalog data after catalog updates", async () => {
+test("refreshes provider and model data independently after domain updates", async () => {
   const events = createEventStream()
   const requests = { model: 0, provider: 0 }
   const calls = createFetch((url) => {
@@ -1965,8 +2048,13 @@ test("refreshes effective catalog data after catalog updates", async () => {
   try {
     await wait(() => requests.model > 0 && requests.provider > 0)
     const before = { ...requests }
-    emitEvent(events, { id: "evt_catalog", created: 0, type: "catalog.updated", data: {} })
-    await wait(() => requests.model > before.model && requests.provider > before.provider)
+    emitEvent(events, { id: "evt_provider", created: 0, type: "provider.updated", data: {} })
+    await wait(() => requests.provider > before.provider)
+    expect(requests).toEqual({ model: before.model, provider: before.provider + 1 })
+
+    emitEvent(events, { id: "evt_model", created: 0, type: "model.updated", data: {} })
+    await wait(() => requests.model > before.model)
+    expect(requests).toEqual({ model: before.model + 1, provider: before.provider + 1 })
   } finally {
     app.renderer.destroy()
   }
@@ -2068,7 +2156,6 @@ test("refreshes references after updates", async () => {
 test("keeps shell state scoped to location", async () => {
   const events = createEventStream()
   const other = "/tmp/opencode/other"
-  const workspace = "ws_other"
   let removed: URL | undefined
   const calls = createFetch((url, request) => {
     if (url.pathname === "/api/shell/sh_other" && request.method === "DELETE") {
@@ -2080,7 +2167,6 @@ test("keeps shell state scoped to location", async () => {
     return json({
       location: {
         directory: requestDirectory ?? directory,
-        workspaceID: url.searchParams.get("location[workspace]") ?? undefined,
         project: { id: "proj_test", directory: requestDirectory ?? directory },
       },
       data: [
@@ -2131,10 +2217,10 @@ test("keeps shell state scoped to location", async () => {
 
   try {
     await wait(() => data.shell.list().some((shell) => shell.id === "sh_default"))
-    await data.shell.sync({ directory: other, workspaceID: workspace })
+    await data.shell.sync({ directory: other })
 
     expect(data.shell.list().map((shell) => shell.id)).toEqual(["sh_default"])
-    expect(data.shell.list({ directory: other, workspaceID: workspace }).map((shell) => shell.id)).toEqual(["sh_other"])
+    expect(data.shell.list({ directory: other }).map((shell) => shell.id)).toEqual(["sh_other"])
     expect(data.shell.listBySession("ses_shared").map((shell) => [shell.id, shell.location.directory])).toEqual([
       ["sh_default", directory],
       ["sh_other", other],
@@ -2145,13 +2231,13 @@ test("keeps shell state scoped to location", async () => {
     app.mockInput.pressKey("d", { ctrl: true })
     await wait(() => removed !== undefined)
     expect(removed?.searchParams.get("location[directory]")).toBe(other)
-    expect(removed?.searchParams.get("location[workspace]")).toBe(workspace)
+    expect(removed?.searchParams.has("location[workspace]")).toBe(false)
 
     events.emit({
       id: "evt_shell_created",
       created: 0,
       type: "shell.created",
-      location: { directory: other, workspaceID: workspace },
+      location: { directory: other },
       data: {
         info: {
           id: "sh_live_other",
@@ -2165,9 +2251,7 @@ test("keeps shell state scoped to location", async () => {
         },
       },
     })
-    await wait(() =>
-      data.shell.list({ directory: other, workspaceID: workspace }).some((shell) => shell.id === "sh_live_other"),
-    )
+    await wait(() => data.shell.list({ directory: other }).some((shell) => shell.id === "sh_live_other"))
     expect(data.shell.list().map((shell) => shell.id)).toEqual(["sh_default"])
     expect(
       data.shell.listBySession("ses_shared").find((shell) => shell.id === "sh_live_other")?.location.directory,
@@ -2344,7 +2428,7 @@ test("dismisses a permission that expired before its reply", async () => {
     await data.session.permission.reply({
       sessionID: request.sessionID,
       requestID: request.id,
-      reply: "once",
+      decision: "once",
     })
 
     expect(replies).toBe(1)
@@ -2431,7 +2515,7 @@ test("adds, dismisses, and refreshes form requests", async () => {
 test("tracks global forms by location", async () => {
   const events = createEventStream()
   const calls = createFetch(undefined, events)
-  const other = { directory: "/tmp/opencode-other", workspaceID: "wrk_other" }
+  const other = { directory: "/tmp/opencode-other" }
   let data!: ReturnType<typeof useData>
   let client!: ReturnType<typeof useClient>
 
@@ -2496,16 +2580,14 @@ test("tracks global forms by location", async () => {
 test("syncs global forms once for each requested location", async () => {
   const events = createEventStream()
   const requests: URL[] = []
-  const other = { directory: "/tmp/opencode-other", workspaceID: "wrk_other" }
+  const other = { directory: "/tmp/opencode-other" }
   const calls = createFetch((url) => {
-    if (url.pathname !== "/api/form/request") return
+    if (url.pathname !== "/api/form") return
     requests.push(url)
     const requestedDirectory = url.searchParams.get("location[directory]") ?? directory
-    const requestedWorkspace = url.searchParams.get("location[workspace]") ?? undefined
     return json({
       location: {
         directory: requestedDirectory,
-        workspaceID: requestedWorkspace,
         project: { id: "proj_test", directory: requestedDirectory },
       },
       data: [
@@ -2548,7 +2630,7 @@ test("syncs global forms once for each requested location", async () => {
 
     expect(requests).toHaveLength(1)
     expect(requests[0]?.searchParams.get("location[directory]")).toBe(other.directory)
-    expect(requests[0]?.searchParams.get("location[workspace]")).toBe(other.workspaceID)
+    expect(requests[0]?.searchParams.has("location[workspace]")).toBe(false)
     expect(data.session.form.list("global", other)?.map((form) => form.id)).toEqual(["frm_other"])
     expect(data.session.form.list("global", { directory })?.map((form) => form.id)).toEqual(["frm_default"])
 
@@ -2565,7 +2647,7 @@ test("resyncs global forms only for the active location after reconnect", async 
   const requests: URL[] = []
   const counts = new Map<string, number>()
   const home = { directory: process.cwd() }
-  const other = { directory: "/tmp/opencode-other", workspaceID: "wrk_other" }
+  const other = { directory: "/tmp/opencode-other" }
   const calls = createFetch((url) => {
     if (url.pathname === "/api/location")
       return json({ ...home, project: { id: "proj_test", directory: home.directory } })
@@ -2578,16 +2660,14 @@ test("resyncs global forms only for the active location after reconnect", async 
         ],
         cursor: {},
       })
-    if (url.pathname !== "/api/form/request") return
+    if (url.pathname !== "/api/form") return
     requests.push(url)
     const requestedDirectory = url.searchParams.get("location[directory]") ?? home.directory
-    const requestedWorkspace = url.searchParams.get("location[workspace]") ?? undefined
     const count = (counts.get(requestedDirectory) ?? 0) + 1
     counts.set(requestedDirectory, count)
     return json({
       location: {
         directory: requestedDirectory,
-        workspaceID: requestedWorkspace,
         project: { id: "proj_test", directory: requestedDirectory },
       },
       data: [
@@ -2631,12 +2711,7 @@ test("resyncs global forms only for the active location after reconnect", async 
     await wait(() => data.session.form.list("global", home)?.[0]?.id === "frm_default_2", 4000)
     expect(data.session.form.list("global", other)?.[0]?.id).toBe("frm_other_1")
     expect(requests).toHaveLength(1)
-    expect(
-      requests.map((url) => [
-        url.searchParams.get("location[directory]") ?? directory,
-        url.searchParams.get("location[workspace]") ?? undefined,
-      ]),
-    ).toEqual([[home.directory, undefined]])
+    expect(requests.map((url) => url.searchParams.get("location[directory]") ?? directory)).toEqual([home.directory])
   } finally {
     app.renderer.destroy()
   }
@@ -2758,6 +2833,7 @@ test("settles pending tools when a live failure arrives", async () => {
       type: "session.step.started",
       durable: durable("session-1", 2),
       data: {
+        started: 0,
         sessionID: "session-1",
         assistantMessageID: "msg_explicit_assistant_9",
         agent: "build",
@@ -2925,7 +3001,7 @@ test("renders admitted prompts immediately and tracks them until promoted", asyn
       {
         id: messageID,
         sessionID,
-        timeCreated: 0,
+        time: { created: 0 },
         type: "user",
         payload: { text: "hello" },
         delivery: "steer",
@@ -3279,7 +3355,7 @@ test("admits prompts optimistically and reconciles with the durable echo", async
       {
         id: messageID,
         sessionID,
-        timeCreated: 5,
+        time: { created: 5 },
         type: "user",
         payload: { text: "hello", files: [echoFile] },
         delivery: "steer",
@@ -3307,7 +3383,7 @@ test("hydrates durable pending prompts into the visible transcript", async () =>
   const item = {
     id: "msg_pending_1",
     sessionID,
-    timeCreated: 5,
+    time: { created: 5 },
     type: "user" as const,
     payload: { text: "waiting" },
     delivery: "steer" as const,
@@ -3361,7 +3437,7 @@ test("keeps the row when the response lands before the echo", async () => {
   const admission = {
     id: messageID,
     sessionID,
-    timeCreated: 1,
+    time: { created: 1 },
     type: "user",
     payload: { text: "hello" },
     delivery: "steer",
@@ -3468,7 +3544,7 @@ test("a retry under the same client-minted ID cannot duplicate rows", async () =
   const admission = {
     id: messageID,
     sessionID,
-    timeCreated: 1,
+    time: { created: 1 },
     type: "user",
     payload: { text: "hello" },
     delivery: "steer",

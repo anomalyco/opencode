@@ -8,6 +8,13 @@ export type PromptComment = {
   origin?: "review" | "file"
 }
 
+/** An attachment the model receives as a path on the server rather than inline bytes. */
+export type PromptAttachmentReference = {
+  name: string
+  mime: string
+  path: string
+}
+
 function selection(selection: unknown) {
   if (!selection || typeof selection !== "object") return undefined
   const startLine = Number((selection as FileSelection).startLine)
@@ -58,8 +65,17 @@ export function readPromptPresentation(value: unknown) {
   const displayText = (value as { displayText?: unknown }).displayText
   const comments = (value as { comments?: unknown }).comments
   if (typeof displayText !== "string" || !Array.isArray(comments)) return
+  const attachments = (value as { attachments?: unknown }).attachments
   return {
     displayText,
+    attachments: (Array.isArray(attachments) ? attachments : []).flatMap((item): PromptAttachmentReference[] => {
+      if (!item || typeof item !== "object") return []
+      const name = (item as { name?: unknown }).name
+      const mime = (item as { mime?: unknown }).mime
+      const path = (item as { path?: unknown }).path
+      if (typeof name !== "string" || typeof mime !== "string" || typeof path !== "string") return []
+      return [{ name, mime, path }]
+    }),
     comments: comments.flatMap((item): PromptComment[] => {
       if (!item || typeof item !== "object") return []
       const path = (item as { path?: unknown }).path
@@ -78,6 +94,10 @@ export function readPromptPresentation(value: unknown) {
       ]
     }),
   }
+}
+
+export function formatAttachmentReference(input: PromptAttachmentReference) {
+  return `Attached file: \`${input.path}\``
 }
 
 export function formatCommentNote(input: { path: string; selection?: FileSelection; comment: string }) {

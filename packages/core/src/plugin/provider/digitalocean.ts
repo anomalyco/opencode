@@ -155,12 +155,12 @@ export const DigitalOceanPlugin = define({
     yield* ctx.integration.transform((draft) => {
       draft.method.update(oauth)
     })
-    yield* ctx.catalog.transform((evt) => {
-      if (!evt.provider.get(providerID)) return
+    yield* ctx.provider.transform((evt) => {
+      if (!evt.get(providerID)) return
       for (const router of loaded.routers) {
         const id = `router:${router.name}`
-        if (evt.model.get(providerID, id)) continue
-        evt.model.update(providerID, id, (draft) => {
+        if (evt.get(providerID)?.models.has(Model.ID.make(id))) continue
+        evt.models.update(providerID, id, (draft) => {
           draft.name = router.name
           draft.family = Model.Family.make("digitalocean-inference-routers")
           draft.capabilities = { tools: true, input: ["text"], output: ["text"] }
@@ -168,7 +168,7 @@ export const DigitalOceanPlugin = define({
         })
       }
     })
-    const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.catalog.reload())))
+    const refresh = () => loading.withPermit(load().pipe(Effect.andThen(ctx.provider.reload())))
     yield* bus.subscribe(Credential.Event.Switched).pipe(
       Stream.filter((event) => event.data.integrationID === integrationID),
       Stream.runForEach(refresh),

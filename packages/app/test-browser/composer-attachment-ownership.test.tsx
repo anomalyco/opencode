@@ -34,10 +34,15 @@ describe("Composer attachment ownership", () => {
           addPart: () => false,
           setDraggingType() {},
           directory: () => "C:/repo",
+          destination: () => ({
+            input: { image: true, pdf: true },
+            local: false,
+            upload: () => Promise.reject(new Error("native attachments must not upload")),
+          }),
           isDialogActive: () => false,
-          warn() {},
           duplicate() {},
           onError: rejectTest,
+          onUploadError: rejectTest,
           store: () => stored.promise,
         })
 

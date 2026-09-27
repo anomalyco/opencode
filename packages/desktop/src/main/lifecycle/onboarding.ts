@@ -4,10 +4,13 @@ import { scoped } from "../native/logging"
 import { hasExistingAppState } from "../storage/install-state"
 import { FIRST_LAUNCH_ONBOARDING_COMPLETE_KEY } from "../storage/keys"
 import { getStore } from "../storage/store"
-
-const DEFAULT_PROJECT_DIR = "Default Project"
+import { nativeT } from "../native/translations"
 
 export const initializeFirstLaunchOnboarding = Effect.fn("Onboarding.initialize")(function* (userDataPath: string) {
+  const store = getStore()
+  const current = store.get(FIRST_LAUNCH_ONBOARDING_COMPLETE_KEY)
+  if (typeof current === "boolean") return current
+
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
   const names = (yield* fs.exists(userDataPath)) ? yield* fs.readDirectory(userDataPath) : []
@@ -17,11 +20,8 @@ export const initializeFirstLaunchOnboarding = Effect.fn("Onboarding.initialize"
       const info = yield* fs.stat(path.join(userDataPath, name)).pipe(Effect.option)
       return { name, directory: Option.isSome(info) && info.value.type === "Directory" }
     }),
+    { concurrency: "unbounded" },
   )
-  const store = getStore()
-  const current = store.get(FIRST_LAUNCH_ONBOARDING_COMPLETE_KEY)
-  if (typeof current === "boolean") return current
-
   const complete = hasExistingAppState(entries)
   store.set(FIRST_LAUNCH_ONBOARDING_COMPLETE_KEY, complete)
   return complete
@@ -41,7 +41,9 @@ export const finishFirstLaunchOnboarding = Effect.fn("Onboarding.finish")(functi
 
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
-  const defaultProject = createDefaultProject ? path.join(app.getPath("documents"), DEFAULT_PROJECT_DIR) : null
+  const defaultProject = createDefaultProject
+    ? path.join(app.getPath("documents"), nativeT("desktop.onboarding.defaultProject"))
+    : null
   if (defaultProject) yield* fs.makeDirectory(defaultProject, { recursive: true })
 
   getStore().set(FIRST_LAUNCH_ONBOARDING_COMPLETE_KEY, true)

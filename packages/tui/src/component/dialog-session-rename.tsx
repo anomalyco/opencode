@@ -18,7 +18,7 @@ export function DialogSessionRename(props: { sessionID: string; currentTitle?: s
         const title = value.trim()
         if (!title) return
         void client.api.session
-          .rename({ sessionID: props.sessionID, title })
+          .update({ sessionID: props.sessionID, title })
           .then(() => dialog.clear())
           .catch((error) =>
             toast.show({
