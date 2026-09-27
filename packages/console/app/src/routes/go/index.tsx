@@ -26,6 +26,7 @@ const checkLoggedIn = query(async () => {
 
 const models = [
   { name: "Space Bunny Free", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
+  { name: "LongCat 2.5 Preview Free", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Grok 4.7", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "Grok 4.6", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
   { name: "GPT 6 Luna", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention30" },
