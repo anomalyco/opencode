@@ -1,23 +1,36 @@
-import { Effect, Ref, Schema } from "effect"
+import { Effect, Exit, Ref, Schema } from "effect"
+import { spawn, type ChildProcess } from "child_process"
 import path from "path"
+import { pathToFileURL } from "url"
 import { Global } from "@opencode-ai/core/global"
 import * as Tool from "./tool"
 import DESCRIPTION from "./browser.txt"
+import DRIVER_SOURCE from "./browser-driver.mjs.txt"
 
 /**
- * Browser tool — Fase 4 (browser agent nativo). Drives one Playwright/Chromium
+ * Browser tool — Fase 4 (browser agent nativo). Drives one headless Chromium
  * session per workspace instance and returns evidence (screenshots as
- * attachments, console/network drains) for the verification loop.
+ * attachments, console/network drains) for the verification loop:
+ * modify → start the app → open the browser → test → report → fix → repeat.
  *
- * Playwright is an OPTIONAL dependency: it is loaded through a variable
- * specifier so the package typechecks and runs without it installed, and
- * `open` fails with honest installation instructions instead of pretending
- * a browser exists (Fase 40 — no simulated results).
+ * The tool runs under bun, but Playwright only works under Node.js (its
+ * launcher and WebSocket client hang under the bun runtime — verified, while
+ * Node.js launches Chromium in well under a second). `open` therefore writes
+ * a small Node.js driver (`browser-driver.mjs.txt`) to the temp dir and spawns
+ * `node driver.mjs <playwright-entry> <scratch-dir>`; every action is
+ * validated and authorized here, then executed in the driver over a
+ * JSON-lines stdio protocol. The driver returns ready results (title/output/
+ * attachments), exits after "close", and closes the browser when stdin closes.
+ *
+ * Playwright stays an OPTIONAL dependency: it is resolved through
+ * Bun.resolveSync at open, and a missing package (or missing Node.js) fails
+ * with honest installation/BLOCKED instructions instead of pretending a
+ * browser exists (Fase 40 — no simulated results).
  *
  * - One session per instance (the registry creates this tool per directory);
  *   `open` is idempotent, `close` is idempotent.
- * - console/network/downloads buffers cap and DRAIN on read so evidence is
- *   never repeated across reads.
+ * - console/network/downloads evidence lives in the driver and DRAINS on read
+ *   so it is never repeated across reads.
  * - `open`, `goto`, and `eval` request the "browser" permission (pattern =
  *   URL); in-page actions run inside the already-approved session.
  */
@@ -68,109 +81,25 @@ export const Parameters = Schema.Struct({
   }),
 })
 
-// Structural subset of the Playwright API this tool uses. The module is loaded
-// through a widened string specifier so TypeScript does not resolve it at
-// compile time — Playwright stays an optional runtime dependency.
-interface PlaywrightModule {
-  readonly chromium: {
-    launch(options?: { headless?: boolean }): Promise<PlaywrightRuntime["browser"]>
-  }
-}
-interface PlaywrightRuntime {
-  readonly browser: {
-    newPage(): Promise<PlaywrightPage>
-    close(): Promise<void>
-  }
-  readonly page: PlaywrightPage
-}
-interface PlaywrightPage {
-  goto(url: string, options?: { timeout?: number }): Promise<unknown>
-  goBack(options?: { timeout?: number }): Promise<unknown>
-  goForward(options?: { timeout?: number }): Promise<unknown>
-  click(selector: string, options?: { timeout?: number }): Promise<unknown>
-  fill(selector: string, value: string, options?: { timeout?: number }): Promise<unknown>
-  selectOption(selector: string, value: string, options?: { timeout?: number }): Promise<unknown>
-  setInputFiles(selector: string, file: string, options?: { timeout?: number }): Promise<unknown>
-  screenshot(options?: { path?: string; fullPage?: boolean }): Promise<Buffer>
-  content(): Promise<string>
-  evaluate(code: string): Promise<unknown>
-  setViewportSize(size: { width: number; height: number }): Promise<void>
-  viewportSize(): { width: number; height: number } | null
-  waitForSelector(selector: string, options?: { timeout?: number }): Promise<unknown>
-  url(): string
-  title(): Promise<string>
-  on(event: "console", listener: (message: ConsoleMessage) => void): void
-  on(event: "pageerror", listener: (error: Error) => void): void
-  on(event: "response", listener: (response: PageResponse) => void): void
-  on(event: "requestfailed", listener: (request: FailedRequest) => void): void
-  on(event: "download", listener: (download: Download) => void): void
-}
-interface ConsoleMessage {
-  type(): string
-  text(): string
-  location(): { url: string; lineNumber: number }
-}
-interface PageResponse {
-  status(): number
-  url(): string
-  ok(): boolean
-  request(): { method(): string; resourceType(): string }
-}
-interface FailedRequest {
-  url(): string
-  method(): string
-  resourceType(): string
-  failure(): { errorText: string } | null
-}
-interface Download {
-  suggestedFilename(): string
-  path(): Promise<string>
+// A successful driver reply. The driver owns page access, so it formats the
+// final title/output (and the base64 screenshot attachment) itself.
+interface RpcResult {
+  readonly title: string
+  readonly output: string
+  attachments?: Array<{ type: "file"; mime: string; url: string }>
 }
 
-interface ConsoleEntry {
-  readonly at: number
-  readonly type: string
-  readonly text: string
-  readonly url?: string
-  readonly line?: number
-}
-interface NetworkEntry {
-  readonly at: number
-  readonly method: string
-  readonly url: string
-  readonly resourceType: string
-  readonly ok: boolean
-  readonly status?: number
-  readonly failure?: string
-}
-interface DownloadEntry {
-  readonly at: number
-  readonly filename: string
-  readonly path?: string
-  readonly error?: string
-}
+// One Node.js driver process per instance. Replies correlate by id (they may
+// interleave), `stderr` keeps a tail so a crashed driver can report honestly,
+// and `exited` distinguishes "never opened" from "session died".
 interface Session {
-  readonly browser: PlaywrightRuntime["browser"]
-  readonly page: PlaywrightPage
-  readonly console: ConsoleEntry[]
-  readonly network: NetworkEntry[]
-  readonly downloads: DownloadEntry[]
+  readonly child: ChildProcess
+  readonly pending: Map<number, { resolve: (result: RpcResult) => void; reject: (error: Error) => void }>
+  nextId: number
+  exited: boolean
+  exitCode: number | null
+  stderr: string
 }
-
-const MAX_CONSOLE = 200
-const MAX_NETWORK = 500
-const MAX_DOWNLOADS = 100
-
-// Widened to string on purpose: a literal type would make TypeScript resolve
-// the module at compile time, which must not happen for an optional package.
-const PLAYWRIGHT: string = "playwright"
-
-const loadPlaywright = Effect.promise(() =>
-  import(PLAYWRIGHT).then(
-    (module) => module as unknown as PlaywrightModule,
-    () => undefined,
-  ),
-)
 
 const attempt = <A>(label: string, task: () => Promise<A>) =>
   Effect.promise(() =>
@@ -185,85 +114,34 @@ const requireField = <T>(action: string, name: string, value: T | undefined): T 
   return value
 }
 
-const cap = <A>(entries: A[], entry: A, max: number) => {
-  entries.push(entry)
-  if (entries.length > max) entries.splice(0, entries.length - max)
+// Resolves the optional playwright package to the exact file the driver must
+// import. Fails with actionable instructions instead of a resolution error
+// (the driver lives in the temp dir, so it cannot resolve node_modules itself).
+const resolvePlaywright = (): string => {
+  try {
+    return pathToFileURL(Bun.resolveSync("playwright", import.meta.dirname)).href
+  } catch {
+    throw new Error(
+      'Browser automation is unavailable: the optional "playwright" package is not installed. ' +
+        "Install it with `bun add playwright` and its browsers with `bunx playwright install chromium`, " +
+        "then retry the action.",
+    )
+  }
 }
 
-const stamp = (at: number) => new Date(at).toISOString().slice(11, 23)
-
-// Subscribes the page events that back evidence gathering: console output,
-// uncaught page errors, network responses/failures, and downloads (copied to
-// the temp dir through Bun, which creates parent directories).
-const observePage = (session: Session) => {
-  session.page.on("console", (message) => {
-    const location = message.location()
-    cap(
-      session.console,
-      {
-        at: Date.now(),
-        type: message.type(),
-        text: message.text(),
-        ...(location?.url ? { url: location.url, line: location.lineNumber } : {}),
-      },
-      MAX_CONSOLE,
-    )
-  })
-  session.page.on("pageerror", (error) =>
-    cap(session.console, { at: Date.now(), type: "pageerror", text: error.message }, MAX_CONSOLE),
-  )
-  session.page.on("response", (response) => {
-    const request = response.request()
-    cap(
-      session.network,
-      {
-        at: Date.now(),
-        method: request.method(),
-        url: response.url(),
-        resourceType: request.resourceType(),
-        ok: response.ok(),
-        status: response.status(),
-      },
-      MAX_NETWORK,
-    )
-  })
-  session.page.on("requestfailed", (request) =>
-    cap(
-      session.network,
-      {
-        at: Date.now(),
-        method: request.method(),
-        url: request.url(),
-        resourceType: request.resourceType(),
-        ok: false,
-        failure: request.failure()?.errorText ?? "request failed",
-      },
-      MAX_NETWORK,
-    ),
-  )
-  session.page.on("download", (download) => {
-    const filename = path.basename(download.suggestedFilename())
-    const target = path.join(Global.Path.tmp, "opencode-browser", filename)
-    const failed = (error: unknown) =>
-      cap(session.downloads, { at: Date.now(), filename, error: String(error) }, MAX_DOWNLOADS)
-    download
-      .path()
-      .then(
-        (source) =>
-          Bun.write(target, Bun.file(source)).then(
-            () => cap(session.downloads, { at: Date.now(), filename, path: target }, MAX_DOWNLOADS),
-            failed,
-          ),
-        failed,
-      )
-  })
-}
-
-const navigate = (page: PlaywrightPage, url: string, timeout: number) =>
-  Effect.gen(function* () {
-    yield* attempt("goto", () => page.goto(url, { timeout }))
-    const title = yield* attempt("title", () => page.title())
-    return `Navigated to ${page.url()}\nTitle: ${title}`
+const send = (current: Session, action: string, params: Schema.Schema.Type<typeof Parameters>) =>
+  new Promise<RpcResult>((resolve, reject) => {
+    if (current.exited) {
+      reject(new Error('Browser session is not running. Run action "open" to start a new session.'))
+      return
+    }
+    const id = ++current.nextId
+    current.pending.set(id, { resolve, reject })
+    current.child.stdin?.write(JSON.stringify({ id, action, params }) + "\n", (error) => {
+      if (!error) return
+      current.pending.delete(id)
+      reject(new Error(`browser ${action} failed: browser driver connection error: ${error.message}`))
+    })
   })
 
 export const BrowserTool = Tool.define(
@@ -271,11 +149,100 @@ export const BrowserTool = Tool.define(
   Effect.gen(function* () {
     const session = yield* Ref.make<Session | undefined>(undefined)
 
+    // Spawns a fresh driver: resolve playwright first (honest failure before
+    // any process exists), write the embedded source to the temp dir, then
+    // start `node` with protocol stdio. A dead previous session is replaced.
+    const startDriver = Effect.gen(function* () {
+      const entry = resolvePlaywright()
+      const directory = path.join(Global.Path.tmp, "opencode-browser")
+      const driverPath = path.join(directory, "driver.mjs")
+      yield* Effect.promise(() => Bun.write(driverPath, DRIVER_SOURCE))
+      const child = spawn("node", [driverPath, entry, directory], { stdio: ["pipe", "pipe", "pipe"] })
+      const input = child.stdin
+      const output = child.stdout
+      const errors = child.stderr
+      if (input === null || output === null || errors === null) {
+        child.kill()
+        throw new Error("browser driver failed to start: node stdio pipes are unavailable.")
+      }
+      const current: Session = { child, pending: new Map(), nextId: 0, exited: false, exitCode: null, stderr: "" }
+
+      const rejectAll = (detail: string) => {
+        current.exited = true
+        const tail = current.stderr.trim().split("\n").slice(-5).join("\n").trim()
+        const error = new Error(detail + (tail ? ` Driver output: ${tail}` : ""))
+        for (const waiter of current.pending.values()) waiter.reject(error)
+        current.pending.clear()
+      }
+
+      // Correlates one reply line to its pending send. Malformed lines are
+      // protocol noise (e.g. a stray launcher log), never a response.
+      const route = (line: string) => {
+        let message: { id?: unknown; ok?: unknown; result?: RpcResult; error?: unknown }
+        try {
+          message = JSON.parse(line)
+        } catch {
+          return
+        }
+        if (typeof message.id !== "number") return
+        const waiter = current.pending.get(message.id)
+        if (waiter === undefined) return
+        current.pending.delete(message.id)
+        if (message.ok === true && message.result !== undefined) {
+          waiter.resolve(message.result)
+          return
+        }
+        waiter.reject(
+          new Error(typeof message.error === "string" ? message.error : "browser driver returned a malformed response"),
+        )
+      }
+
+      let buffer = ""
+      output.setEncoding("utf8")
+      output.on("data", (chunk: string) => {
+        buffer += chunk
+        let index = buffer.indexOf("\n")
+        while (index >= 0) {
+          const line = buffer.slice(0, index)
+          buffer = buffer.slice(index + 1)
+          if (line.trim() !== "") route(line)
+          index = buffer.indexOf("\n")
+        }
+      })
+      errors.setEncoding("utf8")
+      errors.on("data", (chunk: string) => {
+        current.stderr = (current.stderr + chunk).slice(-4000)
+      })
+      input.on("error", (error) => rejectAll(`Browser driver connection lost: ${error.message}.`))
+      child.on("error", (error) =>
+        rejectAll(
+          `Browser driver failed to start: ${error.message}. The browser needs a working Node.js process because ` +
+            "playwright does not run under bun — install Node.js or treat the browser as BLOCKED.",
+        ),
+      )
+      // 'close' (not 'exit') so buffered replies are routed before pending
+      // sends reject; 'exit' can fire while stdio is still draining.
+      child.on("close", (code) => {
+        current.exitCode = code
+        rejectAll(`Browser driver exited with code ${code ?? "unknown"}. Run action "open" to start a new session.`)
+      })
+
+      const previous = yield* Ref.get(session)
+      if (previous !== undefined) previous.child.kill()
+      yield* Ref.set(session, current)
+      return current
+    })
+
     const requireSession = (action: string) =>
       Effect.gen(function* () {
         const current = yield* Ref.get(session)
         if (current === undefined)
           throw new Error(`The browser action "${action}" requires an open browser session. Call action "open" first.`)
+        if (current.exited)
+          throw new Error(
+            `The browser action "${action}" cannot run: the driver exited with code ${current.exitCode ?? "unknown"}. ` +
+              'Run action "open" to start a new session.',
+          )
         return current
       })
 
@@ -293,236 +260,118 @@ export const BrowserTool = Tool.define(
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
         Effect.gen(function* () {
           const action = params.action
-          const timeout = params.timeoutMs ?? 30_000
 
           switch (action) {
             case "open": {
               yield* ask(ctx, action, params.url)
               const existing = yield* Ref.get(session)
-              if (existing !== undefined) {
-                const navigation = params.url ? yield* navigate(existing.page, params.url, timeout) : ""
-                return {
-                  title: "browser open",
-                  output: [`Browser already open at ${existing.page.url()}.`, navigation].filter(Boolean).join("\n"),
-                  metadata: {},
-                }
+              if (existing !== undefined && !existing.exited) {
+                const result = yield* attempt("open", () => send(existing, action, params))
+                return { ...result, metadata: {} }
               }
-              const playwright = yield* loadPlaywright
-              if (playwright === undefined)
-                throw new Error(
-                  'Browser automation is unavailable: the optional "playwright" package is not installed. ' +
-                    "Install it with `bun add playwright` and its browsers with `bunx playwright install chromium`, " +
-                    "then retry the action.",
-                )
-              const headless = params.headless ?? true
-              const runtime = yield* attempt("open", async () => {
-                const browser = await playwright.chromium.launch({ headless })
-                try {
-                  const page = await browser.newPage()
-                  return { browser, page }
-                } catch (error) {
-                  // A page that never opened would leak the browser process.
-                  await browser.close().catch(() => undefined)
-                  throw error
-                }
-              }).pipe(
-                // Bounded so a hung launcher can never wedge the session: playwright's
-                // own launch timeout does not fire under the bun runtime.
-                Effect.timeoutOrElse({
-                  duration: "30 seconds",
-                  orElse: () =>
-                    Effect.fail(
-                      new Error(
-                        "browser open timed out after 30s: playwright never started a browser process. " +
-                          "This is the known playwright+bun runtime incompatibility (playwright only supports " +
-                          "Node.js); under Node.js the same launch completes in under a second. " +
-                          "Treat the browser as BLOCKED in this runtime.",
+              const current = yield* startDriver
+              const opened = yield* Effect.exit(
+                attempt("open", () => send(current, action, params)).pipe(
+                  // Bounded so a wedged driver can never hang the session.
+                  Effect.timeoutOrElse({
+                    duration: "30 seconds",
+                    orElse: () =>
+                      Effect.fail(
+                        new Error(
+                          "browser open timed out after 30s: the Node.js driver never answered " +
+                            "(playwright is unresponsive in this runtime). Treat the browser as BLOCKED.",
+                        ),
                       ),
-                    ),
-                }),
+                  }),
+                ),
               )
-              const state: Session = {
-                browser: runtime.browser,
-                page: runtime.page,
-                console: [],
-                network: [],
-                downloads: [],
+              if (Exit.isFailure(opened)) {
+                // A session that never opened must not linger as a zombie.
+                current.child.kill()
+                yield* Ref.set(session, undefined)
+                return yield* Effect.failCause(opened.cause)
               }
-              observePage(state)
-              yield* Ref.set(session, state)
-              const navigation = params.url ? yield* navigate(state.page, params.url, timeout) : ""
-              return {
-                title: "browser open",
-                output: [
-                  `Browser opened (headless=${headless}).`,
-                  navigation || `Call action "goto" with a url to navigate. Current page: ${state.page.url()}`,
-                ].join("\n"),
-                metadata: {},
-              }
+              return { ...opened.value, metadata: {} }
             }
             case "close": {
               const current = yield* Ref.get(session)
-              if (current === undefined)
+              if (current === undefined || current.exited)
                 return { title: "browser close", output: "No browser session to close.", metadata: {} }
-              yield* attempt("close", () => current.browser.close())
+              const result = yield* attempt("close", () => send(current, action, params))
               yield* Ref.set(session, undefined)
-              return {
-                title: "browser close",
-                output: "Browser closed. Console, network, and download buffers cleared.",
-                metadata: {},
-              }
+              return { ...result, metadata: {} }
             }
             case "goto": {
               const url = requireField(action, "url", params.url)
               yield* ask(ctx, action, url)
               const current = yield* requireSession(action)
-              const summary = yield* navigate(current.page, url, timeout)
-              return { title: `browser goto ${url}`, output: summary, metadata: {} }
+              const result = yield* attempt(action, () => send(current, action, params))
+              return { ...result, metadata: {} }
             }
             case "back":
             case "forward": {
               const current = yield* requireSession(action)
-              const response = yield* attempt(action, () =>
-                action === "back" ? current.page.goBack({ timeout }) : current.page.goForward({ timeout }),
-              )
-              return {
-                title: `browser ${action}`,
-                output:
-                  response === null
-                    ? `No history entry to go ${action}. Still at ${current.page.url()}`
-                    : `Went ${action}. Now at ${current.page.url()}`,
-                metadata: {},
-              }
+              const result = yield* attempt(action, () => send(current, action, params))
+              return { ...result, metadata: {} }
             }
             case "click": {
-              const selector = requireField(action, "selector", params.selector)
+              requireField(action, "selector", params.selector)
               const current = yield* requireSession(action)
-              yield* attempt("click", () => current.page.click(selector, { timeout }))
-              return {
-                title: `browser click ${selector}`,
-                output: `Clicked "${selector}". Page: ${current.page.url()}`,
-                metadata: {},
-              }
+              const result = yield* attempt(action, () => send(current, action, params))
+              return { ...result, metadata: {} }
             }
             case "fill": {
-              const selector = requireField(action, "selector", params.selector)
-              const value = requireField(action, "value", params.value)
+              requireField(action, "selector", params.selector)
+              requireField(action, "value", params.value)
               const current = yield* requireSession(action)
-              yield* attempt("fill", () => current.page.fill(selector, value, { timeout }))
-              return { title: `browser fill ${selector}`, output: `Filled "${selector}".`, metadata: {} }
+              const result = yield* attempt(action, () => send(current, action, params))
+              return { ...result, metadata: {} }
             }
             case "select": {
-              const selector = requireField(action, "selector", params.selector)
-              const value = requireField(action, "value", params.value)
+              requireField(action, "selector", params.selector)
+              requireField(action, "value", params.value)
               const current = yield* requireSession(action)
-              yield* attempt("select", () => current.page.selectOption(selector, value, { timeout }))
-              return {
-                title: `browser select ${selector}`,
-                output: `Selected "${value}" in "${selector}".`,
-                metadata: {},
-              }
+              const result = yield* attempt(action, () => send(current, action, params))
+              return { ...result, metadata: {} }
             }
             case "upload": {
-              const selector = requireField(action, "selector", params.selector)
-              const file = requireField(action, "value", params.value)
+              requireField(action, "selector", params.selector)
+              requireField(action, "value", params.value)
               const current = yield* requireSession(action)
-              yield* attempt("upload", () => current.page.setInputFiles(selector, file, { timeout }))
-              return { title: `browser upload ${selector}`, output: `Attached ${file} to "${selector}".`, metadata: {} }
+              const result = yield* attempt(action, () => send(current, action, params))
+              return { ...result, metadata: {} }
             }
             case "screenshot": {
               const current = yield* requireSession(action)
-              const options = {
-                ...(params.path !== undefined ? { path: params.path } : {}),
-                ...(params.fullPage === true ? { fullPage: true } : {}),
-              }
-              const image = yield* attempt("screenshot", () => current.page.screenshot(options))
-              if (params.path !== undefined)
-                return { title: "browser screenshot", output: `Screenshot saved to ${params.path}`, metadata: {} }
-              return {
-                title: "browser screenshot",
-                output: `Screenshot captured (${params.fullPage === true ? "full page" : "viewport"}).`,
-                attachments: [
-                  {
-                    type: "file" as const,
-                    mime: "image/png",
-                    url: `data:image/png;base64,${image.toString("base64")}`,
-                  },
-                ],
-                metadata: {},
-              }
+              const result = yield* attempt(action, () => send(current, action, params))
+              return { ...result, metadata: {} }
             }
             case "snapshot": {
               const current = yield* requireSession(action)
-              const html = yield* attempt("snapshot", () => current.page.content())
-              const title = yield* attempt("snapshot (title)", () => current.page.title())
-              return {
-                title: "browser snapshot",
-                output: `URL: ${current.page.url()}\nTitle: ${title}\n\n${html}`,
-                metadata: {},
-              }
+              const result = yield* attempt(action, () => send(current, action, params))
+              return { ...result, metadata: {} }
             }
             case "eval": {
-              const code = requireField(action, "code", params.code)
+              requireField(action, "code", params.code)
               yield* ask(ctx, action)
               const current = yield* requireSession(action)
-              const value = yield* attempt("eval", () => current.page.evaluate(code))
-              const output = typeof value === "string" ? value : (JSON.stringify(value) ?? String(value))
-              return { title: "browser eval", output, metadata: {} }
+              const result = yield* attempt(action, () => send(current, action, params))
+              return { ...result, metadata: {} }
             }
             case "console": {
               const current = yield* requireSession(action)
-              const entries = current.console.splice(0)
-              if (entries.length === 0)
-                return { title: "browser console", output: "No console messages since the last read.", metadata: {} }
-              return {
-                title: `browser console (${entries.length})`,
-                output: entries
-                  .map((entry) => {
-                    const where = entry.url ? ` (${entry.url}:${entry.line ?? 0})` : ""
-                    return `[${stamp(entry.at)}] ${entry.type}: ${entry.text}${where}`
-                  })
-                  .join("\n"),
-                metadata: {},
-              }
+              const result = yield* attempt(action, () => send(current, action, params))
+              return { ...result, metadata: {} }
             }
             case "network": {
               const current = yield* requireSession(action)
-              const entries = current.network.splice(0)
-              if (entries.length === 0)
-                return { title: "browser network", output: "No network activity since the last read.", metadata: {} }
-              return {
-                title: `browser network (${entries.length})`,
-                output: entries
-                  .map((entry) => {
-                    const outcome = entry.ok
-                      ? `→ ${entry.status}`
-                      : `→ ${entry.failure ?? `HTTP ${entry.status ?? "failed"}`}`
-                    return `[${stamp(entry.at)}] ${entry.method} ${entry.url} ${outcome} (${entry.resourceType})`
-                  })
-                  .join("\n"),
-                metadata: {},
-              }
+              const result = yield* attempt(action, () => send(current, action, params))
+              return { ...result, metadata: {} }
             }
             case "downloads": {
               const current = yield* requireSession(action)
-              const entries = current.downloads.splice(0)
-              if (entries.length === 0)
-                return {
-                  title: "browser downloads",
-                  output: "No completed downloads since the last read.",
-                  metadata: {},
-                }
-              return {
-                title: `browser downloads (${entries.length})`,
-                output: entries
-                  .map((entry) =>
-                    entry.path !== undefined
-                      ? `[${stamp(entry.at)}] ${entry.filename} → ${entry.path}`
-                      : `[${stamp(entry.at)}] ${entry.filename} FAILED: ${entry.error ?? "unknown error"}`,
-                  )
-                  .join("\n"),
-                metadata: {},
-              }
+              const result = yield* attempt(action, () => send(current, action, params))
+              return { ...result, metadata: {} }
             }
             case "viewport": {
               if (params.width !== undefined || params.height !== undefined) {
@@ -533,27 +382,17 @@ export const BrowserTool = Tool.define(
                     `The browser action "viewport" requires positive width and height (got ${width}x${height}).`,
                   )
                 const current = yield* requireSession(action)
-                yield* attempt("viewport", () => current.page.setViewportSize({ width, height }))
-                return { title: "browser viewport", output: `Viewport set to ${width}x${height}.`, metadata: {} }
+                const result = yield* attempt(action, () => send(current, action, params))
+                return { ...result, metadata: {} }
               }
               const current = yield* requireSession(action)
-              const size = current.page.viewportSize()
-              return {
-                title: "browser viewport",
-                output: `Viewport: ${size === null ? "unknown" : `${size.width}x${size.height}`}`,
-                metadata: {},
-              }
+              const result = yield* attempt(action, () => send(current, action, params))
+              return { ...result, metadata: {} }
             }
             case "wait": {
               const current = yield* requireSession(action)
-              const selector = params.selector
-              if (selector !== undefined) {
-                yield* attempt("wait", () => current.page.waitForSelector(selector, { timeout }))
-                return { title: "browser wait", output: `Selector "${selector}" is present.`, metadata: {} }
-              }
-              const ms = Math.min(params.timeoutMs ?? 1000, 30_000)
-              yield* Effect.sleep(`${ms} millis`)
-              return { title: "browser wait", output: `Waited ${ms}ms.`, metadata: {} }
+              const result = yield* attempt(action, () => send(current, action, params))
+              return { ...result, metadata: {} }
             }
             default:
               // `satisfies never` makes a new Parameters literal without a case
