@@ -31,6 +31,7 @@ import { parsePluginSpecifier, readPluginId, readV1Plugin, resolvePluginId } fro
 import { registerAdapter } from "@/control-plane/adapters"
 import type { WorkspaceAdapter } from "@/control-plane/types"
 import { RuntimeFlags } from "@/effect/runtime-flags"
+import { Auth } from "@/auth"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstallationChannel } from "@opencode-ai/core/installation/version"
 
@@ -130,6 +131,7 @@ const layer = Layer.effect(
     const events = yield* EventV2Bridge.Service
     const config = yield* Config.Service
     const flags = yield* RuntimeFlags.Service
+    const auth = yield* Auth.Service
 
     const state = yield* InstanceState.make<State>(
       Effect.fn("Plugin.state")(function* (ctx) {
@@ -152,6 +154,11 @@ const layer = Layer.effect(
         const cfg = yield* config.get()
         const input: PluginInput = {
           client,
+          auth: {
+            get: (providerID) => bridge.promise(auth.getStored(providerID)),
+            compareAndSet: (providerID, expected, next) =>
+              bridge.promise(auth.compareAndSet(providerID, expected, next)),
+          },
           project: ctx.project,
           worktree: ctx.worktree,
           directory: ctx.directory,
@@ -312,7 +319,7 @@ const layer = Layer.effect(
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [EventV2Bridge.node, Config.node, RuntimeFlags.node],
+  deps: [EventV2Bridge.node, Config.node, RuntimeFlags.node, Auth.node],
 })
 
 export * as Plugin from "."

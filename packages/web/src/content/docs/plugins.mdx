@@ -119,6 +119,7 @@ The plugin function receives:
 - `directory`: The current working directory.
 - `worktree`: The git worktree path.
 - `client`: An opencode SDK client for interacting with the AI.
+- `auth`: An in-process interface for reading and updating stored provider credentials. This is not an HTTP client method.
 - `$`: Bun's [shell API](https://bun.com/docs/runtime/shell) for executing commands.
 
 ---
@@ -136,6 +137,36 @@ export const MyPlugin: Plugin = async ({ project, client, $, directory, worktree
   }
 }
 ```
+
+---
+
+### Stored provider credentials
+
+The host provides `input.auth.get(providerID)` and `input.auth.compareAndSet(providerID, expected, next)` to in-process plugins. The public `PluginInput.auth` type is optional so existing plugin code that constructs an input still compiles; check for it when writing a reusable plugin. `StoredAuth` from `@opencode-ai/plugin` describes the supported `api` (key, optional metadata), `oauth` (refresh, access, expires, optional account ID and enterprise URL), and `wellknown` (key and token) entries.
+
+```ts title=".opencode/plugins/rotate-key.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const RotateKey: Plugin = async ({ auth }) => {
+  if (!auth) return {}
+  const key = process.env.NEXT_PROVIDER_API_KEY
+  if (!key) return {}
+
+  const previous = await auth.get("my-provider")
+  const result = await auth.compareAndSet("my-provider", previous, { type: "api", key })
+  if (!result.written) {
+    // Another process changed this provider; do not overwrite its credential.
+    return {}
+  }
+  return {}
+}
+```
+
+`get` reads the decoded entry from `auth.json`, not the `OPENCODE_AUTH_CONTENT` environment snapshot; an absent or malformed entry reads as `undefined`. `compareAndSet` rereads the file under the cross-process auth lock, compares the decoded entry structurally with `expected`, and atomically writes only the selected provider if they match. Pass `undefined` as `expected` only when the provider is absent. It returns `{ written, current }`: on conflict, `current` is the latest decoded entry (possibly `undefined` for a malformed entry); on success, it is the value just written. Invalid new credentials fail validation; malformed entries for other providers remain on disk. If `auth.json` itself is invalid JSON, writes fail until you repair or remove the file.
+
+Plugins run in-process and can read **every provider's stored credentials** through this interface, just as they can by reading `auth.json` directly. Install only plugins you trust with all of your provider credentials. No credential-read HTTP route is exposed by this interface.
+
+In a child process that opencode starts for a workspace, the provider runtime keeps using the `OPENCODE_AUTH_CONTENT` snapshot it received at startup. A credential rotation written from that child reaches disk immediately but takes effect for the child's provider calls only after the child restarts.
 
 ---
 
