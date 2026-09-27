@@ -10,11 +10,14 @@ export type PromptComment = {
 
 function selection(selection: unknown) {
   if (!selection || typeof selection !== "object") return undefined
-  const startLine = Number((selection as FileSelection).startLine)
-  const startChar = Number((selection as FileSelection).startChar)
-  const endLine = Number((selection as FileSelection).endLine)
-  const endChar = Number((selection as FileSelection).endChar)
-  if (![startLine, startChar, endLine, endChar].every(Number.isFinite)) return undefined
+  if (!("startLine" in selection && "startChar" in selection && "endLine" in selection && "endChar" in selection))
+    return undefined
+  // Parse the raw fields directly: Number(null) and Number("") are 0, so
+  // coercing first would accept malformed metadata as a real selection.
+  const coordinates = [selection.startLine, selection.startChar, selection.endLine, selection.endChar]
+  if (!coordinates.every((field): field is number => typeof field === "number" && Number.isFinite(field)))
+    return undefined
+  const [startLine, startChar, endLine, endChar] = coordinates
   return {
     startLine,
     startChar,
