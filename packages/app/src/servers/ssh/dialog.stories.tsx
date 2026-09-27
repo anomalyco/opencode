@@ -14,6 +14,7 @@ import { SshConnectionPanel } from "./connection-panel"
 import { SshServerSettings } from "./settings"
 
 function Fixture(props: {
+  home?: boolean
   session?: boolean
   settings?: boolean
   incompatible?: boolean
@@ -25,10 +26,15 @@ function Fixture(props: {
   const state: { item?: SshItem; before?: SshItem; step: number; timer?: ReturnType<typeof setTimeout> } = {
     step: 0,
     item:
-      props.initial === "required"
+      props.initial === "required" || props.home
         ? {
             config: { id: "story", target: "ssh linuxbook", name: "" },
-            stage: props.session || props.settings ? "disconnected" : "authentication",
+            stage:
+              props.session || props.settings
+                ? "disconnected"
+                : props.initial === "connecting"
+                  ? "connecting"
+                  : "authentication",
             saved: true,
             detail: "",
           }
@@ -141,7 +147,7 @@ function Fixture(props: {
             <AuthenticationSettings />
           ) : props.session ? (
             <AuthenticationSession />
-          ) : props.initial === "required" ? (
+          ) : props.initial === "required" || props.home ? (
             <AuthenticationHome />
           ) : (
             <Open initial={props.initial} />
@@ -277,6 +283,7 @@ function Open(props: { initial?: string }) {
 
 export default { title: "App/Dialogs/SSH", id: "app-dialog-ssh" }
 export const AuthenticationRequired = { render: () => <Fixture initial="required" /> }
+export const HomeConnecting = { render: () => <Fixture home initial="connecting" /> }
 export const SettingsReconnect = { render: () => <Fixture initial="required" settings connectionDelay={200} /> }
 export const IncompatibleHost = { render: () => <Fixture incompatible /> }
 export const IncompatibleSession = { render: () => <Fixture initial="required" session incompatible /> }

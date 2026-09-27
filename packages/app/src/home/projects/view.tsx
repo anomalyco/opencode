@@ -11,7 +11,6 @@ import { ProjectAvatar } from "@opencode/ui/project-avatar"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Button } from "@opencode/ui/button"
-import { Spinner } from "@opencode/ui/spinner"
 import { Menu } from "@opencode/ui/menu"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { getProjectAvatarVariant, type HomeProjectSelection, type LocalProject } from "@/shell/state/layout"
@@ -256,7 +255,7 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
                       collapsed={collapsed()}
                       health={props.serverHealth(item)}
                     />
-                    <Show when={authentication() || connecting()}>
+                    <Show when={authentication()}>
                       <div class="mx-3 h-px bg-v2-border-border-base" />
                       <div class="px-1.5 py-1">
                         <Button
@@ -264,14 +263,9 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
                           class="w-full"
                           size="small"
                           variant="neutral"
-                          disabled={connecting()}
-                          aria-busy={!!connecting()}
                           onClick={() => props.onAuthenticateServer?.(item)}
                         >
-                          <Show when={connecting()}>
-                            <Spinner class="size-3.5" />
-                          </Show>
-                          {props.language.t(connecting() ? "ssh.stage.connecting" : "ssh.action.authenticate")}
+                          {props.language.t("ssh.action.authenticate")}
                         </Button>
                       </div>
                     </Show>
