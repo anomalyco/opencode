@@ -28,8 +28,11 @@ function selectionFromFileUrl(url: string): Extract<Inline, { type: "file" }>["s
   const queryIndex = url.indexOf("?")
   if (queryIndex === -1) return undefined
   const params = new URLSearchParams(url.slice(queryIndex + 1))
-  const startLine = Number(params.get("start"))
-  const endLine = Number(params.get("end"))
+  const start = params.get("start")
+  const end = params.get("end")
+  if (!start?.trim() || !end?.trim()) return undefined
+  const startLine = Number(start)
+  const endLine = Number(end)
   if (!Number.isFinite(startLine) || !Number.isFinite(endLine)) return undefined
   return {
     startLine,
