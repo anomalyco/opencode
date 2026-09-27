@@ -23,8 +23,7 @@ import { WriteTool } from "./write"
  * than this static list. The caller intentionally supplies shared Location
  * services once to this merged set.
  *
- * TODO: Port the remaining launch-follow-up leaves deliberately: edit fuzzy
- * parity, task, LSP,
+ * TODO: Port the remaining launch-follow-up leaves deliberately: task, LSP,
  * repo_clone, repo_overview, plan_exit, and Rune/code mode. Keep MCP and plugin
  * transforms separate from this static built-in list.
  */

@@ -361,6 +361,223 @@ describe("EditTool", () => {
     ),
   )
 
+  it.live("recovers from inexact oldString via lenient strategies", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        return Effect.promise(() =>
+          Promise.all([
+            fs.writeFile(path.join(tmp.path, "whitespace.txt"), "function greet() {\n  log('hi')   \n}\n"),
+            fs.writeFile(path.join(tmp.path, "indent.txt"), "class A {\n  m() {\n    return 1\n  }\n}\n"),
+            fs.writeFile(path.join(tmp.path, "escaped.txt"), 'log("a\nb")\n'),
+          ]),
+        ).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                yield* settleTool(
+                  registry,
+                  call({
+                    path: "whitespace.txt",
+                    oldString: "function greet() {\n  log('hi')\n}",
+                    newString: "function greet() {\n  log('bye')\n}",
+                  }),
+                )
+                expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "whitespace.txt"), "utf8"))).toBe(
+                  "function greet() {\n  log('bye')\n}\n",
+                )
+
+                yield* settleTool(
+                  registry,
+                  call({
+                    path: "indent.txt",
+                    oldString: "class A {\n    m() {\n      return 1\n    }\n}",
+                    newString: "class A {\n    m() {\n      return 2\n    }\n}",
+                  }),
+                )
+                expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "indent.txt"), "utf8"))).toBe(
+                  "class A {\n    m() {\n      return 2\n    }\n}\n",
+                )
+
+                yield* settleTool(
+                  registry,
+                  call({ path: "escaped.txt", oldString: 'log("a\\nb")', newString: 'log("a\\nc")' }),
+                )
+                expect(yield* Effect.promise(() => fs.readFile(path.join(tmp.path, "escaped.txt"), "utf8"))).toBe(
+                  'log("a\\nc")\n',
+                )
+                expect(writes).toHaveLength(3)
+              }),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("reports exact ambiguity before consulting lenient strategies", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "duplicate.txt")
+        return Effect.promise(() => fs.writeFile(target, "  a()\n  b()\n  a()\n")).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                expect(
+                  yield* executeTool(registry, call({ path: "duplicate.txt", oldString: "  a()", newString: "  c()" })),
+                ).toEqual({
+                  type: "error",
+                  value:
+                    "Found multiple exact matches for oldString. Provide more surrounding context or set replaceAll to true.",
+                })
+                expect(writes).toEqual([])
+              }),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("refuses to guess when an approximate match is ambiguous", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "loose.txt")
+        return Effect.promise(() => fs.writeFile(target, "  a()\n  b()\n  a()\n")).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                expect(
+                  yield* executeTool(registry, call({ path: "loose.txt", oldString: "    a()", newString: "    c()" })),
+                ).toEqual({
+                  type: "error",
+                  value:
+                    "Found multiple approximate matches for oldString after exact matching failed. Provide more surrounding context so the match is unique.",
+                })
+                expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("  a()\n  b()\n  a()\n")
+                expect(writes).toEqual([])
+              }),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("replaces every approximate occurrence when replaceAll is true", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "all-loose.txt")
+        return Effect.promise(() => fs.writeFile(target, "  a()  \n  b()\n  a()  \n")).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              settleTool(
+                registry,
+                call({ path: "all-loose.txt", oldString: "a()", newString: "c()", replaceAll: true }),
+              ),
+            ),
+          ),
+          Effect.andThen((settled) =>
+            Effect.gen(function* () {
+              expect(settled.output?.structured).toMatchObject({ replacements: 2 })
+              expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("  c()  \n  b()\n  c()  \n")
+            }),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("rejects block-anchor matches below the similarity threshold and leaves content unchanged", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "anchor.ts")
+        const original = [
+          "function configure() {",
+          "  keepImportantState()",
+          "  removeAllUserData()",
+          "  archiveBackups()",
+          "  auditLog()",
+          "}",
+        ].join("\n")
+        return Effect.promise(() => fs.writeFile(target, original)).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                expect(
+                  yield* executeTool(
+                    registry,
+                    call({
+                      path: "anchor.ts",
+                      oldString: ["function configure() {", "  const enabled = true", "}"].join("\n"),
+                      newString: ["function configure() {", "  const enabled = false", "}"].join("\n"),
+                    }),
+                  ),
+                ).toEqual({
+                  type: "error",
+                  value:
+                    "Could not find oldString in the file. It must match exactly, including whitespace and indentation.",
+                })
+                expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe(original)
+                expect(writes).toEqual([])
+              }),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("rejects block-anchor matches whose middle content is unrelated", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "unrelated.ts")
+        const original = ["function configure() {", "  removeAllUserData()", "}"].join("\n")
+        return Effect.promise(() => fs.writeFile(target, original)).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                expect(
+                  yield* executeTool(
+                    registry,
+                    call({
+                      path: "unrelated.ts",
+                      oldString: ["function configure() {", "  const enabled = true", "}"].join("\n"),
+                      newString: ["function configure() {", "  const enabled = false", "}"].join("\n"),
+                    }),
+                  ),
+                ).toEqual({
+                  type: "error",
+                  value:
+                    "Could not find oldString in the file. It must match exactly, including whitespace and indentation.",
+                })
+                expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe(original)
+                expect(writes).toEqual([])
+              }),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   it.live("preserves BOM and CRLF line endings", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
@@ -423,7 +640,6 @@ test("keeps the locked edit schema, semantics docstring, and deferred TODOs visi
     "absolute external paths retain mutation capability through a separate\n * external_directory approval before edit approval.",
   )
   for (const todo of [
-    "Port V1 fuzzy correction strategies only after exact-edit behavior is established: line-trimmed matching, block-anchor fallback, indentation correction, and similarity-threshold review.",
     "Add formatter integration after V2 formatter runtime exists.",
     "Publish watcher/file-edit events after V2 watcher integration exists.",
     "Add snapshots / undo after design exists.",

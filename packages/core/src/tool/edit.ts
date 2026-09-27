@@ -1,8 +1,12 @@
 /**
- * Model-facing V2 exact-edit leaf. Relative paths resolve within the active
+ * Model-facing V2 edit leaf. Relative paths resolve within the active
  * Location. Absolute paths inside that Location are accepted, while explicit
  * absolute external paths retain mutation capability through a separate
  * external_directory approval before edit approval.
+ *
+ * Matching stays exact-first: EditMatch only consults its lenient strategies
+ * after exact matching returns zero, and never guesses between multiple
+ * candidate spans.
  */
 export * as EditTool from "./edit"
 
@@ -15,6 +19,7 @@ import { FileMutation } from "../file-mutation"
 import { FSUtil } from "../fs-util"
 import { LocationMutation } from "../location-mutation"
 import { PermissionV2 } from "../permission"
+import { EditMatch } from "./edit-match"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
@@ -52,17 +57,6 @@ const decodeUtf8 = (content: Uint8Array) => {
   return { bom, content, text: new TextDecoder().decode(bom ? content.slice(3) : content) }
 }
 
-const countOccurrences = (content: string, search: string) => {
-  if (search === "") return content.length + 1
-  let count = 0
-  let offset = 0
-  while ((offset = content.indexOf(search, offset)) !== -1) {
-    count++
-    offset += search.length
-  }
-  return count
-}
-
 const previewLines = (value: string, prefix: "+" | "-") => {
   const lines = normalizeLineEndings(value).split("\n")
   const shown = lines.slice(0, 6).map((line) => `${prefix}${line.length > 240 ? `${line.slice(0, 240)}...` : line}`)
@@ -81,7 +75,6 @@ export const toModelOutput = (output: Output, oldString: string, newString: stri
   ].join("\n")
 
 /** Deferred V2 edit behavior and UX integrations remain visible at the model-facing seam. */
-// TODO: Port V1 fuzzy correction strategies only after exact-edit behavior is established: line-trimmed matching, block-anchor fallback, indentation correction, and similarity-threshold review.
 // TODO: Add formatter integration after V2 formatter runtime exists.
 // TODO: Publish watcher/file-edit events after V2 watcher integration exists.
 // TODO: Add snapshots / undo after design exists.
@@ -162,24 +155,32 @@ const layer = Layer.effectDiscard(
                 const ending = detectLineEnding(source.text)
                 const oldString = convertToLineEnding(input.oldString, ending)
                 const newString = convertToLineEnding(input.newString, ending)
-                const replacements = countOccurrences(source.text, oldString)
-                if (replacements === 0) {
+                const resolution = EditMatch.resolve(source.text, oldString, input.replaceAll === true)
+                if (resolution._tag === "NotFound") {
                   return yield* new ToolFailure({
                     message:
                       "Could not find oldString in the file. It must match exactly, including whitespace and indentation.",
                   })
                 }
-                if (replacements > 1 && input.replaceAll !== true) {
+                if (resolution._tag === "Ambiguous") {
                   return yield* new ToolFailure({
                     message:
-                      "Found multiple exact matches for oldString. Provide more surrounding context or set replaceAll to true.",
+                      resolution.strategy === "exact"
+                        ? "Found multiple exact matches for oldString. Provide more surrounding context or set replaceAll to true."
+                        : "Found multiple approximate matches for oldString after exact matching failed. Provide more surrounding context so the match is unique.",
+                  })
+                }
+                if (resolution._tag === "Disproportionate") {
+                  return yield* new ToolFailure({
+                    message:
+                      "Refusing replacement because the closest match spans far more of the file than oldString. Re-read the file and provide the full exact oldString for the intended replacement.",
                   })
                 }
 
                 const replaced =
-                  input.replaceAll === true
-                    ? source.text.replaceAll(oldString, newString)
-                    : source.text.replace(oldString, newString)
+                  resolution.count > 1
+                    ? source.text.replaceAll(resolution.search, newString)
+                    : source.text.replace(resolution.search, newString)
                 const counts = diffLines(source.text, replaced).reduce(
                   (result, item) => ({
                     additions: result.additions + (item.added ? (item.count ?? 0) : 0),
@@ -204,7 +205,7 @@ const layer = Layer.effectDiscard(
                       ...counts,
                     },
                   ],
-                  replacements,
+                  replacements: resolution.count,
                 } satisfies Output
               })
             },
