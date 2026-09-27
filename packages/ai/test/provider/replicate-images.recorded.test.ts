@@ -33,6 +33,8 @@ describe("Replicate Images recorded", () => {
 
         expect(response.images).toHaveLength(1)
         expect(response.image.source.type).toBe("url")
+        expect(response.image.mediaType).toBe("image/webp")
+        expect(response.image.kind).toBe("image")
         expect(response.usage).toMatchObject({ type: "compute" })
         expect((yield* response.image.bytes()).length).toBeGreaterThan(0)
       }),

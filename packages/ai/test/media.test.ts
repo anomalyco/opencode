@@ -90,9 +90,7 @@ describe("Media", () => {
         expect(second).toBe(first)
         expect(first).toEqual(PNG)
         expect(yield* asset.base64()).toBe(Buffer.from(PNG).toString("base64"))
-        expect(yield* asset.dataUrl()).toBe(
-          `data:application/octet-stream;base64,${Buffer.from(PNG).toString("base64")}`,
-        )
+        expect(yield* asset.dataUrl()).toBe(`data:image/png;base64,${Buffer.from(PNG).toString("base64")}`)
 
         const owned = yield* asset.materialize()
         expect(owned.source).toEqual({ type: "bytes", data: PNG, mediaType: "image/png" })
@@ -116,6 +114,60 @@ describe("Media", () => {
           ),
         ),
       )
+    }),
+  )
+
+  it.effect("infers url media types from the path extension unless one is declared", () =>
+    Effect.sync(() => {
+      const webp = Media.url("https://replicate.delivery/xezq/abc/out-0.webp")
+      expect([webp.mediaType, webp.kind]).toEqual(["image/webp", "image"])
+      expect(webp.source).toEqual({ type: "url", url: "https://replicate.delivery/xezq/abc/out-0.webp" })
+      expect(Media.url("https://cdn.test/clip.MP4?sig=a.png#t=1.pdf").mediaType).toBe("video/mp4")
+      expect(Media.url("https://cdn.test/download?file=a.png").mediaType).toBe("application/octet-stream")
+      expect(Media.url("https://cdn.test/v1.2/generated").mediaType).toBe("application/octet-stream")
+      expect(Media.url("not a url.png").mediaType).toBe("application/octet-stream")
+      expect(Media.url("https://cdn.test/a.png", { mediaType: "image/x-custom" }).mediaType).toBe("image/x-custom")
+      expect(Media.from({ type: "url", url: "https://cdn.test/a.mp3" }).kind).toBe("audio")
+    }),
+  )
+
+  it.effect("resolves downloaded media types: declared, then content-type, then sniffed, then extension", () =>
+    Effect.gen(function* () {
+      const responses: Record<string, [Uint8Array, string | undefined]> = {
+        "https://cdn.test/declared.png": [PNG, "image/jpeg"],
+        "https://cdn.test/pcm": [Uint8Array.from([1, 2, 3, 4]), "audio/L16; rate=24000; channels=1"],
+        "https://cdn.test/charset": [new TextEncoder().encode("hi"), "text/plain; charset=utf-8"],
+        "https://cdn.test/opaque": [PNG, "binary/octet-stream"],
+        "https://cdn.test/photo.jpg": [Uint8Array.from([1, 2, 3]), "application/octet-stream"],
+        "https://cdn.test/sniffed.jpg": [PNG, undefined],
+      }
+      const owned = yield* Effect.forEach(
+        [
+          Media.url("https://cdn.test/declared.png", { mediaType: "image/png" }),
+          ...Object.keys(responses)
+            .slice(1)
+            .map((url) => Media.url(url)),
+        ],
+        (asset) => asset.materialize(),
+      ).pipe(
+        Effect.provide(
+          dynamicResponse((input) =>
+            Effect.sync(() => {
+              const [body, type] = responses[input.request.url]
+              return input.respond(body, { headers: type === undefined ? {} : { "content-type": type } })
+            }),
+          ),
+        ),
+      )
+      expect(owned.map((asset) => asset.mediaType)).toEqual([
+        "image/png",
+        "audio/L16;rate=24000;channels=1",
+        "text/plain",
+        "image/png",
+        "image/jpeg",
+        "image/png",
+      ])
+      expect(owned[1].kind).toBe("audio")
     }),
   )
 

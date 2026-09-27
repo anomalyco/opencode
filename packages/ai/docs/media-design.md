@@ -72,7 +72,7 @@ Media.Source =
 
 class Media.Asset {
   readonly source: Media.Source
-  readonly mediaType: string                    // always resolved (sniffed when the provider omits it)
+  readonly mediaType: string                    // always resolved (sniffed bytes or url extension when omitted)
   readonly kind: "image" | "video" | "audio" | "document" | "other"
   readonly info?: { width?; height?; durationSeconds?; sampleRate?; channels?; encoding?; format? }
   readonly expiresAt?: number
@@ -84,6 +84,8 @@ class Media.Asset {
   dataUrl(): Effect<string, AIError, RequestExecutor.Service>
   materialize(): Effect<Media.Asset, AIError, RequestExecutor.Service>  // url/ref → bytes, before the URL dies
 }
+// A downloaded url asset's type: declared, else response content-type (audio keeps its parameters), else sniffed
+// bytes, else the url extension.
 
 Media.bytes(data, mediaType?)      Media.base64(data, mediaType?)
 Media.url(url, options?)           Media.ref(provider, id)
@@ -329,7 +331,7 @@ Settled rules:
 
 | Provider | Kind | Audio input | `timestamps` | `diarize` | Unsupported | Usage |
 |---|---|---|---|---|---|---|
-| OpenAI | stream (`stream: true` in `stream` mode; `whisper-1` ignores `stream`, so it emits only `finish`) | multipart `file` (inline only) | `whisper-1` (`verbose_json`); diarize model: `segment` | `gpt-4o-transcribe-diarize` (`diarized_json`) | `speakers`; `prompt` on the diarize model | `tokens` or `seconds` |
+| OpenAI | stream (`stream: true` in `stream` mode; `whisper-1` ignores `stream`, so it emits only `finish`) | multipart `file`; `url` audio is downloaded through the executor in `body.from` | `whisper-1` (`verbose_json`); diarize model: `segment` | `gpt-4o-transcribe-diarize` (`diarized_json`) | `speakers`; `prompt` on the diarize model | `tokens` or `seconds` |
 | Gemini | stream (`generateContent` / `streamGenerateContent`) | `inlineData` or Gemini Files `fileData` | `audioTranscriptionConfig.wordTimestamp` | `audioTranscriptionConfig.diarization` | `prompt`, `speakers` | `tokens` |
 | Deepgram | inline | raw body, or JSON `{ url }` | words always; `segment` → `utterances` | `diarize_model=latest` + `utterances` | `prompt`, `speakers` | `seconds` (`metadata.duration`) |
 | AssemblyAI | queued (upload → submit → poll) | `/v2/upload` then `audio_url`, or a URL | words always; `segment` → `speaker_labels` | `speaker_labels` | — | `seconds` (`audio_duration`) |

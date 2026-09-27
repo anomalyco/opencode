@@ -319,7 +319,7 @@ const makeTransport = <Request extends MediaRequest>(
       protocol: {
         readonly unsupported?: ReadonlyArray<keyof Request & string>
         readonly prepare?: MediaProtocol.Prepare<Request>
-        readonly from: (request: Request) => Effect.Effect<MediaProtocol.Body, AIError>
+        readonly from: MediaProtocol.BodyFrom<Request>
       },
       execute: Execute,
     ) {
@@ -336,7 +336,7 @@ const makeTransport = <Request extends MediaRequest>(
             )
       // Sanitize after merging so model-level overlays are covered; the model value is restored, not sanitized.
       const resolved: Request = { ...sanitizeSurrogates({ ...prepared, http }), model: request.model }
-      const body = yield* protocol.from(resolved)
+      const body = yield* protocol.from(resolved).pipe(Effect.provideService(RequestExecutorService, { execute }))
       const url = withQuery(
         withQuery(
           Endpoint.render(input.endpoint, { request: resolved, body }),

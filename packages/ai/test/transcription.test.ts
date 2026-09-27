@@ -51,6 +51,7 @@ describe("Transcription", () => {
           Transcription.generate({
             model: openai.transcription("gpt-transcribe"),
             audio: Media.url("https://a.test/x.mp3"),
+            timestamps: "word",
           }),
           Transcription.start({
             model: assemblyai,
@@ -75,13 +76,62 @@ describe("Transcription", () => {
           ["UnsupportedOperation", "media.speakers"],
           ["UnsupportedOperation", "transcription.start"],
           ["InvalidRequest", false],
-          ["InvalidRequest", false],
+          ["UnsupportedOperation", "media.timestamps"],
           ["InvalidRequest", false],
           ["InvalidRequest", false],
           ["UnsupportedOperation", "transcription.model"],
         ],
       )
     }).pipe(Effect.provide(layer(() => Effect.die("an unsupported request reached the network")))),
+  )
+
+  it.effect("downloads OpenAI url audio without route credentials and uploads it as the multipart file", () =>
+    Effect.gen(function* () {
+      const wav = new TextEncoder().encode("RIFF\0\0\0\0WAVEfmt ")
+      const calls: Array<Call> = []
+      const response = yield* Transcription.generate({
+        model: openai.transcription("gpt-transcribe"),
+        audio: Media.url("https://cdn.test/recording?sig=1", { headers: { "x-signed": "cdn" } }),
+      }).pipe(
+        Effect.provide(
+          layer((input) =>
+            observe(calls, input).pipe(
+              Effect.map(({ call }) =>
+                call.url.startsWith("https://cdn.test/")
+                  ? input.respond(wav, { headers: { "content-type": "audio/wav" } })
+                  : json(input, { text: "Hi" }),
+              ),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Hi")
+      expect(calls.map((call) => [call.method, call.url])).toEqual([
+        ["GET", "https://cdn.test/recording?sig=1"],
+        ["POST", "https://openai.test/v1/audio/transcriptions"],
+      ])
+      expect(calls[0].headers.get("authorization")).toBeNull()
+      expect(calls[0].headers.get("x-signed")).toBe("cdn")
+      expect(calls[1].headers.get("authorization")).toBe("Bearer test")
+      expect(calls[1].body).toContain('filename="audio.wav"')
+      expect(calls[1].body).toContain("Content-Type: audio/wav")
+      expect(calls[1].body).toContain("WAVEfmt ")
+    }),
+  )
+
+  it.effect("rejects an invalid OpenAI request before downloading its url audio", () =>
+    Effect.gen(function* () {
+      const calls: Array<Call> = []
+      const error = yield* Transcription.generate({
+        model: openai.transcription("gpt-4o-transcribe-diarize"),
+        audio: Media.url("https://cdn.test/recording.wav"),
+        prompt: "Names: Ada",
+      }).pipe(Effect.flip, Effect.provide(layer((input) => observe(calls, input).pipe(Effect.as(json(input, {}))))))
+
+      expect(error.reason._tag).toBe("UnsupportedOperation")
+      expect(calls).toEqual([])
+    }),
   )
 
   it.effect("ignores unknown OpenAI stream events and fails on an error event with the frame", () =>

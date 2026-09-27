@@ -36,7 +36,7 @@ describe("xAI Images", () => {
       expect(response.images).toHaveLength(2)
       expect(response.image.mediaType).toBe("image/jpeg")
       expect(yield* response.image.bytes()).toEqual(Uint8Array.from([1, 2, 3]))
-      expect(response.images[1].mediaType).toBe("application/octet-stream")
+      expect(response.images[1].mediaType).toBe("image/jpeg")
       expect(response.images[1].source).toEqual({ type: "url", url: "https://api.xai.test/image.jpg" })
       expect(response.usage).toBeUndefined()
       expect(response.providerMetadata).toEqual({ xai: { usage: { num_images: 2 } } })

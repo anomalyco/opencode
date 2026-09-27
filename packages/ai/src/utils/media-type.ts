@@ -54,6 +54,23 @@ const extensionMediaType = (path: string): string | undefined =>
 /** Media type of a file's contents: sniffed magic bytes, then the path's extension. */
 export const fileMediaType = (bytes: Uint8Array, path: string) => detectMediaType(bytes) ?? extensionMediaType(path)
 
+/** Media type implied by a URL path's extension; the query string and fragment never count. */
+export const urlMediaType = (url: string) => extensionMediaType(URL.parse(url)?.pathname ?? "")
+
+const OPAQUE = new Set(["application/octet-stream", "binary/octet-stream"])
+
+/**
+ * A response `content-type` worth trusting over sniffing, or `undefined` for missing, malformed, or opaque types.
+ * Parameters are dropped because provider `mime_type` fields reject them, except on audio, where headerless PCM
+ * declarations such as `audio/L16;rate=24000` carry the only record of the sample format.
+ */
+export const contentMediaType = (header: string | undefined) => {
+  const [essence, ...parameters] = (header ?? "").split(";").map((part) => part.trim())
+  if (!/^[\w.+-]+\/[\w.+-]+$/.test(essence) || OPAQUE.has(essence.toLowerCase())) return undefined
+  if (!essence.toLowerCase().startsWith("audio/")) return essence
+  return [essence, ...parameters.filter((part) => part.length > 0)].join(";")
+}
+
 const EXTENSION_ALIASES: Readonly<Record<string, string>> = {
   "audio/mp3": "mp3",
   "audio/m4a": "m4a",

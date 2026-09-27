@@ -6,7 +6,7 @@ import { ProviderID } from "./schema/ids.js"
 import { AIError, HttpContext, InvalidProviderOutputError, InvalidRequestError } from "./schema/errors.js"
 import { ProviderMetadata } from "./schema/options.js"
 import { Service } from "./route/executor-service.js"
-import { detectMediaType, fileMediaType } from "./utils/media-type.js"
+import { contentMediaType, detectMediaType, fileMediaType, urlMediaType } from "./utils/media-type.js"
 
 export { detectMediaType } from "./utils/media-type.js"
 
@@ -107,7 +107,10 @@ export interface Inline {
 
 export class Asset {
   readonly source: Source
-  /** Derived from the source: declared type, sniffed magic bytes, then `application/octet-stream`. */
+  /**
+   * Derived from the source: declared type, sniffed magic bytes for `bytes`, the path extension for `url`, then
+   * `application/octet-stream`. Downloading a `url` source can resolve a better type; see `materialize()`.
+   */
   readonly mediaType: string
   readonly kind: Kind
   readonly info?: Info
@@ -122,12 +125,14 @@ export class Asset {
   // through `source`, so round-tripping through `Media.from(asset.source)` stays lossless.
   #bytes: Uint8Array | undefined
   #base64: string | undefined
+  #downloadedType: string | undefined
 
   constructor(input: Asset.Input) {
     this.source = input.source
     this.mediaType =
       input.source.mediaType ??
       (input.source.type === "bytes" ? detectMediaType(input.source.data) : undefined) ??
+      (input.source.type === "url" ? urlMediaType(input.source.url) : undefined) ??
       OCTET_STREAM
     this.kind = kindOf(this.mediaType)
     this.info = input.info
@@ -153,13 +158,19 @@ export class Asset {
       if (this.#bytes !== undefined) return Effect.succeed(this.#bytes)
       if (source.type === "ref")
         return Effect.fail(invalid(`Cannot materialize provider ref ${source.provider}:${source.id}`))
-      const decoded =
-        source.type === "base64"
-          ? Effect.fromResult(Encoding.decodeBase64(source.data)).pipe(
-              Effect.mapError((cause) => invalid(`Media asset contains invalid base64 data`, cause)),
-            )
-          : download(source, this.headers)
-      return decoded.pipe(Effect.tap((data) => Effect.sync(() => (this.#bytes = data))))
+      if (source.type === "base64")
+        return Effect.fromResult(Encoding.decodeBase64(source.data)).pipe(
+          Effect.mapError((cause) => invalid(`Media asset contains invalid base64 data`, cause)),
+          Effect.tap((data) => Effect.sync(() => (this.#bytes = data))),
+        )
+      return download(source, this.headers).pipe(
+        Effect.map((downloaded) => {
+          // An explicit type always wins; otherwise the server's declaration beats sniffing, which beats the extension.
+          this.#downloadedType =
+            source.mediaType ?? downloaded.mediaType ?? detectMediaType(downloaded.data) ?? this.mediaType
+          return (this.#bytes = downloaded.data)
+        }),
+      )
     })
   }
 
@@ -173,7 +184,7 @@ export class Asset {
   }
 
   dataUrl(): Effect.Effect<string, AIError, Service> {
-    return this.base64().pipe(Effect.map((data) => `data:${this.mediaType};base64,${data}`))
+    return this.base64().pipe(Effect.map((data) => `data:${this.#downloadedType ?? this.mediaType};base64,${data}`))
   }
 
   /**
@@ -189,12 +200,15 @@ export class Asset {
     }
   }
 
-  /** Pull `url` sources into owned bytes before the URL expires. Inline sources return themselves. */
+  /**
+   * Pull `url` sources into owned bytes before the URL expires. Inline sources return themselves. The owned type is
+   * the declared one, else the response `content-type`, sniffed bytes, and the URL extension in that order.
+   */
   materialize(): Effect.Effect<Asset, AIError, Service> {
     if (this.source.type === "bytes" || this.source.type === "base64") return Effect.succeed(this)
     return this.bytes().pipe(
       Effect.map((data) =>
-        bytes(data, this.source.mediaType, { info: this.info, providerMetadata: this.providerMetadata }),
+        bytes(data, this.#downloadedType, { info: this.info, providerMetadata: this.providerMetadata }),
       ),
     )
   }
@@ -259,7 +273,7 @@ const download = Effect.fn("Media.download")(function* (
         }),
     ),
   )
-  return new Uint8Array(buffer)
+  return { data: new Uint8Array(buffer), mediaType: contentMediaType(response.headers["content-type"]) }
 })
 
 // ---------------------------------------------------------------------------
