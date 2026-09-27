@@ -56,6 +56,26 @@
       ],
       "tests": "test/session/compaction.test.ts",
       "why": "The compaction agent model pin existed (configured-compaction-agent) but the summarize kept the request marker variant, so a pinned model ran at the session variant (e.g. xhigh) instead of the agents configured variant (e.g. low). Threads agent.variant onto the summarize when a model is configured; logs pin+variant for runtime verification."
+    },
+    {
+      "id": "compaction-pin-precedence",
+      "title": "Plugin pin beats the configured compaction agent; the agent is the overflow fallback",
+      "commit": "934f08a31d579b42dd4ba462434d2631218ac207",
+      "patch": "local-fixes/patches/compaction-pin-precedence.patch",
+      "base": "v1.18.32",
+      "files": [
+        "packages/opencode/src/session/compaction.ts",
+        "packages/opencode/test/session/compaction.test.ts"
+      ],
+      "markers": [
+        "compaction-pin-precedence"
+      ],
+      "tests": "test/session/compaction.test.ts",
+      "why": "compaction-model-override made the opencode.json agent.compaction model beat every marker, which also overrode explicit plugin pins (OMO agents.<key>.compaction.model arrives as a marker model DIFFERENT from the working model). Precedence now: explicit pin (marker != working model) > configured compaction agent > bare marker. Core-initiated overflow markers echo the working model, so they fall through to the configured agent (luna-low); OMO preemptive pins win again. Working model = last real user turn before the marker (same rule as resume identity).",
+      "overlapsWith": [
+        "compaction-model-override"
+      ],
+      "orderNote": "Must apply after compaction-model-override (rewrites the same resolution block)."
     }
   ],
   "build": {
