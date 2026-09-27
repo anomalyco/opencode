@@ -9,7 +9,8 @@ import { SessionExecution } from "./session/execution.js"
 import { SessionStore } from "./session/store.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 
-const isSessionEvent = Schema.is(SessionEvent.Durable)
+// Live streaming progress is activity even when it is not persisted.
+const isSessionEvent = Schema.is(SessionEvent.All)
 
 export class Service extends Context.Service<Service, {}>()("@opencode/LocationActivity") {}
 

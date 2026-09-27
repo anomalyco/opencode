@@ -16,6 +16,7 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionEvent } from "@opencode/core/session/event"
+import { SessionMessage } from "@opencode/core/session/message"
 import { SessionRunner } from "@opencode/core/session/runner/index"
 import { SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
@@ -101,6 +102,93 @@ const it = testEffect(
 )
 
 describe("LocationActivity eviction", () => {
+  for (const definition of [
+    SessionEvent.Text.Delta,
+    SessionEvent.Reasoning.Delta,
+    SessionEvent.Tool.Input.Delta,
+    SessionEvent.Tool.Progress,
+    SessionEvent.Compaction.Delta,
+  ]) {
+    it.effect(`keeps ${definition.type} active while an idle location expires`, () =>
+      Effect.gen(function* () {
+        const db = (yield* Database.Service).db
+        const bus = yield* Bus.Service
+        const map = yield* LocationServiceMap.Service
+        const execution = yield* SessionExecution.Service
+        const sessionID = Session.ID.make("ses_streaming")
+        const quietID = Session.ID.make("ses_quiet")
+        const ref = LocationServiceMap.canonical({ directory: AbsolutePath.make("/streaming") })
+        const quiet = LocationServiceMap.canonical({ directory: AbsolutePath.make("/quiet") })
+        yield* db
+          .insert(ProjectTable)
+          .values({ id: Project.ID.global, worktree: ref.directory, sandboxes: [] })
+          .run()
+          .pipe(Effect.orDie)
+        yield* db
+          .insert(SessionTable)
+          .values(
+            [
+              { id: sessionID, directory: ref.directory },
+              { id: quietID, directory: quiet.directory },
+            ].map((session) => ({
+              ...session,
+              project_id: Project.ID.global,
+              slug: "progress",
+              version: "test",
+            })),
+          )
+          .run()
+          .pipe(Effect.orDie)
+
+        const created = yield* Deferred.make<void>()
+        const pending: Form.Info[] = []
+        const unsubscribe = yield* bus.listen((event) => {
+          if (event.type !== Form.Event.Created.type) return Effect.void
+          pending.push(Schema.decodeUnknownSync(Form.Event.Created.data)(event.data).form)
+          return pending.length === 2 ? Deferred.succeed(created, undefined) : Effect.void
+        })
+        yield* Effect.addFinalizer(() => unsubscribe)
+        yield* Effect.forEach([sessionID, quietID], (id) => execution.resume(id).pipe(Effect.exit, Effect.forkScoped))
+        yield* Effect.addFinalizer(() =>
+          Effect.forEach([sessionID, quietID], (id) => execution.interrupt(id)).pipe(
+            Effect.andThen(TestClock.adjust("5 minutes")),
+          ),
+        )
+        yield* Deferred.await(created)
+        const context = yield* map.contextEffect(ref).pipe(Effect.scoped)
+        const forms = Context.get(context, Form.Service)
+        yield* TestClock.adjust("1 minute")
+
+        // Exercise the real bus and eviction service across several idle deadlines.
+        for (const index of [0, 1, 2]) {
+          yield* TestClock.adjust("30 minutes")
+          expect(yield* forms.list({ sessionID })).toHaveLength(1)
+          yield* bus.publish(
+            definition,
+            {
+              sessionID,
+              assistantMessageID: SessionMessage.ID.make("msg_streaming"),
+              ordinal: 0,
+              id: "call_streaming",
+              delta: `chunk ${index}`,
+              text: `summary ${index}`,
+              metadata: { title: `progress ${index}` },
+            },
+            { location: ref },
+          )
+        }
+        expect(Array.from(yield* execution.active)).toEqual([sessionID])
+        expect(Array.from(yield* RcMap.keys(map.rcMap))).toEqual([ref])
+
+        // Once progress stops, ordinary inactivity cleanup must still happen.
+        yield* TestClock.adjust("62 minutes")
+        yield* TestClock.adjust("5 minutes")
+        expect(Array.from(yield* execution.active)).toEqual([])
+        expect(Array.from(yield* RcMap.keys(map.rcMap))).toEqual([])
+      }),
+    )
+  }
+
   for (const [count, admission] of [
     [1, "none"],
     [2, "none"],
