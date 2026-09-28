@@ -1,7 +1,7 @@
 import "./index.css"
 import { createAsync, query } from "@solidjs/router"
 import { Title, Meta } from "@solidjs/meta"
-import { For, createMemo } from "solid-js"
+import { For } from "solid-js"
 //import { HttpHeader } from "@solidjs/start"
 import goLogoLight from "../../asset/go-ornate-light.svg"
 import goLogoDark from "../../asset/go-ornate-dark.svg"
@@ -10,7 +10,7 @@ import { Faq } from "~/component/faq"
 import { Legal } from "~/component/legal"
 import { Footer } from "~/component/footer"
 import { Header } from "~/component/header"
-import { LimitsGraph } from "~/component/limits-graph"
+import { GoPlanChart } from "~/component/go-plan-chart"
 import { config } from "~/config"
 import { getLastSeenWorkspaceID } from "../workspace/common"
 import { IconMiniMax, IconMiMo, IconZai, IconAlibaba, IconDeepSeek } from "~/component/icon"
@@ -34,10 +34,8 @@ const models = [
   { name: "GLM-5.3-Flash", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "GLM-5.3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "GLM-5.2", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
-  { name: "GLM-5.1", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Kimi K3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Kimi K2.7 Code", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
-  { name: "Kimi K2.6", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "LongCat-2.0", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "MiMo-V2.6-Pro", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "MiMo-V2.6-Flash", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
@@ -45,9 +43,7 @@ const models = [
   { name: "MiMo-V2.5", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Qwen3.8 Max", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Qwen3.8 Flash", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
-  { name: "Qwen3.7 Max", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Qwen3.7 Plus", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
-  { name: "Qwen3.6 Plus", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "MiniMax M3", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "MiniMax M2.7", training: "go.faq.a5.notUsed", retention: "go.faq.a5.retention0" },
   { name: "Muse Spark 1.3 Contributor", training: "go.faq.a5.used", retention: "go.faq.a5.notZdr" },
@@ -62,23 +58,29 @@ const models = [
 
 export default function Home() {
   const workspaceID = createAsync(() => checkLoggedIn())
-  const subscribeUrl = createMemo(() => "/console/go")
+  const subscribeUrl = "https://opencode.ai/console/go"
   const i18n = useI18n()
   const language = useLanguage()
   return (
     <main data-page="go">
       {/*<HttpHeader name="Cache-Control" value="public, max-age=1, s-maxage=3600, stale-while-revalidate=86400" />*/}
       <Title>{i18n.t("go.title")}</Title>
-      <Meta name="description" content={i18n.t("go.meta.description")} />
+      <Meta name="description" content={`${i18n.t("go.meta.description")} ${i18n.t("go.plans.plus.description")}`} />
       <LocaleLinks path="/go" />
       <Meta property="og:type" content="website" />
       <Meta property="og:url" content={`${config.baseUrl}${language.route("/go")}`} />
       <Meta property="og:title" content={i18n.t("go.title")} />
-      <Meta property="og:description" content={i18n.t("go.meta.description")} />
+      <Meta
+        property="og:description"
+        content={`${i18n.t("go.meta.description")} ${i18n.t("go.plans.plus.description")}`}
+      />
       <Meta property="og:image" content="/social-share-black.png" />
       <Meta name="twitter:card" content="summary_large_image" />
       <Meta name="twitter:title" content={i18n.t("go.title")} />
-      <Meta name="twitter:description" content={i18n.t("go.meta.description")} />
+      <Meta
+        name="twitter:description"
+        content={`${i18n.t("go.meta.description")} ${i18n.t("go.plans.plus.description")}`}
+      />
       <Meta name="twitter:image" content="/social-share-black.png" />
       <Meta name="opencode:auth" content={workspaceID() ? "true" : "false"} />
 
@@ -182,46 +184,74 @@ export default function Home() {
                 </div>
                 */}
               </div>
-              <a href={subscribeUrl()}>
-                <span>
-                  <For
-                    each={i18n
-                      .t("go.cta.template")
-                      .split(/(\{\{text\}\}|\{\{price\}\})/g)
-                      .filter(Boolean)}
-                  >
-                    {(part) => {
-                      if (part === "{{text}}") return <span>{i18n.t("go.cta.text")}</span>
-                      if (part === "{{price}}") {
-                        return <span data-slot="cta-price">{i18n.t("go.cta.price")}</span>
-                      }
-                      return part
-                    }}
-                  </For>
-                </span>
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M6.5 12L17 12M13 16.5L17.5 12L13 7.5"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                    stroke-linecap="square"
-                  />
-                </svg>
-              </a>
             </div>
-            <div data-slot="pricing-copy">
-              <p>{i18n.t("go.pricing.body")}</p>
+            <div data-slot="plans">
+              <For
+                each={
+                  [
+                    {
+                      name: "Go",
+                      price: "$10",
+                      cta: "go.cta.text",
+                      features: ["go.plans.go.feature1", "go.plans.go.feature2", "go.plans.go.feature3"],
+                      icon: "✓",
+                    },
+                    {
+                      name: "Go Plus",
+                      price: "$40",
+                      cta: "go.plans.plus.cta",
+                      features: ["go.plans.plus.feature1", "go.plans.plus.feature2", "go.plans.plus.feature3"],
+                      icon: "+",
+                    },
+                  ] as const
+                }
+              >
+                {(plan) => (
+                  <div data-slot="plan">
+                    <div>
+                      <p data-slot="name">{plan.name}</p>
+                      <p data-slot="price">
+                        {plan.price} <span>{i18n.t("go.plans.month")}</span>
+                      </p>
+                      <ul>
+                        <For each={plan.features}>
+                          {(feature) => (
+                            <li>
+                              <span aria-hidden="true">
+                                <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
+                                  <path
+                                    d={
+                                      plan.icon === "✓"
+                                        ? "M3.53613 8.17857L6.39328 11.75L12.4647 4.25"
+                                        : "M8 2.88867V13.1109M2.88867 8H13.1109"
+                                    }
+                                    stroke="currentColor"
+                                  />
+                                </svg>
+                              </span>
+                              {i18n.t(feature)}
+                            </li>
+                          )}
+                        </For>
+                      </ul>
+                    </div>
+                    <a href={subscribeUrl}>{i18n.t(plan.cta)}</a>
+                  </div>
+                )}
+              </For>
             </div>
           </section>
 
           <section data-component="comparison">
-            <LimitsGraph href={goUsageLimits(language.locale())} />
+            <GoPlanChart href={goUsageLimits(language.locale())} />
           </section>
 
           <section data-component="problem">
             <div data-slot="section-title">
               <h3>{i18n.t("go.problem.title")}</h3>
-              <p>{i18n.t("go.problem.body")}</p>
+              <p>
+                {i18n.t("go.problem.body")} {i18n.t("go.plans.plus.description")}
+              </p>
             </div>
             <p>{i18n.t("go.problem.subtitle")}</p>
             <ul>
@@ -243,7 +273,9 @@ export default function Home() {
           <section data-component="how">
             <div data-slot="section-title">
               <h3>{i18n.t("go.how.title")}</h3>
-              <p>{i18n.t("go.how.body")}</p>
+              <p>
+                {i18n.t("go.how.body")} {i18n.t("go.plans.plus.description")}
+              </p>
             </div>
             <ul>
               <li>
@@ -260,7 +292,7 @@ export default function Home() {
                 <div>
                   <strong>{i18n.t("go.how.step2.title")}</strong> -{" "}
                   <a href={language.route("/docs/go/#pricing")}>{i18n.t("go.how.step2.link")}</a>{" "}
-                  {i18n.t("go.how.step2.afterLink")}
+                  {i18n.t("go.how.step2.afterLink")} · {i18n.t("go.plans.plus.description")}
                 </div>
               </li>
               <li>
@@ -292,14 +324,17 @@ export default function Home() {
                 <Faq question={i18n.t("go.faq.q9")}>{i18n.t("go.faq.a9")}</Faq>
               </li>
               <li>
-                <Faq question={i18n.t("go.faq.q3")}>{i18n.t("go.faq.a3")}</Faq>
+                <Faq question={i18n.t("go.faq.q3")}>
+                  {i18n.t("go.faq.a3")} {i18n.t("go.plans.plus.description")}
+                </Faq>
               </li>
               <li>
                 <Faq question={i18n.t("go.faq.q4")}>
                   {i18n.t("go.faq.a4.p1.beforePricing")}{" "}
                   <a href={language.route("/docs/go/#pricing")}>{i18n.t("go.faq.a4.p1.pricingLink")}</a>{" "}
-                  {i18n.t("go.faq.a4.p1.afterPricing")} {i18n.t("go.faq.a4.p2.beforeAccount")}{" "}
-                  <a href={subscribeUrl()}>{i18n.t("go.faq.a4.p2.accountLink")}</a>. {i18n.t("go.faq.a4.p3")}
+                  {i18n.t("go.faq.a4.p1.afterPricing")} {i18n.t("go.plans.plus.description")}{" "}
+                  {i18n.t("go.faq.a4.p2.beforeAccount")} <a href={subscribeUrl}>{i18n.t("go.faq.a4.p2.accountLink")}</a>
+                  . {i18n.t("go.faq.a4.p3")}
                 </Faq>
               </li>
               <li>
