@@ -752,7 +752,10 @@ const events = Video.stream({ model: Runway.configure({ apiKey }).video("gen4.5"
 
 Status polls, result fetches, cancels, and asset downloads all run through the same request executor with the route's
 auth. `Generation.await` and `Generation.events` fail with a
-`Timeout` reason when `poll.timeout` (default 10 minutes) elapses. Failed,
+`Timeout` reason when `poll.timeout` (default 10 minutes) elapses. Status polls and result fetches retry transient
+failures (rate limits, provider 5xx, network errors) with backoff that honors `retry-after`, always within
+`poll.timeout`; submits and cancels never retry. Interrupting a wait (or aborting its `signal`) does not cancel the
+provider job, which keeps running and billing: call `cancel()` to stop it. Failed,
 cancelled, and expired generations fail typed with the provider's terminal document on `reason.body`; moderation
 outcomes (Veo `raiMediaFilteredReasons`, xAI `respect_moderation`, Runway `SAFETY.*` codes) surface as `notices` when
 a video is still returned and as a `ContentPolicy` reason when nothing is.
@@ -773,7 +776,9 @@ Provider notes:
 The promise client exposes the same surface: `ai.video.start(...)` resolves to a handle with `await`, `events`,
 `result`, `refresh`, `cancel`, and `token`; `ai.video.generate`, `ai.video.resume(model, token)`, and
 `ai.video.stream` mirror the Effect API. The handle's `status` and `progress` are a snapshot from when it was
-created; `refresh()` resolves to a new handle.
+created; `refresh()` resolves to a new handle. Every promise method and stream accepts `{ signal }`: like `fetch`,
+aborting rejects the Promise or throws from the `for await` loop with `signal.reason` (an `AbortError` `DOMException`
+unless `abort(reason)` passed one), while `break` stops a stream without throwing.
 
 ```ts
 import { ai } from "@opencode/ai/promise"
@@ -871,11 +876,12 @@ for await (const event of ai.speech.stream({ model, text: "Hello from OpenCode."
 ## Transcription
 
 Transcription (speech-to-text) is the one modality whose providers use every route kind: OpenAI and Gemini stream,
-Deepgram answers inline, and AssemblyAI is queued. `Transcription.generate` and `Transcription.stream` work on all of
-them; `Transcription.start` / `resume` return a `Generation` on queued routes and fail with `UnsupportedOperation`
-elsewhere. Models come from `.transcription(...)` selectors on the `OpenAI`, `Google`, `Deepgram`, and `AssemblyAI`
-facades. Common fields (`language`, `prompt`, `timestamps: "none" | "segment" | "word"`, `diarize`, `speakers`) lower
-natively or fail with a typed `AIError` before any network call; a route may return more than asked.
+Deepgram and ElevenLabs answer inline, and AssemblyAI is queued. `Transcription.generate` and `Transcription.stream`
+work on all of them; `Transcription.start` / `resume` return a `Generation` on queued routes and fail with
+`UnsupportedOperation` elsewhere. Models come from `.transcription(...)` selectors on the `OpenAI`, `Google`,
+`Deepgram`, `ElevenLabs`, and `AssemblyAI` facades. Common fields (`language`, `prompt`,
+`timestamps: "none" | "segment" | "word"`, `diarize`, `speakers`) lower natively or fail with a typed `AIError` before
+any network call; a route may return more than asked.
 
 ```ts
 import { Console, Effect, Stream } from "effect"
@@ -887,7 +893,7 @@ const openai = OpenAI.configure({ apiKey: process.env.OPENAI_API_KEY })
 const program = Effect.gen(function* () {
   const audio = yield* Media.file("./call.mp3")
 
-  // Speaker-labelled segments; labels are provider-native strings ("A", "0", "spk:0").
+  // Speaker-labelled segments; labels are provider-native strings ("A", "0", "spk:0", "speaker_0").
   const response = yield* Transcription.generate({
     model: Deepgram.configure({ apiKey }).transcription("nova-3"),
     audio,
@@ -897,7 +903,7 @@ const program = Effect.gen(function* () {
   response.text // "Hello from OpenCode."
   response.segments // [{ text, startSeconds, endSeconds, speaker: "0" }]
   response.words // [{ text, startSeconds, endSeconds, speaker, confidence }]
-  response.language // the provider's own value, lowercased ("en", "english", "en_us")
+  response.language // the provider's own value, lowercased ("en", "eng", "english", "en_us")
 
   // Text deltas as the model transcribes, then one finish carrying the whole transcript.
   yield* Transcription.stream({ model: openai.transcription("gpt-4o-mini-transcribe"), audio }).pipe(
@@ -921,7 +927,12 @@ Provider notes:
 - **OpenAI** takes inline audio only; `diarize` needs `gpt-4o-transcribe-diarize`, timestamps need `whisper-1`, and `whisper-1` does not stream.
 - **Gemini** needs a transcribe model (`gemini-3.5-transcribe`); `prompt` and `speakers` fail typed.
 - **Deepgram** detects the language unless `language` is set; vocabulary goes in `providerOptions.keyterm`.
-- **AssemblyAI** uploads inline audio before submitting and is the only route that accepts `speakers`.
+- **ElevenLabs** (`scribe_v2`) uploads inline audio as the multipart `file` and sends a URL as `source_url`. Words
+  always carry timestamps, and segments are speaker turns, so `diarize`, `timestamps: "segment"`, or `speakers` turns
+  on diarization. `speakers` is an upper bound (`num_speakers`); `prompt` fails typed (vocabulary goes in
+  `providerOptions.keyterms`), as do webhook delivery and per-channel output (`use_multi_channel` without
+  `multichannel_output_style: "combined"`).
+- **AssemblyAI** uploads inline audio before submitting and treats `speakers` as the exact speaker count.
 
 The promise client mirrors the Effect API:
 

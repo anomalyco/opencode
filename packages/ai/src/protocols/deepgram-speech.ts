@@ -89,24 +89,32 @@ const fromRequest = Effect.fn("DeepgramSpeech.fromRequest")(function* (request: 
 // 6. Stream parsing
 // ---------------------------------------------------------------------------
 
-const HEADERLESS_ENCODINGS: Readonly<Record<string, SpeechStream.PcmEncoding>> = {
-  linear16: "pcm_s16le",
-  mulaw: "pcm_mulaw",
-  alaw: "pcm_alaw",
+/** Deepgram wraps raw encodings in WAV unless `container` is `none`, and defaults their sample rate per encoding. */
+const HEADERLESS_ENCODINGS: Readonly<
+  Record<string, { readonly encoding: SpeechStream.PcmEncoding; readonly sampleRate: number }>
+> = {
+  linear16: { encoding: "pcm_s16le", sampleRate: 24000 },
+  mulaw: { encoding: "pcm_mulaw", sampleRate: 8000 },
+  alaw: { encoding: "pcm_alaw", sampleRate: 8000 },
 }
 
 const finish = (state: State, context: MediaProtocol.ResponseContext<Request>) => {
   const headers = context.http.headers
   const mediaType = headers["content-type"]
   const format = audioFormat(context.request)
-  const encoding = HEADERLESS_ENCODINGS[format.encoding ?? ""]
+  const headerless = HEADERLESS_ENCODINGS[format.encoding ?? ""]
+  const container = format.container ?? (headerless === undefined ? undefined : "wav")
   const requestID = headers["dg-request-id"]
   const modelName = headers["dg-model-name"]
   return SpeechStream.finish(route, state, {
-    ...(format.container === "none" && encoding !== undefined
-      ? SpeechStream.pcm(encoding, SpeechStream.sampleRate(mediaType), mediaType)
+    ...(container === "none" && headerless !== undefined
+      ? SpeechStream.pcm(
+          headerless.encoding,
+          SpeechStream.sampleRate(mediaType) ?? context.request.providerOptions?.sampleRate ?? headerless.sampleRate,
+          mediaType,
+        )
       : // Deepgram's default encoding is MP3; WAV is a container around any encoding.
-        { mediaType, info: { format: format.container === "wav" ? "wav" : (format.encoding ?? "mp3") } }),
+        { mediaType, info: { format: container === "wav" ? "wav" : (format.encoding ?? "mp3") } }),
     usage: SpeechStream.headerUsage("characters", headers["dg-char-count"]),
     providerMetadata:
       requestID === undefined && modelName === undefined

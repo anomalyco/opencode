@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "2.0.16",
+  "version": "2.0.18",
   "name": "@opencode/core",
   "type": "module",
   "license": "MIT",
@@ -65,12 +65,6 @@
       "bun": "./src/shell/parser-wasm.bun.ts",
       "node": "./src/shell/parser-wasm.node.ts",
       "default": "./src/shell/parser-wasm.bun.ts"
-    },
-    "#process-lock-ffi": {
-      "workerd": "./src/util/process-lock-ffi.workerd.ts",
-      "bun": "./src/util/process-lock-ffi.bun.ts",
-      "node": "./src/util/process-lock-ffi.node.ts",
-      "default": "./src/util/process-lock-ffi.bun.ts"
     },
     "#v1-migration": {
       "types": "./src/database/v1-migration.bun.ts",

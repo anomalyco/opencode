@@ -85,7 +85,7 @@ Add `compaction` to any [OpenCode configuration file](/config):
 | --- | ---: | --- |
 | `auto` | `true` | Compact automatically near the context limit, and recover once when a provider rejects a request as too long. Manual compaction always works. |
 | `keep.tokens` | `15000` | Approximate recent conversation kept beside the summary. Larger values preserve more detail but leave less room for new work. |
-| `buffer` | `20000` | Tokens to reserve below the model's limit. Larger values start automatic compaction earlier. |
+| `buffer` | 10% of the limit | Tokens to keep free below the model's limit. Larger values start automatic compaction earlier. |
 
 `keep.tokens` and `buffer` accept non-negative integers.
 
@@ -127,7 +127,7 @@ after    [ encrypted checkpoint + recent user messages ]
 | Support | OpenAI Responses models. Support varies by deployment and model. |
 | Threshold | Same `auto` and `buffer` settings as summary compaction. Manual requests work too. |
 | Portability | An encrypted checkpoint only works with the same provider, model, and endpoint. If you switch models, the session continues from the original conversation instead. |
-| Fallback | If the provider rejects an automatic compaction as too long, OpenCode writes a summary itself. |
+| Too long | If the provider rejects a compaction as too long, OpenCode retries it with a smaller request. It does not switch to a summary. |
 
 ## Summaries
 
@@ -156,6 +156,7 @@ session's baseline; see [Instructions](/instructions).
 | --- | --- |
 | Model | Compaction uses the session's model. There is no separate compaction model. |
 | History | Compaction needs older conversation to replace. It cannot create room when a request is mostly fixed instructions and tool schemas. |
+| Size | If the conversation to compact is itself too long, OpenCode sends a shortened text version and may leave out the oldest exchanges. |
 | Recovery | A request rejected as too long is compacted and retried once. A second rejection is returned as an error. |
 | Storage | Earlier messages remain stored even when they are no longer sent to the model. |
 
