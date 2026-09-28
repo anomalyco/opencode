@@ -57,7 +57,10 @@ function NotificationDetails(props: { entry: ToastHistoryEntry }) {
       <text fg={theme.text.feedback[props.entry.variant].base}>
         {props.entry.variant} · {Locale.datetime(props.entry.time)}
       </text>
-      <scrollbox ref={(value) => (scroll = value)} height={Math.max(3, Math.min(18, dimensions().height - 12))}>
+      <scrollbox
+        ref={(value) => (scroll = value)}
+        maxHeight={Math.max(3, Math.min(18, Math.floor(dimensions().height * 0.75) - 8))}
+      >
         <Show when={props.entry.title}>
           <text fg={theme.text.base}>{props.entry.title}</text>
         </Show>

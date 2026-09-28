@@ -34,7 +34,16 @@ for (const width of [40, 100]) {
       const toast = useToast()
       const dialog = useDialog()
       onMount(() => {
-        toast.show({ title: "Plugin warning", message: "First line\nUnique detail", variant: "warning" })
+        toast.show({
+          title: "Plugin warning",
+          message: [
+            "First line",
+            "Unique detail",
+            ...Array.from({ length: 25 }, (_, i) => `Detail ${i}`),
+            "Final detail",
+          ].join("\n"),
+          variant: "warning",
+        })
         toast.dismiss()
         toast.show({ title: "Copied", message: "Some other notification", variant: "success" })
         toast.dismiss()
@@ -70,6 +79,10 @@ for (const width of [40, 100]) {
       await app.waitForFrame(
         (frame) => frame.includes("First line") && frame.includes("Unique detail") && frame.includes("enter back"),
       )
+      app.mockInput.pressKey("\x1b[6~")
+      app.mockInput.pressKey("\x1b[6~")
+      app.mockInput.pressKey("\x1b[6~")
+      await app.waitForFrame((frame) => frame.includes("Final detail") && frame.includes("enter back"))
       app.mockInput.pressKey("RETURN")
       await app.waitForFrame((frame) => frame.includes("Notification history") && frame.includes("Copied"))
       app.mockInput.pressKey("x", { ctrl: true })
