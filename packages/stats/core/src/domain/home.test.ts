@@ -5,7 +5,7 @@ import type { RetentionMetricRow } from "./home"
 process.env.SST_RESOURCE_App = JSON.stringify({ name: "opencode", stage: "test" })
 process.env.SST_RESOURCE_StatsDatabase = JSON.stringify({ url: "mysql://localhost/stats" })
 
-const { buildRetentionEntries, buildStatsHomeData } = await import("./home")
+const { buildRetentionEntries, buildStatsHomeData, normalizeStatRows } = await import("./home")
 
 test("daily rankings use the latest day while weekly rankings retain seven days and their previous-period change", () => {
   const rows = Array.from({ length: 14 }, (_, index) =>
@@ -44,6 +44,40 @@ test("daily rankings use the latest day while weekly rankings retain seven days 
     ["model-a", 9],
   ])
   expect(rankings["2M"]).toEqual(rankings["1W"])
+})
+
+describe("model usage attribution", () => {
+  const row = {
+    periodKey: "2026-09-27",
+    updatedAt: new Date("2026-09-28T00:00:00.000Z"),
+    tier: "Go",
+    provider: "unknown",
+    model: "longcat-2.5-preview",
+    sessions: 1,
+    uniqueUsers: 1,
+    inputTokens: 50,
+    outputTokens: 50,
+    reasoningTokens: 0,
+    cacheReadTokens: 0,
+    totalTokens: 100,
+    inputCostMicrocents: 0,
+    outputCostMicrocents: 0,
+    totalCostMicrocents: 0,
+  }
+
+  test("shows historical LongCat usage under Meituan", () => {
+    expect(normalizeStatRows([row])).toMatchObject([{ provider: "meituan", model: "longcat-2.5-preview" }])
+  })
+
+  test("prefers recomputed rows over stale unknown dimensions", () => {
+    expect(normalizeStatRows([row, { ...row, provider: "meituan" }])).toMatchObject([
+      { provider: "meituan", totalTokens: 100 },
+    ])
+  })
+
+  test("keeps unknown usage when a different lab has the same model name", () => {
+    expect(normalizeStatRows([row, { ...row, provider: "another-lab" }])).toHaveLength(2)
+  })
 })
 
 describe("retention aggregates", () => {
