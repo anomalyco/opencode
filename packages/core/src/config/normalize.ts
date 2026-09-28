@@ -24,7 +24,6 @@ import { ConfigMCPV1 } from "../v1/config/mcp.js"
 import { ConfigPermissionV1 } from "../v1/config/permission.js"
 import { ConfigPluginV1 } from "../v1/config/plugin.js"
 import { ConfigProviderV1 } from "../v1/config/provider.js"
-import { ConfigV1 } from "../v1/config/config.js"
 import { ConfigMigrateV1 } from "../v1/config/migrate.js"
 import { PositiveInt } from "../schema.js"
 
@@ -71,7 +70,7 @@ export function normalize(input: unknown): Result {
     ? decodeEncoded(Schema.Boolean, input.snapshot, ["snapshot"], diagnostics)
     : undefined
   const legacyUpdate = own(input, "autoupdate")
-    ? decodeValue(ConfigV1.Info.fields.autoupdate, input.autoupdate, ["autoupdate"], diagnostics)
+    ? decodeValue(Schema.Union([Schema.Boolean, Schema.Literal("notify")]), input.autoupdate, ["autoupdate"], diagnostics)
     : undefined
   const nativeUpdate = own(input, "update")
     ? decodeEncoded(Info.fields.update, input.update, ["update"], diagnostics)
@@ -84,13 +83,10 @@ export function normalize(input: unknown): Result {
   const legacyMedia = own(input, "attachment")
     ? decodeValue(ConfigAttachmentV1.Info, input.attachment, ["attachment"], diagnostics)
     : undefined
-  if (legacyMedia !== undefined) {
-    const migrated = ConfigMigrateV1.migrate({ attachment: legacyMedia }).media
-    if (migrated !== undefined) encoded.media = canonical(ConfigMedia.Info, migrated)
-  }
+  if (legacyMedia !== undefined) encoded.media = canonical(ConfigMedia.Info, legacyMedia)
   if (legacySnapshots !== undefined) encoded.snapshots = legacySnapshots
   const migratedUpdate =
-    legacyUpdate === undefined ? undefined : ConfigMigrateV1.migrate({ autoupdate: legacyUpdate }).update
+    legacyUpdate === false ? "disable" : legacyUpdate === "notify" ? "notify" : legacyUpdate === true ? "auto" : undefined
   const update = prefer(migratedUpdate, nativeUpdate, ["update"], diagnostics)
   if (update !== undefined) encoded.update = update
   if (legacyShare !== undefined) encoded.share = legacyShare
@@ -135,9 +131,7 @@ export function normalize(input: unknown): Result {
   const legacySmallModel = own(input, "small_model")
     ? decodeValue(Schema.String, input.small_model, ["small_model"], diagnostics)
     : undefined
-  const migratedSmallModel = legacySmallModel
-    ? ConfigMigrateV1.migrate({ small_model: legacySmallModel }).agents?.title?.model
-    : undefined
+  const migratedSmallModel = ConfigMigrateV1.modelSelection(legacySmallModel)
   if (legacySmallModel && !migratedSmallModel)
     diagnostics.push({
       kind: "unsupported",

@@ -1,9 +1,7 @@
 export * as ConfigMigrateV1 from "./migrate.js"
 
-import { Info } from "@opencode/schema/config"
 import { ConfigAgent } from "@opencode/schema/config/agent"
 import { Schema } from "effect"
-import { ConfigV1 } from "./config.js"
 import { ConfigAgentV1 } from "./agent.js"
 import { ConfigCommandV1 } from "./command.js"
 import { ConfigMCPV1 } from "./mcp.js"
@@ -14,102 +12,16 @@ import { Provider } from "../../provider.js"
 import { Model } from "../../model.js"
 
 const decodeOptions = { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" } as const
-const decodeInfo = Schema.decodeUnknownSync(Schema.fromJsonString(Info), decodeOptions)
-const encodeInfo = Schema.encodeSync(Info)
 const decodeAgent = Schema.decodeUnknownSync(Schema.fromJsonString(ConfigAgent.Info), decodeOptions)
 const encodeAgent = Schema.encodeSync(ConfigAgent.Info)
-export function migrate(info: typeof ConfigV1.Info.Type) {
-  return encodeInfo(
-    decodeInfo(
-      JSON.stringify({
-        $schema: info.$schema,
-        shell: info.shell,
-        model: modelSelection(info.model),
-        default_agent: info.default_agent,
-        update:
-          info.autoupdate === false
-            ? "disable"
-            : info.autoupdate === "notify"
-              ? "notify"
-              : info.autoupdate === true
-                ? "auto"
-                : undefined,
-        share: info.share ?? (info.autoshare ? "auto" : undefined),
-        enterprise: info.enterprise,
-        username: info.username,
-        permissions: permissions(info.permission, info.tools),
-        agents: agents(info),
-        snapshots: info.snapshot,
-        watcher: info.watcher,
-        formatter: info.formatter,
-        lsp: info.lsp,
-        media: info.attachment,
-        tool_output: info.tool_output,
-        mcp: mcp(info),
-        compaction: info.compaction && {
-          auto: info.compaction.auto,
-          prune: info.compaction.prune,
-          keep: {
-            tokens: info.compaction.preserve_recent_tokens,
-          },
-          buffer: info.compaction.reserved,
-        },
-        skills: info.skills && [...(info.skills.paths ?? []), ...(info.skills.urls ?? [])],
-        commands: commands(info.command),
-        instructions: info.instructions,
-        references: info.references ?? info.reference,
-        experimental: experimental(info),
-        plugins: info.plugin?.map((plugin) =>
-          typeof plugin === "string" ? plugin : { package: plugin[0], options: plugin[1] },
-        ),
-        providers: providers(info.provider),
-      }),
-    ),
-  )
-}
 
-function experimental(info: typeof ConfigV1.Info.Type) {
-  const policies = [
-    ...(info.enabled_providers === undefined
-      ? []
-      : [
-          { action: "provider.use" as const, resource: "*", effect: "deny" as const },
-          ...info.enabled_providers.map((resource) => ({
-            action: "provider.use" as const,
-            resource: providerID(resource),
-            effect: "allow" as const,
-          })),
-        ]),
-    ...(info.disabled_providers ?? []).map((resource) => ({
-      action: "provider.use" as const,
-      resource: providerID(resource),
-      effect: "deny" as const,
-    })),
-  ]
-  if (info.experimental?.subagent_depth === undefined && !policies.length) return
-  return {
-    subagent_depth: info.experimental?.subagent_depth,
-    policies: policies.length ? policies : undefined,
-  }
-}
-
-function permissions(info?: ConfigPermissionV1.Info, tools?: Readonly<Record<string, boolean>>) {
-  const rules: Array<{ action: string; resource: string; effect: ConfigPermissionV1.Action }> = Object.entries(
-    tools ?? {},
-  ).map(([action, enabled]) => ({
-    action: normalizeAction(action),
-    resource: "*",
-    effect: enabled ? ("allow" as const) : ("deny" as const),
-  }))
-  for (const [key, rule] of Object.entries(info ?? {})) {
-    if (!rule) continue
+function permissions(info?: ConfigPermissionV1.Info) {
+  const rules = Object.entries(info ?? {}).flatMap(([key, rule]) => {
+    if (!rule) return []
     const action = normalizeAction(key)
-    if (typeof rule === "string") {
-      rules.push({ action, resource: "*", effect: rule })
-      continue
-    }
-    rules.push(...Object.entries(rule).map(([resource, effect]) => ({ action, resource, effect })))
-  }
+    if (typeof rule === "string") return [{ action, resource: "*", effect: rule }]
+    return Object.entries(rule).map(([resource, effect]) => ({ action, resource, effect }))
+  })
   return rules.length ? rules : undefined
 }
 
@@ -119,23 +31,6 @@ export function normalizeAction(action: string) {
   if (action === "task") return "subagent"
   if (action === "bash") return "shell"
   return action
-}
-
-function agents(info: typeof ConfigV1.Info.Type) {
-  const entries = [
-    ...Object.entries(info.agent ?? {}),
-    ...Object.entries(info.mode ?? {}).map(([name, agent]) => [name, { ...agent, mode: "primary" as const }] as const),
-  ]
-  const result = Object.fromEntries(entries.flatMap(([name, agent]) => (agent ? [[name, migrateAgent(agent)]] : [])))
-  const small = modelSelection(info.small_model)
-  if (!small) return entries.length ? result : undefined
-  return {
-    ...result,
-    title: {
-      model: small,
-      ...result.title,
-    },
-  }
 }
 
 export function migrateAgent(info: ConfigAgentV1.Info) {
@@ -178,7 +73,7 @@ export function commands(info?: Readonly<Record<string, ConfigCommandV1.Info>>) 
   )
 }
 
-function modelSelection(input?: string, variant?: string) {
+export function modelSelection(input?: string, variant?: string) {
   if (input === undefined || !/^[^/#]+\/[^#]+$/.test(input)) return undefined
   const separator = input.indexOf("/")
   return {
@@ -186,17 +81,6 @@ function modelSelection(input?: string, variant?: string) {
     model: input.slice(separator + 1),
     ...(variant === undefined || variant.length === 0 || variant.includes("#") ? {} : { variant }),
   }
-}
-
-function mcp(info: typeof ConfigV1.Info.Type) {
-  const servers = Object.fromEntries(
-    Object.entries(info.mcp ?? {}).flatMap(([name, server]) =>
-      "type" in server ? [[name, migrateMcp(server)] as const] : [],
-    ),
-  )
-  const timeout = info.experimental?.mcp_timeout
-  if (!timeout && !Object.keys(servers).length) return undefined
-  return { timeout: timeout === undefined ? undefined : { catalog: timeout, execution: timeout }, servers }
 }
 
 export function migrateMcp(info: ConfigMCPV1.Info) {
@@ -224,18 +108,6 @@ export function migrateMcp(info: ConfigMCPV1.Info) {
     disabled,
     timeout: info.timeout === undefined ? undefined : { catalog: info.timeout, execution: info.timeout },
   }
-}
-
-function providers(info?: Readonly<Record<string, ConfigProviderV1.Info>>) {
-  if (!info) return undefined
-  return Object.fromEntries(
-    Object.entries(info).flatMap(([name, provider]) => {
-      const id = providerID(name)
-      // If both names are present, keep the settings under the current name and ignore the old one.
-      if (id !== name && info[id]) return []
-      return [[id, migrateProvider(name, provider)]]
-    }),
-  )
 }
 
 export function migrateProvider(sourceID: string, info: ConfigProviderV1.Info) {
