@@ -1,4 +1,5 @@
 import { EOL } from "node:os"
+import { text } from "node:stream/consumers"
 import { Effect, Option } from "effect"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
@@ -27,7 +28,7 @@ export default Runtime.handler(
       if (index < 1) return yield* Effect.fail(new Error(`Invalid header, expected name:value: ${header}`))
       headers.set(header.slice(0, index).trim(), header.slice(index + 1).trim())
     }
-    const body = Option.getOrUndefined(input.data)
+    const body = yield* resolveBody(Option.getOrUndefined(input.data))
     if (body !== undefined && !headers.has("content-type")) headers.set("content-type", "application/json")
 
     const response = yield* Effect.tryPromise(() =>
@@ -55,6 +56,19 @@ export function resolveOperation(spec: OpenApi, operationID: string, params: Rec
 export function rawRequest(input: readonly string[]) {
   if (input.length !== 2 || !methods.has(input[0].toLowerCase()) || !input[1].startsWith("/")) return
   return { method: input[0].toUpperCase(), path: input[1] }
+}
+
+export function resolveBody(data: string | undefined) {
+  if (data === undefined || !data.startsWith("@")) return Effect.succeed(data)
+  const source = data.slice(1)
+  if (source === "") {
+    return Effect.fail(new Error("Expected a file path after @, or @- to read the request body from stdin"))
+  }
+  return Effect.tryPromise({
+    try: () => (source === "-" ? text(process.stdin) : Bun.file(source).text()),
+    catch: (cause) =>
+      new Error(`Failed to read request body: ${cause instanceof Error ? cause.message : String(cause)}`),
+  })
 }
 
 function resolveRequest(

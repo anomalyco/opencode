@@ -13,7 +13,11 @@ export const Commands = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCO
           Argument.withDescription("OpenAPI operation ID, or an HTTP method followed by a path"),
           Argument.variadic({ min: 1, max: 2 }),
         ),
-        data: Flag.string("data").pipe(Flag.withAlias("d"), Flag.withDescription("Request body"), Flag.optional),
+        data: Flag.string("data").pipe(
+          Flag.withAlias("d"),
+          Flag.withDescription("Request body, or @file to read it from a file (use @- for stdin)"),
+          Flag.optional,
+        ),
         header: Flag.string("header").pipe(
           Flag.withAlias("H"),
           Flag.withDescription("Request header in name:value form"),
