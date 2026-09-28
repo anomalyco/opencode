@@ -1,4 +1,5 @@
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
+import type { Context } from "@opencode/plugin/effect/plugin"
 import { define } from "@opencode/plugin/effect/plugin"
 import type { SessionRequest } from "@opencode/plugin/effect/session"
 import { Deferred, Duration, Effect, Option, Schema, Semaphore, Stream } from "effect"
@@ -68,7 +69,7 @@ const decodeMetadata = Schema.decodeUnknownOption(
   }),
 )
 
-const signIn = (app: App.Info, savedClientID: () => string | undefined) =>
+const signIn = (app: App.Info, savedClientID: () => string | undefined, storage: Context["storage"]) =>
   ({
     integrationID: Integration.ID.make("openai"),
     method: {
@@ -78,6 +79,9 @@ const signIn = (app: App.Info, savedClientID: () => string | undefined) =>
     },
     authorize: () =>
       Effect.gen(function* () {
+        const storedHostID = yield* storage.get("agent-host-id")
+        const hostID = typeof storedHostID === "string" ? storedHostID : `urn:uuid:${crypto.randomUUID()}`
+        if (typeof storedHostID !== "string") yield* storage.set("agent-host-id", hostID)
         const pkce = yield* Effect.promise(generatePKCE)
         const state = randomValue()
         const nonce = randomValue()
@@ -124,7 +128,7 @@ const signIn = (app: App.Info, savedClientID: () => string | undefined) =>
         const redirect = `http://127.0.0.1:${port}/auth/callback`
         return {
           mode: "auto" as const,
-          url: authorizeURL(redirect, pkce, state, nonce, savedID),
+          url: authorizeURL(redirect, pkce, state, nonce, savedID, hostID),
           instructions: "Complete authorization in your browser. This window will close automatically.",
           callback: Effect.gen(function* () {
             const result = yield* Deferred.await(received)
@@ -200,7 +204,9 @@ export const OpenAIPlugin = define({
     })
 
     yield* ctx.integration.transform((editor) => {
-      editor.method.update(signIn(ctx.app, () => Option.getOrUndefined(decodeMetadata(chatgpt?.metadata))?.clientID))
+      editor.method.update(
+        signIn(ctx.app, () => Option.getOrUndefined(decodeMetadata(chatgpt?.metadata))?.clientID, ctx.storage),
+      )
     })
     yield* load()
     yield* ctx.session.hook(
@@ -461,10 +467,18 @@ function base64UrlEncode(buffer: ArrayBuffer) {
   return Buffer.from(buffer).toString("base64url")
 }
 
-function authorizeURL(redirect: string, pkce: Pkce, state: string, nonce: string, savedID: string | undefined) {
+function authorizeURL(
+  redirect: string,
+  pkce: Pkce,
+  state: string,
+  nonce: string,
+  savedID: string | undefined,
+  hostID: string,
+) {
   return `${issuer}/api/accounts/authorize?${new URLSearchParams({
     client_id: savedID ?? registrationClientID,
     ...(savedID ? {} : { agent_name_hint: agentName }),
+    ext_agent_host_id: hostID,
     // Enable only for user-requested consent retries after OpenAI confirms deployment;
     // ordinary sign-ins must not force reconsent.
     // force_reconsent: "true",

@@ -10,6 +10,7 @@ import { exportJWK, generateKeyPair, SignJWT } from "jose"
 import { App } from "@opencode/core/app"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
+import { KV } from "@opencode/core/kv"
 import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
 import { ModelResolver } from "@opencode/core/model-resolver"
@@ -33,7 +34,7 @@ const it = testEffect(PluginTestLayer)
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
-  const host = yield* PluginHost.make(plugin)
+  const host = yield* PluginHost.make(plugin, OpenAIPlugin.id)
   yield* OpenAIPlugin.effect(host)
 })
 
@@ -376,6 +377,12 @@ describe("OpenAIPlugin", () => {
       expect(url.searchParams.get("state")).toBeTruthy()
       expect(url.searchParams.get("nonce")).toBeTruthy()
       expect(url.searchParams.get("code_challenge")).toBeTruthy()
+      const hostID = url.searchParams.get("ext_agent_host_id")
+      expect(hostID).toMatch(/^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+      const kv = yield* KV.Service
+      const storage = PluginHost.storage(kv, OpenAIPlugin.id)
+      expect(yield* storage.get("agent-host-id")).toBe(hostID)
+      expect((yield* authorize()).searchParams.get("ext_agent_host_id")).toBe(hostID)
       expect(redirect.hostname).toBe("127.0.0.1")
       expect(redirect.pathname).toBe("/auth/callback")
       expect(Number(redirect.port)).toBeGreaterThan(0)
@@ -403,6 +410,9 @@ describe("OpenAIPlugin", () => {
   it.effect("reauthorizes with the client ID issued to an existing ChatGPT connection", () =>
     Effect.gen(function* () {
       const credentials = yield* Credential.Service
+      const kv = yield* KV.Service
+      const hostID = "urn:uuid:00000000-0000-4000-8000-000000000000"
+      yield* PluginHost.storage(kv, OpenAIPlugin.id).set("agent-host-id", hostID)
       yield* credentials.create({
         integrationID: Integration.ID.make("openai"),
         value: Credential.OAuth.make({
@@ -418,6 +428,7 @@ describe("OpenAIPlugin", () => {
       const url = yield* authorize()
       expect(url.searchParams.get("client_id")).toBe("oaiapp_issued")
       expect(url.searchParams.has("agent_name_hint")).toBe(false)
+      expect(url.searchParams.get("ext_agent_host_id")).toBe(hostID)
       expect(new URL(url.searchParams.get("redirect_uri") ?? "").hostname).toBe("127.0.0.1")
     }),
   )
