@@ -7,6 +7,28 @@ import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { reply } from "../../lib/llm-server"
 import { cliIt } from "../../lib/cli-process"
+import { testProviderConfig } from "../../lib/test-provider"
+
+// test-model declares `high`; plain-model declares no variants and is pinned by the `pinned` command.
+function variantEnv(url: string) {
+  const config = testProviderConfig(url)
+  const model = config.provider.test.models["test-model"]
+  return {
+    OPENCODE_CONFIG_CONTENT: JSON.stringify({
+      ...config,
+      command: { pinned: { template: "check the build", model: "test/plain-model" } },
+      provider: {
+        test: {
+          ...config.provider.test,
+          models: {
+            "test-model": { ...model, variants: { high: { reasoningEffort: "high" } } },
+            "plain-model": { ...model, id: "plain-model", name: "Plain Model" },
+          },
+        },
+      },
+    }),
+  }
+}
 
 describe("opencode run (non-interactive subprocess)", () => {
   // Happy path: prompt completes, output reaches stdout, process exits 0.
@@ -162,6 +184,60 @@ describe("opencode run (non-interactive subprocess)", () => {
         expect(result.stdout.split("\n").filter(Boolean)).toHaveLength(1)
       }),
     30_000,
+  )
+
+  cliIt.concurrent(
+    "rejects a --variant the model does not declare and names the valid ones",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        const env = variantEnv(llm.url)
+        const result = yield* opencode.run("say hi", { extraArgs: ["--variant", "hihg"], env })
+        expect(result.exitCode).not.toBe(0)
+        expect(result.stderr).toContain("Variant not found")
+        expect(result.stderr).toContain("Available variants: high")
+
+        const json = yield* opencode.run("say hi", { format: "json", extraArgs: ["--variant", "hihg"], env })
+        expect(json.exitCode).not.toBe(0)
+        expect(opencode.parseJsonEvents(json.stdout)[0]).toMatchObject({
+          type: "error",
+          error: {
+            name: "BadRequest",
+            data: { message: 'Variant not found: "hihg" for test/test-model. Available variants: high' },
+          },
+        })
+        expect(yield* llm.calls).toBe(0)
+      }),
+    60_000,
+  )
+
+  cliIt.concurrent(
+    "--command on a pinned model drops only a variant the caller's model declares",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        const env = variantEnv(llm.url)
+        const invalid = yield* opencode.run("", {
+          model: "test/test-model",
+          command: "pinned",
+          extraArgs: ["--variant", "totally-invalid-xyz"],
+          env,
+        })
+        expect(invalid.exitCode).not.toBe(0)
+        expect(invalid.stderr).toContain("Variant not found")
+        expect(invalid.stderr).toContain("for test/plain-model. This model has no variants.")
+        expect(yield* llm.calls).toBe(0)
+
+        yield* llm.text("pinned done")
+        const inherited = yield* opencode.run("", {
+          model: "test/test-model",
+          command: "pinned",
+          extraArgs: ["--variant", "high"],
+          env,
+        })
+        opencode.expectExit(inherited, 0)
+        expect(inherited.stdout).toContain("pinned done")
+        expect((yield* llm.inputs)[0]?.reasoning_effort).toBeUndefined()
+      }),
+    60_000,
   )
 
   cliIt.concurrent(

@@ -99,12 +99,31 @@ function isOrphanedInterruptedTool(part: SessionV1.ToolPart) {
   return part.state.status === "error" && part.state.metadata?.interrupted === true
 }
 
+export class VariantNotFoundError extends Schema.TaggedErrorClass<VariantNotFoundError>()(
+  "SessionVariantNotFoundError",
+  {
+    providerID: Schema.String,
+    modelID: Schema.String,
+    variant: Schema.String,
+    available: Schema.Array(Schema.String),
+  },
+) {
+  override get message() {
+    const hint = this.available.length
+      ? ` Available variants: ${this.available.join(", ")}`
+      : " This model has no variants."
+    return `Variant not found: "${this.variant}" for ${this.providerID}/${this.modelID}.${hint}`
+  }
+}
+
+export type PromptError = Image.Error | VariantNotFoundError
+
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
-  readonly prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error>
+  readonly prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, PromptError>
   readonly loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts>
   readonly shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError>
-  readonly command: (input: CommandInput) => Effect.Effect<SessionV1.WithParts, Image.Error>
+  readonly command: (input: CommandInput) => Effect.Effect<SessionV1.WithParts, PromptError>
   readonly resolvePromptParts: (template: string) => Effect.Effect<PromptInput["parts"]>
 }
 
@@ -645,25 +664,30 @@ const layer = Layer.effect(
 
       const model = input.model ?? ag.model ?? (yield* currentModel(input.sessionID))
       const same = ag.model && model.providerID === ag.model.providerID && model.modelID === ag.model.modelID
-      const explicit = input.variant && input.variant !== "default" ? input.variant : undefined
+      const explicit = input.variant !== undefined && input.variant !== "default" ? input.variant : undefined
       const full =
-        explicit || (!input.variant && ag.variant && same)
+        explicit !== undefined || (!input.variant && ag.variant && same)
           ? yield* provider
               .getModel(model.providerID, model.modelID)
               .pipe(Effect.catchIf(Provider.ModelNotFoundError.isInstance, () => Effect.succeed(undefined)))
           : undefined
       // An unknown variant would be dropped when the request is built while still being recorded on the
       // session, so reject it before anything is persisted.
-      if (explicit && full && !full.variants?.[explicit]) {
-        const available = Object.keys(full.variants ?? {})
-        const hint = available.length ? ` Available variants: ${available.join(", ")}` : " This model has no variants."
-        const error = new NamedError.Unknown({
-          message: `Variant not found: "${explicit}" for ${model.providerID}/${model.modelID}.${hint}`,
+      if (explicit !== undefined && full && !Object.hasOwn(full.variants ?? {}, explicit)) {
+        const error = new VariantNotFoundError({
+          providerID: model.providerID,
+          modelID: model.modelID,
+          variant: explicit,
+          available: Object.keys(full.variants ?? {}),
         })
-        yield* events.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
-        throw error
+        yield* events.publish(Session.Event.Error, {
+          sessionID: input.sessionID,
+          error: new NamedError.Unknown({ message: error.message }).toObject(),
+        })
+        return yield* error
       }
-      const variant = input.variant ?? (ag.variant && full?.variants?.[ag.variant] ? ag.variant : undefined)
+      const variant =
+        input.variant ?? (ag.variant && Object.hasOwn(full?.variants ?? {}, ag.variant) ? ag.variant : undefined)
 
       const info: SessionV1.User = {
         id: input.messageID ?? MessageID.ascending(),
@@ -1061,7 +1085,7 @@ const layer = Layer.effect(
       return { info, parts }
     }, Effect.scoped)
 
-    const prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error> = Effect.fn(
+    const prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, PromptError> = Effect.fn(
       "SessionPrompt.prompt",
     )(function* (input: PromptInput) {
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
@@ -1469,12 +1493,17 @@ const layer = Layer.effect(
       const userAgent = isSubtask ? (input.agent ?? (yield* agents.defaultInfo()).name) : agent.name
       const userModel = isSubtask ? yield* callerModel() : taskModel
       // The caller picked its variant for its own model. When the command pins a different model that does
-      // not offer that variant, run it on that model's default instead of failing the command.
+      // not offer that variant, run it on that model's default instead of failing the command. A value the
+      // caller's model does not declare either is left in place so it is rejected like any other prompt.
       const inherited = yield* Effect.gen(function* () {
-        if (isSubtask || !pinnedModel || !input.variant || input.variant === "default") return false
-        if (resolvedTaskModel.variants?.[input.variant]) return false
+        if (isSubtask || !pinnedModel || input.variant === undefined || input.variant === "default") return false
+        if (Object.hasOwn(resolvedTaskModel.variants ?? {}, input.variant)) return false
         const caller = yield* callerModel()
-        return caller.providerID !== pinnedModel.providerID || caller.modelID !== pinnedModel.modelID
+        if (caller.providerID === pinnedModel.providerID && caller.modelID === pinnedModel.modelID) return false
+        const callerInfo = yield* provider
+          .getModel(caller.providerID, caller.modelID)
+          .pipe(Effect.catchIf(Provider.ModelNotFoundError.isInstance, () => Effect.succeed(undefined)))
+        return Object.hasOwn(callerInfo?.variants ?? {}, input.variant)
       })
       const variant = inherited ? undefined : input.variant
 

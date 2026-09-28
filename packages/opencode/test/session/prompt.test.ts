@@ -47,6 +47,7 @@ import { Shell } from "@opencode-ai/core/shell"
 import { Snapshot } from "../../src/snapshot"
 import { ToolRegistry } from "@/tool/registry"
 import { Truncate } from "@/tool/truncate"
+import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { Format } from "../../src/format"
@@ -208,12 +209,21 @@ const promptRoot = LayerNode.group([
   RuntimeFlags.node,
 ])
 
-function makePrompt(input?: { mcpInstructions?: MCP.ServerInstructions[]; processor?: "blocking" }) {
+function makePrompt(input?: {
+  mcpInstructions?: MCP.ServerInstructions[]
+  processor?: "blocking"
+  backgroundSubagents?: boolean
+}) {
   const replacements = [
     [SessionSummary.node, summary],
     [LSP.node, lsp],
     [MCP.node, makeMcp(input?.mcpInstructions)],
-    [RuntimeFlags.node, runtimeFlags],
+    [
+      RuntimeFlags.node,
+      input?.backgroundSubagents
+        ? RuntimeFlags.layer({ experimentalEventSystem: true, experimentalBackgroundSubagents: true })
+        : runtimeFlags,
+    ],
   ] as const
   if (input?.processor === "blocking") {
     return LayerNode.compile(promptRoot, [...replacements, [SessionProcessor.node, blockingProcessor]])
@@ -242,6 +252,7 @@ function makeHttpNoLLMServer(input?: { mcpInstructions?: MCP.ServerInstructions[
 const it = testEffect(makeHttp())
 const noLLMServer = testEffect(makeHttpNoLLMServer())
 const raceNoLLMServer = testEffect(makeHttpNoLLMServer({ processor: "blocking" }))
+const backgroundNoLLMServer = testEffect(makePrompt({ backgroundSubagents: true }))
 const withMcpInstructions = testEffect(
   makeHttp({
     mcpInstructions: [
@@ -2415,10 +2426,10 @@ const expectUnknownVariant = (exit: Exit.Exit<unknown, unknown>, variant: string
   expect(Exit.isFailure(exit)).toBe(true)
   if (!Exit.isFailure(exit)) return ""
   const err = Cause.squash(exit.cause)
-  expect(NamedError.Unknown.isInstance(err)).toBe(true)
-  if (!NamedError.Unknown.isInstance(err)) return ""
-  expect(err.data.message).toContain(`Variant not found: "${variant}"`)
-  return err.data.message
+  expect(err).toBeInstanceOf(SessionPrompt.VariantNotFoundError)
+  if (!(err instanceof SessionPrompt.VariantNotFoundError)) return ""
+  expect(err.message).toContain(`Variant not found: "${variant}"`)
+  return err.message
 }
 
 it.instance("rejects an unknown explicit variant before recording or sending it", () =>
@@ -2445,6 +2456,33 @@ it.instance("rejects an unknown explicit variant before recording or sending it"
     expect(yield* sessions.messages({ sessionID: chat.id })).toHaveLength(0)
     expect(yield* llm.calls).toBe(0)
   }),
+)
+
+noLLMServer.instance(
+  "rejects explicit variant names the model does not declare as its own",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+
+      for (const variant of ["constructor", "toString", "__proto__", ""]) {
+        const exit = yield* prompt
+          .prompt({
+            sessionID: chat.id,
+            agent: "build",
+            model: ref,
+            variant,
+            noReply: true,
+            parts: [{ type: "text", text: "hello" }],
+          })
+          .pipe(Effect.exit)
+        expect(expectUnknownVariant(exit, variant)).toContain("Available variants: high, xhigh")
+      }
+      expect((yield* sessions.get(chat.id)).model).toBeUndefined()
+      expect(yield* sessions.messages({ sessionID: chat.id })).toHaveLength(0)
+    }),
+  { config: variantCfg("http://localhost:1/v1") },
 )
 
 it.instance("applies a declared explicit variant to the provider request", () =>
@@ -2540,6 +2578,30 @@ it.instance("command with its own model does not inherit the caller's variant", 
   }),
 )
 
+it.instance("command with its own model rejects a variant neither model declares", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(variantCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    yield* llm.text("done")
+
+    const exit = yield* prompt
+      .command({
+        sessionID: chat.id,
+        command: "pinned",
+        arguments: "",
+        model: "test/test-model",
+        variant: "totally-invalid-xyz",
+      })
+      .pipe(Effect.exit)
+
+    expect(expectUnknownVariant(exit, "totally-invalid-xyz")).toContain("test/plain-model")
+    expect(yield* sessions.messages({ sessionID: chat.id })).toHaveLength(0)
+    expect(yield* llm.calls).toBe(0)
+  }),
+)
+
 it.instance("command on the caller's model rejects an unknown variant", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig(variantCfg)
@@ -2562,6 +2624,120 @@ it.instance("command on the caller's model rejects an unknown variant", () =>
     expect(yield* sessions.messages({ sessionID: chat.id })).toHaveLength(0)
     expect(yield* llm.calls).toBe(0)
   }),
+)
+
+backgroundNoLLMServer.instance(
+  "background task result reaches a parent that switched away from its agent's pinned model",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const jobs = yield* BackgroundJob.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+      const other = { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("other-model") }
+      const first = yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        variant: "high",
+        noReply: true,
+        parts: [{ type: "text", text: "start" }],
+      })
+      const assistant: SessionV1.Assistant = {
+        id: MessageID.ascending(),
+        role: "assistant",
+        parentID: first.info.id,
+        sessionID: chat.id,
+        mode: "build",
+        agent: "build",
+        cost: 0,
+        path: { cwd: "/tmp", root: "/tmp" },
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        modelID: ref.modelID,
+        providerID: ref.providerID,
+        variant: "high",
+        time: { created: Date.now() },
+      }
+      yield* sessions.updateMessage(assistant)
+
+      // Every prompt goes through real admission; the child waits until the parent has switched models.
+      const release = yield* Deferred.make<void>()
+      const injected = yield* Deferred.make<Exit.Exit<SessionV1.WithParts>>()
+      const promptOps: TaskPromptOps = {
+        cancel: prompt.cancel,
+        resolvePromptParts: prompt.resolvePromptParts,
+        prompt: (input) =>
+          input.sessionID === chat.id
+            ? prompt.prompt({ ...input, noReply: true }).pipe(
+                Effect.orDie,
+                Effect.onExit((exit) => Deferred.succeed(injected, exit)),
+              )
+            : Deferred.await(release).pipe(Effect.andThen(prompt.prompt({ ...input, noReply: true })), Effect.orDie),
+      }
+      const task = yield* TaskTool
+      const def = yield* task.init()
+      const result = yield* def.execute(
+        { description: "inspect bug", prompt: "look into it", subagent_type: "general", background: true },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        model: other,
+        variant: "xhigh",
+        noReply: true,
+        parts: [{ type: "text", text: "switch" }],
+      })
+      yield* Deferred.succeed(release, undefined)
+      expect((yield* jobs.wait({ id: result.metadata.sessionId, timeout: 1_000 })).info?.status).toBe("completed")
+
+      const exit = yield* awaitWithTimeout(Deferred.await(injected), "no background result was injected", "5 seconds")
+      expect(Exit.isSuccess(exit)).toBe(true)
+      if (!Exit.isSuccess(exit) || exit.value.info.role !== "user") throw new Error("expected injected user message")
+      expect(exit.value.info.model).toEqual({ ...other, variant: "xhigh" })
+      expect(
+        exit.value.parts.some(
+          (part) => part.type === "text" && part.synthetic && part.text.includes("Background task completed"),
+        ),
+      ).toBe(true)
+      expect((yield* sessions.get(chat.id)).model).toEqual({
+        id: other.modelID,
+        providerID: other.providerID,
+        variant: "xhigh",
+      })
+    }),
+  {
+    config: {
+      ...cfg,
+      agent: { build: { model: "test/test-model" } },
+      provider: {
+        ...cfg.provider,
+        test: {
+          ...cfg.provider.test,
+          models: {
+            "test-model": {
+              ...cfg.provider.test.models["test-model"],
+              variants: { high: { reasoningEffort: "high" } },
+            },
+            "other-model": {
+              ...cfg.provider.test.models["test-model"],
+              id: "other-model",
+              variants: { xhigh: { reasoningEffort: "xhigh" } },
+            },
+          },
+        },
+      },
+    },
+  },
 )
 
 // Agent / command resolution errors

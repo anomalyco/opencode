@@ -861,7 +861,7 @@ describe("tool.task", () => {
     }),
   )
 
-  background.instance("background task result follows the parent's current model variant", () =>
+  background.instance("background task result follows the parent's current model and variant", () =>
     Effect.gen(function* () {
       const jobs = yield* BackgroundJob.Service
       const sessions = yield* Session.Service
@@ -912,6 +912,7 @@ describe("tool.task", () => {
       const waited = yield* jobs.wait({ id: result.metadata.sessionId, timeout: 1_000 })
       expect(waited.info?.status).toBe("completed")
       const notification = yield* Effect.promise(() => injected.promise)
+      expect(notification.model).toEqual({ providerID: ref.providerID, modelID: ModelV2.ID.make("other-model") })
       expect(notification.variant).toBe("default")
     }),
   )
