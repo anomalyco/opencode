@@ -4,6 +4,8 @@ import { dict as en } from "./en"
 export const dict = {
   ...en,
   "go.promo.spaceBunny": "全新匿名模型 Space Bunny Free 限时上线",
+  "go.referral.ended.label": "警告",
+  "go.referral.ended": "推荐计划已结束。推荐链接不再为你或分享链接的人提供额度。",
   "go.graph.bonus": "{{count}} 倍用量",
   "nav.github": "GitHub",
   "nav.docs": "文档",
@@ -252,6 +254,7 @@ export const dict = {
   "go.title": "OpenCode Go | 人人可用的低成本编程模型",
   "go.meta.description": "Go 每月 $10，提供充裕的使用限额，并可可靠访问领先的编程模型。",
   "go.hero.title": "人人可用的低成本编程模型",
+  "go.hero.tagline": "可配合任何代理使用。如有需要可充值。随时取消。",
   "go.hero.body":
     "Go 将代理编程带给全世界的程序员。提供充裕的限额和对最强大的开源模型的可靠访问，让您可以利用强大的代理进行构建，而无需担心成本或可用性。",
 
@@ -259,7 +262,7 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "订阅 Go",
   "go.cta.price": "$10/月",
-  "go.plans.month": "/月",
+  "go.plans.month": "每月",
   "go.plans.plus.cta": "订阅 Go Plus",
   "go.plans.plus.description": "Go Plus 每月 $40，提供更高的使用额度。",
   "go.plans.go.feature1": "精选实惠的模型",

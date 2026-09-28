@@ -4,6 +4,9 @@ import { dict as en } from "./en"
 export const dict = {
   ...en,
   "go.promo.spaceBunny": "Space Bunny Free, un nuevo modelo anónimo, está disponible por tiempo limitado",
+  "go.referral.ended.label": "Advertencia",
+  "go.referral.ended":
+    "El programa de referidos ha terminado. Los enlaces de referido ya no otorgan crédito ni a ti ni a quien los compartió.",
   "go.graph.bonus": "{{count}}× de uso",
   "nav.github": "GitHub",
   "nav.docs": "Documentación",
@@ -266,6 +269,7 @@ export const dict = {
   "go.meta.description":
     "Go cuesta 10 $/mes, con límites de uso generosos y acceso fiable a modelos de programación líderes.",
   "go.hero.title": "Modelos de programación de bajo coste para todos",
+  "go.hero.tagline": "Úsalo con cualquier agente. Recarga crédito si lo necesitas. Cancela cuando quieras.",
   "go.hero.body":
     "Go lleva la programación agéntica a programadores de todo el mundo. Ofrece límites generosos y acceso fiable a los modelos de código abierto más capaces, para que puedas crear con agentes potentes sin preocuparte por el coste o la disponibilidad.",
 
@@ -273,7 +277,7 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Suscribirse a Go",
   "go.cta.price": "10 $/mes",
-  "go.plans.month": "/mes",
+  "go.plans.month": "al mes",
   "go.plans.plus.cta": "Suscribirse a Go Plus",
   "go.plans.plus.description": "Go Plus cuesta 40 $/mes y ofrece límites más altos.",
   "go.plans.go.feature1": "Modelos seleccionados y asequibles",

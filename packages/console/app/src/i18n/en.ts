@@ -1,5 +1,8 @@
 export const dict = {
   "go.promo.spaceBunny": "Space Bunny Free, a new anonymous model, is available for a limited time",
+  "go.referral.ended.label": "Warning",
+  "go.referral.ended":
+    "The referral program has ended. Referral links no longer earn credit for you or the person who shared them.",
   "go.graph.bonus": "{{count}}× usage",
   "nav.github": "GitHub",
   "nav.docs": "Docs",
@@ -260,6 +263,7 @@ export const dict = {
   "go.title": "OpenCode Go | Low cost coding models for everyone",
   "go.meta.description": "Go costs $10/month, with generous usage limits and reliable access to leading coding models.",
   "go.hero.title": "Low cost coding models for everyone",
+  "go.hero.tagline": "Use with any agent. Top up credit if needed. Cancel any time.",
   "go.hero.body":
     "Go brings agentic coding to programmers around the world. Offering generous limits and reliable access to the most capable open-source models, so you can build with powerful agents without worrying about cost or availability.",
 
@@ -267,7 +271,7 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Subscribe to Go",
   "go.cta.price": "$10/month",
-  "go.plans.month": "/month",
+  "go.plans.month": "per month",
   "go.plans.plus.cta": "Subscribe to Go Plus",
   "go.plans.plus.description": "Go Plus costs $40/month with higher limits.",
   "go.plans.go.feature1": "Curated, affordable models",

@@ -4,6 +4,9 @@ import { dict as en } from "./en"
 export const dict = {
   ...en,
   "go.promo.spaceBunny": "新しい匿名モデル Space Bunny Free が期間限定で利用可能です",
+  "go.referral.ended.label": "警告",
+  "go.referral.ended":
+    "紹介プログラムは終了しました。紹介リンクを使っても、あなたや共有した人にクレジットは付与されません。",
   "go.graph.bonus": "利用枠{{count}}倍",
   "nav.github": "GitHub",
   "nav.docs": "ドキュメント",
@@ -262,6 +265,7 @@ export const dict = {
   "go.meta.description":
     "Goは月額$10で、主要なコーディングモデルへのゆとりある利用上限と安定したアクセスを提供します。",
   "go.hero.title": "すべての人のための低価格なコーディングモデル",
+  "go.hero.tagline": "どのエージェントでも利用できます。必要に応じてクレジットをチャージ。いつでもキャンセル可能。",
   "go.hero.body":
     "Goは、世界中のプログラマーにエージェント型コーディングをもたらします。最も高性能なオープンソースモデルへの十分な制限と安定したアクセスを提供し、コストや可用性を気にすることなく強力なエージェントで構築できます。",
 
