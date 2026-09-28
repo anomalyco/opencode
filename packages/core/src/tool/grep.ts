@@ -93,12 +93,12 @@ const layer = Layer.effectDiscard(
                 source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
               })
               const target = path.resolve(location.directory, input.path ?? ".")
-              const info = yield* fs.stat(target).pipe(Effect.catch(() => Effect.succeed(undefined)))
+              const info = yield* fs.stat(target)
               return yield* ripgrep
                 .grep({
-                  cwd: info?.type === "Directory" ? target : path.dirname(target),
+                  cwd: info.type === "Directory" ? target : path.dirname(target),
                   pattern: input.pattern,
-                  file: info?.type === "File" ? path.basename(target) : undefined,
+                  file: info.type === "File" ? path.basename(target) : undefined,
                   include: input.include,
                   limit: input.limit ?? Number.MAX_SAFE_INTEGER,
                 })
@@ -112,10 +112,7 @@ const layer = Layer.effectDiscard(
                           path: RelativePath.make(
                             path.relative(
                               location.directory,
-                              path.resolve(
-                                info?.type === "Directory" ? target : path.dirname(target),
-                                match.entry.path,
-                              ),
+                              path.resolve(info.type === "Directory" ? target : path.dirname(target), match.entry.path),
                             ),
                           ),
                         }),
