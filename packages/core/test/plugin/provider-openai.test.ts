@@ -381,7 +381,7 @@ describe("OpenAIPlugin", () => {
       expect(hostID).toMatch(/^urn:uuid:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
       const kv = yield* KV.Service
       const storage = PluginHost.storage(kv, OpenAIPlugin.id)
-      expect(yield* storage.get("agent-host-id")).toBe(hostID)
+      expect(yield* storage.get("chatgpt-agent-host-id")).toBe(hostID)
       expect((yield* authorize()).searchParams.get("ext_agent_host_id")).toBe(hostID)
       expect(redirect.hostname).toBe("127.0.0.1")
       expect(redirect.pathname).toBe("/auth/callback")
@@ -412,7 +412,7 @@ describe("OpenAIPlugin", () => {
       const credentials = yield* Credential.Service
       const kv = yield* KV.Service
       const hostID = "urn:uuid:00000000-0000-4000-8000-000000000000"
-      yield* PluginHost.storage(kv, OpenAIPlugin.id).set("agent-host-id", hostID)
+      yield* PluginHost.storage(kv, OpenAIPlugin.id).set("chatgpt-agent-host-id", hostID)
       yield* credentials.create({
         integrationID: Integration.ID.make("openai"),
         value: Credential.OAuth.make({

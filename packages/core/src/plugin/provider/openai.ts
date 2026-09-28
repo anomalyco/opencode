@@ -79,9 +79,9 @@ const signIn = (app: App.Info, savedClientID: () => string | undefined, storage:
     },
     authorize: () =>
       Effect.gen(function* () {
-        const storedHostID = yield* storage.get("agent-host-id")
+        const storedHostID = yield* storage.get("chatgpt-agent-host-id")
         const hostID = typeof storedHostID === "string" ? storedHostID : `urn:uuid:${crypto.randomUUID()}`
-        if (typeof storedHostID !== "string") yield* storage.set("agent-host-id", hostID)
+        if (typeof storedHostID !== "string") yield* storage.set("chatgpt-agent-host-id", hostID)
         const pkce = yield* Effect.promise(generatePKCE)
         const state = randomValue()
         const nonce = randomValue()
