@@ -231,6 +231,10 @@ function McpMenu(props: ServiceMenuProps) {
             const change = (value: boolean) => {
               if (pending()) return
               if (props.mcp) return props.mcp.change(server().name, value)
+              if (server().status.status === "needs_auth") {
+                toggle.mutate({ name: server().name, enabled: true })
+                return
+              }
               toggle.mutate({ name: server().name, enabled: value })
             }
             return (
