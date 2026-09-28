@@ -127,6 +127,7 @@ function GroupContent(props: GroupProps) {
     )
     return `${completed() ? "Explored" : "Exploring"}: ${names.join(", ")}`
   })
+  const failed = () => tools().some((part) => part.state.status === "error")
   const toggle = disclosure.toggle
   const children = (mode: "normal" | "thought" | "tool") => (
     <Children {...props} nodes={props.node.children} mode={mode} />
@@ -143,7 +144,7 @@ function GroupContent(props: GroupProps) {
           <Show when={grouped()} fallback={children("normal")}>
             <Show when={tools().length > 0}>
               <InlineToolRow
-                icon={completed() ? "→" : "✱"}
+                icon={failed() ? "✗" : completed() ? "→" : "✱"}
                 color={hover() ? theme.text.base : theme.text.muted}
                 complete={completed()}
                 pending={label()}
@@ -205,21 +206,12 @@ function ActivityGroup(props: GroupProps) {
   const disclosure = useDisclosure(props)
   const [hover, setHover] = createSignal(false)
   const entries = createMemo(() => descendants(props.node))
-  const summary = createMemo(() => summarizeActivity(props.node, props.message, props.pending))
+  const summary = createMemo(() => summarizeActivity(props.node, props.message, props.pending, props.completed))
   return (
     <GroupAnchor groupID={disclosure.id()} active={summary().label !== ""}>
-      {/* Until something finishes there is nothing to summarize; show the live items, spaced like Medium. */}
-      <Show
-        when={summary().label}
-        fallback={
-          <box flexDirection="column" gap={1}>
-            <Children {...props} nodes={props.node.children} mode="normal" />
-          </box>
-        }
-      >
+      <Show when={summary().label}>
         <InlineToolRow
           icon={summary().failed ? "✗" : disclosure.expanded() ? "−" : "+"}
-          iconColor={summary().failed ? theme.text.feedback.error.base : undefined}
           color={hover() ? theme.text.base : theme.text.muted}
           complete={true}
           pending={summary().label}

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client"
-import { activitySummary, summarizeActivity } from "../../../src/routes/session/activity-summary"
+import { activitySummary, busyLabel, summarizeActivity } from "../../../src/routes/session/activity-summary"
 import {
   append,
   groupRefs,
@@ -236,5 +236,58 @@ test("activity summary counts distinct instruction files and skips redacted thou
   const activity = reduceSessionRows(messages, new Set(), false, "low")[0]
   if (activity.type !== "group") throw new Error("Expected activity")
   const message = (id: string) => messages.find((item) => item.id === id)
-  expect(summarizeActivity(activity, message).label).toBe("1 thought, 1 read, 3 instructions")
+  expect(summarizeActivity(activity, message, [], true).label).toBe("1 thought, 1 read, 3 instructions")
+})
+
+test("questions stand alone at every level and end an activity run", () => {
+  for (const verbosity of ["low", "medium", "high"] as const)
+    expect(partPath({ type: "tool", name: "question" }, verbosity)).toEqual([])
+  const rows = reduceSessionRows(
+    [assistant("a", [tool("r1", "read"), tool("q", "question", "running"), tool("r2", "read")])],
+    new Set(),
+    false,
+    "low",
+  )
+  expect(rows.map((row) => (row.type === "group" ? row.kind : row.type))).toEqual(["activity", "part", "activity"])
+})
+
+test("a thought still streaming counts as finished once a later row closes its group", () => {
+  const open = { ...assistant("a", []), time: { created: 1 } }
+  const items = [
+    { message: open, part: { type: "reasoning" as const, text: "Planning", time: { created: 1 } } },
+    { message: open, part: tool("r1", "read") },
+  ]
+  expect(activitySummary(items, 0)).toEqual({ label: "1 read", active: true, failed: false })
+  expect(activitySummary(items, 0, true)).toEqual({ label: "1 thought, 1 read", active: false, failed: false })
+})
+
+test("until something finishes, the label is the first running item's status", () => {
+  const open = {
+    ...assistant("a", [tool("e1", "edit", "running"), tool("s1", "shell", "running")]),
+    time: { created: 1 },
+  }
+  const activity = reduceSessionRows([open], new Set(), false, "low")[0]
+  if (activity.type !== "group") throw new Error("Expected activity")
+  expect(summarizeActivity(activity, () => open, [], false)).toEqual({
+    label: "Running edit…",
+    active: true,
+    failed: false,
+  })
+})
+
+test("busy labels depend only on the tool and whether it is still being prepared", () => {
+  const streaming: SessionMessageAssistantTool = {
+    ...tool("s", "bash", "running"),
+    state: { status: "streaming", input: "" },
+  }
+  expect(busyLabel(streaming)).toBe("Preparing command…")
+  expect(busyLabel(tool("s", "shell", "running"))).toBe("Running command…")
+  expect(busyLabel(tool("r", "read", "running"))).toBe("Running read…")
+  expect(busyLabel(tool("x", "execute", "running"))).toBe("Running code…")
+  expect(busyLabel({ type: "reasoning", text: "", time: { created: 1 } })).toBe("Thinking…")
+})
+
+test("a finished execute with no nested calls counts as one tool", () => {
+  const message = assistant("a", [])
+  expect(activitySummary([{ message, part: tool("x", "execute") }], 0).label).toBe("1 tool")
 })

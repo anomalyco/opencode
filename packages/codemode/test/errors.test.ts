@@ -68,9 +68,9 @@ describe("error identity", () => {
 
 describe("rethrown interpreter failures", () => {
   test("keep their diagnostic kind and source location", async () => {
-    const failure = await error(`try { switch (Symbol) {} } catch (e) { throw e }`)
+    const failure = await error(`try { Symbol + 1 } catch (e) { throw e }`)
     expect(failure.kind).toBe("InvalidDataValue")
-    expect(failure.message).toStartWith("TypeError: Switch discriminants must be data values. (line ")
+    expect(failure.message).toStartWith("TypeError: Binary operators require data values. (line ")
     expect(failure.location).toBeDefined()
   })
 

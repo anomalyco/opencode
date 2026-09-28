@@ -608,7 +608,7 @@
   [data-slot="context-tool-group-title"] {
     display: flex;
     align-items: center;
-    gap: 0;
+    gap: 4px;
     flex-shrink: 1;
     min-width: 0;
   }
@@ -617,7 +617,7 @@
     flex-shrink: 0;
     display: flex;
     align-items: center;
-    gap: 0;
+    gap: 4px;
     color: var(--v2-text-text-muted);
     font-family: var(--v2-font-family-sans);
     font-size: 13px;
@@ -633,6 +633,7 @@
 
   [data-slot="context-tool-group-count"] {
     color: var(--v2-text-text-base);
+    font-variant-numeric: tabular-nums;
   }
 
   [data-slot="context-tool-group-prefix"] {

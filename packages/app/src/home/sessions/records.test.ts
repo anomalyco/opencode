@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionInfo } from "@opencode/client/promise"
 import type { LocalProject } from "@/shell/state/layout"
-import { buildHomeSessionRecords } from "./records"
+import { buildHomeSessionRecords, homeSessionLocation } from "./records"
 
 const session = (id: string, directory: string, projectID: string) =>
   ({
@@ -57,5 +57,21 @@ describe("buildHomeSessionRecords", () => {
     })
 
     expect(records[0]?.project.worktree).toBe("/repo/a/packages/app")
+  })
+})
+
+describe("homeSessionLocation", () => {
+  test("returns the worktree directory name and branch", () => {
+    expect(homeSessionLocation("/repo/.worktrees/crisp-cactus", "feature/home")).toEqual({
+      worktree: "crisp-cactus",
+      branch: "feature/home",
+    })
+  })
+
+  test("uses the worktree name while branch metadata is unavailable", () => {
+    expect(homeSessionLocation("/repo/.worktrees/crisp-cactus")).toEqual({
+      worktree: "crisp-cactus",
+      branch: undefined,
+    })
   })
 })

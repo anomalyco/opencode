@@ -29,19 +29,6 @@ export class ModelUnavailableError extends Schema.TaggedError<ModelUnavailableEr
     return `Model unavailable: ${this.providerID}/${this.modelID}`
   }
 }
-export const VariantUnavailableError = ModelResolver.VariantUnavailableError
-export type VariantUnavailableError = ModelResolver.VariantUnavailableError
-export const UnsupportedPackageError = ModelResolver.UnsupportedPackageError
-export type UnsupportedPackageError = ModelResolver.UnsupportedPackageError
-export const ModelConfigurationError = ModelResolver.ModelConfigurationError
-export type ModelConfigurationError = ModelResolver.ModelConfigurationError
-export const ModelInitializationError = ModelResolver.ModelInitializationError
-export type ModelInitializationError = ModelResolver.ModelInitializationError
-export const UnresolvedProviderVariablesError = ModelResolver.UnresolvedProviderVariablesError
-export type UnresolvedProviderVariablesError = ModelResolver.UnresolvedProviderVariablesError
-export const UnsupportedCompactionError = ModelResolver.UnsupportedCompactionError
-export type UnsupportedCompactionError = ModelResolver.UnsupportedCompactionError
-
 export type Error = ModelNotSelectedError | ModelUnavailableError | ModelResolver.Error
 export type Resolved = ModelResolver.Resolved
 

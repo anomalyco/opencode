@@ -4,19 +4,16 @@ import { ImageModel, ImageResponse, type ImageRequestFor } from "../image.js"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderID, mergeJsonRecords } from "../schema/index.js"
+import { mergeJsonRecords, type OpenString } from "../schema/index.js"
 import { JsonObject, ProviderShared, optionalNull } from "./shared.js"
 import { MediaInput } from "./utils/media-input.js"
 
-const ADAPTER = "meta-images"
-const NAME = "Meta Images"
-const PROVIDER = ProviderID.make("meta")
+const route = MediaProtocol.identity({ id: "meta-images", name: "Meta Images", provider: "meta" })
+export const DEFAULT_BASE_URL = "https://api.meta.ai/v1"
 
 // ---------------------------------------------------------------------------
 // 1. Public model input
 // ---------------------------------------------------------------------------
-
-type OpenString<Known extends string> = Known | (string & {})
 
 /** Provider-native options. Common fields (`n`, `size`, `format`, `images`) live on the request. */
 export type ImageOptions = {
@@ -72,7 +69,7 @@ const isEdit = (request: Request) => (request.images?.length ?? 0) > 0
 
 // Meta has no file handles: refs are rejected even when they name this provider.
 const reference = (asset: Media.Asset) =>
-  ProviderShared.mediaReference(asset, undefined, NAME).pipe(Effect.map((item) => ({ image_url: item.value })))
+  ProviderShared.mediaReference(asset, undefined, route.name).pipe(Effect.map((item) => ({ image_url: item.value })))
 
 const fromRequest = Effect.fn("MetaImages.fromRequest")(function* (request: Request) {
   const images = yield* Effect.forEach(request.images ?? [], reference)
@@ -101,24 +98,23 @@ const fromRequest = Effect.fn("MetaImages.fromRequest")(function* (request: Requ
 // 6. Response decoding
 // ---------------------------------------------------------------------------
 
+const decodeDocument = route.decodeJson(Response)
+
 const decodeResponse = Effect.fn("MetaImages.decodeResponse")(function* (
   response: HttpClientResponse.HttpClientResponse,
   context: MediaProtocol.DecodeContext<Request>,
 ) {
-  const output = yield* MediaProtocol.decodeJson(ADAPTER, NAME, Response)(response)
+  const output = yield* decodeDocument(response)
   const decoded = output.value
   const requested = context.body.type === "json" ? context.body.value.output_format : undefined
   const format = decoded.output_format ?? (typeof requested === "string" ? requested : "webp")
   const mediaType = `image/${format}`
-  const images = yield* Effect.forEach(decoded.data, (item, index) => {
-    if (item.b64_json)
-      return MediaInput.decodedAsset(output.invalid, `${NAME} result ${index}`, item.b64_json, mediaType, {
-        info: { format },
-      })
-    if (item.url) return Effect.succeed(Media.url(item.url, { mediaType, info: { format } }))
-    return Effect.fail(output.invalid(`${NAME} result ${index} has neither image data nor a URL`))
-  })
-  if (images.length === 0) return yield* output.invalid(`${NAME} returned no images`)
+  const images = yield* Effect.forEach(decoded.data, (item, index) =>
+    MediaInput.imageOutput(output.invalid, `${route.name} result ${index}`, item, mediaType, {
+      info: { format },
+    }),
+  )
+  if (images.length === 0) return yield* output.invalid(`${route.name} returned no images`)
   return new ImageResponse({
     images,
     usage:
@@ -139,20 +135,17 @@ const decodeResponse = Effect.fn("MetaImages.decodeResponse")(function* (
 // 7. Protocol and route
 // ---------------------------------------------------------------------------
 
-export const protocol = MediaProtocol.inline<Request, ImageResponse>({
-  id: ADAPTER,
-  name: NAME,
+export const protocol = MediaProtocol.inline<Request, ImageResponse>(route, {
   unsupported: ["mask", "aspectRatio", "seed"],
   body: { from: fromRequest },
   response: { decode: decodeResponse },
 })
 
-export const model = (input: MediaRoute.ModelInput & { readonly baseURL: string }) =>
+export const model = (input: MediaRoute.ModelInput) =>
   ImageModel.fromRoute<ImageOptions>(
     {
-      id: ADAPTER,
-      provider: PROVIDER,
       protocol,
+      baseURL: DEFAULT_BASE_URL,
       path: ({ request }) => `/images/${isEdit(request) ? "edits" : "generations"}`,
     },
     input,

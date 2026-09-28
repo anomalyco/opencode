@@ -4,9 +4,9 @@ import { FileComponentProvider } from "@opencode/ui/context/file"
 import { Font } from "@opencode/ui/font"
 import { ThemeProvider } from "@opencode/ui/theme/context"
 import { MetaProvider } from "@solidjs/meta"
-import { type BaseRouterProps, Router, useLocation } from "@solidjs/router"
+import { type BaseRouterProps, Router } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
-import { type Component, createRenderEffect, ErrorBoundary, type JSX, type ParentProps, Show } from "solid-js"
+import { type Component, createRenderEffect, ErrorBoundary, type JSX, type ParentProps } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { CommandProvider } from "@/shell/commands/command"
 import { DesktopCommands } from "@/shell/commands/desktop"
@@ -107,29 +107,21 @@ export function AppInterface(props: {
   // The visual layout lives in the router root so it remains mounted across
   // route changes. Draft and session routes override only their server-bound data
   // providers beneath it.
-  const Root = (rootProps: ParentProps) => {
-    const location = useLocation()
-    // Pairing saves credentials before mounting any server connections or health checks.
-    return (
-      <>
+  const Root = (rootProps: ParentProps) => (
+    <TabsProvider>
+      <GlobalProvider>
         <BodyTypography />
-        <Show when={location.pathname !== "/connect"} fallback={rootProps.children}>
-          <TabsProvider>
-            <GlobalProvider>
-              <CommandProvider>
-                <DesktopCommands />
-                <SshRestore />
-                <HighlightsProvider>
-                  {props.children}
-                  {rootProps.children}
-                </HighlightsProvider>
-              </CommandProvider>
-            </GlobalProvider>
-          </TabsProvider>
-        </Show>
-      </>
-    )
-  }
+        <CommandProvider>
+          <DesktopCommands />
+          <SshRestore />
+          <HighlightsProvider>
+            {props.children}
+            {rootProps.children}
+          </HighlightsProvider>
+        </CommandProvider>
+      </GlobalProvider>
+    </TabsProvider>
+  )
 
   return (
     <ServersProvider

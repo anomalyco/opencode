@@ -47,8 +47,17 @@ export type ServerInfoOutput = {
 }
 export type ServerInfoOperation<E = never> = () => Effect.Effect<ServerInfoOutput, E>
 
+export type ServerPairOutput = { readonly code: string; readonly expires_in: number }
+export type ServerPairOperation<E = never> = () => Effect.Effect<ServerPairOutput, E>
+
+export type ServerConnectInput = { readonly code: string }
+export type ServerConnectOutput = { readonly token: string }
+export type ServerConnectOperation<E = never> = (input: ServerConnectInput) => Effect.Effect<ServerConnectOutput, E>
+
 export interface ServerApi<E = never> {
   readonly info: ServerInfoOperation<E>
+  readonly pair: ServerPairOperation<E>
+  readonly connect: ServerConnectOperation<E>
 }
 
 export type LocationGetInput = { readonly location?: { readonly directory?: string | undefined } | undefined }

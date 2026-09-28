@@ -38,57 +38,6 @@
 }
 
 @layer components {
-  [data-slot="session-chat-panel"] {
-    container-name: session-chat;
-  }
-
-  [data-component="new-session"] {
-    container-type: inline-size;
-    container-name: new-session;
-  }
-
-  [data-slot="session-chat-panel"]
-    :is([data-timeline-virtual-content], [data-component="session-composer-dock"] > div),
-  [data-slot="new-session-content"] {
-    translate: var(--session-summary-resize-translate, var(--session-summary-translate, none));
-    transition: translate 240ms cubic-bezier(0.4, 0, 0.2, 1);
-
-    @media (prefers-reduced-motion: reduce) {
-      transition: none;
-    }
-  }
-
-  [data-slot="session-chat-panel"][data-summary-resizing="true"]
-    :is([data-timeline-virtual-content], [data-component="session-composer-dock"] > div),
-  [data-component="new-session"][data-summary-resizing="true"] [data-slot="new-session-content"] {
-    transition: none;
-  }
-
-  /* Keep the 1000px conversation intact, with 320px for the summary and its gutters.
-     When they overlap, center the conversation in the space that remains beside the summary. */
-  @container session-chat (min-width: 1320px) and (width < 1640px) {
-    [data-slot="session-chat-panel"][data-summary-open="true"]
-      :is([data-timeline-virtual-content], [data-component="session-composer-dock"] > div) {
-      --session-summary-translate: -160px;
-
-      &:dir(rtl) {
-        --session-summary-translate: 160px;
-      }
-    }
-  }
-
-  /* Shift only while centered content overlaps the 280px summary cards and their 16px edge inset:
-     880px + 2 * (280px + 16px) = 1472px. Center it in the remaining space, reserving 320px. */
-  @container new-session (min-width: 1200px) and (width < 1472px) {
-    [data-component="new-session"][data-summary-open="true"] [data-slot="new-session-content"] {
-      --session-summary-translate: -160px;
-
-      &:dir(rtl) {
-        --session-summary-translate: 160px;
-      }
-    }
-  }
-
   [data-slot="session-chat-panel"][data-scrollbar-hidden="true"]
     [data-slot="session-timeline-scroll"]
     > .scroll-view__thumb {

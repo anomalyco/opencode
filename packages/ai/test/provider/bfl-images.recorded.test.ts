@@ -33,6 +33,8 @@ describe("Black Forest Labs Images recorded", () => {
 
         expect(response.image.source.type).toBe("bytes")
         expect(dimensions(yield* response.image.bytes())).toEqual({ width: 512, height: 512 })
+        // BFL reports cost on submit only; the Ready result omits it.
+        expect(response.usage).toEqual({ type: "credits", credits: 1.4000000000000001 })
       }),
     { timeout: 15 * 60 * 1000 },
   )

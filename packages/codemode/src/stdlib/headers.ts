@@ -117,7 +117,7 @@ export const headersGlobal = <R>(ctx: Interpreter<R>) => {
         const target = self(thisValue, "forEach")
         const apply = applyCollectionCallback(ctx, args[0], "Headers.forEach")
         return Effect.gen(function* () {
-          for (const [key, value] of Array.from(target.headers.entries())) yield* apply([value, key, target])
+          for (const [key, value] of Array.from(target.headers.entries())) yield* apply([value, key, target], args[1])
           return undefined
         })
       },

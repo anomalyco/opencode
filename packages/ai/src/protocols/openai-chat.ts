@@ -17,7 +17,6 @@ import {
   type FinishReason,
   type FinishReasonDetails,
   type CacheHint,
-  type JsonSchema,
   type LLMRequest,
   type MediaPart,
   type ReasoningPart,
@@ -29,7 +28,6 @@ import { classifyProviderFailure } from "../provider-error.js"
 import { isRecord, JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { OpenAIOptions } from "./utils/openai-options.js"
 import { Lifecycle } from "./utils/lifecycle.js"
-import { ToolSchemaProjection } from "./utils/tool-schema.js"
 import { ToolStream } from "./utils/tool-stream.js"
 
 const ADAPTER = "openai-chat"
@@ -66,6 +64,14 @@ const OpenAIChatTool = Schema.Struct({
 })
 type OpenAIChatTool = Schema.Schema.Type<typeof OpenAIChatTool>
 
+// Gemini's OpenAI-compatible surface carries thought signatures in tool call
+// `extra_content` and rejects replayed parallel calls without them:
+// https://ai.google.dev/gemini-api/docs/thinking#signatures
+const ExtraContent = Schema.Struct({
+  google: Schema.Struct({ thought_signature: Schema.String }),
+})
+const decodeExtraContent = (value: unknown) => Option.getOrUndefined(Schema.decodeUnknownOption(ExtraContent)(value))
+
 const OpenAIChatAssistantToolCall = Schema.Struct({
   id: Schema.String,
   type: Schema.tag("function"),
@@ -73,6 +79,7 @@ const OpenAIChatAssistantToolCall = Schema.Struct({
     name: Schema.String,
     arguments: Schema.String,
   }),
+  extra_content: Schema.optional(ExtraContent),
 })
 type OpenAIChatAssistantToolCall = Schema.Schema.Type<typeof OpenAIChatAssistantToolCall>
 
@@ -113,12 +120,6 @@ type ReasoningDetail = Schema.Schema.Type<typeof ReasoningDetail>
 const decodeReasoningDetail = Schema.decodeUnknownOption(ReasoningDetail)
 const knownReasoningDetails = (details: ReadonlyArray<unknown>) =>
   details.flatMap((detail) => Option.toArray(decodeReasoningDetail(detail)))
-
-// Intentionally omit Gemini's provider-specific `extra_content.google.thought_signature`
-// extension until direct Google OpenAI-compatible routing is supported here:
-// https://github.com/vercel/ai/issues/11590
-// https://github.com/vercel/ai/pull/11745
-// https://ai.google.dev/gemini-api/docs/thought-signatures#openai
 
 const OpenAIChatUserContent = Schema.Union([
   Schema.Struct({
@@ -244,6 +245,7 @@ const OpenAIChatToolCallDelta = Schema.Struct({
   index: optionalNull(Schema.Number),
   id: optionalNull(Schema.String),
   function: optionalNull(OpenAIChatToolCallDeltaFunction),
+  extra_content: optionalNull(Schema.Unknown),
 })
 type OpenAIChatToolCallDelta = Schema.Schema.Type<typeof OpenAIChatToolCallDelta>
 
@@ -296,6 +298,7 @@ interface PendingToolDelta {
   readonly id?: string
   readonly name?: string
   readonly input: string
+  readonly extraContent?: Schema.Schema.Type<typeof ExtraContent>
 }
 
 export interface ParserState {
@@ -330,17 +333,12 @@ interface LoweringOptions {
   readonly toolCallID?: (id: string) => string
 }
 
-const lowerTool = (
-  tool: ToolDefinition,
-  inputSchema: JsonSchema,
-  options: LoweringOptions,
-  supportsStrictMode: boolean,
-): OpenAIChatTool => ({
+const lowerTool = (tool: ToolDefinition, options: LoweringOptions, supportsStrictMode: boolean): OpenAIChatTool => ({
   type: "function",
   function: {
     name: tool.name,
     description: tool.description,
-    parameters: inputSchema,
+    parameters: tool.inputSchema,
     ...(supportsStrictMode ? { strict: false } : {}),
   },
   cache_control: options.cacheControl?.(tool.cache),
@@ -354,13 +352,17 @@ const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
     tool: (name) => ({ type: "function" as const, function: { name } }),
   })
 
-const lowerToolCall = (part: ToolCallPart, options: LoweringOptions): OpenAIChatAssistantToolCall => ({
+const lowerToolCall = (
+  part: ToolCallPart,
+  options: LoweringOptions & { readonly providerMetadataKey: string },
+): OpenAIChatAssistantToolCall => ({
   id: options.toolCallID?.(part.id) ?? part.id,
   type: "function",
   function: {
     name: part.name,
     arguments: ProviderShared.encodeJson(part.input === undefined ? {} : part.input),
   },
+  extra_content: decodeExtraContent(part.providerMetadata?.[options.providerMetadataKey]?.extraContent),
 })
 
 const lowerMedia = Effect.fn("OpenAIChat.lowerMedia")(function* (part: MediaPart) {
@@ -728,7 +730,9 @@ const detectSupportsStore = (provider: string, baseURL: string | undefined): boo
     p === "vercel-ai-gateway" || url.includes("ai-gateway.vercel.sh") || url.includes("vercel.sh")
   const isAntLing = p === "ant-ling" || url.includes("api.ant-ling.com")
   const isOpencode = p === "opencode" || url.includes("opencode.ai")
+  const isGemini = url.includes("generativelanguage.googleapis.com")
   const isNonStandard =
+    isGemini ||
     isNvidia ||
     isCerebras ||
     isXai ||
@@ -803,7 +807,6 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
       `OpenAI Chat reasoning field conflicts with reserved field ${reasoningField}`,
     )
   const generation = request.generation
-  const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   const flattened = ProviderShared.flattenToolRequest(request)
   const provider = String(request.model.provider)
   const baseURL = request.model.route.endpoint.baseURL
@@ -826,14 +829,7 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
         ? hasHistory
           ? []
           : undefined
-        : flattened.tools.map((tool) =>
-            lowerTool(
-              tool,
-              ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility),
-              options,
-              supportsStrictMode,
-            ),
-          ),
+        : flattened.tools.map((tool) => lowerTool(tool, options, supportsStrictMode)),
     tool_choice: hasActiveTools && request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined,
     stream: true as const,
     ...(supportsUsageInStreaming ? { stream_options: { include_usage: true } } : {}),
@@ -1129,12 +1125,13 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       const id = current?.id ?? pending?.id ?? (tool.id || undefined)
       const name = current?.name ?? pending?.name ?? (tool.function?.name || undefined)
       const text = `${pending?.input ?? ""}${tool.function?.arguments ?? ""}`
+      const extraContent = pending?.extraContent ?? decodeExtraContent(tool.extra_content)
       latestToolIndex = index
       nextToolIndex = Math.max(nextToolIndex, index + 1)
       if (!current && (!id || !name)) {
         pendingTools = {
           ...pendingTools,
-          [index]: { id: id || undefined, name: name || undefined, input: text },
+          [index]: { id: id || undefined, name: name || undefined, input: text, extraContent },
         }
         continue
       }
@@ -1146,7 +1143,12 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         ADAPTER,
         tools,
         index,
-        { id: id || undefined, name: name || undefined, text },
+        {
+          id: id || undefined,
+          name: name || undefined,
+          text,
+          providerMetadata: extraContent && { [state.providerMetadataKey]: { extraContent } },
+        },
         "OpenAI Chat tool call delta is missing id or name",
       )
       if (ToolStream.isError(result))

@@ -2117,7 +2117,7 @@ testEffect(Layer.empty).live("isolates invalid MCP tools and preserves plugin tr
       }) satisfies Mcp.Tool
     const healthy = [tool("demo", "search"), tool("other", "lookup")]
     const namespace = tool("x".repeat(65), "lookup")
-    const catalog = yield* Ref.make([tool("demo", "x".repeat(65)), ...healthy, namespace])
+    const catalog = yield* Ref.make([tool("demo", "x".repeat(129)), ...healthy, namespace])
 
     yield* Effect.gen(function* () {
       const registry = yield* Tool.Service
@@ -2146,7 +2146,7 @@ testEffect(Layer.empty).live("isolates invalid MCP tools and preserves plugin tr
         editor.remove("repaired_lookup")
       })
 
-      yield* Ref.set(catalog, [tool("demo", "y".repeat(65)), ...healthy, tool("demo", "added"), namespace])
+      yield* Ref.set(catalog, [tool("demo", "y".repeat(129)), ...healthy, tool("demo", "added"), namespace])
       yield* bus.publish(McpEvent.ToolsChanged, { server: "demo" })
       yield* waitForTool(registry, "demo_added")
       expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual([

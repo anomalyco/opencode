@@ -371,6 +371,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         onSubmit: (submitOptions) => {
           if (!available()) return
           const queue = options?.queue
+          if (queue?.undoing()) return
           // Confirming an edit re-admits the queued prompt instead of sending
           // the composer value as a new prompt. Enter keeps it queued in
           // place; the alternate action sends it as a steer.

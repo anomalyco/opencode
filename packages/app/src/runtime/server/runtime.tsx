@@ -18,6 +18,8 @@ import { showToast } from "@/shell/notifications/toast"
 import { formatServerError } from "./errors"
 import { useSettings } from "@/settings/model"
 import { timelinePreset } from "@opencode/session-ui/timeline/detail"
+import type { SessionInfo } from "@opencode/client/promise"
+import { resolveProjectForSession, resolveSessionDetailsProject } from "@/shell/layout/helpers"
 
 export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext({
   name: "Global",
@@ -48,15 +50,18 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
       return serverCtx
     }
 
+    // A server that rejects our credentials would retry its event stream every second with the same
+    // credentials, so its controller waits until health recovers and then starts with the current ones.
     createMemo(() => {
       for (const conn of server.list) {
+        if (serverHealth[ServerConnection.key(conn)]?.unauthorized) continue
         ensureServerCtx(conn)
       }
     })
 
     createEffect(() => {
       for (const [key] of serverCtxs) {
-        if (!server.list.find((conn) => ServerConnection.key(conn) === key)) {
+        if (serverHealth[key]?.unauthorized || !server.list.find((conn) => ServerConnection.key(conn) === key)) {
           serverCtxDisposers.get(key)?.()
           serverCtxDisposers.delete(key)
           serverCtxs.delete(key)
@@ -177,6 +182,13 @@ function createServerController(
   }
 
   const projectsList = createMemo(() => projects.list().map(enrich))
+  const forSession = (session: SessionInfo) => {
+    const project = resolveProjectForSession(session, projectsList(), sync.data.project)
+    if (!project) return
+    return "expanded" in project ? project : { ...project, expanded: false }
+  }
+  const detailsForSession = (session: SessionInfo) =>
+    resolveSessionDetailsProject(session, projectsList(), sync.data.project)
   const recentlyClosedList = createMemo(() => {
     const known = new Set(sync.data.project.map((project) => pathKey(project.worktree)))
     return projects
@@ -197,6 +209,8 @@ function createServerController(
     projects: {
       ...projects,
       list: projectsList,
+      forSession,
+      detailsForSession,
       resolve: enrich,
       recentlyClosed: recentlyClosedList,
     },

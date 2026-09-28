@@ -214,7 +214,7 @@ export function request(input: EvaluationRequest | EvaluationRequestInput) {
   return new EvaluationRequest({
     ...input,
     model: input.model as unknown as EvaluationModel,
-    http: input.http === undefined ? undefined : HttpOptions.make(input.http),
+    http: HttpOptions.make(input.http),
   })
 }
 

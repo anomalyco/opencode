@@ -13,6 +13,7 @@ const stableArtifact = "https://opencode.ai/update/api/latest/desktop/opencode"
 
 export const make = Effect.gen(function* () {
   const external = requiresStableMacInstaller(process.platform, CHANNEL)
+  const userAgent = `opencode/${CHANNEL === "prod" ? "latest" : CHANNEL}/${app.getVersion()}/desktop`
   const runFork = Effect.runForkWith(yield* Effect.context())
   updateClient.logger = {
     info: (...args) => runFork(Effect.logInfo(...args)),
@@ -21,6 +22,7 @@ export const make = Effect.gen(function* () {
     debug: (...args) => runFork(Effect.logDebug(...args)),
   }
   updateClient.channel = "latest"
+  updateClient.requestHeaders = { "User-Agent": userAgent }
   updateClient.allowPrerelease = false
   updateClient.allowDowngrade = true
   updateClient.autoDownload = false
@@ -38,7 +40,7 @@ export const make = Effect.gen(function* () {
     checkForUpdate: Effect.tryPromise({
       try: async () => {
         if (external) {
-          const response = await fetch(stableArtifact)
+          const response = await fetch(stableArtifact, { headers: { "User-Agent": userAgent } })
           if (!response.ok) throw new Error(`Stable OpenCode update check failed: ${response.status}`)
           const download = stableMacDownload(await response.json(), process.arch)
           if (!download) throw new Error("Stable OpenCode download is unavailable")

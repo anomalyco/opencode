@@ -85,3 +85,42 @@ export const StreamingInlineCode = {
     </div>
   ),
 }
+
+const externalLinkChunks = [
+  "1. ",
+  "[#540](https://github.com/anomalyco/opencode/pull/540)",
+  ": Batch access-policy reads.\n2. ",
+  "[Stack Overflow](https://stackoverflow.com/questions/123)",
+  ": Favicon from a public site.\n3. ",
+  "[MDN docs](https://developer.mozilla.org/en-US/docs/Web)",
+  ": Globe while loading.\n4. ",
+  "[Unavailable favicon](https://absent-site.example.org/docs)",
+  ": Globe fallback.\n5. ",
+  "[Local host](http://localhost:8080/docs)",
+  ": No third-party request.",
+]
+
+function StreamingExternalLinks() {
+  const [count, setCount] = createSignal(1)
+  const timer = setInterval(() => {
+    setCount((value) => {
+      if (value === externalLinkChunks.length) {
+        clearInterval(timer)
+        return value
+      }
+      return value + 1
+    })
+  }, 380)
+  onCleanup(() => clearInterval(timer))
+  return (
+    <Markdown text={externalLinkChunks.slice(0, count()).join("")} streaming={count() < externalLinkChunks.length} />
+  )
+}
+
+export const ExternalLinksStreaming = {
+  render: () => (
+    <div class="mx-auto max-w-[680px] rounded-lg border border-border-weak-base bg-background-base px-5 py-4">
+      <StreamingExternalLinks />
+    </div>
+  ),
+}

@@ -24,8 +24,6 @@ type DesktopOS = "macos" | "windows" | "linux"
 
 export type PairingInfo = {
   readonly urls: readonly string[]
-  readonly username: "opencode"
-  readonly password: string
 }
 
 export type FatalRendererErrorLog = {
@@ -42,6 +40,9 @@ type PlatformBase = {
 
   /** Open a web or mail URL in the default system application */
   openExternal(url: string): void
+
+  /** Open an authentication page, reporting whether the browser could be launched. */
+  openBrowser?(url: string): Promise<boolean>
 
   /** Open a local path in a local app (desktop only) */
   openPath?(path: string, app?: string): Promise<void>
@@ -138,6 +139,8 @@ type PlatformBase = {
   /** Pair another device with the local desktop server. */
   pair?: {
     info(): Promise<PairingInfo>
+    /** Single-use code for an `/auth/connect/:code` link. */
+    code(): Promise<string>
   }
 }
 

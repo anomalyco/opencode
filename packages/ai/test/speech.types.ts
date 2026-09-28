@@ -1,5 +1,5 @@
 import type { Stream } from "effect"
-import { Speech, type SpeechEvent } from "../src/index.js"
+import { Speech, SpeechModel, type SpeechEvent, type SpeechOptions } from "../src/index.js"
 import { ElevenLabs, OpenAI, Runway } from "../src/providers.js"
 
 type StreamItem<T> = T extends Stream.Stream<infer A, infer _E, infer _R> ? A : never
@@ -7,6 +7,8 @@ type Equal<A, B> = [A, B] extends [B, A] ? true : false
 type Assert<T extends true> = T
 
 const elevenlabs = ElevenLabs.configure({ apiKey: "test" }).speech("eleven_flash_v2_5")
+const widenSpeech = <Options extends SpeechOptions>(model: SpeechModel<Options>): SpeechModel => model
+void widenSpeech
 
 Speech.generate({
   model: elevenlabs,

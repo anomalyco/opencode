@@ -11,7 +11,8 @@ import { applyEffortUpdates } from "../effort-updates.js"
 import { normalizeToolHistory } from "../tool-history.js"
 import { sanitizeSurrogates } from "../utils/sanitize.js"
 import * as ProviderShared from "../protocols/shared.js"
-import type { ProtocolID, ProviderOptions } from "../schema/index.js"
+import { ToolSchemaProjection } from "../protocols/utils/tool-schema.js"
+import type { LanguageModelSanitizerCompatibility, ProtocolID, ProviderOptions } from "../schema/index.js"
 import {
   AIError,
   CompactionResponse,
@@ -57,6 +58,7 @@ export interface Route<
   readonly defaults: RouteDefaults
   readonly body: RouteBody<Body>
   readonly supportsEffortUpdates?: (request: LLMRequest) => boolean
+  readonly sanitizer?: LanguageModelSanitizerCompatibility
   readonly with: {
     <Next extends CompactionOperations | undefined>(
       patch: RoutePatch<Body, Prepared> & { readonly compact: Next },
@@ -152,7 +154,7 @@ const mergeRouteDefaults = (base: RouteDefaults | undefined, patch: RouteDefault
     providerOptions: mergeProviderOptions(base?.providerOptions, patch.providerOptions),
     http: mergeHttpOptions(
       base?.http,
-      httpOptions(patch.http),
+      HttpOptions.make(patch.http),
       headers === undefined ? undefined : new HttpOptions({ headers }),
     ),
   }
@@ -171,11 +173,6 @@ const mergeHeaders = (...items: ReadonlyArray<Record<string, string> | undefined
 
 export const generationOptions = (input: GenerationOptions.Input | undefined) =>
   input === undefined ? undefined : GenerationOptions.make(input)
-
-export const httpOptions = (input: HttpOptionsInput | undefined) => {
-  if (input === undefined) return input
-  return HttpOptions.make(input)
-}
 
 export interface Interface {
   readonly compact: CompactMethod
@@ -261,7 +258,9 @@ const unsupportedCompaction = (request: LLMRequest, mechanism: string | undefine
   })
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/LLMClient") {}
+export class LLMClientService extends Context.Service<LLMClientService, Interface>()("@opencode/LLMClient") {}
+export const Service = LLMClientService
+export type Service = LLMClientService
 
 const resolveRequestOptions = (request: LLMRequest) => {
   const messages = normalizeToolHistory(request.messages)
@@ -391,6 +390,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
       defaults: routeInput.defaults ?? {},
       body: protocol.body,
       supportsEffortUpdates: protocol.supportsEffortUpdates,
+      sanitizer: protocol.sanitizer,
       with: (patch: RoutePatch<Body, Prepared>) => {
         const { compact, id, provider, providerMetadataKey, auth, transport, endpoint, ...defaults } = patch
         return build({
@@ -562,7 +562,9 @@ const prepareRequest = (request: LLMRequest) => {
       tool.type === "tool" ? tool : { ...tool, tools: dedupe(tool.tools) },
     )
   const resolved = applyCachePolicy(
-    applyEffortUpdates(LLMRequest.update(sanitized, { tools: dedupe(sanitized.tools) })),
+    applyEffortUpdates(
+      LLMRequest.update(sanitized, { tools: ToolSchemaProjection.tools(dedupe(sanitized.tools), sanitized.model) }),
+    ),
   )
   const headers = resolved.model.route.headers?.({ request: resolved })
   return headers === undefined

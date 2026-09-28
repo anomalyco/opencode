@@ -1,11 +1,11 @@
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
-import { HttpOptions, ProviderID, type ModelID } from "../schema/index.js"
-import { CartesiaSpeech, DEFAULT_BASE_URL } from "../protocols/cartesia-speech.js"
+import { MediaRoute } from "../route/media.js"
+import { type HttpOptions, ProviderID, type ModelID } from "../schema/index.js"
+import { CartesiaSpeech } from "../protocols/cartesia-speech.js"
 
 export type { CartesiaEncoding, CartesiaSpeechOptions } from "../protocols/cartesia-speech.js"
 
 export const id = ProviderID.make("cartesia")
-const baseURL = DEFAULT_BASE_URL
 
 export type Config = ProviderAuthOption<"optional"> & {
   readonly baseURL?: string
@@ -16,14 +16,8 @@ export type Config = ProviderAuthOption<"optional"> & {
 const auth = (options: ProviderAuthOption<"optional">) => AuthOptions.bearer(options, "CARTESIA_API_KEY")
 
 export const configure = (input: Config = {}) => {
-  const speech = (modelID: string | ModelID) =>
-    CartesiaSpeech.model({
-      id: modelID,
-      auth: auth(input),
-      baseURL: input.baseURL ?? baseURL,
-      headers: input.headers,
-      http: input.http === undefined ? undefined : HttpOptions.make(input.http),
-    })
+  const media = MediaRoute.deployment(input, auth(input))
+  const speech = (modelID: string | ModelID) => CartesiaSpeech.model({ ...media, id: modelID })
   return {
     id,
     speech,

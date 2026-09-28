@@ -1,14 +1,15 @@
+export { AIClient } from "./ai-client.js"
 export { LLMClient } from "./route/client.js"
 export { ImageClient } from "./image-client.js"
 export { Auth } from "./route/auth.js"
 export { Provider } from "./provider.js"
 export { ProviderPackage } from "./provider-package.js"
-export { isContextOverflow, isContextOverflowFailure } from "./provider-error.js"
+export { isContextOverflow, isContextOverflowFailure, isRetryable } from "./provider-error.js"
 export type {
   RouteLanguageModelInput,
   RouteRoutedLanguageModelInput,
   Interface as LLMClientShape,
-  Service as LLMClientService,
+  LLMClientService,
 } from "./route/client.js"
 export * from "./schema/index.js"
 export {

@@ -1,15 +1,14 @@
 import { Auth } from "../route/auth.js"
 import type { ProviderAuthOption } from "../route/auth-options.js"
-import { HttpOptions, ProviderID, type ModelID } from "../schema/index.js"
+import { MediaRoute } from "../route/media.js"
+import { type HttpOptions, ProviderID, type ModelID } from "../schema/index.js"
 import { FalImages } from "../protocols/fal-images.js"
 import { FalVideo } from "../protocols/fal-video.js"
-import { FalQueue } from "../protocols/utils/fal-queue.js"
 
 export type { FalImageOptions } from "../protocols/fal-images.js"
 export type { FalVideoOptions } from "../protocols/fal-video.js"
 
 export const id = ProviderID.make("fal")
-const baseURL = FalQueue.DEFAULT_BASE_URL
 
 export type Config = ProviderAuthOption<"optional"> & {
   readonly baseURL?: string
@@ -26,17 +25,11 @@ const auth = (options: ProviderAuthOption<"optional">) => {
 }
 
 export const configure = (input: Config = {}) => {
-  const media = (modelID: string | ModelID) => ({
-    id: modelID,
-    auth: auth(input),
-    baseURL: input.baseURL ?? baseURL,
-    headers: input.headers,
-    http: input.http === undefined ? undefined : HttpOptions.make(input.http),
-  })
+  const media = MediaRoute.deployment(input, auth(input))
   return {
     id,
-    image: (modelID: string | ModelID) => FalImages.model(media(modelID)),
-    video: (modelID: string | ModelID) => FalVideo.model(media(modelID)),
+    image: (modelID: string | ModelID) => FalImages.model({ ...media, id: modelID }),
+    video: (modelID: string | ModelID) => FalVideo.model({ ...media, id: modelID }),
     configure,
   }
 }

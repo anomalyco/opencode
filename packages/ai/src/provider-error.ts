@@ -58,6 +58,47 @@ export const isContextOverflowFailure = (failure: unknown) =>
     ? failure.reason._tag === "InvalidRequest" && failure.reason.classification === "context-overflow"
     : Schema.is(ProviderErrorEvent)(failure) && failure.classification === "context-overflow"
 
+/**
+ * Whether a failed call may succeed when sent again: rate limits, provider-side failures, transport failures that did
+ * not deliver an accepted write, and unrecognized failures. Callers decide which calls are safe to repeat.
+ */
+export const isRetryable = (error: AIError) => {
+  const override = error.reason.http?.headers["x-should-retry"]
+  if (override === "true") return true
+  if (override === "false") return false
+  switch (error.reason._tag) {
+    case "RateLimit":
+    case "ProviderInternal":
+      return true
+    // A WebSocket acknowledgment marks delivery accepted before model output may exist.
+    // Read failures can still recover; the caller chooses retry versus continuation from durable output.
+    case "Transport":
+      return (
+        error.reason.delivery !== "rejected" &&
+        (error.reason.delivery !== "accepted" || error.reason.operation === "read")
+      )
+    case "InvalidProviderOutput":
+      return error.reason.classification === "incomplete-stream"
+    // Unrecognized failures retry: classification records affirmative
+    // deterministic evidence, and transient failures are exactly the ones
+    // that arrive in shapes no classifier anticipates.
+    case "UnknownProvider":
+      return true
+    case "Authentication":
+    case "QuotaExceeded":
+    case "ContentPolicy":
+    case "InvalidRequest":
+    case "UnsupportedOperation":
+    case "NoRoute":
+    case "Timeout":
+      return false
+    default: {
+      const exhaustive: never = error.reason
+      return exhaustive
+    }
+  }
+}
+
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 // OpenCode Zen reports account caps as typed 429/402 errors that are not throttles.
 const QUOTA_CODES = new Set([
@@ -80,7 +121,13 @@ const SERVER_CODES = new Set([
   "slow_down",
   "serviceunavailableexception",
 ])
-const INVALID_REQUEST_CODES = new Set(["invalid_prompt", "invalid_request_error", "validationexception"])
+// `invalid_request` is the Vercel AI Gateway's code for an upstream request rejection.
+const INVALID_REQUEST_CODES = new Set([
+  "invalid_prompt",
+  "invalid_request",
+  "invalid_request_error",
+  "validationexception",
+])
 // Azure OpenAI reports `content_filter` with `innererror.code` ResponsibleAIPolicyViolation.
 // OpenRouter tags provider failures with a typed `error_type`; its Responses skin also
 // emits `image_content_policy_violation` as the native code.

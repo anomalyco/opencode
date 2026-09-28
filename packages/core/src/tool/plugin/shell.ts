@@ -61,6 +61,7 @@ export const Input = Schema.Struct({
 
 const StructuredOutput = Schema.Struct({
   exit: Schema.optionalKey(Schema.Number),
+  signal: Schema.optionalKey(Schema.String),
   shellID: Schema.optionalKey(Schema.String),
   truncated: Schema.Boolean,
   timeout: Schema.optionalKey(Schema.Boolean),

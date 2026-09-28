@@ -70,6 +70,7 @@ import { useToast } from "../../ui/toast"
 import stripAnsi from "strip-ansi"
 import { usePromptRef } from "../../context/prompt"
 import { projectedPromptInput } from "../../prompt/codec"
+import { appendPrompt } from "../../prompt/history"
 import { deduplicateVisibleImages } from "../../prompt/attachment"
 import { useEpilogue } from "../../context/epilogue"
 import { normalizePath } from "../../util/path"
@@ -121,7 +122,6 @@ import { SessionGroupView } from "./group-view"
 import { useEntryAnchor } from "./anchor-view"
 import { containsAnchor, createTimelineAnchors } from "./anchors"
 import { rowsAfter, rowsBefore, rowWeight } from "./mount-budget"
-import { summarizeActivity } from "./activity-summary"
 export { InlineToolRow } from "./message-parts"
 export { toolDisplay } from "./message-parts"
 
@@ -212,7 +212,9 @@ export function Session(props: {
   )
   const pendingDeliveries = createMemo(() => new Map(pendingUsers().map((item) => [item.id, item.delivery])))
   const queuedPrompts = createMemo(() =>
-    pendingUsers().flatMap((item) => (item.delivery === "queue" ? [{ id: item.id, text: item.payload.text }] : [])),
+    pendingUsers().flatMap((item) =>
+      item.delivery === "queue" ? [{ id: item.id, text: item.payload.text, payload: item.payload }] : [],
+    ),
   )
   const [composer, setComposer] = createStore({
     open: false,
@@ -405,9 +407,6 @@ export function Session(props: {
       rowWeight(row, {
         expanded: groupExpanded,
         grouped: groupedKind,
-        summarized: (node) =>
-          node.kind !== "activity" ||
-          summarizeActivity(node, (messageID) => data.session.message.get(route.sessionID, messageID)).label !== "",
       }),
     ),
   )
@@ -612,7 +611,7 @@ export function Session(props: {
   const dialog = useDialog()
   const renderer = useRenderer()
   const runPendingAction = createSingleFlight<string>()
-  const mutatePending = async (action: PendingAction, inboxID: string) => {
+  const mutatePending = async (action: PendingAction, inboxID: string, failureLabel?: string) => {
     const result = await runPendingAction(inboxID, async () => {
       const request =
         action === "steer"
@@ -625,7 +624,7 @@ export function Session(props: {
         (error) => error,
       )
       if (!error) return true
-      const label = action === "cancel" ? "delete" : action
+      const label = failureLabel ?? (action === "cancel" ? "delete" : action)
       toast.show({ title: `Failed to ${label} pending prompt`, message: errorMessage(error), variant: "error" })
       return false
     })
@@ -653,6 +652,26 @@ export function Session(props: {
               const last = queuedPrompts().length === 1
               void mutatePending("cancel", option.value).then((cancelled) => {
                 if (cancelled && last) dialog.clear()
+              })
+            },
+          },
+          {
+            command: "queued_prompt.undo",
+            title: "undo",
+            onTrigger: (option) => {
+              const target = prompt()
+              const queued = queuedPrompts().find((item) => item.id === option.value)
+              if (!target || !queued) return
+              if (target.mode === "shell" && target.current.text) {
+                toast.show({ message: "Leave shell mode before undoing a queued prompt", variant: "error" })
+                return
+              }
+              void mutatePending("cancel", queued.id, "undo").then((undone) => {
+                if (!undone) return
+                target.setMode("normal")
+                target.set(appendPrompt(target.current, { ...projectedPromptInput(queued.payload), pasted: [] }))
+                dialog.clear()
+                target.focus()
               })
             },
           },
@@ -1057,7 +1076,7 @@ export function Session(props: {
       },
     },
     {
-      title: `Transcript verbosity: ${Locale.titlecase(verbosity())}`,
+      title: `Verbosity: ${Locale.titlecase(verbosity())}`,
       id: "session.verbosity.cycle",
       group: "Session",
       run: () => {
@@ -2610,6 +2629,7 @@ function InlineTool(props: {
   children: JSX.Element
   part: SessionMessageAssistantTool
   onClick?: () => void
+  onErrorClick?: () => void
 }) {
   const theme = useTheme()
   const renderer = useRenderer()
@@ -2659,6 +2679,7 @@ function InlineTool(props: {
       onMouseUp={() => {
         if (renderer.getSelection()?.getSelectedText()) return
         if (failed()) {
+          if (props.onErrorClick) return props.onErrorClick()
           setErrorExpanded((value) => !value)
           return
         }
@@ -2787,7 +2808,7 @@ function Shell(props: ToolProps) {
       command={stringValue(props.input.command)}
       workdir={stringValue(props.input.workdir)}
       status={props.part.state.status}
-      background={Boolean(stringValue(props.metadata.shellID)) && props.part.state.status !== "running"}
+      background={props.part.state.status === "completed" && props.metadata.status === "running"}
       output={stringValue(props.metadata.shellID) ? undefined : props.output}
     />
   )
@@ -3202,6 +3223,7 @@ function Execute(props: ToolProps) {
   const hasRuntimeError = createMemo(() => props.metadata.error === true || props.part.state.status === "error")
   const outputPreview = createMemo(() => collapseToolOutput(output(), 4, 4 * Math.max(20, ctx.width - 6)).output)
   const showOutput = createMemo(() => output() && hasRuntimeError())
+  const openDetails = () => dialog.replace(() => <DialogExecute part={props.part} />)
 
   return (
     <>
@@ -3212,7 +3234,8 @@ function Execute(props: ToolProps) {
         pending="execute"
         complete={true}
         part={props.part}
-        onClick={() => dialog.replace(() => <DialogExecute part={props.part} />)}
+        onClick={openDetails}
+        onErrorClick={openDetails}
       >
         execute
       </InlineTool>

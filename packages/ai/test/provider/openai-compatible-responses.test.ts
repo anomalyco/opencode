@@ -202,10 +202,16 @@ describe("Open Responses-compatible route", () => {
           type: "function",
           name: "acme_billing_lookup",
           description: "Lookup billing",
-          parameters: {},
+          parameters: { type: "object" },
           strict: false,
         },
-        { type: "function", name: "acme_users", description: "Lookup users", parameters: {}, strict: false },
+        {
+          type: "function",
+          name: "acme_users",
+          description: "Lookup users",
+          parameters: { type: "object" },
+          strict: false,
+        },
       ])
     }),
   )

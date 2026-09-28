@@ -200,7 +200,7 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
     canonicalLocalServer?: ServerConnection.Key
     servers?: Array<ServerConnection.Any>
   }) => {
-    const [store, setStore, _] = persisted(
+    const [store, setStore, _, hydrated] = persisted(
       {
         ...Persist.global("server"),
         sync: true,
@@ -258,6 +258,9 @@ export const { use: useServers, provider: ServersProvider } = createSimpleContex
       get visible() {
         return visibleServers()
       },
+      // Named to avoid the context `ready` gate: consumers that derive from persisted project
+      // state wait on this, but the provider must not block first render on storage.
+      hydrated,
       isHidden(key: ServerConnection.Key) {
         return store.hidden[key] ?? false
       },

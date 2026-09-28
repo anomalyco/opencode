@@ -7,7 +7,6 @@ import {
   type ImageModelOptions,
   type ImageOptions,
   type ImageRequestFor,
-  type ImageRoute,
 } from "../src/index.js"
 import type { Service } from "../src/image-client.js"
 import { Anthropic, BlackForestLabs, Google, OpenAI, Stability, XAI, ZAI } from "../src/providers.js"
@@ -21,8 +20,7 @@ type GoogleLikeOptions = {
   readonly thinkingLevel?: "LOW" | "HIGH"
 } & Record<string, unknown>
 
-declare const route: ImageRoute<GoogleLikeOptions>
-const google = ImageModel.make<GoogleLikeOptions>({ id: "gemini-image", provider: "google", route })
+declare const google: ImageModel<GoogleLikeOptions>
 // @ts-expect-error Extracted model options retain known provider fields.
 const invalidGoogleOptions: ImageModelOptions<typeof google> = { imageSize: "8K" }
 void invalidGoogleOptions
@@ -152,6 +150,8 @@ Image.generate({ model: zai, prompt: "A lighthouse", providerOptions: { quality:
 Image.generate({ model: zai, prompt: "A lighthouse", providerOptions: { userID: 1 } })
 
 declare const generic: ImageModel<ImageOptions>
+const widenImage = <Options extends ImageOptions>(model: ImageModel<Options>): ImageModel => model
+void widenImage
 Image.generate({ model: generic, prompt: "A lighthouse", providerOptions: { arbitrary: true } })
 const explicitAsset: Media.Asset = Media.url("https://example.com/image.png")
 void explicitAsset

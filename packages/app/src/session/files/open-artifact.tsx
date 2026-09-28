@@ -67,8 +67,9 @@ export const { use: useArtifactOpener, provider: ArtifactOpenerProvider } = crea
     })
 
     // Inline paths are guessed from text, so confirm the file exists before a tab appears for it.
+    // Always reread: V2 publishes no workspace file change events, so a cached copy can be stale.
     const openTab = (path: string) => {
-      void file.load(path).then(() => {
+      void file.load(path, { force: true }).then(() => {
         if (file.get(path)?.loaded) showTab(file.tab(path))
       })
     }

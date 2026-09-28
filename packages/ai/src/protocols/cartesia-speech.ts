@@ -3,14 +3,12 @@ import { classifyProviderFailure } from "../provider-error.js"
 import { Framing } from "../route/framing.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { AIError, ProviderID, mergeJsonRecords } from "../schema/index.js"
+import { AIError, mergeJsonRecords, type OpenString } from "../schema/index.js"
 import { SpeechModel, type SpeechEvent, type SpeechRequestFor } from "../speech.js"
 import { ProviderShared, optionalNull } from "./shared.js"
 import { SpeechStream } from "./utils/speech-stream.js"
 
-const ADAPTER = "cartesia-speech"
-const NAME = "Cartesia"
-const PROVIDER = ProviderID.make("cartesia")
+const route = MediaProtocol.identity({ id: "cartesia-speech", name: "Cartesia", provider: "cartesia" })
 export const DEFAULT_BASE_URL = "https://api.cartesia.ai"
 export const API_VERSION = "2026-08-14"
 export const BYTES_PATH = "/tts/bytes"
@@ -22,8 +20,6 @@ const DEFAULT_BIT_RATE = 128000
 // 1. Public model input
 // ---------------------------------------------------------------------------
 
-export type CartesiaSpeechString<Known extends string> = Known | (string & {})
-
 export type CartesiaEncoding = SpeechStream.PcmEncoding
 
 export type CartesiaSpeechOptions = {
@@ -32,7 +28,7 @@ export type CartesiaSpeechOptions = {
   readonly encoding?: CartesiaEncoding
   readonly generation_config?: {
     readonly volume?: number
-    readonly emotion?: CartesiaSpeechString<"neutral" | "calm" | "angry" | "content" | "sad" | "scared">
+    readonly emotion?: OpenString<"neutral" | "calm" | "angry" | "content" | "sad" | "scared">
   }
   readonly pronunciation_dict_id?: string
 } & Record<string, unknown>
@@ -60,7 +56,7 @@ const SseEvent = Schema.Struct({
   error_code: optionalNull(Schema.String),
 })
 
-const decodeEvent = MediaProtocol.decodeFrame(ADAPTER, NAME, SseEvent)
+const decodeEvent = route.decodeFrame(SseEvent)
 
 // ---------------------------------------------------------------------------
 // 4. Parser state
@@ -84,16 +80,14 @@ const outputFormat = Effect.fn("CartesiaSpeech.outputFormat")(function* (request
   const format = request.format ?? (sse ? "pcm" : "mp3")
   const container = CONTAINERS[format]
   if (container === undefined)
-    return yield* SpeechStream.unsupportedFormat(
-      PROVIDER,
-      ADAPTER,
-      `${NAME} supports the pcm, wav, and mp3 formats, not "${format}"`,
+    return yield* route.unsupported(
+      "media.format",
+      `${route.name} supports the pcm, wav, and mp3 formats, not "${format}"`,
     )
   if (sse && container !== "raw")
-    return yield* SpeechStream.unsupportedFormat(
-      PROVIDER,
-      ADAPTER,
-      `${NAME} streams and timestamps only raw PCM; request format "pcm" instead of "${format}"`,
+    return yield* route.unsupported(
+      "media.format",
+      `${route.name} streams and timestamps only raw PCM; request format "pcm" instead of "${format}"`,
     )
   const sampleRate = request.providerOptions?.sampleRate ?? DEFAULT_SAMPLE_RATE
   if (container === "mp3")
@@ -104,7 +98,7 @@ const outputFormat = Effect.fn("CartesiaSpeech.outputFormat")(function* (request
 const fromRequest = Effect.fn("CartesiaSpeech.fromRequest")(function* (request: MediaProtocol.Addressed<Request>) {
   const voice = SpeechStream.voiceID(request.voice)
   if (voice === undefined)
-    return yield* ProviderShared.invalidRequest(`${NAME} requires a voice id; pass it as \`voice\``)
+    return yield* ProviderShared.invalidRequest(`${route.name} requires a voice id; pass it as \`voice\``)
   const { sampleRate: _sampleRate, bitRate: _bitRate, encoding: _encoding, ...native } = request.providerOptions ?? {}
   return MediaProtocol.json(
     mergeJsonRecords(
@@ -138,7 +132,7 @@ const onEvent = Effect.fn("CartesiaSpeech.onEvent")(function* (state: State, fra
   if (event.type === "error")
     return yield* new AIError({
       reason: classifyProviderFailure({
-        message: `${NAME} stream failed${event.title === undefined ? "" : ` (${event.title})`}: ${event.message ?? "unknown error"}`,
+        message: `${route.name} stream failed${event.title === undefined ? "" : ` (${event.title})`}: ${event.message ?? "unknown error"}`,
         status: event.status_code,
         rawBody: frame,
       }),
@@ -150,10 +144,10 @@ const finish = Effect.fn("CartesiaSpeech.finish")(function* (
   state: State,
   context: MediaProtocol.ResponseContext<Request>,
 ) {
-  if (usesSse(context.request) && !state.done) return yield* MediaProtocol.incomplete(ADAPTER)
+  if (usesSse(context.request) && !state.done) return yield* route.incomplete()
   const format = yield* outputFormat(context.request)
   return yield* SpeechStream.finish(
-    ADAPTER,
+    route,
     state,
     format.container === "raw"
       ? SpeechStream.pcm(format.encoding, format.sample_rate)
@@ -165,9 +159,7 @@ const finish = Effect.fn("CartesiaSpeech.finish")(function* (
 // 7. Protocol and route
 // ---------------------------------------------------------------------------
 
-export const protocol = MediaProtocol.stream<Request, SpeechEvent, string | Uint8Array, State>({
-  id: ADAPTER,
-  name: NAME,
+export const protocol = MediaProtocol.stream<Request, SpeechEvent, string | Uint8Array, State>(route, {
   unsupported: ["instructions"],
   body: { from: fromRequest },
   frames: (bytes, context) => (usesSse(context.request) ? Framing.sse.frame(bytes) : bytes),
@@ -179,8 +171,6 @@ export const protocol = MediaProtocol.stream<Request, SpeechEvent, string | Uint
 export const model = (input: MediaRoute.ModelInput) =>
   SpeechModel.fromRoute<CartesiaSpeechOptions, string | Uint8Array, State>(
     {
-      id: ADAPTER,
-      provider: PROVIDER,
       protocol,
       baseURL: DEFAULT_BASE_URL,
       headers: { "Cartesia-Version": API_VERSION },

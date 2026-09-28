@@ -1,11 +1,11 @@
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
-import { HttpOptions, ProviderID, type ModelID } from "../schema/index.js"
-import { DEFAULT_BASE_URL, StabilityImages } from "../protocols/stability-images.js"
+import { MediaRoute } from "../route/media.js"
+import { type HttpOptions, ProviderID, type ModelID } from "../schema/index.js"
+import { StabilityImages } from "../protocols/stability-images.js"
 
 export type { StabilityImageOptions, StabilityUpscaleOptions } from "../protocols/stability-images.js"
 
 export const id = ProviderID.make("stability")
-const baseURL = DEFAULT_BASE_URL
 
 export type Config = ProviderAuthOption<"optional"> & {
   readonly baseURL?: string
@@ -16,16 +16,11 @@ export type Config = ProviderAuthOption<"optional"> & {
 const auth = (options: ProviderAuthOption<"optional">) => AuthOptions.bearer(options, "STABILITY_API_KEY")
 
 export const configure = (input: Config = {}) => {
-  const deployment = {
-    auth: auth(input),
-    baseURL: input.baseURL ?? baseURL,
-    headers: input.headers,
-    http: input.http === undefined ? undefined : HttpOptions.make(input.http),
-  }
+  const media = MediaRoute.deployment(input, auth(input))
   return {
     id,
-    image: (modelID: string | ModelID) => StabilityImages.model({ ...deployment, id: modelID }),
-    upscale: () => StabilityImages.upscaleModel(deployment),
+    image: (modelID: string | ModelID) => StabilityImages.model({ ...media, id: modelID }),
+    upscale: () => StabilityImages.upscaleModel(media),
     configure,
   }
 }

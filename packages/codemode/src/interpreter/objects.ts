@@ -9,6 +9,8 @@ import {
   type GeneratorRequestKind,
   IteratorSymbol,
   type PendingThrow,
+  rangeError,
+  typeError,
 } from "./model.js"
 
 /** Property attributes, as in a JS property descriptor. */
@@ -41,6 +43,8 @@ export const frozen: Attributes = { writable: false, enumerable: false, configur
  */
 export class Obj {
   readonly props = new Map<string | symbol, Slot>()
+  /** [[Extensible]]: cleared by `Object.preventExtensions`, `seal`, and `freeze`. */
+  extensible = true
   constructor(public proto: Obj | null) {}
 
   /** The class name `Object.prototype.toString` reports: `[object Map]`. */
@@ -91,6 +95,8 @@ export class Obj {
 
 export class Arr extends Obj {
   override readonly tag = "Array"
+  /** The attributes every live element shares; `seal` and `freeze` narrow them since elements have no slots. */
+  elements: Attributes = data
   constructor(
     proto: Obj,
     readonly items: Array<Value> = [],
@@ -143,7 +149,11 @@ export abstract class Opaque extends Obj {
 
 export abstract class Callable extends Opaque {
   override readonly tag = "Function"
-  constructor(proto: Obj, name: string, length: number) {
+  constructor(
+    proto: Obj,
+    name: string,
+    readonly length: number,
+  ) {
     super(proto)
     define(this, "length", length, readonly)
     define(this, "name", name, readonly)
@@ -162,9 +172,26 @@ export class Fn extends Callable {
     readonly capturedScopes: Array<Map<string, Binding>>,
     readonly async: boolean,
     readonly generator: boolean,
+    /** Arrows have no `this` or `arguments` of their own; they read the enclosing function's. */
+    readonly arrow: boolean,
   ) {
     const optional = parameters.findIndex((p) => p.type === "AssignmentPattern" || p.type === "RestElement")
     super(proto, name, optional === -1 ? parameters.length : optional)
+  }
+}
+
+/** The strict `arguments` object: an ordinary object with indexed own properties and a hidden `length`. */
+export class Arguments extends Obj {
+  override readonly tag = "Arguments"
+  constructor(proto: Obj, args: Array<Value>) {
+    super(proto)
+    args.forEach((arg, index) => define(this, String(index), arg))
+    define(this, "length", args.length, hidden)
+  }
+  override iterator() {
+    return keys(this)
+      .map((key) => get(this, key))
+      .values()
   }
 }
 
@@ -329,6 +356,23 @@ export class SetObj extends Wrapper {
   }
 }
 
+/** Keys are program objects, so a host WeakMap gives the same lifetime rule as JavaScript without any bookkeeping. */
+export class WeakMapObj extends Wrapper {
+  override readonly tag = "WeakMap"
+  readonly map = new WeakMap<Obj, Value>()
+  override inspect() {
+    return "WeakMap { <items unknown> }"
+  }
+}
+
+export class WeakSetObj extends Wrapper {
+  override readonly tag = "WeakSet"
+  readonly set = new WeakSet<Obj>()
+  override inspect() {
+    return "WeakSet { <items unknown> }"
+  }
+}
+
 export class URLSearchParamsObj extends Wrapper {
   override readonly tag = "URLSearchParams"
   constructor(
@@ -460,10 +504,11 @@ export const own = (target: Obj, key: PropertyKey): Slot | undefined => {
     const at = index(target, name)
     if (at !== undefined) {
       const items = elements(target)
-      return at in items ? { value: items[at], ...data } : undefined
+      if (!(at in items)) return undefined
+      return { value: items[at], ...(target instanceof Arr ? target.elements : data) }
     }
     if (target instanceof Arr && name === "length") {
-      return { value: target.items.length, writable: true, enumerable: false, configurable: false }
+      return { value: target.items.length, writable: target.elements.writable, enumerable: false, configurable: false }
     }
   }
   return target.props.get(name)
@@ -505,13 +550,19 @@ export const hasPrototype = (value: Value, proto: Obj): boolean => {
 const writeElement = (target: Indexed, name: string | symbol, value: Value): boolean | undefined => {
   const at = index(target, name)
   if (at !== undefined) {
-    if (target instanceof Bytes) target.bytes[at] = typeof value === "number" ? value : Number(value)
-    else target.items[at] = value
+    if (target instanceof Bytes) {
+      target.bytes[at] = typeof value === "number" ? value : Number(value)
+      return true
+    }
+    if (!(at in target.items)) rejectAddition(target, at)
+    target.items[at] = value
     return true
   }
   if (!(target instanceof Arr) || name !== "length") return undefined
   const length = typeof value === "number" ? value : Number(value)
-  if (!Number.isInteger(length) || length < 0) return false
+  if (!Number.isInteger(length) || length < 0) throw rangeError("Invalid array length")
+  // Shrinking deletes elements, which a sealed array forbids.
+  if (length < target.items.length && !target.elements.configurable) return false
   checkArrayLength(length)
   target.items.length = length
   return true
@@ -541,8 +592,15 @@ export const set = (target: Obj, key: PropertyKey, value: Value): boolean => {
     const written = writeElement(target, name, value)
     if (written !== undefined) return written
   }
+  rejectAddition(target, name)
   target.props.set(name, { value, ...data })
   return true
+}
+
+/** Creating a property on a non-extensible object is the one [[Set]] failure with its own message. */
+export const rejectAddition = (target: Obj, key: string | symbol | number): void => {
+  if (target.extensible) return
+  throw typeError(`Cannot add property ${String(key)}, object is not extensible.`)
 }
 
 /** [[DefineOwnProperty]] for a data property, ignoring the chain. */
@@ -560,7 +618,11 @@ export const remove = (target: Obj, key: PropertyKey): boolean => {
   const name = canonical(key)
   if (isIndexed(target)) {
     const at = index(target, name)
-    if (at !== undefined) return target instanceof Bytes ? !(at in target.bytes) : delete target.items[at]
+    if (at !== undefined) {
+      if (target instanceof Bytes) return !(at in target.bytes)
+      if (at in target.items && !target.elements.configurable) return false
+      return delete target.items[at]
+    }
     if (target instanceof Arr && name === "length") return false
   }
   const slot = target.props.get(name)

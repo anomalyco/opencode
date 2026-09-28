@@ -144,12 +144,19 @@ export const make = Effect.gen(function* () {
         if (Exit.isFailure(joined)) yield* interruptTools
         const tools = classifyToolExits(joined, toolRuns)
 
+        const overflow = overflowFailure ?? streamFailure
         if (
           !publisher.record().outputStarted &&
-          isContextOverflowFailure(overflowFailure ?? streamFailure) &&
+          isContextOverflowFailure(overflow) &&
           (yield* restore(input.recoverOverflow))
-        )
+        ) {
+          yield* Effect.logWarning("provider rejected the request as too long; compacting", {
+            sessionID: input.sessionID,
+            model: input.model.ref,
+            message: overflow?.message,
+          })
           return Outcome.Compacted()
+        }
 
         if (overflowFailure) yield* publisher.publish(overflowFailure)
         const recorded = publisher.record()
