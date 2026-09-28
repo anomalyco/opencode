@@ -8,27 +8,23 @@ import {
   Hooks,
   LlmGateway,
   Mcp,
-  type McpShape,
   Permission,
-  type Profile,
-  type ProfileName,
   Runtime,
   SessionStore,
-  SpawnError,
   ToolRegistry,
   type Asker,
   type ResolvedConfig,
   type RunResult,
   type RunState,
   type RuntimeShape,
-  type SubagentsShape,
   type TokenUsage,
-  type ToolSet,
 } from "../contract"
 import { persist } from "../llm/probe"
-import { forProfile, searchTool } from "../mcp/tools"
+import { mcpForRun } from "../mcp/tools"
 import { harnessPrompt, select } from "../profile/profiles"
 import { replay, validId } from "../session/store"
+import { make } from "../subagent/manager"
+import { taskTool } from "../subagent/task"
 import { parse } from "../tools/text-protocol"
 import { system } from "./context"
 import { run, type LoopDeps, type LoopResult } from "./loop"
@@ -71,12 +67,13 @@ export function layer(options: RuntimeOptions = {}) {
       const hooks = yield* Hooks
       const mcp = yield* Mcp
       const scale = Number(process.env.OCLITE_RETRY_SCALE ?? 1)
+      // Children start through this runtime's own `start` (declared below; only called after the layer is built).
+      const subagents = make({ start: (input, sink) => start(input, sink), store, cfg })
       const deps: LoopDeps = {
         gateway,
         store,
         hooks,
-        // Phase 5 seam: subagent/manager.ts `make({ start })` replaces this stub (task tool, background queue).
-        subagents: noSubagents,
+        subagents,
         parse,
         persistContext: (handle, tokens) => persist(handle.baseURL, handle.model.id, { context_window: tokens }, "error-400"),
         retryDelays: options.retryDelays ?? [2000, 4000, 8000].map((ms) => ms * scale),
@@ -93,12 +90,14 @@ export function layer(options: RuntimeOptions = {}) {
           if (input.session_id !== undefined && !validId(input.session_id))
             return yield* new ConfigError({ message: `invalid session id "${input.session_id}"` })
           const previous = input.session_id ? yield* store.read(input.session_id) : []
-          if (input.session_id && !previous.some((record) => record.type === "session"))
+          const fresh = !previous.some((record) => record.type === "session")
+          // A sub-agent id is chosen by the manager before its session exists; any other unknown id is an error.
+          if (input.session_id && fresh && !input.parent)
             return yield* new ConfigError({ message: `unknown session "${input.session_id}"` })
-          const session_id =
-            input.session_id ??
-            (yield* store.create({ id: "", cwd, agent: agent.name, model: handle.ref, profile: profile.name, depth,
-              parent_id: input.parent?.session_id, parent_call_id: input.parent?.call_id, created_at: Date.now() }))
+          const session_id = !fresh
+            ? input.session_id!
+            : yield* store.create({ id: input.session_id ?? "", cwd, agent: agent.name, model: handle.ref, profile: profile.name,
+                depth, parent_id: input.parent?.session_id, parent_call_id: input.parent?.call_id, created_at: Date.now() })
           const agent_path = input.parent ? [agent.name] : []
           const status = (phase: "tools" | "instructions" | "notice", message: string) =>
             sink({ session_id, agent_path, type: "status", phase, message })
@@ -107,7 +106,10 @@ export function layer(options: RuntimeOptions = {}) {
           const ruleset = permission.ruleset({ agent, mode: input.permissionMode ?? cfg.permissionMode,
             parent: input.parent?.ruleset, mcpReadOnly: servers.readOnly })
           yield* status("tools", "building tools")
-          const tools = yield* registry.build({ session_id, cwd, agent, depth, ruleset, sink, profile }, servers.extra, handle.capabilities)
+          const ctx = { session_id, cwd, agent, depth, ruleset, sink, profile }
+          const mode = input.permissionMode ?? cfg.permissionMode
+          const parentReadOnly = mode === "plan" || agent.read_only
+          const tools = yield* registry.build(ctx, [...servers.extra, taskTool({ ctx, subagents, cfg, parentReadOnly })], handle.capabilities)
           const mcpInstructions = yield* servers.bind(tools, replay(previous).activated)
           yield* status("instructions", "loading instructions")
           const prompt = yield* Effect.promise(() =>
@@ -135,7 +137,10 @@ export function layer(options: RuntimeOptions = {}) {
           yield* Fiber.await(fiber).pipe(
             Effect.flatMap((exit) =>
               Effect.gen(function* () {
-                const denied = (yield* permission.denials(session_id)) + (Exit.isSuccess(exit) ? (exit.value.protocolFailures ?? 0) : 0)
+                yield* subagents.cancelAll(session_id) // no child outlives its parent's run
+                // Descendants' denials count too (headless exit 3), as do text-protocol give-ups.
+                const denied = (yield* permission.denials(session_id)) + (yield* subagents.denials(session_id)) +
+                  (Exit.isSuccess(exit) ? (exit.value.protocolFailures ?? 0) : 0)
                 const base = { session_id, turns: progress.step, usage: progress.tokens, denied, text: "" }
                 const value: RunResult = Exit.isSuccess(exit)
                   ? { ...base, ...result(exit.value), state: exit.value.reason === "error" ? "failed" : exit.value.reason === "cancelled" ? "cancelled" : "completed" }
@@ -157,77 +162,11 @@ export function layer(options: RuntimeOptions = {}) {
           }
         })
 
-      return Runtime.of({ start, subagents: noSubagents })
+      return Runtime.of({ start, subagents })
     }),
   )
 }
 
-/**
- * The MCP part of a run (shared with `debug prompt`): the extra tools for registry.build (every MCP tool, or only
- * tool_search in deferred profiles), read-only names for the ruleset, and `bind`, which re-applies persisted
- * activations and returns server instructions for the system prompt. Servers first reached through tool_search
- * get their instructions in that tool's result instead, so the system prompt stays byte-stable for the run.
- */
-export function mcpForRun(
-  mcp: McpShape,
-  profile: Profile,
-  persist: (names: string[]) => Effect.Effect<void>,
-  notice: (key: string, message: string) => Effect.Effect<void>,
-) {
-  return Effect.gen(function* () {
-    const all = yield* mcp.tools()
-    const bound: { tools?: ToolSet } = {}
-    const shown = new Set<string>()
-    const cap = MCP_INSTRUCTIONS_CAP[profile.name]
-    // Each server's instructions once per run, cut to the profile cap (a few KB would break the local budgets).
-    const fresh = (texts: string[]) =>
-      Effect.forEach(texts.filter((text) => !shown.has(text) && !!shown.add(text)), (text) => {
-        if (text.length <= cap) return Effect.succeed(text)
-        const head = text.split("\n")[0]!
-        return notice(`mcp-instructions:${profile.name}:${head}`, `${head.replace(/:$/, "")} cut to ${cap} chars (${profile.name})`).pipe(
-          Effect.as(`${text.slice(0, cap)}\n…[truncated]`),
-        )
-      })
-    const search = () =>
-      searchTool({
-        search: mcp.search,
-        maxChars: profile.descriptionMaxChars,
-        activate: (names) =>
-          Effect.gen(function* () {
-            yield* bound.tools?.activate(names) ?? Effect.void
-            yield* persist(names)
-            return yield* fresh(yield* mcp.instructions(names))
-          }),
-      })
-    return {
-      extra: forProfile(profile, all, search),
-      readOnly: all.filter((tool) => tool.readOnly).map((tool) => tool.name),
-      bind: (tools: ToolSet, activated: readonly string[]) =>
-        Effect.gen(function* () {
-          bound.tools = tools
-          if (activated.length) yield* tools.activate([...activated])
-          const requested = profile.mcp === "deferred" ? activated : all.map((tool) => tool.name)
-          return yield* fresh(yield* mcp.instructions(requested.filter((name) => name in tools.tools)))
-        }),
-    }
-  })
-}
-
-const MCP_INSTRUCTIONS_CAP: Record<ProfileName, number> = { default: 2000, local: 600, "local-min": 300 }
-
 function result(value: LoopResult) {
   return { reason: value.reason, text: value.text, turns: value.turns, usage: value.usage, error: value.error }
-}
-
-const phase5 = () => new SpawnError({ message: "sub-agents arrive in phase 5" })
-
-const noSubagents: SubagentsShape = {
-  spawn: () => Effect.fail(phase5()),
-  wait: () => Effect.die(phase5()),
-  get: () => Effect.succeed(undefined),
-  send: () => Effect.succeed(false),
-  cancel: () => Effect.succeed(undefined),
-  takeFinished: () => Effect.succeed([]),
-  running: () => Effect.succeed(0),
-  envelope: () => "",
 }

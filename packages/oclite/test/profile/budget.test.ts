@@ -37,8 +37,8 @@ describe("debug prompt --tokens --check", () => {
   test.each<[string, number, string[]]>([
     ["local", 1200, ["bash", "edit", "glob", "grep", "read", "write"]],
     ["local-min", 600, ["bash", "edit", "grep", "read"]],
-    // The real registry: `question` is left out by design (tools/extra.ts), `task` arrives with sub-agents in phase 5.
-    ["default", 7300, ["bash", "edit", "glob", "grep", "read", "skill", "todowrite", "webfetch", "write"]],
+    // The real registry: `question` is left out by design (tools/extra.ts).
+    ["default", 7300, ["bash", "edit", "glob", "grep", "read", "skill", "task", "todowrite", "webfetch", "write"]],
   ])("%s profile stays within %d tok", async (profile, budget, tools) => {
     await using env = await setup()
     const result = await env.run(["debug", "prompt", "--tokens", "--check", "--profile", profile, "--output-format", "json"])

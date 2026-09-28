@@ -116,6 +116,12 @@ export const layer = Layer.effect(
             })
           : []
         const readOnly = input.mode === "plan" || input.agent.read_only
+        const restricted = readOnly ? readOnlyRules(input.mcpReadOnly) : []
+        // A read_only child re-applies its own read_only rules after the inherited denies, so it keeps `git status`,
+        // `ls` and readOnlyHint MCP tools; inherited denies that aren't read_only rules still come last.
+        const inherited = parent.filter(
+          (rule) => rule.action === "deny" && !restricted.some((own) => own.permission === rule.permission && own.pattern === rule.pattern),
+        )
         return [
           ...defaults(),
           ...cfg.permission,
@@ -124,9 +130,9 @@ export const layer = Layer.effect(
           ...parent,
           ...cfg.cliRules,
           // --allowed-tools can't lift read_only; CLI and parent denies stay last so nothing after them re-allows.
-          ...(readOnly ? readOnlyRules(input.mcpReadOnly) : []),
+          ...restricted,
           ...cfg.cliRules.filter((rule) => rule.action === "deny"),
-          ...parent.filter((rule) => rule.action === "deny"),
+          ...inherited,
         ]
       },
       check: Effect.fn("Permission.check")(function* (input) {

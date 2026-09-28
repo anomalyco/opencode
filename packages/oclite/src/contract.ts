@@ -109,7 +109,7 @@ export interface ToolAccess { permission: string; patterns: string[]; always?: s
 export interface OcliteTool {
   name: string; tool: AnyExecutableTool          // @opencode-ai/llm Tool.make(...)
   access: (input: unknown) => ToolAccess         // pure; called after decode
-  readOnly: boolean                              // parallel-safe + allowed for read_only agents
+  readOnly: boolean                              // concurrency grouping only: consecutive readOnly calls in one reply run together; permissions come from rules
   timeoutMs: number                              // bash 120000, others 30000, mcp per server
   summarize: (input: unknown) => string          // "read src/x.ts"
 }

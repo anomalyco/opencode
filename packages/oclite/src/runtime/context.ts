@@ -14,7 +14,7 @@ export interface SystemInput {
   profile: Profile
   /** ToolSet.textProtocolPrompt, when the server has no tool-call parser. */
   textProtocolPrompt?: string
-  /** Instructions of MCP servers whose tools are in the first request (runtime.ts mcpForRun). */
+  /** Instructions of MCP servers whose tools are in the first request (mcp/tools.ts mcpForRun). */
   mcpInstructions?: readonly string[]
   home?: string
   now?: Date

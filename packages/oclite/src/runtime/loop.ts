@@ -12,12 +12,13 @@ import type {
   RenderEvent,
   RunResult,
   SessionStoreShape,
-  SubagentsShape,
+  SubagentInfo,
   Thinking,
   TokenUsage,
   ToolSet,
 } from "../contract"
 import { replay } from "../session/store"
+import { notice, type Manager } from "../subagent/manager"
 import { outcome } from "../tools/registry"
 import { maybe } from "./compaction"
 import { reminders } from "./context"
@@ -26,7 +27,7 @@ export interface LoopDeps {
   gateway: LlmGatewayShape
   store: SessionStoreShape
   hooks: HooksShape
-  subagents: SubagentsShape
+  subagents: Manager
   /** tools/text-protocol.ts `parse`: at most one call per assistant text. */
   parse: (text: string) => { call?: { name: string; input: unknown }; error?: string }
   /** Persist a context window learned from a 400 (probe cache, source "error-400"). */
@@ -76,6 +77,7 @@ export const run = Effect.fn("loop.run")(function* (deps: LoopDeps, input: LoopI
     handle: input.handle,
     todos: JSON.stringify(initial.todos),
     stop: [] as string[],
+    finished: [] as SubagentInfo[],
     fresh: true,
     malformed: false,
     overflowed: false,
@@ -86,6 +88,8 @@ export const run = Effect.fn("loop.run")(function* (deps: LoopDeps, input: LoopI
     Effect.gen(function* () {
       if (error) yield* append({ type: "error", message: error, retryable: false })
       if (error) yield* emit({ type: "error", message: error, retryable: false })
+      // Children end with their parent, and their `subagent` rows land before its `end` record.
+      yield* deps.subagents.cancelAll(input.session_id)
       yield* append({ type: "end", reason, turns: state.steps, usage })
       return { reason, text: state.text, turns: state.steps, usage, error, protocolFailures } satisfies LoopResult
     })
@@ -98,7 +102,7 @@ export const run = Effect.fn("loop.run")(function* (deps: LoopDeps, input: LoopI
       )
       const before = replay(yield* deps.store.read(input.session_id), { textProtocol })
       const todos = JSON.stringify(before.todos)
-      const envelopes = (yield* deps.subagents.takeFinished(input.session_id)).map(deps.subagents.envelope)
+      const envelopes = [...state.finished.splice(0), ...(yield* deps.subagents.takeFinished(input.session_id))].map(notice)
       const reminder = reminders({
         steers: yield* input.steers(),
         envelopes,
@@ -120,8 +124,11 @@ export const run = Effect.fn("loop.run")(function* (deps: LoopDeps, input: LoopI
       if (attempt.text) state.text = attempt.text
       state.turn++
       if (calls.length === 0) {
-        if ((yield* deps.subagents.running(input.session_id)) > 0) {
-          yield* Effect.sleep(100)
+        // Idle with background children still running: wait for the next finish, then continue with it.
+        const waited = yield* nextFinished()
+        if (waited.length) {
+          state.finished.push(...waited)
+          state.fresh = true
           continue
         }
         const outcome = yield* deps.hooks.run("Stop", { session_id: input.session_id, cwd: input.cwd })
@@ -135,8 +142,22 @@ export const run = Effect.fn("loop.run")(function* (deps: LoopDeps, input: LoopI
   })
 
   return yield* body.pipe(
-    Effect.onInterrupt(() => append({ type: "end", reason: "cancelled", turns: state.steps, usage }).pipe(Effect.ignore)),
+    Effect.onInterrupt(() =>
+      deps.subagents.cancelAll(input.session_id).pipe(
+        Effect.andThen(append({ type: "end", reason: "cancelled", turns: state.steps, usage })),
+        Effect.ignore,
+      ),
+    ),
   )
+
+  function nextFinished(): Effect.Effect<SubagentInfo[]> {
+    return Effect.gen(function* () {
+      const taken = yield* deps.subagents.takeFinished(input.session_id)
+      if (taken.length || (yield* deps.subagents.running(input.session_id)) === 0) return taken
+      yield* Effect.sleep(50)
+      return yield* nextFinished()
+    })
+  }
 
   function compactInput() {
     return {

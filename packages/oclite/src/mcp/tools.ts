@@ -4,7 +4,7 @@
 import path from "path"
 import { Effect } from "effect"
 import { type ContentPart, Tool, ToolFailure } from "@opencode-ai/llm"
-import type { McpStatus, OcliteTool, Profile } from "../contract"
+import type { McpShape, McpStatus, OcliteTool, Profile, ProfileName, ToolSet } from "../contract"
 import { dataDir } from "../util/paths"
 
 // Structural subsets of the SDK result types, so this module never loads the SDK.
@@ -167,3 +167,56 @@ function summary(name: string, args: unknown) {
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
 }
+
+/**
+ * The MCP part of a run (shared with `debug prompt`): the extra tools for registry.build (every MCP tool, or only
+ * tool_search in deferred profiles), read-only names for the ruleset, and `bind`, which re-applies persisted
+ * activations and returns server instructions for the system prompt. Servers first reached through tool_search
+ * get their instructions in that tool's result instead, so the system prompt stays byte-stable for the run.
+ */
+export function mcpForRun(
+  mcp: McpShape,
+  profile: Profile,
+  persist: (names: string[]) => Effect.Effect<void>,
+  notice: (key: string, message: string) => Effect.Effect<void>,
+) {
+  return Effect.gen(function* () {
+    const all = yield* mcp.tools()
+    const bound: { tools?: ToolSet } = {}
+    const shown = new Set<string>()
+    const cap = MCP_INSTRUCTIONS_CAP[profile.name]
+    // Each server's instructions once per run, cut to the profile cap (a few KB would break the local budgets).
+    const fresh = (texts: string[]) =>
+      Effect.forEach(texts.filter((text) => !shown.has(text) && !!shown.add(text)), (text) => {
+        if (text.length <= cap) return Effect.succeed(text)
+        const head = text.split("\n")[0]!
+        return notice(`mcp-instructions:${profile.name}:${head}`, `${head.replace(/:$/, "")} cut to ${cap} chars (${profile.name})`).pipe(
+          Effect.as(`${text.slice(0, cap)}\n…[truncated]`),
+        )
+      })
+    const search = () =>
+      searchTool({
+        search: mcp.search,
+        maxChars: profile.descriptionMaxChars,
+        activate: (names) =>
+          Effect.gen(function* () {
+            yield* bound.tools?.activate(names) ?? Effect.void
+            yield* persist(names)
+            return yield* fresh(yield* mcp.instructions(names))
+          }),
+      })
+    return {
+      extra: forProfile(profile, all, search),
+      readOnly: all.filter((tool) => tool.readOnly).map((tool) => tool.name),
+      bind: (tools: ToolSet, activated: readonly string[]) =>
+        Effect.gen(function* () {
+          bound.tools = tools
+          if (activated.length) yield* tools.activate([...activated])
+          const requested = profile.mcp === "deferred" ? activated : all.map((tool) => tool.name)
+          return yield* fresh(yield* mcp.instructions(requested.filter((name) => name in tools.tools)))
+        }),
+    }
+  })
+}
+
+const MCP_INSTRUCTIONS_CAP: Record<ProfileName, number> = { default: 2000, local: 600, "local-min": 300 }
