@@ -19,8 +19,14 @@ import { SessionShareTable } from "@opencode-ai/core/share/sql"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { EventV2 } from "@opencode-ai/core/event"
+import { Flag } from "@opencode-ai/core/flag/flag"
 
-const disabled = process.env["OPENCODE_DISABLE_SHARE"] === "true" || process.env["OPENCODE_DISABLE_SHARE"] === "1"
+// Sharing publishes the transcript to opncd.ai, so an offline host opts out
+// wholesale rather than queueing syncs that can only fail.
+const disabled =
+  process.env["OPENCODE_DISABLE_SHARE"] === "true" ||
+  process.env["OPENCODE_DISABLE_SHARE"] === "1" ||
+  Flag.OPENCODE_OFFLINE
 
 export type Api = {
   create: string

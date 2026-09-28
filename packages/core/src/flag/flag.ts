@@ -55,8 +55,10 @@ export const Flag = {
     return truthy("OPENCODE_DISABLE_PROJECT_CONFIG")
   },
   // Hosts without any route to the public internet must not pay for network
-  // round trips that can only fail. Every best-effort remote call (catalog,
-  // update check, LSP/package downloads) is skipped when this is set.
+  // round trips that can only fail. Every best-effort remote call is skipped
+  // when this is set: provider catalog, update check, well-known and account
+  // config, LSP/package downloads, and share sync. Callers that already have
+  // disk state (a cached catalog snapshot, an installed plugin) still use it.
   get OPENCODE_OFFLINE() {
     return truthy("OPENCODE_OFFLINE")
   },

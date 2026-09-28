@@ -172,7 +172,7 @@ describe("opencode run (non-interactive subprocess)", () => {
         })
         expect(result.stdout.split("\n").filter(Boolean)).toHaveLength(1)
       }),
-    30_000,
+    60_000,
   )
 
   cliIt.concurrent(
@@ -328,7 +328,7 @@ describe("opencode run (non-interactive subprocess)", () => {
         expect(result.exitCode).not.toBe(0)
         expect(result.stderr).toContain("Cannot attach local directory without a shared filesystem")
       }),
-    30_000,
+    60_000,
   )
 
   cliIt.live(

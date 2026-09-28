@@ -371,6 +371,13 @@ const layer = Layer.effect(
           if (value.type === "wellknown") {
             const url = key.replace(/\/+$/, "")
             authEnv[value.key] = value.token
+            // This fetch is inline in Config.get(), so an unreachable host would
+            // fail task startup outright. Offline deployments keep only the
+            // inline credential.
+            if (Flag.OPENCODE_OFFLINE) {
+              yield* Effect.logDebug("skipping well-known remote config while offline", { url })
+              continue
+            }
             const wellknownURL = `${url}/.well-known/opencode`
             yield* Effect.logDebug("fetching remote config", { url: wellknownURL })
             const wellknown = yield* fetchRemoteJson(wellknownURL, undefined, ConfigV1.WellKnown, url)
@@ -449,26 +456,31 @@ const layer = Layer.effect(
 
           yield* ensureGitignore(dir).pipe(Effect.orDie)
 
-          const dep = yield* npmSvc
-            .install(dir, {
-              add: [
-                {
-                  name: "@opencode-ai/plugin",
-                  version: InstallationLocal ? undefined : InstallationVersion,
-                },
-              ],
-            })
-            .pipe(
-              Effect.exit,
-              Effect.tap((exit) =>
-                Exit.isFailure(exit)
-                  ? Effect.logWarning("background dependency install failed", { dir, error: String(exit.cause) })
-                  : Effect.void,
-              ),
-              Effect.asVoid,
-              Effect.forkDetach,
-            )
-          deps.push(dep)
+          // Backgrounded, but still a registry round trip per config directory.
+          if (Flag.OPENCODE_OFFLINE) {
+            yield* Effect.logDebug("skipping background dependency install while offline", { dir })
+          } else {
+            const dep = yield* npmSvc
+              .install(dir, {
+                add: [
+                  {
+                    name: "@opencode-ai/plugin",
+                    version: InstallationLocal ? undefined : InstallationVersion,
+                  },
+                ],
+              })
+              .pipe(
+                Effect.exit,
+                Effect.tap((exit) =>
+                  Exit.isFailure(exit)
+                    ? Effect.logWarning("background dependency install failed", { dir, error: String(exit.cause) })
+                    : Effect.void,
+                ),
+                Effect.asVoid,
+                Effect.forkDetach,
+              )
+            deps.push(dep)
+          }
 
           result.command = mergeDeep(result.command ?? {}, yield* Effect.promise(() => ConfigCommand.load(dir)))
           result.agent = mergeDeep(result.agent ?? {}, yield* Effect.promise(() => ConfigAgent.load(dir)))
@@ -492,7 +504,10 @@ const layer = Layer.effect(
         const activeAccount = Option.getOrUndefined(
           yield* accountSvc.active().pipe(Effect.catch(() => Effect.succeed(Option.none()))),
         )
-        if (activeAccount?.active_org_id) {
+        if (activeAccount?.active_org_id && Flag.OPENCODE_OFFLINE) {
+          yield* Effect.logDebug("skipping remote account config while offline")
+        }
+        if (activeAccount?.active_org_id && !Flag.OPENCODE_OFFLINE) {
           const accountID = activeAccount.id
           const orgID = activeAccount.active_org_id
           const url = activeAccount.url
