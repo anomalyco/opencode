@@ -265,6 +265,7 @@ export const dict = {
   "go.meta.description":
     "Go koster $10/måned, med generøse brugsgrænser og pålidelig adgang til førende kodningsmodeller.",
   "go.hero.title": "Kodningsmodeller til lav pris for alle",
+  "go.hero.tagline": "Brug med enhver agent. Tank op med kredit efter behov. Afmeld når som helst.",
   "go.hero.body":
     "Go bringer agentisk kodning til programmører over hele verden. Med generøse grænser og pålidelig adgang til de mest kapable open source-modeller, så du kan bygge med kraftfulde agenter uden at bekymre dig om omkostninger eller tilgængelighed.",
 
@@ -272,7 +273,7 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Abonner på Go",
   "go.cta.price": "$10/måned",
-  "go.plans.month": "/måned",
+  "go.plans.month": "om måneden",
   "go.plans.plus.cta": "Abonnér på Go Plus",
   "go.plans.plus.description": "Go Plus koster $40/måned og giver højere brugsgrænser.",
   "go.plans.go.feature1": "Udvalgte, prisvenlige modeller",

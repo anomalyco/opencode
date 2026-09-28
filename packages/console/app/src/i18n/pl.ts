@@ -266,6 +266,7 @@ export const dict = {
   "go.meta.description":
     "Go kosztuje $10/miesiąc, oferując hojne limity użycia i niezawodny dostęp do wiodących modeli do kodowania.",
   "go.hero.title": "Niskokosztowe modele do kodowania dla każdego",
+  "go.hero.tagline": "Używaj z dowolnym agentem. Doładuj środki w razie potrzeby. Anuluj w dowolnym momencie.",
   "go.hero.body":
     "Go udostępnia programowanie z agentami programistom na całym świecie. Oferuje hojne limity i niezawodny dostęp do najzdolniejszych modeli open source, dzięki czemu możesz budować za pomocą potężnych agentów, nie martwiąc się o koszty czy dostępność.",
 
@@ -273,7 +274,7 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Zasubskrybuj Go",
   "go.cta.price": "$10/miesiąc",
-  "go.plans.month": "/miesiąc",
+  "go.plans.month": "miesięcznie",
   "go.plans.plus.cta": "Subskrybuj Go Plus",
   "go.plans.plus.description": "Go Plus kosztuje $40/miesiąc i oferuje wyższe limity.",
   "go.plans.go.feature1": "Wyselekcjonowane, przystępne modele",

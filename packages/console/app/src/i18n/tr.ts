@@ -267,6 +267,7 @@ export const dict = {
   "go.meta.description":
     "Go ayda 10$'dır; cömert kullanım limitleri ve önde gelen kodlama modellerine güvenilir erişim sunar.",
   "go.hero.title": "Herkes için düşük maliyetli kodlama modelleri",
+  "go.hero.tagline": "Herhangi bir ajanla kullanın. Gerekirse kredi yükleyin. İstediğiniz zaman iptal edin.",
   "go.hero.body":
     "Go, dünya çapındaki programcılara ajan tabanlı kodlama getiriyor. En yetenekli açık kaynaklı modellere cömert limitler ve güvenilir erişim sunarak, maliyet veya erişilebilirlik konusunda endişelenmeden güçlü ajanlarla geliştirme yapmanızı sağlar.",
 
@@ -274,7 +275,7 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Go'ya abone ol",
   "go.cta.price": "Ayda 10$",
-  "go.plans.month": "/ay",
+  "go.plans.month": "aylık",
   "go.plans.plus.cta": "Go Plus'a abone ol",
   "go.plans.plus.description": "Go Plus ayda 40$'dır ve daha yüksek limitler sunar.",
   "go.plans.go.feature1": "Seçilmiş, uygun fiyatlı modeller",

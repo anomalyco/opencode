@@ -253,6 +253,7 @@ export const dict = {
   "go.title": "OpenCode Go | 低成本全民編碼模型",
   "go.meta.description": "Go 每月 $10，提供充裕的使用限額，並可穩定存取領先的編碼模型。",
   "go.hero.title": "低成本全民編碼模型",
+  "go.hero.tagline": "可搭配任何代理使用。如有需要可儲值。隨時取消。",
   "go.hero.body":
     "Go 將代理編碼帶給全世界的程式設計師。提供寬裕的限額以及對最強大開源模型的穩定存取，讓你可以使用強大的代理進行構建，而無需擔心成本或可用性。",
 
@@ -260,7 +261,7 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "訂閱 Go",
   "go.cta.price": "$10/月",
-  "go.plans.month": "/月",
+  "go.plans.month": "每月",
   "go.plans.plus.cta": "訂閱 Go Plus",
   "go.plans.plus.description": "Go Plus 每月 $40，提供更高的使用額度。",
   "go.plans.go.feature1": "精選實惠的模型",
