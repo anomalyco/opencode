@@ -65,12 +65,13 @@ export function Home() {
     untrack(() => composer.set(prompt))
   })
 
-  // Wait for the model store to be ready before auto-submitting --prompt.
+  // Wait for model preferences, the model catalog, and a resolved agent and model before auto-submitting --prompt.
   createEffect(() => {
     const r = ref()
     if (sent) return
     if (!r) return
-    if (!local.model.ready) return
+    if (!local.model.ready || !local.model.catalogReady) return
+    if (!local.agent.current() || !local.model.current()) return
     if (!args.prompt) return
     if (r.current.text !== args.prompt) return
     sent = true
