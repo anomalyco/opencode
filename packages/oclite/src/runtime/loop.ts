@@ -53,7 +53,8 @@ export interface LoopInput {
   progress: { step: number; tokens: TokenUsage }
 }
 
-export type LoopResult = Pick<RunResult, "reason" | "text" | "turns" | "usage" | "error">
+/** `protocolFailures` counts like a denial (headless exit 3): the text-protocol run gave up on malformed calls. */
+export type LoopResult = Pick<RunResult, "reason" | "text" | "turns" | "usage" | "error"> & { protocolFailures?: number }
 
 type Call = { id: string; name: string; input: unknown }
 type Attempt = { text: string; reasoning: string; calls: Call[]; reason: string; usage: TokenUsage }
@@ -81,12 +82,12 @@ export const run = Effect.fn("loop.run")(function* (deps: LoopDeps, input: LoopI
     unthought: false,
   }
 
-  const end = (reason: LoopResult["reason"], error?: string) =>
+  const end = (reason: LoopResult["reason"], error?: string, protocolFailures?: number) =>
     Effect.gen(function* () {
       if (error) yield* append({ type: "error", message: error, retryable: false })
       if (error) yield* emit({ type: "error", message: error, retryable: false })
       yield* append({ type: "end", reason, turns: state.steps, usage })
-      return { reason, text: state.text, turns: state.steps, usage, error } satisfies LoopResult
+      return { reason, text: state.text, turns: state.steps, usage, error, protocolFailures } satisfies LoopResult
     })
 
   const body = Effect.gen(function* () {
@@ -115,7 +116,7 @@ export const run = Effect.fn("loop.run")(function* (deps: LoopDeps, input: LoopI
       input.progress.step = state.steps
       const calls = textProtocol ? yield* textCall(attempt) : attempt.calls
       if (calls === "malformed") continue
-      if (calls === "give-up") return yield* end("error", "model produced a malformed tool call twice")
+      if (calls === "give-up") return yield* end("error", "model produced a malformed tool call twice", 1)
       if (attempt.text) state.text = attempt.text
       state.turn++
       if (calls.length === 0) {

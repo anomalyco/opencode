@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import path from "path"
 import { Effect } from "effect"
 import type { RecordInput } from "../../src/contract"
-import { make, replay } from "../../src/session/store"
+import { make, replay, validId } from "../../src/session/store"
 import { registerSecret } from "../../src/util/redact"
 import { tmpdir } from "../lib/tmp"
 
@@ -111,5 +111,13 @@ describe("session store", () => {
       expect(text).not.toContain(secret),
     )
     expect(text).toContain("***")
+  })
+
+  test("session ids that could escape the sessions dir are rejected", async () => {
+    await using env = await setup()
+    expect(validId("ses_01ABCxyz")).toBe(true)
+    ;["../..", "ses_../x", "ses_a/b", "ses_", "other"].forEach((bad) => expect(validId(bad)).toBe(false))
+    const exit = await Effect.runPromiseExit(env.store.read("../../etc/passwd"))
+    expect(exit._tag).toBe("Failure")
   })
 })

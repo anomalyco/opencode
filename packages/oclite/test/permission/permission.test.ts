@@ -10,7 +10,7 @@ import {
 } from "../../src/contract"
 import { cliRules } from "../../src/config/config"
 import { evaluate, fromConfig } from "../../src/forked/permission-rules"
-import { bashPattern } from "../../src/permission/permission"
+import { bashPatterns } from "../../src/tools/bash"
 import { agent, config, permissionLayers, scriptedAsker } from "../tools/harness"
 
 const cwd = "/tmp/oclite-permission"
@@ -35,7 +35,7 @@ function setup(
   const check = (
     permission: typeof Permission.Service,
     tool: string,
-    pattern: string,
+    pattern: string | string[],
     options: {
       def?: AgentDef
       mode?: PermissionMode
@@ -54,7 +54,7 @@ function setup(
           mcpReadOnly: options.mcpReadOnly ?? [],
         }),
         tool,
-        patterns: [pattern],
+        patterns: typeof pattern === "string" ? [pattern] : pattern,
         always: options.always,
         summary: `${tool} ${pattern}`,
       })
@@ -76,10 +76,21 @@ describe("rules", () => {
     expect(evaluate("webfetch", "x", []).action).toBe("ask")
   })
 
-  test("bash patterns: metacharacters make a command <complex>", () => {
-    expect(bashPattern("git status")).toBe("git status")
-    for (const command of ["git status; rm -rf x", "a && b", "a | b", "a > f", "echo $(id)", "echo `id`", "a\nb"])
-      expect(bashPattern(command)).toBe("<complex>")
+  test("bash patterns: metacharacters make a command <complex> plus its segments", () => {
+    expect(bashPatterns("git status")).toEqual(["git status"])
+    for (const command of [
+      "git status; rm -rf x",
+      "a && b",
+      "a | b",
+      "a > f",
+      "echo $(id)",
+      "echo `id`",
+      "a\nb",
+      "(rm x)",
+    ])
+      expect(bashPatterns(command)[0]).toBe("<complex>")
+    expect(bashPatterns("true; rm -rf ~")).toEqual(["<complex>", "true", "rm -rf ~"])
+    expect(bashPatterns("echo $(rm -rf x) && (cd y || ls)")).toEqual(["<complex>", "echo", "rm -rf x", "cd y", "ls"])
   })
 })
 
@@ -155,7 +166,7 @@ describe("modes and composition", () => {
         Effect.all([
           check(permission, "bash", "git status"),
           check(permission, "bash", "git push origin"),
-          check(permission, "bash", bashPattern("git status; rm -rf x")),
+          check(permission, "bash", bashPatterns("git status; rm -rf x")),
         ]),
       ),
     ).toEqual(["allow", "deny", "reject"])
@@ -172,11 +183,97 @@ describe("modes and composition", () => {
           check(permission, "mcp__fixture__write_file", "*", ro),
           check(permission, "mcp__fixture__lookup", "*", ro),
           check(permission, "bash", "git log -1", ro),
-          check(permission, "bash", bashPattern("git status; rm -rf x"), ro),
+          check(permission, "bash", bashPatterns("git status; rm -rf x"), ro),
           check(permission, "bash", "rm -rf x", ro),
+          check(permission, "bash", "git diff --output=pwned", ro),
+          check(permission, "bash", "git log -p -o out.txt", ro),
+          check(permission, "bash", "git diff --ext-diff", ro),
+          check(permission, "bash", "git log --oneline -5", ro),
         ]),
       ),
-    ).toEqual(["deny", "deny", "deny", "allow", "allow", "deny", "deny"])
+    ).toEqual(["deny", "deny", "deny", "allow", "allow", "deny", "deny", "deny", "deny", "deny", "allow"])
+  })
+
+  test("chained commands can't slip past bash denies", async () => {
+    const broad = setup({ cfg: { permission: fromConfig({ bash: { "*": "allow", "rm *": "deny" } }) } })
+    expect(
+      await broad.run((permission) =>
+        Effect.all([
+          broad.check(permission, "bash", bashPatterns("true; rm -rf ~")),
+          broad.check(permission, "bash", bashPatterns("echo $(rm -rf x)")),
+          broad.check(permission, "bash", bashPatterns("ls | wc -l")),
+        ]),
+      ),
+    ).toEqual(["deny", "deny", "allow"])
+    const bypass = setup({ cfg: { cliRules: cliRules(["Bash(rm:*)"], "deny") } })
+    expect(
+      await bypass.run((permission) =>
+        bypass.check(permission, "bash", bashPatterns("echo x && rm -rf x"), { mode: "bypassPermissions" }),
+      ),
+    ).toBe("deny")
+  })
+
+  test("wrapped and obfuscated commands are <complex> and still hit deny globs", async () => {
+    const commands = [
+      'bash -c "rm -rf x"',
+      "sh -c 'rm x'",
+      'eval "rm -rf x"',
+      "find . | xargs rm",
+      "env rm -rf x",
+      "command rm x",
+      "sudo rm -rf /",
+      "exec rm x",
+      "nohup rm x",
+      "time rm x",
+      "timeout 5 rm x",
+      "\\rm -rf x",
+      "r''m -rf x",
+      "r\\\nm -rf x",
+    ]
+    for (const command of commands) expect(bashPatterns(command)[0]).toBe("<complex>")
+    expect(bashPatterns('git commit -m "msg"')).toEqual(['git commit -m "msg"'])
+    const broad = setup({ cfg: { permission: fromConfig({ bash: { "*": "allow", "rm *": "deny" } }) } })
+    expect(
+      await broad.run((permission) =>
+        Effect.all(commands.map((command) => broad.check(permission, "bash", bashPatterns(command)))),
+      ),
+    ).toEqual(commands.map(() => "deny"))
+    const bypass = setup({ cfg: { cliRules: cliRules(["Bash(rm:*)"], "deny") } })
+    expect(
+      await bypass.run((permission) =>
+        bypass.check(permission, "bash", bashPatterns('bash -c "rm -rf x"'), { mode: "bypassPermissions" }),
+      ),
+    ).toBe("deny")
+  })
+
+  test("--allowed-tools can't lift read_only, and a child can't undo a parent deny", async () => {
+    const { run } = setup({ cfg: { cliRules: cliRules(["edit", "bash(rm *)", "webfetch"], "allow") } })
+    const ro = agent({ name: "explore", read_only: true })
+    const parent = [{ permission: "webfetch", pattern: "*", action: "deny" as const }]
+    const decide = (permission: typeof Permission.Service, def: AgentDef, tool: string, pattern: string) =>
+      permission
+        .check({
+          session_id: "ses_a",
+          agent: def.name,
+          ruleset: permission.ruleset({ agent: def, mode: "default", parent, mcpReadOnly: [] }),
+          tool,
+          patterns: [pattern],
+          summary: tool,
+        })
+        .pipe(
+          Effect.exit,
+          Effect.map((exit) => (Exit.isSuccess(exit) ? "allow" : "deny")),
+        )
+    expect(
+      await run((permission) =>
+        Effect.all([
+          decide(permission, ro, "edit", "a.ts"),
+          decide(permission, ro, "bash", "rm -rf x"),
+          decide(permission, agent({ name: "code" }), "webfetch", "https://x"),
+          decide(permission, agent({ name: "code" }), "edit", "a.ts"),
+        ]),
+      ),
+    ).toEqual(["deny", "deny", "deny", "allow"])
   })
 })
 

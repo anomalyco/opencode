@@ -1,6 +1,6 @@
 // Runtime service + app layer composition (ARCHITECTURE §3). `start` resolves the model, profile, ruleset,
 // tools and system prompt once, then forks the loop and hands back a RunHandle.
-import { Cause, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import type { HttpClient } from "effect/unstable/http"
 import {
   AppConfig,
@@ -20,30 +20,36 @@ import {
   type SubagentsShape,
   type TokenUsage,
 } from "../contract"
-import { layer as hooksLayer } from "../hooks/hooks"
-import { layer as gatewayLayer, layerWith } from "../llm/client"
 import { persist } from "../llm/probe"
-import { layer as permissionLayer } from "../permission/permission"
 import { harnessPrompt, select } from "../profile/profiles"
-import { layer as storeLayer, replay } from "../session/store"
-import { layer as registryLayer } from "../tools/registry"
+import { replay, validId } from "../session/store"
 import { parse } from "../tools/text-protocol"
 import { system } from "./context"
-import { run, type LoopDeps } from "./loop"
+import { run, type LoopDeps, type LoopResult } from "./loop"
 
 export interface RuntimeOptions {
   /** Retry backoff in ms (default 2/4/8 s; OCLITE_RETRY_SCALE multiplies it, for subprocess tests). */
   retryDelays?: readonly number[]
 }
 
+// Every service module exports `layer`; they load as module objects (also keeps them off the startup path).
 export function appLayer(cfg: ResolvedConfig, asker: Layer.Layer<Asker>, http?: Layer.Layer<HttpClient.HttpClient>, options: RuntimeOptions = {}) {
-  const config = Layer.succeed(AppConfig, cfg)
-  const base = Layer.mergeAll(config, storeLayer, hooksLayer.pipe(Layer.provide(config)), http ? layerWith(http) : gatewayLayer)
-  const services = Layer.provideMerge(
-    Layer.provideMerge(registryLayer, permissionLayer.pipe(Layer.provide(asker))),
-    base.pipe(Layer.provide(config)),
+  return Layer.unwrap(
+    Effect.promise(async () => {
+      const hooks = await import("../hooks/hooks")
+      const client = await import("../llm/client")
+      const permission = await import("../permission/permission")
+      const store = await import("../session/store")
+      const registry = await import("../tools/registry")
+      const config = Layer.succeed(AppConfig, cfg)
+      const base = Layer.mergeAll(config, store.layer, hooks.layer.pipe(Layer.provide(config)), http ? client.layerWith(http) : client.layer)
+      const services = Layer.provideMerge(
+        Layer.provideMerge(registry.layer, permission.layer.pipe(Layer.provide(asker))),
+        base.pipe(Layer.provide(config)),
+      )
+      return Layer.provideMerge(layer(options), services)
+    }),
   )
-  return Layer.provideMerge(layer(options), services)
 }
 
 export function layer(options: RuntimeOptions = {}) {
@@ -76,6 +82,8 @@ export function layer(options: RuntimeOptions = {}) {
           const profile = select({ explicit: input.profile ?? cfg.profile, handle })
           const cwd = input.cwd ?? cfg.cwd
           const depth = input.parent ? input.parent.depth + 1 : 0
+          if (input.session_id !== undefined && !validId(input.session_id))
+            return yield* new ConfigError({ message: `invalid session id "${input.session_id}"` })
           const previous = input.session_id ? yield* store.read(input.session_id) : []
           if (input.session_id && !previous.some((record) => record.type === "session"))
             return yield* new ConfigError({ message: `unknown session "${input.session_id}"` })
@@ -110,36 +118,41 @@ export function layer(options: RuntimeOptions = {}) {
             thinking: input.thinking ?? cfg.thinking ?? agent.thinking,
             steers: () => Effect.sync(() => steers.splice(0)),
           }).pipe(Effect.forkDetach)
+          // A watcher settles the Deferred once, so every await works even after an earlier waiter was interrupted.
+          const done = yield* Deferred.make<RunResult>()
           const finished: { state?: RunState } = {}
-          const result = Fiber.await(fiber).pipe(
+          yield* Fiber.await(fiber).pipe(
             Effect.flatMap((exit) =>
               Effect.gen(function* () {
-                const denied = yield* permission.denials(session_id)
+                const denied = (yield* permission.denials(session_id)) + (Exit.isSuccess(exit) ? (exit.value.protocolFailures ?? 0) : 0)
                 const base = { session_id, turns: progress.step, usage: progress.tokens, denied, text: "" }
                 const value: RunResult = Exit.isSuccess(exit)
-                  ? { ...base, ...exit.value, state: exit.value.reason === "error" ? "failed" : exit.value.reason === "cancelled" ? "cancelled" : "completed" }
+                  ? { ...base, ...result(exit.value), state: exit.value.reason === "error" ? "failed" : exit.value.reason === "cancelled" ? "cancelled" : "completed" }
                   : Cause.hasInterrupts(exit.cause)
                     ? { ...base, state: "cancelled", reason: "cancelled" }
                     : { ...base, state: "failed", reason: "error", error: Cause.pretty(exit.cause) }
                 finished.state = value.state
-                return value
+                yield* Deferred.succeed(done, value)
               }),
             ),
-            Effect.cached,
+            Effect.forkDetach,
           )
-          const awaited = yield* result
           return {
             session_id,
             send: (message: string) => Effect.sync(() => void steers.push(message)),
             cancel: Fiber.interrupt(fiber).pipe(Effect.asVoid),
             status: Effect.sync(() => ({ state: finished.state ?? "running", step: progress.step, started_at, tokens: progress.tokens })),
-            await: awaited,
+            await: Deferred.await(done),
           }
         })
 
       return Runtime.of({ start, subagents: noSubagents })
     }),
   )
+}
+
+function result(value: LoopResult) {
+  return { reason: value.reason, text: value.text, turns: value.turns, usage: value.usage, error: value.error }
 }
 
 const phase5 = () => new SpawnError({ message: "sub-agents arrive in phase 5" })

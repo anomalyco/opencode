@@ -14,11 +14,12 @@ export function limit(agent: AgentDef, handle: ModelHandle) {
 
 /**
  * E = last step's server-reported usage + chars/4 of what was appended since (+25% when that usage was
- * estimated). Without a trustworthy step (none yet, or a prune/compaction since) it is chars/4 of the request.
+ * estimated). Without a trustworthy step (none yet, or a prune/compaction after it) it is chars/4 of the request.
  */
 export function estimate(state: Replay, system: string, tools: readonly ToolDefinition[]) {
   const step = state.records.findLast((record) => record.type === "step")
-  const stale = !step || state.records.some((record) => record.type === "prune" && record.seq > step.seq)
+  const stale =
+    !step || state.records.some((record) => (record.type === "prune" || record.type === "compaction") && record.seq > step.seq)
   if (stale) return Math.ceil((system.length + JSON.stringify(tools).length + JSON.stringify(state.messages).length) / 4)
   const since = state.records.filter((record) => record.seq > step.seq)
   const base = (step.usage.input + step.usage.output) * (step.usage.estimated ? 1.25 : 1)

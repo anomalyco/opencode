@@ -5,7 +5,7 @@ import { ConfigMCPV1 } from "@opencode-ai/core/v1/config/mcp"
 import { type AgentDef, ConfigError } from "../contract"
 import { decode } from "../config/agents"
 import { load, parseJson } from "../config/config"
-import { configDir, projectRoot } from "../util/paths"
+import { configDir, dataDir, projectRoot } from "../util/paths"
 import { redact, redactArgs, redactText, redactUrl } from "../util/redact"
 import type { CliArgs } from "./args"
 
@@ -157,6 +157,46 @@ export function mcpRemove(args: CliArgs, input: { name: string; scope: Option.Op
     yield* Console.log(`Removed MCP server "${input.name}" from ${found.file}`)
   })
 }
+
+export function sessionList(args: CliArgs) {
+  return Effect.gen(function* () {
+    const store = yield* sessions
+    const items = yield* store.list({ cwd: path.resolve(process.cwd()), limit: 50 })
+    if (args.outputFormat !== "text") return yield* Console.log(JSON.stringify(items))
+    if (!items.length) return yield* Console.log("No sessions in this directory.")
+    yield* Console.log(items.map((item) => [item.id, new Date(item.created_at).toISOString().slice(0, 16).replace("T", " "), item.agent, item.model, item.profile].join("  ")).join("\n"))
+  })
+}
+
+export function sessionShow(args: CliArgs, input: { id: string }) {
+  return Effect.gen(function* () {
+    const records = yield* sessionRecords(input.id)
+    if (args.outputFormat !== "text") return yield* Console.log(JSON.stringify(records))
+    const lines = records.flatMap((record) => {
+      if (record.type === "session") return [`session ${record.id} · ${record.agent} · ${record.model} · ${record.profile} · ${record.cwd}`]
+      if (record.type === "user" && !record.synthetic) return [`\n> ${record.text}`]
+      if (record.type === "text") return [record.text]
+      if (record.type === "tool_result") return [`[${record.name} ${record.status} · ${record.bytes} B]`]
+      if (record.type === "end") return [`\n(end: ${record.reason}, ${record.turns} turns, in ${record.usage.input} / out ${record.usage.output} tok)`]
+      return []
+    })
+    yield* Console.log(lines.join("\n"))
+  })
+}
+
+export function sessionExport(_args: CliArgs, input: { id: string }) {
+  return sessionRecords(input.id).pipe(Effect.flatMap((records) => Console.log(records.map((record) => JSON.stringify(record)).join("\n"))))
+}
+
+function sessionRecords(id: string) {
+  return sessions.pipe(
+    Effect.flatMap((store) => store.read(id)),
+    Effect.flatMap((records) => (records.length ? Effect.succeed(records) : Effect.fail(new ConfigError({ message: `unknown session "${id}"` })))),
+  )
+}
+
+// Lazy: the store pulls @opencode-ai/llm, which `agents list` and `mcp list` never need.
+const sessions = Effect.promise(() => import("../session/store")).pipe(Effect.map((store) => store.make(path.join(dataDir(), "sessions"))))
 
 function scopeFile(scope: Scope) {
   if (scope === "user") return path.join(configDir(), "config.json")

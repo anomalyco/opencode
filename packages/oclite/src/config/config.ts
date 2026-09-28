@@ -66,6 +66,8 @@ const Provider = Schema.Struct({
       Schema.Struct({
         limit: Schema.optional(Schema.Struct({ context: Schema.optional(Count), output: Schema.optional(Count) })),
         reasoning: Schema.optional(Schema.Boolean),
+        // Per-model request knobs, e.g. `reasoning_effort` (read by llm/client.ts; not in the frozen ProviderEntry type).
+        options: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
       }),
     ),
   ),
@@ -93,6 +95,7 @@ export const Info = Schema.Struct({
         context_window: Schema.optional(Count),
         max_tokens: Schema.optional(Count),
         concurrency: Schema.optional(Count),
+        probe_timeout_ms: Schema.optional(Count),
       }),
     ),
   ),

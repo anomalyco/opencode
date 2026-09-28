@@ -1,117 +1,90 @@
 // `oclite debug prompt [--tokens] [--check]` and `oclite debug server [--reprobe]` (ARCHITECTURE §9, §10).
-// Stand-in composition until runtime/context.ts and tools/registry.ts land: system = harness prompt + agent prompt +
-// env block; tools = the profile's list with profile descriptions (opencode .txt for default) and minimal schemas.
-import path from "path"
-import { Console, Effect, Layer, Stream } from "effect"
+// The prompt report uses the same composition as Runtime.start: tools/registry.ts builds the ToolSet and
+// runtime/context.ts layers the system prompt, so the numbers are those of a real first request.
+import { Console, Effect, Stream } from "effect"
 import { Message, ToolDefinition } from "@opencode-ai/llm"
-import { type AgentDef, AppConfig, ConfigError, LlmGateway, type LlmGatewayShape, type ModelHandle, type Profile, type ResolvedConfig } from "../contract"
+import { type AgentDef, ConfigError, LlmGateway, type LlmGatewayShape, type ModelHandle, Permission, type Profile, type ResolvedConfig, ToolRegistry } from "../contract"
 import { load } from "../config/config"
-import { fallbackNotices, layer, tokenUsage } from "../llm/client"
+import { fallbackNotices, tokenUsage } from "../llm/client"
 import type { CapabilityRecord } from "../llm/probe"
-import { descriptions, harnessPrompt, select } from "../profile/profiles"
+import { headlessAsker } from "../permission/permission"
+import { harnessPrompt, select } from "../profile/profiles"
+import { system } from "../runtime/context"
+import { appLayer } from "../runtime/runtime"
+import { clean } from "../render/event"
+import { redact, redactUrl } from "../util/redact"
 import type { CliArgs } from "./args"
-import EDIT from "@/tool/edit.txt"
-import GLOB from "@/tool/glob.txt"
-import GREP from "@/tool/grep.txt"
-import QUESTION from "@/tool/question.txt"
-import READ from "@/tool/read.txt"
-import SKILL from "@/tool/skill.txt"
-import TASK from "@/tool/task.txt"
-import TODOWRITE from "@/tool/todowrite.txt"
-import WEBFETCH from "@/tool/webfetch.txt"
-import WRITE from "@/tool/write.txt"
-
-const OPENCODE: Record<string, string> = { edit: EDIT, glob: GLOB, grep: GREP, question: QUESTION, read: READ, skill: SKILL, task: TASK, todowrite: TODOWRITE, webfetch: WEBFETCH, write: WRITE }
-const object = (props: Record<string, string>, required: string[]) => ({
-  type: "object", required,
-  properties: Object.fromEntries(Object.entries(props).map(([key, type]) => [key, type === "array" ? { type, items: { type: "object" } } : { type }])),
-})
-// Parameter names match opencode exactly (ADR "Tools"), so the default profile can reuse opencode's .txt texts.
-const SCHEMAS: Record<string, ReturnType<typeof object>> = {
-  bash: object({ command: "string", timeout: "integer", workdir: "string" }, ["command"]),
-  edit: object({ filePath: "string", oldString: "string", newString: "string", replaceAll: "boolean" }, ["filePath", "oldString", "newString"]),
-  glob: object({ pattern: "string", path: "string" }, ["pattern"]),
-  grep: object({ pattern: "string", path: "string", include: "string" }, ["pattern"]),
-  question: object({ questions: "array" }, ["questions"]),
-  read: object({ filePath: "string", offset: "integer", limit: "integer" }, ["filePath"]),
-  skill: object({ name: "string" }, ["name"]),
-  task: object({ description: "string", prompt: "string", subagent_type: "string", task_id: "string", background: "boolean" }, ["description", "prompt", "subagent_type"]),
-  todowrite: object({ todos: "array" }, ["todos"]),
-  webfetch: object({ url: "string", format: "string", timeout: "number" }, ["url", "format"]),
-  write: object({ content: "string", filePath: "string" }, ["content", "filePath"]),
-}
 
 export function debugPrompt(args: CliArgs) {
-  return withGateway(args, (cfg, gateway) =>
+  return withApp(args, (cfg, gateway) =>
     Effect.gen(function* () {
       const agent = cfg.agents[cfg.default_agent]!
       const handle = yield* gateway.resolve(agent.model ?? cfg.model)
       const profile = select({ explicit: cfg.profile, handle })
-      const request = yield* Effect.promise(() => compose(cfg, handle, profile, agent))
+      const request = yield* first(cfg, handle, profile, agent)
       const tools = request.tools.map((tool) => ({ name: tool.name, description: tool.description.length, schema: JSON.stringify(tool.inputSchema).length }))
       const chars = request.system.length + JSON.stringify(request.tools.map(wire)).length
       const measured = args.tokens || args.check ? yield* fixed(gateway, handle, request) : undefined
       const tokens = measured?.tokens ?? Math.ceil(chars / 4)
       const over = args.check === true && tokens > profile.budgetTokens
       const report = { profile: profile.name, model: handle.ref, budget: profile.budgetTokens, system_chars: request.system.length, tools, fixed: measured?.tokens, estimated: measured?.estimated ?? true, over }
-      yield* Console.log(args.outputFormat === "text" ? [
+      yield* Console.log(clean(args.outputFormat === "text" ? [
         `profile ${profile.name} · model ${handle.ref} · budget ${profile.budgetTokens} tok`,
         `--- system (${request.system.length} chars)`, request.system, "--- tools",
         ...tools.map((tool) => `${tool.name.padEnd(12)} description ${String(tool.description).padStart(5)} chars · schema ${String(tool.schema).padStart(4)} chars`),
         `total ${chars} chars ≈ ${Math.ceil(chars / 4)} tok (chars/4)`,
         ...(measured ? [`fixed overhead: ${measured.tokens} tok${measured.estimated ? " (est.)" : " (server-reported)"}`] : []),
         ...(over ? [`over budget: ${tokens} > ${profile.budgetTokens}`] : []),
-      ].join("\n") : JSON.stringify(report))
+      ].join("\n") : JSON.stringify(report)))
       if (over) process.exitCode = 1
     }),
   )
 }
 
 export function debugServer(args: CliArgs) {
-  return withGateway(args, (cfg, gateway) =>
+  return withApp(args, (cfg, gateway) =>
     Effect.gen(function* () {
       const handle = yield* gateway.resolve(cfg.agents[cfg.default_agent]?.model ?? cfg.model, { reprobe: args.reprobe })
       const record = handle.capabilities as CapabilityRecord
-      if (args.outputFormat !== "text") return yield* Console.log(JSON.stringify(record))
+      if (args.outputFormat !== "text") return yield* Console.log(clean(JSON.stringify(redact(record))))
       const keys = Object.keys(record.sources) as Array<keyof CapabilityRecord["sources"]>
-      yield* Console.log([
-        `server ${handle.baseURL} · model ${handle.model.id}${handle.local ? " (loopback)" : ""}`,
+      yield* Console.log(clean([
+        `server ${redactUrl(handle.baseURL)} · model ${handle.model.id}${handle.local ? " (loopback)" : ""}`,
         ...keys.map((key) => `${key.padEnd(16)} ${JSON.stringify(record[key])}  (${record.sources[key]})`),
         ...(record.ttft_ms ? [`ttft_ms          ${record.ttft_ms.map(Math.round).join(" → ")}`] : []),
         ...fallbackNotices(handle).map((item) => `notice: ${item.message}`),
-      ].join("\n"))
+      ].join("\n")))
     }),
   )
 }
 
-function withGateway<A>(args: CliArgs, body: (cfg: ResolvedConfig, gateway: LlmGatewayShape) => Effect.Effect<A, ConfigError>) {
+function withApp<A>(args: CliArgs, body: (cfg: ResolvedConfig, gateway: LlmGatewayShape) => Effect.Effect<A, ConfigError, ToolRegistry | Permission>) {
   return Effect.gen(function* () {
     const cfg = yield* load(args)
     return yield* Effect.gen(function* () {
       const gateway = yield* LlmGateway
       return yield* body(cfg, gateway)
-    }).pipe(Effect.provide(layer.pipe(Layer.provide(Layer.succeed(AppConfig, cfg)))))
+    }).pipe(Effect.provide(appLayer(cfg, headlessAsker)))
   })
 }
 
-/** Exact first-turn system + tool definitions for this agent/profile (byte-stable: tools sorted, env date only). */
-export async function compose(cfg: ResolvedConfig, handle: ModelHandle, profile: Profile, agent: AgentDef) {
-  const names = [...new Set([...profile.tools, ...(agent.tools ?? []).filter((name) => profile.optionalTools.includes(name))])].sort()
-  const tools = await Promise.all(names.map(async (name) =>
-    new ToolDefinition({ name, description: descriptions(profile, name) ?? (await opencodeDescription(name)), inputSchema: SCHEMAS[name] ?? object({}, []) }),
-  ))
-  const head = await Bun.file(path.join(cfg.projectRoot, ".git", "HEAD")).text().catch(() => "")
-  const branch = head.startsWith("ref: refs/heads/") ? head.slice(16).trim() : head.trim().slice(0, 12)
-  const env = ["<env>", `cwd: ${cfg.cwd}`, `platform: ${process.platform}`, `date: ${new Date().toISOString().slice(0, 10)}`,
-    ...(branch ? [`git branch: ${branch}`] : []), "</env>"].join("\n")
-  return { system: [harnessPrompt(profile, handle), agent.prompt, env].filter(Boolean).join("\n\n"), tools }
+/** The first request's system + tool definitions, composed exactly as Runtime.start does (byte-stable, tools sorted). */
+function first(cfg: ResolvedConfig, handle: ModelHandle, profile: Profile, agent: AgentDef) {
+  return Effect.gen(function* () {
+    const registry = yield* ToolRegistry
+    const permission = yield* Permission
+    const ruleset = permission.ruleset({ agent, mode: cfg.permissionMode, mcpReadOnly: [] })
+    const tools = yield* registry.build({ session_id: "ses_debug", cwd: cfg.cwd, agent, depth: 0, ruleset, sink: () => Effect.void, profile }, [], handle.capabilities)
+    const prompt = yield* Effect.promise(() =>
+      system({ harness: harnessPrompt(profile, handle), agent, cfg, profile, textProtocolPrompt: tools.textProtocolPrompt }),
+    )
+    return { system: prompt.text, tools: tools.definitions }
+  })
 }
 
-async function opencodeDescription(name: string) {
-  if (name !== "bash") return OPENCODE[name] ?? ""
-  // Lazy: ShellPrompt imports core/global (mkdirs opencode data dirs); only the default profile reaches it.
-  const { ShellPrompt } = await import("opencode/tool/shell/prompt")
-  return ShellPrompt.render("bash", process.platform, { maxLines: 2000, maxBytes: 50 * 1024 }, 120_000).description
+/** `first` outside an Effect context (profile tests). */
+export function compose(cfg: ResolvedConfig, handle: ModelHandle, profile: Profile, agent: AgentDef) {
+  return Effect.runPromise(first(cfg, handle, profile, agent).pipe(Effect.provide(appLayer(cfg, headlessAsker))))
 }
 
 const wire = (tool: ToolDefinition) => ({ type: "function", function: { name: tool.name, description: tool.description, parameters: tool.inputSchema } })

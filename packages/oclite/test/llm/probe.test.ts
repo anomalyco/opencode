@@ -85,7 +85,7 @@ describe("probe", () => {
     expect(server.chats()[1]?.body && "prompt_cache_key" in server.chats()[1]!.body!).toBe(false)
   })
 
-  test("pins skip probing: fully pinned server makes no requests", async () => {
+  test("pins skip probing: fully pinned server gets only a reachability GET /models", async () => {
     const pins: ServerPins = {
       context_window: 65536,
       concurrency: 2,
@@ -97,7 +97,8 @@ describe("probe", () => {
     }
     const { server, record } = await probed({}, pins)
     await using _ = server
-    expect(server.requests.length).toBe(0)
+    expect(server.chats().length).toBe(0)
+    expect(server.requests.map((item) => item.path)).toEqual(["/v1/models"])
     expect(record).toMatchObject({ context_window: 65536, concurrency: 2, tools_native: false, no_think_suffix: true, prefix_cache: true })
     expect(Object.values(record.sources).every((source) => source === "config")).toBe(true)
   })
@@ -115,9 +116,11 @@ describe("probe", () => {
     server.queue(toolReply, toolReply, toolReply, toolReply)
     const run = (reprobe: boolean) => Effect.runPromise(probe({ baseURL: server.url, model: "cache-model", reprobe }))
     await run(true)
-    const after = counted(server)
+    const after = server.chats().length
     const again = await run(false)
-    expect(counted(server)).toBe(after)
+    // A cache hit sends no chat, only the reachability GET /models.
+    expect(server.chats().length).toBe(after)
+    expect(server.requests.at(-1)?.path).toBe("/v1/models")
     expect(again.context_window).toBe(12000)
 
     const file = cacheFile(server.url, "cache-model")
@@ -125,11 +128,11 @@ describe("probe", () => {
     const record = await Bun.file(file).json()
     await Bun.write(file, JSON.stringify({ ...record, probed_at: Date.now() - 8 * 24 * 3600 * 1000 }))
     await run(false)
-    expect(counted(server)).toBeGreaterThan(after)
+    expect(server.chats().length).toBeGreaterThan(after)
 
-    const before = counted(server)
+    const before = server.chats().length
     await run(true)
-    expect(counted(server)).toBeGreaterThan(before)
+    expect(server.chats().length).toBeGreaterThan(before)
   })
 
   test("persist merges a runtime finding with its source", async () => {
@@ -148,6 +151,56 @@ describe("probe", () => {
     const exit = await Effect.runPromiseExit(probe({ baseURL: "http://127.0.0.1:9/v1", model: "x", reprobe: true }))
     expect(exit._tag).toBe("Failure")
     expect(String(exit)).toContain("cannot reach http://127.0.0.1:9/v1")
+  })
+
+  test("secrets in the baseURL never reach error text or the cache file", async () => {
+    await using server = await startLocalServer({})
+    const secret = `http://someone:sekretpass1@127.0.0.1:${new URL(server.url).port}/v1?api_key=topsecret99`
+    const record = await Effect.runPromise(probe({ baseURL: secret, model: "secret-model", reprobe: true }))
+    const cached = await Bun.file(cacheFile(secret, "secret-model")).text()
+    const down = await Effect.runPromiseExit(probe({ baseURL: "http://someone:sekretpass1@127.0.0.1:9/v1?api_key=topsecret99", model: "x", reprobe: true }))
+    ;[JSON.stringify(record), cached, cacheFile(secret, "secret-model"), String(down)].forEach((text) => {
+      expect(text).not.toContain("sekretpass1")
+      expect(text).not.toContain("topsecret99")
+    })
+    expect(String(down)).toContain("cannot reach")
+  })
+
+  test("chat that never answers (after /models did): bounded, conservative defaults, R3 skipped", async () => {
+    await using server = await startLocalServer({ hang: true })
+    const started = Date.now()
+    const record = await Effect.runPromise(probe({ baseURL: server.url, model: "hang-model", reprobe: true, timeouts: { chat: 200 } }))
+    expect(Date.now() - started).toBeLessThan(3000)
+    expect(server.chats().length).toBe(1)
+    expect(record).toMatchObject({
+      tools_native: true, reasoning_field: "reasoning_content", think_tags: false, usage_in_stream: true, prefix_cache: false,
+      accepts: { chat_template_kwargs: false, prompt_cache_key: false, reasoning_effort: false, parallel_tool_calls: false },
+    })
+    ;(["tools_native", "reasoning_field", "think_tags", "usage_in_stream", "accepts", "prefix_cache"] as const)
+      .forEach((key) => expect(record.sources[key]).toBe("default"))
+    expect(record.notes.join("\n")).toContain(`probe timed out after 0.2 s; pin servers[<your base URL>].capabilities for 127.0.0.1:${new URL(server.url).port} to skip`)
+  })
+
+  test("slow body (slow-CPU server): chat timeout mid-stream → defaults; probe_timeout_ms raises the limit", async () => {
+    await using server = await startLocalServer({ chunk_delay_ms: 60 })
+    server.queue(toolReply, toolReply)
+    const slow = await Effect.runPromise(probe({ baseURL: server.url, model: "slow-model", reprobe: true, timeouts: { chat: 100 } }))
+    expect(slow.sources.tools_native).toBe("default")
+    expect(slow.notes.join("\n")).toContain("probe timed out after 0.1 s")
+    const pins = { probe_timeout_ms: 10_000 } as ServerPins
+    const patient = await Effect.runPromise(probe({ baseURL: server.url, model: "slow-model", reprobe: true, pins, timeouts: { chat: 100 } }))
+    expect(patient).toMatchObject({ tools_native: true, reasoning_field: "reasoning_content", usage_in_stream: true })
+    expect(patient.sources.tools_native).toBe("probe")
+    expect(patient.accepts.prompt_cache_key).toBe(true)
+  })
+
+  test("pin hints name the config key generically and show host:port only", async () => {
+    await using server = await startLocalServer({ models: "none" })
+    server.queue(toolReply, toolReply)
+    const secret = server.url.replace("http://", "http://someone:sekretpass1@")
+    const record = await Effect.runPromise(probe({ baseURL: secret, model: "hint-model", reprobe: true }))
+    expect(record.notes.join("\n")).toContain(`pin servers[<your base URL>].context_window for 127.0.0.1:${new URL(server.url).port}`)
+    expect(record.notes.join("\n")).not.toContain("sekretpass1")
   })
 
   test("STATIC record for hosted providers", () => {

@@ -1,10 +1,10 @@
 // Agent loop against the sanctioned fake server (test/lib/local-server.ts) with the real app layer.
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
 import path from "path"
-import { Effect } from "effect"
+import { Cause, Effect, Exit, Fiber } from "effect"
 import type { CliArgs } from "../../src/cli/args"
 import { load } from "../../src/config/config"
-import { Runtime, SessionStore, type RenderEvent, type RunInput } from "../../src/contract"
+import { ConfigError, Runtime, SessionStore, type RenderEvent, type RunInput } from "../../src/contract"
 import { headlessAsker } from "../../src/permission/permission"
 import { appLayer } from "../../src/runtime/runtime"
 import { reply, startLocalServer, type ChatBody, type LocalServer, type Toggles } from "../lib/local-server"
@@ -93,6 +93,16 @@ async function setup(
       })
       const output = await Effect.runPromise(program.pipe(Effect.provide(appLayer(cfg, headlessAsker, undefined, { retryDelays: [5, 10, 20] }))))
       return { ...output, events }
+    },
+    /** Runs `body` against a freshly built app layer (for handle-level tests). */
+    with: async <A>(body: (runtime: Runtime["Service"]) => Effect.Effect<A, unknown>) => {
+      const cfg = await Effect.runPromise(
+        load(args, { cwd: project.path, home: home.path, configDir: path.join(home.path, ".config", "oclite") }),
+      )
+      const program = Effect.gen(function* () {
+        return yield* body(yield* Runtime)
+      })
+      return Effect.runPromiseExit(program.pipe(Effect.provide(appLayer(cfg, headlessAsker, undefined, { retryDelays: [5] }))))
     },
     [Symbol.asyncDispose]: async () => {
       await server.stop()
@@ -199,7 +209,9 @@ describe("agent loop (local-server)", () => {
     env.server.queue(reply.malformed_tool_call("<tool_call>{bad</tool_call>"))
     env.server.queue(reply.malformed_tool_call("<tool_call>{still bad</tool_call>"))
     const out = await env.run("x")
-    expect(out.result).toMatchObject({ reason: "error", state: "failed" })
+    // Headless exit 3 is signalled through `denied` (reason stays "error"; the RunResult union is frozen).
+    expect(out.result).toMatchObject({ reason: "error", state: "failed", denied: 1 })
+    expect(out.result.error).toContain("malformed tool call")
     expect(env.server.chats()).toHaveLength(2)
   })
 
@@ -248,6 +260,7 @@ describe("agent loop (local-server)", () => {
     expect(String(system(chats[1]!.body))).toContain("context summarization agent")
     expect(JSON.stringify(chats[2]!.body!.messages)).toContain("SUMMARY OF WORK")
     expect(out.records.filter((record) => record.type === "compaction")).toHaveLength(1)
+    expect(chats.filter((chat) => String(system(chat.body)).includes("context summarization agent"))).toHaveLength(1)
     const cached = await Array.fromAsync(new Bun.Glob("oclite/servers/*.json").scan({ cwd: data.dir, absolute: true }))
     const records = await Promise.all(cached.map((file) => Bun.file(file).json()))
     expect(records.find((record) => record.base_url === env.server.url)).toMatchObject({
@@ -298,5 +311,28 @@ describe("agent loop (local-server)", () => {
     const out = await env.run("wait", {}, () => {}, 200)
     expect(out.result).toMatchObject({ state: "cancelled", reason: "cancelled" })
     expect(out.records.at(-1)).toMatchObject({ type: "end", reason: "cancelled" })
+  })
+
+  test("RunHandle.await still resolves after an earlier waiter was interrupted", async () => {
+    await using env = await setup({ chunk_delay_ms: 20 })
+    env.server.queue(reply.text("slow answer"))
+    const exit = await env.with((runtime) =>
+      Effect.gen(function* () {
+        const handle = yield* runtime.start({ agent: "build", prompt: "hi" }, () => Effect.void)
+        const waiter = yield* handle.await.pipe(Effect.forkChild)
+        yield* Fiber.interrupt(waiter)
+        return yield* handle.await.pipe(Effect.timeout(5000))
+      }),
+    )
+    expect(Exit.isSuccess(exit) && exit.value).toMatchObject({ state: "completed", text: "slow answer" })
+  })
+
+  test("a resume id that is not ses_<alnum> is refused with ConfigError before touching the disk", async () => {
+    await using env = await setup()
+    for (const bad of ["../..", "ses_../../etc/passwd", "ses_a/b", ""]) {
+      const exit = await env.with((runtime) => runtime.start({ agent: "build", prompt: "hi", session_id: bad }, () => Effect.void))
+      expect(Exit.isFailure(exit) && Cause.squash(exit.cause)).toBeInstanceOf(ConfigError)
+    }
+    expect(env.server.chats()).toHaveLength(0)
   })
 })

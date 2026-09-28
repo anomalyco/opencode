@@ -1,6 +1,6 @@
 // JSONL session record Schemas (ARCHITECTURE §7). They decode to the contract's SessionRecord types.
 import { Schema } from "effect"
-import type { SessionRecord as SessionRecordType } from "../contract"
+import type { SessionRecord } from "../contract"
 
 const Profile = Schema.Literals(["default", "local", "local-min"])
 const ToolStatus = Schema.Literals(["ok", "error", "denied", "timeout", "blocked"])
@@ -16,7 +16,7 @@ const Common = { seq: Schema.Number, t: Schema.Number }
 const turn = Schema.Number
 const Strings = Schema.mutable(Schema.Array(Schema.String))
 
-export const SessionHeader = Schema.Struct({
+export const HeaderSchema = Schema.Struct({
   ...Common,
   type: Schema.Literal("session"),
   v: Schema.Literal(1),
@@ -32,8 +32,8 @@ export const SessionHeader = Schema.Struct({
   title: Schema.optional(Schema.String),
 })
 
-export const SessionRecord = Schema.Union([
-  SessionHeader,
+export const RecordSchema = Schema.Union([
+  HeaderSchema,
   Schema.Struct({
     ...Common,
     type: Schema.Literal("user"),
@@ -89,14 +89,14 @@ export const SessionRecord = Schema.Union([
   Schema.Struct({ ...Common, type: Schema.Literal("end"), reason: Schema.Literals(["stop", "max_turns", "cancelled", "error"]), turns: Schema.Number, usage: Usage }),
 ])
 
-const decodeLine = Schema.decodeUnknownOption(Schema.fromJsonString(SessionRecord))
+const decodeLine = Schema.decodeUnknownOption(Schema.fromJsonString(RecordSchema))
 
 /** One JSONL line → record, or undefined for a torn/unknown line (a crash mid-write leaves one at the tail). */
-export function parseLine(line: string): SessionRecordType | undefined {
+export function parseLine(line: string): SessionRecord | undefined {
   const decoded = decodeLine(line)
   return decoded._tag === "Some" ? decoded.value : undefined
 }
 
 // Compile-time guard: the Schemas and the contract's §7 types must stay the same shape both ways.
-type Decoded = typeof SessionRecord.Type
-export const check: [Decoded] extends [SessionRecordType] ? ([SessionRecordType] extends [Decoded] ? true : false) : false = true
+type Decoded = typeof RecordSchema.Type
+export const check: [Decoded] extends [SessionRecord] ? ([SessionRecord] extends [Decoded] ? true : false) : false = true

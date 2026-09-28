@@ -204,9 +204,16 @@ export async function truncate(text: string, session: string, call: string) {
     kept.push(line)
     size.bytes += next
   }
-  const file = path.join(dataDir(), "tool-output", session, `${call}.txt`)
+  // Ids come from the model server; keep them to one safe path segment each.
+  const root = path.join(dataDir(), "tool-output")
+  const file = path.join(root, safe(session), `${safe(call)}.txt`)
+  if (path.relative(root, file).startsWith("..")) throw new Error(`overflow path escapes ${root}`)
   await Bun.write(file, text)
   const removed = size.hitBytes ? `${bytes - size.bytes} bytes` : `${lines.length - kept.length} lines`
   const hint = `The tool call succeeded but the output was truncated. Full output saved to: ${file}\nUse Grep to search the full content or Read with offset/limit to view specific sections.`
   return { text: `${kept.join("\n")}\n\n...${removed} truncated...\n\n${hint}`, bytes, overflow_path: file }
+}
+
+function safe(segment: string) {
+  return segment.replace(/[^A-Za-z0-9_-]/g, "_") || "_"
 }

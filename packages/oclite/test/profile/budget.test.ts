@@ -37,7 +37,8 @@ describe("debug prompt --tokens --check", () => {
   test.each<[string, number, string[]]>([
     ["local", 1200, ["bash", "edit", "glob", "grep", "read", "write"]],
     ["local-min", 600, ["bash", "edit", "grep", "read"]],
-    ["default", 7300, ["bash", "edit", "glob", "grep", "question", "read", "skill", "task", "todowrite", "webfetch", "write"]],
+    // The real registry: `question` is left out by design (tools/extra.ts), `task` arrives with sub-agents in phase 5.
+    ["default", 7300, ["bash", "edit", "glob", "grep", "read", "skill", "todowrite", "webfetch", "write"]],
   ])("%s profile stays within %d tok", async (profile, budget, tools) => {
     await using env = await setup()
     const result = await env.run(["debug", "prompt", "--tokens", "--check", "--profile", profile, "--output-format", "json"])
@@ -105,12 +106,12 @@ describe("debug server", () => {
     ;["context_window", "usage_in_stream", "reasoning_field", "think_tags", "tools_native", "accepts", "prefix_cache", "concurrency", "tokenize", "no_think_suffix"]
       .forEach((field) => expect(result.stdout).toMatch(new RegExp(`^${field}\\s+.+\\((probe|config|default|static|error-400)\\)$`, "m")))
     expect(result.stdout).toMatch(/^context_window\s+32768\s+\(config\)$/m)
-    const probed = env.server.requests.length
-    expect(probed).toBeLessThanOrEqual(3)
+    expect(env.server.requests.length).toBeLessThanOrEqual(3)
+    const probed = env.server.chats().length
     await env.run(["debug", "server"])
-    expect(env.server.requests.length).toBe(probed)
+    expect(env.server.chats().length).toBe(probed)
     await env.run(["debug", "server", "--reprobe"])
-    expect(env.server.requests.length).toBeGreaterThan(probed)
+    expect(env.server.chats().length).toBeGreaterThan(probed)
   })
 
   test("hosted anthropic: STATIC record, no requests, no unknown", async () => {

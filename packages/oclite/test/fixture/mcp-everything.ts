@@ -120,6 +120,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra): Promise<
           params: { progressToken: token, progress: step, total: steps, message: `step ${step}/${steps}` },
         })
     }
+    // The SDK client dispatches notifications on a microtask but responses synchronously, so a final progress that
+    // arrives in the same stdout read as the result is dropped (its handler is already removed). Leave a gap.
+    if (token !== undefined) await Bun.sleep(50)
     return text(`done after ${steps} steps`)
   }
   if (name === "crash") {

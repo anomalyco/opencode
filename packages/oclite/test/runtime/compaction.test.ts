@@ -117,4 +117,16 @@ describe("compaction", () => {
     const pruned = replay([...records, { type: "prune", before_turn: 0, seq: 2, t: 1 }])
     expect(estimate(pruned, "x".repeat(400), [])).toBe(Math.ceil((400 + 2 + 2) / 4))
   })
+
+  test("a compaction after the last step makes its usage stale, so the next turn does not compact again", async () => {
+    await using env = await setup(exchange(760))
+    expect(await env.maybe(1, true)).toBe("compacted")
+    expect(await env.maybe(1)).toBe("none")
+    expect(env.scripted.requests).toHaveLength(1)
+    const records = [
+      { type: "step", turn: 0, reason: "stop", usage: usage(5000), seq: 1, t: 1 },
+      { type: "compaction", summary: "S", through_seq: 0, seq: 2, t: 1 },
+    ] as Parameters<typeof replay>[0]
+    expect(estimate(replay(records), "", [])).toBeLessThan(100)
+  })
 })

@@ -1,4 +1,4 @@
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Option } from "effect"
 import { Wildcard } from "@opencode-ai/core/util/wildcard"
 import { AppConfig, type HookEntry, type HookInput, type HookOutcome, Hooks } from "../contract"
 
@@ -14,7 +14,7 @@ export const layer = Layer.effect(
       run: Effect.fn("Hooks.run")(function* (hook, input) {
         const warnings: string[] = []
         for (const entry of cfg.hooks[hook].filter((entry) => matches(entry.matcher, input.tool_name))) {
-          const outcome = yield* Effect.promise(() => spawn(entry, hook, input))
+          const outcome = yield* spawn(entry, hook, input)
           if (outcome.kind === "block") return outcome
           if (outcome.kind === "warn") warnings.push(outcome.message)
         }
@@ -31,7 +31,7 @@ export function matches(matcher: string, tool: string | undefined) {
   return matcher.split("|").some((part) => Wildcard.match(tool.toLowerCase(), part.trim().toLowerCase() || "*"))
 }
 
-async function spawn(entry: HookEntry, hook: HookName, input: HookInput): Promise<HookOutcome> {
+function spawn(entry: HookEntry, hook: HookName, input: HookInput) {
   const payload = {
     hook,
     hook_event_name: hook,
@@ -41,30 +41,49 @@ async function spawn(entry: HookEntry, hook: HookName, input: HookInput): Promis
     tool_output: input.tool_output,
     cwd: input.cwd,
   }
-  // Own process group so a timeout also kills whatever the hook script started.
-  const proc = Bun.spawn(["sh", "-c", entry.command], {
-    cwd: input.cwd,
-    env: { ...process.env },
-    stdin: new Blob([JSON.stringify(payload)]),
-    stdout: "ignore",
-    stderr: "pipe",
-    detached: true,
-  })
-  const state = { timedOut: false }
-  const timer = setTimeout(() => {
-    state.timedOut = true
-    killGroup(proc.pid)
-  }, entry.timeout_ms)
-  const [code, stderr] = await Promise.all([proc.exited, new Response(proc.stderr).text()])
-  clearTimeout(timer)
-  if (state.timedOut)
-    return { kind: "warn", message: `hook "${entry.command}" timed out after ${entry.timeout_ms / 1000} s` }
-  if (code === 0) return { kind: "continue" }
-  if (code === 2) return { kind: "block", message: stderr.trim() || `blocked by hook "${entry.command}"` }
-  return {
-    kind: "warn",
-    message: `hook "${entry.command}" exited with code ${code}${stderr.trim() ? `: ${stderr.trim()}` : ""}`,
-  }
+  return Effect.acquireUseRelease(
+    Effect.sync(() => {
+      // Own process group so a timeout or cancel also kills whatever the hook script started.
+      const proc = Bun.spawn(["sh", "-c", entry.command], {
+        cwd: input.cwd,
+        env: { ...process.env },
+        stdin: new Blob([JSON.stringify(payload)]),
+        stdout: "ignore",
+        stderr: "pipe",
+        detached: true,
+      })
+      const chunks: string[] = []
+      const decoder = new TextDecoder()
+      const reader = proc.stderr.getReader()
+      const drain = async (): Promise<void> => {
+        const next = await reader.read()
+        if (next.done) return
+        chunks.push(decoder.decode(next.value, { stream: true }))
+        return drain()
+      }
+      return { proc, chunks, reading: drain() }
+    }),
+    (run) =>
+      // Done when the hook process exits, not when stderr closes: a backgrounded grandchild may keep it open.
+      Effect.promise(() => run.proc.exited).pipe(
+        Effect.timeoutOption(entry.timeout_ms),
+        Effect.flatMap((code) =>
+          Effect.promise(() => Promise.race([run.reading, Bun.sleep(50)])).pipe(
+            Effect.map((): HookOutcome => {
+              const stderr = run.chunks.join("").trim()
+              if (Option.isNone(code))
+                return { kind: "warn", message: `hook "${entry.command}" timed out after ${entry.timeout_ms / 1000} s` }
+              if (code.value === 0) return { kind: "continue" }
+              if (code.value === 2) return { kind: "block", message: stderr || `blocked by hook "${entry.command}"` }
+              const detail = stderr ? `: ${stderr}` : ""
+              return { kind: "warn", message: `hook "${entry.command}" exited with code ${code.value}${detail}` }
+            }),
+          ),
+        ),
+      ),
+    // Timeout or interrupt (cancel): the group is still running, kill it.
+    (run) => Effect.sync(() => (run.proc.exitCode === null ? killGroup(run.proc.pid) : undefined)),
+  )
 }
 
 export function killGroup(pid: number) {

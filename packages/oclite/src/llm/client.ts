@@ -6,6 +6,7 @@ import { Auth, LLM, LLMClient, LLMError, type LLMEvent, type LLMRequest, Message
 import { RequestExecutor } from "@opencode-ai/llm/route"
 import { AppConfig, ConfigError, LlmGateway, type ModelHandle, type ResolvedConfig, type TokenUsage, type TurnRequest } from "../contract"
 import { isLoopback } from "../util/paths"
+import { redactUrl } from "../util/redact"
 import { type CapabilityRecord, OPTIONAL, persist, probe, staticRecord } from "./probe"
 import { splitThink } from "./think"
 
@@ -34,7 +35,7 @@ const make = Effect.gen(function* () {
     Stream.unwrap(
       Effect.gen(function* () {
         const caps = handle.capabilities
-        const request = build(handle, req)
+        const request = build(handle, req, effort(cfg, handle.ref))
         const input = caps.usage_in_stream ? 0 : yield* estimateInput(handle, request)
         const seen = { finish: false, out: 0 }
         const base = client.stream(request).pipe(
@@ -54,7 +55,7 @@ const make = Effect.gen(function* () {
           }),
           // Bun.serve fakes and some proxies end a dropped stream with a clean EOF: treat "no finish" as a retryable drop.
           Stream.concat(Stream.suspend(() => (seen.finish ? Stream.empty : Stream.fail(new LLMError({ module: "oclite/llm", method: "stream",
-            reason: new ProviderInternalReason({ status: 0, message: `stream from ${handle.baseURL} ended without finish_reason (connection dropped)` }) }))))),
+            reason: new ProviderInternalReason({ status: 0, message: `stream from ${redactUrl(handle.baseURL)} ended without finish_reason (connection dropped)` }) }))))),
           Stream.catch((error: LLMError) => {
             const params = retry ? rejectedParams(error, request) : []
             if (!params.length) return Stream.fail(error)
@@ -99,10 +100,8 @@ export const layer = layerWith(FetchHttpClient.layer)
 
 function resolveModel(cfg: ResolvedConfig, ref: string, reprobe: boolean) {
   return Effect.gen(function* () {
-    const slash = ref.indexOf("/")
-    if (slash <= 0) return yield* new ConfigError({ message: `model "${ref}" must be provider/model` })
-    const providerID = ref.slice(0, slash)
-    const modelID = ref.slice(slash + 1)
+    const [providerID, modelID] = [ref.slice(0, Math.max(0, ref.indexOf("/"))), ref.slice(ref.indexOf("/") + 1)]
+    if (!providerID) return yield* new ConfigError({ message: `model "${ref}" must be provider/model` })
     const entry = cfg.provider[providerID] ?? {}
     const options = entry.options ?? {}
     const limits = entry.models?.[modelID]
@@ -146,14 +145,21 @@ async function modelFor(hosted: "anthropic" | "openai" | undefined, input: { bas
 }
 
 /** Optional params are sent only when the capability record says the server accepts them (openai-compatible only). */
-function build(handle: ModelHandle, req: TurnRequest) {
+// reasoning_effort: opt-in per model (provider.<id>.models.<model>.options.reasoning_effort); by ref, so handle copies keep it.
+function effort(cfg: ResolvedConfig, ref: string) {
+  const model = cfg.provider[ref.slice(0, Math.max(0, ref.indexOf("/")))]?.models?.[ref.slice(ref.indexOf("/") + 1)]
+  const value = (model as { options?: { reasoning_effort?: unknown } } | undefined)?.options?.reasoning_effort
+  return typeof value === "string" ? value : undefined
+}
+
+function build(handle: ModelHandle, req: TurnRequest, reasoningEffort: string | undefined) {
   const caps = handle.capabilities
   const compatible = handle.model.route.id === COMPATIBLE
   const thinking = req.thinking
   const body: Record<string, unknown> = compatible ? {
     ...(caps.accepts.chat_template_kwargs && thinking !== undefined ? { chat_template_kwargs: { enable_thinking: thinking } } : {}),
     ...(caps.accepts.prompt_cache_key ? { prompt_cache_key: req.session_id } : {}),
-    ...(caps.accepts.reasoning_effort && handle.reasoning && thinking !== undefined ? { reasoning_effort: thinking ? "medium" : "low" } : {}),
+    ...(caps.accepts.reasoning_effort && reasoningEffort ? { reasoning_effort: reasoningEffort } : {}),
     ...(caps.accepts.parallel_tool_calls && req.tools.length > 0 ? { parallel_tool_calls: false } : {}),
   } : {}
   // `/no_think` is model-specific (Qwen templates): only when pinned, and only when enable_thinking can't be sent.
@@ -183,9 +189,7 @@ function rejectedParams(error: LLMError, request: LLMRequest) {
 }
 
 function queueFor(baseURL: string, size: number) {
-  const existing = queues.get(baseURL)
-  if (existing) return existing
-  const queue = { semaphore: Semaphore.makeUnsafe(size), size, holders: [] as string[] }
+  const queue = queues.get(baseURL) ?? { semaphore: Semaphore.makeUnsafe(size), size, holders: [] as string[] }
   queues.set(baseURL, queue)
   return queue
 }
@@ -251,8 +255,8 @@ function render(body: unknown) {
 }
 
 async function tokenize(baseURL: string, content: string) {
-  const res = await fetch(`${new URL(baseURL).origin}/tokenize`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ content }) })
-  const body: { tokens?: unknown[] } = await res.json()
+  const init = { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ content }), signal: AbortSignal.timeout(5_000) }
+  const body: { tokens?: unknown[] } = await (await fetch(`${new URL(baseURL).origin}/tokenize`, init)).json()
   if (!Array.isArray(body.tokens)) throw new Error("no tokens")
   return body.tokens.length
 }
@@ -282,5 +286,5 @@ export function fallbackNotices(handle: ModelHandle) {
     ...OPTIONAL.map((param): [string, string] | false => compatible && !caps.accepts[param] && [`accepts.${param}`, `request: ${param} not accepted by the server, not sent`]),
     ...notes.map((note): [string, string] => [note, note]),
   ]
-  return items.filter((item) => item !== false).map((item) => ({ key: `${handle.baseURL} ${item[0]}`, message: item[1] }))
+  return items.filter((item) => item !== false).map((item) => ({ key: `${redactUrl(handle.baseURL)} ${item[0]}`, message: item[1] }))
 }

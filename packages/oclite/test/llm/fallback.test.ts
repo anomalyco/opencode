@@ -102,7 +102,7 @@ describe("fallback ladder", () => {
   test("reject_params: 400 naming params → stripped, persisted, retried once", async () => {
     await using server = await startLocalServer({ reject_params: ["prompt_cache_key", "reasoning_effort"] })
     server.queue(reply.text("ok"), reply.text("again"))
-    const cfg = config(server, { pins: pinned({}, {}), models: { "test-model": { reasoning: true } } })
+    const cfg = config(server, { pins: pinned({}, {}), models: { "test-model": { reasoning: true, options: { reasoning_effort: "low" } } } })
     const result = await withGateway(cfg, (gateway) =>
       Effect.gen(function* () {
         const handle = yield* gateway.resolve("local/test-model")
@@ -147,7 +147,7 @@ describe("fallback ladder", () => {
     )
     expect(result.handle.contextWindow).toBe(32768)
     expect(result.handle.capabilities.context_window).toBe(32768)
-    expect(result.notice.message).toContain(`pin servers.${server.url}.context_window`)
+    expect(result.notice.message).toContain(`pin servers[<your base URL>].context_window for 127.0.0.1:${new URL(server.url).port}`)
     expect([result.first, result.second]).toEqual([true, false])
   })
 
@@ -184,6 +184,29 @@ describe("fallback ladder", () => {
     expect((await profile(true)).auto).toBe("local")
   })
 
+  test("unreachable provider with every capability pinned → ConfigError at resolve (exit 2)", async () => {
+    const server = await startLocalServer({})
+    const cfg = config(server, { pins: pinned() })
+    await server.stop()
+    const error = await withGateway(cfg, (gateway) => gateway.resolve("local/test-model").pipe(Effect.flip))
+    expect(error._tag).toBe("oclite/ConfigError")
+    expect(error.message).toContain(`cannot reach ${server.url}`)
+  })
+
+  test("a dropped stream's error text carries the redacted base URL", async () => {
+    await using server = await startLocalServer({ drop_after_chunks: 2 })
+    server.queue(reply.text("cut short"))
+    const secret = server.url.replace("http://", "http://someone:sekretpass1@")
+    const cfg = { ...config(server, {}), provider: { local: { options: { baseURL: secret } } }, servers: { [secret]: pinned() } }
+    const error = await withGateway(cfg, (gateway) =>
+      Effect.gen(function* () {
+        return yield* collect(gateway, yield* gateway.resolve("local/test-model"), turn({ messages: user })).pipe(Effect.flip)
+      }),
+    )
+    expect(error.message).toContain("ended without finish_reason")
+    expect(error.message).not.toContain("sekretpass1")
+  })
+
   test("a stream that ends without finish_reason fails as a retryable drop", async () => {
     await using server = await startLocalServer({ drop_after_chunks: 3 })
     server.queue(reply.text("a long answer that gets cut"))
@@ -216,7 +239,21 @@ describe("request shaping", () => {
     expect((await shape({ pins: pinned({}, { max_tokens: 1000 }), models: { "test-model": { reasoning: true } } })).max_tokens).toBe(1000)
 
     const all = await shape({ pins: pinned(), models: { "test-model": { reasoning: true } } }, false)
-    expect(all).toMatchObject({ prompt_cache_key: "ses_test", parallel_tool_calls: false, chat_template_kwargs: { enable_thinking: false }, reasoning_effort: "low" })
+    expect(all).toMatchObject({ prompt_cache_key: "ses_test", parallel_tool_calls: false, chat_template_kwargs: { enable_thinking: false } })
+    // reasoning_effort is opt-in per model (provider.<id>.models.<model>.options.reasoning_effort), even when accepted.
+    expect("reasoning_effort" in all).toBe(false)
+    const effort = await shape({ pins: pinned(), models: { "test-model": { reasoning: true, options: { reasoning_effort: "high" } } } }, true)
+    expect(effort.reasoning_effort).toBe("high")
+    // Keyed by ref: a copied handle (the loop copies it after overflow recovery) still sends it.
+    const copied = await withGateway(config(server, { pins: pinned(), models: { "test-model": { options: { reasoning_effort: "high" } } } }), (gateway) =>
+      Effect.gen(function* () {
+        const handle = yield* gateway.resolve("local/test-model")
+        yield* collect(gateway, { ...handle, contextWindow: 1000 }, turn({ messages: user }))
+      }),
+    ).then(() => server.chats().at(-1)!.body!)
+    expect(copied.reasoning_effort).toBe("high")
+    const refused = await shape({ pins: pinned({ accepts: { reasoning_effort: false } }), models: { "test-model": { options: { reasoning_effort: "high" } } } }, true)
+    expect("reasoning_effort" in refused).toBe(false)
     const none = await shape({ pins: pinned({ accepts: { chat_template_kwargs: false, prompt_cache_key: false, reasoning_effort: false, parallel_tool_calls: false } }) }, true)
     expect(["prompt_cache_key", "parallel_tool_calls", "chat_template_kwargs", "reasoning_effort"].some((key) => key in none)).toBe(false)
     const noTools = await shape({ pins: pinned() }, undefined, [])

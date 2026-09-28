@@ -13,7 +13,11 @@ export const layer = Layer.sync(SessionStore, () => make(path.join(dataDir(), "s
 /** A store rooted at `dir` (tests pass a temp dir; the layer uses ~/.local/share/oclite/sessions). */
 export function make(dir: string): SessionStoreShape {
   const seqs = new Map<string, number>()
-  const file = (session: string) => path.join(dir, `${session}.jsonl`)
+  // Ids reach paths (`--resume <id>`), so anything but `ses_<alnum>` is refused before touching the disk.
+  const file = (session: string) => {
+    if (!validId(session)) throw new Error(`invalid session id "${session}"`)
+    return path.join(dir, `${session}.jsonl`)
+  }
   const read = (session: string) =>
     Effect.promise(async () => {
       const handle = Bun.file(file(session))
@@ -56,9 +60,12 @@ export function make(dir: string): SessionStoreShape {
   }
 }
 
+export function validId(session: string) {
+  return /^ses_[A-Za-z0-9]+$/.test(session)
+}
+
 function safeList(dir: string) {
-  if (!existsSync(dir)) return undefined
-  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
+  return !existsSync(dir) ? undefined : readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
     entry.isFile() && entry.name.endsWith(".jsonl") ? [entry.name] : [],
   )
 }

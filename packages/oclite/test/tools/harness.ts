@@ -1,5 +1,9 @@
 // Shared setup for tools/permission/hooks tests: real layers, an in-memory SessionStore (the contract interface) and
 // a scripted Asker standing in for a person at the REPL.
+import { afterAll, beforeAll } from "bun:test"
+import fs from "fs/promises"
+import os from "os"
+import path from "path"
 import { Effect, Layer } from "effect"
 import { ToolRuntime } from "@opencode-ai/llm"
 import type { PermissionV1 } from "@opencode-ai/core/v1/permission"
@@ -187,4 +191,19 @@ export async function toolset(
       ),
     denials: () => Effect.runPromise(built.permission.denials("ses_test")),
   }
+}
+
+/** Points XDG_DATA_HOME at a temp dir for the file's tests, so overflow files stay out of ~/.local/share. */
+export function tempDataHome() {
+  const previous = process.env.XDG_DATA_HOME
+  const data = path.join(os.tmpdir(), `oclite-data-${process.pid}-${Math.random().toString(36).slice(2)}`)
+  beforeAll(() => {
+    process.env.XDG_DATA_HOME = data
+  })
+  afterAll(async () => {
+    if (previous === undefined) delete process.env.XDG_DATA_HOME
+    if (previous !== undefined) process.env.XDG_DATA_HOME = previous
+    await fs.rm(data, { recursive: true, force: true })
+  })
+  return data
 }

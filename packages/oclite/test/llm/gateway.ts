@@ -13,7 +13,7 @@ export const PINNED: Partial<Capabilities> = {
   accepts: { chat_template_kwargs: true, prompt_cache_key: true, reasoning_effort: true, parallel_tool_calls: true },
 }
 
-export function config(server: LocalServer, input: { pins?: ServerPins; models?: Record<string, { limit?: { context?: number; output?: number }; reasoning?: boolean }> } = {}): ResolvedConfig {
+export function config(server: LocalServer, input: { pins?: ServerPins; models?: Record<string, { limit?: { context?: number; output?: number }; reasoning?: boolean; options?: { reasoning_effort?: string } }> } = {}): ResolvedConfig {
   return {
     cwd: process.cwd(), projectRoot: process.cwd(), model: "local/test-model", default_agent: "build",
     provider: { local: { npm: "@ai-sdk/openai-compatible", options: { baseURL: server.url }, models: input.models } },

@@ -207,12 +207,13 @@ const debug = Command.make("debug").pipe(
   ]),
 )
 
+const id = Argument.string("id")
 const session = Command.make("session").pipe(
   Command.withDescription("Inspect saved sessions"),
   Command.withSubcommands([
-    Command.make("list", {}, handler((module) => module.notImplemented("session list", 3))),
-    Command.make("show", { id: Argument.string("id") }, handler((module) => module.notImplemented("session show", 3))),
-    Command.make("export", { id: Argument.string("id") }, handler((module) => module.notImplemented("session export", 3))),
+    Command.make("list", {}, handler((module) => module.sessionList)).pipe(Command.withDescription("List sessions for this directory")),
+    Command.make("show", { id }, handler((module) => module.sessionShow)).pipe(Command.withDescription("Show a session transcript")),
+    Command.make("export", { id }, handler((module) => module.sessionExport)).pipe(Command.withDescription("Print a session's JSONL records")),
   ]),
 )
 
@@ -220,8 +221,12 @@ export const command = root.pipe(
   Command.withHandler((flags) =>
     Effect.gen(function* () {
       const args = toCliArgs(flags)
-      const module = yield* Effect.promise(() => import("./commands"))
-      yield* module.notImplemented(args.print === undefined ? "REPL" : "-p", 3)(args)
+      if (args.print !== undefined) {
+        const { runPrint } = yield* Effect.promise(() => import("./run"))
+        return yield* runPrint(args)
+      }
+      const { runRepl } = yield* Effect.promise(() => import("./repl"))
+      yield* runRepl(args)
     }),
   ),
   Command.withSubcommands([mcp, agents, debug, session]),

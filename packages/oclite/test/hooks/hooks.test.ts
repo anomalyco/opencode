@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
-import { Effect, Layer, Schema } from "effect"
+import { Effect, Fiber, Layer, Schema } from "effect"
 import { AppConfig, type HookEntry, type HookInput, Hooks } from "../../src/contract"
 import { layer, matches } from "../../src/hooks/hooks"
 import { tmpdir } from "../lib/tmp"
@@ -72,6 +72,37 @@ describe("hooks", () => {
     await Bun.sleep(100)
     const child = Number((await Bun.file(pid).text()).trim())
     expect(() => process.kill(child, 0)).toThrow()
+  })
+
+  test("cancel interrupts a running hook at once and kills its group", async () => {
+    await using dir = await tmpdir()
+    const pid = path.join(dir.path, "pid")
+    const cfg = config(dir.path, {
+      hooks: { PreToolUse: [entry(`sleep 30 & echo $! > ${pid}; wait`)], PostToolUse: [], Stop: [] },
+    })
+    const started = Date.now()
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const hooks = yield* Hooks
+        const fiber = yield* Effect.forkChild(
+          hooks.run("PreToolUse", { session_id: "ses_h", cwd: dir.path, tool_name: "bash" }),
+        )
+        yield* Effect.sleep(300)
+        yield* Fiber.interrupt(fiber)
+      }).pipe(Effect.provide(layer.pipe(Layer.provide(Layer.succeed(AppConfig, cfg))))),
+    )
+    expect(Date.now() - started).toBeLessThan(3000)
+    await Bun.sleep(100)
+    const child = Number((await Bun.file(pid).text()).trim())
+    expect(() => process.kill(child, 0)).toThrow()
+  })
+
+  test("completion is the hook's exit, even if a background child keeps stderr open", async () => {
+    await using dir = await tmpdir()
+    const started = Date.now()
+    const outcome = await run(dir.path, "PreToolUse", [entry("(sleep 3 >&2 &); echo stop >&2; exit 2", "*", 2000)])
+    expect(outcome).toEqual({ kind: "block", message: "stop" })
+    expect(Date.now() - started).toBeLessThan(1500)
   })
 
   test("hooks inherit the parent environment and run in the session cwd", async () => {

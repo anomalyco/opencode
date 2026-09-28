@@ -7,6 +7,7 @@
 | 0 | Recon B (MCP/permission/session) → docs/recon/B-mcp-permission-session.md | cartographer | PASS |
 | 0 | Path-import smoke test (lead) | lead | PASS: `bun run` + `bun typecheck` exit 0 importing `opencode/mcp/index` and `opencode/agent/subagent-permissions`, with tsconfig `paths {"@/*": ["../opencode/src/*"]}`, DOM lib, and `src/opencode-ambient.d.ts` referencing opencode's audio/sql/markdown d.ts. Typecheck ~5s. Without these: 30–561 errors. || 1 | ADR.md (103 lines) + ARCHITECTURE.md (861 lines) | architect | APPROVED by lead after full read. 42 files / ~6,640 lines planned vs 45 / 7,000. |
 | 2 | Skeleton: contract, CLI tree, config layering, agents, redact, size-budget, agents/mcp commands | cli-engineer | PASS after 1 fix round (reviewer B1 secret leak in decode errors, B2 URL/arg redaction). Lead gate: `bun typecheck` exit 0; `bun test` 45 pass / 0 fail; size budget 10/45 files, 1297/7000 lines; verified a bad `mcp` entry with a Bearer token exits 2 and prints no secret. |
+| 3 | Runtime + local profile: loop, context, compaction, JSONL store, LLM gateway + probe + think splitter + queue, profiles, tools, permission, hooks, rendering, -p, REPL, debug prompt/server | runtime-, tools-permissions-, perf-, cli-engineer; test-engineer (local-server, MCP fixture) | PASS after 2 fix rounds. Round 1 fixed 12 findings, incl. HIGH chained-bash deny bypass, read_only override by --allowed-tools, path traversal, secret redaction in sinks, probe timeouts, opt-in reasoning_effort. Round 2 fixed the slow-probe exit-2 blocker, bash wrappers, and `always` widening. Lead gate: typecheck exit 0; `bun test` 253 pass / 0 fail (×2); size budget 36/45 files, 4890/7000 lines (+168 forked). Fixed overhead vs fake (server-reported): local 627 tok (≤1200), local-min 362 (≤600), default 5449 (≤7300). Status line 144–174 ms; render latency ≤5 ms. Lead smoke: `-p "list files" --output-format json` does tool call → text, exit 0; stream-json has reasoning_delta before text_delta. |
 
 ## Decisions
 - Repo: `~/code/opencode-dev` (1.18.33 copy without `.git`). Ran `git init -b dev`, baseline commit `ab6c8a6`, branch `oclite-harness`. Upstream SHA `b471c2b44` can't be checked against this copy.
@@ -21,6 +22,11 @@
 - CLI framework: `effect/unstable/cli` (no new manifest dep; ~30 ms). MCP client: own thin client on the SDK (MCP.Service import costs 0.43–0.52 s).
 
 - Phase 2 M1: `.claude/agents` `tools:` lists only restrict (listed = not denied, falls through to ask; others denied), matching Claude Code semantics. This differs from ARCHITECTURE §8's "allow rules" wording.
+
+- Phase 3 accepted follow-ups (not blocking):
+  - F4: parentheses mark a command `<complex>`, so read_only denies `git log --grep="fix(x)"`. Conservative.
+  - F6: a plan-mode parent's `bash *` deny, inherited through deriveSubagentSessionPermission, also blocks git reads in read_only children. This is opencode's own semantics; revisit in Phase 5.
+- Phase 3 probe caveat: the probe's tool-call canary depends on the model actually calling the tool. A model that ignores it records `tools_native=false`, so oclite falls back to the text protocol. Pin `servers.<url>.capabilities.tools_native` to override.
 
 ## Assumptions (UNATTENDED=true)
 - Original prompt text is garbled in places. Reconstructed in `docs/SPEC.md`; every guess is marked **[R]** there. Key guessed values: default-profile budget 2500 tok, `permission_timeout_ms` 300000, reasoning-model min `max_tokens` 8192, tool-output stubbing 6/6/3 turns, size budget excludes forked files, `.oclite/agents/*.md` path, hooks "other exit = warn and continue".

@@ -21,10 +21,10 @@ export interface AgentDef {                     // structurally assignable to op
   tools?: string[]                              // optional tools enabled for local profiles
 }
 export interface HookEntry { matcher: string; command: string; timeout_ms: number }
-export interface ServerPins { capabilities?: Partial<Omit<Capabilities, "accepts">> & { accepts?: Partial<Capabilities["accepts"]> }; context_window?: number; max_tokens?: number; concurrency?: number }
+export interface ServerPins { capabilities?: Partial<Omit<Capabilities, "accepts">> & { accepts?: Partial<Capabilities["accepts"]> }; context_window?: number; max_tokens?: number; concurrency?: number; probe_timeout_ms?: number }
 export interface ProviderEntry {
   npm?: string; options?: { baseURL?: string; apiKey?: string; headers?: Record<string, string> }
-  models?: Record<string, { limit?: { context?: number; output?: number }; reasoning?: boolean }>
+  models?: Record<string, { limit?: { context?: number; output?: number }; reasoning?: boolean; options?: Record<string, unknown> }>
 }
 export interface ResolvedConfig {
   cwd: string; projectRoot: string

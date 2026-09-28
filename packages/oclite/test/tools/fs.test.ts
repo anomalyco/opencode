@@ -1,22 +1,10 @@
-import { afterAll, beforeAll, describe, expect, test } from "bun:test"
-import fs from "fs/promises"
-import os from "os"
+import { describe, expect, test } from "bun:test"
 import path from "path"
 import { tmpdir } from "../lib/tmp"
-import { config, scriptedAsker, toolset } from "./harness"
+import { config, scriptedAsker, tempDataHome, toolset } from "./harness"
 import type { AskRequest } from "../../src/contract"
 
-const previous = process.env.XDG_DATA_HOME
-const data = path.join(os.tmpdir(), `oclite-data-${process.pid}`)
-// Truncation writes under dataDir(); keep it out of the real ~/.local/share.
-beforeAll(() => {
-  process.env.XDG_DATA_HOME = data
-})
-afterAll(async () => {
-  if (previous === undefined) delete process.env.XDG_DATA_HOME
-  if (previous !== undefined) process.env.XDG_DATA_HOME = previous
-  await fs.rm(data, { recursive: true, force: true })
-})
+const data = tempDataHome()
 
 describe("read / write / edit", () => {
   test("write then read shows numbered lines, edit replaces exactly once", async () => {
@@ -99,6 +87,14 @@ describe("truncation", () => {
     expect(result.text).toContain("bytes truncated")
     expect(result.overflow_path).toBeDefined()
     expect(Buffer.byteLength(result.text)).toBeLessThan(52 * 1024)
+  })
+
+  test("a hostile call id can't move the overflow file out of tool-output", async () => {
+    await using dir = await tmpdir({ files: { "big.txt": Array.from({ length: 2500 }, (_, i) => `l${i}`).join("\n") } })
+    const tools = await toolset(config(dir.path))
+    const result = await tools.call("read", { filePath: "big.txt", limit: 3000 }, "../../x")
+    expect(result.overflow_path).toBe(path.join(data, "oclite", "tool-output", "ses_test", "______x.txt"))
+    expect(await Bun.file(path.join(data, "oclite", "x.txt")).exists()).toBe(false)
   })
 
   test("reading the overflow file back needs no external_directory ask", async () => {

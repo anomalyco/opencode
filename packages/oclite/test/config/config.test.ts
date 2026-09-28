@@ -103,6 +103,14 @@ describe("config", () => {
     expect((await env.load({ model: "flag/c", agent: "plan", profile: "local" })).model).toBe("flag/c")
   })
 
+  test("provider models keep per-model options (reasoning_effort opt-in)", async () => {
+    await using env = await setup({
+      project: { provider: { local: { options: { baseURL: "http://127.0.0.1:8000/v1" }, models: { qwen: { reasoning: true, options: { reasoning_effort: "low" } } } } } },
+    })
+    const cfg = await env.load()
+    expect(cfg.provider.local!.models!.qwen).toEqual({ reasoning: true, options: { reasoning_effort: "low" } } as never)
+  })
+
   test("{env:} and {file:} substitution", async () => {
     await using env = await setup({
       project: { small_model: "{env:HOME}", model: "{file:model.txt}" },

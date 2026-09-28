@@ -1,6 +1,6 @@
 import fs from "fs/promises"
 import path from "path"
-import { Effect, Schema } from "effect"
+import { Effect, Logger, References, Schema } from "effect"
 import { ToolFailure } from "@opencode-ai/llm"
 import type { Ripgrep } from "@opencode-ai/core/ripgrep"
 import type { RunToolContext } from "../contract"
@@ -101,6 +101,10 @@ function ripgrep<A>(use: (rg: Ripgrep.Interface) => Effect.Effect<A, Ripgrep.Err
       const rg = yield* Ripgrep.Service
       return yield* use(rg)
     })
-    return yield* service.pipe(Effect.provide(LayerNode.compile(Ripgrep.node)))
+    // The binary layer logs "downloading ripgrep" on first use; stdout belongs to the answer, so logs go to stderr.
+    return yield* service.pipe(
+      Effect.provide(LayerNode.compile(Ripgrep.node)),
+      Effect.provideService(References.CurrentLoggers, new Set([Logger.withConsoleError(Logger.formatLogFmt)])),
+    )
   }).pipe(Effect.mapError((error) => new ToolFailure({ message: error.message })))
 }

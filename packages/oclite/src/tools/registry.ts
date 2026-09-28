@@ -45,7 +45,7 @@ export function make(options: { describe?: Describe } = {}) {
       const wrap = (ctx: RunToolContext, item: BuiltinTool, description: string) =>
         Tool.make({
           description,
-          jsonSchema: toDefinitions({ [item.name]: item.tool })[0].inputSchema,
+          jsonSchema: terse(ctx.profile, toDefinitions({ [item.name]: item.tool })[0].inputSchema),
           toModelOutput: (result) => [{ type: "text", text: (result.output as { text: string }).text }],
           toStructuredOutput: (output) => (output as { meta: Meta }).meta,
           execute: (raw, call) =>
@@ -76,15 +76,24 @@ export function make(options: { describe?: Describe } = {}) {
               if (pre.kind === "block") return yield* failure("blocked", `blocked: ${pre.message}`)
               if (pre.kind === "warn") yield* notice(ctx, pre.message)
               const timeoutMs = item.timeoutFor?.(input) ?? item.timeoutMs
+              const callId = call?.id ?? id("call")
               const value: unknown = yield* item.tool.execute(input, call).pipe(
                 Effect.timeoutOrElse({
                   duration: timeoutMs,
                   orElse: () => Effect.fail(failure("timeout", `timed out after ${timeoutMs / 1000} s`)),
                 }),
+                // Error text is model input too: same 2000-line / 50 KB cut as output.
+                Effect.catch((error) =>
+                  Effect.promise(() => truncate(error.message, ctx.session_id, callId)).pipe(
+                    Effect.flatMap((cut) =>
+                      Effect.fail(new ToolFailure({ message: cut.text, error: error.error, metadata: error.metadata })),
+                    ),
+                  ),
+                ),
               )
               // Built-in and MCP tools return text; anything else is shown as JSON.
               const output = typeof value === "string" ? value : JSON.stringify(value)
-              const result = yield* Effect.promise(() => truncate(output, ctx.session_id, call?.id ?? id("call")))
+              const result = yield* Effect.promise(() => truncate(output, ctx.session_id, callId))
               const post = yield* hooks.run("PostToolUse", { ...hook, tool_output: result.text })
               if (post.kind === "warn") yield* notice(ctx, post.message)
               // PostToolUse exit 2 can't undo the call; its stderr goes to the model with the output (Claude Code does the same).
@@ -192,6 +201,17 @@ function notice(ctx: RunToolContext, message: string) {
     phase: "notice",
     message,
   })
+}
+
+// [cli-engineer, Phase 3 integration] local-min: per-parameter descriptions cost ~220 tok over its 4 tools and
+// pushed the real first request to 739 > 600 tok; names, types and `required` stay. Owner (tools/perf) to review.
+function terse<S extends Record<string, unknown>>(profile: Profile, schema: S): S {
+  if (profile.name !== "local-min" || !isRecord(schema.properties)) return schema
+  const properties = Object.entries(schema.properties).map(([key, value]) => [
+    key,
+    isRecord(value) ? Object.fromEntries(Object.entries(value).filter((entry) => entry[0] !== "description")) : value,
+  ])
+  return { ...schema, properties: Object.fromEntries(properties) }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

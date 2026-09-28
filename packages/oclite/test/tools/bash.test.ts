@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import { tmpdir } from "../lib/tmp"
-import { config, toolset } from "./harness"
+import type { AskRequest } from "../../src/contract"
+import { config, scriptedAsker, toolset } from "./harness"
 
 const allowBash = (cwd: string) => config(cwd, { permission: [{ permission: "bash", pattern: "*", action: "allow" }] })
 
@@ -48,13 +49,26 @@ describe("bash", () => {
     expect(result.text).toBe("permission denied: bash echo hi")
   })
 
+  test("always for a wrapped or complex command persists nothing; for a plain one, the command prefix", async () => {
+    await using dir = await tmpdir()
+    const seen: AskRequest[] = []
+    const tools = await toolset(config(dir.path), { asker: scriptedAsker(["always", "always", "always"], seen) })
+    await tools.call("bash", { command: "bash -c 'npm test'" })
+    await tools.call("bash", { command: "npm test && echo ok" })
+    await tools.call("bash", { command: "npm test" })
+    expect(seen.map((request) => request.always)).toEqual([[], [], ["npm test *"]])
+    // Neither complex "always" granted anything: the wrapped form asks again.
+    await tools.call("bash", { command: "bash -c 'npm test'" })
+    expect(seen).toHaveLength(4)
+  })
+
   test("--allowed-tools bash(git *) allows git but not a chained command", async () => {
     await using dir = await tmpdir()
     const { cliRules } = await import("../../src/config/config")
     const tools = await toolset(config(dir.path, { cliRules: cliRules(["bash(git *)"], "allow") }))
     expect((await tools.call("bash", { command: "git --version" })).text).toStartWith("git version")
     const chained = await tools.call("bash", { command: "git status; touch pwned" })
-    expect(chained.text).toBe("permission denied: bash <complex>")
+    expect(chained.text).toBe("permission denied: bash <complex> git status touch pwned")
     expect(await Bun.file(path.join(dir.path, "pwned")).exists()).toBe(false)
   })
 })

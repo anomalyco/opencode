@@ -29,9 +29,10 @@ const agent: AgentDef = {
 async function handles() {
   await using server = await startLocalServer({})
   const cfg = config(server, { pins: pinned() })
-  return withGateway(cfg, (gateway) =>
+  const result = await withGateway(cfg, (gateway) =>
     Effect.all({ local: gateway.resolve("local/test-model"), hosted: gateway.resolve("anthropic/claude-sonnet-5") }),
-  ).then((result) => ({ ...result, cfg }))
+  )
+  return { ...result, cfg }
 }
 
 describe("profiles", () => {
@@ -86,7 +87,7 @@ describe("byte-stable composition", () => {
     expect(a.tools.map((tool) => tool.name)).toEqual(["bash", "edit", "glob", "grep", "read", "todowrite", "write"])
     const env = a.system.slice(a.system.indexOf("<env>"))
     expect(env).toContain(`date: ${new Date().toISOString().slice(0, 10)}`)
-    expect(env).toContain("git branch: feature-x")
+    expect(env).toContain("Git branch: feature-x")
     expect(env).not.toMatch(/\d{1,2}:\d{2}/)
     expect(a.system.indexOf("You are oclite")).toBe(0)
     expect(a.system.indexOf("You are the build agent.")).toBeLessThan(a.system.indexOf("<env>"))

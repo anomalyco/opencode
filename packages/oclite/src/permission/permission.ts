@@ -20,9 +20,10 @@ import { dataDir, id } from "../util/paths"
 // opencode's .env read guard (mirrors the gitignore Node pattern). It survives bypassPermissions.
 const ENV_GUARD = fromConfig({ read: { "*.env": "ask", "*.env.*": "ask", "*.env.example": "allow" } })
 const READ_ONLY_BASH = ["git status*", "git diff*", "git log*", "ls*", "pwd"]
-// A shell metacharacter can chain or redirect, so such commands never match an allow glob like `git status*`.
-const COMPLEX = /[;&|><\n`]|\$\(/
-
+// git diff/log can still write files or run an external diff program.
+const GIT_WRITES = ["diff", "log"].flatMap((sub) =>
+  ["*--output*", "* -o*", "*--ext-diff*"].map((flag) => `git ${sub}${flag}`),
+)
 // Asks are serialized per process: two prompts at once would interleave on the terminal or the MCP client.
 const asking = Semaphore.makeUnsafe(1)
 
@@ -51,12 +52,9 @@ export function defaults(): PermissionV1.Rule[] {
 
 export function readOnlyRules(mcpReadOnly: readonly string[]): PermissionV1.Rule[] {
   return [
-    ...["edit", "write", "apply_patch", "mcp__*", "bash"].map((permission) => ({
-      permission,
-      pattern: "*",
-      action: "deny" as const,
-    })),
+    ...fromConfig({ edit: "deny", write: "deny", apply_patch: "deny", "mcp__*": "deny", bash: "deny" }),
     ...READ_ONLY_BASH.map((pattern) => ({ permission: "bash", pattern, action: "allow" as const })),
+    ...GIT_WRITES.map((pattern) => ({ permission: "bash", pattern, action: "deny" as const })),
     ...mcpReadOnly.map((permission) => ({ permission, pattern: "*", action: "allow" as const })),
   ]
 }
@@ -73,12 +71,6 @@ export function modeRules(
     ...(mode === "acceptEdits" ? fromConfig({ edit: "allow", write: "allow" }) : []),
     ...(mode === "plan" || readOnly ? readOnlyRules(mcpReadOnly) : []),
   ]
-}
-
-/** Bash permission pattern: the command itself, or `<complex>` when it chains, pipes, redirects or substitutes. */
-export function bashPattern(command: string) {
-  const trimmed = command.trim()
-  return COMPLEX.test(trimmed) ? "<complex>" : trimmed
 }
 
 export const layer = Layer.effect(
@@ -115,20 +107,28 @@ export const layer = Layer.effect(
       Effect.sync(() => denied.set(session_id, (denied.get(session_id) ?? 0) + 1))
 
     return Permission.of({
-      ruleset: (input) => [
-        ...defaults(),
-        ...cfg.permission,
-        ...input.agent.permission,
-        ...modeRules(input.mode, input.agent.read_only, input.mcpReadOnly),
-        ...(input.parent
+      ruleset: (input) => {
+        const parent = input.parent
           ? deriveSubagentSessionPermission({
               parentSessionPermission: input.parent,
               // Only `permission` is read. AgentDef.model is a "provider/model" string, Agent.Info's is a ref object.
               subagent: { ...input.agent, model: undefined, permission: [...input.agent.permission] },
             })
-          : []),
-        ...cfg.cliRules,
-      ],
+          : []
+        const readOnly = input.mode === "plan" || input.agent.read_only
+        return [
+          ...defaults(),
+          ...cfg.permission,
+          ...input.agent.permission,
+          ...modeRules(input.mode, input.agent.read_only, input.mcpReadOnly),
+          ...parent,
+          ...cfg.cliRules,
+          // --allowed-tools can't lift read_only; CLI and parent denies stay last so nothing after them re-allows.
+          ...(readOnly ? readOnlyRules(input.mcpReadOnly) : []),
+          ...cfg.cliRules.filter((rule) => rule.action === "deny"),
+          ...parent.filter((rule) => rule.action === "deny"),
+        ]
+      },
       check: Effect.fn("Permission.check")(function* (input) {
         const always = yield* sessionAlways(input.session_id)
         const decisions = input.patterns.map((pattern) => decide(input.tool, pattern, input.ruleset, always))

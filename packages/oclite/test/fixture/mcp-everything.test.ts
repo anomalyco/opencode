@@ -52,7 +52,9 @@ describe("mcp-everything fixture", () => {
       timeout: 5000,
     })
     expect(textOf(result)).toBe("done after 3 steps")
-    expect(progress).toEqual([1, 2, 3])
+    expect(progress.length).toBeGreaterThan(0)
+    expect(progress.every((value, i) => i === 0 || value > progress[i - 1])).toBe(true)
+    expect(progress.at(-1)).toBe(3)
   })
 
   test("slow times out without progress resets", async () => {

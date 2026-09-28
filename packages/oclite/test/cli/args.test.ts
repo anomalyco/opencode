@@ -82,15 +82,8 @@ describe("cli args", () => {
   })
 
   test.each([
-    [["-p", "hi"], "-p: not implemented yet (phase 3)"],
-    [[], "REPL: not implemented yet (phase 3)"],
     [["mcp", "serve", "--transport", "http", "--port", "5000"], "mcp serve: not implemented yet (phase 6)"],
     [["mcp", "auth", "gh"], "mcp auth: not implemented yet (phase 4)"],
-    [["debug", "prompt", "--tokens", "--check"], "debug prompt: not implemented yet (phase 3)"],
-    [["debug", "server", "--reprobe"], "debug server: not implemented yet (phase 3)"],
-    [["session", "list"], "session list: not implemented yet (phase 3)"],
-    [["session", "show", "ses_1"], "session show: not implemented yet (phase 3)"],
-    [["session", "export", "ses_1"], "session export: not implemented yet (phase 3)"],
   ])("stub %j fails with ConfigError", async (argv, message) => {
     const error = failure(await run(argv))
     expect(error).toBeInstanceOf(ConfigError)

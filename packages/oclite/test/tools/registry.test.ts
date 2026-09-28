@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
 import { Effect, Schema } from "effect"
-import { Tool } from "@opencode-ai/llm"
+import { Tool, ToolFailure } from "@opencode-ai/llm"
 import READ from "@/tool/read.txt"
 import type { OcliteTool } from "../../src/contract"
 import { tmpdir } from "../lib/tmp"
-import { agent, config, PROFILE, toolset } from "./harness"
+import { agent, config, PROFILE, tempDataHome, toolset } from "./harness"
+
+tempDataHome()
 
 function mcpTool(name: string, readOnly: boolean): OcliteTool {
   return {
@@ -22,7 +24,38 @@ function mcpTool(name: string, readOnly: boolean): OcliteTool {
   }
 }
 
+function slowTool(name: string, run: Effect.Effect<string, ToolFailure>, timeoutMs: number): OcliteTool {
+  return {
+    ...mcpTool(name, true),
+    tool: Tool.make({ description: name, jsonSchema: { type: "object", properties: {} }, execute: () => run }),
+    timeoutMs,
+  }
+}
+
 describe("registry", () => {
+  test("a non-bash tool past its timeoutMs ends as a timeout result", async () => {
+    await using dir = await tmpdir()
+    const cfg = config(dir.path, { permission: [{ permission: "mcp__*", pattern: "*", action: "allow" }] })
+    const tools = await toolset(cfg, { extra: [slowTool("mcp__fixture__slow", Effect.never, 200)] })
+    const started = Date.now()
+    expect(await tools.call("mcp__fixture__slow", {})).toMatchObject({
+      status: "timeout",
+      text: "timed out after 0.2 s",
+    })
+    expect(Date.now() - started).toBeLessThan(2000)
+  })
+
+  test("huge error text is truncated like output", async () => {
+    await using dir = await tmpdir()
+    const cfg = config(dir.path, { permission: [{ permission: "mcp__*", pattern: "*", action: "allow" }] })
+    const huge = Effect.fail(new ToolFailure({ message: "e\n".repeat(5000) }))
+    const tools = await toolset(cfg, { extra: [slowTool("mcp__fixture__crash", huge, 30_000)] })
+    const result = await tools.call("mcp__fixture__crash", {})
+    expect(result.status).toBe("error")
+    expect(result.text).toContain("lines truncated")
+    expect(result.text.split("\n").length).toBeLessThan(2010)
+  })
+
   test("definitions are sorted, byte-stable across reads, and use opencode's .txt in the default profile", async () => {
     await using dir = await tmpdir()
     const tools = await toolset(config(dir.path))
