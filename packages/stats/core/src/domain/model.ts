@@ -195,6 +195,7 @@ export class ModelStatRepo extends Context.Service<ModelStatRepo, ModelStatRepo.
                   or(
                     inArray(modelStat.provider, RETIRED_STAT_PROVIDERS),
                     inArray(modelStat.model, RETIRED_STAT_MODELS),
+                    and(eq(modelStat.provider, "unknown"), eq(modelStat.model, "hy4-preview")),
                   ),
                 ),
               ),

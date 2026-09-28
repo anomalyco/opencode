@@ -6,6 +6,7 @@ import {
   EXCLUDED_MODELS,
   FREE_MODELS,
   MODEL_AUTHOR_RULES,
+  MODEL_NAME_MAX_LENGTH,
   MODEL_NAME_ALIASES,
   RETIRED_STAT_PROVIDERS,
   STEALTH_MODELS,
@@ -35,9 +36,9 @@ const WEEK_MS = 7 * DAY_MS
 // from both sources.
 const LIVE_SOURCE_START = "2026-08-11T10:57:48.186Z"
 
-// R2 SQL limits result sets to 10,000 rows and does not support OFFSET. Two
-// queries per day/week keep each result bounded and avoid combining the costly
-// distinct user/session aggregates with the high-cardinality geo dimensions.
+// R2 SQL results are cursor-paginated after aggregation. Separate usage and geo
+// queries per day/week avoid combining costly distinct user/session aggregates
+// with the high-cardinality geo dimensions.
 export function buildStatsQueries(periodStart: Date, periodEnd: Date, input?: StatsQuerySource) {
   const source = input ?? {
     namespace: Resource.R2Sql.namespace,
@@ -326,7 +327,6 @@ FROM filtered
 GROUP BY GROUPING SETS (
   ${groupingSets}
 )
-LIMIT 10000
 `
 }
 
@@ -466,12 +466,16 @@ function statModelSql(model: string, providerModel: string) {
       WHEN lower(${model}) = 'big-pickle' THEN regexp_replace(NULLIF(${providerModel}, ''), '^.*/', '')
       ELSE ${model}
     END, '(-free|:free|:global)+$', '')`
-  return `COALESCE(NULLIF(CASE
+  const value = `CASE
 ${Object.entries(MODEL_NAME_ALIASES)
   .map(([from, to]) => `      WHEN lower(${normalized}) = ${sqlString(from)} THEN ${sqlString(to)}`)
   .join("\n")}
       ELSE ${normalized}
-    END, ''), 'unknown')`
+    END`
+  return `CASE
+      WHEN length(${value}) > ${MODEL_NAME_MAX_LENGTH} THEN 'unknown'
+      ELSE COALESCE(NULLIF(${value}, ''), 'unknown')
+    END`
 }
 
 function freeTierSql(tier: string, model: string) {
