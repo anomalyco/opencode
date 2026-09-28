@@ -1,7 +1,8 @@
 import path from "path"
 import { Effect, Exit, Schema } from "effect"
 import type { RunToolContext } from "../contract"
-import { killGroup } from "../hooks/hooks"
+import { childEnv, killGroup, track } from "../hooks/hooks"
+import { mentionsEnv } from "../permission/permission"
 import { define } from "./fs"
 
 // ---- permission patterns ----
@@ -16,6 +17,8 @@ const WRAPPERS = new Set(
     " ",
   ),
 )
+
+export { killAll } from "../hooks/hooks"
 
 export const DEFAULT_TIMEOUT_MS = 120_000
 const SHELL = Bun.which("bash") ?? "/bin/sh"
@@ -47,18 +50,21 @@ export function bashTool(ctx: RunToolContext) {
     },
     summarize: (params) => `bash ${params.command.split("\n")[0].slice(0, 80)}`,
     paths: (params) => [{ path: workdir(params.workdir), kind: "directory" }],
+    envFiles: (params) => (mentionsEnv(params.command) ? [".env"] : []),
     execute: (params) =>
       Effect.acquireUseRelease(
         // Own process group (detached) so a timeout or cancel reaches every child, not just the shell.
-        Effect.sync(() =>
-          Bun.spawn([SHELL, "-c", `exec 2>&1\n${params.command}`], {
+        Effect.sync(() => {
+          const proc = Bun.spawn([SHELL, "-c", `exec 2>&1\n${params.command}`], {
             cwd: workdir(params.workdir),
-            env: { ...process.env },
+            env: childEnv(),
             stdin: "ignore",
             stdout: "pipe",
             detached: true,
-          }),
-        ),
+          })
+          track(proc)
+          return proc
+        }),
         (proc) =>
           Effect.promise(async () => {
             const [output, code] = await Promise.all([new Response(proc.stdout).text(), proc.exited])

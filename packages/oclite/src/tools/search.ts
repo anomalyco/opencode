@@ -6,6 +6,7 @@ import type { Ripgrep } from "@opencode-ai/core/ripgrep"
 import type { RunToolContext } from "../contract"
 import GLOB from "@/tool/glob.txt"
 import GREP from "@/tool/grep.txt"
+import { isEnvFile } from "../permission/permission"
 import { define } from "./fs"
 
 const LIMIT = 100
@@ -66,7 +67,7 @@ export function searchTools(ctx: RunToolContext) {
           const target = resolve(params.path)
           const stat = yield* Effect.promise(() => fs.stat(target).catch(() => undefined))
           const dir = stat?.isFile() ? path.dirname(target) : target
-          const found = yield* ripgrep((rg) =>
+          const matches = yield* ripgrep((rg) =>
             rg.grep({
               cwd: dir,
               pattern: params.pattern,
@@ -74,6 +75,8 @@ export function searchTools(ctx: RunToolContext) {
               limit: LIMIT,
             }),
           )
+          // ripgrep searches hidden files; a directory search leaves .env contents out (a direct path is guarded).
+          const found = stat?.isFile() ? matches : matches.filter((match) => !isEnvFile(match.entry.path))
           if (found.length === 0) return "No files found"
           const groups = Map.groupBy(found, (match) => path.resolve(dir, match.entry.path))
           const lines = [...groups].flatMap(([file, matches], index) => [

@@ -18,6 +18,7 @@ const args: CliArgs = {
   disallowedTools: [],
   continue: false,
   noThinking: false,
+  trustProject: true,
 }
 
 // Probe cache and sessions live under XDG_DATA_HOME; point it at a temp dir for this file.

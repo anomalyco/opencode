@@ -47,8 +47,15 @@ export function runRepl(args: CliArgs) {
     const tty = process.stdin.isTTY === true
     const sink = textSink({ showThinking: !args.noThinking, tty: process.stderr.isTTY === true })
     yield* sink({ session_id: "", agent_path: [], type: "status", phase: "config", message: "loading config" })
-    const { load } = yield* Effect.promise(() => import("../config/config"))
-    const cfg = yield* load(args)
+    const { load, trust, trustNotice } = yield* Effect.promise(() => import("../config/config"))
+    const loaded = yield* load(args)
+    // Untrusted project settings: a TTY asks once (y records the hash); scripted stdin gets the -p notice instead.
+    const untrusted = trustNotice(loaded)
+    const accepted = untrusted !== undefined && tty &&
+      (globalThis.prompt(`\nThis project's config defines ${loaded.trust.skipped.join(", ")}. Trust ${loaded.trust.root}? [y/N]`) ?? "").trim().toLowerCase() === "y"
+    if (accepted) yield* Effect.promise(() => trust(loaded.trust.root))
+    const cfg = accepted ? yield* load(args) : loaded
+    if (untrusted && !accepted) yield* sink({ session_id: "", agent_path: [], type: "status", phase: "notice", message: untrusted })
     if (cfg.permissionMode === "bypassPermissions") yield* sink({ session_id: "", agent_path: [], type: "status", phase: "notice", message: BYPASS })
     const { appLayer } = yield* Effect.promise(() => import("../runtime/runtime"))
     const rl = readline.createInterface({ input: process.stdin, output: tty ? process.stdout : undefined, terminal: tty, prompt: "› " })

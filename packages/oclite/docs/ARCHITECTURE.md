@@ -739,8 +739,7 @@ Control tools. Each result is `content:[{type:"text", text: JSON}]` plus `struct
 - Prompts: each primary agent becomes a prompt `{name: agent, description, arguments: [{name: "task",
   required: true}]}`. `getPrompt` returns one user message telling the client to call `agent_spawn` with
   that agent and task.
-- Resources: `oclite://sessions/<id>`, mime `application/x-ndjson`. The redacted JSONL is listed for the 50
-  most recent sessions.
+- Resources: `oclite://sessions/<id>`, mime `application/x-ndjson`. The redacted JSONL is listed only for sessions this server started, or whose cwd is under the serve cwd (Phase 6/7 change).
 - Progress: foreground calls with a `progressToken` get `notifications/progress {progress: step, message:
   "<one-line event>"}`. Every run also emits `notifications/message {level: "info", logger: "oclite/<id>", data: RenderEvent}`,
     which includes reasoning deltas batched every 50 ms and tool lifecycle.
@@ -858,3 +857,10 @@ system+tools across turns, and `prompt_cache_key`.
    can be added later as an optional tool.
 5. The `@/…` tsconfig path is used only for `.txt` asset imports from opencode, because `opencode/*` resolves
    to `*.ts`. `.ts` modules use `opencode/<path>`.
+
+
+## 16. Post-implementation notes
+
+- `transport: mcp` children receive the parent's deny/ask rules and permission mode via `agent_spawn.parent_rules` / `permission_mode`. A client's `permission_mode` can only tighten the serve-time mode.
+- Project trust (Phase 7) gates project-layer `provider`, `mcp`, `hooks`, `servers`, permission allows, `{file:}`/`{env:}` and agent `transport`/`mcp`. See README Security notes.
+- `question` is not implemented. REPL `/compact` is a stub (Deviation).

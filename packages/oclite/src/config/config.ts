@@ -1,4 +1,4 @@
-import { existsSync } from "fs"
+import { existsSync, realpathSync } from "fs"
 import os from "os"
 import path from "path"
 import { Effect, Layer, Schema } from "effect"
@@ -11,7 +11,7 @@ import { AppConfig, ConfigError, type HookEntry, type ResolvedConfig } from "../
 import { substitute } from "../forked/variable"
 import { configDir, projectRoot } from "../util/paths"
 import { argSecrets, registerSecret, urlSecrets } from "../util/redact"
-import { claudeTool, decode, fromConfig, loadAgents, mergeDeep } from "./agents"
+import { claudeTool, decode, fromConfig, loadAgents, mergeDeep, untrust } from "./agents"
 
 export const DEFAULT_MODEL = "anthropic/claude-sonnet-5"
 const HOOK_TIMEOUT_MS = 10_000
@@ -126,9 +126,19 @@ export interface LoadContext {
   cwd?: string
   home?: string
   configDir?: string
+  /** Only the stored trust counts (`oclite trust` itself ignores --trust-project / OCLITE_TRUST_PROJECT). */
+  storedTrustOnly?: boolean
 }
 
-export function load(args: CliArgs, ctx: LoadContext = {}) {
+/** Project trust (SECURITY F1): what an untrusted project layer tried to set and was ignored. Not in the frozen contract. */
+export interface Trust {
+  root: string
+  trusted: boolean
+  skipped: string[]
+}
+export type LoadedConfig = ResolvedConfig & { trust: Trust }
+
+export function load(args: CliArgs, ctx: LoadContext = {}): Effect.Effect<LoadedConfig, ConfigError> {
   return Effect.tryPromise({
     try: () => resolve(args, ctx),
     catch: (error) => (error instanceof ConfigError ? error : new ConfigError({ message: String(error) })),
@@ -139,19 +149,25 @@ export function layer(cfg: ResolvedConfig) {
   return Layer.succeed(AppConfig, cfg)
 }
 
-async function resolve(args: CliArgs, ctx: LoadContext): Promise<ResolvedConfig> {
+async function resolve(args: CliArgs, ctx: LoadContext): Promise<LoadedConfig> {
   const cwd = path.resolve(ctx.cwd ?? process.cwd())
   const home = ctx.home ?? os.homedir()
   const userDir = ctx.configDir ?? configDir()
   const root = projectRoot(cwd)
+  // --trust-project / OCLITE_TRUST_PROJECT=1: trust for this process only (child processes inherit the env); neither
+  // is ever written to trusted.json. Both come from whoever launches oclite, never from the repo.
+  const once = !ctx.storedTrustOnly && (args.trustProject === true || process.env.OCLITE_TRUST_PROJECT === "1")
+  const trusted = once || (await isTrusted(root, userDir))
+  const skipped = new Set<string>()
+  const projectFile = path.join(root, ".oclite", "config.json")
   const files = [
     await readConfig(path.join(userDir, "config.json"), userDir),
-    await readConfig(path.join(root, ".oclite", "config.json"), root),
+    trusted ? await readConfig(projectFile, root) : await readUntrusted(projectFile, root, skipped),
   ].map((layer): Info => (args.strictMcpConfig ? { ...layer, mcp: undefined } : layer))
   const imported = await Promise.all(args.mcpConfig.map((value) => readMcpConfig(value, cwd)))
   const merged = [...files, ...imported.map((mcp): Info => ({ mcp }))].reduce(mergeLayer, {})
 
-  const agents = await loadAgents({ projectRoot: root, cwd, home, configDir: userDir, overrides: merged.agent ?? {} })
+  const agents = await loadAgents({ projectRoot: root, cwd, home, configDir: userDir, overrides: merged.agent ?? {}, untrusted: trusted ? undefined : skipped })
   if (merged.small_model && agents.explore && !agents.explore.model) agents.explore.model = merged.small_model
   const defaultAgent = args.agent ?? merged.default_agent ?? "build"
   if (!agents[defaultAgent])
@@ -184,14 +200,82 @@ async function resolve(args: CliArgs, ctx: LoadContext): Promise<ResolvedConfig>
     showThinking: !args.noThinking,
     appendSystemPrompt: args.appendSystemPrompt,
     maxTurns: args.maxTurns,
+    trust: { root, trusted, skipped: [...skipped] },
   }
+}
+
+// Untrusted project layer: no {env:}/{file:} expansion, and nothing that reaches the network, runs commands or
+// widens permissions (providers, MCP servers, hooks, server pins, permission allows, agent transports).
+const UNTRUSTED_KEYS: Record<string, string> = { provider: "providers", mcp: "MCP servers", hooks: "hooks", servers: "server pins" }
+
+async function readUntrusted(file: string, base: string, skipped: Set<string>): Promise<Info> {
+  if (!existsSync(file)) return {}
+  const raw = await parseJson(await Bun.file(file).text(), file)
+  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) return decode(Info, raw, file)
+  const cut: Record<string, unknown> = { ...raw }
+  Object.keys(UNTRUSTED_KEYS).filter((key) => key in cut).forEach((key) => {
+    skipped.add(UNTRUSTED_KEYS[key]!)
+    delete cut[key]
+  })
+  // untrust() drops permission allows (and would drop agent-style transport keys, which a config never has).
+  const kept = untrust(cut, skipped)
+  if (isRecord(kept.agent))
+    kept.agent = Object.fromEntries(Object.entries(kept.agent).map(([name, agent]) => [name, isRecord(agent) ? untrust(agent, skipped) : agent]))
+  return withInstructions(decode(Info, kept, file), base)
+}
+
+/** One line for -p / mcp serve / non-TTY REPL when the project layer was cut; undefined when nothing was. */
+export function trustNotice(cfg: LoadedConfig) {
+  if (cfg.trust.trusted || !cfg.trust.skipped.length) return undefined
+  return `untrusted project ${cfg.trust.root}: ignored ${cfg.trust.skipped.join(", ")} from its config; run \`oclite trust\` to trust it, or --trust-project for one run`
+}
+
+/** sha256 over the project config bytes, the project agent files and the instruction files the project config names. */
+export async function projectHash(root: string) {
+  const file = path.join(root, ".oclite", "config.json")
+  const raw = existsSync(file) ? await Bun.file(file).text() : ""
+  const parsed: unknown = await parseJson(raw || "{}", file).catch(() => ({}))
+  const instructions = isRecord(parsed) && Array.isArray(parsed.instructions)
+    ? parsed.instructions.filter((item) => typeof item === "string").map((item) => resolvePath(root, item)) : []
+  const globs = [[".oclite/agents", "**/*.md"], [".opencode", "{agent,agents}/**/*.md"], [".claude/agents", "*.md"]]
+  const agents = await Promise.all(globs.map(async ([dir, pattern]) =>
+    existsSync(path.join(root, dir!)) ? (await Array.fromAsync(new Bun.Glob(pattern!).scan({ cwd: path.join(root, dir!), dot: true }))).map((item) => path.join(root, dir!, item)) : []))
+  const hasher = new Bun.CryptoHasher("sha256").update(raw)
+  const parts = await Promise.all([...agents.flat().sort(), ...instructions].map(async (item) => [item, existsSync(item) ? await Bun.file(item).bytes() : ""] as const))
+  parts.forEach(([item, bytes]) => hasher.update(`\0${item}\0`).update(bytes))
+  return hasher.digest("hex")
+}
+
+/** Records the project's current hash in `<configDir>/trusted.json` (`oclite trust`, the REPL's y). */
+export async function trust(root: string, userDir = configDir()) {
+  const store = await trustStore(userDir)
+  await Bun.write(path.join(userDir, "trusted.json"), JSON.stringify({ ...store, [realpathSync(root)]: await projectHash(root) }, null, 2) + "\n")
+}
+
+async function isTrusted(root: string, userDir: string) {
+  const hash = (await trustStore(userDir))[realpathSync(root)]
+  return hash !== undefined && hash === (await projectHash(root))
+}
+
+async function trustStore(userDir: string): Promise<Record<string, string>> {
+  const file = Bun.file(path.join(userDir, "trusted.json"))
+  if (!(await file.exists())) return {}
+  const value: unknown = await file.json().catch(() => ({}))
+  return isRecord(value) ? (Object.fromEntries(Object.entries(value).filter((entry) => typeof entry[1] === "string")) as Record<string, string>) : {}
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
 }
 
 /** Reads one config layer; missing file = empty layer. Relative instruction paths resolve against `base`. */
 export async function readConfig(file: string, base: string): Promise<Info> {
   const raw = await readJson(file)
   if (raw === undefined) return {}
-  const info = decode(Info, raw, file)
+  return withInstructions(decode(Info, raw, file), base)
+}
+
+function withInstructions(info: Info, base: string): Info {
   return info.instructions ? { ...info, instructions: info.instructions.map((item) => resolvePath(base, item)) } : info
 }
 
@@ -268,7 +352,13 @@ export function cliRules(values: readonly string[], action: PermissionV1.Action)
     })
 }
 
+// Keys the gateway and tools can read from the environment (SECURITY F5): redacted wherever they show up.
+const ENV_SECRETS = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY",
+  "GOOGLE_GENERATIVE_AI_API_KEY", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "OCLITE_MCP_TOKEN", "AZURE_API_KEY", "MISTRAL_API_KEY",
+  "GROQ_API_KEY", "XAI_API_KEY", "DEEPSEEK_API_KEY", "TOGETHER_AI_API_KEY", "FIREWORKS_API_KEY"]
+
 function registerSecrets(cfg: Info) {
+  ENV_SECRETS.forEach((name) => process.env[name] && registerSecret(process.env[name]))
   Object.values(cfg.provider ?? {}).forEach((provider) => {
     if (provider.options?.apiKey) registerSecret(provider.options.apiKey)
     urlSecrets(provider.options?.baseURL ?? "").forEach(registerSecret)

@@ -19,11 +19,12 @@ import {
   ToolRegistry,
   type ToolStatus,
 } from "../contract"
+import { isEnvFile } from "../permission/permission"
 import { descriptions } from "../profile/profiles"
 import { id } from "../util/paths"
 import { bashTool } from "./bash"
 import { extraTools } from "./extra"
-import { type BuiltinTool, fsTools, MAX_BYTES, MAX_LINES, truncate } from "./fs"
+import { type BuiltinTool, fsTools, realpathNearest, MAX_BYTES, MAX_LINES, truncate } from "./fs"
 import { searchTools } from "./search"
 import { grammar } from "./text-protocol"
 
@@ -64,13 +65,35 @@ export function make(options: { describe?: Describe } = {}) {
                 permission
                   .check({ ...base, tool, patterns, always, metadata })
                   .pipe(Effect.mapError(() => failure("denied", `permission denied: ${tool} ${patterns.join(" ")}`)))
-              for (const target of item.paths?.(input) ?? []) {
-                const full = path.resolve(ctx.cwd, target.path)
-                if ([ctx.cwd, cfg.projectRoot].some((root) => contains(root, full))) continue
-                const glob = path.join(target.kind === "directory" ? full : path.dirname(full), "*")
-                yield* check("external_directory", [glob], [glob], { filepath: full })
+              // Containment and the .env guard use real paths, so a symlink in the repo can't point outside it.
+              const roots = yield* Effect.promise(() =>
+                Promise.all([ctx.cwd, cfg.projectRoot].map((dir) => realpathNearest(dir))),
+              )
+              const targets = yield* Effect.promise(() =>
+                Promise.all(
+                  (item.paths?.(input) ?? []).map(async (target) => ({
+                    kind: target.kind,
+                    real: await realpathNearest(path.resolve(ctx.cwd, target.path)),
+                  })),
+                ),
+              )
+              for (const target of targets) {
+                if (roots.some((root) => contains(root, target.real))) continue
+                const glob = path.join(target.kind === "directory" ? target.real : path.dirname(target.real), "*")
+                yield* check("external_directory", [glob], [glob], { filepath: target.real })
               }
-              yield* check(access.permission, access.patterns, access.always, { input })
+              // Any tool touching a .env file is checked as a read of it, so the guard also holds in bypassPermissions.
+              // (read itself instead gets the real path as a pattern, so `config.txt -> .env` hits the same rules.)
+              const envFiles =
+                item.name === "read"
+                  ? []
+                  : [...targets.map((target) => target.real).filter(isEnvFile), ...(item.envFiles?.(input) ?? [])]
+              if (envFiles.length) yield* check("read", envFiles, [])
+              const patterns =
+                item.name === "read" && targets[0]
+                  ? [...new Set([...access.patterns, targets[0].real])]
+                  : access.patterns
+              yield* check(access.permission, patterns, access.always, { input })
               const hook = { session_id: ctx.session_id, tool_name: item.name, tool_input: input, cwd: ctx.cwd }
               const pre = yield* hooks.run("PreToolUse", hook)
               if (pre.kind === "block") return yield* failure("blocked", `blocked: ${pre.message}`)
@@ -213,7 +236,9 @@ function notice(ctx: RunToolContext, message: string) {
 // pattern is "*", so this widens nothing.
 function terse<S extends Record<string, unknown>>(profile: Profile, schema: S): S {
   if (profile.name === "default" || !isRecord(schema.properties)) return schema
-  const open = Object.fromEntries(Object.entries(schema).filter((entry) => !(entry[0] === "additionalProperties" && entry[1] === false))) as S
+  const open = Object.fromEntries(
+    Object.entries(schema).filter((entry) => !(entry[0] === "additionalProperties" && entry[1] === false)),
+  ) as S
   if (profile.name !== "local-min") return open
   const properties = Object.entries(schema.properties).map(([key, value]) => [
     key,

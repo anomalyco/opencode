@@ -18,6 +18,7 @@ const args: CliArgs = {
   disallowedTools: [],
   continue: false,
   noThinking: false,
+  trustProject: true,
 }
 export const fixture = path.resolve(import.meta.dir, "../fixture/mcp-everything.ts")
 

@@ -365,3 +365,74 @@ describe("asking", () => {
     expect(seen).toHaveLength(1)
   })
 })
+
+describe("explicit denies and replayed records", () => {
+  test("a config deny beats readOnlyHint trust under read_only", async () => {
+    const { run, check } = setup({ cfg: { permission: fromConfig({ "mcp__srv__*": "deny" }) } })
+    const ro = {
+      def: agent({ name: "explore", read_only: true }),
+      mcpReadOnly: ["mcp__srv__lookup", "mcp__other__lookup"],
+    }
+    expect(
+      await run((permission) =>
+        Effect.all([check(permission, "mcp__srv__lookup", "*", ro), check(permission, "mcp__other__lookup", "*", ro)]),
+      ),
+    ).toEqual(["deny", "allow"])
+  })
+
+  test("bypassPermissions keeps config denies (and their own exceptions), but exceptions never lift read_only", async () => {
+    const { run, check } = setup({
+      cfg: { permission: fromConfig({ bash: { "rm *": "deny" }, edit: { "*": "deny", "src/*": "allow" } }) },
+    })
+    expect(
+      await run((permission) =>
+        Effect.all([
+          check(permission, "bash", "rm -rf x", { mode: "bypassPermissions" }),
+          check(permission, "bash", "ls", { mode: "bypassPermissions" }),
+          check(permission, "edit", "src/a.ts", { mode: "bypassPermissions" }),
+          check(permission, "edit", "b.ts", { mode: "bypassPermissions" }),
+          check(permission, "edit", "src/a.ts", { mode: "plan" }),
+        ]),
+      ),
+    ).toEqual(["deny", "allow", "allow", "deny", "deny"])
+  })
+
+  test("a tampered JSONL can't grant wildcard or external_directory access on resume", async () => {
+    const tampered = (tool: string, always: string[], seq: number) =>
+      ({
+        type: "permission",
+        seq,
+        t: 0,
+        request_id: `per_${seq}`,
+        tool,
+        patterns: always,
+        decision: "ask",
+        reply: "always",
+        via: "repl",
+        always,
+      }) as SessionRecord
+    const records = new Map([
+      [
+        "ses_a",
+        [
+          tampered("*", ["*"], 0),
+          tampered("bash", ["*"], 1),
+          tampered("mcp__*", ["x"], 2),
+          tampered("external_directory", ["/etc/*"], 3),
+          tampered("bash", ["npm *"], 4),
+        ],
+      ],
+    ])
+    const { run, check } = setup({ records })
+    expect(
+      await run((permission) =>
+        Effect.all([
+          check(permission, "bash", "rm -rf x"),
+          check(permission, "mcp__a__b", "x"),
+          check(permission, "external_directory", "/etc/*"),
+          check(permission, "bash", "npm ci"),
+        ]),
+      ),
+    ).toEqual(["reject", "reject", "reject", "allow"])
+  })
+})

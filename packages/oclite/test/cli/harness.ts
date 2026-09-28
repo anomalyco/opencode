@@ -56,7 +56,8 @@ async function spawn(
   const started = Date.now()
   const proc = Bun.spawn([process.execPath, entry, ...args], {
     cwd: options.cwd,
-    env: { ...isolatedEnv(options.home), XDG_CACHE_HOME: cache, OCLITE_RETRY_SCALE: "0.001", ...options.env },
+    // The fake provider lives in the project layer, so these runs trust it (as `--trust-project` would); trust tests unset it.
+    env: { ...isolatedEnv(options.home), XDG_CACHE_HOME: cache, OCLITE_RETRY_SCALE: "0.001", OCLITE_TRUST_PROJECT: "1", ...options.env },
     stdin: options.stdin === undefined ? "ignore" : new Blob([options.stdin]),
     stdout: "pipe",
     stderr: "pipe",

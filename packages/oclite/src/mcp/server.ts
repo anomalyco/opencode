@@ -25,11 +25,8 @@ interface Tracked {
   id: string; agent: string; mode: PermissionMode; conn: Conn; started_at: number
   /** The run's own depth and effective ruleset: what a parent_id child inherits. */
   depth: number; ruleset: PermissionV1.Ruleset
-  status: Effect.Effect<{ state: RunState; step: number; tokens: TokenUsage }>
-  wait: (timeout_ms?: number) => Effect.Effect<Option.Option<Result>>
-  send: (message: string) => Effect.Effect<boolean>
-  cancel: Effect.Effect<unknown>
-  progress?: (message: string) => void
+  status: Effect.Effect<{ state: RunState; step: number; tokens: TokenUsage }>; wait: (timeout_ms?: number) => Effect.Effect<Option.Option<Result>>
+  send: (message: string) => Effect.Effect<boolean>; cancel: Effect.Effect<unknown>; progress?: (message: string) => void
 }
 type Conn = { server: Server }
 type Args = Record<string, unknown>
@@ -180,10 +177,10 @@ export function serve(cfg: ResolvedConfig, input: ServeInput) {
           } else {
             // Depth applies on every path: a child `oclite mcp serve` starts at OCLITE_DEPTH.
             if (root > cfg.subagent.max_depth) return yield* fail(`Subagent depth limit reached (${cfg.subagent.max_depth})`)
-            // A `transport: mcp` parent sends its ruleset; only denies and external_directory rules are taken (the
-            // deriveSubagentSessionPermission filter), so a client can restrict a run but never grant it anything.
+            // A `transport: mcp` parent sends its ruleset. Over MCP only deny and ask rules are taken, whatever the key (an
+            // external_directory allow would switch off outside-cwd asks), so a client can restrict a run, never grant.
             const inherited = Array.isArray(args.parent_rules)
-              ? (args.parent_rules as PermissionV1.Rule[]).filter((rule) => isRule(rule) && (rule.action === "deny" || rule.permission === "external_directory"))
+              ? (args.parent_rules as PermissionV1.Rule[]).filter((rule) => isRule(rule) && (rule.action === "deny" || rule.action === "ask"))
               : undefined
             const parent = inherited && { session_id: validId(String(args.parent_session_id)) ? String(args.parent_session_id) : id("ses"), depth: root - 1, ruleset: inherited, call_id: id("call") }
             const handle = yield* runtime.start({ agent: agent.name, prompt, model, cwd, permissionMode: mode, parent }, sinkFor(conn, ref))
@@ -217,10 +214,8 @@ export function serve(cfg: ResolvedConfig, input: ServeInput) {
           }
           const run = runs.get(str(args, "id"))
           if (name === "agent_cancel") {
-            if (!run) return { status: "not_found" }
-            if (TERMINAL.includes((yield* run.status).state)) return { status: "already_finished" }
-            yield* run.cancel
-            return { status: "cancelled" }
+            if (!run || TERMINAL.includes((yield* run.status).state)) return { status: run ? "already_finished" : "not_found" }
+            return yield* run.cancel.pipe(Effect.as({ status: "cancelled" }))
           }
           if (!run) return yield* fail(`unknown agent id "${args.id}"`)
           if (name === "agent_send") {
@@ -242,10 +237,8 @@ export function serve(cfg: ResolvedConfig, input: ServeInput) {
         })
 
       const connect = () => {
-        const server = new lib.server.Server({ name: "oclite", version: pkg.version }, {
-          capabilities: { tools: {}, prompts: {}, resources: {}, logging: {} },
-          instructions: "oclite coding agents. agent_spawn starts one; background runs report through agent_status/agent_result.",
-        })
+        const server = new lib.server.Server({ name: "oclite", version: pkg.version }, { capabilities: { tools: {}, prompts: {}, resources: {}, logging: {} },
+          instructions: "oclite coding agents. agent_spawn starts one; background runs report through agent_status/agent_result." })
         const conn: Conn = { server }
         const types = lib.types
         server.setRequestHandler(types.ListToolsRequestSchema, async () => ({ tools: TOOLS }))
@@ -258,16 +251,12 @@ export function serve(cfg: ResolvedConfig, input: ServeInput) {
             Effect.map((raw) => redact(raw) as Args),
             Effect.map((out) => ({ content: [{ type: "text" as const, text: JSON.stringify(out) }], structuredContent: out })),
             // Bad arguments (str throws) and failures alike become isError results.
-            Effect.catchCause((cause) => {
-              const error = Cause.squash(cause)
-              return Effect.succeed({ content: [{ type: "text" as const, text: JSON.stringify({ error: error instanceof Error ? error.message : String(error) }) }], isError: true })
-            }),
+            Effect.catchCause((cause) => Effect.succeed({ content: [{ type: "text" as const, text: JSON.stringify({ error: (Cause.squash(cause) as { message?: string }).message ?? "failed" }) }], isError: true })),
           ))
         })
         const primary = () => Object.values(cfg.agents).filter((agent) => agent.mode !== "subagent").sort((a, b) => a.name.localeCompare(b.name))
-        server.setRequestHandler(types.ListPromptsRequestSchema, async () => ({
-          prompts: primary().map((agent) => ({ name: agent.name, description: agent.description, arguments: [{ name: "task", description: "What the agent should do", required: true }] })),
-        }))
+        server.setRequestHandler(types.ListPromptsRequestSchema, async () =>
+          ({ prompts: primary().map((agent) => ({ name: agent.name, description: agent.description, arguments: [{ name: "task", description: "What the agent should do", required: true }] })) }))
         server.setRequestHandler(types.GetPromptRequestSchema, async (request) => {
           const agent = primary().find((item) => item.name === request.params.name)
           if (!agent) throw new Error(`unknown prompt "${request.params.name}"`)
@@ -286,9 +275,8 @@ export function serve(cfg: ResolvedConfig, input: ServeInput) {
           return Effect.runPromise(store.read(session).pipe(Effect.map((records) => {
             const header = records.find((record) => record.type === "session")
             if (!mine(header?.type === "session" ? header : undefined)) throw new Error(`unknown resource ${request.params.uri}`)
-            return {
-            contents: [{ uri: request.params.uri, mimeType: "application/x-ndjson", text: records.map((record) => JSON.stringify(redact(record))).join("\n") }],
-          }})))
+            return { contents: [{ uri: request.params.uri, mimeType: "application/x-ndjson", text: records.map((record) => JSON.stringify(redact(record))).join("\n") }] }
+          })))
         })
         return conn
       }
@@ -308,8 +296,11 @@ export function serve(cfg: ResolvedConfig, input: ServeInput) {
         if (Date.now() - at >= IDLE_MS) void (sessions.get(session)?.close(), sessions.delete(session), seen.delete(session))
       }), Math.min(IDLE_MS, 60_000)).unref()
       const listener = Bun.serve({
-        hostname: input.host, port: input.port, idleTimeout: 0,
-        fetch: async (request) => {
+        hostname: input.host, port: input.port, idleTimeout: 0, maxRequestBodySize: 4 * 1024 * 1024,
+        // One shared token = one principal: agent_send/status/cancel/result aren't bound to the connection that started
+        // a run (agent_permission_reply and parent_id are).
+        fetch: async (request, bun) => {
+          if (!trusted(request, input.host, bun.port ?? input.port)) return new Response("forbidden", { status: 403 })
           if (new URL(request.url).pathname !== "/mcp") return new Response("not found", { status: 404 })
           if (!authorized(request.headers.get("authorization"), token!)) return new Response("unauthorized", { status: 401, headers: { "WWW-Authenticate": "Bearer" } })
           const sid = request.headers.get("mcp-session-id")
@@ -344,6 +335,15 @@ async function sdk() {
 function authorized(header: string | null, token: string) {
   const digest = (value: string) => createHash("sha256").update(value).digest()
   return header?.startsWith("Bearer ") === true && timingSafeEqual(digest(header.slice(7)), digest(token))
+}
+
+/** DNS-rebinding defence in depth: a present Origin must be loopback, and Host must name the bound host:port. */
+function trusted(request: Request, host: string, port: number) {
+  const origin = request.headers.get("origin")
+  if (origin && !isLoopback(origin)) return false
+  const loopback = isLoopback(`http://${host.includes(":") ? `[${host}]` : host}`)
+  const names = loopback ? ["localhost", "127.0.0.1", "[::1]", host] : [host.includes(":") ? `[${host}]` : host]
+  return names.map((name) => `${name}:${port}`).includes(request.headers.get("host") ?? "")
 }
 
 function view(run: string, result: Option.Option<Result>) {

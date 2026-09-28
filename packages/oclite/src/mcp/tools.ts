@@ -1,11 +1,13 @@
 // MCP tool → OcliteTool (ARCHITECTURE §12 Tools): `mcp__<server>__<tool>` wire names, `[server]` descriptions,
 // readOnlyHint, per-server timeouts reset by progress, MCP content → text, the deferred-profile `tool_search`
 // meta-tool, and resource text for @-mentions (large bodies go to a file and are attached by path).
+import { chmod, mkdir, writeFile } from "fs/promises"
 import path from "path"
 import { Effect } from "effect"
 import { type ContentPart, Tool, ToolFailure } from "@opencode-ai/llm"
 import type { McpShape, McpStatus, OcliteTool, Profile, ProfileName, ToolSet } from "../contract"
 import { dataDir } from "../util/paths"
+import { redactText } from "../util/redact"
 
 // Structural subsets of the SDK result types, so this module never loads the SDK.
 export interface McpToolDef {
@@ -88,9 +90,13 @@ export async function resourceAttachment(server: string, uri: string, contents: 
   const text = contents.map(resourceText).join("\n")
   const bytes = Buffer.byteLength(text)
   if (bytes <= INLINE_RESOURCE_BYTES) return { text: `<resource server="${server}" uri="${uri}">\n${text}\n</resource>` }
-  // Flat file in tool-output: the default ruleset already allows reading it back (external_directory).
-  const file = path.join(dataDir(), "tool-output", `mcp-${new Bun.CryptoHasher("sha1").update(`${server}\0${uri}`).digest("hex").slice(0, 16)}.txt`)
-  await Bun.write(file, text)
+  // Under tool-output (the default ruleset already allows reading it back), redacted, owner-only (0700 dir, 0600 file).
+  const dir = path.join(dataDir(), "tool-output", "mcp")
+  await mkdir(dir, { recursive: true, mode: 0o700 })
+  await chmod(dir, 0o700)
+  const file = path.join(dir, `${new Bun.CryptoHasher("sha1").update(`${server}\0${uri}`).digest("hex").slice(0, 16)}.txt`)
+  await writeFile(file, redactText(text), { mode: 0o600 })
+  await chmod(file, 0o600)
   return { path: file, text: `<resource server="${server}" uri="${uri}" path="${file}" bytes="${bytes}">Too large to inline; read it from the path.</resource>` }
 }
 

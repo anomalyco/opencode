@@ -68,6 +68,7 @@ describe("cli args", () => {
       appendSystemPrompt: "be brief",
       thinking: "off",
       noThinking: true,
+      trustProject: false,
     })
   })
 

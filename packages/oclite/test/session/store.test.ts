@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { chmod, stat } from "fs/promises"
 import path from "path"
 import { Effect } from "effect"
 import type { RecordInput } from "../../src/contract"
@@ -119,5 +120,20 @@ describe("session store", () => {
     ;["../..", "ses_../x", "ses_a/b", "ses_", "other"].forEach((bad) => expect(validId(bad)).toBe(false))
     const exit = await Effect.runPromiseExit(env.store.read("../../etc/passwd"))
     expect(exit._tag).toBe("Failure")
+  })
+
+  test("sessions dir is 0700 and transcripts 0600, fixed on open for files created looser", async () => {
+    await using env = await setup()
+    const dir = path.join(env.dir.path, "sessions")
+    const mode = async (file: string) => (await stat(file)).mode & 0o777
+    const session = await env.run(env.store.create(header))
+    expect(await mode(dir)).toBe(0o700)
+    expect(await mode(path.join(dir, `${session}.jsonl`))).toBe(0o600)
+    // An older transcript written with the default umask is tightened the first time a store opens it.
+    await chmod(dir, 0o755)
+    await chmod(path.join(dir, `${session}.jsonl`), 0o644)
+    await Effect.runPromise(make(dir).append(session, { type: "text", turn: 0, text: "later" }))
+    expect(await mode(dir)).toBe(0o700)
+    expect(await mode(path.join(dir, `${session}.jsonl`))).toBe(0o600)
   })
 })

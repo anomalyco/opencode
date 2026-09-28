@@ -1,14 +1,14 @@
 {
-  "bash": "Run a shell command. Use for build, test, git; not for reading files. workdir sets the directory; timeout in ms.",
-  "edit": "Replace exact, unique text in a file (oldString → newString). Read the file first.",
-  "glob": "Find files by glob pattern. path limits the directory.",
-  "grep": "Regex search in file contents. include filters files by glob; path limits the directory.",
-  "question": "Ask the user a question and wait for the answer.",
-  "read": "Read a file (absolute filePath) as numbered lines; offset and limit page large files.",
-  "skill": "Load a listed skill's instructions by name.",
-  "task": "Run a sub-agent (subagent_type) on a self-contained prompt; returns its result.",
+  "bash": "Run a bash command (build, test, git).",
+  "edit": "Replace unique oldString with newString in filePath.",
+  "glob": "Find files by glob pattern.",
+  "grep": "Regex search of file contents; include = file glob.",
+  "question": "Ask the user a question.",
+  "read": "Read filePath as numbered lines (offset, limit).",
+  "skill": "Load a listed skill by name.",
+  "task": "Run a sub-agent (subagent_type) on a self-contained prompt.",
   "todowrite": "Replace the todo list (content, status, priority).",
-  "tool_search": "Find MCP tools by keyword; matches become callable next turn.",
+  "tool_search": "Find MCP tools by keyword; matches load next turn.",
   "webfetch": "Fetch a URL as markdown, text or html.",
-  "write": "Create or overwrite a file (absolute filePath) with content."
+  "write": "Create or overwrite filePath with content."
 }

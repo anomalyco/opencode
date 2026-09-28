@@ -7,6 +7,7 @@ import READ from "@/tool/read.txt"
 import WRITE from "@/tool/write.txt"
 import type { OcliteTool, RunToolContext, ToolAccess } from "../contract"
 import { dataDir } from "../util/paths"
+import { redactText } from "../util/redact"
 
 // opencode's truncation policy (tool/truncate.ts constants and hint), without its cleanup fiber.
 export const MAX_LINES = 2000
@@ -17,6 +18,8 @@ type Target = { path: string; kind: "file" | "directory" }
 export interface BuiltinTool extends OcliteTool {
   readonly paths?: (input: unknown) => readonly Target[]
   readonly timeoutFor?: (input: unknown) => number
+  /** Names of .env files the call touches outside `paths` (bash text); each is checked like a `read` of it. */
+  readonly envFiles?: (input: unknown) => readonly string[]
 }
 
 // Parameter names and descriptions match opencode's read/write/edit, so its .txt descriptions apply unchanged.
@@ -161,6 +164,7 @@ export function define<A>(input: {
   summarize: (params: A) => string
   paths?: (params: A) => readonly Target[]
   timeoutFor?: (params: A) => number
+  envFiles?: (params: A) => readonly string[]
   execute: (params: A, call?: ToolExecuteContext) => Effect.Effect<string, ToolFailure>
 }): BuiltinTool {
   return {
@@ -177,6 +181,7 @@ export function define<A>(input: {
     summarize: (params) => input.summarize(params as A),
     paths: input.paths && ((params) => input.paths!(params as A)),
     timeoutFor: input.timeoutFor && ((params) => input.timeoutFor!(params as A)),
+    envFiles: input.envFiles && ((params) => input.envFiles!(params as A)),
   }
 }
 
@@ -208,10 +213,27 @@ export async function truncate(text: string, session: string, call: string) {
   const root = path.join(dataDir(), "tool-output")
   const file = path.join(root, safe(session), `${safe(call)}.txt`)
   if (path.relative(root, file).startsWith("..")) throw new Error(`overflow path escapes ${root}`)
-  await Bun.write(file, text)
+  // Private to the user, and passed through redaction: tool output can carry tokens the model saw.
+  await fs.mkdir(path.dirname(file), { recursive: true, mode: 0o700 })
+  await Promise.all([root, path.dirname(file)].map((dir) => fs.chmod(dir, 0o700)))
+  await fs.writeFile(file, redactText(text), { mode: 0o600 })
   const removed = size.hitBytes ? `${bytes - size.bytes} bytes` : `${lines.length - kept.length} lines`
   const hint = `The tool call succeeded but the output was truncated. Full output saved to: ${file}\nUse Grep to search the full content or Read with offset/limit to view specific sections.`
   return { text: `${kept.join("\n")}\n\n...${removed} truncated...\n\n${hint}`, bytes, overflow_path: file }
+}
+
+/**
+ * Where `file` really points: realpath, or for a path that doesn't exist yet the real path of its nearest existing
+ * parent. A dangling symlink is followed to its target, since writing through it creates that target.
+ */
+export async function realpathNearest(file: string, depth = 0): Promise<string> {
+  const real = await fs.realpath(file).catch(() => undefined)
+  if (real) return real
+  const link = await fs.readlink(file).catch(() => undefined)
+  if (link !== undefined && depth < 40) return realpathNearest(path.resolve(path.dirname(file), link), depth + 1)
+  const parent = path.dirname(file)
+  if (parent === file) return file
+  return path.join(await realpathNearest(parent, depth + 1), path.basename(file))
 }
 
 function safe(segment: string) {

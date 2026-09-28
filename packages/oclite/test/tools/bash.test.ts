@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import path from "path"
 import { tmpdir } from "../lib/tmp"
 import type { AskRequest } from "../../src/contract"
+import { killAll } from "../../src/tools/bash"
 import { config, scriptedAsker, toolset } from "./harness"
 
 const allowBash = (cwd: string) => config(cwd, { permission: [{ permission: "bash", pattern: "*", action: "allow" }] })
@@ -70,5 +71,32 @@ describe("bash", () => {
     const chained = await tools.call("bash", { command: "git status; touch pwned" })
     expect(chained.text).toBe("permission denied: bash <complex> git status touch pwned")
     expect(await Bun.file(path.join(dir.path, "pwned")).exists()).toBe(false)
+  })
+})
+
+describe("process groups and env", () => {
+  test("killAll() kills running bash process groups", async () => {
+    await using dir = await tmpdir()
+    const tools = await toolset(allowBash(dir.path))
+    const pidFile = path.join(dir.path, "pid")
+    const started = Date.now()
+    const pending = tools.call("bash", { command: `sleep 30 & echo $! > ${pidFile}; wait` })
+    await Bun.sleep(300)
+    killAll()
+    const result = await pending
+    expect(Date.now() - started).toBeLessThan(5000)
+    expect(result.text).toContain("exit code")
+    expect(alive(Number((await Bun.file(pidFile).text()).trim()))).toBe(false)
+  })
+
+  test("OCLITE_MCP_TOKEN is not passed to bash", async () => {
+    await using dir = await tmpdir()
+    const previous = process.env.OCLITE_MCP_TOKEN
+    process.env.OCLITE_MCP_TOKEN = "tok_should_not_leak"
+    const tools = await toolset(allowBash(dir.path))
+    const result = await tools.call("bash", { command: 'echo "${OCLITE_MCP_TOKEN:-unset} $HOME"' })
+    if (previous === undefined) delete process.env.OCLITE_MCP_TOKEN
+    if (previous !== undefined) process.env.OCLITE_MCP_TOKEN = previous
+    expect(result.text).toBe(`unset ${process.env.HOME}`)
   })
 })

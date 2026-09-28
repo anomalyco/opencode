@@ -40,7 +40,7 @@ describe("profiles", () => {
     expect(PROFILES.local).toMatchObject({ promptMaxChars: 600, descriptionMaxChars: 300, mcp: "deferred", instructionCapChars: 2000, title: false, stubAfterTurns: 6, compactAt: 0.75, budgetTokens: 1200 })
     expect(PROFILES["local-min"]).toMatchObject({ promptMaxChars: 300, descriptionMaxChars: 150, instructionCapChars: 1000, stubAfterTurns: 3, compactAt: 0.6, budgetTokens: 600 })
     expect(PROFILES.default).toMatchObject({ promptMaxChars: undefined, descriptionMaxChars: undefined, mcp: "all", title: true, budgetTokens: 7300 })
-    expect(PROFILES.local.optionalTools).toEqual(["question", "skill", "task", "todowrite", "webfetch"])
+    expect(PROFILES.local.optionalTools).toEqual(["skill", "task", "todowrite", "webfetch"])
     Object.values(PROFILES).forEach((profile) => expect([...profile.tools]).toEqual([...profile.tools].sort()))
   })
 

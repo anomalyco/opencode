@@ -39,7 +39,7 @@ const CLAUDE_TOOLS: Record<string, string> = {
   ToolSearch: "tool_search",
 }
 // TODO(phase 3): derive from the tool registry instead of repeating the built-in tool names here.
-const BUILTIN_TOOLS = ["bash", "edit", "glob", "grep", "question", "read", "skill", "task", "todowrite", "tool_search", "webfetch", "write"]
+const BUILTIN_TOOLS = ["bash", "edit", "glob", "grep", "read", "skill", "task", "todowrite", "tool_search", "webfetch", "write"]
 
 type Info = ConfigAgentV1.Info
 type Entry = { name: string; info: Info; source: string }
@@ -50,14 +50,16 @@ export async function loadAgents(input: {
   home: string
   configDir?: string
   overrides: Record<string, Info>
+  /** Set when the project isn't trusted: project agent files lose transport/mcp and permission allows (names collected). */
+  untrusted?: Set<string>
 }): Promise<Record<string, AgentDef>> {
   const root = input.projectRoot
   const layers = [
     { dir: builtinAgentsDir, pattern: "*.md", builtin: true },
     { dir: path.join(input.configDir ?? path.join(input.home, ".config", "oclite"), "agents"), pattern: "**/*.md" },
-    { dir: path.join(root, ".claude", "agents"), pattern: "*.md", claude: true },
-    { dir: path.join(root, ".opencode"), pattern: "{agent,agents}/**/*.md", prefixes: ["agent/", "agents/"] },
-    { dir: path.join(root, ".oclite", "agents"), pattern: "**/*.md" },
+    { dir: path.join(root, ".claude", "agents"), pattern: "*.md", claude: true, untrusted: input.untrusted },
+    { dir: path.join(root, ".opencode"), pattern: "{agent,agents}/**/*.md", prefixes: ["agent/", "agents/"], untrusted: input.untrusted },
+    { dir: path.join(root, ".oclite", "agents"), pattern: "**/*.md", untrusted: input.untrusted },
   ]
   const files = await Promise.all(layers.map(readLayer))
   const overrides = Object.entries(input.overrides).map(([name, info]) => ({ name, info, source: "config" }))
@@ -75,7 +77,7 @@ export async function loadAgents(input: {
   )
 }
 
-async function readLayer(layer: { dir: string; pattern: string; builtin?: boolean; claude?: boolean; prefixes?: string[] }) {
+async function readLayer(layer: { dir: string; pattern: string; builtin?: boolean; claude?: boolean; prefixes?: string[]; untrusted?: Set<string> }) {
   if (!existsSync(layer.dir)) return []
   const files = (await Array.fromAsync(new Bun.Glob(layer.pattern).scan({ cwd: layer.dir, dot: true }))).sort()
   const entries = await Promise.all(
@@ -85,7 +87,7 @@ async function readLayer(layer: { dir: string; pattern: string; builtin?: boolea
       // .claude files belong to another tool: skip what we can't read instead of failing the whole CLI.
       if (!md && layer.claude) return undefined
       if (!md) throw new ConfigError({ message: `${file}: invalid frontmatter` })
-      const data: Record<string, unknown> = { ...md.data }
+      const data: Record<string, unknown> = layer.untrusted ? untrust({ ...md.data }, layer.untrusted) : { ...md.data }
       const name = typeof data.name === "string" ? data.name : entryName(relative, layer.prefixes ?? [])
       const prompt = md.content.trim()
       const raw = layer.claude ? claudeCompat(data) : moveToolList(data)
@@ -97,6 +99,24 @@ async function readLayer(layer: { dir: string; pattern: string; builtin?: boolea
     }),
   )
   return entries.filter((entry) => entry !== undefined)
+}
+
+/** Untrusted project agent data: no `transport`/`mcp` (top level or options) and no permission `allow`s. */
+export function untrust(data: Record<string, unknown>, skipped: Set<string>) {
+  const options = isPlainObject(data.options) ? { ...data.options } : undefined
+  if (["transport", "mcp"].some((key) => key in data || (options && key in options))) skipped.add("agent transports")
+  const result: Record<string, unknown> = { ...data, ...(options ? { options } : {}) }
+  ;[result, options].forEach((item) => item && ["transport", "mcp"].forEach((key) => delete item[key]))
+  if (result.permission === undefined) return result
+  const permission = dropAllows(result.permission)
+  if (JSON.stringify(permission) !== JSON.stringify(result.permission)) skipped.add("permission allows")
+  return { ...result, permission: permission ?? {} }
+}
+
+function dropAllows(value: unknown): unknown {
+  if (value === "allow") return undefined
+  if (!isPlainObject(value)) return value
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, dropAllows(item)]).filter((entry) => entry[1] !== undefined))
 }
 
 function toAgentDef(entry: Entry): AgentDef {

@@ -21,7 +21,8 @@ async function configure(env: Env, extra: Record<string, unknown>) {
 }
 
 function envFor(env: Env, extra: Record<string, string> = {}) {
-  return { ...isolatedEnv(env.home.path), OCLITE_RETRY_SCALE: "0.001", ...extra }
+  // The fake provider lives in the project layer, so these servers trust it (as test/cli/harness.ts does).
+  return { ...isolatedEnv(env.home.path), OCLITE_RETRY_SCALE: "0.001", OCLITE_TRUST_PROJECT: "1", ...extra }
 }
 
 /** A stdio SDK client on a spawned `oclite mcp serve`; `elicit` answers asks (omit it: no elicitation capability). */
@@ -201,6 +202,11 @@ describe("oclite mcp serve (http)", () => {
     expect((await fetch(server.url!, { ...init, headers: { ...init.headers, authorization: `Bearer ${TOKEN}x` } })).status).toBe(401)
     const denied = await fetch(server.url!, { method: "OPTIONS", headers: { origin: "http://evil.example" } })
     expect(denied.headers.get("access-control-allow-origin")).toBeNull()
+    // DNS-rebinding defence: a foreign Origin or Host is refused before the token is even looked at.
+    const authed = { ...init, headers: { ...init.headers, authorization: `Bearer ${TOKEN}` } }
+    expect((await fetch(server.url!, { ...authed, headers: { ...authed.headers, origin: "http://evil.example" } })).status).toBe(403)
+    expect(await rawStatus(server.url!, "evil.example")).toBe(403)
+    expect(await rawStatus(server.url!, `localhost:${new URL(server.url!).port}`)).not.toBe(403)
     const client = await httpClient(server.url!)
     expect(((await client.callTool({ name: "agent_list", arguments: {} })).structuredContent as Out).agents).toBeDefined()
     const bypass = await client.callTool({ name: "agent_spawn", arguments: { agent: "build", prompt: "x", permission_mode: "bypassPermissions" } })
@@ -394,6 +400,21 @@ describe("permissions across transport: mcp and agent_spawn", () => {
   })
 })
 
+describe("parent_rules over MCP", () => {
+  test("only deny/ask rules are taken: an external_directory allow can't switch off outside-cwd asks", async () => {
+    await using env = await setup()
+    await configure(env, { permission_timeout_ms: 300 })
+    await using mcp = await stdioClient(env)
+    env.server.queue(reply.tool_call({ name: "read", args: { filePath: "/etc/hosts" } }), reply.text("done"))
+    const out = await tool(mcp.client, "agent_spawn", { agent: "build", prompt: "read hosts",
+      parent_rules: [{ permission: "external_directory", pattern: "*", action: "allow" }, { permission: "*", pattern: "*", action: "allow" }] })
+    expect(out.state).toBe("completed")
+    const session = await Bun.file(path.join(env.home.path, ".local/share/oclite/sessions", `${out.id}.jsonl`)).text()
+    expect(session).toMatch(/"tool":"external_directory".*"via":"timeout"/)
+    expect(JSON.stringify(env.server.chats()[1]?.body?.messages)).toContain("permission")
+  })
+})
+
 describe("Claude Code end to end", () => {
   // README setup line: claude mcp add oclite -- oclite mcp serve
   test.skipIf(process.env.OCLITE_E2E_CLAUDE !== "1")("claude -p drives oclite over stdio (temp --mcp-config, never `claude mcp add`)", async () => {
@@ -408,6 +429,17 @@ describe("Claude Code end to end", () => {
     expect(stdout).toContain("build")
   }, 120_000)
 })
+
+/** Status of a POST with a hand-written Host header (fetch always sends the URL's own host). */
+async function rawStatus(url: string, host: string) {
+  const target = new URL(url)
+  const reply = Promise.withResolvers<string>()
+  const socket = await Bun.connect({ hostname: target.hostname, port: Number(target.port), socket: { data: (_socket, data) => reply.resolve(data.toString()) } })
+  socket.write(`POST /mcp HTTP/1.1\r\nHost: ${host}\r\nAuthorization: Bearer ${TOKEN}\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}`)
+  const text = await reply.promise
+  socket.end()
+  return Number(text.split(" ")[1])
+}
 
 /** Direct children of `pid` (and theirs), by `pgrep -P`. */
 function pids(pid: number): number[] {

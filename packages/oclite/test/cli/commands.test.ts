@@ -9,7 +9,7 @@ async function setup() {
   return {
     project,
     home,
-    run: (args: string[], env?: Record<string, string>) => oclite(args, { cwd: project.path, home: home.path, env }),
+    run: (args: string[], env?: Record<string, string>) => oclite(args, { cwd: project.path, home: home.path, env: { OCLITE_TRUST_PROJECT: "1", ...env } }),
     [Symbol.asyncDispose]: async () => {
       await project[Symbol.asyncDispose]()
       await home[Symbol.asyncDispose]()

@@ -46,12 +46,13 @@ function spawn(entry: HookEntry, hook: HookName, input: HookInput) {
       // Own process group so a timeout or cancel also kills whatever the hook script started.
       const proc = Bun.spawn(["sh", "-c", entry.command], {
         cwd: input.cwd,
-        env: { ...process.env },
+        env: childEnv(),
         stdin: new Blob([JSON.stringify(payload)]),
         stdout: "ignore",
         stderr: "pipe",
         detached: true,
       })
+      track(proc)
       const chunks: string[] = []
       const decoder = new TextDecoder()
       const reader = proc.stderr.getReader()
@@ -86,9 +87,30 @@ function spawn(entry: HookEntry, hook: HookName, input: HookInput) {
   )
 }
 
+// Live detached process groups (bash and hooks), so signal handlers can kill them all via killAll().
+const groups = new Set<number>()
+
+export function track(proc: { pid: number; exited: Promise<number> }) {
+  groups.add(proc.pid)
+  void proc.exited.then(() => groups.delete(proc.pid))
+}
+
 export function killGroup(pid: number) {
+  groups.delete(pid)
   // The group may already be gone; nothing else to clean up then.
   try {
     process.kill(-pid, "SIGKILL")
   } catch {}
+}
+
+/** SIGKILLs every live bash/hook process group. For the CLI's signal handlers. */
+export function killAll() {
+  ;[...groups].forEach(killGroup)
+}
+
+/** Parent env for bash and hooks, minus oclite's own MCP bearer token. */
+export function childEnv() {
+  const env = { ...process.env }
+  delete env.OCLITE_MCP_TOKEN
+  return env
 }

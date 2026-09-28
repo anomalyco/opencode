@@ -1,6 +1,7 @@
 // Fixed-overhead budgets (SPEC primary constraint #1) via `oclite debug prompt --tokens --check` against the fake,
 // whose prompt_tokens are deterministic (ceil(chars/4) of the rendered request). Numbers are recorded in docs/PERF.md.
 import { describe, expect, test } from "bun:test"
+import path from "path"
 import { oclite } from "../lib/cli"
 import { reply, startLocalServer } from "../lib/local-server"
 import { tmpdir } from "../lib/tmp"
@@ -10,7 +11,11 @@ const PINS = {
   accepts: { chat_template_kwargs: true, prompt_cache_key: true, reasoning_effort: true, parallel_tool_calls: true },
 }
 
-async function setup(capabilities: Record<string, unknown> = PINS) {
+const fixture = path.resolve(import.meta.dir, "../fixture/mcp-everything.ts")
+const BUILD = "You are the build agent. Do the task end to end: read the relevant code, make focused changes, run checks, and report what changed. Delegate narrow research or edits to sub-agents when it saves context."
+
+// Pinned capabilities matter: unpinned, the probe meets the fake's empty queue, detects text-protocol mode and undercounts.
+async function setup(capabilities: Record<string, unknown> = PINS, options: { mcp?: boolean; task?: boolean } = {}) {
   const server = await startLocalServer({})
   const project = await tmpdir({ git: true })
   const home = await tmpdir()
@@ -19,10 +24,14 @@ async function setup(capabilities: Record<string, unknown> = PINS) {
     model: "local/test-model",
     provider: { local: { npm: "@ai-sdk/openai-compatible", options: { baseURL: server.url } } },
     servers: { [server.url]: { context_window: 32768, capabilities } },
+    ...(options.mcp ? { mcp: { fixture: { type: "local", command: [process.execPath, fixture] } } } : {}),
   }))
+  // Same prompt as the built-in build agent, plus `task` from the local profile's optional tools.
+  if (options.task) await project.write(".oclite/agents/build.md", `---\ndescription: build\nmode: primary\ntools: [read, edit, write, bash, grep, glob, task]\n---\n${BUILD}`)
   return {
     server, project,
-    run: (args: string[]) => oclite(args, { cwd: project.path, home: home.path }),
+    // The fake provider is in the project layer, so these runs trust it for the run (OCLITE_TRUST_PROJECT, never stored).
+    run: (args: string[]) => oclite(args, { cwd: project.path, home: home.path, env: { OCLITE_TRUST_PROJECT: "1" } }),
     [Symbol.asyncDispose]: async () => {
       await server.stop()
       await project[Symbol.asyncDispose]()
@@ -34,23 +43,30 @@ async function setup(capabilities: Record<string, unknown> = PINS) {
 type Report = { profile: string; budget: number; fixed: number; estimated: boolean; over: boolean; system_chars: number; tools: Array<{ name: string; description: number; schema: number }> }
 
 describe("debug prompt --tokens --check", () => {
-  test.each<[string, number, string[]]>([
-    ["local", 1200, ["bash", "edit", "glob", "grep", "read", "write"]],
-    ["local-min", 600, ["bash", "edit", "grep", "read"]],
+  // Limits: the SPEC budgets (1200 / 600 / 7300) and, for the local profiles with MCP configured, the Phase 7 headroom
+  // targets (≤ 1050 / ≤ 500) so that small prompt or schema changes can't silently eat the budget. See docs/PERF.md.
+  const LOCAL = ["bash", "edit", "glob", "grep", "read", "write"]
+  test.each<[string, { mcp?: boolean; task?: boolean }, number, string[]]>([
+    ["local", {}, 1000, LOCAL],
+    ["local", { mcp: true }, 1050, [...LOCAL.slice(0, 5), "tool_search", "write"]],
+    ["local", { mcp: true, task: true }, 1200, [...LOCAL.slice(0, 5), "task", "tool_search", "write"]],
+    ["local-min", {}, 450, ["bash", "edit", "grep", "read"]],
+    ["local-min", { mcp: true }, 500, ["bash", "edit", "grep", "read", "tool_search"]],
     // The real registry: `question` is left out by design (tools/extra.ts).
-    ["default", 7300, ["bash", "edit", "glob", "grep", "read", "skill", "task", "todowrite", "webfetch", "write"]],
-  ])("%s profile stays within %d tok", async (profile, budget, tools) => {
-    await using env = await setup()
+    ["default", {}, 7300, ["bash", "edit", "glob", "grep", "read", "skill", "task", "todowrite", "webfetch", "write"]],
+  ])("%s %j stays within %d tok", async (profile, options, limit, tools) => {
+    await using env = await setup(PINS, options)
     const result = await env.run(["debug", "prompt", "--tokens", "--check", "--profile", profile, "--output-format", "json"])
     expect(result.stderr).toBe("")
     expect(result.code).toBe(0)
     const report: Report = JSON.parse(result.stdout)
-    console.log(`PERF ${profile}: fixed=${report.fixed} tok, system=${report.system_chars} chars, tools=${JSON.stringify(report.tools)}`)
-    expect(report).toMatchObject({ profile, budget, estimated: false, over: false })
+    console.log(`PERF ${profile} ${JSON.stringify(options)}: fixed=${report.fixed} tok, system=${report.system_chars} chars`)
+    expect(report).toMatchObject({ profile, estimated: false, over: false })
     expect(report.tools.map((tool) => tool.name)).toEqual(tools)
     expect(report.fixed).toBeGreaterThan(0)
-    expect(report.fixed).toBeLessThanOrEqual(budget)
-    // Server-reported: A (system + tools + ".") minus B (".") equals the fake's chars/4 of the fixed part, ±1 rounding.
+    expect(report.fixed).toBeLessThanOrEqual(limit)
+    expect(report.fixed).toBeLessThanOrEqual(report.budget)
+    // Server-reported: A (system + tools + ".") minus B (".").
     const [a, b] = env.server.chats().map((item) => item.body!)
     expect(a!.max_tokens).toBe(1)
     expect(b!.tools).toBeUndefined()

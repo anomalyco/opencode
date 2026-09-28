@@ -33,6 +33,9 @@
 
 - Phase 6 (lead): a client-supplied `permission_mode` on `agent_spawn` may only **tighten** the serve-time mode (plan < default < acceptEdits < bypassPermissions), over stdio as well as HTTP. Only the launcher can loosen it (`oclite mcp serve --permission-mode …`; HTTP bypass also needs `--i-understand-remote-bypass`). This is stricter than SPEC §5, so that a prompt-injected MCP client can't turn off every ask.
 
+- Phase 7 (lead): the per-profile fixed-overhead budgets are measured on the SPEC baseline setup (built-in tools, no MCP servers, no AGENTS.md), and also with the MCP fixture for the local profiles, which defer MCP schemas via `tool_search`. `default` sends every MCP schema by design (SPEC §8), so its overhead grows with the servers configured: 7625 tok with the fixture, against 7259 without. Use a local profile to bound MCP cost.
+- Phase 7 perf trim: local 951 (1011 with MCP), local+task+MCP 1184, local-min 420 (480 with MCP), default 7259. All are within budget, including the earlier local+task deviation, which is now resolved.
+
 ## Assumptions (UNATTENDED=true)
 - Original prompt text is garbled in places. Reconstructed in `docs/SPEC.md`; every guess is marked **[R]** there. Key guessed values: default-profile budget 2500 tok, `permission_timeout_ms` 300000, reasoning-model min `max_tokens` 8192, tool-output stubbing 6/6/3 turns, size budget excludes forked files, `.oclite/agents/*.md` path, hooks "other exit = warn and continue".
 - Package `oclite`, no npm publish, default model `anthropic/claude-sonnet-5`, HTTP port 4096, commit locally, never push, no PRs.
@@ -40,10 +43,12 @@
 - New external dependencies need approval → blocked; use only deps already in the workspace lockfile.
 
 ## Deviations
+- REPL `/compact` prints a message only; manual compaction needs a Runtime seam. Automatic compaction (75%/60% triggers, overflow) is implemented.
+- The `question` tool isn't implemented (the Asker can't return free text), so it's removed from all profiles.
 - Denials a `transport: mcp` child makes under its own rules, without asking the parent, don't count toward the parent's headless exit 3. Forwarded-ask rejects do count.
 - The Claude Code end-to-end test (`claude -p --mcp-config <tmp> --strict-mcp-config`) is opt-in via `OCLITE_E2E_CLAUDE=1`; it wasn't run unattended because it sends prompts on the user's account. Stdio MCP control is covered by SDK-client and oclite↔oclite tests.
 - Split-secret redaction across deltas is done in `mcp serve` notifications (50 ms batch) but not in stream-json, which stays one line per delta for the latency guarantee.
-- In local profiles, `task` is opt-in per agent. With it enabled the fixed overhead is 1318 tok, over the 1200 local budget; without it, 1123 (1187 with MCP).
+- (Resolved in Phase 7) local with `task` enabled was 1318 > 1200; after the trim it is 1123 (1184 with MCP).
 - opencode's background paragraph is left out of the default task description (7337 → 7259 tok) to stay under the 7300 default budget.
 - SPEC §1 says an unreachable MCP target → exit 2. oclite continues with a notice instead (ADR: Unreachable MCP server), as the Phase 4 reviewer recommended.
 - MCP stdio descendants (e.g. a `docker run` container without `--rm`) aren't killed; only the direct child is. `npx`/`uvx` grandchildren exit on stdin EOF. Documented follow-up.

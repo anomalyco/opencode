@@ -87,7 +87,7 @@ describe("oclite -p (subprocess)", () => {
     const result = await env.spawn(["-p", "hi", "--permission-mode", "bypassPermissions"])
     expect(result.code).toBe(0)
     expect(result.stdout).toBe("ok\n")
-    expect(result.stderr).toContain("permission mode bypassPermissions: all tools allowed except .env reads and explicit denies")
+    expect(result.stderr).toContain("permission mode bypassPermissions: all tools allowed except .env access and your explicit deny rules")
     const repl = await env.spawn(["--permission-mode", "bypassPermissions"], { stdin: "/exit\n" })
     expect(repl.stderr).toContain("permission mode bypassPermissions")
   })

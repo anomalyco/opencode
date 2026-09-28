@@ -36,7 +36,7 @@ export async function system(input: SystemInput): Promise<System> {
     input.agent.prompt,
     input.textProtocolPrompt,
     ...files.parts,
-    ...(input.mcpInstructions ?? []),
+    ...(input.mcpInstructions ?? []).map(neutralize),
     input.cfg.appendSystemPrompt,
     env(input.cfg.cwd, branch, input.now ?? new Date()),
   ]
@@ -131,6 +131,14 @@ export function reminders(input: ReminderInput) {
   ]
   if (!blocks.length) return undefined
   return blocks.map((block) => `<system-reminder>\n${block}\n</system-reminder>`).join("\n")
+}
+
+/**
+ * Untrusted text (handbacks, MCP instructions) can't open or close the harness's own blocks: `<` of reminder, task
+ * and tool-result tags becomes `‹`, so a child can't forge a `</task>…<system-reminder>` inside its envelope.
+ */
+export function neutralize(text: string) {
+  return text.replace(/<(\/?)(system-reminder|task_result|task_error|task|tool_result)\b/gi, "‹$1$2")
 }
 
 function todoLines(todos: readonly unknown[]) {

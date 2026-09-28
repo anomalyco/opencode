@@ -11,7 +11,7 @@ export const PROFILES: Record<ProfileName, Profile> = {
   default: {
     name: "default",
     promptMaxChars: undefined,
-    tools: ["bash", "edit", "glob", "grep", "question", "read", "skill", "task", "todowrite", "webfetch", "write"],
+    tools: ["bash", "edit", "glob", "grep", "read", "skill", "task", "todowrite", "webfetch", "write"],
     optionalTools: [],
     descriptionMaxChars: undefined,
     mcp: "all",
@@ -25,7 +25,7 @@ export const PROFILES: Record<ProfileName, Profile> = {
     name: "local",
     promptMaxChars: 600,
     tools: ["bash", "edit", "glob", "grep", "read", "write"],
-    optionalTools: ["question", "skill", "task", "todowrite", "webfetch"],
+    optionalTools: ["skill", "task", "todowrite", "webfetch"],
     descriptionMaxChars: 300,
     mcp: "deferred",
     instructionCapChars: 2000,

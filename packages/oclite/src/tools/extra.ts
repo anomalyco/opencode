@@ -1,3 +1,4 @@
+import dns from "dns/promises"
 import os from "os"
 import path from "path"
 import { Effect, Schema } from "effect"
@@ -41,10 +42,11 @@ export function extraTools(ctx: RunToolContext, cfg: ResolvedConfig) {
       description: WEBFETCH,
       parameters: FetchParameters,
       readOnly: true,
-      access: (params) => ({ permission: "webfetch", patterns: [params.url], always: ["*"] }),
+      access: (params) => ({ permission: "webfetch", patterns: [params.url], always: [`${origin(params.url)}/*`] }),
       summarize: (params) => `webfetch ${params.url}`,
       timeoutFor: (params) => fetchSeconds(params.timeout) * 1000,
-      execute: (params) => attempt((signal) => webfetch(params.url, params.format ?? "markdown", signal)),
+      execute: (params) =>
+        attempt((signal) => webfetch(params.url, params.format ?? "markdown", signal, allowedOrigin(ctx))),
     }),
     define({
       name: "todowrite",
@@ -131,18 +133,11 @@ export async function listSkills(roots: readonly string[]) {
   ].toReversed()
 }
 
-async function webfetch(url: string, format: "text" | "markdown" | "html", signal: AbortSignal) {
-  if (!/^https?:\/\//.test(url)) throw new Error("URL must start with http:// or https://")
-  const response = await fetch(url, {
-    signal,
-    headers: {
-      Accept: format === "html" ? "text/html,*/*;q=0.8" : "text/markdown,text/plain,text/html;q=0.9,*/*;q=0.8",
-    },
-  })
+async function webfetch(url: string, format: "text" | "markdown" | "html", signal: AbortSignal, allowed: Allowed) {
+  const accept = format === "html" ? "text/html,*/*;q=0.8" : "text/markdown,text/plain,text/html;q=0.9,*/*;q=0.8"
+  const response = await follow(url, { signal, headers: { Accept: accept }, redirect: "manual" }, allowed, 0)
   if (!response.ok) throw new Error(`Request failed with status code: ${response.status}`)
-  const body = await response.arrayBuffer()
-  if (body.byteLength > MAX_RESPONSE) throw new Error("Response too large (exceeds 5MB limit)")
-  const text = new TextDecoder().decode(body)
+  const text = new TextDecoder().decode(await readCapped(response))
   const html = (response.headers.get("content-type") ?? "").includes("html")
   if (!html || format === "html") return text
   // No HTML→markdown converter in oclite's deps: drop scripts/styles and tags, keep the text.
@@ -156,4 +151,84 @@ async function webfetch(url: string, format: "text" | "markdown" | "html", signa
     .replace(/&gt;/g, ">")
     .replace(/\n\s*\n\s*\n+/g, "\n\n")
     .trim()
+}
+
+type Allowed = (origin: string) => boolean
+
+function origin(url: string) {
+  return URL.canParse(url) ? new URL(url).origin : url
+}
+
+// Local and private addresses need an allow rule naming that exact origin; `webfetch: allow` alone isn't enough.
+function allowedOrigin(ctx: RunToolContext): Allowed {
+  return (origin) =>
+    ctx.ruleset.some(
+      (rule) =>
+        rule.permission === "webfetch" &&
+        rule.action === "allow" &&
+        [origin, `${origin}/*`, `${origin}*`].includes(rule.pattern),
+    )
+}
+
+// Redirects are followed by hand (max 5) so every hop gets the same address check.
+async function follow(url: string, init: RequestInit, allowed: Allowed, hops: number): Promise<Response> {
+  if (!/^https?:\/\//.test(url) || !URL.canParse(url)) throw new Error("URL must start with http:// or https://")
+  const target = new URL(url)
+  await assertPublic(target, allowed)
+  const response = await fetch(target, init)
+  const location = response.headers.get("location")
+  if (response.status < 300 || response.status >= 400 || !location) return response
+  await response.body?.cancel()
+  if (hops >= 5) throw new Error("Too many redirects (max 5)")
+  return follow(new URL(location, target).href, init, allowed, hops + 1)
+}
+
+// Checks the name and every address it resolves to. A DNS answer can change between this lookup and fetch's own.
+async function assertPublic(url: URL, allowed: Allowed) {
+  if (allowed(url.origin)) return
+  const host = url.hostname.replace(/^\[|\]$/g, "")
+  const local = host === "localhost" || host.endsWith(".localhost")
+  const addresses = local ? [] : (await dns.lookup(host, { all: true })).map((entry) => entry.address)
+  if (addresses.length && !addresses.some(isPrivate)) return
+  throw new Error(`${url.origin} is a local or private address; allow it with a webfetch rule for "${url.origin}/*"`)
+}
+
+export function isPrivate(ip: string) {
+  const v4 = ip.replace(/^::ffff:/i, "")
+  if (/^\d+\.\d+\.\d+\.\d+$/.test(v4)) {
+    const [a, b] = v4.split(".").map(Number)
+    return (
+      a === 0 ||
+      a === 10 ||
+      a === 127 ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168) ||
+      (a === 100 && b >= 64 && b <= 127)
+    )
+  }
+  const v6 = ip.toLowerCase()
+  return v6 === "::" || v6 === "::1" || /^fe[89ab]/.test(v6) || /^f[cd]/.test(v6)
+}
+
+// Streams the body and stops at 5 MB instead of buffering an unbounded response first.
+async function readCapped(response: Response) {
+  if (Number(response.headers.get("content-length") ?? 0) > MAX_RESPONSE)
+    throw new Error("Response too large (exceeds 5MB limit)")
+  const reader = response.body?.getReader()
+  const chunks: Uint8Array[] = []
+  const state = { size: 0 }
+  const pump = async (): Promise<void> => {
+    const next = await reader?.read()
+    if (!next || next.done) return
+    state.size += next.value.byteLength
+    if (state.size > MAX_RESPONSE) {
+      await reader?.cancel()
+      throw new Error("Response too large (exceeds 5MB limit)")
+    }
+    chunks.push(next.value)
+    return pump()
+  }
+  await pump()
+  return Buffer.concat(chunks)
 }

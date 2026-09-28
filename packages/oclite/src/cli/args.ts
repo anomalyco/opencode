@@ -22,6 +22,8 @@ export interface CliArgs {
   appendSystemPrompt?: string
   thinking?: Thinking
   noThinking: boolean
+  /** --trust-project: trust the project layer for this run without recording it. */
+  trustProject?: boolean
   // command-specific flags, set only by the command that declares them
   transport?: "stdio" | "http"
   port?: number
@@ -73,6 +75,7 @@ export const shared = {
   appendSystemPrompt: Flag.string("append-system-prompt").pipe(Flag.optional),
   thinking: Flag.choice("thinking", ["auto", "on", "off"]).pipe(Flag.optional),
   noThinking: Flag.boolean("no-thinking").pipe(Flag.withDescription("Hide reasoning output")),
+  trustProject: Flag.boolean("trust-project").pipe(Flag.withDescription("Trust this project's config for this run only (same as OCLITE_TRUST_PROJECT=1); never stored")),
 }
 
 const root = Command.make("oclite").pipe(
@@ -101,6 +104,7 @@ export function toCliArgs(flags: SharedInput, extra: Partial<CliArgs> = {}): Cli
     appendSystemPrompt: Option.getOrUndefined(flags.appendSystemPrompt),
     thinking: Option.getOrUndefined(flags.thinking),
     noThinking: flags.noThinking,
+    trustProject: flags.trustProject,
     ...extra,
   }
 }
@@ -217,6 +221,12 @@ const session = Command.make("session").pipe(
   ]),
 )
 
+const trust = Command.make(
+  "trust",
+  { path: Argument.string("path").pipe(Argument.optional), yes: Flag.boolean("yes").pipe(Flag.withDescription("Record without asking")) },
+  handler((module) => module.trustProject),
+).pipe(Command.withDescription("Show what a project's config would be trusted with, and record the trust"))
+
 export const command = root.pipe(
   Command.withHandler((flags) =>
     Effect.gen(function* () {
@@ -229,5 +239,5 @@ export const command = root.pipe(
       yield* runRepl(args)
     }),
   ),
-  Command.withSubcommands([mcp, agents, debug, session]),
+  Command.withSubcommands([mcp, agents, debug, session, trust]),
 )

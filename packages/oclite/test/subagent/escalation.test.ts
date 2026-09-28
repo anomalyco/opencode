@@ -4,7 +4,11 @@ import { describe, expect, test } from "bun:test"
 import path from "path"
 import { Effect } from "effect"
 import type { SessionRecord } from "../../src/contract"
+import type { CliArgs } from "../../src/cli/args"
+import { load } from "../../src/config/config"
+import { childAuth, childEnv } from "../../src/subagent/manager"
 import { oclite } from "../lib/cli"
+import { tmpdir } from "../lib/tmp"
 import { reply } from "../lib/local-server"
 import { setup, taskIds, toolNames } from "./harness"
 
@@ -86,9 +90,48 @@ describe("sub-agent escalation", () => {
     env.parent.queue(reply.text("parent done"))
     env.child.queue(reply.tool_call({ name: "edit", args: { filePath: path.join(env.project.path, "a.txt"), oldString: "original", newString: "changed" } }))
     env.child.queue(reply.text("edit was rejected"))
-    const result = await oclite(["-p", "go"], { cwd: env.project.path, home: env.home.path })
+    const result = await oclite(["-p", "go", "--trust-project"], { cwd: env.project.path, home: env.home.path })
     expect(result.stdout).toContain("parent done")
     expect(result.code).toBe(3)
     expect(await env.project.read("a.txt")).toBe("original")
+  })
+})
+
+// transport: mcp credentials (security F6): OCLITE_MCP_TOKEN only reaches loopback children unless the agent names a token.
+const cliArgs: CliArgs = { outputFormat: "text", mcpConfig: [], strictMcpConfig: false, allowedTools: [], disallowedTools: [], continue: false, noThinking: false,
+   trustProject: true,
+ }
+const env = { OCLITE_MCP_TOKEN: "parent-token-123", MY_CHILD_TOKEN: "child-token-456", PATH: "/bin" }
+
+async function agents(files: Record<string, string>) {
+  await using project = await tmpdir({ git: true })
+  await using home = await tmpdir()
+  await Promise.all(Object.entries(files).map(([name, text]) => project.write(`.oclite/agents/${name}.md`, text)))
+  const cfg = await Effect.runPromise(load(cliArgs, { cwd: project.path, home: home.path, configDir: path.join(home.path, ".config", "oclite") }))
+  return cfg.agents
+}
+const agent = (mcp: string) => `---\nmode: subagent\ntransport: mcp\nmcp:\n${mcp}\n---\nremote child`
+
+describe("transport: mcp child credentials", () => {
+  test("loopback URL gets OCLITE_MCP_TOKEN; another host gets none and a notice; explicit mcp.token wins", async () => {
+    const loaded = await agents({
+      local: agent("  url: http://127.0.0.1:4096/mcp"),
+      remote: agent("  url: https://agents.example.com/mcp"),
+      named: agent('  url: https://agents.example.com/mcp\n  token: "{env:MY_CHILD_TOKEN}"'),
+      stdio: agent("  command: [oclite, mcp, serve]"),
+    })
+    expect(childAuth(loaded.local!, env)).toEqual({ token: "parent-token-123" })
+    const remote = childAuth(loaded.remote!, env)
+    expect(remote.token).toBeUndefined()
+    expect(remote.notice).toContain("not loopback")
+    expect(remote.notice).not.toContain("parent-token-123")
+    expect(childAuth(loaded.named!, env)).toEqual({ token: "child-token-456" })
+    expect(childAuth(loaded.stdio!, env)).toEqual({ token: undefined })
+  })
+
+  test("stdio children don't inherit OCLITE_MCP_TOKEN", () => {
+    const child = childEnv(env, 2)
+    expect(child.OCLITE_MCP_TOKEN).toBeUndefined()
+    expect(child).toMatchObject({ MY_CHILD_TOKEN: "child-token-456", PATH: "/bin", OCLITE_DEPTH: "2" })
   })
 })

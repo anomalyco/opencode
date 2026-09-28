@@ -112,6 +112,17 @@ describe("hooks", () => {
     expect(await Bun.file(out).text()).toBe(`${process.env.HOME}|${dir.path}`)
   })
 
+  test("OCLITE_MCP_TOKEN is not passed to hooks", async () => {
+    await using dir = await tmpdir()
+    const out = path.join(dir.path, "token")
+    const previous = process.env.OCLITE_MCP_TOKEN
+    process.env.OCLITE_MCP_TOKEN = "tok_should_not_leak"
+    await run(dir.path, "Stop", [entry(`printf '%s' "\${OCLITE_MCP_TOKEN:-unset}" > ${out}`)], { tool_name: undefined })
+    if (previous === undefined) delete process.env.OCLITE_MCP_TOKEN
+    if (previous !== undefined) process.env.OCLITE_MCP_TOKEN = previous
+    expect(await Bun.file(out).text()).toBe("unset")
+  })
+
   test("matcher: case-insensitive, |-alternated globs against the oclite tool name", () => {
     expect(matches("Bash", "bash")).toBe(true)
     expect(matches("Edit|Write", "write")).toBe(true)

@@ -1,86 +1,120 @@
-# oclite — performance record
+# oclite — performance record (final, Phase 7)
 
-Primary constraint #1 (SPEC): fixed per-request overhead (system prompt, tool schemas, injected reminders, with no
-conversation) must stay ≤ 1200 tok in `local`, ≤ 600 in `local-min` and ≤ 7300 in `default` (lead decision, see
-PROGRESS Deviations). The baseline to beat is opencode at about 7,200–7,300 tok for the same setup.
+This covers the SPEC primary constraints. #1 is fixed overhead per request: ≤ 1200 tok for `local`, ≤ 600 for
+`local-min` and ≤ 7300 for `default` (lead decision, PROGRESS Deviations). #2 is visible progress: a status line
+within 300 ms, and each stream part rendered within 50 ms of arrival. Numbers were taken at HEAD `3504985` plus the
+Phase 7 profile changes, on 2026-09-28, with Bun 1.3.10 on darwin.
 
-## Method
+## 1. Fixed token overhead
 
-`oclite debug prompt --tokens` (`src/cli/debug.ts`, ARCHITECTURE §9):
+### Method
+- `oclite debug prompt --tokens --profile <p>` composes the real first request, using the same code path as
+  `Runtime.start`: `tools/registry.ts` builds the ToolSet, `runtime/context.ts` layers the system prompt, and MCP
+  goes through `mcpForRun`. The agent is `build` and the user message is `"."`.
+- Request A (system + tools, `max_tokens: 1`) and request B (no system, no tools) both go through `LlmGateway`.
+  `fixed = A.prompt_tokens − B.prompt_tokens`, as reported by the server for an empty conversation.
+- The server is `test/lib/local-server.ts`. Its `prompt_tokens` is `ceil(chars / 4)` of the rendered request (system
+  text, then tools JSON, then the other messages), so the results are deterministic. A real tokenizer will differ by
+  roughly ±10–25%.
+- Capabilities are pinned to native tools (`tools_native: true`, etc.). Unpinned, the probe meets the fake's empty
+  reply queue, detects text-protocol mode and undercounts.
+- MCP means the `test/fixture/mcp-everything.ts` stdio server (6 tools) is configured. `local` and `local-min` defer
+  MCP behind `tool_search`, while `default` sends every schema.
+- The env block includes the temp project's cwd (about 70 chars), so another cwd shifts these by a few tokens.
+  Enforced by `test/profile/budget.test.ts` (`debug prompt --tokens --check`, plus the tighter limits below).
 
-1. Build the first-turn request for the default agent (`build`) and the chosen profile, with user message `"."`.
-2. Send request A (system + tools, `max_tokens: 1`) and request B (the same with no system and no tools) through
-   `LlmGateway.stream`, so they're queued and shaped like any other turn.
-3. `fixed = A.usage.input − B.usage.input`, taken from the server's `prompt_tokens`. When `usage_in_stream` is false,
-   the gateway estimates the value (llama.cpp `/tokenize` when available, else chars/4) and the output is labelled
-   `est.`.
-4. `--check` exits 1 when `fixed > budgetTokens`. `test/profile/budget.test.ts` runs this for every profile.
+### Results (tok, server-reported)
 
-The server here is `test/lib/local-server.ts`. Its `prompt_tokens` is `ceil(chars/4)` of the rendered request
-(system text, then tools JSON, then the other messages as JSON), so these numbers are deterministic and match a chars/4
-estimate of the same bytes. A real tokenizer usually comes out 10–25% off chars/4 for English prose and JSON. The
-margins below are meant to absorb that.
+| profile | no MCP (before → after) | MCP (before → after) | test limit | SPEC budget |
+|---|---|---|---|---|
+| local | 1128 → **951** | 1191 → **1011** | 1000 / 1050 (MCP) | 1200 |
+| local + `task` enabled | 1318 → **1123** | 1381 → **1184** | 1200 (MCP) | 1200 |
+| local-min | 478 → **420** | 541 → **480** | 450 / 500 (MCP) | 600 |
+| default (opencode texts) | 7259 | 7625 | 7300 (no MCP) | 7300 |
 
-Composition used for the measurement (a stand-in until the lead integrates `runtime/context.ts` and
-`tools/registry.ts`):
-- System = harness prompt (profile) + agent prompt + env block (`cwd`, `platform`, `date: YYYY-MM-DD`, `git branch`).
-  There are no instruction files (no AGENTS.md in the test project) and no reminders on the first turn.
-- Tools = the profile list, sorted by name, plus `AgentDef.tools ∩ optionalTools`. Descriptions come from
-  `profiles.descriptions()`; the default profile uses opencode's `.txt` files, with bash from
-  `ShellPrompt.render`. Schemas are minimal JSON Schemas with opencode's parameter names and **no per-parameter
-  descriptions**.
+"Before" is the Phase 3–6 profile text. "After" is the Phase 7 rewrite, which only touches `src/profile/*`.
 
-## Results (2026-09-28, fake server, model `local/test-model`, agent `build`)
+The opencode baseline is ≈ 7,260 tok. The `default` profile sends opencode's own texts byte for byte:
+`session/prompt/default.txt` (8,528 chars, since an unknown local model id falls back to it) and the tool `.txt`
+files. Those are bash via `ShellPrompt.render` (4,629), edit 1,369, read 1,158, task 2,305, todowrite 2,012,
+webfetch 750, grep 657, write 623, glob 517 and skill 399. Add the parameter schemas and the env block and the
+total is 7,259 tok measured, which matches SPEC's ≈ 7,300 estimate. Against that baseline, `local` saves 87% and
+`local-min` saves 94%.
 
-| profile | budget | fixed (server-reported) | headroom | system chars | tool desc chars | schema chars | tools |
-|---|---|---|---|---|---|---|---|
-| local | 1200 | **794 tok** | 406 | 857 | 998 | 848 | bash edit glob grep read write |
-| local-min | 600 | **452 tok** | 148 | 512 | 367 | 617 | bash edit grep read |
-| default | 7300 | **6653 tok** | 647 | 8878 | 15076 | 1517 | bash edit glob grep question read skill task todowrite webfetch write |
-| default (claude model id → anthropic.txt) | 7300 | 6574 tok | 726 | 8562 | 15076 | 1517 | same |
+**Flag:** `default` with MCP configured is 7,625 tok, over 7300, because it sends all 6 fixture schemas. The spec
+baseline has no MCP, and the budget test checks `default` without MCP. Keeping `default` under 7300 with MCP would
+need the deferred `tool_search` there too. That's a lead decision.
 
-Harness prompt sizes: `local.txt` is 507 chars (cap 600) and `local-min.txt` is 162 chars (cap 300). The rest of the
-system prompt is the `build` agent prompt (about 200 chars) and the env block (about 120 chars, depending on the cwd).
+### What changed in Phase 7
 
-Per-tool description chars:
+| asset | before (chars) | after (chars) |
+|---|---|---|
+| `local.txt` | 507 | 297 |
+| `local-min.txt` | 162 | 108 |
+| `tools.local.json` bash / edit / glob / grep / read / write | 267 / 202 / 124 / 151 / 138 / 116 | 108 / 109 / 60 / 73 / 86 / 67 |
+| `tools.local.json` task / tool_search | 226 / 61 | 158 / 50 |
+| `tools.local-min.json` bash / edit / grep / read / tool_search | 112 / 82 / 88 / 85 / 61 | 38 / 52 / 51 / 48 / 50 |
 
-| tool | local (≤300) | local-min (≤150) | default (opencode .txt) |
-|---|---|---|---|
-| bash | 267 | 112 | 4,629 (`ShellPrompt.render`) |
-| edit | 202 | 82 | 1,369 |
-| glob | 124 | 54 | 517 |
-| grep | 151 | 88 | 657 |
-| read | 138 | 85 | 1,158 |
-| write | 116 | 60 | 623 |
-| task | 226 | 79 | 2,305 |
-| todowrite | 161 | 50 | 2,012 |
-| question | 133 | 48 | 657 |
-| skill | 83 | 43 | 399 |
-| webfetch | 104 | 38 | 750 |
-| tool_search | 109 | 61 | – (MCP deferred only) |
+Every description still says what the tool does and names its key parameters (for example `filePath`, `oldString`,
+`include`, `offset`/`limit`, `subagent_type`, `background`). Text the registry already sends in per-parameter
+schema descriptions (timeout units, workdir semantics, default paths) was cut from the tool descriptions.
 
-Against the opencode baseline of about 7,300 tok, `local` cuts fixed overhead by about 89% and `local-min` by about
-94%. `default` keeps opencode's texts byte-for-byte, so it lands near the baseline by design. It comes in a little
-under because oclite sends no skills/env extras and uses leaner schemas.
+In `local`, the remaining overhead is mostly schemas. Per-parameter descriptions from `tools/*` are about 2.5 KB
+(≈ 620 tok) and are outside `src/profile`. They're the next lever if more headroom is needed. `local-min` already
+drops them (`registry.ts` `terse`).
 
-## Things that could move these numbers
+## 2. Progress latency (`test/render/render.test.ts`)
 
-- **Registry schemas.** If `tools/registry.ts` emits per-parameter `description` fields (opencode's schemas have
-  them, about 40–150 chars each), `local` could gain roughly 150–300 tok. That would still fit under 1200. For
-  `local-min` it might be worth keeping parameter descriptions off, since the headroom there is only about 150 tok.
-- **Instruction files.** AGENTS.md is capped per file at 2000 chars (local) or 1000 chars (local-min), which is up
-  to about 500 / 250 tok per file. With one capped file, `local-min` would go over 600. I think that's in line with
-  the spec, which measures the budget with no AGENTS.md, but it's worth confirming with the lead.
-- **Optional tools** enabled per agent (`task`, `todowrite`, …) add about 60–100 tok each in `local`.
-- **MCP:** local profiles send only `tool_search` (about 50 tok) until tools are activated.
+| metric | target | measured |
+|---|---|---|
+| first status line on stderr, from spawn | ≤ 300 ms | 144–174 ms |
+| per-event render latency (stream-json, server send → line written) | ≤ 50 ms | ≤ 5 ms |
 
-## Live-server numbers: pending
+## 3. TTFT: PENDING (no live server)
 
-There's no model server at `http://127.0.0.1:8000/v1` (connection refused on 2026-09-28, see PROGRESS
-Deviations), so every number above comes from the fake. Once a server is available, record for each profile:
-`oclite debug server` (capability record + TTFTs), then `oclite debug prompt --tokens --profile <p>`
-(server-reported fixed overhead from the real tokenizer). Add a row per model below.
+No live local server was available: `http://127.0.0.1:8000/v1` (`local-qwen`) refused connections throughout (see
+PROGRESS Deviations). The fake's TTFT is simulated prefill (`prefill_ms_per_kchar`), so it doesn't count as a real
+number. It shows the mechanism only: the probe measures 58 ms on the first request and 13 ms on the second with the
+same prefix. To take the real before/after measurement:
 
-| server / model | profile | fixed (tok) | notes |
+```sh
+# config: provider.local.options.baseURL = "http://127.0.0.1:8000/v1", model "local/local-qwen", no pins
+bun src/index.ts debug server --reprobe          # ttft_ms "R2 → R3": cold vs warm prefix, prefix_cache verdict
+bun src/index.ts debug prompt --tokens --profile local       # real-tokenizer fixed overhead, per profile
+bun src/index.ts debug prompt --tokens --profile default     # "before": opencode-sized prefix
+# TTFT per profile, first turn (cold) then second turn (warm prefix), stream-json timestamps:
+bun src/index.ts -p "list files" --profile local --output-format stream-json | head -5
+bun src/index.ts -p "list files" --profile default --output-format stream-json | head -5
+```
+
+For each, record the time from spawn to the first `text_delta`/`reasoning_delta` line (3 runs, cold and warm).
+Prefill scales with prompt size, so ≈ 7.3k → ≈ 1k fixed tokens should cut cold TTFT roughly in proportion. Results:
+
+| server / model | profile | fixed (tok) | TTFT cold / warm (ms) |
 |---|---|---|---|
 | _pending_ | | | |
+
+## 4. Prefix-cache byte stability
+
+- **Guarantee:** for one session, the system prompt and tool list are byte-identical on every request, so a server's
+  prefix/KV cache is reused across turns.
+- **How it's kept:**
+  - The system prompt is composed once per run.
+  - Tools are sorted by name.
+  - The env block carries the date only, with no time.
+  - Volatile content (reminders, todos, background completions) goes only in the last user message.
+  - MCP tools activated by `tool_search` join later requests without reordering earlier bytes.
+  - Server instructions arrive in the `tool_search` result, not in the system prompt.
+  - `prompt_cache_key = session_id` is sent when the server accepts it.
+- **Tests:**
+  - `test/llm/fallback.test.ts` "byte-stable prefix": two requests in one session send identical system and tools
+    bytes plus the same `prompt_cache_key`.
+  - `test/profile/profiles.test.ts` "byte-stable composition": same bytes on repeated composition, tools sorted, env
+    has the date only and no `HH:MM`.
+  - `test/runtime/loop.test.ts`: system bytes are identical across turns.
+  - `test/runtime/context.test.ts`: fixed layer order.
+  - `test/tools/registry.test.ts`: definitions sorted and stable.
+  - `test/mcp/client.test.ts`: the system prompt stays stable after activation.
+- **prefix_cache detection:** the probe sends the same ~2k-token prompt twice (R2, R3), and a second TTFT at or below
+  0.7× the first means a cache is present. It's a heuristic. The reliable path is to pin
+  `servers[<base URL>].capabilities.prefix_cache`.

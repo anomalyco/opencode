@@ -1,5 +1,5 @@
 // Append-only JSONL sessions (ARCHITECTURE §7): one redacted record per line, flushed per line; replay for resume.
-import { appendFileSync, existsSync, mkdirSync, readdirSync } from "fs"
+import { appendFileSync, chmodSync, existsSync, mkdirSync, readdirSync } from "fs"
 import path from "path"
 import { Effect, Layer } from "effect"
 import { Message } from "@opencode-ai/llm"
@@ -26,10 +26,12 @@ export function make(dir: string): SessionStoreShape {
     })
   const write = (session: string, record: RecordInput) =>
     Effect.gen(function* () {
+      // Transcripts hold code and output the redactor can't know about: owner-only dir and files, fixed on first open.
+      if (!seqs.has(session)) secure(dir, file(session))
       const seq = seqs.get(session) ?? ((yield* read(session)).at(-1)?.seq ?? -1) + 1
       seqs.set(session, seq + 1)
       // appendFileSync writes the whole line before returning, so a crash leaves at most one torn tail line.
-      appendFileSync(file(session), JSON.stringify({ ...(redact(record) as RecordInput), seq, t: Date.now() }) + "\n")
+      appendFileSync(file(session), JSON.stringify({ ...(redact(record) as RecordInput), seq, t: Date.now() }) + "\n", { mode: 0o600 })
     })
   const headers = Effect.promise(() =>
     Promise.all(
@@ -40,23 +42,15 @@ export function make(dir: string): SessionStoreShape {
     ).then((items) => items.filter((item) => item !== undefined).toSorted((a, b) => b.created_at - a.created_at)),
   )
   return {
-    create: (header) =>
-      Effect.gen(function* () {
-        mkdirSync(dir, { recursive: true })
-        const session = header.id || id("ses")
-        yield* write(session, { ...header, id: session, type: "session", v: 1 })
-        return session
-      }),
+    create: (header) => Effect.suspend(() => {
+      const session = header.id || id("ses")
+      return write(session, { ...header, id: session, type: "session", v: 1 }).pipe(Effect.as(session))
+    }),
     append: write,
     read,
-    list: (filter) =>
-      headers.pipe(
-        Effect.map((items) =>
-          items.filter((item) => !filter?.cwd || item.cwd === filter.cwd).slice(0, filter?.limit ?? items.length),
-        ),
-      ),
-    latest: (cwd) =>
-      headers.pipe(Effect.map((items) => items.find((item) => item.cwd === cwd && !item.parent_id)?.id)),
+    list: (filter) => headers.pipe(Effect.map((items) =>
+      items.filter((item) => !filter?.cwd || item.cwd === filter.cwd).slice(0, filter?.limit ?? items.length))),
+    latest: (cwd) => headers.pipe(Effect.map((items) => items.find((item) => item.cwd === cwd && !item.parent_id)?.id)),
   }
 }
 
@@ -64,10 +58,15 @@ export function validId(session: string) {
   return /^ses_[A-Za-z0-9]+$/.test(session)
 }
 
+function secure(dir: string, file: string) {
+  mkdirSync(dir, { recursive: true, mode: 0o700 })
+  chmodSync(dir, 0o700)
+  if (existsSync(file)) chmodSync(file, 0o600)
+}
+
 function safeList(dir: string) {
-  return !existsSync(dir) ? undefined : readdirSync(dir, { withFileTypes: true }).flatMap((entry) =>
-    entry.isFile() && entry.name.endsWith(".jsonl") ? [entry.name] : [],
-  )
+  if (!existsSync(dir)) return undefined
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => (entry.isFile() && entry.name.endsWith(".jsonl") ? [entry.name] : []))
 }
 
 export interface Replay {

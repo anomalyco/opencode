@@ -17,8 +17,10 @@ import {
 } from "../contract"
 import { evaluate } from "../forked/permission-rules"
 import { renderOutput } from "../forked/task-contract"
+import { neutralize } from "../runtime/context"
 import { validId } from "../session/store"
-import { id } from "../util/paths"
+import { id, isLoopback } from "../util/paths"
+import { redactUrl, registerSecret } from "../util/redact"
 
 /** Handback text cap: 4000 tokens ≈ 16,000 chars (SPEC §4). */
 export const ENVELOPE_CHARS = 16_000
@@ -109,10 +111,12 @@ export function make(deps: { start: RuntimeShape["start"]; store: SessionStoreSh
       const parent = entry.input.parent
       const scope = yield* Scope.make()
       const asked = { denied: 0 }
+      const auth = childAuth(agent, process.env)
+      if (auth.notice)
+        yield* entry.input.sink({ session_id: parent.session_id, agent_path: [agent.name], type: "status", phase: "notice", message: auth.notice })
       const client = yield* connectChild({
         command: agent.mcp?.command ?? ["oclite", "mcp", "serve", "--permission-mode", deps.cfg.permissionMode],
-        url: agent.mcp?.url, token: process.env.OCLITE_MCP_TOKEN, cwd: parent.cwd,
-        env: { ...(process.env as Record<string, string>), OCLITE_DEPTH: String(parent.depth + 1) },
+        url: agent.mcp?.url, token: auth.token, cwd: parent.cwd, env: childEnv(process.env, parent.depth + 1),
         // The child's run already carries its own name first in agent_path (it runs with a parent).
         onEvent: entry.input.sink,
         onAsk: (req) =>
@@ -247,7 +251,30 @@ export function make(deps: { start: RuntimeShape["start"]; store: SessionStoreSh
 export function envelope(info: SubagentInfo, summary?: string) {
   const state = info.state === "completed" ? "completed" : info.state === "failed" || info.state === "cancelled" ? "error" : "running"
   const text = state === "error" ? (info.error ?? info.result ?? `Task ${info.state}`) : (info.result ?? "")
-  return renderOutput({ sessionID: info.id, state, summary, text: truncate(text) })
+  // The opencode wrapper stays; the child's text and the description inside it are neutralized.
+  return renderOutput({ sessionID: info.id, state, summary: summary && neutralize(summary), text: neutralize(truncate(text)) })
+}
+
+/**
+ * Bearer token for a remote `transport: mcp` child: an explicit frontmatter `mcp.token` (`{env:NAME}` or a literal)
+ * wins; otherwise OCLITE_MCP_TOKEN goes only to loopback URLs, so an agent file can't send it to any host it names.
+ */
+export function childAuth(agent: AgentDef, env: Record<string, string | undefined>): { token?: string; notice?: string } {
+  const raw = (agent.options.mcp as { token?: unknown } | undefined)?.token
+  if (typeof raw === "string") {
+    const token = raw.match(/^\{env:([A-Za-z_][A-Za-z0-9_]*)\}$/) ? env[raw.slice(5, -1)] : raw
+    if (token) registerSecret(token)
+    return { token }
+  }
+  const url = agent.mcp?.url
+  if (!url || isLoopback(url)) return { token: url ? env.OCLITE_MCP_TOKEN : undefined }
+  return { notice: `transport: mcp agent ${agent.name}: ${redactUrl(url)} is not loopback, so OCLITE_MCP_TOKEN is not sent (set mcp.token in the agent)` }
+}
+
+/** A stdio child's env: the parent's minus OCLITE_MCP_TOKEN (the child serves stdio; it needs no bearer token). */
+export function childEnv(env: Record<string, string | undefined>, depth: number): Record<string, string> {
+  const entries = Object.entries(env).filter((entry): entry is [string, string] => entry[0] !== "OCLITE_MCP_TOKEN" && entry[1] !== undefined)
+  return { ...Object.fromEntries(entries), OCLITE_DEPTH: String(depth) }
 }
 
 /** The reminder for a background child that finished since the parent's last turn. */

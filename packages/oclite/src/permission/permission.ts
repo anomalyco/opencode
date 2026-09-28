@@ -1,3 +1,4 @@
+import { existsSync, realpathSync } from "fs"
 import path from "path"
 import { Effect, Layer, Semaphore } from "effect"
 import { Wildcard } from "@opencode-ai/core/util/wildcard"
@@ -17,8 +18,27 @@ import {
 import { evaluate, fromConfig } from "../forked/permission-rules"
 import { dataDir, id } from "../util/paths"
 
-// opencode's .env read guard (mirrors the gitignore Node pattern). It survives bypassPermissions.
-const ENV_GUARD = fromConfig({ read: { "*.env": "ask", "*.env.*": "ask", "*.env.example": "allow" } })
+// opencode's .env read guard (mirrors the gitignore Node pattern). It survives bypassPermissions. The registry also
+// routes other tools' .env paths (real paths, after symlinks) and bash commands naming .env through it.
+const ENV_GUARD = fromConfig({
+  read: { "*.env": "ask", "*.env.*": "ask", "*.env.example": "allow", "*.env.sample": "allow" },
+})
+const ENV_FILE = /^\.env(\..+)?$/
+const ENV_TEMPLATE = /^\.env\.(example|sample)$/
+
+/** `.env` / `.env.*` by basename, except `.env.example` and `.env.sample`. */
+export function isEnvFile(file: string) {
+  const base = path.basename(file)
+  return ENV_FILE.test(base) && !ENV_TEMPLATE.test(base)
+}
+
+/**
+ * Best-effort: a bash command whose text names a .env file (`.envrc` and the templates excluded). A command can
+ * still build the name at runtime; this only catches the plain spelling.
+ */
+export function mentionsEnv(command: string) {
+  return /\.env\b(?!\.(example|sample)\b)/.test(command.replaceAll(".envrc", ""))
+}
 const READ_ONLY_BASH = ["git status*", "git diff*", "git log*", "ls*", "pwd"]
 // git diff/log can still write files or run an external diff program.
 const GIT_WRITES = ["diff", "log"].flatMap((sub) =>
@@ -45,7 +65,12 @@ export function defaults(): PermissionV1.Rule[] {
       external_directory: "ask",
     }),
     // Truncated tool output is written here and the hint tells the model to read it back.
-    { permission: "external_directory", pattern: path.join(dataDir(), "tool-output", "*"), action: "allow" },
+    // The registry checks real paths, so the real form of the data dir is allowed too.
+    ...[...new Set([dataDir(), realDir(dataDir())])].map((dir) => ({
+      permission: "external_directory",
+      pattern: path.join(dir, "tool-output", "*"),
+      action: "allow" as const,
+    })),
     ...ENV_GUARD,
   ]
 }
@@ -88,9 +113,16 @@ export const layer = Layer.effect(
       const existing = approved.get(session_id)
       if (existing) return existing
       const records = yield* store.read(session_id)
+      // The JSONL is a file on disk: a replayed record never grants a wildcard tool, a bare `*` pattern, or
+      // external_directory access. Those are asked again after a resume.
       const rules = records.flatMap((record) =>
-        record.type === "permission" && record.reply === "always"
-          ? (record.always ?? []).map((pattern) => ({ permission: record.tool, pattern, action: "allow" as const }))
+        record.type === "permission" &&
+        record.reply === "always" &&
+        !record.tool.includes("*") &&
+        record.tool !== "external_directory"
+          ? (record.always ?? [])
+              .filter((pattern) => !/^\*+$/.test(pattern.trim()))
+              .map((pattern) => ({ permission: record.tool, pattern, action: "allow" as const }))
           : [],
       )
       const current = approved.get(session_id) ?? rules
@@ -120,7 +152,9 @@ export const layer = Layer.effect(
         // A read_only child re-applies its own read_only rules after the inherited denies, so it keeps `git status`,
         // `ls` and readOnlyHint MCP tools; inherited denies that aren't read_only rules still come last.
         const inherited = parent.filter(
-          (rule) => rule.action === "deny" && !restricted.some((own) => own.permission === rule.permission && own.pattern === rule.pattern),
+          (rule) =>
+            rule.action === "deny" &&
+            !restricted.some((own) => own.permission === rule.permission && own.pattern === rule.pattern),
         )
         return [
           ...defaults(),
@@ -129,9 +163,12 @@ export const layer = Layer.effect(
           ...modeRules(input.mode, input.agent.read_only, input.mcpReadOnly),
           ...parent,
           ...cfg.cliRules,
-          // --allowed-tools can't lift read_only; CLI and parent denies stay last so nothing after them re-allows.
+          // --allowed-tools can't lift read_only. The user's own denies (config, agent, CLI) and parent denies stay
+          // last, so no mode-derived allow (bypass `*`, readOnlyHint MCP tools, read_only bash) re-opens them.
           ...restricted,
-          ...cfg.cliRules.filter((rule) => rule.action === "deny"),
+          ...ownDenies(cfg.permission, restricted),
+          ...ownDenies(input.agent.permission, restricted),
+          ...ownDenies(cfg.cliRules, restricted),
           ...inherited,
         ]
       },
@@ -201,4 +238,32 @@ function decide(tool: string, pattern: string, ruleset: PermissionV1.Ruleset, al
   const action = evaluate(tool, pattern, ruleset).action
   if (action !== "ask") return action
   return evaluate(tool, pattern, always).action === "allow" ? "allow" : "ask"
+}
+
+// A layer's denies plus that layer's own later, narrower exceptions to them (`.claude` agents deny `mcp__*` and then
+// re-open listed tools with `ask`), so re-appending keeps the user's intent without letting other layers win. An
+// exception that read_only denies is dropped: re-appending must never lift read_only.
+function ownDenies(rules: PermissionV1.Ruleset, restricted: PermissionV1.Ruleset) {
+  return rules.flatMap((rule, index) =>
+    rule.action === "deny"
+      ? [
+          rule,
+          ...rules
+            .slice(index + 1)
+            .filter(
+              (later) =>
+                later.action !== "deny" &&
+                evaluate(later.permission, later.pattern, restricted).action !== "deny" &&
+                Wildcard.match(later.permission, rule.permission) &&
+                Wildcard.match(later.pattern, rule.pattern),
+            ),
+        ]
+      : [],
+  )
+}
+
+function realDir(dir: string): string {
+  if (existsSync(dir)) return realpathSync(dir)
+  const parent = path.dirname(dir)
+  return parent === dir ? dir : path.join(realDir(parent), path.basename(dir))
 }

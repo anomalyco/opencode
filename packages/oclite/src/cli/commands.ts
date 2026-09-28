@@ -4,7 +4,7 @@ import { Console, Effect, Layer, Logger, Option } from "effect"
 import { ConfigMCPV1 } from "@opencode-ai/core/v1/config/mcp"
 import { type AgentDef, AppConfig, ConfigError, Mcp, type McpShape, type ResolvedConfig } from "../contract"
 import { decode } from "../config/agents"
-import { load, parseJson } from "../config/config"
+import { type LoadedConfig, load, parseJson, trust, trustNotice } from "../config/config"
 import { configDir, dataDir, projectRoot } from "../util/paths"
 import { redact, redactArgs, redactText, redactUrl } from "../util/redact"
 import type { CliArgs } from "./args"
@@ -75,6 +75,7 @@ function describeAgent(agent: AgentDef) {
 export function mcpList(args: CliArgs, input: { check: boolean } = { check: false }) {
   return Effect.gen(function* () {
     const cfg = yield* load(args)
+    yield* warnUntrusted(cfg)
     const names = Object.keys(cfg.mcp).sort()
     const live = input.check && names.length ? yield* withMcp(cfg, (mcp) => mcp.connectAll(() => Effect.void).pipe(Effect.andThen(mcp.status()))) : []
     const status = (name: string) => live.find((item) => item.name === name)
@@ -99,6 +100,7 @@ export function mcpList(args: CliArgs, input: { check: boolean } = { check: fals
 export function mcpServe(args: CliArgs, input: { transport: "stdio" | "http"; port: number; host: string; iUnderstandRemoteBypass: boolean }) {
   return Effect.gen(function* () {
     const cfg = yield* load(args)
+    yield* warnUntrusted(cfg)
     const { serve } = yield* Effect.promise(() => import("../mcp/server"))
     yield* serve(cfg, { transport: input.transport, host: input.host, port: input.port, allowRemoteBypass: input.iUnderstandRemoteBypass })
     // stdio returns once stdin closed and every run was cancelled (and its layer closed); stdin's handle would keep us alive.
@@ -231,6 +233,25 @@ function sessionRecords(id: string) {
 
 // Lazy: the store pulls @opencode-ai/llm, which `agents list` and `mcp list` never need.
 const sessions = Effect.promise(() => import("../session/store")).pipe(Effect.map((store) => store.make(path.join(dataDir(), "sessions"))))
+
+/** `oclite trust [path] [--yes]`: prints what the project layer sets that untrusted runs ignore, then records its hash. */
+export function trustProject(args: CliArgs, input: { path: Option.Option<string>; yes: boolean }) {
+  return Effect.gen(function* () {
+    const cwd = path.resolve(Option.getOrElse(input.path, () => process.cwd()))
+    const cfg = yield* load(args, { cwd, storedTrustOnly: true })
+    if (cfg.trust.trusted) return yield* Console.log(`${cfg.trust.root} is already trusted`)
+    yield* Console.log(`${cfg.trust.root}: ${cfg.trust.skipped.length ? `defines ${cfg.trust.skipped.join(", ")}` : "nothing beyond prompts and agents"}`)
+    const yes = input.yes || (process.stdin.isTTY === true && (prompt(`Trust ${cfg.trust.root}? [y/N]`) ?? "").trim().toLowerCase() === "y")
+    if (!yes) {
+      process.exitCode = 1
+      return yield* Console.log("not trusted (re-run with --yes to record it)")
+    }
+    yield* attempt(() => trust(cfg.trust.root))
+    yield* Console.log(`trusted ${cfg.trust.root} (a change to its config, agents or instructions revokes it)`)
+  })
+}
+
+const warnUntrusted = (cfg: LoadedConfig) => Effect.sync(() => trustNotice(cfg) && console.error(`oclite: notice: ${trustNotice(cfg)}`))
 
 function scopeFile(scope: Scope) {
   if (scope === "user") return path.join(configDir(), "config.json")

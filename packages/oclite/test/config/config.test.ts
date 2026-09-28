@@ -14,6 +14,8 @@ const base: CliArgs = {
   disallowedTools: [],
   continue: false,
   noThinking: false,
+  // These tests exercise the project layer's full schema; project trust has its own tests below.
+  trustProject: true,
 }
 
 // A git project plus a separate home whose config dir is `<home>/.config/oclite`.

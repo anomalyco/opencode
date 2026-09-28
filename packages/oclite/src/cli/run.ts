@@ -17,16 +17,19 @@ import { clean, exitCode, exitReason, resultEvent } from "../render/event"
 import { jsonCollector, streamJsonSink } from "../render/json"
 import { textSink } from "../render/text"
 import { statusText } from "../mcp/tools"
+import { killAll } from "../tools/bash"
 import type { CliArgs } from "./args"
 
-export const BYPASS = "permission mode bypassPermissions: all tools allowed except .env reads and explicit denies"
+export const BYPASS = "permission mode bypassPermissions: all tools allowed except .env access and your explicit deny rules"
 
 export function runPrint(args: CliArgs) {
   const output = renderer(args)
   return Effect.gen(function* () {
     yield* output.sink(early({ type: "status", phase: "config", message: "loading config" }))
-    const { load } = yield* Effect.promise(() => import("../config/config"))
+    const { load, trustNotice } = yield* Effect.promise(() => import("../config/config"))
     const cfg = yield* load(args)
+    const untrusted = trustNotice(cfg)
+    if (untrusted) yield* output.sink(early({ type: "status", phase: "notice", message: untrusted }))
     if (cfg.permissionMode === "bypassPermissions") yield* output.sink(early({ type: "status", phase: "notice", message: BYPASS }))
     const { appLayer } = yield* Effect.promise(() => import("../runtime/runtime"))
     const { headlessAsker } = yield* Effect.promise(() => import("../permission/permission"))
@@ -79,26 +82,40 @@ function execute(cfg: ResolvedConfig, args: CliArgs, output: Output) {
       { session_id, agent: agent.name, prompt: args.print ?? "", maxTurns: cfg.maxTurns },
       output.sink,
     )
+    const signal = { name: undefined as NodeJS.Signals | undefined }
     const finish = (result: RunResult) =>
       Effect.gen(function* () {
-        const code = exitCode(result, true)
+        const code = signal.name && result.state === "cancelled" ? SIGNAL_CODES[signal.name] : exitCode(result, true)
         yield* output.sink(resultEvent(result, code))
         output.flush()
         const reason = args.outputFormat === "text" ? exitReason(result, code) : undefined
         if (reason) process.stderr.write(`oclite: ${clean(reason)}\n`)
         return code
       })
-    // SIGINT from here on cancels the detached loop, so the session records `end: cancelled`, the result event is
-    // still emitted and the exit code is 130. (Before this point runMain's own handler interrupts and exits 130.)
-    // A second SIGINT exits at once.
-    process.removeAllListeners("SIGINT")
-    process.once("SIGINT", () => {
-      process.once("SIGINT", () => process.exit(130))
-      Effect.runFork(run.cancel)
+    // From here SIGINT/SIGTERM/SIGHUP cancel the detached loop: the session records `end: cancelled`, the result
+    // event is still emitted, exit 130/143/129. (Before this, runMain's handler interrupts and exits 130.) A second
+    // signal waits up to 2 s for that cancel (its finalizers kill tool process groups), then exits.
+    const cancelling = { done: undefined as Promise<void> | undefined }
+    const onSignal = (name: NodeJS.Signals) => {
+      signal.name ??= name
+      if (cancelling.done) {
+        void Promise.race([cancelling.done, Bun.sleep(2000)]).then(() => {
+          killAll()
+          process.exit(SIGNAL_CODES[name])
+        })
+        return
+      }
+      cancelling.done = Effect.runPromise(run.cancel)
+    }
+    Object.keys(SIGNAL_CODES).forEach((name) => {
+      process.removeAllListeners(name)
+      process.on(name, onSignal)
     })
     return yield* run.await.pipe(Effect.flatMap(finish))
   })
 }
+
+const SIGNAL_CODES: Record<string, number> = { SIGINT: 130, SIGTERM: 143, SIGHUP: 129 }
 
 function latest(found: Effect.Effect<string | undefined>, cwd: string) {
   return found.pipe(

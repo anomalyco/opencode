@@ -2,6 +2,7 @@
 // and the sanctioned model fake (test/lib/local-server.ts). Every run is a real `bun src/index.ts` subprocess.
 import { describe, expect, test } from "bun:test"
 import { readdirSync } from "fs"
+import { stat } from "fs/promises"
 import path from "path"
 import { setup } from "../cli/harness"
 import { reply, type ChatBody } from "../lib/local-server"
@@ -64,10 +65,10 @@ describe("mcp client (spawned fixture)", () => {
   })
 
   test("REPL: /mcp__fixture__greet name=Bob sends the prompt text; @fixture:fixture://readme is attached", async () => {
-    await using env = await setup()
+    await using env = await setup({ apiKey: "sk-resource-secret-4242" })
     await withMcp(env)
     env.server.queue(reply.text("hi Bob"), reply.text("read it"), reply.text("big one"))
-    const big = `fixture://item/${"x".repeat(9000)}`
+    const big = `fixture://item/${"x".repeat(9000)}-sk-resource-secret-4242`
     const result = await env.spawn([], { stdin: `/mcp\n/mcp__fixture__greet name=Bob\nsummarize @fixture:fixture://readme\nlook @fixture:${big}\n` })
     expect(result.code).toBe(0)
     expect(result.stdout).toContain("fixture: connected (6 tools)")
@@ -80,7 +81,12 @@ describe("mcp client (spawned fixture)", () => {
     expect(chats[2]).toContain("Too large to inline")
     const saved = chats[2]!.match(/path=\\"([^\\]+)\\"/)?.[1]
     expect(saved).toBeDefined()
-    expect(await Bun.file(saved!).text()).toContain(`item ${"x".repeat(9000)}`)
+    const body = await Bun.file(saved!).text()
+    expect(body).toContain(`item ${"x".repeat(9000)}-***`)
+    // Owner-only: 0600 file in a 0700 dir, redacted before it is written.
+    expect(body).not.toContain("sk-resource-secret-4242")
+    expect((await stat(saved!)).mode & 0o777).toBe(0o600)
+    expect((await stat(path.dirname(saved!))).mode & 0o777).toBe(0o700)
     expect(chats[2]).not.toContain(`item ${"x".repeat(9000)}`)
   })
 
