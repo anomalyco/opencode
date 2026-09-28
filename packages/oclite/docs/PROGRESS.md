@@ -6,6 +6,7 @@
 | 0 | Recon A (model/tools/agent) → docs/recon/A-model-tools-agent.md | cartographer | PASS (spot-checked: default.txt = 8528 chars) |
 | 0 | Recon B (MCP/permission/session) → docs/recon/B-mcp-permission-session.md | cartographer | PASS |
 | 0 | Path-import smoke test (lead) | lead | PASS: `bun run` + `bun typecheck` exit 0 importing `opencode/mcp/index` and `opencode/agent/subagent-permissions`, with tsconfig `paths {"@/*": ["../opencode/src/*"]}`, DOM lib, and `src/opencode-ambient.d.ts` referencing opencode's audio/sql/markdown d.ts. Typecheck ~5s. Without these: 30–561 errors. || 1 | ADR.md (103 lines) + ARCHITECTURE.md (861 lines) | architect | APPROVED by lead after full read. 42 files / ~6,640 lines planned vs 45 / 7,000. |
+| 2 | Skeleton: contract, CLI tree, config layering, agents, redact, size-budget, agents/mcp commands | cli-engineer | PASS after 1 fix round (reviewer B1 secret leak in decode errors, B2 URL/arg redaction). Lead gate: `bun typecheck` exit 0; `bun test` 45 pass / 0 fail; size budget 10/45 files, 1297/7000 lines; verified a bad `mcp` entry with a Bearer token exits 2 and prints no secret. |
 
 ## Decisions
 - Repo: `~/code/opencode-dev` (1.18.33 copy without `.git`). Ran `git init -b dev`, baseline commit `ab6c8a6`, branch `oclite-harness`. Upstream SHA `b471c2b44` can't be checked against this copy.
@@ -18,6 +19,8 @@
 - Phase 1 [LEAD] 3: headless denial continues the run, and exits 3 at the end if any denial happened (SPEC §1 exit codes). This differs from Claude Code, which exits 0.
 - Phase 1 [LEAD] 4: `apply_patch` is omitted from all profiles for v1.
 - CLI framework: `effect/unstable/cli` (no new manifest dep; ~30 ms). MCP client: own thin client on the SDK (MCP.Service import costs 0.43–0.52 s).
+
+- Phase 2 M1: `.claude/agents` `tools:` lists only restrict (listed = not denied, falls through to ask; others denied), matching Claude Code semantics. This differs from ARCHITECTURE §8's "allow rules" wording.
 
 ## Assumptions (UNATTENDED=true)
 - Original prompt text is garbled in places. Reconstructed in `docs/SPEC.md`; every guess is marked **[R]** there. Key guessed values: default-profile budget 2500 tok, `permission_timeout_ms` 300000, reasoning-model min `max_tokens` 8192, tool-output stubbing 6/6/3 turns, size budget excludes forked files, `.oclite/agents/*.md` path, hooks "other exit = warn and continue".

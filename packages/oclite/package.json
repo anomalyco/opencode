@@ -10,7 +10,8 @@
   },
   "scripts": {
     "typecheck": "tsgo --noEmit",
-    "test": "bun test --timeout 30000"
+    "test": "bun test --timeout 30000",
+    "budget": "bun run scripts/size-budget.ts"
   },
   "dependencies": {
     "@effect/platform-node": "catalog:",
