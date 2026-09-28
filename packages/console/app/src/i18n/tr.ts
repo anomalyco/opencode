@@ -664,7 +664,6 @@ export const dict = {
   "workspace.payments.type.subscription": "abonelik",
   "workspace.payments.view": "Görüntüle",
 
-  "workspace.black.loading": "Yükleniyor...",
   "workspace.black.time.day": "gün",
   "workspace.black.time.days": "gün",
   "workspace.black.time.hour": "saat",
@@ -674,7 +673,7 @@ export const dict = {
   "workspace.black.time.fewSeconds": "birkaç saniye",
   "workspace.black.subscription.title": "Abonelik",
   "workspace.black.subscription.message": "Aylık ${{plan}} karşılığında OpenCode Black'e abonesiniz.",
-  "workspace.black.subscription.manage": "Aboneliği Yönet",
+  "workspace.black.subscription.ending": "OpenCode Black mevcut fatura döneminizin sonunda sona erer ve yenilenmez. Sizi yeni konsola taşıyacağız.",
   "workspace.black.subscription.rollingUsage": "5 Saatlik Kullanım",
   "workspace.black.subscription.weeklyUsage": "Haftalık Kullanım",
   "workspace.black.subscription.resetsIn": "Sıfırlama süresi",

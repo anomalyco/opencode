@@ -634,7 +634,6 @@ export const dict = {
   "workspace.payments.type.subscription": "订阅",
   "workspace.payments.view": "查看",
 
-  "workspace.black.loading": "加载中...",
   "workspace.black.time.day": "天",
   "workspace.black.time.days": "天",
   "workspace.black.time.hour": "小时",
@@ -644,7 +643,7 @@ export const dict = {
   "workspace.black.time.fewSeconds": "几秒钟",
   "workspace.black.subscription.title": "订阅",
   "workspace.black.subscription.message": "您已订阅 OpenCode Black，价格为每月 ${{plan}}。",
-  "workspace.black.subscription.manage": "管理订阅",
+  "workspace.black.subscription.ending": "OpenCode Black 将在当前计费周期结束时终止，不会续订。我们会将你迁移到新的控制台。",
   "workspace.black.subscription.rollingUsage": "5 小时用量",
   "workspace.black.subscription.weeklyUsage": "每周用量",
   "workspace.black.subscription.resetsIn": "重置于",

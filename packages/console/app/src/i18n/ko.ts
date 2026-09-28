@@ -653,7 +653,6 @@ export const dict = {
   "workspace.payments.type.subscription": "구독",
   "workspace.payments.view": "보기",
 
-  "workspace.black.loading": "로드 중...",
   "workspace.black.time.day": "일",
   "workspace.black.time.days": "일",
   "workspace.black.time.hour": "시간",
@@ -663,7 +662,7 @@ export const dict = {
   "workspace.black.time.fewSeconds": "몇 초",
   "workspace.black.subscription.title": "구독",
   "workspace.black.subscription.message": "현재 월 ${{plan}} OpenCode Black 플랜을 구독 중입니다.",
-  "workspace.black.subscription.manage": "구독 관리",
+  "workspace.black.subscription.ending": "OpenCode Black은 현재 결제 기간이 끝나면 종료되며 갱신되지 않습니다. 새 콘솔로 옮겨 드리겠습니다.",
   "workspace.black.subscription.rollingUsage": "5시간 사용량",
   "workspace.black.subscription.weeklyUsage": "주간 사용량",
   "workspace.black.subscription.resetsIn": "초기화까지 남은 시간:",
