@@ -126,6 +126,39 @@ it.live("configured chunkTimeout raises a retryable response stream error when S
   }),
 )
 
+// Regression for #43519: SSE comment heartbeats (`: keepalive`) reset the
+// per-chunk timer without carrying any event, so a provider or LB holding a
+// stalled generation open with comments kept it alive forever. The timeout
+// must only extend when a real SSE field line arrives.
+it.live("chunkTimeout fires while a stalled stream is kept warm by comment heartbeats", () =>
+  Effect.gen(function* () {
+    const server = yield* Effect.acquireRelease(
+      Effect.promise(() => keepaliveBodyServer(10)),
+      (server) => Effect.sync(() => server.server.close()),
+    )
+
+    yield* provideTmpdirInstance(
+      () =>
+        Effect.gen(function* () {
+          const provider = yield* Provider.Service
+          const model = yield* provider.getModel(ProviderV2.ID.make("test"), ModelV2.ID.make("test-model"))
+          const result = streamText({
+            model: yield* provider.getLanguage(model),
+            onError() {},
+            messages: [{ role: "user", content: "hello" }],
+          })
+
+          const error = yield* Effect.promise(() => firstStreamError(result.fullStream))
+          expect(error).toBeInstanceOf(ProviderError.ResponseStreamError)
+          expect(
+            SessionRetry.retryable(MessageV2.fromError(error, { providerID: model.providerID }), model.providerID),
+          ).toEqual({ message: "SSE read timed out" })
+        }),
+      { config: providerConfig(server.url, { chunkTimeout: 100 }) },
+    )
+  }),
+)
+
 it.live("chunkTimeout can be disabled with false", () =>
   Effect.gen(function* () {
     const server = yield* Effect.acquireRelease(
@@ -383,6 +416,23 @@ async function delayedBodyServer(delay: number): Promise<{ server: Server; url: 
     setTimeout(() => {
       res.end('data: {"choices":[{"delta":{"content":"late"}}]}\n\ndata: [DONE]\n\n')
     }, delay)
+  })
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
+  const address = server.address()
+  if (!address || typeof address === "string") throw new Error("server did not bind to a TCP port")
+  return { server, url: `http://127.0.0.1:${address.port}` }
+}
+
+// Sends one partial SSE event, then holds the response open with `: keepalive`
+// comments every `interval` ms — bytes keep flowing but no SSE field line ever
+// completes the generation.
+async function keepaliveBodyServer(interval: number): Promise<{ server: Server; url: string }> {
+  const server = createServer((_, res) => {
+    res.writeHead(200, { "content-type": "text/event-stream" })
+    res.flushHeaders()
+    res.write('data: {"choices":[{"delta":{"role":"assistant","content":""}}]}\n\n')
+    const timer = setInterval(() => res.write(": keepalive\n\n"), interval)
+    res.on("close", () => clearInterval(timer))
   })
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
   const address = server.address()

@@ -23,42 +23,73 @@ export interface LanguageEvent {
   language?: LanguageModelV3
 }
 
+// Reports whether a chunk contains the start of a non-comment SSE line.
+// Comment heartbeats (`: keepalive`) keep a stalled generation "warm" at the
+// byte level without ever dispatching an event, so they must not extend the
+// chunk timeout. Tracks the head byte of the current line so a field line
+// split across chunk boundaries still counts as progress.
+function sseFieldScanner() {
+  let atLineHead = true
+  return (chunk: Uint8Array) => {
+    let progress = false
+    let i = 0
+    while (i < chunk.length) {
+      if (atLineHead) {
+        const head = chunk[i]!
+        atLineHead = false
+        if (head !== 0x3a && head !== 0x0a && head !== 0x0d) progress = true
+      }
+      const nl = chunk.indexOf(0x0a, i)
+      if (nl === -1) break
+      i = nl + 1
+      atLineHead = true
+    }
+    return progress
+  }
+}
+
 function wrapSSE(res: Response, ms: number, ctl: AbortController) {
   if (typeof ms !== "number" || ms <= 0) return res
   if (!res.body) return res
   if (!res.headers.get("content-type")?.includes("text/event-stream")) return res
 
   const reader = res.body.getReader()
+  const progressed = sseFieldScanner()
+  let reject: ((error: unknown) => void) | undefined
+  let stall: ReturnType<typeof setTimeout> | undefined
+
+  const timeout = () => {
+    const error = new Error("SSE read timed out")
+    ctl.abort(error)
+    reader.cancel(error).catch(() => {})
+    reject?.(error)
+  }
+  const arm = () => {
+    clearTimeout(stall)
+    stall = setTimeout(timeout, ms)
+  }
+
   const body = new ReadableStream<Uint8Array>({
     async pull(ctrl) {
-      const part = await new Promise<Awaited<ReturnType<typeof reader.read>>>((resolve, reject) => {
-        const id = setTimeout(() => {
-          const err = new Error("SSE read timed out")
-          ctl.abort(err)
-          reader.cancel(err).catch(() => {})
-          reject(err)
-        }, ms)
-
-        reader.read().then(
-          (part) => {
-            clearTimeout(id)
-            resolve(part)
-          },
-          (err) => {
-            clearTimeout(id)
-            reject(err)
-          },
-        )
+      if (stall === undefined) arm()
+      const part = await new Promise<Awaited<ReturnType<typeof reader.read>>>((resolve, rejectPromise) => {
+        reject = rejectPromise
+        reader.read().then(resolve, rejectPromise)
+      }).finally(() => {
+        reject = undefined
       })
 
       if (part.done) {
+        clearTimeout(stall)
         ctrl.close()
         return
       }
 
+      if (progressed(part.value)) arm()
       ctrl.enqueue(part.value)
     },
     async cancel(reason) {
+      clearTimeout(stall)
       ctl.abort(reason)
       await reader.cancel(reason)
     },
