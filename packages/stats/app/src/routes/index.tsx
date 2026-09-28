@@ -410,7 +410,7 @@ function TopModelsSection(props: {
               setActiveModel(undefined)
             }}
           >
-            Weekly
+            {i18n.t("chart.weekly")}
           </button>
           <button
             type="button"

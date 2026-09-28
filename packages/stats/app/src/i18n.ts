@@ -80,6 +80,7 @@ const en = {
   "range.2W": "2 Weeks",
   "range.1M": "1 Month",
   "range.2M": "2 Months",
+  "chart.weekly": "Weekly",
   "chart.daily": "Daily",
   "chart.input": "Input",
   "chart.output": "Output",
