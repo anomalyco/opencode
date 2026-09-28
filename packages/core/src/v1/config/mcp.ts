@@ -3,6 +3,22 @@ export * as ConfigMCPV1 from "./mcp"
 import { Schema } from "effect"
 import { PositiveInt } from "../../schema"
 
+export const Timeout = Schema.Struct({
+  startup: Schema.optional(PositiveInt).annotate({
+    description: "Timeout in ms to establish and initialize the MCP server. Defaults to 30000 (30 seconds).",
+  }),
+  request: Schema.optional(PositiveInt).annotate({
+    description:
+      "Timeout in ms for each MCP request after initialization, including tool calls. Long-running tool calls that report progress reset this budget.",
+  }),
+}).annotate({ identifier: "McpTimeoutConfig" })
+export type Timeout = Schema.Schema.Type<typeof Timeout>
+
+const timeout = Schema.optional(Schema.Union([PositiveInt, Timeout])).annotate({
+  description:
+    "Timeout in ms applied to both server startup and every request, or an object setting the startup and request budgets separately.",
+})
+
 export const Local = Schema.Struct({
   type: Schema.Literal("local").annotate({ description: "Type of MCP server connection" }),
   command: Schema.mutable(Schema.Array(Schema.String)).annotate({
@@ -17,9 +33,7 @@ export const Local = Schema.Struct({
   enabled: Schema.optional(Schema.Boolean).annotate({
     description: "Enable or disable the MCP server on startup",
   }),
-  timeout: Schema.optional(PositiveInt).annotate({
-    description: "Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.",
-  }),
+  timeout,
 }).annotate({ identifier: "McpLocalConfig" })
 export type Local = Schema.Schema.Type<typeof Local>
 
@@ -53,9 +67,7 @@ export const Remote = Schema.Struct({
   oauth: Schema.optional(Schema.Union([OAuth, Schema.Literal(false)])).annotate({
     description: "OAuth authentication configuration for the MCP server. Set to false to disable OAuth auto-detection.",
   }),
-  timeout: Schema.optional(PositiveInt).annotate({
-    description: "Timeout in ms for MCP server requests. Defaults to 5000 (5 seconds) if not specified.",
-  }),
+  timeout,
 }).annotate({ identifier: "McpRemoteConfig" })
 export type Remote = Schema.Schema.Type<typeof Remote>
 

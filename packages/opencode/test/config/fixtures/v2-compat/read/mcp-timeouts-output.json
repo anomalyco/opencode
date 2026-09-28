@@ -1,25 +1,29 @@
 {
   "mcp": {
-    "safe": {
+    "both": {
       "type": "local",
-      "command": ["safe-mcp"],
+      "command": ["both-mcp"],
       "enabled": true,
-      "timeout": 3000
+      "timeout": {
+        "startup": 1000,
+        "request": 600000
+      }
     },
-    "unsafe": {
+    "calls": {
       "type": "local",
-      "command": ["unsafe-mcp"],
-      "enabled": true
-    },
-    "partial": {
-      "type": "local",
-      "command": ["partial-mcp"],
-      "enabled": true
+      "command": ["calls-mcp"],
+      "enabled": true,
+      "timeout": {
+        "request": 600000
+      }
     },
     "startup": {
       "type": "local",
       "command": ["startup-mcp"],
-      "enabled": true
+      "enabled": true,
+      "timeout": {
+        "startup": 60000
+      }
     }
   },
   "experimental": {

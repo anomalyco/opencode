@@ -49,6 +49,12 @@ const CLIENT_OPTIONS = {
   },
 } satisfies ClientOptions
 
+// A server's timeout is either one budget for everything or separate startup and request budgets.
+const startupBudget = (timeout: ConfigMCPV1.Info["timeout"]) =>
+  typeof timeout === "object" ? timeout.startup : timeout
+const requestBudget = (timeout: ConfigMCPV1.Info["timeout"]) =>
+  typeof timeout === "object" ? timeout.request : timeout
+
 export const Resource = Schema.Struct({
   name: Schema.String,
   uri: Schema.String,
@@ -283,7 +289,7 @@ const layer = Layer.effect(
         },
       ]
 
-      const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
+      const connectTimeout = startupBudget(mcp.timeout) ?? DEFAULT_TIMEOUT
       let lastStatus: Status | undefined
 
       for (const { name, transport } of transports) {
@@ -356,7 +362,7 @@ const layer = Layer.effect(
         },
       })
 
-      const connectTimeout = mcp.timeout ?? DEFAULT_TIMEOUT
+      const connectTimeout = startupBudget(mcp.timeout) ?? DEFAULT_TIMEOUT
       return yield* connectTransport(transport, connectTimeout).pipe(
         Effect.map((client): { client: MCPClient | undefined; status: Status } => ({
           client,
@@ -388,7 +394,9 @@ const layer = Layer.effect(
         }
 
         return yield* Effect.gen(function* () {
-          const listed = mcpClient.getServerCapabilities()?.tools ? yield* McpCatalog.defs(mcpClient, mcp.timeout) : []
+          const listed = mcpClient.getServerCapabilities()?.tools
+            ? yield* McpCatalog.defs(mcpClient, requestBudget(mcp.timeout))
+            : []
           if (!listed) {
             return yield* Effect.fail(new Error("Failed to get tools"))
           }
@@ -522,7 +530,7 @@ const layer = Layer.effect(
                 s.clients[key] = result.mcpClient
                 s.defs[key] = result.defs!
                 if (result.instructions) s.instructions[key] = result.instructions
-                watch(s, key, result.mcpClient, bridge, mcp.timeout)
+                watch(s, key, result.mcpClient, bridge, requestBudget(mcp.timeout))
               }
             }),
           { concurrency: "unbounded" },
@@ -635,7 +643,14 @@ const layer = Layer.effect(
         return result.status
       }
 
-      return yield* storeClient(s, name, result.mcpClient, result.defs!, result.instructions, mcp.timeout)
+      return yield* storeClient(
+        s,
+        name,
+        result.mcpClient,
+        result.defs!,
+        result.instructions,
+        requestBudget(mcp.timeout),
+      )
     })
 
     const add = Effect.fn("MCP.add")(function* (name: string, mcp: ConfigMCPV1.Info) {
@@ -659,8 +674,8 @@ const layer = Layer.effect(
     })
 
     function requestTimeout(s: State, name: string, configured: McpEntry | undefined, fallback?: number) {
-      const staticTimeout = configured && isMcpConfigured(configured) ? configured.timeout : undefined
-      return s.config[name]?.timeout ?? staticTimeout ?? fallback
+      const staticTimeout = configured && isMcpConfigured(configured) ? requestBudget(configured.timeout) : undefined
+      return requestBudget(s.config[name]?.timeout) ?? staticTimeout ?? fallback
     }
 
     const tools = Effect.fn("MCP.tools")(function* () {
@@ -882,7 +897,7 @@ const layer = Layer.effect(
 
         const listed = client
           ? client.getServerCapabilities()?.tools
-            ? yield* McpCatalog.defs(client, mcpConfig.timeout)
+            ? yield* McpCatalog.defs(client, requestBudget(mcpConfig.timeout))
             : []
           : undefined
         if (!client || !listed) {
@@ -892,7 +907,14 @@ const layer = Layer.effect(
 
         const s = yield* InstanceState.get(state)
         yield* auth.clearOAuthState(mcpName)
-        return yield* storeClient(s, mcpName, client, listed, client.getInstructions()?.trim(), mcpConfig.timeout)
+        return yield* storeClient(
+          s,
+          mcpName,
+          client,
+          listed,
+          client.getInstructions()?.trim(),
+          requestBudget(mcpConfig.timeout),
+        )
       }
 
       const callbackPromise = McpOAuthCallback.waitForCallback(result.oauthState, mcpName)

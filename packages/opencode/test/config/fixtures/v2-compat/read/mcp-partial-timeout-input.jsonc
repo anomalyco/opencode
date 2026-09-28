@@ -1,3 +1,4 @@
 {
-  "mcp": { "timeout": { "startup": 1000, "catalog": 2000 } },
+  // V1 has no global startup budget, so the whole entry lowers to nothing.
+  "mcp": { "timeout": { "startup": 1000 } },
 }

@@ -1825,6 +1825,11 @@ export type ProviderConfig = {
   }
 }
 
+export type McpTimeoutConfig = {
+  startup?: number
+  request?: number
+}
+
 export type McpLocalConfig = {
   /**
    * Type of MCP server connection
@@ -1839,7 +1844,10 @@ export type McpLocalConfig = {
     [key: string]: string
   }
   enabled?: boolean
-  timeout?: number
+  /**
+   * Timeout in ms applied to both server startup and every request, or an object setting the startup and request budgets separately.
+   */
+  timeout?: number | McpTimeoutConfig
 }
 
 export type McpOAuthConfig = {
@@ -1867,7 +1875,10 @@ export type McpRemoteConfig = {
    * OAuth authentication configuration for the MCP server. Set to false to disable OAuth auto-detection.
    */
   oauth?: McpOAuthConfig | false
-  timeout?: number
+  /**
+   * Timeout in ms applied to both server startup and every request, or an object setting the startup and request budgets separately.
+   */
+  timeout?: number | McpTimeoutConfig
 }
 
 /**

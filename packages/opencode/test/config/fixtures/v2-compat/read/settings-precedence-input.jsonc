@@ -11,5 +11,5 @@
     "reserved": 300,
     "buffer": 400,
   },
-  "mcp": { "timeout": { "catalog": 8000, "execution": 8000 } },
+  "mcp": { "timeout": { "request": 8000 } },
 }

@@ -101,7 +101,7 @@ describe("ConfigV2Compat.lower", () => {
             url: `https://example.com/?token=${secret}`,
             oauth: { client_secret: secret },
             codemode: false,
-            timeout: { execution: 60000 },
+            timeout: { request: 60000 },
           },
         },
       },
@@ -118,7 +118,6 @@ describe("ConfigV2Compat.lower", () => {
         expect.objectContaining({ kind: "unsupported", path: ["experimental", "portable_shell_scanner"] }),
         expect.objectContaining({ kind: "unsupported", path: ["agents", "reviewer", "request", "headers"] }),
         expect.objectContaining({ kind: "unsupported", path: ["mcp", "servers", "remote", "codemode"] }),
-        expect.objectContaining({ kind: "unsupported", path: ["mcp", "servers", "remote", "timeout"] }),
         expect.objectContaining({ kind: "unsupported", path: ["lsp", "custom"] }),
       ]),
     )
@@ -172,7 +171,7 @@ describe("ConfigV2Compat.lower", () => {
       { agent: null, agents: { reviewer: { system: "Native prompt" } } },
       { command: [], commands: { review: { template: "Native command" } } },
       { attachment: false, media: { image: { auto_resize: true } } },
-      { experimental: null, mcp: { timeout: { catalog: 3000, execution: 3000 } } },
+      { experimental: null, mcp: { timeout: { request: 3000 } } },
       { agent: { reviewer: 42 }, agents: { reviewer: { system: "Native prompt" } } },
       { command: { review: 42 }, commands: { review: { template: "Native command" } } },
       { mcp: { shared: 42, servers: { shared: { type: "local", command: ["native"] } } } },
@@ -268,7 +267,7 @@ describe("ConfigV2Compat.lower", () => {
             url: "https://example.com/mcp",
             disabled: true,
             oauth: { client_id: "client" },
-            timeout: { execution: 3000 },
+            timeout: { request: 3000 },
           },
         },
       },
@@ -324,7 +323,7 @@ describe("V2 configuration loading", () => {
           snapshots: false,
           skills: ["./skills", "https://example.com/skills"],
           mcp: {
-            timeout: { catalog: 9000, execution: 9000 },
+            timeout: { request: 9000 },
             servers: {
               native: { type: "remote", url: "https://native.example.com/mcp", disabled: false },
             },

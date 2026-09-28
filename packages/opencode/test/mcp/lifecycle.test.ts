@@ -14,6 +14,7 @@ import {
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { ConfigMCPV1 } from "@opencode-ai/core/v1/config/mcp"
 import { Cause, Effect, Exit } from "effect"
 import type { MCP as MCPNS } from "../../src/mcp/index"
 import { MCP } from "../../src/mcp/index"
@@ -180,7 +181,12 @@ function statusName(status: Record<string, MCPNS.Status> | MCPNS.Status, server:
   return status[server]?.status
 }
 
-const remote = (url: string, timeout?: number) => ({ type: "remote" as const, url, oauth: false as const, timeout })
+const remote = (url: string, timeout?: ConfigMCPV1.Info["timeout"]) => ({
+  type: "remote" as const,
+  url,
+  oauth: false as const,
+  timeout,
+})
 
 it.instance("advertises and lists the instance directory as its root", () =>
   Effect.gen(function* () {
@@ -430,6 +436,40 @@ it.instance("uses per-server timeouts for prompt and resource requests", () =>
 
     expect(yield* mcp.getPrompt("timeout-server", "test")).toBeUndefined()
     expect(yield* mcp.readResource("timeout-server", "test://resource")).toBeUndefined()
+  }),
+)
+
+it.instance("applies the request budget to requests without capping startup", () =>
+  Effect.gen(function* () {
+    const server = yield* lifecycleServer()
+    const mcp = yield* MCP.Service
+    // A startup budget far below the request budget still has to complete the handshake.
+    yield* mcp.add("split-server", remote(server.url, { startup: 5000, request: 50 }))
+    server.state.requestDelay = 200
+
+    expect((yield* mcp.status())["split-server"]?.status).toBe("connected")
+    expect(yield* mcp.getPrompt("split-server", "test")).toBeUndefined()
+    expect(yield* mcp.readResource("split-server", "test://resource")).toBeUndefined()
+  }),
+)
+
+it.instance("gives tool calls the configured request budget", () =>
+  Effect.gen(function* () {
+    const server = yield* lifecycleServer()
+    const mcp = yield* MCP.Service
+    yield* mcp.add("long-calls", remote(server.url, { startup: 1000, request: 600_000 }))
+
+    expect((yield* mcp.tools())["long-calls_test_tool"]?.timeout).toBe(600_000)
+  }),
+)
+
+it.instance("keeps a numeric timeout covering startup and requests", () =>
+  Effect.gen(function* () {
+    const server = yield* lifecycleServer()
+    const mcp = yield* MCP.Service
+    yield* mcp.add("legacy", remote(server.url, 7000))
+
+    expect((yield* mcp.tools())["legacy_test_tool"]?.timeout).toBe(7000)
   }),
 )
 

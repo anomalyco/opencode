@@ -22,8 +22,7 @@ const decodeOptions = { errors: "all", onExcessProperty: "ignore", propertyOrder
 const Record = Schema.Record(Schema.String, Schema.Unknown)
 const Timeout = Schema.Struct({
   startup: Schema.optional(PositiveInt),
-  catalog: Schema.optional(PositiveInt),
-  execution: Schema.optional(PositiveInt),
+  request: Schema.optional(PositiveInt),
 })
 const OAuth = Schema.Struct({
   client_id: Schema.optional(Schema.String),
@@ -254,7 +253,7 @@ function normalizeMcp(input: Record<string, unknown>, result: Record<string, unk
     Option.isSome(timeoutRecord) &&
     !isDirectServer(timeoutRecord.value) &&
     (Object.keys(timeoutRecord.value).length === 0 ||
-      ["startup", "catalog", "execution"].some((key) => Object.hasOwn(timeoutRecord.value, key)))
+      ["startup", "request"].some((key) => Object.hasOwn(timeoutRecord.value, key)))
 
   for (const [name, value] of Object.entries(mcp.value)) {
     if (name === "servers" && envelope) continue
@@ -298,11 +297,10 @@ function normalizeMcp(input: Record<string, unknown>, result: Record<string, unk
   result.mcp = servers
 
   if (!globalTimeout || Option.isNone(timeout)) return
-  const value = lowerTimeout(timeout.value)
-  if (value === undefined) {
-    if (Object.keys(timeout.value).length) unsupported(["mcp", "timeout"], diagnostics)
-    return
-  }
+  // V1 has no global startup budget, only the per-request default behind experimental.mcp_timeout.
+  if (timeout.value.startup !== undefined) unsupported(["mcp", "timeout", "startup"], diagnostics)
+  const value = timeout.value.request
+  if (value === undefined) return
   const existing = decodeRecord(result.experimental)
   if (Object.hasOwn(result, "experimental") && Option.isNone(existing)) return
   const experimental = Option.isSome(existing) ? { ...existing.value } : {}
@@ -322,8 +320,6 @@ function normalizeServer(input: unknown, path: string[], diagnostics: Diagnostic
   const server = decodeValue(Server, input, path, diagnostics)
   if (server === undefined) return
   if (server.codemode !== undefined) unsupported([...path, "codemode"], diagnostics)
-  if (server.timeout && lowerTimeout(server.timeout) === undefined && Object.keys(server.timeout).length)
-    unsupported([...path, "timeout"], diagnostics)
   const raw = decodeRecord(input)
   if (Option.isNone(raw) || !Object.hasOwn(raw.value, "enabled")) return lowerServer(server)
   if (server.disabled !== undefined && raw.value.enabled === server.disabled)
@@ -360,10 +356,12 @@ function lowerSelection(input: Schema.Schema.Type<typeof Selection>) {
 }
 
 function lowerTimeout(input: Schema.Schema.Type<typeof Timeout>) {
-  if (input.startup !== undefined) return undefined
-  if (input.catalog === undefined || input.execution === undefined) return undefined
-  if (input.catalog !== input.execution) return undefined
-  return input.catalog
+  const result = {
+    ...(input.startup === undefined ? {} : { startup: input.startup }),
+    ...(input.request === undefined ? {} : { request: input.request }),
+  }
+  if (Object.keys(result).length === 0) return undefined
+  return result
 }
 
 function lowerServer(input: Schema.Schema.Type<typeof Server>) {

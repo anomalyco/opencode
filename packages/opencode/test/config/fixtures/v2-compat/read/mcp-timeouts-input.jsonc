@@ -1,15 +1,10 @@
 {
   "mcp": {
-    "timeout": { "catalog": 8000, "execution": 8000 },
+    "timeout": { "request": 8000 },
     "servers": {
-      "safe": { "type": "local", "command": ["safe-mcp"], "timeout": { "catalog": 3000, "execution": 3000 } },
-      "unsafe": { "type": "local", "command": ["unsafe-mcp"], "timeout": { "catalog": 2000, "execution": 4000 } },
-      "partial": { "type": "local", "command": ["partial-mcp"], "timeout": { "execution": 5000 } },
-      "startup": {
-        "type": "local",
-        "command": ["startup-mcp"],
-        "timeout": { "startup": 1000, "catalog": 3000, "execution": 3000 },
-      },
+      "both": { "type": "local", "command": ["both-mcp"], "timeout": { "startup": 1000, "request": 600000 } },
+      "calls": { "type": "local", "command": ["calls-mcp"], "timeout": { "request": 600000 } },
+      "startup": { "type": "local", "command": ["startup-mcp"], "timeout": { "startup": 60000 } },
     },
   },
 }
