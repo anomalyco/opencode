@@ -3,6 +3,7 @@ export * as LocationActivity from "./location-activity.js"
 import { Clock, Context, Duration, Effect, Layer, RcMap, Schema } from "effect"
 import { Bus } from "./bus.js"
 import { Location } from "./location.js"
+import { LocationRetention } from "./location-retention.js"
 import { LocationServiceMap } from "./location-service-map.js"
 import { SessionEvent } from "./session/event.js"
 import { SessionExecution } from "./session/execution.js"
@@ -20,6 +21,7 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
       const clock = yield* Clock.Clock
       const bus = yield* Bus.Service
       const locations = yield* LocationServiceMap.Service
+      const retention = yield* LocationRetention.Service
       const execution = yield* SessionExecution.Service
       const sessions = yield* SessionStore.Service
       const timeToLive = Duration.toMillis(options.timeToLive ?? "60 minutes")
@@ -50,11 +52,24 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
         const now = clock.currentTimeMillisUnsafe()
         const expired = Array.from(entries.values()).filter((entry) => entry.expiresAt <= now)
         if (expired.length === 0) return
+        const live = yield* retention.live()
+        const pinned = new Set(live.map((snapshot) => key(snapshot.ref)))
         const active = yield* Effect.forEach(yield* execution.active, (sessionID) => sessions.get(sessionID))
         yield* Effect.forEach(
           expired,
           (entry) =>
             Effect.gen(function* () {
+              // Live child processes pin their location: touching defers the
+              // deadline without taking a reference, so explicit invalidation
+              // still tears the location down immediately.
+              if (pinned.has(key(entry.ref))) {
+                yield* touch(entry.ref)
+                yield* Effect.logDebug("location eviction deferred for live processes", {
+                  directory: entry.ref.directory,
+                  workspaceID: entry.ref.workspaceID,
+                })
+                return
+              }
               const owners = active.flatMap((session) =>
                 session && key(session.location) === key(entry.ref) ? [session] : [],
               )
@@ -92,5 +107,5 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
 export const node = makeGlobalNode({
   service: Service,
   layer: layer(),
-  deps: [Bus.node, LocationServiceMap.node, SessionExecution.node, SessionStore.node],
+  deps: [Bus.node, LocationServiceMap.node, SessionExecution.node, SessionStore.node, LocationRetention.node],
 })
