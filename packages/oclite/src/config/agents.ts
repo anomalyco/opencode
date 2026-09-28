@@ -1,13 +1,14 @@
 import { existsSync } from "fs"
-import os from "os"
 import path from "path"
 import { Result, Schema, SchemaIssue } from "effect"
 import { ConfigMarkdown } from "@opencode-ai/core/config/markdown"
 import { ConfigAgentV1 } from "@opencode-ai/core/v1/config/agent"
 import type { ConfigPermissionV1 } from "@opencode-ai/core/v1/config/permission"
-import type { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { type AgentDef, ConfigError } from "../contract"
 import { builtinAgentsDir } from "../util/paths"
+import { fromConfig } from "../forked/permission-rules"
+
+export { fromConfig }
 
 // oclite frontmatter extensions; ConfigAgentV1 moves unknown keys into `options`, they are read from there.
 const Extensions = Schema.Struct({
@@ -167,23 +168,6 @@ function entryName(relative: string, prefixes: string[]) {
   const stripped = prefixes.find((prefix) => normalized.startsWith(prefix))
   const candidate = stripped ? normalized.slice(stripped.length) : normalized
   return candidate.replace(/\.md$/, "")
-}
-
-// Minimal copy of opencode Permission.fromConfig semantics (pattern `~`/`$HOME` expansion). Phase 3 replaces it
-// with src/forked/permission-rules.ts.
-export function fromConfig(permission: ConfigPermissionV1.Info): PermissionV1.Rule[] {
-  return Object.entries(permission).flatMap(([key, value]): PermissionV1.Rule[] => {
-    if (value === undefined) return []
-    if (typeof value === "string") return [{ permission: key, pattern: "*", action: value }]
-    return Object.entries(value).map(([pattern, action]) => ({ permission: key, pattern: expand(pattern), action }))
-  })
-}
-
-function expand(pattern: string) {
-  if (pattern === "~" || pattern === "$HOME") return os.homedir()
-  if (pattern.startsWith("~/")) return os.homedir() + pattern.slice(1)
-  if (pattern.startsWith("$HOME/")) return os.homedir() + pattern.slice(5)
-  return pattern
 }
 
 export function decode<S extends Schema.Decoder<unknown>>(schema: S, value: unknown, source: string): S["Type"] {

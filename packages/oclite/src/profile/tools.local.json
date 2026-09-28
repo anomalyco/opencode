@@ -1,0 +1,14 @@
+{
+  "bash": "Run a shell command in the project (bash). Use for build, test, git and scripts, not for reading or searching files. Chain dependent steps with &&. workdir sets the directory (don't cd). timeout is in ms (default 120000). Output over 2000 lines or 50 KB is truncated.",
+  "edit": "Replace exact text in a file. oldString must match the file exactly, including whitespace, and be unique unless replaceAll is true. Read the file first. Keep edits minimal; use write only for new files.",
+  "glob": "Find files by glob pattern, e.g. \"src/**/*.ts\". Returns matching paths, newest first. path limits the search to a directory.",
+  "grep": "Search file contents with a regex. include filters files by glob, e.g. \"*.ts\". path limits the search to a directory. Returns matching files and lines.",
+  "question": "Ask the user one or more questions and wait for the answer. Use only when you cannot proceed without a decision; offer short options.",
+  "read": "Read a file or list a directory. filePath is absolute. Returns numbered lines; use offset and limit for large files. Read before you edit.",
+  "skill": "Load a skill's instructions by name when the task matches one of the listed skills.",
+  "task": "Start a sub-agent for a self-contained task. subagent_type picks the agent. The prompt must include goal, known facts, exact paths and the expected output. background=true returns at once; task_id resumes a previous sub-agent.",
+  "todowrite": "Replace the todo list for multi-step work. Each todo has content, status (pending, in_progress, completed, cancelled) and priority. Keep exactly one in_progress.",
+  "tool_search": "Find MCP tools by keyword. Matching tools become callable on the next turn. Returns name — description lines.",
+  "webfetch": "Fetch a URL and return its content as markdown (default), text or html. timeout is in seconds (max 120).",
+  "write": "Create or overwrite a file with content. filePath is absolute. Read an existing file first; prefer edit for changes."
+}

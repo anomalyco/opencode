@@ -188,9 +188,20 @@ const debug = Command.make("debug").pipe(
     Command.make(
       "prompt",
       { tokens: Flag.boolean("tokens"), check: Flag.boolean("check") },
-      handler((module) => module.notImplemented("debug prompt", 3)),
+      (input) =>
+        Effect.gen(function* () {
+          const flags = yield* root
+          const { debugPrompt } = yield* Effect.promise(() => import("./debug"))
+          yield* debugPrompt(toCliArgs(flags, input))
+        }),
     ).pipe(Command.withDescription("Composed system prompt, tool sizes, server-reported tokens")),
-    Command.make("server", { reprobe: Flag.boolean("reprobe") }, handler((module) => module.notImplemented("debug server", 3))).pipe(
+    Command.make("server", { reprobe: Flag.boolean("reprobe") }, (input) =>
+      Effect.gen(function* () {
+        const flags = yield* root
+        const { debugServer } = yield* Effect.promise(() => import("./debug"))
+        yield* debugServer(toCliArgs(flags, input))
+      }),
+    ).pipe(
       Command.withDescription("Capability record for the current provider/model"),
     ),
   ]),
