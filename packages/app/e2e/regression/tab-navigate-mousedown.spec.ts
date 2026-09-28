@@ -460,6 +460,7 @@ test("preferences control vertical tab layout and hide empty experimental settin
   const layout = settings.locator('[data-action="settings-tab-layout"]')
   await expect(language).toBeVisible()
   await expect(layout).toContainText("Horizontal")
+  await expect(settings.locator('[data-action="settings-vertical-tab-position"]')).toHaveCount(0)
   await expect
     .poll(async () => {
       const [languageBox, layoutBox] = await Promise.all([language.boundingBox(), layout.boundingBox()])
@@ -470,6 +471,11 @@ test("preferences control vertical tab layout and hide empty experimental settin
   await page.getByRole("option", { name: "Vertical" }).click()
 
   await expect(layout).toContainText("Vertical")
+  const position = settings.locator('[data-action="settings-vertical-tab-position"]')
+  await expect(position).toContainText("Bottom")
+  await position.click()
+  await page.getByRole("option", { name: "Top", exact: true }).click()
+  await expect(position).toContainText("Top")
   await expect(page.locator('[data-slot="vertical-tabs-sidebar"]')).toBeVisible()
   await expect(page.locator('[data-slot="titlebar-tabs"]')).toHaveCount(0)
   const projectNames = page.locator('[data-slot="vertical-tabs-sidebar"] [data-slot="tab-project"]')
@@ -495,6 +501,7 @@ test("preferences control vertical tab layout and hide empty experimental settin
   await page.getByRole("menuitemradio", { name: "Preferences", exact: true }).click()
   await expect(settings.getByRole("heading", { name: "Preferences", level: 2, exact: true })).toBeVisible()
   await expect(layout).toContainText("Vertical")
+  await expect(position).toContainText("Top")
   await settings.evaluate((element) => element.setAttribute("dir", "rtl"))
   await expect(settings.getByRole("button", { name: "Preferences", exact: true })).toBeInViewport()
 
@@ -629,4 +636,80 @@ function json(route: Route, body: unknown, status = 200) {
 
 function sse(route: Route) {
   return route.fulfill({ status: 200, contentType: "text/event-stream", body: ": ok\n\n" })
+}
+
+for (const preference of [
+  { layout: "vertical", position: "top" },
+  { layout: "vertical", position: "bottom" },
+  { layout: "horizontal", position: "top" },
+]) {
+  test(`new tab placement ${preference.layout} ${preference.position} preserves existing and reopened tabs`, async ({
+    page,
+  }) => {
+    await mockServer(page)
+    await page.addInitScript(
+      ({ server, a, b, preference }) => {
+        if (localStorage.getItem("opencode.window.browser.dat:tabs")) return
+        localStorage.setItem(
+          "settings.v3",
+          JSON.stringify({ appearance: { tabLayout: preference.layout, verticalTabPosition: preference.position } }),
+        )
+        localStorage.setItem(
+          "opencode.window.browser.dat:tabs",
+          JSON.stringify([
+            { type: "session", server, sessionId: a },
+            { type: "session", server, sessionId: b },
+          ]),
+        )
+      },
+      { server, a: sessionA.id, b: sessionB.id, preference },
+    )
+    const href = (id: string) => `/server/${base64Encode(server)}/session/${id}`
+    await page.goto(href(sessionC.id))
+    const titles = page.locator("[data-titlebar-tab-slot]:visible [data-titlebar-tab-title]")
+    const top = preference.layout === "vertical" && preference.position === "top"
+    const expected = top
+      ? [sessionC.title, sessionA.title, sessionB.title]
+      : [sessionA.title, sessionB.title, sessionC.title]
+    await expect(titles).toHaveText(expected)
+    // Opening an existing tab must not move it or duplicate it.
+    await page.locator(`a[data-titlebar-tab-link][href="${href(sessionA.id)}"]:visible`).click()
+    await expect(titles).toHaveText(expected)
+    // Restoring the middle tab uses its original index even when new tabs go first.
+    const middle = top ? sessionA : sessionB
+    await page
+      .locator(`[data-titlebar-tab-slot]:visible:has(a[href="${href(middle.id)}"]) [data-slot="tab-close"]`)
+      .click()
+    await expect(titles).toHaveCount(2)
+    await page.keyboard.press("Control+Shift+T")
+    await expect(titles).toHaveText(expected)
+    await page.getByRole("button", { name: "New session", exact: true }).click()
+    await expect(page).toHaveURL(/new-session\?draftId=/)
+    await expect(titles).toHaveText(top ? ["Session", ...expected] : [...expected, "Session"])
+    await expect
+      .poll(() =>
+        page.evaluate(() => JSON.parse(localStorage.getItem("opencode.window.browser.dat:tabs") ?? "[]").length),
+      )
+      .toBe(4)
+    await page.reload()
+    await expect(titles).toHaveText(top ? ["Session", ...expected] : [...expected, "Session"])
+    if (top) {
+      const slots = page.locator("[data-titlebar-tab-slot]:visible")
+      const from = await slots.nth(0).boundingBox()
+      const to = await slots.nth(2).boundingBox()
+      if (!from || !to) throw new Error("Missing tab bounds")
+      await page.mouse.move(from.x + from.width / 2, from.y + from.height / 2)
+      await page.mouse.down()
+      await page.mouse.move(to.x + to.width / 2, to.y + to.height / 2, { steps: 20 })
+      await page.mouse.up()
+      await expect(titles).toHaveText([sessionC.title, sessionA.title, "Session", sessionB.title])
+      await expect
+        .poll(() =>
+          page.evaluate(() => JSON.parse(localStorage.getItem("opencode.window.browser.dat:tabs") ?? "[]")[2]?.type),
+        )
+        .toBe("draft")
+      await page.reload()
+      await expect(titles).toHaveText([sessionC.title, sessionA.title, "Session", sessionB.title])
+    }
+  })
 }
