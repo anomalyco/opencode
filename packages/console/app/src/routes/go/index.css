@@ -153,6 +153,7 @@ body {
   }
 
   [data-component="container"] {
+    width: 100%;
     max-width: 67.5rem;
     margin: 0 auto;
     border: 1px solid var(--color-border-weak);

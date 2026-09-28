@@ -262,6 +262,57 @@
       flex-direction: column;
     }
   }
+  /* Phones stack each model name above its bar so the table fits without horizontal scrolling. */
+  @media (max-width: 40rem) {
+    table,
+    thead,
+    tbody,
+    tfoot {
+      display: block;
+      min-width: 0;
+    }
+    colgroup,
+    tfoot td:not([data-slot="axis"]) {
+      display: none;
+    }
+    tr {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 5.5rem 4rem;
+      align-items: center;
+    }
+    thead tr {
+      border: 1px solid var(--go-console-border);
+      border-radius: 6px;
+    }
+    thead th {
+      border: 0;
+      padding-inline: 0.5rem;
+      white-space: normal;
+    }
+    /* The 100 and 1K ticks sit too close together to label both. */
+    [data-slot="gridline"]:first-child,
+    [data-slot="axis"] span:first-child {
+      display: none;
+    }
+    thead th:first-child {
+      padding-inline-start: 1rem;
+    }
+    thead th:last-child,
+    [data-slot="number"]:last-child {
+      padding-inline-end: 1rem;
+    }
+    tbody th {
+      grid-column: 1 / -1;
+      padding-block-end: 0;
+    }
+    [data-slot="bars"],
+    [data-slot="axis"] {
+      margin-inline-start: 1rem;
+    }
+    [data-slot="number"] {
+      padding-inline: 0.5rem;
+    }
+  }
   @media (prefers-reduced-motion: reduce) {
     [data-slot="tier-switch"] button,
     [data-slot="gridline"],
