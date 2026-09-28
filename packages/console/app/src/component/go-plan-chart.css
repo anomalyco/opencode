@@ -172,13 +172,14 @@
   }
   [data-slot="labels"] a {
     color: inherit;
-    text-decoration: underline;
-    text-decoration-color: transparent;
-    text-underline-offset: 2px;
-    transition: text-decoration-color 180ms ease;
+    text-decoration: none;
+    transition:
+      background-color 180ms ease,
+      border-color 180ms ease;
   }
   [data-slot="labels"] a:hover {
-    text-decoration-color: currentColor;
+    background: var(--go-console-track);
+    border-color: var(--go-console-track);
   }
   [data-slot="bars"] {
     position: relative;
