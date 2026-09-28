@@ -85,14 +85,27 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   '';
 
   postInstall = lib.optionalString (stdenvNoCC.buildPlatform.canExecute stdenvNoCC.hostPlatform) ''
-    # trick yargs into also generating zsh completions
+    # v2 dropped the `completion` subcommand; --completions is the global flag.
+    # NOTE: staged to files, installShellCompletion only rejects a zero-size file.
+    $out/bin/opencode --completions bash > opencode.bash
+    $out/bin/opencode --completions zsh > _opencode
+    $out/bin/opencode --completions fish > opencode.fish
+
     installShellCompletion --cmd opencode \
-      --bash <($out/bin/opencode completion) \
-      --zsh <(SHELL=/bin/zsh $out/bin/opencode completion)
+      --bash opencode.bash \
+      --fish opencode.fish \
+      --zsh _opencode
+
+    # OPENCODE_CLI_NAME is a build-time define, so the opencode2 copies are
+    # renamed rather than regenerated.
+    substitute opencode.bash opencode2.bash --replace-fail opencode opencode2
+    substitute _opencode _opencode2 --replace-fail opencode opencode2
+    substitute opencode.fish opencode2.fish --replace-fail opencode opencode2
 
     installShellCompletion --cmd opencode2 \
-      --bash <($out/bin/opencode2 completion) \
-      --zsh <(SHELL=/bin/zsh $out/bin/opencode2 completion)
+      --bash opencode2.bash \
+      --fish opencode2.fish \
+      --zsh _opencode2
   '';
 
   nativeInstallCheckInputs = [

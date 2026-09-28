@@ -3,11 +3,11 @@ let
   version = (builtins.fromJSON (builtins.readFile ../packages/desktop/package.json)).devDependencies.electron;
 in
 (callPackage (path + "/pkgs/development/tools/electron/binary/generic.nix") { }) version {
-  # Electron 42.10.1 SHASUMS256.txt; update with the desktop package version.
-  aarch64-linux = "20e68d6c4e47f3ebf59de7c6b1f8b8bec6a6ebda6a451132f9b465f3f13ce467";
-  x86_64-linux = "2452b27112d92387471fa2488aafac85d79ea3f2ee1216c0abd5150d6c12362b";
-  aarch64-darwin = "ac7194a3dfd81930ba35355c01620262c1254752859b42dcb8f4b9e4d174a871";
-  x86_64-darwin = "4489aba55477a0082266cb690db1c829503ba3338048599d8fd243953df37dab";
+  # Electron 44.4.3 SHASUMS256.txt; update with the desktop package version.
+  aarch64-linux = "61f084a5ac0f1835efc12b9db17042d92c8c617b03578f96a888acd4a05a0b10";
+  x86_64-linux = "fe880a7e37160cfd4e00193bc4c713ead7a778abfe74860a2d36d86fd0be48a8";
+  aarch64-darwin = "6b728f5dcfae74f3f936f2bca5b3cd9b9659ffea464f67939f004acb55425a85";
+  x86_64-darwin = "015b52631d92187b552ff4e047255f596a7af4707e388a5890951f0b2645764e";
   # fetchzip hashes the unpacked headers, not the release tarball.
-  headers = "sha256-4eUy3BZVvxTl7KUOsxio7769lL6ag/ecbeK+qLURWMI=";
+  headers = "sha256-QPkX+99kArlQhhbgOZe+Hsk28G5cadkUy0G0cIDtEh8=";
 }
