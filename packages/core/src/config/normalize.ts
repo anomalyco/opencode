@@ -18,7 +18,6 @@ import { ConfigReference } from "@opencode/schema/config/reference"
 import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { Permission } from "@opencode/schema/permission"
 import { ConfigAgentV1 } from "../v1/config/agent.js"
-import { ConfigAttachmentV1 } from "../v1/config/attachment.js"
 import { ConfigCommandV1 } from "../v1/config/command.js"
 import { ConfigMCPV1 } from "../v1/config/mcp.js"
 import { ConfigPermissionV1 } from "../v1/config/permission.js"
@@ -52,6 +51,7 @@ const unsupportedExperimental = [
 ] as const
 const unsupportedProvider = ["id", "whitelist", "blacklist"] as const
 const unsupportedModel = ["release_date", "attachment", "reasoning", "temperature", "experimental"] as const
+const LegacyAutoupdate = Schema.Literals([true, false, "notify"])
 
 export function normalize(input: unknown): Result {
   if (!isRecord(input))
@@ -70,7 +70,7 @@ export function normalize(input: unknown): Result {
     ? decodeEncoded(Schema.Boolean, input.snapshot, ["snapshot"], diagnostics)
     : undefined
   const legacyUpdate = own(input, "autoupdate")
-    ? decodeValue(Schema.Union([Schema.Boolean, Schema.Literal("notify")]), input.autoupdate, ["autoupdate"], diagnostics)
+    ? decodeValue(LegacyAutoupdate, input.autoupdate, ["autoupdate"], diagnostics)
     : undefined
   const nativeUpdate = own(input, "update")
     ? decodeEncoded(Info.fields.update, input.update, ["update"], diagnostics)
@@ -81,12 +81,18 @@ export function normalize(input: unknown): Result {
       : undefined
     : undefined
   const legacyMedia = own(input, "attachment")
-    ? decodeValue(ConfigAttachmentV1.Info, input.attachment, ["attachment"], diagnostics)
+    ? decodeEncoded(ConfigMedia.Info, input.attachment, ["attachment"], diagnostics)
     : undefined
-  if (legacyMedia !== undefined) encoded.media = canonical(ConfigMedia.Info, legacyMedia)
+  if (legacyMedia !== undefined) encoded.media = legacyMedia
   if (legacySnapshots !== undefined) encoded.snapshots = legacySnapshots
   const migratedUpdate =
-    legacyUpdate === false ? "disable" : legacyUpdate === "notify" ? "notify" : legacyUpdate === true ? "auto" : undefined
+    legacyUpdate === false
+      ? "disable"
+      : legacyUpdate === "notify"
+        ? "notify"
+        : legacyUpdate === true
+          ? "auto"
+          : undefined
   const update = prefer(migratedUpdate, nativeUpdate, ["update"], diagnostics)
   if (update !== undefined) encoded.update = update
   if (legacyShare !== undefined) encoded.share = legacyShare

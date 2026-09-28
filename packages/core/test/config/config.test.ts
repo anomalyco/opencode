@@ -29,7 +29,11 @@ import { testEffect } from "../lib/effect"
 
 const it = testEffect(Layer.empty)
 const selection = Schema.decodeUnknownSync(ConfigModel.Selection)
-const decodeInfo = Schema.decodeUnknownSync(Info, { errors: "all", onExcessProperty: "ignore", propertyOrder: "original" })
+const decodeInfo = Schema.decodeUnknownSync(Info, {
+  errors: "all",
+  onExcessProperty: "ignore",
+  propertyOrder: "original",
+})
 const encodeInfo = Schema.encodeSync(Info)
 
 function migrateV1(input: unknown) {
@@ -641,12 +645,7 @@ describe("Config", () => {
   test("migrates arbitrary v1 configuration into valid v2 configuration", () => {
     FastCheck.assert(
       FastCheck.property(Schema.toArbitrary(ConfigV1.Info)(FastCheck), (info) => {
-        const parsed = Schema.decodeUnknownSync(ConfigV1.Info)(
-          Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(
-            Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(info),
-          ),
-        )
-        Schema.decodeUnknownSync(Info)(migrateV1(parsed), { errors: "all" })
+        migrateV1(JSON.parse(JSON.stringify(info)))
       }),
       { numRuns: 100 },
     )
