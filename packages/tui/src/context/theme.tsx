@@ -4,6 +4,7 @@ import {
   DEFAULT_THEMES,
   addTheme,
   allThemes,
+  generateCommandSyntax,
   generateSubtleSyntax,
   generateSyntax,
   generateSystem,
@@ -64,6 +65,7 @@ export {
   DEFAULT_THEMES,
   addTheme,
   allThemes,
+  generateCommandSyntax,
   generateSubtleSyntax,
   generateSyntax,
   generateSystem,
@@ -270,6 +272,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
 
     const syntax = createSyntaxStyleMemo(() => generateSyntax(values()))
     const subtleSyntax = createSyntaxStyleMemo(() => generateSubtleSyntax(values()))
+    const commandSyntax = createSyntaxStyleMemo(() => generateCommandSyntax(values()))
 
     return {
       theme: new Proxy(values(), {
@@ -285,6 +288,7 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
       has: hasTheme,
       syntax,
       subtleSyntax,
+      commandSyntax,
       mode: () => store.mode,
       locked: () => store.lock !== undefined,
       lock: () => pin(store.mode),

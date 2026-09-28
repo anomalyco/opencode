@@ -131,7 +131,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
     return {}
   })
 
-  const { theme } = useTheme()
+  const { theme, commandSyntax } = useTheme()
 
   return (
     <Switch>
@@ -275,8 +275,24 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
                 title: "Shell command",
                 body: (
                   <Show when={command}>
-                    <box paddingLeft={1}>
-                      <text fg={theme.text}>{"$ " + command}</text>
+                    <box paddingLeft={1} flexDirection="row" gap={1}>
+                      <text fg={theme.textMuted} flexShrink={0}>
+                        $
+                      </text>
+                      <code
+                        // Deliberately not filetype(): that maps .sh/.bash to "shellscript",
+                        // which has no registered parser. "bash" is the key in parsers-config.ts.
+                        filetype="bash"
+                        syntaxStyle={commandSyntax()}
+                        content={command}
+                        wrapMode="word"
+                        drawUnstyledText={true}
+                        streaming={false}
+                        conceal={false}
+                        flexGrow={1}
+                        flexShrink={1}
+                        fg={theme.text}
+                      />
                     </box>
                   </Show>
                 ),

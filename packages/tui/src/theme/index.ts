@@ -557,6 +557,25 @@ export function generateSyntax(theme: Theme) {
   return SyntaxStyle.fromTheme(getSyntaxRules(theme))
 }
 
+// getSyntaxRules maps function.call to syntaxVariable, which is right for most
+// languages but wrong for shell, where function.call is the command name and
+// variable.parameter is its arguments. Auditing a command needs the verb to be
+// the loudest token on the line, so remap it to the function color and bold it.
+// convertThemeToStyles flattens rules into an object keyed by scope, so the
+// later rule wins.
+export function generateCommandSyntax(theme: Theme) {
+  return SyntaxStyle.fromTheme([
+    ...getSyntaxRules(theme),
+    {
+      scope: ["function.call"],
+      style: {
+        foreground: theme.syntaxFunction,
+        bold: true,
+      },
+    },
+  ])
+}
+
 export function generateSubtleSyntax(theme: Theme, overrides?: SyntaxStyleOverrides) {
   const rules = getSyntaxRules(theme)
   return SyntaxStyle.fromTheme(
