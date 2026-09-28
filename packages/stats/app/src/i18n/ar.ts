@@ -61,6 +61,7 @@ export const dict = {
   "range.2W": "أسبوعان",
   "range.1M": "شهر واحد",
   "range.2M": "شهران",
+  "chart.weekly": "أسبوعي",
   "chart.daily": "يومي",
   "chart.input": "الإدخال",
   "chart.output": "الإخراج",

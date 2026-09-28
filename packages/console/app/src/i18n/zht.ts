@@ -258,6 +258,18 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "訂閱 Go",
   "go.cta.price": "$10/月",
+  "go.plans.month": "/月",
+  "go.plans.plus.cta": "訂閱 Go Plus",
+  "go.plans.plus.description": "Go Plus 每月 $40，提供更高的使用額度。",
+  "go.plans.go.feature1": "精選實惠的模型",
+  "go.plans.go.feature2": "專為代理程式編碼測試",
+  "go.plans.go.feature3": "充足額度與穩定存取",
+  "go.plans.plus.feature1": "包含 Go 的所有權益",
+  "go.plans.plus.feature2": "更高額度，支援更長時間的專注編碼",
+  "go.plans.plus.feature3": "適合更大型、更複雜的專案",
+  "go.plans.limits": "使用額度",
+  "go.plans.description": "各模型每 5 小時的預估請求次數及每月使用額度",
+  "go.plans.legend": "方案",
   "go.pricing.body": "可搭配任何代理使用。每月 $10。如有需要可儲值。隨時取消。",
   "go.graph.free": "免費",
   "go.graph.freePill": "Big Pickle 與免費模型",
@@ -360,7 +372,7 @@ export const dict = {
 
   "go.faq.q9": "免費模型與 Go 有什麼區別？",
   "go.faq.a9":
-    "免費模型包括 Big Pickle 以及當時可用的促銷模型，配額為 200 次請求/天。Go 提供精選模型陣容，並在滾動視窗（5 小時、每週和每月）內提供更高的請求配額，大約相當於每 5 小時 $12、每週 $30 和每月 $60 的基礎額度；具體額度可能因模型而異（實際請求數因模型和使用情況而異）。",
+    "免費模型包括 Big Pickle 以及當時可用的促銷模型，配額為每天 200 次請求。Go 提供精選模型陣容，並在滾動視窗內執行較高的請求配額：每 5 小時為每月額度的 20%、每週 50%、每月 100%。具體額度可能因模型而異（實際請求次數因模型和使用情況而異）。",
   "go.faq.q10": "我可以退款嗎？",
   "go.faq.a10":
     "若扣款發生在過去 14 天內，且你在該計費期間尚未使用任何 Go 額度，你可能符合退款資格。請{{contact}}申請退款。",

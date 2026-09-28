@@ -270,6 +270,18 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Abonner på Go",
   "go.cta.price": "$10/måned",
+  "go.plans.month": "/måned",
+  "go.plans.plus.cta": "Abonner på Go Plus",
+  "go.plans.plus.description": "Go Plus koster $40/måned og gir høyere bruksgrenser.",
+  "go.plans.go.feature1": "Utvalgte, rimelige modeller",
+  "go.plans.go.feature2": "Testet for agentbasert koding",
+  "go.plans.go.feature3": "Romslige grenser og pålitelig tilgang",
+  "go.plans.plus.feature1": "Alt i Go er inkludert",
+  "go.plans.plus.feature2": "Høyere grenser for lengre, fokuserte kodeøkter",
+  "go.plans.plus.feature3": "For større, krevende prosjekter",
+  "go.plans.limits": "Grenser",
+  "go.plans.description": "Anslåtte forespørsler per 5 timer og månedlige grenser per modell",
+  "go.plans.legend": "Abonnementer",
   "go.pricing.body": "Bruk med hvilken som helst agent. $10/måned. Fyll på kreditt ved behov. Avslutt når som helst.",
   "go.graph.free": "Gratis",
   "go.graph.freePill": "Big Pickle og gratis modeller",
@@ -382,7 +394,7 @@ export const dict = {
 
   "go.faq.q9": "Hva er forskjellen mellom gratis modeller og Go?",
   "go.faq.a9":
-    "Gratis modeller inkluderer Big Pickle pluss kampanjemodeller som er tilgjengelige på det tidspunktet, med en kvote på 200 forespørsler/dag. Go tilbyr et kuratert modellutvalg med høyere forespørselskvoter som håndheves over rullerende vinduer (5 timer, ukentlig og månedlig), omtrent tilsvarende basiskvoter på $12 per 5 timer, $30 per uke og $60 per måned; modellspesifikke kvoter kan variere (faktiske forespørselsantall varierer etter modell og bruk).",
+    "Gratis modeller inkluderer Big Pickle pluss kampanjemodeller som er tilgjengelige på det tidspunktet, med en kvote på 200 forespørsler/dag. Go tilbyr et kuratert modellutvalg med høyere forespørselskvoter i rullerende perioder: 20 % av den månedlige kvoten per 5 timer, 50 % per uke og 100 % per måned. Modellspesifikke kvoter kan variere (faktisk antall forespørsler varierer etter modell og bruk).",
   "go.faq.q10": "Kan jeg få refusjon?",
   "go.faq.a10":
     "Du kan ha rett på refusjon hvis belastningen ble gjort i løpet av de siste 14 dagene og du ikke har brukt noe av Go-kvoten i den faktureringsperioden. {{contact}} for å be om refusjon.",

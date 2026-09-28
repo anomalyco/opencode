@@ -153,6 +153,7 @@ body {
   }
 
   [data-component="container"] {
+    width: 100%;
     max-width: 67.5rem;
     margin: 0 auto;
     border: 1px solid var(--color-border-weak);
@@ -1067,6 +1068,101 @@ body {
         }
       }
     }
+  }
+
+  [data-slot="plans"] {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+    margin-top: 2rem;
+    font-family: "Inter", sans-serif;
+    font-size: 0.8125rem;
+    font-weight: 440;
+    line-height: 1.25rem;
+    letter-spacing: -0.04px;
+    text-rendering: geometricPrecision;
+    -webkit-font-smoothing: antialiased;
+
+    [data-slot="plan"] {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 1.75rem;
+      padding: 1rem;
+      border: 1px solid var(--go-console-border);
+      border-radius: 6px;
+      background: var(--go-console-surface);
+      color: var(--go-console-text);
+    }
+    [data-slot="name"] {
+      color: var(--go-console-secondary);
+      line-height: 1.25rem;
+    }
+    [data-slot="price"] {
+      margin-top: 1rem;
+      font-size: 1.625rem;
+      font-weight: 610;
+      line-height: 2rem;
+      letter-spacing: -0.5px;
+      span {
+        font-size: 0.8125rem;
+        font-weight: 440;
+        letter-spacing: -0.04px;
+        color: var(--go-console-secondary);
+      }
+    }
+    ul {
+      display: grid;
+      gap: 0.5rem;
+      margin-top: 1.25rem;
+      padding: 0;
+      list-style: none;
+      color: var(--go-console-secondary);
+    }
+    li {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    li span {
+      display: inline-flex;
+      flex: none;
+      color: var(--go-console-icon);
+    }
+    a {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 2rem;
+      padding: 0 1rem;
+      font-size: 0.8125rem;
+      font-weight: 530;
+      border: 1px solid var(--go-console-border);
+      border-radius: 6px;
+      background: var(--go-console-bg);
+      color: var(--go-console-text);
+      text-align: center;
+      text-decoration: none;
+    }
+    a:hover {
+      background: var(--go-console-track);
+    }
+    a:focus-visible {
+      outline: 2px solid var(--go-console-text);
+      outline-offset: 2px;
+    }
+    @media (max-width: 42rem) {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  [data-component="comparison"] {
+    background: var(--go-console-bg);
+    border-top: 0;
+  }
+
+  [data-component="hero"] {
+    padding-bottom: 2rem;
   }
 
   [data-slot="section-title"] {

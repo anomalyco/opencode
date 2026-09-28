@@ -1545,6 +1545,25 @@ body {
   background: var(--stats-layer-2);
 }
 
+[data-page="stats"] [data-slot="leaderboard-period"] {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+  color: var(--stats-muted);
+  font-size: 13px;
+}
+
+[data-page="stats"] [data-slot="leaderboard-period"] [data-component="usage-filter"] button {
+  width: auto;
+  padding: 0 8px;
+}
+
+[data-page="stats"] [data-slot="leaderboard-period"] + [data-component="leaderboard"] {
+  margin-top: 12px;
+}
+
 [data-page="stats"] [data-component="chart-tooltip"] {
   position: absolute;
   right: auto;
