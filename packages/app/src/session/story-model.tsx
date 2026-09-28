@@ -235,7 +235,7 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
   } satisfies SessionComposerRegionViewController
 
   return (
-    <div class="mx-auto h-screen min-h-[640px] w-full max-w-[1440px]">
+    <div class="mx-auto h-dvh w-full max-w-[1440px]">
       <SessionRouteFrame padded>
         <SessionPanelFrame raised>
           <main class="flex min-h-0 flex-1 flex-col">
@@ -256,12 +256,12 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
                     "hidden md:flex": state.reviewOpened,
                   }}
                 >
-                  <div class="min-h-0 flex-1 overflow-y-auto py-6">
+                  <div class="min-h-0 flex-1 overflow-y-auto">
                     <SessionTimeline
                       document={props.document}
                       editToolDefaultOpen
                       shellToolDefaultOpen
-                      class="mx-auto w-full max-w-[840px]"
+                      class="mx-auto w-full max-w-[840px] py-6"
                     />
                   </div>
                   <SessionComposerRegion
