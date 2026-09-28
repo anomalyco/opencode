@@ -310,5 +310,18 @@
     [data-slot="number"] {
       padding-inline: 0.5rem;
     }
+    /* Rows are grids here, so highlight the row itself instead of each cell. */
+    tbody tr {
+      border-radius: 6px;
+      transition: background-color 120ms ease;
+    }
+    tbody tr:hover {
+      background: var(--go-console-surface);
+    }
+    tbody tr > *,
+    tbody tr:hover > * {
+      border-radius: 0;
+      background: none;
+    }
   }
 }
