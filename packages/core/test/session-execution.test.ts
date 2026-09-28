@@ -14,6 +14,7 @@ import { ProjectTable } from "@opencode/core/project/sql"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionExecution } from "@opencode/core/session/execution"
+import { SessionEnvironment } from "@opencode/core/session/environment"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
 import { SessionEvent } from "@opencode/core/session/event"
 import { SessionInbox } from "@opencode/core/session/inbox"
@@ -27,11 +28,68 @@ import { testEffect } from "./lib/effect"
 
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, SessionStore.node, SessionInbox.node, Job.node, KV.node, Session.node]),
+    LayerNode.group([
+      Database.node,
+      Bus.node,
+      SessionStore.node,
+      SessionInbox.node,
+      Job.node,
+      KV.node,
+      Session.node,
+      SessionEnvironment.node,
+    ]),
   ),
 )
 
 describe("SessionExecution lifecycle", () => {
+  it.effect("recovers same-directory agents only after their own environment is rebound", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const original = yield* SessionEnvironment.Service
+      const first = Session.ID.make("ses_identity_first")
+      const second = Session.ID.make("ses_identity_second")
+      yield* seedSessions(database, [first, second], { time_suspended: Date.now() })
+      yield* original.set(first, { PASEO_AGENT_ID: "first", PASEO_AGENT_CWD: "/same" })
+      yield* original.set(second, { PASEO_AGENT_ID: "second", PASEO_AGENT_CWD: "/same" })
+      const restarted = yield* SessionEnvironment.make
+      const waiting = yield* Deferred.make<void>()
+      const firstRunning = yield* Deferred.make<void>()
+      const secondRunning = yield* Deferred.make<void>()
+      const observed: Array<SessionEnvironment.Variables | undefined> = []
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, ({ sessionID }) =>
+        Effect.gen(function* () {
+          observed.push(yield* restarted.resolve(sessionID))
+          yield* Deferred.succeed(sessionID === first ? firstRunning : secondRunning, undefined)
+          yield* Effect.never
+        }),
+      ).pipe(
+        Effect.provideService(SessionEnvironment.Service, {
+          ...restarted,
+          resolve: (id) => Deferred.succeed(waiting, undefined).pipe(Effect.andThen(restarted.resolve(id))),
+        }),
+      )
+      yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+      yield* Deferred.await(waiting)
+      yield* Context.get(context, SessionRestart.Service).resumeSuspendedSessions
+      expect(observed).toEqual([])
+      expect(yield* attempts(database, first)).toBe(0)
+      yield* restarted.set(second, { PASEO_AGENT_ID: "second", PASEO_AGENT_CWD: "/same" })
+      yield* Deferred.await(secondRunning)
+      expect(observed).toEqual([{ PASEO_AGENT_ID: "second", PASEO_AGENT_CWD: "/same" }])
+      expect(yield* attempts(database, first)).toBe(0)
+      yield* restarted.set(first, { PASEO_AGENT_ID: "first", PASEO_AGENT_CWD: "/same" })
+      yield* Deferred.await(firstRunning)
+      expect(observed).toEqual([
+        { PASEO_AGENT_ID: "second", PASEO_AGENT_CWD: "/same" },
+        { PASEO_AGENT_ID: "first", PASEO_AGENT_CWD: "/same" },
+      ])
+      expect(yield* attempts(database, first)).toBe(1)
+      expect(yield* attempts(database, second)).toBe(1)
+    }),
+  )
+
   test("classifies success and typed failure terminals", () => {
     expect(SessionExecution.terminal(Exit.succeed(undefined))).toEqual({ type: "succeeded" })
     expect(
@@ -1346,6 +1404,7 @@ function buildExecution(
     const store = yield* SessionStore.Service
     const jobs = overrideJobs ?? (yield* Job.Service)
     const sessions = yield* Session.Service
+    const environments = yield* SessionEnvironment.Service
     const sessionLayer = Layer.effect(
       Session.Service,
       Effect.gen(function* () {
@@ -1382,6 +1441,7 @@ function buildExecution(
         Layer.provide(Layer.succeed(Bus.Service, bus)),
         Layer.provide(Layer.succeed(SessionStore.Service, store)),
         Layer.provide(Layer.succeed(Job.Service, jobs)),
+        Layer.provide(Layer.succeed(SessionEnvironment.Service, environments)),
         // Do not reuse the outer harness's selector with its already-captured Location map.
         Layer.provide(
           AppNodeBuilder.build(Instance.node, [LocationServiceMap.node.replace(locations)]).pipe(Layer.fresh),

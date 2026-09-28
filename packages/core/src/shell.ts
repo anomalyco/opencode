@@ -258,7 +258,7 @@ const layer = () =>
         const sessionID = input.metadata?.sessionID
         const sessionEnvironment =
           location.workspaceID === undefined && Schema.is(SessionSchema.ID)(sessionID)
-            ? yield* environments.get(sessionID)
+            ? yield* environments.resolve(sessionID)
             : undefined
         const invocation: ShellCreateBefore = {
           command: input.command,

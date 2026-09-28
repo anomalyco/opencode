@@ -23,6 +23,7 @@ import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Agent } from "@opencode/core/agent"
 import { Job } from "@opencode/core/job"
+import { KV } from "@opencode/core/kv"
 import { Session } from "@opencode/core/session"
 import { SessionEvent } from "@opencode/core/session/event"
 import { SessionExecution } from "@opencode/core/session/execution"
@@ -146,6 +147,7 @@ const nodes = LayerNode.group([
   Database.node,
   Bus.node,
   Job.node,
+  KV.node,
   Session.node,
   SessionExecution.node,
   LocationServiceMap.node,
@@ -948,6 +950,70 @@ describe("ShellTool", () => {
 
               expect(settled.status).toBe("completed")
               expect(settled.content?.[0]).toEqual({ type: "text", text: "from-session" })
+            }),
+          )
+        },
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+      ),
+    { timeout: 15_000 },
+  )
+
+  productionIt.live(
+    "keeps recovered same-directory shells waiting for their own identity",
+    () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => {
+          reset()
+          return withSession(tmp.path, (registry) =>
+            Effect.gen(function* () {
+              const sessions = yield* Session.Service
+              const kv = yield* KV.Service
+              const second = yield* sessions.create({
+                location: Location.Ref.make({ directory: AbsolutePath.make(tmp.path) }),
+                model: sessionModel,
+              })
+              // Only these markers survive a process restart; environment values do not.
+              yield* kv.set(`session.environment/${sessionID}`, true)
+              yield* kv.set(`session.environment/${second.id}`, true)
+              const finished = yield* Deferred.make<void>()
+              const command = isWindows
+                ? "[Console]::Out.Write($env:PASEO_AGENT_ID + ':' + $env:PASEO_AGENT_CWD)"
+                : 'printf %s "$PASEO_AGENT_ID:$PASEO_AGENT_CWD"'
+              const first = yield* executeTool(registry, call({ command })).pipe(
+                Effect.tap(() => Deferred.succeed(finished, undefined)),
+                Effect.forkScoped,
+              )
+              yield* sessions.environment({
+                sessionID: second.id,
+                variables: { PASEO_AGENT_ID: "second", PASEO_AGENT_CWD: tmp.path },
+              })
+              const other = yield* executeTool(registry, { ...call({ command }, "second-shell"), sessionID: second.id })
+              expect(other.status).toBe("completed")
+              expect(other.content?.[0]).toEqual({ type: "text", text: `second:${tmp.path}` })
+              expect(yield* Deferred.isDone(finished)).toBe(false)
+              yield* sessions.environment({
+                sessionID,
+                variables: { PASEO_AGENT_ID: "first", PASEO_AGENT_CWD: tmp.path },
+              })
+              const own = yield* Fiber.join(first)
+              expect(own.status).toBe("completed")
+              expect(own.content?.[0]).toEqual({ type: "text", text: `first:${tmp.path}` })
+              const locations = yield* LocationServiceMap.Service
+              const location = Location.Ref.make({ directory: AbsolutePath.make(tmp.path) })
+              yield* locations.invalidate(location)
+              yield* Effect.gen(function* () {
+                const plugins = yield* Plugin.Service
+                yield* plugins.awaitActivation
+                const reloaded = yield* Tool.Service
+                for (const [id, identity] of [[sessionID, "first"], [second.id, "second"]] as const) {
+                  const result = yield* executeTool(reloaded, {
+                    ...call({ command }, `reloaded-${identity}`), sessionID: id,
+                  })
+                  expect(result.status).toBe("completed")
+                  expect(result.content?.[0]).toEqual({ type: "text", text: `${identity}:${tmp.path}` })
+                }
+              }).pipe(Effect.provide(locations.get(location)))
             }),
           )
         },
