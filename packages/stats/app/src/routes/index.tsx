@@ -433,6 +433,7 @@ function TopModelsSection(props: {
       >
         <Leaderboard
           data={leaderboard()}
+          showChange={period() === "weekly"}
           activeModel={activeModel()}
           onActiveModelChange={setActiveModel}
           catalogLabs={props.catalogLabs}
@@ -847,6 +848,7 @@ function formatUsers(value: number) {
 
 function Leaderboard(props: {
   data: LeaderboardEntry[]
+  showChange: boolean
   activeModel: string | undefined
   onActiveModelChange: (model: string | undefined) => void
   catalogLabs: readonly string[]
@@ -861,6 +863,7 @@ function Leaderboard(props: {
           {(entry) => (
             <LeaderboardCard
               entry={entry}
+              showChange={props.showChange}
               size="featured"
               active={props.activeModel === entry.model}
               onActiveModelChange={props.onActiveModelChange}
@@ -875,6 +878,7 @@ function Leaderboard(props: {
           {(entry) => (
             <LeaderboardCard
               entry={entry}
+              showChange={props.showChange}
               size="compact"
               active={props.activeModel === entry.model}
               onActiveModelChange={props.onActiveModelChange}
@@ -888,6 +892,7 @@ function Leaderboard(props: {
           {(entry) => (
             <LeaderboardCard
               entry={entry}
+              showChange={props.showChange}
               size="featured"
               active={props.activeModel === entry.model}
               onActiveModelChange={props.onActiveModelChange}
@@ -902,6 +907,7 @@ function Leaderboard(props: {
 
 function LeaderboardCard(props: {
   entry: LeaderboardEntry
+  showChange: boolean
   size: "featured" | "compact"
   active: boolean
   onActiveModelChange: (model: string | undefined) => void
@@ -941,13 +947,15 @@ function LeaderboardCard(props: {
             <Show when={hasProvider()} fallback={<span />}>
               <span>{props.entry.author}</span>
             </Show>
-            <span
-              data-slot="delta"
-              data-new={props.entry.change === null ? "true" : undefined}
-              data-negative={props.entry.change !== null && props.entry.change < 0 ? "true" : undefined}
-            >
-              {formatChange(props.entry.change, i18n)}
-            </span>
+            <Show when={props.showChange}>
+              <span
+                data-slot="delta"
+                data-new={props.entry.change === null ? "true" : undefined}
+                data-negative={props.entry.change !== null && props.entry.change < 0 ? "true" : undefined}
+              >
+                {formatChange(props.entry.change, i18n)}
+              </span>
+            </Show>
           </div>
         </div>
       </div>
