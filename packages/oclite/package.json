@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode-ai/oclite",
+  "version": "1.18.33",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "bin": {
+    "oclite": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsgo --noEmit",
+    "test": "bun test --timeout 30000"
+  },
+  "dependencies": {
+    "@effect/platform-node": "catalog:",
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "@opencode-ai/core": "workspace:*",
+    "@opencode-ai/llm": "workspace:*",
+    "@opencode-ai/schema": "workspace:*",
+    "effect": "catalog:",
+    "opencode": "workspace:*"
+  },
+  "devDependencies": {
+    "@opencode-ai/http-recorder": "workspace:*",
+    "@tsconfig/bun": "catalog:",
+    "@types/bun": "catalog:",
+    "@typescript/native-preview": "catalog:"
+  }
+}
