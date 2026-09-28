@@ -106,7 +106,7 @@ export const PersistentPtyGroup = HttpApiGroup.make("server.experimental")
       error: [ForbiddenError, PtyNotFoundError, ServiceUnavailableError],
     }).annotateMerge(
       OpenApi.annotations({
-        identifier: "v2.persistentPty.connect",
+        identifier: "persistentPty.connect",
         summary: "Connect to a persistent PTY",
         description: "Stream persistent PTY output through the OpenCode server.",
         transform: (operation) => ({

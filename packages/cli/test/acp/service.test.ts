@@ -18,15 +18,14 @@ describe("acp service", () => {
           body: request.method === "GET" ? undefined : await request.json().catch(() => undefined),
         })
         const location = { directory: "/workspace", project: { id: "global", directory: "/workspace" } }
-        if (url.pathname === "/api/plugin/await-activation") return new Response(null, { status: 204 })
         if (url.pathname === "/api/model") return Response.json({ location, data: [model] })
         if (url.pathname === "/api/model/default") return Response.json({ location, data: model })
         if (url.pathname === "/api/agent") return Response.json({ location, data: [agent] })
         if (url.pathname === "/api/command")
           return Response.json({ location, data: [{ name: "review", template: "" }] })
-        if (url.pathname === "/api/skill") return Response.json({ location, data: [skill] })
         if (url.pathname === "/api/session" && request.method === "POST") return Response.json({ data: session })
-        if (url.pathname === "/api/mcp/docs" && request.method === "PUT") return new Response(null, { status: 204 })
+        if (url.pathname === "/api/experimental/mcp/docs" && request.method === "PUT")
+          return new Response(null, { status: 204 })
         return new Response(null, { status: 404 })
       },
     })
@@ -55,7 +54,7 @@ describe("acp service", () => {
       expect(result.configOptions?.map((option) => option.id)).toEqual(["model", "effort", "mode"])
       expect(requests).toContainEqual({
         method: "PUT",
-        path: "/api/mcp/docs",
+        path: "/api/experimental/mcp/docs",
         body: {
           config: { type: "local", command: ["bun", "docs.ts"], environment: { TOKEN: "x" } },
         },
@@ -64,7 +63,7 @@ describe("acp service", () => {
         sessionId: "ses_acp",
         update: {
           sessionUpdate: "available_commands_update",
-          availableCommands: [{ name: "review" }, { name: "verify", description: "Verify work" }],
+          availableCommands: [{ name: "review", description: "" }],
         },
       })
     } finally {
@@ -94,15 +93,6 @@ const agent = {
   mode: "primary" as const,
   hidden: false,
   permissions: [],
-}
-
-const skill = {
-  id: "verify",
-  name: "verify",
-  description: "Verify work",
-  slash: true,
-  location: "/skills/verify.md",
-  content: "verify",
 }
 
 const session = {

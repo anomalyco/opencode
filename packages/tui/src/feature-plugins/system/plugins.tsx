@@ -7,6 +7,7 @@ import { Spinner } from "../../component/spinner"
 import { usePlugin } from "../../plugin/context"
 import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
 import { useDialog } from "../../ui/dialog"
+import { errorMessage } from "../../util/error"
 
 const id = "opencode.plugins"
 
@@ -98,14 +99,14 @@ export function PluginsDialog(props: {
         footer: updating(entry) ? "updating" : footer(entry),
         footerColor:
           status(entry) === "failed"
-            ? props.context.theme.text.feedback.error.default
+            ? props.context.theme.text.feedback.error.base
             : outdated(entry)
-              ? props.context.theme.text.feedback.info.default
-              : props.context.theme.text.subdued,
+              ? props.context.theme.text.feedback.info.base
+              : props.context.theme.text.muted,
         gutter: updating(entry)
           ? (color) => <Spinner color={color} />
           : status(entry) === "failed"
-            ? () => <text fg={props.context.theme.text.feedback.error.default}>x</text>
+            ? () => <text fg={props.context.theme.text.feedback.error.base}>x</text>
             : undefined,
       }),
     ),
@@ -134,7 +135,7 @@ export function PluginsDialog(props: {
       .catch((cause) => {
         props.context.ui.toast.show({
           variant: "error",
-          message: cause instanceof Error ? cause.message : String(cause),
+          message: errorMessage(cause),
         })
       })
       .finally(() => setLocked(false))
@@ -148,12 +149,11 @@ export function PluginsDialog(props: {
         location,
         targets: [entry.plugin.source.target],
       })
-      .then(() => props.context.client.plugin.awaitActivation({ location }))
       .then(() => refetch())
       .catch((cause) => {
         props.context.ui.toast.show({
           variant: "error",
-          message: cause instanceof Error ? cause.message : String(cause),
+          message: errorMessage(cause),
         })
       })
       .finally(() => setPending((keys) => keys.filter((key) => key !== entry.key)))
@@ -174,7 +174,7 @@ export function PluginsDialog(props: {
       .catch((cause) => {
         props.context.ui.toast.show({
           variant: "error",
-          message: cause instanceof Error ? cause.message : String(cause),
+          message: errorMessage(cause),
         })
       })
       .finally(() => setChecking(false))
@@ -224,6 +224,15 @@ export function PluginsDialog(props: {
                 onTrigger: check,
               },
               {
+                title: "view error",
+                command: "dialog.plugins.error",
+                hidden: !pluginError(focusedTui()),
+                onTrigger: (option) => {
+                  const entry = entries().find((entry) => entry.key === option.value)
+                  if (pluginError(entry)) setDetail(entry)
+                },
+              },
+              {
                 title: toggleTitle(),
                 command: "plugins.toggle",
                 side: "right",
@@ -239,12 +248,12 @@ export function PluginsDialog(props: {
               },
             ]}
             footer={
-              <Show when={pluginError(focusedEntry())}>
+              <Show when={pluginError(focusedEntry()) && !focusedTui()}>
                 <text>
-                  <span style={{ fg: props.context.theme.text.default }}>
+                  <span style={{ fg: props.context.theme.text.base }}>
                     <b>enter</b>
                   </span>
-                  <span style={{ fg: props.context.theme.text.subdued }}> view error</span>
+                  <span style={{ fg: props.context.theme.text.muted }}> view error</span>
                 </text>
               </Show>
             }

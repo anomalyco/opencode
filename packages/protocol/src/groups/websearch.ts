@@ -15,7 +15,7 @@ export const WebSearchGroup = HttpApiGroup.make("server.websearch")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.websearch.providers",
+          identifier: "websearch.providers",
           summary: "List web search providers",
           description: "Return the registered web search providers.",
         }),
@@ -31,7 +31,7 @@ export const WebSearchGroup = HttpApiGroup.make("server.websearch")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.websearch.query",
+          identifier: "websearch.query",
           summary: "Search the web",
           description:
             "Run one web search through the selected provider. Specify a provider to override the configured default.",

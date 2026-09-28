@@ -31,7 +31,7 @@ function appAssetsPlugin(archive: string): Plugin {
     },
     load(id) {
       if (id !== "\0virtual:opencode-app-assets") return
-      return `export default ${JSON.stringify(archive)}`
+      return `export default ${archive}`
     },
   }
 }
@@ -292,5 +292,5 @@ export default mainConfig({
   channel: process.env.OPENCODE_CHANNEL ?? "local",
   assetHash: "local",
   target: nodeTarget(process.platform, process.arch),
-  appArchive: "",
+  appArchive: "{}",
 })

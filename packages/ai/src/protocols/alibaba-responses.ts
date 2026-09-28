@@ -6,9 +6,9 @@ import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
 
 const Options = Schema.Struct({
-  reasoningEffort: OpenResponsesOptions.Options.fields.reasoningEffort,
+  reasoningEffort: Schema.optional(OpenResponsesOptions.ReasoningEffort),
   enableThinking: Schema.optional(Schema.Boolean),
-  store: OpenResponsesOptions.Options.fields.store,
+  store: Schema.optional(Schema.Boolean),
   previousResponseId: Schema.optional(Schema.String),
   conversation: Schema.optional(Schema.String),
 })

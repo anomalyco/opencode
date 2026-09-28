@@ -20,7 +20,7 @@ import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 
 async function setup(width: number, output = "") {
   const temporary = await tmpdir()
-  const location = { directory: `${temporary.path}/original`, workspaceID: "workspace_fixture" }
+  const location = { directory: `${temporary.path}/original` }
   const shell: ShellInfo = {
     id: "sh_fixture",
     command: "render-scene --quality high",
@@ -66,7 +66,7 @@ async function setup(width: number, output = "") {
   const app = await testRender(
     () => (
       <TestTuiContexts directory={temporary.path} paths={{ state: temporary.path }}>
-        <ConfigProvider config={createTuiResolvedConfig({ session: { terminal: false } })}>
+        <ConfigProvider config={createTuiResolvedConfig({}, { terminal: false })}>
           <RouteProvider initialRoute={{ type: "session", sessionID: "ses_fixture" }}>
             <ClientProvider api={api}>
               <DataProvider directory={temporary.path}>
@@ -149,9 +149,7 @@ test.each([40, 100])("shell output opens, follows, scrolls, and survives exit at
   expect(reads.every((request) => request.url.searchParams.get("location[directory]") === app.location.directory)).toBe(
     true,
   )
-  expect(
-    reads.every((request) => request.url.searchParams.get("location[workspace]") === app.location.workspaceID),
-  ).toBe(true)
+  expect(reads.every((request) => request.url.searchParams.has("location[workspace]") === false)).toBe(true)
 
   app.mockInput.pressEscape()
   await app.waitForFrame((frame) => !frame.includes("Shell output") && frame.includes("No shell commands"))

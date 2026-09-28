@@ -172,19 +172,7 @@ export async function runPromptQueue(input: QueueInput): Promise<void> {
               break
             }
 
-            const emittedUser = sent.mode !== "shell" && sent.command?.source === "skill" && !!sent.text.trim()
-            if (emittedUser) {
-              const commit = {
-                kind: "user",
-                text: sent.text,
-                phase: "start",
-                source: "system",
-                messageID: sent.messageID,
-              } as const
-              input.trace?.write("ui.commit", commit)
-              input.footer.append(commit)
-            }
-            input.onSend?.(sent, emittedUser)
+            input.onSend?.(sent, false)
 
             if (state.closed) {
               break

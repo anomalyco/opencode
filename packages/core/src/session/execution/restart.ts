@@ -93,6 +93,7 @@ export const layer = (options?: Options) =>
           sessionID,
           text: CONTINUE_AFTER_SERVER_RESTART,
           description: "Continuing after restart",
+          metadata: { notice: "restart" },
         })
         return true
       })
@@ -100,7 +101,6 @@ export const layer = (options?: Options) =>
       const recoverShell = Effect.fnUntraced(function* (
         background: Job.Background,
         recovery: Extract<Job.Recovery, { kind: "shell" }>,
-        suspended: ReadonlySet<SessionSchema.ID>,
       ) {
         const state = background.status === "running" ? "cancelled" : background.status
         const text =
@@ -124,7 +124,9 @@ export const layer = (options?: Options) =>
               state,
               text,
             }),
-            ...(suspended.has(recovery.sessionID) ? { resume: false } : {}),
+            // Restart notices must not revive idle owners of long-lived shells.
+            // Interrupted executions resume separately after their notices are admitted.
+            resume: false,
           })
           .pipe(
             Effect.catchTag("Session.NotFoundError", () => Effect.void),
@@ -208,7 +210,7 @@ export const layer = (options?: Options) =>
               if ((yield* jobs.get(background.id))?.status === "running") return
               const recovery = background.recovery
               yield* recovery.kind === "shell"
-                ? recoverShell(background, recovery, suspended)
+                ? recoverShell(background, recovery)
                 : recoverSubagent(background, recovery, suspended)
             }),
             { discard: true },

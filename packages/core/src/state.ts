@@ -151,6 +151,10 @@ export interface Interface<State, Editor> extends Transformable<Editor> {
    * value and never touches earlier ones, so callers may retain what they read.
    */
   readonly get: () => State
+  /** Marks a changed read-time dependency without scheduling another notification. */
+  readonly invalidate: () => void
+  /** Changes synchronously, including batched edits and grouped-registration removal. */
+  readonly revision: () => number
 }
 
 export function create<State, Editor>(options: Options<State, Editor>): Interface<State, Editor> {
@@ -215,6 +219,8 @@ export function create<State, Editor>(options: Options<State, Editor>): Interfac
 
   return {
     get,
+    invalidate,
+    revision: () => version,
     transform: Effect.fn("State.transform")(function* (update) {
       yield* Effect.annotateCurrentSpan("state", options.name ?? "anonymous")
       const scope = yield* Scope.Scope

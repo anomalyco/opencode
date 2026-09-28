@@ -67,11 +67,11 @@ describe("credentialConnections", () => {
           name: "Example",
           connections: [
             { type: "env", name: "EXAMPLE_KEY" },
-            { type: "credential", id: "cred_1", label: "Work" },
+            { type: "credential", method: "key", id: "cred_1", label: "Work" },
           ],
         }),
       ),
-    ).toEqual([{ type: "credential", id: "cred_1", label: "Work" }])
+    ).toEqual([{ type: "credential", method: "key", id: "cred_1", label: "Work" }])
   })
 })
 
@@ -83,7 +83,7 @@ describe("connectionSummary", () => {
           id: "example",
           name: "Example",
           connections: [
-            { type: "credential", id: "cred_1", label: "Work" },
+            { type: "credential", method: "key", id: "cred_1", label: "Work" },
             { type: "env", name: "EXAMPLE_KEY" },
           ],
         }),

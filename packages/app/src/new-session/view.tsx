@@ -13,8 +13,6 @@ import {
   PromptProjectSelector,
   type PromptProjectController,
 } from "@/new-session/project/selector"
-import { StatusPopover } from "@/shell/status/status-popover"
-import { TitlebarRight } from "@/shell/titlebar/right-slot"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useProviders } from "@/providers/catalog/providers"
@@ -102,6 +100,8 @@ export function NewSessionView(props: {
           </div>
         </div>
         <NewSessionTips
+          selection={props.composer.model.selection}
+          onDone={props.composer.restoreFocus}
           workspaceEligible={
             !!props.project.selected() &&
             props.workspace.bar.visible() &&
@@ -115,20 +115,12 @@ export function NewSessionView(props: {
   )
 }
 
-export function NewSessionStatus(props: { visible: boolean }) {
-  const language = useLanguage()
-  return (
-    <TitlebarRight>
-      <Show when={props.visible}>
-        <Tooltip appearance="standard" placement="bottom" value={language.t("status.popover.trigger")}>
-          <StatusPopover />
-        </Tooltip>
-      </Show>
-    </TitlebarRight>
-  )
-}
-
-function NewSessionTips(props: { workspaceEligible: boolean; onWorkspace: () => void }) {
+function NewSessionTips(props: {
+  selection: ComposerModel["model"]["selection"]
+  onDone: () => void
+  workspaceEligible: boolean
+  onWorkspace: () => void
+}) {
   const language = useLanguage()
   const dialog = useDialog()
   const sdk = useWorkspaceLocation()
@@ -151,9 +143,8 @@ function NewSessionTips(props: { workspaceEligible: boolean; onWorkspace: () => 
   )
   const providerVisible = createMemo(
     () =>
-      providers.ready() &&
       providerReady() &&
-      providers.paid().length === 0 &&
+      providers.anyConnection() === false &&
       Date.now() - providerState.dismissedAt >= providerTipDismissalDuration,
   )
   const tip = createMemo<"workspace" | "provider" | undefined>(() => {
@@ -175,7 +166,9 @@ function NewSessionTips(props: { workspaceEligible: boolean; onWorkspace: () => 
       return
     }
     void import("@/providers/connect/dialog").then(({ DialogConnectProvider }) => {
-      void dialog.show(() => <DialogConnectProvider directory={sdk().directory} />)
+      void dialog.show(() => (
+        <DialogConnectProvider directory={sdk().directory} selection={props.selection} onDone={props.onDone} />
+      ))
     })
   }
   const dismiss = () => {

@@ -5,6 +5,7 @@ import { app, crashReporter, netLog, shell } from "electron"
 import { Context, Effect, FileSystem, Layer, Logger, Option, Path, References, Stream } from "effect"
 import { homedir } from "node:os"
 import { VERSION } from "../constants"
+import { marks } from "../lifecycle/marks"
 
 const MAX_LOG_AGE_DAYS = 7
 const TAIL_LINES = 1000
@@ -18,6 +19,7 @@ let netLogPath: string | undefined
 
 export interface Interface {
   readonly startNetwork: Effect.Effect<void>
+  readonly startCrashReporter: Effect.Effect<void>
   readonly exportDebug: Effect.Effect<string>
 }
 
@@ -29,16 +31,25 @@ const serviceLayer = Layer.effect(
     const fs = yield* FileSystem.FileSystem
     const path = yield* Path.Path
     yield* initLogging(fs, path).pipe(Effect.orDie)
-    yield* initCrashReporter(fs, path).pipe(Effect.orDie)
+    // Old run directories go away in the background; listing them is not worth a wait at startup.
+    yield* Effect.forkScoped(cleanup(fs, path).pipe(Effect.catch(() => Effect.void)))
+    marks.logging = Date.now()
     yield* Effect.logInfo("app starting", {
       version: VERSION,
       packaged: app.isPackaged,
       onboardingTest: process.env.OPENCODE_TEST_ONBOARDING === "1",
+      marks,
     })
     const exportDebug = exportDebugLogsEffect(fs, path).pipe(Effect.orDie)
     return Service.of({
       startNetwork: startNetLog(path).pipe(
         Effect.catch((error) => Effect.logWarning("failed to start net log", { error })),
+      ),
+      // Starting crashpad spawns its handler process, ~60 ms on the main thread, so the first window
+      // and its IPC port come first.
+      startCrashReporter: initCrashReporter(fs, path).pipe(
+        Effect.tap(() => Effect.sync(() => (marks.crash = Date.now()))),
+        Effect.catch((error) => Effect.logWarning("failed to start crash reporter", { error })),
       ),
       exportDebug,
     })
@@ -97,7 +108,6 @@ function initLogging(fs: FileSystem.FileSystem, path: Path.Path) {
       log.initialize({ preload: false, spyRendererConsole: true })
       initConsoleTransport()
     })
-    yield* cleanup(fs, path)
   })
 }
 

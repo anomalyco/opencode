@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test"
 import { Clock, Effect, Schedule } from "effect"
 import { TestClock } from "effect/testing"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
-import { Catalog } from "@opencode/core/catalog"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { Model } from "@opencode/core/model"
@@ -35,18 +34,19 @@ const oauthCredential = Effect.fn(function* (access = "do-token", expires = 0) {
 })
 
 const discovery = Effect.gen(function* () {
-  const catalog = yield* Catalog.Service
-  yield* catalog.transform((draft) => {
-    draft.provider.update(providerID, (provider) => {
-      provider.package = Provider.aisdk("@ai-sdk/openai-compatible")
+  const providers = yield* Provider.Service
+  const models = yield* Model.Service
+  yield* providers.transform((draft) => {
+    draft.update(providerID, (provider) => {
+      provider.package = "@opencode/ai/providers/openai-compatible"
       provider.settings = { baseURL: "https://inference.do-ai.run/v1" }
     })
-    draft.model.update(providerID, Model.ID.make("snapshot-model"), () => {})
-    draft.model.update(providerID, Model.ID.make("router:configured"), (model) => {
+    draft.models.update(providerID, Model.ID.make("snapshot-model"), () => {})
+    draft.models.update(providerID, Model.ID.make("router:configured"), (model) => {
       model.name = "Configured router"
       model.limit.context = 256_000
     })
-    draft.model.update(Provider.ID.openai, Model.ID.make("router:alpha"), () => {})
+    draft.models.update(Provider.ID.openai, Model.ID.make("router:alpha"), () => {})
   })
   const remote: { status: number; body: unknown; requests: HttpClientRequest.HttpClientRequest[] } = {
     status: 200,
@@ -59,7 +59,7 @@ const discovery = Effect.gen(function* () {
       return HttpClientResponse.fromWeb(request, Response.json(remote.body, { status: remote.status }))
     }),
   )
-  return { catalog, remote, install: addPlugin().pipe(Effect.provideService(HttpClient.HttpClient, http)) }
+  return { models, remote, install: addPlugin().pipe(Effect.provideService(HttpClient.HttpClient, http)) }
 })
 
 const status = Effect.fn(function* (attempt: Integration.Attempt) {
@@ -106,15 +106,15 @@ describe("DigitalOceanPlugin", () => {
         url: "https://api.digitalocean.com/v2/gen-ai/models/routers",
         headers: { authorization: "Bearer do-token", accept: "application/json", "user-agent": expect.any(String) },
       })
-      expect(yield* fixture.catalog.model.get(providerID, Model.ID.make("router:alpha"))).toMatchObject({
+      expect(yield* fixture.models.get(providerID, Model.ID.make("router:alpha"))).toMatchObject({
         name: "alpha",
         family: "digitalocean-inference-routers",
-        package: "aisdk:@ai-sdk/openai-compatible",
+        package: "@opencode/ai/providers/openai-compatible",
         settings: { baseURL: "https://inference.do-ai.run/v1" },
         capabilities: { tools: true, input: ["text"], output: ["text"] },
         limit: { context: 128_000, output: 8_192 },
       })
-      expect(yield* fixture.catalog.model.get(providerID, Model.ID.make("router:configured"))).toMatchObject({
+      expect(yield* fixture.models.get(providerID, Model.ID.make("router:configured"))).toMatchObject({
         name: "Configured router",
         limit: { context: 256_000 },
       })
@@ -126,30 +126,30 @@ describe("DigitalOceanPlugin", () => {
       yield* TestClock.adjust("1 minute")
       yield* drain
       expect(fixture.remote.requests).toHaveLength(2)
-      expect(yield* fixture.catalog.model.get(providerID, Model.ID.make("router:alpha"))).toBeUndefined()
-      expect(yield* fixture.catalog.model.get(providerID, Model.ID.make("router:beta"))).toBeDefined()
+      expect(yield* fixture.models.get(providerID, Model.ID.make("router:alpha"))).toBeUndefined()
+      expect(yield* fixture.models.get(providerID, Model.ID.make("router:beta"))).toBeDefined()
 
       fixture.remote.status = 503
       yield* TestClock.adjust("5 minutes")
       yield* drain
       expect(fixture.remote.requests).toHaveLength(3)
-      expect(yield* fixture.catalog.model.get(providerID, Model.ID.make("router:beta"))).toBeDefined()
+      expect(yield* fixture.models.get(providerID, Model.ID.make("router:beta"))).toBeDefined()
 
       fixture.remote.status = 200
       fixture.remote.body = { model_routers: [{ name: 123 }] }
       yield* TestClock.adjust("5 minutes")
       yield* drain
       expect(fixture.remote.requests).toHaveLength(4)
-      expect(yield* fixture.catalog.model.get(providerID, Model.ID.make("router:beta"))).toBeDefined()
+      expect(yield* fixture.models.get(providerID, Model.ID.make("router:beta"))).toBeDefined()
 
       fixture.remote.body = { model_routers: [] }
       yield* TestClock.adjust("5 minutes")
       yield* drain
       expect(fixture.remote.requests).toHaveLength(5)
-      expect(yield* fixture.catalog.model.get(providerID, Model.ID.make("router:beta"))).toBeUndefined()
-      expect(yield* fixture.catalog.model.get(providerID, Model.ID.make("snapshot-model"))).toBeDefined()
-      expect(yield* fixture.catalog.model.get(providerID, Model.ID.make("router:configured"))).toBeDefined()
-      expect(yield* fixture.catalog.model.get(Provider.ID.openai, Model.ID.make("router:alpha"))).toBeDefined()
+      expect(yield* fixture.models.get(providerID, Model.ID.make("router:beta"))).toBeUndefined()
+      expect(yield* fixture.models.get(providerID, Model.ID.make("snapshot-model"))).toBeDefined()
+      expect(yield* fixture.models.get(providerID, Model.ID.make("router:configured"))).toBeDefined()
+      expect(yield* fixture.models.get(Provider.ID.openai, Model.ID.make("router:alpha"))).toBeDefined()
     }),
   )
 
@@ -163,32 +163,32 @@ describe("DigitalOceanPlugin", () => {
 
       yield* oauthCredential()
       yield* drain
-      expect(yield* fixture.catalog.model.get(providerID, Model.ID.make("router:alpha"))).toBeDefined()
+      expect(yield* fixture.models.get(providerID, Model.ID.make("router:alpha"))).toBeDefined()
 
       fixture.remote.status = 503
       const second = yield* oauthCredential("other-account")
       yield* drain
       expect(fixture.remote.requests.at(-1)?.headers.authorization).toBe("Bearer other-account")
-      expect(yield* fixture.catalog.model.get(providerID, Model.ID.make("router:alpha"))).toBeUndefined()
+      expect(yield* fixture.models.get(providerID, Model.ID.make("router:alpha"))).toBeUndefined()
 
       fixture.remote.status = 200
       fixture.remote.body = { model_routers: [{ name: "beta" }] }
       yield* TestClock.adjust("5 minutes")
       yield* drain
-      expect(yield* fixture.catalog.model.get(providerID, Model.ID.make("router:beta"))).toBeDefined()
+      expect(yield* fixture.models.get(providerID, Model.ID.make("router:beta"))).toBeDefined()
 
       const count = fixture.remote.requests.length
       yield* credentials.create({ integrationID, value: Credential.Key.make({ type: "key", key: "do-key" }) })
       yield* drain
       expect(fixture.remote.requests).toHaveLength(count)
-      expect(yield* fixture.catalog.model.get(providerID, Model.ID.make("router:beta"))).toBeUndefined()
+      expect(yield* fixture.models.get(providerID, Model.ID.make("router:beta"))).toBeUndefined()
 
       yield* credentials.activate(second.id)
       yield* drain
-      expect(yield* fixture.catalog.model.get(providerID, Model.ID.make("router:beta"))).toBeDefined()
+      expect(yield* fixture.models.get(providerID, Model.ID.make("router:beta"))).toBeDefined()
       yield* credentials.remove(second.id)
       yield* drain
-      expect(yield* fixture.catalog.model.get(providerID, Model.ID.make("router:beta"))).toBeUndefined()
+      expect(yield* fixture.models.get(providerID, Model.ID.make("router:beta"))).toBeUndefined()
     }),
   )
 
@@ -202,7 +202,7 @@ describe("DigitalOceanPlugin", () => {
       yield* TestClock.adjust("5 minutes")
       yield* drain
       expect(fixture.remote.requests).toHaveLength(1)
-      expect(yield* fixture.catalog.model.get(providerID, Model.ID.make("router:alpha"))).toBeDefined()
+      expect(yield* fixture.models.get(providerID, Model.ID.make("router:alpha"))).toBeDefined()
     }),
   )
 

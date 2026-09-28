@@ -12,7 +12,6 @@ import { SessionRunner } from "./runner/index.js"
 import { SessionSchema } from "./schema.js"
 import { SessionStore } from "./store.js"
 import { toSessionError } from "./to-session-error.js"
-import { UserInterruptedError } from "./error.js"
 import { SessionInbox } from "./inbox.js"
 
 export interface Interface {
@@ -34,7 +33,7 @@ export interface Interface {
   readonly interrupt: (
     sessionID: SessionSchema.ID,
     options?: {
-      readonly continue?: boolean
+      readonly resume?: boolean
       readonly reason?: "user" | "inactivity"
       readonly awaitSettlement?: boolean
     },
@@ -51,9 +50,7 @@ type InterruptReason = "user" | "shutdown" | "inactivity"
 export function terminal(exit: Exit.Exit<void, SessionRunner.RunError>, reason?: InterruptReason) {
   if (Exit.isSuccess(exit)) return { type: "succeeded" as const }
   if (Cause.hasInterrupts(exit.cause)) return { type: "interrupted" as const, reason: reason ?? "shutdown" }
-  const failure = Cause.squash(exit.cause)
-  if (failure instanceof UserInterruptedError) return { type: "interrupted" as const, reason: "user" as const }
-  return { type: "failed" as const, error: toSessionError(failure) }
+  return { type: "failed" as const, error: toSessionError(Cause.squash(exit.cause)) }
 }
 
 /** Process-local execution: drains run in this process using the selected instance. */
@@ -108,6 +105,7 @@ export const layer = Layer.effect(
       return yield* SessionRunner.DrainResult.$match(result, {
         Complete: () => Effect.void,
         Moved: (result) => drain(sessionID, false, result.continuation, promotable),
+        Reloaded: (result) => drain(sessionID, result.force, result.continuation, promotable),
       })
     })
     const coordinator = yield* SessionRunCoordinator.make<SessionSchema.ID, SessionRunner.RunError, InterruptReason>({
@@ -155,7 +153,7 @@ export const layer = Layer.effect(
       interrupt: (sessionID, options) =>
         Effect.gen(function* () {
           const interrupted = yield* coordinator.interrupt(sessionID, options?.reason ?? "user", options)
-          if (!options?.continue) return interrupted
+          if (!options?.resume) return interrupted
           // Resume steering input and between-turn control work from the interrupted
           // intent. Queued next-turn prompts stay parked: a steer-scoped drain never
           // promotes them, and a control item behind a queued prompt waits its turn.

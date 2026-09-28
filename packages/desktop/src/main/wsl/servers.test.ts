@@ -32,7 +32,7 @@ posix(
       '#!/bin/sh\n[ "$1" = "-a" ] || exit 1\nprintf "%s" "$2" > "$HOME/wslpath-input"\nprintf "%s\\n" "$LOCAL_BINARY"\n',
       { mode: 0o755 },
     )
-    const windows = "C:\\local build's\\opencode2"
+    const windows = "C:\\local build's\\opencode"
     const command = wslCliInstallCommand({ version: "0.0.0-dev-16365", binary: windows })
     expect(
       yield* spawner.exitCode(
@@ -42,8 +42,8 @@ posix(
       ),
     ).toBe(0)
     expect(yield* fs.readFileString(path.join(dir, "wslpath-input"))).toBe(windows)
-    expect(yield* fs.readFileString(path.join(dir, ".opencode/bin/opencode2"))).toContain("0.0.0-dev-16365")
-    expect(yield* fs.readDirectory(path.join(dir, ".opencode/bin"))).toEqual(["opencode2"])
+    expect(yield* fs.readFileString(path.join(dir, ".opencode/bin/opencode"))).toContain("0.0.0-dev-16365")
+    expect((yield* fs.readDirectory(path.join(dir, ".opencode/bin"))).toSorted()).toEqual(["opencode", "opencode2"])
     expect(yield* fs.readFileString(path.join(dir, ".bashrc"))).toContain(`export PATH=${dir}/.opencode/bin:$PATH`)
   }),
 )
@@ -57,7 +57,7 @@ test("installs and verifies the bundled CLI version", async () => {
         installCli: async (distro, cli) => {
           installs.push([distro, cli.version])
         },
-        resolveCli: async () => "/home/me/.opencode/bin/opencode2",
+        resolveCli: async () => "/home/me/.opencode/bin/opencode",
       }),
     ),
   )
@@ -74,7 +74,7 @@ test("rejects a WSL CLI version that differs from the bundled version", async ()
     createWslServersController(
       testControllerOptions({
         installCli: async () => undefined,
-        resolveCli: async () => "/home/me/.opencode/bin/opencode2",
+        resolveCli: async () => "/home/me/.opencode/bin/opencode",
         readCliVersion: async () => "0.0.0-dev-older",
       }),
     ),
@@ -166,7 +166,7 @@ test("probes addable distros in parallel before checking OpenCode", async () => 
         },
         resolveCli: async (distro) => {
           opencode.push(distro)
-          return "/home/me/.opencode/bin/opencode2"
+          return "/home/me/.opencode/bin/opencode"
         },
       }),
     ),
@@ -201,7 +201,7 @@ test("does not check OpenCode in addable distros that cannot execute commands", 
         }),
         resolveCli: async (distro) => {
           opencode.push(distro)
-          return "/home/me/.opencode/bin/opencode2"
+          return "/home/me/.opencode/bin/opencode"
         },
       }),
     ),
@@ -238,7 +238,7 @@ function testControllerOptions(overrides: Partial<ControllerOptions> = {}): Cont
       persistedServers = servers
     },
     readCliVersion: async () => "0.0.0-dev-16365",
-    resolveCli: async () => "/home/me/.opencode/bin/opencode2",
+    resolveCli: async () => "/home/me/.opencode/bin/opencode",
     ...overrides,
   }
 }

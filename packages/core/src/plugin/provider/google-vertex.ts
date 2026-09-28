@@ -38,39 +38,22 @@ function replaceVertexVars(value: string, project: string | undefined, location:
     .replaceAll("${GOOGLE_VERTEX_ENDPOINT}", vertexEndpoint(location))
 }
 
-function authFetch(fetchWithRuntimeOptions?: unknown) {
-  // Native Vertex SDKs handle ADC internally. OpenAI-compatible Vertex endpoints
-  // do not, so inject a Google access token into their fetch path.
-  return async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
-    const { GoogleAuth } = await import("google-auth-library")
-    const auth = new GoogleAuth({ scopes: ["https://www.googleapis.com/auth/cloud-platform"] })
-    const client = await auth.getClient()
-    const token = await client.getAccessToken()
-    const headers = new Headers(init?.headers)
-    headers.set("Authorization", `Bearer ${token.token}`)
-    return typeof fetchWithRuntimeOptions === "function"
-      ? fetchWithRuntimeOptions(input, { ...init, headers })
-      : fetch(input, { ...init, headers })
-  }
-}
-
 export const GoogleVertexPlugin = define({
   id: "opencode.provider.google.vertex",
   effect: Effect.fn(function* (ctx) {
-    yield* ctx.catalog.transform((evt) => {
-      for (const item of evt.provider.list()) {
-        if (!Provider.isAISDK(item.provider.package)) continue
+    yield* ctx.provider.transform((evt) => {
+      for (const item of evt.list()) {
         if (
-          Provider.packageName(item.provider.package) !== "@ai-sdk/google-vertex" &&
+          !item.provider.package.startsWith("@opencode/ai/providers/google-vertex") &&
           !(
             item.provider.id === Provider.ID.googleVertex &&
-            Provider.packageName(item.provider.package)?.includes("@ai-sdk/openai-compatible")
+            item.provider.package === "@opencode/ai/providers/openai-compatible"
           )
         )
           continue
         const project = resolveProject(item.provider.settings ?? {})
         const location = String(resolveLocation(item.provider.settings ?? {}))
-        evt.provider.update(item.provider.id, (provider) => {
+        evt.update(item.provider.id, (provider) => {
           // Vertex authenticates through ADC rather than a key credential, so a
           // resolvable project is what makes the provider usable.
           if (project && provider.activation === "auto") provider.activation = "enabled"
@@ -85,42 +68,29 @@ export const GoogleVertexPlugin = define({
         })
       }
     })
-    yield* ctx.aisdk.hook(
-      "sdk",
-      Effect.fn(function* (evt) {
-        if (evt.model.providerID === Provider.ID.googleVertex && evt.package.includes("@ai-sdk/openai-compatible")) {
-          evt.options.fetch = authFetch(evt.options.fetch)
-          return
-        }
-        if (evt.package === "@ai-sdk/google-vertex/anthropic") {
-          const mod = yield* Effect.promise(() => import("@ai-sdk/google-vertex/anthropic"))
-          const project = resolveProject(evt.options)
-          const location = String(resolveLocation(evt.options))
-          const regionalBaseURL =
-            (location === "eu" || location === "us") && project && !evt.options.baseURL
-              ? `https://aiplatform.${location}.rep.googleapis.com/v1/projects/${project}/locations/${location}/publishers/anthropic/models`
-              : undefined
-          evt.sdk = mod.createVertexAnthropic({
-            ...evt.options,
-            project,
-            location,
-            ...(regionalBaseURL ? { baseURL: regionalBaseURL } : {}),
+    yield* ctx.model.transform((models) => {
+      for (const item of models.provider.list()) {
+        if (
+          !item.provider.package.startsWith("@opencode/ai/providers/google-vertex") &&
+          !(
+            item.provider.id === Provider.ID.googleVertex &&
+            item.provider.package === "@opencode/ai/providers/openai-compatible"
+          )
+        )
+          continue
+        const project = resolveProject(item.provider.settings ?? {})
+        const location = String(resolveLocation(item.provider.settings ?? {}))
+        for (const model of models.list(item.provider.id)) {
+          if (typeof model.settings?.baseURL !== "string") continue
+          models.update(item.provider.id, model.id, (draft) => {
+            draft.settings = {
+              ...draft.settings,
+              baseURL: replaceVertexVars(String(draft.settings?.baseURL), project, location),
+            }
           })
-          return
         }
-        if (evt.package !== "@ai-sdk/google-vertex") return
-        const mod = yield* Effect.promise(() => import("@ai-sdk/google-vertex"))
-        const project = resolveProject(evt.options)
-        const location = resolveLocation(evt.options)
-        const options = { ...evt.options }
-        delete options.fetch
-        evt.sdk = mod.createVertex({
-          ...options,
-          project,
-          location,
-        })
-      }),
-    )
+      }
+    })
     yield* ctx.aisdk.hook(
       "language",
       Effect.fn(function* (evt) {

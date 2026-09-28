@@ -16,12 +16,12 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Lo
 
 export const node = LayerNode.unbound(Service, tags.values.location)
 
-const layer = (ref: Ref, options?: { readonly discovery?: boolean }) =>
+const layer = (ref: Ref) =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
       const project = yield* Project.Service
-      const resolved = yield* project.resolve(ref.directory, options)
+      const resolved = yield* project.resolve(ref.directory)
       return Service.of({
         directory: ref.directory,
         workspaceID: ref.workspaceID,
@@ -31,9 +31,9 @@ const layer = (ref: Ref, options?: { readonly discovery?: boolean }) =>
     }),
   )
 
-export const boundNode = (ref: Ref, options?: { readonly discovery?: boolean }) =>
+export const boundNode = (ref: Ref) =>
   makeLocationNode({
     service: Service,
-    layer: layer(ref, options),
+    layer: layer(ref),
     deps: [Project.node],
   })

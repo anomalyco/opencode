@@ -142,7 +142,7 @@ function fixture(read?: (url: URL) => Promise<Response | void>) {
               type: "user",
               delivery: "steer",
               payload: { text: "pending" },
-              timeCreated: 1,
+              time: { created: 1 },
             },
           ],
         })

@@ -1,7 +1,7 @@
 export * as DesktopFiles from "./index"
 
 import { execFile } from "node:child_process"
-import { clipboard, dialog, shell } from "electron"
+import { clipboard, dialog, nativeImage, shell } from "electron"
 import { Context, Effect, FileSystem, Layer, Path } from "effect"
 import type { DirectoryPickerOptions, FilePickerOptions, SaveFilePickerOptions } from "../../shared/ipc-contract"
 import { scoped } from "../native/logging"
@@ -92,25 +92,43 @@ function make(fs: FileSystem.FileSystem, path: Path.Path) {
       shell.showItemInFolder(target)
       return true
     }),
-    readClipboardImage() {
-      const image = clipboard.readImage()
+    readClipboardImage: Effect.fn("DesktopFiles.readClipboardImage")(function* () {
+      const items = yield* Effect.promise(() => clipboard.read())
+      const found = clipboardImageTypes
+        .flatMap((mime) => items.filter((item) => item.types.includes(mime)).map((item) => ({ item, mime })))
+        .at(0)
+      if (!found) return null
+      // getType() is typed as Blob | ClipboardBookmark; only the bookmark format yields the latter.
+      const payload = yield* Effect.promise(async () => found.item.getType(found.mime))
+      if (!(payload instanceof Blob)) return null
+      const bytes = yield* Effect.promise(() => payload.arrayBuffer())
+      // Re-encode through nativeImage so the renderer always receives PNG and the image dimensions.
+      const image = nativeImage.createFromBuffer(Buffer.from(bytes))
       if (image.isEmpty()) return null
       const size = image.getSize()
-      return { buffer: new Uint8Array(image.toPNG()).buffer, width: size.width, height: size.height }
-    },
-    writeClipboardText(text: string) {
-      clipboard.writeText(text)
-    },
+      return { buffer: new Uint8Array(image.toPNG()), width: size.width, height: size.height }
+    }),
+    writeClipboardText: Effect.fn("DesktopFiles.writeClipboardText")(function* (text: string) {
+      yield* Effect.promise(() => clipboard.writeText(text))
+    }),
   }
 }
+
+// Chromium exposes copied bitmaps as image/png; JPEG only appears when an app placed one explicitly.
+const clipboardImageTypes = ["image/png", "image/jpeg"]
 
 export const openExternalURL = Effect.fn("DesktopFiles.openExternalURL")(function* (value: string) {
   const url = resolveExternalURL(value)
   if (!url) {
     yield* scoped("window", Effect.logWarning("blocked external target", { url: value }))
-    return
+    return false
   }
-  yield* Effect.promise(() => shell.openExternal(url))
+  return yield* Effect.tryPromise(() => shell.openExternal(url)).pipe(
+    Effect.as(true),
+    Effect.catch((error) =>
+      scoped("window", Effect.logError("failed to open external target", { url, error })).pipe(Effect.as(false)),
+    ),
+  )
 })
 
 export const openLocalFileURL = Effect.fn("DesktopFiles.openLocalFileURL")(function* (value: string) {

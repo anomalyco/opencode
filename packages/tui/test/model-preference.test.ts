@@ -19,7 +19,7 @@ test("repairs known model preferences and preserves unrelated fields", () => {
   })
 })
 
-test("atomically serializes patches and variant updates", async () => {
+test("atomically serializes model preference updates", async () => {
   await using tmp = await tmpdir()
   const file = path.join(tmp.path, "model.json")
   await Bun.write(file, JSON.stringify({ unrelated: "keep", favorite: [], variant: {} }))
@@ -28,7 +28,7 @@ test("atomically serializes patches and variant updates", async () => {
   const anthropic = { providerID: "anthropic", modelID: "claude/sonnet" }
 
   await Promise.all([
-    repository.patch({ recent: [openai] }),
+    repository.addRecent(openai),
     repository.saveVariant(openai, "high"),
     repository.saveVariant(anthropic, "low"),
   ])

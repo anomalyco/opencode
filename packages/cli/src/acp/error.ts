@@ -5,6 +5,11 @@ export class SessionNotFoundError extends Schema.TaggedError<SessionNotFoundErro
   sessionId: Schema.String,
 }) {}
 
+export class SessionDirectoryMismatchError extends Schema.TaggedError<SessionDirectoryMismatchError>()(
+  "ACPSessionDirectoryMismatchError",
+  { sessionId: Schema.String, cwd: Schema.String },
+) {}
+
 export class InvalidConfigOptionError extends Schema.TaggedError<InvalidConfigOptionError>()(
   "ACPInvalidConfigOptionError",
   { configId: Schema.String },
@@ -37,6 +42,7 @@ export class ServiceFailureError extends Schema.TaggedError<ServiceFailureError>
 
 export type Error =
   | SessionNotFoundError
+  | SessionDirectoryMismatchError
   | InvalidConfigOptionError
   | InvalidModelError
   | InvalidEffortError
@@ -49,6 +55,11 @@ export function toRequestError(error: Error): RequestError {
   switch (error._tag) {
     case "ACPSessionNotFoundError":
       return RequestError.invalidParams({ sessionId: error.sessionId }, `session not found: ${error.sessionId}`)
+    case "ACPSessionDirectoryMismatchError":
+      return RequestError.invalidParams(
+        { sessionId: error.sessionId, cwd: error.cwd },
+        `session ${error.sessionId} does not belong to cwd: ${error.cwd}`,
+      )
     case "ACPInvalidConfigOptionError":
       return RequestError.invalidParams({ configId: error.configId }, `unknown config option: ${error.configId}`)
     case "ACPInvalidModelError":

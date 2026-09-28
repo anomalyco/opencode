@@ -10,29 +10,29 @@ export function SessionTabsRailControls(props: {
   tabs: SessionTabsController
   belowHighlighted: boolean
 }) {
-  const theme = useTheme("elevated")
+  const theme = useTheme()
   const keymap = Keymap.use()
   const [hovered, setHovered] = createSignal(false)
   const hoverColor = createMemo(() =>
-    tint(theme.background.default, theme.background.action.primary.hovered, theme.background.action.primary.hovered.a),
+    tint(theme.background.raised.base, theme.background.raised.high, theme.background.raised.high.a),
   )
   let pressed = false
   const search = () => (props.tabs.search ? props.tabs.search() : keymap.dispatch("session.list"))
   return (
-    <box height={1} position="relative" flexShrink={0} backgroundColor={theme.background.default}>
+    <box height={1} position="relative" flexShrink={0} backgroundColor={theme.background.raised.base}>
       <SessionTabHalfRow
         top={-1}
         edge="top"
         width={props.width}
-        color={hovered() ? hoverColor() : theme.background.default}
-        background={theme.background.default}
+        color={hovered() ? hoverColor() : theme.background.raised.base}
+        background={theme.background.raised.base}
       />
       <box
         height={1}
         position="relative"
         flexDirection="row"
         justifyContent="center"
-        backgroundColor={hovered() ? theme.background.action.primary.hovered : undefined}
+        backgroundColor={hovered() ? theme.background.raised.high : undefined}
         onMouseOver={() => setHovered(true)}
         onMouseOut={() => setHovered(false)}
         onMouseDown={(event) => {
@@ -47,7 +47,7 @@ export function SessionTabsRailControls(props: {
         }}
         onMouseDragEnd={() => (pressed = false)}
       >
-        <text width={1} height={1} fg={theme.text.action.secondary.default} selectable={false} wrapMode="none">
+        <text width={1} height={1} fg={theme.text.action.secondary.base} selectable={false} wrapMode="none">
           ⌕
         </text>
       </box>
@@ -59,7 +59,7 @@ export function SessionTabsRailControls(props: {
         height={1}
         zIndex={2}
         fg={hoverColor()}
-        bg={hovered() && props.belowHighlighted ? hoverColor() : theme.background.default}
+        bg={hovered() && props.belowHighlighted ? hoverColor() : theme.background.raised.base}
         selectable={false}
       >
         {(hovered() ? "▀" : props.belowHighlighted ? "▄" : " ").repeat(props.width)}

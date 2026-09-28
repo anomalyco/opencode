@@ -50,6 +50,23 @@ type TranslationKey<Key extends Extract<keyof Dictionary, string>> = Key extends
   : Key
 type Source = { dict: Record<string, string> }
 
+export function richTemplateParts<Value>(template: string, params: Record<string, Value>) {
+  return template
+    .split(/({{\s*[^}]+?\s*}})/g)
+    .filter(Boolean)
+    .map((part) => {
+      const match = part.match(/^{{\s*([^}]+?)\s*}}$/)
+      if (!match) return part
+      return params[match[1]] ?? ""
+    })
+}
+
+export function localizedListParts<Value>(locale: string, items: readonly Value[]) {
+  return new Intl.ListFormat(locale, { style: "long", type: "conjunction" })
+    .formatToParts(items.map((_, index) => String(index)))
+    .map((part) => (part.type === "element" ? items[Number(part.value)] : part.value))
+}
+
 function cookie(locale: Locale) {
   return `oc_locale=${encodeURIComponent(locale)}; Path=/; Max-Age=31536000; SameSite=Lax`
 }
@@ -234,6 +251,21 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
     const plural = (key: PluralKey, count: number, params?: Record<string, string | number | boolean>) =>
       pluralForm(key, pluralCategory(intl(), count), { ...params, count })
 
+    const tDynamic = <Key extends Extract<keyof Dictionary, string>>(
+      key: TranslationKey<Key>,
+      source: string,
+      params?: Record<string, string | number | boolean>,
+    ) => (intl().toLowerCase().split("-")[0] === "en" ? resolveTemplate(source, params) : t(key, params))
+
+    const rich = <Key extends Extract<keyof Dictionary, string>>(
+      key: TranslationKey<Key>,
+      params: Record<string, JSX.Element>,
+    ) => {
+      const current = (dictionary.loading ? base : (dictionary() ?? base)) as Record<string, string>
+      return richTemplateParts(current[key] ?? key, params)
+    }
+    const list = (items: readonly JSX.Element[]) => localizedListParts(intl(), items)
+
     const label = (value: Locale) => DESKTOP_NATIVE_LABELS[value]
 
     createEffect(() => {
@@ -262,8 +294,11 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       locales: LOCALES,
       label,
       t,
+      tDynamic,
       plural,
       pluralForm,
+      rich,
+      list,
       setLocale(next: Locale) {
         setStore("locale", normalizeLocale(next))
       },

@@ -53,7 +53,7 @@ export function parseRegistration(output: string) {
 }
 
 export function binaryPath(version: string) {
-  return `$HOME/.opencode/desktop-ssh/${RemoteCli.requireVersion(version)}/opencode2`
+  return `$HOME/.opencode/desktop-ssh/${RemoteCli.requireVersion(version)}/opencode`
 }
 
 function connectionAddress(address: string, password: string) {

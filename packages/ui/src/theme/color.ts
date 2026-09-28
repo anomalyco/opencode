@@ -258,7 +258,7 @@ export function contrastRatio(foreground: HexColor, background: HexColor) {
   const linear = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)
   const luminance = (hex: HexColor) => {
     const { r, g, b } = hexToRgb(hex)
-    return 0.2126 * linear(r) + 0.587 * linear(g) + 0.0722 * linear(b)
+    return 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b)
   }
   const fg = luminance(foreground)
   const bg = luminance(background)

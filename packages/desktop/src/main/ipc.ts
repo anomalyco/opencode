@@ -65,12 +65,15 @@ export const registerIpcHandlers = Effect.gen(function* () {
       if (input.type !== "keyDown" || input.key !== "Escape") return
       win.webContents.send(DragCancelEvent)
     })
-    win.webContents.on("did-finish-load", () => {
+    const post = () => {
       if (win.isDestroyed() || win.webContents.isDestroyed()) return
       const channel = new MessageChannelMain()
       handoff.bind(win.webContents, channel.port1)
       win.webContents.postMessage(IpcTransportPort, null, [channel.port2])
-    })
+    }
+    win.webContents.on("did-finish-load", post)
+    // The first window starts loading before the layers exist and may already be done.
+    if (!win.webContents.isLoading() && win.webContents.getURL()) post()
   }
   yield* Effect.sync(() => {
     app.on("browser-window-created", wire)

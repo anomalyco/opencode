@@ -99,10 +99,17 @@ describe("readLocalImage", () => {
   test.each([400, 401])("propagates declared API errors (%s)", async (status) => {
     const error = { _tag: "RequestError", message: "Cannot read image" }
     const { api } = setup(() => Response.json(error, { status }))
-    await expect(readLocalImage(api, "/repo", "image.png", new AbortController().signal)).rejects.toEqual(error)
+    await expect(readLocalImage(api, "/repo", "image.png", new AbortController().signal)).rejects.toMatchObject(error)
   })
 
-  test.each([404, 500])("does not turn an unexpected HTTP status (%s) into a Blob", async (status) => {
+  test("propagates missing-file errors", async () => {
+    const error = { _tag: "FileNotFoundError", path: "image.png", message: "File not found: image.png" }
+    const { api } = setup(() => Response.json(error, { status: 404 }))
+    await expect(readLocalImage(api, "/repo", "image.png", new AbortController().signal)).rejects.toMatchObject(error)
+  })
+
+  test("does not turn an unexpected HTTP status into a Blob", async () => {
+    const status = 500
     const { api } = setup(() => new Response("Not an image", { status }))
     await expect(readLocalImage(api, "/repo", "image.png", new AbortController().signal)).rejects.toMatchObject({
       reason: "UnexpectedStatus",

@@ -1,4 +1,5 @@
-import { type AstNode, type Binding, InterpreterRuntimeError } from "./model.js"
+import { type AstNode, type Binding, referenceError, typeError } from "./model.js"
+import type { Value } from "./objects.js"
 
 export class ScopeStack {
   private readonly scopes: Array<Map<string, Binding>>
@@ -10,55 +11,55 @@ export class ScopeStack {
   reserve(name: string, mutable: boolean, node: AstNode): void {
     const scope = this.current()
     if (scope.has(name)) {
-      throw new InterpreterRuntimeError(`Identifier '${name}' has already been declared.`, node)
+      throw typeError(`Identifier '${name}' has already been declared.`, node)
     }
     scope.set(name, { mutable, value: undefined, initialized: false })
   }
 
-  initialize(name: string, value: unknown, node: AstNode): void {
+  initialize(name: string, value: Value, node: AstNode): void {
     const binding = this.current().get(name)
     if (!binding || binding.initialized !== false) {
-      throw new InterpreterRuntimeError(`Identifier '${name}' has not been reserved for initialization.`, node)
+      throw typeError(`Identifier '${name}' has not been reserved for initialization.`, node)
     }
     binding.value = value
     binding.initialized = true
   }
 
-  declare(name: string, value: unknown, mutable: boolean, node: AstNode): void {
+  declare(name: string, value: Value, mutable: boolean, node: AstNode): void {
     const scope = this.current()
     if (scope.has(name)) {
-      throw new InterpreterRuntimeError(`Identifier '${name}' has already been declared.`, node)
+      throw typeError(`Identifier '${name}' has already been declared.`, node)
     }
     scope.set(name, { mutable, value, initialized: true })
   }
 
-  get(name: string, node: AstNode): unknown {
+  get(name: string, node: AstNode): Value {
     const binding = this.resolve(name)
 
     if (!binding) {
-      throw new InterpreterRuntimeError(`Unknown identifier '${name}'.`, node).as("ReferenceError")
+      throw referenceError(`Unknown identifier '${name}'.`, node)
     }
 
     if (binding.initialized === false) {
-      throw new InterpreterRuntimeError(`Cannot access '${name}' before initialization.`, node).as("ReferenceError")
+      throw referenceError(`Cannot access '${name}' before initialization.`, node)
     }
 
     return binding.value
   }
 
-  set(name: string, value: unknown, node: AstNode): unknown {
+  set(name: string, value: Value, node: AstNode): Value {
     const binding = this.resolve(name)
 
     if (!binding) {
-      throw new InterpreterRuntimeError(`Unknown identifier '${name}'.`, node).as("ReferenceError")
+      throw referenceError(`Unknown identifier '${name}'.`, node)
     }
 
     if (binding.initialized === false) {
-      throw new InterpreterRuntimeError(`Cannot access '${name}' before initialization.`, node).as("ReferenceError")
+      throw referenceError(`Cannot access '${name}' before initialization.`, node)
     }
 
     if (!binding.mutable) {
-      throw new InterpreterRuntimeError(`Cannot assign to constant '${name}'.`, node).as("TypeError")
+      throw typeError(`Cannot assign to constant '${name}'.`, node)
     }
 
     binding.value = value
@@ -82,7 +83,7 @@ export class ScopeStack {
     const scope = this.scopes[this.scopes.length - 1]
 
     if (!scope) {
-      throw new InterpreterRuntimeError("Interpreter scope stack is empty.")
+      throw typeError("Interpreter scope stack is empty.")
     }
 
     return scope

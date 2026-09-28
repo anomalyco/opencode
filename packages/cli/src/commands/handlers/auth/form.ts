@@ -1,21 +1,63 @@
 import { confirm, log, multiselect, password, select, text, type Option } from "@clack/prompts"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
+import { Form } from "@opencode/schema/form"
+import { formValidateValue } from "@opencode/tui/util/form"
 import type { FormAnswer, FormField, FormFields } from "@opencode/client"
 import { openUrl, prompt, requireInteractive } from "../../../ui/prompt"
 
 const skip = Symbol("skip")
 const custom = Symbol("custom")
+const decodeAnswer = Schema.decodeUnknownOption(Schema.fromJsonString(Form.Value))
 
-export const answerForm = Effect.fn("cli.auth.form")(function* (fields: FormFields | undefined) {
+export const answerForm = Effect.fn("cli.auth.form")(function* (
+  fields: FormFields | undefined,
+  input: ReadonlyArray<string> = [],
+) {
+  const supplied = new Map<string, string>()
+  for (const item of input) {
+    const separator = item.indexOf("=")
+    if (separator < 1) return yield* Effect.fail(new Error("Expected --answer key=value"))
+    const key = item.slice(0, separator)
+    if (!fields?.some((field) => field.key === key)) {
+      return yield* Effect.fail(new Error(`Unknown form field: ${key}`))
+    }
+    supplied.set(key, item.slice(separator + 1))
+  }
   if (!fields) return undefined
-  yield* requireInteractive("Authentication form input requires an interactive terminal")
   const answer: FormAnswer = {}
   for (const field of fields) {
-    if (!active(field, answer)) continue
-    const value = yield* answerField(field)
+    if (!active(field, answer)) {
+      if (supplied.has(field.key)) {
+        return yield* Effect.fail(new Error(`Form field is not active: ${field.key}`))
+      }
+      continue
+    }
+    const provided = supplied.get(field.key)
+    const value =
+      provided !== undefined
+        ? yield* suppliedAnswer(field, provided)
+        : field.type !== "external" && field.hidden
+          ? field.default
+          : yield* answerField(field)
+    if (field.type !== "external") {
+      const invalid = formValidateValue(field, value)
+      if (invalid) return yield* Effect.fail(new Error(`${field.key}: ${invalid}`))
+    }
     if (value !== undefined) answer[field.key] = value
   }
   return answer
+})
+
+const suppliedAnswer = Effect.fn("cli.auth.form.answer")(function* (field: FormField, input: string) {
+  if (field.type === "external") {
+    return yield* Effect.fail(new Error(`External form field requires interactive confirmation: ${field.key}`))
+  }
+  if (field.type === "string") return input
+  const value = decodeAnswer(input)
+  if (value._tag === "None") {
+    return yield* Effect.fail(new Error(`Expected a JSON value for form field: ${field.key}`))
+  }
+  return typeof value.value === "object" ? [...value.value] : value.value
 })
 
 export const secret = Effect.fn("cli.auth.secret")(function* (message: string) {
@@ -24,6 +66,7 @@ export const secret = Effect.fn("cli.auth.secret")(function* (message: string) {
 })
 
 const answerField = Effect.fn("cli.auth.form.field")(function* (field: FormField) {
+  yield* requireInteractive("Authentication form input requires an interactive terminal")
   const message = field.title ?? field.key
   if (field.description) log.info(field.description)
   if (field.type === "external") {

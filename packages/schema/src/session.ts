@@ -10,6 +10,7 @@ import { SessionEvent } from "./session-event.js"
 import { SessionID } from "./session-id.js"
 import { SessionMetadata } from "./session-metadata.js"
 import { Money } from "./money.js"
+import { Permission } from "./permission.js"
 import { TokenUsage } from "./token-usage.js"
 import { Revert } from "./session-revert.js"
 import { SessionFork } from "./session-fork.js"
@@ -25,8 +26,6 @@ export const Event = SessionEvent
 export { Revert }
 export const ForkBoundary = SessionFork.Boundary
 export type ForkBoundary = SessionFork.Boundary
-export const ForkRequestBoundary = SessionFork.RequestBoundary
-export type ForkRequestBoundary = SessionFork.RequestBoundary
 
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({
@@ -54,6 +53,8 @@ export const Info = Schema.Struct({
   location: Location.Ref,
   subpath: RelativePath.pipe(optional),
   metadata: Metadata.pipe(optional),
+  /** Evaluated after the agent's rules; the last matching rule wins. */
+  permissions: Permission.Ruleset.pipe(optional),
   revert: Revert.pipe(optional),
 }).annotate({ identifier: "Session.Info" })
 

@@ -110,7 +110,6 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
         location: { directory, project: { id: "proj_test", directory: worktree, canonical: worktree } },
         data: [],
       })
-    if (url.pathname === "/api/project/current") return json({ id: "proj_test", directory: worktree })
     if (url.pathname === "/api/project") return json([])
     if (url.pathname === "/api/worktree") {
       if (request.method === "GET") return json([{ directory: worktree }])
@@ -143,7 +142,7 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
         location: { directory, project: { id: "proj_test", directory: worktree, canonical: worktree } },
         data: [],
       })
-    if (url.pathname === "/api/form/request")
+    if (url.pathname === "/api/form")
       return json({ location: { directory, project: { id: "proj_test", directory: worktree } }, data: [] })
     if (/^\/api\/session\/[^/]+\/form$/.test(url.pathname)) return json({ data: [] })
     if (/^\/api\/experimental\/session\/[^/]+\/terminal$/.test(url.pathname)) return json({ data: [] })

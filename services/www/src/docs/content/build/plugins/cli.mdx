@@ -214,7 +214,7 @@ console.log(result.ok, result.notification, result.sound, result.skipped)
 Use semantic theme tokens with OpenTUI elements and pass `context.renderer` to renderer-specific helpers.
 
 ```tsx
-const Status = () => <text fg={context.theme.text.default}>Ready</text>
+const Status = () => <text fg={context.theme.text.base}>Ready</text>
 const renderer = context.renderer
 ```
 
@@ -227,7 +227,7 @@ import { usePlugin } from "@opencode/plugin/tui"
 
 function Status() {
   const context = usePlugin()
-  return <text fg={context.theme.text.default}>{context.app.version}</text>
+  return <text fg={context.theme.text.base}>{context.app.version}</text>
 }
 ```
 
@@ -389,10 +389,43 @@ if (context.ui.tabs.enabled()) {
 }
 ```
 
+## Model
+
+Read the prompt's selected model and change its variant. `current()` and `variant.list()` are reactive when read in a
+Solid computation. A `variant` of `undefined` is the model default.
+
+```ts
+const selected = context.ui.model.current()
+const variants = context.ui.model.variant.list()
+context.ui.model.variant.set("high")
+context.ui.model.variant.set(undefined)
+```
+
+`variant.set` returns `false` when no model is selected or the model has no such variant. Bind it to a command to
+replace the built-in variant cycle, for example to skip the model default:
+
+```ts
+context.keymap.layer(() => ({
+  commands: [
+    {
+      id: "acme.variant.cycle",
+      title: "Cycle variants",
+      bind: "tab",
+      run() {
+        const variants = context.ui.model.variant.list()
+        if (variants.length === 0) return
+        const index = variants.indexOf(context.ui.model.current()?.variant ?? "")
+        context.ui.model.variant.set(variants[(index + 1) % variants.length])
+      },
+    },
+  ],
+}))
+```
+
 ## Slots
 
-Slots insert or replace JSX at `app`, `home.footer`, `prompt.footer`, `prompt.footer.status`, `prompt.footer.file`,
-`session.composer.top`, `sidebar.content`, or `sidebar.footer`.
+Slots insert or replace JSX at `app`, `home.footer`, `home.footer.status`, `prompt.footer`, `prompt.footer.status`,
+`prompt.footer.file`, `session.composer.top`, `sidebar.content`, or `sidebar.footer`.
 
 ```tsx
 return context.ui.slot({
@@ -409,6 +442,13 @@ context.ui.slot({ append: "home.footer", render: () => <text>After footer conten
 context.ui.slot({ before: "home.footer", render: () => <text>Before footer slot</text> })
 context.ui.slot({ after: "home.footer", render: () => <text>After footer slot</text> })
 context.ui.slot({ replace: "home.footer", render: () => <text>New footer</text> })
+```
+
+Use `home.footer.status` to add content to the built-in footer row without replacing it. Status contributions appear
+after OpenCode's health indicators and before the version.
+
+```tsx
+context.ui.slot({ append: "home.footer.status", render: () => <text>SYNCED</text> })
 ```
 
 ### Session panels
@@ -510,7 +550,7 @@ Expose the CLI plugin through `./tui`; add OpenTUI peers when the plugin renders
     "./tui": "./src/tui.tsx"
   },
   "dependencies": {
-    "@opencode/plugin": "beta"
+    "@opencode/plugin": "latest"
   },
   "peerDependencies": {
     "@opentui/core": ">=0.5.8",

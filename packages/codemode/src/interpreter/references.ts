@@ -1,46 +1,18 @@
 import { ToolReference } from "../tool-runtime.js"
-import { Values } from "../values.js"
-import { HostFunction, HostNamespace } from "./host.js"
-import {
-  type AstNode,
-  AsyncIteratorSymbol,
-  CodeModeFunction,
-  CodeModeGenerator,
-  GeneratorMethodReference,
-  InterpreterRuntimeError,
-  IntrinsicReference,
-  IteratorSymbol,
-  PromiseInstanceMethodReference,
-} from "./model.js"
+import { invalidData } from "./model.js"
+import { Callable, getOwn, isRuntimeReference, Obj, Opaque, ownKeys, type Value } from "./objects.js"
 
-export const isRuntimeReference = (value: unknown): boolean =>
-  value instanceof HostFunction ||
-  value instanceof HostNamespace ||
-  value instanceof CodeModeFunction ||
-  value instanceof CodeModeGenerator ||
-  value instanceof GeneratorMethodReference ||
-  value instanceof ToolReference ||
-  value instanceof IntrinsicReference ||
-  value instanceof PromiseInstanceMethodReference ||
-  value instanceof Values.Promise ||
-  Values.isValue(value)
-
-function* childValues(value: object): Generator {
-  for (const key of Reflect.ownKeys(value)) {
-    if (!Object.prototype.propertyIsEnumerable.call(value, key)) continue
-    if (typeof key === "symbol" && key !== AsyncIteratorSymbol && key !== IteratorSymbol) continue
-    yield Reflect.get(value, key)
-  }
-}
+/** Interpreter machinery that is never data, unlike a Date or Map, which cross some boundaries as copies. */
+export const isOpaque = (value: Value): boolean => value instanceof Opaque || value instanceof ToolReference
 
 // Depth-first search over a value tree. `match` stops the walk; `skip` prunes a subtree without matching it.
 const find = (
-  value: unknown,
-  match: (current: unknown) => boolean,
-  skip: (current: unknown) => boolean,
+  value: Value,
+  match: (current: Value) => boolean,
+  skip: (current: Value) => boolean,
   seen: Set<object>,
 ): boolean => {
-  const pending: Array<Iterator<unknown>> = [[value].values()]
+  const pending: Array<Iterator<Value>> = [[value].values()]
   while (pending.length > 0) {
     const next = pending.at(-1)!.next()
     if (next.done) {
@@ -49,71 +21,45 @@ const find = (
     }
     const current = next.value
     if (match(current)) return true
-    if (current === null || typeof current !== "object" || skip(current) || seen.has(current)) continue
+    if (!(current instanceof Obj) || skip(current) || seen.has(current)) continue
     seen.add(current)
-    pending.push(childValues(current))
+    pending.push(
+      ownKeys(current)
+        .map((key) => getOwn(current, key))
+        .values(),
+    )
   }
   return false
 }
 
 const never = () => false
 
-export const containsRuntimeReference = (value: unknown): boolean => find(value, isRuntimeReference, never, new Set())
+export const containsRuntimeReference = (value: Value): boolean => find(value, isRuntimeReference, never, new Set())
 
-// CodeMode values are data here, not opaque interpreter references.
-export const containsOpaqueReference = (value: unknown): boolean =>
-  find(value, (current) => !Values.isValue(current) && isRuntimeReference(current), Values.isValue, new Set())
+export const containsOpaqueReference = (value: Value): boolean =>
+  find(value, isOpaque, (current) => isRuntimeReference(current) && !isOpaque(current), new Set())
 
 // Reject cycles before mutation so later boundary walks remain safe.
 export const rejectCircularInsertion = (
-  container: object,
-  value: unknown,
+  container: Obj,
+  value: Value,
   label: string,
-  node: AstNode,
   seen = new Set<object>(),
 ): void => {
   if (find(value, (current) => current === container, isRuntimeReference, seen)) {
-    throw new InterpreterRuntimeError(`${label} contains a circular value.`, node, "InvalidDataValue")
+    throw invalidData(`${label} contains a circular value.`)
   }
 }
 
-export const describeValue = (value: unknown): string => {
-  if (value === null) return "null"
-  if (Array.isArray(value)) return "an array"
-  if (value instanceof Values.Promise) return "an un-awaited Promise"
+export const describeValue = (value: Value): string => {
+  if (value === null || value === undefined) return String(value)
+  if (value instanceof Obj) return value.describe
   if (value instanceof ToolReference) return "a tool reference"
-  if (value instanceof Values.Date) return "a Date"
-  if (value instanceof Values.RegExp) return "a RegExp"
-  if (value instanceof Values.Map) return "a Map"
-  if (value instanceof Values.Set) return "a Set"
-  if (value instanceof Values.URL) return "a URL"
-  if (value instanceof Values.URLSearchParams) return "a URLSearchParams"
-  if (value instanceof CodeModeGenerator) return "a generator"
-  if (isRuntimeReference(value)) return "a function"
-  if (typeof value === "object") return "a data object"
   return `a ${typeof value}`
 }
 
-export const typeofValue = (value: unknown): string => {
-  if (
-    value instanceof HostFunction ||
-    value instanceof CodeModeFunction ||
-    value instanceof GeneratorMethodReference ||
-    value instanceof IntrinsicReference ||
-    value instanceof PromiseInstanceMethodReference
-  ) {
-    return "function"
-  }
-  if (value instanceof HostNamespace) return "object"
+export const typeofValue = (value: Value): string => {
+  if (value instanceof Callable) return "function"
   if (value instanceof ToolReference) return value.path.length > 0 ? "function" : "object"
   return typeof value
-}
-
-const MAX_ARRAY_LENGTH = 4_294_967_295
-
-export const parseArrayIndex = (key: string | number): number | undefined => {
-  const property = String(key)
-  if (!/^(0|[1-9]\d*)$/.test(property)) return undefined
-  const index = Number(property)
-  return index < MAX_ARRAY_LENGTH ? index : undefined
 }

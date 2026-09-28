@@ -3,7 +3,8 @@ import { Tool } from "@opencode/schema/tool"
 import { SessionError } from "@opencode/schema/session-error"
 import { Permission } from "../permission.js"
 import { Integration } from "../integration.js"
-import { AgentNotFoundError, StepFailedError, UserInterruptedError } from "./error.js"
+import { AgentNotFoundError, StepFailedError } from "./error.js"
+import { ModelResolver } from "../model-resolver.js"
 import { SessionRunnerModel } from "./runner/model.js"
 
 export function toSessionError(cause: unknown): SessionError.Error {
@@ -31,6 +32,8 @@ export function toSessionError(cause: unknown): SessionError.Error {
         return providerError("provider.no-route", cause.reason)
       case "UnknownProvider":
         return providerError("provider.unknown", cause.reason)
+      case "Timeout":
+        return providerError("provider.timeout", cause.reason)
       default: {
         const exhaustive: never = cause.reason
         return exhaustive
@@ -46,16 +49,17 @@ export function toSessionError(cause: unknown): SessionError.Error {
     return unwrapped.message === "" ? { ...unwrapped, type: "tool.execution", message: cause.message } : unwrapped
   }
   if (cause instanceof StepFailedError) return cause.error
-  if (cause instanceof SessionRunnerModel.UnsupportedCompactionError)
+  if (cause instanceof ModelResolver.UnsupportedCompactionError)
     return { type: "provider.unsupported-operation", message: cause.message }
   if (cause instanceof AgentNotFoundError) return { type: "unknown", message: cause.message }
-  if (cause instanceof UserInterruptedError) return { type: "aborted", message: cause.message }
   if (
     cause instanceof SessionRunnerModel.ModelNotSelectedError ||
     cause instanceof SessionRunnerModel.ModelUnavailableError ||
-    cause instanceof SessionRunnerModel.VariantUnavailableError ||
-    cause instanceof SessionRunnerModel.UnsupportedPackageError ||
-    cause instanceof SessionRunnerModel.UnresolvedProviderVariablesError
+    cause instanceof ModelResolver.VariantUnavailableError ||
+    cause instanceof ModelResolver.UnsupportedPackageError ||
+    cause instanceof ModelResolver.ModelConfigurationError ||
+    cause instanceof ModelResolver.ModelInitializationError ||
+    cause instanceof ModelResolver.UnresolvedProviderVariablesError
   )
     return { type: "provider.no-route", message: cause.message }
   if (cause instanceof Integration.AuthorizationError) return { type: "provider.auth", message: cause.message }

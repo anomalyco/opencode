@@ -96,9 +96,9 @@ describe("Object.keys over arrays", () => {
     expect((await error(`return Object.keys(tools.github.list_issues({ value: "x" }))`)).message).toContain(
       "received an un-awaited Promise",
     )
-    expect((await error(`const { a } = new Map(); return a`)).message).toContain("received a Map.")
+    expect(await value(`const { a, size } = new Map(); return [a, size]`)).toEqual([null, 0])
     expect((await error(`return Array.from(7)`)).message).toContain("received a number.")
-    expect((await error(`return (() => 1).x`)).message).toContain("Cannot read properties of a function")
+    expect(await value(`return [(() => 1).x, Object.keys(() => 1)]`)).toEqual([null, []])
   })
 })
 

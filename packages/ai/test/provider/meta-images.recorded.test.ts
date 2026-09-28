@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect } from "effect"
-import { Image, ImageInput, LLM, LLMEvent, LLMRequest, Message } from "../../src/index.js"
+import { Image, LLM, LLMEvent, LLMRequest, Media, Message } from "../../src/index.js"
 import { Meta } from "../../src/providers/meta.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -28,15 +28,16 @@ recorded.effect.with(
       const response = yield* Image.generate({
         model: meta.image(modelID),
         prompt: "A flat black square centered on a plain white background. No text.",
-        options: { ...controls, n: 1, size: "256x256" },
+        n: 1,
+        size: "256x256",
+        providerOptions: controls,
       })
       expect(response.images).toHaveLength(1)
-      expect(response.image?.mediaType).toBe("image/webp")
-      expect(response.image?.data).toBeInstanceOf(Uint8Array)
-      if (!(response.image?.data instanceof Uint8Array)) throw new Error("Expected image bytes")
-      expect(new TextDecoder().decode(response.image.data.slice(0, 4))).toBe("RIFF")
-      expect(new TextDecoder().decode(response.image.data.slice(8, 12))).toBe("WEBP")
-      expect(response.usage?.outputTokens).toBeGreaterThan(0)
+      expect(response.image.mediaType).toBe("image/webp")
+      const bytes = yield* response.image.bytes()
+      expect(new TextDecoder().decode(bytes.slice(0, 4))).toBe("RIFF")
+      expect(new TextDecoder().decode(bytes.slice(8, 12))).toBe("WEBP")
+      expect(response.usage?.type === "tokens" ? response.usage.output : undefined).toBeGreaterThan(0)
     }),
   180_000,
 )
@@ -50,16 +51,18 @@ recorded.effect.with(
         model: meta.image(modelID),
         prompt: "Change the shape to bright purple. Keep the plain white background.",
         images: [
-          ImageInput.bytes(
+          Media.bytes(
             yield* Effect.promise(() => Bun.file("test/fixtures/images/edit-source.jpg").bytes()),
             "image/jpeg",
           ),
         ],
-        options: { ...controls, n: 1, outputFormat: "png", size: "256x256" },
+        n: 1,
+        size: "256x256",
+        format: "png",
+        providerOptions: controls,
       })
-      expect(response.image?.mediaType).toBe("image/png")
-      if (!(response.image?.data instanceof Uint8Array)) throw new Error("Expected image bytes")
-      expect(Array.from(response.image.data.slice(0, 8))).toEqual([137, 80, 78, 71, 13, 10, 26, 10])
+      expect(response.image.mediaType).toBe("image/png")
+      expect(Array.from((yield* response.image.bytes()).slice(0, 8))).toEqual([137, 80, 78, 71, 13, 10, 26, 10])
     }),
   180_000,
 )

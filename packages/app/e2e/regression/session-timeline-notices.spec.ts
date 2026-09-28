@@ -122,7 +122,15 @@ test("renders compaction progress, summary, and outcome in order", async ({ page
   )
   await expect(compaction.getByRole("heading", { name: "Checkpoint" })).toBeVisible()
   await expect(compaction).toContainText("Streamed implementation details.")
-  await expect(compaction.getByRole("status").getByLabel("Compacting", { exact: true })).toBeVisible()
+  const running = compaction.getByRole("status").getByLabel("Compacting", { exact: true })
+  await expect(running).toBeVisible()
+  await expect
+    .poll(async () => {
+      const summary = await compaction.locator('[data-component="text-part"]').boundingBox()
+      const status = await running.boundingBox()
+      return !!summary && !!status && status.y >= summary.y + summary.height
+    })
+    .toBe(true)
   await expect(compaction.getByText("Session compacted", { exact: true })).toHaveCount(0)
 
   await timeline.send(

@@ -6,7 +6,7 @@ title: "Effect"
 and decodes responses into OpenCode schema values.
 
 ```sh
-bun add @opencode/client@beta effect
+bun add @opencode/client effect
 ```
 
 ## Create a client
@@ -134,7 +134,7 @@ const program = Effect.gen(function* () {
       HttpClient.mapRequest(httpClient, (request) => HttpClientRequest.setHeaders(request, Service.headers(endpoint))),
     ),
   )
-  return yield* client.health.get()
+  return yield* client.server.info()
 })
 
 const health = await Effect.runPromise(

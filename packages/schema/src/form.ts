@@ -41,6 +41,9 @@ const FieldBase = {
   title: Schema.String.pipe(optional),
   description: Schema.String.pipe(optional),
   required: Schema.Boolean.pipe(optional),
+  hidden: Schema.Boolean.pipe(optional).annotate({
+    description: "Skip the interactive authentication prompt and use the default unless an answer is supplied",
+  }),
   when: Schema.Array(When).pipe(optional),
 }
 
@@ -151,6 +154,12 @@ export const State = Schema.Union([
   .pipe(Schema.toTaggedUnion("status"))
   .annotate({ identifier: "Form.State" })
 export type State = typeof State.Type
+
+export const Detail = Schema.Struct({
+  ...Info.fields,
+  state: State,
+}).annotate({ identifier: "Form.Detail" })
+export interface Detail extends Schema.Schema.Type<typeof Detail> {}
 
 export const Reply = Schema.Struct({
   answer: Answer,

@@ -1,0 +1,22 @@
+[
+  {
+    "role": "user",
+    "content": [
+      { "type": "text", "text": "retained attachments" },
+      {
+        "type": "media",
+        "mediaType": "image/png",
+        "data": "AQID",
+        "filename": "attachment.png",
+        "cache": { "type": "ephemeral" },
+        "metadata": { "attachment": "original" },
+        "providerMetadata": { "openai": { "detail": "high" } }
+      },
+      { "type": "media", "mediaType": "image/jpeg", "data": "BAUG" }
+    ]
+  },
+  {
+    "role": "assistant",
+    "content": [{ "type": "compaction", "provider": "openai", "encrypted": "opaque-checkpoint", "id": "cp_legacy" }]
+  }
+]

@@ -1,11 +1,12 @@
 import { confirm, intro, log, outro, spinner } from "@clack/prompts"
 import { Service } from "@opencode/client/effect/service"
 import { Global } from "@opencode/util/global"
-import { Effect, FileSystem } from "effect"
+import { Effect, FileSystem, Schedule } from "effect"
 import path from "node:path"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { ServerConnection } from "../../services/server-connection"
+import { RetainedImage } from "../../services/retained-image"
 import { Updater } from "../../services/updater"
 import { handlePromptErrors, prompt, requireInteractive } from "../../ui/prompt"
 import { errorMessage } from "../../util/error"
@@ -79,12 +80,20 @@ export default Runtime.handler(
       )
     }
 
+    // Links that keep an older OpenCode replaceable may still run; move them so the cache can go.
+    if (process.platform === "win32") yield* RetainedImage.relocate(global.cache, global.tmp)
     const errors: string[] = []
     yield* Effect.forEach(directories, (directory) =>
       Effect.gen(function* () {
         if (directory.keep) return
         progress.start(`Removing ${directory.label}...`)
         yield* fs.remove(directory.path, { recursive: true, force: true }).pipe(
+          // Windows reports a terminated service as gone before it releases its database
+          // and log handles, so the first removal can race that teardown.
+          Effect.retry({
+            while: (error) => process.platform === "win32" && error.reason._tag === "Busy",
+            schedule: Schedule.max([Schedule.spaced("250 millis"), Schedule.recurs(40)]),
+          }),
           Effect.tap(() => Effect.sync(() => progress.stop(`Removed ${directory.label}`))),
           Effect.catch((error) =>
             Effect.sync(() => {

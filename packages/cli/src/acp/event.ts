@@ -1,10 +1,12 @@
-import type { AgentSideConnection, PromptResponse, SessionUpdate } from "@agentclientprotocol/sdk"
+import type { PromptResponse, SessionUpdate } from "@agentclientprotocol/sdk"
 import type {
   EventSubscribeOutput,
   OpenCodeClient,
   SessionMessageAssistant,
   SessionMessageInfo,
+  SessionStructuredError,
 } from "@opencode/client/promise"
+import type { ACPConnection } from "./connection"
 import { partsToContentChunks, type ReplayPart } from "./content"
 import { ACPError } from "./error"
 import { replyPermission, syncEditedFiles } from "./permission"
@@ -17,11 +19,11 @@ import {
   type ToolInput,
 } from "./tool"
 
-type Connection = Pick<AgentSideConnection, "sessionUpdate" | "requestPermission"> &
-  Partial<Pick<AgentSideConnection, "writeTextFile">>
+type Connection = Pick<ACPConnection.Connection, "sessionUpdate" | "requestPermission" | "writeTextFile">
 
 export type TurnControl = {
   cancelled: boolean
+  // Aborted whenever the turn is cancelled or closed, so it also cancels the turn's outbound client requests.
   readonly admission: AbortController
 }
 
@@ -39,6 +41,13 @@ export type TurnStart =
 
 export const ChildSessionUpdatesCapability = "opencode/child-session-updates"
 export const ChildSessionUpdateMethod = "opencode/session/child_update"
+const RetryMeta = "opencode/retry"
+
+type RetryStatus = {
+  readonly attempt: number
+  readonly nextRetryAt: string
+  readonly error: SessionStructuredError
+}
 
 type ChildSessionUpdateBase = {
   readonly rootSessionId: string
@@ -96,6 +105,7 @@ export async function streamTurn(input: {
   let finish: SessionMessageAssistant["finish"]
   let executionError: { readonly type: string; readonly message: string } | undefined
   const tools = new Map<string, ToolState>()
+  const retries = new Map<string, RetryStatus>()
   const children = new Map<string, ChildSession>()
   const openChildren = new Set<string>()
   let handedOff = false
@@ -160,12 +170,13 @@ export async function streamTurn(input: {
           clientSessionID: input.sessionID,
           cwd: input.cwd,
           tool,
+          signal: control.admission.signal,
           ...(child ? { toolCallPrefix: child.id, titlePrefix: child.title } : {}),
         })
         continue
       }
       if (event.type === "form.created" && (event.data.form.sessionID === input.sessionID || child)) {
-        await input.client.form
+        await input.client.session.form
           .cancel({ sessionID: event.data.form.sessionID, formID: event.data.form.id })
           .catch(() => input.client.session.interrupt({ sessionID: event.data.form.sessionID }).catch(() => {}))
         continue
@@ -186,6 +197,18 @@ export async function streamTurn(input: {
 
       if (event.type === "session.step.started") {
         if (!child) assistantMessageID = event.data.assistantMessageID
+        if (retries.delete(eventSessionID))
+          await send({ sessionUpdate: "session_info_update", _meta: { [RetryMeta]: null } })
+        continue
+      }
+      if (event.type === "session.retry.scheduled") {
+        const retry = {
+          attempt: event.data.attempt,
+          nextRetryAt: new Date(event.data.at).toISOString(),
+          error: event.data.error,
+        }
+        retries.set(eventSessionID, retry)
+        await send({ sessionUpdate: "session_info_update", _meta: { [RetryMeta]: retry } })
         continue
       }
       if (event.type === "session.text.delta") {
@@ -201,7 +224,7 @@ export async function streamTurn(input: {
         if (!child) assistantMessageID = event.data.assistantMessageID
         await send({
           sessionUpdate: "agent_thought_chunk",
-          messageId: event.data.assistantMessageID,
+          messageId: `${event.data.assistantMessageID}:reasoning:${event.data.ordinal}`,
           content: { type: "text", text: event.data.delta },
         })
         continue
@@ -269,6 +292,7 @@ export async function streamTurn(input: {
           toolName: current.name,
           toolInput: current.input,
           metadata: event.data.metadata ?? {},
+          signal: control.admission.signal,
         }).catch(() => {})
         await send({
           sessionUpdate: "tool_call_update",
@@ -369,7 +393,7 @@ export async function streamTurn(input: {
     }
     const assistant = assistantMessageID
       ? await input.client.session
-          .message({ sessionID: input.sessionID, messageID: assistantMessageID })
+          .message.get({ sessionID: input.sessionID, messageID: assistantMessageID })
           .catch(() => undefined)
       : undefined
     return response(
@@ -378,6 +402,7 @@ export async function streamTurn(input: {
       terminal,
       control.cancelled,
       finish,
+      retries.get(input.sessionID),
     )
   } catch (error) {
     streamController.abort()
@@ -417,7 +442,7 @@ function projectChildUpdate(update: SessionUpdate, child: ChildSession) {
 }
 
 export async function replayMessages(
-  connection: Pick<AgentSideConnection, "sessionUpdate">,
+  connection: Pick<Connection, "sessionUpdate">,
   sessionID: string,
   cwd: string,
   messages: readonly SessionMessageInfo[],
@@ -426,7 +451,7 @@ export async function replayMessages(
 }
 
 async function replayMessage(
-  connection: Pick<AgentSideConnection, "sessionUpdate">,
+  connection: Pick<Connection, "sessionUpdate">,
   sessionID: string,
   cwd: string,
   message: SessionMessageInfo,
@@ -455,6 +480,8 @@ async function replayMessage(
     return
   }
   if (message.type !== "assistant") return
+  // Live reasoning ordinals count only reasoning parts, not the mixed content array.
+  let reasoningOrdinal = 0
   for (const part of message.content) {
     if (part.type === "text") {
       await connection.sessionUpdate({
@@ -472,7 +499,7 @@ async function replayMessage(
         sessionId: sessionID,
         update: {
           sessionUpdate: "agent_thought_chunk",
-          messageId: message.id,
+          messageId: `${message.id}:reasoning:${reasoningOrdinal++}`,
           content: { type: "text", text: part.text },
         },
       })
@@ -555,6 +582,7 @@ function response(
   terminal: "succeeded" | "failed" | "interrupted",
   cancelled: boolean,
   finish: SessionMessageAssistant["finish"],
+  retry?: RetryStatus,
 ): PromptResponse {
   const error = assistant?.error ?? executionError
   if (error?.type === "provider.auth") throw new ACPError.AuthRequiredError()
@@ -577,7 +605,8 @@ function response(
       }
     : undefined
   const stopReason = resolveStopReason({ terminal, cancelled, finish, error: error?.type })
-  return { stopReason, ...(usage ? { usage } : {}), _meta: {} }
+  // Only an interrupt during backoff leaves a retry pending. Interruption clears the projected retry, so report it here.
+  return { stopReason, ...(usage ? { usage } : {}), _meta: retry ? { [RetryMeta]: retry } : {} }
 }
 
 function resolveStopReason(input: {

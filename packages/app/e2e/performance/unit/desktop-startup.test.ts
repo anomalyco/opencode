@@ -20,14 +20,12 @@ describe("desktop startup benchmark", () => {
       ["electronSpawnStarted", "starting electron app..."],
       ["debugEndpointReady", "DevTools listening on ws://"],
       ["electronStarted", "app starting"],
+      ["layersReady", "layers ready"],
+      ["windowVisible", "main window visible"],
       ["serviceEnsureStarted", "starting v2 background service"],
       ["serviceSpawnRequested", "v2 CLI background service starting"],
       ["serviceReady", "v2 CLI background service ready"],
-      ["backgroundLoadingReady", "loading task finished"],
       ["rendererViteConnected", "[vite] connected."],
-      ["rendererInitializationStarted", "awaiting server ready"],
-      ["rendererInitializationReady", "server ready"],
-      ["windowVisible", "main window visible"],
     ] as const
     cases.forEach(([milestone, line]) => {
       expect(milestoneForLine(`\u001b[32m${line}\u001b[39m`)).toBe(milestone)
@@ -58,14 +56,12 @@ function sample(run: number, commandToHomeReadyMs: number): DesktopStartupSample
     electronSpawnStarted: 7,
     debugEndpointReady: 8,
     electronStarted: 9,
-    serviceEnsureStarted: 10,
-    serviceSpawnRequested: 11,
-    serviceReady: 12,
-    backgroundLoadingReady: 13,
-    rendererViteConnected: 14,
-    rendererInitializationStarted: 15,
-    rendererInitializationReady: 16,
-    windowVisible: 17,
+    layersReady: 10,
+    windowVisible: 11,
+    serviceEnsureStarted: 12,
+    serviceSpawnRequested: 13,
+    serviceReady: 14,
+    rendererViteConnected: 15,
     homeReady: commandToHomeReadyMs,
   }
   return {
@@ -80,8 +76,8 @@ function sample(run: number, commandToHomeReadyMs: number): DesktopStartupSample
       electronStartup: 2,
       serviceSpawnWait: 1,
       serviceProcessStartup: 1,
-      rendererStartup: commandToHomeReadyMs - 14,
-      visibleWindowToHome: commandToHomeReadyMs - 17,
+      rendererStartup: commandToHomeReadyMs - 15,
+      visibleWindowToHome: commandToHomeReadyMs - 11,
     },
     service: { version: "2.0.0-local-test", url: "http://127.0.0.1:3000", pid: run },
   }

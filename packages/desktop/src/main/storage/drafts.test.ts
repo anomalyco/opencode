@@ -17,17 +17,29 @@ describe("draft store", () => {
     expect(database.db.all(sql`SELECT key FROM document`)).toEqual([])
   })
 
-  test("stores blobs by content hash and collects unreferenced ones on open", () => {
+  test("stores blobs by content hash and collects unreferenced ones shortly after open", async () => {
     const database = openDatabase(":memory:")
-    const first = createDraftStore(database.db, { delay: 1_000 })
+    let clock = 0
+    const first = createDraftStore(database.db, { delay: 1_000, now: () => clock })
     const used = first.putBlob(new Uint8Array([1, 2, 3]))
     const unused = first.putBlob(new Uint8Array([4, 5, 6]))
     expect(first.putBlob(new Uint8Array([1, 2, 3]))).toBe(used)
     first.set("doc", JSON.stringify({ parts: [{ blob: { id: used } }] }))
     first.flush()
-    const second = createDraftStore(database.db, { delay: 1_000 })
-    expect(second.getBlob(used)).toEqual(new Uint8Array([1, 2, 3]))
-    expect(second.getBlob(unused)).toBeNull()
+    first.close()
+    // The startup collection runs off the window's critical path and keeps the usual grace, so a
+    // blob from a session that ended within the grace period is still there...
+    const second = createDraftStore(database.db, { delay: 1_000, now: () => clock, collectDelay: 0 })
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    expect(second.getBlob(unused)).toEqual(new Uint8Array([4, 5, 6]))
+    second.close()
+    // ...and gone once the grace has passed.
+    clock = blobGrace + 1
+    const third = createDraftStore(database.db, { delay: 1_000, now: () => clock, collectDelay: 0 })
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    expect(third.getBlob(used)).toEqual(new Uint8Array([1, 2, 3]))
+    expect(third.getBlob(unused)).toBeNull()
+    third.close()
   })
 
   test("collects a retired chunk only once it is unreferenced and past the grace period", () => {

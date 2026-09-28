@@ -1,7 +1,17 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { CacheHint, LLM, AIError, LLMRequest, Message, ToolCallPart, ToolDefinition, Usage } from "../../src/index.js"
+import {
+  CacheHint,
+  LLM,
+  AIError,
+  LLMRequest,
+  Message,
+  ToolCallPart,
+  ToolDefinition,
+  Usage,
+  Media,
+} from "../../src/index.js"
 import { Auth, Endpoint, LLMClient, Route } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as AnthropicMessages from "../../src/protocols/anthropic-messages.js"
@@ -138,11 +148,13 @@ describe("Anthropic Messages route", () => {
     Effect.gen(function* () {
       const enabled = yield* compileRequest(
         LLMRequest.update(request, {
+          generation: { maxTokens: 4_096 },
           providerOptions: { thinking: { type: "enabled", budgetTokens: 1_024 } },
         }),
       )
       const legacy = yield* compileRequest(
         LLMRequest.update(request, {
+          generation: { maxTokens: 4_096 },
           providerOptions: { thinking: { type: "enabled", budget_tokens: 2_048 } },
         }),
       )
@@ -158,6 +170,22 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("fits the thinking budget to half the output limit", () =>
+    Effect.gen(function* () {
+      const thinking = (maxTokens: number) =>
+        compileRequest(
+          LLMRequest.update(request, {
+            generation: { maxTokens },
+            providerOptions: { thinking: { type: "enabled", budgetTokens: 31_999 } },
+          }),
+        ).pipe(Effect.map((prepared) => prepared.body.thinking))
+
+      expect(yield* thinking(64_000)).toEqual({ type: "enabled", budget_tokens: 31_999 })
+      expect(yield* thinking(20_000)).toEqual({ type: "enabled", budget_tokens: 10_000 })
+      expect(yield* thinking(1_500)).toEqual({ type: "enabled", budget_tokens: 1_024 })
+    }),
+  )
+
   it.effect("rejects enabled thinking without a budget", () =>
     Effect.gen(function* () {
       const error = yield* compileRequest(
@@ -166,7 +194,89 @@ describe("Anthropic Messages route", () => {
         }),
       ).pipe(Effect.flip)
 
-      expect(error.message).toContain("Anthropic thinking provider option requires budgetTokens")
+      expect(error.reason._tag).toBe("InvalidRequest")
+      expect(error.message).toContain("budgetTokens")
+    }),
+  )
+
+  it.effect("lowers passthrough provider options and accepts either key spelling", () =>
+    Effect.gen(function* () {
+      const snake = yield* compileRequest(
+        LLMRequest.update(request, {
+          providerOptions: {
+            service_tier: "auto",
+            metadata: { user_id: "user_1" },
+            container: { id: "container_1" },
+            inference_geo: "us",
+            cache_control: { type: "ephemeral", ttl: "1h" },
+            output_config: { format: { type: "json_schema", schema: { type: "object" } } },
+          },
+        }),
+      )
+      const camel = yield* compileRequest(
+        LLMRequest.update(request, {
+          providerOptions: {
+            serviceTier: "standard_only",
+            container: "container_2",
+            inferenceGeo: "eu",
+            cacheControl: { type: "ephemeral" },
+            outputConfig: { effort: "low" },
+          },
+        }),
+      )
+
+      expect(snake.body).toMatchObject({
+        service_tier: "auto",
+        metadata: { user_id: "user_1" },
+        container: { id: "container_1" },
+        inference_geo: "us",
+        cache_control: { type: "ephemeral", ttl: "1h" },
+        output_config: { format: { type: "json_schema", schema: { type: "object" } } },
+      })
+      expect(camel.body).toMatchObject({
+        service_tier: "standard_only",
+        container: "container_2",
+        inference_geo: "eu",
+        cache_control: { type: "ephemeral" },
+        output_config: { effort: "low" },
+      })
+    }),
+  )
+
+  it.effect("forwards unknown values for pass-through string enums", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLMRequest.update(request, {
+          providerOptions: {
+            service_tier: "future-tier",
+            thinking: { type: "adaptive", display: "future-display" },
+          },
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        service_tier: "future-tier",
+        thinking: { type: "adaptive", display: "future-display" },
+      })
+    }),
+  )
+
+  it.effect("ignores unknown provider options and rejects malformed known ones", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(LLMRequest.update(request, { providerOptions: { unknownOption: true } }))
+      const malformed = [
+        { service_tier: 1 },
+        { metadata: { user_id: 42 } },
+        { cache_control: { type: "ephemeral", ttl: "future-ttl" } },
+        { output_config: { format: { type: "text" } } },
+        { thinking: { type: "automatic" } },
+      ]
+      const errors = yield* Effect.forEach(malformed, (providerOptions) =>
+        compileRequest(LLMRequest.update(request, { providerOptions })).pipe(Effect.flip),
+      )
+
+      expect(prepared.body).not.toHaveProperty("unknownOption")
+      expect(errors.map((error) => error.reason._tag)).toEqual(malformed.map(() => "InvalidRequest"))
     }),
   )
 
@@ -284,7 +394,7 @@ describe("Anthropic Messages route", () => {
           model: opus48,
           messages: [
             Message.user("Before."),
-            Message.make({ role: "system", content: { type: "media", mediaType: "image/png", data: "AAECAw==" } }),
+            Message.make({ role: "system", content: { type: "media", media: Media.base64("AAECAw==", "image/png") } }),
           ],
         }),
       ).pipe(Effect.flip)
@@ -2032,8 +2142,8 @@ describe("Anthropic Messages route", () => {
           messages: [
             Message.user([
               { type: "text", text: "What is in this image?" },
-              { type: "media", mediaType: "image/png", data: "AAECAw==" },
-              { type: "media", mediaType: "application/pdf", data: "JVBERi0xLjQ=", filename: "report.pdf" },
+              { type: "media", media: Media.base64("AAECAw==", "image/png") },
+              { type: "media", media: Media.base64("JVBERi0xLjQ=", "application/pdf"), filename: "report.pdf" },
             ]),
           ],
         }),

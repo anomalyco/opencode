@@ -7,7 +7,8 @@ import { MetaImages } from "../protocols/meta-images.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
-import { HttpOptions, ProviderID, ToolDefinition, type ModelID } from "../schema/index.js"
+import { MediaRoute } from "../route/media.js"
+import { ProviderID, ToolDefinition, type ModelID, type OpenString } from "../schema/index.js"
 import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
 
 export const id = ProviderID.make("meta")
@@ -48,8 +49,8 @@ export const webSearch = (options: WebSearchOptions = {}) =>
 
 export interface ImageGenerationOptions {
   readonly size?: string
-  readonly outputFormat?: "webp" | "png" | "jpeg" | (string & {})
-  readonly reasoningStrength?: "low" | "high" | (string & {})
+  readonly outputFormat?: OpenString<"webp" | "png" | "jpeg">
+  readonly reasoningStrength?: OpenString<"low" | "high">
   readonly enableImageSearch?: boolean
   readonly enableWebSearch?: boolean
   readonly enableShell?: boolean
@@ -79,11 +80,11 @@ export type LanguageModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
     readonly providerOptions?: ProviderOptionsInput
   }
 
-export interface Settings extends ProviderPackage.Settings {
-  readonly apiKey?: string
-  readonly baseURL?: string
-  readonly providerOptions?: ProviderOptionsInput
-}
+export type Settings = ProviderPackage.Settings &
+  ProviderOptionsInput & {
+    readonly apiKey?: string
+    readonly baseURL?: string
+  }
 
 const responsesRoute = Route.make({
   id: "meta-responses",
@@ -132,21 +133,15 @@ export const configure = (input: LanguageModelOptions = {}) => {
   const chat = (modelID: string | ModelID) =>
     configuredChat.model<OpenResponsesProviderOptionsInput>({
       id: modelID,
-      compatibility: { maxTokensField: "max_completion_tokens", supportsStore: false },
+      compatibility: { maxTokensField: "max_completion_tokens", supportsStore: false, supportsPromptCacheKey: true },
     })
   const messages = (modelID: string | ModelID) =>
     configuredMessages.model<MessagesOptionsInput>({
       id: modelID,
       compatibility: { requireSignature: false },
     })
-  const image = (modelID: string | ModelID) =>
-    MetaImages.model({
-      id: modelID,
-      baseURL: endpoint ?? baseURL,
-      auth: options.auth,
-      headers: input.headers,
-      http: input.http === undefined ? undefined : HttpOptions.make(input.http),
-    })
+  const media = MediaRoute.deployment(input, options.auth)
+  const image = (modelID: string | ModelID) => MetaImages.model({ ...media, id: modelID })
   return { id, model: responses, responses, chat, messages, image, configure }
 }
 
@@ -169,13 +164,13 @@ export const chatModel: ProviderPackage.Definition<Settings, OpenResponsesProvid
 export const messagesModel: ProviderPackage.Definition<Settings, MessagesOptionsInput>["model"] = (modelID, settings) =>
   fromSettings(settings).messages(modelID)
 
-function fromSettings(settings: Settings) {
+function fromSettings({ apiKey, baseURL, body, headers, ...providerOptions }: Settings) {
   return configure({
-    apiKey: settings.apiKey,
-    baseURL: settings.baseURL,
-    headers: settings.headers,
-    http: settings.body === undefined ? undefined : { body: { ...settings.body } },
-    providerOptions: settings.providerOptions,
+    apiKey,
+    baseURL,
+    headers,
+    http: body === undefined ? undefined : { body: { ...body } },
+    providerOptions,
   })
 }
 

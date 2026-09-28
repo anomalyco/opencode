@@ -1,7 +1,7 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { LayerNode } from "@opencode/util/effect/layer-node"
-import { PtyID } from "@opencode/core/pty/schema"
+import { Pty } from "@opencode/core/pty"
 import { PtyTicket } from "@opencode/core/pty/ticket"
 import { Workspace } from "@opencode/core/workspace"
 import { testEffect } from "../lib/effect"
@@ -17,7 +17,7 @@ describe("PTY websocket tickets", () => {
   it.live("consumes tickets once", () =>
     Effect.gen(function* () {
       const tickets = yield* PtyTicket.Service
-      const scope = { ptyID: PtyID.ascending(), directory: "/tmp/a" }
+      const scope = { ptyID: Pty.ID.ascending(), directory: "/tmp/a" }
       const issued = yield* tickets.issue(scope)
 
       expect(yield* tickets.consume({ ...scope, ticket: issued.ticket })).toBe(true)
@@ -28,7 +28,7 @@ describe("PTY websocket tickets", () => {
   it.live("rejects tickets scoped to a different request", () =>
     Effect.gen(function* () {
       const tickets = yield* PtyTicket.Service
-      const ptyID = PtyID.ascending()
+      const ptyID = Pty.ID.ascending()
       const issued = yield* tickets.issue({ ptyID, directory: "/tmp/a" })
 
       expect(yield* tickets.consume({ ptyID, directory: "/tmp/b", ticket: issued.ticket })).toBe(false)
@@ -39,7 +39,7 @@ describe("PTY websocket tickets", () => {
   itExpiring.live("rejects tickets after the TTL elapses", () =>
     Effect.gen(function* () {
       const tickets = yield* PtyTicket.Service
-      const ptyID = PtyID.ascending()
+      const ptyID = Pty.ID.ascending()
       const issued = yield* tickets.issue({ ptyID })
 
       yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 25)))
@@ -51,7 +51,7 @@ describe("PTY websocket tickets", () => {
   it.live("rejects tickets scoped to a different workspace", () =>
     Effect.gen(function* () {
       const tickets = yield* PtyTicket.Service
-      const ptyID = PtyID.ascending()
+      const ptyID = Pty.ID.ascending()
       const workspaceID = Workspace.ID.ascending()
       const issued = yield* tickets.issue({ ptyID, workspaceID })
 

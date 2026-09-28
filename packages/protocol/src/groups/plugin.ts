@@ -14,24 +14,9 @@ export const PluginGroup = HttpApiGroup.make("server.plugin")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.plugin.list",
+          identifier: "plugin.list",
           summary: "List plugins",
           description: "Retrieve enabled server plugins and their current status.",
-        }),
-      ),
-  )
-  .add(
-    HttpApiEndpoint.post("plugin.awaitActivation", "/api/plugin/await-activation", {
-      query: LocationQuery,
-      success: HttpApiSchema.NoContent,
-    })
-      .annotateMerge(locationQueryOpenApi)
-      .annotateMerge(
-        OpenApi.annotations({
-          identifier: "v2.plugin.awaitActivation",
-          summary: "Wait for plugin activation",
-          description:
-            "Wait for configured plugin activation at a Location to settle, including missing-package installs. Completion does not imply every plugin succeeded or background resource discovery finished. Cancelling this wait does not cancel activation.",
         }),
       ),
   )
@@ -45,7 +30,7 @@ export const PluginGroup = HttpApiGroup.make("server.plugin")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.plugin.check",
+          identifier: "plugin.check",
           summary: "Check plugin updates",
           description: "Check one or all package plugins for available updates.",
         }),
@@ -61,7 +46,7 @@ export const PluginGroup = HttpApiGroup.make("server.plugin")
       .annotateMerge(locationQueryOpenApi)
       .annotateMerge(
         OpenApi.annotations({
-          identifier: "v2.plugin.update",
+          identifier: "plugin.update",
           summary: "Update plugins",
           description:
             "Update package plugins concurrently and notify active locations to reload them. Responds once every update has finished; fails when any update fails.",

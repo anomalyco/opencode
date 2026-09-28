@@ -23,7 +23,6 @@ import {
 } from "effect"
 import { TestClock } from "effect/testing"
 import { Agent } from "@opencode/core/agent"
-import { Catalog } from "@opencode/core/catalog"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
@@ -282,7 +281,8 @@ describe("LocationServiceMap", () => {
 
       yield* read
       yield* TestClock.adjust("59 minutes")
-      yield* bus.publish(Catalog.Event.Updated, {}, { location: ref })
+      yield* bus.publish(Provider.Event.Updated, {}, { location: ref })
+      yield* bus.publish(Model.Event.Updated, {}, { location: ref })
       yield* TestClock.adjust("2 minutes")
       expect(Array.from(yield* RcMap.keys(locations.rcMap))).toEqual([])
 
@@ -450,7 +450,7 @@ describe("LocationServiceMap", () => {
     ),
   )
 
-  it.live("isolates catalog state by location", () =>
+  it.live("isolates provider state by location", () =>
     Effect.acquireRelease(
       Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
       (dirs) => Effect.promise(() => Promise.all(dirs.map((dir) => dir[Symbol.asyncDispose]())).then(() => undefined)),
@@ -460,13 +460,13 @@ describe("LocationServiceMap", () => {
           const update = (directory: string, providerID: Provider.ID) =>
             Effect.gen(function* () {
               yield* Reference.Service
-              const catalog = yield* Catalog.Service
-              yield* catalog.transform((editor) => editor.provider.update(providerID, () => {}))
+              const providers = yield* Provider.Service
+              yield* providers.transform((editor) => editor.update(providerID, () => {}))
               const plugins = yield* Plugin.Service
               yield* plugins.awaitActivation
               const registry = yield* Tool.Service
               return {
-                providers: yield* catalog.provider.all(),
+                providers: yield* providers.all(),
                 tools: yield* toolDefinitions(registry),
               }
             }).pipe(
@@ -568,7 +568,7 @@ describe("LocationServiceMap", () => {
             ),
           )
           const failure = yield* Effect.gen(function* () {
-            const catalog = yield* Catalog.Service
+            const modelState = yield* Model.Service
             const models = yield* SessionRunnerModel.Service
             return yield* models.resolve(
               Session.Info.make({
@@ -584,7 +584,7 @@ describe("LocationServiceMap", () => {
                 time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
                 location,
               }),
-              catalog.model.available,
+              modelState.available,
             )
           }).pipe(Effect.provide(LocationServiceMap.Service.get(location)), Effect.flip)
 
@@ -611,7 +611,7 @@ describe("LocationServiceMap", () => {
             ["google-vertex-anthropic", "google-vertex"],
           ] as const) {
             const failure = yield* Effect.gen(function* () {
-              const catalog = yield* Catalog.Service
+              const modelState = yield* Model.Service
               const models = yield* SessionRunnerModel.Service
               return yield* models.resolve(
                 Session.Info.make({
@@ -627,7 +627,7 @@ describe("LocationServiceMap", () => {
                   time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
                   location,
                 }),
-                catalog.model.available,
+                modelState.available,
               )
             }).pipe(Effect.provide(LocationServiceMap.Service.get(location)), Effect.flip)
 
@@ -654,12 +654,13 @@ describe("LocationServiceMap", () => {
         Effect.gen(function* () {
           const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
           const resolved = yield* Effect.gen(function* () {
-            const catalog = yield* Catalog.Service
-            yield* catalog.transform((editor) => {
-              editor.provider.update(Provider.ID.make("aliased"), (provider) => {
-                provider.package = Provider.aisdk("@ai-sdk/openai")
+            const providers = yield* Provider.Service
+            const modelState = yield* Model.Service
+            yield* providers.transform((editor) => {
+              editor.update(Provider.ID.make("aliased"), (provider) => {
+                provider.package = "@opencode/ai/providers/openai"
               })
-              editor.model.update(Provider.ID.make("aliased"), Model.ID.make("fast"), (model) => {
+              editor.models.update(Provider.ID.make("aliased"), Model.ID.make("fast"), (model) => {
                 // Catalog id and package model id intentionally differ, like gpt-5.5-fast -> gpt-5.5.
                 model.modelID = Model.ID.make("base")
                 model.variants = [{ id: Model.VariantID.make("high") }]
@@ -681,7 +682,7 @@ describe("LocationServiceMap", () => {
                 time: { created: DateTime.makeUnsafe(0), updated: DateTime.makeUnsafe(0) },
                 location,
               }),
-              catalog.model.available,
+              modelState.available,
             )
           }).pipe(Effect.provide(LocationServiceMap.Service.get(location)))
 

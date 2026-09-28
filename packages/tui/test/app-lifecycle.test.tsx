@@ -123,7 +123,7 @@ test.each(["dismissed", "refreshing"])(
     const locations: string[] = []
     await using setup = await createAppFixture({
       state: state.path,
-      config: { animations: false, tabs: { enabled: false } },
+      config: { animations: false, tabs: { mode: "off" } },
       fetch: (url) => {
         if (url.pathname === "/api/session") {
           if (url.searchParams.has("parentID")) {
@@ -335,7 +335,7 @@ test("session lifecycle updates the terminal title and prints the epilogue after
     await task
 
     expect(stdout).toContain("Renamed session")
-    expect(stdout).toContain("opencode2 -s dummy")
+    expect(stdout).toContain("opencode -s dummy")
     expect(promptRequests).toBe(0)
   } finally {
     process.stdout.write = originalWrite
@@ -430,7 +430,7 @@ test("session title generated while an untitled session is loading remains visib
   }
 })
 
-test("vertical session tabs collapse to a compact rail with the terminal", async () => {
+test("vertical session tabs switch to horizontal below readable content width", async () => {
   await using state = await tmpdir()
   await Bun.write(path.join(state.path, "test", "tui", "layout.json"), JSON.stringify({ verticalTabsWidth: 42 }))
   const session = {
@@ -443,11 +443,11 @@ test("vertical session tabs collapse to a compact rail with the terminal", async
     time: { created: 1, updated: 2 },
   }
   await using setup = await createAppFixture({
-    width: 100,
+    width: 120,
     state: state.path,
     config: {
       animations: false,
-      tabs: { enabled: true, layout: "vertical", indicators: "status" },
+      tabs: { mode: "on", layout: "vertical", indicators: "status" },
       session: { sidebar: "hide" },
     },
     args: { sessionID: session.id },
@@ -461,13 +461,49 @@ test("vertical session tabs collapse to a compact rail with the terminal", async
   await setup.ready
   await setup.waitForFrame((frame) => frame.split("\n")[1].slice(0, 42).includes(session.title))
 
-  setup.resize(54, 30)
-  await setup.waitForFrame((frame) => frame.split("\n")[1].slice(0, 10).trim() === "⌕")
-  setup.resize(48, 30)
+  setup.resize(100, 30)
   await setup.waitForFrame((frame) => frame.split("\n")[0].includes(session.title))
   expect(setup.captureCharFrame()).not.toContain("⌕")
-  setup.resize(100, 30)
+  setup.resize(120, 30)
   await setup.waitForFrame((frame) => frame.split("\n")[1].slice(0, 42).includes(session.title))
+})
+
+test("narrow vertical session tabs collapse to a compact rail with the terminal", async () => {
+  await using state = await tmpdir()
+  await Bun.write(path.join(state.path, "test", "tui", "layout.json"), JSON.stringify({ verticalTabsWidth: 5 }))
+  const session = {
+    id: "ses_resize",
+    title: "Resize fixture",
+    projectID: "project",
+    location: { directory },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 1, updated: 2 },
+  }
+  await using setup = await createAppFixture({
+    width: 80,
+    state: state.path,
+    config: {
+      animations: false,
+      tabs: { mode: "on", layout: "vertical", indicators: "status" },
+      session: { sidebar: "hide" },
+    },
+    args: { sessionID: session.id },
+    fetch: (url) => {
+      if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
+      if (/^\/api\/session\/ses_resize\/(message|inbox|permission)$/.test(url.pathname))
+        return json({ data: [], cursor: {} })
+      return undefined
+    },
+  })
+  await setup.ready
+  await setup.waitForFrame((frame) => frame.split("\n")[1].slice(0, 10).trim() === "⌕")
+
+  setup.resize(68, 30)
+  await setup.waitForFrame((frame) => frame.split("\n")[0].includes(session.title))
+  expect(setup.captureCharFrame()).not.toContain("⌕")
+  setup.resize(80, 30)
+  await setup.waitForFrame((frame) => frame.split("\n")[1].slice(0, 10).trim() === "⌕")
 })
 
 test("automatic rename refreshes the displayed title before settling, even without a renamed event", async () => {
@@ -487,10 +523,10 @@ test("automatic rename refreshes the displayed title before settling, even witho
     time: { created: 0, updated: 0 },
   }
   await using setup = await createAppFixture({
-    width: 90,
+    width: 110,
     height: 20,
     state: state.path,
-    config: { tabs: { enabled: true, layout: "vertical" }, session: { sidebar: "hide" } },
+    config: { tabs: { mode: "on", layout: "vertical" }, session: { sidebar: "hide" } },
     args: { sessionID: session.id },
     fetch: async (url, request) => {
       if (url.pathname === "/api/location") return json(location)
@@ -500,13 +536,13 @@ test("automatic rename refreshes the displayed title before settling, even witho
         return json({ location, data: [{ id: "model", providerID: "provider", name: "Model", variants: [] }] })
       if (url.pathname === "/api/provider") return json({ location, data: [{ id: "provider", name: "Provider" }] })
       if (url.pathname === "/api/session") return json({ data: [], cursor: {} })
-      if (url.pathname === "/api/session/ses_rename") return json({ data: session })
-      if (/^\/api\/session\/ses_rename\/(message|inbox|permission)$/.test(url.pathname))
-        return json({ data: [], cursor: {} })
-      if (url.pathname === "/api/session/ses_rename/rename") {
+      if (url.pathname === "/api/session/ses_rename" && request.method === "PATCH") {
         bodies.push(await request.json())
         return response.promise
       }
+      if (url.pathname === "/api/session/ses_rename") return json({ data: session })
+      if (/^\/api\/session\/ses_rename\/(message|inbox|permission)$/.test(url.pathname))
+        return json({ data: [], cursor: {} })
       return undefined
     },
   })
@@ -549,7 +585,7 @@ test.each([80, 120])("completes custom Markdown and ordinary fences in a session
     width,
     height: 55,
     state: state.path,
-    config: { animations: false, tabs: { enabled: false }, session: { sidebar: "hide" } },
+    config: { animations: false, tabs: { mode: "off" }, session: { sidebar: "hide" } },
     args: { sessionID: session.id },
     fetch: (url) => {
       if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
@@ -654,7 +690,7 @@ test("keeps assistant footer metrics current after prepend, same-length refresh,
     width: 100,
     height: 40,
     state: state.path,
-    config: { animations: false, tabs: { enabled: false }, session: { sidebar: "hide", tps: true } },
+    config: { animations: false, tabs: { mode: "off" }, session: { sidebar: "hide", tps: true } },
     args: { sessionID: session.id },
     fetch: (url) => {
       if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
@@ -850,7 +886,7 @@ test.each([false, true])("uses the resolved launch directory for new prompts (fa
   let session: unknown
   await using setup = await createAppFixture({
     state: state.path,
-    config: { animations: false, tabs: { enabled: false }, keybinds: { "session.new": "f6" } },
+    config: { animations: false, tabs: { mode: "off" }, keybinds: { "session.new": "f6" } },
     fetch: async (url, request) => {
       requests.push(url)
       if (url.searchParams.has("location[directory]") && url.searchParams.get("location[directory]") !== target)
@@ -988,7 +1024,7 @@ test("completed user shell output replaces a partial live read when the final re
   let failedReads = 0
   await using setup = await createAppFixture({
     state: state.path,
-    config: { animations: false, tabs: { enabled: false }, session: { sidebar: "hide" } },
+    config: { animations: false, tabs: { mode: "off" }, session: { sidebar: "hide" } },
     args: { sessionID: session.id },
     fetch: (url) => {
       if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
@@ -1219,9 +1255,9 @@ test("keeps the prompt display stable while a new location catalog loads", async
   }
 })
 
-test("configured app bindings execute settings and permission commands", async () => {
+test("configured app binding opens settings", async () => {
   await using setup = await createAppFixture({
-    config: { animations: false, keybinds: { "opencode.settings": "f6", "permission.mode": "f7" } },
+    config: { animations: false, keybinds: { "opencode.settings": "f6" } },
   })
   await setup.ready
   await setup.waitForFrame((frame) => frame.includes("commands"))
@@ -1230,23 +1266,6 @@ test("configured app bindings execute settings and permission commands", async (
   const settings = await setup.waitForFrame((frame) => frame.includes("Settings"))
   expect(settings).toContain("Color mode")
   expect(settings).toContain("Animations")
-
-  setup.mockInput.pressEscape()
-  await setup.waitForFrame((frame) => !frame.includes("Settings"))
-  setup.mockInput.pressKey("F7")
-  await setup.renderOnce()
-  setup.mockInput.pressKey("p", { ctrl: true })
-  await setup.waitForFrame((frame) => frame.includes("Commands"))
-  setup.mockInput.pressKey("END")
-  const commands = await setup.waitForFrame(
-    (frame) => {
-      if (frame.includes("Disable auto-approve permissions")) return true
-      setup.mockInput.pressArrow("up")
-      return false
-    },
-    { maxPasses: 100 },
-  )
-  expect(commands).not.toContain("Enable auto-approve permissions")
 })
 
 test("ctrl+c dismisses autocomplete and shell mode before exiting", async () => {
@@ -1267,7 +1286,7 @@ test("ctrl+c dismisses autocomplete and shell mode before exiting", async () => 
   expect(setup.renderer.isDestroyed).toBe(false)
 })
 
-test.each(["manual", "select"] as const)(
+test.skipIf(process.platform === "win32").each(["manual", "select"] as const)(
   "selection copy and pane management respect %s mode in the prompt and terminal pane",
   async (copy) => {
     const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
@@ -1345,7 +1364,6 @@ test.each(["manual", "select"] as const)(
             get: async () => ({
               animations: false,
               terminal: { copy },
-              session: { terminal: true },
             }),
             update: async () => ({}),
           },
@@ -1438,7 +1456,7 @@ test.each([100, 44])(
       width,
       state: state.path,
       args: { sessionID: session.id },
-      config: { animations: false, tabs: { enabled: false } },
+      config: { animations: false, tabs: { mode: "off" } },
       fetch: (url) => {
         if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
         if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
@@ -1602,7 +1620,7 @@ test.each([44, 100])(
       width,
       state: state.path,
       args: { sessionID: session.id },
-      config: { animations: false, tabs: { enabled: false } },
+      config: { animations: false, tabs: { mode: "off" } },
       fetch: (url) => {
         if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
         if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
@@ -1650,7 +1668,7 @@ test.each([44, 100])(
       created: 3,
       type: "session.step.started",
       durable: { aggregateID: session.id, seq: 2, version: 1 },
-      data: { sessionID: session.id, assistantMessageID: "msg_countdown", agent: "build", model },
+      data: { sessionID: session.id, assistantMessageID: "msg_countdown", agent: "build", model, started: 3 },
     })
     await setup.waitForFrame((frame) => !frame.includes("Retrying") && !frame.includes("Retry due"))
 

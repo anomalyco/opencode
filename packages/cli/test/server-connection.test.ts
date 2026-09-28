@@ -16,9 +16,9 @@ test("resolution groups Effect-native lifecycle operations only for the managed 
     port: 0,
     fetch() {
       return Response.json({
-        healthy: true,
         version: OPENCODE_VERSION,
         pid: process.pid,
+        urls: [],
       })
     },
   })

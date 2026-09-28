@@ -4,9 +4,9 @@
     "name": "cloudflare-ai-gateway/cloudflare-ai-gateway-workers-ai-llama-3-1-8b-text",
     "recordedAt": "2026-05-08T15:55:48.952Z",
     "provider": "cloudflare-ai-gateway",
-    "route": "cloudflare-ai-gateway",
+    "route": "cloudflare-ai-gateway-chat",
     "transport": "http",
-    "model": "workers-ai/@cf/meta/llama-3.1-8b-instruct",
+    "model": "@cf/meta/llama-3.1-8b-instruct",
     "tags": ["prefix:cloudflare-ai-gateway", "provider:cloudflare-ai-gateway", "text", "golden"]
   },
   "interactions": [
@@ -14,11 +14,11 @@
       "transport": "http",
       "request": {
         "method": "POST",
-        "url": "https://gateway.ai.cloudflare.com/v1/{account}/{gateway}/compat/chat/completions",
+        "url": "https://api.cloudflare.com/client/v4/accounts/{account}/ai/v1/chat/completions",
         "headers": {
           "content-type": "application/json"
         },
-        "body": "{\"model\":\"workers-ai/@cf/meta/llama-3.1-8b-instruct\",\"messages\":[{\"role\":\"system\",\"content\":\"You are concise.\"},{\"role\":\"user\",\"content\":\"Reply exactly with: Hello!\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":40,\"temperature\":0}"
+        "body": "{\"model\":\"@cf/meta/llama-3.1-8b-instruct\",\"messages\":[{\"role\":\"system\",\"content\":\"You are concise.\"},{\"role\":\"user\",\"content\":\"Reply exactly with: Hello!\"}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"max_tokens\":40,\"temperature\":0}"
       },
       "response": {
         "status": 200,

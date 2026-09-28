@@ -104,7 +104,7 @@
   }
 
   [data-slot="session-side-region-presence"][data-opened="false"] {
-    animation: side-region-presence-out 240ms cubic-bezier(0.22, 1, 0.36, 1);
+    animation: side-region-presence-out 240ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
   }
 
   [data-slot="terminal-panel-presence"][data-opened="true"] {

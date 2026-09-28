@@ -1,6 +1,6 @@
 import { createMemo, createUniqueId, Show } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createQuery } from "@tanstack/solid-query"
+import { createQuery, keepPreviousData } from "@tanstack/solid-query"
 import { Icon } from "@opencode/ui/icon"
 import { SessionFilePanelV2, SessionFilePanelV2Empty } from "@opencode/session-ui/v2/session-file-panel-v2"
 import { SessionReviewV2Sidebar } from "@opencode/session-ui/v2/session-review-v2"
@@ -56,6 +56,7 @@ export function SessionFileBrowserTab(props: {
       queryKey: [serverSDK.scope, "session-open-file", workspaceKey(), value] as const,
       enabled: serverSDK.connection.status() === "connected" && value.length > 0,
       queryFn: ({ signal }) => file.searchFiles(value, { limit: 200, signal }),
+      placeholderData: keepPreviousData,
     }
   })
   const files = createMemo(() => {
@@ -172,7 +173,9 @@ export function SessionFileBrowserTab(props: {
           <SessionFilePanelV2Empty>
             <div class="flex flex-col items-center gap-2 text-center text-text-weak">
               <Icon name="file-tree" size="large" class="mb-2" />
-              <div class="text-[13px] font-medium leading-[13px] text-text-strong">{language.t("command.file.open")}</div>
+              <div class="text-[13px] font-medium leading-[13px] text-text-strong">
+                {language.t("command.file.open")}
+              </div>
               <div class="h-5 text-13-regular leading-5">{language.t("session.files.selectToOpen")}</div>
             </div>
           </SessionFilePanelV2Empty>

@@ -38,7 +38,7 @@ for (const viewport of [
     test("every settings page leaves room below its final content", async ({ page }) => {
       await page.setViewportSize(viewport)
       const settings = page.getByTestId("settings-screen")
-      const panel = settings.locator(":scope > .settings > .settings-panel:visible")
+      const panel = settings.locator(".settings-content > .settings-panel:visible")
       const scroller = panel.locator('[data-slot="settings-panel-scroll"] > [data-scrollable]')
       if (viewport.bottom) {
         const toggle = settings.locator('[data-action="settings-mobile-titlebar-bottom"]')
@@ -51,13 +51,12 @@ for (const viewport of [
         "Appearance",
         "Notifications",
         "Shortcuts",
-        "Servers",
         "Projects",
         "Worktrees",
         "Providers",
         "Models",
         "Extensions",
-        "Experimental",
+        "Server",
         "About",
       ]) {
         if (viewport.width >= 816) await settings.getByRole("tab", { name, exact: true }).click()

@@ -1,5 +1,4 @@
 import { spawn } from "node:child_process"
-import * as pty from "@lydell/node-pty"
 import type { WslDistroProbe, WslInstalledDistro, WslOnlineDistro, WslRuntimeCheck } from "@opencode/app/wsl/types"
 import { Effect, FileSystem, Path } from "effect"
 import { nativeT } from "../native/translations"
@@ -39,7 +38,9 @@ const DEFAULT_WSL_TIMEOUT_MS = 20_000
 const DEFAULT_WSL_INSTALL_TIMEOUT_MS = 15 * 60_000
 
 export function wslArgs(args: string[], distro?: string | null, user?: string | null) {
-  return [...(distro ? ["-d", distro] : []), ...(user ? ["--user", user] : []), "--", ...args]
+  // `--` hands the command line to the distro's default shell, which expands `$VAR` and `$(...)`
+  // inside our inline scripts before `sh -lc` ever runs them. `--exec` runs the command directly.
+  return [...(distro ? ["-d", distro] : []), ...(user ? ["--user", user] : []), "--exec", ...args]
 }
 
 export function runWsl(args: string[], opts: RunWslOptions = {}) {
@@ -117,7 +118,14 @@ function runCommand(command: string, args: string[], opts: RunWslOptions = {}) {
   })
 }
 
-function runInteractiveCommand(command: string, args: string[], opts: RunWslOptions = {}, defaultTimeoutMs: number) {
+async function runInteractiveCommand(
+  command: string,
+  args: string[],
+  opts: RunWslOptions = {},
+  defaultTimeoutMs: number,
+) {
+  // The native addon is only needed for interactive installs; loading it here keeps it out of startup.
+  const pty = await import("@lydell/node-pty")
   return new Promise<WslCommandResult>((resolve, reject) => {
     const child = pty.spawn(command, args, {
       name: "xterm-color",

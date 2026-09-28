@@ -28,10 +28,12 @@ function fixture() {
     commands: Browser.Action[]
   }[] = []
   const endpoint = { url: "http://localhost:4096" }
+  const previews: string[] = []
   const connection = createBrowserConnection({
     target: () => ({ serverKey: "browser-test", sessionID: "ses_browser", endpoint: { ...endpoint } }),
     change: (state) => states.push(state),
     focus: () => {},
+    preview: (path) => previews.push(path),
     pane: {
       register(target, emit) {
         const call = { target, emit, closed: false, commands: [] as Browser.Action[] }
@@ -40,6 +42,9 @@ function fixture() {
           setLayout() {},
           async command(command) {
             call.commands.push(command)
+          },
+          async capture() {
+            return null
           },
           close() {
             call.closed = true
@@ -50,8 +55,20 @@ function fixture() {
   })
   connection.wake()
   calls[0].emit({ type: "state", state: browser })
-  return { connection, calls, states, endpoint }
+  return { connection, calls, states, endpoint, previews }
 }
+
+test("preview requests reach the session without touching connection state", () => {
+  const app = fixture()
+  try {
+    const before = app.states.length
+    app.calls[0].emit({ type: "preview", path: "docs/report.pdf" })
+    expect(app.previews).toEqual(["docs/report.pdf"])
+    expect(app.states).toHaveLength(before)
+  } finally {
+    app.connection.dispose()
+  }
+})
 
 test("suspension retains tabs and reconnects once on demand using the current endpoint", async () => {
   const app = fixture()

@@ -11,7 +11,6 @@ import {
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
-import type { ServiceHealth } from "./generated/types.js"
 
 export * from "../service.js"
 
@@ -25,6 +24,7 @@ export * from "../service.js"
 export async function discover(options: DiscoverOptions = {}) {
   const found = (await registered(options.file)).service
   if (found?.state !== "ready") return undefined
+  if (!found.compatible) return undefined
   if (!matchesVersion(found.version, options)) return undefined
   return found.endpoint
 }
@@ -57,7 +57,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   try {
     while (true) {
       if (Date.now() >= deadline) throw new Error("Timed out waiting for the background service to start")
-      const registration = await registered(options.file, true, timing.requestTimeout)
+      const registration = await registered(options.file, timing.requestTimeout)
       if (registration.timedOut && registration.info !== undefined) {
         timeouts = {
           info: registration.info,
@@ -76,7 +76,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
       if (registration.service !== undefined) {
         spawnDelay = timing.spawnDelay
         const service = registration.service
-        const compatible = !service.legacy && matchesVersion(service.version, options)
+        const compatible = service.compatible && matchesVersion(service.version, options)
         if (compatible && service.state === "ready") {
           await PtyHandoff.complete(options.file ?? fallback(), service.info)
           return service.endpoint
@@ -84,11 +84,11 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
         if (compatible && service.state === "failed") throw new Error("Background service failed to start")
         if (!compatible) {
           announce("version-mismatch", service.version)
-          if (!service.legacy && service.state !== "ready")
+          if (service.state !== "ready")
             console.warn("Background service is not ready; replacement cannot preserve persistent terminals")
           await stop({
             file: options.file,
-            pty: !service.legacy && service.state === "ready" ? "handoff" : "clear",
+            pty: service.state === "ready" ? "handoff" : "clear",
           }).catch(() => undefined)
           lastSpawn = 0
         }
@@ -151,10 +151,10 @@ type LocalService = {
   readonly endpoint: Endpoint
   readonly version?: string
   readonly state: "ready" | "waiting" | "failed"
-  readonly legacy: boolean
+  readonly compatible: boolean
 }
 
-async function probeResult(info: Info, allowLegacy = false, timeout = defaultEnsureTiming.requestTimeout) {
+async function probeResult(info: Info, timeout = defaultEnsureTiming.requestTimeout) {
   const endpoint = {
     url: info.url,
     auth:
@@ -163,13 +163,10 @@ async function probeResult(info: Info, allowLegacy = false, timeout = defaultEns
         : { type: "basic" as const, username: "opencode", password: info.password },
   } satisfies Endpoint
   const signal = AbortSignal.timeout(timeout)
-  const result = await fetch(new URL("/api/health", info.url), {
-    headers: headers(endpoint),
-    signal,
-  })
+  const result = await fetch(new URL("/api/info", info.url), { headers: headers(endpoint), signal })
     .then(async (response) => ({
       response,
-      body: (await response.json()) as ServiceHealth | { readonly healthy: true },
+      body: response.status === 404 ? undefined : ((await response.json()) as unknown),
     }))
     .then(
       (value) => ({ value }),
@@ -177,32 +174,49 @@ async function probeResult(info: Info, allowLegacy = false, timeout = defaultEns
     )
   if ("cause" in result) return { service: undefined, timedOut: signal.aborted }
   const response = result.value.response
-  const body = result.value.body
-  if (body !== undefined && "version" in body && "pid" in body) {
-    if (body.pid !== info.pid) return { service: undefined, timedOut: false }
-    if (info.version !== undefined && body.version !== info.version) return { service: undefined, timedOut: false }
+  // The previous V2 service exposes /api/status instead. Its authenticated 404 is enough
+  // to recognize the registered daemon as incompatible and route it through replacement.
+  if (response.status === 404)
     return {
       service: {
         info,
         endpoint,
-        version: body.version,
+        version: info.version,
+        state: "ready" as const,
+        compatible: false,
+      } satisfies LocalService,
+      timedOut: false,
+    }
+  const serverInfo = decodeInfo(result.value.body)
+  if (serverInfo !== undefined) {
+    if (serverInfo.pid !== info.pid) return { service: undefined, timedOut: false }
+    if (info.version !== undefined && serverInfo.version !== info.version)
+      return { service: undefined, timedOut: false }
+    return {
+      service: {
+        info,
+        endpoint,
+        version: serverInfo.version,
         state: response.ok ? "ready" : response.status === 500 ? "failed" : "waiting",
-        legacy: false,
+        compatible: true,
       } satisfies LocalService,
       timedOut: false,
     }
   }
-  if (!allowLegacy || body?.healthy !== true) return { service: undefined, timedOut: false }
-  return {
-    service: { info, endpoint, state: "ready", legacy: true } satisfies LocalService,
-    timedOut: false,
-  }
+  return { service: undefined, timedOut: false }
 }
 
-async function registered(file?: string, allowLegacy = false, timeout?: number) {
+function decodeInfo(input: unknown) {
+  if (typeof input !== "object" || input === null) return
+  if (!("version" in input) || typeof input.version !== "string") return
+  if (!("pid" in input) || typeof input.pid !== "number" || !Number.isInteger(input.pid) || input.pid < 0) return
+  return { version: input.version, pid: input.pid }
+}
+
+async function registered(file?: string, timeout?: number) {
   const info = await read(file)
   if (info === undefined) return { info: undefined, service: undefined, timedOut: false }
-  return { info, ...(await probeResult(info, allowLegacy, timeout)) }
+  return { info, ...(await probeResult(info, timeout)) }
 }
 
 function signal(pid: number, name: NodeJS.Signals) {

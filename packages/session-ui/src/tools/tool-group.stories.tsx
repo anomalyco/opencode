@@ -36,6 +36,33 @@ export const MixedTools = {
   },
 }
 
+export const NoticesOnly = {
+  render: () => {
+    const [open, setOpen] = createStore({ tools: false, notices: false })
+    const tools = [storyTool("notice_read", "read", "completed", { path: "AGENTS.md" })]
+    return (
+      <section class="mx-auto flex w-full max-w-[720px] flex-col gap-4 p-6">
+        <CurrentSessionProviders document={storyDocument(tools)}>
+          <CurrentContextToolGroup
+            parts={tools}
+            busy={false}
+            open={open.tools}
+            onOpenChange={(value) => setOpen("tools", value)}
+          />
+          <CurrentContextToolGroup
+            parts={[
+              { type: "notice", id: "notice_instructions", render: () => <p>Instructions updated: AGENTS.md</p> },
+            ]}
+            busy={false}
+            open={open.notices}
+            onOpenChange={(value) => setOpen("notices", value)}
+          />
+        </CurrentSessionProviders>
+      </section>
+    )
+  },
+}
+
 export const MixedReasoning = {
   args: { reasoningDefaultOpen: false },
   render: (args: { reasoningDefaultOpen: boolean }) => {

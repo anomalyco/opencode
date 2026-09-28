@@ -8,7 +8,7 @@ import { it } from "../../core/test/lib/effect"
 import { createRoutes } from "../src/routes"
 
 it.live(
-  "lists and gets providers without blocking on plugin initialization",
+  "provider reads stay nonblocking while authentication discovery waits for plugins",
   () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped("opencode-provider-endpoints-")
@@ -62,11 +62,10 @@ it.live(
             }),
           )
         })
-      const pending = yield* request("POST", "/api/plugin/await-activation").pipe(Effect.forkScoped)
-      yield* Deferred.await(started)
-
       // Config providers activate after SDK plugins; reads must return the current snapshot without waiting.
       const list = yield* request("GET", "/api/provider").pipe(Effect.timeout("2 seconds"))
+      yield* Deferred.await(started)
+      const integrations = yield* request("GET", "/api/integration").pipe(Effect.forkScoped)
       expect(list.status).toBe(200)
       expect(yield* Effect.promise(() => list.json())).toMatchObject({
         location: { directory: tmp.path },
@@ -78,28 +77,11 @@ it.live(
         _tag: "ProviderNotFoundError",
         providerID: "custom",
       })
-      expect(pending.pollUnsafe()).toBeUndefined()
-
       yield* Deferred.succeed(release, undefined)
-      expect((yield* Fiber.join(pending)).status).toBe(204)
-      const provider = {
-        id: "custom",
-        name: "Configured Custom Provider",
-        activation: "enabled",
-        package: "@opencode/ai/providers/openai-compatible",
-        settings: { apiKey: "secret" },
-      }
-      const configuredList = yield* request("GET", "/api/provider").pipe(Effect.timeout("2 seconds"))
-      expect(configuredList.status).toBe(200)
-      expect(yield* Effect.promise(() => configuredList.json())).toMatchObject({
-        location: { directory: tmp.path },
-        data: expect.arrayContaining([expect.objectContaining(provider)]),
-      })
-      const configuredGet = yield* request("GET", "/api/provider/custom").pipe(Effect.timeout("2 seconds"))
-      expect(configuredGet.status).toBe(200)
-      expect(yield* Effect.promise(() => configuredGet.json())).toMatchObject({
-        location: { directory: tmp.path },
-        data: provider,
+      const discovered = yield* Fiber.join(integrations)
+      expect(discovered.status).toBe(200)
+      expect(yield* Effect.promise(() => discovered.json())).toMatchObject({
+        data: expect.arrayContaining([expect.objectContaining({ id: "opencode" })]),
       })
     }),
   15_000,

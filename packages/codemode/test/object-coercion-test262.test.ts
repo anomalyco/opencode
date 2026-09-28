@@ -167,17 +167,14 @@ describe("Object.assign Test262 parity", () => {
     ).toEqual([true, [1, 8, 9], true, [1, 8, 3], true, 5, true, 0])
   })
 
-  test("array targets accept only array indexes (deviation from target-Array.js)", async () => {
+  test("test/built-ins/Object/assign/target-Array.js", async () => {
     expect(
       await value(`
         const target = [7]
-        const out = []
-        for (const source of [{ length: 0 }, { x: 1 }, { "1.5": 1 }, { "-0": 1 }, { ["__proto__"]: null }]) {
-          try { Object.assign(target, source) } catch (error) { out.push(error.name) }
-        }
-        return [out, [...target], target.length, Object.keys(target)]
+        for (const source of [{ x: 1 }, { "1.5": 1 }, { "-0": 1 }, { 1: 8 }, { length: 1 }]) Object.assign(target, source)
+        return [[...target], target.length, Object.keys(target), target.x]
       `),
-    ).toEqual([["TypeError", "TypeError", "TypeError", "TypeError", "TypeError"], [7], 1, ["0"]])
+    ).toEqual([[7], 1, ["0", "x", "1.5", "-0"], 1])
   })
 
   test("test/built-ins/Object/assign/Target-{Null,Undefined}.js", async () => {

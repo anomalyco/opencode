@@ -34,6 +34,17 @@ describe("settings timeline detail migration", () => {
 })
 
 describe("settings schema", () => {
+  test("restores summary expansion and discards the retired status preference", () => {
+    const settings = decode({
+      general: { showStatus: true, showSearch: true },
+      sessionSummary: { projectExpanded: false, serverExpanded: true },
+    })
+    expect(settings.general.showSearch).toBe(true)
+    expect(settings.general).not.toHaveProperty("showStatus")
+    expect(settings.sessionSummary).toEqual({ projectExpanded: false, serverExpanded: true })
+    expect(decode(encode(settings)).sessionSummary).toEqual(settings.sessionSummary)
+  })
+
   test("uses the supplied initial values independently of the current schema", () => {
     const initial = {
       ...defaultSettings,
@@ -58,8 +69,6 @@ describe("settings schema", () => {
         showFileTree: false,
         showNavigation: false,
         showSearch: false,
-        showStatus: false,
-        showProjectIcon: false,
         showTerminal: false,
         timelineDetail: timelinePresets[2].value,
         showCustomAgents: false,
@@ -67,15 +76,14 @@ describe("settings schema", () => {
         mobileDiffWrap: true,
         terminalPlacement: "side",
         followUpBehavior: "steer",
-        experimentalBrowser: false,
       },
+      sessionSummary: { projectExpanded: true, serverExpanded: true },
       appearance: {
         fontSize: 14,
         mono: "",
         sans: "",
         terminal: "",
         tabLayout: "horizontal",
-        showProjectName: false,
       },
       keybinds: {},
       permissions: { autoApprove: false },
@@ -121,7 +129,6 @@ describe("settings schema", () => {
       sans: "",
       terminal: "",
       tabLayout: "vertical",
-      showProjectName: true,
     })
     expect(settings.permissions.autoApprove).toBe(true)
     expect(settings.workspaces).toEqual({ defaultDestination: "new", lastUsed: { good: "workspace" } })
@@ -131,10 +138,14 @@ describe("settings schema", () => {
     expect(decode(encode(settings))).toEqual(settings)
   })
 
-  test("browser attachment is opt-in and preserves an explicit choice", () => {
-    expect(decode({}).general.experimentalBrowser).toBe(false)
-    expect(decode({ general: { experimentalBrowser: true } }).general.experimentalBrowser).toBe(true)
-    expect(decode({ general: { experimentalBrowser: false } }).general.experimentalBrowser).toBe(false)
+  test("discards retired experimental preferences", () => {
+    const settings = decode({
+      general: { experimentalBrowser: false, showProjectIcon: true },
+      appearance: { showProjectName: true },
+    })
+    expect(settings.general).not.toHaveProperty("experimentalBrowser")
+    expect(settings.general).not.toHaveProperty("showProjectIcon")
+    expect(settings.appearance).not.toHaveProperty("showProjectName")
   })
 
   test.each([undefined, null, false, 7, "invalid", []].map((invalid) => [invalid]))(

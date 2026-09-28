@@ -1,11 +1,13 @@
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
-import { HttpOptions, ProviderID, type ModelID } from "../schema/index.js"
+import { MediaRoute } from "../route/media.js"
+import { ProviderID, type ModelID } from "../schema/index.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenResponsesChannel } from "../protocols/open-responses-channel.js"
 import { XAIResponses } from "../protocols/xai-responses.js"
 import { XAIImages } from "../protocols/xai-images.js"
+import { XAIVideo } from "../protocols/xai-video.js"
 import type { OpenAIOptionsInput } from "./openai-options.js"
 import type { ProviderPackage } from "../provider-package.js"
 
@@ -20,13 +22,14 @@ export type LanguageModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
     readonly providerOptions?: XAIProviderOptionsInput
   }
 
-export interface Settings extends ProviderPackage.Settings {
-  readonly apiKey?: string
-  readonly baseURL?: string
-  readonly providerOptions?: XAIProviderOptionsInput
-}
+export type Settings = ProviderPackage.Settings &
+  XAIProviderOptionsInput & {
+    readonly apiKey?: string
+    readonly baseURL?: string
+  }
 
 export type { XAIImageOptions } from "../protocols/xai-images.js"
+export type { XAIVideoOptions } from "../protocols/xai-video.js"
 
 const RESPONSES_WEBSOCKET_ROTATE_AFTER_MS = 24 * 60 * 1000
 
@@ -41,6 +44,10 @@ const responsesRoute = Route.make({
     id: "openai-responses",
     name: "xAI Responses",
     rotateAfterMs: RESPONSES_WEBSOCKET_ROTATE_AFTER_MS,
+    // xAI continues a chain only from stored responses: with `store: false` (the route default) `previous_response_id`
+    // fails with "Response with id=… not found", so those steps are sent in full over the reused connection. It also
+    // rejects `instructions` next to `previous_response_id` and keeps the instructions of the response it continues.
+    continuation: ({ instructions: _instructions, ...request }) => (request.store === false ? undefined : request),
   }),
   defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
 })
@@ -83,20 +90,14 @@ export const configure = (input: LanguageModelOptions = {}) => {
   const chatRoute = configuredChatRoute(input)
   const responses = (modelID: string | ModelID) => responsesRoute.model<XAIProviderOptionsInput>({ id: modelID })
   const chat = (modelID: string | ModelID) => chatRoute.model<XAIProviderOptionsInput>({ id: modelID })
-  const image = (modelID: string | ModelID) =>
-    XAIImages.model({
-      id: modelID,
-      auth: auth(input),
-      baseURL: input.baseURL ?? baseURL,
-      headers: input.headers,
-      http: input.http === undefined ? undefined : HttpOptions.make(input.http),
-    })
+  const media = MediaRoute.deployment(input, auth(input))
   return {
     id,
     model: responses,
     responses,
     chat,
-    image,
+    image: (modelID: string | ModelID) => XAIImages.model({ ...media, id: modelID }),
+    video: (modelID: string | ModelID) => XAIVideo.model({ ...media, id: modelID }),
     configure,
   }
 }
@@ -106,14 +107,15 @@ export const model: ProviderPackage.Definition<
   Settings,
   XAIProviderOptionsInput,
   typeof responsesRoute.compact
->["model"] = (modelID, settings) =>
+>["model"] = (modelID, { apiKey, baseURL, body, headers, ...providerOptions }) =>
   configure({
-    apiKey: settings.apiKey,
-    baseURL: settings.baseURL,
-    headers: settings.headers,
-    http: settings.body === undefined ? undefined : { body: { ...settings.body } },
-    providerOptions: settings.providerOptions,
+    apiKey,
+    baseURL,
+    headers,
+    http: body === undefined ? undefined : { body: { ...body } },
+    providerOptions,
   }).model(modelID)
 export const responses = provider.responses
 export const chat = provider.chat
 export const image = provider.image
+export const video = provider.video

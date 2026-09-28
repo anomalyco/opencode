@@ -5,7 +5,7 @@ import { Schema } from "effect"
 import type { Platform } from "@/runtime/platform/platform"
 import { createComposerReady, createComposerState } from "@/composer/state"
 import { ServerScope } from "@/runtime/server/scope"
-import { createDraftStore } from "@/runtime/persistence/drafts"
+import { createDraftStore, resolveBlobUrl } from "@/runtime/persistence/drafts"
 import { flushPersisted } from "@/runtime/persistence/persist"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 
@@ -103,15 +103,11 @@ describe("prompt persistence", () => {
       }),
     }))
     await root.session.ready.promise
+    // Bytes stay in the store until the image is shown or sent.
     expect(root.session.current()).toEqual([
-      {
-        type: "image",
-        id: "image",
-        filename: "image.png",
-        mime: "image/png",
-        blob: { id: "composer-image", url: expect.stringMatching(/^blob:/) },
-      },
+      { type: "image", id: "image", filename: "image.png", mime: "image/png", blob: { id: "composer-image", url: "" } },
     ])
+    expect(await resolveBlobUrl(root.session.current()[0]!.blob)).toStartWith("blob:")
     root.session.set([{ type: "text", content: "hello", start: 0, end: 5 }, ...root.session.current()])
     flushPersisted()
     await Bun.sleep(0)
@@ -237,7 +233,7 @@ describe("prompt persistence", () => {
   })
 })
 
-test("moves image data URLs into blobs and hydrates object URLs", async () => {
+test("moves image data URLs into blobs and resolves object URLs on demand", async () => {
   const documents = new Map<string, string>()
   const blobs = new Map<string, Blob>()
   const store = createDraftStore({
@@ -258,8 +254,8 @@ test("moves image data URLs into blobs and hydrates object URLs", async () => {
   await store.setItem("prompt", JSON.stringify({ prompt: [{ type: "image", dataUrl: "data:image/png;base64,YQ==" }] }))
   expect(documents.get("prompt")).not.toContain("dataUrl")
   const value = JSON.parse((await store.getItem("prompt"))!)
-  expect(value.prompt[0].blob.id).toBe("1")
-  expect(value.prompt[0].blob.url).toStartWith("blob:")
+  expect(value.prompt[0].blob).toEqual({ id: "1" })
+  expect(await resolveBlobUrl(value.prompt[0].blob)).toStartWith("blob:")
 })
 
 test("does not let delayed blob migration overwrite a newer draft", async () => {

@@ -348,7 +348,7 @@ const event = { id: "evt_compact", created: 10, durable: { aggregateID: sessionI
 const item = (id: string, timeCreated = 10): SessionInboxCompaction => ({
   id,
   sessionID,
-  timeCreated,
+  time: { created: timeCreated },
   type: "compaction",
   delivery: "steer",
   payload: {},

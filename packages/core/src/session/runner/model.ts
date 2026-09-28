@@ -29,15 +29,6 @@ export class ModelUnavailableError extends Schema.TaggedError<ModelUnavailableEr
     return `Model unavailable: ${this.providerID}/${this.modelID}`
   }
 }
-export const VariantUnavailableError = ModelResolver.VariantUnavailableError
-export type VariantUnavailableError = ModelResolver.VariantUnavailableError
-export const UnsupportedPackageError = ModelResolver.UnsupportedPackageError
-export type UnsupportedPackageError = ModelResolver.UnsupportedPackageError
-export const UnresolvedProviderVariablesError = ModelResolver.UnresolvedProviderVariablesError
-export type UnresolvedProviderVariablesError = ModelResolver.UnresolvedProviderVariablesError
-export const UnsupportedCompactionError = ModelResolver.UnsupportedCompactionError
-export type UnsupportedCompactionError = ModelResolver.UnsupportedCompactionError
-
 export type Error = ModelNotSelectedError | ModelUnavailableError | ModelResolver.Error
 export type Resolved = ModelResolver.Resolved
 
@@ -60,7 +51,7 @@ export const resolved = (
     readonly cost: Model.Info["cost"]
     readonly limit: Model.Info["limit"]
     readonly compaction?: Provider.Compaction
-    readonly websocket?: boolean
+    readonly transport?: Provider.Transport
   },
 ): Resolved => ({
   model,
@@ -73,7 +64,7 @@ export const resolved = (
   cost: options.cost,
   limit: options.limit,
   compaction: options.compaction,
-  websocket: options.websocket ?? false,
+  transport: options.transport,
 })
 
 const layer = Layer.effect(

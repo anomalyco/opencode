@@ -17,12 +17,14 @@ import { useSessionKey } from "@/session/session-layout"
 import { showToast } from "@/shell/notifications/toast"
 import { SessionRouteKey, SessionStateKey } from "@/runtime/server/scope"
 import { clearSessionMessageHandoff, setSessionMessageHandoff } from "@/session/handoff"
+import type { DraftMcpControls } from "./mcp"
 
 export function createNewSessionComposerAdapter(props: {
   draftID: string
   worktree: () => string
   branch: () => string | undefined
   submitted: () => void
+  mcp: DraftMcpControls
 }) {
   const route = useSessionKey()
   const prompt = useComposerState()
@@ -46,9 +48,11 @@ export function createNewSessionComposerAdapter(props: {
     submitted: props.submitted,
     async start(selection, submission, message) {
       const draftID = props.draftID
-      const projectDirectory = location().directory
+      const currentDirectory = location().directory
+      const projectDirectory = data.location.info({ directory: currentDirectory })?.project.canonical ?? currentDirectory
       const worktree = props.worktree()
       const branch = props.branch()
+      const mcp = props.mcp.capture()
       const id = Session.ID.create()
       const pending =
         worktree === "create"
@@ -65,6 +69,18 @@ export function createNewSessionComposerAdapter(props: {
       })
       if (!sessionDirectory) {
         await pending?.rollback()
+        return
+      }
+
+      const rollback = async () => {
+        if (!pending) return
+        data.project.invalidate()
+        await data.project.sync().catch(() => undefined)
+        await pending.rollback(sessionDirectory)
+      }
+      if (!(await props.mcp.prepare(sessionDirectory, mcp))) {
+        await rollback()
+        if (pending) props.mcp.remember(sessionDirectory, mcp)
         return
       }
 
@@ -89,10 +105,7 @@ export function createNewSessionComposerAdapter(props: {
         },
       )
       if (pending && !(await creation).ok) {
-        // Keep retries on the worktree that was already created, not another new checkout.
-        data.project.invalidate()
-        await data.project.sync().catch(() => undefined)
-        await pending.rollback(sessionDirectory)
+        await rollback()
         return
       }
       const afterCreation = async <T>(run: () => Promise<T>) => {

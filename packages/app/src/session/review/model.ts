@@ -155,6 +155,9 @@ export function createSessionReview(input: {
   const count = () => diffs().length
   const hasChanges = () => count() > 0
   const ready = () => {
+    // A project without VCS never enables vcsQuery, so its status stays "pending" forever.
+    const project = input.session.project()
+    if (project && !project.vcs) return true
     if (mode() === "git" || mode() === "branch") return !vcsQuery.isPending
     return true
   }
@@ -396,6 +399,7 @@ export function createSessionReview(input: {
     deferRender: input.deferRender,
     details: {
       diffs: () => (detailsQuery.isFetched ? (detailsQuery.data ?? []) : undefined),
+      open: () => state.detailsOpen,
       setOpen: (open: boolean) => setState("detailsOpen", open),
     },
     diffVersion: () => vcsQuery.dataUpdatedAt,

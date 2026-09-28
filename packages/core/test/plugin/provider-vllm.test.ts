@@ -1,5 +1,4 @@
 import { Bus } from "@opencode/core/bus"
-import { Catalog } from "@opencode/core/catalog"
 import { Config } from "@opencode/core/config"
 import { Integration } from "@opencode/core/integration"
 import { Model } from "@opencode/core/model"
@@ -75,38 +74,39 @@ describe("VLLMPlugin", () => {
       }),
       ({ state, server }) =>
         Effect.gen(function* () {
-          const catalog = yield* Catalog.Service
+          const providers = yield* Provider.Service
+          const modelState = yield* Model.Service
           const providerID = Provider.ID.make("vllm")
           expect(VLLMPlugin.id).toBe("opencode.provider.vllm")
           expect(ProviderPlugins.map((item) => item.id)).toContain("opencode.provider.vllm")
           yield* addPlugin(server.url.origin, "5 millis")
           yield* Effect.promise(() => Bun.sleep(20))
-          expect(yield* catalog.provider.get(providerID)).toBeUndefined()
+          expect(yield* providers.get(providerID)).toBeUndefined()
           expect(state.models).toBe(0)
 
           state.healthy = true
           const model = yield* eventually(
-            catalog.model.get(providerID, Model.ID.make("Qwen/Qwen3-Coder")),
+            modelState.get(providerID, Model.ID.make("Qwen/Qwen3-Coder")),
             (item) => item !== undefined,
           )
-          expect(yield* catalog.provider.get(providerID)).toEqual({
+          expect(yield* providers.get(providerID)).toEqual({
             id: providerID,
             name: "vLLM",
             package: "@opencode/ai/providers/openai-compatible",
             settings: { baseURL: `${server.url.origin}/v1`, provider: "vllm", apiKey: "" },
             activation: "enabled",
           })
-          expect((yield* catalog.provider.available()).map((provider) => provider.id)).toContain(providerID)
+          expect((yield* providers.available()).map((provider) => provider.id)).toContain(providerID)
           expect(model).toMatchObject({
             modelID: "Qwen/Qwen3-Coder",
             name: "Qwen/Qwen3-Coder",
             capabilities: { tools: false, input: ["text"], output: ["text"] },
             limit: { context: 65_536, output: 32_000 },
           })
-          expect(yield* catalog.model.get(providerID, Model.ID.make("unknown-limit"))).toMatchObject({
+          expect(yield* modelState.get(providerID, Model.ID.make("unknown-limit"))).toMatchObject({
             limit: { context: 200_000, output: 32_000 },
           })
-          expect(yield* catalog.model.get(providerID, Model.ID.make("foreign-model"))).toBeUndefined()
+          expect(yield* modelState.get(providerID, Model.ID.make("foreign-model"))).toBeUndefined()
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
     ),
@@ -130,23 +130,23 @@ describe("VLLMPlugin", () => {
       }),
       ({ state, server }) =>
         Effect.gen(function* () {
-          const catalog = yield* Catalog.Service
+          const modelState = yield* Model.Service
           const providerID = Provider.ID.make("vllm")
           yield* addPlugin(server.url.origin, "5 millis")
-          yield* eventually(catalog.model.get(providerID, Model.ID.make("first-model")), (model) => model !== undefined)
+          yield* eventually(modelState.get(providerID, Model.ID.make("first-model")), (model) => model !== undefined)
 
           state.failing = true
           state.models = [remoteModel("second-model")]
           yield* Effect.promise(() => Bun.sleep(30))
-          expect(yield* catalog.model.get(providerID, Model.ID.make("first-model"))).toBeDefined()
-          expect(yield* catalog.model.get(providerID, Model.ID.make("second-model"))).toBeUndefined()
+          expect(yield* modelState.get(providerID, Model.ID.make("first-model"))).toBeDefined()
+          expect(yield* modelState.get(providerID, Model.ID.make("second-model"))).toBeUndefined()
 
           state.failing = false
           yield* eventually(
-            catalog.model.get(providerID, Model.ID.make("second-model")),
+            modelState.get(providerID, Model.ID.make("second-model")),
             (model) => model !== undefined,
           )
-          expect(yield* catalog.model.get(providerID, Model.ID.make("first-model"))).toBeUndefined()
+          expect(yield* modelState.get(providerID, Model.ID.make("first-model"))).toBeUndefined()
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
     ),
@@ -169,7 +169,8 @@ describe("VLLMPlugin", () => {
       }),
       ({ models, server }) =>
         Effect.gen(function* () {
-          const catalog = yield* Catalog.Service
+          const providers = yield* Provider.Service
+          const modelState = yield* Model.Service
           const integrations = yield* Integration.Service
           const providerID = Provider.ID.make("vllm")
           yield* integrations.transform((editor) => {
@@ -181,35 +182,36 @@ describe("VLLMPlugin", () => {
               method: { type: "env", names: ["VLLM_API_KEY"] },
             })
           })
-          yield* catalog.transform((editor) => {
-            editor.provider.update(providerID, (provider) => {
+          yield* providers.transform((editor) => {
+            editor.update(providerID, (provider) => {
               provider.name = "vLLM"
-              provider.package = "aisdk:@ai-sdk/openai-compatible"
+              provider.package = "@opencode/ai/providers/openai-compatible"
               provider.integrationID = Integration.ID.make("vllm")
               provider.activation = "auto"
             })
-            editor.model.update(providerID, Model.ID.make("static-model"), () => {})
+            editor.models.update(providerID, Model.ID.make("static-model"), () => {})
           })
 
           yield* addPlugin(server.url.origin, "5 millis")
           yield* eventually(
-            catalog.model.get(providerID, Model.ID.make("discovered-model")),
+            modelState.get(providerID, Model.ID.make("discovered-model")),
             (model) => model !== undefined,
           )
           expect(yield* integrations.get(Integration.ID.make("vllm"))).toBeUndefined()
-          expect((yield* catalog.provider.get(providerID))?.integrationID).toBeUndefined()
-          expect((yield* catalog.provider.get(providerID))?.activation).toBe("enabled")
-          expect(yield* catalog.model.get(providerID, Model.ID.make("static-model"))).toBeUndefined()
+          expect((yield* providers.get(providerID))?.integrationID).toBeUndefined()
+          expect((yield* providers.get(providerID))?.activation).toBe("enabled")
+          expect(yield* modelState.get(providerID, Model.ID.make("static-model"))).toBeUndefined()
 
           models.splice(0)
           yield* eventually(
-            catalog.model.get(providerID, Model.ID.make("static-model")),
-            (model) => model !== undefined,
+            providers.snapshot(),
+            (snapshot) => snapshot.records.get(providerID)?.models.has(Model.ID.make("static-model")) === true,
           )
-          expect(yield* catalog.model.get(providerID, Model.ID.make("discovered-model"))).toBeUndefined()
+          expect(yield* modelState.get(providerID, Model.ID.make("discovered-model"))).toBeUndefined()
+          expect(yield* modelState.get(providerID, Model.ID.make("static-model"))).toBeUndefined()
           expect(yield* integrations.get(Integration.ID.make("vllm"))).toBeDefined()
-          expect((yield* catalog.provider.get(providerID))?.integrationID).toBe(Integration.ID.make("vllm"))
-          expect((yield* catalog.provider.get(providerID))?.activation).toBe("auto")
+          expect((yield* providers.get(providerID))?.integrationID).toBe(Integration.ID.make("vllm"))
+          expect((yield* providers.get(providerID))?.activation).toBe("auto")
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
     ),
@@ -246,12 +248,13 @@ describe("VLLMPlugin", () => {
         ({ requests, initial, configured }) =>
           Effect.gen(function* () {
             const bus = yield* Bus.Service
-            const catalog = yield* Catalog.Service
+            const providers = yield* Provider.Service
+            const modelState = yield* Model.Service
             const config = yield* Config.Test
             const providerID = Provider.ID.make("vllm")
             yield* addPlugin(initial.url.origin)
             yield* eventually(
-              catalog.model.get(providerID, Model.ID.make("initial-model")),
+              modelState.get(providerID, Model.ID.make("initial-model")),
               (model) => model !== undefined,
             )
 
@@ -259,14 +262,14 @@ describe("VLLMPlugin", () => {
             yield* config.setEntries([configuration({ baseURL }), configuration({ apiKey: "secret" })])
             yield* bus.publish(Event.Updated, {})
             yield* eventually(
-              catalog.model.get(providerID, Model.ID.make("configured-model")),
+              modelState.get(providerID, Model.ID.make("configured-model")),
               (model) => model !== undefined,
             )
 
             expect(requests).toContainEqual({ authorization: "Bearer secret", path: "/proxy/health" })
             expect(requests).toContainEqual({ authorization: "Bearer secret", path: "/proxy/v1/models" })
-            expect(yield* catalog.model.get(providerID, Model.ID.make("initial-model"))).toBeUndefined()
-            expect((yield* catalog.provider.get(providerID))?.settings).toEqual({
+            expect(yield* modelState.get(providerID, Model.ID.make("initial-model"))).toBeUndefined()
+            expect((yield* providers.get(providerID))?.settings).toEqual({
               baseURL,
               provider: "vllm",
               apiKey: "secret",
@@ -276,7 +279,7 @@ describe("VLLMPlugin", () => {
             yield* config.setEntries([configuration({ baseURL }), configuration({ apiKey: "next-secret" })])
             yield* bus.publish(Event.Updated, {})
             yield* eventually(
-              catalog.provider.get(providerID),
+              providers.get(providerID),
               (provider) => provider?.settings?.apiKey === "next-secret",
             )
             expect(requests).toContainEqual({ authorization: "Bearer next-secret", path: "/proxy/health" })

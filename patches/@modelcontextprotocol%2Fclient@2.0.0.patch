@@ -1,0 +1,40 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index 635f1c0134274c89e7efbcae2adf3d9ecba575ee..5eaa7b451c8c7e12e51f61c2a835ff6f7a8ea0ae 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -977,7 +977,6 @@ async function discoverMetadataWithFallback(serverUrl, wellKnownType, fetchFn, o
+ 	else {
+ 		const wellKnownPath = buildWellKnownPath(wellKnownType, issuer.pathname);
+ 		url = new URL(wellKnownPath, opts?.metadataServerUrl ?? issuer);
+-		url.search = issuer.search;
+ 	}
+ 	let response = await tryMetadataDiscovery(url, protocolVersion, fetchFn);
+ 	if (!opts?.metadataUrl && shouldAttemptFallback(response, issuer.pathname)) response = await tryMetadataDiscovery(new URL(`/.well-known/${wellKnownType}`, issuer), protocolVersion, fetchFn);
+@@ -1158,7 +1157,6 @@ async function startAuthorization(authorizationServerUrl, { metadata, clientInfo
+ 	authorizationUrl.searchParams.set("redirect_uri", String(redirectUrl));
+ 	if (state) authorizationUrl.searchParams.set("state", state);
+ 	if (scope) authorizationUrl.searchParams.set("scope", scope);
+-	if (scope?.split(" ").includes("offline_access")) authorizationUrl.searchParams.append("prompt", "consent");
+ 	if (resource) authorizationUrl.searchParams.set("resource", resource.href);
+ 	return {
+ 		authorizationUrl,
+diff --git a/dist/index.mjs b/dist/index.mjs
+index f02ce3ca394e826fc27c9848dbe9a214bf6ba7a9..73a93a066c3540e131fa0770a74b4a7e8d9343a0 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -974,7 +974,6 @@ async function discoverMetadataWithFallback(serverUrl, wellKnownType, fetchFn, o
+ 	else {
+ 		const wellKnownPath = buildWellKnownPath(wellKnownType, issuer.pathname);
+ 		url = new URL(wellKnownPath, opts?.metadataServerUrl ?? issuer);
+-		url.search = issuer.search;
+ 	}
+ 	let response = await tryMetadataDiscovery(url, protocolVersion, fetchFn);
+ 	if (!opts?.metadataUrl && shouldAttemptFallback(response, issuer.pathname)) response = await tryMetadataDiscovery(new URL(`/.well-known/${wellKnownType}`, issuer), protocolVersion, fetchFn);
+@@ -1155,7 +1154,6 @@ async function startAuthorization(authorizationServerUrl, { metadata, clientInfo
+ 	authorizationUrl.searchParams.set("redirect_uri", String(redirectUrl));
+ 	if (state) authorizationUrl.searchParams.set("state", state);
+ 	if (scope) authorizationUrl.searchParams.set("scope", scope);
+-	if (scope?.split(" ").includes("offline_access")) authorizationUrl.searchParams.append("prompt", "consent");
+ 	if (resource) authorizationUrl.searchParams.set("resource", resource.href);
+ 	return {
+ 		authorizationUrl,

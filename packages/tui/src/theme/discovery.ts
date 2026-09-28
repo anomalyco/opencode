@@ -6,7 +6,7 @@ export async function discoverThemes(directories: string[]) {
   for (const directory of directories) {
     const themeDirectory = path.join(directory, "themes")
     const entries = await readdir(themeDirectory, { withFileTypes: true }).catch((error: unknown) => {
-      if (error && typeof error === "object" && Reflect.get(error, "code") === "ENOENT") return []
+      if (error && typeof error === "object" && "code" in error && error.code === "ENOENT") return []
       return Promise.reject(error)
     })
     const files = entries

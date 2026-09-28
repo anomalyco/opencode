@@ -280,6 +280,18 @@ export const Compaction = Schema.Union([CompactionRunning, CompactionCompleted, 
 )
 export type Compaction = CompactionRunning | CompactionCompleted | CompactionFailed
 
+/**
+ * Marks the Session going idle: every step since the previous marker belongs to
+ * one turn, including prompts steered in while it was busy. A shutdown does not
+ * record one, since the resumed execution continues the same turn.
+ */
+export interface Idle extends Schema.Schema.Type<typeof Idle> {}
+export const Idle = Schema.Struct({
+  ...Base,
+  type: Schema.tag("idle"),
+  outcome: Schema.Literals(["succeeded", "failed", "interrupted"]),
+}).annotate({ identifier: "Session.Message.Idle" })
+
 export const Info = Schema.Union([
   AgentSelected,
   ModelSelected,
@@ -291,6 +303,7 @@ export const Info = Schema.Union([
   Shell,
   Assistant,
   Compaction,
+  Idle,
 ]).annotate({ identifier: "Session.Message.Info" })
 export type Info =
   | AgentSelected
@@ -303,4 +316,5 @@ export type Info =
   | Shell
   | Assistant
   | Compaction
+  | Idle
 export type Type = Info["type"]

@@ -8,6 +8,7 @@
 // the current draft is saved and history begins. Arrowing past the end
 // restores the draft.
 export { displayCharAt, displaySlice, mentionTriggerIndex, slashTriggerIndex } from "../prompt/display"
+import { promptOffsetWidth } from "../prompt/display"
 import { stringWidth } from "../util/string-width"
 import type { RunPrompt } from "./types"
 
@@ -35,6 +36,30 @@ export function promptCopy(prompt: RunPrompt): RunPrompt {
   }
 }
 
+// Part ranges are textarea offsets, so shift by display width rather than string length.
+export function promptAppend(prompt: RunPrompt, following: RunPrompt): RunPrompt {
+  const text = prompt.text ? `${prompt.text}\n\n` : ""
+  const offset = promptOffsetWidth(text)
+  const shift = <T extends { start: number; end: number }>(range: T) => ({
+    ...range,
+    start: range.start + offset,
+    end: range.end + offset,
+  })
+  const command = prompt.text ? prompt.command : following.command
+  return {
+    text: text + following.text,
+    parts: [
+      ...structuredClone(prompt.parts),
+      ...structuredClone(following.parts).map((part) => {
+        if (!part.source) return part
+        if (part.type === "file") return { ...part, source: { ...part.source, text: shift(part.source.text) } }
+        return { ...part, source: shift(part.source) }
+      }),
+    ],
+    ...(command ? { command } : {}),
+  }
+}
+
 export function promptSame(a: RunPrompt, b: RunPrompt): boolean {
   return (
     a.mode === b.mode &&
@@ -44,9 +69,11 @@ export function promptSame(a: RunPrompt, b: RunPrompt): boolean {
   )
 }
 
+export const EXIT_COMMANDS = ["exit", "quit", "q"]
+
 export function isExitCommand(input: string): boolean {
   const text = input.trim().toLowerCase()
-  return text === "/exit" || text === "/quit" || text === ":q"
+  return text === ":q" || EXIT_COMMANDS.some((name) => text === `/${name}`)
 }
 
 export function isNewCommand(input: string): boolean {

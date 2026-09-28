@@ -1,7 +1,6 @@
 import { Plugin } from "@opencode/plugin/effect"
 import type { IntegrationMethod } from "@opencode/plugin/effect/integration"
 import { Agent } from "@opencode/core/agent"
-import { Catalog } from "@opencode/core/catalog"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { Location } from "@opencode/core/location"
@@ -46,17 +45,17 @@ export function host(overrides: Overrides = {}): Plugin.Context {
     aisdk: overrides.aisdk ?? {
       hook: () => Effect.die("unused aisdk.hook"),
     },
-    catalog: overrides.catalog ?? {
-      provider: {
-        list: () => Effect.die("unused catalog.provider.list"),
-        get: () => Effect.die("unused catalog.provider.get"),
-      },
-      model: {
-        list: () => Effect.die("unused catalog.model.list"),
-        default: () => Effect.die("unused catalog.model.default"),
-      },
-      transform: () => Effect.die("unused catalog.transform"),
-      reload: () => Effect.die("unused catalog.reload"),
+    provider: overrides.provider ?? {
+      list: () => Effect.die("unused provider.list"),
+      get: () => Effect.die("unused provider.get"),
+      transform: () => Effect.die("unused provider.transform"),
+      reload: () => Effect.die("unused provider.reload"),
+    },
+    model: overrides.model ?? {
+      list: () => Effect.die("unused model.list"),
+      default: () => Effect.die("unused model.default"),
+      transform: () => Effect.die("unused model.transform"),
+      reload: () => Effect.die("unused model.reload"),
     },
     command: overrides.command ?? {
       list: () => Effect.die("unused command.list"),
@@ -134,12 +133,15 @@ export function host(overrides: Overrides = {}): Plugin.Context {
     tool: overrides.tool ?? {
       transform: () => Effect.die("unused tool.transform"),
       reload: () => Effect.die("unused tool.reload"),
+      list: () => Effect.die("unused tool.list"),
       hook: () => Effect.die("unused tool.hook"),
     },
     vcs: overrides.vcs ?? {
       base: () => Effect.die("unused vcs.base"),
       get: () => Effect.die("unused vcs.get"),
-      branches: () => Effect.die("unused vcs.branches"),
+      branch: {
+        list: () => Effect.die("unused vcs.branch.list"),
+      },
       status: () => Effect.die("unused vcs.status"),
       diff: () => Effect.die("unused vcs.diff"),
       transform: () => Effect.die("unused vcs.transform"),
@@ -168,7 +170,7 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       prompt: overrides.session?.prompt ?? (() => Effect.die("unused session.prompt")),
       generate: overrides.session?.generate ?? (() => Effect.die("unused session.generate")),
       command: overrides.session?.command ?? (() => Effect.die("unused session.command")),
-      rename: overrides.session?.rename ?? (() => Effect.die("unused session.rename")),
+      update: overrides.session?.update ?? (() => Effect.die("unused session.update")),
       move: overrides.session?.move ?? (() => Effect.die("unused session.move")),
       synthetic: overrides.session?.synthetic ?? (() => Effect.die("unused session.synthetic")),
       interrupt: overrides.session?.interrupt ?? (() => Effect.die("unused session.interrupt")),
@@ -221,84 +223,65 @@ export function agentHost(agent: Agent.Interface): Plugin.Context["agent"] {
   }
 }
 
-export function catalogHost(catalog: Catalog.Interface): Plugin.Context["catalog"] {
+export function providerHost(providers: Provider.Interface): Plugin.Context["provider"] {
   return {
-    provider: {
-      list: () => Effect.die("unused catalog.provider.list"),
-      get: () => Effect.die("unused catalog.provider.get"),
-    },
-    model: {
-      list: () =>
-        catalog.model.available().pipe(
-          Effect.map((data) => ({
-            location: new Location.Info({
-              directory: AbsolutePath.make("/"),
-              project: {
-                id: Project.ID.make("test"),
-                directory: AbsolutePath.make("/"),
-                canonical: AbsolutePath.make("/"),
-              },
-            }),
-            data: data.map(modelInfo),
-          })),
+    list: () => providers.available().pipe(Effect.map(located)),
+    get: (input) =>
+      providers.get(Provider.ID.make(input.providerID)).pipe(
+        Effect.flatMap((provider) =>
+          provider === undefined
+            ? Effect.fail(new Error(`Provider not found: ${input.providerID}`))
+            : Effect.succeed(located(provider)),
         ),
-      default: () => Effect.die("unused catalog.model.default"),
-    },
-    reload: catalog.reload,
+      ),
+    reload: providers.reload,
     transform: (callback) =>
-      catalog.transform((editor) =>
+      providers.transform((editor) =>
         callback({
-          provider: {
-            list: () =>
-              editor.provider.list().map((value) => ({
-                provider: providerInfo(value.provider),
-                models: new Map(Array.from(value.models, ([id, model]) => [id, modelInfo(model)])),
-              })),
-            get: (id) => {
-              const value = editor.provider.get(Provider.ID.make(id))
-              return (
-                value && {
-                  provider: providerInfo(value.provider),
-                  models: new Map(Array.from(value.models, ([id, model]) => [id, modelInfo(model)])),
-                }
-              )
-            },
-            update: (id, update) =>
-              editor.provider.update(Provider.ID.make(id), (value) => {
-                const current = providerInfo(value)
-                update(current)
-                Object.assign(value, current, { id: Provider.ID.make(current.id) })
-              }),
-            remove: (id) => editor.provider.remove(Provider.ID.make(id)),
-          },
-          model: {
-            get: (providerID, modelID) => {
-              const value = editor.model.get(Provider.ID.make(providerID), Model.ID.make(modelID))
-              return value && modelInfo(value)
-            },
+          list: editor.list,
+          get: (id) => editor.get(Provider.ID.make(id)),
+          add: editor.add,
+          update: (id, update) => editor.update(Provider.ID.make(id), update),
+          remove: (id) => editor.remove(Provider.ID.make(id)),
+          models: {
+            set: (id, models) => editor.models.set(Provider.ID.make(id), models),
             update: (providerID, modelID, update) =>
-              editor.model.update(Provider.ID.make(providerID), Model.ID.make(modelID), (value) => {
-                const current = modelInfo(value)
-                update(current)
-                Object.assign(value, current, {
-                  id: Model.ID.make(current.id),
-                  providerID: Provider.ID.make(current.providerID),
-                  family: current.family === undefined ? undefined : Model.Family.make(current.family),
-                  variants: current.variants?.map((variant) => ({
-                    ...variant,
-                    id: Model.VariantID.make(variant.id),
-                  })),
-                })
-              }),
-            remove: (providerID, modelID) => editor.model.remove(Provider.ID.make(providerID), Model.ID.make(modelID)),
-            default: {
-              get: () => {
-                const value = editor.model.default.get()
-                return value && { providerID: value.providerID, modelID: value.modelID }
-              },
-              set: (providerID, modelID) =>
-                editor.model.default.set(Provider.ID.make(providerID), Model.ID.make(modelID)),
-            },
+              editor.models.update(Provider.ID.make(providerID), Model.ID.make(modelID), update),
+            remove: (providerID, modelID) => editor.models.remove(Provider.ID.make(providerID), Model.ID.make(modelID)),
+          },
+        }),
+      ),
+  }
+}
+
+/** Empty catalog for hosts that only need provider lookups to fall back. */
+export const noProviders: Plugin.Context["provider"] = {
+  list: () => Effect.succeed(located([])),
+  get: () => Effect.die("unused provider.get"),
+  transform: () => Effect.die("unused provider.transform"),
+  reload: () => Effect.die("unused provider.reload"),
+}
+
+export function modelHost(models: Model.Interface): Plugin.Context["model"] {
+  return {
+    list: () => models.available().pipe(Effect.map(located)),
+    default: () => models.default().pipe(Effect.map(located)),
+    reload: models.reload,
+    transform: (callback) =>
+      models.transform((editor) =>
+        callback({
+          list: (id) => editor.list(id === undefined ? undefined : Provider.ID.make(id)),
+          get: (providerID, modelID) => editor.get(Provider.ID.make(providerID), Model.ID.make(modelID)),
+          update: (providerID, modelID, update) =>
+            editor.update(Provider.ID.make(providerID), Model.ID.make(modelID), update),
+          remove: (providerID, modelID) => editor.remove(Provider.ID.make(providerID), Model.ID.make(modelID)),
+          default: {
+            get: editor.default.get,
+            set: (providerID, modelID) => editor.default.set(Provider.ID.make(providerID), Model.ID.make(modelID)),
+          },
+          provider: {
+            list: editor.provider.list,
+            get: (id) => editor.provider.get(Provider.ID.make(id)),
           },
         }),
       ),
@@ -483,34 +466,16 @@ function agentInfo(value: Agent.Info) {
   }
 }
 
-function providerInfo(value: Provider.MutableInfo) {
+function located<A>(data: A) {
   return {
-    ...value,
-    settings: value.settings && { ...value.settings },
-    headers: value.headers && { ...value.headers },
-    body: value.body && { ...value.body },
-  }
-}
-
-function modelInfo(value: Model.Info | Model.MutableInfo) {
-  return {
-    ...value,
-    settings: value.settings && { ...value.settings },
-    headers: value.headers && { ...value.headers },
-    body: value.body && { ...value.body },
-    capabilities: {
-      ...value.capabilities,
-      input: [...value.capabilities.input],
-      output: [...value.capabilities.output],
-    },
-    variants: value.variants?.map((variant) => ({
-      ...variant,
-      settings: variant.settings && { ...variant.settings },
-      headers: variant.headers && { ...variant.headers },
-      body: variant.body && { ...variant.body },
-    })),
-    time: { ...value.time },
-    cost: value.cost.map((cost) => ({ ...cost, tier: cost.tier && { ...cost.tier }, cache: { ...cost.cache } })),
-    limit: { ...value.limit },
+    location: new Location.Info({
+      directory: AbsolutePath.make("/"),
+      project: {
+        id: Project.ID.make("test"),
+        directory: AbsolutePath.make("/"),
+        canonical: AbsolutePath.make("/"),
+      },
+    }),
+    data,
   }
 }

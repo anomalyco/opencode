@@ -148,7 +148,7 @@ it.live(
         const modelMessage = Option.fromNullishOr(context.find((message) => message.type === "model-switched")).pipe(
           Option.getOrThrow,
         )
-        const message = yield* opencode.sessions.message({ sessionID: id, messageID: modelMessage.id })
+        const message = yield* opencode.sessions.message.get({ sessionID: id, messageID: modelMessage.id })
         yield* opencode.sessions.interrupt({ sessionID: id })
         const other = yield* opencode.sessions.create({ location: location(fixture) })
         const missingSessionID = fixture.sdk.Session.ID.create()
@@ -156,14 +156,14 @@ it.live(
           [
             opencode.sessions.log({ sessionID: missingSessionID }).pipe(Stream.runHead, Effect.flip),
             opencode.sessions.interrupt({ sessionID: missingSessionID }).pipe(Effect.flip),
-            opencode.sessions.message({ sessionID: missingSessionID, messageID: modelMessage.id }).pipe(Effect.flip),
+            opencode.sessions.message.get({ sessionID: missingSessionID, messageID: modelMessage.id }).pipe(Effect.flip),
             opencode.sessions.instructions.entry.list({ sessionID: missingSessionID }).pipe(Effect.flip),
             opencode.sessions.inbox.list({ sessionID: missingSessionID }).pipe(Effect.flip),
           ],
           { concurrency: "unbounded" },
         )
         const missingMessage = yield* Effect.flip(
-          opencode.sessions.message({
+          opencode.sessions.message.get({
             sessionID: other.id,
             messageID: modelMessage.id,
           }),

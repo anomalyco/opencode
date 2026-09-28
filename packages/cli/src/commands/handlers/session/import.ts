@@ -39,12 +39,12 @@ export default Runtime.handler(
       }),
     )
     const response = yield* Effect.promise(() =>
-      fetch(new URL("/api/session/import", server.endpoint.url), {
+      fetch(new URL("/api/experimental/session/import", server.endpoint.url), {
         method: "POST",
         headers: { ...Service.headers(server.endpoint), "content-type": "application/json" },
         body: JSON.stringify({
           ...encoded,
-          location: { directory: location.directory, workspaceID: location.workspaceID },
+          location: { directory: location.directory },
         }),
       }),
     )

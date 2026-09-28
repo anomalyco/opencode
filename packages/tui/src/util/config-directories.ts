@@ -31,7 +31,7 @@ export async function localProjectDirectory(cwd: string) {
 
 export function isMissingPath(error: unknown) {
   if (!error || typeof error !== "object") return false
-  const code = Reflect.get(error, "code")
+  const code = "code" in error ? error.code : undefined
   return code === "ENOENT" || code === "ENOTDIR"
 }
 
