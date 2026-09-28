@@ -14,6 +14,7 @@ const it = testEffect(LayerNode.compile(AppProcess.node))
 const NODE = process.execPath
 const cmd = (...args: string[]) => ChildProcess.make(NODE, args)
 
+// Resolves once `file` exists. The child publishes it atomically (see `lingeringChild`), so any content read is complete.
 const waitForFile = (file: string) =>
   Effect.promise(async () => {
     while (true) {
@@ -25,6 +26,18 @@ const waitForFile = (file: string) =>
       }
     }
   })
+
+// A child that stays alive until SIGTERM. It installs the SIGTERM handler before announcing readiness, so once `ready`
+// exists a signal can never find it without the handler. Both markers are written to a temp file and renamed into
+// place: a plain writeFileSync creates the file empty first, and a reader polling for it could observe that empty file.
+const lingeringChild = (ready: string, settled: string) =>
+  [
+    "const fs=require('fs')",
+    `const mark=(file,text)=>{fs.writeFileSync(file+'.tmp',text);fs.renameSync(file+'.tmp',file)}`,
+    `process.on('SIGTERM',()=>{mark(${JSON.stringify(settled)},'settled');process.exit(0)})`,
+    `mark(${JSON.stringify(ready)},String(process.pid))`,
+    "setInterval(()=>{},60000)",
+  ].join(";")
 
 describe("AppProcess", () => {
   describe("run", () => {
@@ -159,7 +172,7 @@ describe("AppProcess", () => {
           (directory) => {
             const ready = path.join(directory, "ready")
             const settled = path.join(directory, "settled")
-            const script = `const fs=require('fs');fs.writeFileSync(${JSON.stringify(ready)},String(process.pid));process.on('SIGTERM',()=>{fs.writeFileSync(${JSON.stringify(settled)},'settled');process.exit(0)});setInterval(()=>{},60000)`
+            const script = lingeringChild(ready, settled)
             return Effect.gen(function* () {
               const svc = yield* AppProcess.Service
               const exit = yield* Effect.exit(svc.run(cmd("-e", script), { timeout: "250 millis" }))
@@ -180,7 +193,7 @@ describe("AppProcess", () => {
           (directory) => {
             const ready = path.join(directory, "ready")
             const settled = path.join(directory, "settled")
-            const script = `const fs=require('fs');fs.writeFileSync(${JSON.stringify(ready)},String(process.pid));process.on('SIGTERM',()=>{fs.writeFileSync(${JSON.stringify(settled)},'settled');process.exit(0)});setInterval(()=>{},60000)`
+            const script = lingeringChild(ready, settled)
             return Effect.gen(function* () {
               const svc = yield* AppProcess.Service
               const fiber = yield* svc.run(cmd("-e", script)).pipe(Effect.forkChild)
