@@ -86,7 +86,7 @@ const signIn = (app: App.Info, savedClientID: () => string | undefined) =>
         // Lazy so runtimes without a loopback listener (workerd) never evaluate node:http.
         const { createServer } = yield* Effect.promise(() => import("node:http"))
         const server = createServer((request, response) => {
-          const url = new URL(request.url ?? "/", "http://localhost")
+          const url = new URL(request.url ?? "/", "http://127.0.0.1")
           if (url.pathname !== "/auth/callback") {
             response.writeHead(404).end("Not found")
             return
@@ -121,7 +121,7 @@ const signIn = (app: App.Info, savedClientID: () => string | undefined) =>
         })
         const port = yield* listen(server)
         yield* Effect.addFinalizer(() => Effect.sync(() => server.close()))
-        const redirect = `http://localhost:${port}/auth/callback`
+        const redirect = `http://127.0.0.1:${port}/auth/callback`
         return {
           mode: "auto" as const,
           url: authorizeURL(redirect, pkce, state, nonce, savedID),
@@ -169,7 +169,7 @@ function listen(server: Server) {
   return Effect.callback<number, Error>((resume) => {
     const onError = (error: Error) => resume(Effect.fail(error))
     server.once("error", onError)
-    server.listen(0, "localhost", () => {
+    server.listen(0, "127.0.0.1", () => {
       server.off("error", onError)
       const address = server.address()
       if (!address || typeof address === "string") return resume(Effect.fail(new Error("Missing OAuth callback port")))

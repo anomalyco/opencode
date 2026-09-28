@@ -376,7 +376,7 @@ describe("OpenAIPlugin", () => {
       expect(url.searchParams.get("state")).toBeTruthy()
       expect(url.searchParams.get("nonce")).toBeTruthy()
       expect(url.searchParams.get("code_challenge")).toBeTruthy()
-      expect(redirect.hostname).toBe("localhost")
+      expect(redirect.hostname).toBe("127.0.0.1")
       expect(redirect.pathname).toBe("/auth/callback")
       expect(Number(redirect.port)).toBeGreaterThan(0)
     }),
@@ -418,6 +418,7 @@ describe("OpenAIPlugin", () => {
       const url = yield* authorize()
       expect(url.searchParams.get("client_id")).toBe("oaiapp_issued")
       expect(url.searchParams.has("agent_name_hint")).toBe(false)
+      expect(new URL(url.searchParams.get("redirect_uri") ?? "").hostname).toBe("127.0.0.1")
     }),
   )
 
