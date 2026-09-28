@@ -46,7 +46,17 @@ export function hints(template: string) {
 export const Default = {
   INIT: "init",
   REVIEW: "review",
+  LOOP: "loop",
 } as const
+
+// Not a template: SessionPrompt.command recognizes this entry and schedules the prompt itself.
+export const Loop: Info = {
+  name: Default.LOOP,
+  description: "repeat a prompt on an interval: [5m] <prompt>, or stop",
+  source: "command",
+  template: "",
+  hints: [],
+}
 
 export interface Interface {
   readonly get: (name: string) => Effect.Effect<Info | undefined>
@@ -86,6 +96,7 @@ const layer = Layer.effect(
         subtask: true,
         hints: hints(PROMPT_REVIEW),
       }
+      commands[Default.LOOP] = Loop
 
       for (const [name, command] of Object.entries(cfg.command ?? {})) {
         commands[name] = {

@@ -1844,6 +1844,110 @@ unix(
   30_000,
 )
 
+it.instance(
+  "/loop repeats the prompt on its interval until stopped",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const { prompt, chat } = yield* boot()
+      yield* llm.text("first")
+      yield* llm.text("second")
+
+      const result = yield* prompt.command({ sessionID: chat.id, command: "loop", arguments: "1s ping" })
+      expect(result.info.role).toBe("assistant")
+      yield* awaitWithTimeout(llm.wait(2), "loop did not run a second time", "5 seconds")
+
+      yield* prompt.command({ sessionID: chat.id, command: "loop", arguments: "stop" })
+      yield* Effect.sleep("1500 millis")
+      expect(yield* llm.hits).toHaveLength(2)
+      expect(JSON.stringify((yield* llm.inputs).at(-1)?.messages)).toContain("ping")
+    }),
+  15_000,
+)
+
+it.instance(
+  "cancel stops an active /loop",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const { prompt, chat } = yield* boot()
+      yield* llm.text("first")
+
+      yield* prompt.command({ sessionID: chat.id, command: "loop", arguments: "1s ping" })
+      yield* prompt.cancel(chat.id)
+      yield* Effect.sleep("1500 millis")
+      expect(yield* llm.hits).toHaveLength(1)
+    }),
+  15_000,
+)
+
+it.instance(
+  "cancel ends a /loop tick that is mid-turn",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const { prompt, chat } = yield* boot()
+      yield* llm.text("first")
+      yield* llm.hang
+
+      yield* prompt.command({ sessionID: chat.id, command: "loop", arguments: "1s ping" })
+      yield* awaitWithTimeout(llm.wait(2), "loop did not tick", "5 seconds")
+      yield* awaitWithTimeout(prompt.cancel(chat.id), "cancel hung on the running tick", "3 seconds")
+    }),
+  15_000,
+)
+
+it.instance(
+  "/loop stop does not wait for a tick that is mid-turn",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const { prompt, chat } = yield* boot()
+      yield* llm.text("first")
+      yield* llm.hang
+
+      yield* prompt.command({ sessionID: chat.id, command: "loop", arguments: "1s ping" })
+      yield* awaitWithTimeout(llm.wait(2), "loop did not tick", "5 seconds")
+      yield* awaitWithTimeout(
+        prompt.command({ sessionID: chat.id, command: "loop", arguments: "stop" }),
+        "stop hung on the running tick",
+        "3 seconds",
+      )
+    }),
+  15_000,
+)
+
+it.instance(
+  "/loop can repeat another command",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig((url) => ({
+        ...providerCfg(url),
+        command: { probe: { template: "Probe $ARGUMENTS" } },
+      }))
+      const { prompt, chat } = yield* boot()
+      yield* llm.text("done")
+
+      yield* prompt.command({ sessionID: chat.id, command: "loop", arguments: "5m /probe staging" })
+      yield* prompt.command({ sessionID: chat.id, command: "loop", arguments: "stop" })
+      expect(JSON.stringify((yield* llm.inputs).at(-1)?.messages)).toContain("Probe staging")
+    }),
+  15_000,
+)
+
+noLLMServer.instance(
+  "/loop without a prompt fails with usage",
+  () =>
+    Effect.gen(function* () {
+      const { prompt, chat } = yield* boot()
+      const exit = yield* prompt.command({ sessionID: chat.id, command: "loop", arguments: "5m" }).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit))
+        expect(Cause.squash(exit.cause)).toMatchObject({ data: { message: expect.stringContaining("Usage: /loop") } })
+    }),
+  { config: cfg },
+)
+
 unixNoLLMServer(
   "cancel interrupts shell and resolves cleanly",
   () =>

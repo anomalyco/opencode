@@ -42,7 +42,7 @@ import { Truncate } from "@/tool/truncate"
 import { Image } from "@/image/image"
 import { decodeDataUrl } from "@/util/data-url"
 import { Process } from "@/util/process"
-import { Cause, Effect, Exit, Latch, Layer, Option, Scope, Context, Schema, Types } from "effect"
+import { Cause, Duration, Effect, Exit, FiberMap, Latch, Layer, Option, Scope, Context, Schema, Types } from "effect"
 import { InstanceState } from "@/effect/instance-state"
 import { TaskTool, type TaskPromptOps } from "@/tool/task"
 import { SessionRunState } from "./run-state"
@@ -141,6 +141,7 @@ const layer = Layer.effect(
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
     const { db } = database
+    const scheduled = yield* FiberMap.make<SessionID>()
     const ops = Effect.fn("SessionPrompt.ops")(function* () {
       return {
         cancel: (sessionID: SessionID) => cancel(sessionID),
@@ -151,6 +152,7 @@ const layer = Layer.effect(
 
     const cancel = Effect.fn("SessionPrompt.cancel")(function* (sessionID: SessionID) {
       yield* Effect.logInfo("cancel", { "session.id": sessionID })
+      yield* FiberMap.remove(scheduled, sessionID)
       yield* state.cancel(sessionID)
     })
 
@@ -1360,6 +1362,7 @@ const layer = Layer.effect(
         agent: input.agent,
       })
       const cmd = yield* commands.get(input.command)
+      if (cmd === Command.Loop) return yield* repeat(input)
       if (!cmd) {
         const available = (yield* commands.list()).map((c) => c.name)
         const hint = available.length ? ` Available commands: ${available.join(", ")}` : ""
@@ -1480,6 +1483,67 @@ const layer = Layer.effect(
       return result
     })
 
+    const repeat: (input: CommandInput) => Effect.Effect<SessionV1.WithParts, Image.Error> = Effect.fn(
+      "SessionPrompt.repeat",
+    )(function* (input: CommandInput) {
+      if (input.arguments.trim() === "stop") {
+        yield* FiberMap.remove(scheduled, input.sessionID)
+        return yield* lastAssistant(input.sessionID)
+      }
+      const interval = input.arguments.match(loopIntervalRegex)
+      const text = input.arguments.slice(interval?.[0].length ?? 0).trim()
+      const name = text.startsWith("/") ? text.slice(1).split(/\s/, 1)[0] : undefined
+      if (!text || name === Command.Default.LOOP) {
+        const error = new NamedError.Unknown({
+          message: "Usage: /loop [interval] <prompt>, e.g. /loop 5m check the deploy",
+        })
+        yield* events.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
+        throw error
+      }
+      const every = interval
+        ? Duration.seconds(Number(interval[1]) * loopUnits[interval[2] as keyof typeof loopUnits])
+        : Duration.minutes(10)
+      const step = (messageID?: MessageID) =>
+        name
+          ? command({
+              sessionID: input.sessionID,
+              messageID,
+              agent: input.agent,
+              model: input.model,
+              variant: input.variant,
+              parts: input.parts,
+              command: name,
+              arguments: text.slice(name.length + 1).trim(),
+            })
+          : resolvePromptParts(text).pipe(
+              Effect.flatMap((parts) =>
+                prompt({
+                  sessionID: input.sessionID,
+                  messageID,
+                  agent: input.agent,
+                  model: input.model ? Provider.parseModel(input.model) : undefined,
+                  variant: input.variant,
+                  parts: [...parts, ...(input.parts ?? [])],
+                }),
+              ),
+            )
+
+      // Start the timer before the first run so cancelling that run also stops the loop.
+      // Ticks that land while the session is busy are skipped rather than queued.
+      yield* Effect.gen(function* () {
+        if ((yield* status.get(input.sessionID)).type !== "idle") return
+        yield* step()
+      }).pipe(
+        Effect.delay(every),
+        Effect.forever,
+        Effect.catchCause((cause) =>
+          Effect.logError("loop stopped", { "session.id": input.sessionID, cause: Cause.pretty(cause) }),
+        ),
+        FiberMap.run(scheduled, input.sessionID),
+      )
+      return yield* step(input.messageID)
+    })
+
     return Service.of({
       cancel,
       prompt,
@@ -1594,6 +1658,8 @@ const bashRegex = /!`([^`]+)`/g
 const argsRegex = /(?:\[Image\s+\d+\]|"[^"]*"|'[^']*'|[^\s"']+)/gi
 const placeholderRegex = /\$(\d+)/g
 const quoteTrimRegex = /^["']|["']$/g
+const loopIntervalRegex = /^\s*([1-9]\d*)([smh])(?:\s+|$)/
+const loopUnits = { s: 1, m: 60, h: 3600 }
 
 export const node = LayerNode.make({
   service: Service,
