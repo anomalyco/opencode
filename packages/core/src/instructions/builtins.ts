@@ -23,6 +23,15 @@ const layer = Layer.effect(
         Effect.succeed(
           Instructions.combine([
             Instructions.make({
+              key: Instructions.Key.make("core/date"),
+              codec: Schema.toCodecJson(Schema.String),
+              read: DateTime.nowAsDate.pipe(Effect.map((date) => date.toDateString())),
+              render: {
+                initial: (date) => `Today's date: ${date}`,
+                changed: (_previous, date) => `Today's date is now: ${date}`,
+              },
+            }),
+            Instructions.make({
               key: Instructions.Key.make("core/environment"),
               codec: Schema.toCodecJson(Schema.String),
               read: Effect.sync(() =>
@@ -42,15 +51,6 @@ const layer = Layer.effect(
                   ["Here is some useful information about the environment you are running in:", environment].join("\n"),
                 changed: (_previous, environment) =>
                   ["The environment you are running in is now:", environment].join("\n"),
-              },
-            }),
-            Instructions.make({
-              key: Instructions.Key.make("core/date"),
-              codec: Schema.toCodecJson(Schema.String),
-              read: DateTime.nowAsDate.pipe(Effect.map((date) => date.toDateString())),
-              render: {
-                initial: (date) => `Today's date: ${date}`,
-                changed: (_previous, date) => `Today's date is now: ${date}`,
               },
             }),
           ]),

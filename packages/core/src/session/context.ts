@@ -144,13 +144,15 @@ const layer = Layer.effect(
       return {
         session,
         agent: { ...agent, info: agent.info },
+        // Date and environment vary by day and directory, so they render after the shared
+        // sources to keep the rest of the baseline a stable prompt-cache prefix across sessions.
         instructions: Instructions.combine([
-          loaded.builtins,
           CodeModeInstructions.make(loaded.tools.codeModeCatalog),
           loaded.discovery,
           loaded.skills,
           loaded.references,
           loaded.mcp,
+          loaded.builtins,
           loaded.entries,
         ]),
         tools: loaded.tools,

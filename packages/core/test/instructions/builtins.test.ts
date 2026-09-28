@@ -44,6 +44,8 @@ describe("InstructionBuiltIns", () => {
 
       expect(initialized.text).toBe(
         [
+          `Today's date: ${localDate(timestamp)}`,
+          "",
           "Here is some useful information about the environment you are running in:",
           "<env>",
           `  Current conversation session ID: ${sessionID}`,
@@ -53,8 +55,6 @@ describe("InstructionBuiltIns", () => {
           `  Platform: ${process.platform}`,
           `  Prefer ${temporary} over generic system temporary directories such as /tmp; it is pre-created and approved for external access.`,
           "</env>",
-          "",
-          `Today's date: ${localDate(timestamp)}`,
         ].join("\n"),
       )
     }),
