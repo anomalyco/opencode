@@ -1124,3 +1124,69 @@ async function wait(check: () => boolean) {
     await Bun.sleep(10)
   }
 }
+
+test.each(["asked", "replied", "parallel"] as const)(
+  "preserves permission changes (%s) when an older list response arrives",
+  async (kind) => {
+    const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+    const response = Promise.withResolvers<Response>()
+    const started = Promise.withResolvers<void>()
+    const request = {
+      id: "per_mcp",
+      sessionID: "ses_refresh",
+      action: "local_echo",
+      resources: ["*"],
+      save: ["*"],
+      metadata: {},
+      source: { type: "tool" as const, messageID: "msg_execute", id: "call_outer" },
+    }
+    const api = OpenCode.make({
+      baseUrl: "http://opencode.local",
+      fetch: async () => {
+        started.resolve()
+        return response.promise
+      },
+    })
+    const setup = createRoot((dispose) => ({
+      data: createData({
+        api: () => api,
+        directory: "/project",
+        event: {
+          on: () => () => {},
+          listen(handler) {
+            listeners.add(handler)
+            return () => listeners.delete(handler)
+          },
+        },
+      }),
+      dispose,
+    }))
+    try {
+      const syncing = setup.data.session.permission.sync(request.sessionID)
+      await started.promise
+      const event: OpenCodeEvent =
+        kind !== "replied"
+          ? { id: "evt_ask", created: 1, type: "permission.asked", data: request }
+          : {
+              id: "evt_reply",
+              created: 1,
+              type: "permission.replied",
+              data: { sessionID: request.sessionID, requestID: request.id, reply: "once" },
+            }
+      listeners.forEach((listener) => listener({ name: event.type, details: event }))
+      const second = { ...request, id: "per_second" }
+      if (kind === "parallel") {
+        const next: OpenCodeEvent = { id: "evt_second", created: 2, type: "permission.asked", data: second }
+        listeners.forEach((listener) => listener({ name: next.type, details: next }))
+      }
+      response.resolve(Response.json({ data: kind !== "replied" ? [] : [request] }))
+      await syncing
+      expect(setup.data.session.permission.list(request.sessionID)).toEqual(
+        kind === "replied" ? [] : kind === "parallel" ? [request, second] : [request],
+      )
+    } finally {
+      response.resolve(Response.json({ data: [] }))
+      setup.dispose()
+    }
+  },
+)
