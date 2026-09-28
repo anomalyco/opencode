@@ -39,7 +39,8 @@ describe("Gemini OpenAI-compatible Chat recorded", () => {
         const first = yield* LLMClient.generate(request)
         const calls = first.events.filter(LLMEvent.is.toolCall)
         expect(calls.map((call) => call.input)).toEqual([{ city: "Paris" }, { city: "Tokyo" }])
-        expect(calls[0]?.providerMetadata?.google?.thoughtSignature).toEqual(expect.any(String))
+        const extraContent = calls[0]?.providerMetadata?.google?.extraContent
+        expect(extraContent).toEqual({ google: { thought_signature: expect.any(String) } })
 
         const results = yield* Effect.forEach(calls, (call) => ToolRuntime.dispatch(tools, call))
         const continuation = LLMRequest.update(request, {
@@ -53,9 +54,9 @@ describe("Gemini OpenAI-compatible Chat recorded", () => {
         })
         const prepared = yield* compileRequest(continuation)
         const assistant = prepared.body.messages.find((message) => message.role === "assistant")
-        expect(assistant?.role === "assistant" ? assistant.tool_calls?.[0]?.extra_content : undefined).toEqual({
-          google: { thought_signature: calls[0]?.providerMetadata?.google?.thoughtSignature },
-        })
+        expect(assistant?.role === "assistant" ? assistant.tool_calls?.[0]?.extra_content : undefined).toEqual(
+          extraContent,
+        )
 
         const second = yield* LLMClient.generate(continuation)
         expect(second.events.filter(LLMEvent.is.toolCall)).toHaveLength(0)

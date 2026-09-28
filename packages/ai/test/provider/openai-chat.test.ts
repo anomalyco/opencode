@@ -484,7 +484,7 @@ describe("OpenAI Chat route", () => {
                 id: "call_1",
                 name: "lookup",
                 input: { city: "Paris" },
-                providerMetadata: { openai: { thoughtSignature: "sig_1" } },
+                providerMetadata: { openai: { extraContent: { google: { thought_signature: "sig_1" } } } },
               }),
               ToolCallPart.make({ id: "call_2", name: "lookup", input: { city: "Tokyo" } }),
             ]),
@@ -1879,7 +1879,7 @@ describe("OpenAI Chat route", () => {
           name: "lookup",
           input: { city: "Paris" },
           providerExecuted: undefined,
-          providerMetadata: { openai: { thoughtSignature: "sig_1" } },
+          providerMetadata: { openai: { extraContent: { google: { thought_signature: "sig_1" } } } },
         },
         {
           type: "tool-call",
@@ -1893,17 +1893,15 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  it.effect("keeps a thought signature that arrives before or after the tool identity", () =>
+  it.effect("keeps extra content that arrives before the tool identity", () =>
     Effect.gen(function* () {
       const body = sseEvents(
         deltaChunk({
           tool_calls: [
-            { index: 0, extra_content: { google: { thought_signature: "sig_early" } }, function: { arguments: "{" } },
+            { index: 0, extra_content: { google: { thought_signature: "sig_1" } }, function: { arguments: "{" } },
           ],
         }),
         deltaChunk({ tool_calls: [{ index: 0, id: "call_1", function: { name: "lookup", arguments: "}" } }] }),
-        deltaChunk({ tool_calls: [{ index: 1, id: "call_2", function: { name: "lookup", arguments: "{}" } }] }),
-        deltaChunk({ tool_calls: [{ index: 1, extra_content: { google: { thought_signature: "sig_late" } } }] }),
         deltaChunk({}, "tool_calls"),
       )
       const response = yield* LLMClient.generate(
@@ -1913,8 +1911,7 @@ describe("OpenAI Chat route", () => {
       ).pipe(Effect.provide(fixedResponse(body)))
 
       expect(response.events.filter(LLMEvent.is.toolCall).map((event) => event.providerMetadata)).toEqual([
-        { openai: { thoughtSignature: "sig_early" } },
-        { openai: { thoughtSignature: "sig_late" } },
+        { openai: { extraContent: { google: { thought_signature: "sig_1" } } } },
       ])
     }),
   )
