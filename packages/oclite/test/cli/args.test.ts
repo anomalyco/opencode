@@ -82,7 +82,7 @@ describe("cli args", () => {
   })
 
   test.each([
-    [["mcp", "serve", "--transport", "http", "--port", "5000"], "mcp serve: not implemented yet (phase 6)"],
+    [["mcp", "serve", "--transport", "http", "--port", "5000"], "mcp serve --transport http: set OCLITE_MCP_TOKEN (clients send it as a Bearer token)"],
     [["mcp", "auth", "gh"], 'mcp auth: "gh" is not a configured remote MCP server'],
   ])("stub %j fails with ConfigError", async (argv, message) => {
     const error = failure(await run(argv))

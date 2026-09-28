@@ -1,8 +1,10 @@
 // Sub-agent lifecycle (ARCHITECTURE §13): pending ──admit──► running ──► completed | failed | cancelled.
 // ≤ max_concurrent running children per parent (extras wait pending), a depth limit, background completions
 // queued for the parent's next turn boundary, and every child cancelled when its parent's run ends.
-import { Deferred, Effect, Option } from "effect"
+import { Deferred, Effect, Exit, Option, Scope } from "effect"
 import {
+  type AgentDef,
+  type AskerShape,
   SpawnError,
   type ResolvedConfig,
   type RunHandle,
@@ -13,6 +15,7 @@ import {
   type SubagentInfo,
   type SubagentsShape,
 } from "../contract"
+import { evaluate } from "../forked/permission-rules"
 import { renderOutput } from "../forked/task-contract"
 import { validId } from "../session/store"
 import { id } from "../util/paths"
@@ -35,7 +38,8 @@ interface Entry {
   denied: number
 }
 
-export function make(deps: { start: RuntimeShape["start"]; store: SessionStoreShape; cfg: ResolvedConfig }): Manager {
+/** `ask` is this process's Asker: a `transport: mcp` child's asks (elicitation) are answered by it. */
+export function make(deps: { start: RuntimeShape["start"]; store: SessionStoreShape; cfg: ResolvedConfig; ask: AskerShape["ask"] }): Manager {
   const children = new Map<string, Entry>()
   const finished = new Map<string, SubagentInfo[]>()
   const of = (parent: string) => [...children.values()].filter((entry) => entry.input.parent.session_id === parent)
@@ -48,7 +52,7 @@ export function make(deps: { start: RuntimeShape["start"]; store: SessionStoreSh
       child_id: entry.info.id,
       agent: entry.info.agent,
       state: entry.info.state,
-      transport: "in-process",
+      transport: entry.info.transport,
       background: entry.input.background,
     })
 
@@ -68,7 +72,8 @@ export function make(deps: { start: RuntimeShape["start"]; store: SessionStoreSh
       entry.info = { ...entry.info, state: "running", started_at: Date.now() }
       yield* record(entry)
       const parent = entry.input.parent
-      const started = yield* deps
+      const agent = deps.cfg.agents[entry.input.agent]!
+      const launched: Effect.Effect<RunHandle, { message: string }> = agent.transport === "mcp" ? remote(entry, agent) : deps
         .start(
           {
             session_id: entry.info.id,
@@ -81,7 +86,7 @@ export function make(deps: { start: RuntimeShape["start"]; store: SessionStoreSh
           },
           entry.input.sink,
         )
-        .pipe(Effect.result)
+      const started = yield* launched.pipe(Effect.result)
       if (started._tag === "Failure") return yield* finish(entry, { state: "failed", error: started.failure.message })
       entry.handle = started.success
       yield* started.success.await.pipe(
@@ -92,6 +97,49 @@ export function make(deps: { start: RuntimeShape["start"]; store: SessionStoreSh
         Effect.forkDetach,
       )
     })
+
+  // A child `oclite mcp serve` (ARCHITECTURE §12): spawn{background} then result{wait}, behind a RunHandle so limits,
+  // envelope and cancellation match in-process children. The parent's ruleset travels as `parent_rules` (the child
+  // keeps only its denies and external_directory rules, as in-process), the parent's mode as the child's serve mode
+  // (a client can only tighten it), and every forwarded ask is checked against the parent's ruleset first. Rejected
+  // forwarded asks count as the child's denials (headless exit 3).
+  const remote = (entry: Entry, agent: AgentDef) =>
+    Effect.gen(function* () {
+      const { connectChild } = yield* Effect.promise(() => import("../mcp/child"))
+      const parent = entry.input.parent
+      const scope = yield* Scope.make()
+      const asked = { denied: 0 }
+      const client = yield* connectChild({
+        command: agent.mcp?.command ?? ["oclite", "mcp", "serve", "--permission-mode", deps.cfg.permissionMode],
+        url: agent.mcp?.url, token: process.env.OCLITE_MCP_TOKEN, cwd: parent.cwd,
+        env: { ...(process.env as Record<string, string>), OCLITE_DEPTH: String(parent.depth + 1) },
+        // The child's run already carries its own name first in agent_path (it runs with a parent).
+        onEvent: entry.input.sink,
+        onAsk: (req) =>
+          (req.patterns.some((pattern) => evaluate(req.tool, pattern, parent.ruleset).action === "deny")
+            ? Effect.succeed("reject" as const)
+            : deps.ask({ ...req, agent: `${agent.name}/${req.agent}` })
+          ).pipe(Effect.tap((reply) => Effect.sync(() => void (reply === "reject" && asked.denied++)))),
+      }).pipe(Scope.provide(scope))
+      const id = yield* client.spawn({ agent: agent.name, prompt: entry.input.prompt, background: true, permission_mode: entry.input.permissionMode,
+        model: entry.input.model, parent_rules: parent.ruleset, parent_session_id: parent.session_id })
+        .pipe(Effect.onError(() => Scope.close(scope, Exit.void)))
+      const started_at = Date.now()
+      const tokens = { input: 0, output: 0, estimated: true }
+      const handle: RunHandle = {
+        session_id: entry.info.id,
+        send: (message) => client.send(id, message).pipe(Effect.ignore),
+        cancel: client.cancel(id),
+        status: Effect.succeed({ state: "running", step: 0, started_at, tokens }),
+        await: client.result(id, 86_400_000).pipe(
+          Effect.map((out): RunResult => ({ session_id: entry.info.id, state: out.state, text: out.state === "completed" ? out.text : "", error: out.state === "completed" ? undefined : out.text,
+            turns: 0, usage: tokens, reason: out.state === "completed" ? "stop" : out.state === "cancelled" ? "cancelled" : "error", denied: asked.denied })),
+          Effect.catch((error) => Effect.succeed<RunResult>({ session_id: entry.info.id, state: "failed", text: "", error: error.message, turns: 0, usage: tokens, reason: "error", denied: asked.denied })),
+          Effect.ensuring(Scope.close(scope, Exit.void)),
+        ),
+      }
+      return handle
+    }).pipe(Effect.mapError((error) => new SpawnError({ message: error.message })))
 
   // Starts pending children of `parent` in spawn order while slots are free.
   const admit = (parent: string): Effect.Effect<void> =>
@@ -126,7 +174,7 @@ export function make(deps: { start: RuntimeShape["start"]; store: SessionStoreSh
       const parentAgent = deps.cfg.agents[header?.agent ?? ""]
       const limit = Math.min(parentAgent?.max_depth ?? deps.cfg.subagent.max_depth, deps.cfg.subagent.max_depth)
       if (input.parent.depth + 1 > limit) return yield* fail(`Subagent depth limit reached (${limit})`)
-      if (agent.transport === "mcp") return yield* fail("transport: mcp arrives in phase 6")
+      if (agent.transport === "mcp" && input.task_id !== undefined) return yield* fail("task_id resume is not supported for transport: mcp agents")
       if (input.task_id !== undefined) {
         const existing = children.get(input.task_id)
         if (existing && live(existing)) return yield* fail(`task ${input.task_id} is still ${existing.info.state}`)
@@ -144,7 +192,7 @@ export function make(deps: { start: RuntimeShape["start"]; store: SessionStoreSh
           parent_session_id: input.parent.session_id,
           agent: agent.name,
           description: input.description,
-          transport: "in-process",
+          transport: agent.transport,
           state: "pending",
           step: 0,
           started_at: Date.now(),

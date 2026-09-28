@@ -1,6 +1,6 @@
 import { existsSync } from "fs"
 import path from "path"
-import { Console, Effect, Layer, Option } from "effect"
+import { Console, Effect, Layer, Logger, Option } from "effect"
 import { ConfigMCPV1 } from "@opencode-ai/core/v1/config/mcp"
 import { type AgentDef, AppConfig, ConfigError, Mcp, type McpShape, type ResolvedConfig } from "../contract"
 import { decode } from "../config/agents"
@@ -10,11 +10,6 @@ import { redact, redactArgs, redactText, redactUrl } from "../util/redact"
 import type { CliArgs } from "./args"
 
 type Scope = "project" | "user"
-
-export function notImplemented(what: string, phase: number) {
-  return (_args: CliArgs, _input?: unknown) =>
-    Effect.fail(new ConfigError({ message: `${what}: not implemented yet (phase ${phase})` }))
-}
 
 export function agentsList(args: CliArgs) {
   return Effect.gen(function* () {
@@ -98,6 +93,17 @@ export function mcpList(args: CliArgs, input: { check: boolean } = { check: fals
         .join("\n"),
     )
   })
+}
+
+/** `oclite mcp serve`: stdout is the MCP channel over stdio, so logs go to stderr. */
+export function mcpServe(args: CliArgs, input: { transport: "stdio" | "http"; port: number; host: string; iUnderstandRemoteBypass: boolean }) {
+  return Effect.gen(function* () {
+    const cfg = yield* load(args)
+    const { serve } = yield* Effect.promise(() => import("../mcp/server"))
+    yield* serve(cfg, { transport: input.transport, host: input.host, port: input.port, allowRemoteBypass: input.iUnderstandRemoteBypass })
+    // stdio returns once stdin closed and every run was cancelled (and its layer closed); stdin's handle would keep us alive.
+    process.exit(0)
+  }).pipe(Effect.provideService(Logger.LogToStderr, true))
 }
 
 /** `oclite mcp auth <name>`: the OAuth browser flow; tokens go to the mcp-auth.json shared with opencode. */

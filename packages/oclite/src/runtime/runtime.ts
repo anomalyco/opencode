@@ -4,6 +4,7 @@ import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
 import type { HttpClient } from "effect/unstable/http"
 import {
   AppConfig,
+  Asker,
   ConfigError,
   Hooks,
   LlmGateway,
@@ -12,7 +13,6 @@ import {
   Runtime,
   SessionStore,
   ToolRegistry,
-  type Asker,
   type ResolvedConfig,
   type RunResult,
   type RunState,
@@ -47,7 +47,7 @@ export function appLayer(cfg: ResolvedConfig, asker: Layer.Layer<Asker>, http?: 
       const config = Layer.succeed(AppConfig, cfg)
       const base = Layer.mergeAll(config, store.layer, hooks.layer.pipe(Layer.provide(config)), mcp.layer, http ? client.layerWith(http) : client.layer)
       const services = Layer.provideMerge(
-        Layer.provideMerge(registry.layer, permission.layer.pipe(Layer.provide(asker))),
+        Layer.provideMerge(registry.layer, permission.layer.pipe(Layer.provideMerge(asker))),
         base.pipe(Layer.provide(config)),
       )
       return Layer.provideMerge(layer(options), services)
@@ -66,9 +66,10 @@ export function layer(options: RuntimeOptions = {}) {
       const permission = yield* Permission
       const hooks = yield* Hooks
       const mcp = yield* Mcp
+      const asker = yield* Asker
       const scale = Number(process.env.OCLITE_RETRY_SCALE ?? 1)
       // Children start through this runtime's own `start` (declared below; only called after the layer is built).
-      const subagents = make({ start: (input, sink) => start(input, sink), store, cfg })
+      const subagents = make({ start: (input, sink) => start(input, sink), store, cfg, ask: asker.ask })
       const deps: LoopDeps = {
         gateway,
         store,
@@ -86,7 +87,8 @@ export function layer(options: RuntimeOptions = {}) {
           const handle = yield* gateway.resolve(agent.model ?? input.model ?? cfg.model)
           const profile = select({ explicit: input.profile ?? cfg.profile, handle })
           const cwd = input.cwd ?? cfg.cwd
-          const depth = input.parent ? input.parent.depth + 1 : 0
+          // A `transport: mcp` child process starts its top-level runs at the depth its parent gave it.
+          const depth = input.parent ? input.parent.depth + 1 : Number(process.env.OCLITE_DEPTH ?? 0)
           if (input.session_id !== undefined && !validId(input.session_id))
             return yield* new ConfigError({ message: `invalid session id "${input.session_id}"` })
           const previous = input.session_id ? yield* store.read(input.session_id) : []

@@ -3,7 +3,7 @@ import { Argument, Command, Flag } from "effect/unstable/cli"
 import type { ConfigError, OutputFormat, PermissionMode, ProfileName, Thinking } from "../contract"
 
 // The full SPEC §1 surface. Handlers load their module lazily so `--help` and `agents list` stay off the heavy
-// import graph. Commands whose runtime lands in a later phase point at `notImplemented` until then.
+// import graph.
 
 export interface CliArgs {
   print?: string
@@ -131,7 +131,7 @@ const mcp = Command.make("mcp").pipe(
         host: Flag.string("host").pipe(Flag.withDefault("127.0.0.1")),
         iUnderstandRemoteBypass: Flag.boolean("i-understand-remote-bypass"),
       },
-      handler((module) => module.notImplemented("mcp serve", 6)),
+      handler((module) => module.mcpServe),
     ).pipe(Command.withDescription("Expose oclite agents as an MCP server")),
     Command.make(
       "add",

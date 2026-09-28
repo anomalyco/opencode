@@ -27,16 +27,16 @@ describe("oclite commands (subprocess)", () => {
     )
   })
 
-  test("usage errors and unbuilt commands exit 2", async () => {
+  test("usage and config errors exit 2", async () => {
     await using env = await setup()
     const bogus = await env.run(["--bogus"])
     expect(bogus.code).toBe(2)
     const print = await env.run(["-p", "hello", "--agent", "nope"])
     expect(print.code).toBe(2)
     expect(print.stderr).toContain('unknown agent "nope"')
-    const serve = await env.run(["mcp", "serve"])
+    const serve = await env.run(["mcp", "serve", "--transport", "http"])
     expect(serve.code).toBe(2)
-    expect(serve.stderr).toContain("not implemented yet (phase 6)")
+    expect(serve.stderr).toContain("OCLITE_MCP_TOKEN")
   })
 
   test("agents list / show", async () => {
