@@ -378,7 +378,7 @@ export const getStatsModelComparisonData = (
     { provider: secondProvider, model: secondModel },
   ])
 
-function buildStatsHomeData(
+export function buildStatsHomeData(
   modelRows: ModelStatMetric[],
   countryRows: CountryTotalRow[],
   retentionRows: RetentionMetricRow[],
@@ -416,7 +416,9 @@ function buildStatsHomeData(
       ),
     ),
     leaderboard: createUsageProductRecord((product) =>
-      createRangeRecord((_range) => buildLeaderboard(normalized, product, getWindow("1W", earliest, latest))),
+      createRangeRecord((range) =>
+        buildLeaderboard(normalized, product, getWindow(range === "1D" ? "1D" : "1W", earliest, latest)),
+      ),
     ),
     market: createRangeRecord((range) => buildMarketShare(normalized, "Go", range, getWindow(range, earliest, latest))),
     tokenCost: createTokenProductRecord((product) =>
