@@ -1030,7 +1030,7 @@ function ProviderConnection(props: {
         </p>
         <div
           data-component="first-provider-model-scroll"
-          class="settings-panel settings-models min-h-0 flex-1 overflow-y-auto pb-4"
+          class="settings-panel settings-panel--scroll settings-models min-h-0 flex-1 overflow-y-auto pb-4"
         >
           <div data-component="available-models-heading" class="flex items-center gap-1.5">
             <span class="text-[13px] font-[530] leading-4 text-v2-text-text-base">

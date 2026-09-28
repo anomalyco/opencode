@@ -107,11 +107,11 @@ export const SettingsModels: Component<{
     if (managed()?.providers.some((item) => item.id === provider)) setStore("collapsed", CONSOLE_GROUP_KEY, false)
     setStore("collapsed", provider, false)
     requestAnimationFrame(() => {
-      const panel = section.closest<HTMLElement>(".settings-panel")
-      const header = panel?.querySelector<HTMLElement>(".settings-tab-header")
-      if (panel && header) {
-        panel.scrollTo({
-          top: panel.scrollTop + section.getBoundingClientRect().top - header.getBoundingClientRect().bottom - 24,
+      const scroller = section.closest<HTMLElement>('[data-slot="settings-panel-scroll"] > [data-scrollable]')
+      const header = scroller?.querySelector<HTMLElement>(".settings-tab-header")
+      if (scroller && header) {
+        scroller.scrollTo({
+          top: scroller.scrollTop + section.getBoundingClientRect().top - header.getBoundingClientRect().bottom - 24,
         })
       } else {
         section.scrollIntoView({ block: "start" })

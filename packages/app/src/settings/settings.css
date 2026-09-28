@@ -359,10 +359,11 @@
  * hover, and must not also scroll here — otherwise the thumb tracks an inner
  * viewport while the panel scrolls behind it.
  *
- * The two model dialogs have no ScrollView and rely on this element being the
+ * The model dialogs have no ScrollView and rely on this element being the
  * scroll container: Manage Models to drive its scroll-timeline top fade in
- * index.css, and the model selector to scroll the active row into view. They
- * keep the base class, so those selectors still match.
+ * index.css, the model selector to scroll the active row into view, and the
+ * connect-provider model list to scroll with its scrollbar hidden. They keep
+ * the base class, so those selectors still match.
  */
 .settings-panel--scroll {
   overflow-y: auto;
