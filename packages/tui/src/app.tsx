@@ -650,6 +650,9 @@ function App() {
           prompt: startupPrompt,
         })
       }
+      if (args.sessionID === "") {
+        dialog.replace(() => <DialogSessionList />)
+      }
     })
   })
 
