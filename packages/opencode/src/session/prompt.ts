@@ -645,12 +645,24 @@ const layer = Layer.effect(
 
       const model = input.model ?? ag.model ?? (yield* currentModel(input.sessionID))
       const same = ag.model && model.providerID === ag.model.providerID && model.modelID === ag.model.modelID
+      const explicit = input.variant && input.variant !== "default" ? input.variant : undefined
       const full =
-        !input.variant && ag.variant && same
+        explicit || (!input.variant && ag.variant && same)
           ? yield* provider
               .getModel(model.providerID, model.modelID)
               .pipe(Effect.catchIf(Provider.ModelNotFoundError.isInstance, () => Effect.succeed(undefined)))
           : undefined
+      // An unknown variant would be dropped when the request is built while still being recorded on the
+      // session, so reject it before anything is persisted.
+      if (explicit && full && !full.variants?.[explicit]) {
+        const available = Object.keys(full.variants ?? {})
+        const hint = available.length ? ` Available variants: ${available.join(", ")}` : " This model has no variants."
+        const error = new NamedError.Unknown({
+          message: `Variant not found: "${explicit}" for ${model.providerID}/${model.modelID}.${hint}`,
+        })
+        yield* events.publish(Session.Event.Error, { sessionID: input.sessionID, error: error.toObject() })
+        throw error
+      }
       const variant = input.variant ?? (ag.variant && full?.variants?.[ag.variant] ? ag.variant : undefined)
 
       const info: SessionV1.User = {
@@ -1408,17 +1420,21 @@ const layer = Layer.effect(
       }
       template = template.trim()
 
-      const taskModel = yield* Effect.gen(function* () {
+      const callerModel = Effect.fnUntraced(function* () {
+        if (input.model) return Provider.parseModel(input.model)
+        return yield* currentModel(input.sessionID)
+      })
+      const pinnedModel = yield* Effect.gen(function* () {
         if (cmd.model) return Provider.parseModel(cmd.model)
         if (cmd.agent) {
           const cmdAgent = yield* agents.get(cmd.agent)
           if (cmdAgent?.model) return cmdAgent.model
         }
-        if (input.model) return Provider.parseModel(input.model)
-        return yield* currentModel(input.sessionID)
+        return undefined
       })
+      const taskModel = pinnedModel ?? (yield* callerModel())
 
-      yield* getModel(taskModel.providerID, taskModel.modelID, input.sessionID)
+      const resolvedTaskModel = yield* getModel(taskModel.providerID, taskModel.modelID, input.sessionID)
 
       const agent = agentName ? yield* agents.get(agentName) : yield* agents.defaultInfo()
       if (!agent) {
@@ -1451,11 +1467,16 @@ const layer = Layer.effect(
         : [...uniqueTemplateParts, ...(input.parts ?? [])]
 
       const userAgent = isSubtask ? (input.agent ?? (yield* agents.defaultInfo()).name) : agent.name
-      const userModel = isSubtask
-        ? input.model
-          ? Provider.parseModel(input.model)
-          : yield* currentModel(input.sessionID)
-        : taskModel
+      const userModel = isSubtask ? yield* callerModel() : taskModel
+      // The caller picked its variant for its own model. When the command pins a different model that does
+      // not offer that variant, run it on that model's default instead of failing the command.
+      const inherited = yield* Effect.gen(function* () {
+        if (isSubtask || !pinnedModel || !input.variant || input.variant === "default") return false
+        if (resolvedTaskModel.variants?.[input.variant]) return false
+        const caller = yield* callerModel()
+        return caller.providerID !== pinnedModel.providerID || caller.modelID !== pinnedModel.modelID
+      })
+      const variant = inherited ? undefined : input.variant
 
       yield* plugin.trigger(
         "command.execute.before",
@@ -1469,7 +1490,7 @@ const layer = Layer.effect(
         model: userModel,
         agent: userAgent,
         parts,
-        variant: input.variant,
+        variant,
       })
       yield* events.publish(Command.Event.Executed, {
         name: input.command,

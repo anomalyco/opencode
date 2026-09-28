@@ -2381,6 +2381,189 @@ noLLMServer.instance(
   },
 )
 
+// Explicit variants
+
+function variantCfg(url: string) {
+  const base = providerCfg(url)
+  return {
+    ...base,
+    provider: {
+      ...base.provider,
+      test: {
+        ...base.provider.test,
+        models: {
+          "test-model": {
+            ...base.provider.test.models["test-model"],
+            variants: { high: { reasoningEffort: "high" }, xhigh: { reasoningEffort: "xhigh" } },
+          },
+          "plain-model": {
+            ...base.provider.test.models["test-model"],
+            id: "plain-model",
+            name: "Plain Model",
+          },
+        },
+      },
+    },
+    command: {
+      pinned: { template: "check the build", model: "test/plain-model" },
+      unpinned: { template: "check the build" },
+    },
+  }
+}
+
+const expectUnknownVariant = (exit: Exit.Exit<unknown, unknown>, variant: string) => {
+  expect(Exit.isFailure(exit)).toBe(true)
+  if (!Exit.isFailure(exit)) return ""
+  const err = Cause.squash(exit.cause)
+  expect(NamedError.Unknown.isInstance(err)).toBe(true)
+  if (!NamedError.Unknown.isInstance(err)) return ""
+  expect(err.data.message).toContain(`Variant not found: "${variant}"`)
+  return err.data.message
+}
+
+it.instance("rejects an unknown explicit variant before recording or sending it", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(variantCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+
+    const exit = yield* prompt
+      .prompt({
+        sessionID: chat.id,
+        agent: "build",
+        model: ref,
+        variant: "totally-invalid-xyz",
+        parts: [{ type: "text", text: "hello" }],
+      })
+      .pipe(Effect.exit)
+
+    const message = expectUnknownVariant(exit, "totally-invalid-xyz")
+    expect(message).toContain("test/test-model")
+    expect(message).toContain("high, xhigh")
+    expect((yield* sessions.get(chat.id)).model).toBeUndefined()
+    expect(yield* sessions.messages({ sessionID: chat.id })).toHaveLength(0)
+    expect(yield* llm.calls).toBe(0)
+  }),
+)
+
+it.instance("applies a declared explicit variant to the provider request", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(variantCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    yield* llm.text("done")
+
+    const result = yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      model: ref,
+      variant: "high",
+      parts: [{ type: "text", text: "hello" }],
+    })
+
+    expect(result.info.role).toBe("assistant")
+    expect((yield* sessions.get(chat.id)).model).toEqual({
+      id: ref.modelID,
+      providerID: ref.providerID,
+      variant: "high",
+    })
+    const inputs = yield* llm.inputs
+    expect(inputs).toHaveLength(1)
+    expect(inputs[0]?.reasoning_effort).toBe("high")
+  }),
+)
+
+noLLMServer.instance(
+  "accepts the default variant sentinel and rejects variants on a model without any",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+      const plain = { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("plain-model") }
+
+      const accepted = yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        model: plain,
+        variant: "default",
+        noReply: true,
+        parts: [{ type: "text", text: "hello" }],
+      })
+      if (accepted.info.role !== "user") throw new Error("expected user message")
+      expect(accepted.info.model.variant).toBe("default")
+
+      const exit = yield* prompt
+        .prompt({
+          sessionID: chat.id,
+          agent: "build",
+          model: plain,
+          variant: "high",
+          noReply: true,
+          parts: [{ type: "text", text: "hello again" }],
+        })
+        .pipe(Effect.exit)
+      expect(expectUnknownVariant(exit, "high")).toContain("has no variants")
+      expect((yield* sessions.get(chat.id)).model?.variant).toBe("default")
+      expect(yield* sessions.messages({ sessionID: chat.id })).toHaveLength(1)
+    }),
+  { config: variantCfg("http://localhost:1/v1") },
+)
+
+it.instance("command with its own model does not inherit the caller's variant", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(variantCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    yield* llm.text("done")
+
+    yield* prompt.command({
+      sessionID: chat.id,
+      command: "pinned",
+      arguments: "",
+      model: "test/test-model",
+      variant: "high",
+    })
+
+    const user = (yield* sessions.messages({ sessionID: chat.id })).find((msg) => msg.info.role === "user")
+    if (user?.info.role !== "user") throw new Error("expected user message")
+    expect(user.info.model).toEqual({
+      providerID: ProviderV2.ID.make("test"),
+      modelID: ModelV2.ID.make("plain-model"),
+      variant: undefined,
+    })
+    expect((yield* sessions.get(chat.id)).model?.variant).toBe("default")
+    expect((yield* llm.inputs)[0]?.reasoning_effort).toBeUndefined()
+  }),
+)
+
+it.instance("command on the caller's model rejects an unknown variant", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(variantCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({ title: "Pinned" })
+    yield* llm.text("done")
+
+    const exit = yield* prompt
+      .command({
+        sessionID: chat.id,
+        command: "unpinned",
+        arguments: "",
+        model: "test/test-model",
+        variant: "totally-invalid-xyz",
+      })
+      .pipe(Effect.exit)
+
+    expectUnknownVariant(exit, "totally-invalid-xyz")
+    expect(yield* sessions.messages({ sessionID: chat.id })).toHaveLength(0)
+    expect(yield* llm.calls).toBe(0)
+  }),
+)
+
 // Agent / command resolution errors
 
 noLLMServer.instance(

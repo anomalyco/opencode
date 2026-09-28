@@ -861,6 +861,61 @@ describe("tool.task", () => {
     }),
   )
 
+  background.instance("background task result follows the parent's current model variant", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+      const release = defer<void>()
+      const injected = defer<SessionPrompt.PromptInput>()
+      const promptOps: TaskPromptOps = {
+        ...stubOps(),
+        prompt: (input) => {
+          if (input.sessionID === chat.id) {
+            injected.resolve(input)
+            return Effect.succeed(reply(input, "done"))
+          }
+          return Effect.promise(() => release.promise).pipe(Effect.as(reply(input, "background done")))
+        },
+      }
+
+      const result = yield* def.execute(
+        {
+          description: "inspect bug",
+          prompt: "look into the cache key path",
+          subagent_type: "general",
+          background: true,
+        },
+        {
+          sessionID: chat.id,
+          messageID: assistant.id,
+          agent: "build",
+          abort: new AbortController().signal,
+          extra: { promptOps },
+          messages: [],
+          metadata: () => Effect.void,
+          ask: () => Effect.void,
+        },
+      )
+
+      // The user switches the parent session to another model while the task runs.
+      yield* sessions.setAgentModel({
+        sessionID: chat.id,
+        agent: "build",
+        model: { id: ModelV2.ID.make("other-model"), providerID: ref.providerID, variant: "default" },
+        time: Date.now(),
+      })
+      release.resolve()
+
+      const waited = yield* jobs.wait({ id: result.metadata.sessionId, timeout: 1_000 })
+      expect(waited.info?.status).toBe("completed")
+      const notification = yield* Effect.promise(() => injected.promise)
+      expect(notification.variant).toBe("default")
+    }),
+  )
+
   background.instance("background tasks complete through the background job service", () =>
     Effect.gen(function* () {
       const jobs = yield* BackgroundJob.Service
