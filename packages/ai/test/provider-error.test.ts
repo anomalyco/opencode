@@ -355,6 +355,32 @@ describe("provider error rawBody classification", () => {
     }
   })
 
+  test("classifies Google invalid API keys as authentication failures", () => {
+    const rawBody = JSON.stringify({
+      error: {
+        code: 400,
+        message: "API key not valid. Please pass a valid API key.",
+        status: "INVALID_ARGUMENT",
+        details: [
+          {
+            "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+            reason: "API_KEY_INVALID",
+            domain: "googleapis.com",
+          },
+          {
+            "@type": "type.googleapis.com/google.rpc.LocalizedMessage",
+            locale: "en-US",
+            message: "API key not valid. Please pass a valid API key.",
+          },
+        ],
+      },
+    })
+    expect(
+      classifyProviderFailure({ message: "API key not valid. Please pass a valid API key.", status: 400, rawBody })
+        ._tag,
+    ).toBe("Authentication")
+  })
+
   test("classifies overflow signals buried in the raw payload when the summary is vague", () => {
     const reason = classifyProviderFailure({
       message: "Request failed",
