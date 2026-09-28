@@ -5,7 +5,8 @@ export const dict = {
   ...en,
   "go.promo.spaceBunny": "Space Bunny Free, un nuevo modelo anónimo, está disponible por tiempo limitado",
   "go.referral.ended.label": "Advertencia",
-  "go.referral.ended": "El programa de referidos ha terminado. Los enlaces de referido ya no otorgan crédito ni a ti ni a quien los compartió.",
+  "go.referral.ended":
+    "El programa de referidos ha terminado. Los enlaces de referido ya no otorgan crédito ni a ti ni a quien los compartió.",
   "go.graph.bonus": "{{count}}× de uso",
   "nav.github": "GitHub",
   "nav.docs": "Documentación",

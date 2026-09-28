@@ -5,7 +5,8 @@ export const dict = {
   ...en,
   "go.promo.spaceBunny": "Space Bunny Free, un nouveau modèle anonyme, est disponible pour une durée limitée",
   "go.referral.ended.label": "Avertissement",
-  "go.referral.ended": "Le programme de parrainage est terminé. Les liens de parrainage ne donnent plus de crédit, ni à vous ni à la personne qui les a partagés.",
+  "go.referral.ended":
+    "Le programme de parrainage est terminé. Les liens de parrainage ne donnent plus de crédit, ni à vous ni à la personne qui les a partagés.",
   "go.graph.bonus": "{{count}}× d’utilisation",
   "app.meta.description": "OpenCode - L'agent de code open source.",
   "nav.github": "GitHub",
