@@ -8,6 +8,7 @@ import { scoped } from "../native/logging"
 import { nativeT } from "../native/translations"
 import { assertAttachmentBudget, createPickedFileAuthorizations, readAttachment } from "./attachment-picker"
 import { resolveExternalURL, resolveLocalFilePath } from "./external-url"
+import { isPowerShellApp, openPowerShellWindow } from "./powershell"
 
 export type Interface = ReturnType<typeof make>
 
@@ -76,6 +77,10 @@ function make(fs: FileSystem.FileSystem, path: Path.Path) {
     }),
     openPath: Effect.fn("DesktopFiles.openPath")(function* (target: string, application?: string) {
       if (!application) return yield* Effect.promise(() => shell.openPath(target))
+      if (process.platform === "win32" && isPowerShellApp(application)) {
+        yield* Effect.tryPromise(() => openPowerShellWindow(application, target))
+        return
+      }
       yield* Effect.tryPromise(() =>
         new Promise<void>((resolve, reject) => {
           const command =
