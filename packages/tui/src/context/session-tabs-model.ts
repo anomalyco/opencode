@@ -59,7 +59,7 @@ export type ClosedSessionTab = {
   index: number
 }
 
-const CLOSED_SESSION_TAB_LIMIT = 10
+const CLOSED_SESSION_TAB_LIMIT = 25
 
 export function recordClosedSessionTab(
   stack: readonly ClosedSessionTab[],

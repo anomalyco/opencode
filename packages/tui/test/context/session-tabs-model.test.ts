@@ -234,12 +234,12 @@ describe("session tabs", () => {
     const reopened = reopenSessionTab(twice, [{ sessionID: "b" }])
     expect(reopened.tabs).toEqual([{ sessionID: "b" }, { sessionID: "a" }])
 
-    const overflow = Array.from({ length: 12 }, (_, index) => ({ sessionID: String(index) })).reduce(
+    const overflow = Array.from({ length: 27 }, (_, index) => ({ sessionID: String(index) })).reduce(
       (stack, tab, index) => recordClosedSessionTab(stack, tab, index),
       twice,
     )
-    expect(overflow).toHaveLength(10)
-    expect(overflow.at(-1)?.tab.sessionID).toBe("11")
+    expect(overflow).toHaveLength(25)
+    expect(overflow.at(-1)?.tab.sessionID).toBe("26")
     expect(overflow[0]?.tab.sessionID).toBe("2")
   })
 

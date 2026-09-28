@@ -236,6 +236,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
         await app.waitForFrame((frame) => frame.includes("Recently closed tabs"))
         expect(app.captureCharFrame()).not.toContain("New tab")
         const menu = app.captureCharFrame().split("\n")
+        expect(menu.some((line) => line.trim() === "New session")).toBe(false)
         const earlier = menu.findIndex((line) => line.includes("Earlier session"))
         expect(earlier).toBeGreaterThan(menu.findIndex((line) => line.includes("Most recently closed")))
         await app.mockMouse.click(menu[earlier]!.indexOf("Earlier session"), earlier)
@@ -246,6 +247,14 @@ for (const orientation of ["horizontal", "vertical"] as const) {
           { sessionID: "closed-old", title: "Earlier session" },
         ])
       }
+      app.renderer.resize(60, 20)
+      setClosed(Array.from({ length: 11 }, (_, index) => ({ sessionID: `closed-${index}`, title: `History ${index + 1}` })))
+      await app.renderOnce()
+      const historyRows = app.captureCharFrame().split("\n")
+      const newRow = historyRows.findIndex((line) => line.includes("+ New session"))
+      await app.mockMouse.click(historyRows[newRow]!.indexOf("+ New session") + 2, newRow, MouseButton.RIGHT)
+      await app.waitForFrame((frame) => frame.includes("History 10"))
+      expect(app.captureCharFrame()).not.toContain("History 11")
     } finally {
       app.renderer.destroy()
     }

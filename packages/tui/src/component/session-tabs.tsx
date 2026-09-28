@@ -385,9 +385,9 @@ function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsCo
   const actions = createMemo<Array<{ title: string; run?: () => void }>>(() => {
     const sessionID = props.state.sessionID
     const title = props.state.title
-    const closed = props.tabs.recentlyClosed?.() ?? []
+    const closed = (props.tabs.recentlyClosed?.() ?? []).slice(0, 10)
     return [
-      ...(props.tabs.add ? [{ title: NEW_SESSION_TAB_TITLE, run: () => props.tabs.add?.() }] : []),
+      ...(sessionID && props.tabs.add ? [{ title: NEW_SESSION_TAB_TITLE, run: () => props.tabs.add?.() }] : []),
       ...(sessionID
         ? [
             {
