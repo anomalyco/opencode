@@ -327,7 +327,7 @@ Recent work
     ])
   })
 
-  test("drops provider-native continuation metadata from failed assistant turns", () => {
+  test("keeps reasoning provider state and drops tool continuation metadata from failed assistant turns", () => {
     const messages = toLLMMessages(
       [
         SessionMessage.Assistant.make({
@@ -369,8 +369,15 @@ Recent work
       model,
     )
 
+    // The reasoning keeps its provider metadata (Anthropic requires the signed thinking
+    // block to stay ahead of the turn's tool_use), while tool continuation metadata
+    // from the step that never completed is still dropped.
     expect(messages[0]?.content).toEqual([
-      { type: "reasoning", text: "Partial thought", providerMetadata: undefined },
+      {
+        type: "reasoning",
+        text: "Partial thought",
+        providerMetadata: { openai: { itemId: "rs_failed", reasoningEncryptedContent: null } },
+      },
       {
         type: "tool-call",
         id: "hosted-failed",
@@ -396,6 +403,59 @@ Recent work
         metadata: undefined,
         providerMetadata: undefined,
       },
+    ])
+  })
+
+  test("replays failed assistant turns with thinking state intact ahead of tool calls", () => {
+    const messages = toLLMMessages(
+      [
+        SessionMessage.Assistant.make({
+          id: id("assistant-failed-thinking"),
+          type: "assistant",
+          agent: "build",
+          model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
+          content: [
+            SessionMessage.AssistantText.make({ type: "text", id: "text-failed", text: "Partial answer" }),
+            SessionMessage.AssistantReasoning.make({
+              type: "reasoning",
+              id: "reasoning-failed-thinking",
+              text: "Signed thought",
+              providerMetadata: { anthropic: { signature: "sig_failed" } },
+            }),
+            SessionMessage.AssistantTool.make({
+              type: "tool",
+              id: "local-failed",
+              name: "read",
+              state: SessionMessage.ToolStateCompleted.make({
+                status: "completed",
+                input: { path: "README.md" },
+                content: [{ type: "text", text: "Hello" }],
+                structured: {},
+              }),
+              time: { created, completed: created },
+            }),
+          ],
+          finish: "error",
+          error: { type: "unknown", message: "Provider turn interrupted" },
+          time: { created, completed: created },
+        }),
+      ],
+      model,
+    )
+
+    // Anthropic requires a tool_use block to be preceded by its thinking block, so an
+    // errored turn must keep its signed thinking state; replaying the turn's tool call
+    // without it would produce an orphaned tool_use and the provider rejects the
+    // request with a 400.
+    expect(messages.map((message) => message.role)).toEqual(["assistant", "tool"])
+    expect(messages[0]?.content).toEqual([
+      { type: "text", text: "Partial answer" },
+      {
+        type: "reasoning",
+        text: "Signed thought",
+        providerMetadata: { anthropic: { signature: "sig_failed" } },
+      },
+      { type: "tool-call", id: "local-failed", name: "read", input: { path: "README.md" } },
     ])
   })
 
