@@ -999,6 +999,21 @@ describe("ShellTool", () => {
               const own = yield* Fiber.join(first)
               expect(own.status).toBe("completed")
               expect(own.content?.[0]).toEqual({ type: "text", text: `first:${tmp.path}` })
+              const locations = yield* LocationServiceMap.Service
+              const location = Location.Ref.make({ directory: AbsolutePath.make(tmp.path) })
+              yield* locations.invalidate(location)
+              yield* Effect.gen(function* () {
+                const plugins = yield* Plugin.Service
+                yield* plugins.awaitActivation
+                const reloaded = yield* Tool.Service
+                for (const [id, identity] of [[sessionID, "first"], [second.id, "second"]] as const) {
+                  const result = yield* executeTool(reloaded, {
+                    ...call({ command }, `reloaded-${identity}`), sessionID: id,
+                  })
+                  expect(result.status).toBe("completed")
+                  expect(result.content?.[0]).toEqual({ type: "text", text: `${identity}:${tmp.path}` })
+                }
+              }).pipe(Effect.provide(locations.get(location)))
             }),
           )
         },
