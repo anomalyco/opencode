@@ -282,9 +282,8 @@ function registerSecrets(cfg: Info) {
       return
     }
     argSecrets(server.command).forEach(registerSecret)
-    Object.entries(server.environment ?? {})
-      .filter((entry) => /key|token|secret|password|auth|credential/i.test(entry[0]))
-      .forEach((entry) => registerSecret(entry[1]))
+    // Every value, not only secret-named keys: env is how stdio servers get credentials (registerSecret skips < 6 chars).
+    Object.values(server.environment ?? {}).forEach(registerSecret)
   })
 }
 

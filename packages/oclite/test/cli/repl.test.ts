@@ -12,7 +12,7 @@ describe("oclite REPL (scripted stdin)", () => {
     expect(result.stdout).toContain("hello there")
     expect(result.stdout).toMatch(/cost: ses_\w+ · steps 1 · in \d+ \/ out \d+ tok/)
     expect(result.stdout).toContain("/compact")
-    expect(result.stdout).toContain("phase 4")
+    expect(result.stdout).toContain("No MCP servers configured.")
     expect(result.stdout).toContain("unknown command /bogus")
     expect(env.server.chats()).toHaveLength(1)
   })

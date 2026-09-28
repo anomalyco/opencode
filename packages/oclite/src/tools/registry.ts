@@ -172,6 +172,8 @@ export function outcome(result: ToolDispatchResult) {
 async function describe(resolve: Describe | undefined, profile: Profile, item: BuiltinTool) {
   const custom = resolve?.(profile, item.name)
   if (custom !== undefined) return custom
+  // MCP descriptions are `[server] …` from mcp/tools.ts, cut to the profile limit.
+  if (item.name.startsWith("mcp__")) return item.tool.description.slice(0, profile.descriptionMaxChars)
   if (item.name !== "bash") return item.tool.description
   // Lazy: ShellPrompt pulls core/global. Same limits and default timeout as tools/bash.ts.
   const { ShellPrompt } = await import("opencode/tool/shell/prompt")
@@ -205,13 +207,19 @@ function notice(ctx: RunToolContext, message: string) {
 
 // [cli-engineer, Phase 3 integration] local-min: per-parameter descriptions cost ~220 tok over its 4 tools and
 // pushed the real first request to 739 > 600 tok; names, types and `required` stay. Owner (tools/perf) to review.
+// [mcp-engineer, Phase 4] local profiles also drop `additionalProperties: false` (~7 tok per tool), which pushed
+// local + tool_search past 1200. Built-ins still reject unknown keys in the decode below. MCP tools don't decode
+// locally (Tool.make jsonSchema → Schema.Unknown), so unknown keys are the server's to reject; their permission
+// pattern is "*", so this widens nothing.
 function terse<S extends Record<string, unknown>>(profile: Profile, schema: S): S {
-  if (profile.name !== "local-min" || !isRecord(schema.properties)) return schema
+  if (profile.name === "default" || !isRecord(schema.properties)) return schema
+  const open = Object.fromEntries(Object.entries(schema).filter((entry) => !(entry[0] === "additionalProperties" && entry[1] === false))) as S
+  if (profile.name !== "local-min") return open
   const properties = Object.entries(schema.properties).map(([key, value]) => [
     key,
     isRecord(value) ? Object.fromEntries(Object.entries(value).filter((entry) => entry[0] !== "description")) : value,
   ])
-  return { ...schema, properties: Object.fromEntries(properties) }
+  return { ...open, properties: Object.fromEntries(properties) }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

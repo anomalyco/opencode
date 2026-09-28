@@ -1,8 +1,8 @@
 import { existsSync } from "fs"
 import path from "path"
-import { Console, Effect, Option } from "effect"
+import { Console, Effect, Layer, Option } from "effect"
 import { ConfigMCPV1 } from "@opencode-ai/core/v1/config/mcp"
-import { type AgentDef, ConfigError } from "../contract"
+import { type AgentDef, AppConfig, ConfigError, Mcp, type McpShape, type ResolvedConfig } from "../contract"
 import { decode } from "../config/agents"
 import { load, parseJson } from "../config/config"
 import { configDir, dataDir, projectRoot } from "../util/paths"
@@ -76,21 +76,49 @@ function describeAgent(agent: AgentDef) {
     .join("\n")
 }
 
-export function mcpList(args: CliArgs) {
+/** `--check` connects to every server (in parallel, per-server timeout) and adds its live status. */
+export function mcpList(args: CliArgs, input: { check: boolean } = { check: false }) {
   return Effect.gen(function* () {
     const cfg = yield* load(args)
     const names = Object.keys(cfg.mcp).sort()
-    if (args.outputFormat !== "text") return yield* Console.log(JSON.stringify(redact(cfg.mcp)))
+    const live = input.check && names.length ? yield* withMcp(cfg, (mcp) => mcp.connectAll(() => Effect.void).pipe(Effect.andThen(mcp.status()))) : []
+    const status = (name: string) => live.find((item) => item.name === name)
+    if (args.outputFormat !== "text")
+      return yield* Console.log(JSON.stringify(redact(input.check ? Object.fromEntries(names.map((name) => [name, { ...cfg.mcp[name], live: status(name) }])) : cfg.mcp)))
     if (!names.length) return yield* Console.log("No MCP servers configured.")
+    const { statusText } = yield* Effect.promise(() => import("../mcp/tools"))
     yield* Console.log(
       names
         .map((name) => {
           const server = cfg.mcp[name]
           const target = server.type === "local" ? redactArgs(server.command).join(" ") : redactUrl(server.url)
-          return redactText(`${name}: ${target} (${server.type})${server.enabled === false ? " [disabled]" : ""}`)
+          const found = status(name)
+          return redactText(`${name}: ${target} (${server.type})${server.enabled === false ? " [disabled]" : ""}${found ? ` · ${statusText(found).slice(name.length + 2)}` : ""}`)
         })
         .join("\n"),
     )
+  })
+}
+
+/** `oclite mcp auth <name>`: the OAuth browser flow; tokens go to the mcp-auth.json shared with opencode. */
+export function mcpAuth(args: CliArgs, input: { name: string }) {
+  return Effect.gen(function* () {
+    const cfg = yield* load(args)
+    const status = yield* withMcp(cfg, (mcp) =>
+      mcp.authenticate(input.name).pipe(Effect.mapError((error) => new ConfigError({ message: `mcp auth: ${error.message}` }))),
+    )
+    const { statusText } = yield* Effect.promise(() => import("../mcp/tools"))
+    yield* Console.log(redactText(statusText(status)))
+  })
+}
+
+function withMcp<A>(cfg: ResolvedConfig, body: (mcp: McpShape) => Effect.Effect<A, ConfigError>) {
+  return Effect.gen(function* () {
+    const client = yield* Effect.promise(() => import("../mcp/client"))
+    return yield* Effect.gen(function* () {
+      const mcp = yield* Mcp
+      return yield* body(mcp)
+    }).pipe(Effect.provide(client.layer.pipe(Layer.provide(Layer.succeed(AppConfig, cfg)))))
   })
 }
 

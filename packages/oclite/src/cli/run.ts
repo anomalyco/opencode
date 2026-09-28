@@ -6,6 +6,7 @@ import {
   ConfigError,
   type EventSink,
   LlmGateway,
+  Mcp,
   type RenderEvent,
   type ResolvedConfig,
   type RunResult,
@@ -15,6 +16,7 @@ import {
 import { clean, exitCode, exitReason, resultEvent } from "../render/event"
 import { jsonCollector, streamJsonSink } from "../render/json"
 import { textSink } from "../render/text"
+import { statusText } from "../mcp/tools"
 import type { CliArgs } from "./args"
 
 export const BYPASS = "permission mode bypassPermissions: all tools allowed except .env reads and explicit denies"
@@ -55,13 +57,16 @@ function execute(cfg: ResolvedConfig, args: CliArgs, output: Output) {
     const runtime = yield* Runtime
     const gateway = yield* LlmGateway
     const store = yield* SessionStore
+    const mcp = yield* Mcp
     const { fallbackNotices } = yield* Effect.promise(() => import("../llm/client"))
     const session_id = args.resume ?? (args.continue ? yield* latest(store.latest(cfg.cwd), cfg.cwd) : undefined)
     const agent = cfg.agents[cfg.default_agent]!
     const ref = agent.model ?? cfg.model
     yield* output.sink(early({ type: "status", phase: "probe", message: `resolving ${ref}` }))
     // Resolving here (the gateway caches the handle for start) lets the one-time fallback notices print first.
-    const handle = yield* gateway.resolve(ref)
+    // MCP servers connect while the model server is resolved (probe); both report their own status lines.
+    const connecting = mcp.connectAll((status) => output.sink(early({ type: "status", phase: "mcp", message: `mcp ${statusText(status)}` })))
+    const [handle] = yield* Effect.all([gateway.resolve(ref), connecting], { concurrency: 2 })
     yield* Effect.forEach(
       fallbackNotices(handle),
       (item) =>

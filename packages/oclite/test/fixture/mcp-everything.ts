@@ -4,6 +4,7 @@
 // Run: `bun test/fixture/mcp-everything.ts`. Env:
 //   FIXTURE_WRITE_DIR=<dir>   write_file writes inside <dir> only; unset → write_file writes nothing and returns ok.
 //   FIXTURE_LIST_CHANGED=1    after the first tools/list, adds tool `late` and emits notifications/tools/list_changed.
+//   FIXTURE_INSTRUCTIONS=<t>  replaces the server instructions (instruction-cap tests).
 //
 // Tools: echo{text}, add{a,b}, slow{steps,ms} (progress when _meta.progressToken is set), crash (exits mid-call),
 // write_file{path,content} (readOnlyHint false), lookup{key} (readOnlyHint true).
@@ -23,7 +24,7 @@ import {
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js"
 
-const INSTRUCTIONS = "Fixture server for oclite tests. Prefer lookup for read-only questions."
+const INSTRUCTIONS = process.env.FIXTURE_INSTRUCTIONS || "Fixture server for oclite tests. Prefer lookup for read-only questions."
 const README = "# fixture\n\nThis is the mcp-everything fixture readme.\n"
 const TABLE: Record<string, string> = { alpha: "1", beta: "2" }
 

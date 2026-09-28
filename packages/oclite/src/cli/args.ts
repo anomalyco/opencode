@@ -157,7 +157,7 @@ const mcp = Command.make("mcp").pipe(
           yield* handler((module) => module.mcpAdd)({ ...input, target: [...input.target, ...operands] })
         }),
     ).pipe(Command.withDescription("Add an MCP server (opencode ConfigMCPV1 shape)")),
-    Command.make("list", {}, handler((module) => module.mcpList)).pipe(
+    Command.make("list", { check: Flag.boolean("check").pipe(Flag.withDescription("Connect and show live status")) }, handler((module) => module.mcpList)).pipe(
       Command.withDescription("List configured MCP servers"),
     ),
     Command.make("get", { name }, handler((module) => module.mcpGet)).pipe(
@@ -166,7 +166,7 @@ const mcp = Command.make("mcp").pipe(
     Command.make("remove", { name, scope: scope.pipe(Flag.optional) }, handler((module) => module.mcpRemove)).pipe(
       Command.withDescription("Remove an MCP server"),
     ),
-    Command.make("auth", { name }, handler((module) => module.notImplemented("mcp auth", 4))).pipe(
+    Command.make("auth", { name }, handler((module) => module.mcpAuth)).pipe(
       Command.withDescription("Run the OAuth flow for a remote MCP server"),
     ),
   ]),

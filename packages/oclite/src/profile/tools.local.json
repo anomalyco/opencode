@@ -8,7 +8,7 @@
   "skill": "Load a skill's instructions by name when the task matches one of the listed skills.",
   "task": "Start a sub-agent for a self-contained task. subagent_type picks the agent. The prompt must include goal, known facts, exact paths and the expected output. background=true returns at once; task_id resumes a previous sub-agent.",
   "todowrite": "Replace the todo list for multi-step work. Each todo has content, status (pending, in_progress, completed, cancelled) and priority. Keep exactly one in_progress.",
-  "tool_search": "Find MCP tools by keyword. Matching tools become callable on the next turn. Returns name — description lines.",
+  "tool_search": "Find MCP tools by keyword; matches become callable next turn.",
   "webfetch": "Fetch a URL and return its content as markdown (default), text or html. timeout is in seconds (max 120).",
   "write": "Create or overwrite a file with content. filePath is absolute. Read an existing file first; prefer edit for changes."
 }

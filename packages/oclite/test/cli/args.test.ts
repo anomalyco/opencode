@@ -83,7 +83,7 @@ describe("cli args", () => {
 
   test.each([
     [["mcp", "serve", "--transport", "http", "--port", "5000"], "mcp serve: not implemented yet (phase 6)"],
-    [["mcp", "auth", "gh"], "mcp auth: not implemented yet (phase 4)"],
+    [["mcp", "auth", "gh"], 'mcp auth: "gh" is not a configured remote MCP server'],
   ])("stub %j fails with ConfigError", async (argv, message) => {
     const error = failure(await run(argv))
     expect(error).toBeInstanceOf(ConfigError)

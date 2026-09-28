@@ -4,9 +4,13 @@
 import path from "path"
 import readline from "readline"
 import { Effect, Layer, Logger } from "effect"
+import type { ContentPart } from "@opencode-ai/llm"
 import {
   Asker,
   type AskReply,
+  LlmGateway,
+  Mcp,
+  type McpShape,
   type ProfileName,
   type RenderEvent,
   type ResolvedConfig,
@@ -17,6 +21,7 @@ import {
 } from "../contract"
 import { bytes, clean, exitCode, resultEvent, stepLine } from "../render/event"
 import { textSink } from "../render/text"
+import { sanitize, statusText } from "../mcp/tools"
 import type { CliArgs } from "./args"
 import { BYPASS } from "./run"
 
@@ -28,9 +33,12 @@ const HELP = `/help                 this list
 /clear                start a new session
 /cost                 token usage of this session
 /resume [id]          list recent sessions, or resume one
-/reconnect, /mcp      MCP servers (phase 4)
+/mcp                  MCP servers, their status and prompts
+/mcp__<server>__<prompt> k=v …   send an MCP prompt
+/reconnect            reconnect MCP servers and re-probe the model server
 /exit                 quit
-@path                 attach a file to the prompt`
+@path                 attach a file to the prompt
+@<server>:<uri>       attach an MCP resource`
 const PROFILES: readonly string[] = ["default", "local", "local-min"]
 const MAX_ATTACH = 256 * 1024
 
@@ -78,6 +86,9 @@ function loop(cfg: ResolvedConfig, args: CliArgs, io: Io) {
   return Effect.gen(function* () {
     const runtime = yield* Runtime
     const store = yield* SessionStore
+    const mcp = yield* Mcp
+    const gateway = yield* LlmGateway
+    yield* mcp.connectAll((status) => io.sink({ session_id: "", agent_path: [], type: "status", phase: "mcp", message: `mcp ${statusText(status)}` }))
     const session = {
       id: args.resume ?? (args.continue ? yield* store.latest(cfg.cwd) : undefined),
       agent: cfg.default_agent,
@@ -87,7 +98,19 @@ function loop(cfg: ResolvedConfig, args: CliArgs, io: Io) {
     const say = (text: string) => Effect.sync(() => console.log(clean(text)))
 
     const agentModel = () => cfg.agents[session.agent]?.model
-    const later = () => say("MCP arrives in phase 4")
+    const submit = (prompt: string | ContentPart[]) =>
+      Effect.gen(function* () {
+        const started = yield* runtime
+          .start({ session_id: session.id, agent: session.agent, prompt, model: session.model, profile: session.profile }, io.sink)
+          .pipe(Effect.catch((error) => say(`error: ${error.message}`).pipe(Effect.as(undefined))))
+        if (!started) return
+        session.id = started.session_id
+        io.current.run = started
+        const result = yield* started.await
+        io.current.run = undefined
+        yield* io.sink(resultEvent(result, exitCode(result, false)))
+        if (result.state === "cancelled") yield* say("(cancelled)")
+      })
     const commands: Record<string, (arg: string) => Effect.Effect<unknown>> = {
       help: () => say(HELP),
       agents: (arg) =>
@@ -112,11 +135,19 @@ function loop(cfg: ResolvedConfig, args: CliArgs, io: Io) {
         arg ? Effect.sync(() => void (session.id = arg)).pipe(Effect.andThen(say(`resuming ${arg}`))) : recent(store, cfg.cwd).pipe(Effect.flatMap(say)),
       // Deviation: RuntimeShape has no compaction entry point yet; compaction still runs at the profile threshold.
       compact: () => say("compaction runs automatically at the profile threshold (manual /compact needs a Runtime seam)"),
-      mcp: later,
-      reconnect: later,
+      mcp: () => servers(mcp).pipe(Effect.flatMap(say)),
+      reconnect: () =>
+        Effect.gen(function* () {
+          yield* mcp.reconnect()
+          yield* gateway.resolve(agentModel() ?? session.model ?? cfg.model, { reprobe: true }).pipe(
+            Effect.flatMap((handle) => say(`model server ${handle.ref}: reachable`)),
+            Effect.catch((error) => say(`model server: ${error.message}`)),
+          )
+          yield* servers(mcp).pipe(Effect.flatMap(say))
+        }),
     }
     const slash = (name: string, arg: string) =>
-      commands[name]?.(arg) ?? (name.startsWith("mcp__") ? later() : say(`unknown command /${name} (try /help)`))
+      commands[name]?.(arg) ?? (name.startsWith("mcp__") ? prompt(mcp, name, arg, submit, say) : say(`unknown command /${name} (try /help)`))
 
     while (true) {
       io.prompt()
@@ -131,19 +162,51 @@ function loop(cfg: ResolvedConfig, args: CliArgs, io: Io) {
         yield* slash(name, rest.join(" "))
         continue
       }
-      const prompt = yield* Effect.promise(() => attach(text, cfg.cwd))
-      const started = yield* runtime
-        .start({ session_id: session.id, agent: session.agent, prompt, model: session.model, profile: session.profile }, io.sink)
-        .pipe(Effect.catch((error) => say(`error: ${error.message}`).pipe(Effect.as(undefined))))
-      if (!started) continue
-      session.id = started.session_id
-      io.current.run = started
-      const result = yield* started.await
-      io.current.run = undefined
-      yield* io.sink(resultEvent(result, exitCode(result, false)))
-      if (result.state === "cancelled") yield* say("(cancelled)")
+      const resources = yield* Effect.forEach(mentions(text, cfg), (ref) =>
+        mcp.readResource(ref.server, ref.uri).pipe(
+          Effect.map((item) => item.text),
+          Effect.catch((error) => say(`@${ref.server}:${ref.uri}: ${error.message}`).pipe(Effect.as(undefined))),
+        ),
+      )
+      const attached = yield* Effect.promise(() => attach(text, cfg.cwd))
+      yield* submit([attached, ...resources.filter((item) => item !== undefined)].join("\n\n"))
     }
   })
+}
+
+/** `/mcp`: one status line per server, then the prompts usable as slash commands. */
+function servers(mcp: McpShape) {
+  return Effect.gen(function* () {
+    const statuses = yield* mcp.status()
+    if (!statuses.length) return "No MCP servers configured."
+    const prompts = yield* mcp.prompts()
+    return [
+      ...statuses.map(statusText),
+      ...prompts.map((item) => `/mcp__${sanitize(item.server)}__${sanitize(item.name)}${item.arguments.map((arg) => ` ${arg}=…`).join("")}${item.description ? `  ${item.description}` : ""}`),
+    ].join("\n")
+  })
+}
+
+/** `/mcp__<server>__<prompt> k=v "k2=two words"` → getPrompt → one user message. */
+function prompt(mcp: McpShape, name: string, arg: string, submit: (prompt: ContentPart[]) => Effect.Effect<void>, say: (text: string) => Effect.Effect<void>) {
+  return Effect.gen(function* () {
+    const found = (yield* mcp.prompts()).find((item) => `mcp__${sanitize(item.server)}__${sanitize(item.name)}` === name)
+    if (!found) return yield* say(`unknown MCP prompt /${name} (see /mcp)`)
+    const args = Object.fromEntries(
+      [...arg.matchAll(/(?:"([^"=]+)=([^"]*)"|([^\s=]+)=("[^"]*"|\S*))/g)].map((m) => [m[1] ?? m[3]!, (m[2] ?? m[4] ?? "").replace(/^"|"$/g, "")]),
+    )
+    const parts = yield* mcp.getPrompt(found.server, found.name, args).pipe(
+      Effect.catch((error) => say(`/${name}: ${error.message}`).pipe(Effect.as(undefined))),
+    )
+    if (parts) yield* submit(parts)
+  })
+}
+
+/** `@<server>:<uri>` tokens that name a configured MCP server. */
+function mentions(text: string, cfg: ResolvedConfig) {
+  return [...text.matchAll(/(?:^|\s)@([A-Za-z0-9_.-]+):(\S+)/g)]
+    .filter((match) => cfg.mcp[match[1]!] !== undefined)
+    .map((match) => ({ server: match[1]!, uri: match[2]! }))
 }
 
 function answer(line: string | undefined): AskReply {
@@ -153,7 +216,7 @@ function answer(line: string | undefined): AskReply {
   return "reject"
 }
 
-/** `@path` tokens that name a readable file are appended as <file> blocks; `@server:uri` resources are phase 4. */
+/** `@path` tokens that name a readable file are appended as <file> blocks (`@server:uri` resources: see mentions). */
 async function attach(text: string, cwd: string) {
   const refs = [...text.matchAll(/(?:^|\s)@([^\s:]+)(?=\s|$)/g)].map((match) => match[1]!)
   const files = await Promise.all(

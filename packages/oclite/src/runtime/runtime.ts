@@ -7,7 +7,11 @@ import {
   ConfigError,
   Hooks,
   LlmGateway,
+  Mcp,
+  type McpShape,
   Permission,
+  type Profile,
+  type ProfileName,
   Runtime,
   SessionStore,
   SpawnError,
@@ -19,8 +23,10 @@ import {
   type RuntimeShape,
   type SubagentsShape,
   type TokenUsage,
+  type ToolSet,
 } from "../contract"
 import { persist } from "../llm/probe"
+import { forProfile, searchTool } from "../mcp/tools"
 import { harnessPrompt, select } from "../profile/profiles"
 import { replay, validId } from "../session/store"
 import { parse } from "../tools/text-protocol"
@@ -38,11 +44,12 @@ export function appLayer(cfg: ResolvedConfig, asker: Layer.Layer<Asker>, http?: 
     Effect.promise(async () => {
       const hooks = await import("../hooks/hooks")
       const client = await import("../llm/client")
+      const mcp = await import("../mcp/client")
       const permission = await import("../permission/permission")
       const store = await import("../session/store")
       const registry = await import("../tools/registry")
       const config = Layer.succeed(AppConfig, cfg)
-      const base = Layer.mergeAll(config, store.layer, hooks.layer.pipe(Layer.provide(config)), http ? client.layerWith(http) : client.layer)
+      const base = Layer.mergeAll(config, store.layer, hooks.layer.pipe(Layer.provide(config)), mcp.layer, http ? client.layerWith(http) : client.layer)
       const services = Layer.provideMerge(
         Layer.provideMerge(registry.layer, permission.layer.pipe(Layer.provide(asker))),
         base.pipe(Layer.provide(config)),
@@ -62,6 +69,7 @@ export function layer(options: RuntimeOptions = {}) {
       const registry = yield* ToolRegistry
       const permission = yield* Permission
       const hooks = yield* Hooks
+      const mcp = yield* Mcp
       const scale = Number(process.env.OCLITE_RETRY_SCALE ?? 1)
       const deps: LoopDeps = {
         gateway,
@@ -94,17 +102,20 @@ export function layer(options: RuntimeOptions = {}) {
           const agent_path = input.parent ? [agent.name] : []
           const status = (phase: "tools" | "instructions" | "notice", message: string) =>
             sink({ session_id, agent_path, type: "status", phase, message })
+          const servers = yield* mcpForRun(mcp, profile, (names) => store.append(session_id, { type: "tools_activated", names }), (key, message) =>
+            gateway.notice(key, message).pipe(Effect.flatMap((first) => (first ? status("notice", message) : Effect.void))))
           const ruleset = permission.ruleset({ agent, mode: input.permissionMode ?? cfg.permissionMode,
-            parent: input.parent?.ruleset, mcpReadOnly: [] })
+            parent: input.parent?.ruleset, mcpReadOnly: servers.readOnly })
           yield* status("tools", "building tools")
-          const tools = yield* registry.build({ session_id, cwd, agent, depth, ruleset, sink, profile }, [], handle.capabilities)
+          const tools = yield* registry.build({ session_id, cwd, agent, depth, ruleset, sink, profile }, servers.extra, handle.capabilities)
+          const mcpInstructions = yield* servers.bind(tools, replay(previous).activated)
           yield* status("instructions", "loading instructions")
           const prompt = yield* Effect.promise(() =>
-            system({ harness: harnessPrompt(profile, handle), agent, cfg: { ...cfg, cwd }, profile, textProtocolPrompt: tools.textProtocolPrompt }),
+            system({ harness: harnessPrompt(profile, handle), agent, cfg: { ...cfg, cwd }, profile, textProtocolPrompt: tools.textProtocolPrompt, mcpInstructions }),
           )
           yield* Effect.forEach(prompt.notices, (notice) => status("notice", notice), { discard: true })
           yield* sink({ session_id, agent_path, type: "system", agent: agent.name, model: handle.ref, profile: profile.name,
-            tools: Object.keys(tools.tools).sort(), mcp: [] })
+            tools: Object.keys(tools.tools).sort(), mcp: (yield* mcp.status()).map((item) => ({ name: item.name, status: item.status })) })
           const text = typeof input.prompt === "string" ? input.prompt
             : input.prompt.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
           yield* store.append(session_id, { type: "user", turn: replay(previous).turn, text, synthetic: false })
@@ -150,6 +161,59 @@ export function layer(options: RuntimeOptions = {}) {
     }),
   )
 }
+
+/**
+ * The MCP part of a run (shared with `debug prompt`): the extra tools for registry.build (every MCP tool, or only
+ * tool_search in deferred profiles), read-only names for the ruleset, and `bind`, which re-applies persisted
+ * activations and returns server instructions for the system prompt. Servers first reached through tool_search
+ * get their instructions in that tool's result instead, so the system prompt stays byte-stable for the run.
+ */
+export function mcpForRun(
+  mcp: McpShape,
+  profile: Profile,
+  persist: (names: string[]) => Effect.Effect<void>,
+  notice: (key: string, message: string) => Effect.Effect<void>,
+) {
+  return Effect.gen(function* () {
+    const all = yield* mcp.tools()
+    const bound: { tools?: ToolSet } = {}
+    const shown = new Set<string>()
+    const cap = MCP_INSTRUCTIONS_CAP[profile.name]
+    // Each server's instructions once per run, cut to the profile cap (a few KB would break the local budgets).
+    const fresh = (texts: string[]) =>
+      Effect.forEach(texts.filter((text) => !shown.has(text) && !!shown.add(text)), (text) => {
+        if (text.length <= cap) return Effect.succeed(text)
+        const head = text.split("\n")[0]!
+        return notice(`mcp-instructions:${profile.name}:${head}`, `${head.replace(/:$/, "")} cut to ${cap} chars (${profile.name})`).pipe(
+          Effect.as(`${text.slice(0, cap)}\n…[truncated]`),
+        )
+      })
+    const search = () =>
+      searchTool({
+        search: mcp.search,
+        maxChars: profile.descriptionMaxChars,
+        activate: (names) =>
+          Effect.gen(function* () {
+            yield* bound.tools?.activate(names) ?? Effect.void
+            yield* persist(names)
+            return yield* fresh(yield* mcp.instructions(names))
+          }),
+      })
+    return {
+      extra: forProfile(profile, all, search),
+      readOnly: all.filter((tool) => tool.readOnly).map((tool) => tool.name),
+      bind: (tools: ToolSet, activated: readonly string[]) =>
+        Effect.gen(function* () {
+          bound.tools = tools
+          if (activated.length) yield* tools.activate([...activated])
+          const requested = profile.mcp === "deferred" ? activated : all.map((tool) => tool.name)
+          return yield* fresh(yield* mcp.instructions(requested.filter((name) => name in tools.tools)))
+        }),
+    }
+  })
+}
+
+const MCP_INSTRUCTIONS_CAP: Record<ProfileName, number> = { default: 2000, local: 600, "local-min": 300 }
 
 function result(value: LoopResult) {
   return { reason: value.reason, text: value.text, turns: value.turns, usage: value.usage, error: value.error }

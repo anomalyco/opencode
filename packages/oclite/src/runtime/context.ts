@@ -14,6 +14,8 @@ export interface SystemInput {
   profile: Profile
   /** ToolSet.textProtocolPrompt, when the server has no tool-call parser. */
   textProtocolPrompt?: string
+  /** Instructions of MCP servers whose tools are in the first request (runtime.ts mcpForRun). */
+  mcpInstructions?: readonly string[]
   home?: string
   now?: Date
 }
@@ -34,6 +36,7 @@ export async function system(input: SystemInput): Promise<System> {
     input.agent.prompt,
     input.textProtocolPrompt,
     ...files.parts,
+    ...(input.mcpInstructions ?? []),
     input.cfg.appendSystemPrompt,
     env(input.cfg.cwd, branch, input.now ?? new Date()),
   ]

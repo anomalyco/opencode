@@ -36,9 +36,10 @@ const CLAUDE_TOOLS: Record<string, string> = {
   WebFetch: "webfetch",
   Task: "task",
   TodoWrite: "todowrite",
+  ToolSearch: "tool_search",
 }
 // TODO(phase 3): derive from the tool registry instead of repeating the built-in tool names here.
-const BUILTIN_TOOLS = ["bash", "edit", "glob", "grep", "question", "read", "skill", "task", "todowrite", "webfetch", "write"]
+const BUILTIN_TOOLS = ["bash", "edit", "glob", "grep", "question", "read", "skill", "task", "todowrite", "tool_search", "webfetch", "write"]
 
 type Info = ConfigAgentV1.Info
 type Entry = { name: string; info: Info; source: string }
@@ -133,7 +134,9 @@ function claudeCompat(data: Record<string, unknown>) {
   if (typeof data.model === "string" && !data.model.includes("/")) delete result.model
   const listed = toolList(data.tools)
   if (!listed) return result
-  const tools = listed.map(claudeTool)
+  // Listing an MCP tool implies tool_search: deferred profiles only reach MCP tools through it.
+  const mapped = listed.map(claudeTool)
+  const tools = mapped.some((tool) => tool.startsWith("mcp__")) && !mapped.includes("tool_search") ? [...mapped, "tool_search"] : mapped
   const permission: ConfigPermissionV1.Info = {
     ...Object.fromEntries(BUILTIN_TOOLS.filter((tool) => !tools.includes(tool)).map((tool) => [tool, "deny"])),
     "mcp__*": "deny",

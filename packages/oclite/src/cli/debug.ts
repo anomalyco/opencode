@@ -3,14 +3,14 @@
 // runtime/context.ts layers the system prompt, so the numbers are those of a real first request.
 import { Console, Effect, Stream } from "effect"
 import { Message, ToolDefinition } from "@opencode-ai/llm"
-import { type AgentDef, ConfigError, LlmGateway, type LlmGatewayShape, type ModelHandle, Permission, type Profile, type ResolvedConfig, ToolRegistry } from "../contract"
+import { type AgentDef, ConfigError, LlmGateway, type LlmGatewayShape, Mcp, type ModelHandle, Permission, type Profile, type ResolvedConfig, ToolRegistry } from "../contract"
 import { load } from "../config/config"
 import { fallbackNotices, tokenUsage } from "../llm/client"
 import type { CapabilityRecord } from "../llm/probe"
 import { headlessAsker } from "../permission/permission"
 import { harnessPrompt, select } from "../profile/profiles"
 import { system } from "../runtime/context"
-import { appLayer } from "../runtime/runtime"
+import { appLayer, mcpForRun } from "../runtime/runtime"
 import { clean } from "../render/event"
 import { redact, redactUrl } from "../util/redact"
 import type { CliArgs } from "./args"
@@ -58,7 +58,7 @@ export function debugServer(args: CliArgs) {
   )
 }
 
-function withApp<A>(args: CliArgs, body: (cfg: ResolvedConfig, gateway: LlmGatewayShape) => Effect.Effect<A, ConfigError, ToolRegistry | Permission>) {
+function withApp<A>(args: CliArgs, body: (cfg: ResolvedConfig, gateway: LlmGatewayShape) => Effect.Effect<A, ConfigError, ToolRegistry | Permission | Mcp>) {
   return Effect.gen(function* () {
     const cfg = yield* load(args)
     return yield* Effect.gen(function* () {
@@ -73,10 +73,13 @@ function first(cfg: ResolvedConfig, handle: ModelHandle, profile: Profile, agent
   return Effect.gen(function* () {
     const registry = yield* ToolRegistry
     const permission = yield* Permission
-    const ruleset = permission.ruleset({ agent, mode: cfg.permissionMode, mcpReadOnly: [] })
-    const tools = yield* registry.build({ session_id: "ses_debug", cwd: cfg.cwd, agent, depth: 0, ruleset, sink: () => Effect.void, profile }, [], handle.capabilities)
+    const mcp = yield* Mcp
+    const servers = yield* mcpForRun(mcp, profile, () => Effect.void, () => Effect.void)
+    const ruleset = permission.ruleset({ agent, mode: cfg.permissionMode, mcpReadOnly: servers.readOnly })
+    const tools = yield* registry.build({ session_id: "ses_debug", cwd: cfg.cwd, agent, depth: 0, ruleset, sink: () => Effect.void, profile }, servers.extra, handle.capabilities)
+    const mcpInstructions = yield* servers.bind(tools, [])
     const prompt = yield* Effect.promise(() =>
-      system({ harness: harnessPrompt(profile, handle), agent, cfg, profile, textProtocolPrompt: tools.textProtocolPrompt }),
+      system({ harness: harnessPrompt(profile, handle), agent, cfg, profile, textProtocolPrompt: tools.textProtocolPrompt, mcpInstructions }),
     )
     return { system: prompt.text, tools: tools.definitions }
   })

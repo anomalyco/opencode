@@ -62,7 +62,8 @@ describe("agents", () => {
     expect(reviewer).toMatchObject({ description: "Reviews code", prompt: "Review carefully.", mode: "all" })
     expect(reviewer.model).toBeUndefined()
     expect(reviewer.source).toBe(path.join(root.path, ".claude/agents/reviewer.md"))
-    expect(reviewer.tools).toEqual(["read", "grep", "edit", "mcp__github__get_pr"])
+    // Listing an MCP tool implies tool_search (deferred profiles reach MCP tools only through it).
+    expect(reviewer.tools).toEqual(["read", "grep", "edit", "mcp__github__get_pr", "tool_search"])
     expect(reviewer.permission.some((rule) => rule.action === "allow")).toBe(false)
     // listed built-ins fall through to the normal default (no agent rule)
     expect(decide(reviewer.permission, "read")).toBeUndefined()
