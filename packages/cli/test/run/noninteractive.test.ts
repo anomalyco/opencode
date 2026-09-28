@@ -24,6 +24,27 @@ function form(id: string, sessionID: string): FormInfo {
   }
 }
 
+function webSearchForm(id: string, sessionID: string): FormInfo {
+  return {
+    id,
+    sessionID,
+    title: "Web Search",
+    metadata: { kind: "websearch.provider" },
+    fields: [
+      {
+        key: "choice",
+        type: "string",
+        required: true,
+        custom: false,
+        options: [
+          { value: "allow", label: "Allow search" },
+          { value: "disable", label: "Disable search" },
+        ],
+      },
+    ],
+  }
+}
+
 function formCreated(info: FormInfo, eventLocation = location): V2Event {
   return { id: `evt_${info.id}`, created: 0, type: "form.created", location: eventLocation, data: { form: info } }
 }
@@ -35,6 +56,37 @@ function prompted(inboxID: string): V2Event {
     type: "session.inbox.delivered",
     durable: { aggregateID: "ses_1", seq: 0, version: 1 },
     data: { sessionID: "ses_1", inboxID },
+  }
+}
+
+function childCreated(): V2Event {
+  return {
+    id: "evt_child_created",
+    created: 0,
+    type: "session.created",
+    durable: { aggregateID: "ses_child", seq: 0, version: 1 },
+    data: {
+      sessionID: "ses_child",
+      projectID: "proj_1",
+      location,
+      parentID: "ses_1",
+      slug: "child",
+      version: "test",
+    },
+  }
+}
+
+function permissionAsked(sessionID: string): V2Event {
+  return {
+    id: "evt_permission",
+    created: 1,
+    type: "permission.asked",
+    data: {
+      id: "per_1",
+      sessionID,
+      action: "shell",
+      resources: ["rm file"],
+    },
   }
 }
 
@@ -210,9 +262,11 @@ async function run(input: {
   turn: (inboxID: string) => V2Event[]
   pendingForms?: FormInfo[]
   attached?: boolean
+  auto?: boolean
   format?: "default" | "json"
   compatibility?: "v1"
   cancel?: (input: { sessionID: string; formID: string }) => Promise<void>
+  reply?: (input: { sessionID: string; formID: string; answer: Record<string, unknown> }) => Promise<void>
   renderTool?: (part: SessionMessageAssistantTool) => Promise<void>
   renderToolError?: (part: SessionMessageAssistantTool) => Promise<void>
   messages?: (inboxID: string) => SessionMessageInfo[]
@@ -241,6 +295,7 @@ async function run(input: {
   })()
   spyOn(sdk.event, "subscribe").mockImplementation(() => stream)
   spyOn(sdk.permission, "list").mockImplementation(() => ok([]) as never)
+  spyOn(sdk.permission, "reply").mockImplementation(() => ok(undefined) as never)
   spyOn(sdk.session.form, "list").mockImplementation(
     (request) => ok(input.pendingForms?.filter((item) => item.sessionID === request.sessionID) ?? []) as never,
   )
@@ -252,6 +307,8 @@ async function run(input: {
       }) as never,
   )
   spyOn(sdk.session.form, "cancel").mockImplementation((request) => (input.cancel?.(request) ?? ok(undefined)) as never)
+  spyOn(sdk.session.form, "reply").mockImplementation((request) => (input.reply?.(request) ?? ok(undefined)) as never)
+  spyOn(sdk.session, "interrupt").mockImplementation(() => ok(undefined) as never)
   let promptID = "msg_prompt"
   spyOn(sdk.session, "wait").mockImplementation(() => input.wait?.() ?? wait.promise)
   spyOn(sdk.message, "list").mockImplementation(() =>
@@ -276,7 +333,7 @@ async function run(input: {
     files: [],
     thinking: false,
     format: input.format ?? "default",
-    auto: false,
+    auto: input.auto ?? false,
     attached: input.attached ?? false,
     compatibility: input.compatibility,
     renderTool: input.renderTool ?? (() => Promise.resolve()),
@@ -312,6 +369,105 @@ afterEach(() => {
 })
 
 describe("runNonInteractivePrompt", () => {
+  test("keeps exit zero when a failed step is recovered", async () => {
+    const output = await capture({
+      format: "json",
+      turn: (messageID) => [prompted(messageID), stepStarted(), stepFailed("socket closed"), settled()],
+    })
+
+    expect(output.exitCode ?? 0).toBe(0)
+    expect(output.stdout).toContain('"type":"error"')
+    expect(output.stdout).toContain("socket closed")
+  })
+
+  test("keeps terminal execution failures fatal after a failed step", async () => {
+    const output = await capture({
+      format: "json",
+      turn: (messageID) => [prompted(messageID), stepFailed("socket closed"), executionFailed("retries exhausted")],
+    })
+
+    expect(output.exitCode).toBe(1)
+  })
+
+  test("does not infer failure from a recovered projected step", async () => {
+    const output = await capture({
+      format: "json",
+      turn: (messageID) => [prompted(messageID), settled()],
+      messages: (messageID) => [
+        {
+          id: "msg_success",
+          type: "assistant",
+          agent: "build",
+          model: { providerID: "test", id: "test-model" },
+          content: [{ type: "text", text: "recovered" }],
+          finish: "stop",
+          time: { created: 4, completed: 5 },
+        },
+        {
+          id: "msg_failed",
+          type: "assistant",
+          agent: "build",
+          model: { providerID: "test", id: "test-model" },
+          content: [],
+          finish: "error",
+          error: { type: "provider.transport", message: "socket closed" },
+          time: { created: 2, completed: 3 },
+        },
+        { id: messageID, type: "user", text: "hello", time: { created: 1 } },
+      ],
+    })
+
+    expect(output.exitCode).toBe(0)
+    expect(output.stdout).toContain("recovered")
+  })
+
+  test("selects the default web search option instead of cancelling", async () => {
+    const sdk = await run({
+      turn: (messageID) => [formCreated(webSearchForm("frm_search", "ses_1")), prompted(messageID), settled()],
+    })
+
+    expect(sdk.session.form.reply).toHaveBeenCalledWith({
+      sessionID: "ses_1",
+      formID: "frm_search",
+      answer: { choice: "allow" },
+    })
+    expect(sdk.session.form.cancel).not.toHaveBeenCalled()
+  })
+
+  test("rejects blockers owned by child sessions", async () => {
+    const sdk = await run({
+      turn: (messageID) => [
+        prompted(messageID),
+        childCreated(),
+        permissionAsked("ses_child"),
+        formCreated(form("frm_child", "ses_child")),
+        settled(),
+      ],
+    })
+
+    expect(sdk.permission.reply).toHaveBeenCalledWith({
+      sessionID: "ses_child",
+      requestID: "per_1",
+      decision: "reject",
+    })
+    expect(sdk.session.interrupt).toHaveBeenCalledWith({ sessionID: "ses_child" })
+    expect(sdk.session.form.cancel).toHaveBeenCalledWith({ sessionID: "ses_child", formID: "frm_child" })
+  })
+
+  test("auto-approves permissions owned by child sessions", async () => {
+    const sdk = await run({
+      auto: true,
+      turn: (messageID) => [prompted(messageID), childCreated(), permissionAsked("ses_child"), settled()],
+    })
+
+    expect(sdk.permission.reply).toHaveBeenCalledWith({
+      sessionID: "ses_child",
+      requestID: "per_1",
+      decision: "once",
+    })
+    expect(sdk.session.interrupt).not.toHaveBeenCalled()
+  })
+
   test("keeps formatted tool output and compact tool metadata in JSON", async () => {
     const output = await capture({ format: "json", turn: successfulGrep })
     const events = output.stdout
@@ -429,7 +585,10 @@ describe("runNonInteractivePrompt", () => {
     }
     expect(sdk.session.form.cancel).toHaveBeenCalledWith({ sessionID: "global", formID: "frm_live" }, globalOptions)
     expect(sdk.session.form.cancel).toHaveBeenCalledWith({ sessionID: "ses_1", formID: "frm_pending" })
-    expect(sdk.session.form.cancel).toHaveBeenCalledWith({ sessionID: "global", formID: "frm_pending_global" }, globalOptions)
+    expect(sdk.session.form.cancel).toHaveBeenCalledWith(
+      { sessionID: "global", formID: "frm_pending_global" },
+      globalOptions,
+    )
     expect(sdk.form.list).toHaveBeenCalledWith({
       location: { directory: "/work tree" },
     })
@@ -443,7 +602,10 @@ describe("runNonInteractivePrompt", () => {
     })
     expect(sdk.session.form.cancel).toHaveBeenCalledWith({ sessionID: "ses_1", formID: "frm_pending" })
     expect(sdk.form.list).not.toHaveBeenCalled()
-    expect(sdk.session.form.cancel).not.toHaveBeenCalledWith({ sessionID: "global", formID: "frm_live" }, expect.anything())
+    expect(sdk.session.form.cancel).not.toHaveBeenCalledWith(
+      { sessionID: "global", formID: "frm_live" },
+      expect.anything(),
+    )
     expect(sdk.session.form.cancel).not.toHaveBeenCalledWith(
       { sessionID: "global", formID: "frm_pending_global" },
       expect.anything(),
