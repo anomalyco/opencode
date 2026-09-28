@@ -4,6 +4,7 @@ import { dict as en } from "./en"
 export const dict = {
   ...en,
   "go.promo.spaceBunny": "全新匿名模型 Space Bunny Free 限时上线",
+  "go.referral.ended": "推荐计划已结束。推荐链接不再为你或分享链接的人提供额度。",
   "go.graph.bonus": "{{count}} 倍用量",
   "nav.github": "GitHub",
   "nav.docs": "文档",

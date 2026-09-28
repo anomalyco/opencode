@@ -340,6 +340,14 @@ body {
     }
   }
 
+  [data-component="referral-ended-notice"] {
+    border: 1px solid var(--color-border-weak);
+    color: var(--color-text-strong);
+    line-height: 1.4;
+    padding: 12px 16px;
+    margin-bottom: 24px;
+  }
+
   [data-component="desktop-app-banner"] {
     display: flex;
     align-items: center;

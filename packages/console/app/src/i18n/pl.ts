@@ -3,6 +3,7 @@ import { dict as en } from "./en"
 export const dict = {
   ...en,
   "go.promo.spaceBunny": "Space Bunny Free, nowy anonimowy model, jest dostępny przez ograniczony czas",
+  "go.referral.ended": "Program poleceń został zakończony. Linki polecające nie dają już środków ani Tobie, ani osobie, która je udostępniła.",
   "go.graph.bonus": "{{count}}× większy limit",
   "nav.github": "GitHub",
   "nav.docs": "Dokumentacja",
