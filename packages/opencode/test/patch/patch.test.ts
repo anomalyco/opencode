@@ -140,6 +140,27 @@ PATCH`
   })
 
   describe("applyPatch", () => {
+    for (const [original, expected] of [
+      ["", "added\n"],
+      ["\n", "\nadded\n"],
+      ["before", "before\nadded\n"],
+      ["before\n", "before\nadded\n"],
+      ["before\n\n", "before\n\nadded\n"],
+      ["before\n\n\n", "before\n\n\nadded\n"],
+    ]) {
+      it.live(`appends pure additions after all content lines in ${JSON.stringify(original)}`, () =>
+        Effect.gen(function* () {
+          const target = path.join(tempDir, "append.txt")
+          yield* Effect.promise(() => fs.writeFile(target, original))
+          const result = yield* Patch.applyPatch(
+            `*** Begin Patch\n*** Update File: ${target}\n@@\n+added\n*** End Patch`,
+          )
+          expect(result.modified).toEqual([target])
+          expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe(expected)
+        }),
+      )
+    }
+
     it.live("preserves trailing blank lines across repeated updates", () =>
       Effect.gen(function* () {
         const target = path.join(tempDir, "trailing.txt")

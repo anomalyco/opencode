@@ -360,11 +360,8 @@ function computeReplacements(
 
     // Handle pure addition (no old lines)
     if (chunk.old_lines.length === 0) {
-      const insertionIdx =
-        originalLines.length > 0 && originalLines[originalLines.length - 1] === ""
-          ? originalLines.length - 1
-          : originalLines.length
-      replacements.push([insertionIdx, 0, chunk.new_lines])
+      // The split sentinel was already removed; any remaining blank lines are content.
+      replacements.push([originalLines.length, 0, chunk.new_lines])
       continue
     }
 
