@@ -273,12 +273,12 @@ export const layer = Layer.effect(
         model: model.model,
         http: {
           headers: {
-            "x-session-affinity": session.id,
-            "X-Session-Id": session.id,
+            "x-session-affinity": affinity,
+            "X-Session-Id": affinity,
             ...(session.parentID ? { "x-parent-session-id": session.parentID } : {}),
             "User-Agent": App.useragent(app),
             "x-opencode-project": session.projectID,
-            "x-opencode-session": session.id,
+            "x-opencode-session": affinity,
             "x-opencode-client": app.name,
           },
         },

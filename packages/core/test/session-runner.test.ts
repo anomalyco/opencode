@@ -4693,7 +4693,12 @@ describe("SessionRunnerLLM", () => {
       .pipe(Effect.orDie)
     yield* s.runPrompt("Run child request")
 
-    expect(s.requests[0]?.http?.headers?.["x-parent-session-id"]).toBe(parentID)
+    expect(s.requests[0]?.http?.headers).toMatchObject({
+      "x-session-affinity": parentID,
+      "X-Session-Id": parentID,
+      "x-parent-session-id": parentID,
+      "x-opencode-session": parentID,
+    })
     expect(s.requests[0]?.promptCacheKey).toBe(parentID)
   })
 
