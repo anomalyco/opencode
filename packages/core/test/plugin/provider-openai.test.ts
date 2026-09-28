@@ -89,7 +89,7 @@ describe("OpenAIPlugin", () => {
               if (new URL(request.url).pathname === "/error/models") return new Response(null, { status: 503 })
               if (new URL(request.url).pathname === "/empty/models") return Response.json({ models: [] })
               expect(request.headers.get("authorization")).toBe("Bearer test-token")
-              expect(request.headers.get("x-openai-chatpass-test")).toBe("codex-direct")
+              expect(request.headers.has("x-openai-chatpass-test")).toBe(false)
               return Response.json({
                 models: [
                   {
@@ -562,13 +562,13 @@ describe("OpenAIPlugin", () => {
       expect(provider.package).toBe("@opencode/ai/providers/openai")
       expect(provider.settings?.transport).toBe("http")
       expect(provider.settings?.baseURL).toBeUndefined()
-      expect(provider.headers).toEqual({ "x-openai-chatpass-test": "codex-direct" })
+      expect(provider.headers).not.toHaveProperty("x-openai-chatpass-test")
       expect(direct.baseURL).toBe("https://api.openai.com/v1")
       expect(direct.headers).toEqual({})
       expect(direct.hasHttpHooks).toBe(false)
       const eligible = required(yield* models.get(Provider.ID.openai, Model.ID.make("gpt-5.5")))
       expect(eligible.package).toBe("@opencode/ai/providers/openai")
-      expect(eligible.headers).toEqual({ "x-openai-chatpass-test": "codex-direct" })
+      expect(eligible.headers).not.toHaveProperty("x-openai-chatpass-test")
       expect(eligible.cost).toEqual([])
       expect(eligible.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
       expect(eligible.enabled).toBe(true)

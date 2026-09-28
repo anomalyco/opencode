@@ -221,9 +221,6 @@ export const OpenAIPlugin = define({
           transport: chatgpt ? "http" : (provider.settings?.transport ?? "websocket"),
           ...(chatgpt ? { compaction: { type: "summary" } } : {}),
         })
-        if (!chatgpt) return
-        // Temporary pre-launch header required by ChatGPT token sharing.
-        provider.headers = Provider.mergeHeaders(provider.headers, { "x-openai-chatpass-test": "codex-direct" })
       })
       if (!chatgpt || !available || !source) return
       const updated = providers.get(Provider.ID.openai)
@@ -352,7 +349,6 @@ export function fetchModels(token: string, app: App.Info, baseURL = resource) {
     headers: {
       Authorization: `Bearer ${token}`,
       "User-Agent": App.useragent(app),
-      "x-openai-chatpass-test": "codex-direct",
     },
   }).pipe(
     Effect.flatMap(decodeModels),
