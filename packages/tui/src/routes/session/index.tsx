@@ -2800,7 +2800,7 @@ function BlockTool(props: BlockToolProps) {
 
 const SHELL_DISPLAY_LIMIT = 1024 * 1024
 
-export function Shell(props: ToolProps) {
+function Shell(props: ToolProps) {
   return (
     <ShellDisplay
       part={props.part}
