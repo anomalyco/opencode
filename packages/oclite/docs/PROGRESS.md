@@ -11,6 +11,7 @@
 | 4 | MCP client: SDK thin client (stdio, StreamableHTTP→SSE, OAuth via shared mcp-auth.json), `mcp__server__tool` naming, deferred `tool_search`, prompts as slash commands, `@server:uri` resources, `mcp auth`, `/mcp` | mcp-engineer | PASS after 1 fix round (B1: server instructions capped per profile; B2: readOnlyHint trust documented in ADR). Lead gate: typecheck exit 0; `bun test` 268 pass / 0 fail; size budget 5532/7000. Budgets with an MCP server: local 1187/1200, local-min 537/600, default 6750/7300. e2e uses the in-repo SDK fixture (Deviation: server-everything unavailable). |
 | 5 | Sub-agents: task tool (fg/bg/resume/steer), manager (depth, 4-concurrency, lifecycle, cancel), isolation, opencode envelope, background reminders, built-in roles | runtime-engineer | PASS after 1 fix round (B1: escalation tests, plan/read_only parents force plan-mode children; B2: steer ownership check; B3: child denials count toward headless exit 3). Lead gate: typecheck exit 0; `bun test` 283 pass / 0 fail; size budget 41/45 files, 5874/7000 (+216 forked). Budget: default with task 7259/7300. |
 | 6 | `oclite mcp serve` (7 control tools, stdio + HTTP bearer auth on 127.0.0.1, elicitation + `agent_permission_reply` fallback, progress/log notifications, prompts, scoped session resources) and `transport: mcp` children | mcp-engineer | PASS after 1 fix round (B1 parent rules/mode reach mcp children; B2 parent_id depth chaining; B3 forwarded-ask rejects count toward exit 3; plus cwd scoping, reply binding, caps, split-secret batching). Lead gate: typecheck exit 0; `bun test` 299 pass / 1 skip / 0 fail; size 43/45 files, 6422/7000. Lead manual check: HTTP 401 with no or wrong token; exit 2 without OCLITE_MCP_TOKEN; listens on 127.0.0.1 only. |
+| 7 | Hardening: security audit (12 findings: project trust, symlinks, parent_rules, file modes, env secrets, webfetch SSRF, .env guard, resume `always`, HTTP Origin/Host, orphans, reminder spoofing) + 2 verification rounds; failure-injection tests; perf trim; README + CONFIG/MCP/HOOKS docs | security-reviewer, cli-, tools-permissions-, runtime-, mcp-, perf-, test-engineer, docs-writer | PASS. Security final verdict: **HIGH open: none**. Lead gate: typecheck exit 0; `bun test` 349 pass / 2 skip / 0 fail; size 43/45 files, 6904/7000 lines (+216 forked); `packages/opencode` typecheck still exit 0. Lead manual checks: untrusted project config (remote provider + `{env:}` header + hook + `*` allow) is ignored with a notice; untrusted agent `tools: {bash: true}` → bash denied, exit 3, no file written. |
 
 ## Decisions
 - Repo: `~/code/opencode-dev` (1.18.33 copy without `.git`). Ran `git init -b dev`, baseline commit `ab6c8a6`, branch `oclite-harness`. Upstream SHA `b471c2b44` can't be checked against this copy.
@@ -56,3 +57,18 @@
 - `@modelcontextprotocol/server-everything` isn't installed and new deps are blocked. Phase 4 e2e uses `test/fixture/mcp-everything.ts`, a real SDK stdio server.
 - No local model server at `http://127.0.0.1:8000/v1` (curl returned connection refused, 2026-09-28). Live PERF numbers and live smoke tests fall back to `test/lib/local-server.ts` plus chars/4 estimates until a real server is available.
 - Bun on this machine is 1.3.10; repo pins `bun@1.3.14`.
+
+## Residual risks (low, accepted for v1)
+- Symlink check-then-write TOCTOU race; webfetch DNS lookup/fetch gap (rebinding); `.env` detection in bash is best-effort; bash deny rules under a broad allow are best-effort (ADR).
+- `-p` doesn't emit a status when an MCP server dies mid-run (REPL `/mcp` shows it); one extra summary request can follow a forced compaction; HTTP-executor-internal retries show no status line.
+- Split-secret redaction across stream-json deltas isn't done (it is for `mcp serve` notifications).
+- Per-file line caps from ARCHITECTURE §1 are exceeded by several files (manager, permission, registry, fs, extra); the package-level budget (≤45 files, ≤7000 lines) passes.
+
+## Definition of done: status
+- [x] `bun typecheck`, `bun test`, `scripts/size-budget.ts` pass from packages/oclite; opencode typecheck still passes.
+- [x] Every reuse-table row imported or copied with justification (ADR.md).
+- [~] `debug prompt --tokens` meets budgets against the fake server (local 951, local-min 420, default 7259). **Pending**: measurement against a real local server and TTFT before/after; no server at 127.0.0.1:8000. Commands are in PERF.md.
+- [x] Streaming text/reasoning deltas, tool lifecycle, step tokens, pre-model status line (144–174 ms) in the REPL and `-p`.
+- [~] Seven MCP control tools work from an SDK client and a second oclite (stdio + HTTP), incl. the permission-reply fallback. **Pending**: Claude Code end-to-end (`OCLITE_E2E_CLAUDE=1`), not run unattended.
+- [x] Every §10 fallback has a passing test against test/lib/local-server.ts.
+- [x] README: quickstart, config reference, profiles, MCP server guide (Claude Code setup line), hooks reference, security notes.
