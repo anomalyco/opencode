@@ -347,6 +347,26 @@ body {
     }
   }
 
+  [data-component="referral-ended-notice"] {
+    /* Matches the docs warning callout, which uses fixed colors in both themes. */
+    border: 1px solid rgb(98, 71, 31);
+    background: rgb(28, 20, 8);
+    color: rgb(239, 239, 239);
+    line-height: 1.8;
+    padding: 16px;
+    margin-bottom: 24px;
+
+    strong {
+      display: block;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    p {
+      margin: 0;
+    }
+  }
+
   [data-component="desktop-app-banner"] {
     display: flex;
     align-items: center;
