@@ -1125,7 +1125,7 @@ async function wait(check: () => boolean) {
   }
 }
 
-test.each(["asked", "replied", "parallel"] as const)(
+test.each(["asked", "replied", "parallel", "asked-replied", "duplicate"] as const)(
   "preserves permission changes (%s) when an older list response arrives",
   async (kind) => {
     const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
@@ -1179,10 +1179,19 @@ test.each(["asked", "replied", "parallel"] as const)(
         const next: OpenCodeEvent = { id: "evt_second", created: 2, type: "permission.asked", data: second }
         listeners.forEach((listener) => listener({ name: next.type, details: next }))
       }
-      response.resolve(Response.json({ data: kind !== "replied" ? [] : [request] }))
+      if (kind === "asked-replied") {
+        const next: OpenCodeEvent = {
+          id: "evt_reply",
+          created: 2,
+          type: "permission.replied",
+          data: { sessionID: request.sessionID, requestID: request.id, reply: "once" },
+        }
+        listeners.forEach((listener) => listener({ name: next.type, details: next }))
+      }
+      response.resolve(Response.json({ data: kind === "replied" || kind === "duplicate" ? [request] : [] }))
       await syncing
       expect(setup.data.session.permission.list(request.sessionID)).toEqual(
-        kind === "replied" ? [] : kind === "parallel" ? [request, second] : [request],
+        kind === "replied" || kind === "asked-replied" ? [] : kind === "parallel" ? [request, second] : [request],
       )
     } finally {
       response.resolve(Response.json({ data: [] }))
@@ -1190,3 +1199,67 @@ test.each(["asked", "replied", "parallel"] as const)(
     }
   },
 )
+
+test.each(["failed", "invalidated"] as const)("permission snapshots recover after a %s read", async (kind) => {
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const response = Promise.withResolvers<Response>()
+  const started = Promise.withResolvers<void>()
+  const request = {
+    id: "per_recovery",
+    sessionID: "ses_recovery",
+    action: "local_echo",
+    resources: ["*"],
+    save: ["*"],
+    metadata: {},
+    source: { type: "tool" as const, messageID: "msg_execute", id: "call_outer" },
+  }
+  let calls = 0
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async () => {
+      calls++
+      if (calls > 1) return Response.json({ data: [] })
+      started.resolve()
+      return response.promise
+    },
+  })
+  const setup = createRoot((dispose) => ({
+    data: createData({
+      api: () => api,
+      directory: "/project",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    }),
+    dispose,
+  }))
+  try {
+    const syncing = setup.data.session.permission.sync(request.sessionID)
+    await started.promise
+    const event: OpenCodeEvent = { id: "evt_ask", created: 1, type: "permission.asked", data: request }
+    listeners.forEach((listener) => listener({ name: event.type, details: event }))
+    expect(setup.data.session.permission.list(request.sessionID)).toEqual([request])
+    if (kind === "failed") {
+      response.resolve(new Response("Failed", { status: 500 }))
+      await expect(syncing).rejects.toBeDefined()
+      expect(setup.data.session.permission.list(request.sessionID)).toEqual([request])
+      await setup.data.session.permission.sync(request.sessionID)
+    } else {
+      setup.data.session.permission.invalidate(request.sessionID)
+      const reloading = setup.data.session.permission.sync(request.sessionID)
+      expect(calls).toBe(1)
+      response.resolve(Response.json({ data: [] }))
+      await Promise.all([syncing, reloading])
+    }
+    // A later authoritative snapshot must not inherit updates from the previous read.
+    expect(calls).toBe(2)
+    expect(setup.data.session.permission.list(request.sessionID)).toEqual([])
+  } finally {
+    response.resolve(Response.json({ data: [] }))
+    setup.dispose()
+  }
+})

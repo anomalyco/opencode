@@ -89,7 +89,7 @@ test.each(["hydrated", "live", "stale"])(
     try {
       await listed.promise
       if (mode !== "stale") await setup.waitForFrame((frame) => frame.includes("Run local echo"))
-      events.emit({ id: "evt_ask", created: 2, type: "permission.asked", data: permission })
+      if (mode !== "hydrated") events.emit({ id: "evt_ask", created: 2, type: "permission.asked", data: permission })
       await setup.waitForFrame((frame) => frame.includes("local_echo") && frame.includes("Allow"))
       release.resolve()
       await setup.waitForVisualIdle()
