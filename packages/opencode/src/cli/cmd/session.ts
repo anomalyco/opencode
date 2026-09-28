@@ -3,6 +3,8 @@ import { Effect } from "effect"
 import { cmd } from "./cmd"
 import { effectCmd, fail } from "../effect-cmd"
 import { Session } from "@/session/session"
+import { generateTitle } from "@/session/prompt"
+import { MessageV2 } from "@/session/message-v2"
 import { SessionID } from "../../session/schema"
 import { UI } from "../ui"
 import { Locale } from "@/util/locale"
@@ -44,8 +46,57 @@ function pagerCmd(): string[] {
 export const SessionCommand = cmd({
   command: "session",
   describe: "manage sessions",
-  builder: (yargs: Argv) => yargs.command(SessionListCommand).command(SessionDeleteCommand).demandCommand(),
+  builder: (yargs: Argv) =>
+    yargs.command(SessionListCommand).command(SessionDeleteCommand).command(SessionTitlesCommand).demandCommand(),
   async handler() {},
+})
+
+export const SessionTitlesCommand = effectCmd({
+  command: "titles",
+  describe: "generate titles for sessions that still have default ones",
+  builder: (yargs) =>
+    yargs.option("dry-run", {
+      describe: "list untitled sessions without generating titles",
+      type: "boolean",
+      default: false,
+    }),
+  handler: Effect.fn("Cli.session.titles")(function* (args) {
+    const svc = yield* Session.Service
+    const sessions = yield* svc.list({ roots: true })
+    const untitled = sessions.filter((session) => !session.parentID && Session.isDefaultTitle(session.title))
+    if (untitled.length === 0) {
+      UI.println(UI.Style.TEXT_SUCCESS_BOLD + "No sessions need a title" + UI.Style.TEXT_NORMAL)
+      return
+    }
+    if (args.dryRun) {
+      for (const session of untitled) UI.println(`${session.id}  ${Locale.todayTimeOrDateTime(session.time.updated)}`)
+      UI.println(`${untitled.length} session(s) would be titled`)
+      return
+    }
+    let titled = 0
+    yield* Effect.forEach(
+      untitled,
+      (session) =>
+        Effect.gen(function* () {
+          const history = yield* MessageV2.filterCompactedEffect(session.id)
+          const user = MessageV2.latest(history).user
+          if (!user) return
+          const before = session.title
+          yield* generateTitle({
+            session,
+            history,
+            providerID: user.model.providerID,
+            modelID: user.model.modelID,
+          })
+          const updated = yield* svc.get(session.id).pipe(Effect.orDie)
+          if (updated.title === before) return
+          titled++
+          UI.println(`- ${updated.title}`)
+        }),
+      { concurrency: 4 },
+    )
+    UI.println(UI.Style.TEXT_SUCCESS_BOLD + `${titled} of ${untitled.length} session(s) titled` + UI.Style.TEXT_NORMAL)
+  }),
 })
 
 export const SessionDeleteCommand = effectCmd({
