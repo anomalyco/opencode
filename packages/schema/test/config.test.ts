@@ -27,6 +27,20 @@ describe("Config.Entry", () => {
     expect(() => Schema.decodeUnknownSync(Config.Info)({ providers: { custom: { canonical: 1 } } })).toThrow()
   })
 
+  test("round-trips disabled and numeric provider HTTP timeouts", () => {
+    const input = { providers: { custom: { settings: { headerTimeout: 600_000, chunkTimeout: false } } } } as const
+    const decoded = Schema.decodeUnknownSync(Config.Info)(input)
+    expect(Schema.encodeSync(Config.Info)(decoded)).toEqual(input)
+    expect(Schema.decodeUnknownSync(Provider.Settings)(decoded.providers?.custom?.settings)).toMatchObject({
+      headerTimeout: 600_000,
+      chunkTimeout: false,
+    })
+    expect(Schema.decodeUnknownSync(Provider.Settings)({ headerTimeout: false, chunkTimeout: 600_000 })).toMatchObject({
+      headerTimeout: false,
+      chunkTimeout: 600_000,
+    })
+  })
+
   test("accepts disabled, fixed, and random web search selection", () => {
     const decode = Schema.decodeUnknownSync(Config.Info)
 

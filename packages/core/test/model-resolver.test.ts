@@ -307,6 +307,18 @@ describe("ModelResolver", () => {
     }),
   )
 
+  it.effect("preserves a disabled provider chunk timeout on native HTTP requests", () =>
+    Effect.gen(function* () {
+      const resolved = yield* ModelResolver.fromCatalogModel(
+        model(Provider.aisdk("@ai-sdk/openai"), {
+          settings: { apiKey: "secret", headerTimeout: 60_000, chunkTimeout: false },
+        }),
+      )
+
+      expect(resolved.defaults?.http).toMatchObject({ headerTimeout: 60_000, chunkTimeout: false })
+    }),
+  )
+
   it.effect("keeps catalog apiKey credentials out of provider JSON", () =>
     Effect.gen(function* () {
       const resolved = yield* ModelResolver.fromCatalogModel(

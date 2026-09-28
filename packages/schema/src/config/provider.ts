@@ -9,7 +9,7 @@ import { optional } from "../schema.js"
 export const Settings = Schema.StructWithRest(
   Schema.Struct({
     timeout: Schema.Union([Schema.Finite, Schema.Literal(false)]).pipe(optional),
-    chunkTimeout: Schema.Finite.pipe(optional),
+    chunkTimeout: Schema.Union([Schema.Finite, Schema.Literal(false)]).pipe(optional),
     compaction: Provider.Compaction.pipe(optional),
     transport: Provider.Transport.pipe(optional),
   }),

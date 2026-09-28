@@ -395,7 +395,7 @@ export const layer = Layer.effect(
         limit: selected.limit,
         compaction: runtimeInfo.settings?.compaction,
         transport: provider?.settings?.transport,
-        chunkTimeout: provider?.settings?.chunkTimeout,
+        chunkTimeout: typeof provider?.settings?.chunkTimeout === "number" ? provider.settings.chunkTimeout : undefined,
       }
     })
     return Service.of({
