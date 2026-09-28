@@ -108,9 +108,10 @@ export function killAll() {
   ;[...groups].forEach(killGroup)
 }
 
-/** Parent env for bash and hooks, minus oclite's own MCP bearer token. */
+/** Parent env for bash and hooks, minus oclite's own MCP bearer token and the one-run project trust. */
 export function childEnv() {
   const env = { ...process.env }
   delete env.OCLITE_MCP_TOKEN
+  delete env.OCLITE_TRUST_PROJECT
   return env
 }

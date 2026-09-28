@@ -194,7 +194,7 @@ async function assertPublic(url: URL, allowed: Allowed) {
 }
 
 export function isPrivate(ip: string) {
-  const v4 = ip.replace(/^::ffff:/i, "")
+  const v4 = embeddedV4(ip)
   if (/^\d+\.\d+\.\d+\.\d+$/.test(v4)) {
     const [a, b] = v4.split(".").map(Number)
     return (
@@ -209,6 +209,16 @@ export function isPrivate(ip: string) {
   }
   const v6 = ip.toLowerCase()
   return v6 === "::" || v6 === "::1" || /^fe[89ab]/.test(v6) || /^f[cd]/.test(v6)
+}
+
+// IPv4-mapped (`::ffff:127.0.0.1`, `::ffff:7f00:1`, expanded `0:0:0:0:0:ffff:…`) and NAT64 (`64:ff9b::/96`)
+// addresses carry an IPv4 address in their last 32 bits; check that address instead.
+function embeddedV4(ip: string) {
+  const match = ip.toLowerCase().match(/^(?:::ffff:|(?:0+:){5}ffff:|64:ff9b::|::ffff:0:)((?:\d+\.){3}\d+|[0-9a-f]{1,4}:[0-9a-f]{1,4})$/)
+  if (!match) return ip
+  if (match[1]!.includes(".")) return match[1]!
+  const [hi = 0, lo = 0] = match[1]!.split(":").map((part) => parseInt(part, 16))
+  return [hi >> 8, hi & 255, lo >> 8, lo & 255].join(".")
 }
 
 // Streams the body and stops at 5 MB instead of buffering an unbounded response first.

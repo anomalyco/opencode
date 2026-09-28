@@ -36,7 +36,7 @@ export const connectChild = (spec: ChildSpec) =>
       ? new lib.http.StreamableHTTPClientTransport(new URL(spec.url), { requestInit: spec.token ? { headers: { Authorization: `Bearer ${spec.token}` } } : undefined })
       : new lib.stdio.StdioClientTransport({ command: argv[0]!, args: argv.slice(1), cwd: spec.cwd, stderr: "pipe",
           // A stdio child serves over stdio, so it never needs the HTTP serve token.
-          env: Object.fromEntries(Object.entries(spec.env).filter((entry) => entry[0] !== "OCLITE_MCP_TOKEN")) })
+          env: Object.fromEntries(Object.entries(spec.env).filter((entry) => entry[0] !== "OCLITE_MCP_TOKEN" && entry[0] !== "OCLITE_TRUST_PROJECT")) })
     if (transport instanceof lib.stdio.StdioClientTransport)
       transport.stderr?.on("data", (chunk: Buffer) => void (log.tail = (log.tail + chunk.toString()).slice(-2000)))
     const failure = (error: unknown) =>

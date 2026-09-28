@@ -101,6 +101,9 @@ export function mcpServe(args: CliArgs, input: { transport: "stdio" | "http"; po
   return Effect.gen(function* () {
     const cfg = yield* load(args)
     yield* warnUntrusted(cfg)
+    const { killOnTerm } = yield* Effect.promise(() => import("./run"))
+    // SIGTERM: runMain interrupts (runs cancel) and exits; SIGHUP has no runMain handler, so exit here.
+    killOnTerm({ exit: (name) => name === "SIGHUP" })
     const { serve } = yield* Effect.promise(() => import("../mcp/server"))
     yield* serve(cfg, { transport: input.transport, host: input.host, port: input.port, allowRemoteBypass: input.iUnderstandRemoteBypass })
     // stdio returns once stdin closed and every run was cancelled (and its layer closed); stdin's handle would keep us alive.

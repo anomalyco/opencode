@@ -23,7 +23,8 @@ import { bytes, clean, exitCode, resultEvent, stepLine } from "../render/event"
 import { textSink } from "../render/text"
 import { sanitize, statusText } from "../mcp/tools"
 import type { CliArgs } from "./args"
-import { BYPASS } from "./run"
+import { killAll } from "../tools/bash"
+import { BYPASS, killOnTerm } from "./run"
 
 const HELP = `/help                 this list
 /agents [name]        list agents, or switch the primary agent
@@ -65,6 +66,7 @@ export function runRepl(args: CliArgs) {
     // runMain would interrupt the whole REPL on the first Ctrl-C; the REPL owns SIGINT instead.
     const interrupt = () => {
       current.interrupts++
+      if (current.interrupts >= 2) killAll()
       if (current.interrupts >= 2) process.exit(130)
       if (current.run) return void Effect.runFork(current.run.cancel)
       process.stderr.write("\n(press Ctrl-C again to exit)\n")
@@ -72,6 +74,7 @@ export function runRepl(args: CliArgs) {
     }
     process.removeAllListeners("SIGINT")
     process.on("SIGINT", interrupt)
+    killOnTerm({ before: () => current.run && Effect.runFork(current.run.cancel), exit: () => true })
     rl.on("SIGINT", interrupt)
     const asker = Layer.succeed(Asker, {
       ask: (req) =>

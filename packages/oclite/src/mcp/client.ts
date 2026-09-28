@@ -262,7 +262,7 @@ function stdio(lib: Sdk, server: ConfigMCPV1.Local, log: { tail: string }, cwd: 
   const transport = new lib.stdio.StdioClientTransport({
     command, args, stderr: "pipe", cwd: path.resolve(cwd, server.cwd ?? "."),
     // Our own serve token is not the server's business.
-    env: { ...(Object.fromEntries(Object.entries(process.env).filter((entry) => entry[0] !== "OCLITE_MCP_TOKEN")) as Record<string, string>), ...server.environment },
+    env: { ...(Object.fromEntries(Object.entries(process.env).filter((entry) => entry[0] !== "OCLITE_MCP_TOKEN" && entry[0] !== "OCLITE_TRUST_PROJECT")) as Record<string, string>), ...server.environment },
   })
   transport.stderr?.on("data", (chunk: Buffer) => {
     log.tail = (log.tail + chunk.toString()).slice(-2000)

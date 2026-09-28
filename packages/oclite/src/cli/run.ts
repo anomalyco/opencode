@@ -117,6 +117,17 @@ function execute(cfg: ResolvedConfig, args: CliArgs, output: Output) {
 
 const SIGNAL_CODES: Record<string, number> = { SIGINT: 130, SIGTERM: 143, SIGHUP: 129 }
 
+/** REPL and mcp serve: SIGTERM/SIGHUP kill every bash/hook process group first. `exit` false leaves the exit to runMain. */
+export function killOnTerm(options: { before?: () => unknown; exit: (name: string) => boolean }) {
+  ;["SIGTERM", "SIGHUP"].forEach((name) =>
+    process.on(name, () => {
+      options.before?.()
+      killAll()
+      if (options.exit(name)) process.exit(SIGNAL_CODES[name])
+    }),
+  )
+}
+
 function latest(found: Effect.Effect<string | undefined>, cwd: string) {
   return found.pipe(
     Effect.flatMap((id) =>

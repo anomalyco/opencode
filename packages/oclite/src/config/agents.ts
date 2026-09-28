@@ -101,16 +101,17 @@ async function readLayer(layer: { dir: string; pattern: string; builtin?: boolea
   return entries.filter((entry) => entry !== undefined)
 }
 
-/** Untrusted project agent data: no `transport`/`mcp` (top level or options) and no permission `allow`s. */
-export function untrust(data: Record<string, unknown>, skipped: Set<string>) {
+/** Untrusted project agent data: no `transport`/`mcp` (top level or options), no permission `allow`s, no `tools: {x: true}`. */
+export function untrust(data: Record<string, unknown>, skipped: Set<string>): Record<string, unknown> {
   const options = isPlainObject(data.options) ? { ...data.options } : undefined
   if (["transport", "mcp"].some((key) => key in data || (options && key in options))) skipped.add("agent transports")
   const result: Record<string, unknown> = { ...data, ...(options ? { options } : {}) }
   ;[result, options].forEach((item) => item && ["transport", "mcp"].forEach((key) => delete item[key]))
-  if (result.permission === undefined) return result
-  const permission = dropAllows(result.permission)
-  if (JSON.stringify(permission) !== JSON.stringify(result.permission)) skipped.add("permission allows")
-  return { ...result, permission: permission ?? {} }
+  // The deprecated `tools: {bash: true}` record becomes `permission.bash = allow` in ConfigAgentV1: keep only `false`.
+  const tools = isPlainObject(result.tools) ? Object.fromEntries(Object.entries(result.tools).filter((entry) => entry[1] === false)) : result.tools
+  const permission = result.permission === undefined ? undefined : (dropAllows(result.permission) ?? {})
+  if (JSON.stringify([tools, permission]) !== JSON.stringify([result.tools, result.permission])) skipped.add("permission allows")
+  return { ...result, ...(tools !== undefined ? { tools } : {}), ...(permission !== undefined ? { permission } : {}) }
 }
 
 function dropAllows(value: unknown): unknown {

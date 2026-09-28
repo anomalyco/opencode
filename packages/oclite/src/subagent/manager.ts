@@ -114,8 +114,11 @@ export function make(deps: { start: RuntimeShape["start"]; store: SessionStoreSh
       const auth = childAuth(agent, process.env)
       if (auth.notice)
         yield* entry.input.sink({ session_id: parent.session_id, agent_path: [agent.name], type: "status", phase: "notice", message: auth.notice })
+      const command = agent.mcp?.command ?? ["oclite", "mcp", "serve", "--permission-mode", deps.cfg.permissionMode]
+      const { stillTrusted } = yield* Effect.promise(() => import("../config/config"))
+      const trusted = command[0] === "oclite" && (yield* Effect.promise(() => stillTrusted(deps.cfg)))
       const client = yield* connectChild({
-        command: agent.mcp?.command ?? ["oclite", "mcp", "serve", "--permission-mode", deps.cfg.permissionMode],
+        command: trusted ? [...command, "--trust-project"] : command,
         url: agent.mcp?.url, token: auth.token, cwd: parent.cwd, env: childEnv(process.env, parent.depth + 1),
         // The child's run already carries its own name first in agent_path (it runs with a parent).
         onEvent: entry.input.sink,
@@ -273,7 +276,9 @@ export function childAuth(agent: AgentDef, env: Record<string, string | undefine
 
 /** A stdio child's env: the parent's minus OCLITE_MCP_TOKEN (the child serves stdio; it needs no bearer token). */
 export function childEnv(env: Record<string, string | undefined>, depth: number): Record<string, string> {
-  const entries = Object.entries(env).filter((entry): entry is [string, string] => entry[0] !== "OCLITE_MCP_TOKEN" && entry[1] !== undefined)
+  // Trust reaches a child only as an explicit --trust-project after re-checking the project hash (see spawn).
+  const entries = Object.entries(env).filter((entry): entry is [string, string] =>
+    entry[0] !== "OCLITE_MCP_TOKEN" && entry[0] !== "OCLITE_TRUST_PROJECT" && entry[1] !== undefined)
   return { ...Object.fromEntries(entries), OCLITE_DEPTH: String(depth) }
 }
 

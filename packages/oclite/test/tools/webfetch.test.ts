@@ -84,4 +84,10 @@ describe("webfetch", () => {
       expect(isPrivate(ip)).toBe(true)
     for (const ip of ["8.8.8.8", "172.32.0.1", "1.1.1.1", "2606:4700::1111"]) expect(isPrivate(ip)).toBe(false)
   })
+
+  test("isPrivate normalizes IPv4-mapped and NAT64 IPv6 to the embedded IPv4", () => {
+    for (const ip of ["::ffff:7f00:1", "::FFFF:7F00:0001", "0:0:0:0:0:ffff:7f00:1", "::ffff:a00:1", "::ffff:c0a8:101", "64:ff9b::7f00:1", "64:ff9b::10.0.0.1", "::ffff:169.254.169.254", "::ffff:a9fe:a9fe"])
+      expect(isPrivate(ip)).toBe(true)
+    for (const ip of ["::ffff:808:808", "64:ff9b::808:808", "::ffff:8.8.8.8"]) expect(isPrivate(ip)).toBe(false)
+  })
 })

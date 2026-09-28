@@ -5,6 +5,7 @@ import { stat } from "fs/promises"
 import os from "os"
 import path from "path"
 import type { AgentDef, Profile, ResolvedConfig } from "../contract"
+import { envFile } from "../config/config"
 import { ancestors, configDir } from "../util/paths"
 
 export interface SystemInput {
@@ -69,7 +70,8 @@ async function instructions(input: SystemInput) {
     ...project,
     path.join(input.home ? path.join(input.home, ".config", "oclite") : configDir(), "AGENTS.md"),
     path.join(home, ".claude", "CLAUDE.md"),
-    ...input.cfg.instructions.map((file) => path.resolve(input.cfg.projectRoot, file)),
+    // config/config.ts already filters these; the .env guard is repeated here as defence in depth.
+    ...input.cfg.instructions.map((file) => path.resolve(input.cfg.projectRoot, file)).filter((file) => !envFile(file)),
   ].filter((file): file is string => file !== undefined)
   const unique = [...new Set(candidates)]
   const loaded = await Promise.all(

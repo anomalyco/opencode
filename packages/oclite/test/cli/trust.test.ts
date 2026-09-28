@@ -70,6 +70,47 @@ describe("project trust", () => {
     expect(await show("mine")).toMatchObject({ transport: "mcp" })
   })
 
+  test("untrusted `tools: {bash: true}` (agent file and config override) grants nothing; bash still asks → headless exit 3", async () => {
+    await using env = await project()
+    await env.project.write(".oclite/agents/build.md", "---\ndescription: repo build\nmode: primary\ntools:\n  bash: true\n  write: true\n---\nBuild.")
+    await env.project.write(".oclite/config.json", JSON.stringify({ ...env.repo, agent: { build: { tools: { bash: true } } } }))
+    env.server.queue(reply.tool_call({ name: "bash", args: { command: "touch pwned" } }), reply.text("done"))
+    const result = await env.run(["-p", "go", "--output-format", "stream-json"])
+    expect(result.code).toBe(3)
+    const events = result.lines.map((item) => JSON.parse(item.line))
+    expect(events.find((event) => event.type === "tool_end")).toMatchObject({ name: "bash", status: "denied" })
+    expect(await Bun.file(`${env.project.path}/pwned`).exists()).toBe(false)
+    await env.remote.stop()
+  })
+
+  test("untrusted default_agent is ignored", async () => {
+    await using env = await project()
+    await env.project.write(".oclite/agents/sneaky.md", "---\ndescription: sneaky\nmode: primary\n---\nSneak.")
+    await env.project.write(".oclite/config.json", JSON.stringify({ ...env.repo, default_agent: "sneaky" }))
+    env.server.queue(reply.text("ok"))
+    const result = await env.run(["-p", "go", "--output-format", "stream-json"])
+    expect(result.lines.map((item) => JSON.parse(item.line)).find((event) => event.type === "system")).toMatchObject({ agent: "build" })
+    expect(result.stdout).toContain("default agent")
+    await env.remote.stop()
+  })
+
+  test("instructions: untrusted keeps only in-project non-.env files; trusted still refuses .env", async () => {
+    await using env = await project()
+    await env.project.write("ok.md", "IN-PROJECT-RULE")
+    await env.project.write(".env", "ENV-FILE-CONTENT")
+    await env.home.write("outside.txt", "OUTSIDE-SECRET")
+    const outside = `${env.home.path}/outside.txt`
+    await env.project.write(".oclite/config.json", JSON.stringify({ ...env.repo, instructions: ["ok.md", ".env", outside, "../../etc/hosts"] }))
+    const untrusted = await env.run(["debug", "prompt", "--profile", "local"])
+    expect(untrusted.stdout).toContain("IN-PROJECT-RULE")
+    expect(untrusted.stdout).not.toContain("ENV-FILE-CONTENT")
+    expect(untrusted.stdout).not.toContain("OUTSIDE-SECRET")
+    const trusted = await env.run(["debug", "prompt", "--profile", "local", "--trust-project"])
+    expect(trusted.stdout).toContain("OUTSIDE-SECRET")
+    expect(trusted.stdout).not.toContain("ENV-FILE-CONTENT")
+    await env.remote.stop()
+  })
+
   test("REPL with scripted stdin never prompts; it prints the notice", async () => {
     await using env = await project()
     env.server.queue(reply.text("hello"))
@@ -82,6 +123,13 @@ describe("project trust", () => {
 })
 
 describe("env secrets (F5)", () => {
+  test("env vars with secret-looking names (8+ chars) are registered", async () => {
+    const { redactText, registerEnvSecrets } = await import("../../src/util/redact")
+    registerEnvSecrets({ GITHUB_TOKEN: "ghp_abcdefgh123", MY_SERVICE_SECRET: "s3cr3t-value", SHORT_TOKEN: "abc", HOME: "/Users/someone-home" })
+    expect(redactText("ghp_abcdefgh123 s3cr3t-value abc /Users/someone-home")).toBe("*** *** abc /Users/someone-home")
+  })
+
+
   test("a provider key from the environment is redacted in bash output, the result event and the session JSONL", async () => {
     await using env = await setup({ toggles: { delta_chars: 1000 } })
     const secret = "sk-ant-env-secret-98765"

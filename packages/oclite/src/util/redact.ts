@@ -10,6 +10,11 @@ export function registerSecret(secret: string) {
   if (secret.length >= 6) secrets.add(secret)
 }
 
+/** Env values whose NAME looks secret (`*_API_KEY`, `GITHUB_TOKEN`, `*_SECRET`, `*_PASSWORD`, …), 8+ chars. */
+export function registerEnvSecrets(env: Record<string, string | undefined> = process.env) {
+  Object.entries(env).forEach(([name, value]) => value && value.length >= 8 && secretName.test(name) && registerSecret(value))
+}
+
 export function redactText(text: string, list: readonly string[] = [...secrets]) {
   return list.filter(Boolean).reduce((result, secret) => result.replaceAll(secret, "***"), text)
 }

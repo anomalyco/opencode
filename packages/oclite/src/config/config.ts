@@ -10,7 +10,7 @@ import type { CliArgs } from "../cli/args"
 import { AppConfig, ConfigError, type HookEntry, type ResolvedConfig } from "../contract"
 import { substitute } from "../forked/variable"
 import { configDir, projectRoot } from "../util/paths"
-import { argSecrets, registerSecret, urlSecrets } from "../util/redact"
+import { argSecrets, registerEnvSecrets, registerSecret, urlSecrets } from "../util/redact"
 import { claudeTool, decode, fromConfig, loadAgents, mergeDeep, untrust } from "./agents"
 
 export const DEFAULT_MODEL = "anthropic/claude-sonnet-5"
@@ -135,6 +135,8 @@ export interface Trust {
   root: string
   trusted: boolean
   skipped: string[]
+  /** The project hash when trusted, so a transport:mcp child is trusted only while the project is unchanged. */
+  hash?: string
 }
 export type LoadedConfig = ResolvedConfig & { trust: Trust }
 
@@ -200,13 +202,13 @@ async function resolve(args: CliArgs, ctx: LoadContext): Promise<LoadedConfig> {
     showThinking: !args.noThinking,
     appendSystemPrompt: args.appendSystemPrompt,
     maxTurns: args.maxTurns,
-    trust: { root, trusted, skipped: [...skipped] },
+    trust: { root, trusted, skipped: [...skipped], hash: trusted ? await projectHash(root) : undefined },
   }
 }
 
 // Untrusted project layer: no {env:}/{file:} expansion, and nothing that reaches the network, runs commands or
 // widens permissions (providers, MCP servers, hooks, server pins, permission allows, agent transports).
-const UNTRUSTED_KEYS: Record<string, string> = { provider: "providers", mcp: "MCP servers", hooks: "hooks", servers: "server pins" }
+const UNTRUSTED_KEYS: Record<string, string> = { provider: "providers", mcp: "MCP servers", hooks: "hooks", servers: "server pins", default_agent: "default agent" }
 
 async function readUntrusted(file: string, base: string, skipped: Set<string>): Promise<Info> {
   if (!existsSync(file)) return {}
@@ -221,7 +223,7 @@ async function readUntrusted(file: string, base: string, skipped: Set<string>): 
   const kept = untrust(cut, skipped)
   if (isRecord(kept.agent))
     kept.agent = Object.fromEntries(Object.entries(kept.agent).map(([name, agent]) => [name, isRecord(agent) ? untrust(agent, skipped) : agent]))
-  return withInstructions(decode(Info, kept, file), base)
+  return withInstructions(decode(Info, kept, file), base, base, skipped)
 }
 
 /** One line for -p / mcp serve / non-TTY REPL when the project layer was cut; undefined when nothing was. */
@@ -252,6 +254,12 @@ export async function trust(root: string, userDir = configDir()) {
   await Bun.write(path.join(userDir, "trusted.json"), JSON.stringify({ ...store, [realpathSync(root)]: await projectHash(root) }, null, 2) + "\n")
 }
 
+/** True while the project the parent loaded as trusted still hashes the same (transport:mcp child spawn). */
+export async function stillTrusted(cfg: ResolvedConfig) {
+  const trust = (cfg as Partial<LoadedConfig>).trust
+  return trust?.hash !== undefined && trust.hash === (await projectHash(trust.root))
+}
+
 async function isTrusted(root: string, userDir: string) {
   const hash = (await trustStore(userDir))[realpathSync(root)]
   return hash !== undefined && hash === (await projectHash(root))
@@ -275,8 +283,19 @@ export async function readConfig(file: string, base: string): Promise<Info> {
   return withInstructions(decode(Info, raw, file), base)
 }
 
-function withInstructions(info: Info, base: string): Info {
-  return info.instructions ? { ...info, instructions: info.instructions.map((item) => resolvePath(base, item)) } : info
+/** Resolves instruction paths; drops `.env` files always and, for an untrusted layer, anything outside `contain`. */
+function withInstructions(info: Info, base: string, contain?: string, skipped?: Set<string>): Info {
+  if (!info.instructions) return info
+  const inside = (file: string) => existsSync(file) && !path.relative(realpathSync(contain!), realpathSync(file)).startsWith("..")
+  const kept = info.instructions.map((item) => resolvePath(base, item)).filter((file) => !envFile(file) && (!contain || inside(file)))
+  if (kept.length !== info.instructions.length) skipped?.add("instruction files outside the project or .env")
+  return { ...info, instructions: kept }
+}
+
+/** The .env read guard's patterns (`*.env`, `*.env.*`, but not `*.env.example`), for instruction files. */
+export function envFile(file: string) {
+  const name = path.basename(file)
+  return /(^|\.)env(\.|$)/.test(name) && !name.endsWith(".env.example")
 }
 
 async function readMcpConfig(value: string, cwd: string) {
@@ -352,13 +371,9 @@ export function cliRules(values: readonly string[], action: PermissionV1.Action)
     })
 }
 
-// Keys the gateway and tools can read from the environment (SECURITY F5): redacted wherever they show up.
-const ENV_SECRETS = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY", "OPENROUTER_API_KEY", "GOOGLE_API_KEY", "GEMINI_API_KEY",
-  "GOOGLE_GENERATIVE_AI_API_KEY", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN", "OCLITE_MCP_TOKEN", "AZURE_API_KEY", "MISTRAL_API_KEY",
-  "GROQ_API_KEY", "XAI_API_KEY", "DEEPSEEK_API_KEY", "TOGETHER_AI_API_KEY", "FIREWORKS_API_KEY"]
-
 function registerSecrets(cfg: Info) {
-  ENV_SECRETS.forEach((name) => process.env[name] && registerSecret(process.env[name]))
+  // SECURITY F5: provider keys and tokens from the environment (ANTHROPIC_API_KEY, GITHUB_TOKEN, AWS_SECRET_ACCESS_KEY, …).
+  registerEnvSecrets()
   Object.values(cfg.provider ?? {}).forEach((provider) => {
     if (provider.options?.apiKey) registerSecret(provider.options.apiKey)
     urlSecrets(provider.options?.baseURL ?? "").forEach(registerSecret)
