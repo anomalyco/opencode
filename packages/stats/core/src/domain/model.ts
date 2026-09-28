@@ -47,6 +47,7 @@ export declare namespace ModelStatRepo {
     readonly lastSyncedAt: () => Effect.Effect<Date | null, DatabaseError>
     readonly upsert: (rows: ModelStatRow[]) => Effect.Effect<void, DatabaseError>
     readonly deleteRetiredDimensions: (rows: ModelStatRow[]) => Effect.Effect<void, DatabaseError>
+    readonly deleteUnknownDimensions: (rows: ModelStatRow[]) => Effect.Effect<void, DatabaseError>
   }
 }
 
@@ -195,6 +196,7 @@ export class ModelStatRepo extends Context.Service<ModelStatRepo, ModelStatRepo.
                   or(
                     inArray(modelStat.provider, RETIRED_STAT_PROVIDERS),
                     inArray(modelStat.model, RETIRED_STAT_MODELS),
+                    and(eq(modelStat.provider, "unknown"), eq(modelStat.model, "hy4-preview")),
                   ),
                 ),
               ),
@@ -202,7 +204,55 @@ export class ModelStatRepo extends Context.Service<ModelStatRepo, ModelStatRepo.
         })
       })
 
-      return ModelStatRepo.of({ listDaily, lastSyncedAt, upsert, deleteRetiredDimensions })
+      const deleteUnknownDimensions = Effect.fn("ModelStatRepo.deleteUnknownDimensions")(function* (
+        rows: ModelStatRow[],
+      ) {
+        const scope = statRowScope(rows)
+        if (!scope) return
+        const replacements = new Set(rows.map((row) => [statPeriodKey(row), row.model].join("\u0000")))
+        const stale = yield* Effect.tryPromise({
+          try: () =>
+            db
+              .select({
+                id: modelStat.id,
+                grain: modelStat.grain,
+                period_key: modelStat.period_key,
+                dataset: modelStat.dataset,
+                tier: modelStat.tier,
+                client: modelStat.client,
+                source: modelStat.source,
+                model: modelStat.model,
+              })
+              .from(modelStat)
+              .where(
+                and(
+                  eq(modelStat.provider, "unknown"),
+                  inArray(modelStat.grain, scope.grains),
+                  inArray(modelStat.period_key, scope.periodKeys),
+                  inArray(modelStat.dataset, scope.datasets),
+                  inArray(modelStat.client, scope.clients),
+                  inArray(modelStat.source, scope.sources),
+                  inArray(modelStat.model, [...new Set(rows.map((row) => row.model))]),
+                ),
+              ),
+          catch: (cause) => DatabaseError.make({ cause }),
+        })
+        const ids = stale
+          .filter((row) => replacements.has([statPeriodKey(row), row.model].join("\u0000")))
+          .map((row) => row.id)
+        yield* Effect.forEach(
+          chunks(ids, UPSERT_CHUNK_SIZE),
+          (chunk) =>
+            Effect.tryPromise({
+              try: () =>
+                db.delete(modelStat).where(and(eq(modelStat.provider, "unknown"), inArray(modelStat.id, chunk))),
+              catch: (cause) => DatabaseError.make({ cause }),
+            }),
+          { discard: true },
+        )
+      })
+
+      return ModelStatRepo.of({ listDaily, lastSyncedAt, upsert, deleteRetiredDimensions, deleteUnknownDimensions })
     }),
   )
 }

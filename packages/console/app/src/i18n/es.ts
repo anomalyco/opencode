@@ -3,7 +3,7 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
-  "go.promo.deepseek": "DeepSeek V4.1 Flash tiene límites de uso 4x mayores por tiempo limitado",
+  "go.promo.spaceBunny": "Space Bunny Free, un nuevo modelo anónimo, está disponible por tiempo limitado",
   "go.graph.bonus": "{{count}}× de uso",
   "nav.github": "GitHub",
   "nav.docs": "Documentación",
@@ -273,6 +273,18 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Suscribirse a Go",
   "go.cta.price": "10 $/mes",
+  "go.plans.month": "/mes",
+  "go.plans.plus.cta": "Suscribirse a Go Plus",
+  "go.plans.plus.description": "Go Plus cuesta 40 $/mes y ofrece límites más altos.",
+  "go.plans.go.feature1": "Modelos seleccionados y asequibles",
+  "go.plans.go.feature2": "Probados para programación con agentes",
+  "go.plans.go.feature3": "Límites generosos y acceso fiable",
+  "go.plans.plus.feature1": "Todo lo incluido en Go",
+  "go.plans.plus.feature2": "Límites más altos para programar durante más tiempo con concentración",
+  "go.plans.plus.feature3": "Para proyectos más grandes y exigentes",
+  "go.plans.limits": "Límites",
+  "go.plans.description": "Solicitudes estimadas cada 5 horas y límites mensuales por modelo",
+  "go.plans.legend": "Planes",
   "go.pricing.body":
     "Úsalo con cualquier agente. 10 $/mes. Recarga crédito si es necesario. Cancela en cualquier momento.",
   "go.graph.free": "Gratis",
@@ -386,7 +398,7 @@ export const dict = {
 
   "go.faq.q9": "¿Cuál es la diferencia entre los modelos gratuitos y Go?",
   "go.faq.a9":
-    "Los modelos gratuitos incluyen Big Pickle y los modelos promocionales disponibles en ese momento, con una cuota de 200 solicitudes/día. Go ofrece una selección de modelos con cuotas de solicitudes más altas aplicadas en ventanas móviles (de 5 horas, semanales y mensuales), aproximadamente equivalentes a cuotas base de 12 $ por 5 horas, 30 $ por semana y 60 $ por mes; las cuotas específicas pueden variar según el modelo (la cantidad real de solicitudes varía según el modelo y el uso).",
+    "Los modelos gratuitos incluyen Big Pickle y los modelos promocionales disponibles en ese momento, con una cuota de 200 solicitudes/día. Go ofrece una selección de modelos con cuotas de solicitudes más altas en ventanas móviles: el 20 % de la cuota mensual cada 5 horas, el 50 % por semana y el 100 % por mes. Las cuotas específicas pueden variar según el modelo (la cantidad real de solicitudes varía según el modelo y el uso).",
   "go.faq.q10": "¿Puedo obtener un reembolso?",
   "go.faq.a10":
     "Podrías tener derecho a un reembolso si el cargo se realizó en los últimos 14 días y no has utilizado tu cuota de Go durante ese periodo de facturación. {{contact}} para solicitar un reembolso.",
@@ -653,7 +665,6 @@ export const dict = {
   "workspace.payments.type.subscription": "suscripción",
   "workspace.payments.view": "Ver",
 
-  "workspace.black.loading": "Cargando...",
   "workspace.black.time.day": "día",
   "workspace.black.time.days": "días",
   "workspace.black.time.hour": "hora",
@@ -663,7 +674,8 @@ export const dict = {
   "workspace.black.time.fewSeconds": "unos pocos segundos",
   "workspace.black.subscription.title": "Suscripción",
   "workspace.black.subscription.message": "Estás suscrito a OpenCode Black por ${{plan}} al mes.",
-  "workspace.black.subscription.manage": "Gestionar Suscripción",
+  "workspace.black.subscription.ending":
+    "OpenCode Black finaliza con tu periodo de facturación actual y no se renovará. Te trasladaremos a la nueva consola.",
   "workspace.black.subscription.rollingUsage": "Uso de 5 horas",
   "workspace.black.subscription.weeklyUsage": "Uso Semanal",
   "workspace.black.subscription.resetsIn": "Se reinicia en",
