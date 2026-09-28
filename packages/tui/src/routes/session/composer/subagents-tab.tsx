@@ -110,6 +110,17 @@ export function SubagentsTab(props: { sessionID: string }) {
     }
   }
 
+  function toggleActivity() {
+    setStore({ selected: 0, active: !store.active })
+    scroll?.scrollTo(0)
+  }
+
+  function interruptSelected() {
+    const entry = selectedEntry()
+    if (!entry || entry.status !== "running") return
+    void client.api.session.interrupt({ sessionID: entry.sessionID })
+  }
+
   onMount(() => {
     const cleanup = composer.register({
       id: "subagents",
@@ -118,11 +129,18 @@ export function SubagentsTab(props: { sessionID: string }) {
         const entry = selectedEntry()
         return [
           ...(entry?.status === "running"
-            ? [{ label: "interrupt", shortcut: shortcuts.get("composer.subagent.interrupt") ?? "" }]
+            ? [
+                {
+                  label: "interrupt",
+                  shortcut: shortcuts.get("composer.subagent.interrupt") ?? "",
+                  run: interruptSelected,
+                },
+              ]
             : []),
           {
             label: `show ${store.active ? "inactive" : "active"}`,
             shortcut: shortcuts.get("composer.subagent.toggle-activity") ?? "",
+            run: toggleActivity,
           },
         ]
       },
@@ -171,20 +189,13 @@ export function SubagentsTab(props: { sessionID: string }) {
         title: "Toggle active subagents",
         group: "Composer",
         bind: "ctrl+a",
-        run() {
-          setStore({ selected: 0, active: !store.active })
-          scroll?.scrollTo(0)
-        },
+        run: toggleActivity,
       },
       {
         id: "composer.subagent.interrupt",
         title: "Interrupt subagent",
         group: "Composer",
-        run() {
-          const entry = selectedEntry()
-          if (!entry || entry.status !== "running") return
-          void client.api.session.interrupt({ sessionID: entry.sessionID })
-        },
+        run: interruptSelected,
       },
     ],
   }))

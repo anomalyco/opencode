@@ -117,6 +117,7 @@ export function Composer(props: ComposerProps) {
                         <text
                           fg={isActive() ? theme.text.base : theme.text.muted}
                           attributes={isActive() ? TextAttributes.BOLD : undefined}
+                          onMouseUp={() => setStore("active", t.id)}
                         >
                           {t.label}
                         </text>
@@ -137,7 +138,7 @@ export function Composer(props: ComposerProps) {
             <box flexDirection="row" gap={2} paddingLeft={1} flexShrink={0}>
               <For each={footerHints()}>
                 {(hint) => (
-                  <text>
+                  <text onMouseUp={hint.run ? () => hint.run?.() : undefined}>
                     <span style={{ fg: theme.text.base }}>
                       <b>{hint.label}</b>{" "}
                     </span>
@@ -146,7 +147,7 @@ export function Composer(props: ComposerProps) {
                 )}
               </For>
               <Show when={tabList().length > 1}>
-                <text>
+                <text onMouseUp={() => switchTab(1)}>
                   <span style={{ fg: theme.text.base }}>
                     <b>tabs</b>{" "}
                   </span>

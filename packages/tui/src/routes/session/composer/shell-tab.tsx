@@ -46,6 +46,15 @@ export function ShellTab(props: { sessionID: string }) {
     }
   })
 
+  function killSelected() {
+    const entry = selectedEntry()
+    if (!entry) return
+    void client.api.shell.remove({
+      id: entry.id,
+      location: { directory: entry.location.directory },
+    })
+  }
+
   onMount(() => {
     const cleanup = composer.register({
       id: "shell",
@@ -53,8 +62,8 @@ export function ShellTab(props: { sessionID: string }) {
       hints: () =>
         selectedEntry()
           ? [
-              { label: "output", shortcut: shortcuts.get("composer.shell.select") ?? "" },
-              { label: "kill", shortcut: shortcuts.get("composer.shell.kill") ?? "" },
+              { label: "output", shortcut: shortcuts.get("composer.shell.select") ?? "", run: open },
+              { label: "kill", shortcut: shortcuts.get("composer.shell.kill") ?? "", run: killSelected },
             ]
           : [],
     })
@@ -98,14 +107,7 @@ export function ShellTab(props: { sessionID: string }) {
         id: "composer.shell.kill",
         title: "Kill shell command",
         group: "Composer",
-        run() {
-          const entry = selectedEntry()
-          if (!entry) return
-          void client.api.shell.remove({
-            id: entry.id,
-            location: { directory: entry.location.directory },
-          })
-        },
+        run: killSelected,
       },
     ],
   }))

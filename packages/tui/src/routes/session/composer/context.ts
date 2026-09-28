@@ -3,6 +3,7 @@ import { createContext, useContext } from "solid-js"
 export interface ComposerHint {
   label: string
   shortcut: string
+  run?: () => void
 }
 
 export interface ComposerTab {
