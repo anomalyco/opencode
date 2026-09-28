@@ -1,5 +1,6 @@
 export const dict = {
   "go.promo.spaceBunny": "Space Bunny Free, a new anonymous model, is available for a limited time",
+  "go.referral.ended.label": "Warning",
   "go.referral.ended": "The referral program has ended. Referral links no longer earn credit for you or the person who shared them.",
   "go.graph.bonus": "{{count}}× usage",
   "nav.github": "GitHub",

@@ -91,9 +91,10 @@ export default function Home() {
         <div data-component="content">
           <section data-component="hero">
             <Show when={searchParams.ref}>
-              <div data-component="referral-ended-notice" role="status">
-                {i18n.t("go.referral.ended")}
-              </div>
+              <aside data-component="referral-ended-notice" aria-label={i18n.t("go.referral.ended.label")}>
+                <strong>{i18n.t("go.referral.ended.label")}</strong>
+                <p>{i18n.t("go.referral.ended")}</p>
+              </aside>
             </Show>
             <div data-component="desktop-app-banner">
               <span data-slot="badge">{i18n.t("home.banner.badge")}</span>
