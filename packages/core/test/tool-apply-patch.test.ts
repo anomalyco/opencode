@@ -130,6 +130,39 @@ const exists = (target: string) =>
 const it = testEffect(Layer.empty)
 
 describe("ApplyPatchTool", () => {
+  it.live("preserves trailing blank lines across repeated updates and reports only requested changes", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "trailing.txt")
+        return Effect.promise(() => fs.writeFile(target, "before\nunchanged\n\n\n")).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                for (const [before, after] of [
+                  ["before", "after"],
+                  ["after", "final"],
+                ]) {
+                  const settled = yield* settleTool(
+                    registry,
+                    call(`*** Begin Patch\n*** Update File: trailing.txt\n@@\n-${before}\n+${after}\n*** End Patch`),
+                  )
+                  expect(settled.result.type).toBe("text")
+                  expect(settled.output?.structured).toMatchObject({
+                    files: [{ file: "trailing.txt", additions: 1, deletions: 1 }],
+                  })
+                  expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe(`${after}\nunchanged\n\n\n`)
+                }
+              }),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   it.live("registers and sequentially applies add, update, and delete hunks", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),

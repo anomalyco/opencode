@@ -314,15 +314,16 @@ export function deriveNewContentsFromChunks(
   let originalLines = originalContent.text.split("\n")
 
   // Drop trailing empty element for consistent line counting
-  if (originalLines.length > 0 && originalLines[originalLines.length - 1] === "") {
+  const trailingNewline = originalLines.at(-1) === ""
+  if (trailingNewline) {
     originalLines.pop()
   }
 
   const replacements = computeReplacements(originalLines, filePath, chunks)
   let newLines = applyReplacements(originalLines, replacements)
 
-  // Ensure trailing newline
-  if (newLines.length === 0 || newLines[newLines.length - 1] !== "") {
+  // Restore the split sentinel even when the last content line is blank.
+  if (trailingNewline || newLines.length === 0 || newLines[newLines.length - 1] !== "") {
     newLines.push("")
   }
 

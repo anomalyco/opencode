@@ -140,6 +140,23 @@ PATCH`
   })
 
   describe("applyPatch", () => {
+    it.live("preserves trailing blank lines across repeated updates", () =>
+      Effect.gen(function* () {
+        const target = path.join(tempDir, "trailing.txt")
+        yield* Effect.promise(() => fs.writeFile(target, "before\nunchanged\n\n\n"))
+        for (const [before, after] of [
+          ["before", "after"],
+          ["after", "final"],
+        ]) {
+          const result = yield* Patch.applyPatch(
+            `*** Begin Patch\n*** Update File: ${target}\n@@\n-${before}\n+${after}\n*** End Patch`,
+          )
+          expect(result.modified).toEqual([target])
+          expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe(`${after}\nunchanged\n\n\n`)
+        }
+      }),
+    )
+
     it.live("should add a new file", () =>
       Effect.gen(function* () {
         const patchText = `*** Begin Patch

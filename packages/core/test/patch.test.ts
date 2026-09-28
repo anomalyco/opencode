@@ -2,6 +2,19 @@ import { describe, expect, test } from "bun:test"
 import { Patch } from "@opencode-ai/core/patch"
 
 describe("Patch", () => {
+  test.each(["\n", "\n\n", "\n\n\n"])("preserves an unchanged trailing %j", (ending) => {
+    expect(Patch.derive("update.txt", [{ oldLines: ["old"], newLines: ["new"] }], `\uFEFFold${ending}`)).toEqual({
+      content: `new${ending}`,
+      bom: true,
+    })
+  })
+
+  test("can explicitly remove a trailing blank line", () => {
+    expect(
+      Patch.derive("update.txt", [{ oldLines: ["old", ""], newLines: ["new"], endOfFile: true }], "old\n\n").content,
+    ).toBe("new\n")
+  })
+
   test("parses add, update, and delete hunks", () => {
     expect(
       Patch.parse(
