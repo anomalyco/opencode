@@ -8,6 +8,7 @@ import { Session } from "../../session.js"
 import { SessionEvent } from "../event.js"
 import { SessionExecution } from "../execution.js"
 import { SessionSchema } from "../schema.js"
+import { SessionEnvironment } from "../environment.js"
 import { SessionStore } from "../store.js"
 import { ShellResult } from "../../shell/result.js"
 import { SubagentCompletion } from "../subagent-completion.js"
@@ -71,8 +72,10 @@ export const layer = (options?: Options) =>
       const bus = yield* Bus.Service
       const jobs = yield* Job.Service
       const sessions = yield* Session.Service
+      const environments = yield* SessionEnvironment.Service
       const scope = yield* Effect.scope
       const maxAttempts = options?.maxAttempts ?? DEFAULT_MAX_ATTEMPTS
+      const waiting = new Set<SessionSchema.ID>()
 
       const prepareResume = Effect.fnUntraced(function* (sessionID: SessionSchema.ID) {
         // Durable before the resume runs, so a crash inside the resumed turn is
@@ -221,9 +224,29 @@ export const layer = (options?: Options) =>
           yield* Effect.forEach(
             (yield* store.listSuspended()).filter((sessionID) => !resumed.has(sessionID)),
             (sessionID) =>
-              execution
-                .resume(sessionID)
-                .pipe(Effect.ignore, Effect.forkIn(scope), Effect.when(prepareResume(sessionID))),
+              Effect.gen(function* () {
+                if (waiting.has(sessionID)) return
+                waiting.add(sessionID)
+                const resume = Effect.gen(function* () {
+                  // Reattachment can arrive long after the sweep. Do not resurrect a
+                  // completed/cancelled turn or duplicate local execution.
+                  if (!(yield* store.listSuspended()).includes(sessionID)) return
+                  if (yield* execution.isActive(sessionID)) return
+                  if (yield* prepareResume(sessionID))
+                    yield* execution.resume(sessionID).pipe(Effect.ignore, Effect.forkIn(scope))
+                })
+                // Preserve synchronous budget accounting for ready sessions. Waiting
+                // for one disconnected client must not stall recovery of other sessions.
+                if (yield* environments.isReady(sessionID))
+                  return yield* resume.pipe(Effect.ensuring(Effect.sync(() => waiting.delete(sessionID))))
+                yield* environments
+                  .resolve(sessionID)
+                  .pipe(
+                    Effect.andThen(resume),
+                    Effect.ensuring(Effect.sync(() => waiting.delete(sessionID))),
+                    Effect.forkIn(scope),
+                  )
+              }),
             { concurrency: "unbounded", discard: true },
           )
           // Async observers consult this set at delivery; later completions wake parents normally.
@@ -236,5 +259,5 @@ export const layer = (options?: Options) =>
 export const node = makeGlobalNode({
   service: Service,
   layer: layer(),
-  deps: [SessionStore.node, SessionExecution.node, Bus.node, Job.node, Session.node],
+  deps: [SessionStore.node, SessionExecution.node, Bus.node, Job.node, Session.node, SessionEnvironment.node],
 })
