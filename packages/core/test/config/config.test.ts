@@ -737,8 +737,7 @@ describe("Config", () => {
       },
     })
 
-    // The top-level model decodes as a native V2 field, so it does not receive the legacy provider rename.
-    expect(migrated.model).toEqual({ providerID: "azure-cognitive-services", model: "deployment" })
+    expect(migrated.model).toEqual({ providerID: "azure", model: "deployment" })
     expect(migrated.agents?.reviewer?.model).toEqual({ providerID: "google-vertex", model: "claude-sonnet" })
     expect(migrated.commands?.review?.model).toEqual({ providerID: "azure", model: "deployment" })
     expect(migrated.experimental?.policies).toEqual([

@@ -160,7 +160,7 @@ function migrateGoogleVertexAnthropicProvider(info: ConfigProviderV1.Info) {
   }
 }
 
-// Rename these only while migrating unambiguous V1 fields.
+// Renames retired provider IDs in V1 fields and the shared top-level model.
 export function providerID(input: string) {
   if (input === "azure-cognitive-services") return "azure"
   if (input === "google-vertex-anthropic") return "google-vertex"

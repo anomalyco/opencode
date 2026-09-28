@@ -10,6 +10,7 @@ import { ConfigCompaction } from "@opencode/schema/config/compaction"
 import { ConfigFormatter } from "@opencode/schema/config/formatter"
 import { ConfigLSP } from "@opencode/schema/config/lsp"
 import { ConfigMedia } from "@opencode/schema/config/media"
+import { ConfigModel } from "@opencode/schema/config/model"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import { ConfigPlugin } from "@opencode/schema/config/plugin"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
@@ -196,10 +197,14 @@ export function normalize(input: unknown): Result {
   normalizeFormatter(input, encoded, diagnostics)
   normalizeLsp(input, encoded, diagnostics)
 
+  const model = own(input, "model")
+    ? decodeValue(ConfigModel.Selection, input.model, ["model"], diagnostics)
+    : undefined
+  if (model) encoded.model = { ...model, providerID: ConfigMigrateV1.providerID(model.providerID) }
+
   const nativeAtomic = {
     $schema: Info.fields.$schema,
     shell: Info.fields.shell,
-    model: Info.fields.model,
     default_agent: Info.fields.default_agent,
     share: Info.fields.share,
     enterprise: Info.fields.enterprise,
