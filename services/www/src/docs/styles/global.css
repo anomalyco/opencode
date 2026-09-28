@@ -912,6 +912,48 @@ main {
   overflow-x: auto;
 }
 
+.docs-plan-tabs {
+  margin-bottom: 1.5rem;
+}
+
+.docs-plan-tabs-list {
+  display: flex;
+  gap: 0;
+  margin-bottom: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.docs-plan-tabs-list button {
+  margin-bottom: -1px;
+  padding: 0.5rem 1rem;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.docs-plan-tabs-list button[aria-selected="true"] {
+  border-bottom-color: var(--foreground);
+  color: var(--foreground);
+}
+
+.docs-plan-tabs-list button:focus-visible {
+  outline: 2px solid var(--link);
+  outline-offset: 2px;
+}
+
+.docs-plan-tabs [role="tabpanel"] {
+  overflow-x: auto;
+}
+
+.docs-plan-tabs [role="tabpanel"] > :last-child,
+.docs-plan-tabs [role="tabpanel"] > :last-child > :last-child {
+  margin-bottom: 0;
+}
+
 .prose table {
   width: 100%;
   margin-bottom: 1.5rem;
