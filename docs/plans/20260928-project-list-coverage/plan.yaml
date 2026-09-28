@@ -1,0 +1,378 @@
+plan_id: 20260928-project-list-coverage
+objective: If db has sessions with a project/path, make it show in project list with all sessions. All for API/GUI/Web UI + TUI if easy.
+created_at: '2026-09-28T00:00:00Z'
+created_by: gem-planner
+status: pending
+research_confidence: high
+plan_metrics:
+  wave_1_task_count: 2
+  total_dependencies: 10
+  risk_score: medium
+tldr: |
+  No new endpoint. Enumerate coverage read-only (project.list + full session.list cursor walk + distinct dirs + E:/ both-spellings + archived/children matrix),
+  add solid projectSessions query on existing SessionsQuery contract, build GUI/Web union selector (client order + DB sync + session dirs,
+  alias-aware dedupe), wire TUI dialog-open to same query with fallback + story, then verify counts/alias/SEARCH/invalidation E2E.
+open_questions:
+  - question: Does SEARCH/global cap (5000 sessions index, 512 render, 64/dir) need raising once union adds DB-only projects?
+    context: app-home sessions index caps; union increases visible projects without raising session row caps.
+    type: nice_to_know
+    affects: [gui-1, ver-1]
+  - question: Should series-archived parents stay hidden from project list while their children still confer coverage?
+    context: Coverage rule says parentID undefined returns roots+children; archived exclusion currently missing.
+    type: nice_to_know
+    affects: [cov-1, gui-1, ver-1]
+pre_mortem:
+  overall_risk_level: medium
+  critical_failure_modes:
+    - scenario: Cursor walk terminates early on data.length<limit boundary and misses distinct dirs, union under-covers.
+      likelihood: medium
+      impact: high
+      mitigation: Enforce terminate-only-on-data.length<limit rule, always follow cursor.next, cover in cov-1 matrix + ver-1 count check vs DB.
+    - scenario: E:/ alias mismatch hides Windows projects (server verbatim eq vs client aliasPathKey).
+      likelihood: medium
+      impact: high
+      mitigation: Normalize before ?directory= and query both spellings; alias-aware dedupe via enrich; alias matrix in ver-1.
+    - scenario: Union breaks open/selection semantics or recentlyClosed restores wrong project.
+      likelihood: medium
+      impact: medium
+      mitigation: Preserve existing order + selection/open semantics in gui-1; keep recentlyClosed path; ver-1 regression on open/select/close.
+    - scenario: projectSessions query N+1 per project (per-project loop + orphan sweep + per-dir queries) regresses Home load.
+      likelihood: medium
+      impact: medium
+      mitigation: Key query by projectID with memo/suspense, short-page + sweep only, benchmark baseline before session/timeline edits per AGENTS.md.
+  assumptions:
+    - No protocol change needed; SessionsQuery project+subpath cursor union (All/Directory/Project) + base64url already sufficient.
+    - Never delete Project rows (FK CASCADE); coverage is additive only.
+    - NEVER restart app/server during implementation or verification; use bun run dev:live for TUI.
+    - Default branch v2 for worktrees and PR targets.
+implementation_specification:
+  code_structure: Solid client query (packages/client/src/solid/data.ts) over existing generated promise client; Home union selector in packages/app/src/home/projects + sessions controllers; TUI dialog-open resource in packages/tui reusing same query; no Schema/Core/Protocol/Server HttpApi change.
+  affected_areas:
+    - packages/client/src/solid/data.ts
+    - packages/app/src/home/projects
+    - packages/app/src/home/sessions
+    - packages/tui/src/component/dialog-open.tsx
+    - packages/tui/src/component/dialog-session-list.tsx
+  component_details:
+    - component: projectSessions query
+      responsibility: Per-project session coverage using existing SessionsQuery contract, keyed by projectID, with cursor walk + invalidation.
+      interfaces: ['projectSessions(projectID) -> Session.Info[]', 'cursor.next loop until data.length<limit', 'sync.data.project invalidation']
+      dependencies:
+        - component: generated promise client
+          relationship: reuses SessionsQuery {project, subpath, directory} union, no regen unless HttpApi touched
+      integration_points: ['packages/client/src/solid/data.ts', 'sync.data.project']
+    - component: Home union selector
+      responsibility: Union client order + DB sync.data.project + distinct session dirs with alias-aware dedupe, preserving order/selection/open/recentlyClosed.
+      interfaces: ['projectDirectories allowlist extension', 'enrich() alias-aware dedupe', 'home.project.list merge']
+      dependencies:
+        - component: projectSessions query
+          relationship: consumes per-project coverage for counts and session rows
+      integration_points: ['packages/app/src/home/projects/controller.tsx', 'packages/app/src/home/sessions/controller.tsx', 'packages/app/src/home/projects/region.tsx']
+    - component: TUI dialog-open projectOptions
+      responsibility: Project list via new query resource + local fallback on in-flight/mismatch/error; dialog-session-list scoping already ok.
+      interfaces: ['projectOptions resource', 'data.project.sync().then + list() filter', 'session-list.allProjects scope pref']
+      dependencies:
+        - component: projectSessions query
+          relationship: reuses same contract with backslash-norm subpath scoping
+      integration_points: ['packages/tui/src/component/dialog-open.tsx', 'packages/tui/src/component/dialog-session-list.tsx']
+contracts:
+  - from_task: cov-1
+    to_task: api-1
+    interface: coverage-shape {projectID, directory, subpath} + cursor rule (default limit 50, always cursor.next, terminate on data.length<limit) + distinct-dir list
+    format: typescript-type + markdown-table
+  - from_task: cov-2
+    to_task: api-1
+    interface: alias-normalization table (verbatim server eq vs aliasPathKey 5 rows, pathKey vs aliasPathKey, both-spellings query for E:/)
+    format: markdown-table
+  - from_task: api-1
+    to_task: gui-1
+    interface: projectSessions(projectID) query key + Session.Info[] shape + invalidation on sync.data.project
+    format: typescript-signature
+  - from_task: gui-1
+    to_task: tui-1
+    interface: union dedupe semantics (order preserved, alias-aware via enrich, selection/open + recentlyClosed behavior)
+    format: markdown-spec
+  - from_task: gui-1
+    to_task: ver-1
+    interface: union project list + per-project counts for DB count comparison
+    format: json-fixture
+  - from_task: tui-1
+    to_task: ver-1
+    interface: dialog-open projectOptions with fallback behavior + scope prefs (session-list.allProjects, ctrl+a)
+    format: markdown-spec
+  - from_task: tui-2
+    to_task: ver-1
+    interface: storybook story id + OPENCODE_STORY dev:live narrow/wide steps
+    format: markdown-steps
+  - from_task: api-1
+    to_task: tui-1
+    interface: projectSessions query reuse with {project, subpath backslash-norm} scoping
+    format: typescript-signature
+tasks:
+  - id: cov-1
+    title: Audit project coverage gap read-only
+    description: Read-only enumeration only, no code changes. Walk project.list (recency-ordered) + full session.list({}) cursor walk collecting {projectID, directory, subpath}, build distinct-dir set, document archived/children/global matrix (store.list AND exact-eq, no archived exclusion, parentID undefined returns roots+children, default limit 50 + always cursor.next, terminate on data.length<limit). Produce per-project short-page + orphan sweep + per-dir exact query plan. Never delete rows (FK CASCADE).
+    wave: 1
+    agent: gem-researcher
+    prototype: false
+    covers: [server-project-sessions-api, app-home-project-list]
+    priority: high
+    status: pending
+    dependencies: []
+    conflicts_with: []
+    context_files:
+      - path: packages/core/src/session/store.ts
+        description: ListProjectInput eq, ListInput union, cursor semantics
+      - path: packages/app/src/home/sessions/controller.tsx
+        description: Sessions index 5000/64/114/512 caps and projectDirectories allowlist
+      - path: packages/app/src/home/projects/controller.tsx
+        description: Current client-only opened set + home.project.list
+    planning_pass: 1
+    estimated_effort: small
+    estimated_files: 2
+    estimated_lines: 120
+    focus_area: server-project-sessions-api
+    verification: [Full cursor walk terminates only on data.length<limit, distinct dirs listed, archived/children/global matrix table present]
+    acceptance_criteria: ['No code modified (read-only)', 'Distinct {projectID,directory,subpath} set enumerated', 'Cursor rule + per-project/orphan/per-dir query plan documented']
+    success_criteria: ['coverage_matrix.rows >= 1', 'cursor_rule_documented == true']
+    failure_modes:
+      - scenario: Partial cursor walk misses tail pages and under-reports coverage
+        likelihood: medium
+        impact: high
+        mitigation: Always follow cursor.next until data.length<limit; cross-check total vs DB count.
+    tech_stack: [TypeScript, Effect, Bun]
+    research_sources: [research_findings_server-project-sessions-api.yaml, research_findings_app-home-project-list.yaml]
+  - id: cov-2
+    title: Map alias and path normalization matrix
+    description: Read-only. Document E:/ alias client-only (aliasPathKey) vs server verbatim eq, pathKey vs aliasPathKey split (retain raw, match alias, open exact vs closed pathKey), registry.tsx server store + runtime enrich per-opened-row + bootstrap loadProjectsQuery filter, and both-spellings query requirement before ?directory=. Include archived/children handling note.
+    wave: 1
+    agent: gem-researcher
+    prototype: false
+    covers: [server-project-sessions-api, app-home-project-list]
+    priority: medium
+    status: pending
+    dependencies: []
+    conflicts_with: []
+    context_files:
+      - path: packages/app/src/home/sessions/controller.tsx
+        description: pathKey vs aliasPathKey enrich and retain-raw semantics
+      - path: packages/core/src/session/store.ts
+        description: Server verbatim eq on directory
+    planning_pass: 1
+    estimated_effort: small
+    estimated_files: 2
+    estimated_lines: 100
+    focus_area: server-project-sessions-api
+    verification: [Alias table with both-spellings query examples, pathKey/aliasPathKey cases covered]
+    acceptance_criteria: ['E:/ both-spellings rule documented', 'No code modified']
+    success_criteria: ['alias_matrix.rows >= 2']
+    failure_modes:
+      - scenario: Alias edge case missed causing hidden Windows project
+        likelihood: medium
+        impact: high
+        mitigation: Query both spellings; verify via enrich dedupe cases in gui-1 and alias matrix in ver-1.
+    tech_stack: [TypeScript]
+    research_sources: [research_findings_server-project-sessions-api.yaml, research_findings_app-home-project-list.yaml]
+  - id: api-1
+    title: Add solid projectSessions query on existing contract
+    description: Add global-sessions-memo-adjacent projectSessions query in packages/client/src/solid/data.ts keyed by projectID using existing SessionsQuery {project, subpath} + cursor union (All/Directory/Project) + base64url via generated promise client. No protocol/Schema change. Run bun run generate from packages/client as regen check only (do not hand-edit generated files). Keep deps directed client->schema+protocol. Use createStore over createSignal. Preserve benchmark baseline if touching session/timeline paths.
+    wave: 2
+    agent: gem-implementer
+    prototype: false
+    covers: [protocol-client-project-contract]
+    priority: high
+    status: pending
+    dependencies: [cov-1, cov-2]
+    conflicts_with: []
+    context_files:
+      - path: packages/client/src/solid/data.ts
+        description: Add projectSessions query alongside global sessions memo
+      - path: packages/core/src/session/store.ts
+        description: Existing ListInput contract reference
+    planning_pass: 1
+    estimated_effort: medium
+    estimated_files: 2
+    estimated_lines: 150
+    focus_area: protocol-client-project-contract
+    verification: ['bun run generate passes or no-op (no hand-edited generated files)', 'bun typecheck in affected package', 'Query keyed by projectID returns Session.Info[] with projectID+subpath']
+    acceptance_criteria: ['No Protocol or Server HttpApi change', 'createStore used, no new createSignal for query state', 'Cursor loop terminates on data.length<limit', 'Alias both-spellings handled or delegated to caller with documented contract']
+    success_criteria: ['typecheck.exit_code === 0', 'generate.no_hand_edits === true']
+    failure_modes:
+      - scenario: N+1 per-project queries overload Home load
+        likelihood: medium
+        impact: medium
+        mitigation: Memoize per projectID with suspense, short-page + sweep only, reuse sync.data.project invalidation.
+      - scenario: Accidental generated-client hand edit breaks regen
+        likelihood: low
+        impact: high
+        mitigation: Regen check via bun run generate; never hand-edit generated files.
+    tech_stack: [TypeScript, Solid, Effect, Bun]
+    research_sources: [research_findings_protocol-client-project-contract.yaml, research_findings_server-project-sessions-api.yaml]
+    requires_review: true
+    review_depth: standard
+    review_security_sensitive: false
+  - id: gui-1
+    title: Implement Home union project list GUI Web
+    description: Build union selector in home projects/sessions controllers + region: union client opened order + DB sync.data.project + distinct session dirs from projectSessions, alias-aware dedupe via existing enrich (retain raw, match alias), preserve order + selection/open semantics + recentlyClosed restore, keep 64/dir display and 114/512 index caps unless SEARCH explicitly scoped. Single Home() with branch flags (no desktop/web fork). i18n keys for new strings. Touch only home scope.
+    wave: 3
+    agent: gem-implementer
+    prototype: false
+    covers: [app-home-project-list]
+    priority: high
+    status: pending
+    dependencies: [api-1]
+    conflicts_with: []
+    context_files:
+      - path: packages/app/src/home/projects/controller.tsx
+        description: Union list assembly + selection/open semantics
+      - path: packages/app/src/home/sessions/controller.tsx
+        description: Sessions index merge + projectDirectories extension + recentlyClosed
+      - path: packages/app/src/home/projects/region.tsx
+        description: Render union list (client list only today)
+    planning_pass: 1
+    estimated_effort: medium
+    estimated_files: 3
+    estimated_lines: 220
+    focus_area: app-home-project-list
+    verification: ['DB-only project with sessions appears in list with all sessions and correct count', 'Open/select/close/recentlyClosed preserves prior behavior', 'Alias project dedupes to one row']
+    acceptance_criteria: ['DB sessions confer list membership (no sidebar-only gate)', 'Order preserved, enrich dedupe alias-aware', 'i18n keys, no hard-coded strings', 'No desktop/web fork introduced']
+    success_criteria: ['union_coverage.db_only_visible === true', 'open_select_regression.pass === true']
+    failure_modes:
+      - scenario: Union duplicates alias rows (pathKey vs alias split)
+        likelihood: medium
+        impact: medium
+        mitigation: Dedupe through enrich with retain-raw + alias match; cover E:/ both spellings.
+      - scenario: RecentlyClosed restores wrong project after union reorder
+        likelihood: low
+        impact: medium
+        mitigation: Preserve client order as primary; DB/session dirs appended deterministically; regression check in ver-1.
+    tech_stack: [TypeScript, Solid, Bun]
+    research_sources: [research_findings_app-home-project-list.yaml, research_findings_server-project-sessions-api.yaml]
+    requires_review: true
+    review_depth: standard
+    review_security_sensitive: false
+  - id: tui-1
+    title: Wire TUI dialog-open to projectSessions with fallback
+    description: Add projectOptions resource in dialog-open using projectSessions query (scopes: allProjects {} / global {directory} / else {project, subpath backslash-norm}) + local fallback on in-flight/mismatch/error mirroring dialog-session-list. Reuse session-list.allProjects pref (tabs.scope!=='cwd') + ctrl+a persist. Keep data.project.sync().then + list() filter canonical!=='/' as fallback. Preserve RECENT 8 merge (data.session.list()+props.sessions dedupe !parentID sort) and session.deleted/moved reconcile. Semantic theme tokens only.
+    wave: 4
+    agent: gem-implementer
+    prototype: false
+    covers: [tui-project-session-list]
+    priority: medium
+    status: pending
+    dependencies: [gui-1]
+    conflicts_with: []
+    context_files:
+      - path: packages/tui/src/component/dialog-open.tsx
+        description: projectOptions resource + fallback
+      - path: packages/tui/src/component/dialog-session-list.tsx
+        description: Existing scoping + fallback pattern to mirror
+    planning_pass: 1
+    estimated_effort: medium
+    estimated_files: 2
+    estimated_lines: 180
+    focus_area: tui-project-session-list
+    verification: ['DB-only project appears in dialog-open with sessions', 'Fallback triggers on in-flight/mismatch/error', 'Scope prefs persist']
+    acceptance_criteria: ['Backslash-norm subpath scoping', 'Local fallback preserved', 'Semantic theme tokens, no raw hue reuse', 'NEVER restart server; verify via dev:live']
+    success_criteria: ['tui_db_only_visible === true', 'fallback.on_error === true']
+    failure_modes:
+      - scenario: In-flight query flash empties project list
+        likelihood: medium
+        impact: medium
+        mitigation: Local fallback on in-flight/mismatch/error; keep last-good list until resolve.
+    tech_stack: [TypeScript, Solid, Bun]
+    research_sources: [research_findings_tui-project-session-list.yaml, research_findings_protocol-client-project-contract.yaml]
+    requires_review: false
+  - id: tui-2
+    title: Add TUI storybook story for project dialogs
+    description: Fixture-driven story rendering real dialog-open + dialog-session-list components (no visual copies) with StoryFooter keys + reset command, covering allProjects/global/project scopes + fallback state. Register in index storybook. Verify via OPENCODE_STORY + bun run dev:live at narrow and wide terminal sizes.
+    wave: 4
+    agent: gem-implementer
+    prototype: false
+    covers: [tui-project-session-list]
+    priority: low
+    status: pending
+    dependencies: [gui-1]
+    conflicts_with: []
+    context_files:
+      - path: packages/tui/src/component/dialog-open.tsx
+        description: Real component under story
+      - path: packages/tui/src/component/dialog-session-list.tsx
+        description: Real component under story
+    planning_pass: 1
+    estimated_effort: small
+    estimated_files: 2
+    estimated_lines: 140
+    focus_area: tui-project-session-list
+    verification: ['OPENCODE_STORY=<story-id> bun run dev:live renders narrow + wide', 'StoryFooter lists keys + reset works']
+    acceptance_criteria: ['Fixture-driven real components', 'StoryFooter keys + reset', 'Narrow/wide exercised']
+    success_criteria: ['story.renders_narrow === true', 'story.renders_wide === true']
+    tech_stack: [TypeScript, Bun]
+    research_sources: [research_findings_tui-project-session-list.yaml]
+  - id: ver-1
+    title: Verify counts alias SEARCH invalidation E2E
+    description: Evidence-based E2E (no implementation): counts vs DB (union list count == distinct DB dirs + client-only), alias matrix (E:/ both spellings, pathKey/alias cases), SEARCH cap behavior (5000/512/64 notes), invalidation (sync.data.project + projectSessions refetch on open/close/delete/move), series archival note (archived parents vs children coverage). Collect screenshots/logs. NEVER restart app/server.
+    wave: 5
+    agent: gem-browser-tester
+    prototype: false
+    covers: [app-home-project-list, server-project-sessions-api, tui-project-session-list]
+    priority: high
+    status: pending
+    dependencies: [gui-1, tui-1, tui-2]
+    conflicts_with: []
+    context_files:
+      - path: packages/app/src/home/projects/region.tsx
+        description: Render target for browser evidence
+      - path: packages/tui/src/component/dialog-open.tsx
+        description: TUI scope for dev:live evidence (narrow/wide)
+    planning_pass: 1
+    estimated_effort: medium
+    estimated_files: 2
+    estimated_lines: 120
+    focus_area: app-home-project-list
+    verification: ['Count table vs DB matches', 'Alias matrix all pass', 'Invalidation steps re-render without restart', 'Evidence screenshots/logs attached']
+    acceptance_criteria: ['Counts vs DB documented with exit 0 evidence', 'Alias both-spellings pass', 'SEARCH cap + archival note recorded']
+    success_criteria: ['counts.match_db === true', 'alias_matrix.pass === true', 'evidence.attached === true']
+    failure_modes:
+      - scenario: Flaky browser session masks union regression
+        likelihood: medium
+        impact: medium
+        mitigation: Pin scope fixtures, rerun 3x, attach logs/screenshots per scenario.
+    tech_stack: [TypeScript, Playwright, Bun]
+    research_sources: [research_findings_app-home-project-list.yaml, research_findings_server-project-sessions-api.yaml, research_findings_tui-project-session-list.yaml]
+    validation_matrix:
+      - scenario: DB-only project with sessions appears with full count
+        steps: ['Seed DB project+path with N sessions (no client open)', 'Load Home + dialog-open', 'Compare list count vs DB distinct dirs']
+        expected_result: Project visible in GUI/Web + TUI with all N sessions
+      - scenario: E:/ alias dedupes to single row
+        steps: ['Seed verbatim + alias spellings same project', 'Load Home', 'Check single row opens correct path']
+        expected_result: One row, open exact semantics preserved
+  - id: doc-1
+    title: Document project-list coverage behavior
+    description: Document union rule (DB sessions confer membership), alias both-spellings note, cursor walk + SEARCH caps, scope prefs (session-list.allProjects/ctrl+a), fallback behavior, and series archival note. Read-only source. Final wave per new-feature rule.
+    wave: 5
+    agent: gem-documentation-writer
+    prototype: false
+    covers: [app-home-project-list, tui-project-session-list]
+    priority: low
+    status: pending
+    dependencies: [tui-1, tui-2]
+    conflicts_with: []
+    context_files:
+      - path: packages/app/src/home/projects/controller.tsx
+        description: Union behavior source (read-only)
+      - path: packages/tui/src/component/dialog-open.tsx
+        description: TUI scope/fallback source (read-only)
+    planning_pass: 1
+    estimated_effort: small
+    estimated_files: 1
+    estimated_lines: 80
+    focus_area: null
+    verification: [Docs cover union + alias + caps + prefs + fallback + archival note]
+    acceptance_criteria: ['Read-only source, no implementation', 'i18n-safe wording where UI strings referenced']
+    success_criteria: ['docs.covers_union === true']
+    tech_stack: [Markdown]
+    research_sources: [research_findings_app-home-project-list.yaml, research_findings_tui-project-session-list.yaml]
+    task_type: documentation
+    audience: developers
+    coverage_matrix: [union rule, alias note, SEARCH caps, scope prefs, fallback, archival note]

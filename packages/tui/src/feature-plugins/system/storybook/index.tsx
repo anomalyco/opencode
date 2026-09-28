@@ -4,6 +4,7 @@ import { createSignal, For, type JSX } from "solid-js"
 import { StoryFooter } from "./footer"
 import { mermanLayoutsStory } from "./merman-layouts"
 import { sessionTabsStory } from "./session-tabs"
+import { dialogProjectListStory } from "./dialog-project-list"
 import { sessionLocationMissingStory } from "./session-location-missing"
 import { oneCellSpinnerStory } from "./one-cell-spinner"
 
@@ -17,7 +18,7 @@ export type Story = {
   render: (context: Plugin.Context) => JSX.Element
 }
 
-const stories: Story[] = [mermanLayoutsStory, sessionTabsStory, sessionLocationMissingStory, oneCellSpinnerStory]
+const stories: Story[] = [mermanLayoutsStory, sessionTabsStory, dialogProjectListStory, sessionLocationMissingStory, oneCellSpinnerStory]
 
 function Commands(props: { context: Plugin.Context }) {
   props.context.keymap.layer(() => ({

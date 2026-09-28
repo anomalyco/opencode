@@ -1,6 +1,7 @@
 import { batch, createEffect, createMemo, createResource, createSignal, onCleanup, Show } from "solid-js"
 import type { OpenCodeEvent, SessionInfo } from "@opencode/client"
 import path from "path"
+import { Project } from "@opencode/schema/project"
 import { useTerminalDimensions } from "@opentui/solid"
 import type { RGBA } from "@opentui/core"
 import { dialogWidth, useDialog } from "../ui/dialog"
@@ -20,11 +21,15 @@ import { truncateFilePath } from "../ui/file-path"
 import { useToast } from "../ui/toast"
 import { errorMessage } from "../util/error"
 import { stringWidth } from "../util/string-width"
+import { useStorage } from "../context/storage"
+import { useConfig } from "../config"
+import { createDebouncedSignal } from "../util/signal"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import { Spinner } from "./spinner"
 import { projectName } from "../util/project"
 
 const RECENT_LIMIT = 8
+const PROJECT_QUERY_LIMIT = 50
 export const DialogOpenKey = Symbol("DialogOpen")
 
 type OpenTarget =
@@ -47,8 +52,18 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
   const paths = useTuiPaths()
   const dimensions = useTerminalDimensions()
   const shortcuts = Keymap.useShortcuts()
+  const config = useConfig().data
   const [filter, setFilter] = createSignal("")
+  const [projectSearch, setProjectSearch] = createDebouncedSignal("", 150)
   const [selectionMoved, setSelectionMoved] = createSignal(false)
+  const [prefs, updatePrefs] = useStorage().store("session-list", {
+    initial: { allProjects: config.tabs?.scope !== "cwd" },
+  })
+  const allProjects = () => prefs.allProjects
+  const pickerLocation = () =>
+    (route.data.type === "session" ? data.session.get(route.data.sessionID)?.location : undefined) ??
+    location.ref ??
+    data.location.default()
   let closed = false
   onCleanup(() => {
     closed = true
@@ -83,6 +98,73 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
       () => true,
       () => false,
     ),
+  )
+  const [health] = createResource(() =>
+    client.api.server.info().then(
+      (info) => info,
+      () => undefined,
+    ),
+  )
+  // Version-skew matrix:
+  // | server     | project source              | search (limit/search/cursor) | metadata  |
+  // | new-server | project.list + session dirs | enabled                      | full      |
+  // | old-server | session-derived only        | disabled (local filter)      | disabled  |
+  // | unknown    | project.list fallback       | disabled (local filter)      | disabled  |
+  const isOldServer = () => {
+    const version = health()?.version ?? ""
+    if (version === "") return false
+    const major = Number(version.replace(/^v/, "").split(".")[0])
+    return Number.isFinite(major) && major < 2
+  }
+  const [projectQuery] = createResource(
+    () => ({
+      query: projectSearch().trim(),
+      allProjects: allProjects(),
+      location: pickerLocation(),
+    }),
+    async ({ query, allProjects, location }) => {
+      try {
+        if (isOldServer()) {
+          // old-server: session-derived projects only, search disabled, metadata disabled.
+          const derived = deriveSessionProjects()
+          const needle = query.toLowerCase()
+          const directories = needle
+            ? derived.filter((directory) => directory.toLowerCase().includes(needle))
+            : derived
+          return { query, allProjects, directories, disabled: true as const, error: undefined }
+        }
+        const current = data.location.info(location) ?? data.location.info(data.location.default())
+        const scope = allProjects
+          ? {}
+          : current?.project.id === Project.ID.global || !current
+            ? { directory: location.directory }
+            : {
+                project: current.project.id,
+                subpath: path.relative(current.project.directory, location.directory).replaceAll("\\", "/"),
+              }
+        const directories: string[] = []
+        let cursor: string | undefined = undefined
+        do {
+          const response = await client.api.session.list({
+            limit: PROJECT_QUERY_LIMIT,
+            order: "desc",
+            parentID: null,
+            ...scope,
+            ...(query ? { search: query } : {}),
+            ...(cursor ? { cursor } : {}),
+          })
+          for (const session of response.data) {
+            if (!directories.includes(session.location.directory)) directories.push(session.location.directory)
+          }
+          cursor = response.cursor.next ?? undefined
+          if (response.data.length < PROJECT_QUERY_LIMIT) break
+        } while (cursor)
+        return { query, allProjects, directories, disabled: false as const, error: undefined }
+      } catch (error) {
+        // A transient transport failure must degrade search, not crash the TUI.
+        return { query, allProjects, directories: [] as string[], disabled: true as const, error }
+      }
+    },
   )
   const [view, setView] = createSignal<OpenView>({ type: "projects" })
   const projectID = () => {
@@ -166,6 +248,54 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
         return true
       })
       .toSorted((a, b) => b.time.updated - a.time.updated)
+  })
+
+  function deriveSessionProjects() {
+    // old-server session-derived fallback: distinct session directories confer coverage.
+    const seen = new Set<string>()
+    const directories: string[] = []
+    for (const session of [...data.session.list(), ...props.sessions]) {
+      if (session.parentID) continue
+      const directory = session.location.directory
+      if (seen.has(directory)) continue
+      seen.add(directory)
+      directories.push(directory)
+    }
+    return directories
+  }
+
+  const fallbackProjectDirectories = createMemo(() =>
+    data.project
+      .list()
+      .filter((project) => project.canonical !== "/")
+      .map((project) => project.canonical),
+  )
+
+  const projectDirectories = createMemo(() => {
+    const fallback = fallbackProjectDirectories()
+    const result = projectQuery()
+    // Local fallback on in-flight/mismatch/error mirrors dialog-session-list: keep last-good list, no flash.
+    if (projectQuery.loading) return projectQuery.latest?.directories ?? fallback
+    if (!result || result.query !== projectSearch().trim() || result.allProjects !== allProjects() || result.error)
+      return fallback
+    // Union client order + session coverage: preserve project.list order, append session-derived dirs.
+    const seen = new Set(fallback)
+    const union = [...fallback]
+    for (const directory of [...result.directories, ...deriveSessionProjects()]) {
+      if (seen.has(directory)) continue
+      seen.add(directory)
+      union.push(directory)
+    }
+    return union
+  })
+
+  const projectCoverageDisabled = createMemo(() => projectQuery()?.disabled ?? true)
+
+  const currentProjectName = createMemo(() => {
+    const current = data.location.info(pickerLocation())
+    if (!current) return ""
+    const project = data.project.get(current.project.id)
+    return projectName(project) ?? ""
   })
 
   const options = createMemo(() => {
