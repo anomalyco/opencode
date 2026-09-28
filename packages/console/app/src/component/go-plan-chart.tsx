@@ -109,14 +109,24 @@ export function GoPlanChart(props: { href: string }) {
                     </div>
                   </td>
                   <td data-slot="number">
-                    <span>{format().format(tier() === "go" ? model.requests : model.plusRequests)}</span>
+                    <Show when={tier()} keyed>
+                      {(selected) => (
+                        <span data-slot="plan-value">
+                          {format().format(selected === "go" ? model.requests : model.plusRequests)}
+                        </span>
+                      )}
+                    </Show>
                   </td>
                   <td data-slot="number">
-                    <span>
-                      {Number.isFinite(tier() === "go" ? model.allowance : model.plusAllowance)
-                        ? currency().format(tier() === "go" ? model.allowance : model.plusAllowance)
-                        : "∞"}
-                    </span>
+                    <Show when={tier()} keyed>
+                      {(selected) => (
+                        <span data-slot="plan-value">
+                          {Number.isFinite(selected === "go" ? model.allowance : model.plusAllowance)
+                            ? currency().format(selected === "go" ? model.allowance : model.plusAllowance)
+                            : "∞"}
+                        </span>
+                      )}
+                    </Show>
                   </td>
                 </tr>
               )}

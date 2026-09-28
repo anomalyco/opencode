@@ -93,6 +93,16 @@
   [data-slot="tier-switch"] button {
     color: var(--go-console-secondary);
     border-radius: 4px;
+    transition:
+      background-color 180ms ease,
+      opacity 180ms ease;
+  }
+  [data-slot="tier-switch"] button[aria-pressed="false"] {
+    opacity: 0.4;
+    font-weight: 440;
+  }
+  [data-slot="tier-switch"] button[aria-pressed="false"]:is(:hover, :focus-visible) {
+    opacity: 0.75;
   }
   [data-slot="tier-switch"] button[aria-pressed="true"] {
     background: var(--go-console-surface);
@@ -168,6 +178,7 @@
     position: absolute;
     inset-block: 0;
     border-inline-start: 1px dashed var(--go-console-border);
+    transition: inset-inline-start 600ms cubic-bezier(0.22, 1, 0.36, 1);
   }
   [data-slot="track"] {
     position: relative;
@@ -177,7 +188,22 @@
     margin: 0.5rem 0;
   }
   [data-slot="track"] > [data-tier] {
+    position: relative;
     border-radius: 2px;
+    background: linear-gradient(var(--v2-yellow-500), var(--v2-yellow-600));
+    transition: width 600ms cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  [data-slot="track"] > [data-tier]::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: linear-gradient(var(--v2-orange-500), var(--v2-orange-600));
+    opacity: 0;
+    transition: opacity 300ms ease;
+  }
+  [data-slot="track"] > [data-tier="plus"]::after {
+    opacity: 1;
   }
   [data-slot="remainder"] {
     flex: 1;
@@ -193,6 +219,9 @@
     display: block;
     line-height: 1.25rem;
   }
+  [data-slot="plan-value"] {
+    animation: go-plan-value-in 300ms ease-out both;
+  }
   [data-slot="axis"] {
     position: relative;
     height: 2rem;
@@ -203,6 +232,7 @@
     position: absolute;
     top: 0.25rem;
     transform: translateX(-50%);
+    transition: inset-inline-start 600ms cubic-bezier(0.22, 1, 0.36, 1);
   }
   &:dir(rtl) [data-slot="axis"] span {
     transform: translateX(50%);
@@ -231,5 +261,28 @@
       align-items: start;
       flex-direction: column;
     }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    [data-slot="tier-switch"] button,
+    [data-slot="gridline"],
+    [data-slot="track"] > [data-tier],
+    [data-slot="track"] > [data-tier]::after,
+    [data-slot="axis"] span {
+      transition: none;
+    }
+    [data-slot="plan-value"] {
+      animation: none;
+    }
+  }
+}
+
+@keyframes go-plan-value-in {
+  from {
+    opacity: 0.3;
+    transform: translateY(3px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
