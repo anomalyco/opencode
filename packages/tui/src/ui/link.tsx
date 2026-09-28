@@ -24,7 +24,18 @@ export function Link(props: LinkProps) {
       bg={props.bg}
       width={props.width}
       wrapMode={props.wrapMode}
-      onMouseUp={() => {
+      onMouseUp={(event) => {
+        // Modified clicks belong to the terminal's native OSC 8 link handler.
+        // Opening them here as well launches the authorization page twice.
+        if (
+          event.defaultPrevented ||
+          event.button !== 0 ||
+          event.modifiers.ctrl ||
+          event.modifiers.alt ||
+          event.modifiers.shift
+        )
+          return
+        event.stopPropagation()
         openUrl(props.href).catch(() => {})
       }}
     >
