@@ -947,7 +947,7 @@ function LeaderboardCard(props: {
             <Show when={hasProvider()} fallback={<span />}>
               <span>{props.entry.author}</span>
             </Show>
-            <Show when={props.showChange}>
+            <Show when={props.showChange || props.entry.change === null}>
               <span
                 data-slot="delta"
                 data-new={props.entry.change === null ? "true" : undefined}
