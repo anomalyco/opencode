@@ -259,6 +259,18 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "订阅 Go",
   "go.cta.price": "$10/月",
+  "go.plans.month": "/月",
+  "go.plans.plus.cta": "订阅 Go Plus",
+  "go.plans.plus.description": "Go Plus 每月 $40，提供更高的使用额度。",
+  "go.plans.go.feature1": "精选实惠的模型",
+  "go.plans.go.feature2": "专为智能体编程测试",
+  "go.plans.go.feature3": "充足额度与稳定访问",
+  "go.plans.plus.feature1": "包含 Go 的全部权益",
+  "go.plans.plus.feature2": "更高额度，支持更长时间的专注编码",
+  "go.plans.plus.feature3": "适合更大型、更复杂的项目",
+  "go.plans.limits": "使用额度",
+  "go.plans.description": "各模型每 5 小时的预计请求次数和每月使用额度",
+  "go.plans.legend": "套餐",
   "go.pricing.body": "可配合任何代理使用。每月 $10。如有需要可充值。随时取消。",
   "go.graph.free": "免费",
   "go.graph.freePill": "Big Pickle 和免费模型",
@@ -361,7 +373,7 @@ export const dict = {
 
   "go.faq.q9": "免费模型和 Go 之间的区别是什么？",
   "go.faq.a9":
-    "免费模型包含 Big Pickle 加上当时可用的促销模型，每天有 200 次请求的配额。Go 提供精选模型阵容，并在滚动窗口（5 小时、每周和每月）内执行更高的请求配额，大致相当于每 5 小时 $12、每周 $30 和每月 $60 的基础额度；具体额度可能因模型而异（实际请求计数因模型和使用情况而异）。",
+    "免费模型包含 Big Pickle 加上当时可用的促销模型，每天有 200 次请求的配额。Go 提供精选模型阵容，并在滚动窗口内执行更高的请求配额：每 5 小时为月额度的 20%，每周为 50%，每月为 100%。具体额度可能因模型而异（实际请求次数因模型和使用情况而异）。",
   "go.faq.q10": "我可以退款吗？",
   "go.faq.a10":
     "如果扣款发生在过去 14 天内，并且您在该计费周期内尚未使用任何 Go 额度，您可能符合退款条件。请{{contact}}申请退款。",
