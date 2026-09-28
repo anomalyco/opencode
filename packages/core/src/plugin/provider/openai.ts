@@ -465,6 +465,9 @@ function authorizeURL(redirect: string, pkce: Pkce, state: string, nonce: string
   return `${issuer}/api/accounts/authorize?${new URLSearchParams({
     client_id: savedID ?? registrationClientID,
     ...(savedID ? {} : { agent_name_hint: agentName }),
+    // Enable only for user-requested consent retries after OpenAI confirms deployment;
+    // ordinary sign-ins must not force reconsent.
+    // force_reconsent: "true",
     response_type: "code",
     redirect_uri: redirect,
     scope: `openid profile email offline_access resource.invoke ${tokenSharingScope}`,
