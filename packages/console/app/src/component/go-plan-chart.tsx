@@ -5,22 +5,17 @@ import { useLanguage } from "~/context/language"
 import { goPlanModels } from "./go-models"
 
 const ticks = [100, 1000, 10000]
+const max = Math.max(...goPlanModels.map((model) => model.plusRequests).filter(Number.isFinite))
 
 export function GoPlanChart(props: { href: string }) {
   const i18n = useI18n()
   const language = useLanguage()
   const id = createUniqueId()
   const [expanded, setExpanded] = createSignal(false)
-  const [tier, setTier] = createSignal<"go" | "go-plus">("go")
   const models = createMemo(() => goPlanModels.filter((model) => expanded() || model.featured))
-  const max = createMemo(() =>
-    Math.max(
-      ...goPlanModels.map((model) => (tier() === "go" ? model.requests : model.plusRequests)).filter(Number.isFinite),
-    ),
-  )
   const position = (requests: number) =>
     Number.isFinite(requests)
-      ? 4 + Math.pow(Math.log10(Math.max(requests / 100, 1)) / Math.log10(max() / 100), 2.2) * 78
+      ? 4 + Math.pow(Math.log10(Math.max(requests / 100, 1)) / Math.log10(max / 100), 2.2) * 78
       : 100
   const format = createMemo(() => new Intl.NumberFormat(language.tag(language.locale())))
   const currency = createMemo(
@@ -40,24 +35,24 @@ export function GoPlanChart(props: { href: string }) {
           <h2 id={`${id}-title`}>{i18n.t("go.plans.limits")}</h2>
           <p>{i18n.t("go.plans.description")}</p>
         </div>
-        <div data-slot="tier-switch" role="group" aria-label={i18n.t("go.plans.legend")}>
-          <button type="button" aria-pressed={tier() === "go"} onClick={() => setTier("go")}>
+        <ul data-slot="legend" aria-label={i18n.t("go.plans.legend")}>
+          <li>
             <i data-tier="go" />
             Go
-          </button>
-          <button type="button" aria-pressed={tier() === "go-plus"} onClick={() => setTier("go-plus")}>
+          </li>
+          <li>
             <i data-tier="plus" />
             Go Plus
-          </button>
-        </div>
+          </li>
+        </ul>
       </div>
       <div data-slot="scroll">
         <table id={id}>
           <colgroup>
             <col style={{ width: "26%" }} />
-            <col style={{ width: "40%" }} />
-            <col style={{ width: "17%" }} />
-            <col style={{ width: "17%" }} />
+            <col style={{ width: "44%" }} />
+            <col style={{ width: "16%" }} />
+            <col style={{ width: "14%" }} />
           </colgroup>
           <thead>
             <tr>
@@ -73,60 +68,55 @@ export function GoPlanChart(props: { href: string }) {
               {(model) => (
                 <tr>
                   <th scope="row">
-                    <span data-slot="model">
-                      <bdi>{model.name}</bdi>
-                      <Show when={model.fresh}>
-                        <small>{i18n.t("go.graph.new")}</small>
-                      </Show>
-                      <Show when={model.limitedTime}>
-                        <small>{i18n.t("go.graph.limitedTime")}</small>
-                      </Show>
-                      <Show when={model.regions}>
-                        <a
-                          href="https://ai.developer.meta.com/legal/geographic-use-policy"
-                          title={i18n.t("go.graph.limitedRegions")}
-                          aria-label={`${model.name}: ${i18n.t("go.graph.limitedRegions")}`}
-                        >
-                          <svg viewBox="0 0 16 16" width="13" height="13" fill="none" aria-hidden="true">
-                            <circle cx="8" cy="8" r="6" stroke="currentColor" />
-                            <ellipse cx="8" cy="8" rx="2.5" ry="6" stroke="currentColor" />
-                            <path d="M2 8h12" stroke="currentColor" />
-                          </svg>
-                        </a>
-                      </Show>
-                    </span>
+                    <bdi>{model.name}</bdi>
+                    <Show when={model.fresh || model.limitedTime || model.regions}>
+                      <span data-slot="labels">
+                        <Show when={model.fresh}>
+                          <small>{i18n.t("go.graph.new")}</small>
+                        </Show>
+                        <Show when={model.limitedTime}>
+                          <small>{i18n.t("go.graph.limitedTime")}</small>
+                        </Show>
+                        <Show when={model.regions}>
+                          <a href="https://ai.developer.meta.com/legal/geographic-use-policy">
+                            {i18n.t("go.graph.limitedRegions")}
+                          </a>
+                        </Show>
+                      </span>
+                    </Show>
                   </th>
                   <td data-slot="bars" aria-hidden="true">
                     <For each={ticks}>
                       {(tick) => <span data-slot="gridline" style={{ "inset-inline-start": `${position(tick)}%` }} />}
                     </For>
                     <div data-slot="track">
-                      <span
-                        data-tier={tier() === "go" ? "go" : "plus"}
-                        style={{ width: `${position(tier() === "go" ? model.requests : model.plusRequests)}%` }}
-                      />
-                      <span data-slot="remainder" />
+                      <div data-slot="lane">
+                        {/* The Go bar is a linear fraction of the Plus bar so the multiplier reads true on the log scale. */}
+                        <span
+                          data-tier="go"
+                          style={{
+                            width: `${
+                              Number.isFinite(model.plusRequests)
+                                ? (position(model.plusRequests) * model.requests) / model.plusRequests
+                                : position(model.requests)
+                            }%`,
+                          }}
+                        />
+                        <span data-slot="remainder" />
+                      </div>
+                      <div data-slot="lane">
+                        <span data-tier="plus" style={{ width: `${position(model.plusRequests)}%` }} />
+                        <span data-slot="remainder" />
+                      </div>
                     </div>
                   </td>
                   <td data-slot="number">
-                    <Show when={tier()} keyed>
-                      {(selected) => (
-                        <span data-slot="plan-value">
-                          {format().format(selected === "go" ? model.requests : model.plusRequests)}
-                        </span>
-                      )}
-                    </Show>
+                    <span>{format().format(model.requests)}</span>
+                    <span>{format().format(model.plusRequests)}</span>
                   </td>
                   <td data-slot="number">
-                    <Show when={tier()} keyed>
-                      {(selected) => (
-                        <span data-slot="plan-value">
-                          {Number.isFinite(selected === "go" ? model.allowance : model.plusAllowance)
-                            ? currency().format(selected === "go" ? model.allowance : model.plusAllowance)
-                            : "∞"}
-                        </span>
-                      )}
-                    </Show>
+                    <span>{Number.isFinite(model.allowance) ? currency().format(model.allowance) : "∞"}</span>
+                    <span>{Number.isFinite(model.plusAllowance) ? currency().format(model.plusAllowance) : "∞"}</span>
                   </td>
                 </tr>
               )}
