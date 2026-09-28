@@ -132,7 +132,7 @@ const layer = Layer.effect(
       const loaded = yield* Effect.all(
         {
           tools: registry.snapshot(permissions),
-          builtins: builtins.load(sessionID),
+          builtins: builtins.load(),
           discovery: discovery.load(),
           skills: skillInstructions.load(permissions),
           references: referenceInstructions.load(),
@@ -144,14 +144,15 @@ const layer = Layer.effect(
       return {
         session,
         agent: { ...agent, info: agent.info },
-        // Date and environment vary by day and directory, so they render after the shared
-        // sources to keep the rest of the baseline a stable prompt-cache prefix across sessions.
+        // Ordered from most to least shared across sessions so the baseline stays a reusable
+        // prompt-cache prefix: user-level catalog and guidance, then project instructions, then
+        // the date and environment, which vary by day and directory.
         instructions: Instructions.combine([
           CodeModeInstructions.make(loaded.tools.codeModeCatalog),
-          loaded.discovery,
-          loaded.skills,
-          loaded.references,
           loaded.mcp,
+          loaded.references,
+          loaded.skills,
+          loaded.discovery,
           loaded.builtins,
           loaded.entries,
         ]),

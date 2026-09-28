@@ -2,13 +2,12 @@ export * as InstructionBuiltIns from "./builtins.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, DateTime, Effect, Layer, Schema } from "effect"
-import type { Session } from "@opencode/schema/session"
 import { Global } from "@opencode/util/global"
 import { Location } from "../location.js"
 import { Instructions } from "./index.js"
 
 export interface Interface {
-  readonly load: (sessionID: Session.ID) => Effect.Effect<Instructions.List>
+  readonly load: () => Effect.Effect<Instructions.List>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/InstructionBuiltIns") {}
@@ -19,7 +18,7 @@ const layer = Layer.effect(
     const global = yield* Global.Service
     const location = yield* Location.Service
     return Service.of({
-      load: (sessionID) =>
+      load: () =>
         Effect.succeed(
           Instructions.combine([
             Instructions.make({
@@ -37,7 +36,6 @@ const layer = Layer.effect(
               read: Effect.sync(() =>
                 [
                   "<env>",
-                  `  Current conversation session ID: ${sessionID}`,
                   `  Working directory: ${location.directory}`,
                   `  Workspace root folder: ${location.project.directory}`,
                   `  Is directory a git repo: ${location.vcs?.type === "git" ? "yes" : "no"}`,
