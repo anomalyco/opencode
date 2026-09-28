@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { mkdirSync, rmSync } from "node:fs"
+import { enableCompileCache } from "node:module"
 import { homedir, tmpdir } from "node:os"
 import path from "node:path"
 import { app } from "electron"
@@ -31,6 +32,8 @@ export function configureApplication() {
     app.setPath("sessionData", path.join(testRoot, "session"))
     if (testOnboarding) app.setPath("documents", path.join(testRoot, "documents"))
   }
+  // V8 bytecode for the main bundle survives between launches, like the renderer's code cache.
+  enableCompileCache(path.join(app.getPath("userData"), "compile-cache"))
 }
 
 export function acquireApplicationLock() {

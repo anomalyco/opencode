@@ -54,6 +54,9 @@ export const Plugin = Schema.Union([
   }),
 ])
 
+export const DiffSource = Schema.Union([Vcs.Mode, Schema.Literal("turn")])
+export type DiffSource = Schema.Schema.Type<typeof DiffSource>
+
 export const Cursor = Schema.Struct({
   style: Schema.optional(Schema.Literals(["block", "underline", "line", "default"])).annotate({
     description: "Cursor shape. Use 'default' to preserve the terminal setting",
@@ -108,8 +111,9 @@ export const Info = Schema.Struct({
   ).annotate({ description: "System notification and sound settings" }),
   diffs: Schema.optional(
     Schema.Struct({
-      source: Schema.optional(Vcs.Mode).annotate({
-        description: "Initial diff source; defaults to 'branch' (branch and uncommitted changes)",
+      source: Schema.optional(DiffSource).annotate({
+        description:
+          "Initial diff source; defaults to 'branch' (branch and uncommitted changes). 'turn' shows the session's last turn and falls back to 'branch' outside a session",
       }),
       wrap: Schema.optional(Schema.Literals(["word", "none"])).annotate({
         description: "Line wrapping behavior in diff output",
@@ -154,6 +158,9 @@ export const Info = Schema.Struct({
       grouping: Schema.optional(Schema.Literals(["auto", "none"])).annotate({
         description: "Group related transcript items automatically or render each item separately",
       }),
+      verbosity: Schema.optional(Schema.Literals(["low", "medium", "high"])).annotate({
+        description: "Transcript detail level: low summarizes each run of tools and thoughts, high opens exploration and instruction groups",
+      }),
       image_preview: Schema.optional(Schema.Boolean).annotate({
         description: "Show user attachment and tool-result images in the session transcript",
       }),
@@ -173,8 +180,11 @@ export const Info = Schema.Struct({
   ).annotate({ description: "Session transcript presentation settings" }),
   tabs: Schema.optional(
     Schema.Struct({
+      mode: Schema.optional(Schema.Literals(["auto", "on", "off"])).annotate({
+        description: "Use session tabs always, never, or when the terminal environment supports them",
+      }),
       enabled: Schema.optional(Schema.Boolean).annotate({
-        description: "Use a persistent tab strip instead of pinned quick-switch sessions",
+        description: "Legacy tab toggle; use mode instead",
       }),
       scope: Schema.optional(Schema.Literals(["global", "cwd"])).annotate({
         description: "Share tabs globally or keep a separate set for each working directory",
@@ -261,6 +271,7 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
     tps: boolean
   }
   tabs: {
+    mode: "auto" | "on" | "off"
     enabled: boolean
     scope: "global" | "cwd"
     layout: "horizontal" | "vertical"
@@ -268,7 +279,12 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
   }
 }
 
-export function resolve(input: Info, options: { terminalSuspend: boolean }): Resolved {
+export function resolve(
+  input: Info,
+  options: { terminalSuspend: boolean; environment?: Readonly<Record<string, string | undefined>> },
+): Resolved {
+  const tabsMode =
+    input.tabs?.mode ?? (input.tabs?.enabled === undefined ? "auto" : input.tabs.enabled ? "on" : "off")
   const keybinds: TuiKeybind.KeybindOverrides = { ...input.keybinds }
   if (!options.terminalSuspend) {
     keybinds["terminal.suspend"] = "none"
@@ -310,7 +326,8 @@ export function resolve(input: Info, options: { terminalSuspend: boolean }): Res
     },
     tabs: {
       ...input.tabs,
-      enabled: input.tabs?.enabled ?? true,
+      mode: tabsMode,
+      enabled: tabsMode === "on" || (tabsMode === "auto" && (options.environment ?? process.env).HERDR_ENV !== "1"),
       scope: input.tabs?.scope ?? "cwd",
       layout: input.tabs?.layout ?? "horizontal",
       indicators: input.tabs?.indicators ?? "status",
@@ -327,7 +344,7 @@ const ConfigContext = createContext<{
 export function ConfigProvider(props: {
   config: Resolved
   service?: Interface
-  options?: { terminalSuspend: boolean }
+  options?: { terminalSuspend: boolean; environment?: Readonly<Record<string, string | undefined>> }
   children: JSX.Element
 }) {
   const [config, setConfig] = createStore(props.config)

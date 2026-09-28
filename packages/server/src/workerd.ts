@@ -23,8 +23,8 @@ import type { ServerOptions } from "./options"
  *
  * - Database runs on the injected `DurableObjectStorage` SQLite.
  * - Watcher and fff are disabled through their existing option flags; pty, fff,
- *   shell-parser, photon, and process-lock native modules resolve to inert
- *   stubs under the `workerd` bundle condition.
+ *   shell-parser, and photon native modules resolve to inert stubs under the
+ *   `workerd` bundle condition.
  * - Bare locations use a typed no-execution-plane process spawner; FileSystem,
  *   FileSystemSearch, and Pty fail with a clear defect until a remote sandbox
  *   backs them; Snapshot and Vcs degrade to no-op results.

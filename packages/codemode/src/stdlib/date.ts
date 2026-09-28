@@ -1,12 +1,11 @@
 import { Effect } from "effect"
 import { constructor, type Method, methods, prototypeFrom, receiver } from "../interpreter/native.js"
 import { rangeError } from "../interpreter/model.js"
-import { DateObj, Obj } from "../interpreter/objects.js"
+import { DateObj, Obj, coerceToNumber, coerceToString, type Value } from "../interpreter/objects.js"
 import { toPrimitive, toPrimitiveNumber } from "../interpreter/callback.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
-import { coerceToNumber, coerceToString } from "./value.js"
 
-const constructDate = <R>(ctx: Interpreter<R>, args: Array<unknown>, proto: Obj) => {
+const constructDate = <R>(ctx: Interpreter<R>, args: Array<Value>, proto: Obj) => {
   if (args.length === 0) return Effect.succeed(new DateObj(proto, Date.now()))
   if (args.length === 1) {
     const arg = args[0]
@@ -17,8 +16,11 @@ const constructDate = <R>(ctx: Interpreter<R>, args: Array<unknown>, proto: Obj)
         : new DateObj(proto, new Date(coerceToNumber(value)).getTime()),
     )
   }
-  const parts = args.map((arg) => coerceToNumber(arg))
-  return Effect.succeed(new DateObj(proto, new Date(...(parts as [number, number])).getTime()))
+  // The spec converts at most seven components, in order, so extra arguments never run program code.
+  return Effect.map(
+    Effect.forEach(args.slice(0, 7), (arg) => toPrimitiveNumber(ctx, arg), { concurrency: 1 }),
+    (parts) => new DateObj(proto, new Date(...(parts as [number, number])).getTime()),
+  )
 }
 
 type Getter = keyof {
@@ -80,10 +82,18 @@ export const dateGlobal = <R>(ctx: Interpreter<R>) => {
   methods(builtins, date, [
     ["now", 0, () => Date.now()],
     ["parse", 1, (_, args) => Date.parse(coerceToString(args[0]))],
-    ["UTC", 7, (_, args) => Date.UTC(...(args.map((arg) => coerceToNumber(arg)) as Parameters<typeof Date.UTC>))],
+    [
+      "UTC",
+      7,
+      (_, args) =>
+        Effect.map(
+          Effect.forEach(args.slice(0, 7), (arg) => toPrimitiveNumber(ctx, arg), { concurrency: 1 }),
+          (parts) => Date.UTC(...(parts as Parameters<typeof Date.UTC>)),
+        ),
+    ],
   ])
 
-  const self = (thisValue: unknown, name: string) => receiver(DateObj, thisValue, `Date.prototype.${name}`)
+  const self = (thisValue: Value, name: string) => receiver(DateObj, thisValue, `Date.prototype.${name}`)
   const iso = (value: DateObj) => {
     if (!Number.isFinite(value.time)) throw rangeError("Invalid time value.")
     return new Date(value.time).toISOString()
@@ -105,6 +115,13 @@ export const dateGlobal = <R>(ctx: Interpreter<R>) => {
     ["toTimeString", 0, (thisValue) => new Date(self(thisValue, "toTimeString").time).toTimeString()],
     ["toUTCString", 0, (thisValue) => new Date(self(thisValue, "toUTCString").time).toUTCString()],
     ["toGMTString", 0, (thisValue) => new Date(self(thisValue, "toGMTString").time).toUTCString()],
+    ...(["toLocaleString", "toLocaleDateString", "toLocaleTimeString"] as const).map(
+      (name): Method => [
+        name,
+        0,
+        (thisValue) => new Date(self(thisValue, name).time)[name]("en-US", { timeZone: "UTC" }),
+      ],
+    ),
     ...getters.map((name): Method => [name, 0, (thisValue) => new Date(self(thisValue, name).time)[name]()]),
     ...setters.map(
       ([name, length]): Method => [
@@ -119,6 +136,8 @@ export const dateGlobal = <R>(ctx: Interpreter<R>) => {
               concurrency: 1,
             }),
             (values) => {
+              // Every setter but setTime and setFullYear leaves an invalid Date untouched and answers NaN.
+              if (Number.isNaN(hosted.getTime()) && name !== "setTime" && !name.endsWith("FullYear")) return NaN
               target.time = hosted[name](...(values as [number, number, number, number]))
               return target.time
             },

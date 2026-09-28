@@ -4,7 +4,8 @@ import { app } from "electron"
 import { Effect, Path } from "effect"
 import { DesktopPaths } from "../paths"
 import { getUserShell, loadShellEnv } from "../service/shell-env"
-import { registerRendererProtocol, setDockIcon } from "../windows"
+import { registerRendererProtocol, setDockIcon, setProtocolReporter } from "../windows"
+import { scoped } from "../native/logging"
 
 // electron-context-menu attaches to every existing and future window, so it can load once the first
 // window is up instead of holding up startup with its dependency tree.
@@ -37,7 +38,11 @@ export const prepareDesktop = Effect.gen(function* () {
   const paths = yield* DesktopPaths.resolve
   if (app.isPackaged || process.env.OPENCODE_DESKTOP_DISABLE_PROTOCOL_REGISTRATION !== "1")
     app.setAsDefaultProtocolClient("opencode")
-  yield* registerRendererProtocol()
+  const runFork = Effect.runForkWith(yield* Effect.context())
+  setProtocolReporter((level, message, data) =>
+    runFork(scoped("protocol", level === "error" ? Effect.logError(message, data) : Effect.logWarning(message, data))),
+  )
+  registerRendererProtocol(paths.rendererRoot)
   setDockIcon(path, paths)
 })
 

@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:openai-transcription",
+      "provider:openai",
+      "protocol:openai-transcription"
+    ],
+    "name": "openai-transcription/streams-text-deltas",
+    "recordedAt": "2026-09-23T12:31:59.149Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/audio/transcriptions",
+        "headers": {
+          "content-type": "multipart/form-data; boundary=----WebKitFormBoundarya44da5204f47452ea1ef8dec145321dc"
+        },
+        "body": "--BOUNDARY\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.mp3\"\r\nContent-Type: audio/mpeg\r\n\r\n[audio]\r\n--BOUNDARY\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\ngpt-4o-mini-transcribe\r\n--BOUNDARY\r\nContent-Disposition: form-data; name=\"stream\"\r\n\r\ntrue\r\n--BOUNDARY--\r\n"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream; charset=utf-8"
+        },
+        "body": "data: {\"type\":\"transcript.text.delta\",\"delta\":\"Hello\"}\r\n\r\ndata: {\"type\":\"transcript.text.delta\",\"delta\":\" from\"}\r\n\r\ndata: {\"type\":\"transcript.text.delta\",\"delta\":\" Open\"}\r\n\r\ndata: {\"type\":\"transcript.text.delta\",\"delta\":\"Code\"}\r\n\r\ndata: {\"type\":\"transcript.text.delta\",\"delta\":\".\"}\r\n\r\ndata: {\"type\":\"transcript.text.done\",\"text\":\"Hello from OpenCode.\",\"usage\":{\"type\":\"tokens\",\"total_tokens\":22,\"input_tokens\":15,\"input_token_details\":{\"text_tokens\":0,\"audio_tokens\":15},\"output_tokens\":7}}\r\n\r\ndata: [DONE]\r\n\r\n"
+      }
+    }
+  ]
+}

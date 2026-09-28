@@ -40,7 +40,7 @@ while the TUI is running.
 Set `OPENCODE_CLI_CONFIG_CONTENT` to apply CLI settings from inline JSON:
 
 ```sh
-OPENCODE_CLI_CONFIG_CONTENT='{"tabs":{"enabled":false}}' opencode
+OPENCODE_CLI_CONFIG_CONTENT='{"tabs":{"mode":"off"}}' opencode
 ```
 
 OpenCode merges the inline settings over the global `cli.json`. Nested objects are merged, while arrays and scalar
@@ -152,7 +152,7 @@ Configure the persistent session tab strip:
 ```json title="cli.json"
 {
   "tabs": {
-    "enabled": true,
+    "mode": "auto",
     "scope": "cwd",
     "layout": "horizontal",
     "indicators": "status"
@@ -160,11 +160,13 @@ Configure the persistent session tab strip:
 }
 ```
 
+The legacy boolean `tabs.enabled` setting remains supported: `true` is `on` and `false` is `off`. OpenCode reads it without rewriting the config file.
+
 <div class="docs-table-scroll" role="region" aria-label="Tab settings" tabIndex={0}>
 
 | Setting           | Values                      | Description                                                                   |
 | ----------------- | --------------------------- | ----------------------------------------------------------------------------- |
-| `tabs.enabled`    | boolean                     | Uses a persistent tab strip instead of pinned quick-switch sessions.          |
+| `tabs.mode`       | `auto`, `on`, or `off`      | Uses tabs automatically, always, or never. Auto hides them inside Herdr.       |
 | `tabs.scope`      | `cwd` or `global`           | Keeps separate tabs per working directory or shares them globally.            |
 | `tabs.layout`     | `horizontal` or `vertical`  | Places tabs in a horizontal strip or a vertical sidebar.                      |
 | `tabs.indicators` | `status` or `numbers`       | Shows status icons or always shows tab numbers.                               |
@@ -192,18 +194,19 @@ Configure the initial diff scope and presentation:
 
 <div class="docs-table-scroll" role="region" aria-label="Diff settings" tabIndex={0}>
 
-| Setting        | Values                              | Description                                                   |
-| -------------- | ----------------------------------- | ------------------------------------------------------------- |
-| `diffs.source` | `branch`, `committed`, or `working` | Sets the initial review scope.                                |
-| `diffs.wrap`   | `word` or `none`                    | Wraps long lines at words or leaves them unwrapped.           |
-| `diffs.tree`   | boolean                             | Shows the diff file tree.                                     |
-| `diffs.single` | boolean                             | Shows only the selected file patch.                           |
-| `diffs.view`   | `auto`, `split`, or `unified`       | Sets the layout. `auto` chooses from the available width.     |
+| Setting        | Values                                      | Description                                               |
+| -------------- | ------------------------------------------- | --------------------------------------------------------- |
+| `diffs.source` | `branch`, `committed`, `working`, or `turn` | Sets the initial review scope.                            |
+| `diffs.wrap`   | `word` or `none`                            | Wraps long lines at words or leaves them unwrapped.       |
+| `diffs.tree`   | boolean                                     | Shows the diff file tree.                                 |
+| `diffs.single` | boolean                                     | Shows only the selected file patch.                       |
+| `diffs.view`   | `auto`, `split`, or `unified`               | Sets the layout. `auto` chooses from the available width. |
 
 </div>
 
 `branch` shows **All** branch and local changes, `committed` shows branch commits only, and `working` shows staged,
-unstaged, and untracked changes.
+unstaged, and untracked changes. `turn` shows **Last turn**, the files the session changed in its latest turn; it
+refreshes when the session finishes a turn and falls back to `branch` when `/diff` is not opened from a session.
 
 In `/diff`, press `d` to change the scope or choose a comparison branch from **Base**. These in-view choices last until
 the TUI exits and do not change `cli.json`.

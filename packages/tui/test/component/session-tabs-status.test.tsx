@@ -33,7 +33,8 @@ for (const orientation of ["horizontal", "vertical"] as const) {
     const [status, setStatus] = createSignal<SessionTabsStatus>(EMPTY_SESSION_TAB_STATUS)
     const [active, setActive] = createSignal("second")
     const [newTab, setNewTab] = createSignal(false)
-    const settings: Info = { tabs: { enabled: true } }
+    const settings: Info = { tabs: { mode: "on" } }
+    const copied: string[] = []
     let config!: ReturnType<typeof useConfig>
     let theme!: ReturnType<typeof useTheme>
     function Colors() {
@@ -61,7 +62,10 @@ for (const orientation of ["horizontal", "vertical"] as const) {
     } satisfies SessionTabsController
     const app = await testRender(
       () => (
-        <TestTuiContexts paths={{ state: temporary.path }}>
+        <TestTuiContexts
+          paths={{ state: temporary.path }}
+          clipboard={{ read: async () => undefined, write: async (text) => void copied.push(text) }}
+        >
           <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
             <StorageProvider>
               <ConfigProvider
@@ -202,10 +206,12 @@ for (const orientation of ["horizontal", "vertical"] as const) {
       await app.mockMouse.click(column, row, MouseButton.RIGHT)
       await app.waitForFrame((frame) => frame.includes("Rename"))
       expect(app.captureCharFrame().split("\n")[row + 1]!.indexOf("Rename")).toBe(column + 1)
+      expect(app.captureCharFrame()).toContain("Copy session ID")
       expect(app.captureCharFrame()).toContain("Close")
       expect(app.captureCharFrame()).not.toContain("Keep open")
       expect(active()).toBe("second")
-      app.mockInput.pressKey("c", { ctrl: true })
+      await app.mockMouse.click(column + 1, row + 2)
+      expect(copied).toEqual(["first"])
       await app.waitForFrame((frame) => !frame.includes("Rename"))
 
       setNewTab(true)

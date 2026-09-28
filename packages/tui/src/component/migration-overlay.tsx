@@ -3,6 +3,7 @@ import { useClient } from "../context/client"
 import { useTheme } from "../context/theme"
 import { SplitBorder } from "../ui/border"
 import { useToast } from "../ui/toast"
+import { errorMessage } from "../util/error"
 import { Spinner } from "./spinner"
 
 type Progress = { label: string; numerator?: number; denominator?: number }
@@ -30,7 +31,7 @@ export function MigrationOverlay() {
       toast.show({
         variant: "error",
         title: "Data migration failed",
-        message: error instanceof Error ? error.message : String(error),
+        message: errorMessage(error),
         duration: 10_000,
       })
     })

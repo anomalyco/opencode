@@ -79,4 +79,16 @@ describe("titlebar history", () => {
     expect(back.to.url).toBe("/")
     expect(forwardPath(applyPath(back.state, back.to))?.to.state).toEqual({ tab: "models" })
   })
+
+  test("settings pages replace one history entry", () => {
+    const initial = applyPath(history(), { url: "/settings" })
+    const models = applyPath(initial, { url: "/settings?tab=models" })
+    const project = applyPath(models, { url: "/settings?server=local&project=%2Fwork&tab=extensions" })
+
+    expect(project.stack.map((entry) => entry.url)).toEqual([
+      "/",
+      "/settings?server=local&project=%2Fwork&tab=extensions",
+    ])
+    expect(backPath(project)?.to.url).toBe("/")
+  })
 })

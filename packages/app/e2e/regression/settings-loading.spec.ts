@@ -67,8 +67,7 @@ test("an inventory event updates the open all-project worktree list", async ({ p
   await settings.getByRole("tab", { name: "Worktrees", exact: true }).click()
   await expect(settings.getByText(sandboxes[0], { exact: true })).toBeVisible()
   const listed = page.waitForResponse(
-    (response) =>
-      new URL(response.url()).pathname === "/api/worktree" && response.request().method() === "GET",
+    (response) => new URL(response.url()).pathname === "/api/worktree" && response.request().method() === "GET",
   )
   inventory.push({ directory: discovered, strategy: "git" })
   events.push({
@@ -99,6 +98,51 @@ test("settings has its own route and returns through app history", async ({ page
   await expect(home).toHaveAttribute("aria-pressed", "true")
 })
 
+test("settings page survives refresh", async ({ page }) => {
+  const settings = page.getByTestId("settings-screen")
+  const appearance = settings.getByRole("tab", { name: "Appearance", exact: true })
+
+  await appearance.click()
+  await expect(page).toHaveURL("/settings?tab=appearance")
+  await expect(appearance).toHaveAttribute("aria-selected", "true")
+
+  await page.reload()
+
+  await expect(settings).toBeVisible()
+  await expect(appearance).toHaveAttribute("aria-selected", "true")
+  await expect(page).toHaveURL("/settings?tab=appearance")
+})
+
+test("another server's settings page survives refresh", async ({ page }) => {
+  const remote = "http://127.0.0.1:4097"
+  await page.addInitScript(
+    (input) => {
+      localStorage.setItem(
+        "opencode.global.dat:server",
+        JSON.stringify({
+          list: [{ type: "http", http: { url: input.remote } }],
+          projects: { local: [{ worktree: input.directory, expanded: true }] },
+        }),
+      )
+    },
+    { directory, remote },
+  )
+  const settings = page.getByTestId("settings-screen")
+  const url = (value: URL) =>
+    value.pathname === "/settings" &&
+    value.searchParams.get("server") === remote &&
+    value.searchParams.get("tab") === "providers"
+
+  await page.goto(`/settings?server=${encodeURIComponent(remote)}&tab=providers`)
+  await expect(settings.getByRole("heading", { name: "Providers", exact: true })).toBeVisible()
+  await expect(page).toHaveURL(url)
+
+  await page.reload()
+
+  await expect(settings.getByRole("heading", { name: "Providers", exact: true })).toBeVisible()
+  await expect(page).toHaveURL(url)
+})
+
 test("single-server settings expose scoped pages without a server picker", async ({ page }) => {
   const settings = page.getByTestId("settings-screen")
   await expect(settings.getByRole("tab", { name: "Server", exact: true })).toBeVisible()
@@ -116,7 +160,7 @@ test("single-server settings expose scoped pages without a server picker", async
   await expect(connection.getByRole("heading", { name: "Connection", exact: true })).toBeVisible()
   await expect(connection.locator('[data-component="settings-list"]')).toHaveCSS("padding-left", "16px")
   await expect(connection.locator(".settings-servers-row")).toHaveCSS("padding-top", "20px")
-  await expect(connection.locator(".settings-servers-lead")).toHaveCSS("column-gap", "4px")
+  await expect(connection.locator(".settings-servers-lead")).toHaveCSS("column-gap", "10px")
   await expect(connection.locator(".settings-servers-copy")).toHaveCSS("row-gap", "6px")
   await expect(settings.getByRole("heading", { name: "Preferences", exact: true })).toBeVisible()
   await expect(settings.getByText("Terminal shell", { exact: true })).toBeVisible()
@@ -134,10 +178,53 @@ test("project settings open as a nested autosaving view", async ({ page }) => {
   await settings.getByRole("button", { name: "Settings demo", exact: true }).click()
 
   await expect(settings.getByRole("button", { name: "Back to projects", exact: true })).toBeVisible()
-  await expect(settings.getByRole("tab", { name: "Settings demo", exact: true })).toBeVisible()
+  await expect(settings.getByRole("tab", { name: "General", exact: true })).toBeVisible()
   await expect(settings.getByRole("tab", { name: "Worktrees", exact: true })).toBeVisible()
   await expect(settings.getByRole("tab", { name: "Extensions", exact: true })).toBeVisible()
   await expect(settings.getByRole("tab", { name: "Scripts", exact: true })).toHaveCount(0)
+  await expect(settings.getByTitle(directory)).toHaveCount(0)
+  const projectIcon = settings.locator('.settings-tab-header [data-component="project-avatar-v2"]')
+  await expect(projectIcon).toHaveCSS("width", "32px")
+  const projectOptions = settings
+    .locator(".settings-tab-header")
+    .getByRole("button", { name: "More options", exact: true })
+  await expect(projectOptions).toHaveCSS("width", "28px")
+  await expect
+    .poll(
+      async () =>
+        new Set(
+          await Promise.all(
+            [
+              settings.getByRole("button", { name: "Back to projects", exact: true }),
+              settings.getByRole("heading", { name: "Settings demo", exact: true }),
+              projectIcon,
+              projectOptions,
+            ].map((item) =>
+              item.evaluate((element) => {
+                const bounds = element.getBoundingClientRect()
+                return Math.round(bounds.top + bounds.height / 2)
+              }),
+            ),
+          ),
+        ).size,
+    )
+    .toBe(1)
+  await expect
+    .poll(async () => {
+      const back = await settings
+        .getByRole("button", { name: "Back to projects", exact: true })
+        .evaluate((element) => element.getBoundingClientRect().top)
+      const general = await settings
+        .getByRole("tab", { name: "General", exact: true })
+        .evaluate((element) => element.getBoundingClientRect().top)
+      return Math.round(general - back)
+    })
+    .toBe(72)
+  await projectOptions.click()
+  const projectMenu = page.getByRole("menu")
+  await expect(projectMenu.getByRole("menuitem")).toHaveText(["Clear notifications", "Close"])
+  await page.keyboard.press("Escape")
+  await expect(projectMenu).toBeHidden()
 
   const name = settings.getByRole("textbox", { name: "Project name", exact: true })
   const saved = page.waitForRequest(
@@ -146,7 +233,8 @@ test("project settings open as a nested autosaving view", async ({ page }) => {
   await name.fill("Renamed project")
   await name.blur()
   expect((await saved).postDataJSON()).toEqual({ name: "Renamed project" })
-  await expect(settings.getByRole("tab", { name: "Renamed project", exact: true })).toBeVisible()
+  await expect(settings.getByRole("tab", { name: "General", exact: true })).toBeVisible()
+  await expect(settings.getByRole("heading", { name: "Renamed project", exact: true })).toBeVisible()
 
   const startup = settings.getByRole("textbox", { name: "Worktree startup script", exact: true })
   const scriptSaved = page.waitForRequest(
@@ -156,7 +244,19 @@ test("project settings open as a nested autosaving view", async ({ page }) => {
   await startup.blur()
   expect((await scriptSaved).postDataJSON()).toEqual({ commands: { start: "bun install" } })
 
+  const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
   await settings.getByRole("tab", { name: "Worktrees", exact: true }).click()
+  await expect(settings.getByRole("heading", { name: "Worktrees", exact: true })).toBeVisible()
+  await expect(page).toHaveURL(
+    (url) =>
+      url.pathname === "/settings" &&
+      url.searchParams.get("server") === server &&
+      url.searchParams.get("project") === directory &&
+      url.searchParams.get("tab") === "workspaces",
+  )
+
+  await page.reload()
+
   await expect(settings.getByRole("heading", { name: "Worktrees", exact: true })).toBeVisible()
   await page.keyboard.press("Escape")
   await expect(settings.getByRole("heading", { name: "Projects", exact: true })).toBeVisible()
@@ -226,7 +326,7 @@ test("recording a new session shortcut stays in settings until recording finishe
   await page.keyboard.press("Control+t")
 
   await expect(binding).toHaveText("Ctrl+T")
-  await expect(page).toHaveURL("/settings")
+  await expect(page).toHaveURL("/settings?tab=shortcuts")
   await expect(page.locator("[data-titlebar-tab]")).toHaveCount(0)
   await page.keyboard.press("Control+t")
   await expect(page).toHaveURL(/\/new-session\?draftId=.+$/)

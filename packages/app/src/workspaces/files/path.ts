@@ -105,7 +105,11 @@ export function createPathHelpers(scope: () => string) {
   const normalize = (input: string) => {
     const root = scope()
 
-    let path = unquoteGitPath(decodeFilePath(stripQueryAndHash(stripFileProtocol(input))))
+    // file:///C:/dir becomes /C:/dir once the protocol is gone; restore the drive form.
+    let path = unquoteGitPath(decodeFilePath(stripQueryAndHash(stripFileProtocol(input)))).replace(
+      /^[/\\]([A-Za-z]:)/,
+      "$1",
+    )
 
     // Separator-agnostic prefix stripping for Cygwin/native Windows compatibility
     // Only case-insensitive on Windows (drive letter or UNC paths)
@@ -116,19 +120,20 @@ export function createPathHelpers(scope: () => string) {
       canonPath.startsWith(canonRoot) &&
       (canonRoot.endsWith("/") || canonPath === canonRoot || canonPath[canonRoot.length] === "/")
     ) {
-      // Slice from original path to preserve native separators
-      path = path.slice(root.length)
+      // Slice from original path to preserve native separators, then drop the separator itself.
+      path = path.slice(root.length).replace(/^[/\\]/, "")
     }
 
     if (path.startsWith("./") || path.startsWith(".\\")) {
       path = path.slice(2)
     }
 
-    if (path.startsWith("/") || path.startsWith("\\")) {
-      path = path.slice(1)
-    }
+    // An absolute path that is not under the root stays absolute; it is a file outside the workspace.
     return path
   }
+
+  /** Whether a normalized path points outside the workspace root. */
+  const absolute = (path: string) => /^[A-Za-z]:[/\\]/.test(path) || path.startsWith("/") || path.startsWith("\\\\")
 
   const tab = (input: string) => {
     const path = normalize(input)
@@ -149,6 +154,7 @@ export function createPathHelpers(scope: () => string) {
 
   return {
     normalize,
+    absolute,
     tab,
     pathFromTab,
     normalizeDir,

@@ -22,6 +22,16 @@ describe("source syntax", () => {
 })
 
 describe("error identity", () => {
+  test("Error.isError is true for every Error value and nothing else", async () => {
+    expect(
+      await value(`
+        const caught = (() => { try { null.foo } catch (error) { return error } })()
+        return [Error.isError(new Error("x")), Error.isError(new RangeError("x")), Error.isError(caught),
+          Error.isError({ name: "Error", message: "x" }), Error.isError("Error"), Error.isError(null)]
+      `),
+    ).toEqual([true, true, true, false, false, false])
+  })
+
   test("awaiting the same rejected promise twice yields the same error object", async () => {
     expect(
       await value(`
@@ -58,9 +68,9 @@ describe("error identity", () => {
 
 describe("rethrown interpreter failures", () => {
   test("keep their diagnostic kind and source location", async () => {
-    const failure = await error(`try { switch (Symbol) {} } catch (e) { throw e }`)
+    const failure = await error(`try { Symbol + 1 } catch (e) { throw e }`)
     expect(failure.kind).toBe("InvalidDataValue")
-    expect(failure.message).toStartWith("TypeError: Switch discriminants must be data values. (line ")
+    expect(failure.message).toStartWith("TypeError: Binary operators require data values. (line ")
     expect(failure.location).toBeDefined()
   })
 
@@ -95,6 +105,24 @@ describe("uncaught program throws", () => {
   })
 })
 
+describe("source locations", () => {
+  test("uses the submitted line and 1-based column", async () => {
+    const failure = await error("const value = 1\nreturn value()")
+    expect(failure.location).toEqual({ line: 2, column: 8 })
+    expect(failure.message).toBe("TypeError: value is not a function. (line 2, col 8)")
+  })
+
+  test("names a missing method on a call instead of the previous line", async () => {
+    const failure = await error(`// Try search with different namespaces
+for (const ns of ["github", "tools.github", "tools", ""]) {
+  const s = await search({query: "star", namespace: ns, limit: 100}).catch(e=>({items:[],error:String(e)}));
+  return s
+}`)
+    expect(failure.location).toEqual({ line: 3, column: 19 })
+    expect(failure.message).toBe("TypeError: search(...).catch is not a function. (line 3, col 19)")
+  })
+})
+
 describe("host errors escaping built-ins", () => {
   test("become the same-named program error", async () => {
     expect(
@@ -107,7 +135,7 @@ describe("host errors escaping built-ins", () => {
   test("report the location of the call that raised them", async () => {
     const failure = await error(`return [1].map((n) => n.toFixed(200))`)
     expect(failure.kind).toBe("ExecutionFailure")
-    expect(failure.message).toBe("RangeError: toFixed() argument must be between 0 and 100 (line 1, col 19)")
+    expect(failure.message).toBe("RangeError: toFixed() argument must be between 0 and 100 (line 1, col 23)")
   })
 
   test("a built-in that rejects its arguments before doing any work is located at the call", async () => {
@@ -115,26 +143,26 @@ describe("host errors escaping built-ins", () => {
   })
 
   test("a rejection born inside a promise the built-in created is located at the creating call", async () => {
-    expect((await error(`return await Promise.all(1)`)).message).toEndWith("(line 1, col 10)")
-    expect((await error(`return await Promise.race([])`)).message).toEndWith("(line 1, col 10)")
+    expect((await error(`return await Promise.all(1)`)).message).toEndWith("(line 1, col 14)")
+    expect((await error(`return await Promise.race([])`)).message).toEndWith("(line 1, col 14)")
     expect((await error(`return await Promise.all({ [Symbol.iterator]: () => ({ next: 1 }) })`)).message).toEndWith(
-      "(line 1, col 10)",
+      "(line 1, col 14)",
     )
     expect((await error(`let p; p = Promise.resolve().then(() => p); return await p`)).message).toEndWith(
-      "(line 1, col 8)",
+      "(line 1, col 12)",
     )
   })
 
   test("an un-awaited rejection born inside promise machinery keeps its location in the warning", async () => {
     const result = await run(`Promise.all(1); return 1`)
     expect(result.ok && result.warnings?.[0]?.message).toEndWith(
-      "TypeError: Promise.all expects an array or other synchronous iterable. (line 1, col 1)",
+      "TypeError: Promise.all expects a synchronous iterable, received a number. (line 1, col 1)",
     )
   })
 
   test("a failure inside a built-in called by another built-in is located at the outer call", async () => {
     const failure = await error(`return Array.from({ [Symbol.iterator]: () => ({ next: 1 }) })`)
-    expect(failure.message).toBe("TypeError: Iterator next must be a function. (line 1, col 4)")
+    expect(failure.message).toBe("TypeError: Iterator next must be a function. (line 1, col 8)")
   })
 })
 
@@ -153,7 +181,7 @@ describe("call depth", () => {
   test("uncaught overflow reports the call that overflowed", async () => {
     const failure = await error(`const f = (n) => f(n + 1); return f(0)`)
     expect(failure.kind).toBe("ExecutionFailure")
-    expect(failure.message).toBe("RangeError: Maximum call stack size exceeded (line 1, col 14)")
+    expect(failure.message).toBe("RangeError: Maximum call stack size exceeded (line 1, col 18)")
   })
 
   test("the limit is 10000 nested calls", async () => {

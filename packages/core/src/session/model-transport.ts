@@ -21,7 +21,8 @@ import { webSocketConstructor } from "../effect/app-node-platform.js"
 
 const ROTATE_AFTER_MS = 55 * 60 * 1000
 const CONNECT_TIMEOUT = "15 seconds"
-const IDLE_TIMEOUT = "5 minutes"
+// Reasoning models can stream nothing for several minutes while still working.
+const IDLE_TIMEOUT = "30 minutes"
 /** Consecutive exchanges lost to the socket before the Session stays on HTTP. */
 const MAX_STREAM_FAILURES = 5
 const events = Metric.counter("opencode_session_websocket_events_total", {
@@ -72,7 +73,11 @@ export interface Interceptor {
 }
 
 export interface Interface {
-  readonly bind: (sessionID: SessionSchema.ID, interceptor?: Interceptor) => WebSocketChannelExecutor
+  readonly bind: (
+    sessionID: SessionSchema.ID,
+    interceptor?: Interceptor,
+    idleTimeout?: number,
+  ) => WebSocketChannelExecutor
   readonly close: (sessionID: SessionSchema.ID) => Effect.Effect<void>
   readonly closeAll: Effect.Effect<void>
 }
@@ -291,6 +296,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
         owner: State,
         input: WebSocketChannelExchange,
         interceptor?: Interceptor,
+        idleTimeout?: number,
       ) {
         if (owner.closed)
           return yield* transportError("Session WebSocket owner is closed", {
@@ -409,7 +415,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
         const token = {}
         const frames = Stream.fromQueue(active.queue).pipe(
           Stream.timeoutOrElse({
-            duration: IDLE_TIMEOUT,
+            duration: idleTimeout ?? IDLE_TIMEOUT,
             orElse: () =>
               Stream.fail(
                 transportError("Timed out waiting for WebSocket data", {
@@ -500,7 +506,11 @@ export const makeLayer = (connector: WebSocketConnector) =>
         return { frames, complete, http: channel.connection.http }
       })
 
-      const bind = (sessionID: SessionSchema.ID, interceptor?: Interceptor): WebSocketChannelExecutor => ({
+      const bind = (
+        sessionID: SessionSchema.ID,
+        interceptor?: Interceptor,
+        idleTimeout?: number,
+      ): WebSocketChannelExecutor => ({
         execute: (exchange) => {
           const owner = state(sessionID)
           let execution: WebSocketChannelExecution | undefined
@@ -510,7 +520,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
             },
             frames: Stream.unwrap(
               Effect.acquireRelease(owner.lock.take(1), () => owner.lock.release(1), { interruptible: true }).pipe(
-                Effect.andThen(start(owner, exchange, interceptor)),
+                Effect.andThen(start(owner, exchange, interceptor, idleTimeout)),
                 Effect.tap((started) =>
                   Effect.sync(() => {
                     execution = started

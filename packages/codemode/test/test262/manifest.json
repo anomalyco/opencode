@@ -1,16 +1,16 @@
 {
   "revision": "250f204f23a9249ff204be2baec29600faae7b75",
-  "directories": ["built-ins/Array/prototype", "language/statements"],
+  "directories": ["built-ins", "language"],
   "harness": ["assert.js", "sta.js", "compareArray.js", "doneprintHandle.js"],
   "flags": ["module", "raw", "noStrict"],
   "boundaries": {
     "class": "\\bclass\\s*[A-Za-z_${]",
-    "this": "\\bthis\\b",
-    "arguments": "\\barguments\\b",
-    "call/apply/bind": "\\.(call|apply|bind)\\s*\\(",
     "accessor properties": "\\b(get|set)\\s+[\\w$\\[][^\\n(]*\\(",
-    "property descriptors": "Object\\.(defineProperty|defineProperties|getOwnPropertyDescriptors?|getOwnPropertyNames|create|getPrototypeOf|setPrototypeOf|freeze|seal|preventExtensions|isFrozen|isSealed|isExtensible)\\b",
-    "boxed primitives": "\\bnew\\s+(String|Number|Boolean)\\s*\\(",
+    "property descriptors": "Object\\.(defineProperty|defineProperties|getOwnPropertyDescriptors?|getOwnPropertyNames|setPrototypeOf)\\b",
+    "boxed primitives": "\\b(new\\s+(String|Number|Boolean)\\b|Object\\s*\\(\\s*(true|false|-?\\d|['\"]))",
+    "typed arrays and buffers": "\\b(ArrayBuffer|SharedArrayBuffer|DataView|Int8Array|Uint8ClampedArray|Int16Array|Uint16Array|Int32Array|Uint32Array|Float16Array|Float32Array|Float64Array|BigInt64Array|BigUint64Array)\\b",
+    "weak collections": "\\b(WeakRef|FinalizationRegistry)\\b",
+    "Reflect and Proxy": "\\b(Reflect|Proxy)\\b",
     "sloppy mode": "\\bwith\\s*\\(",
     "eval": "\\b(eval|Function)\\b",
     "new.target": "\\bnew\\.target\\b",
@@ -74,8 +74,6 @@
     "Uint16Array",
     "Uint32Array",
     "uint8array-base64",
-    "WeakMap",
-    "WeakSet",
     "WeakRef",
     "FinalizationRegistry",
     "Intl-enumeration",
@@ -101,6 +99,8 @@
     "legacy-regexp",
     "__proto__",
     "__getter__",
-    "__setter__"
+    "__setter__",
+    "iterator-sequencing",
+    "joint-iteration"
   ]
 }

@@ -9,6 +9,7 @@ import type { Types } from "effect"
 import type { Hooks, Transform } from "./registration.js"
 
 export interface ToolContext extends Omit<Tool.Context, "progress"> {
+  readonly signal: AbortSignal
   readonly progress: (update: Tool.Metadata) => Promise<void>
 }
 

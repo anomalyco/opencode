@@ -1,9 +1,9 @@
 import { Plugin } from "@opencode/plugin/tui"
-import { createMemo, For, Match, Show, Switch, createSignal } from "solid-js"
+import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { DialogMcp } from "../../component/dialog-mcp"
 
-function View(props: { context: Plugin.Context; sessionID: string }) {
-  const [open, setOpen] = createSignal(true)
+export function SidebarMcp(props: { context: Plugin.Context; sessionID: string }) {
+  const [view, updateView] = props.context.storage.store("view", { initial: { open: true } })
   const theme = props.context.theme
   const session = createMemo(() => props.context.data.session.get(props.sessionID))
   const list = createMemo(() => props.context.data.location.mcp.server.list(session()?.location) ?? [])
@@ -23,13 +23,22 @@ function View(props: { context: Plugin.Context; sessionID: string }) {
   return (
     <Show when={list().length > 0}>
       <box>
-        <box flexDirection="row" gap={1} onMouseDown={() => list().length > 2 && setOpen((x) => !x)}>
+        <box
+          flexDirection="row"
+          gap={1}
+          onMouseDown={() => {
+            if (list().length <= 2) return
+            void updateView((draft) => {
+              draft.open = !draft.open
+            }).catch((error) => console.error("Failed to persist MCP sidebar state", error))
+          }}
+        >
           <Show when={list().length > 2}>
-            <text fg={theme.text.base}>{open() ? "▼" : "▶"}</text>
+            <text fg={theme.text.base}>{view.open ? "▼" : "▶"}</text>
           </Show>
           <text fg={theme.text.base}>
             <b>MCP</b>
-            <Show when={!open()}>
+            <Show when={!view.open}>
               <span style={{ fg: theme.text.muted }}>
                 {" "}
                 ({on()} active{bad() > 0 ? `, ${bad()} error${bad() > 1 ? "s" : ""}` : ""})
@@ -37,7 +46,7 @@ function View(props: { context: Plugin.Context; sessionID: string }) {
             </Show>
           </text>
         </box>
-        <Show when={list().length <= 2 || open()}>
+        <Show when={list().length <= 2 || view.open}>
           <For each={list()}>
             {(item) => (
               <box
@@ -88,7 +97,7 @@ export default Plugin.define({
   setup(context) {
     context.ui.slot({
       append: "sidebar.content",
-      render: (props) => <View context={context} sessionID={props.sessionID} />,
+      render: (props) => <SidebarMcp context={context} sessionID={props.sessionID} />,
     })
   },
 })

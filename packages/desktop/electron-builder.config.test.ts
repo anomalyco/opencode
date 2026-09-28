@@ -17,6 +17,12 @@ const channels = [
   { channel: "prod", appId: "ai.opencode.desktop" },
 ] as const
 
+test("signs the macOS app without signing the DMG", async () => {
+  const config = (await import("./electron-builder.config.ts?mac-signing")).default as Configuration
+  expect(config.mac?.sign).toBeFunction()
+  expect(config.dmg?.sign).not.toBe(true)
+})
+
 for (const channel of channels) {
   test(`disables security code AutoFill by default for ${channel.channel}`, async () => {
     const previous = process.env.OPENCODE_CHANNEL

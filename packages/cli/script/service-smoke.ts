@@ -55,7 +55,7 @@ try {
   if ((await pluginIDs(info.url, headers)).includes("smoke")) throw new Error("Smoke plugin existed before creation")
   const plugin = path.join(root, ".opencode", "plugins", "smoke.ts")
   await fs.writeFile(plugin, pluginSource())
-  await waitForPlugin(info.url, headers)
+  await waitForPlugin(info.url, headers, plugin)
 
   const unauthorizedInfo = await fetch(new URL("/api/info", info.url), {
     signal: AbortSignal.timeout(5_000),
@@ -139,7 +139,13 @@ async function waitForReady(url: string, headers: HeadersInit) {
 }
 
 function exitsWithin(process: Bun.Subprocess, milliseconds: number) {
-  return Promise.race([process.exited.then(() => true), Bun.sleep(milliseconds).then(() => false)])
+  return new Promise<boolean>((resolve) => {
+    const timeout = setTimeout(() => resolve(false), milliseconds)
+    process.exited.then(() => {
+      clearTimeout(timeout)
+      resolve(true)
+    })
+  })
 }
 
 function pluginSource() {
@@ -159,11 +165,15 @@ async function pluginIDs(url: string, headers: HeadersInit) {
   )
 }
 
-async function waitForPlugin(url: string, headers: HeadersInit) {
+async function waitForPlugin(url: string, headers: HeadersInit, plugin: string) {
   const deadline = Date.now() + 10_000
+  let attempt = 0
   while (Date.now() < deadline) {
     if ((await pluginIDs(url, headers)).includes("smoke")) return
     await Bun.sleep(25)
+    // Native watchers may coalesce a single creation edge. Keep changing valid source so
+    // the smoke proves that a later native event is delivered.
+    if (++attempt % 10 === 0) await fs.writeFile(plugin, `${pluginSource()}// watcher retry ${attempt}\n`)
   }
   throw new Error("Compiled service did not discover the created plugin")
 }

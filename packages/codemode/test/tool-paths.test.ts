@@ -106,9 +106,12 @@ describe("callable namespaces", () => {
     const diagnostic = await failure(runtime, `return await tools.issues.missing({})`)
     expect(diagnostic.kind).toBe("UnknownTool")
     expect(diagnostic.message).toContain("Unknown tool 'issues.missing'")
-    expect(diagnostic.suggestions).toEqual([
-      "The tool may have been removed or renamed. Use search to find available tools.",
-    ])
+    expect(diagnostic.suggestions).toEqual(["Use search to find available tools."])
+  })
+
+  test("an unknown tool names the closest match", async () => {
+    const diagnostic = await failure(runtime, `return await tools.issues["get-list"]({})`)
+    expect(diagnostic.message).toBe("Unknown tool 'issues.get-list'. Did you mean tools.issues.list?")
   })
 
   test("a namespace without its own tool stays non-callable", async () => {
@@ -349,5 +352,19 @@ describe("tools.search alias", () => {
   test("a registered root-level search tool takes precedence", async () => {
     const runtime = CodeMode.make({ tools: { search: echo("Custom search", "custom") } })
     expect(await value(runtime, `return await tools.search({})`)).toBe("custom")
+  })
+})
+
+describe("tool references under ==", () => {
+  test("compare by identity against data objects without converting them", async () => {
+    const runtime = CodeMode.make({ tools: { probe: echo("Probe", "ok") } })
+    expect(
+      await value(
+        runtime,
+        `let calls = 0
+         const o = { valueOf() { calls++; return 1 } }
+         return [o == tools.probe, tools == { a: 1 }, tools.probe == null, calls]`,
+      ),
+    ).toEqual([false, false, false, 0])
   })
 })

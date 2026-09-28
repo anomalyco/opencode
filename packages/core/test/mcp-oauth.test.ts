@@ -291,6 +291,14 @@ describe("MCP OAuth", () => {
     await expect(authorize("not a URL")).rejects.toThrow(TypeError)
   })
 
+  test("rejects an authorization endpoint that is not http or https", async () => {
+    const { server } = authorizationServer({ authorization_endpoint: "file:///tmp/authorize" })
+
+    await expect(Effect.runPromise(Effect.scoped(start(server))).finally(() => server.stop(true))).rejects.toThrow(
+      "returned a file: authorization URL",
+    )
+  })
+
   test("sends the configured URL as the resource when the server publishes no metadata", async () => {
     const { server, tokenRequests } = authorizationServer({})
     const url = `${server.url.origin}/mcp`
@@ -420,6 +428,15 @@ describe("MCP OAuth", () => {
       server.stop(true)
     })
     expect(tokenRequests[0]?.get("grant_type")).toBe("refresh_token")
+  })
+
+  test("requests offline_access without forcing a consent prompt", async () => {
+    const { server } = authorizationServer({ scopes_supported: ["read", "offline_access"] })
+    const { url } = await Effect.runPromise(
+      Effect.scoped(start(server, { client_id: "client", scope: "read" })),
+    ).finally(() => server.stop(true))
+    expect(url.searchParams.get("scope")).toBe("read offline_access")
+    expect(url.searchParams.has("prompt")).toBe(false)
   })
 
   test("forwards iss from the redirect so issuer-advertising servers can complete", async () => {

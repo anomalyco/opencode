@@ -45,6 +45,10 @@ function selectOptions(): DevOptions {
 async function prepareServer(source: ServerSource) {
   if (source.type === "download")
     return downloadCliToResources(source.version, windowsify("resources/opencode-cli-dev"))
+  await $`bun run --cwd ${join(import.meta.dirname, "../../app")} build`.env({
+    ...process.env,
+    VITE_OPENCODE_SERVER_MODE: "origin",
+  })
   process.env.OPENCODE_DESKTOP_CLI_DEV = join(import.meta.dirname, "../../cli")
   await $`bun run --cwd ${process.env.OPENCODE_DESKTOP_CLI_DEV} --define=OPENCODE_VERSION=${JSON.stringify(process.env.OPENCODE_VERSION)} src/index.ts --version`
   if (process.platform !== "win32") return

@@ -89,7 +89,7 @@ test.each([40, 120])("shell completion notices do not navigate at width %s", asy
       app: { name: "test", version: "test", channel: "test" },
       server: { endpoint: { url: server.url.toString() } },
       config: {
-        get: async () => ({ animations: false, tabs: { enabled: false } }),
+        get: async () => ({ animations: false, tabs: { mode: "off" } }),
         update: async () => ({}),
       },
       packages: { prepare: async () => ({ directory: "" }) },
@@ -170,7 +170,7 @@ test.each([40, 120])("subagent completion notices navigate to the child session 
       app: { name: "test", version: "test", channel: "test" },
       server: { endpoint: { url: server.url.toString() } },
       config: {
-        get: async () => ({ animations: false, tabs: { enabled: false } }),
+        get: async () => ({ animations: false, tabs: { mode: "off" } }),
         update: async () => ({}),
       },
       packages: { prepare: async () => ({ directory: "" }) },

@@ -2,7 +2,6 @@ import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
-import { ProviderIcon } from "@opencode/ui/provider-icon"
 import { useMutation } from "@tanstack/solid-query"
 import { TextField } from "@opencode/ui/text-field"
 import { showToast } from "@/shell/notifications/toast"
@@ -12,6 +11,7 @@ import { ExternalLink } from "@/runtime/platform/external-link"
 import { useData } from "@/runtime/server/current"
 import { useLanguage } from "@/runtime/i18n/language"
 import { type FormState, headerRow, modelRow, validateCustomProvider } from "./form"
+import { CustomManagedProviderIcon } from "@/providers/models/provider-group"
 
 export function CustomProviderForm(props: { autofocus?: boolean } = {}) {
   const dialog = useDialog()
@@ -134,7 +134,7 @@ export function CustomProviderForm(props: { autofocus?: boolean } = {}) {
   return (
     <div class="flex flex-col gap-6 px-2.5 pb-3 overflow-y-auto max-h-[60vh]">
       <div class="px-2.5 flex gap-4 items-center">
-        <ProviderIcon id="synthetic" class="size-5 shrink-0 icon-strong-base" />
+        <CustomManagedProviderIcon class="size-5 shrink-0" />
         <div class="text-16-medium text-text-strong">{language.t("provider.custom.title")}</div>
       </div>
 

@@ -919,12 +919,22 @@ const registration = await ctx.tool.transform((editor) => {
       additionalProperties: false,
     },
     options: { namespace: "acme", codemode: true },
-    execute: async (input, tool) => {
-      await tool.progress({ status: "greeting" })
+    execute: async (input, context) => {
+      await context.progress({ status: "greeting" })
       return { content: `Hello ${(input as { name: string }).name}!` }
     },
   })
 })
+```
+
+Promise tool executors receive `context.signal`. Pass it to cancellable work such as `fetch` so stopping the Session
+also stops the underlying operation.
+
+```ts
+execute: async ({ url }, context) => {
+  const response = await fetch(url, { signal: context.signal })
+  return { content: await response.text() }
+}
 ```
 
 Call `reload()` after changing source data captured by the callback. Reload replays the active transforms without

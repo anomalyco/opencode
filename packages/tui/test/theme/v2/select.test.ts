@@ -7,7 +7,7 @@ test("selects complete light and dark themes independently", () => {
   const dark = selectTheme(getOpenCodeTheme(), "dark")
   expect(selectTheme(getOpenCodeTheme())).toEqual(light)
   expect(light.hue).toEqual(getOpenCodeTheme().light.hue)
-  expect(light.text).toEqual(getOpenCodeTheme().base.text)
+  expect(dark.text).toEqual(getOpenCodeTheme().base.text)
   expect(dark.hue).toEqual(getOpenCodeTheme().dark.hue)
   expect(selectThemeMode(getOpenCodeTheme(), "dark")).toEqual({ theme: dark, mode: "dark" })
 })

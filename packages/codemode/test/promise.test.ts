@@ -730,7 +730,7 @@ describe("Promise.all over arbitrary arrays", () => {
 
   test("a non-collection argument is a clear error", async () => {
     const diagnostic = await error(`return await Promise.all(42)`)
-    expect(diagnostic.message).toContain("Promise.all expects an array")
+    expect(diagnostic.message).toContain("Promise.all expects a synchronous iterable, received a number")
   })
 
   test("exceeding maxToolCalls inside Promise.all is a ToolCallLimitExceeded diagnostic", async () => {
@@ -1131,8 +1131,43 @@ describe("unsupported promise surface", () => {
   })
 
   test("unknown Promise statics are not functions", async () => {
-    const diagnostic = await error(`return await Promise.withResolvers()`)
-    expect(diagnostic.message).toContain("Promise.withResolvers is not a function")
+    const diagnostic = await error(`return await Promise.settle(() => 1)`)
+    expect(diagnostic.message).toContain("Promise.settle is not a function")
+  })
+})
+
+describe("Promise.try", () => {
+  test("runs the function now with its arguments; a throw rejects, a return fulfils, a promise or thenable is adopted", async () => {
+    expect(
+      await value(`
+        const log = []
+        const sum = Promise.try((a, b) => { log.push("ran"); return a + b }, 1, 2)
+        log.push("after")
+        let caught
+        try { await Promise.try(() => { throw new RangeError("boom") }) } catch (e) { caught = e.constructor.name }
+        return [log, sum instanceof Promise, await sum, caught, await Promise.try(async () => 5), await Promise.try(() => ({ then: (r) => r("thenable") }))]
+      `),
+    ).toEqual([["ran", "after"], true, 3, "RangeError", 5, "thenable"])
+    expect((await error(`return Promise.try(5)`)).message).toContain(
+      "Promise.try expects a function, received a number.",
+    )
+  })
+})
+
+describe("Promise.withResolvers", () => {
+  test("returns a pending promise with resolvers that settle it once and adopt thenables", async () => {
+    expect(
+      await value(`
+        const first = Promise.withResolvers()
+        first.resolve(Promise.resolve("adopted"))
+        first.resolve("ignored")
+        const second = Promise.withResolvers()
+        second.reject(new Error("no"))
+        let caught
+        try { await second.promise } catch (e) { caught = e.message }
+        return [Object.keys(first), first.promise instanceof Promise, await first.promise, caught]
+      `),
+    ).toEqual([["promise", "resolve", "reject"], true, "adopted", "no"])
   })
 })
 

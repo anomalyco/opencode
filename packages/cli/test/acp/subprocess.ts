@@ -70,7 +70,10 @@ description: Verifier compatibility skill.
 `
 
 export async function createAcpFixture(
-  options: { readonly skill?: string; readonly respond?: (request: unknown) => string | Promise<string> } = {},
+  options: {
+    readonly skill?: string
+    readonly respond?: (request: unknown) => string | Response | Promise<string | Response>
+  } = {},
 ) {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-cli-acp-"))
   const home = path.join(root, "workspace")
@@ -93,7 +96,9 @@ export async function createAcpFixture(
       }
       const body: unknown = await request.json().catch(() => undefined)
       requests.push(body)
-      return new Response(completion(await (options.respond?.(body) ?? "accepted")), {
+      const result = await (options.respond?.(body) ?? "accepted")
+      if (result instanceof Response) return result
+      return new Response(completion(result), {
         headers: { "content-type": "text/event-stream" },
       })
     },

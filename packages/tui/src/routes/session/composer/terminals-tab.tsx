@@ -4,7 +4,7 @@ import { Keymap } from "../../../context/keymap"
 import { useSessionTerminals } from "../../../context/session-terminals"
 import { useTheme } from "../../../context/theme"
 import { useToast } from "../../../ui/toast"
-import { useComposerTab } from "./index"
+import { useComposerTab } from "./context"
 
 export function TerminalsTab(props: { sessionID: string; visibleTerminalID?: string }) {
   const composer = useComposerTab()
