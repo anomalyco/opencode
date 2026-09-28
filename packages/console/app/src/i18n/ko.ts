@@ -265,6 +265,18 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Go 구독하기",
   "go.cta.price": "$10/월",
+  "go.plans.month": "/월",
+  "go.plans.plus.cta": "Go Plus 구독하기",
+  "go.plans.plus.description": "Go Plus는 월 $40로 더 높은 사용 한도를 제공합니다.",
+  "go.plans.go.feature1": "엄선된 합리적인 가격의 모델",
+  "go.plans.go.feature2": "에이전트 코딩에 최적화된 테스트",
+  "go.plans.go.feature3": "넉넉한 한도와 안정적인 접근",
+  "go.plans.plus.feature1": "Go의 모든 혜택 포함",
+  "go.plans.plus.feature2": "더 높은 한도로 장시간 코딩에 집중",
+  "go.plans.plus.feature3": "더 크고 복잡한 프로젝트에 적합",
+  "go.plans.limits": "사용 한도",
+  "go.plans.description": "모델별 5시간당 예상 요청 횟수 및 월간 사용 한도",
+  "go.plans.legend": "요금제",
   "go.pricing.body":
     "어떤 에이전트와도 사용할 수 있습니다. 월 $10. 필요하면 크레딧을 충전하세요. 언제든지 취소할 수 있습니다.",
   "go.graph.free": "무료",
@@ -374,7 +386,7 @@ export const dict = {
 
   "go.faq.q9": "무료 모델과 Go의 차이점은 무엇인가요?",
   "go.faq.a9":
-    "무료 모델에는 Big Pickle과 당시 사용 가능한 프로모션 모델이 포함되며, 하루 200회 요청 할당량이 적용됩니다. Go는 엄선된 모델 라인업을 제공하며, 롤링 윈도우(5시간, 주간, 월간)에 걸쳐 더 높은 요청 할당량을 적용합니다. 기본 할당량은 대략 5시간당 $12, 주당 $30, 월 $60에 해당하며 모델별 할당량은 다를 수 있습니다(실제 요청 수는 모델 및 사용량에 따라 다름).",
+    "무료 모델에는 Big Pickle과 당시 사용 가능한 프로모션 모델이 포함되며, 하루 200회 요청 할당량이 적용됩니다. Go는 엄선된 모델 라인업을 제공하며, 이동 기간별 요청 한도는 5시간당 월간 한도의 20%, 주간 50%, 월간 100%입니다. 모델별 한도는 다를 수 있습니다(실제 요청 수는 모델 및 사용량에 따라 다름).",
   "go.faq.q10": "환불받을 수 있나요?",
   "go.faq.a10":
     "결제일로부터 14일 이내이며 해당 결제 기간에 Go 사용 한도를 전혀 사용하지 않은 경우 환불 대상이 될 수 있습니다. 환불을 요청하려면 {{contact}}를 선택해 주세요.",
@@ -641,7 +653,6 @@ export const dict = {
   "workspace.payments.type.subscription": "구독",
   "workspace.payments.view": "보기",
 
-  "workspace.black.loading": "로드 중...",
   "workspace.black.time.day": "일",
   "workspace.black.time.days": "일",
   "workspace.black.time.hour": "시간",
@@ -651,7 +662,8 @@ export const dict = {
   "workspace.black.time.fewSeconds": "몇 초",
   "workspace.black.subscription.title": "구독",
   "workspace.black.subscription.message": "현재 월 ${{plan}} OpenCode Black 플랜을 구독 중입니다.",
-  "workspace.black.subscription.manage": "구독 관리",
+  "workspace.black.subscription.ending":
+    "OpenCode Black은 현재 결제 기간이 끝나면 종료되며 갱신되지 않습니다. 새 콘솔로 옮겨 드리겠습니다.",
   "workspace.black.subscription.rollingUsage": "5시간 사용량",
   "workspace.black.subscription.weeklyUsage": "주간 사용량",
   "workspace.black.subscription.resetsIn": "초기화까지 남은 시간:",

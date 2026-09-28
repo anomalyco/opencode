@@ -14,6 +14,7 @@ import {
   statModel,
   statProvider,
 } from "./model-normalization"
+import { catalogIdentity } from "./catalog-identity"
 
 describe("inference stat normalization", () => {
   test("normalizes model suffixes used by router/provider variants", () => {
@@ -36,6 +37,7 @@ describe("inference stat normalization", () => {
     expect(modelAuthor("grok-build-0.1")).toBe("xai")
     expect(modelAuthor("hy3-preview")).toBe("tencent")
     expect(modelAuthor("kimi-k2.6")).toBe("moonshot")
+    expect(modelAuthor("longcat-2.5-preview")).toBe("meituan")
     expect(modelAuthor("mimo-v2-omni")).toBe("xiaomi")
     expect(modelAuthor("minimax-m2.7")).toBe("minimax")
     expect(modelAuthor("muse-spark-1.2-contributor")).toBe("meta")
@@ -175,6 +177,45 @@ describe("inference stat normalization", () => {
         model: "claude-sonnet-4-5",
         provider_model: "claude-sonnet-4-5",
       },
+    ])
+  })
+
+  test("uses catalog labs in SQL and retains them in aggregate conversion", () => {
+    const catalog = catalogIdentity({
+      models: { "meituan/longcat-2.5-preview": {}, "cohere/north-mini-code": {}, "zhipuai/glm-5.3": {} },
+      providers: {
+        opencode: {
+          models: {
+            "longcat-2.5-preview-free": { canonical_model_id: "meituan/longcat-2.5-preview" },
+            "north-mini-code": { canonical_model_id: "cohere/north-mini-code" },
+            "glm-5.3": { canonical_model_id: "zhipuai/glm-5.3" },
+          },
+        },
+      },
+    })
+    const [query] = buildStatsQueries(
+      new Date("2026-09-27"),
+      new Date("2026-09-28"),
+      {
+        namespace: "inference",
+        table: "generation",
+        dataset: "zen",
+      },
+      catalog,
+    )
+
+    expect(query).toContain(
+      "WHEN lower(raw_provider) = 'opencode' AND lower(raw_model) = 'longcat-2.5-preview-free' THEN 'meituan'",
+    )
+    expect(query).toContain("WHEN lower(model) = 'longcat-2.5-preview' THEN 'meituan'")
+    expect(query).toContain("WHEN lower(model) = 'north-mini-code' THEN 'cohere'")
+    expect(query).toContain("WHEN strpos(lower(model), 'glm') > 0 THEN 'zhipu'")
+    expect(query).not.toContain("WHEN lower(model) = 'glm-5.3' THEN 'zhipuai'")
+    expect(toModelAggregate(aggregate("longcat-2.5-preview", "meituan"), catalog)).toMatchObject([
+      { model: "longcat-2.5-preview", provider: "meituan" },
+    ])
+    expect(toGeoAggregate({ ...aggregate("longcat-2.5-preview", "meituan"), country: "US" }, catalog)).toMatchObject([
+      { model: "longcat-2.5-preview", provider: "meituan", country: "US" },
     ])
   })
 
