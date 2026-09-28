@@ -61,23 +61,14 @@
     color: var(--go-console-muted);
     line-height: 1.25rem;
   }
-  [data-slot="actions"],
-  [data-slot="legend"],
-  [data-slot="legend"] span {
+  [data-slot="tier-switch"] {
     display: flex;
     align-items: center;
-    gap: 1rem;
+    gap: 0.25rem;
   }
-  [data-slot="legend"] span {
-    gap: 0.4rem;
-    white-space: nowrap;
-  }
-  [data-slot="legend"] {
-    color: var(--go-console-secondary);
-  }
-  [data-slot="legend"] i {
+  [data-slot="tier-switch"] i {
     width: 3px;
-    height: 13px;
+    height: 12px;
     border-radius: 1px;
   }
   [data-tier="go"] {
@@ -99,7 +90,18 @@
     cursor: pointer;
     white-space: nowrap;
   }
-  button[aria-expanded="true"] svg {
+  [data-slot="tier-switch"] button {
+    color: var(--go-console-secondary);
+    border-radius: 4px;
+  }
+  [data-slot="tier-switch"] button[aria-pressed="true"] {
+    background: var(--go-console-surface);
+    color: var(--go-console-text);
+  }
+  [data-slot="tier-switch"] button:hover {
+    color: var(--go-console-text);
+  }
+  [data-slot="expand"][aria-expanded="true"] svg {
     transform: rotate(180deg);
   }
   [data-slot="scroll"] {
@@ -206,8 +208,16 @@
     transform: translateX(50%);
   }
   figcaption {
-    text-align: end;
-    padding-top: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 0.75rem;
+    border-top: 1px solid var(--go-console-border);
+    padding-top: 0.75rem;
+  }
+  [data-slot="expand"] {
+    padding-inline: 0;
   }
   figcaption a {
     color: var(--go-console-secondary);
@@ -220,9 +230,6 @@
     [data-slot="heading"] {
       align-items: start;
       flex-direction: column;
-    }
-    [data-slot="actions"] {
-      flex-wrap: wrap;
     }
   }
 }

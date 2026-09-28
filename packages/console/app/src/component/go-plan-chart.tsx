@@ -4,11 +4,6 @@ import { useI18n } from "~/context/i18n"
 import { useLanguage } from "~/context/language"
 import { goPlanModels } from "./go-models"
 
-const max = Math.max(...goPlanModels.map((model) => model.plusRequests).filter(Number.isFinite))
-const position = (requests: number) =>
-  Number.isFinite(requests)
-    ? 4 + Math.pow(Math.log10(Math.max(requests / 100, 1)) / Math.log10(max / 100), 2.2) * 78
-    : 100
 const ticks = [100, 1000, 10000]
 
 export function GoPlanChart(props: { href: string }) {
@@ -16,7 +11,17 @@ export function GoPlanChart(props: { href: string }) {
   const language = useLanguage()
   const id = createUniqueId()
   const [expanded, setExpanded] = createSignal(false)
+  const [tier, setTier] = createSignal<"go" | "go-plus">("go")
   const models = createMemo(() => goPlanModels.filter((model) => expanded() || model.featured))
+  const max = createMemo(() =>
+    Math.max(
+      ...goPlanModels.map((model) => (tier() === "go" ? model.requests : model.plusRequests)).filter(Number.isFinite),
+    ),
+  )
+  const position = (requests: number) =>
+    Number.isFinite(requests)
+      ? 4 + Math.pow(Math.log10(Math.max(requests / 100, 1)) / Math.log10(max() / 100), 2.2) * 78
+      : 100
   const format = createMemo(() => new Intl.NumberFormat(language.tag(language.locale())))
   const currency = createMemo(
     () =>
@@ -35,24 +40,14 @@ export function GoPlanChart(props: { href: string }) {
           <h2 id={`${id}-title`}>{i18n.t("go.plans.limits")}</h2>
           <p>{i18n.t("go.plans.description")}</p>
         </div>
-        <div data-slot="actions">
-          <div data-slot="legend" aria-label={i18n.t("go.plans.legend")}>
-            <span>
-              <i data-tier="go" />
-              Go
-            </span>
-            <span>
-              <i data-tier="plus" />
-              Go Plus
-            </span>
-          </div>
-          <button type="button" aria-expanded={expanded()} aria-controls={id} onClick={() => setExpanded(!expanded())}>
-            {expanded()
-              ? i18n.t("go.graph.showLess")
-              : i18n.t("go.graph.showAll", { count: format().format(goPlanModels.length) })}
-            <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.25" />
-            </svg>
+        <div data-slot="tier-switch" role="group" aria-label={i18n.t("go.plans.legend")}>
+          <button type="button" aria-pressed={tier() === "go"} onClick={() => setTier("go")}>
+            <i data-tier="go" />
+            Go
+          </button>
+          <button type="button" aria-pressed={tier() === "go-plus"} onClick={() => setTier("go-plus")}>
+            <i data-tier="plus" />
+            Go Plus
           </button>
         </div>
       </div>
@@ -105,22 +100,23 @@ export function GoPlanChart(props: { href: string }) {
                     <For each={ticks}>
                       {(tick) => <span data-slot="gridline" style={{ "inset-inline-start": `${position(tick)}%` }} />}
                     </For>
-                    <For each={[model.requests, model.plusRequests]}>
-                      {(requests, index) => (
-                        <div data-slot="track">
-                          <span data-tier={index() === 0 ? "go" : "plus"} style={{ width: `${position(requests)}%` }} />
-                          <span data-slot="remainder" />
-                        </div>
-                      )}
-                    </For>
+                    <div data-slot="track">
+                      <span
+                        data-tier={tier() === "go" ? "go" : "plus"}
+                        style={{ width: `${position(tier() === "go" ? model.requests : model.plusRequests)}%` }}
+                      />
+                      <span data-slot="remainder" />
+                    </div>
                   </td>
                   <td data-slot="number">
-                    <span>{format().format(model.requests)}</span>
-                    <span>{format().format(model.plusRequests)}</span>
+                    <span>{format().format(tier() === "go" ? model.requests : model.plusRequests)}</span>
                   </td>
                   <td data-slot="number">
-                    <span>{Number.isFinite(model.allowance) ? currency().format(model.allowance) : "∞"}</span>
-                    <span>{Number.isFinite(model.plusAllowance) ? currency().format(model.plusAllowance) : "∞"}</span>
+                    <span>
+                      {Number.isFinite(tier() === "go" ? model.allowance : model.plusAllowance)
+                        ? currency().format(tier() === "go" ? model.allowance : model.plusAllowance)
+                        : "∞"}
+                    </span>
                   </td>
                 </tr>
               )}
@@ -144,6 +140,20 @@ export function GoPlanChart(props: { href: string }) {
         </table>
       </div>
       <figcaption>
+        <button
+          type="button"
+          data-slot="expand"
+          aria-expanded={expanded()}
+          aria-controls={id}
+          onClick={() => setExpanded(!expanded())}
+        >
+          {expanded()
+            ? i18n.t("go.graph.showLess")
+            : i18n.t("go.graph.showAll", { count: format().format(goPlanModels.length) })}
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="m4 6 4 4 4-4" stroke="currentColor" stroke-width="1.25" />
+          </svg>
+        </button>
         <a href={props.href}>{i18n.t("go.graph.usageLimits")}</a>
       </figcaption>
     </figure>
