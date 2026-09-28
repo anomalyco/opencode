@@ -20,13 +20,13 @@ function sessionInfo(record: SessionInput) {
   }
 }
 
-async function launch(options: { failCreates?: number; existing?: string[] } = {}) {
+async function launch(options: { failCreates?: number } = {}) {
   const attempts: (string | undefined)[] = []
   const created: SessionInput[] = []
   const prompts: string[] = []
   let failures = options.failCreates ?? 0
   const setup = await createAppFixture({
-    args: { createSessionID: "ses_chosen" },
+    args: { newSessionID: "ses_chosen" },
     config: { animations: false, keybinds: { "session.new": "f6" } },
     fetch: async (url, request) => {
       if (url.pathname === "/api/agent")
@@ -35,9 +35,7 @@ async function launch(options: { failCreates?: number; existing?: string[] } = {
       if (url.pathname === "/api/model")
         return json({ location, data: [{ id: "model", providerID: "demo", name: "Demo Model", variants: [] }] })
       if (url.pathname === "/api/session" && request.method === "POST") {
-        const input: unknown = await request.json()
-        if (typeof input !== "object" || input === null) throw new Error("Expected a session input")
-        const record = input as SessionInput
+        const record: SessionInput = await request.json()
         attempts.push(record.id)
         if (failures > 0) {
           failures--
@@ -54,9 +52,7 @@ async function launch(options: { failCreates?: number; existing?: string[] } = {
         return json({ data: [], cursor: {} })
       if (/^\/api\/session\/[^/]+\/(agent|model)$/.test(url.pathname)) return new Response(null, { status: 204 })
       if (/^\/api\/session\/[^/]+$/.test(url.pathname)) {
-        const id = url.pathname.split("/")[3] ?? ""
-        if (options.existing?.includes(id)) return json({ data: sessionInfo({ id }) })
-        const record = created.find((item) => item.id === id)
+        const record = created.find((item) => item.id === url.pathname.split("/")[3])
         if (!record) return json({ message: "not found" }, { status: 404 })
         return json({ data: sessionInfo(record) })
       }
@@ -66,7 +62,7 @@ async function launch(options: { failCreates?: number; existing?: string[] } = {
   return { setup, attempts, created, prompts }
 }
 
-test("a launch createSessionID seeds the first fresh session and is consumed once", async () => {
+test("the first new session uses the launch session ID and later ones mint their own", async () => {
   const run = await launch()
   await using setup = run.setup
 
@@ -76,8 +72,7 @@ test("a launch createSessionID seeds the first fresh session and is consumed onc
   setup.mockInput.pressEnter()
   await setup.waitForFrame(() => run.prompts.length === 1)
   expect(run.prompts[0]).toBe("ses_chosen")
-  expect(run.created).toHaveLength(1)
-  expect(run.created[0]?.id).toBe("ses_chosen")
+  expect(run.created.map((item) => item.id)).toEqual(["ses_chosen"])
 
   setup.mockInput.pressKey("F6")
   await setup.renderOnce()
@@ -88,7 +83,7 @@ test("a launch createSessionID seeds the first fresh session and is consumed onc
   expect(run.created[1]?.id).not.toBe("ses_chosen")
 })
 
-test("a failed first create keeps the launch createSessionID for the retry", async () => {
+test("a failed first create keeps the launch session ID for the retry", async () => {
   const run = await launch({ failCreates: 1 })
   await using setup = run.setup
 
@@ -96,25 +91,10 @@ test("a failed first create keeps the launch createSessionID for the retry", asy
   await setup.waitForFrame((frame) => frame.includes("Demo Model"))
   await setup.mockInput.typeText("hello")
   setup.mockInput.pressEnter()
-  // Retry only once the failed prompt is back in the input.
   await setup.waitForFrame((frame) => frame.includes("Creating a session failed") && frame.includes("hello"))
   expect(run.attempts).toEqual(["ses_chosen"])
 
   setup.mockInput.pressEnter()
   await setup.waitForFrame(() => run.created.length === 1)
   expect(run.attempts).toEqual(["ses_chosen", "ses_chosen"])
-  expect(run.created[0]?.id).toBe("ses_chosen")
-})
-
-test("a launch createSessionID that already exists is reported and never created", async () => {
-  const run = await launch({ existing: ["ses_chosen"] })
-  await using setup = run.setup
-
-  await setup.ready
-  await setup.waitForFrame((frame) => frame.includes("Session already exists: ses_chosen"))
-  await setup.mockInput.typeText("hello")
-  setup.mockInput.pressEnter()
-  await setup.waitForFrame(() => run.created.length === 1)
-  expect(run.attempts[0]).toMatch(/^ses/)
-  expect(run.attempts[0]).not.toBe("ses_chosen")
 })

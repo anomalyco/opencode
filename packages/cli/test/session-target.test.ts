@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { OpenCode, type LocationGetOutput, type ModelRef, type SessionInfo } from "@opencode/client/promise"
-import { resolveSessionTarget, SessionTargetMutationError, validateSessionCreateInput } from "../src/session-target"
+import { resolveSessionTarget, SessionTargetMutationError } from "../src/session-target"
 
 function location(directory: string): LocationGetOutput {
   return { directory, project: { id: "project", directory, canonical: directory } }
@@ -40,6 +40,28 @@ describe("session target resolver", () => {
       model: { providerID: "openai", id: "gpt-5" },
       resume: true,
     })
+  })
+
+  test("creates a missing explicit Session with its ID", async () => {
+    const client = OpenCode.make({ baseUrl: "https://opencode.test" })
+    spyOn(client.session, "get").mockRejectedValue({ _tag: "SessionNotFoundError" })
+    spyOn(client.location, "get").mockResolvedValue(location("/project"))
+    const create = spyOn(client.session, "create").mockResolvedValue(session("ses_chosen", "/project"))
+
+    const target = await resolveSessionTarget({ client, session: "ses_chosen", prepare })
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ id: "ses_chosen" }))
+    expect(target).toMatchObject({ session: { id: "ses_chosen" }, resume: false })
+  })
+
+  test("does not create a missing explicit Session to fork", async () => {
+    const client = OpenCode.make({ baseUrl: "https://opencode.test" })
+    spyOn(client.session, "get").mockRejectedValue({ _tag: "SessionNotFoundError" })
+    const create = spyOn(client.session, "create")
+
+    await expect(resolveSessionTarget({ client, session: "ses_chosen", fork: true, prepare })).rejects.toThrow(
+      "Session not found",
+    )
+    expect(create).not.toHaveBeenCalled()
   })
 
   test("paginates to continue the exact directory", async () => {
@@ -112,49 +134,5 @@ describe("session target resolver", () => {
     spyOn(client.location, "get").mockResolvedValue(location("/project"))
     spyOn(client.session, "create").mockRejectedValue(new Error("connection closed after create"))
     await expect(resolveSessionTarget({ client, prepare })).rejects.toBeInstanceOf(SessionTargetMutationError)
-  })
-
-  test("creates a fresh Session with the requested id", async () => {
-    const client = OpenCode.make({ baseUrl: "https://opencode.test" })
-    spyOn(client.location, "get").mockResolvedValue(location("/project"))
-    spyOn(client.session, "get").mockRejectedValue({ _tag: "SessionNotFoundError", sessionID: "ses_chosen" })
-    const create = spyOn(client.session, "create").mockImplementation(async (input) =>
-      session(input?.id ?? "ses_fresh", "/project"),
-    )
-
-    const target = await resolveSessionTarget({ client, createSessionID: "ses_chosen", prepare })
-    expect(create).toHaveBeenCalledTimes(1)
-    expect(create.mock.calls[0]?.[0]).toMatchObject({ id: "ses_chosen" })
-    expect(target.session.id).toBe("ses_chosen")
-    expect(target.resume).toBe(false)
-  })
-
-  test("rejects a requested id that already exists without mutating it", async () => {
-    const client = OpenCode.make({ baseUrl: "https://opencode.test" })
-    spyOn(client.location, "get").mockResolvedValue(location("/project"))
-    spyOn(client.session, "get").mockResolvedValue(session("ses_taken", "/project"))
-    const create = spyOn(client.session, "create").mockImplementation(async () => session("ses_taken", "/project"))
-
-    await expect(resolveSessionTarget({ client, createSessionID: "ses_taken", prepare })).rejects.toThrow(
-      "Session already exists: ses_taken",
-    )
-    expect(create).not.toHaveBeenCalled()
-  })
-})
-
-describe("session create input validation", () => {
-  test("accepts a bare create id", () => {
-    expect(validateSessionCreateInput({ createSessionID: "ses_chosen" })).toBeUndefined()
-  })
-
-  test("rejects resume flag combinations", () => {
-    expect(validateSessionCreateInput({ createSessionID: "ses_chosen", session: "ses_resume" })).toContain("--session")
-    expect(validateSessionCreateInput({ createSessionID: "ses_chosen", session: "" })).toContain("--session")
-    expect(validateSessionCreateInput({ createSessionID: "ses_chosen", continue: true })).toContain("--continue")
-    expect(validateSessionCreateInput({ createSessionID: "ses_chosen", fork: true })).toContain("--fork")
-  })
-
-  test("rejects an id without the ses prefix", () => {
-    expect(validateSessionCreateInput({ createSessionID: "custom" })).toContain("ses")
   })
 })

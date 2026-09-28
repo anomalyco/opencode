@@ -1,3 +1,4 @@
+import { mergeProps } from "solid-js"
 import { createSimpleContext } from "./helper"
 
 export interface Args {
@@ -6,39 +7,25 @@ export interface Args {
   prompt?: string
   continue?: boolean
   sessionID?: string
-  createSessionID?: string
+  newSessionID?: string
   fork?: boolean
   auto?: boolean
 }
 
-// A --session-id launch id is consumed by the prompt's first fresh-session
-// submit and then cleared, so later new sessions mint their own ids. Context
-// props are read-only getters, so the pending id lives in module scope.
-let pendingCreateSessionID: string | undefined
-
-export function seedCreateSessionID(id: string | undefined) {
-  pendingCreateSessionID = id
-}
-
-export function takeCreateSessionID() {
-  const id = pendingCreateSessionID
-  pendingCreateSessionID = undefined
-  return id
-}
-
-// A failed create returns the id so the retry still uses it.
-export function restoreCreateSessionID(id: string) {
-  pendingCreateSessionID ??= id
-}
-
-// Drops the id only while it is still waiting for the first create.
-export function discardCreateSessionID(id: string) {
-  if (pendingCreateSessionID !== id) return false
-  pendingCreateSessionID = undefined
-  return true
-}
-
 export const { use: useArgs, provider: ArgsProvider } = createSimpleContext({
   name: "Args",
-  init: (props: Args) => props,
+  init: (props: Args) => {
+    // The first new session created from home takes this ID; later ones mint their own.
+    let pending = props.newSessionID
+    return mergeProps(props, {
+      takeNewSessionID() {
+        const id = pending
+        pending = undefined
+        return id
+      },
+      restoreNewSessionID(id: string) {
+        pending ??= id
+      },
+    })
+  },
 })
