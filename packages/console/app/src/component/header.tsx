@@ -143,12 +143,12 @@ export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: bo
       <nav data-component="nav-desktop">
         <ul>
           <li>
-            <a href={config.github.repoUrl} target="_blank" style="white-space: nowrap;">
+            <a href={`${config.github.repoUrl}/tree/v2`} target="_blank" style="white-space: nowrap;">
               {i18n.t("nav.github")}
             </a>
           </li>
           <li>
-            <a href={language.route("/docs")}>{i18n.t("nav.docs")}</a>
+            <a href="/v2/docs">{i18n.t("nav.docs")}</a>
           </li>
           <li>
             <a href={language.route("/data")}>{i18n.t("nav.data")}</a>
@@ -243,12 +243,12 @@ export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: bo
                   <A href={language.route("/")}>{i18n.t("nav.home")}</A>
                 </li>
                 <li>
-                  <a href={config.github.repoUrl} target="_blank" style="white-space: nowrap;">
+                  <a href={`${config.github.repoUrl}/tree/v2`} target="_blank" style="white-space: nowrap;">
                     {i18n.t("nav.github")}
                   </a>
                 </li>
                 <li>
-                  <a href={language.route("/docs")}>{i18n.t("nav.docs")}</a>
+                  <a href="/v2/docs">{i18n.t("nav.docs")}</a>
                 </li>
                 <li>
                   <a href={language.route("/data")}>{i18n.t("nav.data")}</a>
