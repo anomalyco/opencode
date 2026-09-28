@@ -2800,7 +2800,7 @@ function BlockTool(props: BlockToolProps) {
 
 const SHELL_DISPLAY_LIMIT = 1024 * 1024
 
-function Shell(props: ToolProps) {
+export function Shell(props: ToolProps) {
   return (
     <ShellDisplay
       part={props.part}
@@ -2808,7 +2808,7 @@ function Shell(props: ToolProps) {
       command={stringValue(props.input.command)}
       workdir={stringValue(props.input.workdir)}
       status={props.part.state.status}
-      background={Boolean(stringValue(props.metadata.shellID)) && props.part.state.status !== "running"}
+      background={props.part.state.status === "completed" && props.metadata.status === "running"}
       output={stringValue(props.metadata.shellID) ? undefined : props.output}
     />
   )
