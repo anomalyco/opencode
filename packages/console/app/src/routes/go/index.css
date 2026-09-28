@@ -365,6 +365,12 @@ body {
       color: var(--color-text-strong);
       line-height: 1.4;
     }
+
+    @media (max-width: 40rem) {
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 8px;
+    }
   }
 
   [data-slot="hero-copy"] {

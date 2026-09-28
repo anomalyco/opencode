@@ -286,7 +286,7 @@ export const dict = {
   "go.graph.label": "Requests / 5 hours",
   "go.graph.period": "Usage",
   "go.graph.model": "Model",
-  "go.graph.requests": "Est. requests / 5 hr",
+  "go.graph.requests": "Est. requests / 5h",
   "go.graph.allowance": "Monthly usage",
   "go.graph.new": "New",
   "go.graph.scale": "Nonlinear request scale",
