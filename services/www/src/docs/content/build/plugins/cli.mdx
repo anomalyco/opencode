@@ -529,6 +529,23 @@ const current = context.ui.panel.current()
 context.ui.panel.close()
 ```
 
+## Exit epilogue
+
+When the TUI exits from a session it prints an epilogue to stdout: the wordmark, the session title, and the command
+that continues the session. Claim it to print your own text instead, for example when you embed OpenCode under another
+command. The last enabled claim wins; return `undefined` to print nothing.
+
+```ts
+// Print your own resume hint
+context.ui.epilogue(({ sessionID }) => `Resume: acme -s ${sessionID}`)
+
+// Or print nothing
+context.ui.epilogue(() => undefined)
+```
+
+The host runs `render` while the session is open, so the text is ready before plugins are disposed at exit. A render
+that throws prints nothing.
+
 ## Formatting
 
 Format filesystem paths for display, including home-directory abbreviation.

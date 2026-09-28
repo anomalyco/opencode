@@ -164,6 +164,12 @@ type PromptFooterInput = {
 
 export type PanelPresentation = "panel" | "fullscreen"
 
+/** The session a TUI exit leaves behind, passed to ui.epilogue renders. */
+export interface EpilogueInput {
+  readonly sessionID: string
+  readonly title: string
+}
+
 /** Client-local state of the selected session panel. The host owns its layout and input scope. */
 export interface PanelInput {
   /** Selected content name, set by ui.panel.open. Contributions decide whether to render it. */
@@ -511,6 +517,14 @@ export interface UI {
   }
   /** Claims a place in the slot tree; see SlotClaim. */
   readonly slot: (claim: SlotClaim) => () => void
+  /**
+   * Claims the text printed to stdout after the TUI exits from a session, in
+   * place of the built-in epilogue. The last enabled claim wins; returning
+   * undefined prints nothing, as does a render that throws. `render` runs
+   * while the session is open and reruns when the reactive state it reads
+   * changes.
+   */
+  readonly epilogue: (render: (input: EpilogueInput) => string | undefined) => () => void
 }
 
 export interface Context {
