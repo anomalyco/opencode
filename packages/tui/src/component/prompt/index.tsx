@@ -32,7 +32,7 @@ import { promptOffsetWidth } from "../../prompt/display"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { usePromptHistory, type PromptInfo } from "../../prompt/history"
 import { computePromptTraits } from "../../prompt/traits"
-import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../prompt/part"
+import { expandPastedTextPlaceholders, expandPastedTextPlaceholder, expandTrackedPastedText } from "../../prompt/part"
 import { usePromptStash } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteRef, Autocomplete } from "./autocomplete"
@@ -375,6 +375,7 @@ export function Prompt(props: PromptProps) {
         run: async (ctx: CommandContext<Renderable, KeyEvent>) => {
           ctx.event.preventDefault()
           ctx.event.stopPropagation()
+          if (expandPastedPlaceholder()) return
           const content = await clipboard.read?.()
           if (content?.mime.startsWith("image/")) {
             await pasteAttachment({
@@ -1146,6 +1147,17 @@ export function Prompt(props: PromptProps) {
     return true
   }
 
+  function expandPastedPlaceholder() {
+    const expanded = expandPastedTextPlaceholder(input, promptPartTypeId, (id) => {
+      const partIndex = store.extmarkToPartIndex.get(id)
+      const part = partIndex === undefined ? undefined : store.prompt.parts[partIndex]
+      return part?.type === "text" ? part.text : undefined
+    })
+    if (!expanded) return false
+    syncExtmarksWithPromptParts()
+    return true
+  }
+
   function pasteText(text: string, virtualText: string) {
     const currentOffset = input.cursorOffset
     const extmarkStart = currentOffset
@@ -1415,6 +1427,8 @@ export function Prompt(props: PromptProps) {
                 // Once we cross an async boundary below, the terminal may perform its
                 // default paste unless we suppress it first and handle insertion ourselves.
                 event.preventDefault()
+
+                if (expandPastedPlaceholder()) return
 
                 await pasteInputText(normalizedText)
               }}

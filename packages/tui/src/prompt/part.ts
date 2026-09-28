@@ -1,3 +1,4 @@
+import type { TextareaRenderable } from "@opentui/core"
 import { displaySlice } from "./display"
 
 export function stripPromptPartIDs<Part extends { id: string; messageID: string; sessionID: string }>(part: Part) {
@@ -26,4 +27,36 @@ export function expandTrackedPastedText(text: string, ranges: { start: number; e
     .slice()
     .sort((a, b) => b.start - a.start)
     .reduce((result, part) => displaySlice(result, 0, part.start) + part.text + displaySlice(result, part.end), text)
+}
+
+// Cursor lands on a placeholder's [start, end] range or right after it
+// (the trailing space pasteText inserts means end + 1 too)
+export function pastedTextExtmarkAtOffset<T extends { start: number; end: number }>(offset: number, ranges: T[]) {
+  return ranges.find((range) => offset >= range.start && offset <= range.end + 1)
+}
+
+// Expands a collapsed paste placeholder ([Pasted ~N lines]) at the cursor back
+// into the original text, returning true when an expansion happened.
+export function expandPastedTextPlaceholder(
+  input: Pick<TextareaRenderable, "cursorOffset" | "editBuffer" | "extmarks" | "insertText">,
+  typeId: number,
+  pastedTextFor: (extmarkId: number) => string | undefined,
+) {
+  const extmark = pastedTextExtmarkAtOffset(
+    input.cursorOffset,
+    input.extmarks.getAllForTypeId(typeId).flatMap((candidate) => {
+      const text = pastedTextFor(candidate.id)
+      if (text === undefined) return []
+      return [{ start: candidate.start, end: candidate.end, id: candidate.id, text }]
+    }),
+  )
+  if (!extmark) return false
+  const start = input.editBuffer.offsetToPosition(extmark.start)
+  const end = input.editBuffer.offsetToPosition(extmark.end)
+  if (!start || !end) return false
+  input.extmarks.delete(extmark.id)
+  input.editBuffer.deleteRange(start.row, start.col, end.row, end.col)
+  input.editBuffer.setCursor(start.row, start.col)
+  input.insertText(extmark.text)
+  return true
 }
