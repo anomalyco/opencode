@@ -8,16 +8,20 @@ import { it } from "../../core/test/lib/effect"
 import { startServer } from "./fixture/server"
 import { ServerFetch } from "../src/fetch"
 
+async function initRepo(dir: string) {
+  await $`git init -b main`.cwd(dir).quiet()
+  await $`git config commit.gpgsign false`.cwd(dir).quiet()
+  await $`git config user.email test@opencode.test`.cwd(dir).quiet()
+  await $`git config user.name Test`.cwd(dir).quiet()
+}
+
 it.live(
   "serves lazy review bases, committed diffs, and unavailable-base errors",
   () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-vcs-endpoint-")))
       yield* Effect.promise(async () => {
-        await $`git init -b main`.cwd(tmp.path).quiet()
-        await $`git config commit.gpgsign false`.cwd(tmp.path).quiet()
-        await $`git config user.email test@opencode.test`.cwd(tmp.path).quiet()
-        await $`git config user.name Test`.cwd(tmp.path).quiet()
+        await initRepo(tmp.path)
         await Bun.write(path.join(tmp.path, "file.txt"), "base\n")
         await $`git add .`.cwd(tmp.path).quiet()
         await $`git commit -m initial`.cwd(tmp.path).quiet()
@@ -29,15 +33,7 @@ it.live(
       const server = yield* startServer(path.join(tmp.path, "config"))
       const url = new URL("/api/vcs/base", server.base)
       url.searchParams.set("location[directory]", tmp.path)
-      const base = yield* Effect.tryPromise({
-        try: async () => {
-          const response = await fetch(url, { headers: server.headers })
-          const body: unknown = await response.json()
-          if (!isRecord(body) || !isRecord(body.data)) throw new Error("VCS provider not ready")
-          return body
-        },
-        catch: (cause) => cause,
-      }).pipe(Effect.retry(Schedule.spaced("10 millis")), Effect.timeout("2 seconds"))
+      const base = yield* Effect.promise(async () => (await fetch(url, { headers: server.headers })).json())
       expect(base).toMatchObject({
         data: { name: "main", ref: "refs/heads/main", source: "reflog" },
       })
@@ -74,6 +70,24 @@ it.live(
         message: "No review base available",
       })
     }),
+  20_000,
+)
+
+it.live("answers the first vcs summary of a cold location with its provider", () =>
+  Effect.gen(function* () {
+    const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-vcs-cold-")))
+    yield* Effect.promise(async () => {
+      await initRepo(tmp.path)
+      await $`git commit --allow-empty -m initial`.cwd(tmp.path).quiet()
+    })
+    const server = yield* startServer(path.join(tmp.path, "config"))
+    const url = new URL("/api/vcs", server.base)
+    url.searchParams.set("location[directory]", tmp.path)
+    const response = yield* Effect.promise(() => fetch(url, { headers: server.headers }))
+    expect(yield* Effect.promise(() => response.json())).toMatchObject({
+      data: { provider: "git", branch: { current: "main" } },
+    })
+  }),
   20_000,
 )
 
@@ -136,7 +150,3 @@ it.live("maps a failing base provider to HTTP 503 instead of null metadata", () 
     })
   }),
 )
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-}
