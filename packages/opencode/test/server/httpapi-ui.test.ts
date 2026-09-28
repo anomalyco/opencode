@@ -356,6 +356,45 @@ describe("HttpApi UI fallback", () => {
     }),
   )
 
+  it.live("marks content-hashed assets immutable and everything else revalidating", () =>
+    Effect.gen(function* () {
+      const fs = yield* FSUtil.Service
+      const embedded = {
+        "index.html": "/$bunfs/root/index.html",
+        "assets/index-Ab1cD2e3.js": "/$bunfs/root/assets/index-Ab1cD2e3.js",
+        "assets/Inter.ttf": "/$bunfs/root/assets/Inter.ttf",
+        "site.webmanifest": "/$bunfs/root/site.webmanifest",
+      }
+      const reader = {
+        ...fs,
+        readFile: (path: string) => {
+          const entry = Object.values(embedded).find((f) => f === path)
+          return entry ? Effect.succeed(new TextEncoder().encode(path)) : Effect.die(`unexpected: ${path}`)
+        },
+      }
+      const get = (path: string, ifNoneMatch?: string) =>
+        serveEmbeddedUIEffect(path, reader, embedded, ifNoneMatch).pipe(Effect.map(HttpServerResponse.toWeb))
+
+      const html = yield* get("/index.html")
+      expect(html.headers.get("cache-control")).toBe("no-cache")
+      expect(html.headers.get("etag")).toMatch(/^"[0-9a-f]{32}"$/)
+
+      const hashed = yield* get("/assets/index-Ab1cD2e3.js")
+      expect(hashed.headers.get("cache-control")).toBe("public, max-age=31536000, immutable")
+
+      for (const path of ["/assets/Inter.ttf", "/site.webmanifest"]) {
+        const unhashed = yield* get(path)
+        expect(unhashed.headers.get("cache-control")).toBe("no-cache")
+      }
+
+      const etag = html.headers.get("etag")!
+      const revalidated = yield* get("/index.html", etag)
+      expect(revalidated.status).toBe(304)
+      expect(revalidated.headers.get("etag")).toBe(etag)
+      expect(revalidated.headers.get("cache-control")).toBe("no-cache")
+    }),
+  )
+
   it.live("keeps matched API routes ahead of the UI fallback", () =>
     Effect.gen(function* () {
       const server = routeOrderingApp()
