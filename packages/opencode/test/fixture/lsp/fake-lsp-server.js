@@ -6,6 +6,16 @@ let lastChange = null
 let initializeParams = null
 let diagnosticRequestCount = 0
 let registeredCapability = false
+const fs = require("fs")
+const shutdownMode = process.env.OPENCODE_TEST_LSP_SHUTDOWN
+const eventFile = process.env.OPENCODE_TEST_LSP_EVENT_FILE
+const shutdownReleaseFile = process.env.OPENCODE_TEST_LSP_SHUTDOWN_RELEASE_FILE
+const initializeReleaseFile = process.env.OPENCODE_TEST_LSP_INITIALIZE_RELEASE_FILE
+const recordInitialize = process.env.OPENCODE_TEST_LSP_RECORD_INITIALIZE
+const recordStart = process.env.OPENCODE_TEST_LSP_RECORD_START
+const descendantEventFile = process.env.OPENCODE_TEST_LSP_DESCENDANT_EVENT_FILE
+const descendantPidFile = process.env.OPENCODE_TEST_LSP_DESCENDANT_PID_FILE
+const descendantExpiryMs = Number(process.env.OPENCODE_TEST_LSP_DESCENDANT_EXPIRY_MS ?? 10_000)
 const pendingClientRequests = new Map()
 let pullConfig = {
   delayMs: 0,
@@ -58,6 +68,46 @@ function sendResponse(id, result) {
 function sendNotification(method, params) {
   send({ jsonrpc: "2.0", method, params })
 }
+
+function record(event) {
+  if (!eventFile) return
+  fs.appendFileSync(eventFile, `${event}\n`)
+}
+
+if (recordStart) record("start")
+
+if (descendantEventFile || descendantPidFile) {
+  const { spawn } = require("child_process")
+  spawn(
+    process.execPath,
+    [
+      "-e",
+      `
+    const fs = require("fs")
+    const http = require("http")
+    const eventFile = ${JSON.stringify(descendantEventFile)}
+    const pidFile = ${JSON.stringify(descendantPidFile)}
+    const expiryMs = ${JSON.stringify(descendantExpiryMs)}
+    const server = http.createServer((_, response) => response.end("alive"))
+    const close = () => server.close(() => process.exit(0))
+    process.on("SIGTERM", () => {
+      if (eventFile) fs.appendFileSync(eventFile, "descendant-exit\\n")
+      close()
+    })
+    server.listen(0, "127.0.0.1", () => {
+      const address = server.address()
+      if (!address || typeof address === "string") process.exit(1)
+      if (eventFile) fs.appendFileSync(eventFile, "descendant-start\\n")
+      if (pidFile) fs.writeFileSync(pidFile, process.pid + "\\nhttp://127.0.0.1:" + address.port)
+      setTimeout(close, Math.max(expiryMs, 1))
+    })
+  `,
+    ],
+    { stdio: "ignore" },
+  )
+}
+
+if (shutdownMode === "unresponsive") setInterval(() => {}, 1_000)
 
 function maybeRegister(method) {
   if (pullConfig.registerOn !== method || registeredCapability) return
@@ -113,14 +163,50 @@ function handle(raw) {
 
   if (data.method === "initialize") {
     initializeParams = data.params
-    sendResponse(data.id, {
-      capabilities: {
-        textDocumentSync: {
-          change: 2,
+    if (recordInitialize) record("initialize")
+    const response = () =>
+      sendResponse(data.id, {
+        capabilities: {
+          textDocumentSync: {
+            change: 2,
+          },
         },
-      },
-    })
+      })
+    if (!initializeReleaseFile) {
+      response()
+      return
+    }
+    const timer = setInterval(() => {
+      if (!fs.existsSync(initializeReleaseFile)) return
+      clearInterval(timer)
+      response()
+    }, 10)
     return
+  }
+
+  if (data.method === "shutdown") {
+    record("shutdown")
+    if (shutdownMode === "unresponsive") return
+    const response = () => {
+      sendResponse(data.id, null)
+      record("shutdown-response")
+    }
+    if (shutdownReleaseFile) {
+      const timer = setInterval(() => {
+        if (!fs.existsSync(shutdownReleaseFile)) return
+        clearInterval(timer)
+        response()
+      }, 10)
+      return
+    }
+    response()
+    return
+  }
+
+  if (data.method === "exit") {
+    record("exit")
+    if (shutdownMode === "unresponsive") return
+    process.exit(0)
   }
 
   if (data.method === "test/get-initialize-params") {

@@ -201,6 +201,24 @@ for (const item of targets) {
     },
   })
 
+  if (item.os === "win32") {
+    await Bun.build({
+      conditions: ["bun", "node"],
+      tsconfig: "./tsconfig.json",
+      minify: true,
+      compile: {
+        autoloadBunfig: false,
+        autoloadDotenv: false,
+        autoloadTsconfig: true,
+        autoloadPackageJson: true,
+        target: name.replace(pkg.name, "bun") as any,
+        outfile: `dist/${name}/bin/opencode-process-win32`,
+        windows: {},
+      },
+      entrypoints: ["./src/util/process-win32-helper.ts"],
+    })
+  }
+
   // Smoke test: only run if binary is for current platform
   if (item.os === process.platform && item.arch === process.arch && !item.abi) {
     const binaryPath = `dist/${name}/bin/opencode`

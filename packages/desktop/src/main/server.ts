@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url"
 import { app, utilityProcess } from "electron"
 import type { Details } from "electron"
 import { getLogger } from "./logging"
+import { processWin32HelperPath } from "./process-helper"
 import { getUserShell, loadShellEnv } from "./shell-env"
 import { getStore } from "./store"
 import { DEFAULT_SERVER_URL_KEY } from "./store-keys"
@@ -216,6 +217,13 @@ function createSidecarEnv(): Record<string, string> {
   )
   delete env.DEBUG
   if (process.platform === "linux") delete env.LD_PRELOAD
+  if (process.platform === "win32") {
+    env.OPENCODE_PROCESS_WIN32_HELPER = processWin32HelperPath({
+      appIsPackaged: app.isPackaged,
+      resourcesPath: process.resourcesPath,
+      developmentResourcesPath: join(dirname(fileURLToPath(import.meta.url)), "../../resources"),
+    })
+  }
   return env
 }
 

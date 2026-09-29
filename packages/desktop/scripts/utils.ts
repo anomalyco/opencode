@@ -69,6 +69,34 @@ export function getCurrentCli(target = RUST_TARGET ?? nativeTarget()) {
   return binaryConfig
 }
 
+export function windowsProcessHelperTarget(target = RUST_TARGET ?? nativeTarget()) {
+  return getCurrentCli(target).cpu === "arm64" ? "bun-windows-arm64" : "bun-windows-x64-baseline"
+}
+
+export async function buildWindowsProcessHelper() {
+  if (process.platform !== "win32") return
+
+  const build = await Bun.build({
+    conditions: ["bun", "node"],
+    tsconfig: "../opencode/tsconfig.json",
+    minify: true,
+    compile: {
+      autoloadBunfig: false,
+      autoloadDotenv: false,
+      autoloadTsconfig: true,
+      autoloadPackageJson: true,
+      target: windowsProcessHelperTarget(),
+      outfile: "resources/opencode-process-win32",
+      windows: {},
+    },
+    entrypoints: ["../opencode/src/util/process-win32-helper.ts"],
+  })
+  if (!build.success) throw new Error("Failed to compile the Windows process helper")
+  if (process.env.GITHUB_ACTIONS === "true") {
+    await $`pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File ../../script/sign-windows.ps1 resources/opencode-process-win32.exe`
+  }
+}
+
 export async function downloadCliToResources() {
   const cli = getCurrentCli()
   const directory = await mkdtemp(join(tmpdir(), "opencode-cli-"))

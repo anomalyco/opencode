@@ -27,6 +27,8 @@ const arch = archMap[os.arch()] ?? os.arch()
 const base = `opencode-${platform}-${arch}`
 const sourceBinary = platform === "windows" ? "opencode.exe" : "opencode"
 const targetBinary = path.join(__dirname, "bin", "opencode.exe")
+const processBinary = "opencode-process-win32.exe"
+const targetProcessBinary = path.join(__dirname, "bin", processBinary)
 
 function supportsAvx2() {
   if (arch !== "x64") return false
@@ -137,6 +139,7 @@ function installPackage(name) {
     if (result.status !== 0) return
     const packageDir = path.join(temp, "node_modules", name)
     copyBinary(path.join(packageDir, "bin", sourceBinary), targetBinary)
+    if (platform === "windows") copyBinary(path.join(packageDir, "bin", processBinary), targetProcessBinary)
     return true
   } finally {
     fs.rmSync(temp, { recursive: true, force: true })
@@ -167,7 +170,9 @@ function verifyBinary() {
 function main() {
   for (const name of packageNames()) {
     try {
-      copyBinary(resolveBinary(name), targetBinary)
+      const binaryPath = resolveBinary(name)
+      copyBinary(binaryPath, targetBinary)
+      if (platform === "windows") copyBinary(path.join(path.dirname(binaryPath), processBinary), targetProcessBinary)
       if (verifyBinary()) return
     } catch {
       if (installPackage(name) && verifyBinary()) return
