@@ -355,6 +355,17 @@ describe("provider error rawBody classification", () => {
     }
   })
 
+  test("classifies Workers AI context window rejections as context overflow despite HTTP 413", () => {
+    const message =
+      "AiError: Ai: The estimated number of input and maximum output tokens (900047) exceeded this model context window limit (32000). (17851589-f2e6-405d-b67c-5550e52ee1c1)"
+    const reason = classifyProviderFailure({
+      message,
+      status: 413,
+      rawBody: JSON.stringify({ errors: [{ message, code: 5021 }], success: false, result: {}, messages: [] }),
+    })
+    expect(reason._tag === "InvalidRequest" ? reason.classification : reason._tag).toBe("context-overflow")
+  })
+
   test("classifies Google invalid API keys as authentication failures", () => {
     const rawBody = JSON.stringify({
       error: {
