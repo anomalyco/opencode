@@ -488,12 +488,11 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
   })()
   const result = {
     role: "assistant" as const,
-    content:
-      content.some((part) => part.cache_control !== undefined)
-        ? content
-        : content.length === 0 && toolCalls.length > 0
-          ? null
-          : content.map((part) => part.text).join(""),
+    content: (() => {
+      if (content.some((part) => part.cache_control !== undefined)) return content
+      if (content.length === 0 && toolCalls.length > 0) return null
+      return content.map((part) => part.text).join("")
+    })(),
     ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
     ...(details !== undefined ? { reasoning_details: details } : {}),
   }
