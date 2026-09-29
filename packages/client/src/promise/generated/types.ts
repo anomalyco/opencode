@@ -141,7 +141,7 @@ export type SessionMessageCompactionRunning = {
   metadata?: { [x: string]: JsonValue }
   time: { created: number }
   status: "running"
-  reason: "auto" | "manual"
+  reason: "auto" | "manual" | "overflow"
   summary: string
   recent: string
 }
@@ -534,7 +534,7 @@ export type SessionMessageCompactionFailed = {
   metadata?: { [x: string]: JsonValue }
   time: { created: number }
   status: "failed"
-  reason: "auto" | "manual"
+  reason: "auto" | "manual" | "overflow"
   error: SessionStructuredError
   cost?: MoneyUSD
   tokens?: TokenUsageInfo
@@ -788,7 +788,7 @@ export type SessionCompactionStarted = {
   type: "session.compaction.started"
   durable: { aggregateID: string; seq: number; version: 1 }
   location?: LocationRef
-  data: { sessionID: string; reason: "auto" | "manual"; recent: string; inputID?: string }
+  data: { sessionID: string; reason: "auto" | "manual" | "overflow"; recent: string; inputID?: string }
 }
 
 export type SessionCompactionFailed = {
@@ -800,7 +800,7 @@ export type SessionCompactionFailed = {
   location?: LocationRef
   data: {
     sessionID: string
-    reason: "auto" | "manual"
+    reason: "auto" | "manual" | "overflow"
     error: SessionStructuredError
     inputID?: string
     cost?: MoneyUSD
@@ -1776,7 +1776,7 @@ export type SessionMessageCompactionCompleted = {
   metadata?: { [x: string]: JsonValue }
   time: { created: number }
   status: "completed"
-  reason: "auto" | "manual"
+  reason: "auto" | "manual" | "overflow"
   model?: ModelRef
   providerState?: SessionMessageProviderState
   summary: string
@@ -1795,7 +1795,7 @@ export type SessionCompactionEnded = {
   location?: LocationRef
   data: {
     sessionID: string
-    reason: "auto" | "manual"
+    reason: "auto" | "manual" | "overflow"
     model?: ModelRef
     providerState?: SessionMessageProviderState1
     providerContext?: SessionProviderContext
@@ -3226,7 +3226,7 @@ export type SessionImportInput = {
               readonly metadata?: { readonly [x: string]: JsonValue }
               readonly time: { readonly created: number }
               readonly status: "running"
-              readonly reason: "auto" | "manual"
+              readonly reason: "auto" | "manual" | "overflow"
               readonly summary: string
               readonly recent: string
             }
@@ -3236,7 +3236,7 @@ export type SessionImportInput = {
               readonly metadata?: { readonly [x: string]: JsonValue }
               readonly time: { readonly created: number }
               readonly status: "completed"
-              readonly reason: "auto" | "manual"
+              readonly reason: "auto" | "manual" | "overflow"
               readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
               readonly providerState?: { readonly [x: string]: JsonValue }
               readonly summary: string
@@ -3267,7 +3267,7 @@ export type SessionImportInput = {
               readonly metadata?: { readonly [x: string]: JsonValue }
               readonly time: { readonly created: number }
               readonly status: "failed"
-              readonly reason: "auto" | "manual"
+              readonly reason: "auto" | "manual" | "overflow"
               readonly error: { readonly type: string; readonly message: string; readonly status?: number }
               readonly cost?: number
               readonly tokens?: {
@@ -3543,7 +3543,7 @@ export type SessionImportInput = {
               readonly metadata?: { readonly [x: string]: JsonValue }
               readonly time: { readonly created: number }
               readonly status: "running"
-              readonly reason: "auto" | "manual"
+              readonly reason: "auto" | "manual" | "overflow"
               readonly summary: string
               readonly recent: string
             }
@@ -3553,7 +3553,7 @@ export type SessionImportInput = {
               readonly metadata?: { readonly [x: string]: JsonValue }
               readonly time: { readonly created: number }
               readonly status: "completed"
-              readonly reason: "auto" | "manual"
+              readonly reason: "auto" | "manual" | "overflow"
               readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
               readonly providerState?: { readonly [x: string]: JsonValue }
               readonly summary: string
@@ -3584,7 +3584,7 @@ export type SessionImportInput = {
               readonly metadata?: { readonly [x: string]: JsonValue }
               readonly time: { readonly created: number }
               readonly status: "failed"
-              readonly reason: "auto" | "manual"
+              readonly reason: "auto" | "manual" | "overflow"
               readonly error: { readonly type: string; readonly message: string; readonly status?: number }
               readonly cost?: number
               readonly tokens?: {
@@ -3860,7 +3860,7 @@ export type SessionImportInput = {
               readonly metadata?: { readonly [x: string]: JsonValue }
               readonly time: { readonly created: number }
               readonly status: "running"
-              readonly reason: "auto" | "manual"
+              readonly reason: "auto" | "manual" | "overflow"
               readonly summary: string
               readonly recent: string
             }
@@ -3870,7 +3870,7 @@ export type SessionImportInput = {
               readonly metadata?: { readonly [x: string]: JsonValue }
               readonly time: { readonly created: number }
               readonly status: "completed"
-              readonly reason: "auto" | "manual"
+              readonly reason: "auto" | "manual" | "overflow"
               readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
               readonly providerState?: { readonly [x: string]: JsonValue }
               readonly summary: string
@@ -3901,7 +3901,7 @@ export type SessionImportInput = {
               readonly metadata?: { readonly [x: string]: JsonValue }
               readonly time: { readonly created: number }
               readonly status: "failed"
-              readonly reason: "auto" | "manual"
+              readonly reason: "auto" | "manual" | "overflow"
               readonly error: { readonly type: string; readonly message: string; readonly status?: number }
               readonly cost?: number
               readonly tokens?: {

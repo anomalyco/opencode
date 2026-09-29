@@ -237,6 +237,9 @@ export const Assistant = Schema.Struct({
 
 const CompactionBase = { type: Schema.tag("compaction"), ...Base }
 
+/** `overflow`: the provider rejected the request as too long, before our own size check called for it. */
+const CompactionReason = Schema.Literals(["auto", "manual", "overflow"])
+
 /** Usage of the compaction request itself, not the size of the resulting context. */
 const CompactionUsage = {
   cost: Money.USD.pipe(optional),
@@ -247,7 +250,7 @@ export interface CompactionRunning extends Schema.Schema.Type<typeof CompactionR
 export const CompactionRunning = Schema.Struct({
   ...CompactionBase,
   status: Schema.tag("running"),
-  reason: Schema.Literals(["auto", "manual"]),
+  reason: CompactionReason,
   summary: Schema.String,
   recent: Schema.String,
 }).annotate({ identifier: "Session.Message.Compaction.Running" })
@@ -256,7 +259,7 @@ export interface CompactionCompleted extends Schema.Schema.Type<typeof Compactio
 export const CompactionCompleted = Schema.Struct({
   ...CompactionBase,
   status: Schema.tag("completed"),
-  reason: Schema.Literals(["auto", "manual"]),
+  reason: CompactionReason,
   model: Model.Ref.pipe(optional),
   providerState: ProviderState.pipe(optional),
   summary: Schema.String,
@@ -269,7 +272,7 @@ export interface CompactionFailed extends Schema.Schema.Type<typeof CompactionFa
 export const CompactionFailed = Schema.Struct({
   ...CompactionBase,
   status: Schema.tag("failed"),
-  reason: Schema.Literals(["auto", "manual"]),
+  reason: CompactionReason,
   error: SessionError.Error,
   ...CompactionUsage,
 }).annotate({ identifier: "Session.Message.Compaction.Failed" })

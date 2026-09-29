@@ -588,7 +588,7 @@ export namespace Compaction {
     ...options,
     schema: {
       ...Base,
-      reason: Schema.Literals(["auto", "manual"]),
+      reason: SessionMessage.CompactionRunning.fields.reason,
       recent: Schema.String,
       inputID: SessionMessage.ID.pipe(optional),
     },

@@ -376,7 +376,11 @@ export const layer = Layer.effect(
       const context = trigger.context
       // The runner opened the manual compaction's message when it delivered the `/compact` item.
       if (trigger.reason !== "manual") {
-        yield* bus.publish(SessionEvent.Compaction.Started, { sessionID: context.session.id, reason: "auto", recent })
+        yield* bus.publish(SessionEvent.Compaction.Started, {
+          sessionID: context.session.id,
+          reason: trigger.reason,
+          recent,
+        })
       }
       if (prepared.event.result) return yield* fromHook(context, prepared.event.result, recent)
 
@@ -614,13 +618,12 @@ export const layer = Layer.effect(
     ): Effect.fn.Return<Outcome> {
       const context = trigger.context
       const sessionID = context.session.id
-      const reason = trigger.reason === "manual" ? "manual" : "auto"
       const usage = spent.get(sessionID)
 
       if ("error" in outcome) {
         yield* bus.publish(SessionEvent.Compaction.Failed, {
           sessionID,
-          reason,
+          reason: trigger.reason,
           inputID: trigger.reason === "manual" ? trigger.inputID : undefined,
           error: outcome.error,
           ...usage,
@@ -632,7 +635,7 @@ export const layer = Layer.effect(
         SessionEvent.Compaction.Ended,
         {
           sessionID,
-          reason,
+          reason: trigger.reason,
           model: context.model.ref,
           providerState: outcome.providerState,
           providerContext: outcome.providerContext,

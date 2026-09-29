@@ -3235,11 +3235,14 @@ describe("SessionRunnerLLM", () => {
     expect(userTexts(s.requests[1]).at(-1)).toContain("## Objective")
     expect(userTexts(s.requests[2])[0]).toContain("<summary>\n## Objective\n- Recover overflow\n</summary>")
     expect(yield* s.context).toMatchObject([
-      { type: "compaction", summary: "## Objective\n- Recover overflow" },
+      { type: "compaction", reason: "overflow", summary: "## Objective\n- Recover overflow" },
       { type: "assistant", finish: "stop" },
     ])
     yield* replaySessionProjection(sessionID)
-    expect(yield* s.context).toMatchObject([{ type: "compaction" }, { type: "assistant", finish: "stop" }])
+    expect(yield* s.context).toMatchObject([
+      { type: "compaction", reason: "overflow" },
+      { type: "assistant", finish: "stop" },
+    ])
   })
 
   scenario("refreshes preparation after overflow compaction without promoting new input", function* (s) {
@@ -3485,13 +3488,13 @@ describe("SessionRunnerLLM", () => {
       expect.objectContaining({
         type: "compaction",
         status: "failed",
-        reason: "auto",
+        reason: "overflow",
         error: { type: "provider.error", message: "summary unavailable" },
       }),
     )
     expect(context.slice(-3)).toMatchObject([
       Expected.user("Continue"),
-      { type: "compaction", status: "failed", reason: "auto" },
+      { type: "compaction", status: "failed", reason: "overflow" },
       { type: "assistant", finish: "error", error: { message: "prompt too long" } },
     ])
   })
@@ -3518,7 +3521,7 @@ describe("SessionRunnerLLM", () => {
       expect.objectContaining({
         type: "compaction",
         status: "failed",
-        reason: "auto",
+        reason: "overflow",
         error: { type: "compaction.interrupted", message: "Compaction was interrupted" },
       }),
     )

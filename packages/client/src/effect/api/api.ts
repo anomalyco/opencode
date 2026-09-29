@@ -1174,7 +1174,7 @@ export type SessionLogOutput =
             | undefined
           readonly data: {
             readonly sessionID: Session.ID
-            readonly reason: "auto" | "manual"
+            readonly reason: "auto" | "manual" | "overflow"
             readonly recent: string
             readonly inputID?: SessionMessage.ID | undefined
           }
@@ -1193,7 +1193,7 @@ export type SessionLogOutput =
             | undefined
           readonly data: {
             readonly sessionID: Session.ID
-            readonly reason: "auto" | "manual"
+            readonly reason: "auto" | "manual" | "overflow"
             readonly model?: Model.Ref | undefined
             readonly providerState?: SessionMessage.ProviderState | undefined
             readonly providerContext?:
@@ -1237,7 +1237,7 @@ export type SessionLogOutput =
             | undefined
           readonly data: {
             readonly sessionID: Session.ID
-            readonly reason: "auto" | "manual"
+            readonly reason: "auto" | "manual" | "overflow"
             readonly error: { readonly type: string; readonly message: string; readonly status?: number | undefined }
             readonly inputID?: SessionMessage.ID | undefined
             readonly cost?: (number & Brand.Brand<"Money.USD">) | undefined

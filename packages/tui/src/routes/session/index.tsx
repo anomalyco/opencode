@@ -2052,6 +2052,9 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
               ? "Provider compaction"
               : "Compaction"}
           </text>
+          <Show when={props.message.reason === "overflow"}>
+            <text fg={color()}>· context overflow</text>
+          </Show>
           <Show when={cancelled()}>
             <text fg={color()}>· cancelled</text>
           </Show>
