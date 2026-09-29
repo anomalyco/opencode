@@ -113,7 +113,6 @@ const NATIVE = new Set([
   ...Object.values(PACKAGES),
   ...Object.values(HOSTS).flatMap((host) => Object.values(host)),
   "@opencode/ai/providers/azure/chat",
-  "@opencode/ai/providers/xai/chat",
   "@opencode/ai/providers/amazon-bedrock/mantle",
   "@opencode/ai/providers/amazon-bedrock/mantle/chat",
   "@opencode/ai/providers/amazon-bedrock/mantle/responses",

@@ -563,7 +563,6 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/moonshot/chat": moonshotChat,
   "@opencode/ai/providers/togetherai": openaiChat,
   "@opencode/ai/providers/xai": xaiResponses,
-  "@opencode/ai/providers/xai/chat": openaiChat,
   "@opencode/ai/providers/zai/chat": zaiChat,
   "@opencode/ai/providers/zai-coding-plan/chat": zaiChat,
 

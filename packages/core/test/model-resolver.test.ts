@@ -581,35 +581,26 @@ describe("ModelResolver", () => {
     }),
   )
 
-  it.effect("sends xAI reasoning summaries only through Responses", () =>
+  it.effect("sends xAI Responses effort variants with reasoning summaries", () =>
     Effect.gen(function* () {
-      for (const packageName of ["@opencode/ai/providers/xai", "@opencode/ai/providers/xai/chat"]) {
-        const base = model(packageName, { providerID: Provider.ID.make("xai"), modelID: "grok-4.6" })
-        const catalog = Info.make({
-          ...base,
-          variants: Variant.resolve(base, [{ type: "effort", values: ["low", "high"] }]),
-        })
-        const resolved = yield* ModelResolver.resolveModel(
-          catalog,
-          VariantID.make("high"),
-          Credential.Key.make({ type: "key", key: "secret" }),
-        )
-        const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
+      const base = model("@opencode/ai/providers/xai", { providerID: Provider.ID.make("xai"), modelID: "grok-4.6" })
+      const catalog = Info.make({
+        ...base,
+        variants: Variant.resolve(base, [{ type: "effort", values: ["low", "high"] }]),
+      })
+      const resolved = yield* ModelResolver.resolveModel(
+        catalog,
+        VariantID.make("high"),
+        Credential.Key.make({ type: "key", key: "secret" }),
+      )
+      const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
 
-        if (packageName.endsWith("/chat")) {
-          expect(resolved.route.id).toBe("openai-compatible-chat")
-          expect(prepared.body).toMatchObject({ reasoning_effort: "high" })
-          expect(prepared.body).not.toHaveProperty("reasoning")
-          expect(prepared.body).not.toHaveProperty("include")
-          continue
-        }
-        expect(resolved.route.id).toBe("openai-responses")
-        expect(prepared.body).toMatchObject({
-          reasoning: { effort: "high", summary: "auto" },
-          include: ["reasoning.encrypted_content"],
-        })
-        expect(prepared.body).not.toHaveProperty("reasoning_effort")
-      }
+      expect(resolved.route.id).toBe("openai-responses")
+      expect(prepared.body).toMatchObject({
+        reasoning: { effort: "high", summary: "auto" },
+        include: ["reasoning.encrypted_content"],
+      })
+      expect(prepared.body).not.toHaveProperty("reasoning_effort")
     }),
   )
 
