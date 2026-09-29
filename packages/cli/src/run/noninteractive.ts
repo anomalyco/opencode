@@ -135,6 +135,7 @@ export async function runNonInteractivePrompt(input: Input) {
   const replyPermission = async (request: { id: string; action: string; resources: ReadonlyArray<string> }) => {
     if (!input.auto) {
       permissionRejected = true
+      if (input.compatibility !== "v1") process.exitCode = 1
       UI.println(
         UI.Style.TEXT_WARNING_BOLD + "!",
         UI.Style.TEXT_NORMAL +
@@ -163,6 +164,7 @@ export async function runNonInteractivePrompt(input: Input) {
       if (!formAlreadySettled(error)) throw error
     }
     formCancelled = true
+    if (input.compatibility !== "v1") process.exitCode = 1
   }
 
   const consume = async () => {
@@ -493,7 +495,8 @@ export async function runNonInteractivePrompt(input: Input) {
       if (event.type === "session.execution.interrupted") {
         if (input.compatibility === "v1" && (permissionRejected || formCancelled)) return
         if (event.data.reason === "user" && interrupted) process.exitCode = 130
-        if (event.data.reason !== "user" && !emittedError) {
+        // A declined tool call ends the step with an interruption; it was already reported above.
+        if (event.data.reason !== "user" && !emittedError && !permissionRejected && !formCancelled) {
           emittedError = true
           process.exitCode = 1
           const error = { type: "aborted" as const, message: `Session interrupted: ${event.data.reason}` }
@@ -620,7 +623,9 @@ export async function runNonInteractivePrompt(input: Input) {
         UI.error(item.state.error.message)
       }
 
-      if (message.error && !emittedError) {
+      // A declined tool call ends its step with an interrupted-step error that is
+      // only a consequence of our own rejection; it was already reported above.
+      if (message.error && !emittedError && !permissionRejected && !formCancelled) {
         emittedError = true
         process.exitCode = 1
         if (!emit("error", timestamp, { error: message.error })) UI.error(message.error.message)

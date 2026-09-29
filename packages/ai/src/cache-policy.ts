@@ -38,8 +38,15 @@ const resolve = (policy: CachePolicy | undefined): CachePolicyObject => {
 // prefix caching, Gemini's implicit + out-of-band CachedContent). Skip the
 // whole policy pass for these — emitting hints would be harmless but pointless.
 const RESPECTS_INLINE_HINTS = new Set([
+  "alibaba-messages",
   "anthropic-messages",
+  "anthropic-compatible-messages",
+  "cloudflare-ai-gateway-messages",
   "google-vertex-messages",
+  "meta-messages",
+  "minimax-messages",
+  "moonshot-messages",
+  "zai-coding-messages",
   "bedrock-converse",
   "openrouter",
 ])

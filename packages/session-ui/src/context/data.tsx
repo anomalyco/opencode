@@ -32,7 +32,7 @@ type Data = {
     [sessionID: string]: FileDiffInfo[]
   }
   session_diff_preload?: {
-    [sessionID: string]: PreloadMultiFileDiffResult<unknown>[]
+    [sessionID: string]: PreloadMultiFileDiffResult<unknown, undefined>[]
   }
 }
 

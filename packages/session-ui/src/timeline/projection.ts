@@ -271,7 +271,12 @@ export namespace Timeline {
             detail,
             new Set(
               messages
-                .filter((message) => message.type === "compaction" || message.type === "model-switched")
+                .filter(
+                  (message) =>
+                    message.type === "compaction" ||
+                    message.type === "model-switched" ||
+                    message.type === "location-switched",
+                )
                 .map((message) => message.id),
             ),
           )

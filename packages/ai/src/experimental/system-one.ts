@@ -142,32 +142,37 @@ export const model = <Options extends EvaluationOptions = EvaluationOptions>(cfg
             Effect.mapError((cause) => fail("System One returned an invalid response", cause, text)),
           )
 
-          const confidence: Record<string, number> = {}
           const legend: Record<string, Record<string, Schema.Json>> = {}
           const answers = Object.fromEntries(
             Object.entries(data.answers).map(([id, answer]): [string, EvaluationAnswer] => {
               if (answer.type === "noul") return [id, { type: "boolean", probability: answer.noul }]
               if (answer.type === "choice") {
-                if (answer.confidence !== undefined) confidence[id] = answer.confidence
                 return [
                   id,
                   {
                     type: "choice",
                     choice: answer.choice,
                     probabilities: answer.probabilities,
+                    ...(answer.confidence === undefined ? {} : { confidence: answer.confidence }),
                   },
                 ]
               }
-              if (answer.confidence !== undefined) confidence[id] = answer.confidence
               if (answer.legend !== undefined) legend[id] = answer.legend
-              return [id, { type: "score", score: answer.score, probabilities: answer.probabilities }]
+              return [
+                id,
+                {
+                  type: "score",
+                  score: answer.score,
+                  probabilities: answer.probabilities,
+                  ...(answer.confidence === undefined ? {} : { confidence: answer.confidence }),
+                },
+              ]
             }),
           )
           const meta = {
             ...(data.id === undefined ? {} : { responseId: data.id }),
             ...(data.provider === undefined ? {} : { provider: data.provider }),
             ...data.provider_metadata?.[cfg.providerMetadataKey],
-            ...(Object.keys(confidence).length === 0 ? {} : { confidence }),
             ...(Object.keys(legend).length === 0 ? {} : { legend }),
           }
           return new EvaluationResponse({

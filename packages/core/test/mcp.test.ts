@@ -333,6 +333,7 @@ function resourceMcpLayer(
             activate: unusedIntegration,
             update: unusedIntegration,
             remove: unusedIntegration,
+            status: unusedIntegration,
           },
           oauth: {
             connect: unusedIntegration,

@@ -1,7 +1,7 @@
 import { expect, story } from "../../storybook/playwright/story"
 
 // Moved from packages/app/e2e/regression/session-timeline-notices.spec.ts
-story("renders the moved location notice in its compact timeline style", async ({ mount, page }) => {
+story("renders the moved location notice as a timeline divider", async ({ mount, page }) => {
   const directory = `/Users/usrnk1/Developer/opencode/${"nested-directory/".repeat(24)}session`
   await page.setViewportSize({ width: 480, height: 720 })
   const timeline = await mount("current-session-timeline-rows--conversation", { args: { scenario: "location" } })
@@ -14,12 +14,10 @@ story("renders the moved location notice in its compact timeline style", async (
   await expect(value).toHaveText(directory)
   await expect(notice).not.toContainText("·")
   await expect(notice.locator("svg")).toHaveCount(0)
-  await expect(notice).toHaveCSS("height", "28px")
-  await expect(notice).toHaveCSS("gap", "8px")
-  await expect(notice).toHaveCSS("padding-top", "4px")
-  await expect(notice).toHaveCSS("padding-bottom", "4px")
+  await expect(notice).toHaveCSS("padding-top", "8px")
+  await expect(notice).toHaveCSS("padding-bottom", "8px")
   await expect(label).toHaveCSS("font-size", "13px")
-  await expect(label).toHaveCSS("font-weight", "530")
+  await expect(label).toHaveCSS("font-weight", "440")
   await expect(label).toHaveCSS("line-height", "16px")
   await expect(label).toHaveCSS("color", "rgb(128, 128, 128)")
   await expect(value).toHaveCSS("font-size", "13px")

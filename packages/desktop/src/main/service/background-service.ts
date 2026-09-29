@@ -44,7 +44,14 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
           ? path.join(app.getPath("userData"), "opencode", "service-local.json")
           : undefined,
       version,
-      command: [...cli.command, "serve", "--service", ...(isolated ? ["--hostname", "0.0.0.0", "--port", "0"] : [])],
+      // A fixed port makes a second contender fail to bind and back off; port 0 never collides, so two
+      // services could boot against the same database.
+      command: [
+        ...cli.command,
+        "serve",
+        "--service",
+        ...(isolated ? ["--hostname", "0.0.0.0", "--port", String(0x0c0c)] : []),
+      ],
       onStart: (reason, previousVersion) =>
         runFork(Effect.logInfo("v2 CLI background service starting", { reason, previousVersion })),
     })
