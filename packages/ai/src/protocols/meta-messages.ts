@@ -12,7 +12,7 @@ const WebSearch = Schema.Struct({
 })
 const MetaCacheControl = Schema.Struct({
   type: Schema.tag("ephemeral"),
-  ttl: Schema.optional(Schema.Literals(["5m", "1h"])),
+  ttl: Schema.optional(Schema.Literal("5m")),
 })
 const FunctionTool = Schema.Struct({
   name: Schema.String,
@@ -28,6 +28,8 @@ const Body = Schema.Struct({
 const fromRequest = Effect.fn("MetaMessages.fromRequest")(function* (request: LLMRequest) {
   const projected = ProviderShared.flattenToolRequest(request)
   const body = yield* AnthropicMessages.protocol.body.from(projected.request)
+  if (hasOneHourCacheControl(body))
+    return yield* ProviderShared.invalidRequest("Meta Messages does not support 1h cache TTL")
   return {
     ...body,
     tools:
@@ -36,7 +38,14 @@ const fromRequest = Effect.fn("MetaMessages.fromRequest")(function* (request: LL
         : yield* Effect.forEach(body.tools, (tool, index) =>
             Effect.gen(function* () {
               const native = projected.tools[index]?.native
-              if (native === undefined) return tool
+              if (native === undefined)
+                return {
+                  ...tool,
+                  cache_control: tool.cache_control && {
+                    type: tool.cache_control.type,
+                    ...(tool.cache_control.ttl === "5m" ? { ttl: "5m" as const } : {}),
+                  },
+                }
               const search = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(MetaResponses.WebSearch))(
                 native.meta,
               )
@@ -47,6 +56,20 @@ const fromRequest = Effect.fn("MetaMessages.fromRequest")(function* (request: LL
           ),
   }
 })
+
+const hasOneHourCacheControl = (body: AnthropicMessages.AnthropicMessagesBody) =>
+  body.cache_control?.ttl === "1h" ||
+  body.system?.some((part) => part.cache_control?.ttl === "1h") ||
+  body.tools?.some((tool) => tool.cache_control?.ttl === "1h") ||
+  body.messages.some((message) =>
+    message.content.some(
+      (part) =>
+        ("cache_control" in part && part.cache_control?.ttl === "1h") ||
+        (part.type === "tool_result" &&
+          Array.isArray(part.content) &&
+          part.content.some((content) => content.cache_control?.ttl === "1h")),
+    ),
+  )
 
 export const protocol = Protocol.make({
   id: "meta-messages",
