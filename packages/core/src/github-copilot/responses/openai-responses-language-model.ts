@@ -1695,7 +1695,7 @@ function getResponsesModelConfig(modelId: string): ResponsesModelConfig {
   // o series reasoning models:
   if (
     modelId.startsWith("o") ||
-    modelId.startsWith("gpt-5") ||
+    Number(/^gpt-(\d+)/.exec(modelId)?.[1]) >= 5 ||
     modelId.startsWith("codex-") ||
     modelId.startsWith("computer-use")
   ) {

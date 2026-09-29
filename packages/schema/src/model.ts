@@ -80,6 +80,8 @@ export const Compatibility = Schema.Struct({
   requireFinishReason: Schema.Boolean.pipe(optional),
   requireAssistantAfterTool: Schema.Boolean.pipe(optional),
   supportsPromptCacheKey: Schema.Boolean.pipe(optional),
+  supportsEffortUpdates: Schema.Boolean.pipe(optional),
+  supportsThinkingBlockBinding: Schema.Boolean.pipe(optional),
 }).annotate({ identifier: "Model.Compatibility" })
 
 export interface Capabilities extends Schema.Schema.Type<typeof Capabilities> {}

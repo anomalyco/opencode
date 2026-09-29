@@ -800,18 +800,13 @@ const requireThinkingSignature = (request: LLMRequest) => {
   return true
 }
 
-// Mid-conversation system messages became available with Opus 4.8 and version
-// 5 of the other supported Claude families. Treat later family versions as
-// compatible without assuming that every Anthropic Messages model is Claude.
+// Mid-conversation system messages became available with Opus 4.8 and every
+// Claude 5 model. Treat later Claude versions of any family as compatible
+// without assuming that every Anthropic Messages model is Claude.
 const supportsNativeSystemUpdates = (request: LLMRequest) => {
-  const match = /(?:^|[./])claude-(fable|haiku|mythos|opus|sonnet)-(\d+)(?:[.-](\d+))?/.exec(
-    String(request.model.id).toLowerCase(),
-  )
-  if (!match) return false
-  const major = Number(match[2])
-  if (match[1] !== "opus") return major >= 5
-  if (major !== 4) return major >= 5
-  return match[3] !== undefined && match[3].length <= 2 && Number(match[3]) >= 8
+  const version = claudeVersion(request.model.id)
+  if (version === undefined) return false
+  return version.major >= 5 || (version.family === "opus" && version.major === 4 && version.minor >= 8)
 }
 
 const endsInServerToolUse = (message: LLMRequest["messages"][number]) => {
@@ -1004,14 +999,14 @@ const supportsThinkingBlockBinding = (model: LLMRequest["model"]) => {
   return version !== undefined && (version.major > 5 || (version.major === 5 && version.minor >= 1))
 }
 
+// Sonnet 5 and Fable 5 reject mid-conversation effort.
 const supportsEffortUpdates = (model: LLMRequest["model"]) => {
   const override = model.compatibility?.supportsEffortUpdates
   if (override !== undefined) return override
   const version = claudeVersion(model.id)
   if (version === undefined) return false
-  if (version.family === "opus") return version.major >= 5
-  if (version.family !== "fable" && version.family !== "mythos") return false
-  return version.major > 5 || (version.major === 5 && version.minor >= 1)
+  if (version.major !== 5) return version.major > 5
+  return version.family === "opus" || version.minor >= 1
 }
 
 const applyThinkingBindingDefault = (model: LLMRequest["model"], thinking: AnthropicThinking | undefined) => {

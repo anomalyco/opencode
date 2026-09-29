@@ -197,9 +197,14 @@ describe("Anthropic Messages effort updates", () => {
     ["anthropic/claude-opus-5", true],
     ["claude-fable-5-1", true],
     ["claude-mythos-5-1", true],
+    ["claude-opus-5-5-fast", true],
+    ["claude-sonnet-5-1", true],
+    ["claude-haiku-6", true],
+    ["claude-nova-6", true],
     ["claude-fable-5", false],
     ["claude-opus-4-8", false],
     ["claude-sonnet-5", false],
+    ["claude-sonnet-5-20260901", false],
     ["kimi-k2.5", false],
   ] as const) {
     it.effect(`${supported ? "lowers" : "strips"} markers for ${id}`, () =>
@@ -364,7 +369,7 @@ describe("OpenAI Responses effort updates", () => {
       )
 
       expect(updates(prepared.body)).toEqual([])
-      expect(prepared.body.reasoning).toEqual({ effort: "low" })
+      expect(prepared.body.reasoning).toEqual({ effort: "low", summary: "auto" })
     }),
   )
 
@@ -375,10 +380,15 @@ describe("OpenAI Responses effort updates", () => {
     ["openai/gpt-6-sol", true],
     ["gpt-6-luna", true],
     ["openai/gpt-6-luna", true],
-    ["gpt-6-astra-2026-09-01", false],
+    ["gpt-6-astra-2026-09-01", true],
+    ["gpt-6-sol-fast", true],
+    ["gpt-6-terra", true],
+    ["gpt-6.1-astra", true],
+    ["gpt-7", true],
     ["gpt-6-sol-pro", false],
     ["gpt-6-luna-pro", false],
-    ["gpt-6-sol-fast", false],
+    ["gpt-6-sol-pro-2026-09-01", false],
+    ["openai.gpt-6-sol", false],
     ["gpt-5.6-sol", false],
   ] as const) {
     it.effect(`${supported ? "lowers" : "strips"} markers for ${id}`, () =>
@@ -426,7 +436,7 @@ describe("OpenAI Responses effort updates", () => {
     dynamicResponse(({ text, respond }) =>
       Effect.sync(() => {
         const body = JSON.parse(text)
-        expect(body.reasoning).toEqual({ effort: "high" })
+        expect(body.reasoning).toEqual({ effort: "high", summary: "auto" })
         expect(body.input).toEqual([
           { type: "message", role: "user", content: [{ type: "input_text", text: "Before." }] },
           { type: "configuration_update", reasoning: { effort: "low" } },

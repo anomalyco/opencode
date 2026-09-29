@@ -2069,6 +2069,31 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  for (const [id, defaults] of [
+    ["gpt-5", true],
+    ["gpt-5.6-sol", true],
+    ["gpt-6-sol", true],
+    ["gpt-6.1-astra", true],
+    ["openai/gpt-7-terra", true],
+    ["gpt-5-chat-latest", false],
+    ["gpt-5-pro", false],
+    ["gpt-4.1", false],
+    ["o3", false],
+  ] as const) {
+    it.effect(`${defaults ? "applies" : "skips"} reasoning defaults for ${id}`, () =>
+      Effect.gen(function* () {
+        const prepared = yield* compileRequest(
+          LLM.request({
+            model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).responses(id),
+            prompt: "hi",
+          }),
+        )
+
+        expect(prepared.body.reasoning).toEqual(defaults ? { effort: "medium", summary: "auto" } : undefined)
+      }),
+    )
+  }
+
   it.effect("lets callers opt out of the GPT-5 default include", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(

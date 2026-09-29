@@ -450,6 +450,37 @@ describe("ModelResolver", () => {
     ),
   )
 
+  it.effect("lets catalog compatibility disable default effort updates", () =>
+    Effect.gen(function* () {
+      const request = (compatibility?: Compatibility) =>
+        Effect.gen(function* () {
+          const resolved = yield* ModelResolver.fromCatalogModel(
+            model("@opencode/ai/providers/openai", {
+              modelID: "gpt-6-sol",
+              compatibility,
+              settings: { apiKey: "test" },
+            }),
+          )
+          const prepared = yield* compileRequest(
+            LLM.request({
+              model: resolved,
+              messages: [
+                Message.user("Before."),
+                Message.effort({ effort: "low", previous: "high" }),
+                Message.user("After."),
+              ],
+              providerOptions: { reasoningEffort: "low" },
+            }),
+          )
+          return prepared.body.input
+        })
+      const update = { type: "configuration_update", reasoning: { effort: "low" } }
+
+      expect(yield* request()).toContainEqual(update)
+      expect(yield* request({ supportsEffortUpdates: false })).not.toContainEqual(update)
+    }),
+  )
+
   it.effect("uses merged API settings for OpenAI-compatible auth and request defaults", () =>
     Effect.gen(function* () {
       const resolved = yield* ModelResolver.fromCatalogModel(

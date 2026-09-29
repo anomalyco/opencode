@@ -32,13 +32,14 @@ const openAIProviderOptions = (options: OpenAIOptionsInput | undefined): Provide
   return result
 }
 
-export const gpt5DefaultOptions = (modelID: string): ProviderOptions | undefined => {
+export const reasoningDefaultOptions = (modelID: string): ProviderOptions | undefined => {
   const id = modelID.toLowerCase()
-  if (!id.includes("gpt-5") || id.includes("gpt-5-chat") || id.includes("gpt-5-pro")) return undefined
+  const reasoning = Number(/gpt-(\d+)/.exec(id)?.[1]) >= 5
+  if (!reasoning || id.includes("gpt-5-chat") || id.includes("gpt-5-pro")) return undefined
   return openAIProviderOptions({
     reasoningEffort: "medium",
     reasoningSummary: "auto",
-    // GPT-5 reasoning models are configured stateless (`store: false`) by
+    // GPT reasoning models are configured stateless (`store: false`) by
     // `openAIDefaultOptions` below, so the only way a follow-up turn can
     // carry reasoning state is via the encrypted reasoning include. Without
     // this, callers using the default model facade get reasoning summaries
@@ -48,7 +49,7 @@ export const gpt5DefaultOptions = (modelID: string): ProviderOptions | undefined
 }
 
 export const openAIDefaultOptions = (modelID: string): ProviderOptions | undefined =>
-  mergeProviderOptions(openAIProviderOptions({ store: false }), gpt5DefaultOptions(modelID))
+  mergeProviderOptions(openAIProviderOptions({ store: false }), reasoningDefaultOptions(modelID))
 
 export const withOpenAIOptions = <Options extends { readonly providerOptions?: OpenAIProviderOptionsInput }>(
   modelID: string,

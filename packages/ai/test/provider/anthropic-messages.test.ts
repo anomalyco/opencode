@@ -305,14 +305,17 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  it.effect("supports native chronological system updates on documented and later Claude family versions", () =>
+  it.effect("supports native chronological system updates on documented and later Claude versions", () =>
     Effect.gen(function* () {
       const ids = [
         "claude-opus-4-8",
+        "claude-opus-4-8-fast",
         "claude-opus-5-1",
         "claude-sonnet-5",
+        "claude-sonnet-5-20260901",
         "claude-haiku-5-1",
         "claude-fable-6",
+        "claude-nova-6",
         "anthropic/claude-mythos-7.2",
       ]
 
@@ -359,13 +362,14 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  it.effect("does not infer native system update support for older or undocumented Claude families", () =>
+  it.effect("does not infer native system update support for older Claude versions or non-Claude models", () =>
     Effect.gen(function* () {
       const ids = [
         "claude-opus-4-7",
         "claude-opus-4-20250514",
         "claude-sonnet-4-9",
         "claude-haiku-4-9",
+        "claude-3-7-sonnet-20250219",
         "custom-model-7",
       ]
 
