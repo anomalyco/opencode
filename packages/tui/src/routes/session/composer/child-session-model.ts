@@ -1,6 +1,6 @@
 import type { ModelInfo, ModelRef } from "@opencode/client"
 
-export function subagentModelDisplay(
+export function childSessionModelDisplay(
   model: ModelRef | undefined,
   models: readonly Pick<ModelInfo, "providerID" | "id" | "name">[] | undefined,
 ) {

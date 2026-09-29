@@ -10,7 +10,7 @@ import { ShellTab } from "./shell-tab"
 import { TerminalsTab } from "./terminals-tab"
 import { useConfig } from "../../../config"
 import { ComposerContext, type ComposerTab } from "./context"
-import { subagentModelDisplay } from "./subagents-tab.model"
+import { childSessionModelDisplay } from "./child-session-model"
 
 export { useComposerTab, type ComposerHint } from "./context"
 
@@ -38,7 +38,7 @@ export function Composer(props: ComposerProps) {
   const childModel = createMemo(() => {
     const session = data.session.get(props.sessionID)
     if (!session?.parentID) return
-    return subagentModelDisplay(session.model, data.location.model.list(session.location))
+    return childSessionModelDisplay(session.model, data.location.model.list(session.location))
   })
 
   // Set active tab when opened
