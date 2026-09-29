@@ -2,6 +2,7 @@ import { createEffect, createMemo, For, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { TextAttributes } from "@opentui/core"
 import { useTheme } from "../../../context/theme"
+import { useData } from "../../../context/data"
 import { SplitBorder } from "../../../ui/border"
 import { Keymap } from "../../../context/keymap"
 import { SubagentsTab } from "./subagents-tab"
@@ -9,6 +10,7 @@ import { ShellTab } from "./shell-tab"
 import { TerminalsTab } from "./terminals-tab"
 import { useConfig } from "../../../config"
 import { ComposerContext, type ComposerTab } from "./context"
+import { subagentModelDisplay } from "./subagents-tab.model"
 
 export { useComposerTab, type ComposerHint } from "./context"
 
@@ -22,6 +24,7 @@ export type ComposerProps = {
 
 export function Composer(props: ComposerProps) {
   const theme = useTheme()
+  const data = useData()
   const config = useConfig().data
 
   const [store, setStore] = createStore({
@@ -32,6 +35,11 @@ export function Composer(props: ComposerProps) {
   const tabList = createMemo(() => Object.values(store.tabs))
   const activeTab = createMemo(() => tabList().find((t) => t.id === store.active))
   const footerHints = createMemo(() => activeTab()?.hints?.() ?? [])
+  const childModel = createMemo(() => {
+    const session = data.session.get(props.sessionID)
+    if (!session?.parentID) return
+    return subagentModelDisplay(session.model, data.location.model.list(session.location))
+  })
 
   // Set active tab when opened
   createEffect(() => {
@@ -154,6 +162,25 @@ export function Composer(props: ComposerProps) {
                 </text>
               </Show>
             </box>
+            <Show when={childModel()}>
+              {(model) => (
+                <box flexDirection="row" gap={1} paddingLeft={1} flexShrink={0} minWidth={0}>
+                  <text fg={theme.text.base} flexShrink={0}>
+                    <b>model</b>
+                  </text>
+                  <text fg={theme.text.muted} wrapMode="none" truncate minWidth={0} flexShrink={1}>
+                    {model().name}
+                  </text>
+                  <Show when={model().variant}>
+                    {(variant) => (
+                      <text fg={theme.text.muted} flexShrink={0}>
+                        · {variant()}
+                      </text>
+                    )}
+                  </Show>
+                </box>
+              )}
+            </Show>
           </box>
         </box>
       </box>
