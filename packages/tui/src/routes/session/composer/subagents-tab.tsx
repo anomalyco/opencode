@@ -232,9 +232,6 @@ export function SubagentsTab(props: { sessionID: string }) {
                       }
                       attributes={active() ? TextAttributes.BOLD : undefined}
                       wrapMode="none"
-                      truncate
-                      flexShrink={1}
-                      minWidth={0}
                     >
                       {entry.prefix}
                       {entry.agent}: {entry.title}
