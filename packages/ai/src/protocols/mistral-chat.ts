@@ -426,6 +426,7 @@ interface ActiveContent {
   readonly type: "text" | "reasoning"
   readonly id: string
   readonly thinking?: MistralThinkingContent
+  readonly thinkingUnits?: MistralThinkingUnit[]
 }
 
 export interface ParserState {
@@ -502,8 +503,8 @@ const closeActive = (state: ParserState, events: LLMEvent[]) => {
           state.lifecycle,
           events,
           state.active.id,
-          thinkingMetadata(state.active.thinking ?? { type: "thinking", thinking: [] }),
-          thinkingText(state.active.thinking?.thinking ?? []),
+          thinkingMetadata({ ...state.active.thinking, type: "thinking", thinking: state.active.thinkingUnits ?? [] }),
+          thinkingText(state.active.thinkingUnits ?? []),
         )
   return { ...state, lifecycle, active: undefined }
 }
@@ -524,20 +525,23 @@ const appendThinking = (state: ParserState, events: LLMEvent[], part: MistralOut
   const current = state.active?.type === "reasoning" ? state : closeActive(state, events)
   const units = thinkingUnits(part.thinking)
   const active = current.active ?? { type: "reasoning" as const, id: `reasoning-${current.nextContent}` }
+  // Keep native units out of streamed events until the block is complete.
+  const accumulated = active.thinkingUnits ?? []
+  accumulated.push(...units)
   const thinking = {
     ...active.thinking,
     ...part,
     type: "thinking" as const,
-    thinking: [...(active.thinking?.thinking ?? []), ...units],
+    thinking: [],
   }
   const text = thinkingText(units)
   return {
     ...current,
     lifecycle:
       text.length > 0
-        ? Lifecycle.reasoningDelta(current.lifecycle, events, active.id, text, thinkingMetadata(thinking))
-        : Lifecycle.reasoningStart(current.lifecycle, events, active.id, thinkingMetadata(thinking)),
-    active: { ...active, thinking },
+        ? Lifecycle.reasoningDelta(current.lifecycle, events, active.id, text)
+        : Lifecycle.reasoningStart(current.lifecycle, events, active.id),
+    active: { ...active, thinking, thinkingUnits: accumulated },
     nextContent: current.active ? current.nextContent : current.nextContent + 1,
   }
 }
