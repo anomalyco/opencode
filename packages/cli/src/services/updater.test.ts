@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { action } from "./updater-action"
-import { decodePolicy } from "./updater"
+import { decodePolicy, replacesExecutable } from "./updater"
 
 describe("updater", () => {
   test("reads update policy from JSONC", () => {
@@ -83,5 +83,39 @@ describe("updater", () => {
   test("rejects versions longer than semver's limit before trimming", () => {
     expect(action("1.2.3", `${" ".repeat(251)}1.2.3`, "notify")).toBe("none")
     expect(action("1.2.3", `1.2.4+${"a".repeat(250)}`, "notify")).toBe("notify")
+  })
+})
+
+describe("replacesExecutable", () => {
+  const root = "/home/user/.npm-global/lib/node_modules"
+  const inside = `${root}/@opencode/cli/bin/opencode.exe`
+
+  test("accepts a binary the manager can reinstall", () => {
+    expect(replacesExecutable(root, inside)).toBe(true)
+  })
+
+  test("rejects a binary outside the manager's global root", () => {
+    expect(replacesExecutable(root, "/home/user/.local/lib/node_modules/@opencode/cli/bin/opencode.exe")).toBe(
+      false,
+    )
+  })
+
+  test("rejects a sibling directory that merely shares the root prefix", () => {
+    expect(replacesExecutable(root, `${root}-backup/@opencode/cli/bin/opencode.exe`)).toBe(false)
+  })
+
+  test("rejects the global root itself", () => {
+    expect(replacesExecutable(root, root)).toBe(false)
+  })
+
+  test("keeps previous behaviour when the root cannot be read", () => {
+    expect(replacesExecutable(undefined, inside)).toBe(true)
+    expect(replacesExecutable("", inside)).toBe(true)
+    expect(replacesExecutable("   \n", inside)).toBe(true)
+  })
+
+  test("resolves relative and untrimmed roots", () => {
+    expect(replacesExecutable(`  ${root}\n`, inside)).toBe(true)
+    expect(replacesExecutable("lib/node_modules", "lib/node_modules/@opencode/cli/bin/opencode.exe")).toBe(true)
   })
 })
