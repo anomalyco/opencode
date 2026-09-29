@@ -34,6 +34,7 @@ import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { InstallationChannel } from "@opencode-ai/core/installation/version"
 import { HuGRComposerPlugin } from "./hugr-composer"
+import { AppDockPlugin } from "./app-dock"
 
 type State = {
   hooks: Hooks[]
@@ -83,6 +84,7 @@ function internalPlugins(flags: RuntimeFlags.Info): PluginInstance[] {
     XaiAuthPlugin,
     CerebrasPlugin,
     HuGRComposerPlugin,
+    ...(flags.client === "desktop" ? [AppDockPlugin] : []),
   ]
 }
 
