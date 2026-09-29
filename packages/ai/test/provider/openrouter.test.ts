@@ -189,7 +189,10 @@ describe("OpenRouter", () => {
       expect(prepared.body.messages).toMatchObject([
         { role: "user", content: "Call the tool" },
         { role: "assistant", content: "Calling", cache_control: { type: "ephemeral" } },
-        { role: "tool", content: '"Done"', cache_control: { type: "ephemeral", ttl: "1h" } },
+        {
+          role: "tool",
+          content: [{ type: "text", text: '"Done"', cache_control: { type: "ephemeral", ttl: "1h" } }],
+        },
       ])
     }),
   )

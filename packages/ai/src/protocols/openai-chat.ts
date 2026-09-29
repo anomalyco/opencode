@@ -98,7 +98,11 @@ const OpenRouterDetailFields = {
 }
 const ReasoningDetail = Schema.Union([
   Schema.StructWithRest(
-    Schema.Struct({ type: Schema.Literal("reasoning.text"), text: Schema.optional(Schema.String), ...OpenRouterDetailFields }),
+    Schema.Struct({
+      type: Schema.Literal("reasoning.text"),
+      text: Schema.optional(Schema.String),
+      ...OpenRouterDetailFields,
+    }),
     [Schema.Record(Schema.String, Schema.Unknown)],
   ),
   Schema.StructWithRest(
@@ -121,12 +125,14 @@ const decodeReasoningDetail = Schema.decodeUnknownOption(ReasoningDetail)
 const knownReasoningDetails = (details: ReadonlyArray<unknown>) =>
   details.flatMap((detail) => Option.toArray(decodeReasoningDetail(detail)))
 
+const OpenAIChatTextContent = Schema.Struct({
+  type: Schema.Literal("text"),
+  text: Schema.String,
+  cache_control: Schema.optional(OpenAIChatCacheControl),
+})
+
 const OpenAIChatUserContent = Schema.Union([
-  Schema.Struct({
-    type: Schema.Literal("text"),
-    text: Schema.String,
-    cache_control: Schema.optional(OpenAIChatCacheControl),
-  }),
+  OpenAIChatTextContent,
   Schema.Struct({
     type: Schema.Literal("image_url"),
     image_url: Schema.Struct({ url: Schema.String }),
@@ -162,8 +168,7 @@ const OpenAIChatMessage = Schema.Union([
   Schema.Struct({
     role: Schema.Literal("tool"),
     tool_call_id: Schema.String,
-    content: Schema.String,
-    cache_control: Schema.optional(OpenAIChatCacheControl),
+    content: Schema.Union([Schema.String, Schema.Array(OpenAIChatTextContent)]),
   }),
 ]).pipe(Schema.toTaggedUnion("role"))
 type OpenAIChatMessage = Schema.Schema.Type<typeof OpenAIChatMessage>
@@ -509,26 +514,35 @@ const lowerToolMessages = Effect.fn("OpenAIChat.lowerToolMessages")(function* (
     if (!ProviderShared.supportsContent(part, ["tool-result"]))
       return yield* ProviderShared.unsupportedContent("OpenAI Chat", "tool", ["tool-result"])
     if (part.result.type !== "content") {
-      messages.push({
-        role: "tool",
-        tool_call_id: options.toolCallID?.(part.id) ?? part.id,
-        content: ProviderShared.toolResultText(part),
-        cache_control: options.cacheControl?.(part.cache),
-      })
+      messages.push(
+        toolMessage(
+          options.toolCallID?.(part.id) ?? part.id,
+          ProviderShared.toolResultText(part),
+          options.cacheControl?.(part.cache),
+        ),
+      )
       continue
     }
     const content: ReadonlyArray<Tool.Content> = part.result.value
     const text = content.filter((item) => item.type === "text").map((item) => item.text)
-    messages.push({
-      role: "tool",
-      tool_call_id: options.toolCallID?.(part.id) ?? part.id,
-      content: text.join("\n"),
-      cache_control: options.cacheControl?.(part.cache),
-    })
+    messages.push(
+      toolMessage(options.toolCallID?.(part.id) ?? part.id, text.join("\n"), options.cacheControl?.(part.cache)),
+    )
     const files = content.filter((item) => item.type === "file")
     attachments.push(...(yield* Effect.forEach(files, (item) => lowerMedia(ProviderShared.toolFileMedia(item)))))
   }
   return { messages, attachments }
+})
+
+// A cache breakpoint goes on a text content part: Alibaba ignores `cache_control` set on the tool message itself.
+const toolMessage = (
+  toolCallID: string,
+  text: string,
+  cacheControl: Schema.Schema.Type<typeof OpenAIChatCacheControl> | undefined,
+) => ({
+  role: "tool" as const,
+  tool_call_id: toolCallID,
+  content: cacheControl === undefined ? text : [{ type: "text" as const, text, cache_control: cacheControl }],
 })
 
 const lowerMessage = Effect.fn("OpenAIChat.lowerMessage")(function* (
