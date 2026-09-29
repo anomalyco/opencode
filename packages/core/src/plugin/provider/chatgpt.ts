@@ -39,11 +39,12 @@ const fallbackModels = new Set([
 ])
 const nonRetryableSharingCodes = [
   "subscription_sharing_usage_limit_exceeded",
-  "subscription_sharing_v2_user_not_eligible",
+  "subscription_sharing_user_not_eligible",
   "subscription_sharing_unsupported_capability",
-  "subscription_sharing_v2_client_not_enabled",
-  "subscription_sharing_v2_route_not_supported",
-  "subscription_sharing_v2_invalid_user",
+  "subscription_sharing_route_not_supported",
+  "subscription_sharing_invalid_user",
+  "chatpass_v2_scope_not_authorized",
+  "chatpass_v2_invalid_authorization_context",
 ]
 type Pkce = {
   verifier: string
@@ -155,7 +156,11 @@ const signIn = (app: App.Info, savedClientID: () => string | undefined, storage:
               )
             return yield* Effect.gen(function* () {
               // Reauthorization callbacks may omit the client ID; reuse the one this attempt started with.
-              const clientID = result.clientID ?? savedID
+              if (savedID && result.clientID && result.clientID !== savedID)
+                return yield* Effect.fail(
+                  new Error("ChatGPT returned a different client than this connection. Connect again."),
+                )
+              const clientID = savedID ?? result.clientID
               if (!clientID)
                 return yield* Effect.fail(new Error("ChatGPT sign-in did not return a client ID. Connect again."))
               const tokens = yield* exchange(result.code, clientID, redirect, pkce, app)

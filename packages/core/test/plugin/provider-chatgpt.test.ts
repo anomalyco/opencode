@@ -356,13 +356,14 @@ describe("ChatGPTPlugin", () => {
       const hooks = yield* PluginHooks.Service
       const decide = yield* SessionRunnerRetry.policy(Session.ID.make("ses_sharing_errors"))
       const cases = [
-        ["subscription_sharing_v2_user_not_eligible", false],
+        ["subscription_sharing_user_not_eligible", false],
         ["subscription_sharing_unsupported_capability", false],
-        ["subscription_sharing_v2_client_not_enabled", false],
-        ["subscription_sharing_v2_route_not_supported", false],
-        ["subscription_sharing_v2_invalid_user", false],
+        ["subscription_sharing_route_not_supported", false],
+        ["subscription_sharing_invalid_user", false],
+        ["chatpass_v2_scope_not_authorized", false],
+        ["chatpass_v2_invalid_authorization_context", false],
         ["subscription_sharing_usage_unavailable", true],
-        ["subscription_sharing_v2_user_unavailable", true],
+        ["subscription_sharing_user_unavailable", true],
       ] as const
       for (const [code, retry] of cases) {
         const cause = new AIError({
@@ -455,6 +456,39 @@ describe("ChatGPTPlugin", () => {
       expect(url.searchParams.has("agent_name_hint")).toBe(false)
       expect(url.searchParams.get("ext_agent_host_id")).toBe(hostID)
       expect(new URL(url.searchParams.get("redirect_uri") ?? "").hostname).toBe("127.0.0.1")
+    }),
+  )
+
+  it.live("rejects a reauthorization callback that returns a different client ID", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      yield* credentials.create({
+        integrationID: Integration.ID.make("openai"),
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("chatgpt-token-sharing"),
+          access: "chatgpt-token",
+          refresh: "refresh",
+          expires: Date.now() + 60 * 60_000,
+          metadata: { clientID: "oaiapp_issued" },
+        }),
+      })
+      yield* addPlugin()
+      const integrations = yield* Integration.Service
+      const attempt = yield* integrations.oauth.connect({
+        integrationID: Integration.ID.make("openai"),
+        methodID: Integration.MethodID.make("chatgpt-token-sharing"),
+      })
+      const authorization = new URL(attempt.url)
+      expect(authorization.searchParams.get("client_id")).toBe("oaiapp_issued")
+      const callback = new URL(authorization.searchParams.get("redirect_uri") ?? "")
+      callback.searchParams.set("code", "test-code")
+      callback.searchParams.set("state", authorization.searchParams.get("state") ?? "")
+      callback.searchParams.set("client_id", "oaiapp_other")
+      const response = yield* Effect.promise(() => fetch(callback))
+      expect(response.status).toBe(400)
+      expect(yield* Effect.promise(() => response.text())).toContain("different client")
+      expect(yield* credentials.list(Integration.ID.make("openai"))).toHaveLength(1)
     }),
   )
 
