@@ -280,8 +280,7 @@
 
   [data-component="markdown-code"][data-mermaid-pending="true"] > pre,
   [data-component="markdown-code"][data-mermaid-pending="true"] > [data-slot="markdown-copy-button"],
-  [data-component="markdown-code"][data-mermaid-ready="true"] > pre,
-  [data-component="markdown-code"][data-mermaid-ready="true"] > [data-slot="markdown-copy-button"] {
+  [data-component="markdown-code"][data-mermaid-ready="true"] > pre {
     display: none;
   }
 

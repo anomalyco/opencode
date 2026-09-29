@@ -411,18 +411,27 @@ story("keeps a reopened cached answer recent under cache pressure", async ({ pag
   expect(cached).toBe("**Cached answer**")
 })
 
-story("renders cached Mermaid blocks and falls back to code for invalid diagrams", async ({ page }) => {
+story("renders cached Mermaid blocks with copy and falls back to code for invalid diagrams", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountMarkdown } = await import(fixture)
     await mountMarkdown({ text: "```mermaid\nflowchart LR\n A[Start] --> B[End]\n```", cached: true })
   }, fixture)
   const harness = page.getByTestId("markdown-fixture")
   const markdown = harness.locator('[data-component="markdown"]')
-  await expect(markdown.locator('[data-component="markdown-mermaid"] > svg')).toBeVisible()
+  const diagram = markdown.locator('[data-component="markdown-mermaid"] > svg')
+  await expect(diagram).toBeVisible()
+  await expect(markdown.locator('[data-component="markdown-code"]')).toHaveAttribute("data-mermaid-ready", "true")
+  await page.context().grantPermissions(["clipboard-read", "clipboard-write"])
+  await markdown.locator('[data-component="markdown-code"]').hover()
+  await markdown.getByRole("button", { name: "Copy", exact: true }).click()
+  await expect(markdown.getByRole("button", { name: "Copied" })).toBeVisible()
+  expect((await page.evaluate(() => navigator.clipboard.readText())).replaceAll("\r\n", "\n")).toBe(
+    "flowchart LR\n A[Start] --> B[End]",
+  )
   await harness.getByRole("button", { name: "Toggle Markdown" }).click()
   await expect(markdown).toHaveCount(0)
   await harness.getByRole("button", { name: "Toggle Markdown" }).click()
-  await expect(markdown.locator('[data-component="markdown-mermaid"] > svg')).toBeVisible()
+  await expect(diagram).toBeVisible()
   await harness.getByLabel("Markdown text").fill("```mermaid\nnot a diagram\n```")
   await expect(markdown.locator('[data-component="markdown-mermaid"]')).toHaveCount(0)
   await expect(markdown.locator("pre code")).toBeVisible()
