@@ -2,7 +2,7 @@ import { useWorkspaceLocation } from "@/workspaces/location"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import type { SessionStatus, SessionStepFailed } from "@opencode/client/promise"
 import { onCleanup } from "solid-js"
-import { Option, Schema } from "effect"
+import { Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
 import { useSessionLayout } from "./session-layout"
 import { useDialog, useI18n } from "@opencode/ui/context"
@@ -17,22 +17,10 @@ const GO_UPSELL_WINDOW = 86_400_000 // 24 hrs
 const GO_UPSELL_PROVIDERS = new Set(["opencode", "opencode-go"])
 const CHATGPT_USAGE_LIMIT_WINDOW = 86_400_000 // 24 hrs
 
-const decodeChatGPTFailure = Schema.decodeUnknownOption(
-  Schema.fromJsonString(
-    Schema.Struct({
-      error: Schema.optional(Schema.Struct({ code: Schema.String })),
-      response: Schema.optional(Schema.Struct({ error: Schema.Struct({ code: Schema.String }) })),
-    }),
-  ),
-)
-
 export function isChatGPTUsageLimit(error: SessionStepFailed["data"]["error"]) {
-  const body = error.response?.body
-  if (!body) return false
-  const failure = Option.getOrUndefined(decodeChatGPTFailure(body))
   return (
-    failure?.error?.code === "subscription_sharing_usage_limit_exceeded" ||
-    failure?.response?.error.code === "subscription_sharing_usage_limit_exceeded"
+    error.message ===
+    "ChatGPT usage limit reached. Try again after your allowance resets; check ChatGPT Settings → Usage for details."
   )
 }
 

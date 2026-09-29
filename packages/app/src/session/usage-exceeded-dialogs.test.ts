@@ -40,43 +40,28 @@ describe("usage exceeded preferences", () => {
 })
 
 describe("ChatGPT usage limit", () => {
-  test("detects the exact code in HTTP and streaming failures", () => {
+  const message =
+    "ChatGPT usage limit reached. Try again after your allowance resets; check ChatGPT Settings → Usage for details."
+
+  test("detects the mapped message regardless of failure type", () => {
     expect(
       isChatGPTUsageLimit({
         type: "provider.rate-limit",
-        message: "ChatGPT usage limit reached",
+        message,
         status: 429,
-        response: { body: '{"error":{"code":"subscription_sharing_usage_limit_exceeded"}}' },
       }),
     ).toBe(true)
-    expect(
-      isChatGPTUsageLimit({
-        type: "provider.rate-limit",
-        message: "ChatGPT usage limit reached",
-        response: {
-          body: '{"type":"response.failed","response":{"error":{"code":"subscription_sharing_usage_limit_exceeded"}}}',
-        },
-      }),
-    ).toBe(true)
+    expect(isChatGPTUsageLimit({ type: "provider.unknown", message })).toBe(true)
   })
 
-  test("ignores unrelated rate limits, text matches, and malformed bodies", () => {
-    expect(
-      isChatGPTUsageLimit({ type: "provider.rate-limit", message: "ChatGPT usage limit reached", status: 429 }),
-    ).toBe(false)
+  test("ignores other rate limits and similar messages", () => {
+    expect(isChatGPTUsageLimit({ type: "provider.rate-limit", message: "Rate limit exceeded", status: 429 })).toBe(
+      false,
+    )
     expect(
       isChatGPTUsageLimit({
         type: "provider.rate-limit",
-        message: "Rate limit exceeded",
-        status: 429,
-        response: { body: '{"error":{"code":"rate_limit_exceeded"}}' },
-      }),
-    ).toBe(false)
-    expect(
-      isChatGPTUsageLimit({
-        type: "provider.unknown",
-        message: "subscription_sharing_usage_limit_exceeded",
-        response: { body: "not JSON" },
+        message: "ChatGPT usage limit reached",
       }),
     ).toBe(false)
   })
