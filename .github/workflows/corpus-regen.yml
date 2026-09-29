@@ -1,0 +1,75 @@
+name: corpus-regen
+
+on:
+  push:
+    branches: [dev, 'feat/**']
+  pull_request:
+    branches: [dev, 'feat/**']
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  corpus-regen:
+    name: corpus regen check
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Regenerate corpus
+        working-directory: packages/desktop/docs/corpus/app-dock
+        run: node generate-corpus.mjs
+
+      - name: Verify corpus up-to-date
+        run: git diff --exit-code
+
+      - name: Lint corpus source
+        run: bunx oxlint packages/desktop/docs/corpus/app-dock/generate-corpus.mjs
+
+  typecheck:
+    name: typecheck
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Run typecheck
+        run: bun typecheck
+
+  lint:
+    name: lint
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Run oxlint
+        run: bunx oxlint packages/desktop/src/main/app-dock-live.test.ts packages/desktop/src/main/app-dock-rpc.ts packages/desktop/src/main/server.ts
+
+  live-test:
+    name: live test (macOS)
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+
+      - name: Setup Bun
+        uses: ./.github/actions/setup-bun
+
+      - name: Run live harness
+        working-directory: packages/desktop
+        run: timeout 300 bun run src/main/app-dock-live.test.ts
+        env:
+          ELECTRON_DISABLE_SECURITY_WARNINGS: "true"

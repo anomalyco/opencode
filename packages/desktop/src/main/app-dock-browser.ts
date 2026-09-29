@@ -433,7 +433,9 @@ export function buildPDFScript() {
  * @returns Self-invoking async script snippet
  */
 export function buildFrameScript(direction: "next" | "prev") {
-  return '(async () => { const iframes = document.getElementsByTagName("iframe"); const idx = Array.from(iframes).findIndex(f => f.contentWindow === window) || 0; let targetIdx; if (direction === "next") { targetIdx = (idx + 1) % iframes.length } else { targetIdx = (idx - 1 + iframes.length) % iframes.length }; if (iframes[targetIdx]) { iframes[targetIdx].contentWindow.location.href = window.location.href; return { ok: true, iframe: iframes[targetIdx] } } return { ok: false, error: "No more iframes in that direction" } })()'
+  return (
+    "(async () => { const iframes = document.getElementsByTagName(\"iframe\"); const idx = Array.from(iframes).findIndex(f => { try { return f.contentWindow === window } catch { return false } }) || 0; let targetIdx; if (direction === \"next\") { targetIdx = (idx + 1) % iframes.length } else { targetIdx = (idx - 1 + iframes.length) % iframes.length }; if (iframes[targetIdx]) { try { iframes[targetIdx].focus(); return { ok: true, iframeIndex: targetIdx } } catch (e) { return { ok: false, error: \"Cross-origin iframe access denied\" } } } return { ok: false, error: \"No more iframes in that direction\" } })()"
+  )
 }
 
 /**
@@ -443,7 +445,13 @@ export function buildFrameScript(direction: "next" | "prev") {
  * @returns Self-invoking async script snippet
  */
 export function buildRetryScript(attempts: number, delay: number) {
-  return '(async () => { let attemptsLeft = attempts; while (attemptsLeft > 0) { try { return { ok: true } } catch (e) { attemptsLeft--; if (attemptsLeft > 0) { await new Promise(r => setTimeout(r, delay)) } else { return { ok: false, error: "Max attempts exceeded" } } } } return { ok: false, error: "Retry loop ended" } })()'
+  return (
+    "(async () => { let attemptsLeft = " +
+    attempts +
+    "; let lastError; while (attemptsLeft > 0) { try { const result = await (async () => { return { ok: true, attemptsLeft } })(); return result } catch (e) { lastError = e; attemptsLeft--; if (attemptsLeft > 0) { await new Promise(r => setTimeout(r, " +
+    delay +
+    ")) } } return { ok: false, attemptsLeft, error: lastError?.message ?? \"Max attempts exceeded\" } })()"
+  )
 }
 
 /**
