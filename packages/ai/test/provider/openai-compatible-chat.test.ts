@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { LLM, LLMRequest, Message, ToolCallPart, ToolChoice, ToolDefinition } from "../../src/index.js"
+import { LLM, LLMRequest, Message, ToolCallPart, ToolChoice, ToolDefinition, ToolNamespace } from "../../src/index.js"
 import { Auth, LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as OpenAICompatibleChat from "../../src/protocols/openai-compatible-chat.js"
@@ -190,6 +190,32 @@ describe("OpenAI-compatible Chat route", () => {
         stream: true,
         stream_options: { include_usage: true },
       })
+    }),
+  )
+
+  it.effect("flattens only defined namespaced forced tool choices", () =>
+    Effect.gen(function* () {
+      const tools = [
+        ToolNamespace.make({
+          name: "crm",
+          tools: [ToolDefinition.make({ name: "lookup", description: "Look up a customer", inputSchema: {} })],
+        }),
+      ]
+      const prepare = (name: string) =>
+        compileRequest(
+          LLM.request({
+            model,
+            prompt: "Look up a customer.",
+            tools,
+            toolChoice: ToolChoice.named(name),
+          }),
+        )
+      const prepared = yield* prepare("crm.lookup")
+      const unknown = yield* prepare("crm.missing")
+
+      expect(prepared.body.tools).toMatchObject([{ function: { name: "crm_lookup" } }])
+      expect(prepared.body.tool_choice).toEqual({ type: "function", function: { name: "crm_lookup" } })
+      expect(unknown.body.tool_choice).toEqual({ type: "function", function: { name: "crm.missing" } })
     }),
   )
 

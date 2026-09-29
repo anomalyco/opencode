@@ -108,7 +108,9 @@ const fromRequest = Effect.fn("MetaResponses.fromRequest")(function* (request: L
           ),
     tool_choice:
       OpenResponses.allowedToolChoice(request) ??
-      (request.toolChoice ? yield* OpenResponses.lowerToolChoice(NAME, request.toolChoice) : undefined),
+      (projected.request.toolChoice
+        ? yield* OpenResponses.lowerToolChoice(NAME, projected.request.toolChoice)
+        : undefined),
   })
 })
 

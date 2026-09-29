@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { LLM, LLMEvent, Message, ToolDefinition, Media } from "../../src/index.js"
+import { LLM, LLMEvent, Message, ToolDefinition, ToolNamespace, Media } from "../../src/index.js"
 import { Mistral } from "../../src/providers/index.js"
 import { MistralChat } from "../../src/protocols/index.js"
 import { LLMClient } from "../../src/route.js"
@@ -35,6 +35,27 @@ describe("Mistral Chat", () => {
     })
     expect(entrypoint.model).toBeFunction()
   })
+
+  it.effect("flattens a namespaced forced tool choice", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          prompt: "Look up a customer.",
+          tools: [
+            ToolNamespace.make({
+              name: "crm",
+              tools: [ToolDefinition.make({ name: "lookup", description: "Look up a customer", inputSchema: {} })],
+            }),
+          ],
+          toolChoice: "crm.lookup",
+        }),
+      )
+
+      expect(prepared.body.tools).toMatchObject([{ function: { name: "crm_lookup" } }])
+      expect(prepared.body.tool_choice).toEqual({ type: "function", function: { name: "crm_lookup" } })
+    }),
+  )
 
   it.effect("lowers native messages, media, tool choice, options, and replay IDs", () =>
     Effect.gen(function* () {
