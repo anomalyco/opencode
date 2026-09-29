@@ -1,18 +1,15 @@
-import { Effect, Encoding, Option, Schema } from "effect"
+import { Effect, Encoding, Schema } from "effect"
 import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
-import { HttpTransport } from "../route/transport/index.js"
 import {
   AIError,
-  HttpOptions,
   LLMEvent,
-  LLMRequest,
-  mergeJsonRecords,
   Usage,
   type CacheHint,
   type FinishReason,
   type FinishReasonDetails,
+  type LLMRequest,
   type LanguageModel,
   type ProviderMetadata,
   type ReasoningPart,
@@ -532,6 +529,8 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
         : {
             ...(generation?.topK === undefined ? {} : { top_k: generation.topK }),
             ...(thinking === undefined ? {} : { thinking }),
+            // Converse takes Anthropic betas in the body, and Bedrock rejects `block_binding` without this one.
+            ...(thinking?.block_binding === undefined ? {} : { anthropic_beta: [THINKING_BINDING_BETA] }),
           },
   }
 })
@@ -828,42 +827,6 @@ export const protocol = Protocol.make({
   },
 })
 
-const decodeBoundThinking = Schema.decodeUnknownOption(
-  Schema.Struct({
-    additionalModelRequestFields: Schema.Struct({
-      thinking: Schema.Struct({ block_binding: Schema.Unknown }),
-      anthropic_beta: Schema.optional(Schema.Array(Schema.String)),
-    }),
-  }),
-)
-
-// Converse takes Anthropic betas in the body instead of a header, and Bedrock rejects `block_binding` without its
-// beta. `http.body` replaces arrays instead of merging them, so resolve the request that will actually be sent and
-// add the beta to the overlay beside any betas the caller already set.
-const transport = () => {
-  const http = HttpTransport.httpJson<BedrockConverseBody, object>({ framing })
-  return {
-    ...http,
-    prepare: (input: Parameters<typeof http.prepare>[0]) => {
-      const bound = decodeBoundThinking(mergeJsonRecords(input.body, input.request.http?.body))
-      if (Option.isNone(bound)) return http.prepare(input)
-      const betas = bound.value.additionalModelRequestFields.anthropic_beta ?? []
-      if (betas.includes(THINKING_BINDING_BETA)) return http.prepare(input)
-      return http.prepare({
-        ...input,
-        request: LLMRequest.update(input.request, {
-          http: new HttpOptions({
-            ...input.request.http,
-            body: mergeJsonRecords(input.request.http?.body, {
-              additionalModelRequestFields: { anthropic_beta: [...betas, THINKING_BINDING_BETA] },
-            }),
-          }),
-        }),
-      })
-    },
-  }
-}
-
 export const route = Route.make({
   id: ADAPTER,
   provider: "bedrock",
@@ -876,7 +839,7 @@ export const route = Route.make({
     ({ body }) => `/model/${encodeURIComponent(body.modelId)}/converse-stream`,
   ),
   auth: BedrockAuth.auth,
-  transport: transport(),
+  framing,
 })
 
 export const sigV4Auth = BedrockAuth.sigV4
