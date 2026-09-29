@@ -1,3 +1,4 @@
+import { useLanguage } from "../../context/language"
 import { createStore, unwrap } from "solid-js/store"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { usePaste, useRenderer, useTerminalDimensions } from "@opentui/solid"
@@ -58,6 +59,7 @@ const drafts = new Map<string, FormDraft>()
 
 export function FormPrompt(props: { form: FormWithLocation }) {
   const data = useData()
+  const language = useLanguage()
   const theme = useTheme()
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
@@ -117,14 +119,17 @@ export function FormPrompt(props: { form: FormWithLocation }) {
   })
   const tabs = createMemo(() => (single() ? 1 : fields().length + 1))
   const tabbed = createMemo(() => {
-    const width = fields().reduce((sum, item) => sum + truncate(formLabel(item), 24).length + 3, "Submit".length + 3)
+    const width = fields().reduce(
+      (sum, item) => sum + truncate(formLabel(item), 24).length + 3,
+      language.t("tui.details.submit").length + 3,
+    )
     return width <= dimensions().width - 8
   })
   const completed = (item: FormField) => {
     const value = store.answers[item.key]
     if (value === undefined) return false
     if (item.type === "external") return value === true
-    return formValidateValue(item, value) === undefined
+    return formValidateValue(item, value, language.t) === undefined
   }
   const answered = createMemo(() => fields().filter(completed).length)
   const field = createMemo(() => fields()[store.tab])
@@ -140,7 +145,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
   const reviewMaxHeight = createMemo(() => Math.max(3, dimensions().height - 14))
   const configuredRows = createMemo(() => {
     const current = answerField()
-    return current ? formRows(current) : []
+    return current ? formRows(current, language.t) : []
   })
   const rows = createMemo(() => {
     const current = answerField()
@@ -177,10 +182,10 @@ export function FormPrompt(props: { form: FormWithLocation }) {
       const minimum = typeof current.minimum === "number" ? current.minimum : undefined
       const maximum = typeof current.maximum === "number" ? current.maximum : undefined
       if (minimum !== undefined && maximum !== undefined) return `${minimum}-${maximum}`
-      if (minimum !== undefined) return `at least ${minimum}`
-      if (maximum !== undefined) return `at most ${maximum}`
+      if (minimum !== undefined) return language.t("tui.form.minimum", { value: minimum })
+      if (maximum !== undefined) return language.t("tui.form.maximum", { value: maximum })
     }
-    return "Type your answer"
+    return language.t("tui.details.typeYourAnswer")
   })
   const other = createMemo(() => custom() && store.selected === rows().length)
   const input = createMemo(() => store.custom[answerField()?.key ?? ""] ?? "")
@@ -193,19 +198,21 @@ export function FormPrompt(props: { form: FormWithLocation }) {
   })
   const customChecked = createMemo(() => customPicked() || (multi() && other() && store.editing))
   const actionLabel = createMemo(() => {
-    if (confirm()) return "submit"
+    if (confirm()) return language.t("tui.submit")
     const external = externalField()
     if (external) {
-      if (store.answers[external.key] === true) return "continue"
-      return store.externalReady[external.key] ? "I finished" : "open link"
+      if (store.answers[external.key] === true) return language.t("tui.details.continue")
+      return store.externalReady[external.key]
+        ? language.t("tui.details.iFinished")
+        : language.t("tui.details.openLink")
     }
     if (multi()) {
-      if (other() && store.editing) return "done"
-      if (other() && !input()) return "edit"
-      return "toggle"
+      if (other() && store.editing) return language.t("tui.details.done")
+      if (other() && !input()) return language.t("tui.details.edit")
+      return language.t("tui.details.toggle")
     }
-    if (single()) return "submit"
-    return "confirm"
+    if (single()) return language.t("tui.submit")
+    return language.t("tui.confirm")
   })
 
   onCleanup(() => {
@@ -279,7 +286,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
   function pick(value: FormValue, customValue?: string) {
     const current = answerField()
     if (!current) return
-    const invalid = formValidateValue(current, value)
+    const invalid = formValidateValue(current, value, language.t)
     if (invalid) {
       setStore("error", invalid)
       return
@@ -389,7 +396,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
           ? formSetMultiselectCustom(store.answers[current.key], store.custom[current.key], "")
           : undefined
       if (isTextual || !isMulti) {
-        const invalid = formValidateValue(current, value)
+        const invalid = formValidateValue(current, value, language.t)
         if (invalid) {
           setStore("error", invalid)
           return false
@@ -403,7 +410,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
 
     if (isTextual && (current.type === "number" || current.type === "integer")) {
       const value = Number(text)
-      const invalid = formValidateValue(current, value)
+      const invalid = formValidateValue(current, value, language.t)
       if (invalid) {
         setStore("error", invalid)
         return false
@@ -412,7 +419,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     }
 
     if (isTextual && current.type === "string") {
-      const invalid = formValidateValue(current, text)
+      const invalid = formValidateValue(current, text, language.t)
       if (invalid) {
         setStore("error", invalid)
         return false
@@ -425,7 +432,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     }
 
     if (!isTextual && !isMulti) {
-      const invalid = formValidateValue(current, text)
+      const invalid = formValidateValue(current, text, language.t)
       if (invalid) {
         setStore("error", invalid)
         return false
@@ -480,7 +487,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     setStore("error", "")
     void openUrl(current.url)
       .then(() => setStore("externalReady", { ...store.externalReady, [current.key]: true }))
-      .catch(() => setStore("error", "Could not open the browser. Copy the URL and continue manually."))
+      .catch(() => setStore("error", language.t("tui.form.browserFailed")))
   }
 
   function copyExternal() {
@@ -490,7 +497,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
       .write(current.url)
       .then(() => {
         setStore("externalReady", { ...store.externalReady, [current.key]: true })
-        toast.show({ message: "Copied URL to clipboard", variant: "info" })
+        toast.show({ message: language.t("tui.form.urlCopied"), variant: "info" })
       })
       .catch(toast.error)
   }
@@ -513,14 +520,17 @@ export function FormPrompt(props: { form: FormWithLocation }) {
   function submit() {
     const unacknowledged = fields().find((field) => field.type === "external" && store.answers[field.key] !== true)
     if (unacknowledged) {
-      setStore("error", `External action must be acknowledged: ${formLabel(unacknowledged)}`)
+      setStore("error", language.t("tui.transcript.externalAcknowledgement", { label: formLabel(unacknowledged) }))
       return
     }
     const invalid = fields()
       .filter(isFormAnswerField)
-      .find((field) => formValidateValue(field, store.answers[field.key]))
+      .find((field) => formValidateValue(field, store.answers[field.key], language.t))
     if (invalid) {
-      setStore("error", formValidateValue(invalid, store.answers[invalid.key]) ?? "Invalid answer")
+      setStore(
+        "error",
+        formValidateValue(invalid, store.answers[invalid.key], language.t) ?? language.t("tui.details.invalidAnswer"),
+      )
       return
     }
     reply(
@@ -541,8 +551,8 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     commands: [
       {
         id: "prompt.paste",
-        title: "Paste from clipboard",
-        group: "Form",
+        title: language.t("tui.details.pasteFromClipboard"),
+        group: language.t("tui.details.form"),
         run: (_input, event) => {
           event?.preventDefault()
           event?.stopPropagation()
@@ -559,8 +569,8 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     commands: [
       {
         id: "prompt.clear",
-        title: "Clear answer edit",
-        group: "Form",
+        title: language.t("tui.details.clearAnswerEdit"),
+        group: language.t("tui.details.form"),
         run() {
           const text = textarea?.plainText ?? ""
           if (!text) {
@@ -576,8 +586,8 @@ export function FormPrompt(props: { form: FormWithLocation }) {
       },
       {
         bind: "escape",
-        title: textual() ? "Dismiss form" : "Close answer edit",
-        group: "Form",
+        title: textual() ? language.t("tui.details.dismissForm") : language.t("tui.details.closeAnswerEdit"),
+        group: language.t("tui.details.form"),
         run: () => {
           if (textual()) {
             cancel()
@@ -588,8 +598,8 @@ export function FormPrompt(props: { form: FormWithLocation }) {
       },
       {
         bind: "tab",
-        title: "Next field",
-        group: "Form",
+        title: language.t("tui.details.nextField"),
+        group: language.t("tui.details.form"),
         run: () => {
           const text = textarea?.plainText?.trim() ?? ""
           submitInput(text)
@@ -597,8 +607,8 @@ export function FormPrompt(props: { form: FormWithLocation }) {
       },
       {
         bind: "shift+tab",
-        title: "Previous field",
-        group: "Form",
+        title: language.t("tui.details.previousField"),
+        group: language.t("tui.details.form"),
         run: () => {
           const text = textarea?.plainText?.trim() ?? ""
           submitInput(text, -1)
@@ -606,8 +616,8 @@ export function FormPrompt(props: { form: FormWithLocation }) {
       },
       {
         bind: "up",
-        title: "Leave answer edit",
-        group: "Form",
+        title: language.t("tui.details.leaveAnswerEdit"),
+        group: language.t("tui.details.form"),
         run: () => {
           if (textual() || !textarea || textarea.isDestroyed || store.selected === 0) return false
           if (textarea.scrollY + textarea.visualCursor.visualRow > 0) return false
@@ -617,8 +627,8 @@ export function FormPrompt(props: { form: FormWithLocation }) {
       },
       {
         bind: "return",
-        title: "Submit answer edit",
-        group: "Form",
+        title: language.t("tui.details.submitAnswerEdit"),
+        group: language.t("tui.details.form"),
         run: () => {
           const text = textarea?.plainText?.trim() ?? ""
           const current = answerField()
@@ -650,34 +660,44 @@ export function FormPrompt(props: { form: FormWithLocation }) {
       commands: [
         {
           id: "app.exit",
-          title: "Dismiss form",
-          group: "Form",
+          title: language.t("tui.details.dismissForm"),
+          group: language.t("tui.details.form"),
           run: cancel,
         },
         {
           bind: "left",
-          title: "Previous field",
-          group: "Form",
+          title: language.t("tui.details.previousField"),
+          group: language.t("tui.details.form"),
           run: () => selectTab((store.tab - 1 + tabs()) % tabs()),
         },
         {
           bind: "h",
-          title: "Previous field",
-          group: "Form",
+          title: language.t("tui.details.previousField"),
+          group: language.t("tui.details.form"),
           run: () => selectTab((store.tab - 1 + tabs()) % tabs()),
         },
-        { bind: "right", title: "Next field", group: "Form", run: () => selectTab((store.tab + 1) % tabs()) },
-        { bind: "l", title: "Next field", group: "Form", run: () => selectTab((store.tab + 1) % tabs()) },
+        {
+          bind: "right",
+          title: language.t("tui.details.nextField"),
+          group: language.t("tui.details.form"),
+          run: () => selectTab((store.tab + 1) % tabs()),
+        },
+        {
+          bind: "l",
+          title: language.t("tui.details.nextField"),
+          group: language.t("tui.details.form"),
+          run: () => selectTab((store.tab + 1) % tabs()),
+        },
         {
           bind: "tab",
-          title: "Next field",
-          group: "Form",
+          title: language.t("tui.details.nextField"),
+          group: language.t("tui.details.form"),
           run: () => selectTab((store.tab + 1) % tabs()),
         },
         {
           bind: "shift+tab",
-          title: "Previous field",
-          group: "Form",
+          title: language.t("tui.details.previousField"),
+          group: language.t("tui.details.form"),
           run: () => selectTab((store.tab - 1 + tabs()) % tabs()),
         },
         ...(external
@@ -686,40 +706,70 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                 bind: "return",
                 title:
                   store.answers[external.key] === true
-                    ? "Continue"
+                    ? language.t("tui.details.continue")
                     : store.externalReady[external.key]
-                      ? "Confirm completion"
-                      : "Open link",
-                group: "Form",
+                      ? language.t("tui.details.confirmCompletion")
+                      : language.t("tui.details.openLink"),
+                group: language.t("tui.details.form"),
                 run: acknowledgeExternal,
               },
-              { bind: "c", title: "Copy link", group: "Form", run: copyExternal },
-              { bind: "escape", title: "Dismiss form", group: "Form", run: cancel },
+              {
+                bind: "c",
+                title: language.t("tui.details.copyLink"),
+                group: language.t("tui.details.form"),
+                run: copyExternal,
+              },
+              {
+                bind: "escape",
+                title: language.t("tui.details.dismissForm"),
+                group: language.t("tui.details.form"),
+                run: cancel,
+              },
             ]
           : confirm()
             ? [
                 {
                   bind: "return",
-                  title: "Submit form",
-                  group: "Form",
+                  title: language.t("tui.details.submitForm"),
+                  group: language.t("tui.details.form"),
                   run: submit,
                 },
                 {
                   bind: "escape",
-                  title: "Dismiss form",
-                  group: "Form",
+                  title: language.t("tui.details.dismissForm"),
+                  group: language.t("tui.details.form"),
                   run: cancel,
                 },
-                { bind: "up", title: "Scroll review", group: "Form", run: () => review?.scrollBy(-1) },
-                { bind: "k", title: "Scroll review", group: "Form", run: () => review?.scrollBy(-1) },
-                { bind: "down", title: "Scroll review", group: "Form", run: () => review?.scrollBy(1) },
-                { bind: "j", title: "Scroll review", group: "Form", run: () => review?.scrollBy(1) },
+                {
+                  bind: "up",
+                  title: language.t("tui.details.scrollReview"),
+                  group: language.t("tui.details.form"),
+                  run: () => review?.scrollBy(-1),
+                },
+                {
+                  bind: "k",
+                  title: language.t("tui.details.scrollReview"),
+                  group: language.t("tui.details.form"),
+                  run: () => review?.scrollBy(-1),
+                },
+                {
+                  bind: "down",
+                  title: language.t("tui.details.scrollReview"),
+                  group: language.t("tui.details.form"),
+                  run: () => review?.scrollBy(1),
+                },
+                {
+                  bind: "j",
+                  title: language.t("tui.details.scrollReview"),
+                  group: language.t("tui.details.form"),
+                  run: () => review?.scrollBy(1),
+                },
               ]
             : [
                 ...Array.from({ length: max }, (_, index) => ({
                   bind: String(index + 1),
-                  title: `Select answer ${index + 1}`,
-                  group: "Form",
+                  title: language.t("tui.transcript.selectAnswer", { number: index + 1 }),
+                  group: language.t("tui.details.form"),
                   run: () => {
                     setStore("selected", index)
                     selectOption()
@@ -727,36 +777,48 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                 })),
                 {
                   bind: "up",
-                  title: "Previous answer",
-                  group: "Form",
+                  title: language.t("tui.details.previousAnswer"),
+                  group: language.t("tui.details.form"),
                   run: () => setStore("selected", (store.selected - 1 + total) % total),
                 },
                 {
                   bind: "k",
-                  title: "Previous answer",
-                  group: "Form",
+                  title: language.t("tui.details.previousAnswer"),
+                  group: language.t("tui.details.form"),
                   run: () => setStore("selected", (store.selected - 1 + total) % total),
                 },
                 {
                   bind: "down",
-                  title: "Next answer",
-                  group: "Form",
+                  title: language.t("tui.details.nextAnswer"),
+                  group: language.t("tui.details.form"),
                   run: () => setStore("selected", (store.selected + 1) % total),
                 },
                 {
                   bind: "j",
-                  title: "Next answer",
-                  group: "Form",
+                  title: language.t("tui.details.nextAnswer"),
+                  group: language.t("tui.details.form"),
                   run: () => setStore("selected", (store.selected + 1) % total),
                 },
-                { bind: "return", title: "Select answer", group: "Form", run: () => selectOption() },
+                {
+                  bind: "return",
+                  title: language.t("tui.details.selectAnswer"),
+                  group: language.t("tui.details.form"),
+                  run: () => selectOption(),
+                },
                 ...(multi()
-                  ? [{ bind: "space", title: "Toggle answer", group: "Form", run: () => selectOption() }]
+                  ? [
+                      {
+                        bind: "space",
+                        title: language.t("tui.details.toggleAnswer"),
+                        group: language.t("tui.details.form"),
+                        run: () => selectOption(),
+                      },
+                    ]
                   : []),
                 {
                   bind: "escape",
-                  title: "Dismiss form",
-                  group: "Form",
+                  title: language.t("tui.details.dismissForm"),
+                  group: language.t("tui.details.form"),
                   run: cancel,
                 },
               ]),
@@ -783,11 +845,16 @@ export function FormPrompt(props: { form: FormWithLocation }) {
         <Show when={!single() && !tabbed()}>
           <box flexDirection="row" gap={3} paddingLeft={1}>
             <text fg={theme.text.muted}>
-              {confirm() ? "Review" : `Field ${Math.min(store.tab, fields().length - 1) + 1} of ${fields().length}`}
+              {confirm()
+                ? language.t("tui.details.review")
+                : language.t("tui.form.position", {
+                    current: Math.min(store.tab, fields().length - 1) + 1,
+                    total: fields().length,
+                  })}
             </text>
             <Show when={fields().length > 0}>
               <text fg={theme.text.muted}>
-                · {answered()}/{fields().length} completed
+                · {language.t("tui.transcript.formCompleted", { answered: answered(), total: fields().length })}
               </text>
             </Show>
           </box>
@@ -852,7 +919,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                 }
                 attributes={confirm() ? TextAttributes.BOLD : undefined}
               >
-                Submit
+                {language.t("tui.transcript.submit")}
               </text>
             </box>
           </box>
@@ -880,10 +947,10 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                 fg={store.answers[external().key] === true ? theme.text.feedback.success.base : theme.text.muted}
               >
                 {store.answers[external().key] === true
-                  ? "✓ Acknowledged"
+                  ? language.t("tui.transcript.acknowledged")
                   : store.externalReady[external().key]
-                    ? "Complete the external action, then press enter to confirm."
-                    : "Open or copy the URL, complete the external action, then confirm."}
+                    ? language.t("tui.details.completeTheExternalActionThenPressEnterToConfirm")
+                    : language.t("tui.details.openOrCopyTheURLCompleteTheExternalActionThenConfirm")}
               </text>
             </box>
           )}
@@ -908,7 +975,13 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                     })
                   }}
                   initialValue={
-                    input() || formDisplayValue(answerField()!, store.answers[answerField()!.key], "(none)")
+                    input() ||
+                    formDisplayValue(
+                      answerField()!,
+                      store.answers[answerField()!.key],
+                      language.t("tui.form.none"),
+                      language.t,
+                    )
                   }
                   placeholder={placeholder()}
                   placeholderColor={theme.text.muted}
@@ -1027,7 +1100,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                           fallback={
                             <>
                               <text fg={other() ? theme.text.formfield.focused : theme.text.formfield.base}>
-                                {input() || "Type your own answer"}
+                                {input() || language.t("tui.details.typeYourOwnAnswer")}
                               </text>
                               <Show when={!multi() && customPicked()}>
                                 <text fg={theme.text.formfield.selected}>✓</text>
@@ -1049,7 +1122,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                               })
                             }}
                             initialValue={input()}
-                            placeholder="Type your own answer"
+                            placeholder={language.t("tui.details.typeYourOwnAnswer")}
                             placeholderColor={theme.text.muted}
                             minHeight={1}
                             maxHeight={6}
@@ -1099,16 +1172,19 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                                 : theme.text.feedback.error.base,
                             }}
                           >
-                            {acknowledged() ? "Acknowledged" : "(acknowledgement required)"}
+                            {acknowledged()
+                              ? language.t("tui.details.acknowledged")
+                              : language.t("tui.details.acknowledgementRequired")}
                           </span>
                         </text>
                       </box>
                     )
                   }
-                  const value = () => formDisplayValue(item, store.answers[item.key], "(none)")
+                  const value = () =>
+                    formDisplayValue(item, store.answers[item.key], language.t("tui.form.none"), language.t)
                   const answered = () => store.answers[item.key] !== undefined
                   const missing = () => !answered() && item.required === true
-                  const invalid = () => formValidateValue(item, store.answers[item.key])
+                  const invalid = () => formValidateValue(item, store.answers[item.key], language.t)
                   return (
                     <box paddingLeft={1}>
                       <text>
@@ -1123,7 +1199,12 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                                   : theme.text.muted,
                           }}
                         >
-                          {invalid() ?? (answered() ? value() : missing() ? "(required)" : "(not answered)")}
+                          {invalid() ??
+                            (answered()
+                              ? value()
+                              : missing()
+                                ? language.t("tui.transcript.required")
+                                : language.t("tui.transcript.notAnswered"))}
                         </span>
                       </text>
                     </box>
@@ -1146,17 +1227,17 @@ export function FormPrompt(props: { form: FormWithLocation }) {
         <box flexDirection="row" gap={2}>
           <Show when={!single()}>
             <text fg={theme.text.base}>
-              {"⇆"} <span style={{ fg: theme.text.muted }}>tab</span>
+              {"⇆"} <span style={{ fg: theme.text.muted }}>{language.t("tui.details.tab")}</span>
             </text>
           </Show>
           <Show when={!confirm() && !textual() && !externalField() && !store.editing}>
             <text fg={theme.text.base}>
-              {"↑↓"} <span style={{ fg: theme.text.muted }}>select</span>
+              {"↑↓"} <span style={{ fg: theme.text.muted }}>{language.t("tui.select")}</span>
             </text>
           </Show>
           <Show when={confirm() && reviewContentHeight() > reviewMaxHeight()}>
             <text fg={theme.text.base}>
-              {"↑↓"} <span style={{ fg: theme.text.muted }}>scroll</span>
+              {"↑↓"} <span style={{ fg: theme.text.muted }}>{language.t("tui.details.scroll")}</span>
             </text>
           </Show>
           <text
@@ -1171,11 +1252,14 @@ export function FormPrompt(props: { form: FormWithLocation }) {
           </text>
           <Show when={externalField()}>
             <text fg={theme.text.base} onMouseUp={copyExternal}>
-              c <span style={{ fg: theme.text.muted }}>copy</span>
+              c <span style={{ fg: theme.text.muted }}>{language.t("tui.details.copy")}</span>
             </text>
           </Show>
           <text fg={theme.text.base} onMouseUp={cancel}>
-            esc <span style={{ fg: theme.text.muted }}>{store.editing && !textual() ? "close" : "dismiss"}</span>
+            esc{" "}
+            <span style={{ fg: theme.text.muted }}>
+              {store.editing && !textual() ? language.t("tui.details.close") : language.t("tui.details.dismiss")}
+            </span>
           </text>
         </box>
         <Show when={store.error}>

@@ -5,10 +5,12 @@ import { SplitBorder } from "../ui/border"
 import { useToast } from "../ui/toast"
 import { errorMessage } from "../util/error"
 import { Spinner } from "./spinner"
+import { useLanguage } from "../context/language"
 
 type Progress = { label: string; numerator?: number; denominator?: number }
 
 export function MigrationOverlay() {
+  const language = useLanguage()
   const client = useClient()
   const toast = useToast()
   const theme = useTheme()
@@ -30,7 +32,7 @@ export function MigrationOverlay() {
       setProgress(undefined)
       toast.show({
         variant: "error",
-        title: "Data migration failed",
+        title: language.t("tui.dialogs.migrationFailed"),
         message: errorMessage(error),
         duration: 10_000,
       })

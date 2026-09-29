@@ -1,4 +1,6 @@
 import { logo } from "../logo"
+import { createLanguage } from "../i18n/translate"
+import { stringWidth } from "./string-width"
 
 const reset = "\x1b[0m"
 const bold = "\x1b[1m"
@@ -23,13 +25,16 @@ function wordmark(pad = "") {
   })
 }
 
-export function sessionEpilogue(input: { title: string; sessionID?: string }) {
-  const weak = (text: string) => `${dim}${text.padEnd(10, " ")}${reset}`
+export function sessionEpilogue(input: { title: string; sessionID?: string }, t = createLanguage(() => "en").t) {
+  const session = t("command.category.session")
+  const resume = t("tui.session.continue")
+  const width = Math.max(8, stringWidth(session), stringWidth(resume)) + 2
+  const weak = (text: string) => `${dim}${text}${" ".repeat(width - stringWidth(text))}${reset}`
   return [
     ...wordmark("  "),
     "",
-    `  ${weak("Session")}${bold}${input.title}${reset}`,
-    `  ${weak("Continue")}${bold}opencode -s ${input.sessionID}${reset}`,
+    `  ${weak(session)}${bold}${input.title}${reset}`,
+    `  ${weak(resume)}${bold}opencode -s ${input.sessionID}${reset}`,
     "",
   ].join("\n")
 }
