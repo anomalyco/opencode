@@ -19,7 +19,7 @@ import { useProviders } from "@/providers/catalog/providers"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useServerSDK } from "@/runtime/server/client"
 import { useSessionLayout } from "@/session/session-layout"
-import { createSessionContextFormatter } from "./session-context-format"
+import { cacheHitRate, createSessionContextFormatter } from "./session-context-format"
 
 function Stat(props: { label: string; value: JSX.Element }) {
   return (
@@ -133,6 +133,19 @@ export function SessionContextTab() {
       usage: model?.limit.context ? Math.round((total / model.limit.context) * 100) : null,
     }
   })
+
+  // Session-wide prompt cache hit rate: cached reads vs uncached input across
+  // every assistant message, not just the last request.
+  const hitRate = createMemo(() => {
+    let read = 0
+    let input = 0
+    for (const message of messages()) {
+      if (message.type !== "assistant" || !message.tokens) continue
+      read += message.tokens.cache.read
+      input += message.tokens.input
+    }
+    return cacheHitRate(read, input)
+  })
   const formatter = createMemo(() => createSessionContextFormatter(language.intl()))
 
   const cost = createMemo(() => {
@@ -185,6 +198,7 @@ export function SessionContextTab() {
       label: "context.stats.cacheTokens",
       value: () => `${formatter().number(ctx()?.tokens.cache.read)} / ${formatter().number(ctx()?.tokens.cache.write)}`,
     },
+    { label: "context.stats.cacheHitRate", value: () => formatter().percent(hitRate()) },
     { label: "context.stats.userMessages", value: () => counts().user.toLocaleString(language.intl()) },
     { label: "context.stats.assistantMessages", value: () => counts().assistant.toLocaleString(language.intl()) },
     { label: "context.stats.totalCost", value: cost },
