@@ -10,11 +10,15 @@ const WebSearch = Schema.Struct({
   name: Schema.Literal("web_search"),
   user_location: MetaResponses.WebSearch.fields.user_location,
 })
+const MetaCacheControl = Schema.Struct({
+  type: Schema.tag("ephemeral"),
+  ttl: Schema.optional(Schema.Literals(["5m", "1h"])),
+})
 const FunctionTool = Schema.Struct({
   name: Schema.String,
   description: Schema.String,
   input_schema: JsonObject,
-  cache_control: AnthropicMessages.AnthropicMessagesBody.fields.cache_control,
+  cache_control: Schema.optional(MetaCacheControl),
 })
 const Body = Schema.Struct({
   ...AnthropicMessages.AnthropicMessagesBody.fields,
