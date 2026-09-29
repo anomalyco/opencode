@@ -9,6 +9,7 @@ import {
 } from "@opencode-ai/llm"
 import { SessionMessage } from "../message"
 import type { FileAttachment } from "../prompt"
+import { ToolOutputStore } from "../../tool-output-store"
 
 const media = (file: FileAttachment): ContentPart => ({
   type: "media",
@@ -133,15 +134,25 @@ function toLLMMessage(message: SessionMessage.Message, model: Model): Message[] 
       return [Message.make({ id: message.id, role: "user", content: message.text, metadata: message.metadata })]
     case "system":
       return [Message.system(message.text)]
-    case "shell":
+    case "shell": {
+      // Unbounded shell output reaches the provider request verbatim and can
+      // strand the session on context overflow. Bound the model-facing preview
+      // to the tool-output limit; the full output stays in session history.
+      const output =
+        Buffer.byteLength(message.output, "utf-8") <= ToolOutputStore.MAX_BYTES
+          ? message.output
+          : `${Buffer.from(message.output, "utf-8")
+              .subarray(0, ToolOutputStore.MAX_BYTES)
+              .toString("utf-8")}\n[truncated: shell output exceeds 50 KiB; full output retained in session history]`
       return [
         Message.make({
           id: message.id,
           role: "user",
-          content: `Shell command: ${message.command}\n\n${message.output}`,
+          content: `Shell command: ${message.command}\n\n${output}`,
           metadata: message.metadata,
         }),
       ]
+    }
     case "assistant":
       return assistant(message, model)
     case "compaction":
