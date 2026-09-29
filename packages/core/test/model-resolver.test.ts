@@ -595,7 +595,7 @@ describe("ModelResolver", () => {
       )
       const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
 
-      expect(resolved.route.id).toBe("openai-responses")
+      expect(resolved.route.id).toBe("xai-responses")
       expect(prepared.body).toMatchObject({
         reasoning: { effort: "high", summary: "auto" },
         include: ["reasoning.encrypted_content"],
@@ -1306,7 +1306,7 @@ describe("ModelResolver", () => {
         reasoningEffort: "high",
       })
       expect(String(mistral.provider)).toBe("test-provider")
-      expect(xai.route.id).toBe("openai-responses")
+      expect(xai.route.id).toBe("xai-responses")
       expect(xai.route.defaults.providerOptions).toEqual({
         reasoningEffort: "high",
         store: false,
