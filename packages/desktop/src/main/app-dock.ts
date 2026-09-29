@@ -4,7 +4,7 @@ import { createHash, randomUUID } from "node:crypto"
 import type { EventEmitter } from "node:events"
 import { appDockURL, appDockZoom, panelBoundsToContent, type DockBounds } from "./app-dock-utils"
 export type { DockBounds } from "./app-dock-utils"
-import { buildScrollScript, buildHoverScript, buildDragScript, buildClickAtProbeScript, buildClickScript, buildElementPointScript, buildFocusScript, buildReadElementScript, buildSnapshotScript, buildTypeScript, buildScrollToScript, buildStorageScript, buildPDFSript, buildFrameScript, buildRetryScript, buildEvaluateScript, buildNetworkScript } from "./app-dock-browser"
+import { buildScrollScript, buildHoverScript, buildDragScript, buildClickAtProbeScript, buildClickScript, buildElementPointScript, buildFocusScript, buildReadElementScript, buildSnapshotScript, buildTypeScript, buildScrollToScript, buildStorageScript, buildPDFScript, buildFrameScript, buildRetryScript, buildEvaluateScript, buildNetworkScript } from "./app-dock-browser"
 import type { AppDockAPI } from "./app-dock-api"
 
 export type AppDockIdentity = Readonly<{ tabID: string; generation: number }>
@@ -106,7 +106,7 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
   >()
   const terminalDownloads = new Map<string, number>()
   const active = new Map<number, string>()
-      const layoutBounds = new Map<number, DockBounds>()
+const layoutBounds = new Map<number, DockBounds>()
   let lastLayoutBounds: DockBounds | undefined
   const inactive = new Map<string, { senderID: number; tabID: string }>()
   const refNamespaces = new Map<string, number>()
@@ -1349,7 +1349,7 @@ export function createAppDock(options: { developmentMode?: () => boolean } = {})
     pdf(senderID: number, tabID: string): Promise<{ ok: boolean; blob: Blob }> {
       const record = tabs.get(senderID)?.get(tabID)
       if (!record) throw new Error("Unknown App Dock tab")
-      return this.execute(senderID, tabID, buildPDFSript()) as Promise<{ ok: boolean; blob: Blob }>
+      return this.execute(senderID, tabID, buildPDFScript()) as Promise<{ ok: boolean; blob: Blob }>
     },
   /**
    * Changes iframe focus in a dock tab.

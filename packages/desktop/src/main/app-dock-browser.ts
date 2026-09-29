@@ -423,7 +423,7 @@ export function buildStorageScript(storage: "local" | "session", key: string) {
  * Generates a script to capture PDF from canvas.
  * @returns Self-invoking async script snippet
  */
-export function buildPDFSript() {
+export function buildPDFScript() {
   return '(async () => { const canvas = document.createElement("canvas"); canvas.width = window.innerWidth; canvas.height = window.innerHeight; const ctx = canvas.getContext("2d"); ctx.drawImage(document.body, 0, 0); const pdf = canvas.toBlob(function(blob) { if (blob) { const url = URL.createObjectURL(blob); return { ok: true, blob: blob, url: url } } else { return { ok: false, error: "Failed to create PDF" } } }); return { ok: false, error: "Canvas context failed" } })()'
 }
 
