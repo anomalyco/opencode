@@ -109,7 +109,8 @@ const QUOTA_CODES = new Set([
   "freeusagelimiterror",
   "creditlimitexceeded",
 ])
-const AUTH_CODES = new Set(["authentication_error", "permission_error"])
+// Google reports an invalid API key as HTTP 400 INVALID_ARGUMENT with this `details[].reason`.
+const AUTH_CODES = new Set(["authentication_error", "permission_error", "api_key_invalid"])
 const SERVER_CODES = new Set([
   "api_error",
   "internal_error",
@@ -259,6 +260,10 @@ function providerCodes(value: unknown) {
     error?.type,
     error?.status,
     error?.error_type,
+    // Google `google.rpc.ErrorInfo` details carry the specific reason.
+    ...(Array.isArray(error?.details)
+      ? error.details.map((detail) => (isRecord(detail) ? detail.reason : undefined))
+      : []),
     inner?.code,
     metadata?.error_type,
     responseError?.code,

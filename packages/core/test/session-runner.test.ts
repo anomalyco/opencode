@@ -128,6 +128,7 @@ const undersizedContextModel = testModel("undersized-context", { context: 1, out
 const recoveryModel = testModel("recovery", { context: 200_000, output: 1_000 })
 const fittedOutputModel = testModel("fitted-output", { context: 100_000, output: 64_000 })
 const smallWindowModel = testModel("small-window", { context: 64_000, output: 16_000 })
+const largeOutputModel = testModel("large-output", { context: 1_000_000, output: 1_000_000 })
 
 test("calculates step cost using the matching context tier", () => {
   expect(
@@ -3422,6 +3423,14 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests[0]?.generation?.maxTokens).toBe(64_000)
     expect(s.requests[1]?.generation?.maxTokens).toBeLessThan(100_000 - 50_000)
     expect(s.requests[1]?.generation?.maxTokens).toBeGreaterThan(100_000 - 50_000 - 200)
+  })
+
+  scenario("caps the output limit a large model advertises", function* (s) {
+    s.currentModel = largeOutputModel
+    yield* s.llm.push(TestLLM.text("Answer", "text-large-output"))
+    yield* s.runPrompt("Question")
+
+    expect(s.requests[0]?.generation?.maxTokens).toBe(256_000)
   })
 
   scenario("gives the summary its full output limit when the conversation overshot the threshold", function* (s) {
