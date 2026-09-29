@@ -153,6 +153,9 @@ import type {
   McpDisconnectOutput,
   McpResourceCatalogInput,
   McpResourceCatalogOutput,
+  CredentialListOutput,
+  CredentialCreateInput,
+  CredentialCreateOutput,
   CredentialUpdateInput,
   CredentialUpdateOutput,
   CredentialActivateInput,
@@ -1021,6 +1024,30 @@ const adaptGroupMcp = (raw: RawClient["server.mcp"]) => ({
   resource: { catalog: EndpointMcpResourceCatalog(raw) },
 })
 
+const EndpointCredentialList = (raw: RawClient["server.credential"]) => () =>
+  preserveEffect<CredentialListOutput>()(
+    raw["credential.list"]({}).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointCredentialCreate = (raw: RawClient["server.credential"]) => (input: CredentialCreateInput) =>
+  preserveEffect<CredentialCreateOutput>()(
+    raw["credential.create"]({
+      payload: {
+        id: input["id"],
+        integrationID: input["integrationID"],
+        label: input["label"],
+        value: input["value"],
+        activate: input["activate"],
+      },
+    }).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
 const EndpointCredentialUpdate = (raw: RawClient["server.credential"]) => (input: CredentialUpdateInput) =>
   preserveEffect<CredentialUpdateOutput>()(
     raw["credential.update"]({
@@ -1042,6 +1069,8 @@ const EndpointCredentialRemove = (raw: RawClient["server.credential"]) => (input
   )
 
 const adaptGroupCredential = (raw: RawClient["server.credential"]) => ({
+  list: EndpointCredentialList(raw),
+  create: EndpointCredentialCreate(raw),
   update: EndpointCredentialUpdate(raw),
   activate: EndpointCredentialActivate(raw),
   remove: EndpointCredentialRemove(raw),

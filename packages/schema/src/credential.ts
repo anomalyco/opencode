@@ -35,14 +35,14 @@ export const OAuth = Schema.Struct({
   refresh: Schema.String,
   access: Schema.String,
   expires: NonNegativeInt,
-  metadata: optional(Schema.Record(Schema.String, Schema.Unknown)),
+  metadata: optional(Schema.Record(Schema.String, Schema.Json)),
 }).annotate({ identifier: "Credential.OAuth" })
 
 export interface Key extends Schema.Schema.Type<typeof Key> {}
 export const Key = Schema.Struct({
   type: Schema.Literal("key"),
   key: Schema.String,
-  metadata: optional(Schema.Record(Schema.String, Schema.Unknown)),
+  metadata: optional(Schema.Record(Schema.String, Schema.Json)),
   configuration: optional(Form.Answer),
 }).annotate({ identifier: "Credential.Key" })
 
@@ -50,3 +50,21 @@ export const Value = Schema.Union([OAuth, Key])
   .pipe(Schema.toTaggedUnion("type"))
   .annotate({ identifier: "Credential.Value" })
 export type Value = Schema.Schema.Type<typeof Value>
+
+export interface Entry extends Schema.Schema.Type<typeof Entry> {}
+export const Entry = Schema.Struct({
+  id: ID,
+  integrationID: IntegrationID,
+  label: Schema.String,
+  active: Schema.Boolean,
+  value: Value,
+}).annotate({ identifier: "Credential.Entry" })
+
+export interface CreateInput extends Schema.Schema.Type<typeof CreateInput> {}
+export const CreateInput = Schema.Struct({
+  id: optional(ID),
+  integrationID: IntegrationID,
+  label: optional(Schema.String),
+  value: Value,
+  activate: optional(Schema.Boolean),
+}).annotate({ identifier: "Credential.CreateInput" })

@@ -1718,6 +1718,21 @@ export interface McpApi<E = never> {
   readonly resource: { readonly catalog: McpResourceCatalogOperation<E> }
 }
 
+export type CredentialListOutput = ReadonlyArray<Credential.Entry>
+export type CredentialListOperation<E = never> = () => Effect.Effect<CredentialListOutput, E>
+
+export type CredentialCreateInput = {
+  readonly id?: Credential.ID | undefined
+  readonly integrationID: Integration.ID
+  readonly label?: string | undefined
+  readonly value: Credential.Value
+  readonly activate?: boolean | undefined
+}
+export type CredentialCreateOutput = Credential.Entry
+export type CredentialCreateOperation<E = never> = (
+  input: CredentialCreateInput,
+) => Effect.Effect<CredentialCreateOutput, E>
+
 export type CredentialUpdateInput = { readonly credentialID: Credential.ID; readonly label: string }
 export type CredentialUpdateOutput = void
 export type CredentialUpdateOperation<E = never> = (
@@ -1737,6 +1752,8 @@ export type CredentialRemoveOperation<E = never> = (
 ) => Effect.Effect<CredentialRemoveOutput, E>
 
 export interface CredentialApi<E = never> {
+  readonly list: CredentialListOperation<E>
+  readonly create: CredentialCreateOperation<E>
   readonly update: CredentialUpdateOperation<E>
   readonly activate: CredentialActivateOperation<E>
   readonly remove: CredentialRemoveOperation<E>
