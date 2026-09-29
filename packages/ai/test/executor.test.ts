@@ -273,8 +273,37 @@ describe("RequestExecutor", () => {
       expectAIError(error)
       expect(error.reason).toMatchObject({ _tag: "InvalidRequest" })
       expect("classification" in error.reason ? error.reason.classification : undefined).toBeUndefined()
-      expect(error.message).toBe("Provider request failed with HTTP 400")
+      expect(error.message).toBe("Provider request failed with HTTP 400: invalid parameter")
     }).pipe(Effect.provide(fixedResponse("invalid parameter", { status: 400 }))),
+  )
+
+  it.effect("shows unrecognized provider error bodies", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expect(error.message).toBe('Provider request failed with HTTP 401: {"detail":"Invalid API Key"}')
+    }).pipe(Effect.provide(fixedResponse('{"detail":"Invalid API Key"}', { status: 401 }))),
+  )
+
+  it.effect("truncates long unrecognized provider error bodies", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expect(error.message).toBe(`Provider request failed with HTTP 400: ${"x".repeat(2000)}…`)
+      expect(error.reason.body).toHaveLength(5000)
+    }).pipe(Effect.provide(fixedResponse("x".repeat(5000), { status: 400 }))),
+  )
+
+  it.effect("does not show HTML error pages", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expect(error.message).toBe("Provider request failed with HTTP 502")
+      expect(error.reason.body).toContain("Bad Gateway")
+    }).pipe(Effect.provide(fixedResponse("<!DOCTYPE html><html><body>Bad Gateway</body></html>", { status: 502 }))),
   )
 
   it.effect("preserves structured provider messages from large error bodies", () =>
@@ -299,7 +328,7 @@ describe("RequestExecutor", () => {
     ),
   )
 
-  it.effect("falls back when structured provider messages are empty", () =>
+  it.effect("shows the body when structured provider messages are empty", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service
       const error = yield* executor.execute(request).pipe(Effect.flip)
@@ -308,7 +337,7 @@ describe("RequestExecutor", () => {
       expect(error.reason).toMatchObject({
         _tag: "InvalidRequest",
       })
-      expect(error.message).toBe("Provider request failed with HTTP 400")
+      expect(error.message).toBe('Provider request failed with HTTP 400: {"error":{"message":"  "}}')
     }).pipe(Effect.provide(fixedResponse('{"error":{"message":"  "}}', { status: 400 }))),
   )
 

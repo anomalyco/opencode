@@ -93,11 +93,18 @@ const decodeProviderBody = Schema.decodeUnknownOption(
   ),
 )
 
+const MAX_BODY_CHARS = 2000
+
+// Without a recognized message, show the raw body so the provider's explanation is never dropped.
 const providerMessage = (status: number, body: string | void) => {
-  const decoded = body === undefined ? undefined : Option.getOrUndefined(decodeProviderBody(body))
+  const fallback = `Provider request failed with HTTP ${status}`
+  const text = body?.trim()
+  // Gateway and proxy HTML error pages are markup, not an explanation.
+  if (!text || /^<(?:!doctype|html)/i.test(text)) return fallback
+  const decoded = Option.getOrUndefined(decodeProviderBody(text))
   return (
     [decoded?.error?.message, decoded?.message].find((message) => message?.trim()) ??
-    `Provider request failed with HTTP ${status}`
+    `${fallback}: ${text.length > MAX_BODY_CHARS ? `${text.slice(0, MAX_BODY_CHARS)}…` : text}`
   )
 }
 
