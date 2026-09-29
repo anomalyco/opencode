@@ -798,6 +798,23 @@ function createEventStream(chunks: unknown[], includeDone = false) {
   })
 }
 
+function createStalledEventStream(chunks: unknown[]) {
+  const payload = chunks.map((chunk) => `data: ${JSON.stringify(chunk)}`).join("\n\n") + "\n\n"
+  const encoder = new TextEncoder()
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(payload))
+    },
+  })
+}
+
+function createStalledEventResponse(chunks: unknown[]) {
+  return new Response(createStalledEventStream(chunks), {
+    status: 200,
+    headers: { "Content-Type": "text/event-stream" },
+  })
+}
+
 function createEventResponse(chunks: unknown[], includeDone = false) {
   return new Response(createEventStream(chunks, includeDone), {
     status: 200,
@@ -1010,6 +1027,141 @@ describe("session.llm.stream", () => {
     {
       config: () => ({
         enabled_providers: [vivgridFixture.providerID],
+        provider: {
+          [vivgridFixture.providerID]: {
+            options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+          },
+        },
+      }),
+    },
+  )
+
+  it.instance(
+    "aborts a stalled provider stream with a retryable error (experimental.stream_idle_timeout)",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture(vivgridFixture.providerID, vivgridFixture.modelID)
+        const request = waitRequest(
+          "/chat/completions",
+          createStalledEventResponse([
+            {
+              id: "chatcmpl-stall",
+              object: "chat.completion.chunk",
+              choices: [{ index: 0, delta: { role: "assistant", content: "par" } }],
+            },
+          ]),
+        )
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make(vivgridFixture.providerID),
+          ModelV2.ID.make(fixture.model.id),
+        )
+        const sessionID = SessionID.make("session-test-stream-stall")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+        const user = {
+          id: MessageID.make("msg_user-stream-stall"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderV2.ID.make(vivgridFixture.providerID), modelID: resolved.id },
+        } satisfies SessionV1.User
+
+        const error = yield* drain({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        }).pipe(Effect.flip)
+        yield* Effect.promise(() => request)
+
+        if (!(error instanceof ProviderError.ResponseStreamError)) throw error
+        expect(error.message).toBe("Stream timed out: provider sent no data for 200ms")
+      }),
+    {
+      config: () => ({
+        enabled_providers: [vivgridFixture.providerID],
+        experimental: { stream_idle_timeout: 200 },
+        provider: {
+          [vivgridFixture.providerID]: {
+            options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+          },
+        },
+      }),
+    },
+  )
+
+  it.instance(
+    "stream_idle_timeout: 0 leaves slow streams alone",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture(vivgridFixture.providerID, vivgridFixture.modelID)
+        const chunks = ["slow", " but", " steady"].map((text) => ({
+          id: "chatcmpl-slow",
+          object: "chat.completion.chunk",
+          choices: [{ index: 0, delta: { role: "assistant", content: text } }],
+        }))
+        const request = waitRequest(
+          "/chat/completions",
+          new Response(
+            new ReadableStream<Uint8Array>({
+              async start(controller) {
+                const encoder = new TextEncoder()
+                for (const chunk of chunks) {
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`))
+                  await Bun.sleep(100)
+                }
+                controller.enqueue(encoder.encode("data: [DONE]\n\n"))
+                controller.close()
+              },
+            }),
+            { status: 200, headers: { "Content-Type": "text/event-stream" } },
+          ),
+        )
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make(vivgridFixture.providerID),
+          ModelV2.ID.make(fixture.model.id),
+        )
+        const sessionID = SessionID.make("session-test-stream-slow")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+        const user = {
+          id: MessageID.make("msg_user-stream-slow"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderV2.ID.make(vivgridFixture.providerID), modelID: resolved.id },
+        } satisfies SessionV1.User
+
+        // Drain only resolves when the stream completes: a spurious timeout
+        // would fail the stream and this test with it.
+        yield* drain({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        })
+        yield* Effect.promise(() => request)
+      }),
+    {
+      config: () => ({
+        enabled_providers: [vivgridFixture.providerID],
+        experimental: { stream_idle_timeout: 0 },
         provider: {
           [vivgridFixture.providerID]: {
             options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },

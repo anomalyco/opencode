@@ -21553,6 +21553,10 @@
                 "type": "integer",
                 "exclusiveMinimum": 0
               },
+              "stream_idle_timeout": {
+                "type": "integer",
+                "minimum": 0
+              },
               "policies": {
                 "type": "array",
                 "items": {

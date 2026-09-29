@@ -12,6 +12,8 @@ import { LLMClient } from "@opencode-ai/llm/route"
 import type { LLMClientService } from "@opencode-ai/llm/route"
 import { GitLabWorkflowLanguageModel } from "gitlab-ai-provider"
 import { ProviderTransform } from "@/provider/transform"
+import { ProviderError } from "@/provider/error"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { Config } from "@/config/config"
 import type { Agent } from "@/agent/agent"
 import type { MessageV2 } from "./message-v2"
@@ -51,6 +53,11 @@ export type StreamInput = {
 export type StreamRequest = StreamInput & {
   abort: AbortSignal
 }
+
+/** Default wait for provider stream data before a stalled stream is aborted. */
+const STREAM_IDLE_TIMEOUT_DEFAULT = 300_000
+
+const streamIdleTimeout = (cfg: ConfigV1.Info) => cfg.experimental?.stream_idle_timeout ?? STREAM_IDLE_TIMEOUT_DEFAULT
 
 export interface Interface {
   readonly stream: (input: StreamInput) => Stream.Stream<LLMEvent, unknown>
@@ -324,6 +331,14 @@ const live: Layer.Layer<
           abortSignal: input.abort,
           headers: prepared.headers,
           maxRetries: input.retries ?? 0,
+          // Abort when the provider stops sending data mid-stream so the
+          // stalled request fails (and retries) instead of hanging. Fires
+          // between chunks; header and pre-first-chunk stalls are covered by
+          // the provider-level headerTimeout/chunkTimeout fetch guards.
+          timeout:
+            streamIdleTimeout(cfg) > 0
+              ? { firstChunkMs: streamIdleTimeout(cfg), chunkMs: streamIdleTimeout(cfg) }
+              : undefined,
           messages: prepared.messages,
           // opencode injects system prompts as messages so provider transforms can
           // rewrite them; ai 7 defaults to instructions-only.
@@ -372,10 +387,25 @@ const live: Layer.Layer<
             // Adapter seam: both runtimes expose the same LLMEvent stream. Native
             // already returns one; AI SDK streams are converted here.
             const state = LLMAISDK.adapterState()
+            const idleTimeout = streamIdleTimeout(yield* config.get())
             return Stream.fromAsyncIterable(result.result.fullStream, (e) =>
               e instanceof Error ? e : new Error(String(e)),
             ).pipe(
-              Stream.mapEffect((event) => LLMAISDK.toLLMEvents(state, event)),
+              Stream.mapEffect((event) => {
+                // The SDK aborts the request when timeout.firstChunkMs/chunkMs
+                // elapses and ends the stream with an `abort` part. Our own
+                // aborts (interrupts, scope close) are the only other source,
+                // so an `abort` we did not trigger is a stream timeout: fail
+                // with a retryable error instead of truncating silently.
+                if (event.type === "abort" && !ctrl.signal.aborted && idleTimeout > 0) {
+                  return Effect.fail(
+                    new ProviderError.ResponseStreamError(
+                      `Stream timed out: provider sent no data for ${idleTimeout}ms`,
+                    ),
+                  )
+                }
+                return LLMAISDK.toLLMEvents(state, event)
+              }),
               Stream.flatMap((events) => Stream.fromIterable(events)),
             )
           }),

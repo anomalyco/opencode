@@ -57,4 +57,3 @@ test("xAI Responses passes through xhigh reasoning effort", async () => {
 
   expect(body?.reasoning).toEqual({ effort: "xhigh" })
 })
-
