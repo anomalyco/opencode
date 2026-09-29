@@ -110,7 +110,6 @@ const layoutBounds = new Map<number, DockBounds>()
   let lastLayoutBounds: DockBounds | undefined
   const inactive = new Map<string, { senderID: number; tabID: string }>()
   const refNamespaces = new Map<string, number>()
-  const committedNavigations = new Set<string>()
   let generation = 0
   let refNamespace = 0
   const MAX_INACTIVE_TABS = 20
@@ -136,7 +135,6 @@ const layoutBounds = new Map<number, DockBounds>()
     refTargets.delete(`${senderID}:${tabID}`)
     blockedNavigationVersions.delete(`${senderID}:${tabID}`)
     refNamespaces.delete(`${senderID}:${tabID}`)
-    committedNavigations.delete(`${senderID}:${tabID}`)
     if (fullscreenOwner.get(senderID) === tabID) {
       fullscreenOwner.delete(senderID)
       fullscreenEpoch.set(senderID, (fullscreenEpoch.get(senderID) ?? 0) + 1)
@@ -428,15 +426,13 @@ const layoutBounds = new Map<number, DockBounds>()
     listen("did-navigate", (_event, navigatedURL) => {
       const key = `${senderID}:${id}`
       refTargets.delete(key)
-      if (committedNavigations.has(key)) refNamespaces.set(key, ++refNamespace)
-      else committedNavigations.add(key)
+      refNamespaces.set(key, ++refNamespace)
       update({ url: navigatedURL })
     })
     listen("did-navigate-in-page", (_event, navigatedURL) => {
       const key = `${senderID}:${id}`
       refTargets.delete(key)
-      if (committedNavigations.has(key)) refNamespaces.set(key, ++refNamespace)
-      else committedNavigations.add(key)
+      refNamespaces.set(key, ++refNamespace)
       update({ url: navigatedURL })
     })
     let crashed = false

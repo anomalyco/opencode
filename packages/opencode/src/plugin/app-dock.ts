@@ -89,7 +89,7 @@ export function createAppDockHooks(port: ParentPortLike): Hooks {
       dock_wait: tool({
         description: "Wait for the active App Dock tab to settle for a bounded duration.",
         args: {
-          milliseconds: tool.schema.number().min(0).max(30000).optional().describe("Wait duration in milliseconds"),
+          milliseconds: tool.schema.number().min(0).max(10000).optional().describe("Wait duration in milliseconds"),
         },
         execute: (args, context) =>
           invoke(context, port, "wait", { milliseconds: args.milliseconds }).then(toJSON, toolError),

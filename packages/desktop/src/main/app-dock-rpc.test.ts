@@ -10,7 +10,7 @@ import { createRequire } from "node:module"
 import type { DockRPCReply } from "./app-dock-rpc"
 
 type Case = { id: string; status: "pass"; detail: string }
-const required = ["R01", "R02", "R03", "R04", "R05", "R06", "R07", "R08", "R09", "R10", "R11", "R12", "M01"]
+const required = ["R01", "R02", "R03", "R04", "R05", "R06", "R07", "R08", "R09", "R10", "R11", "R12", "R13", "M01"]
 const root = resolve(import.meta.dir, "../..")
 const artifact = join(process.env.APP_DOCK_ARTIFACT_ROOT ?? root, "artifacts/app-dock-rpc/s1.json")
 const cases: Case[] = []
@@ -134,6 +134,10 @@ async function child() {
     const refs = new Map(read0.value.items.map((item) => [item.tag, item.ref] as const))
     check(refs.has("button") && refs.has("input"), "read snapshot missing button/input refs")
     pass("R05", "read returns page snapshot refs through execute")
+
+    const noText = (await rpc("read", { maxText: 0 })) as { ok: boolean; value: { text: string } }
+    check(noText.ok === true && noText.value.text === "", "read maxText: 0 returned page text")
+    pass("R13", "read respects an explicit zero text budget")
 
     const incrementRef = read0.value.items.find((item) => item.name === "Increment")?.ref
     check(typeof incrementRef === "number", "increment ref missing")

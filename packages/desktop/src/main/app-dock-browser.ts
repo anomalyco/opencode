@@ -41,7 +41,7 @@ type SnapshotOptions = {
 
 export function buildSnapshotScript(options: SnapshotOptions = {}) {
   const budget = Math.max(1, Math.min(Math.round(options.budget ?? 100) || 100, 500))
-  const maxText = Math.max(0, Math.min(Math.round(options.maxText ?? 1500) || 1500, 20000))
+  const maxText = Math.max(0, Math.min(Math.round(options.maxText ?? 1500), 20000))
   const namespace = Number.isSafeInteger(options.namespace) && (options.namespace ?? 0) > 0 ? options.namespace : 1
   return `(() => {
   window.__opencodeDockRefNamespace = ${namespace}
