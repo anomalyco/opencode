@@ -15,13 +15,16 @@ import { Menu } from "@opencode/ui/menu"
 import { TextInput } from "@opencode/ui/text-input"
 import { ModelTooltip } from "./tooltip"
 import { useLanguage } from "@/runtime/i18n/language"
+import { ExternalLink } from "@/runtime/platform/external-link"
+import { useData } from "@/runtime/server/current"
+import { useWorkspaceLocation } from "@/workspaces/location"
 import { decode64 } from "@/runtime/persistence/base64"
 import { handleDocumentSearchKeydown } from "@/shell/commands/search-keydown"
 import { createMenuDismissController } from "@/shell/commands/menu-dismiss"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { matchesModelSearch } from "./search"
 import { SettingsList } from "@/settings/list"
-import { CONSOLE_GROUP_KEY, consoleModelGroup, ProviderModelSections } from "@/providers/models/provider-group"
+import { CONSOLE_GROUP_KEY, consoleModelGroup, ProviderModelIcon, ProviderModelSections } from "@/providers/models/provider-group"
 import "@/settings/settings.css"
 
 const isFree = (provider: string, cost: { input: number } | undefined) =>
@@ -218,11 +221,21 @@ export function ModelSelectorPopover(props: {
   onClose?: () => void
 }) {
   const dialog = useDialog()
+  const data = useData()
+  const location = useWorkspaceLocation()
   const controller = createModelSelectorController({
     model: props.model,
     provider: () => props.provider,
     onSelect: () => props.onClose?.(),
   })
+  const chatgptPlan = () => {
+    if (!controller.current()?.startsWith("openai:")) return false
+    const connection = data.location.integration
+      .list(location().ref)
+      ?.find((integration) => integration.id === "openai")
+      ?.connections[0]
+    return connection?.type === "credential" && connection.method === "oauth"
+  }
 
   return (
     <ModelSelectorPopoverView
@@ -230,6 +243,7 @@ export function ModelSelectorPopover(props: {
       models={controller.models}
       groups={controller.groups}
       current={controller.current()}
+      chatgptPlan={chatgptPlan()}
       select={controller.select}
       onManage={() => {
         void import("./manage").then((module) => {
@@ -281,11 +295,12 @@ function createModelSelectorController(input: {
   }
 }
 
-function ModelSelectorPopoverView(props: {
+export function ModelSelectorPopoverView(props: {
   trigger: ModelSelectorTrigger
   models: (search: string) => ModelItem[]
   groups: (models: ModelItem[]) => { category: string; items: ModelItem[] }[]
   current: string | undefined
+  chatgptPlan?: boolean
   select: (item: ModelItem) => void
   onManage: () => void
   onClose: () => void
@@ -368,7 +383,8 @@ function ModelSelectorPopoverView(props: {
       <Menu.Portal>
         <Menu.Content
           ref={(element: HTMLDivElement) => (contentRef = element)}
-          class="w-[284px] overflow-hidden rounded-md border-0 bg-v2-background-bg-layer-01 !p-0 shadow-[var(--v2-elevation-floating)] focus:outline-none"
+          class="w-[284px] max-w-[calc(100vw-16px)] overflow-hidden rounded-md border-0 bg-v2-background-bg-layer-01 !p-0 shadow-[var(--v2-elevation-floating)] focus:outline-none"
+          classList={{ "!w-[320px]": props.chatgptPlan }}
           onPointerDownOutside={dismiss.preventTriggerRestore}
           onFocusOutside={dismiss.preventTriggerRestore}
           onCloseAutoFocus={dismiss.onCloseAutoFocus}
@@ -505,6 +521,20 @@ function ModelSelectorPopoverView(props: {
               <span class="min-w-0 flex-1 truncate leading-5">{language.t("dialog.model.manage")}</span>
             </Menu.Item>
           </div>
+          <Show when={props.chatgptPlan}>
+            <div class="h-px bg-v2-border-border-muted" />
+            <div class="flex min-h-10 items-center gap-2 px-3 py-2 text-[13px] leading-5 text-v2-text-text-base">
+              <ProviderModelIcon provider={{ id: "openai", name: "OpenAI" }} class="shrink-0" />
+              <span class="min-w-0 flex-1 truncate">{language.t("dialog.model.chatgptPlan")}</span>
+              <ExternalLink
+                href="https://chatgpt.com/#settings/Usage"
+                class="flex shrink-0 items-center gap-1 rounded-sm text-v2-text-text-muted no-underline hover:text-v2-text-text-base focus-visible:outline focus-visible:outline-2"
+              >
+                {language.t("dialog.model.chatgptManageUsage")}
+                <Icon name="arrow-up-right" size="small" />
+              </ExternalLink>
+            </div>
+          </Show>
         </Menu.Content>
       </Menu.Portal>
     </Menu>
