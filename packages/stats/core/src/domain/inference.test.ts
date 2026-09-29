@@ -14,6 +14,7 @@ import {
   statModel,
   statProvider,
 } from "./model-normalization"
+import { catalogIdentity } from "./catalog-identity"
 
 describe("inference stat normalization", () => {
   test("normalizes model suffixes used by router/provider variants", () => {
@@ -36,6 +37,7 @@ describe("inference stat normalization", () => {
     expect(modelAuthor("grok-build-0.1")).toBe("xai")
     expect(modelAuthor("hy3-preview")).toBe("tencent")
     expect(modelAuthor("kimi-k2.6")).toBe("moonshot")
+    expect(modelAuthor("longcat-2.5-preview")).toBe("meituan")
     expect(modelAuthor("mimo-v2-omni")).toBe("xiaomi")
     expect(modelAuthor("minimax-m2.7")).toBe("minimax")
     expect(modelAuthor("muse-spark-1.2-contributor")).toBe("meta")
@@ -57,6 +59,17 @@ describe("inference stat normalization", () => {
     expect(statProvider("unknown", "", "custom-provider")).toBe("custom-provider")
   })
 
+  test("attributes hy4 preview traffic to Tencent instead of the unknown provider", () => {
+    expect(modelAuthor("hy4-preview")).toBe("tencent")
+    expect(toModelAggregate(aggregate("hy4-preview", "opencode"))).toMatchObject([
+      { model: "hy4-preview", provider: "tencent" },
+    ])
+    expect(toProviderAggregate(aggregate("hy4-preview", "opencode"))).toMatchObject([{ provider: "tencent" }])
+    expect(toGeoAggregate({ ...aggregate("hy4-preview", "opencode"), country: "US" })).toMatchObject([
+      { model: "hy4-preview", provider: "tencent" },
+    ])
+  })
+
   test("maps oversized model ids to unknown before aggregation", () => {
     expect(statModel("x".repeat(256), "")).toBe("x".repeat(256))
     expect(statModel("x".repeat(257), "")).toBe("unknown")
@@ -75,6 +88,11 @@ describe("inference stat normalization", () => {
     expect(statProvider("omen-alpha", "gpt-test-model", "test-provider")).toBe("unknown")
     expect(statProvider("OMEN-ALPHA-free:global", "gpt-test-model", "test-provider")).toBe("unknown")
     expect(statProvider("omen-alpha", "", "test-provider")).toBe("unknown")
+    expect(statProvider("space-bunny-free", "hidden-route-model", "hidden-provider")).toBe("unknown")
+
+    const spaceBunny = { ...aggregate("space-bunny-free", "hidden-provider"), provider_model: "hidden-route-model" }
+    expect(toModelAggregate(spaceBunny)).toMatchObject([{ model: "space-bunny", provider: "unknown", requests: 1 }])
+    expect(toProviderAggregate(spaceBunny)).toMatchObject([{ provider: "unknown", requests: 1 }])
 
     const row = { ...aggregate("omen-alpha", "test-provider"), provider_model: "gpt-test-model" }
     expect(toModelAggregate(row)).toMatchObject([{ model: "omen-alpha", provider: "unknown", requests: 1 }])
@@ -162,6 +180,45 @@ describe("inference stat normalization", () => {
     ])
   })
 
+  test("uses catalog labs in SQL and retains them in aggregate conversion", () => {
+    const catalog = catalogIdentity({
+      models: { "meituan/longcat-2.5-preview": {}, "cohere/north-mini-code": {}, "zhipuai/glm-5.3": {} },
+      providers: {
+        opencode: {
+          models: {
+            "longcat-2.5-preview-free": { canonical_model_id: "meituan/longcat-2.5-preview" },
+            "north-mini-code": { canonical_model_id: "cohere/north-mini-code" },
+            "glm-5.3": { canonical_model_id: "zhipuai/glm-5.3" },
+          },
+        },
+      },
+    })
+    const [query] = buildStatsQueries(
+      new Date("2026-09-27"),
+      new Date("2026-09-28"),
+      {
+        namespace: "inference",
+        table: "generation",
+        dataset: "zen",
+      },
+      catalog,
+    )
+
+    expect(query).toContain(
+      "WHEN lower(raw_provider) = 'opencode' AND lower(raw_model) = 'longcat-2.5-preview-free' THEN 'meituan'",
+    )
+    expect(query).toContain("WHEN lower(model) = 'longcat-2.5-preview' THEN 'meituan'")
+    expect(query).toContain("WHEN lower(model) = 'north-mini-code' THEN 'cohere'")
+    expect(query).toContain("WHEN strpos(lower(model), 'glm') > 0 THEN 'zhipu'")
+    expect(query).not.toContain("WHEN lower(model) = 'glm-5.3' THEN 'zhipuai'")
+    expect(toModelAggregate(aggregate("longcat-2.5-preview", "meituan"), catalog)).toMatchObject([
+      { model: "longcat-2.5-preview", provider: "meituan" },
+    ])
+    expect(toGeoAggregate({ ...aggregate("longcat-2.5-preview", "meituan"), country: "US" }, catalog)).toMatchObject([
+      { model: "longcat-2.5-preview", provider: "meituan", country: "US" },
+    ])
+  })
+
   test("provider aggregates never keep opencode as the provider", () => {
     expect(toProviderAggregate({ ...aggregate("big-pickle", "opencode"), provider_model: "gpt-5" })).toMatchObject([
       { provider: "openai" },
@@ -198,7 +255,9 @@ describe("inference stat normalization", () => {
     expect(queries).toHaveLength(8)
     queries.forEach((query) => {
       expect(query).toContain("WHERE lower(model) NOT IN ('alpha-gpt-next')")
-      expect(query).toContain("CASE\n      WHEN lower(model) IN ('omen-alpha', 'union-alpha') THEN 'unknown'\n")
+      expect(query).toContain(
+        "CASE\n      WHEN lower(model) IN ('omen-alpha', 'space-bunny', 'union-alpha') THEN 'unknown'\n",
+      )
       expect(query).toContain("= 'opencode-go/union-alpha' THEN 'union-alpha'")
       expect(query).toContain("= 'opencode/union-alpha' THEN 'union-alpha'")
       expect(query).toContain("= 'deepseek-flash' THEN 'deepseek-v4.1-flash'")
@@ -221,7 +280,7 @@ describe("inference stat normalization", () => {
     expect(queries[0]).toContain("OR lower(raw_model) IN ('gpt-5-nano', 'grok-code', 'big-pickle')")
     expect(queries[0]).toContain("OR lower(raw_model) LIKE '%-free'")
     expect(queries[0]).toContain("THEN 'Free'")
-    expect(queries[0]).toContain("LIMIT 10000")
+    expect(queries[0]).not.toContain("LIMIT")
     expect(queries[0]).toContain("approx_distinct(session) AS sessions")
     expect(queries[1]).toContain("'geo_model' ELSE 'geo'")
     expect(queries[1]).toContain("0 AS sessions")
@@ -270,7 +329,7 @@ describe("inference stat normalization", () => {
     expect(queries[0]?.query).toContain("AND product = 'go'")
     expect(queries[0]?.query).toContain("AND lower(model) NOT IN ('alpha-gpt-next')")
     expect(queries[0]?.query).toContain(
-      "CASE\n      WHEN lower(model) IN ('omen-alpha', 'union-alpha') THEN 'unknown'\n",
+      "CASE\n      WHEN lower(model) IN ('omen-alpha', 'space-bunny', 'union-alpha') THEN 'unknown'\n",
     )
     expect(queries[0]?.query).toContain("= 'opencode-go/union-alpha' THEN 'union-alpha'")
     expect(queries[0]?.query).toContain("= 'opencode/union-alpha' THEN 'union-alpha'")
