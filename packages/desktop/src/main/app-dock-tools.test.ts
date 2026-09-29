@@ -70,6 +70,10 @@ async function child() {
   const { app, BrowserWindow } = await import("electron")
   if (!process.versions.electron) throw new Error("Electron child not started")
   await app.whenReady()
+  const watchdog = setTimeout(() => {
+    process.exit(1)
+  }, 60_000)
+  watchdog.unref()
   if (!process.env.APP_DOCK_ARTIFACT_ROOT || !isAbsolute(process.env.APP_DOCK_ARTIFACT_ROOT))
     throw new Error("Invalid App Dock artifact root")
   const site = await fixture()
@@ -143,13 +147,13 @@ async function child() {
       JSON.stringify({ version: 1, electronVersion: process.versions.electron, cases }, null, 2),
     )
   } catch (error) {
-    console.error(JSON.stringify({ phase: "app-dock-tools-child-failure", error: String(error) }))
     await mkdir(dirname(artifact), { recursive: true })
     await writeFile(artifact, JSON.stringify({ version: 1, electronVersion: process.versions.electron, cases, error: String(error) }, null, 2))
     throw error
   } finally {
     if (!win.isDestroyed()) win.destroy()
     await site.close()
+    clearTimeout(watchdog)
     app.exit(cases.length === required.length && required.every((id) => cases.some((item) => item.id === id)) ? 0 : 1)
   }
 }
@@ -193,13 +197,11 @@ async function parent() {
     const env = { ...process.env, APP_DOCK_ARTIFACT_ROOT: root, ELECTRON_DISABLE_SECURITY_WARNINGS: "true" }
     await rm(artifact, { force: true })
     const child = spawn(electron, [entry, "--app-dock-tools-child"], { stdio: ["ignore", "pipe", "pipe"], env })
-    let stderr = ""
-    child.stderr.on("data", (chunk) => { stderr += chunk })
     const exitResult = await new Promise<{ code: number | null }>((resolveProcess, reject) => {
       child.once("exit", (code) => resolveProcess({ code }))
       child.once("error", reject)
     })
-    if (exitResult.code !== 0) throw new Error(`child failed (${exitResult.code}): ${stderr}`)
+    if (exitResult.code !== 0) throw new Error(`child failed (${exitResult.code})`)
     const report = JSON.parse(await readFile(artifact, "utf8"))
     check(
       report.version === 1 &&
