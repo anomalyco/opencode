@@ -1,11 +1,11 @@
-import type { ConnectionInfo } from "@opencode/client"
+import type { ConnectionInfo, IntegrationInfo } from "@opencode/client"
 import type { IntegrationApi } from "@opencode/client/effect/api"
 import { Credential } from "@opencode/schema/credential"
 import { Form } from "@opencode/schema/form"
 import type { Effect, Scope } from "effect"
 import type { Transform } from "./registration.js"
 
-type IntegrationRef = { id: string; name: string }
+type IntegrationRef = Pick<IntegrationInfo, "id" | "name" | "configured">
 
 export interface IntegrationOAuthMethod {
   readonly id: string
