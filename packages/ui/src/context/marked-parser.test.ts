@@ -9,6 +9,13 @@ test("renders links with application attributes", async () => {
   )
 })
 
+test("only strikes through double tildes", async () => {
+  expect(await parser.parse("~$350M and ~5 minutes, 3~5 or 30~60%")).toBe(
+    "<p>~$350M and ~5 minutes, 3~5 or 30~60%</p>\n",
+  )
+  expect(await parser.parse("~~gone~~ and ~kept~")).toBe("<p><del>gone</del> and ~kept~</p>\n")
+})
+
 test("renders inline and block math", async () => {
   expect(await parser.parse("\\(x^2\\)")).toContain('<span class="katex">')
   expect(await parser.parse("$$\nx^2\n$$\n")).toContain('<span class="katex-display">')

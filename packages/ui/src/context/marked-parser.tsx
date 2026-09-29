@@ -11,6 +11,10 @@ export function createMarkdownParser(highlight: (code: string, language: string)
           return `<a href="${href}"${titleAttr} class="external-link" target="_blank" rel="noopener noreferrer">${text}</a>`
         },
       },
+      tokenizer: {
+        // A lone `~` usually means "approximately", so only `~~` strikes through.
+        del: (src) => (src.startsWith("~~") ? false : undefined),
+      },
     },
     katexExtension,
     markedShiki({ highlight }),
