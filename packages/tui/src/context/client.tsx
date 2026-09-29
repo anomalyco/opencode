@@ -43,6 +43,8 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
     })
 
     return {
+      // Freeze startup identity even if managed-service reconnect changes the transport URL.
+      server: serverIdentity(props.url ?? "http://localhost", service !== undefined),
       get api() {
         return api
       },
@@ -59,3 +61,14 @@ export const { use: useClient, provider: ClientProvider } = createSimpleContext(
     }
   },
 })
+
+export function serverIdentity(url: string, managed = false) {
+  if (managed) return "local"
+  const value = new URL(url)
+  value.username = ""
+  value.password = ""
+  value.search = ""
+  value.hash = ""
+  value.pathname = value.pathname.replace(/\/+$/, "") || "/"
+  return value.toString()
+}

@@ -8,7 +8,9 @@ import { useEvent } from "./event"
 import { useStorage } from "./storage"
 
 type SessionTerminalsState = {
-  sessions: Record<string, string | null>
+  servers?: Record<string, { sessions: Record<string, string | null> }>
+  // The managed local server continues using the legacy fields.
+  sessions?: Record<string, string | null>
 }
 
 export const { use: useSessionTerminals, provider: SessionTerminalsProvider } = createSimpleContext({
@@ -21,21 +23,26 @@ export const { use: useSessionTerminals, provider: SessionTerminalsProvider } = 
     const [focus, setFocus] = createSignal<string>()
     const storage = useStorage()
     const [store, update] = storage.store<SessionTerminalsState>("session-terminal-selection", {
-      initial: { sessions: {} },
+      initial: { servers: {} },
     })
-    const [terminals, updateTerminals] = storage.memory<Record<string, PersistentPtyInfo[]>>("session-terminals", {
-      initial: {},
-    })
+    const [terminals, updateTerminals] = storage.memory<Record<string, PersistentPtyInfo[]>>(
+      `session-terminals:${client.server}`,
+      {
+        initial: {},
+      },
+    )
+    const selected = () => (client.server === "local" ? store.sessions : store.servers?.[client.server]?.sessions)
 
     const refresh = async (sessionID: string) => {
       if (!terminals[sessionID]) updateTerminals((draft) => (draft[sessionID] = []))
       const result = await client.api.experimental.persistentPty.list({ sessionID })
       updateTerminals((draft) => (draft[sessionID] = result))
-      const selected = store.sessions[sessionID]
-      if (!selected || result.some((terminal) => terminal.id === selected)) return
+      const current = selected()?.[sessionID]
+      if (!current || result.some((terminal) => terminal.id === current)) return
       await update((draft) => {
-        if (draft.sessions[sessionID] !== selected) return
-        draft.sessions[sessionID] = null
+        const sessions = client.server === "local" ? draft.sessions : draft.servers?.[client.server]?.sessions
+        if (!sessions || sessions[sessionID] !== current) return
+        sessions[sessionID] = null
       })
     }
 
@@ -43,7 +50,14 @@ export const { use: useSessionTerminals, provider: SessionTerminalsProvider } = 
       if (ptyID !== null && !terminals[sessionID]?.some((terminal) => terminal.id === ptyID)) return
       setFocus(ptyID ?? undefined)
       await update((draft) => {
-        draft.sessions[sessionID] = ptyID
+        if (client.server === "local") {
+          draft.sessions ??= {}
+          draft.sessions[sessionID] = ptyID
+          return
+        }
+        draft.servers ??= {}
+        const server = (draft.servers[client.server] ??= { sessions: {} })
+        server.sessions[sessionID] = ptyID
       })
     }
 
@@ -70,7 +84,7 @@ export const { use: useSessionTerminals, provider: SessionTerminalsProvider } = 
       get(sessionID: string) {
         return {
           terminals: terminals[sessionID] ?? [],
-          selectedTerminalID: store.sessions[sessionID] ?? null,
+          selectedTerminalID: selected()?.[sessionID] ?? null,
         }
       },
       refresh,
