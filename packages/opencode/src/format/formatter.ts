@@ -141,7 +141,7 @@ export const biome: Info = {
     ".gql",
   ],
   async enabled(context) {
-    const configs = ["biome.json", "biome.jsonc"]
+    const configs = ["biome.json", "biome.jsonc", ".biome.json", ".biome.jsonc"]
     for (const config of configs) {
       const found = await Filesystem.findUp(config, context.directory, context.worktree)
       if (found.length > 0) {
