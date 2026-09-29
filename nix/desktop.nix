@@ -14,6 +14,11 @@
 }:
 let
   electron = callPackage ./electron.nix { };
+  electronPin =
+    (lib.pipe ../packages/desktop/package.json [
+      builtins.readFile
+      builtins.fromJSON
+    ]).devDependencies.electron;
 in
 stdenv.mkDerivation (finalAttrs: {
   pname = "opencode-desktop";
@@ -74,6 +79,7 @@ stdenv.mkDerivation (finalAttrs: {
     '';
 
   preBuild = ''
+    echo "electron ${electron.version} from nixpkgs ${lib.version}, package.json pins ${electronPin}"
     cp -r "${electron.dist}" $HOME/.electron-dist
     chmod -R u+w $HOME/.electron-dist
 
@@ -89,10 +95,11 @@ stdenv.mkDerivation (finalAttrs: {
 
     export OPENCODE_CLI_DIST="$TMPDIR/desktop-cli"
     cli_package=$(bun -e 'import { getCurrentCli } from "./scripts/utils.ts"; console.log(getCurrentCli().package.replace("@opencode/", ""))')
+    # copyBuiltCliToResources joins this dist with the npm package name getCurrentCli()
+    # reports, not the Nix build's name. It reads only .version from the manifest and
+    # writes it as opencode-cli.version beside the binary.
     mkdir -p "$OPENCODE_CLI_DIST/$cli_package/bin"
     cp ${lib.getExe opencode} "$OPENCODE_CLI_DIST/$cli_package/bin/opencode"
-    # scripts/utils.ts reads only the version from the manifest beside the
-    # binary, and the CLI build's own name does not match $cli_package.
     printf '{"version":"%s"}\n' "$version" > "$OPENCODE_CLI_DIST/$cli_package/package.json"
 
     bun run build

@@ -1,11 +1,12 @@
 { lib, pkgs }:
 let
-  pinned = (builtins.fromJSON (builtins.readFile ../packages/desktop/package.json)).devDependencies.electron;
-  major = lib.versions.major pinned;
-  # Nixpkgs owns the release hashes (pkgs/development/tools/electron/binary/info.json, refreshed by
-  # its update.py from electron's SHASUMS256.txt), so bumping the desktop's electron pin no longer
-  # means copying hashes into this repo. What it resolves to can trail the pin, and that is safe:
-  # patch releases keep the Chromium and Node ABI, and the desktop loads node-pty from a Node-API
-  # prebuild, which is ABI-stable across both.
+  # Nixpkgs owns the release hashes, so bumping the pin no longer means editing this repo. Only the
+  # major is delegated, so what gets built trails the pin whenever nixpkgs has not shipped it yet.
+  # That is safe: the bundle's only native addon, node-pty, is imported from the win32-only WSL
+  # path and is a Node-API prebuild, so nothing in the main process binds the Electron ABI.
+  major = lib.versions.major (lib.pipe ../packages/desktop/package.json [
+    builtins.readFile
+    builtins.fromJSON
+  ]).devDependencies.electron;
 in
-pkgs."electron_${major}-bin" or (throw "nixpkgs ${lib.version} has no prebuilt electron ${major}, run `nix flake update nixpkgs`")
+pkgs."electron_${major}-bin" or (throw "nixpkgs ${lib.version} carries no prebuilt electron ${major}: run `nix flake update nixpkgs`, or pin a major nixpkgs still carries")

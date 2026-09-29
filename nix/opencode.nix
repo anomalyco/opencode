@@ -87,6 +87,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
   postInstall = lib.optionalString (stdenvNoCC.buildPlatform.canExecute stdenvNoCC.hostPlatform) ''
     # v2 dropped the `completion` subcommand; --completions is the global flag.
     # NOTE: staged to files, installShellCompletion only rejects a zero-size file.
+    # --completions also accepts sh, which emits the same script as bash.
     $out/bin/opencode --completions bash > opencode.bash
     $out/bin/opencode --completions zsh > _opencode
     $out/bin/opencode --completions fish > opencode.fish
