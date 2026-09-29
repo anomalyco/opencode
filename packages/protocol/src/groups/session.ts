@@ -855,6 +855,7 @@ export const makeSessionGroup = <
     .add(
       HttpApiEndpoint.delete("session.form.cancel", "/api/session/:sessionID/form/:formID", {
         params: { sessionID: Schema.String, formID: Form.ID },
+        query: Schema.Struct({ message: Schema.optional(Schema.String) }),
         success: HttpApiSchema.NoContent,
         error: [SessionNotFoundError, FormAlreadySettledError, FormNotFoundError],
       })
@@ -863,7 +864,7 @@ export const makeSessionGroup = <
           OpenApi.annotations({
             identifier: "session.form.cancel",
             summary: "Cancel form",
-            description: "Cancel a pending form.",
+            description: "Cancel a pending form, optionally telling the asker why it was not answered.",
           }),
         ),
     )

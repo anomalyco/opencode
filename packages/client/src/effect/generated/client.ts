@@ -732,9 +732,10 @@ const EndpointSessionFormReply = (raw: RawClient["server.session"]) => (input: S
 
 const EndpointSessionFormCancel = (raw: RawClient["server.session"]) => (input: SessionFormCancelInput) =>
   preserveEffect<SessionFormCancelOutput>()(
-    raw["session.form.cancel"]({ params: { sessionID: input["sessionID"], formID: input["formID"] } }).pipe(
-      Effect.mapError(mapClientError),
-    ),
+    raw["session.form.cancel"]({
+      params: { sessionID: input["sessionID"], formID: input["formID"] },
+      query: { message: input["message"] },
+    }).pipe(Effect.mapError(mapClientError)),
   )
 
 const EndpointSessionEnvironment = (raw: RawClient["server.session"]) => (input: SessionEnvironmentInput) =>

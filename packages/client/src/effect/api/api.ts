@@ -1389,7 +1389,11 @@ export type SessionFormReplyOperation<E = never> = (
   input: SessionFormReplyInput,
 ) => Effect.Effect<SessionFormReplyOutput, E>
 
-export type SessionFormCancelInput = { readonly sessionID: string; readonly formID: Form.ID }
+export type SessionFormCancelInput = {
+  readonly sessionID: string
+  readonly formID: Form.ID
+  readonly message?: string | undefined
+}
 export type SessionFormCancelOutput = void
 export type SessionFormCancelOperation<E = never> = (
   input: SessionFormCancelInput,
