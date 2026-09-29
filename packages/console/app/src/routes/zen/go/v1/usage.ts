@@ -1,4 +1,5 @@
 import type { APIEvent } from "@solidjs/start/server"
+import { buildOptionsResponse } from "~/routes/zen/util/modelsHandler"
 import { and, Database, eq, isNull } from "@opencode-ai/console-core/drizzle/index.js"
 import { BillingTable, LiteTable } from "@opencode-ai/console-core/schema/billing.sql.js"
 import { KeyTable } from "@opencode-ai/console-core/schema/key.sql.js"
@@ -7,6 +8,10 @@ import { WorkspaceTable } from "@opencode-ai/console-core/schema/workspace.sql.j
 import { LiteData } from "@opencode-ai/console-core/lite.js"
 import { Subscription } from "@opencode-ai/console-core/subscription.js"
 import { inferenceUnavailable, proxyInference } from "~/lib/inference-proxy"
+
+export async function OPTIONS(_input: APIEvent) {
+  return buildOptionsResponse()
+}
 
 export async function GET(input: APIEvent) {
   const response = await proxyInference(input.request).catch(inferenceUnavailable)
