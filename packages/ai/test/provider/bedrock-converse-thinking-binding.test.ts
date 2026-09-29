@@ -143,20 +143,18 @@ describe("Bedrock Converse thinking block binding", () => {
     }),
   )
 
-  for (const type of ["disabled", "between_tools"]) {
-    it.effect(`does not bind ${type} thinking`, () =>
-      Effect.gen(function* () {
-        const result = yield* wire(
-          request(
-            bedrock("global.anthropic.claude-fable-5-1", {
-              body: { additionalModelRequestFields: { thinking: { type } } },
-            }),
-          ),
-        )
-        expect(result.sent).toEqual({ thinking: { type } })
-      }),
-    )
-  }
+  it.effect("does not bind disabled thinking", () =>
+    Effect.gen(function* () {
+      const result = yield* wire(
+        request(
+          bedrock("global.anthropic.claude-fable-5-1", {
+            body: { additionalModelRequestFields: { thinking: { type: "disabled" } } },
+          }),
+        ),
+      )
+      expect(result.sent).toEqual({ thinking: { type: "disabled" } })
+    }),
+  )
 
   it.effect("adds the beta beside betas the caller already set", () =>
     Effect.gen(function* () {

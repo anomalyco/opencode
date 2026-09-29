@@ -447,12 +447,22 @@ const decodeOptions = ProviderShared.validateWith(Schema.decodeUnknownEffect(Opt
 // Claude on Bedrock requires the thinking budget below `maxTokens`, with a minimum of 1,024.
 const MIN_THINKING_BUDGET = 1_024
 
-// `block_binding` is only accepted beside `adaptive` and `enabled` thinking, and `http.body` can pick another type.
-const decodeOverlayThinking = Schema.decodeUnknownOption(
+const isThinkingDisabled = Schema.is(
   Schema.Struct({
-    additionalModelRequestFields: Schema.Struct({ thinking: Schema.Struct({ type: Schema.String }) }),
+    additionalModelRequestFields: Schema.Struct({ thinking: Schema.Struct({ type: Schema.Literal("disabled") }) }),
   }),
 )
+
+// Claude 5.1+ binds each thinking signature to the prefix above it. Ask Bedrock to drop the affected blocks instead of
+// failing when that prefix changes. `http.body` overlays this field by field, so callers can still override it.
+const applyThinkingBindingDefault = (request: LLMRequest, thinking: Readonly<Record<string, unknown>> | undefined) => {
+  if (isThinkingDisabled(request.http?.body)) return thinking
+  if (!supportsThinkingBlockBinding(request.model)) return thinking
+  return {
+    ...(thinking ?? { type: "adaptive" as const }),
+    block_binding: { prefix_mismatch_behavior: "drop_block" },
+  }
+}
 
 const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request: LLMRequest) {
   const toolChoice = request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined
@@ -461,7 +471,8 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
   const options = yield* decodeOptions(request.providerOptions ?? {})
   const maxTokens =
     isNova2(request.model) && isHighReasoningEffort(request.http?.body) ? undefined : generation?.maxTokens
-  const thinking =
+  const thinking = applyThinkingBindingDefault(
+    request,
     options.thinking === undefined
       ? undefined
       : {
@@ -471,21 +482,8 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
             maxTokens,
             MIN_THINKING_BUDGET,
           ),
-        }
-  const overlayThinking = decodeOverlayThinking(request.http?.body)
-  const bindThinking =
-    supportsThinkingBlockBinding(request.model) &&
-    (Option.isNone(overlayThinking) ||
-      ["adaptive", "enabled"].includes(overlayThinking.value.additionalModelRequestFields.thinking.type))
-  // Claude 5.1+ binds thinking signatures to the prefix above them. Ask Bedrock to drop the affected blocks instead
-  // of failing when the prefix changes, defaulting to adaptive thinking where none is configured. `http.body`
-  // overlays this field by field, so callers can still change the type or the mismatch behavior.
-  const boundThinking = bindThinking
-    ? {
-        ...(thinking ?? { type: "adaptive" as const }),
-        block_binding: { prefix_mismatch_behavior: "drop_block" },
-      }
-    : thinking
+        },
+  )
   // Bedrock-Claude shares Anthropic's 4-breakpoint cap. Spend the budget in
   // tools → system → messages order to favour the highest-impact prefixes.
   const breakpoints = BedrockCache.breakpoints(request.model.id)
@@ -529,11 +527,11 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
     // Converse's base inferenceConfig has no topK or thinking; Anthropic/Nova accept them
     // as model-specific fields, so they go through additionalModelRequestFields.
     additionalModelRequestFields:
-      generation?.topK === undefined && boundThinking === undefined
+      generation?.topK === undefined && thinking === undefined
         ? undefined
         : {
             ...(generation?.topK === undefined ? {} : { top_k: generation.topK }),
-            ...(boundThinking === undefined ? {} : { thinking: boundThinking }),
+            ...(thinking === undefined ? {} : { thinking }),
           },
   }
 })
