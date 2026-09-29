@@ -1,0 +1,346 @@
+@import "@opencode-ai/ui/v2/styles/colors.css";
+
+[data-page="go"] {
+  --go-console-bg: var(--v2-grey-50);
+  --go-console-surface: var(--v2-grey-100);
+  --go-console-track: var(--v2-grey-200);
+  --go-console-text: var(--v2-grey-1100);
+  --go-console-secondary: var(--v2-grey-700);
+  --go-console-muted: var(--v2-grey-600);
+  --go-console-border: var(--v2-alpha-dark-8);
+  --go-console-icon: var(--v2-grey-600);
+
+  @media (prefers-color-scheme: dark) {
+    --go-console-bg: var(--v2-grey-1000);
+    --go-console-surface: var(--v2-grey-900);
+    --go-console-track: var(--v2-grey-800);
+    --go-console-text: var(--v2-grey-200);
+    --go-console-secondary: var(--v2-grey-500);
+    --go-console-muted: var(--v2-grey-600);
+    --go-console-border: var(--v2-alpha-light-8);
+    --go-console-icon: var(--v2-grey-600);
+  }
+}
+
+[data-component="go-plan-chart"] {
+  margin: 0;
+  padding: 2rem var(--padding) 3rem;
+  background: var(--go-console-bg);
+  color: var(--go-console-text);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  font-weight: 440;
+  line-height: 1.25rem;
+  letter-spacing: -0.04px;
+  text-rendering: geometricPrecision;
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+
+  [data-slot="heading"] {
+    display: flex;
+    align-items: end;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 0.75rem;
+  }
+  h2 {
+    font-size: 0.9375rem;
+    font-weight: 530;
+    line-height: 1.25rem;
+    margin-bottom: 0.25rem;
+  }
+  [data-slot="heading"] p {
+    color: var(--go-console-muted);
+    line-height: 1.25rem;
+  }
+  [data-slot="legend"] {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin: 0;
+    padding: 0 0 0.375rem;
+    list-style: none;
+    color: var(--go-console-secondary);
+    font-weight: 530;
+    white-space: nowrap;
+  }
+  [data-slot="legend"] li {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  [data-slot="legend"] i {
+    width: 3px;
+    height: 12px;
+    border-radius: 1px;
+  }
+  [data-tier="go"] {
+    background: linear-gradient(var(--v2-yellow-500), var(--v2-yellow-600));
+  }
+  [data-tier="plus"] {
+    background: linear-gradient(var(--v2-orange-500), var(--v2-orange-600));
+  }
+  button {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: none;
+    border: 0;
+    color: inherit;
+    font: inherit;
+    font-weight: 530;
+    padding: 0.375rem 0.5rem;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+  [data-slot="expand"][aria-expanded="true"] svg {
+    transform: rotate(180deg);
+  }
+  [data-slot="scroll"] {
+    overflow-x: auto;
+  }
+  table {
+    width: 100%;
+    min-width: 48rem;
+    table-layout: fixed;
+    border-spacing: 0;
+    font-size: 0.8125rem;
+  }
+  thead {
+    color: var(--go-console-secondary);
+  }
+  thead tr {
+    background: var(--go-console-surface);
+  }
+  thead th {
+    padding: 0.5rem 1rem;
+    border-block: 1px solid var(--go-console-border);
+    font-weight: 440;
+    text-align: end;
+    white-space: nowrap;
+  }
+  thead th:first-child {
+    text-align: start;
+    border-inline-start: 1px solid var(--go-console-border);
+    border-start-start-radius: 6px;
+    border-end-start-radius: 6px;
+  }
+  thead th:last-child {
+    border-inline-end: 1px solid var(--go-console-border);
+    border-start-end-radius: 6px;
+    border-end-end-radius: 6px;
+  }
+  tbody tr > * {
+    transition: background-color 120ms ease;
+  }
+  tbody tr:hover > * {
+    background: var(--go-console-surface);
+  }
+  tbody tr > :first-child {
+    border-start-start-radius: 6px;
+    border-end-start-radius: 6px;
+  }
+  tbody tr > :last-child {
+    border-start-end-radius: 6px;
+    border-end-end-radius: 6px;
+  }
+  tbody th {
+    padding: 0.5rem 1rem;
+    text-align: start;
+    font-weight: 400;
+    color: var(--go-console-text);
+  }
+  [data-slot="labels"] {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin-top: 0.25rem;
+  }
+  [data-slot="labels"] :is(small, a) {
+    border: 1px solid var(--go-console-border);
+    padding: 0 0.25rem;
+    font-size: 0.625rem;
+    line-height: 1rem;
+  }
+  [data-slot="labels"] a {
+    color: inherit;
+    text-decoration: none;
+    transition:
+      background-color 180ms ease,
+      border-color 180ms ease;
+  }
+  [data-slot="labels"] a:hover {
+    background: var(--go-console-track);
+    border-color: var(--go-console-track);
+  }
+  [data-slot="bars"] {
+    position: relative;
+  }
+  [data-slot="gridline"] {
+    position: absolute;
+    inset-block: 0;
+    border-inline-start: 1px dashed var(--go-console-border);
+  }
+  [data-slot="track"] {
+    position: relative;
+    display: grid;
+    grid-template-rows: 0.5rem 0.5rem;
+    row-gap: 0.5rem;
+    margin: 0.5rem 0;
+  }
+  [data-slot="lane"] {
+    display: flex;
+    gap: 0.25rem;
+  }
+  [data-slot="lane"] > [data-tier] {
+    border-radius: 2px;
+  }
+  [data-slot="remainder"] {
+    flex: 1;
+    border-radius: 2px;
+    background: var(--go-console-track);
+  }
+  [data-slot="number"] {
+    padding: 0.5rem 1rem;
+    text-align: end;
+    white-space: nowrap;
+  }
+  :is(thead th, [data-slot="number"]):last-child {
+    padding-inline-start: 0.5rem;
+  }
+  [data-slot="number"] span {
+    display: block;
+    /* 13px digits are ~9.5px tall, so this leaves the same ~8px visual gap as the bars. */
+    line-height: 1.1rem;
+  }
+  [data-slot="axis"] {
+    position: relative;
+    height: 2rem;
+    color: var(--go-console-muted);
+    font-size: 0.6875rem;
+  }
+  [data-slot="axis"] span {
+    position: absolute;
+    top: 0.25rem;
+    transform: translateX(-50%);
+  }
+  &:dir(rtl) [data-slot="axis"] span {
+    transform: translateX(50%);
+  }
+  figcaption {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-top: 0.75rem;
+    border-top: 1px solid var(--go-console-border);
+    padding-top: 0.75rem;
+  }
+  [data-slot="expand"] {
+    padding-inline: 0;
+  }
+  figcaption a {
+    color: var(--go-console-secondary);
+  }
+  :is(button, a):focus-visible {
+    outline: 2px solid currentColor;
+    outline-offset: 3px;
+  }
+  @media (max-width: 55rem) {
+    [data-slot="heading"] {
+      align-items: start;
+      flex-direction: column;
+    }
+  }
+  /* Phones stack each model name above its bar so the table fits without horizontal scrolling. */
+  @media (max-width: 40rem) {
+    /* Rows share the table's columns through subgrid, so number columns size to their unwrapped headers. */
+    table {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto auto;
+      min-width: 0;
+    }
+    thead,
+    tbody,
+    tfoot {
+      display: contents;
+    }
+    colgroup,
+    tfoot td:not([data-slot="axis"]) {
+      display: none;
+    }
+    tr {
+      display: grid;
+      grid-column: 1 / -1;
+      grid-template-columns: subgrid;
+      align-items: center;
+    }
+    thead tr {
+      border: 1px solid var(--go-console-border);
+      border-radius: 6px;
+    }
+    thead th,
+    thead th:is(:first-child, :last-child) {
+      border: 0;
+      padding-inline: 0.375rem;
+      font-size: 0.75rem;
+    }
+    /* The bars are too narrow to label 100 and 1K apart from 10K. */
+    [data-slot="gridline"],
+    [data-slot="axis"] span:not(:last-child) {
+      display: none;
+    }
+    thead th:first-child {
+      padding-inline-start: 1rem;
+    }
+    thead th:last-child,
+    [data-slot="number"]:last-child {
+      padding-inline-end: 1rem;
+    }
+    tbody th {
+      grid-column: 1 / -1;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.25rem 0.5rem;
+      padding-block-end: 0;
+    }
+    [data-slot="labels"] {
+      margin-top: 0;
+    }
+    /* Bars extend under the requests column's spare header width, stopping short of the right-aligned numbers. */
+    [data-slot="bars"],
+    [data-slot="axis"] {
+      grid-column: 1 / 3;
+      margin-inline: 1rem 4rem;
+    }
+    [data-slot="bars"] {
+      grid-row: 2;
+    }
+    [data-slot="bars"] + [data-slot="number"] {
+      grid-row: 2;
+      grid-column: 2;
+    }
+    [data-slot="number"]:last-child {
+      grid-row: 2;
+      grid-column: 3;
+    }
+    [data-slot="number"] {
+      padding-inline: 0.375rem;
+    }
+    /* Rows are grids here, so highlight the row itself instead of each cell. */
+    tbody tr {
+      padding-block: 0.375rem;
+      border-radius: 6px;
+      transition: background-color 120ms ease;
+    }
+    tbody tr:hover {
+      background: var(--go-console-surface);
+    }
+    tbody tr > *,
+    tbody tr:hover > * {
+      border-radius: 0;
+      background: none;
+    }
+  }
+}
