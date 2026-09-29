@@ -3,6 +3,9 @@ import { dict as en } from "./en"
 export const dict = {
   ...en,
   "go.promo.spaceBunny": "Space Bunny Free — нова анонімна модель, доступна протягом обмеженого часу",
+  "go.referral.ended.label": "Попередження",
+  "go.referral.ended":
+    "Реферальну програму завершено. Реферальні посилання більше не нараховують кредити ні вам, ні тому, хто ними поділився.",
   "go.graph.bonus": "Ліміт ×{{count}}",
   "nav.github": "GitHub",
   "nav.docs": "Документація",
@@ -263,6 +266,7 @@ export const dict = {
   "go.meta.description":
     "Go коштує $10/місяць, зі щедрими лімітами використання та надійним доступом до провідних моделей для кодування.",
   "go.hero.title": "Недорогі моделі кодування для всіх",
+  "go.hero.tagline": "Використовуйте з будь-яким агентом. Поповнюйте за потреби. Скасуйте в будь-який час.",
   "go.hero.body":
     "Go надає агентне програмування програмістам у всьому світі, пропонуючи щедрі ліміти та надійний доступ до найкращих моделей з відкритим кодом.",
 
@@ -270,7 +274,7 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Підписатися на Go",
   "go.cta.price": "$10/місяць",
-  "go.plans.month": "/місяць",
+  "go.plans.month": "на місяць",
   "go.plans.plus.cta": "Підписатися на Go Plus",
   "go.plans.plus.description": "Go Plus коштує $40/місяць і пропонує вищі ліміти.",
   "go.plans.go.feature1": "Відібрані доступні моделі",
@@ -659,7 +663,6 @@ export const dict = {
   "workspace.payments.type.subscription": "підписка",
   "workspace.payments.view": "Переглянути",
 
-  "workspace.black.loading": "Завантаження...",
   "workspace.black.time.day": "день",
   "workspace.black.time.days": "дні",
   "workspace.black.time.hour": "година",
@@ -669,7 +672,8 @@ export const dict = {
   "workspace.black.time.fewSeconds": "кілька секунд",
   "workspace.black.subscription.title": "Підписка",
   "workspace.black.subscription.message": "Ви підписані на OpenCode Black за ${{plan}} на місяць.",
-  "workspace.black.subscription.manage": "Керувати підпискою",
+  "workspace.black.subscription.ending":
+    "OpenCode Black завершиться наприкінці поточного розрахункового періоду й не буде подовжений. Ми перенесемо вас до нової консолі.",
   "workspace.black.subscription.rollingUsage": "Використання (5 год)",
   "workspace.black.subscription.weeklyUsage": "Тижневе використання",
   "workspace.black.subscription.resetsIn": "Скидається через",

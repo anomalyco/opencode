@@ -4,6 +4,9 @@ import { dict as en } from "./en"
 export const dict = {
   ...en,
   "go.promo.spaceBunny": "Space Bunny Free, un nouveau modèle anonyme, est disponible pour une durée limitée",
+  "go.referral.ended.label": "Avertissement",
+  "go.referral.ended":
+    "Le programme de parrainage est terminé. Les liens de parrainage ne donnent plus de crédit, ni à vous ni à la personne qui les a partagés.",
   "go.graph.bonus": "{{count}}× d’utilisation",
   "app.meta.description": "OpenCode - L'agent de code open source.",
   "nav.github": "GitHub",
@@ -267,6 +270,7 @@ export const dict = {
   "go.meta.description":
     "Go coûte 10 $/mois, avec des limites d'utilisation généreuses et un accès fiable aux principaux modèles de codage.",
   "go.hero.title": "Modèles de code à faible coût pour tous",
+  "go.hero.tagline": "Utilisable avec n'importe quel agent. Rechargez du crédit si besoin. Résiliez à tout moment.",
   "go.hero.body":
     "Go apporte le codage agentique aux programmeurs du monde entier. Offrant des limites généreuses et un accès fiable aux modèles open source les plus capables, pour que vous puissiez construire avec des agents puissants sans vous soucier du coût ou de la disponibilité.",
 
@@ -274,7 +278,7 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "S'abonner à Go",
   "go.cta.price": "10 $/mois",
-  "go.plans.month": "/mois",
+  "go.plans.month": "par mois",
   "go.plans.plus.cta": "S'abonner à Go Plus",
   "go.plans.plus.description": "Go Plus coûte 40 $/mois et offre des limites plus élevées.",
   "go.plans.go.feature1": "Modèles sélectionnés et abordables",
@@ -667,7 +671,6 @@ export const dict = {
   "workspace.payments.type.subscription": "abonnement",
   "workspace.payments.view": "Voir",
 
-  "workspace.black.loading": "Chargement...",
   "workspace.black.time.day": "jour",
   "workspace.black.time.days": "jours",
   "workspace.black.time.hour": "heure",
@@ -677,7 +680,8 @@ export const dict = {
   "workspace.black.time.fewSeconds": "quelques secondes",
   "workspace.black.subscription.title": "Abonnement",
   "workspace.black.subscription.message": "Vous êtes abonné à OpenCode Black pour {{plan}} $ par mois.",
-  "workspace.black.subscription.manage": "Gérer l'abonnement",
+  "workspace.black.subscription.ending":
+    "OpenCode Black prend fin avec votre période de facturation actuelle et ne sera pas renouvelé. Nous vous migrerons vers la nouvelle console.",
   "workspace.black.subscription.rollingUsage": "Utilisation 5 heures",
   "workspace.black.subscription.weeklyUsage": "Utilisation hebdomadaire",
   "workspace.black.subscription.resetsIn": "Réinitialisation dans",
