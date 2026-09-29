@@ -93,6 +93,39 @@ test("finds and opens an exact session ID outside the recent list", async () => 
   }
 })
 
+test("opens a child session when its exact ID is typed", async () => {
+  const sessionID = "ses_15b8b4e93ffeJqiVKh4e4TorwJ"
+  const fixture = await renderOpen((url) => {
+    if (url.pathname === "/api/session") return json({ data: [], cursor: {} })
+    if (url.pathname !== `/api/session/${sessionID}`) return undefined
+    return json({
+      data: {
+        id: sessionID,
+        parentID: "ses_parent",
+        projectID: "proj_child",
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        time: { created: 1, updated: 2 },
+        title: "Review the release checklist",
+        location: { directory: "/tmp/opencode/child" },
+      },
+    })
+  })
+
+  try {
+    await fixture.app.waitForFrame((frame) => frame.includes("Search sessions and projects"))
+    await fixture.app.mockInput.typeText(sessionID)
+    await fixture.app.waitForFrame((frame) => frame.includes("Review the release checklist"))
+
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitFor(() => fixture.route.data.type === "session")
+
+    expect(fixture.route.data).toEqual({ type: "session", sessionID })
+  } finally {
+    await fixture.dispose()
+  }
+})
+
 test("shows the current project and opens its root", async () => {
   const root = "/tmp/opencode/project"
   const subfolder = `${root}/packages/tui`
