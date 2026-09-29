@@ -200,6 +200,57 @@ test("a low activity group with nothing finished stays collapsed behind a status
   }
 })
 
+test("failed low activity uses a disclosure icon and keeps details expandable", async () => {
+  const config = createTuiResolvedConfig({ animations: false })
+  const anchors = createTimelineAnchors()
+  const [expanded, setExpanded] = createStore<Record<string, boolean>>({})
+  const message: SessionMessageAssistant = {
+    id: "a",
+    type: "assistant",
+    agent: "build",
+    model: { providerID: "fixture", id: "fixture" },
+    time: { created: 0, completed: 2 },
+    content: [
+      {
+        type: "tool",
+        id: "failed-shell",
+        name: "shell",
+        time: { created: 0, completed: 2 },
+        state: { status: "error", input: {}, error: { type: "Fixture", message: "command failed" } },
+      },
+    ],
+  }
+  const row: SessionGroup = {
+    type: "group",
+    kind: "activity",
+    size: 1,
+    completed: true,
+    pending: [],
+    children: [{ type: "entry", size: 1, entry: { type: "part", ref: { messageID: "a", partID: "failed-shell" } } }],
+  }
+  const app = await mount({
+    row,
+    anchors,
+    config,
+    expanded: (id) => expanded[id],
+    setExpanded: (id, value) => setExpanded(id, value),
+    message: () => message,
+    entry: () => <text>command failed</text>,
+  })
+  try {
+    app.renderer.start()
+    await app.waitForFrame((frame) => frame.includes("1 command"))
+    expect(app.captureCharFrame()).toContain("+ 1 command")
+    expect(app.captureCharFrame()).not.toContain("command failed")
+    await app.mockMouse.click(4, anchors.get({ type: "group", groupID: groupID(row, 0)! })?.node.y ?? -1)
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("− 1 command")
+    expect(app.captureCharFrame()).toContain("command failed")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 function mount(input: {
   row: SessionGroup
   anchors: ReturnType<typeof createTimelineAnchors>
