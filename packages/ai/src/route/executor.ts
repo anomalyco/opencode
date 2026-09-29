@@ -98,14 +98,13 @@ const MAX_BODY_CHARS = 2000
 // Without a recognized message, show the raw body so the provider's explanation is never dropped.
 const providerMessage = (status: number, body: string | void) => {
   const fallback = `Provider request failed with HTTP ${status}`
-  const text = body?.trim()
+  const text = body?.trim() ?? ""
+  const decoded = Option.getOrUndefined(decodeProviderBody(text))
+  const message = [decoded?.error?.message, decoded?.message].find((message) => message?.trim())
+  if (message) return message
   // Gateway and proxy HTML error pages are markup, not an explanation.
   if (!text || /^<(?:!doctype|html)/i.test(text)) return fallback
-  const decoded = Option.getOrUndefined(decodeProviderBody(text))
-  return (
-    [decoded?.error?.message, decoded?.message].find((message) => message?.trim()) ??
-    `${fallback}: ${text.length > MAX_BODY_CHARS ? `${text.slice(0, MAX_BODY_CHARS)}…` : text}`
-  )
+  return `${fallback}: ${text.length > MAX_BODY_CHARS ? `${text.slice(0, MAX_BODY_CHARS)}…` : text}`
 }
 
 const statusError = (response: HttpClientResponse.HttpClientResponse) =>
