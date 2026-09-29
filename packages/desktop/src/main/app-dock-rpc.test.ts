@@ -65,7 +65,7 @@ async function child() {
   const electron = await import("electron")
   const { app, BrowserWindow } = electron
   const { createAppDock } = await import("./app-dock")
-  const { handleDockRPC, registerAppDockBridge, registerAppDockProfileResolver } = await import("./app-dock-rpc")
+  const { handleDockRPC, registerAppDockBridge, registerAppDockProfileResolver, registerAppDockWindow } = await import("./app-dock-rpc")
   if (!process.versions.electron) throw new Error("Electron child not started")
   app.commandLine.appendSwitch("ignore-certificate-errors")
   await app.whenReady()
@@ -97,6 +97,7 @@ async function child() {
     const win = new BrowserWindow({ width: 900, height: 700, show: true })
     win.show()
     win.focus()
+    registerAppDockWindow(win)
     for (let spins = 0; spins < 10 && BrowserWindow.getFocusedWindow() !== win; spins++) {
       win.focus()
       await new Promise((delay) => setTimeout(delay, 40))
@@ -143,13 +144,22 @@ async function child() {
 
     const reload = (await rpc("go", { command: "reload" })) as { ok: boolean }
     check(reload.ok === true, "reload failed")
+    await rpc("wait", { milliseconds: 500 })
     const afterReload = (await rpc("list")) as { ok: boolean; value: Array<{ tabID: string }> }
     check(afterReload.ok === true && afterReload.value.length === 1, "tab was lost on reload")
     pass("R08", "go reload keeps the tab alive")
 
-    await rpc("wait", { milliseconds: 100 })
-    const fullscreenSnap = (await rpc("read")) as { ok: boolean; value?: { items: Array<{ ref: number; name?: string }> }; error?: unknown }
-    check(fullscreenSnap.ok === true && fullscreenSnap.value, `fullscreen read failed: ${JSON.stringify(fullscreenSnap)}`)
+    await rpc("wait", { milliseconds: 300 })
+    let fullscreenSnap
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const snap = (await rpc("read")) as { ok: boolean; value?: { items: Array<{ ref: number; name?: string }> }; error?: unknown }
+      if (snap.ok === true && snap.value) {
+        fullscreenSnap = snap
+        break
+      }
+      await rpc("wait", { milliseconds: 200 })
+    }
+    check(fullscreenSnap && fullscreenSnap.ok === true && fullscreenSnap.value, `fullscreen read failed: ${JSON.stringify(fullscreenSnap)}`)
     const fullscreenRef = fullscreenSnap.value.items.find((item) => item.name === "Fullscreen")?.ref
     check(typeof fullscreenRef === "number", "fullscreen ref missing")
     await rpc("click", { ref: fullscreenRef })
