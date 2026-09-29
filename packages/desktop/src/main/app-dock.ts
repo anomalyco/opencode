@@ -4,7 +4,7 @@ import { createHash, randomUUID } from "node:crypto"
 import type { EventEmitter } from "node:events"
 import { appDockURL, appDockZoom, panelBoundsToContent, type DockBounds } from "./app-dock-utils"
 export type { DockBounds } from "./app-dock-utils"
-import { buildScrollScript, buildHoverScript, buildDragScript, buildClickAtProbeScript, buildClickScript, buildElementPointScript, buildFocusScript, buildReadElementScript, buildSnapshotScript, buildTypeScript, buildScrollToScript, buildStorageScript, buildPDFScript, buildFrameScript, buildRetryScript, buildEvaluateScript, buildNetworkScript } from "./app-dock-browser"
+import { buildScrollScript, buildHoverScript, buildDragScript, buildClickAtProbeScript, buildClickScript, buildElementPointScript, buildFocusScript, buildReadElementScript, buildSnapshotScript, buildTypeScript, buildScrollToScript, buildStorageScript, buildEvaluateScript, buildNetworkScript } from "./app-dock-browser"
 import type { AppDockAPI } from "./app-dock-api"
 
 export type AppDockIdentity = Readonly<{ tabID: string; generation: number }>
@@ -933,12 +933,16 @@ const layoutBounds = new Map<number, DockBounds>()
       const flightKey = `${key}:${namespace}:${budget}:${maxText}`
       const pending = readQueues.get(flightKey)
       if (pending) return pending
-      const current = this.execute(senderID, tabID, buildSnapshotScript({ budget, maxText, namespace }))
-        .then((snapshot) => {
-          if (refNamespaces.get(key) !== namespace) throw new Error("App Dock page changed during read; retry")
-          if (snapshot && typeof snapshot === "object" && "items" in snapshot && Array.isArray(snapshot.items) && "url" in snapshot) {
+      const snapshot = (attempt: number): Promise<unknown> => {
+        const currentNamespace = refNamespaces.get(key) ?? 1
+        return this.execute(senderID, tabID, buildSnapshotScript({ budget, maxText, namespace: currentNamespace })).then((value) => {
+          if (refNamespaces.get(key) !== currentNamespace) {
+            if (attempt === 0) return snapshot(1)
+            throw new Error("App Dock page changed during read")
+          }
+          if (value && typeof value === "object" && "items" in value && Array.isArray(value.items) && "url" in value) {
             const targets = new Map<number, { x: number; y: number; width: number; height: number; tag: string; name: string; href?: string; url: string }>()
-            for (const item of snapshot.items) {
+            for (const item of value.items) {
               if (!item || typeof item !== "object") continue
               const candidate = item as Record<string, unknown>
               if (
@@ -957,14 +961,16 @@ const layoutBounds = new Map<number, DockBounds>()
                   tag: candidate.tag,
                   name: typeof candidate.name === "string" ? candidate.name : "",
                   href: typeof candidate.href === "string" ? candidate.href : undefined,
-                  url: String(snapshot.url),
+                  url: String(value.url),
                 })
               }
             }
             refTargets.set(key, targets)
           }
-          return snapshot
+          return value
         })
+      }
+      const current = snapshot(0)
       readQueues.set(flightKey, current)
       void current.then(
         () => {
@@ -1339,42 +1345,6 @@ const layoutBounds = new Map<number, DockBounds>()
       const record = tabs.get(senderID)?.get(tabID)
       if (!record) throw new Error("Unknown App Dock tab")
       return this.execute(senderID, tabID, buildStorageScript(storage, key)) as Promise<{ ok: boolean; storage: "local" | "session"; key: string; value: string | null }>
-    },
-  /**
-   * Captures a PDF of the dock tab.
-   * @senderID - Electron sender identifier
-   * @tabID - Target tab identifier
-   * @returns Promise resolving to { ok, blob } or error
-   */
-    pdf(senderID: number, tabID: string): Promise<{ ok: boolean; blob: Blob }> {
-      const record = tabs.get(senderID)?.get(tabID)
-      if (!record) throw new Error("Unknown App Dock tab")
-      return this.execute(senderID, tabID, buildPDFScript()) as Promise<{ ok: boolean; blob: Blob }>
-    },
-  /**
-   * Changes iframe focus in a dock tab.
-   * @senderID - Electron sender identifier
-   * @tabID - Target tab identifier
-   * @direction - "next" or "prev" to navigate
-   * @returns Promise resolving to { ok, iframe } or error
-   */
-    frame(senderID: number, tabID: string, direction: "next" | "prev"): Promise<{ ok: boolean; iframe: HTMLIFrameElement }> {
-      const record = tabs.get(senderID)?.get(tabID)
-      if (!record) throw new Error("Unknown App Dock tab")
-      return this.execute(senderID, tabID, buildFrameScript(direction)) as Promise<{ ok: boolean; iframe: HTMLIFrameElement }>
-    },
-  /**
-   * Retries an operation on a dock tab with exponential backoff.
-   * @senderID - Electron sender identifier
-   * @tabID - Target tab identifier
-   * @attempts - Maximum number of retry attempts
-   * @delay - Delay in milliseconds between attempts
-   * @returns Promise resolving to { ok, attemptsLeft } or error
-   */
-    retry(senderID: number, tabID: string, attempts: number, delay: number): Promise<{ ok: boolean; attemptsLeft: number }> {
-      const record = tabs.get(senderID)?.get(tabID)
-      if (!record) throw new Error("Unknown App Dock tab")
-      return this.execute(senderID, tabID, buildRetryScript(attempts, delay)) as Promise<{ ok: boolean; attemptsLeft: number }>
     },
   /**
    * Executes custom JavaScript in a dock tab.

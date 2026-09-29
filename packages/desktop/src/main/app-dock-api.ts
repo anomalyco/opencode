@@ -32,9 +32,6 @@ export interface AppDockAPI {
   clickAt(senderID: number, tabID: string, x: number, y: number): Promise<unknown>
   scrollTo(senderID: number, tabID: string, x: number, y: number): Promise<{ ok: boolean; x: number; y: number }>
   storage(senderID: number, tabID: string, storage: "local" | "session", key: string): Promise<{ ok: boolean; storage: "local" | "session"; key: string; value: string | null }>
-  pdf(senderID: number, tabID: string): Promise<{ ok: boolean; blob: Blob }>
-  frame(senderID: number, tabID: string, direction: "next" | "prev"): Promise<{ ok: boolean; iframe: HTMLIFrameElement }>
-  retry(senderID: number, tabID: string, attempts: number, delay: number): Promise<{ ok: boolean; attemptsLeft: number }>
   evaluate(senderID: number, tabID: string, script: string): Promise<{ ok: boolean; result: string }>
   network(senderID: number, tabID: string, config: { blockUrls?: string[]; allowedOrigins?: string[]; blockMethods?: string[]; probeUrl?: string; probeMethod?: string }): Promise<{ ok: boolean; blocked: number; requests: number; interceptorReady: boolean }>
   wait(senderID: number, tabID: string, milliseconds: number): Promise<{ ok: boolean; waitedMs: number }>

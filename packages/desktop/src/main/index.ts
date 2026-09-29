@@ -15,7 +15,7 @@ import type { ServerReadyData } from "../preload/types"
 import { checkAppExists, resolveAppPath } from "./apps"
 import { CHANNEL } from "./constants"
 import { registerIpcHandlers, sendDeepLinks, sendMenuCommand } from "./ipc"
-import { handleDockRPC } from "./app-dock-rpc"
+import { handleDockRPC, registerAppDockWindow } from "./app-dock-rpc"
 import { forwardInitializationFailure } from "./initialization"
 import { exportDebugLogs, initCrashReporter, initLogging, startNetLog, write as writeLog } from "./logging"
 import { createMenu } from "./menu"
@@ -312,6 +312,7 @@ const main = Effect.gen(function* () {
       if (setNativeTranslations(bundle)) createMenu(menuDeps)
     },
   })
+  app.on("browser-window-created", (_event, win) => registerAppDockWindow(win))
   registerWslIpcHandlers(wslServers)
   void updater.start()
   const updateTimer = setInterval(() => void updater.check(), 10 * 60 * 1000)

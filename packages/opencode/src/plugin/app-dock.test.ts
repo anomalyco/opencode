@@ -1,8 +1,8 @@
-import { describe, expect, test } from "bun:test"
+import { expect, test } from "bun:test"
 import type { Hooks, PluginInput, ToolContext } from "@opencode-ai/plugin"
-import { AppDockPlugin } from "./app-dock"
+import { AppDockPlugin, createAppDockHooks } from "./app-dock"
 
-const context = {} as ToolContext
+const context = { ask: async () => {} } as unknown as ToolContext
 const input = {} as PluginInput
 
 type FakePort = {
@@ -29,18 +29,6 @@ function fakePort(): { port: FakePort; sent: unknown[]; deliver: (payload: unkno
   }
 }
 
-async function pluginWithPort(port?: FakePort) {
-  const previous = (process as typeof process & { parentPort?: unknown }).parentPort
-  if (port) (process as typeof process & { parentPort?: unknown }).parentPort = port
-  else delete (process as typeof process & { parentPort?: unknown }).parentPort
-  try {
-    return await AppDockPlugin(input)
-  } finally {
-    if (port) (process as typeof process & { parentPort?: unknown }).parentPort = previous
-    else (process as typeof process & { parentPort?: unknown }).parentPort = previous
-  }
-}
-
 const toolNames = [
   "dock_list",
   "dock_activate",
@@ -60,22 +48,22 @@ const toolNames = [
   "dock_close",
 ]
 
-describe("AppDockPlugin", () => {
-  test("registers no tools without parentPort", async () => {
-    const hooks = await pluginWithPort(undefined)
+test("AppDockPlugin registers no tools without parentPort", async () => {
+    const hooks = await AppDockPlugin(input)
     expect(hooks.tool ?? {}).toEqual({})
-  })
+})
 
-  test("registers dock_* tools when parentPort present", async () => {
+test("AppDockPlugin registers dock_* tools when parentPort present", async () => {
     const { port } = fakePort()
-    const hooks = (await pluginWithPort(port)) as Required<Hooks>
+    const hooks = createAppDockHooks(port) as Required<Hooks>
     expect(Object.keys(hooks.tool).sort()).toEqual([...toolNames].sort())
-  })
+})
 
-  test("execute posts dock.rpc envelope and resolves matching result", async () => {
+test("AppDockPlugin executes posts dock.rpc envelope and resolves matching result", async () => {
     const { port, sent, deliver } = fakePort()
-    const hooks = (await pluginWithPort(port)) as Required<Hooks>
+    const hooks = createAppDockHooks(port) as Required<Hooks>
     const promise = hooks.tool.dock_list.execute({}, context)
+    await new Promise((resolve) => setTimeout(resolve, 0))
     const envelope = sent[0] as { type: string; id: string; op: string; args: Record<string, unknown> }
     expect(envelope.type).toBe("dock.rpc")
     expect(envelope.op).toBe("list")
@@ -83,11 +71,29 @@ describe("AppDockPlugin", () => {
     expect(envelope.id.length).toBeGreaterThan(0)
     deliver({ type: "dock.rpc.result", id: envelope.id, ok: true, value: { count: 2 } })
     await expect(promise).resolves.toBe('{\n  "count": 2\n}')
-  })
+})
 
-  test("ignores results for other request ids", async () => {
+test("AppDockPlugin asks scoped dock permission before sending RPC", async () => {
     const { port, sent, deliver } = fakePort()
-    const hooks = (await pluginWithPort(port)) as Required<Hooks>
+    const requests: unknown[] = []
+    const hooks = createAppDockHooks(port) as Required<Hooks>
+    const promise = hooks.tool.dock_evaluate.execute(
+      { script: "document.title" },
+      { ...context, ask: async (request) => void requests.push(request) },
+    )
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(requests).toEqual([
+      { permission: "dock", patterns: ["evaluate"], always: ["evaluate"], metadata: { operation: "evaluate" } },
+    ])
+    const envelope = sent[0] as { id: string; op: string }
+    expect(envelope.op).toBe("evaluate")
+    deliver({ type: "dock.rpc.result", id: envelope.id, ok: true, value: "ok" })
+    await expect(promise).resolves.toBe('"ok"')
+})
+
+test("AppDockPlugin ignores results for other request ids", async () => {
+    const { port, sent, deliver } = fakePort()
+    const hooks = createAppDockHooks(port) as Required<Hooks>
     const promise = hooks.tool.dock_list.execute({}, context)
     await new Promise((resolve) => setTimeout(resolve, 0))
     const envelope = sent[0] as { id: string }
@@ -95,11 +101,11 @@ describe("AppDockPlugin", () => {
     await new Promise((resolve) => setTimeout(resolve, 0))
     deliver({ type: "dock.rpc.result", id: envelope.id, ok: true, value: 2 })
     await expect(promise).resolves.toBe("2")
-  })
+})
 
-  test("rejects with error message from result", async () => {
+test("AppDockPlugin rejects with error message from result", async () => {
     const { port, sent, deliver } = fakePort()
-    const hooks = (await pluginWithPort(port)) as Required<Hooks>
+    const hooks = createAppDockHooks(port) as Required<Hooks>
     const promise = hooks.tool.dock_click.execute({ ref: 7 }, context)
     await new Promise((resolve) => setTimeout(resolve, 0))
     const envelope = sent[0] as { id: string; op: string; args: { ref: number } }
@@ -107,11 +113,11 @@ describe("AppDockPlugin", () => {
     expect(envelope.args.ref).toBe(7)
     deliver({ type: "dock.rpc.result", id: envelope.id, ok: false, error: { message: "Element ref 7 is gone" } })
     await expect(promise).resolves.toBe("Element ref 7 is gone")
-  })
+})
 
-  test("passes typed args through envelope", async () => {
+test("AppDockPlugin passes typed args through envelope", async () => {
     const { port, sent, deliver } = fakePort()
-    const hooks = (await pluginWithPort(port)) as Required<Hooks>
+    const hooks = createAppDockHooks(port) as Required<Hooks>
     const promise = hooks.tool.dock_read.execute({ budget: 25, maxText: 400 }, context)
     await new Promise((resolve) => setTimeout(resolve, 0))
     const envelope = sent[0] as { id: string; op: string; args: { budget: number; maxText: number } }
@@ -126,11 +132,11 @@ describe("AppDockPlugin", () => {
     deliver({ type: "dock.rpc.result", id: goEnvelope.id, ok: true, value: "gone" })
     await expect(promise).resolves.toBe('"done"')
     await expect(go).resolves.toBe('"gone"')
-  })
+})
 
-  test("routes coordinate clicks and scoped closes without destructive defaults", async () => {
+test("AppDockPlugin routes coordinate clicks and scoped closes without destructive defaults", async () => {
     const { port, sent, deliver } = fakePort()
-    const hooks = (await pluginWithPort(port)) as Required<Hooks>
+    const hooks = createAppDockHooks(port) as Required<Hooks>
 
     const click = hooks.tool.dock_click.execute({ x: 12, y: 34 }, context)
     await new Promise((resolve) => setTimeout(resolve, 0))
@@ -145,5 +151,4 @@ describe("AppDockPlugin", () => {
     expect(closeEnvelope).toMatchObject({ op: "close", args: { tabID: "tab-1" } })
     deliver({ type: "dock.rpc.result", id: closeEnvelope.id, ok: true, value: [] })
     await expect(close).resolves.toBe("[]")
-  })
 })

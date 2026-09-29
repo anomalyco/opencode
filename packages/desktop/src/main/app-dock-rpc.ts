@@ -1,6 +1,5 @@
 import type { BrowserWindow } from "electron"
 import type { AppDock, DockBounds } from "./app-dock"
-import { getLastFocusedWindow } from "./windows"
 
 export type DockRPCReply = (message: unknown) => void
 
@@ -64,7 +63,11 @@ export class AppDockRPC {
   }
 
   setWindow(win: BrowserWindow) {
+    if (this.dockWindow && !this.dockWindow.isDestroyed()) return
     this.dockWindow = win
+    win.once("closed", () => {
+      if (this.dockWindow === win) this.dockWindow = undefined
+    })
   }
 
   setProfileResolver(resolver: (senderID: number) => { profileID: string; storageKey: string }) {
@@ -81,13 +84,8 @@ export class AppDockRPC {
     })
   }
 
-  private dockWindowFor(): BrowserWindow | null {
-    if (this.dockWindow && !this.dockWindow.isDestroyed()) return this.dockWindow
-    return getLastFocusedWindow()
-  }
-
   private dockSender(): { senderID: number; win: BrowserWindow } {
-    const win = this.dockWindowFor()
+    const win = this.dockWindow
     if (!win || win.isDestroyed()) throw new Error("No window is available for App Dock")
     return { senderID: win.webContents.id, win }
   }
@@ -152,7 +150,7 @@ export class AppDockRPC {
           senderID,
           win,
           address,
-          dockBounds(args.bounds),
+          dockBounds(win, args.bounds),
           (event) => {
             if (!win.isDestroyed()) win.webContents.send("app-dock-event", event)
           },
@@ -213,22 +211,6 @@ export class AppDockRPC {
         const key = dockString(args.key, "key")
         return dock.storage(senderID, tabID, storage, key)
       }
-      case "pdf": {
-        const tabID = this.resolveTabID(dock, senderID, args)
-        return dock.pdf(senderID, tabID)
-      }
-      case "frame": {
-        const tabID = this.resolveTabID(dock, senderID, args)
-        const direction = dockString(args.direction, "direction")
-        if (direction !== "next" && direction !== "prev") throw new Error("Invalid App Dock frame direction")
-        return dock.frame(senderID, tabID, direction)
-      }
-      case "retry": {
-        const tabID = this.resolveTabID(dock, senderID, args)
-        const attempts = dockNumber(args.attempts, "attempts", 1, 10)
-        const delay = dockNumber(args.delay, "delay", 100, 10000)
-        return dock.retry(senderID, tabID, attempts, delay)
-      }
       case "evaluate": {
         const tabID = this.resolveTabID(dock, senderID, args)
         const script = dockString(args.script, "script")
@@ -277,9 +259,7 @@ export class AppDockRPC {
   }
 }
 
-function dockBounds(value: unknown): DockBounds {
-  const win = getLastFocusedWindow()
-  if (!win || win.isDestroyed()) throw new Error("No window is available for App Dock")
+function dockBounds(win: BrowserWindow, value: unknown): DockBounds {
   if (value === undefined) {
     const bounds = win.getContentBounds()
     return { x: bounds.x, y: bounds.y, width: bounds.width, height: bounds.height }

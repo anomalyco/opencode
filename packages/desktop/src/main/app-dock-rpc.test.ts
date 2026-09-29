@@ -10,7 +10,7 @@ import { createRequire } from "node:module"
 import type { DockRPCReply } from "./app-dock-rpc"
 
 type Case = { id: string; status: "pass"; detail: string }
-const required = ["R01", "R02", "R03", "R04", "R05", "R06", "R07", "R08", "R09", "R10", "R11", "M01"]
+const required = ["R01", "R02", "R03", "R04", "R05", "R06", "R07", "R08", "R09", "R10", "R11", "R12", "M01"]
 const root = resolve(import.meta.dir, "../..")
 const artifact = join(process.env.APP_DOCK_ARTIFACT_ROOT ?? root, "artifacts/app-dock-rpc/s1.json")
 const cases: Case[] = []
@@ -65,7 +65,7 @@ async function child() {
   const electron = await import("electron")
   const { app, BrowserWindow } = electron
   const { createAppDock } = await import("./app-dock")
-  const { handleDockRPC, registerAppDockBridge, registerAppDockProfileResolver, registerAppDockWindow } = await import("./app-dock-rpc")
+  const { handleDockRPC, registerAppDockBridge, registerAppDockProfileResolver, registerAppDockWindow, resetAppDockRPC } = await import("./app-dock-rpc")
   if (!process.versions.electron) throw new Error("Electron child not started")
   app.commandLine.appendSwitch("ignore-certificate-errors")
   await app.whenReady()
@@ -110,6 +110,13 @@ async function child() {
     pass("R03", "open lands a real https tab through the bridge")
     check(profileResolverCalls === 1, "RPC open did not resolve active profile storage")
 
+    const foreign = new BrowserWindow({ show: false })
+    registerAppDockWindow(foreign)
+    const bound = (await rpc("list")) as { ok: boolean; value: Array<{ tabID: string }> }
+    check(bound.ok === true && bound.value[0]?.tabID === tab.tabID, "RPC target changed after another window registered")
+    foreign.destroy()
+    pass("R12", "RPC remains bound to its initial desktop window")
+
     const unknown = (await rpc("explode")) as { ok: boolean; error?: { message: string } }
     check(unknown.ok === false && String(unknown.error?.message).includes("explode"), "unknown op not rejected")
     pass("R01", "unknown op returns an error result")
@@ -144,22 +151,12 @@ async function child() {
 
     const reload = (await rpc("go", { command: "reload" })) as { ok: boolean }
     check(reload.ok === true, "reload failed")
-    await rpc("wait", { milliseconds: 500 })
     const afterReload = (await rpc("list")) as { ok: boolean; value: Array<{ tabID: string }> }
     check(afterReload.ok === true && afterReload.value.length === 1, "tab was lost on reload")
     pass("R08", "go reload keeps the tab alive")
 
-    await rpc("wait", { milliseconds: 300 })
-    let fullscreenSnap
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const snap = (await rpc("read")) as { ok: boolean; value?: { items: Array<{ ref: number; name?: string }> }; error?: unknown }
-      if (snap.ok === true && snap.value) {
-        fullscreenSnap = snap
-        break
-      }
-      await rpc("wait", { milliseconds: 200 })
-    }
-    check(fullscreenSnap && fullscreenSnap.ok === true && fullscreenSnap.value, `fullscreen read failed: ${JSON.stringify(fullscreenSnap)}`)
+    const fullscreenSnap = (await rpc("read")) as { ok: boolean; value?: { items: Array<{ ref: number; name?: string }> }; error?: unknown }
+    check(fullscreenSnap.ok === true && fullscreenSnap.value, `fullscreen read failed: ${JSON.stringify(fullscreenSnap)}`)
     const fullscreenRef = fullscreenSnap.value.items.find((item) => item.name === "Fullscreen")?.ref
     check(typeof fullscreenRef === "number", "fullscreen ref missing")
     await rpc("click", { ref: fullscreenRef })
@@ -186,8 +183,8 @@ async function child() {
     check(closed.ok === true && closed.value.length === 0, "close did not empty the tab list")
     pass("R09", "close empties the tab list")
 
-    const foreign = handleDockRPC({ type: "not-dock", body: 1 }, reply)
-    check(foreign === false, "non-dock message should be ignored")
+    const ignored = handleDockRPC({ type: "not-dock", body: 1 }, reply)
+    check(ignored === false, "non-dock message should be ignored")
     pass("M01", "non-dock message ignored")
 
     if (!win.isDestroyed()) win.destroy()
@@ -198,6 +195,7 @@ async function child() {
     await writeFile(artifact, JSON.stringify({ version: 1, electronVersion: process.versions.electron, cases, error: String(error) }, null, 2))
     throw error
   } finally {
+    resetAppDockRPC()
     await site.close()
     app.exit(cases.length === required.length && required.every((id) => cases.some((item) => item.id === id)) ? 0 : 1)
   }

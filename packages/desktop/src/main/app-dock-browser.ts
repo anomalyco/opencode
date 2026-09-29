@@ -420,41 +420,6 @@ export function buildStorageScript(storage: "local" | "session", key: string) {
 }
 
 /**
- * Generates a script to capture PDF from canvas.
- * @returns Self-invoking async script snippet
- */
-export function buildPDFScript() {
-  return '(async () => { const canvas = document.createElement("canvas"); canvas.width = window.innerWidth; canvas.height = window.innerHeight; const ctx = canvas.getContext("2d"); ctx.drawImage(document.body, 0, 0); const pdf = canvas.toBlob(function(blob) { if (blob) { const url = URL.createObjectURL(blob); return { ok: true, blob: blob, url: url } } else { return { ok: false, error: "Failed to create PDF" } } }); return { ok: false, error: "Canvas context failed" } })()'
-}
-
-/**
- * Generates a script to change iframe focus.
- * @direction - "next" or "prev" to navigate
- * @returns Self-invoking async script snippet
- */
-export function buildFrameScript(direction: "next" | "prev") {
-  return (
-    "(async () => { const iframes = document.getElementsByTagName(\"iframe\"); const idx = Array.from(iframes).findIndex(f => { try { return f.contentWindow === window } catch { return false } }) || 0; let targetIdx; if (direction === \"next\") { targetIdx = (idx + 1) % iframes.length } else { targetIdx = (idx - 1 + iframes.length) % iframes.length }; if (iframes[targetIdx]) { try { iframes[targetIdx].focus(); return { ok: true, iframeIndex: targetIdx } } catch (e) { return { ok: false, error: \"Cross-origin iframe access denied\" } } } return { ok: false, error: \"No more iframes in that direction\" } })()"
-  )
-}
-
-/**
- * Generates a retry script with exponential backoff.
- * @attempts - Maximum retry attempts
- * @delay - Delay in milliseconds between attempts
- * @returns Self-invoking async script snippet
- */
-export function buildRetryScript(attempts: number, delay: number) {
-  return (
-    "(async () => { let attemptsLeft = " +
-    attempts +
-    "; let lastError; while (attemptsLeft > 0) { try { const result = await (async () => { return { ok: true, attemptsLeft } })(); return result } catch (e) { lastError = e; attemptsLeft--; if (attemptsLeft > 0) { await new Promise(r => setTimeout(r, " +
-    delay +
-    ")) } } return { ok: false, attemptsLeft, error: lastError?.message ?? \"Max attempts exceeded\" } })()"
-  )
-}
-
-/**
  * Generates a script to evaluate custom JavaScript.
  * @script - JavaScript string to evaluate
  * @returns Self-invoking async script snippet
