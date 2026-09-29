@@ -1017,7 +1017,7 @@ describe("OpencodePlugin", () => {
             body: {
               error: {
                 type: "authentication_error",
-                message: `Sign in with SSO again to use Acme: ${server.url.origin}/auth/sso/ssoconn_1/start?redirectTo=%2F`,
+                message: "Sign in with SSO again to use Acme.",
               },
             },
           }

@@ -73,7 +73,7 @@ class SsoRequiredError extends Schema.TaggedError<SsoRequiredError>()("OpencodeC
   url: Schema.String,
 }) {
   override get message() {
-    return `${ssoMessage(this.organization)}: ${this.url}`
+    return `${ssoMessage(this.organization)}.`
   }
 }
 
@@ -441,7 +441,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
           {
             error: {
               type: "authentication_error",
-              message: status.url ? `${status.message}: ${status.url}` : `${status.message}.`,
+              message: `${status.message}.`,
             },
           },
           { status: event.response.status },
