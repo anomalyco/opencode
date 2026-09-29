@@ -100,7 +100,10 @@ stdenv.mkDerivation (finalAttrs: {
     # writes it as opencode-cli.version beside the binary.
     mkdir -p "$OPENCODE_CLI_DIST/$cli_package/bin"
     cp ${lib.getExe opencode} "$OPENCODE_CLI_DIST/$cli_package/bin/opencode"
-    printf '{"version":"%s"}\n' "$version" > "$OPENCODE_CLI_DIST/$cli_package/package.json"
+    # OPENCODE_VERSION is what the bundled CLI prints for --version, so the manifest
+    # and the executable cannot drift.
+    bun -e 'await Bun.write(process.argv[1], JSON.stringify({ version: process.env.OPENCODE_VERSION }) + "\n")' \
+      "$OPENCODE_CLI_DIST/$cli_package/package.json"
 
     bun run build
     npx electron-builder --dir \
