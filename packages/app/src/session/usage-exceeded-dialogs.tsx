@@ -7,7 +7,6 @@ import { Persistence } from "@/runtime/persistence/schema"
 import { useSessionLayout } from "./session-layout"
 import { useDialog, useI18n } from "@opencode/ui/context"
 import { DialogUsageExceeded } from "@/providers/connect/usage-exceeded"
-import { usePlatform } from "@/runtime/platform/platform"
 
 const GO_UPSELL_FREE_TIER_LAST_SEEN_AT = "go_upsell_last_seen_at"
 const GO_UPSELL_FREE_TIER_DONT_SHOW = "go_upsell_dont_show"
@@ -52,7 +51,6 @@ function goUpsellKeys(status: SessionStatus) {
 export function useUsageExceededDialogs() {
   const sdk = useWorkspaceLocation()
   const dialog = useDialog()
-  const platform = usePlatform()
   const { params } = useSessionLayout()
   const { tDynamic } = useI18n()
 
@@ -70,7 +68,7 @@ export function useUsageExceededDialogs() {
 
   onCleanup(
     sdk().event.on("session.step.failed", (evt) => {
-      if (platform.platform !== "desktop" || evt.data.sessionID !== params.id) return
+      if (evt.data.sessionID !== params.id) return
       if (!isChatGPTUsageLimit(evt.data.error) || dialog.active) return
       if (chatgptUsageLimit.lastSeenAt && Date.now() - chatgptUsageLimit.lastSeenAt < CHATGPT_USAGE_LIMIT_WINDOW) return
 
