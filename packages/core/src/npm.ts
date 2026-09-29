@@ -1,6 +1,8 @@
 export * as Npm from "./npm"
 
 import path from "path"
+import { createRequire } from "module"
+import { pathToFileURL } from "url"
 import npa from "npm-package-arg"
 import { Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
 import { NodeFileSystem } from "@effect/platform-node"
@@ -50,7 +52,13 @@ export function sanitize(pkg: string) {
 const resolveEntryPoint = (name: string, dir: string): EntryPoint => {
   let entrypoint: string | undefined
   try {
-    entrypoint = typeof Bun !== "undefined" ? import.meta.resolve(name, dir) : import.meta.resolve(dir)
+    // Node only honors the parent argument behind --experimental-import-meta-resolve, and
+    // import() of the bare package directory fails with ERR_UNSUPPORTED_DIR_IMPORT. require
+    // resolution picks the "require"/"default" export target, which import() loads fine.
+    entrypoint =
+      typeof Bun !== "undefined"
+        ? import.meta.resolve(name, dir)
+        : pathToFileURL(createRequire(path.join(dir, "package.json")).resolve(name)).href
   } catch {
     entrypoint = undefined
   }
