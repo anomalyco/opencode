@@ -10,7 +10,8 @@ import { ShellTab } from "./shell-tab"
 import { TerminalsTab } from "./terminals-tab"
 import { useConfig } from "../../../config"
 import { ComposerContext, type ComposerTab } from "./context"
-import { childSessionModelDisplay } from "./child-session-model"
+import { PromptMetadataRow } from "../../../component/prompt/metadata"
+import { Locale } from "../../../util/locale"
 
 export { useComposerTab, type ComposerHint } from "./context"
 
@@ -37,8 +38,18 @@ export function Composer(props: ComposerProps) {
   const footerHints = createMemo(() => activeTab()?.hints?.() ?? [])
   const childModel = createMemo(() => {
     const session = data.session.get(props.sessionID)
-    if (!session?.parentID) return
-    return childSessionModelDisplay(session.model, data.location.model.list(session.location))
+    if (!session?.parentID || !session.model) return
+    const selected = session.model
+    const model = data.location.model
+      .list(session.location)
+      ?.find((item) => item.providerID === selected.providerID && item.id === selected.id)
+    const provider = data.location.provider.list(session.location)?.find((item) => item.id === selected.providerID)
+    return {
+      agent: session.agent ? Locale.titlecase(session.agent) : undefined,
+      model: model?.name ?? `${selected.id} (unavailable)`,
+      provider: provider?.name ?? selected.providerID,
+      variant: selected.variant,
+    }
   })
 
   // Set active tab when opened
@@ -164,20 +175,20 @@ export function Composer(props: ComposerProps) {
             </box>
             <Show when={childModel()}>
               {(model) => (
-                <box flexDirection="row" gap={1} paddingLeft={1} flexShrink={0} minWidth={0}>
-                  <text fg={theme.text.base} flexShrink={0}>
-                    <b>model</b>
-                  </text>
-                  <text fg={theme.text.muted} wrapMode="none" truncate minWidth={0} flexShrink={1}>
-                    {model().name}
-                  </text>
-                  <Show when={model().variant}>
-                    {(variant) => (
-                      <text fg={theme.text.muted} flexShrink={0}>
-                        · {variant()}
-                      </text>
-                    )}
-                  </Show>
+                <box paddingLeft={1} flexShrink={0} minWidth={0}>
+                  <PromptMetadataRow
+                    mode="normal"
+                    agent={model().agent}
+                    auto={false}
+                    model={model().model}
+                    provider={model().provider}
+                    variant={model().variant}
+                    muted={false}
+                    highlight={theme.border.base}
+                    agentAlpha={1}
+                    modelAlpha={1}
+                    variantAlpha={1}
+                  />
                 </box>
               )}
             </Show>

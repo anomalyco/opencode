@@ -19,7 +19,10 @@ import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
 const sessions = {
   parent: session("parent", "Parent"),
-  "child-a": session("child-a", "First", "parent"),
+  "child-a": {
+    ...session("child-a", "First", "parent"),
+    model: { providerID: "openai", id: "gpt-6-sol", variant: "high" },
+  },
   "child-b": session("child-b", "Second", "parent"),
 }
 
@@ -29,6 +32,7 @@ async function renderComposer(
   defaultTab: "subagents" | "shell",
   keybinds: Partial<TuiKeybind.Keybinds>,
   focusedTextarea = false,
+  sessionID = "parent",
 ) {
   const events = createEventStream()
   const interrupted: string[] = []
@@ -86,7 +90,7 @@ async function renderComposer(
     return (
       <>
         {focusedTextarea && <textarea focused={true} initialValue="draft" />}
-        <Composer sessionID="parent" open={true} defaultTab={defaultTab} onClose={() => closed++} />
+        <Composer sessionID={sessionID} open={true} defaultTab={defaultTab} onClose={() => closed++} />
       </>
     )
   }
@@ -108,7 +112,7 @@ async function renderComposer(
             <ClientProvider api={createApi(calls.fetch)}>
               <DataProvider directory={process.cwd()}>
                 <LocationProvider>
-                  <RouteProvider initialRoute={{ type: "session", sessionID: "parent" }}>
+                  <RouteProvider initialRoute={{ type: "session", sessionID }}>
                     <ThemeProvider mode="dark" source={{ discover: async () => ({}) }}>
                       <ToastProvider>
                         <DialogProvider>
@@ -139,6 +143,18 @@ async function renderComposer(
     closed: () => closed,
   }
 }
+
+test("opened child uses the main prompt model metadata row", async () => {
+  const composer = await renderComposer("subagents", {}, false, "child-a")
+  try {
+    const frame = composer.app.captureCharFrame()
+    expect(frame).toContain("gpt-6-sol (unavailable)")
+    expect(frame).toContain("openai")
+    expect(frame).toContain("high")
+  } finally {
+    composer.app.renderer.destroy()
+  }
+})
 
 test("disabled subagent bindings have no component fallbacks", async () => {
   const composer = await renderComposer("subagents", {
