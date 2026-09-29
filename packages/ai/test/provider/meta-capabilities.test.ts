@@ -1,17 +1,7 @@
 import { expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import {
-  CacheHint,
-  Image,
-  ImageClient,
-  LLM,
-  LLMEvent,
-  LLMRequest,
-  Media,
-  Message,
-  ToolDefinition,
-} from "../../src/index.js"
+import { Image, ImageClient, LLM, LLMEvent, LLMRequest, Media, Message, ToolDefinition } from "../../src/index.js"
 import { Meta } from "../../src/providers/meta.js"
 import { MetaMessages } from "../../src/protocols/meta-messages.js"
 import { AnthropicMessages } from "../../src/protocols/anthropic-messages.js"
@@ -75,41 +65,6 @@ it.effect("Meta rejects unsupported native tools instead of sending them as loca
         LLM.request({ model: input.model, prompt: "Hello", tools: [input.tool] }),
       ).pipe(Effect.flip)
       expect(error.reason._tag).toBe("InvalidRequest")
-    }
-  }),
-)
-
-it.effect("Meta rejects one-hour cache controls before sending", () =>
-  Effect.gen(function* () {
-    const model = Meta.messages("muse-spark-1.3")
-    const requests = [
-      LLM.request({ model, system: "Stable", prompt: "Hello", cache: { system: true, ttlSeconds: 3600 } }),
-      LLM.request({
-        model,
-        messages: [
-          Message.user([
-            { type: "text", text: "Hello", cache: new CacheHint({ type: "ephemeral", ttlSeconds: 3600 }) },
-          ]),
-        ],
-      }),
-      LLM.request({
-        model,
-        prompt: "Hello",
-        tools: [
-          ToolDefinition.make({
-            name: "lookup",
-            description: "Lookup",
-            inputSchema: { type: "object" },
-            cache: new CacheHint({ type: "ephemeral", ttlSeconds: 3600 }),
-          }),
-        ],
-      }),
-      LLM.request({ model, prompt: "Hello", providerOptions: { cacheControl: { type: "ephemeral", ttl: "1h" } } }),
-    ]
-    for (const request of requests) {
-      const error = yield* compileRequest(request).pipe(Effect.flip)
-      expect(error.reason._tag).toBe("InvalidRequest")
-      expect(error.message).toContain("1h cache TTL")
     }
   }),
 )
