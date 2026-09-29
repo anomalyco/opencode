@@ -6,7 +6,7 @@ import { Database } from "@opencode/core/database/database"
 import { Global } from "@opencode/util/global"
 import { tmpdir } from "./fixture/tmpdir"
 
-// Reads the database and sidecar modes while the database is open, because SQLite may remove the sidecars on close.
+// Read while the connection is open: SQLite may remove the sidecars on close.
 const openModes = (filename: string) =>
   Effect.runPromise(
     Effect.gen(function* () {
@@ -18,7 +18,7 @@ const openModes = (filename: string) =>
   )
 
 describe.skipIf(process.platform === "win32")("Database file permissions", () => {
-  test("creates the database and its sidecars readable only by the owner", async () => {
+  test("creates the database and sidecars readable only by the owner", async () => {
     await using tmp = await tmpdir()
 
     expect(await openModes(path.join(tmp.path, "opencode.db"))).toEqual([0o600, 0o600, 0o600])

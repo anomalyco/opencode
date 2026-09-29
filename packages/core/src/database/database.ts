@@ -80,13 +80,12 @@ export function layer(options: Options = { path: ":memory:" }) {
   )
 }
 
-// The database stores credentials, so only its owner may read it. SQLite gives new -wal and -shm files
-// the database file's mode but never tightens existing ones, and macOS keeps them after close. Windows
-// ignores POSIX modes; there the per-user profile directory's inherited ACLs protect these files.
+// SQLite creates new sidecars with the database's mode, but does not tighten existing sidecars.
+// Windows relies on the user profile directory's inherited ACLs instead of POSIX modes.
 async function restrictToOwner(filename: string) {
   if (process.platform === "win32") return
-  // Never open an existing database: closing any descriptor for a file this process has open through
-  // SQLite releases its POSIX locks. Creating synchronously keeps other fibers from opening it meanwhile.
+  // Opening and closing an existing database can release another connection's POSIX locks.
+  // Create missing files synchronously so another fiber cannot open one before it is restricted.
   if (!existsSync(filename)) closeSync(openSync(filename, "a", 0o600))
   await chmod(filename, 0o600)
   await Promise.all(

@@ -136,19 +136,10 @@ describe("toSessionError", () => {
     })
   })
 
-  test("keeps the original stream failure event when projecting a provider error", () => {
-    const body = '{"type":"response.failed","response":{"error":{"code":"subscription_sharing_usage_limit_exceeded"}}}'
-    expect(toSessionError(llm(new RateLimitError({ message: "Usage limit exceeded", body })))).toEqual({
-      type: "provider.rate-limit",
-      message:
-        "ChatGPT usage limit reached. Try again after your allowance resets; check ChatGPT Settings → Usage for details.",
-      response: { body },
-    })
-  })
-
-  test("shows actionable token-sharing errors while preserving the original provider body", () => {
+  test("maps token-sharing failures while preserving HTTP and stream bodies", () => {
     const cases = [
       ["subscription_sharing_v2_user_not_eligible", "token sharing isn't available for this account"],
+      ["subscription_sharing_usage_limit_exceeded", "ChatGPT usage limit reached"],
       ["subscription_sharing_usage_unavailable", "Try again later"],
       ["subscription_sharing_unsupported_capability", "Remove the unsupported feature"],
       ["subscription_sharing_v2_client_not_enabled", "Contact the app maintainer"],
@@ -157,11 +148,10 @@ describe("toSessionError", () => {
       ["subscription_sharing_v2_user_unavailable", "Try again later"],
     ] as const
     for (const [code, guidance] of cases) {
-      const bodies = [
+      for (const body of [
         JSON.stringify({ error: { code, message: "Request failed" } }),
         JSON.stringify({ type: "response.failed", response: { error: { code, message: "Request failed" } } }),
-      ]
-      for (const body of bodies) {
+      ]) {
         const error = toSessionError(llm(new UnknownProviderError({ message: "Request failed", body })))
         expect(error.message).toContain(guidance)
         expect(error.response).toEqual({ body })

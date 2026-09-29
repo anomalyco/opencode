@@ -218,6 +218,10 @@ export const dict = {
   "provider.connect.models.description": "Choose a model to start with. You can switch models anytime.",
   "provider.connect.models.available": "Available models",
   "provider.connect.models.list": "Models available from {{provider}}",
+  "provider.connect.chatgptUsageLimit.title": "ChatGPT usage limit reached",
+  "provider.connect.chatgptUsageLimit.description": "Review your usage settings in ChatGPT.",
+  "provider.connect.chatgptUsageLimit.manage": "Manage usage",
+  "provider.connect.chatgptUsageLimit.close": "Close",
   "provider.connect.console.refreshFailed":
     "Your account is connected, but we couldn't load your models. Try again to refresh them.",
   "provider.connect.console.connected": "OpenCode connected",
