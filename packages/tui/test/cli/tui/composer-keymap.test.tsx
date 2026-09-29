@@ -23,7 +23,15 @@ const sessions = {
     ...session("child-a", "First", "parent"),
     model: { providerID: "openai", id: "gpt-6-sol", variant: "high" },
   },
-  "child-b": session("child-b", "Second", "parent"),
+  "child-b": {
+    ...session("child-b", "Second", "parent"),
+    model: { providerID: "openai", id: "gpt-6-sol", variant: "default" },
+  },
+  "child-no-agent": {
+    ...session("child-no-agent", "Unnamed", "parent"),
+    agent: undefined,
+    model: { providerID: "openai", id: "gpt-6-sol", variant: "high" },
+  },
 }
 
 const shells = [shell("sh-a", "bun test"), shell("sh-b", "bun dev"), shell("sh-c", "python3 - <<'PY'\nimport json")]
@@ -43,6 +51,10 @@ async function renderComposer(
   let dispatch!: ReturnType<typeof Keymap.use>["dispatch"]
   let route!: ReturnType<typeof useRoute>
   const calls = createFetch((url, request) => {
+    if (url.pathname === "/api/model")
+      return json({ location: { directory }, data: [{ providerID: "openai", id: "gpt-6-sol", name: "GPT-6 Sol" }] })
+    if (url.pathname === "/api/provider")
+      return json({ location: { directory }, data: [{ id: "openai", name: "OpenAI" }] })
     if (url.pathname === "/api/session/active")
       return json({ data: { "child-a": { type: "running" }, "child-b": { type: "running" } } })
     const sessionID = url.pathname.match(/^\/api\/session\/([^/]+)$/)?.[1]
@@ -82,6 +94,8 @@ async function renderComposer(
         data.session.sync("parent"),
         data.session.sync("child-a"),
         data.session.sync("child-b"),
+        data.session.sync(sessionID),
+        data.location.sync({ directory }),
         data.shell.sync(),
       ])
         .then(() => wait(() => data.session.status("child-a") === "running"))
@@ -148,9 +162,29 @@ test("opened child uses the main prompt model metadata row", async () => {
   const composer = await renderComposer("subagents", {}, false, "child-a")
   try {
     const frame = composer.app.captureCharFrame()
-    expect(frame).toContain("gpt-6-sol (unavailable)")
-    expect(frame).toContain("openai")
+    expect(frame).toContain("GPT-6 Sol")
+    expect(frame).toContain("OpenAI")
     expect(frame).toContain("high")
+  } finally {
+    composer.app.renderer.destroy()
+  }
+})
+
+test("opened child still shows its model when its agent is missing", async () => {
+  const composer = await renderComposer("subagents", {}, false, "child-no-agent")
+  try {
+    expect(composer.app.captureCharFrame()).toContain("Subagent · GPT-6 Sol OpenAI · high")
+  } finally {
+    composer.app.renderer.destroy()
+  }
+})
+
+test("opened child omits the default variant like the main prompt", async () => {
+  const composer = await renderComposer("subagents", {}, false, "child-b")
+  try {
+    const frame = composer.app.captureCharFrame()
+    expect(frame).toContain("Build · GPT-6 Sol OpenAI")
+    expect(frame).not.toContain("· default")
   } finally {
     composer.app.renderer.destroy()
   }

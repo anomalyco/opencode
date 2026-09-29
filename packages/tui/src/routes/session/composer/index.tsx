@@ -12,6 +12,7 @@ import { useConfig } from "../../../config"
 import { ComposerContext, type ComposerTab } from "./context"
 import { PromptMetadataRow } from "../../../component/prompt/metadata"
 import { Locale } from "../../../util/locale"
+import { normalizeModelVariant } from "../../../model-preference"
 
 export { useComposerTab, type ComposerHint } from "./context"
 
@@ -45,10 +46,10 @@ export function Composer(props: ComposerProps) {
       ?.find((item) => item.providerID === selected.providerID && item.id === selected.id)
     const provider = data.location.provider.list(session.location)?.find((item) => item.id === selected.providerID)
     return {
-      agent: session.agent ? Locale.titlecase(session.agent) : undefined,
+      agent: session.agent ? Locale.titlecase(session.agent) : "Subagent",
       model: model?.name ?? `${selected.id} (unavailable)`,
       provider: provider?.name ?? selected.providerID,
-      variant: selected.variant,
+      variant: normalizeModelVariant(selected.variant),
     }
   })
 
@@ -184,7 +185,7 @@ export function Composer(props: ComposerProps) {
                     provider={model().provider}
                     variant={model().variant}
                     muted={false}
-                    highlight={theme.border.base}
+                    highlight={theme.text.base}
                     agentAlpha={1}
                     modelAlpha={1}
                     variantAlpha={1}
