@@ -196,21 +196,30 @@ export class AppDockProfileRegistry {
       try {
         manifest = parseManifest(JSON.parse(readFileSync(manifestPath, "utf8")))
       } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error
-        manifestMissing = true
-        const active = Object.keys(registry.profiles).filter((id) => registry.profiles[id].status === "active")
-        manifest = {
-          version: 1,
-          revision: 0,
-          profiles: active.map((id) => ({ id, name: id })),
-          activeProfileID: active[0] ?? "",
-          tabs: Object.fromEntries(active.map((id) => [id, []])),
-          bookmarks: [],
-          history: [],
+        if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+          manifestMissing = true
+        } else if (error instanceof SyntaxError) {
+          manifestMissing = true
+        } else if (error instanceof Error && error.message === "Invalid App Dock manifest") {
+          manifestMissing = true
+        } else {
+          throw error
+        }
+        if (manifestMissing) {
+          const active = Object.keys(registry.profiles).filter((id) => registry.profiles[id].status === "active")
+          manifest = {
+            version: 1,
+            revision: 0,
+            profiles: active.map((id) => ({ id, name: id })),
+            activeProfileID: active[0] ?? "",
+            tabs: Object.fromEntries(active.map((id) => [id, []])),
+            bookmarks: [],
+            history: [],
+          }
         }
       }
-      const result = new AppDockProfileRegistry(path, manifestPath, registry, manifest)
-      if (manifestMissing) result.writeManifest(manifest)
+      const result = new AppDockProfileRegistry(path, manifestPath, registry, manifest!)
+      if (manifestMissing) result.writeManifest(manifest!)
       result.reconcileManifest()
       return result
     } catch (error) {

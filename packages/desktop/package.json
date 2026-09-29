@@ -12,6 +12,8 @@
   "scripts": {
     "typecheck": "tsgo -b",
     "test:app-dock:e2e": "bun run src/main/app-dock-security.test.ts",
+    "test:app-dock:tools": "bun run src/main/app-dock-tools.test.ts",
+    "test:app-dock:rpc": "bun run src/main/app-dock-rpc.test.ts",
     "predev": "bun ./scripts/predev.ts",
     "dev": "electron-vite dev",
     "prebuild": "bun ./scripts/prebuild.ts",

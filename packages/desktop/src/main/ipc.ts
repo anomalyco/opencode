@@ -34,9 +34,11 @@ import {
   panelBoundsToContent,
   type AppDockEvent as NativeAppDockEvent,
   type AppDockFindResult,
+  type AppDockTab,
   type DockBounds,
 } from "./app-dock"
 import { AppDockProfileRegistry } from "./app-dock-profile-registry"
+import { registerAppDockBridge, registerAppDockProfileResolver } from "./app-dock-rpc"
 
 const pickerFilters = (ext?: string[]) => {
   if (!ext || ext.length === 0) return undefined
@@ -154,6 +156,10 @@ const toCloneableAppDockEvent = (event: unknown): CloneableAppDockEvent => {
       },
     }
   }
+  if (source.type === "tab-selected") {
+    if (!hasExactKeys(payload, ["tabID", "generation"])) throw new Error("Invalid App Dock event")
+    return { type: "tab-selected", payload: appDockEventIdentity(payload) }
+  }
   if (source.type === "tab-crashed") {
     if (!hasExactKeys(payload, ["identity", "reason"])) throw new Error("Invalid App Dock event")
     const identity = appDockEventIdentity(payload.identity)
@@ -255,8 +261,14 @@ type Deps = {
 
 export function registerIpcHandlers(deps: Deps) {
   const appDock = createAppDock()
+  registerAppDockBridge(appDock)
   const appDockProfiles = AppDockProfileRegistry.load(app.getPath("userData"))
+  const appDockDestroyHooks = new Set<number>()
   appDockProfiles.ensureActive("default")
+  registerAppDockProfileResolver(() => {
+    const profileID = appDockProfiles.manifest().activeProfileID || "default"
+    return { profileID, storageKey: appDockProfiles.ensureActive(profileID).storageKey }
+  })
   const drafts = createDesktopDraftStore(join(app.getPath("userData"), "drafts.sqlite"))
   const updaterSubscriptions = createUpdaterSubscriptions()
   app.once("will-quit", updaterSubscriptions.clear)
@@ -295,17 +307,42 @@ export function registerIpcHandlers(deps: Deps) {
       if (typeof address !== "string") throw new Error("Invalid App Dock address")
       const profileID = appDockProfileID(profile)
       const profileStorage = appDockProfiles.ensureActive(profileID)
-      const tab = await appDock.open(
-        event.sender.id,
-        win,
-        address,
-        panelBoundsToContent(appDockBounds(bounds), event.sender.getZoomFactor()),
-        (appDockEvent: NativeAppDockEvent) => {
-          if (!event.sender.isDestroyed()) event.sender.send("app-dock-event", toCloneableAppDockEvent(appDockEvent))
-        },
-        profileStorage,
-      )
-      event.sender.once("destroyed", () => appDock.close(event.sender.id, win))
+      let opened = false
+      const pendingEvents: NativeAppDockEvent[] = []
+      const notify = (appDockEvent: NativeAppDockEvent) => {
+        if (!opened) {
+          pendingEvents.push(appDockEvent)
+          return
+        }
+        if (!event.sender.isDestroyed()) event.sender.send("app-dock-event", toCloneableAppDockEvent(appDockEvent))
+      }
+      let tab: AppDockTab
+      try {
+        tab = await appDock.open(
+          event.sender.id,
+          win,
+          address,
+          panelBoundsToContent(appDockBounds(bounds), event.sender.getZoomFactor()),
+          notify,
+          profileStorage,
+        )
+      } catch (error) {
+        if (!event.sender.isDestroyed())
+          pendingEvents.forEach((appDockEvent) => event.sender.send("app-dock-event", toCloneableAppDockEvent(appDockEvent)))
+        throw error
+      }
+      opened = true
+      if (!event.sender.isDestroyed()) {
+        event.sender.send("app-dock-event", toCloneableAppDockEvent({ type: "tab-opened", payload: tab }))
+        pendingEvents.forEach((appDockEvent) => event.sender.send("app-dock-event", toCloneableAppDockEvent(appDockEvent)))
+      }
+      if (!appDockDestroyHooks.has(event.sender.id)) {
+        appDockDestroyHooks.add(event.sender.id)
+        event.sender.once("destroyed", () => {
+          appDockDestroyHooks.delete(event.sender.id)
+          appDock.closeAll(event.sender.id, win)
+        })
+      }
       return tab
     },
   )
@@ -317,7 +354,16 @@ export function registerIpcHandlers(deps: Deps) {
     appDock.hide(event.sender.id, appDockSender(event))
   })
   ipcMain.handle("app-dock-close", (event: IpcMainInvokeEvent) => {
-    appDock.close(event.sender.id, appDockSender(event))
+    appDock.closeAll(event.sender.id, appDockSender(event))
+  })
+  ipcMain.handle("app-dock-list", (event: IpcMainInvokeEvent) => {
+    appDockSender(event)
+    return appDock.list(event.sender.id).map((tab) => ({
+      tabID: tab.tabID,
+      generation: tab.generation,
+      url: tab.url,
+      active: tab.active,
+    }))
   })
   ipcMain.handle("app-dock-close-tab", (event: IpcMainInvokeEvent, tabID: unknown) => {
     appDock.close(event.sender.id, appDockSender(event), appDockID(tabID, "tab"))
@@ -385,7 +431,7 @@ export function registerIpcHandlers(deps: Deps) {
   ipcMain.handle("app-dock-fullscreen", (event: IpcMainInvokeEvent, tabID: unknown, enabled: unknown) => {
     const win = appDockSender(event)
     if (typeof enabled !== "boolean") throw new Error("Invalid App Dock fullscreen state")
-    appDock.fullscreen(event.sender.id, win, appDockID(tabID, "tab"), enabled)
+    return appDock.fullscreen(event.sender.id, win, appDockID(tabID, "tab"), enabled)
   })
   ipcMain.handle("app-dock-get-manifest", (event: IpcMainInvokeEvent) => {
     appDockSender(event)

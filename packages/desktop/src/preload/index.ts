@@ -12,6 +12,7 @@ const updaterHandler = (_: unknown, state: UpdaterState) => {
 
 const api: ElectronAPI = {
   appDockOpen: (url, bounds, profile) => ipcRenderer.invoke("app-dock-open", url, bounds, profile),
+  appDockList: () => ipcRenderer.invoke("app-dock-list"),
   appDockDeleteProfile: (profileID) => ipcRenderer.invoke("app-dock-delete-profile", { profileID }),
   appDockResize: (bounds) => ipcRenderer.invoke("app-dock-resize", bounds),
   appDockHide: () => ipcRenderer.invoke("app-dock-hide"),

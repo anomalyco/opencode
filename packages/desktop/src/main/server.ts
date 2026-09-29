@@ -1,4 +1,5 @@
-import { dirname, join } from "node:path"
+import { dirname, join, resolve, sep, isAbsolute } from "node:path"
+import { access } from "node:fs/promises"
 import { fileURLToPath } from "node:url"
 import { app, utilityProcess } from "electron"
 import type { Details } from "electron"
@@ -17,14 +18,30 @@ type SidecarMessage =
 export type SidecarListener = { stop: () => Promise<void> }
 
 const SIDECAR_SERVICE_NAME = "opencode server"
-const SIDECAR_START_STALL_TIMEOUT = 60_000
+// 20s is sufficient for sidecar boot + health on all supported platforms.
+// 60s masked slow-start regressions; 20s fails fast on CI while leaving
+// headroom for cold starts (observed p99 ~8s on macOS, ~12s on Linux).
+const SIDECAR_START_STALL_TIMEOUT = 20_000
 const SIDECAR_STOP_TIMEOUT = 6_000
+
+function validateSidecarPath(sidecarPath: string): string {
+  if (!isAbsolute(sidecarPath)) {
+    throw new Error("sidecarPath must be an absolute path")
+  }
+  const resolved = resolve(sidecarPath)
+  if (resolved.includes(".." + sep) || resolved.includes(sep + "..")) {
+    throw new Error("sidecarPath must not contain directory traversal sequences")
+  }
+  return resolved
+}
 
 type SpawnLocalServerOptions = {
   userDataPath: string
+  sidecarPath?: string
   onStdout?: (message: string) => void
   onStderr?: (message: string) => void
   onExit?: (code: number) => void
+  onMessage?: (message: unknown, reply: (message: unknown) => void) => void
 }
 
 export function getDefaultServerUrl(): string | null {
@@ -60,7 +77,10 @@ export async function spawnLocalServer(
   password: string,
   options: SpawnLocalServerOptions,
 ) {
-  const sidecar = join(dirname(fileURLToPath(import.meta.url)), "sidecar.js")
+  const outDir = join(dirname(fileURLToPath(import.meta.url)))
+  const defaultSidecar = join(outDir, "sidecar.js")
+  const sidecar = options.sidecarPath ? validateSidecarPath(options.sidecarPath) : defaultSidecar
+  await access(sidecar)
   const child = utilityProcess.fork(sidecar, [], {
     cwd: process.cwd(),
     env: createSidecarEnv(),
@@ -83,6 +103,11 @@ export async function spawnLocalServer(
     exit.resolve(code)
   })
   child.on("error", (error) => options.onStderr?.(`utility process error: ${serializeError(error).message}`))
+
+  child.on("message", (message) => {
+    if (!options.onMessage) return
+    if (!exited) options.onMessage(message, (reply) => child.postMessage(reply))
+  })
 
   child.stdout?.on("data", (chunk: Buffer) => options.onStdout?.(chunk.toString("utf8").trimEnd()))
   child.stderr?.on("data", (chunk: Buffer) => options.onStderr?.(chunk.toString("utf8").trimEnd()))
@@ -159,7 +184,14 @@ export async function spawnLocalServer(
       }
     }
 
-    await Promise.race([ready(), gone])
+    // Health polling is otherwise unbounded: if the sidecar stays alive but
+    // never serves HTTP, wait would hang forever. Bound it by the same
+    // start-stall budget used for the ready handshake.
+    const timedOut = delay(SIDECAR_START_STALL_TIMEOUT).then(() => {
+      throw new Error("Sidecar health check timed out")
+    })
+
+    await Promise.race([ready(), gone, timedOut])
   })()
 
   let stopping: Promise<void> | undefined
@@ -212,7 +244,7 @@ export async function checkHealth(url: string, password?: string | null): Promis
 
 function createSidecarEnv(): Record<string, string> {
   const env = Object.fromEntries(
-    Object.entries(process.env).flatMap(([key, value]) => (value === undefined ? [] : [[key, String(value)]])),
+    Object.entries(process.env).flatMap(([key, value]) => (value === undefined ? [] : [[key, value]])),
   )
   delete env.DEBUG
   if (process.platform === "linux") delete env.LD_PRELOAD
