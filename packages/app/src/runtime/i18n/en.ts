@@ -186,8 +186,6 @@ export const dict = {
   "dialog.model.empty": "No model results",
   "dialog.model.manage": "Manage models",
   "dialog.model.manage.description": "Customize which models appear in the model selector.",
-  "dialog.model.chatgptPlan": "Using ChatGPT plan",
-  "dialog.model.chatgptManageUsage": "Manage usage",
   "dialog.model.manage.provider.toggle": "Toggle all {{provider}} models",
 
   "dialog.model.unpaid.freeModels.title": "Free models provided by OpenCode",
@@ -219,10 +217,6 @@ export const dict = {
   "provider.connect.models.title": "Connected to {{provider}}",
   "provider.connect.models.description": "Choose a model to start with. You can switch models anytime.",
   "provider.connect.models.available": "Available models",
-  "provider.connect.chatgptWelcome.title": "You're using your ChatGPT plan",
-  "provider.connect.chatgptWelcome.description": "Eligible requests in OpenCode use your ChatGPT plan.",
-  "provider.connect.chatgptWelcome.usage": "Manage usage in ChatGPT settings",
-  "provider.connect.chatgptWelcome.confirm": "Got it",
   "provider.connect.models.list": "Models available from {{provider}}",
   "provider.connect.console.refreshFailed":
     "Your account is connected, but we couldn't load your models. Try again to refresh them.",

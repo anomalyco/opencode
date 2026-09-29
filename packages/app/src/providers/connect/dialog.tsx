@@ -39,9 +39,6 @@ import { OpenCodeLogo } from "@/providers/opencode-logo"
 import { decode64 } from "@/runtime/persistence/base64"
 import { SettingsList } from "@/settings/list"
 import { useTabs } from "@/shell/tabs/tabs"
-import { Persist, persisted } from "@/runtime/persistence/storage"
-import { Persistence } from "@/runtime/persistence/schema"
-import { Schema } from "effect"
 import {
   CONSOLE_INTEGRATION,
   CONSOLE_PROVIDERS,
@@ -51,7 +48,6 @@ import {
   type ProviderConnectMethod,
 } from "./controller"
 import { ConsoleAuthorization } from "./console"
-import { DialogChatGPTPlanWelcome } from "./chatgpt-welcome"
 import { authServerName, RemoteAuthNotice } from "./remote"
 import "./models.css"
 
@@ -85,16 +81,8 @@ export const DialogConnectProvider: Component<{
     completed: false,
     modelProvider: undefined as { id: string; name: string } | undefined,
     authorization: false,
-    chatgptWelcome: false,
   })
   const language = useLanguage()
-  const platform = usePlatform()
-  const dialog = useDialog()
-  const [welcome, setWelcome, , welcomeReady] = persisted(
-    Persist.global("chatgpt-plan-welcome.v1"),
-    Persistence.struct({ seen: Schema.Boolean }),
-    { seen: false },
-  )
   const reset = controller.reset
   const back = { current: reset }
   const consoleSelected = () => CONSOLE_PROVIDERS.has(controller.selected() ?? "")
@@ -124,11 +112,7 @@ export const DialogConnectProvider: Component<{
               setBack={(handler) => (back.current = handler)}
               selection={props.selection}
               onDone={props.onDone ? () => setState("completed", true) : undefined}
-              onConnected={(methodID) => {
-                props.onConnected?.(provider)
-                if (platform.platform === "desktop" && provider === "openai" && methodID === "chatgpt-browser")
-                  setState("chatgptWelcome", true)
-              }}
+              onConnected={() => props.onConnected?.(provider)}
               onFirstConnection={(provider) => setState("modelProvider", provider)}
               onAuthorization={(authorization) => setState("authorization", authorization)}
             />
@@ -152,16 +136,9 @@ export const DialogConnectProvider: Component<{
             : "!h-[min(calc(100vh_-_16px),512px)] !w-[min(calc(100vw_-_16px),640px)]"
       }
       onCloseAutoFocus={(event) => {
-        if (state.completed && props.onDone) {
-          event.preventDefault()
-          props.onDone()
-        }
-        if (!state.chatgptWelcome) return
-        void Promise.resolve(welcomeReady.promise).then(() => {
-          if (welcome.seen) return
-          setWelcome("seen", true)
-          void dialog.show(() => <DialogChatGPTPlanWelcome />)
-        })
+        if (!state.completed || !props.onDone) return
+        event.preventDefault()
+        props.onDone()
       }}
       class="[font-family:var(--v2-font-family-sans)] [&_[data-slot=dialog-header]]:!px-5 [&_[data-slot=dialog-header-title]]:!text-[15px] [&_[data-slot=dialog-header-title]]:!tracking-[-0.13px]"
       classList={{
@@ -377,7 +354,7 @@ function ProviderConnection(props: {
   setBack: (handler: () => void) => void
   selection?: ModelSelection
   onDone?: () => void
-  onConnected?: (methodID?: string) => void
+  onConnected?: () => void
   onFirstConnection: (provider: { id: string; name: string }) => void
   onAuthorization: (authorization: boolean) => void
 }) {
@@ -424,8 +401,7 @@ function ProviderConnection(props: {
     prepare: isConsole ? prepareConsoleCatalog : undefined,
     pollInterval: isConsole ? 500 : undefined,
     onComplete: () => {
-      const method = controller.currentMethod()
-      props.onConnected?.(method?.type === "oauth" ? method.id : undefined)
+      props.onConnected?.()
       // The picker only lists the newest model per family by default, which hides most of
       // what a new connection just unlocked. Show everything the connected integration offers.
       global.models.show(
