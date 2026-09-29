@@ -12,7 +12,7 @@
   installShellFiles,
   versionCheckHook,
   writableTmpDirAsHomeHook,
-  node_modules ? callPackage ./node-modules.nix { },
+  node_modules ? callPackage ./node_modules.nix { },
 }:
 stdenvNoCC.mkDerivation (finalAttrs: {
   pname = "opencode";
@@ -86,8 +86,8 @@ stdenvNoCC.mkDerivation (finalAttrs: {
 
   postInstall = lib.optionalString (stdenvNoCC.buildPlatform.canExecute stdenvNoCC.hostPlatform) ''
     # v2 dropped the `completion` subcommand; --completions is the global flag.
-    # NOTE: staged to files, installShellCompletion only rejects a zero-size file.
     # --completions also accepts sh, which emits the same script as bash.
+    # staged to files, substitute below rejects anything that is not a regular file
     $out/bin/opencode --completions bash > opencode.bash
     $out/bin/opencode --completions zsh > _opencode
     $out/bin/opencode --completions fish > opencode.fish
@@ -98,7 +98,9 @@ stdenvNoCC.mkDerivation (finalAttrs: {
       --zsh _opencode
 
     # OPENCODE_CLI_NAME is a build-time define, so the opencode2 copies are
-    # renamed rather than regenerated.
+    # renamed rather than regenerated. --replace-fail is a global literal
+    # substitution, so any lowercase opencode that later appears in a
+    # description or help text ships as opencode2 in the opencode2 copy.
     substitute opencode.bash opencode2.bash --replace-fail opencode opencode2
     substitute _opencode _opencode2 --replace-fail opencode opencode2
     substitute opencode.fish opencode2.fish --replace-fail opencode opencode2

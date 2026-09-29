@@ -13,12 +13,12 @@
   opencode,
 }:
 let
-  electron = callPackage ./electron.nix { };
   electronPin =
     (lib.pipe ../packages/desktop/package.json [
       builtins.readFile
       builtins.fromJSON
     ]).devDependencies.electron;
+  electron = callPackage ./electron.nix { inherit electronPin; };
 in
 stdenv.mkDerivation (finalAttrs: {
   pname = "opencode-desktop";
@@ -71,7 +71,7 @@ stdenv.mkDerivation (finalAttrs: {
     ''
     # https://github.com/electron/electron/issues/31121
     # mac builds use a .app bundle which doesnt have this issue
-    + lib.optionalString stdenv.isLinux ''
+    + lib.optionalString stdenv.hostPlatform.isLinux ''
       substituteInPlace \
         packages/desktop/src/main/windows/appearance.ts \
         packages/desktop/src/main/service/desktop-cli.ts \
@@ -147,6 +147,13 @@ stdenv.mkDerivation (finalAttrs: {
   autoPatchelfIgnoreMissingDeps = [
     "libc.musl-x86_64.so.1"
   ];
+
+  passthru = {
+    # electronVersion is what ships; electronPin is what packages/desktop/package.json
+    # asks for. They differ whenever nixpkgs carries no release of the pinned minor.
+    electronVersion = electron.version;
+    inherit electronPin;
+  };
 
   meta = {
     description = "OpenCode Desktop App";
