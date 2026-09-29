@@ -23,7 +23,28 @@ test("signs the macOS app without signing the DMG", async () => {
   expect(config.dmg?.sign).not.toBe(true)
 })
 
+test("the production Icon Composer package references its bundled artwork", async () => {
+  const icon = await Bun.file(path.join(import.meta.dirname, "icons/prod/icon.icon/icon.json")).json()
+  expect(icon["supported-platforms"]).toEqual({ squares: ["macOS"] })
+  expect(icon.groups[0].layers[0]["image-name"]).toBe("icon.png")
+  expect(await Bun.file(path.join(import.meta.dirname, "icons/prod/icon.icon/Assets/icon.png")).exists()).toBe(true)
+})
+
 for (const channel of channels) {
+  test(`uses the native macOS icon format for ${channel.channel}`, async () => {
+    const previous = process.env.OPENCODE_CHANNEL
+    process.env.OPENCODE_CHANNEL = channel.channel
+    try {
+      const config = (await import(`./electron-builder.config.ts?mac-icon=${channel.channel}`)).default as Configuration
+      expect(config.mac?.icon).toBe(
+        channel.channel === "prod" ? "resources/icons/icon.icon" : "resources/icons/icon.icns",
+      )
+    } finally {
+      if (previous === undefined) delete process.env.OPENCODE_CHANNEL
+      else process.env.OPENCODE_CHANNEL = previous
+    }
+  })
+
   test(`disables security code AutoFill by default for ${channel.channel}`, async () => {
     const previous = process.env.OPENCODE_CHANNEL
     process.env.OPENCODE_CHANNEL = channel.channel
