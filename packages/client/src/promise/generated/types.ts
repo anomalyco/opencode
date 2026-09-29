@@ -133,7 +133,7 @@ export type ToolTextContent = { type: "text"; text: string }
 
 export type ToolFileContent = { type: "file"; uri: string; mime: string; name?: string | null }
 
-export type SessionStructuredError = { type: string; message: string; status?: number }
+export type SessionStructuredError = { type: string; message: string; status?: number; response?: { body: string } }
 
 export type SessionMessageCompactionRunning = {
   type: "compaction"
@@ -3183,7 +3183,12 @@ export type SessionImportInput = {
                   | {
                       readonly status: "error"
                       readonly input: { readonly [x: string]: JsonValue }
-                      readonly error: { readonly type: string; readonly message: string; readonly status?: number }
+                      readonly error: {
+                        readonly type: string
+                        readonly message: string
+                        readonly status?: number
+                        readonly response?: { readonly body: string }
+                      }
                       readonly content?: readonly [
                         (
                           | { readonly type: "text"; readonly text: string }
@@ -3220,11 +3225,21 @@ export type SessionImportInput = {
             readonly reasoning: number
             readonly cache: { readonly read: number; readonly write: number }
           }
-          readonly error?: { readonly type: string; readonly message: string; readonly status?: number }
+          readonly error?: {
+            readonly type: string
+            readonly message: string
+            readonly status?: number
+            readonly response?: { readonly body: string }
+          }
           readonly retry?: {
             readonly attempt: number
             readonly at: number
-            readonly error: { readonly type: string; readonly message: string; readonly status?: number }
+            readonly error: {
+              readonly type: string
+              readonly message: string
+              readonly status?: number
+              readonly response?: { readonly body: string }
+            }
           }
         }
       | (
@@ -3276,7 +3291,12 @@ export type SessionImportInput = {
               readonly time: { readonly created: number }
               readonly status: "failed"
               readonly reason: "auto" | "manual"
-              readonly error: { readonly type: string; readonly message: string; readonly status?: number }
+              readonly error: {
+                readonly type: string
+                readonly message: string
+                readonly status?: number
+                readonly response?: { readonly body: string }
+              }
               readonly cost?: number
               readonly tokens?: {
                 readonly input: number
@@ -3500,7 +3520,12 @@ export type SessionImportInput = {
                   | {
                       readonly status: "error"
                       readonly input: { readonly [x: string]: JsonValue }
-                      readonly error: { readonly type: string; readonly message: string; readonly status?: number }
+                      readonly error: {
+                        readonly type: string
+                        readonly message: string
+                        readonly status?: number
+                        readonly response?: { readonly body: string }
+                      }
                       readonly content?: readonly [
                         (
                           | { readonly type: "text"; readonly text: string }
@@ -3537,11 +3562,21 @@ export type SessionImportInput = {
             readonly reasoning: number
             readonly cache: { readonly read: number; readonly write: number }
           }
-          readonly error?: { readonly type: string; readonly message: string; readonly status?: number }
+          readonly error?: {
+            readonly type: string
+            readonly message: string
+            readonly status?: number
+            readonly response?: { readonly body: string }
+          }
           readonly retry?: {
             readonly attempt: number
             readonly at: number
-            readonly error: { readonly type: string; readonly message: string; readonly status?: number }
+            readonly error: {
+              readonly type: string
+              readonly message: string
+              readonly status?: number
+              readonly response?: { readonly body: string }
+            }
           }
         }
       | (
@@ -3593,7 +3628,12 @@ export type SessionImportInput = {
               readonly time: { readonly created: number }
               readonly status: "failed"
               readonly reason: "auto" | "manual"
-              readonly error: { readonly type: string; readonly message: string; readonly status?: number }
+              readonly error: {
+                readonly type: string
+                readonly message: string
+                readonly status?: number
+                readonly response?: { readonly body: string }
+              }
               readonly cost?: number
               readonly tokens?: {
                 readonly input: number
@@ -3817,7 +3857,12 @@ export type SessionImportInput = {
                   | {
                       readonly status: "error"
                       readonly input: { readonly [x: string]: JsonValue }
-                      readonly error: { readonly type: string; readonly message: string; readonly status?: number }
+                      readonly error: {
+                        readonly type: string
+                        readonly message: string
+                        readonly status?: number
+                        readonly response?: { readonly body: string }
+                      }
                       readonly content?: readonly [
                         (
                           | { readonly type: "text"; readonly text: string }
@@ -3854,11 +3899,21 @@ export type SessionImportInput = {
             readonly reasoning: number
             readonly cache: { readonly read: number; readonly write: number }
           }
-          readonly error?: { readonly type: string; readonly message: string; readonly status?: number }
+          readonly error?: {
+            readonly type: string
+            readonly message: string
+            readonly status?: number
+            readonly response?: { readonly body: string }
+          }
           readonly retry?: {
             readonly attempt: number
             readonly at: number
-            readonly error: { readonly type: string; readonly message: string; readonly status?: number }
+            readonly error: {
+              readonly type: string
+              readonly message: string
+              readonly status?: number
+              readonly response?: { readonly body: string }
+            }
           }
         }
       | (
@@ -3910,7 +3965,12 @@ export type SessionImportInput = {
               readonly time: { readonly created: number }
               readonly status: "failed"
               readonly reason: "auto" | "manual"
-              readonly error: { readonly type: string; readonly message: string; readonly status?: number }
+              readonly error: {
+                readonly type: string
+                readonly message: string
+                readonly status?: number
+                readonly response?: { readonly body: string }
+              }
               readonly cost?: number
               readonly tokens?: {
                 readonly input: number

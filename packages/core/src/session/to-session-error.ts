@@ -69,5 +69,10 @@ export function toSessionError(cause: unknown): SessionError.Error {
 
 function providerError(type: string, reason: AIError["reason"]): SessionError.Error {
   const status = reason.http?.status
-  return { type, message: reason.message, ...(status === undefined ? {} : { status }) }
+  return {
+    type,
+    message: reason.message,
+    ...(status === undefined ? {} : { status }),
+    ...(reason.body === undefined ? {} : { response: { body: reason.body } }),
+  }
 }

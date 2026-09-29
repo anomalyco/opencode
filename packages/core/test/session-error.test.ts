@@ -110,6 +110,7 @@ describe("toSessionError", () => {
       type: "provider.invalid-request",
       message: "too large",
       status: 413,
+      response: { body: '{"error":"context limit"}' },
     })
     expect(
       toSessionError(
@@ -124,6 +125,14 @@ describe("toSessionError", () => {
       type: "provider.internal",
       message: "bad gateway",
       status: 502,
+    })
+  })
+
+  test("preserves provider response body without HTTP status", () => {
+    expect(toSessionError(llm(new RateLimitError({ message: "Slow down", body: '{"error":"rate limit"}' })))).toEqual({
+      type: "provider.rate-limit",
+      message: "Slow down",
+      response: { body: '{"error":"rate limit"}' },
     })
   })
 
