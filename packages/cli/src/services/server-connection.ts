@@ -18,7 +18,7 @@ export type Resolved = {
   readonly service?: ReturnType<typeof managedService>
 }
 
-export const resolve = Effect.fn("cli.server-connection.resolve")(function* (args: Args) {
+export const resolve = Effect.fn("cli.server-connection.resolve")(function* (args: Args = {}) {
   if (args.server !== undefined && args.standalone)
     return yield* Effect.fail(new Error("--server and --standalone cannot be combined"))
   if (args.server !== undefined) {

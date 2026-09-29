@@ -16,7 +16,7 @@ export interface Item {
 }
 
 export const inspect = Effect.fn("cli.plugin.inspect")(function* (selected?: string) {
-  const { endpoint } = yield* ServerConnection.resolve({})
+  const { endpoint } = yield* ServerConnection.resolve()
   const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
   const location = { directory: process.cwd() }
   const listed = yield* Effect.promise(() => client.plugin.list({ location }))

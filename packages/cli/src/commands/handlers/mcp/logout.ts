@@ -12,7 +12,7 @@ const location = { directory: process.cwd() }
 export default Runtime.handler(
   Commands.commands.mcp.commands.logout,
   Effect.fn("cli.mcp.logout")(function* (input) {
-    const { endpoint } = yield* ServerConnection.resolve({})
+    const { endpoint } = yield* ServerConnection.resolve()
     const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
 
     const integration = yield* resolveIntegration(client, input.name, location)

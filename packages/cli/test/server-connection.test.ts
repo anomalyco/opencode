@@ -39,7 +39,7 @@ test("resolution groups Effect-native lifecycle operations only for the managed 
         pid: process.pid,
       }),
     )
-    const resolved = await runPromise(ServerConnection.resolve({}))
+    const resolved = await runPromise(ServerConnection.resolve())
 
     expect(resolved.endpoint.url).toBe(server.url.toString())
     expect(resolved.service).toBeDefined()
