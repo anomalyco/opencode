@@ -284,6 +284,49 @@ describe("provider error classification", () => {
     ).toEqual(Array(6).fill("QuotaExceeded"))
   })
 
+  test("classifies Z.ai plan and balance limits as quota rather than throttling", () => {
+    const zai = (code: string, message: string) => ({ error: { code, message } })
+    const cases = [
+      zai("1113", "Insufficient balance or no resource package. Please recharge."),
+      zai("1308", "Usage limit reached for 5 hours. Your limit will reset at 2026-10-01 00:00:00"),
+      zai(
+        "1309",
+        "Your GLM Coding Plan package has expired and is temporarily unavailable. You can resume using it after renewing the subscription on the official website.",
+      ),
+      zai("1310", "Weekly/Monthly Limit Exhausted. Your limit will reset at 2026-10-01 00:00:00"),
+      zai("1311", "Your current subscription plan does not yet include access to glm-5"),
+      zai("1314", "Your enterprise package has expired. Please contact your enterprise administrator."),
+      // Z.ai's Anthropic-compatible endpoint wraps the code and request ID into the message.
+      {
+        type: "error",
+        error: {
+          type: "rate_limit_error",
+          code: "1309",
+          message:
+            "[1309][Your GLM Coding Plan package has expired and is temporarily unavailable. You can resume using it after renewing the subscription on the official website.][20260929132151e73af01340d54b58]",
+        },
+      },
+    ]
+    expect(
+      cases.map(
+        (body) =>
+          classifyProviderFailure({ message: body.error.message, status: 429, rawBody: JSON.stringify(body) })._tag,
+      ),
+    ).toEqual(Array(cases.length).fill("QuotaExceeded"))
+  })
+
+  test("keeps Z.ai throttling and overload retryable", () => {
+    expect(
+      [
+        { error: { code: "1302", message: "Rate limit reached for requests" } },
+        { error: { code: "1305", message: "The service may be temporarily overloaded, please try again later" } },
+      ].map(
+        (body) =>
+          classifyProviderFailure({ message: body.error.message, status: 429, rawBody: JSON.stringify(body) })._tag,
+      ),
+    ).toEqual(["RateLimit", "RateLimit"])
+  })
+
   test("does not let substituted server codes make a 4xx retryable", () => {
     const openai = { error: { type: "server_error", message: "Upstream request failed: Model is unavailable." } }
     const anthropic = {
