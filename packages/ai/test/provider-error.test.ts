@@ -366,6 +366,23 @@ describe("provider error rawBody classification", () => {
     expect(reason._tag === "InvalidRequest" ? reason.classification : reason._tag).toBe("context-overflow")
   })
 
+  test("classifies Amazon Nova input token rejections as context overflow", () => {
+    const message =
+      "The model returned the following errors: Input Tokens Exceeded: Number of input tokens exceeds maximum length. Please update the input to try again."
+    const reason = classifyProviderFailure({
+      message,
+      rawBody: JSON.stringify({
+        headers: {
+          ":exception-type": { type: "string", value: "validationException" },
+          ":content-type": { type: "string", value: "application/json" },
+          ":message-type": { type: "string", value: "exception" },
+        },
+        body: JSON.stringify({ message }),
+      }),
+    })
+    expect(reason._tag === "InvalidRequest" ? reason.classification : reason._tag).toBe("context-overflow")
+  })
+
   test("classifies Google invalid API keys as authentication failures", () => {
     const rawBody = JSON.stringify({
       error: {

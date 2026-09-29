@@ -21,6 +21,8 @@ const patterns = [
   /exceeds the context window/i,
   /exceeds (?:the )?(?:model'?s )?maximum context length(?: of [\d,]+ tokens?|\s*\([\d,]+\))/i,
   /input token count.*exceeds the maximum/i,
+  // Amazon Nova on Bedrock reports this as a mid-stream validationException.
+  /number of input tokens exceeds maximum length/i,
   /tokens in request more than max tokens allowed/i,
   /maximum prompt length is \d+/i,
   /reduce the length of the messages/i,
