@@ -9,10 +9,10 @@ import { AppProcess } from "@opencode/util/process"
 import { randomBytes, randomUUID } from "node:crypto"
 import { Effect, Option, Redacted, Schema } from "effect"
 import { PersistentPty } from "@opencode/schema/persistent-pty"
-import { HttpServer } from "effect/unstable/http"
 import { Env } from "./env"
 import { ServiceConfig } from "./services/service-config"
 import { RetainedImage } from "./services/retained-image"
+import { ServerAddress } from "./services/server-address"
 import { ServiceRegistration } from "./services/service-registration"
 import { RemoteTunnel } from "./services/remote-tunnel"
 import { WebUi } from "./services/web-ui"
@@ -186,7 +186,7 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
           }),
         )
       }
-      const url = HttpServer.formatAddress(server.address)
+      const url = ServerAddress.formatAddress(server.address)
       console.log(options.mode === "stdio" ? JSON.stringify({ url }) : `server listening on ${url}`)
       if (foreground && !environmentPassword) console.log(`server password ${password}`)
       return yield* options.mode === "service"
