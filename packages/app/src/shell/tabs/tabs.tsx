@@ -1,10 +1,11 @@
 import type { SessionInfo, SessionMessageUser } from "@opencode/client/promise"
 import type { ComposerSelection } from "@/composer/adapter"
 import { createSimpleContext } from "@opencode/ui/context"
+import { base64Encode } from "@opencode/util/encode"
 import { createStore, produce } from "solid-js/store"
 import { Persist, persisted, removePersisted, draftPersistedKeys } from "@/runtime/persistence/storage"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
-import { createEffect, getOwner, onCleanup, startTransition } from "solid-js"
+import { createEffect, createSignal, getOwner, onCleanup, startTransition } from "solid-js"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { usePlatform } from "@/runtime/platform/platform"
 import { uuid } from "@/runtime/persistence/uuid"
@@ -37,6 +38,8 @@ export type TabInfo = typeof TabStorage.Info.Type
 
 export type TabPane = "terminal" | "review"
 export type TabPaneSize = "terminalHeight" | "sessionWidth"
+
+export type PromptFocus = { serverKey: string; id: string }
 
 export const draftHref = (draftID: string) => `/new-session?draftId=${encodeURIComponent(draftID)}`
 
@@ -77,6 +80,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     const [panes, setPanes, , panesReady] = persisted(Persist.window("tabs.panes"), TabStorage.Panes, {})
     const [closed, setClosed, , closedReady] = persisted(Persist.window("tabs.closed"), TabStorage.Closed, [])
     const [pending, setPending] = createStore<Record<string, PendingSession | undefined>>({})
+    const [promptFocus, setPromptFocus] = createSignal<PromptFocus | undefined>(undefined)
 
     const params = useParams()
     const navigate = useNavigate()
@@ -200,6 +204,18 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       removeInfo(key)
       removePanes(key)
       if (draftID) removeDraftPersisted(draftID)
+    }
+
+    const requestPromptFocus = (tab: Tab) => {
+      if (tab.type !== "session") return
+      setPromptFocus({ serverKey: base64Encode(tab.server), id: tab.routeSessionId ?? tab.sessionId })
+    }
+
+    const takePromptFocus = (serverKey: string, id: string) => {
+      const current = promptFocus()
+      if (!current || current.serverKey !== serverKey || current.id !== id) return false
+      setPromptFocus(undefined)
+      return true
     }
 
     const actions = {
@@ -533,6 +549,6 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
       },
     }
 
-    return { ...actions, store, info, ready, infoReady, recentReady, panesReady }
+    return { ...actions, store, info, ready, infoReady, recentReady, panesReady, requestPromptFocus, takePromptFocus }
   },
 })

@@ -4,7 +4,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner } from "@opencode/ui/scroll-view"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useNavigate } from "@solidjs/router"
-import { createEffect, createMemo, on, onMount, type Accessor } from "solid-js"
+import { createEffect, createMemo, createSignal, on, onMount, type Accessor } from "solid-js"
 import { Composer } from "@/composer/composer"
 import { useComposerState } from "@/composer/persistence"
 import { createComposerControls } from "@/composer/selection"
@@ -16,6 +16,7 @@ import { useLocal } from "@/providers/models/selection"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { requireServerKey, sessionHref } from "@/shell/routes/session"
+import { useTabs } from "@/shell/tabs/tabs"
 import { useComposerCommands } from "@/composer/commands"
 import { useSessionCommands } from "../commands/use-session-commands"
 import type { SessionModel } from "../model"
@@ -37,6 +38,7 @@ export function createActiveSessionRegion(input: {
 }) {
   const command = useCommand()
   const dialog = useDialog()
+  const tabs = useTabs()
   const language = useLanguage()
   const local = useLocal()
   const location = useWorkspaceLocation()
@@ -48,6 +50,7 @@ export function createActiveSessionRegion(input: {
     sessionKey: input.session.identity.sessionKey,
   })
   let promptRef: HTMLDivElement | undefined
+  const [promptReady, setPromptReady] = createSignal(false)
 
   createEffect(
     on(
@@ -97,6 +100,10 @@ export function createActiveSessionRegion(input: {
   const focus = () => {
     if (!input.session.data.isChild()) promptRef?.focus()
   }
+  createEffect(() => {
+    if (!input.visible() || !promptReady()) return
+    if (tabs.takePromptFocus(input.session.identity.params.serverKey, input.session.identity.params.id)) focus()
+  })
   const openParent = () => {
     const id = input.session.data.parentID()
     if (id) navigate(sessionHref(requireServerKey(input.session.identity.params.serverKey), id))
@@ -181,6 +188,7 @@ export function createActiveSessionRegion(input: {
     openParent,
     setPromptRef: (element: HTMLDivElement) => {
       promptRef = element
+      setPromptReady(!!element)
     },
     setDockRef: input.timeline.view.setDockRef,
   }
