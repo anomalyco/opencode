@@ -220,6 +220,16 @@ describe("session.llm.ai-sdk adapter", () => {
       },
       {
         type: "finish-step",
+        performance: {
+          effectiveOutputTokensPerSecond: 1,
+          outputTokensPerSecond: 1,
+          inputTokensPerSecond: 1,
+          effectiveTotalTokensPerSecond: 1,
+          stepTimeMs: 1,
+          responseTimeMs: 1,
+          toolExecutionMs: {},
+          timeToFirstOutputMs: 1,
+        },
         response: { id: "response-1", timestamp: new Date(0), modelId: "gpt-test" },
         finishReason: "other",
         rawFinishReason: "other",
@@ -240,8 +250,6 @@ describe("session.llm.ai-sdk adapter", () => {
           inputTokens: 11,
           outputTokens: 6,
           totalTokens: 17,
-          cachedInputTokens: 4,
-          reasoningTokens: 2,
           inputTokenDetails: { noCacheTokens: 7, cacheReadTokens: 4, cacheWriteTokens: undefined },
           outputTokenDetails: { textTokens: 4, reasoningTokens: 2 },
         },
@@ -284,7 +292,6 @@ describe("session.llm.ai-sdk adapter", () => {
         usage: {
           inputTokens: 10,
           outputTokens: 5,
-          totalTokens: 15,
           reasoningTokens: 1,
           cacheReadInputTokens: 3,
           cacheWriteInputTokens: 2,
@@ -297,8 +304,6 @@ describe("session.llm.ai-sdk adapter", () => {
         usage: {
           inputTokens: 11,
           outputTokens: 6,
-          totalTokens: 17,
-          reasoningTokens: 2,
           cacheReadInputTokens: 4,
         },
       },
@@ -364,6 +369,16 @@ describe("session.llm.ai-sdk adapter", () => {
     const events = await adapt([
       {
         type: "finish-step",
+        performance: {
+          effectiveOutputTokensPerSecond: 1,
+          outputTokensPerSecond: 1,
+          inputTokensPerSecond: 1,
+          effectiveTotalTokensPerSecond: 1,
+          stepTimeMs: 1,
+          responseTimeMs: 1,
+          toolExecutionMs: {},
+          timeToFirstOutputMs: 1,
+        },
         response: { id: "response-1", timestamp: new Date(0), modelId: "gpt-test" },
         finishReason: "stop",
         rawFinishReason: "stop",
@@ -372,8 +387,6 @@ describe("session.llm.ai-sdk adapter", () => {
           inputTokens: undefined,
           outputTokens: undefined,
           totalTokens: undefined,
-          reasoningTokens: undefined,
-          cachedInputTokens: undefined,
           inputTokenDetails: { noCacheTokens: undefined, cacheReadTokens: undefined, cacheWriteTokens: undefined },
           outputTokenDetails: { textTokens: undefined, reasoningTokens: undefined },
         },
@@ -406,6 +419,16 @@ describe("session.llm.ai-sdk adapter", () => {
       uncheckedAdapterEvent({ type: "reasoning-end" }),
       {
         type: "finish-step",
+        performance: {
+          effectiveOutputTokensPerSecond: 1,
+          outputTokensPerSecond: 1,
+          inputTokensPerSecond: 1,
+          effectiveTotalTokensPerSecond: 1,
+          stepTimeMs: 1,
+          responseTimeMs: 1,
+          toolExecutionMs: {},
+          timeToFirstOutputMs: 1,
+        },
         response: { id: "r1", timestamp: new Date(0), modelId: "gpt-test" },
         finishReason: "stop",
         rawFinishReason: "stop",
@@ -413,7 +436,7 @@ describe("session.llm.ai-sdk adapter", () => {
         usage: {
           inputTokens: 1,
           outputTokens: 1,
-          totalTokens: 2,
+          totalTokens: 15,
           inputTokenDetails: { noCacheTokens: undefined, cacheReadTokens: undefined, cacheWriteTokens: undefined },
           outputTokenDetails: { textTokens: undefined, reasoningTokens: undefined },
         },
@@ -425,7 +448,7 @@ describe("session.llm.ai-sdk adapter", () => {
         totalUsage: {
           inputTokens: 1,
           outputTokens: 1,
-          totalTokens: 2,
+          totalTokens: 17,
           inputTokenDetails: { noCacheTokens: undefined, cacheReadTokens: undefined, cacheWriteTokens: undefined },
           outputTokenDetails: { textTokens: undefined, reasoningTokens: undefined },
         },
@@ -456,6 +479,16 @@ describe("session.llm.ai-sdk adapter", () => {
     const events = await adapt([
       {
         type: "finish-step",
+        performance: {
+          effectiveOutputTokensPerSecond: 1,
+          outputTokensPerSecond: 1,
+          inputTokensPerSecond: 1,
+          effectiveTotalTokensPerSecond: 1,
+          stepTimeMs: 1,
+          responseTimeMs: 1,
+          toolExecutionMs: {},
+          timeToFirstOutputMs: 1,
+        },
         response: { id: "msg_test", timestamp: new Date(0), modelId: "claude-3-5-sonnet" },
         finishReason: "stop",
         rawFinishReason: "stop",
@@ -463,7 +496,7 @@ describe("session.llm.ai-sdk adapter", () => {
         usage: {
           inputTokens: 1000,
           outputTokens: 500,
-          totalTokens: 1500,
+          totalTokens: 2,
           inputTokenDetails: { noCacheTokens: 800, cacheReadTokens: 200, cacheWriteTokens: undefined },
           outputTokenDetails: { textTokens: 500, reasoningTokens: undefined },
         },
@@ -515,13 +548,23 @@ describe("session.llm.ai-sdk adapter", () => {
       }),
       {
         type: "finish-step",
+        performance: {
+          effectiveOutputTokensPerSecond: 1,
+          outputTokensPerSecond: 1,
+          inputTokensPerSecond: 1,
+          effectiveTotalTokensPerSecond: 1,
+          stepTimeMs: 1,
+          responseTimeMs: 1,
+          toolExecutionMs: {},
+          timeToFirstOutputMs: 1,
+        },
         response: { id: "msg_test", timestamp: new Date(0), modelId: "claude-sonnet-4.6" },
         finishReason: "stop",
         rawFinishReason: "end_turn",
         usage: {
           inputTokens: 11_774,
           outputTokens: 39,
-          totalTokens: 11_813,
+          totalTokens: 2,
           inputTokenDetails: { noCacheTokens: 3, cacheReadTokens: 0, cacheWriteTokens: 11_771 },
           outputTokenDetails: { textTokens: 39, reasoningTokens: undefined },
         },
@@ -529,13 +572,23 @@ describe("session.llm.ai-sdk adapter", () => {
       },
       {
         type: "finish-step",
+        performance: {
+          effectiveOutputTokensPerSecond: 1,
+          outputTokensPerSecond: 1,
+          inputTokensPerSecond: 1,
+          effectiveTotalTokensPerSecond: 1,
+          stepTimeMs: 1,
+          responseTimeMs: 1,
+          toolExecutionMs: {},
+          timeToFirstOutputMs: 1,
+        },
         response: { id: "msg_follow_up", timestamp: new Date(0), modelId: "claude-sonnet-4.6" },
         finishReason: "stop",
         rawFinishReason: "end_turn",
         usage: {
           inputTokens: 1,
           outputTokens: 1,
-          totalTokens: 2,
+          totalTokens: 1500,
           inputTokenDetails: { noCacheTokens: 1, cacheReadTokens: 0, cacheWriteTokens: 0 },
           outputTokenDetails: { textTokens: 1, reasoningTokens: undefined },
         },
@@ -2247,3 +2300,4 @@ describe("session.llm.stream", () => {
     },
   )
 })
+totalTokens: 11813

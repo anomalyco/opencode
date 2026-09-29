@@ -1,4 +1,4 @@
-import { createProviderToolFactory } from "@ai-sdk/provider-utils"
+import { createProviderDefinedToolFactory } from "@ai-sdk/provider-utils"
 import { z } from "zod/v4"
 
 // Args validation schema
@@ -40,7 +40,7 @@ export const webSearchPreviewArgsSchema = z.object({
     .optional(),
 })
 
-export const webSearchPreview = createProviderToolFactory<
+export const webSearchPreview = createProviderDefinedToolFactory<
   {
     // Web search doesn't take input parameters - it's controlled by the prompt
   },

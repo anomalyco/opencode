@@ -1,0 +1,50 @@
+diff --git a/dist/index.js b/dist/index.js
+index 2fa83f2bdccdbde3921e9a1213c1495ebedf3ad4..dccbe2c47b5fcaef047dc43ea1a801abb1164a82 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -1334,22 +1334,6 @@ var OpenAIChatLanguageModel = class _OpenAIChatLanguageModel {
+         });
+       }
+     }
+-    if (openaiOptions.serviceTier === "flex" && !modelCapabilities.supportsFlexProcessing) {
+-      warnings.push({
+-        type: "unsupported",
+-        feature: "serviceTier",
+-        details: "flex processing is only available for o3, o4-mini, and gpt-5 models"
+-      });
+-      baseArgs.service_tier = void 0;
+-    }
+-    if ((openaiOptions.serviceTier === "priority" || openaiOptions.serviceTier === "fast") && !modelCapabilities.supportsPriorityProcessing) {
+-      warnings.push({
+-        type: "unsupported",
+-        feature: "serviceTier",
+-        details: "priority processing is only available for supported models (gpt-4, gpt-5, gpt-5-mini, o3, o4-mini) and requires Enterprise access. gpt-5-nano is not supported"
+-      });
+-      baseArgs.service_tier = void 0;
+-    }
+     const {
+       tools: openaiTools2,
+       toolChoice: openaiToolChoice,
+@@ -7469,22 +7453,6 @@ var OpenAIResponsesLanguageModel = class _OpenAIResponsesLanguageModel {
+         });
+       }
+     }
+-    if (openaiOptions?.serviceTier === "flex" && !modelCapabilities.supportsFlexProcessing) {
+-      warnings.push({
+-        type: "unsupported",
+-        feature: "serviceTier",
+-        details: "flex processing is only available for o3, o4-mini, and gpt-5 models"
+-      });
+-      delete baseArgs.service_tier;
+-    }
+-    if ((openaiOptions?.serviceTier === "priority" || openaiOptions?.serviceTier === "fast") && !modelCapabilities.supportsPriorityProcessing) {
+-      warnings.push({
+-        type: "unsupported",
+-        feature: "serviceTier",
+-        details: "priority processing is only available for supported models (gpt-4, gpt-5, gpt-5-mini, o3, o4-mini) and requires Enterprise access. gpt-5-nano is not supported"
+-      });
+-      delete baseArgs.service_tier;
+-    }
+     const shellToolEnvType = tools?.find(
+       (tool) => tool.type === "provider" && tool.id === "openai.shell"
+     )?.args?.environment?.type;

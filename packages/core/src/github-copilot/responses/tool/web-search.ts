@@ -1,4 +1,4 @@
-import { createProviderToolFactory } from "@ai-sdk/provider-utils"
+import { createProviderDefinedToolFactory } from "@ai-sdk/provider-utils"
 import { z } from "zod/v4"
 
 export const webSearchArgsSchema = z.object({
@@ -21,7 +21,7 @@ export const webSearchArgsSchema = z.object({
     .optional(),
 })
 
-export const webSearchToolFactory = createProviderToolFactory<
+export const webSearchToolFactory = createProviderDefinedToolFactory<
   {
     // Web search doesn't take input parameters - it's controlled by the prompt
   },

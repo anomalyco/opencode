@@ -154,7 +154,7 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
     input.model.api.npm === "@ai-sdk/azure" ||
     input.model.api.npm === "@ai-sdk/amazon-bedrock/mantle"
   ) {
-    for (const key of Object.keys(tools)) tools[key] = { ...tools[key], strict: false }
+    for (const key of Object.keys(tools)) tools[key] = { ...tools[key], strict: false } as (typeof tools)[string]
   }
   if (
     input.model.providerID.includes("github-copilot") &&

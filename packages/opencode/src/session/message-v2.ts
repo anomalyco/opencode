@@ -17,7 +17,7 @@ import {
 } from "@opencode-ai/core/v1/session"
 
 import { NamedError } from "@opencode-ai/core/util/error"
-import { APICallError, convertToModelMessages, LoadAPIKeyError, type ModelMessage, type UIMessage } from "ai"
+import { APICallError, convertToModelMessages, LoadAPIKeyError, StreamProviderError, type ModelMessage, type UIMessage } from "ai"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { NotFoundError } from "@/storage/storage"
@@ -182,12 +182,15 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         value: [
           ...(outputObject.text ? [{ type: "text", text: outputObject.text }] : []),
           ...attachments.map((attachment) => ({
-            type: "media",
+            type: "file",
+            data: {
+              type: "data",
+              data: iife(() => {
+                const commaIndex = attachment.url.indexOf(",")
+                return commaIndex === -1 ? attachment.url : attachment.url.slice(commaIndex + 1)
+              }),
+            },
             mediaType: attachment.mime,
-            data: iife(() => {
-              const commaIndex = attachment.url.indexOf(",")
-              return commaIndex === -1 ? attachment.url : attachment.url.slice(commaIndex + 1)
-            }),
           })),
         ],
       }
@@ -669,6 +672,20 @@ export function fromError(
         },
         { cause: e },
       ).toObject()
+    case StreamProviderError.isInstance(e):
+      return new APIError(
+        {
+          message: e.message,
+          statusCode: e.statusCode,
+          isRetryable: e.isRetryable,
+          responseBody: e.data === undefined ? undefined : JSON.stringify(e.data),
+          metadata: {
+            ...(typeof e.type === "string" ? { type: e.type } : {}),
+            ...(e.code === undefined ? {} : { code: String(e.code) }),
+          },
+        },
+        { cause: e },
+      ).toObject()
     case e instanceof ProviderError.ResponseStreamError:
       return new APIError(
         {
@@ -676,6 +693,34 @@ export function fromError(
           isRetryable: true,
           metadata: {
             code: e.name,
+          },
+        },
+        { cause: e },
+      ).toObject()
+    case APICallError.isInstance(e) && e.cause instanceof ProviderError.ResponseStreamError:
+      // provider-utils wraps errors raised while reading a successful response
+      // body into a generic APICallError; the SSE-level failure is the cause.
+      return new APIError(
+        {
+          message: (e.cause as ProviderError.ResponseStreamError).message,
+          isRetryable: true,
+          metadata: {
+            code: e.cause.constructor.name,
+          },
+        },
+        { cause: e },
+      ).toObject()
+    case APICallError.isInstance(e) && e.cause instanceof Error && !e.responseBody:
+      // Same wrapper for mid-body network failures: retryability is decided by
+      // the underlying transport error (e.g. "socket connection was closed").
+      return new APIError(
+        {
+          message: e.message,
+          statusCode: e.statusCode,
+          isRetryable: e.isRetryable,
+          responseBody: e.cause.message,
+          metadata: {
+            code: e.cause.constructor.name,
           },
         },
         { cause: e },

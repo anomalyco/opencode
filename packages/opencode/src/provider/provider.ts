@@ -9,7 +9,7 @@ import { Npm } from "@opencode-ai/core/npm"
 import { Hash } from "@opencode-ai/core/util/hash"
 import { Plugin } from "../plugin"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
-import { type LanguageModelV3 } from "@ai-sdk/provider"
+import { type LanguageModelV3, type LanguageModelV4 } from "@ai-sdk/provider"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Auth } from "../auth"
 import { Env } from "../env"
@@ -140,9 +140,9 @@ function googleVertexEndpoint(location: string) {
 }
 
 type BundledSDK = {
-  languageModel(modelId: string): LanguageModelV3
-  chat?: (modelId: string) => LanguageModelV3
-  responses?: (modelId: string) => LanguageModelV3
+  languageModel(modelId: string): LanguageModelV4 | LanguageModelV3
+  chat?: (modelId: string) => LanguageModelV4 | LanguageModelV3
+  responses?: (modelId: string) => LanguageModelV4 | LanguageModelV3
 }
 
 const BUNDLED_PROVIDERS: Record<string, () => Promise<(opts: any) => BundledSDK>> = {
@@ -1247,7 +1247,7 @@ export interface Interface {
   readonly list: () => Effect.Effect<Record<ProviderV2.ID, Info>>
   readonly getProvider: (providerID: ProviderV2.ID) => Effect.Effect<Info>
   readonly getModel: (providerID: ProviderV2.ID, modelID: ModelV2.ID) => Effect.Effect<Model, ModelNotFoundError>
-  readonly getLanguage: (model: Model) => Effect.Effect<LanguageModelV3, ModelNotFoundError>
+  readonly getLanguage: (model: Model) => Effect.Effect<LanguageModelV4 | LanguageModelV3, ModelNotFoundError>
   readonly closest: (
     providerID: ProviderV2.ID,
     query: string[],
@@ -1257,7 +1257,7 @@ export interface Interface {
 }
 
 interface State {
-  models: Map<string, LanguageModelV3>
+  models: Map<string, LanguageModelV4 | LanguageModelV3>
   providers: Record<ProviderV2.ID, Info>
   catalog: Record<ProviderV2.ID, Info>
   sdk: Map<string, BundledSDK>
@@ -1457,7 +1457,7 @@ const layer = Layer.effect(
         const database = mapValues(catalog, toPublicInfo)
 
         const providers: Record<ProviderV2.ID, Info> = {} as Record<ProviderV2.ID, Info>
-        const languages = new Map<string, LanguageModelV3>()
+        const languages = new Map<string, LanguageModelV4 | LanguageModelV3>()
         const modelLoaders: {
           [providerID: string]: CustomModelLoader
         } = {}

@@ -12,6 +12,7 @@ export function adapterState() {
     step: 0,
     text: 0,
     reasoning: 0,
+    truncated: false,
     currentTextID: undefined as string | undefined,
     currentReasoningID: undefined as string | undefined,
     toolNames: {} as Record<string, string>,
@@ -101,14 +102,16 @@ export function toLLMEvents(
                 },
               }
         state.copilotTotalNanoAiu = undefined
-        return [
+        const result = [
           LLMEvent.stepFinish({
             index: state.step++,
-            reason: finishReason(event.finishReason),
+            reason: state.truncated ? "unknown" : finishReason(event.finishReason),
             usage: usage(event.usage),
             providerMetadata: metadata,
           }),
         ]
+        state.truncated = false
+        return result
       })
 
     case "finish":
@@ -265,6 +268,13 @@ export function toLLMEvents(
       })
 
     case "error":
+      // OpenAI-compatible providers flag a body that ends without a finish
+      // reason as an error; treat it as an unknown finish like ai 6 did so the
+      // prompt loop continues instead of failing the turn.
+      if (event.error instanceof Error && event.error.message.includes("without a finish reason")) {
+        state.truncated = true
+        return Effect.succeed([])
+      }
       return Effect.fail(event.error)
 
     case "abort":
@@ -272,6 +282,9 @@ export function toLLMEvents(
     case "file":
     case "tool-output-denied":
     case "tool-approval-request":
+    case "tool-approval-response":
+    case "custom":
+    case "reasoning-file":
       return Effect.succeed([])
 
     case "raw":

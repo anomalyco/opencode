@@ -1,0 +1,92 @@
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 80684ab4639515262484640e458321ea180f1d86..6be213a7b1019bc6982f642c421645f3c4692714 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -78,6 +78,7 @@ declare const amazonBedrockLanguageModelChatOptions: z.ZodObject<{
+         type: z.ZodOptional<z.ZodUnion<readonly [z.ZodLiteral<"enabled">, z.ZodLiteral<"disabled">, z.ZodLiteral<"adaptive">]>>;
+         budgetTokens: z.ZodOptional<z.ZodNumber>;
+         maxReasoningEffort: z.ZodOptional<z.ZodEnum<{
++            none: "none";
+             low: "low";
+             medium: "medium";
+             high: "high";
+@@ -88,6 +89,12 @@ declare const amazonBedrockLanguageModelChatOptions: z.ZodObject<{
+             omitted: "omitted";
+             summarized: "summarized";
+         }>>;
++        blockBinding: z.ZodOptional<z.ZodObject<{
++            prefixMismatchBehavior: z.ZodEnum<{
++                error: "error";
++                drop_block: "drop_block";
++            }>;
++        }, z.core.$strip>>;
+     }, z.core.$strip>>;
+     anthropicBeta: z.ZodOptional<z.ZodArray<z.ZodString>>;
+     serviceTier: z.ZodOptional<z.ZodEnum<{
+diff --git a/dist/index.js b/dist/index.js
+index 92b18e3be83d9a72d963533c57b757a9224630ad..4f91434a8cfb857ae3168954bacfac31a7011b6c 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -116,8 +116,11 @@ var amazonBedrockLanguageModelChatOptions = z.object({
+       z.literal("adaptive")
+     ]).optional(),
+     budgetTokens: z.number().optional(),
+-    maxReasoningEffort: z.enum(["low", "medium", "high", "xhigh", "max"]).optional(),
+-    display: z.enum(["omitted", "summarized"]).optional()
++    maxReasoningEffort: z.enum(["none", "low", "medium", "high", "xhigh", "max"]).optional(),
++    display: z.enum(["omitted", "summarized"]).optional(),
++    blockBinding: z.object({
++      prefixMismatchBehavior: z.enum(["error", "drop_block"])
++    }).optional()
+   }).optional(),
+   /**
+    * Anthropic beta features to enable
+@@ -1429,6 +1432,10 @@ var AmazonBedrockChatLanguageModel = class _AmazonBedrockChatLanguageModel {
+       rejectsForcedToolUse
+     });
+     warnings.push(...toolWarnings);
++    const thinkingBlockBindingEarly = isAnthropicModel2 && isThinkingEnabled ? amazonBedrockOptions.reasoningConfig?.blockBinding : void 0;
++    if (thinkingBlockBindingEarly != null) {
++      betas.add("thinking-binding-controls-2026-08-01");
++    }
+     if (additionalTools) {
+       amazonBedrockOptions.additionalModelRequestFields = {
+         ...amazonBedrockOptions.additionalModelRequestFields,
+@@ -1447,6 +1454,9 @@ var AmazonBedrockChatLanguageModel = class _AmazonBedrockChatLanguageModel {
+     const thinkingBudget = thinkingType === "enabled" ? amazonBedrockOptions.reasoningConfig?.budgetTokens : void 0;
+     const thinkingDisplay = thinkingType === "adaptive" ? amazonBedrockOptions.reasoningConfig?.display : void 0;
+     const isAnthropicThinkingEnabled = isAnthropicModel2 && isThinkingEnabled;
++    const thinkingBlockBinding = isAnthropicThinkingEnabled
++      ? amazonBedrockOptions.reasoningConfig?.blockBinding
++      : void 0;
+     const inferenceConfig = {
+       ...maxOutputTokens != null && { maxTokens: maxOutputTokens },
+       ...temperature != null && { temperature },
+@@ -1465,7 +1475,12 @@ var AmazonBedrockChatLanguageModel = class _AmazonBedrockChatLanguageModel {
+           ...amazonBedrockOptions.additionalModelRequestFields,
+           thinking: {
+             type: "enabled",
+-            budget_tokens: thinkingBudget
++            budget_tokens: thinkingBudget,
++            ...thinkingBlockBinding != null && {
++              block_binding: {
++                prefix_mismatch_behavior: thinkingBlockBinding.prefixMismatchBehavior
++              }
++            }
+           }
+         };
+       } else if (thinkingType === "adaptive") {
+@@ -1473,7 +1488,12 @@ var AmazonBedrockChatLanguageModel = class _AmazonBedrockChatLanguageModel {
+           ...amazonBedrockOptions.additionalModelRequestFields,
+           thinking: {
+             type: "adaptive",
+-            ...thinkingDisplay != null && { display: thinkingDisplay }
++            ...thinkingDisplay != null && { display: thinkingDisplay },
++            ...thinkingBlockBinding != null && {
++              block_binding: {
++                prefix_mismatch_behavior: thinkingBlockBinding.prefixMismatchBehavior
++              }
++            }
+           }
+         };
+       }

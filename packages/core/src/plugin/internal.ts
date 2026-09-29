@@ -30,7 +30,6 @@ import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import { AgentPlugin } from "./agent"
 import { CommandPlugin } from "./command"
 import { ModelsDevPlugin } from "./models-dev"
-import { ProviderPlugins } from "./provider"
 import { SkillPlugin } from "./skill"
 import { VariantPlugin } from "./variant"
 
@@ -115,6 +114,9 @@ const layer = Layer.effectDiscard(
         yield* add(ConfigAgentPlugin.Plugin)
         yield* add(ConfigCommandPlugin.Plugin)
         yield* add(ConfigSkillPlugin.Plugin)
+        // Imported lazily: every provider plugin file imports this module, so a
+        // static import would create a module-evaluation cycle (TDZ).
+        const { ProviderPlugins } = yield* Effect.promise(() => import("./provider"))
         for (const item of ProviderPlugins) yield* add(item)
         yield* add(ConfigExternalPlugin.Plugin)
         yield* add(ConfigProviderPlugin.Plugin)

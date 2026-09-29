@@ -26,6 +26,7 @@ import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
+import { LegacyOpenTelemetry } from "@ai-sdk/otel"
 import { LLMAISDK } from "./llm/ai-sdk"
 import { LLMNativeRuntime } from "./llm/native-runtime"
 import { LLMRequestPrep } from "./llm/request"
@@ -134,6 +135,7 @@ const live: Layer.Layer<
               toolCallId: _requestID,
               messages: input.messages,
               abortSignal: input.abort,
+              context: undefined,
             })
             const output = typeof result === "string" ? result : (result?.output ?? JSON.stringify(result))
             return {
@@ -215,6 +217,7 @@ const live: Layer.Layer<
               return (...args: Parameters<typeof target.startSpan>) => {
                 const span = target.startSpan(...args)
                 span.setAttribute("session.id", input.sessionID)
+                span.setAttribute("userId", cfg.username ?? "unknown")
                 return span
               }
             },
@@ -322,6 +325,9 @@ const live: Layer.Layer<
           headers: prepared.headers,
           maxRetries: input.retries ?? 0,
           messages: prepared.messages,
+          // opencode injects system prompts as messages so provider transforms can
+          // rewrite them; ai 7 defaults to instructions-only.
+          allowSystemInMessages: true,
           model: wrapLanguageModel({
             model: language,
             middleware: [
@@ -341,14 +347,10 @@ const live: Layer.Layer<
               },
             ],
           }),
-          experimental_telemetry: {
+          telemetry: {
             isEnabled: cfg.experimental?.openTelemetry,
             functionId: "session.llm",
-            tracer: telemetryTracer,
-            metadata: {
-              userId: cfg.username ?? "unknown",
-              sessionId: input.sessionID,
-            },
+            integrations: telemetryTracer ? [new LegacyOpenTelemetry({ tracer: telemetryTracer })] : undefined,
           },
         }),
       }

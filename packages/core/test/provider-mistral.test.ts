@@ -154,7 +154,13 @@ test("Mistral round-trips native reasoning in assistant history", async () => {
       { role: "user", content: [{ type: "text", text: "Hello again" }] },
     ],
   })
-  expect(body?.messages?.[1]).toEqual({ role: "assistant", content: "thinkingHi" })
+  expect(body?.messages?.[1]).toEqual({
+    role: "assistant",
+    content: [
+      { type: "thinking", thinking: [{ type: "text", text: "thinking" }], closed: true },
+      { type: "text", text: "Hi" },
+    ],
+  })
 })
 
 test("Mistral preserves native reasoning metadata while streaming", async () => {

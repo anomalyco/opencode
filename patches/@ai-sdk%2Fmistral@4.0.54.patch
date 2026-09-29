@@ -1,0 +1,197 @@
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index adec5e64b034d25a003e65d8183eea0e18b34fdf..6ecf3922359a808520642067cbc613b061f7d0b4 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -12,10 +12,7 @@ declare const mistralLanguageModelChatOptions: z.ZodObject<{
+     strictJsonSchema: z.ZodOptional<z.ZodBoolean>;
+     parallelToolCalls: z.ZodOptional<z.ZodBoolean>;
+     promptCacheKey: z.ZodOptional<z.ZodString>;
+-    reasoningEffort: z.ZodOptional<z.ZodEnum<{
+-        none: "none";
+-        high: "high";
+-    }>>;
++    reasoningEffort: z.ZodOptional<z.ZodString>;
+ }, z.core.$strip>;
+ type MistralLanguageModelChatOptions = z.infer<typeof mistralLanguageModelChatOptions>;
+ 
+diff --git a/dist/index.js b/dist/index.js
+index 3f4fe8ae236204e78222e7d5c7bbcc30e9479878..96d5497356bd023cad1234edcdedb939e39250da 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -180,6 +180,12 @@ function convertToMistralChatMessages(prompt) {
+               break;
+             }
+             case "reasoning": {
++              const native = part.providerOptions?.mistral?.thinking;
++              if (native?.type === "thinking") {
++                hasReasoning = true;
++                contentParts.push(native);
++                break;
++              }
+               hasReasoning = true;
+               contentParts.push({
+                 type: "thinking",
+@@ -301,7 +307,7 @@ var mistralLanguageModelChatOptions = z2.object({
+    * - `'high'`: Enable reasoning
+    * - `'none'`: Disable reasoning
+    */
+-  reasoningEffort: z2.enum(["high", "none"]).optional()
++  reasoningEffort: z2.string().optional()
+ });
+ 
+ // src/mistral-error.ts
+@@ -447,7 +453,7 @@ var MistralChatLanguageModel = class _MistralChatLanguageModel {
+     if (topK != null) {
+       warnings.push({ type: "unsupported", feature: "topK" });
+     }
+-    const supportsReasoningEffort = reasoningEffortModelIds.has(this.modelId);
++    const supportsReasoningEffort = true;
+     let resolvedReasoningEffort;
+     if (supportsReasoningEffort) {
+       resolvedReasoningEffort = options.reasoningEffort ?? (isCustomReasoning(reasoning) ? reasoning === "none" ? "none" : mapReasoningToProviderEffort({
+@@ -548,9 +554,11 @@ var MistralChatLanguageModel = class _MistralChatLanguageModel {
+       for (const part of choice.message.content) {
+         if (part.type === "thinking") {
+           const reasoningText = extractReasoningContent(part.thinking);
+-          if (reasoningText.length > 0) {
+-            content.push({ type: "reasoning", text: reasoningText });
+-          }
++          content.push({
++            type: "reasoning",
++            text: reasoningText,
++            providerMetadata: { mistral: { thinking: part } }
++          });
+         } else if (part.type === "text") {
+           if (part.text.length > 0) {
+             content.push({ type: "text", text: part.text });
+@@ -611,6 +619,7 @@ var MistralChatLanguageModel = class _MistralChatLanguageModel {
+     let isFirstChunk = true;
+     let activeText = false;
+     let activeReasoningId = null;
++    let activeThinking = null;
+     let toolCallTracker;
+     const generateId2 = this.generateId;
+     return {
+@@ -647,19 +656,20 @@ var MistralChatLanguageModel = class _MistralChatLanguageModel {
+             if (delta.content != null && Array.isArray(delta.content)) {
+               for (const part of delta.content) {
+                 if (part.type === "thinking") {
++                  activeThinking = mergeThinking(activeThinking, part);
+                   const reasoningDelta = extractReasoningContent(part.thinking);
+-                  if (reasoningDelta.length > 0) {
+-                    if (activeReasoningId == null) {
+-                      if (activeText) {
+-                        controller.enqueue({ type: "text-end", id: "0" });
+-                        activeText = false;
+-                      }
+-                      activeReasoningId = generateId2();
+-                      controller.enqueue({
+-                        type: "reasoning-start",
+-                        id: activeReasoningId
+-                      });
++                  if (activeReasoningId == null) {
++                    if (activeText) {
++                      controller.enqueue({ type: "text-end", id: "0" });
++                      activeText = false;
+                     }
++                    activeReasoningId = generateId2();
++                    controller.enqueue({
++                      type: "reasoning-start",
++                      id: activeReasoningId
++                    });
++                  }
++                  if (reasoningDelta.length > 0) {
+                     controller.enqueue({
+                       type: "reasoning-delta",
+                       id: activeReasoningId,
+@@ -674,9 +684,11 @@ var MistralChatLanguageModel = class _MistralChatLanguageModel {
+                 if (activeReasoningId != null) {
+                   controller.enqueue({
+                     type: "reasoning-end",
+-                    id: activeReasoningId
++                    id: activeReasoningId,
++                    providerMetadata: { mistral: { thinking: activeThinking } }
+                   });
+                   activeReasoningId = null;
++                  activeThinking = null;
+                 }
+                 controller.enqueue({ type: "text-start", id: "0" });
+                 activeText = true;
+@@ -703,8 +715,10 @@ var MistralChatLanguageModel = class _MistralChatLanguageModel {
+             if (activeReasoningId != null) {
+               controller.enqueue({
+                 type: "reasoning-end",
+-                id: activeReasoningId
++                id: activeReasoningId,
++                providerMetadata: { mistral: { thinking: activeThinking } }
+               });
++              activeThinking = null;
+             }
+             if (activeText) {
+               controller.enqueue({ type: "text-end", id: "0" });
+@@ -723,6 +737,13 @@ var MistralChatLanguageModel = class _MistralChatLanguageModel {
+     };
+   }
+ };
++function mergeThinking(current, next) {
++  if (current === null) return { ...next, thinking: [...next.thinking] };
++  current.thinking.push(...next.thinking);
++  if (next.closed !== void 0) current.closed = next.closed;
++  if (next.signature !== void 0) current.signature = next.signature;
++  return current;
++}
+ function extractReasoningContent(thinking) {
+   return thinking.filter((chunk) => chunk.type === "text").map((chunk) => chunk.text).join("");
+ }
+@@ -752,6 +773,30 @@ function extractTextContent(content) {
+   }
+   return textContent.length ? textContent.join("") : void 0;
+ }
++var mistralThinkingContentSchema = z4.discriminatedUnion("type", [
++  z4.object({
++    type: z4.literal("text"),
++    text: z4.string()
++  }),
++  z4.object({
++    type: z4.literal("tool_reference"),
++    tool: z4.string(),
++    title: z4.string(),
++    url: z4.string().nullish(),
++    favicon: z4.string().nullish(),
++    description: z4.string().nullish()
++  }),
++  z4.object({
++    type: z4.literal("reference"),
++    reference_ids: z4.array(z4.union([z4.string(), z4.number()]))
++  })
++]);
++var mistralThinkChunkSchema = z4.object({
++  type: z4.literal("thinking"),
++  thinking: z4.array(mistralThinkingContentSchema),
++  closed: z4.boolean().optional(),
++  signature: z4.string().nullish()
++});
+ var mistralContentSchema = z4.union([
+   z4.string(),
+   z4.array(
+@@ -774,18 +819,11 @@ var mistralContentSchema = z4.union([
+         type: z4.literal("reference"),
+         reference_ids: z4.array(z4.union([z4.string(), z4.number()]))
+       }),
+-      z4.object({
+-        type: z4.literal("thinking"),
+-        thinking: z4.array(
+-          z4.object({
+-            type: z4.literal("text"),
+-            text: z4.string()
+-          })
+-        )
+-      })
++      mistralThinkChunkSchema
+     ])
+   )
+ ]).nullish();
++
+ var mistralChatResponseSchema = z4.object({
+   id: z4.string().nullish(),
+   created: z4.number().nullish(),

@@ -310,7 +310,7 @@ describe("session.message-v2.toModelMessage", () => {
             type: "file",
             mediaType: "image/png",
             filename: "img.png",
-            data: "https://example.com/img.png",
+            data: { type: "url", url: new URL("https://example.com/img.png") },
           },
           { type: "text", text: "What did we do so far?" },
           { type: "text", text: "The following tool was executed by the user" },
@@ -401,7 +401,7 @@ describe("session.message-v2.toModelMessage", () => {
               type: "content",
               value: [
                 { type: "text", text: "ok" },
-                { type: "media", mediaType: "image/png", data: "Zm9v" },
+                { type: "file", data: { type: "data", data: "Zm9v" }, mediaType: "image/png" },
               ],
             },
             providerOptions: { openai: { tool: "meta" } },
@@ -488,7 +488,7 @@ describe("session.message-v2.toModelMessage", () => {
         type: "content",
         value: [
           { type: "text", text: "Image read successfully" },
-          { type: "media", mediaType: "image/jpeg", data: jpeg },
+          { type: "file", data: { type: "data", data: jpeg }, mediaType: "image/jpeg" },
         ],
       },
     })
@@ -594,7 +594,7 @@ describe("session.message-v2.toModelMessage", () => {
             type: "file",
             mediaType: "application/pdf",
             filename: "example.pdf",
-            data: `data:application/pdf;base64,${pdf}`,
+            data: { type: "url", url: new URL(`data:application/pdf;base64,${pdf}`) },
           },
         ],
       },
