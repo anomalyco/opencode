@@ -240,7 +240,12 @@ if (Script.release) {
       await $`zip -r ../../${key}.zip *`.cwd(`dist/${key}/bin`)
     }
   }
-  await $`gh release upload v${Script.version} ./dist/*.zip ./dist/*.tar.gz --clobber --repo ${process.env.GH_REPO}`
+  // CI signs the finished macOS executables before uploading their archives.
+  if (process.env.OPENCODE_DEFER_DARWIN_RELEASE_UPLOAD === "1") {
+    await $`gh release upload v${Script.version} ./dist/opencode-windows*.zip ./dist/opencode-linux*.tar.gz --clobber --repo ${process.env.GH_REPO}`
+  } else {
+    await $`gh release upload v${Script.version} ./dist/*.zip ./dist/*.tar.gz --clobber --repo ${process.env.GH_REPO}`
+  }
 }
 
 export { binaries }
