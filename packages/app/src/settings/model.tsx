@@ -34,14 +34,21 @@ function input(font: string | undefined) {
 }
 
 function family(font: string) {
-  if (/^[\w-]+$/.test(font)) return font
-  return `"${font.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`
+  const trimmed = font.trim()
+  if (!trimmed) return ""
+  if (/^[\w-]+$/.test(trimmed)) return trimmed
+  return `"${trimmed.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`
 }
 
 function stack(font: string | undefined, base: string) {
   const value = font?.trim() ?? ""
   if (!value) return base
-  return `${family(value)}, ${base}`
+  const families = value
+    .split(",")
+    .map(family)
+    .filter((f) => f.length > 0)
+  if (families.length === 0) return base
+  return `${families.join(", ")}, ${base}`
 }
 
 export function monoInput(font: string | undefined) {

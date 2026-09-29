@@ -199,6 +199,17 @@ describe("settings font families", () => {
     expect(monoFontFamily("Custom Mono")).toStartWith('"Custom Mono", "IBM Plex Mono", ')
   })
 
+  test("supports comma-separated font families", () => {
+    expect(sansFontFamily("Custom Sans, Fallback")).toStartWith('"Custom Sans", Fallback, "Inter", ')
+    expect(monoFontFamily("Fira Code, monospace")).toStartWith('"Fira Code", monospace, "IBM Plex Mono", ')
+    expect(sansFontFamily("Inter, system-ui")).toStartWith("Inter, system-ui, ")
+  })
+
+  test("drops empty segments from comma-separated font families", () => {
+    expect(sansFontFamily("Custom Sans, ,  ,Other")).toStartWith('"Custom Sans", Other, "Inter", ')
+    expect(sansFontFamily(",,")).toStartWith('"Inter", ')
+  })
+
   test("preserves the separate terminal font default", () => {
     expect(terminalFontFamily(undefined)).toStartWith('"JetBrainsMono Nerd Font Mono", ')
   })
