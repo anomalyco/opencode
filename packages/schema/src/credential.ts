@@ -35,14 +35,14 @@ export const OAuth = Schema.Struct({
   refresh: Schema.String,
   access: Schema.String,
   expires: NonNegativeInt,
-  metadata: optional(Schema.Record(Schema.String, Schema.Json)),
+  metadata: optional(Schema.Record(Schema.String, Schema.Unknown)),
 }).annotate({ identifier: "Credential.OAuth" })
 
 export interface Key extends Schema.Schema.Type<typeof Key> {}
 export const Key = Schema.Struct({
   type: Schema.Literal("key"),
   key: Schema.String,
-  metadata: optional(Schema.Record(Schema.String, Schema.Json)),
+  metadata: optional(Schema.Record(Schema.String, Schema.Unknown)),
   configuration: optional(Form.Answer),
 }).annotate({ identifier: "Credential.Key" })
 

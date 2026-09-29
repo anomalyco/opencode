@@ -29,7 +29,7 @@ export default Runtime.handler(
               id: credential.id,
               integrationID: credential.integrationID,
               label: credential.label,
-              // The generated client types JSON metadata as mutable; the decoded schema value is the same JSON.
+              // Stored metadata is JSON, but the credential schema types it as unknown while the generated client expects JSON.
               value: credential.value as CredentialCreateInput["value"],
               // Keep the destination's current selections; only integrations new to it adopt the exported selection.
               activate: credential.active && !integrations.has(credential.integrationID),
