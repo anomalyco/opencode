@@ -315,6 +315,39 @@ describe("provider error classification", () => {
     ).toEqual(Array(cases.length).fill("QuotaExceeded"))
   })
 
+  test("classifies Z.ai prompt length rejections as context overflow", () => {
+    const cases = [
+      { error: { code: "1261", message: "Prompt 超长" } },
+      { error: { code: "1261", message: "Prompt too long" } },
+      {
+        type: "error",
+        error: { type: "invalid_request_error", code: "1261", message: "[1261][Prompt too long][2026092913]" },
+      },
+    ]
+    expect(
+      cases.map((body) => {
+        const reason = classifyProviderFailure({
+          message: body.error.message,
+          status: 400,
+          rawBody: JSON.stringify(body),
+        })
+        return reason._tag === "InvalidRequest" ? reason.classification : reason._tag
+      }),
+    ).toEqual(["context-overflow", "context-overflow", "context-overflow"])
+  })
+
+  test("classifies Z.ai sensitive content rejections as content policy", () => {
+    const message =
+      "System detected potentially unsafe or sensitive content in input or generation. Please avoid using prompts that may generate sensitive content. Thank you for your cooperation."
+    expect(
+      classifyProviderFailure({
+        message,
+        status: 400,
+        rawBody: JSON.stringify({ error: { code: "1301", message } }),
+      })._tag,
+    ).toBe("ContentPolicy")
+  })
+
   test("keeps Z.ai throttling and overload retryable", () => {
     expect(
       [

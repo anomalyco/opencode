@@ -40,7 +40,8 @@ const patterns = [
   /context[_ ]length[_ ]exceeded/i,
   /context length is only \d+ tokens/i,
   /input length.*exceeds.*context length/i,
-  /prompt too long; exceeded (?:max )?context length/i,
+  // Z.ai code 1261 arrives as `Prompt too long` or `Prompt 超长`.
+  /prompt (?:too long|超长)/i,
   /too large for model with \d+ maximum context length/i,
   /prompt has [\d,]+ tokens?, but the configured context size is [\d,]+ tokens?/i,
   /model_context_window_exceeded/i,
@@ -164,7 +165,7 @@ const QUOTA_TEXT =
 // Bedrock Mantle reuses it for schema validation; Anthropic reports blocked output
 // under `invalid_request_error`.
 const CONTENT_POLICY_TEXT =
-  /violating our usage policy|blocked by content filtering policy|content[-_\s]?policy|rejected as a result of our safety system/i
+  /violating our usage policy|blocked by content filtering policy|content[-_\s]?policy|rejected as a result of our safety system|detected potentially unsafe or sensitive content/i
 const SERVER_ERROR_TEXT =
   /\b(?:try again|(?:please |you can )?retry (?:the |this |your )?request|try (?:the |this |your )?request again|(?:currently |temporarily )?at capacity|overloaded|temporarily unavailable|service[-_\s]?unavailable|(?:server|internal)[-_\s]?error|server (?:is )?busy|provider returned (?:an )?error|resource[-_\s]?exhausted|upstream (?:connect|connection|request)|request buffer limit while retrying upstream)\b/i
 
