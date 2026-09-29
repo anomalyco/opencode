@@ -55,8 +55,10 @@ const RESPECTS_INLINE_HINTS = new Set([
 // breakpoint, so a conversation-tail breakpoint writes a new cache every step and costs more than none. Qwen ignores
 // breakpoints on tool definitions and caches tools with the system prompt.
 const openRouterPolicy = (modelID: string): CachePolicyObject => {
-  if (modelID.startsWith("anthropic/")) return AUTO
-  if (modelID.startsWith("qwen/")) return { system: true, messages: { tail: 1 } }
+  // `~anthropic/claude-sonnet-latest` style IDs are OpenRouter aliases for the latest model in a family.
+  const id = modelID.replace(/^~/, "")
+  if (id.startsWith("anthropic/")) return AUTO
+  if (id.startsWith("qwen/")) return { system: true, messages: { tail: 1 } }
   return NONE
 }
 

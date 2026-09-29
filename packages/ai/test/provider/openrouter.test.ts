@@ -68,6 +68,25 @@ describe("OpenRouter", () => {
     }),
   )
 
+  it.effect("places default cache breakpoints on OpenRouter latest-model aliases", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenRouter.configure({ apiKey: "test-key" }).model("~anthropic/claude-sonnet-latest"),
+          system: "Base agent",
+          tools: [{ name: "lookup", description: "Lookup", inputSchema: { type: "object", properties: {} } }],
+          prompt: "Hello",
+        }),
+      )
+
+      expect(prepared.body.tools?.[0]?.cache_control).toEqual({ type: "ephemeral" })
+      expect(prepared.body.messages).toMatchObject([
+        { role: "system", content: [{ text: "Base agent", cache_control: { type: "ephemeral" } }] },
+        { role: "user", content: [{ text: "Hello", cache_control: { type: "ephemeral" } }] },
+      ])
+    }),
+  )
+
   it.effect("skips the tool breakpoint for Qwen, which caches tools with the system prompt", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
