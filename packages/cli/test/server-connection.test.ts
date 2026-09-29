@@ -97,8 +97,8 @@ test("disabled background service makes CLI API calls standalone without registe
   }
 
   try {
-    await run("service", "set", "enabled", "false")
-    expect(await run("service", "get", "enabled")).toBe("false\n")
+    await run("service", "set", "disabled", "true")
+    expect(await run("service", "get", "disabled")).toBe("true\n")
     const info = JSON.parse(await run("api", "get", "/api/info"))
     expect(info.pid).toBeGreaterThan(0)
     expect(await run("mcp", "list")).toContain("No MCP servers configured")
@@ -119,8 +119,8 @@ test("disabled background service makes CLI API calls standalone without registe
     }
     expect(await fs.readdir(path.join(root, "state", "opencode")).catch(() => [])).toEqual([])
 
-    await run("service", "unset", "enabled")
-    expect(await run("service", "get", "enabled")).toBe("true\n")
+    await run("service", "unset", "disabled")
+    expect(await run("service", "get", "disabled")).toBe("false\n")
   } finally {
     await fs.rm(root, { recursive: true, force: true })
   }

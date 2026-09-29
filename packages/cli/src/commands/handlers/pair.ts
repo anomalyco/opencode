@@ -10,9 +10,9 @@ import { ServiceConfig } from "../../services/service-config"
 export default Runtime.handler(
   Commands.commands.pair,
   Effect.fn("cli.pair")(function* (input: Runtime.Input<typeof Commands.commands.pair>) {
-    if ((yield* ServiceConfig.read()).enabled === false)
+    if ((yield* ServiceConfig.read()).disabled === true)
       return yield* Effect.fail(
-        new Error("Pairing requires the background service; run `opencode service set enabled true` first"),
+        new Error("Pairing requires the background service; run `opencode service unset disabled` first"),
       )
     const endpoint = yield* Service.ensure(yield* ServiceConfig.options())
     const client = OpenCode.make({ baseUrl: endpoint.url, headers: Service.headers(endpoint) })
