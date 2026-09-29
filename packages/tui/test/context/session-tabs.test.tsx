@@ -323,6 +323,28 @@ test("keeps each visited session open", async () => {
   }
 })
 
+test("lists closed tabs newest first and reopens a selected entry", async () => {
+  const setup = await renderSessionTabs("first", { persisted: ["first", "second", "third"] })
+  try {
+    await wait(() => setup.tabs.tabs().length === 3)
+    setup.tabs.close("second")
+    await wait(() => setup.tabs.tabs().length === 2)
+    setup.tabs.close("third")
+    await wait(() => setup.tabs.tabs().length === 1)
+    expect(setup.tabs.recentlyClosed().map((tab) => tab.sessionID)).toEqual(["third", "second"])
+    setup.tabs.reopen("second")
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "second"))
+    expect(setup.tabs.current()).toBe("second")
+    expect(setup.tabs.recentlyClosed().map((tab) => tab.sessionID)).toEqual(["third"])
+    setup.tabs.reopen()
+    await wait(() => setup.tabs.tabs().length === 3)
+    expect(setup.tabs.current()).toBe("third")
+    expect(setup.tabs.recentlyClosed()).toEqual([])
+  } finally {
+    await setup.destroy()
+  }
+})
+
 test("stores session tabs for the current working directory by default", async () => {
   const setup = await renderSessionTabs("first")
 

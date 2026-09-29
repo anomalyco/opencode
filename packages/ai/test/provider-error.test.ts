@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { isContextOverflow } from "../src/index.js"
-import { classifyProviderFailure } from "../src/provider-error.js"
+import { classifyProviderFailure, providerErrorMessage } from "../src/provider-error.js"
 
 describe("provider error classification", () => {
   test("classifies provider token limit messages as context overflow", () => {
@@ -355,6 +355,32 @@ describe("provider error rawBody classification", () => {
     }
   })
 
+  test("classifies Google invalid API keys as authentication failures", () => {
+    const rawBody = JSON.stringify({
+      error: {
+        code: 400,
+        message: "API key not valid. Please pass a valid API key.",
+        status: "INVALID_ARGUMENT",
+        details: [
+          {
+            "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+            reason: "API_KEY_INVALID",
+            domain: "googleapis.com",
+          },
+          {
+            "@type": "type.googleapis.com/google.rpc.LocalizedMessage",
+            locale: "en-US",
+            message: "API key not valid. Please pass a valid API key.",
+          },
+        ],
+      },
+    })
+    expect(
+      classifyProviderFailure({ message: "API key not valid. Please pass a valid API key.", status: 400, rawBody })
+        ._tag,
+    ).toBe("Authentication")
+  })
+
   test("classifies overflow signals buried in the raw payload when the summary is vague", () => {
     const reason = classifyProviderFailure({
       message: "Request failed",
@@ -368,5 +394,44 @@ describe("provider error rawBody classification", () => {
     expect(
       classifyProviderFailure({ message: "Request failed", rawBody: '{"error":{"code":"insufficient_quota"}}' })._tag,
     ).toBe("QuotaExceeded")
+  })
+})
+
+describe("provider error messages", () => {
+  test("reads messages from common error body layouts", () => {
+    expect(
+      [
+        '{"error":{"message":"Invalid API Key","type":"invalid_request_error"}}',
+        '{"code":"invalid-argument","error":"Incorrect API key provided."}',
+        '{"message":"1 validation error detected"}',
+        '{"Message":"Invalid API Key format: Must start with pre-defined prefix"}',
+        '{"type":"about:blank","title":"Gone","status":410,"detail":"The model has reached its end of life"}',
+        '{"result":null,"success":false,"errors":[{"code":10000,"message":"Authentication error"}]}',
+      ].map(providerErrorMessage),
+    ).toEqual([
+      "Invalid API Key",
+      "Incorrect API key provided.",
+      "1 validation error detected",
+      "Invalid API Key format: Must start with pre-defined prefix",
+      "The model has reached its end of life",
+      "Authentication error",
+    ])
+  })
+
+  test("prefers the nested error message over a top-level message", () => {
+    expect(providerErrorMessage('{"message":"Bad Request","error":{"message":"model not found"}}')).toBe(
+      "model not found",
+    )
+  })
+
+  test("ignores blank, non-string, and non-JSON messages", () => {
+    expect(
+      [
+        '{"error":{"message":"  "}}',
+        '{"message":{"detail":[{"msg":"too high"}]}}',
+        '{"errors":[]}',
+        "invalid parameter",
+      ].map(providerErrorMessage),
+    ).toEqual([undefined, undefined, undefined, undefined])
   })
 })

@@ -235,9 +235,7 @@ export type IntegrationCommandMethod = { id: string; type: "command"; label: str
 
 export type IntegrationEnvMethod = { type: "env"; names: Array<string> }
 
-export type ConnectionCredentialInfo = { type: "credential"; id: string; label: string; method: "key" | "oauth" }
-
-export type ConnectionEnvInfo = { type: "env"; name: string }
+export type ConnectionStatus = { status: "needs_auth"; message: string; url?: string }
 
 export type IntegrationAttempt = {
   attemptID: string
@@ -1469,7 +1467,15 @@ export type ModelCost = {
   cache: { read: MoneyUSDPerMillionTokens; write: MoneyUSDPerMillionTokens }
 }
 
-export type ConnectionInfo = ConnectionCredentialInfo | ConnectionEnvInfo
+export type ConnectionCredentialInfo = {
+  type: "credential"
+  id: string
+  label: string
+  method: "key" | "oauth"
+  status?: ConnectionStatus
+}
+
+export type ConnectionEnvInfo = { type: "env"; name: string; status?: ConnectionStatus }
 
 export type McpServer = {
   name: string
@@ -1883,6 +1889,8 @@ export type FormField =
   | FormExternalField
 
 export type FormState = { status: "pending" } | { status: "answered"; answer: FormAnswer } | { status: "cancelled" }
+
+export type ConnectionInfo = ConnectionCredentialInfo | ConnectionEnvInfo
 
 export type FormField1 =
   | FormStringField1

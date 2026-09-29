@@ -95,6 +95,7 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       connection: {
         active: () => Effect.die("unused integration.connection.active"),
         resolve: () => Effect.die("unused integration.connection.resolve"),
+        status: () => Effect.die("unused integration.connection.status"),
       },
     },
     mcp: overrides.mcp ?? {
@@ -313,6 +314,15 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
         integration.connection.resolve(
           connection.type === "credential" ? { ...connection, id: Credential.ID.make(connection.id) } : connection,
         ),
+      status: (input) =>
+        integration.connection.status({
+          integrationID: Integration.ID.make(input.integrationID),
+          connection:
+            input.connection.type === "credential"
+              ? { ...input.connection, id: Credential.ID.make(input.connection.id) }
+              : input.connection,
+          status: input.status,
+        }),
     },
     transform: (callback) =>
       integration.transform((editor) =>

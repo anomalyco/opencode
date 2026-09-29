@@ -876,6 +876,61 @@ test("session startup prompt is submitted exactly once", async () => {
   }
 })
 
+test("home startup prompt is submitted exactly once", async () => {
+  await using state = await tmpdir()
+  const cwd = process.cwd()
+  const location = { directory: cwd, project: { id: "project", directory: cwd, canonical: cwd } }
+  const bodies: unknown[] = []
+  const submitted = Promise.withResolvers<void>()
+  let session: unknown
+  await using setup = await createAppFixture({
+    state: state.path,
+    args: { prompt: "HOME_READY" },
+    config: { animations: false, tabs: { mode: "off" } },
+    fetch: async (url, request) => {
+      if (url.pathname === "/api/location") return json(location)
+      if (url.pathname === "/api/fs/list") return json({ location, data: [] })
+      if (url.pathname === "/api/agent")
+        return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
+      if (url.pathname === "/api/model")
+        return json({ location, data: [{ id: "model", providerID: "provider", name: "Model", variants: [] }] })
+      if (url.pathname === "/api/provider") return json({ location, data: [{ id: "provider", name: "Provider" }] })
+      if (url.pathname === "/api/session" && request.method === "POST") {
+        const input: unknown = await request.json()
+        if (typeof input !== "object" || input === null) throw new Error("Expected a session input")
+        session = {
+          ...input,
+          projectID: "project",
+          cost: 0,
+          tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+          time: { created: 0, updated: 0 },
+        }
+        return json({ data: session })
+      }
+      if (/^\/api\/session\/[^/]+\/prompt$/.test(url.pathname)) {
+        bodies.push(await request.json())
+        submitted.resolve()
+        return json({ data: {} })
+      }
+      if (/^\/api\/session\/[^/]+\/(message|inbox|permission)$/.test(url.pathname))
+        return json({ data: [], cursor: {} })
+      if (session && /^\/api\/session\/[^/]+$/.test(url.pathname)) return json({ data: session })
+      return undefined
+    },
+  })
+
+  await setup.ready
+  await Promise.race([
+    submitted.promise,
+    Bun.sleep(2000).then(() => {
+      throw new Error("startup prompt was not submitted")
+    }),
+  ])
+  await Bun.sleep(20)
+  expect(bodies).toHaveLength(1)
+  expect(bodies[0]).toMatchObject({ text: "HOME_READY" })
+})
+
 test.each([false, true])("uses the resolved launch directory for new prompts (fallback: %s)", async (fallback) => {
   await using state = await tmpdir()
   const target = fallback ? directory : process.cwd()

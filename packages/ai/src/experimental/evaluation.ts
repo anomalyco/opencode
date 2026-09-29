@@ -63,6 +63,7 @@ export const ChoiceAnswer = Schema.Struct({
   type: Schema.Literal("choice"),
   choice: Schema.String,
   probabilities: Schema.optional(Schema.Record(Schema.String, Probability)),
+  confidence: Schema.optional(Probability),
 })
 export type ChoiceAnswer = Schema.Schema.Type<typeof ChoiceAnswer>
 
@@ -70,6 +71,7 @@ export const ScoreAnswer = Schema.Struct({
   type: Schema.Literal("score"),
   score: Schema.Number,
   probabilities: Schema.optional(Schema.Record(Schema.String, Probability)),
+  confidence: Schema.optional(Probability),
 })
 export type ScoreAnswer = Schema.Schema.Type<typeof ScoreAnswer>
 
@@ -92,6 +94,7 @@ export type AnswerFor<Question extends EvaluationQuestion> = Question extends {
       readonly type: "choice"
       readonly choice: Extract<keyof Criteria, string>
       readonly probabilities?: Readonly<Record<Extract<keyof Criteria, string>, number>>
+      readonly confidence?: number
     }
   : Question extends { readonly type: "score" }
     ? ScoreAnswer

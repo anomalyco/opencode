@@ -29,6 +29,7 @@ import { JsonObject, knownString, optionalArray, optionalNull, ProviderShared } 
 import { classifyProviderFailure } from "../provider-error.js"
 import { effortUpdate, resolveEffortUpdates } from "../effort-updates.js"
 import * as Cache from "./utils/cache.js"
+import { claudeVersion, supportsThinkingBlockBinding, THINKING_BINDING_BETA } from "./utils/claude-model.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolStream } from "./utils/tool-stream.js"
 
@@ -988,22 +989,6 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
   return messages
 })
 
-// Accept gateway namespaces and Vertex suffixes without treating a snapshot date as a minor version.
-const claudeVersion = (id: string) => {
-  const match = /(?:^|[./])claude-(?<family>[a-z]+)-(?<major>\d+)(?:[.-](?<minor>\d{1,2}))?(?:$|[-:@])/.exec(
-    id.toLowerCase(),
-  )?.groups
-  if (!match) return undefined
-  return { family: match.family, major: Number(match.major), minor: Number(match.minor ?? 0) }
-}
-
-const supportsThinkingBlockBinding = (model: LLMRequest["model"]) => {
-  const override = model.compatibility?.supportsThinkingBlockBinding
-  if (override !== undefined) return override
-  const version = claudeVersion(model.id)
-  return version !== undefined && (version.major > 5 || (version.major === 5 && version.minor >= 1))
-}
-
 const supportsEffortUpdates = (model: LLMRequest["model"]) => {
   const override = model.compatibility?.supportsEffortUpdates
   if (override !== undefined) return override
@@ -1652,8 +1637,7 @@ function requiredBetaHeaders(body: Pick<AnthropicMessagesBody, "messages" | "con
     betas.push("mid-conversation-output-config-2026-07-01")
 
   const thinking = body.thinking
-  if (thinking && thinking.type !== "disabled" && thinking.block_binding)
-    betas.push("thinking-binding-controls-2026-08-01")
+  if (thinking && thinking.type !== "disabled" && thinking.block_binding) betas.push(THINKING_BINDING_BETA)
   return betas
 }
 
