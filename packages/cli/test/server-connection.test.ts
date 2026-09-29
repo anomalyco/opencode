@@ -8,6 +8,7 @@ import os from "node:os"
 import path from "node:path"
 import { ServerConnection } from "../src/services/server-connection"
 import { ServiceConfig } from "../src/services/service-config"
+import { isolatedEnv } from "./fixture/environment"
 
 test("resolution groups Effect-native lifecycle operations only for the managed service", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-server-resolution-"))
@@ -69,3 +70,58 @@ test("service options only require a matching version when requested", async () 
     await fs.rm(root, { recursive: true, force: true })
   }
 })
+
+test("disabled background service makes CLI API calls standalone without registering a daemon", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-disabled-"))
+  const env = isolatedEnv(root)
+  const command = [process.execPath, path.join(import.meta.dir, "../src/index.ts")]
+  const execute = async (...args: string[]) => {
+    const child = Bun.spawn([...command, ...args], {
+      cwd: path.join(import.meta.dir, ".."),
+      env,
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    const [stdout, stderr, exit] = await Promise.all([
+      new Response(child.stdout).text(),
+      new Response(child.stderr).text(),
+      child.exited,
+    ])
+    return { stdout, stderr, exit }
+  }
+  const run = async (...args: string[]) => {
+    const { stdout, stderr, exit } = await execute(...args)
+    expect(exit, stderr).toBe(0)
+    expect(stderr).not.toContain("Starting background server")
+    return stdout
+  }
+
+  try {
+    await run("service", "set", "enabled", "false")
+    expect(await run("service", "get", "enabled")).toBe("false\n")
+    const info = JSON.parse(await run("api", "get", "/api/info"))
+    expect(info.pid).toBeGreaterThan(0)
+    expect(await run("mcp", "list")).toContain("No MCP servers configured")
+    const pairing = await execute("pair")
+    expect(pairing.exit).not.toBe(0)
+    expect(pairing.stderr).toContain("Pairing requires the background service")
+
+    const explicit = Bun.serve({
+      port: 0,
+      fetch() {
+        return Response.json({ version: OPENCODE_VERSION, pid: 12345, urls: [] })
+      },
+    })
+    try {
+      expect(JSON.parse(await run("api", "--server", explicit.url.toString(), "get", "/api/info")).pid).toBe(12345)
+    } finally {
+      await explicit.stop(true)
+    }
+    expect(await fs.readdir(path.join(root, "state", "opencode")).catch(() => [])).toEqual([])
+
+    await run("service", "unset", "enabled")
+    expect(await run("service", "get", "enabled")).toBe("true\n")
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+}, 30_000)

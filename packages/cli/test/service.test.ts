@@ -3,7 +3,7 @@ import { Service, type Info } from "@opencode/client/effect/service"
 import { Global } from "@opencode/util/global"
 import { OPENCODE_VERSION } from "../src/version"
 import { expect, test } from "bun:test"
-import { Effect, Schema } from "effect"
+import { Effect, FileSystem, Schema } from "effect"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -19,6 +19,24 @@ test("managed service ports are stable per installation channel", () => {
   expect(ServiceConfig.defaultPort("local")).toBe(0xc0df)
   expect(ServiceConfig.defaultPort("preview-a")).toBe(ServiceConfig.defaultPort("preview-a"))
   expect(ServiceConfig.defaultPort("preview-a")).not.toBe(ServiceConfig.defaultPort("preview-b"))
+})
+
+test("service enabled accepts only booleans without changing configuration on invalid input", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-enabled-"))
+  const layer = Global.layerWith({ config: path.join(root, "config"), state: path.join(root, "state") })
+  const run = <A, E>(effect: Effect.Effect<A, E, Global.Service | FileSystem.FileSystem>) =>
+    Effect.runPromise(effect.pipe(Effect.provide(layer), Effect.provide(NodeFileSystem.layer)))
+  try {
+    expect(await run(ServiceConfig.get("enabled"))).toBe("true")
+    await expect(run(ServiceConfig.set("enabled", "yes"))).rejects.toThrow("Enabled must be true or false")
+    expect(await run(ServiceConfig.read())).toEqual({})
+    await run(ServiceConfig.set("enabled", "false"))
+    expect(await run(ServiceConfig.read())).toEqual({ enabled: false })
+    await run(ServiceConfig.unset("enabled"))
+    expect(await run(ServiceConfig.read())).toEqual({})
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
 })
 
 test("local channel stores service config with the local service filename", async () => {
