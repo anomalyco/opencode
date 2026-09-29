@@ -20,7 +20,6 @@ import {
   type LLMRequest,
   type MediaPart,
   type ReasoningPart,
-  type TextPart,
   type ToolCallPart,
   type ToolDefinition,
 } from "../schema/index.js"
@@ -151,13 +150,12 @@ const OpenAIChatMessage = Schema.Union([
   Schema.StructWithRest(
     Schema.Struct({
       role: Schema.Literal("assistant"),
-      content: Schema.NullOr(Schema.String),
+      content: Schema.NullOr(Schema.Union([Schema.String, Schema.Array(OpenAIChatTextContent)])),
       tool_calls: optionalArray(OpenAIChatAssistantToolCall),
       reasoning_content: Schema.optional(Schema.String),
       reasoning: Schema.optional(Schema.String),
       reasoning_text: Schema.optional(Schema.String),
       reasoning_details: Schema.optional(Schema.Unknown),
-      cache_control: Schema.optional(OpenAIChatCacheControl),
     }),
     [Schema.Record(Schema.String, Schema.Unknown)],
   ),
@@ -442,14 +440,14 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
   requireReasoning: boolean,
   options: LoweringOptions & { readonly providerMetadataKey: string },
 ) {
-  const content: TextPart[] = []
+  const content: Array<Schema.Schema.Type<typeof OpenAIChatTextContent>> = []
   const reasoning: ReasoningPart[] = []
   const toolCalls: OpenAIChatAssistantToolCall[] = []
   for (const part of message.content) {
     if (!ProviderShared.supportsContent(part, ["text", "reasoning", "tool-call"]))
       return yield* ProviderShared.unsupportedContent("OpenAI Chat", "assistant", ["text", "reasoning", "tool-call"])
     if (part.type === "text") {
-      content.push(part)
+      content.push({ type: "text", text: part.text, cache_control: options.cacheControl?.(part.cache) })
       continue
     }
     if (part.type === "reasoning") {
@@ -487,14 +485,18 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
     if (reasoning.length === 0) return nativeReasoning ?? (requireReasoning ? "" : undefined)
     return text
   })()
-  const cached = message.content.findLast((part) => "cache" in part && part.cache !== undefined)
-  const cacheControl = options.cacheControl?.(cached && "cache" in cached ? cached.cache : undefined)
   const result = {
     role: "assistant" as const,
-    content: content.length > 0 ? content.map((part) => part.text).join("") : toolCalls.length > 0 ? null : "",
+    content:
+      content.length > 0
+        ? content.some((part) => part.cache_control !== undefined)
+          ? content
+          : content.map((part) => part.text).join("")
+        : toolCalls.length > 0
+          ? null
+          : "",
     ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
     ...(details !== undefined ? { reasoning_details: details } : {}),
-    ...(cacheControl !== undefined ? { cache_control: cacheControl } : {}),
   }
   if (field === undefined || reasoningText === undefined) return result
   return { ...result, [field]: reasoningText }
@@ -530,7 +532,7 @@ const lowerToolMessages = Effect.fn("OpenAIChat.lowerToolMessages")(function* (
   return { messages, attachments }
 })
 
-// A cache breakpoint goes on a text content part: Alibaba ignores `cache_control` set on the tool message itself.
+// Chat cache breakpoints belong on text content parts, not on the message itself.
 const toolMessage = (
   toolCallID: string,
   text: string,
@@ -609,24 +611,25 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
     if (message.role === "user") bridgeTools()
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("OpenAI Chat", message)
+      const cacheControl = options.cacheControl?.(part.cache)
       if (pendingAttachments.length > 0) {
         messages.push({
           role: "user",
           content: [
             ...pendingAttachments.splice(0),
-            { type: "text", text: part.text, cache_control: options.cacheControl?.(part.cache) },
+            { type: "text", text: part.text, cache_control: cacheControl },
           ],
         })
         continue
       }
       const previous = messages.at(-1)
       if (previous?.role === "user" && typeof previous.content === "string")
-        messages[messages.length - 1] = options.cacheControl?.(part.cache)
+        messages[messages.length - 1] = cacheControl
           ? {
               role: "user",
               content: [
                 { type: "text", text: previous.content },
-                { type: "text", text: part.text, cache_control: options.cacheControl(part.cache) },
+                { type: "text", text: part.text, cache_control: cacheControl },
               ],
             }
           : { role: "user", content: `${previous.content}\n${part.text}` }
@@ -635,15 +638,15 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
           role: "user",
           content: [
             ...previous.content,
-            { type: "text", text: part.text, cache_control: options.cacheControl?.(part.cache) },
+            { type: "text", text: part.text, cache_control: cacheControl },
           ],
         }
       else
         messages.push(
-          options.cacheControl?.(part.cache)
+          cacheControl
             ? {
                 role: "user",
-                content: [{ type: "text", text: part.text, cache_control: options.cacheControl(part.cache) }],
+                content: [{ type: "text", text: part.text, cache_control: cacheControl }],
               }
             : { role: "user", content: part.text },
         )

@@ -106,6 +106,27 @@ describe("OpenRouter", () => {
     }),
   )
 
+  it.effect("places the default Qwen conversation-tail breakpoint inside tool-result text", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenRouter.configure({ apiKey: "test-key" }).model("qwen/qwen3-coder-plus"),
+          messages: [
+            Message.user("Call the tool"),
+            Message.assistant([{ type: "tool-call", id: "call_1", name: "lookup", input: {} }]),
+            Message.tool({ id: "call_1", name: "lookup", result: "Done" }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages.at(-1)).toMatchObject({
+        role: "tool",
+        tool_call_id: "call_1",
+        content: [{ type: "text", text: '"Done"', cache_control: { type: "ephemeral" } }],
+      })
+    }),
+  )
+
   it.effect("sends no default breakpoints to upstreams that cache without them", () =>
     Effect.gen(function* () {
       const openrouter = OpenRouter.configure({ apiKey: "test-key" })
@@ -172,6 +193,8 @@ describe("OpenRouter", () => {
           cache: "none",
           messages: [
             Message.user("Call the tool"),
+            Message.assistant("Unmarked reply"),
+            Message.user("Call again"),
             Message.assistant([
               { type: "text", text: "Calling", cache: new CacheHint({ type: "ephemeral" }) },
               { type: "tool-call", id: "call_1", name: "lookup", input: {} },
@@ -188,7 +211,13 @@ describe("OpenRouter", () => {
 
       expect(prepared.body.messages).toMatchObject([
         { role: "user", content: "Call the tool" },
-        { role: "assistant", content: "Calling", cache_control: { type: "ephemeral" } },
+        { role: "assistant", content: "Unmarked reply" },
+        { role: "user", content: "Call again" },
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "Calling", cache_control: { type: "ephemeral" } }],
+          tool_calls: [{ id: "call_1", type: "function", function: { name: "lookup", arguments: "{}" } }],
+        },
         {
           role: "tool",
           content: [{ type: "text", text: '"Done"', cache_control: { type: "ephemeral", ttl: "1h" } }],
@@ -219,7 +248,7 @@ describe("OpenRouter", () => {
     }),
   )
 
-  it.effect("preserves cache policy hints on reasoning-only assistant messages", () =>
+  it.effect("does not emit text cache markers on reasoning-only assistant messages", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
@@ -231,8 +260,38 @@ describe("OpenRouter", () => {
 
       expect(prepared.body.messages).toMatchObject([
         { role: "user", content: "Think" },
-        { role: "assistant", cache_control: { type: "ephemeral" } },
+        { role: "assistant", content: "" },
       ])
+      expect(prepared.body.messages[1]).not.toHaveProperty("cache_control")
+    }),
+  )
+
+  it.effect("counts wrapped system-update markers once so all four default breakpoints survive", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenRouter.configure({ apiKey: "test-key" }).model("anthropic/claude-sonnet-4.6"),
+          system: [
+            { type: "text", text: "Base agent" },
+            { type: "text", text: "Project instructions" },
+          ],
+          tools: [{ name: "lookup", description: "Lookup", inputSchema: { type: "object", properties: {} } }],
+          messages: [Message.user("Start"), Message.system("Updated instructions")],
+        }),
+      )
+
+      expect(prepared.body.tools?.[0]?.cache_control).toEqual({ type: "ephemeral" })
+      expect(prepared.body.messages.at(-1)).toMatchObject({
+        role: "user",
+        content: [
+          { type: "text", text: "Start" },
+          {
+            type: "text",
+            text: "<system-update>\nUpdated instructions\n</system-update>",
+            cache_control: { type: "ephemeral" },
+          },
+        ],
+      })
     }),
   )
 
