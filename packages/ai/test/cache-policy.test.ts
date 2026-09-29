@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import { CacheHint, LLM, Message } from "../src/index.js"
 import { Auth } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
-import { AmazonBedrock, GoogleVertexMessages } from "../src/providers.js"
+import { AmazonBedrock, AnthropicCompatible, GoogleVertexMessages } from "../src/providers.js"
 import * as AnthropicMessages from "../src/protocols/anthropic-messages.js"
 import * as Gemini from "../src/protocols/gemini.js"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
@@ -101,6 +101,26 @@ describe("applyCachePolicy", () => {
 
       expect(prepared.body).toMatchObject({
         tools: [{ name: "lookup", cache_control: { type: "ephemeral" } }],
+        system: [{ type: "text", text: "You are concise.", cache_control: { type: "ephemeral" } }],
+        messages: [{ role: "user", content: [{ type: "text", text: "hi", cache_control: { type: "ephemeral" } }] }],
+      })
+    }),
+  )
+
+  it.effect("'auto' emits Anthropic cache markers on Anthropic-compatible routes", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: AnthropicCompatible.configure({ apiKey: "test", baseURL: "https://messages.example.test/v1" }).model(
+            "compatible",
+          ),
+          system: "You are concise.",
+          prompt: "hi",
+        }),
+      )
+
+      expect(prepared.route).toBe("anthropic-compatible-messages")
+      expect(prepared.body).toMatchObject({
         system: [{ type: "text", text: "You are concise.", cache_control: { type: "ephemeral" } }],
         messages: [{ role: "user", content: [{ type: "text", text: "hi", cache_control: { type: "ephemeral" } }] }],
       })
