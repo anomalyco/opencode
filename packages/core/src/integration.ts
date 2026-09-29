@@ -373,6 +373,7 @@ const layer = Layer.effect(
           id: credential.id,
           label: credential.label,
           method: credential.value.type,
+          ...(credential.value.type === "oauth" ? { methodID: credential.value.methodID } : {}),
         }))
         .toReversed()
       const env = (entry?.methods ?? [])

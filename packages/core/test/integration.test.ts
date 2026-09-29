@@ -679,6 +679,37 @@ describe("Integration", () => {
         }),
     )
   })
+
+  it.effect("projects the OAuth method ID without exposing credentials", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const credentials = yield* Credential.Service
+      const integrationID = Integration.ID.make("openai")
+      yield* integrations.transform((editor) =>
+        editor.update(integrationID, (ref) => {
+          ref.name = "OpenAI"
+        }),
+      )
+      const credential = yield* credentials.create({
+        integrationID,
+        label: "ChatGPT",
+        value: Credential.OAuth.make({
+          type: "oauth",
+          methodID: Integration.MethodID.make("chatgpt-token-sharing"),
+          access: "test-access",
+          refresh: "test-refresh",
+          expires: Date.now() + 60_000,
+        }),
+      })
+      expect((yield* integrations.get(integrationID))?.connections[0]).toEqual({
+        type: "credential",
+        method: "oauth",
+        methodID: Integration.MethodID.make("chatgpt-token-sharing"),
+        id: credential.id,
+        label: "ChatGPT",
+      })
+    }),
+  )
 })
 
 describe("AuthorizationError", () => {

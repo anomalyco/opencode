@@ -41,6 +41,23 @@ describe("integrationOptions", () => {
 })
 
 describe("connectMethods", () => {
+  test("orders OpenAI sign-in, API key, and both Codex methods", () => {
+    expect(
+      connectMethods(
+        integration({
+          id: "openai",
+          name: "OpenAI",
+          methods: [
+            { type: "oauth", id: "chatgpt-headless", label: "Codex headless" },
+            { type: "key", label: "API key" },
+            { type: "oauth", id: "chatgpt-browser", label: "Codex browser" },
+            { type: "oauth", id: "chatgpt-token-sharing", label: "Sign in with ChatGPT" },
+          ],
+        }),
+      ).map((method) => (method.type === "key" ? "key" : method.id)),
+    ).toEqual(["chatgpt-token-sharing", "key", "chatgpt-browser", "chatgpt-headless"])
+  })
+
   test("offers key and OAuth methods but not environment discovery", () => {
     expect(
       connectMethods(

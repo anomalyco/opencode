@@ -64,10 +64,20 @@ export const OpenCodeZen = {
   render: renderConnection("opencode", [{ type: "key", label: "API key" }]),
 }
 
-export const LoginMethods = {
+// The existing Codex-only response remains usable when SIWC is not registered.
+export const CodexWithoutSIWC = {
   render: renderConnection("openai", [
-    { type: "oauth", label: "ChatGPT Pro/Plus (browser)" },
-    { type: "oauth", label: "ChatGPT Pro/Plus (headless)" },
+    { type: "oauth", id: "chatgpt-browser", label: "ChatGPT Pro/Plus (browser)" },
+    { type: "oauth", id: "chatgpt-headless", label: "ChatGPT Pro/Plus (headless)" },
     { type: "key", label: "API key" },
+  ]),
+}
+
+export const ChatGPTSignIn = {
+  render: renderConnection("openai", [
+    { type: "oauth", id: "chatgpt-token-sharing", label: "Sign in with ChatGPT" },
+    { type: "key", label: "API key" },
+    { type: "oauth", id: "chatgpt-browser", label: "ChatGPT Pro/Plus (browser)" },
+    { type: "oauth", id: "chatgpt-headless", label: "ChatGPT Pro/Plus (headless)" },
   ]),
 }

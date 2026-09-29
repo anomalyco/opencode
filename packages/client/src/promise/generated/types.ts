@@ -1472,6 +1472,7 @@ export type ConnectionCredentialInfo = {
   id: string
   label: string
   method: "key" | "oauth"
+  methodID?: string
   status?: ConnectionStatus
 }
 

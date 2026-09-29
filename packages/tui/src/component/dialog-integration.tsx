@@ -58,7 +58,17 @@ export function integrationOptions(list: IntegrationInfo[]) {
 export function connectMethods(integration: IntegrationInfo): ConnectMethod[] {
   return integration.methods
     .filter((method): method is ConnectMethod => method.type !== "env")
-    .toSorted((a, b) => Number(a.type === "key") - Number(b.type === "key"))
+    .toSorted((a, b) => {
+      if (integration.id !== "openai") return Number(a.type === "key") - Number(b.type === "key")
+      const rank = (method: ConnectMethod) => {
+        if (method.type === "key") return 1
+        if (method.id === "chatgpt-token-sharing") return 0
+        if (method.id === "chatgpt-browser") return 2
+        if (method.id === "chatgpt-headless") return 3
+        return 4
+      }
+      return rank(a) - rank(b)
+    })
 }
 
 export function credentialConnections(integration: IntegrationInfo) {

@@ -37,8 +37,11 @@ import { ProviderModelGroup, ProviderModelIcon } from "@/providers/models/provid
 import type { ModelSelection } from "@/providers/models/selection"
 import { OpenCodeLogo } from "@/providers/opencode-logo"
 import { decode64 } from "@/runtime/persistence/base64"
+import { Persistence } from "@/runtime/persistence/schema"
+import { Persist, persisted } from "@/runtime/persistence/storage"
 import { SettingsList } from "@/settings/list"
 import { useTabs } from "@/shell/tabs/tabs"
+import { Schema } from "effect"
 import {
   CONSOLE_INTEGRATION,
   CONSOLE_PROVIDERS,
@@ -48,6 +51,7 @@ import {
   type ProviderConnectMethod,
 } from "./controller"
 import { ConsoleAuthorization } from "./console"
+import { DialogChatGPTPlanWelcome } from "./chatgpt-welcome"
 import { authServerName, RemoteAuthNotice } from "./remote"
 import "./models.css"
 
@@ -81,8 +85,16 @@ export const DialogConnectProvider: Component<{
     completed: false,
     modelProvider: undefined as { id: string; name: string } | undefined,
     authorization: false,
+    chatgptWelcome: false,
   })
   const language = useLanguage()
+  const platform = usePlatform()
+  const dialog = useDialog()
+  const [welcome, setWelcome, , welcomeReady] = persisted(
+    Persist.global("chatgpt-plan-welcome.v1"),
+    Persistence.struct({ seen: Schema.Boolean }),
+    { seen: false },
+  )
   const reset = controller.reset
   const back = { current: reset }
   const consoleSelected = () => CONSOLE_PROVIDERS.has(controller.selected() ?? "")
@@ -112,7 +124,11 @@ export const DialogConnectProvider: Component<{
               setBack={(handler) => (back.current = handler)}
               selection={props.selection}
               onDone={props.onDone ? () => setState("completed", true) : undefined}
-              onConnected={() => props.onConnected?.(provider)}
+              onConnected={(methodID) => {
+                props.onConnected?.(provider)
+                if (platform.platform === "desktop" && provider === "openai" && methodID === "chatgpt-token-sharing")
+                  setState("chatgptWelcome", true)
+              }}
               onFirstConnection={(provider) => setState("modelProvider", provider)}
               onAuthorization={(authorization) => setState("authorization", authorization)}
             />
@@ -136,13 +152,21 @@ export const DialogConnectProvider: Component<{
             : "!h-[min(calc(100vh_-_16px),512px)] !w-[min(calc(100vw_-_16px),640px)]"
       }
       onCloseAutoFocus={(event) => {
-        if (!state.completed || !props.onDone) return
-        event.preventDefault()
-        props.onDone()
+        if (state.completed && props.onDone) {
+          event.preventDefault()
+          props.onDone()
+        }
+        if (!state.chatgptWelcome) return
+        void Promise.resolve(welcomeReady.promise).then(() => {
+          if (welcome.seen) return
+          setWelcome("seen", true)
+          void dialog.show(() => <DialogChatGPTPlanWelcome />)
+        })
       }}
       class="[font-family:var(--v2-font-family-sans)] [&_[data-slot=dialog-header]]:!px-5 [&_[data-slot=dialog-header-title]]:!text-[15px] [&_[data-slot=dialog-header-title]]:!tracking-[-0.13px]"
       classList={{
-        "[&_[data-slot=dialog-header]]:!pt-4 [&_[data-slot=dialog-header]]:!pb-3": consoleSelected() && !state.modelProvider,
+        "[&_[data-slot=dialog-header]]:!pt-4 [&_[data-slot=dialog-header]]:!pb-3":
+          consoleSelected() && !state.modelProvider,
         "[&_[data-slot=dialog-header]]:!pt-5": !!state.modelProvider,
       }}
     >
@@ -354,7 +378,7 @@ function ProviderConnection(props: {
   setBack: (handler: () => void) => void
   selection?: ModelSelection
   onDone?: () => void
-  onConnected?: () => void
+  onConnected?: (methodID?: string) => void
   onFirstConnection: (provider: { id: string; name: string }) => void
   onAuthorization: (authorization: boolean) => void
 }) {
@@ -401,12 +425,11 @@ function ProviderConnection(props: {
     prepare: isConsole ? prepareConsoleCatalog : undefined,
     pollInterval: isConsole ? 500 : undefined,
     onComplete: () => {
-      props.onConnected?.()
+      const method = controller.currentMethod()
+      props.onConnected?.(method?.type === "oauth" ? method.id : undefined)
       // The picker only lists the newest model per family by default, which hides most of
       // what a new connection just unlocked. Show everything the connected integration offers.
-      global.models.show(
-        connectionModels().map((model) => ({ providerID: model.providerID, modelID: model.id })),
-      )
+      global.models.show(connectionModels().map((model) => ({ providerID: model.providerID, modelID: model.id })))
       if (state.catalogPending) {
         setState("noModels", true)
         return
@@ -500,7 +523,9 @@ function ProviderConnection(props: {
   })
   createEffect(() => {
     const current = controller.auth.state()
-    props.onAuthorization(controller.authorization() !== undefined && (current === "waiting" || current === "refreshing"))
+    props.onAuthorization(
+      controller.authorization() !== undefined && (current === "waiting" || current === "refreshing"),
+    )
   })
   const provider = createMemo(() => ({
     id: props.provider,
@@ -541,6 +566,10 @@ function ProviderConnection(props: {
   })
   const keyIndex = () => controller.methods().findIndex((method) => method.type === "key")
   const oauthIndex = () => controller.methods().findIndex((method) => method.type === "oauth")
+  const chatgptIndex = () =>
+    props.provider === "openai"
+      ? controller.methods().findIndex((method) => method.type === "oauth" && method.id === "chatgpt-token-sharing")
+      : -1
   // The Console device flow owns the dialog from the first frame until the catalogs are loaded.
   const consoleSignIn = () =>
     isConsole &&
@@ -691,33 +720,96 @@ function ProviderConnection(props: {
   props.setBack(goBack)
 
   function MethodSelection() {
+    const [selection, setSelection] = createStore({ codex: false })
+    const codex = () =>
+      controller
+        .methods()
+        .flatMap((method, index) =>
+          method.type === "oauth" && (method.id === "chatgpt-browser" || method.id === "chatgpt-headless")
+            ? [{ method, index }]
+            : [],
+        )
+    const other = () =>
+      controller
+        .methods()
+        .flatMap((method, index) =>
+          chatgptIndex() === -1 ||
+          (method.type === "oauth" &&
+            !["chatgpt-token-sharing", "chatgpt-browser", "chatgpt-headless"].includes(method.id))
+            ? [{ method, index }]
+            : [],
+        )
     return (
       <div class="flex flex-col gap-2">
-        <div class="px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
-          {language.t("provider.connect.selectMethod", { provider: provider().name })}
-        </div>
-        <div class="flex flex-col">
-          <For each={controller.methods()}>
-            {(item, index) => {
-              const details = () => methodDetails(item)
-              return (
-                <button
-                  type="button"
-                  class="group flex h-9 w-full items-center gap-2 rounded-md px-3 text-left text-[13px] leading-5 tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
-                  onClick={() => void controller.auth.select(index())}
-                >
-                  <span class="flex h-2 w-4 shrink-0 items-center justify-center rounded-[1px] bg-v2-background-bg-base shadow-[var(--v2-elevation-button-neutral)]">
-                    <span class="hidden h-0.5 w-2.5 bg-v2-icon-icon-base group-hover:block group-focus-visible:block" />
-                  </span>
-                  <span class="font-[530] text-v2-text-text-base">{details().label}</span>
-                  <Show when={details().hint}>
-                    {(hint) => <span class="font-[440] text-v2-text-text-muted">{hint()}</span>}
-                  </Show>
-                </button>
-              )
-            }}
-          </For>
-        </div>
+        <Show when={chatgptIndex() !== -1}>
+          <div class="flex flex-col items-start gap-3 px-3 pb-3">
+            <Button variant="contrast" size="large" onClick={() => void controller.auth.select(chatgptIndex())}>
+              {language.t("provider.connect.chatgpt.signIn")}
+            </Button>
+            <Show when={keyIndex() !== -1}>
+              <button
+                type="button"
+                class="rounded-sm text-[13px] leading-5 text-v2-text-text-muted underline underline-offset-2 hover:text-v2-text-text-base focus-visible:outline focus-visible:outline-2"
+                onClick={() => void controller.auth.select(keyIndex())}
+              >
+                {language.t("provider.connect.chatgpt.useApiKey")}
+              </button>
+            </Show>
+            <Show when={codex().length > 0}>
+              <button
+                type="button"
+                class="rounded-sm text-[13px] leading-5 text-v2-text-text-muted underline underline-offset-2 hover:text-v2-text-text-base focus-visible:outline focus-visible:outline-2"
+                aria-expanded={selection.codex}
+                onClick={() => setSelection("codex", !selection.codex)}
+              >
+                {language.t("provider.connect.chatgpt.codexSignIn")}
+              </button>
+              <Show when={selection.codex}>
+                <div class="flex flex-col gap-1 ps-2">
+                  <For each={codex()}>
+                    {({ method, index }) => (
+                      <button
+                        type="button"
+                        class="rounded-sm px-1 py-1 text-start text-[13px] leading-5 text-v2-text-text-base hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline focus-visible:outline-2"
+                        onClick={() => void controller.auth.select(index)}
+                      >
+                        <span>{methodDetails(method).label}</span>{" "}
+                        <span class="text-v2-text-text-muted">{methodDetails(method).hint}</span>
+                      </button>
+                    )}
+                  </For>
+                </div>
+              </Show>
+            </Show>
+          </div>
+        </Show>
+        <Show when={other().length > 0}>
+          <div class="px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted">
+            {language.t("provider.connect.selectMethod", { provider: provider().name })}
+          </div>
+          <div class="flex flex-col">
+            <For each={other()}>
+              {({ method: item, index }) => {
+                const details = () => methodDetails(item)
+                return (
+                  <button
+                    type="button"
+                    class="group flex h-9 w-full items-center gap-2 rounded-md px-3 text-left text-[13px] leading-5 tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+                    onClick={() => void controller.auth.select(index)}
+                  >
+                    <span class="flex h-2 w-4 shrink-0 items-center justify-center rounded-[1px] bg-v2-background-bg-base shadow-[var(--v2-elevation-button-neutral)]">
+                      <span class="hidden h-0.5 w-2.5 bg-v2-icon-icon-base group-hover:block group-focus-visible:block" />
+                    </span>
+                    <span class="font-[530] text-v2-text-text-base">{details().label}</span>
+                    <Show when={details().hint}>
+                      {(hint) => <span class="font-[440] text-v2-text-text-muted">{hint()}</span>}
+                    </Show>
+                  </button>
+                )
+              }}
+            </For>
+          </div>
+        </Show>
       </div>
     )
   }
