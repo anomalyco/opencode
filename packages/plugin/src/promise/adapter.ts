@@ -427,6 +427,7 @@ export function fromPromise(plugin: Plugin) {
             connection: {
               active: (id) => Effect.runPromiseWith(runtime)(host.integration.connection.active(id)),
               resolve: (connection) => Effect.runPromiseWith(runtime)(host.integration.connection.resolve(connection)),
+              status: (input) => run(host.integration.connection.status(input)),
             },
           },
           mcp: {

@@ -3,7 +3,17 @@ import { Effect } from "effect"
 import { CacheHint, LLM, Message } from "../src/index.js"
 import { Auth } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
-import { AmazonBedrock, AnthropicCompatible, GoogleVertexMessages } from "../src/providers.js"
+import {
+  Alibaba,
+  AmazonBedrock,
+  AnthropicCompatible,
+  CloudflareAIGateway,
+  GoogleVertexMessages,
+  Meta,
+  MiniMax,
+  Moonshot,
+  ZAICodingPlan,
+} from "../src/providers.js"
 import * as AnthropicMessages from "../src/protocols/anthropic-messages.js"
 import * as Gemini from "../src/protocols/gemini.js"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
@@ -125,6 +135,34 @@ describe("applyCachePolicy", () => {
         messages: [{ role: "user", content: [{ type: "text", text: "hi", cache_control: { type: "ephemeral" } }] }],
       })
     }),
+  )
+
+  const messagesModels = [
+    ["alibaba-messages", Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).messages("qwen3.8-max")],
+    [
+      "cloudflare-ai-gateway-messages",
+      CloudflareAIGateway.configure({ accountId: "test", gatewayId: "test", apiKey: "test" }).model(
+        "anthropic/claude-sonnet-4-6",
+      ),
+    ],
+    ["meta-messages", Meta.configure({ apiKey: "test" }).messages("muse-spark-1.3")],
+    ["minimax-messages", MiniMax.configure({ apiKey: "test" }).model("MiniMax-M3")],
+    ["moonshot-messages", Moonshot.configure({ apiKey: "test" }).messages("kimi-k3")],
+    ["zai-coding-messages", ZAICodingPlan.configure({ apiKey: "test" }).messages("glm-5.3")],
+  ] as const
+
+  messagesModels.forEach(([route, model]) =>
+    it.effect(`'auto' emits cache markers on ${route}`, () =>
+      Effect.gen(function* () {
+        const prepared = yield* compileRequest(LLM.request({ model, system: "Sys", prompt: "hi" }))
+
+        expect(prepared.route).toBe(route)
+        expect(prepared.body).toMatchObject({
+          system: [{ type: "text", text: "Sys", cache_control: { type: "ephemeral" } }],
+          messages: [{ role: "user", content: [{ type: "text", text: "hi", cache_control: { type: "ephemeral" } }] }],
+        })
+      }),
+    ),
   )
 
   it.effect("'auto' is a no-op on OpenAI (implicit caching protocol)", () =>

@@ -160,6 +160,25 @@ const nvidiaChat: Protocol = (model, support) => {
   }
 }
 
+// Workers AI ignores or rejects `reasoning_effort: "none"` on most models. Kimi's chat template reads
+// `thinking`; the others read `enable_thinking`, so both are sent.
+const workersAITemplate = (thinking: boolean): Overlay => ({
+  body: { chat_template_kwargs: { enable_thinking: thinking, thinking } },
+})
+
+const workersAIChat: Protocol = (_, support) => {
+  switch (support.type) {
+    case "effort":
+      return efforts(support.values ?? EFFORTS, (effort) =>
+        effort === "none" ? workersAITemplate(false) : { settings: { reasoningEffort: effort } },
+      )
+    case "toggle":
+      return toggle(workersAITemplate(false), workersAITemplate(true))
+    case "budget_tokens":
+      return []
+  }
+}
+
 const basetenTemplate = (enable_thinking: boolean): Overlay => ({
   body: { chat_template_args: { enable_thinking } },
 })
@@ -552,7 +571,7 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/alibaba/chat": alibabaChat,
   "@opencode/ai/providers/baseten": basetenChat,
   "@opencode/ai/providers/cerebras": openaiChat,
-  "@opencode/ai/providers/cloudflare-workers-ai": openaiChat,
+  "@opencode/ai/providers/cloudflare-workers-ai": workersAIChat,
   "@opencode/ai/providers/deepinfra": deepinfraChat,
   "@opencode/ai/providers/deepseek": deepseekChat,
   "@opencode/ai/providers/fireworks": openaiChat,
