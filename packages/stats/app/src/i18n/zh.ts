@@ -63,6 +63,7 @@ export const dict = {
   "range.2W": "2 周",
   "range.1M": "1 个月",
   "range.2M": "2 个月",
+  "chart.weekly": "每周",
   "chart.daily": "每日",
   "chart.input": "输入",
   "chart.output": "输出",

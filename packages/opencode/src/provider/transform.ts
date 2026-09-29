@@ -517,8 +517,11 @@ export function message(msgs: ModelMessage[], model: Provider.Model, options: Re
   return msgs
 }
 
+const GEMINI_2_5_RE = /gemini-2[.-]5(?:[.-]|$)/i
+const GEMINI_LEGACY_RE = /gemini-(?:(?:flash|pro)-)?[12](?:[.-]|$)/i
+
 const GEMINI_MODELS_WITH_SAMPLING_DEFAULTS = [
-  /gemini-2[.-]5(?:[.-]|$)/,
+  GEMINI_2_5_RE,
   /gemini-3-(?:flash|pro)(?:[.-]|$)/,
   /gemini-3[.-]1(?:[.-]|$)/,
   /gemini-3[.-]5-flash(?!-lite)(?:[.-]|$)/,
@@ -684,9 +687,70 @@ function anthropicOmitsThinking(apiId: string) {
   return anthropicUsesModernAdaptiveThinking(apiId)
 }
 
+// Default to binding controls for Claude 5.1+ as enforcement expands to later models.
+// Mythos 5.1 explicitly does not run the conversation-prefix check.
+// https://platform.claude.com/docs/en/build-with-claude/thinking#preserved-in-conversation
+function anthropicBindsThinking(apiId: string) {
+  // Capture either family/version order, without reading release dates as minor versions.
+  const version = /claude-(?:([a-z]+)-)?(\d+)(?:[.-](\d{1,2}))?(?:-([a-z]+))?(?:[.@-]|$)/i.exec(apiId)
+  if (!version) return false
+  const major = Number(version[2])
+  const minor = Number(version[3] ?? 0)
+  if (major === 5 && minor === 1 && (version[1] ?? version[4])?.toLowerCase() === "mythos") return false
+  return major > 5 || (major === 5 && minor >= 1)
+}
+
+// Fable 5.1 binds each thinking signature to the system prompt, tool list, and
+// messages above it, and rejects the request when any of that changes. opencode
+// re-renders parts of that prefix between turns (system prompt, tools, compaction),
+// so ask the API to drop the affected blocks instead of failing the request.
+// Older model deployments may reject this field, even with thinking enabled.
+// The patched AI SDK adds the thinking-binding-controls beta whenever it is set.
+const ANTHROPIC_BLOCK_BINDING = { prefixMismatchBehavior: "drop_block" }
+
+function anthropicBlockBinding(model: Provider.Model, options: { [x: string]: any }) {
+  const sdk = sdkKey(model.api.npm)
+  const key = sdk === "bedrock" ? "reasoningConfig" : sdk === "anthropic" ? "thinking" : undefined
+  // Consume the OpenCode-only opt-out even on models outside the default scope.
+  if (key && options[key]?.blockBinding === false) {
+    const result = { ...options, [key]: { ...options[key] } }
+    delete result[key].blockBinding
+    if (Object.keys(result[key]).length === 0) delete result[key]
+    return result
+  }
+
+  if (!anthropicBindsThinking(model.api.id)) return options
+  switch (model.api.npm) {
+    case "@ai-sdk/anthropic":
+    case "@ai-sdk/google-vertex/anthropic": {
+      const thinking = options.thinking ?? { type: "adaptive" }
+      if (thinking.type !== "adaptive" && thinking.type !== "enabled") return options
+      if (thinking.blockBinding !== undefined) return options
+      return { ...options, thinking: { ...thinking, blockBinding: ANTHROPIC_BLOCK_BINDING } }
+    }
+    case "@ai-sdk/amazon-bedrock": {
+      const reasoningConfig = options.reasoningConfig ?? { type: "adaptive" }
+      if (reasoningConfig.type !== "adaptive" && reasoningConfig.type !== "enabled") return options
+      if (reasoningConfig.blockBinding !== undefined) return options
+      return { ...options, reasoningConfig: { ...reasoningConfig, blockBinding: ANTHROPIC_BLOCK_BINDING } }
+    }
+  }
+  return options
+}
+
+function isLegacyGemini(apiId: string) {
+  return GEMINI_LEGACY_RE.test(apiId)
+}
+
+function isGemini25(apiId: string) {
+  return GEMINI_2_5_RE.test(apiId)
+}
+
 function googleThinkingLevelEfforts(apiId: string) {
   const id = apiId.toLowerCase()
-  if (!id.includes("gemini-3")) return ["low", "high"]
+  // Gemma 4 only toggles thinking: "minimal" disables it and "high" enables it.
+  if (id.includes("gemma")) return ["minimal", "high"]
+  if (isLegacyGemini(id)) return ["low", "high"]
   if (id.includes("flash-image")) return ["minimal", "high"]
   if (id.includes("pro-image")) return ["high"]
   if (id.includes("flash")) return ["minimal", "low", "medium", "high"]
@@ -695,7 +759,7 @@ function googleThinkingLevelEfforts(apiId: string) {
 
 function googleThinkingBudgetMax(apiId: string) {
   const id = apiId.toLowerCase()
-  if (id.includes("2.5") && id.includes("pro") && !id.includes("flash")) return 32_768
+  if (isGemini25(id) && id.includes("pro") && !id.includes("flash")) return 32_768
   return 24_576
 }
 
@@ -707,7 +771,7 @@ function wrapInSapModelParams(variants: Record<string, Record<string, any>>): Re
 
 function googleThinkingVariants(model: Provider.Model): Record<string, Record<string, any>> {
   const id = model.api.id.toLowerCase()
-  if (id.includes("2.5")) {
+  if (isGemini25(id)) {
     return {
       high: { thinkingConfig: { includeThoughts: true, thinkingBudget: 16000 } },
       max: {
@@ -861,7 +925,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
         }
       }
       if (model.api.id.includes("google")) {
-        if (model.api.id.includes("2.5")) {
+        if (isGemini25(model.api.id)) {
           return {
             high: {
               thinkingConfig: {
@@ -1138,7 +1202,7 @@ export function variants(model: Provider.Model): Record<string, Record<string, a
           max: { thinking: { type: "enabled", budget_tokens: 31999 } },
         })
       }
-      if (id.includes("gemini") && id.includes("2.5")) {
+      if (isGemini25(id) || isGemini25(model.api.id)) {
         return wrapInSapModelParams(googleThinkingVariants(model))
       }
       if (id.includes("gpt") || /\bo[1-9]/.test(id)) {
@@ -1186,7 +1250,7 @@ export function options(input: {
     result["usage"] = {
       include: true,
     }
-    if (input.model.api.id.includes("gemini-3")) {
+    if (input.model.api.id.toLowerCase().includes("gemini") && !isLegacyGemini(input.model.api.id)) {
       result["reasoning"] = { effort: "high" }
     }
   }
@@ -1218,7 +1282,7 @@ export function options(input: {
       result["thinkingConfig"] = {
         includeThoughts: true,
       }
-      if (input.model.api.id.includes("gemini-3")) {
+      if (!isLegacyGemini(input.model.api.id)) {
         result["thinkingConfig"]["thinkingLevel"] = "high"
       }
     }
@@ -1363,7 +1427,7 @@ export function providerOptions(model: Provider.Model, options: { [x: string]: a
     usesOpenAIReasoningGate &&
     (model.capabilities.reasoning || options.reasoningEffort !== undefined || options.reasoningSummary !== undefined)
       ? { ...options, forceReasoning: true }
-      : options
+      : anthropicBlockBinding(model, options)
 
   if (model.api.npm === "@ai-sdk/gateway") {
     // Gateway providerOptions are split across two namespaces:
@@ -1773,11 +1837,14 @@ function reasoningEffort(model: Provider.Model, effort: string) {
     case "ai-gateway-provider":
     case "merge-gateway-ai-sdk-provider":
       return { reasoningEffort: effort }
+    case "gitlab-ai-provider":
+      if (model.family?.startsWith("gpt")) return { reasoningEffort: effort }
+      if (model.family?.startsWith("claude")) return { thinking: { type: "adaptive", effort } }
+      return
     case "@ai-sdk/cohere":
     case "@ai-sdk/perplexity":
     case "@ai-sdk/vercel":
     case "@ai-sdk/alibaba":
-    case "gitlab-ai-provider":
       return
   }
 }

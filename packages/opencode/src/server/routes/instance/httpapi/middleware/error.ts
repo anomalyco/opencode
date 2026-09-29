@@ -20,7 +20,8 @@ export const errorLayer = HttpRouter.middleware<{ handles: unknown }>()((effect)
         ConfigErrorV1.JsonError.isInstance(error) ||
         ConfigErrorV1.InvalidError.isInstance(error) ||
         ConfigErrorV1.FrontmatterError.isInstance(error) ||
-        ConfigErrorV1.DirectoryTypoError.isInstance(error)
+        ConfigErrorV1.DirectoryTypoError.isInstance(error) ||
+        ConfigErrorV1.RemoteAuthError.isInstance(error)
       ) {
         return Effect.succeed(HttpServerResponse.jsonUnsafe(error.toObject(), { status: 400 }))
       }
