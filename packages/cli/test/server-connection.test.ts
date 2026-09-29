@@ -98,7 +98,7 @@ test("disabled background service creates a private server per CLI call without 
 
   try {
     await run("service", "set", "disabled", "true")
-    expect(await run("service", "get", "disabled")).toBe("true\n")
+    expect(await run("service", "get", "disabled")).toMatch(/^true\r?\n$/)
     const first = JSON.parse(await run("api", "get", "/api/info"))
     const second = JSON.parse(await run("api", "get", "/api/info"))
     expect(first.pid).toBeGreaterThan(0)
@@ -123,7 +123,7 @@ test("disabled background service creates a private server per CLI call without 
     expect(await fs.readdir(path.join(root, "state", "opencode")).catch(() => [])).toEqual([])
 
     await run("service", "unset", "disabled")
-    expect(await run("service", "get", "disabled")).toBe("false\n")
+    expect(await run("service", "get", "disabled")).toMatch(/^false\r?\n$/)
   } finally {
     await fs.rm(root, { recursive: true, force: true })
   }
