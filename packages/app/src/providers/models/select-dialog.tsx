@@ -527,7 +527,7 @@ export function ModelSelectorPopoverView(props: {
               <ProviderModelIcon provider={{ id: "openai", name: "OpenAI" }} class="shrink-0" />
               <span class="min-w-0 flex-1 truncate">{language.t("dialog.model.chatgptPlan")}</span>
               <ExternalLink
-                href="https://chatgpt.com/#settings/Usage"
+                href="https://chatgpt.com/settings/usage"
                 class="flex shrink-0 items-center gap-1 rounded-sm text-v2-text-text-muted no-underline hover:text-v2-text-text-base focus-visible:outline focus-visible:outline-2"
               >
                 {language.t("dialog.model.chatgptManageUsage")}

@@ -22,7 +22,7 @@ export function DialogChatGPTPlanWelcome() {
           <bdi dir="auto">{language.t("provider.connect.chatgptWelcome.description")}</bdi>
         </p>
         <ExternalLink
-          href="https://chatgpt.com/#settings/Usage"
+          href="https://chatgpt.com/settings/usage"
           dir="auto"
           class="mt-1 rounded-sm text-[13px] leading-5 text-v2-text-text-muted underline-offset-2 hover:text-v2-text-text-base focus-visible:outline focus-visible:outline-2"
         >

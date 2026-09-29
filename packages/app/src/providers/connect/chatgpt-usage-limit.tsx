@@ -28,7 +28,7 @@ export function DialogChatGPTUsageLimit() {
           class="mt-8 w-full"
           autofocus
           onClick={() => {
-            platform.openExternal("https://chatgpt.com/#settings/Usage")
+            platform.openExternal("https://chatgpt.com/settings/usage")
             dialog.close()
           }}
         >
