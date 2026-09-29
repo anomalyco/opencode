@@ -7,8 +7,10 @@ import { useTheme } from "../context/theme"
 import { useDialog } from "../ui/dialog"
 import { Link } from "../ui/link"
 import { errorMessage } from "../util/error"
+import { useLanguage } from "../context/language"
 
 export function DialogPair() {
+  const language = useLanguage()
   const client = useClient()
   const dialog = useDialog()
   const dimensions = useTerminalDimensions()
@@ -44,12 +46,12 @@ export function DialogPair() {
       <box flexDirection={horizontal() ? "row" : "column"} alignItems={horizontal() ? "flex-start" : "center"} gap={2}>
         <box width={horizontal() ? 29 : "100%"} flexShrink={0} gap={1}>
           <text fg={theme.text.muted} wrapMode="word">
-            Open a link to connect. Links work once and expire in {value.minutes} minutes.
+            {language.t("tui.dialogs.pairHint", { minutes: value.minutes })}
           </text>
           <Show when={value.localhost}>
             {(url) => (
               <box>
-                <text fg={theme.text.muted}>This device</text>
+                <text fg={theme.text.muted}>{language.t("tui.dialogs.thisDevice")}</text>
                 <Link href={url()} fg={theme.text.base}>
                   {url()}
                 </Link>
@@ -57,7 +59,7 @@ export function DialogPair() {
             )}
           </Show>
           <box>
-            <text fg={theme.text.muted}>Links</text>
+            <text fg={theme.text.muted}>{language.t("tui.dialogs.urls")}</text>
             <For each={value.links}>
               {(url) => (
                 <Link href={url} fg={theme.text.base}>
@@ -68,7 +70,7 @@ export function DialogPair() {
           </box>
           <Show when={value.loopback}>
             <text fg={theme.text.muted} wrapMode="word">
-              Run `opencode service set hostname 0.0.0.0` to access the service remotely.
+              {language.t("tui.dialogs.remoteAccess", { command: "opencode service set hostname 0.0.0.0" })}
             </text>
           </Show>
         </box>
@@ -90,7 +92,7 @@ export function DialogPair() {
     <box paddingLeft={2} paddingRight={2} paddingBottom={1} gap={1}>
       <box flexDirection="row" justifyContent="space-between">
         <text fg={theme.text.base} attributes={TextAttributes.BOLD}>
-          Pair
+          {language.t("tui.dialogs.pair")}
         </text>
         <text fg={theme.text.muted} onMouseUp={() => dialog.clear()}>
           esc
@@ -99,7 +101,7 @@ export function DialogPair() {
       <Show
         when={loadError()}
         fallback={
-          <Show when={info()} fallback={<text fg={theme.text.muted}>Loading server information…</text>}>
+          <Show when={info()} fallback={<text fg={theme.text.muted}>{language.t("tui.dialogs.loadingServer")}</text>}>
             <Show
               when={dimensions().height >= 36}
               fallback={
@@ -119,10 +121,10 @@ export function DialogPair() {
         {(error) => (
           <box>
             <text fg={theme.text.feedback.error.base} attributes={TextAttributes.BOLD}>
-              Could not load server information
+              {language.t("tui.dialogs.serverLoadFailed")}
             </text>
             <text fg={theme.text.muted}>{errorMessage(error())}</text>
-            <text fg={theme.text.muted}>Close and reopen Pair to try again.</text>
+            <text fg={theme.text.muted}>{language.t("tui.dialogs.retryPair")}</text>
           </box>
         )}
       </Show>

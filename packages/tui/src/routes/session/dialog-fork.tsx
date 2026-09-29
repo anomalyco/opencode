@@ -1,3 +1,4 @@
+import { useLanguage } from "../../context/language"
 import { createMemo, createSignal, onMount, Show } from "solid-js"
 import { useData } from "../../context/data"
 import { useRoute } from "../../context/route"
@@ -7,10 +8,10 @@ import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
 import { useDialog } from "../../ui/dialog"
 import { useToast } from "../../ui/toast"
 import { errorMessage } from "../../util/error"
-import { Locale } from "../../util/locale"
 import { projectedPromptInput } from "../../prompt/codec"
 
 export function DialogFork(props: { sessionID: string; messageID?: string; onMove?: (messageID?: string) => void }) {
+  const language = useLanguage()
   const data = useData()
   const dialog = useDialog()
   const client = useClient()
@@ -44,7 +45,7 @@ export function DialogFork(props: { sessionID: string; messageID?: string; onMov
         : undefined,
     })
     dialog.clear()
-    toast.show({ message: "Forked session", variant: "success", duration: 4000 })
+    toast.show({ message: language.t("tui.details.forkedSession"), variant: "success", duration: 4000 })
   }
 
   onMount(() => {
@@ -54,7 +55,7 @@ export function DialogFork(props: { sessionID: string; messageID?: string; onMov
 
   const options = createMemo((): DialogSelectOption<string | undefined>[] => [
     {
-      title: "Full session",
+      title: language.t("tui.details.fullSession"),
       value: undefined,
       onSelect: () => fork(),
     },
@@ -65,7 +66,7 @@ export function DialogFork(props: { sessionID: string; messageID?: string; onMov
       .map((message) => ({
         title: message.text.replace(/\n/g, " "),
         value: message.id,
-        footer: Locale.time(message.time.created),
+        footer: language.date(message.time.created, { timeStyle: "short" }),
         onSelect: () => fork(message.id),
       })),
   ])
@@ -75,11 +76,15 @@ export function DialogFork(props: { sessionID: string; messageID?: string; onMov
       when={!pending()}
       fallback={
         <box paddingLeft={2} paddingRight={2} paddingBottom={1}>
-          <Spinner>Forking session…</Spinner>
+          <Spinner>{language.t("tui.details.forkingSession")}</Spinner>
         </box>
       }
     >
-      <DialogSelect onMove={(option) => props.onMove?.(option.value)} title="Fork session" options={options()} />
+      <DialogSelect
+        onMove={(option) => props.onMove?.(option.value)}
+        title={language.t("tui.session.forkSession")}
+        options={options()}
+      />
     </Show>
   )
 }

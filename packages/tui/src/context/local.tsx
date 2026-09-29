@@ -25,10 +25,12 @@ import { useData } from "./data"
 import { usePermission } from "./permission"
 import { useLocation } from "./location"
 import { parse } from "../util/model"
+import { useLanguage } from "./language"
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
   init: () => {
+    const language = useLanguage()
     const data = useData()
     const toast = useToast()
     const theme = useTheme()
@@ -98,7 +100,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (!agents().some((agent) => agent.id === id))
             return toast.show({
               variant: "warning",
-              message: `Agent not found: ${id}`,
+              message: language.t("tui.app.agentNotFound", { name: id }),
               duration: 3000,
             })
           batch(() => {
@@ -426,7 +428,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           if (!favorites.length) {
             toast.show({
               variant: "info",
-              message: "Add a favorite model to use this shortcut",
+              message: language.t("tui.app.favoriteRequired"),
               duration: 3000,
             })
             return

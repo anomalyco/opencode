@@ -1,3 +1,4 @@
+import { ConfigProvider, resolve } from "../../src/config"
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
 import { RGBA, TextRenderable } from "@opentui/core"
@@ -40,7 +41,11 @@ test("prompt footer separates simultaneous subagent, shell, and usage status", a
     },
   } as unknown as Context
   const app = await testRender(
-    () => <PromptFooter context={context} sessionID="session" mode="normal" showDetails={true} />,
+    () => (
+      <ConfigProvider config={resolve({}, { terminalSuspend: true })}>
+        <PromptFooter context={context} sessionID="session" mode="normal" showDetails={true} />
+      </ConfigProvider>
+    ),
     {
       width: 80,
       height: 2,
@@ -109,12 +114,9 @@ test("prompt footer can hide details", async () => {
   const app = await testRender(
     () => (
       <box width="100%" flexDirection="row" justifyContent="space-between" gap={2}>
-        <PromptFooter
-          context={context}
-          sessionID={sessionID()}
-          mode="normal"
-          showDetails={showDetails()}
-        />
+        <ConfigProvider config={resolve({}, { terminalSuspend: true })}>
+          <PromptFooter context={context} sessionID={sessionID()} mode="normal" showDetails={showDetails()} />
+        </ConfigProvider>
       </box>
     ),
     {

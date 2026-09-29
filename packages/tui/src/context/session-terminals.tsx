@@ -6,6 +6,7 @@ import { useConfig } from "../config"
 import { useData } from "./data"
 import { useEvent } from "./event"
 import { useStorage } from "./storage"
+import { useLanguage } from "./language"
 
 type SessionTerminalsState = {
   sessions: Record<string, string | null>
@@ -14,6 +15,7 @@ type SessionTerminalsState = {
 export const { use: useSessionTerminals, provider: SessionTerminalsProvider } = createSimpleContext({
   name: "SessionTerminals",
   init: () => {
+    const language = useLanguage()
     const client = useClient()
     const config = useConfig().data
     const data = useData()
@@ -81,7 +83,7 @@ export const { use: useSessionTerminals, provider: SessionTerminalsProvider } = 
           sessionID,
           args: [],
           cwd: session?.location.directory,
-          title: "Terminal",
+          title: language.t("command.category.terminal"),
           env: {},
         })
         await refresh(sessionID)

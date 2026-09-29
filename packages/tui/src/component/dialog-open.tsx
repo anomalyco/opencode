@@ -1,3 +1,4 @@
+import { useLanguage } from "../context/language"
 import { batch, createEffect, createMemo, createResource, createSignal, onCleanup, Show } from "solid-js"
 import type { OpenCodeEvent, SessionInfo } from "@opencode/client"
 import path from "path"
@@ -20,7 +21,6 @@ import { truncateFilePath } from "../ui/file-path"
 import { useToast } from "../ui/toast"
 import { errorMessage } from "../util/error"
 import { stringWidth } from "../util/string-width"
-import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import { Spinner } from "./spinner"
 import { projectName } from "../util/project"
 
@@ -43,6 +43,7 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
   const location = useLocation()
   const sessionTabs = useSessionTabs()
   const toast = useToast()
+  const language = useLanguage()
   const theme = useTheme().surface("dialog")
   const paths = useTuiPaths()
   const dimensions = useTerminalDimensions()
@@ -120,7 +121,11 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
   }
   const [worktrees, worktreeActions] = createResource(projectID, (projectID) =>
     client.api.worktree.list({ projectID }).catch((error: unknown) => {
-      toast.show({ title: "Loading worktrees failed", message: errorMessage(error), variant: "error" })
+      toast.show({
+        title: language.t("tui.projects.loadingWorktreesFailed"),
+        message: errorMessage(error),
+        variant: "error",
+      })
       return []
     }),
   )
@@ -190,11 +195,13 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
         data.session.status(session.id) === "running" ||
         data.session.family(session.id).some((id) => data.session.status(id) === "running")
       return {
-        title: withTimestampedFallback(session),
+        title:
+          session.title ??
+          language.t("tui.dialogs.newSessionTitle", { timestamp: new Date(session.time.created).toISOString() }),
         searchText: `${session.id} ${session.location.directory}`,
         value: { type: "session", sessionID: session.id } as OpenTarget,
-        category: "Sessions",
-        footer: `${label ? `${Locale.truncate(label, 30)} · ` : ""}${timeAgo(session.time.updated)}`,
+        category: language.t("home.sessions.search.sessions"),
+        footer: `${label ? `${Locale.truncate(label, 30)} · ` : ""}${timeAgo(session.time.updated, language)}`,
         onSelect: () => location.set(session.location),
         gutter: running
           ? (color: RGBA) => <Spinner color={color} />
@@ -231,7 +238,7 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
             directory: item.directory,
             ...(git ? { projectID: item.project!.id } : {}),
           } as OpenTarget,
-          category: "Projects",
+          category: language.t("tui.dialogs.projects"),
           gutter:
             item.directory === current.directory ||
             item.directory === location.current?.project.canonical
@@ -305,8 +312,16 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
               pending = undefined
               restore(previous)
             }}
-            title={projectID() ? `${projectName(data.project.get(projectID()!)) ?? "Project"} / Worktrees` : "Open"}
-            placeholder={projectID() ? "Search worktrees…" : "Search sessions and projects…"}
+            title={
+              projectID()
+                ? language.t("tui.dialogs.projectWorktrees", {
+                    project: projectName(data.project.get(projectID()!)) ?? language.t("tui.dialogs.project"),
+                  })
+                : language.t("tui.projects.open")
+            }
+            placeholder={language.t(
+              projectID() ? "tui.projects.searchWorktrees" : "tui.projects.searchSessionsAndProjects",
+            )}
             options={projectID() ? worktreeOptions() : options()}
             current={
               currentSessionID() ? ({ type: "session", sessionID: currentSessionID()! } as OpenTarget) : undefined
@@ -323,7 +338,7 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
             emptyView={
               <Show when={!recent.loading && !projects.loading}>
                 <box paddingLeft={4} paddingRight={4}>
-                  <text fg={theme.text.muted}>No recent sessions or projects</text>
+                  <text fg={theme.text.muted}>{language.t("tui.projects.noRecentSessionsOrProjects")}</text>
                 </box>
               </Show>
             }
@@ -337,15 +352,22 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
               >
                 <box>
                   <Show when={projectID() && worktrees.loading}>
-                    <Spinner color={theme.text.muted}>Loading worktrees…</Spinner>
+                    <Spinner color={theme.text.muted}>{language.t("tui.projects.loadingWorktrees")}</Spinner>
                   </Show>
                   <Show when={!projectID() && (recent.loading || projects.loading)}>
-                    <Spinner color={theme.text.muted}>Refreshing sessions and projects…</Spinner>
+                    <Spinner color={theme.text.muted}>
+                      {language.t("tui.projects.refreshingSessionsAndProjects")}
+                    </Spinner>
                   </Show>
                   <Show when={!projectID() && (recent() === false || projects() === false)}>
                     <text fg={theme.text.feedback.error.base}>
-                      Could not refresh{" "}
-                      {recent() === false ? (projects() === false ? "sessions and projects" : "sessions") : "projects"}.
+                      {language.t(
+                        recent() === false
+                          ? projects() === false
+                            ? "tui.dialogs.refreshAllFailed"
+                            : "tui.dialogs.refreshSessionsFailed"
+                          : "tui.dialogs.refreshProjectsFailed",
+                      )}
                     </text>
                   </Show>
                 </box>
@@ -356,8 +378,8 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
                 ? [
                     {
                       bind: "right",
-                      title: "Show project worktrees",
-                      group: "Dialog",
+                      title: language.t("tui.projects.showProjectWorktrees"),
+                      group: language.t("tui.dialog"),
                       run: () => {
                         const target = select?.selected?.value
                         if (target?.type !== "project" || !target.projectID) return
@@ -378,27 +400,34 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
                 ? [
                     {
                       bind: "left",
-                      title: "Return to projects",
-                      group: "Dialog",
+                      title: language.t("tui.projects.returnToProjects"),
+                      group: language.t("tui.dialog"),
                       run: back,
                     },
-                    { bind: "ctrl+n", title: "New worktree", group: "Dialog", run: newWorktree },
+                    {
+                      bind: "ctrl+n",
+                      title: language.t("tui.projects.newWorktree"),
+                      group: language.t("tui.dialog"),
+                      run: newWorktree,
+                    },
                   ]
                 : []),
             ]}
-            footerHints={[...(projectID() ? [{ title: "new worktree", label: "ctrl+n" }] : [])]}
+            footerHints={[
+              ...(projectID() ? [{ title: language.t("tui.projects.newWorktreeLabel"), label: "ctrl+n" }] : []),
+            ]}
             noMatchView={
               <box paddingLeft={4} paddingRight={4}>
                 <text fg={theme.text.muted}>
                   {projectID()
                     ? worktrees.loading
-                      ? "Loading worktrees…"
-                      : "No matching worktrees"
+                      ? language.t("tui.projects.loadingWorktrees")
+                      : language.t("tui.dialogs.noMatchingWorktrees")
                     : recent.loading || projects.loading || matched.loading
-                      ? "Searching sessions and projects…"
+                      ? language.t("tui.dialogs.searchingSessionsProjects")
                       : shortcuts.get("session.list")
-                        ? `No matches · search all sessions with ${shortcuts.get("session.list")}`
-                        : "No matches"}
+                        ? language.t("tui.dialogs.searchAllSessions", { key: shortcuts.get("session.list") ?? "" })
+                        : language.t("tui.dialogs.noMatches")}
                 </text>
               </box>
             }
@@ -419,11 +448,13 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
       >
         <DialogPrompt
           size="large"
-          title={`${projectName(data.project.get(projectID()!)) ?? "Project"} / New worktree`}
-          placeholder="Worktree name (optional)"
-          description={() => <text fg={theme.text.muted}>Leave blank for a random name.</text>}
+          title={language.t("tui.dialogs.projectNewWorktree", {
+            project: projectName(data.project.get(projectID()!)) ?? language.t("tui.dialogs.project"),
+          })}
+          placeholder={language.t("tui.dialogs.worktreeNameOptional")}
+          description={() => <text fg={theme.text.muted}>{language.t("tui.projects.leaveBlankForARandomName")}</text>}
           busy={creating()}
-          busyText="Creating worktree…"
+          busyText={language.t("tui.dialogs.creatingWorktree")}
           onCancel={cancelCreation}
           onConfirm={(value) => {
             const id = projectID()!
@@ -444,7 +475,11 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
                 location.set(target)
               })
               .catch((error: unknown) =>
-                toast.show({ title: "Creating worktree failed", message: errorMessage(error), variant: "error" }),
+                toast.show({
+                  title: language.t("tui.projects.creatingWorktreeFailed"),
+                  message: errorMessage(error),
+                  variant: "error",
+                }),
               )
               .finally(() => setCreating(false))
           }}
@@ -464,15 +499,16 @@ export function moveOpenSession(session: SessionInfo, event: Extract<OpenCodeEve
   }
 }
 
-function timeAgo(timestamp: number) {
+function timeAgo(timestamp: number, language: ReturnType<typeof useLanguage>) {
   const minutes = Math.floor((Date.now() - timestamp) / 60_000)
-  if (minutes < 1) return "now"
-  if (minutes < 60) return `${minutes}m`
+  if (minutes < 1) return language.t("tui.dialogs.now")
+  const relative = new Intl.RelativeTimeFormat(language.intl(), { style: "narrow" })
+  if (minutes < 60) return relative.format(-minutes, "minute")
   const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}h`
+  if (hours < 24) return relative.format(-hours, "hour")
   const days = Math.floor(hours / 24)
-  if (days < 30) return `${days}d`
+  if (days < 30) return relative.format(-days, "day")
   const months = Math.floor(days / 30)
-  if (months < 12) return `${months}mo`
-  return `${Math.floor(days / 365)}y`
+  if (months < 12) return relative.format(-months, "month")
+  return relative.format(-Math.floor(days / 365), "year")
 }
