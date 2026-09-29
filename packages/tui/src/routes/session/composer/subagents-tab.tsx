@@ -211,6 +211,7 @@ export function SubagentsTab(props: { sessionID: string }) {
               return (
                 <box
                   flexDirection="row"
+                  gap={1}
                   paddingLeft={1}
                   paddingRight={1}
                   backgroundColor={
@@ -247,7 +248,7 @@ export function SubagentsTab(props: { sessionID: string }) {
                   </box>
                   <Show when={entry.model}>
                     {(model) => (
-                      <box flexDirection="row" gap={1} flexShrink={0} paddingRight={1}>
+                      <box flexDirection="row" gap={1} flexShrink={0}>
                         <text fg={active() ? theme.text.action.primary.focused : theme.text.muted} wrapMode="none">
                           {Locale.truncateWidth(
                             model().name,
@@ -271,7 +272,11 @@ export function SubagentsTab(props: { sessionID: string }) {
                     )}
                   </Show>
                   <Show when={status()}>
-                    <text fg={active() ? theme.text.action.primary.focused : theme.text.muted} wrapMode="none">
+                    <text
+                      fg={active() ? theme.text.action.primary.focused : theme.text.muted}
+                      wrapMode="none"
+                      flexShrink={0}
+                    >
                       {status()}
                     </text>
                   </Show>
