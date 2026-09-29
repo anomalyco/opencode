@@ -25,10 +25,48 @@ describe("OpenRouter", () => {
       expect(prepared.route).toBe("openrouter")
       expect(prepared.body).toMatchObject({
         model: "openai/gpt-4o-mini",
-        messages: [{ role: "user", content: "Say hello." }],
+        messages: [
+          { role: "user", content: [{ type: "text", text: "Say hello.", cache_control: { type: "ephemeral" } }] },
+        ],
         stream: true,
         usage: { include: true },
       })
+    }),
+  )
+
+  it.effect("places default cache breakpoints on tools, system boundaries, and the conversation tail", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenRouter.configure({ apiKey: "test-key" }).model("anthropic/claude-sonnet-4.6"),
+          system: [
+            { type: "text", text: "Base agent" },
+            { type: "text", text: "Model details" },
+            { type: "text", text: "Project instructions" },
+          ],
+          tools: [
+            { name: "read", description: "Read", inputSchema: { type: "object", properties: {} } },
+            { name: "lookup", description: "Lookup", inputSchema: { type: "object", properties: {} } },
+          ],
+          prompt: "Hello",
+        }),
+      )
+
+      expect(prepared.body.tools?.map((tool) => tool.cache_control)).toEqual([undefined, { type: "ephemeral" }])
+      expect(prepared.body.messages).toMatchObject([
+        {
+          role: "system",
+          content: [
+            { text: "Base agent", cache_control: { type: "ephemeral" } },
+            { text: "Model details" },
+            { text: "Project instructions", cache_control: { type: "ephemeral" } },
+          ],
+        },
+        { role: "user", content: [{ text: "Hello", cache_control: { type: "ephemeral" } }] },
+      ])
+      expect(prepared.body.messages[0]?.content).not.toContainEqual(
+        expect.objectContaining({ text: "Model details", cache_control: expect.anything() }),
+      )
     }),
   )
 
