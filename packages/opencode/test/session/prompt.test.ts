@@ -2818,6 +2818,54 @@ noLLMServer.instance(
   { config: variantCfg("http://localhost:1/v1") },
 )
 
+it.instance("command without its own model rejects a variant the model left after undone messages lacks", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(variantCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const revert = yield* SessionRevert.Service
+    yield* llm.text("done")
+    // Only the undone message is on a model that declares "high".
+    const { fork, first, second } = yield* undoInFork(plain, ref)
+
+    const exit = yield* prompt
+      .command({ sessionID: fork.id, command: "unpinned", arguments: "", variant: "high" })
+      .pipe(Effect.exit)
+
+    expect(expectUnknownVariant(exit, "high")).toContain("test/plain-model")
+    const messages = yield* sessions.messages({ sessionID: fork.id })
+    expect(messages.map((msg) => msg.info.id)).toEqual([first.info.id, second.info.id])
+    expect((yield* sessions.get(fork.id)).revert?.messageID).toBe(second.info.id)
+    expect(yield* llm.calls).toBe(0)
+
+    const restored = yield* revert.unrevert({ sessionID: fork.id })
+    expect(restored.revert).toBeUndefined()
+    expect(texts(yield* sessions.messages({ sessionID: fork.id }))).toEqual(["first", "second"])
+  }),
+)
+
+it.instance("command without its own model runs on the model left after undone messages", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(variantCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    yield* llm.text("done")
+    // Only the kept message is on a model that declares "high", so the variant is valid.
+    const { fork, first } = yield* undoInFork(ref, plain)
+
+    yield* prompt.command({ sessionID: fork.id, command: "unpinned", arguments: "", variant: "high" })
+
+    const users = (yield* sessions.messages({ sessionID: fork.id })).filter((msg) => msg.info.role === "user")
+    expect(users.map((msg) => msg.info.id)[0]).toBe(first.info.id)
+    expect(texts(users)).toEqual(["first", "check the build"])
+    const replacement = users[1]?.info
+    if (replacement?.role !== "user") throw new Error("expected user message")
+    expect(replacement.model).toEqual({ ...ref, variant: "high" })
+    expect((yield* sessions.get(fork.id)).revert).toBeUndefined()
+    expect((yield* llm.inputs)[0]?.reasoning_effort).toBe("high")
+  }),
+)
+
 backgroundNoLLMServer.instance(
   "background task result reaches a parent that switched away from its agent's pinned model",
   () =>
