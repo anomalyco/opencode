@@ -25,9 +25,7 @@ describe("OpenRouter", () => {
       expect(prepared.route).toBe("openrouter")
       expect(prepared.body).toMatchObject({
         model: "openai/gpt-4o-mini",
-        messages: [
-          { role: "user", content: [{ type: "text", text: "Say hello.", cache_control: { type: "ephemeral" } }] },
-        ],
+        messages: [{ role: "user", content: "Say hello." }],
         stream: true,
         usage: { include: true },
       })
@@ -67,6 +65,49 @@ describe("OpenRouter", () => {
       expect(prepared.body.messages[0]?.content).not.toContainEqual(
         expect.objectContaining({ text: "Model details", cache_control: expect.anything() }),
       )
+    }),
+  )
+
+  it.effect("skips the tool breakpoint for Qwen, which caches tools with the system prompt", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenRouter.configure({ apiKey: "test-key" }).model("qwen/qwen3-coder-plus"),
+          system: "Base agent",
+          tools: [{ name: "lookup", description: "Lookup", inputSchema: { type: "object", properties: {} } }],
+          prompt: "Hello",
+        }),
+      )
+
+      expect(prepared.body.tools?.[0]?.cache_control).toBeUndefined()
+      expect(prepared.body.messages).toMatchObject([
+        { role: "system", content: [{ text: "Base agent", cache_control: { type: "ephemeral" } }] },
+        { role: "user", content: [{ text: "Hello", cache_control: { type: "ephemeral" } }] },
+      ])
+    }),
+  )
+
+  it.effect("sends no default breakpoints to upstreams that cache without them", () =>
+    Effect.gen(function* () {
+      const openrouter = OpenRouter.configure({ apiKey: "test-key" })
+      const bodies = yield* Effect.forEach(["google/gemini-2.5-flash", "openai/gpt-5-mini"], (id) =>
+        compileRequest(
+          LLM.request({
+            model: openrouter.model(id),
+            system: "Base agent",
+            tools: [{ name: "lookup", description: "Lookup", inputSchema: { type: "object", properties: {} } }],
+            prompt: "Hello",
+          }),
+        ).pipe(Effect.map((prepared) => prepared.body)),
+      )
+
+      bodies.forEach((body) => {
+        expect(body.tools?.[0]?.cache_control).toBeUndefined()
+        expect(body.messages).toMatchObject([
+          { role: "system", content: "Base agent" },
+          { role: "user", content: "Hello" },
+        ])
+      })
     }),
   )
 
