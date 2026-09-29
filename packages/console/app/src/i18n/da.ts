@@ -3,7 +3,10 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
-  "go.promo.deepseek": "DeepSeek V4.1 Flash får firedoblet brugsgrænse i en begrænset periode",
+  "go.promo.spaceBunny": "Space Bunny Free, en ny anonym model, er tilgængelig i en begrænset periode",
+  "go.referral.ended.label": "Advarsel",
+  "go.referral.ended":
+    "Henvisningsprogrammet er afsluttet. Henvisningslinks giver ikke længere kredit til dig eller den, der delte dem.",
   "go.graph.bonus": "{{count}}× forbrug",
   "nav.github": "GitHub",
   "nav.docs": "Dokumentation",
@@ -263,6 +266,7 @@ export const dict = {
   "go.meta.description":
     "Go koster $10/måned, med generøse brugsgrænser og pålidelig adgang til førende kodningsmodeller.",
   "go.hero.title": "Kodningsmodeller til lav pris for alle",
+  "go.hero.tagline": "Brug med enhver agent. Tank op med kredit efter behov. Afmeld når som helst.",
   "go.hero.body":
     "Go bringer agentisk kodning til programmører over hele verden. Med generøse grænser og pålidelig adgang til de mest kapable open source-modeller, så du kan bygge med kraftfulde agenter uden at bekymre dig om omkostninger eller tilgængelighed.",
 
@@ -270,6 +274,18 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Abonner på Go",
   "go.cta.price": "$10/måned",
+  "go.plans.month": "om måneden",
+  "go.plans.plus.cta": "Abonnér på Go Plus",
+  "go.plans.plus.description": "Go Plus koster $40/måned og giver højere brugsgrænser.",
+  "go.plans.go.feature1": "Udvalgte, prisvenlige modeller",
+  "go.plans.go.feature2": "Testet til agentbaseret kodning",
+  "go.plans.go.feature3": "Generøse grænser og pålidelig adgang",
+  "go.plans.plus.feature1": "Alt i Go er inkluderet",
+  "go.plans.plus.feature2": "Højere grænser til længere, fokuserede kodningsforløb",
+  "go.plans.plus.feature3": "Til større, krævende projekter",
+  "go.plans.limits": "Grænser",
+  "go.plans.description": "Anslåede anmodninger pr. 5 timer og månedlige grænser pr. model",
+  "go.plans.legend": "Abonnementer",
   "go.pricing.body": "Brug med enhver agent. $10/måned. Tank op med kredit efter behov. Afmeld når som helst.",
   "go.graph.free": "Gratis",
   "go.graph.freePill": "Big Pickle og gratis modeller",
@@ -381,7 +397,7 @@ export const dict = {
 
   "go.faq.q9": "Hvad er forskellen på gratis modeller og Go?",
   "go.faq.a9":
-    "Gratis modeller inkluderer Big Pickle plus kampagnemodeller, der er tilgængelige på det pågældende tidspunkt, med en kvote på 200 forespørgsler/dag. Go tilbyder et kurateret modeludvalg med højere forespørgselskvoter håndhævet over rullende perioder (5 timer, ugentligt og månedligt), omtrent svarende til basiskvoter på $12 pr. 5 timer, $30 pr. uge og $60 pr. måned; modelspecifikke kvoter kan variere (det faktiske antal forespørgsler varierer efter model og brug).",
+    "Gratis modeller inkluderer Big Pickle plus kampagnemodeller, der er tilgængelige på det pågældende tidspunkt, med en kvote på 200 forespørgsler/dag. Go tilbyder et kurateret modeludvalg med højere forespørgselskvoter i rullende perioder: 20 % af den månedlige kvote pr. 5 timer, 50 % pr. uge og 100 % pr. måned. Modelspecifikke kvoter kan variere (det faktiske antal forespørgsler varierer efter model og brug).",
   "go.faq.q10": "Kan jeg få en refusion?",
   "go.faq.a10":
     "Du kan muligvis få en refusion, hvis opkrævningen blev foretaget inden for de seneste 14 dage, og du ikke har brugt din Go-kvote i den pågældende faktureringsperiode. {{contact}} for at anmode om en refusion.",
@@ -648,7 +664,6 @@ export const dict = {
   "workspace.payments.type.subscription": "abonnement",
   "workspace.payments.view": "Vis",
 
-  "workspace.black.loading": "Indlæser...",
   "workspace.black.time.day": "dag",
   "workspace.black.time.days": "dage",
   "workspace.black.time.hour": "time",
@@ -658,7 +673,8 @@ export const dict = {
   "workspace.black.time.fewSeconds": "et par sekunder",
   "workspace.black.subscription.title": "Abonnement",
   "workspace.black.subscription.message": "Du abonnerer på OpenCode Black for ${{plan}} om måneden.",
-  "workspace.black.subscription.manage": "Administrer abonnement",
+  "workspace.black.subscription.ending":
+    "OpenCode Black slutter med din nuværende faktureringsperiode og fornyes ikke. Vi flytter dig til den nye konsol.",
   "workspace.black.subscription.rollingUsage": "5-timers brug",
   "workspace.black.subscription.weeklyUsage": "Ugentlig brug",
   "workspace.black.subscription.resetsIn": "Nulstiller i",

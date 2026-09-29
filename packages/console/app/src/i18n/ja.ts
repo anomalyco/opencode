@@ -3,7 +3,10 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
-  "go.promo.deepseek": "DeepSeek V4.1 Flashの利用上限が期間限定で4倍に",
+  "go.promo.spaceBunny": "新しい匿名モデル Space Bunny Free が期間限定で利用可能です",
+  "go.referral.ended.label": "警告",
+  "go.referral.ended":
+    "紹介プログラムは終了しました。紹介リンクを使っても、あなたや共有した人にクレジットは付与されません。",
   "go.graph.bonus": "利用枠{{count}}倍",
   "nav.github": "GitHub",
   "nav.docs": "ドキュメント",
@@ -262,6 +265,7 @@ export const dict = {
   "go.meta.description":
     "Goは月額$10で、主要なコーディングモデルへのゆとりある利用上限と安定したアクセスを提供します。",
   "go.hero.title": "すべての人のための低価格なコーディングモデル",
+  "go.hero.tagline": "どのエージェントでも利用できます。必要に応じてクレジットをチャージ。いつでもキャンセル可能。",
   "go.hero.body":
     "Goは、世界中のプログラマーにエージェント型コーディングをもたらします。最も高性能なオープンソースモデルへの十分な制限と安定したアクセスを提供し、コストや可用性を気にすることなく強力なエージェントで構築できます。",
 
@@ -269,6 +273,18 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Goを購読する",
   "go.cta.price": "$10/月",
+  "go.plans.month": "/月",
+  "go.plans.plus.cta": "Go Plus に登録",
+  "go.plans.plus.description": "Go Plus は月額$40で、より高い利用枠を提供します。",
+  "go.plans.go.feature1": "厳選された手頃なモデル",
+  "go.plans.go.feature2": "エージェント型コーディングで検証済み",
+  "go.plans.go.feature3": "十分な利用枠と安定したアクセス",
+  "go.plans.plus.feature1": "Go のすべての特典を含む",
+  "go.plans.plus.feature2": "より高い利用枠で、長時間のコーディングに集中",
+  "go.plans.plus.feature3": "大規模で高度なプロジェクト向け",
+  "go.plans.limits": "利用枠",
+  "go.plans.description": "モデル別の5時間あたりの推定リクエスト数と月間利用枠",
+  "go.plans.legend": "プラン",
   "go.pricing.body":
     "どのエージェントでも使えます。月額$10。必要に応じてクレジットを追加。いつでもキャンセルできます。",
   "go.graph.free": "無料",
@@ -380,7 +396,7 @@ export const dict = {
 
   "go.faq.q9": "無料モデルとGoの違いは何ですか？",
   "go.faq.a9":
-    "無料モデルにはBig Pickleと、その時点で利用可能なプロモーションモデルが含まれ、1日200リクエストの制限があります。Goでは厳選されたモデルラインナップを利用でき、ローリングウィンドウ（5時間、週間、月間）全体でより高いリクエスト制限が適用されます。基本利用枠では概算で5時間あたり$12、週間$30、月間$60相当ですが、モデル別の利用枠は異なる場合があります（実際のリクエスト数はモデルと使用状況により異なります）。",
+    "無料モデルにはBig Pickleと、その時点で利用可能なプロモーションモデルが含まれ、1日200リクエストの制限があります。Goでは厳選されたモデルラインナップを利用でき、ローリングウィンドウで月間利用枠の20%を5時間ごと、50%を週ごと、100%を月ごとの上限として適用します。モデル別の利用枠は異なる場合があります（実際のリクエスト数はモデルと使用状況により異なります）。",
   "go.faq.q10": "返金を受けられますか？",
   "go.faq.a10":
     "請求から14日以内で、その請求期間中にGoの利用枠を一切使用していない場合、返金の対象となる可能性があります。返金を希望する場合は、{{contact}}ください。",
@@ -648,7 +664,6 @@ export const dict = {
   "workspace.payments.type.subscription": "サブスクリプション",
   "workspace.payments.view": "表示",
 
-  "workspace.black.loading": "読み込み中...",
   "workspace.black.time.day": "日",
   "workspace.black.time.days": "日",
   "workspace.black.time.hour": "時間",
@@ -658,7 +673,8 @@ export const dict = {
   "workspace.black.time.fewSeconds": "数秒",
   "workspace.black.subscription.title": "サブスクリプション",
   "workspace.black.subscription.message": "あなたは OpenCode Black を月額 ${{plan}} で購読しています。",
-  "workspace.black.subscription.manage": "サブスクリプションの管理",
+  "workspace.black.subscription.ending":
+    "OpenCode Black は現在の請求期間の終了とともに終了し、更新されません。新しいコンソールへ移行いたします。",
   "workspace.black.subscription.rollingUsage": "5時間利用",
   "workspace.black.subscription.weeklyUsage": "週間利用量",
   "workspace.black.subscription.resetsIn": "リセットまで",

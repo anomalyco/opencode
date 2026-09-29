@@ -103,6 +103,7 @@ OpenCode Zen 的運作方式和 OpenCode 中的其他供應商一樣。
 | Grok Build 0.1                  | grok-build-0.1                  | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 | Muse Spark 1.3                  | muse-spark-1.3                  | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
 | Muse Spark 1.2                  | muse-spark-1.2                  | `https://opencode.ai/zen/v1/responses`                    | `@ai-sdk/openai`            |
+| Qwen3.8 Max                     | qwen3.8-max                     | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Qwen3.8 Flash                   | qwen3.8-flash                   | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Qwen3.7 Max                     | qwen3.7-max                     | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
 | Qwen3.7 Plus                    | qwen3.7-plus                    | `https://opencode.ai/zen/v1/messages`                     | `@ai-sdk/anthropic`         |
@@ -127,6 +128,8 @@ OpenCode Zen 的運作方式和 OpenCode 中的其他供應商一樣。
 | Jev 1.13                        | jev-1.13                        | `https://opencode.ai/zen/v1/systemone`                    | -                           |
 | Jev 1.13 Free                   | jev-1.13-free                   | `https://opencode.ai/zen/v1/systemone`                    | -                           |
 | Big Pickle                      | big-pickle                      | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Space Bunny Free                | space-bunny-free                | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| LongCat 2.5 Preview Free        | longcat-2.5-preview-free        | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | MiMo-V2.6-Flash Free            | mimo-v2.6-flash-free            | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5 Free                  | mimo-v2.5-free                  | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Ling 3.0 Flash Fin Free         | ling-3.0-flash-fin-free         | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
@@ -210,6 +213,8 @@ curl https://opencode.ai/zen/v1/systemone \
 | 模型                              | 輸入   | 輸出    | 快取讀取 | 快取寫入 |
 | --------------------------------- | ------ | ------- | -------- | -------- |
 | Big Pickle                        | Free   | Free    | Free     | -        |
+| Space Bunny Free                  | Free   | Free    | Free     | -        |
+| LongCat 2.5 Preview Free          | Free   | Free    | Free     | -        |
 | MiMo-V2.6-Flash Free              | Free   | Free    | Free     | -        |
 | MiMo-V2.5 Free                    | Free   | Free    | Free     | -        |
 | Ling 3.0 Flash Fin Free           | Free   | Free    | Free     | -        |
@@ -230,6 +235,7 @@ curl https://opencode.ai/zen/v1/systemone \
 | Kimi K3                           | $3.00  | $15.00  | $0.30    | -        |
 | Kimi K2.6                         | $0.95  | $4.00   | $0.16    | -        |
 | Kimi K2.5                         | $0.60  | $3.00   | $0.10    | -        |
+| Qwen3.8 Max                       | $2.00  | $6.00   | $0.25    | $2.50    |
 | Qwen3.8 Flash                     | $0.15  | $0.47   | $0.016   | $0.20    |
 | Qwen3.7 Max                       | $2.50  | $7.50   | $0.50    | $3.125   |
 | Qwen3.7 Plus                      | $0.40  | $1.60   | $0.04    | $0.50    |
@@ -317,6 +323,8 @@ curl https://opencode.ai/zen/v1/systemone \
 - Nemotron 3 Ultra Free 在 OpenCode 上限時提供。團隊正在利用這段時間收集回饋並改進模型。
 - Nemotron 3.5 Lightning Free 在 OpenCode 上限時提供。團隊正在利用這段時間收集回饋並改進模型。
 - Big Pickle 是一個隱身模型，在 OpenCode 上限時免費提供。團隊正在利用這段時間收集回饋並改進模型。
+- Space Bunny Free 是一個隱身模型，在 OpenCode 上限時免費提供。其供應商遵循零保留政策，不會將你的資料用於模型訓練。
+- LongCat 2.5 Preview Free 在 OpenCode 上限時免費提供。其供應商遵循零保留政策，不會將你的資料用於模型訓練。
 - Muse Spark 1.3 Contributor Free 在 OpenCode 上限時提供。團隊正在利用這段時間收集回饋並改進模型。
 - Jev 1.13 Free 在 OpenCode 上限時提供。
 
@@ -378,6 +386,7 @@ curl https://opencode.ai/zen/v1/systemone \
 - Nemotron 3.5 Lightning Free（NVIDIA 免費端點）：僅供試用 — 請勿提交個人或機密資料。基於安全目的以及為了改進 NVIDIA 產品與服務，系統會記錄你的使用情況。基於改進目的而記錄的工作階段資料不會與你的身分或任何持久識別碼相關聯。有關我們資料處理實務的更多資訊，請參閱我們的[隱私政策](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf)。與此端點進行互動，即表示你同意我們收集、記錄與使用此類資訊，並同意 [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf)。
 - OpenAI APIs: 請求會依據 [OpenAI's Data Policies](https://platform.openai.com/docs/guides/your-data) 保留 30 天。
 - Anthropic APIs: 請求會依據 [Anthropic's Data Policies](https://docs.anthropic.com/en/docs/claude-code/data-usage) 保留 30 天。
+- Jev APIs: 提示詞與其他輸入不會用於訓練。資料會依據 [TypeSafe AI 的隱私政策](https://typesafe.ai/legal/privacy-policy) 保留。
 - Muse Spark 1.3 Contributor Free: 以大幅折扣的 Token 價格，換取你同意讓提示詞與補全內容用於訓練未來的 Meta 模型。[了解更多](https://dev.meta.ai/docs/pricing-rate-limits#contributor-tier)。
 
 ---
