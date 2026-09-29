@@ -71,7 +71,7 @@ test("service options only require a matching version when requested", async () 
   }
 })
 
-test("disabled background service makes CLI API calls standalone without registering a daemon", async () => {
+test("disabled background service creates a private server per CLI call without registering a daemon", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-disabled-"))
   const env = isolatedEnv(root)
   const command = [process.execPath, path.join(import.meta.dir, "../src/index.ts")]
@@ -99,8 +99,11 @@ test("disabled background service makes CLI API calls standalone without registe
   try {
     await run("service", "set", "disabled", "true")
     expect(await run("service", "get", "disabled")).toBe("true\n")
-    const info = JSON.parse(await run("api", "get", "/api/info"))
-    expect(info.pid).toBeGreaterThan(0)
+    const first = JSON.parse(await run("api", "get", "/api/info"))
+    const second = JSON.parse(await run("api", "get", "/api/info"))
+    expect(first.pid).toBeGreaterThan(0)
+    expect(second.pid).toBeGreaterThan(0)
+    expect(second.pid).not.toBe(first.pid)
     expect(await run("mcp", "list")).toContain("No MCP servers configured")
     const pairing = await execute("pair")
     expect(pairing.exit).not.toBe(0)
