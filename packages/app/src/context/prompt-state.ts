@@ -33,6 +33,11 @@ export interface AgentPart extends PartBase {
   name: string
 }
 
+export interface CommandPart extends PartBase {
+  type: "command"
+  name: string
+}
+
 export interface ImageAttachmentPart {
   type: "image"
   id: string
@@ -42,7 +47,7 @@ export interface ImageAttachmentPart {
   blob: BlobReference
 }
 
-export type ContentPart = TextPart | FileAttachmentPart | AgentPart | ImageAttachmentPart
+export type ContentPart = TextPart | FileAttachmentPart | AgentPart | CommandPart | ImageAttachmentPart
 export type Prompt = ContentPart[]
 
 export type PromptModel = {
@@ -102,6 +107,8 @@ function isPartEqual(partA: ContentPart, partB: ContentPart) {
       )
     case "agent":
       return partB.type === "agent" && partA.name === partB.name
+    case "command":
+      return partB.type === "command" && partA.name === partB.name
     case "image":
       return partB.type === "image" && partA.id === partB.id
   }
@@ -123,7 +130,7 @@ function cloneSelection(selection?: FileSelection) {
 function clonePart(part: ContentPart): ContentPart {
   if (part.type === "text") return { ...part }
   if (part.type === "image") return { ...part }
-  if (part.type === "agent") return { ...part }
+  if (part.type === "agent" || part.type === "command") return { ...part }
   return {
     ...part,
     selection: cloneSelection(part.selection),

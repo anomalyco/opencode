@@ -78,6 +78,44 @@ describe("prompt input v2 store", () => {
     expect(prompt.state.cursor).toBe(5)
   })
 
+  test("inserts a highlighted command while preserving surrounding text", () => {
+    const prompt = createPromptStore()
+    prompt.setPrompt([{ type: "text", content: "before/re after", start: 0, end: 15 }], 9)
+
+    prompt.addCommand(6, 9, { type: "command", name: "review", content: "/review", start: 0, end: 7 })
+
+    expect(prompt.state.prompt).toEqual([
+      { type: "text", content: "before", start: 0, end: 6 },
+      { type: "command", name: "review", content: "/review", start: 6, end: 13 },
+      { type: "text", content: " after", start: 13, end: 19 },
+    ])
+    expect(prompt.state.cursor).toBe(14)
+  })
+
+  test("replaces a command prefix while preserving the draft, mentions, and attachments", () => {
+    const prompt = createPromptStore()
+    const attachments = prompt.state.prompt.filter((part) => part.type === "image")
+    prompt.setPrompt(
+      [
+        { type: "text", content: "/re已有文字 ", start: 0, end: 8 },
+        { type: "file", path: "one", content: "@one", start: 8, end: 12 },
+        { type: "text", content: " 后续\n正文", start: 12, end: 18 },
+        ...attachments,
+      ],
+      3,
+    )
+
+    prompt.replaceText(0, 3, "/review ")
+
+    expect(prompt.state.prompt).toEqual([
+      { type: "text", content: "/review 已有文字 ", start: 0, end: 13 },
+      { type: "file", path: "one", content: "@one", start: 13, end: 17 },
+      { type: "text", content: " 后续\n正文", start: 17, end: 23 },
+      ...attachments,
+    ])
+    expect(prompt.state.cursor).toBe(8)
+  })
+
   test("mutates context, attachments, and model through shared actions", () => {
     const prompt = createPromptStore()
     const context = { key: "file:src/index.ts", type: "file" as const, path: "src/index.ts" }

@@ -25,6 +25,11 @@ export type PromptInputV2AgentPart = PromptInputV2PartBase & {
   name: string
 }
 
+export type PromptInputV2CommandPart = PromptInputV2PartBase & {
+  type: "command"
+  name: string
+}
+
 export type PromptInputV2Attachment = {
   type: "image"
   id: string
@@ -38,6 +43,7 @@ export type PromptInputV2Prompt = (
   | PromptInputV2TextPart
   | PromptInputV2FilePart
   | PromptInputV2AgentPart
+  | PromptInputV2CommandPart
   | PromptInputV2Attachment
 )[]
 
@@ -101,6 +107,7 @@ export type PromptInputV2Suggestion = {
   description?: string
   path?: string
   keybind?: string[]
+  command?: "custom" | "builtin"
   recent?: boolean
   mention?: PromptInputV2FilePart | PromptInputV2AgentPart
 }

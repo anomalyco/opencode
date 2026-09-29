@@ -74,8 +74,12 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
     return true
   }
 
+  const selected = input.draft.prompt.find((part) => part.type === "command")
   const [head, ...tail] = text.split(" ")
-  const cmd = head?.startsWith("/") ? head.slice(1) : undefined
+  const cmd = selected?.name ?? (head?.startsWith("/") ? head.slice(1) : undefined)
+  const args = selected
+    ? [text.slice(0, selected.start).trimEnd(), text.slice(selected.end).trimStart()].filter(Boolean).join(" ")
+    : tail.join(" ")
   if (cmd && input.sync.data.command.find((item) => item.name === cmd)) {
     setBusy()
     try {
@@ -89,7 +93,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
         sessionID: input.draft.sessionID,
         id: messageID,
         command: cmd,
-        arguments: tail.join(" "),
+        arguments: args,
         agent: input.draft.agent,
         model: {
           id: input.draft.model.modelID,

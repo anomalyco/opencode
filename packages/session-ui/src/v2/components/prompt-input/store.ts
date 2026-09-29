@@ -8,6 +8,7 @@ import type {
   PromptInputV2Model,
   PromptInputV2PersistedState,
   PromptInputV2Prompt,
+  PromptInputV2CommandPart,
 } from "./types"
 
 export type PromptInputV2StoreTuple = [
@@ -45,6 +46,29 @@ export function createPromptInputV2Store(input: PromptInputV2StoreInput) {
           ...prompt.filter((part) => part.type !== "text"),
         ])
         setStore()("cursor", content.length)
+      })
+    },
+    replaceText(start: number, end: number, content: string) {
+      batch(() => {
+        setStore()("prompt", (prompt) =>
+          withOffsets(
+            prompt.map((part) =>
+              part.type !== "text" || start < part.start || end > part.end
+                ? part
+                : {
+                    ...part,
+                    content: part.content.slice(0, start - part.start) + content + part.content.slice(end - part.start),
+                  },
+            ),
+          ),
+        )
+        setStore()("cursor", start + content.length)
+      })
+    },
+    addCommand(start: number, end: number, command: PromptInputV2CommandPart) {
+      batch(() => {
+        setStore()("prompt", (prompt) => insertCommand(prompt, start, end, command))
+        setStore()("cursor", start + command.content.length + 1)
       })
     },
     addText(content: string) {
@@ -111,6 +135,29 @@ function insertText(prompt: PromptInputV2Prompt, cursor: number, content: string
     return [{ type: "text", content, start: 0, end: 0 }, part]
   })
   if (!inserted) parts.push({ type: "text", content, start: 0, end: 0 })
+  return withOffsets(parts)
+}
+
+function insertCommand(
+  prompt: PromptInputV2Prompt,
+  start: number,
+  end: number,
+  command: PromptInputV2CommandPart,
+): PromptInputV2Prompt {
+  let position = 0
+  const parts = prompt.flatMap<PromptInputV2Prompt[number]>((part) => {
+    if (part.type === "image") return [part]
+    const partStart = position
+    position += part.content.length
+    if (part.type !== "text" || start < partStart || end > position) return [part]
+    const before = part.content.slice(0, start - partStart)
+    const after = part.content.slice(end - partStart)
+    return [
+      ...(before ? [{ type: "text" as const, content: before, start: 0, end: 0 }] : []),
+      command,
+      { type: "text" as const, content: after.startsWith(" ") ? after : ` ${after}`, start: 0, end: 0 },
+    ]
+  })
   return withOffsets(parts)
 }
 
