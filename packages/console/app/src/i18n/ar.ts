@@ -3,6 +3,10 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
+  "go.promo.spaceBunny": "يتوفر Space Bunny Free، وهو نموذج مجهول جديد، لفترة محدودة",
+  "go.referral.ended.label": "تحذير",
+  "go.referral.ended": "انتهى برنامج الإحالة. لم تعد روابط الإحالة تمنح رصيدًا لك أو للشخص الذي شاركها.",
+  "go.graph.bonus": "استخدام مضاعف {{count}} مرات",
   "nav.github": "GitHub",
   "nav.docs": "الوثائق",
   "nav.changelog": "سجل التغييرات",
@@ -58,6 +62,7 @@ export const dict = {
   "common.cancel": "إلغاء",
   "common.creating": "جارٍ الإنشاء...",
   "common.create": "إنشاء",
+  "common.contactUs": "اتصل بنا",
 
   "common.videoUnsupported": "متصفحك لا يدعم وسم الفيديو.",
   "common.figure": "شكل {{n}}.",
@@ -224,6 +229,9 @@ export const dict = {
   "zen.faq.q8": "هل يمكنني استخدام Zen مع وكلاء برمجة آخرين؟",
   "zen.faq.a8":
     "بينما يعمل Zen بشكل رائع مع OpenCode، يمكنك استخدام Zen مع أي وكيل. اتبع تعليمات الإعداد في وكيل البرمجة المفضل لديك.",
+  "zen.faq.q9": "هل يمكنني استرداد أموالي؟",
+  "zen.faq.a9":
+    "قد تكون مؤهلًا لاسترداد أموالك إذا تم الخصم خلال آخر 14 يومًا ولم تستخدم الرصيد الناتج عن عملية الشراء هذه. {{contact}} لطلب استرداد الأموال.",
 
   "zen.cta.start": "ابدأ مع Zen",
   "zen.pricing.title": "أضف رصيد 20 دولار (دفع حسب الاستخدام)",
@@ -252,9 +260,9 @@ export const dict = {
   "zen.privacy.exceptionsLink": "الاستثناءات التالية",
 
   "go.title": "OpenCode Go | نماذج برمجة منخفضة التكلفة للجميع",
-  "go.banner.text": "يحصل GLM-5.3-Flash على حدود استخدام مضاعفة لفترة محدودة",
   "go.meta.description": "يبلغ سعر Go ‏$10/شهر، مع حدود استخدام سخية ووصول موثوق إلى نماذج البرمجة الرائدة.",
   "go.hero.title": "نماذج برمجة منخفضة التكلفة للجميع",
+  "go.hero.tagline": "استخدمه مع أي وكيل. قم بزيادة الرصيد إذا لزم الأمر. الإلغاء في أي وقت.",
   "go.hero.body":
     "يجلب Go البرمجة الوكيلة للمبرمجين حول العالم. يوفر حدودًا سخية ووصولًا موثوقًا إلى أقوى النماذج مفتوحة المصدر، حتى تتمكن من البناء باستخدام وكلاء أقوياء دون القلق بشأن التكلفة أو التوفر.",
 
@@ -262,11 +270,31 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "اشترك في Go",
   "go.cta.price": "$10/شهر",
+  "go.plans.month": "شهريًا",
+  "go.plans.plus.cta": "الاشتراك في Go Plus",
+  "go.plans.plus.description": "تبلغ تكلفة Go Plus ‏$40/شهر مع حدود استخدام أعلى.",
+  "go.plans.go.feature1": "نماذج مختارة بأسعار معقولة",
+  "go.plans.go.feature2": "مختبرة للبرمجة باستخدام الوكلاء",
+  "go.plans.go.feature3": "حدود سخية ووصول موثوق",
+  "go.plans.plus.feature1": "يشمل كل مزايا Go",
+  "go.plans.plus.feature2": "حدود أعلى لجلسات برمجة أطول وأكثر تركيزًا",
+  "go.plans.plus.feature3": "للمشاريع الأكبر والأكثر تطلبًا",
+  "go.plans.limits": "الحدود",
+  "go.plans.description": "الطلبات المقدرة لكل 5 ساعات وحدود الاستخدام الشهرية لكل نموذج",
+  "go.plans.legend": "الخطط",
   "go.pricing.body": "استخدمه مع أي وكيل. $10/شهر. قم بزيادة الرصيد إذا لزم الأمر. الإلغاء في أي وقت.",
   "go.graph.free": "مجاني",
   "go.graph.freePill": "Big Pickle ونماذج مجانية",
   "go.graph.go": "Go",
   "go.graph.label": "الطلبات كل 5 ساعات",
+  "go.graph.period": "الاستخدام",
+  "go.graph.model": "النموذج",
+  "go.graph.requests": "الطلبات المقدّرة / ٥ ساعات",
+  "go.graph.allowance": "الاستخدام الشهري",
+  "go.graph.new": "جديد",
+  "go.graph.scale": "مقياس غير خطي لعدد الطلبات",
+  "go.graph.showAll": "عرض جميع النماذج ({{count}})",
+  "go.graph.showLess": "عرض نماذج أقل",
   "go.graph.limitedRegions": "مناطق محدودة",
   "go.graph.limitedTime": "لفترة محدودة",
   "go.graph.usageLimits": "حدود الاستخدام",
@@ -349,7 +377,7 @@ export const dict = {
   "go.faq.a5.museRetention":
     "أسعار توكنات مخفّضة للغاية مقابل منح الإذن باستخدام مطالباتك وإكمالات النموذج لتدريب نماذج Meta المستقبلية.",
   "go.faq.a5.learnMore": "اعرف المزيد",
-  "go.faq.a5.deepseekRetention": "تُجدَّد اتفاقية ZDR شهريًا. الاتفاقية الحالية سارية حتى 31 أغسطس 2026.",
+  "go.faq.a5.deepseekRetention": "تُجدَّد اتفاقية ZDR شهريًا. الاتفاقية الحالية سارية حتى 30 سبتمبر 2026.",
   "go.faq.a5.beforeExceptions":
     "تتم استضافة نماذج Go في الولايات المتحدة. يتبع المزودون سياسة عدم الاحتفاظ بالبيانات ولا يستخدمون بياناتك لتدريب النماذج، مع",
   "go.faq.a5.exceptionsLink": "الاستثناءات التالية",
@@ -362,7 +390,10 @@ export const dict = {
 
   "go.faq.q9": "ما الفرق بين النماذج المجانية وGo؟",
   "go.faq.a9":
-    "تشمل النماذج المجانية Big Pickle بالإضافة إلى النماذج الترويجية المتاحة في ذلك الوقت، مع حصة قدرها 200 طلب/يوم. يقدّم Go مجموعة منسقة من النماذج مع حصص طلبات أعلى مطبقة عبر نوافذ متجددة (5 ساعات، وأسبوعية، وشهرية)، تعادل تقريبًا $12 لكل 5 ساعات، و$30 في الأسبوع، و$60 في الشهر (تختلف أعداد الطلبات الفعلية حسب النموذج والاستخدام).",
+    "تشمل النماذج المجانية Big Pickle بالإضافة إلى النماذج الترويجية المتاحة في ذلك الوقت، مع حصة قدرها 200 طلب/يوم. يقدّم Go مجموعة منسقة من النماذج مع حصص طلبات أعلى عبر نوافذ متجددة: 20% من الحصة الشهرية لكل 5 ساعات، و50% لكل أسبوع، و100% لكل شهر. وقد تختلف الحصص حسب النموذج (تختلف أعداد الطلبات الفعلية حسب النموذج والاستخدام).",
+  "go.faq.q10": "هل يمكنني استرداد أموالي؟",
+  "go.faq.a10":
+    "قد تكون مؤهلًا لاسترداد أموالك إذا تم الخصم خلال آخر 14 يومًا ولم تستخدم مخصصات Go خلال فترة الفوترة تلك. {{contact}} لطلب استرداد الأموال.",
 
   "zen.api.error.rateLimitExceeded": "تم تجاوز حد الطلبات. يرجى المحاولة مرة أخرى لاحقًا.",
   "zen.api.error.modelNotSupported": "النموذج {{model}} غير مدعوم",
@@ -625,7 +656,6 @@ export const dict = {
   "workspace.payments.type.subscription": "اشتراك",
   "workspace.payments.view": "عرض",
 
-  "workspace.black.loading": "جارٍ التحميل...",
   "workspace.black.time.day": "يوم",
   "workspace.black.time.days": "أيام",
   "workspace.black.time.hour": "ساعة",
@@ -635,7 +665,8 @@ export const dict = {
   "workspace.black.time.fewSeconds": "بضع ثوان",
   "workspace.black.subscription.title": "الاشتراك",
   "workspace.black.subscription.message": "أنت مشترك في OpenCode Black مقابل ${{plan}} شهريًا.",
-  "workspace.black.subscription.manage": "إدارة الاشتراك",
+  "workspace.black.subscription.ending":
+    "ينتهي OpenCode Black بنهاية فترة الفوترة الحالية ولن يتم تجديده. سننقلك إلى وحدة التحكم الجديدة.",
   "workspace.black.subscription.rollingUsage": "استخدام لمدة 5 ساعات",
   "workspace.black.subscription.weeklyUsage": "الاستخدام الأسبوعي",
   "workspace.black.subscription.resetsIn": "إعادة تعيين في",

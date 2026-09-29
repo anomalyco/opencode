@@ -3,6 +3,10 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
+  "go.promo.spaceBunny": "全新匿名模型 Space Bunny Free 限时上线",
+  "go.referral.ended.label": "警告",
+  "go.referral.ended": "推荐计划已结束。推荐链接不再为你或分享链接的人提供额度。",
+  "go.graph.bonus": "{{count}} 倍用量",
   "nav.github": "GitHub",
   "nav.docs": "文档",
   "nav.changelog": "更新日志",
@@ -59,6 +63,7 @@ export const dict = {
   "common.cancel": "取消",
   "common.creating": "正在创建...",
   "common.create": "创建",
+  "common.contactUs": "联系我们",
 
   "common.videoUnsupported": "您的浏览器不支持 video 标签。",
   "common.figure": "图 {{n}}.",
@@ -218,6 +223,9 @@ export const dict = {
   "zen.faq.q8": "我可以在其他编程代理中使用 Zen 吗？",
   "zen.faq.a8":
     "虽然 Zen 与 OpenCode 配合效果极佳，但您可以在任何代理中使用 Zen。请按照您首选编程代理中的设置说明进行操作。",
+  "zen.faq.q9": "我可以退款吗？",
+  "zen.faq.a9":
+    "如果扣款发生在过去 14 天内，并且您尚未使用该次购买的任何额度，您可能符合退款条件。请{{contact}}申请退款。",
 
   "zen.cta.start": "开始使用 Zen",
   "zen.pricing.title": "充值 $20 (即用即付)",
@@ -244,9 +252,9 @@ export const dict = {
   "zen.privacy.exceptionsLink": "以下例外情况除外",
 
   "go.title": "OpenCode Go | 人人可用的低成本编程模型",
-  "go.banner.text": "GLM-5.3-Flash 限时享受 2 倍使用额度",
   "go.meta.description": "Go 每月 $10，提供充裕的使用限额，并可可靠访问领先的编程模型。",
   "go.hero.title": "人人可用的低成本编程模型",
+  "go.hero.tagline": "可配合任何代理使用。如有需要可充值。随时取消。",
   "go.hero.body":
     "Go 将代理编程带给全世界的程序员。提供充裕的限额和对最强大的开源模型的可靠访问，让您可以利用强大的代理进行构建，而无需担心成本或可用性。",
 
@@ -254,11 +262,31 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "订阅 Go",
   "go.cta.price": "$10/月",
+  "go.plans.month": "每月",
+  "go.plans.plus.cta": "订阅 Go Plus",
+  "go.plans.plus.description": "Go Plus 每月 $40，提供更高的使用额度。",
+  "go.plans.go.feature1": "精选实惠的模型",
+  "go.plans.go.feature2": "专为智能体编程测试",
+  "go.plans.go.feature3": "充足额度与稳定访问",
+  "go.plans.plus.feature1": "包含 Go 的全部权益",
+  "go.plans.plus.feature2": "更高额度，支持更长时间的专注编码",
+  "go.plans.plus.feature3": "适合更大型、更复杂的项目",
+  "go.plans.limits": "使用额度",
+  "go.plans.description": "各模型每 5 小时的预计请求次数和每月使用额度",
+  "go.plans.legend": "套餐",
   "go.pricing.body": "可配合任何代理使用。每月 $10。如有需要可充值。随时取消。",
   "go.graph.free": "免费",
   "go.graph.freePill": "Big Pickle 和免费模型",
   "go.graph.go": "Go",
   "go.graph.label": "每 5 小时请求数",
+  "go.graph.period": "使用额度",
+  "go.graph.model": "模型",
+  "go.graph.requests": "预估请求数 / 5 小时",
+  "go.graph.allowance": "每月使用额度",
+  "go.graph.new": "新",
+  "go.graph.scale": "请求数采用非线性刻度",
+  "go.graph.showAll": "查看全部 {{count}} 个模型",
+  "go.graph.showLess": "收起模型",
   "go.graph.limitedRegions": "仅限部分地区",
   "go.graph.limitedTime": "限时",
   "go.graph.usageLimits": "使用限制",
@@ -336,7 +364,7 @@ export const dict = {
   "go.faq.a5.gptRetention": "所有 API 功能的使用都会生成滥用监控日志，并最多保留 30 天。",
   "go.faq.a5.museRetention": "以允许使用你的提示词和补全结果训练未来的 Meta 模型为交换，token 价格可获得大幅折扣。",
   "go.faq.a5.learnMore": "了解更多",
-  "go.faq.a5.deepseekRetention": "ZDR 协议每月续签。当前协议有效期至 2026 年 8 月 31 日。",
+  "go.faq.a5.deepseekRetention": "ZDR 协议每月续签。当前协议有效期至 2026 年 9 月 30 日。",
   "go.faq.a5.beforeExceptions": "Go 模型托管在美国。提供商遵循零留存政策，不使用您的数据进行模型训练，",
   "go.faq.a5.exceptionsLink": "以下例外情况除外",
   "go.faq.q6": "我可以充值余额吗？",
@@ -348,7 +376,10 @@ export const dict = {
 
   "go.faq.q9": "免费模型和 Go 之间的区别是什么？",
   "go.faq.a9":
-    "免费模型包含 Big Pickle 加上当时可用的促销模型，每天有 200 次请求的配额。Go 提供精选模型阵容，并在滚动窗口（5 小时、每周和每月）内执行更高的请求配额，大致相当于每 5 小时 $12、每周 $30 和每月 $60（实际请求计数因模型和使用情况而异）。",
+    "免费模型包含 Big Pickle 加上当时可用的促销模型，每天有 200 次请求的配额。Go 提供精选模型阵容，并在滚动窗口内执行更高的请求配额：每 5 小时为月额度的 20%，每周为 50%，每月为 100%。具体额度可能因模型而异（实际请求次数因模型和使用情况而异）。",
+  "go.faq.q10": "我可以退款吗？",
+  "go.faq.a10":
+    "如果扣款发生在过去 14 天内，并且您在该计费周期内尚未使用任何 Go 额度，您可能符合退款条件。请{{contact}}申请退款。",
 
   "zen.api.error.rateLimitExceeded": "超出速率限制。请稍后重试。",
   "zen.api.error.modelNotSupported": "不支持模型 {{model}}",
@@ -606,7 +637,6 @@ export const dict = {
   "workspace.payments.type.subscription": "订阅",
   "workspace.payments.view": "查看",
 
-  "workspace.black.loading": "加载中...",
   "workspace.black.time.day": "天",
   "workspace.black.time.days": "天",
   "workspace.black.time.hour": "小时",
@@ -616,7 +646,8 @@ export const dict = {
   "workspace.black.time.fewSeconds": "几秒钟",
   "workspace.black.subscription.title": "订阅",
   "workspace.black.subscription.message": "您已订阅 OpenCode Black，价格为每月 ${{plan}}。",
-  "workspace.black.subscription.manage": "管理订阅",
+  "workspace.black.subscription.ending":
+    "OpenCode Black 将在当前计费周期结束时终止，不会续订。我们会将你迁移到新的控制台。",
   "workspace.black.subscription.rollingUsage": "5 小时用量",
   "workspace.black.subscription.weeklyUsage": "每周用量",
   "workspace.black.subscription.resetsIn": "重置于",
