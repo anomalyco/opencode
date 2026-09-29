@@ -98,11 +98,7 @@ const OpenRouterDetailFields = {
 }
 const ReasoningDetail = Schema.Union([
   Schema.StructWithRest(
-    Schema.Struct({
-      type: Schema.Literal("reasoning.text"),
-      text: Schema.optional(Schema.String),
-      ...OpenRouterDetailFields,
-    }),
+    Schema.Struct({ type: Schema.Literal("reasoning.text"), text: Schema.optional(Schema.String), ...OpenRouterDetailFields }),
     [Schema.Record(Schema.String, Schema.Unknown)],
   ),
   Schema.StructWithRest(
