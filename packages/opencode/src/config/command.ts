@@ -6,11 +6,11 @@ import { Glob } from "@opencode-ai/core/util/glob"
 import { ConfigCommandV1 } from "@opencode-ai/core/v1/config/command"
 import { configEntryNameFromPath } from "./entry-name"
 import { InvalidError } from "@opencode-ai/core/v1/config/error"
-import * as ConfigMarkdown from "./markdown"
+import { ConfigMarkdown } from "./markdown"
 
 const decodeInfo = Schema.decodeUnknownExit(ConfigCommandV1.Info)
 
-export async function load(dir: string) {
+export async function load(dir: string, options?: { strict?: boolean }) {
   const result: Record<string, ConfigCommandV1.Info> = {}
   for (const item of await Glob.scan("{command,commands}/**/*.md", {
     cwd: dir,
@@ -18,7 +18,10 @@ export async function load(dir: string) {
     dot: true,
     symlink: true,
   })) {
-    const md = await ConfigMarkdown.parse(item).catch(() => undefined)
+    const md = await ConfigMarkdown.parse(item).catch((error) => {
+      if (options?.strict) throw error
+      return undefined
+    })
     if (!md) continue
 
     const name = configEntryNameFromPath(path.relative(dir, item), ["command/", "commands/"])

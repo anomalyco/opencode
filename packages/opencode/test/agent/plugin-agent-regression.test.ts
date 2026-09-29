@@ -17,6 +17,7 @@ import { ProviderTest } from "../fake/provider"
 import { SkillTest } from "../fake/skill"
 import { testEffect } from "../lib/effect"
 import { PLUGIN_AGENT } from "../fixture/agent-plugin.constants"
+import { TestInstance } from "../fixture/fixture"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 
@@ -46,6 +47,16 @@ it.instance(
       const added = agents.find((agent) => agent.name === PLUGIN_AGENT.name)
       expect(added?.description).toBe(PLUGIN_AGENT.description)
       expect(added?.mode).toBe(PLUGIN_AGENT.mode)
+      const workspace = yield* TestInstance
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(workspace.directory, ".opencode/agents/reloaded.md"),
+          "---\nmode: subagent\n---\nA newly added agent.",
+        ),
+      )
+      const reloaded = yield* Agent.use.list()
+      expect(reloaded.find((agent) => agent.name === PLUGIN_AGENT.name)?.description).toBe(PLUGIN_AGENT.description)
+      expect(reloaded.find((agent) => agent.name === "reloaded")?.mode).toBe("subagent")
     }),
   { config: { plugin: [pluginUrl] } },
 )

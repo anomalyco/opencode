@@ -1338,6 +1338,7 @@ const layer = Layer.effect(
         yield* compaction.prune({ sessionID }).pipe(Effect.ignore, Effect.forkIn(scope))
         return yield* lastAssistant(sessionID)
       },
+      (effect) => agents.withSnapshot(effect),
     )
 
     const loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts> = Effect.fn("SessionPrompt.loop")(function* (

@@ -365,7 +365,7 @@ export const TaskTool = Tool.define(
       parameters: Parameters,
       jsonSchema: flags.experimentalBackgroundSubagents ? undefined : ToolJsonSchema.fromSchema(BaseParameters),
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
-        run(params, ctx).pipe(Effect.orDie),
+        run(params, ctx).pipe((effect) => agent.withSnapshot(effect, { fresh: true }), Effect.orDie),
     }
   }),
 )

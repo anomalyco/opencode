@@ -135,6 +135,23 @@ describe("applyGlobalEvent", () => {
 })
 
 describe("applyDirectoryEvent", () => {
+  test("configuration revisions refresh catalogs without resetting active sessions", () => {
+    const session = rootSession({ id: "active" })
+    const [store, setStore] = createStore(baseState({ session: [session] }))
+    const calls: string[] = []
+    applyDirectoryEvent({
+      event: { type: "config.resources.updated", properties: { revision: 1, status: "ready", restartRequired: [] } },
+      store,
+      setStore,
+      directory: "/project",
+      push: () => calls.push("bootstrap"),
+      loadLsp() {},
+      loadConfigResources: () => calls.push("resources"),
+    })
+    expect(calls).toEqual(["resources"])
+    expect(store.session).toEqual([session])
+  })
+
   test("initializes text delta accumulation from the current part text", () => {
     const part = { ...textPart("part", "session", "message"), text: "existing" }
     const [store, setStore] = createStore(baseState({ part: { message: [part] } }))

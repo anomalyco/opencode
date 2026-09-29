@@ -17,8 +17,9 @@ import {
   bootstrapDirectory,
   bootstrapGlobal,
   clearProviderRev,
+  clearConfigResourceRev,
   loadAgentsQuery,
-  loadCommands,
+  loadConfigResources,
   loadGlobalConfigQuery,
   loadPathQuery,
   loadProjectsQuery,
@@ -363,15 +364,21 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       void bootstrapInstance(directory)
     },
     onMcp: (directory, setStore) => {
-      void loadCommands(directory, serverSDK.api.command, sdkFor(directory), serverSDK.protocol)
-        .then((commands) => setStore("command", commands))
-        .catch((err) => {
-          showToast({
-            variant: "error",
-            title: language.t("toast.project.reloadFailed.title", { project: getFilename(directory) }),
-            description: formatServerError(err, language.t),
-          })
+      void loadConfigResources({
+        scope: serverSDK.scope,
+        directory,
+        api: serverSDK.api,
+        sdk: sdkFor(directory),
+        protocol: serverSDK.protocol,
+        queryClient,
+        setStore,
+      }).catch((err) => {
+        showToast({
+          variant: "error",
+          title: language.t("toast.project.reloadFailed.title", { project: getFilename(directory) }),
+          description: formatServerError(err, language.t),
         })
+      })
     },
     onDispose: (directory) => {
       const key = directoryKey(directory)
@@ -379,6 +386,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       sessionMeta.delete(key)
       sdkCache.delete(key)
       clearProviderRev(serverSDK.scope, key)
+      clearConfigResourceRev(serverSDK.scope, key)
     },
     translate: language.t,
     queryOptions: queryOptionsApi,
@@ -583,7 +591,16 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
         .catch(() => {})
 
     const existing = children.children[key]
-    if (!existing) return
+    if (!existing) {
+      if (event.type === "config.resources.updated") {
+        void queryClient.invalidateQueries({
+          queryKey: queryOptionsApi.agents(key).queryKey,
+          exact: true,
+          refetchType: "none",
+        })
+      }
+      return
+    }
     children.mark(key)
     if (
       event.current?.type === "session.moved" ||
@@ -616,6 +633,38 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       loadReferences: () => {
         if (!children.active(key)) return
         void queryClient.fetchQuery(queryOptionsApi.references(key))
+      },
+      loadConfigResources: () => {
+        if (event.type !== "config.resources.updated") return
+        const error = event.properties.error
+        if (error)
+          showToast({
+            variant: "error",
+            title: language.t("toast.project.reloadFailed.title", { project: getFilename(directory) }),
+            description: error,
+          })
+        if (event.properties.restartRequired.length)
+          showToast({
+            title: language.t("error.page.action.restart"),
+            description: event.properties.restartRequired.join(", "),
+          })
+        void loadConfigResources({
+          scope: serverSDK.scope,
+          directory,
+          api: serverSDK.api,
+          sdk: sdkFor(key),
+          protocol: serverSDK.protocol,
+          queryClient,
+          setStore,
+          refresh: true,
+        }).catch((err) => {
+          if (error) return
+          showToast({
+            variant: "error",
+            title: language.t("toast.project.reloadFailed.title", { project: getFilename(directory) }),
+            description: formatServerError(err, language.t),
+          })
+        })
       },
     })
   })

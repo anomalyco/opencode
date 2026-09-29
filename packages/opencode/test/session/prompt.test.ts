@@ -945,6 +945,176 @@ it.instance("loop continues when finish is stop but assistant has tool parts", (
   }),
 )
 
+it.instance(
+  "slash skills load new content in the same session without rewriting earlier messages",
+  () =>
+    Effect.gen(function* () {
+      const server = yield* useServerConfig(providerCfg)
+      const file = path.join(server.dir, ".opencode/skills/story/SKILL.md")
+      yield* writeText(file, "---\nname: story\ndescription: Story instructions\n---\nUse the original story outline.")
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({ title: "Slash skill reload" })
+      yield* server.llm.text("First command finished")
+      yield* prompt.command({
+        sessionID: chat.id,
+        command: "story",
+        arguments: "",
+        agent: "build",
+        model: "test/test-model",
+      })
+      yield* writeText(file, "---\nname: story\ndescription: Story instructions\n---\nUse the revised story outline.")
+      yield* server.llm.text("Second command finished")
+      yield* prompt.command({
+        sessionID: chat.id,
+        command: "story",
+        arguments: "",
+        agent: "build",
+        model: "test/test-model",
+      })
+      const inputs = yield* server.llm.inputs
+      expect(inputs).toHaveLength(2)
+      expect(JSON.stringify(inputs[0].messages)).toContain("Use the original story outline.")
+      expect(JSON.stringify(inputs[0].messages)).not.toContain("Use the revised story outline.")
+      expect(JSON.stringify(inputs[1].messages)).toContain("Use the original story outline.")
+      expect(JSON.stringify(inputs[1].messages)).toContain("Use the revised story outline.")
+    }),
+  30_000,
+)
+
+it.instance(
+  "uses the edited workspace subagent model in the next provider request in the same session",
+  () =>
+    Effect.gen(function* () {
+      const server = yield* useServerConfig((url) => {
+        const provider = providerCfg(url).provider.test
+        return {
+          agent: { title: { disable: true } },
+          provider: {
+            test: {
+              ...provider,
+              models: {
+                ...provider.models,
+                "model-a": { ...provider.models["test-model"], id: "model-a" },
+                "vendor/model-b": { ...provider.models["test-model"], id: "vendor/model-b" },
+              },
+            },
+          },
+        }
+      })
+      const file = path.join(server.dir, ".opencode/agents/designer.md")
+      yield* writeText(file, "---\nmode: subagent\nmodel: test/model-a\n---\nDesign the scene.")
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const chat = yield* sessions.create({
+        title: "Workspace model reload",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      const task = { description: "Design the scene", prompt: "Plan the scene", subagent_type: "designer" }
+      yield* server.llm.tool("task", task)
+      yield* server.llm.text("First design")
+      yield* server.llm.text("First task finished")
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        model: ref,
+        agent: "build",
+        parts: [{ type: "text", text: "Delegate the first design." }],
+      })
+      expect((yield* server.llm.inputs).map((input) => input.model)).toEqual(["test-model", "model-a", "test-model"])
+
+      yield* writeText(file, "---\nmode: subagent\nmodel: test/vendor/model-b\n---\nDesign the revised scene.")
+      yield* server.llm.tool("task", task)
+      yield* server.llm.text("Revised design")
+      yield* server.llm.text("Second task finished")
+      yield* prompt.prompt({
+        sessionID: chat.id,
+        model: ref,
+        agent: "build",
+        parts: [{ type: "text", text: "Delegate the revised design in this same session." }],
+      })
+      expect((yield* server.llm.inputs).map((input) => input.model)).toEqual([
+        "test-model",
+        "model-a",
+        "test-model",
+        "test-model",
+        "vendor/model-b",
+        "test-model",
+      ])
+      expect(yield* server.llm.misses).toEqual([])
+    }),
+  30_000,
+)
+;[
+  {
+    name: "valid edit",
+    content: "---\nmode: subagent\nmodel: test/model-b\n---\nUse the revised design instructions.",
+  },
+  { name: "invalid edit", content: "---\nmodel: [unfinished\n---\nInvalid agent edit." },
+].forEach((edit) =>
+  it.instance(
+    `keeps the running subagent snapshot through ${edit.name} between provider turns`,
+    () =>
+      Effect.gen(function* () {
+        const server = yield* useServerConfig((url) => {
+          const provider = providerCfg(url).provider.test
+          return {
+            agent: { title: { disable: true } },
+            provider: {
+              test: {
+                ...provider,
+                models: {
+                  ...provider.models,
+                  "model-a": { ...provider.models["test-model"], id: "model-a" },
+                  "model-b": { ...provider.models["test-model"], id: "model-b" },
+                },
+              },
+            },
+          }
+        })
+        const file = path.join(server.dir, ".opencode/agents/designer.md")
+        yield* writeText(file, "---\nmode: subagent\nmodel: test/model-a\n---\nKeep the original design instructions.")
+        yield* writeText(path.join(server.dir, "scene.txt"), "A quiet opening scene.")
+        const prompt = yield* SessionPrompt.Service
+        const sessions = yield* Session.Service
+        const chat = yield* sessions.create({
+          title: "Running task snapshot",
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        })
+        const release = yield* Deferred.make<void>()
+        yield* server.llm.tool("task", {
+          description: "Design scene",
+          prompt: "Plan the scene",
+          subagent_type: "designer",
+        })
+        yield* server.llm.push(
+          reply()
+            .tool("read", { filePath: path.join(server.dir, "scene.txt") })
+            .wait(deferredAsPromise(release)),
+        )
+        yield* server.llm.text("The original design is complete")
+        yield* server.llm.text("Task finished")
+        const running = yield* prompt
+          .prompt({
+            sessionID: chat.id,
+            model: ref,
+            agent: "build",
+            parts: [{ type: "text", text: "Delegate this design." }],
+          })
+          .pipe(Effect.forkChild)
+        yield* awaitWithTimeout(server.llm.wait(2), "subagent never reached the provider", "10 seconds")
+        yield* writeText(file, edit.content)
+        yield* Deferred.succeed(release, undefined)
+        yield* Fiber.join(running)
+
+        const inputs = yield* server.llm.inputs
+        expect(inputs.map((input) => input.model)).toEqual(["test-model", "model-a", "model-a", "test-model"])
+        expect(JSON.stringify(inputs[2].messages)).toContain("Keep the original design instructions.")
+        expect(JSON.stringify(inputs[2].messages)).not.toContain("Use the revised design instructions.")
+      }),
+    30_000,
+  ),
+)
+
 it.instance("failed subtask preserves metadata on error tool state", () =>
   Effect.gen(function* () {
     const { llm } = yield* useServerConfig((url) => ({

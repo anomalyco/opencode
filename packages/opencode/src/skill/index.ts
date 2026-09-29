@@ -1,6 +1,6 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import path from "path"
-import { Effect, Layer, Context, Schema } from "effect"
+import { Cache, Effect, Layer, Context, Schema } from "effect"
 import { NamedError } from "@opencode-ai/core/util/error"
 import type { Agent } from "@/agent/agent"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -10,6 +10,8 @@ import { SkillPlugin } from "@opencode-ai/core/plugin/skill"
 import { Permission } from "@/permission"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Config } from "@/config/config"
+import { ConfigPaths } from "@/config/paths"
+import { ConfigResources } from "@/config/resources"
 import { FrontmatterError } from "@opencode-ai/core/v1/config/error"
 import { ConfigMarkdown } from "@/config/markdown"
 import { RuntimeFlags } from "@/effect/runtime-flags"
@@ -102,13 +104,19 @@ export interface Interface {
   readonly available: (agent?: Agent.Info) => Effect.Effect<Info[]>
 }
 
-const add = Effect.fnUntraced(function* (state: State, match: string, events: EventV2Bridge.Service["Service"]) {
+const add = Effect.fnUntraced(function* (
+  state: State,
+  match: string,
+  events: EventV2Bridge.Service["Service"],
+  strict: boolean,
+) {
   const md = yield* Effect.tryPromise({
     try: () => ConfigMarkdown.parse(match),
     catch: (err) => err,
   }).pipe(
     Effect.catch(
       Effect.fnUntraced(function* (err) {
+        if (strict) return yield* Effect.die(err)
         const message = FrontmatterError.isInstance(err) ? err.data.message : `Failed to parse skill ${match}`
         const { Session } = yield* Effect.promise(() => import("@/session/session"))
         yield* events.publish(Session.Event.Error, { error: new NamedError.Unknown({ message }).toObject() })
@@ -120,7 +128,10 @@ const add = Effect.fnUntraced(function* (state: State, match: string, events: Ev
 
   if (!md) return
 
-  if (!isSkillFrontmatter(md.data)) return
+  if (!isSkillFrontmatter(md.data)) {
+    if (strict) return yield* Effect.die(new InvalidError({ path: match, message: "Invalid skill frontmatter" }))
+    return
+  }
 
   if (state.skills[md.data.name]) {
     yield* Effect.logWarning("duplicate skill name", {
@@ -173,6 +184,7 @@ const scan = Effect.fnUntraced(function* (
 const discoverSkills = Effect.fnUntraced(function* (
   config: Config.Interface,
   discovery: Discovery.Interface,
+  resources: ConfigResources.Interface,
   fsys: FSUtil.Interface,
   global: Global.Interface,
   disableExternalSkills: boolean,
@@ -186,6 +198,11 @@ const discoverSkills = Effect.fnUntraced(function* (
   if (!disableExternalSkills) {
     if (!disableClaudeCodeSkills) externalDirs.push(CLAUDE_EXTERNAL_DIR)
     externalDirs.push(AGENTS_EXTERNAL_DIR)
+    yield* resources.watch(
+      [global.home, ...ConfigPaths.ancestors(directory, worktree)].flatMap((root) =>
+        externalDirs.map((dir) => ({ directory: path.join(root, dir), pattern: EXTERNAL_SKILL_PATTERN })),
+      ),
+    )
 
     for (const dir of externalDirs) {
       const root = path.join(global.home, dir)
@@ -203,6 +220,7 @@ const discoverSkills = Effect.fnUntraced(function* (
   }
 
   const configDirs = yield* config.directories()
+  yield* resources.watch(configDirs.map((directory) => ({ directory, pattern: OPENCODE_SKILL_PATTERN })))
   for (const dir of configDirs) {
     yield* scan(state, dir, OPENCODE_SKILL_PATTERN)
   }
@@ -211,6 +229,7 @@ const discoverSkills = Effect.fnUntraced(function* (
   for (const item of cfg.skills?.paths ?? []) {
     const expanded = item.startsWith("~/") ? path.join(global.home, item.slice(2)) : item
     const dir = path.isAbsolute(expanded) ? expanded : path.join(directory, expanded)
+    yield* resources.watch([{ directory: dir, pattern: SKILL_PATTERN }])
     if (!(yield* fsys.isDir(dir))) {
       yield* Effect.logWarning("skill path not found", { path: dir })
       continue
@@ -221,6 +240,7 @@ const discoverSkills = Effect.fnUntraced(function* (
 
   for (const url of cfg.skills?.urls ?? []) {
     const pulledDirs = yield* discovery.pull(url)
+    yield* resources.watch(pulledDirs.map((directory) => ({ directory, pattern: SKILL_PATTERN })))
     for (const dir of pulledDirs) {
       yield* scan(state, dir, SKILL_PATTERN)
     }
@@ -236,9 +256,10 @@ const loadSkills = Effect.fnUntraced(function* (
   state: State,
   discovered: DiscoveryState,
   events: EventV2Bridge.Service["Service"],
+  strict: boolean,
 ) {
-  yield* Effect.forEach(discovered.matches, (match) => add(state, match, events), {
-    concurrency: "unbounded",
+  yield* Effect.forEach(discovered.matches, (match) => add(state, match, events, strict), {
+    concurrency: 1,
     discard: true,
   })
 
@@ -252,15 +273,20 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const discovery = yield* Discovery.Service
     const config = yield* Config.Service
+    const resources = yield* ConfigResources.Service
     const events = yield* EventV2Bridge.Service
     const fsys = yield* FSUtil.Service
     const global = yield* Global.Service
     const flags = yield* RuntimeFlags.Service
-    const discovered = yield* InstanceState.make(
+    const remote = yield* InstanceState.make(() =>
+      Cache.make({ capacity: Number.POSITIVE_INFINITY, lookup: discovery.pull }),
+    )
+    const discovered = ConfigResources.make(
       Effect.fn("Skill.discovery")(function* (ctx) {
         return yield* discoverSkills(
           config,
-          discovery,
+          { pull: (url) => InstanceState.useEffect(remote, (cache) => Cache.get(cache, url)) },
+          resources,
           fsys,
           global,
           flags.disableExternalSkills,
@@ -269,9 +295,10 @@ const layer = Layer.effect(
           ctx.worktree,
         )
       }),
+      { pin: true },
     )
-    const state = yield* InstanceState.make(
-      Effect.fn("Skill.state")(function* () {
+    const state = ConfigResources.make(
+      Effect.fn("Skill.state")(function* (_ctx, previous?: State) {
         const s: State = { skills: {}, dirs: new Set() }
         // Register the built-in skill BEFORE disk discovery so a user-disk
         // skill with the same name can override it.
@@ -281,34 +308,35 @@ const layer = Layer.effect(
           location: "<built-in>",
           content: CUSTOMIZE_OPENCODE_SKILL_BODY,
         }
-        yield* loadSkills(s, yield* InstanceState.get(discovered), events)
+        yield* loadSkills(s, yield* resources.get(discovered), events, previous !== undefined)
         return s
       }),
+      { pin: true },
     )
 
     const get = Effect.fn("Skill.get")(function* (name: string) {
-      const s = yield* InstanceState.get(state)
+      const s = yield* resources.get(state, { fresh: true })
       return s.skills[name]
     })
 
     const require = Effect.fn("Skill.require")(function* (name: string) {
-      const s = yield* InstanceState.get(state)
+      const s = yield* resources.get(state, { fresh: true })
       const info = s.skills[name]
       if (info) return info
       return yield* new NotFoundError({ name, available: Object.keys(s.skills).toSorted() })
     })
 
     const all = Effect.fn("Skill.all")(function* () {
-      const s = yield* InstanceState.get(state)
+      const s = yield* resources.get(state)
       return Object.values(s.skills)
     })
 
     const dirs = Effect.fn("Skill.dirs")(function* () {
-      return (yield* InstanceState.get(discovered)).dirs
+      return (yield* resources.get(discovered)).dirs
     })
 
     const available = Effect.fn("Skill.available")(function* (agent?: Agent.Info) {
-      const s = yield* InstanceState.get(state)
+      const s = yield* resources.get(state)
       const list = Object.values(s.skills).toSorted((a, b) => a.name.localeCompare(b.name))
       if (!agent) return list
       return list.filter((skill) => Permission.evaluate("skill", skill.name, agent.permission).action !== "deny")
@@ -348,7 +376,15 @@ export function fmt(list: Info[], opts: { verbose: boolean }) {
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [Discovery.node, Config.node, EventV2Bridge.node, FSUtil.node, Global.node, RuntimeFlags.node],
+  deps: [
+    Discovery.node,
+    Config.node,
+    ConfigResources.node,
+    EventV2Bridge.node,
+    FSUtil.node,
+    Global.node,
+    RuntimeFlags.node,
+  ],
 })
 
 export * as Skill from "."

@@ -114,6 +114,7 @@ export function applyDirectoryEvent(input: {
   directory: string
   loadLsp: () => void
   loadReferences?: () => void
+  loadConfigResources?: () => void
   vcsCache?: VcsCache
   setSessionTodo?: (sessionID: string, todos: Todo[] | undefined) => void
   retainedLimit?: number
@@ -124,6 +125,10 @@ export function applyDirectoryEvent(input: {
   if (input.sessionContent === false && SESSION_CONTENT_EVENTS.has(event.type)) return
   const limit = Math.max(input.store.limit, input.retainedLimit ?? 0)
   switch (event.type) {
+    case "config.resources.updated": {
+      input.loadConfigResources?.()
+      return
+    }
     case "server.instance.disposed": {
       input.push(input.directory)
       return

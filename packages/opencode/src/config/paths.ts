@@ -43,3 +43,9 @@ export const directories = Effect.fn("ConfigPaths.directories")(function* (direc
 export function fileInDirectory(dir: string, name: string) {
   return [path.join(dir, `${name}.json`), path.join(dir, `${name}.jsonc`)]
 }
+
+export function ancestors(directory: string, stop?: string): string[] {
+  const parent = path.dirname(directory)
+  if (directory === stop || parent === directory) return [directory]
+  return [directory, ...ancestors(parent, stop)]
+}

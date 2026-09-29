@@ -1,6 +1,7 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Config } from "@/config/config"
+import { ConfigResources } from "@/config/resources"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Provider } from "@/provider/provider"
 
@@ -21,7 +22,6 @@ import path from "path"
 import { Plugin } from "@/plugin"
 import { Skill } from "../skill"
 import { Effect, Context, Layer, Schema } from "effect"
-import { InstanceState } from "@/effect/instance-state"
 import * as Option from "effect/Option"
 import * as OtelTracer from "@effect/opentelemetry/Tracer"
 import { AbsolutePath, type DeepMutable } from "@opencode-ai/core/schema"
@@ -62,6 +62,10 @@ const GeneratedAgent = Schema.Struct({
 })
 
 export interface Interface {
+  readonly withSnapshot: <A, E, R>(
+    effect: Effect.Effect<A, E, R>,
+    options?: { fresh?: boolean },
+  ) => Effect.Effect<A, E, R>
   readonly get: (agent: string) => Effect.Effect<Info>
   readonly list: () => Effect.Effect<Info[]>
   readonly defaultInfo: () => Effect.Effect<Info>
@@ -79,7 +83,7 @@ export interface Interface {
   >
 }
 
-type State = Omit<Interface, "generate">
+type State = Omit<Interface, "generate" | "withSnapshot">
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Agent") {}
 
@@ -89,13 +93,14 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
+    const resources = yield* ConfigResources.Service
     const auth = yield* Auth.Service
     const plugin = yield* Plugin.Service
     const skill = yield* Skill.Service
     const provider = yield* Provider.Service
     const locations = yield* LocationServiceMap.Service
 
-    const state = yield* InstanceState.make<State>(
+    const state = ConfigResources.make<State>(
       Effect.fn("Agent.state")(function* (ctx) {
         const cfg = yield* config.get()
         const skillDirs = yield* skill.dirs()
@@ -314,7 +319,6 @@ const layer = Layer.effect(
         })
 
         const list = Effect.fnUntraced(function* () {
-          const cfg = yield* config.get()
           return pipe(
             agents,
             values(),
@@ -326,7 +330,7 @@ const layer = Layer.effect(
         })
 
         const defaultInfo = Effect.fnUntraced(function* () {
-          const c = yield* config.get()
+          const c = cfg
           if (c.default_agent) {
             const agent = agents[c.default_agent]
             if (!agent) throw new Error(`default agent "${c.default_agent}" not found`)
@@ -350,20 +354,23 @@ const layer = Layer.effect(
           defaultAgent,
         } satisfies State
       }),
+      { pin: true },
     )
 
     return Service.of({
+      withSnapshot: (effect, options) =>
+        skill.all().pipe(Effect.andThen(resources.withSnapshot(state, effect, options))),
       get: Effect.fn("Agent.get")(function* (agent: string) {
-        return yield* InstanceState.useEffect(state, (s) => s.get(agent))
+        return yield* resources.get(state).pipe(Effect.flatMap((s) => s.get(agent)))
       }),
       list: Effect.fn("Agent.list")(function* () {
-        return yield* InstanceState.useEffect(state, (s) => s.list())
+        return yield* resources.get(state).pipe(Effect.flatMap((s) => s.list()))
       }),
       defaultInfo: Effect.fn("Agent.defaultInfo")(function* () {
-        return yield* InstanceState.useEffect(state, (s) => s.defaultInfo())
+        return yield* resources.get(state).pipe(Effect.flatMap((s) => s.defaultInfo()))
       }),
       defaultAgent: Effect.fn("Agent.defaultAgent")(function* () {
-        return yield* InstanceState.useEffect(state, (s) => s.defaultAgent())
+        return yield* resources.get(state).pipe(Effect.flatMap((s) => s.defaultAgent()))
       }),
       generate: Effect.fn("Agent.generate")(function* (input: {
         description: string
@@ -379,7 +386,7 @@ const layer = Layer.effect(
 
         const system = [PROMPT_GENERATE]
         yield* plugin.trigger("experimental.chat.system.transform", { model: resolved }, { system })
-        const existing = yield* InstanceState.useEffect(state, (s) => s.list())
+        const existing = yield* resources.get(state).pipe(Effect.flatMap((s) => s.list()))
 
         // TODO: clean this up so provider specific logic doesnt bleed over
         const authInfo = yield* auth.get(model.providerID).pipe(Effect.orDie)
@@ -447,7 +454,7 @@ const locationServiceMapNode = LayerNode.make({
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [Config.node, Auth.node, Plugin.node, Skill.node, Provider.node, locationServiceMapNode],
+  deps: [Config.node, ConfigResources.node, Auth.node, Plugin.node, Skill.node, Provider.node, locationServiceMapNode],
 })
 
 export * as Agent from "./agent"

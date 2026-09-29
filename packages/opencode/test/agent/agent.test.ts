@@ -5,6 +5,8 @@ import path from "path"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { Agent } from "../../src/agent/agent"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import { Auth } from "../../src/auth"
 import { Config } from "../../src/config/config"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
@@ -43,6 +45,65 @@ const expectDefaultAgentError = Effect.fn("AgentTest.expectDefaultAgentError")(f
 afterEach(async () => {
   await disposeAllInstances()
 })
+
+it.instance(
+  "reloads an edited workspace agent model without a watcher notification",
+  () =>
+    Effect.gen(function* () {
+      const agent = yield* Agent.Service
+      const workspace = yield* TestInstance
+      const before = yield* agent.get("designer")
+      expect(before.model).toEqual({ providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("model-a") })
+
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(workspace.directory, ".opencode/agents/designer.md"),
+          "---\nmode: subagent\nmodel: test/model-b\n---\nDesign the scene.",
+        ),
+      )
+
+      const after = yield* agent.get("designer")
+      expect(after.model).toEqual({ providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("model-b") })
+      expect(before.model).toEqual({ providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("model-a") })
+    }),
+  {
+    init: (directory) =>
+      Effect.promise(() =>
+        Bun.write(
+          path.join(directory, ".opencode/agents/designer.md"),
+          "---\nmode: subagent\nmodel: test/model-a\n---\nDesign the scene.",
+        ),
+      ).pipe(Effect.asVoid),
+  },
+)
+
+it.instance(
+  "rejects an invalid agent edit and recovers after the file is repaired",
+  () =>
+    Effect.gen(function* () {
+      const agent = yield* Agent.Service
+      const workspace = yield* TestInstance
+      const before = yield* agent.get("designer")
+      const file = path.join(workspace.directory, ".opencode/agents/designer.md")
+      yield* Effect.promise(() => Bun.write(file, "---\nmodel: [unfinished\n---\nBroken edit."))
+
+      const rejected = yield* agent.get("designer").pipe(Effect.exit)
+      expect(Exit.isFailure(rejected)).toBe(true)
+      if (Exit.isFailure(rejected)) expect(Cause.pretty(rejected.cause)).toContain(file)
+      const repeated = yield* agent.get("designer").pipe(Effect.exit)
+      expect(Exit.isFailure(repeated)).toBe(true)
+      expect(before.model?.modelID).toBe(ModelV2.ID.make("model-a"))
+
+      yield* Effect.promise(() => Bun.write(file, "---\nmodel: test/model-b\n---\nRepaired edit."))
+      expect((yield* agent.get("designer")).model?.modelID).toBe(ModelV2.ID.make("model-b"))
+    }),
+  {
+    init: (directory) =>
+      Effect.promise(() =>
+        Bun.write(path.join(directory, ".opencode/agents/designer.md"), "---\nmodel: test/model-a\n---\nOriginal."),
+      ).pipe(Effect.asVoid),
+  },
+)
 
 it.instance("returns default native agents when no config", () =>
   Effect.gen(function* () {

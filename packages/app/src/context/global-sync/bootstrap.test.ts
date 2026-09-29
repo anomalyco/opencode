@@ -2,12 +2,20 @@ import { describe, expect, test } from "bun:test"
 import { createStore } from "solid-js/store"
 import { QueryClient } from "@tanstack/solid-query"
 import type { Config, OpencodeClient, Project } from "@opencode-ai/sdk/v2/client"
-import type { AgentApi, CatalogApi, CommandApi, ReferenceApi } from "@opencode-ai/client/promise"
+import type {
+  AgentApi,
+  AgentListOutput,
+  CatalogApi,
+  CommandApi,
+  CommandListOutput,
+  ReferenceApi,
+} from "@opencode-ai/client/promise"
 import type { NormalizedProviderListResponse } from "@opencode-ai/session-ui/context"
 import {
   bootstrapDirectory,
   loadAgentsQuery,
   loadCommands,
+  loadConfigResources,
   loadGlobalConfigQuery,
   loadPathQuery,
   loadProjectsQuery,
@@ -74,6 +82,141 @@ function directoryState() {
     part_text_accum_delta: {},
   })
 }
+
+describe("loadConfigResources", () => {
+  const location = { directory: "/project", project: { id: "project", directory: "/project" } }
+
+  test("a concurrent ordinary load joins a refresh instead of restoring cached agents", async () => {
+    const [store, setStore] = directoryState()
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } })
+    queryClient.setQueryData([ServerScope.local, "/project", "agents"], [{ name: "old-agent" }])
+    const updated = Promise.withResolvers<AgentListOutput>()
+    const started = Promise.withResolvers<void>()
+    const input = {
+      scope: ServerScope.local,
+      directory: "/project",
+      api: {
+        agent: {
+          list: () => {
+            started.resolve()
+            return updated.promise
+          },
+        },
+        command: { list: async () => ({ location, data: [] }) },
+      },
+      protocol: Promise.resolve("v2" as const),
+      queryClient,
+      setStore,
+    }
+    const refresh = loadConfigResources({ ...input, refresh: true })
+    await started.promise
+    const ordinary = loadConfigResources(input)
+    updated.resolve({ location, data: [] })
+    await Promise.all([refresh, ordinary])
+    expect(store.agent).toEqual([])
+    queryClient.clear()
+  })
+
+  test("clears an invalid catalog rather than leaving stale selectable entries", async () => {
+    const [store, setStore] = directoryState()
+    setStore("agent", [{ name: "old-agent", mode: "subagent", options: {}, permission: [] }])
+    setStore("command", [{ name: "deleted-command", template: "Old template" }])
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    await expect(
+      loadConfigResources({
+        scope: ServerScope.local,
+        directory: "/project",
+        api: {
+          agent: {
+            list: async () => {
+              throw new Error("Invalid workspace configuration")
+            },
+          },
+          command: { list: async () => ({ location, data: [] }) },
+        },
+        protocol: Promise.resolve("v2"),
+        queryClient,
+        setStore,
+        refresh: true,
+      }),
+    ).rejects.toThrow("Invalid workspace configuration")
+    expect(store.agent).toEqual([])
+    expect(store.command).toEqual([])
+    queryClient.clear()
+  })
+
+  test("an older in-flight catalog load cannot overwrite a newer configuration revision", async () => {
+    const [store, setStore] = directoryState()
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } })
+    queryClient.setQueryData([ServerScope.local, "/project", "agents"], [])
+    const old = Promise.withResolvers<CommandListOutput>()
+    const started = Promise.withResolvers<void>()
+    const input = {
+      scope: ServerScope.local,
+      directory: "/project",
+      protocol: Promise.resolve("v2" as const),
+      queryClient,
+      setStore,
+    }
+    const pending = loadConfigResources({
+      ...input,
+      api: {
+        agent: { list: async () => ({ location, data: [] }) },
+        command: {
+          list: () => {
+            started.resolve()
+            return old.promise
+          },
+        },
+      },
+    })
+    await started.promise
+    await loadConfigResources({
+      ...input,
+      api: {
+        agent: { list: async () => ({ location, data: [] }) },
+        command: { list: async () => ({ location, data: [] }) },
+      },
+      refresh: true,
+    })
+    old.resolve({ location, data: [{ name: "deleted-command", template: "Old template" }] })
+    await pending
+    expect(store.command).toEqual([])
+    queryClient.clear()
+  })
+
+  test("refreshes a cached agent catalog when workspace configuration changes", async () => {
+    const [store, setStore] = directoryState()
+    const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: Infinity } } })
+    const calls: string[] = []
+    queryClient.setQueryData([ServerScope.local, "/project", "agents"], [{ name: "old-agent" }])
+    await loadConfigResources({
+      scope: ServerScope.local,
+      directory: "/project",
+      api: {
+        agent: {
+          list: async () => {
+            calls.push("agents")
+            return { location, data: [] }
+          },
+        },
+        command: {
+          list: async () => {
+            calls.push("commands")
+            return { location, data: [] }
+          },
+        },
+      },
+      protocol: Promise.resolve("v2"),
+      queryClient,
+      setStore,
+      refresh: true,
+    })
+    expect(store.agent).toEqual([])
+    expect(calls.sort()).toEqual(["agents", "commands"])
+    queryClient.clear()
+  })
+})
 
 describe("bootstrapDirectory", () => {
   test("uses legacy MCP endpoints while refreshing a v1 directory", async () => {
@@ -280,6 +423,27 @@ describe("query keys", () => {
 
     expect(calls).toEqual([{ location: { directory: "/repo" } }])
     expect(result).toEqual([])
+  })
+
+  test("preserves the complete model ID in legacy command catalogs", async () => {
+    const result = await loadCommands(
+      "/project",
+      {
+        list: async () => ({
+          location: { directory: "/project", project: { id: "project", directory: "/project" } },
+          data: [],
+        }),
+      },
+      {
+        command: {
+          list: async () => ({
+            data: [{ name: "design", template: "Design the scene", model: "test/vendor/model-b" }],
+          }),
+        },
+      } as unknown as OpencodeClient,
+      Promise.resolve("v1"),
+    )
+    expect(result[0].model).toEqual({ providerID: "test", id: "vendor/model-b" })
   })
 
   test("loads commands from the current location-scoped endpoint", async () => {

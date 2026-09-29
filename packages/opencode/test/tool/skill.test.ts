@@ -8,6 +8,9 @@ import path from "path"
 import type { Permission } from "../../src/permission"
 import type { Tool } from "@/tool/tool"
 import { SkillTool } from "../../src/tool/skill"
+import { Command } from "../../src/command"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ToolRegistry } from "@/tool/registry"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
@@ -27,9 +30,56 @@ afterEach(async () => {
   await disposeAllInstances()
 })
 
-const it = testEffect(LayerNode.compile(LayerNode.group([ToolRegistry.node, CrossSpawnSpawner.node, Ripgrep.node])))
+const it = testEffect(
+  LayerNode.compile(LayerNode.group([ToolRegistry.node, Command.node, CrossSpawnSpawner.node, Ripgrep.node])),
+)
 
 describe("tool.skill", () => {
+  it.instance(
+    "reloads edited skill content in the skill tool and slash command",
+    () =>
+      Effect.gen(function* () {
+        const workspace = yield* TestInstance
+        const commands = yield* Command.Service
+        const registry = yield* ToolRegistry.Service
+        const tool = (yield* registry.tools({
+          providerID: ProviderV2.ID.make("opencode"),
+          modelID: ModelV2.ID.make("gpt-5"),
+          agent: { name: "build", mode: "primary", permission: [], options: {} },
+        })).find((tool) => tool.id === SkillTool.id)
+        if (!tool) throw new Error("Skill tool not found")
+        const context = { ...baseCtx, ask: () => Effect.void }
+        const before = yield* tool.execute({ name: "story" }, context)
+        const command = yield* commands.get("story")
+        expect(before.output).toContain("Write the first draft.")
+        expect(command).toBeDefined()
+        expect(yield* Effect.promise(() => Promise.resolve(command?.template))).toContain("Write the first draft.")
+
+        yield* Effect.promise(() =>
+          Bun.write(
+            path.join(workspace.directory, ".opencode/skills/story/SKILL.md"),
+            "---\nname: story\ndescription: Revised instructions\n---\nReview the second draft.",
+          ),
+        )
+
+        const after = yield* tool.execute({ name: "story" }, context)
+        const updated = yield* commands.get("story")
+        expect(after.output).toContain("Review the second draft.")
+        expect(after.output).not.toContain("Write the first draft.")
+        expect(updated?.description).toBe("Revised instructions")
+        expect(yield* Effect.promise(() => Promise.resolve(updated?.template))).toContain("Review the second draft.")
+      }),
+    {
+      init: (directory) =>
+        Effect.promise(() =>
+          Bun.write(
+            path.join(directory, ".opencode/skills/story/SKILL.md"),
+            "---\nname: story\ndescription: Original instructions\n---\nWrite the first draft.",
+          ),
+        ).pipe(Effect.asVoid),
+    },
+  )
+
   it.instance("execute returns skill content block with files", () =>
     Effect.gen(function* () {
       const dir = (yield* TestInstance).directory

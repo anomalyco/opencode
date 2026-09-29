@@ -5,6 +5,7 @@ import { EffectBridge } from "@/effect/bridge"
 import type { InstanceContext } from "@/project/instance-context"
 import { Effect, Layer, Context, Schema } from "effect"
 import { Config } from "@/config/config"
+import { ConfigResources } from "@/config/resources"
 import { MCP } from "../mcp"
 import { Skill } from "../skill"
 import PROMPT_INITIALIZE from "./template/initialize.txt"
@@ -59,12 +60,21 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const config = yield* Config.Service
+    const resources = yield* ConfigResources.Service
     const mcp = yield* MCP.Service
     const skill = yield* Skill.Service
+    // Keep connection-backed data and bridges alive across local file revisions.
+    const external = yield* InstanceState.make(() =>
+      Effect.gen(function* () {
+        const bridge = yield* EffectBridge.make()
+        const prompts = yield* mcp.prompts()
+        return { bridge, prompts }
+      }),
+    )
 
     const init = Effect.fn("Command.state")(function* (ctx: InstanceContext) {
       const cfg = yield* config.get()
-      const bridge = yield* EffectBridge.make()
+      const shared = yield* InstanceState.get(external)
       const commands: Record<string, Info> = {}
 
       commands[Default.INIT] = {
@@ -102,13 +112,13 @@ const layer = Layer.effect(
         }
       }
 
-      for (const [name, prompt] of Object.entries(yield* mcp.prompts())) {
+      for (const [name, prompt] of Object.entries(shared.prompts)) {
         commands[name] = {
           name,
           source: "mcp",
           description: prompt.description,
           get template() {
-            return bridge.promise(
+            return shared.bridge.promise(
               mcp
                 .getPrompt(
                   prompt.client,
@@ -156,15 +166,15 @@ const layer = Layer.effect(
       }
     })
 
-    const state = yield* InstanceState.make<State>((ctx) => init(ctx))
+    const state = ConfigResources.make<State>((ctx) => init(ctx))
 
     const get = Effect.fn("Command.get")(function* (name: string) {
-      const s = yield* InstanceState.get(state)
+      const s = yield* resources.get(state)
       return s.commands[name]
     })
 
     const list = Effect.fn("Command.list")(function* () {
-      const s = yield* InstanceState.get(state)
+      const s = yield* resources.get(state)
       return Object.values(s.commands)
     })
 
@@ -172,6 +182,10 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = LayerNode.make({ service: Service, layer: layer, deps: [Config.node, MCP.node, Skill.node] })
+export const node = LayerNode.make({
+  service: Service,
+  layer: layer,
+  deps: [Config.node, ConfigResources.node, MCP.node, Skill.node],
+})
 
 export * as Command from "."
