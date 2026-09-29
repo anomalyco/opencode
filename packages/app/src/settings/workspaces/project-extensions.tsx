@@ -22,6 +22,7 @@ import { useData } from "@/runtime/server/current"
 import { pluginLabels } from "@/providers/catalog/plugin"
 import { ExternalLink } from "@/runtime/platform/external-link"
 import { configuredLanguageServers } from "./project-lsp"
+import { ProjectWidgets } from "./project-widgets"
 import { SettingsList } from "@/settings/list"
 import "./project.css"
 
@@ -206,8 +207,8 @@ const ProjectLanguageServers: Component = () => {
 }
 
 export const ProjectSettingsExtensions: Component<{
-  subtab?: "mcps" | "plugins" | "skills" | "lsps"
-  onSubtab: (value: "mcps" | "plugins" | "skills" | "lsps") => void
+  subtab?: "mcps" | "plugins" | "skills" | "lsps" | "widgets"
+  onSubtab: (value: "mcps" | "plugins" | "skills" | "lsps" | "widgets") => void
 }> = (props) => {
   const language = useLanguage()
   const serverSDK = useServerSDK()
@@ -308,7 +309,8 @@ export const ProjectSettingsExtensions: Component<{
           variant="pill"
           value={props.subtab ?? "mcps"}
           onChange={(value) => {
-            if (value === "mcps" || value === "plugins" || value === "skills" || value === "lsps") props.onSubtab(value)
+            if (value === "mcps" || value === "plugins" || value === "skills" || value === "lsps" || value === "widgets")
+              props.onSubtab(value)
           }}
           class="project-settings-extension-tabs settings-subtabs"
         >
@@ -317,6 +319,7 @@ export const ProjectSettingsExtensions: Component<{
             <Tabs.Trigger value="plugins">{language.t("status.popover.tab.plugins")}</Tabs.Trigger>
             <Tabs.Trigger value="skills">{language.t("settings.extensions.tab.skills")}</Tabs.Trigger>
             <Tabs.Trigger value="lsps">{language.t("project.settings.extensions.tab.lsps")}</Tabs.Trigger>
+            <Tabs.Trigger value="widgets">{language.t("project.settings.extensions.tab.widgets")}</Tabs.Trigger>
           </Tabs.List>
 
           <Tabs.Content value="mcps">
@@ -366,6 +369,9 @@ export const ProjectSettingsExtensions: Component<{
           </Tabs.Content>
           <Tabs.Content value="lsps">
             <ProjectLanguageServers />
+          </Tabs.Content>
+          <Tabs.Content value="widgets">
+            <ProjectWidgets />
           </Tabs.Content>
         </Tabs>
       </div>

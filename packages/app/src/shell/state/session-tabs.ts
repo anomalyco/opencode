@@ -1,6 +1,7 @@
 export const SESSION_OPEN_FILE_TAB = "open-file"
 export const SESSION_BROWSER_TAB = "browser"
 export const SESSION_BTW_TAB = "btw"
+export const SESSION_WIDGETS_TAB = "widgets"
 export const sessionBrowserTab = (tabID: string) => `${SESSION_BROWSER_TAB}:${tabID}`
 export const isSessionBrowserTab = (tab: string | undefined) =>
   !!tab && (tab === SESSION_BROWSER_TAB || tab.startsWith(`${SESSION_BROWSER_TAB}:`))
@@ -54,7 +55,7 @@ export function openSessionTab(current: SessionTabState, tab: string): SessionTa
     }
   }
 
-  if (tab === "context") {
+  if (tab === "context" || tab === SESSION_WIDGETS_TAB) {
     return {
       tabs: { all: [tab, ...current.tabs.all.filter((item) => item !== tab)], active: tab },
       preview,

@@ -34,6 +34,7 @@ import { SessionEvent } from "./session-event.js"
 import { SessionStatusEvent } from "./session-status-event.js"
 import { TuiEvent } from "./tui-event.js"
 import { VcsEvent } from "./vcs-event.js"
+import { Widget } from "./widget.js"
 import { WorkspaceEvent } from "./workspace-event.js"
 import { WorktreeEvent } from "./worktree-event.js"
 import { WebSearch } from "./websearch.js"
@@ -61,6 +62,7 @@ const featureDefinitions = Event.inventory(
   ...Command.Event.Definitions,
   ...Config.Event.Definitions,
   ...Skill.Event.Definitions,
+  ...Widget.Event.Definitions,
   ...Pty.Event.Definitions,
   ...PersistentPty.Event.Definitions,
   ...Shell.Event.Definitions,

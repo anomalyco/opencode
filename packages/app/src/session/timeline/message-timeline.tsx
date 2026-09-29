@@ -22,6 +22,7 @@ import { Menu } from "@opencode/ui/menu"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { SummaryPopover } from "../summary/popover"
 import { SessionContextUsage } from "@/session/timeline/session-context-usage"
+import { SessionWidgetsToggle } from "@/session/widgets/toggle"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServer } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
@@ -527,6 +528,7 @@ function MessageTimelineView(
                   <div class="shrink-0 flex items-center gap-2">
                     {props.search}
                     <SessionContextUsage placement="bottom" />
+                    <SessionWidgetsToggle placement="bottom" />
                     <Show when={!parentID() && project()}>
                       {(project) => (
                         <SummaryPopover active={props.active} open={summaryOpen()} onOpenChange={setSummary}>

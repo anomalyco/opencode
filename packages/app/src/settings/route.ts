@@ -28,7 +28,7 @@ export type SettingsView = (
     }
 ) & {
   target?: string
-  subtab?: "mcps" | "plugins" | "skills" | "lsps"
+  subtab?: "mcps" | "plugins" | "skills" | "lsps" | "widgets"
   searchActivation?: number
 }
 
@@ -67,6 +67,7 @@ const subtabs: Record<NonNullable<SettingsView["subtab"]>, true> = {
   plugins: true,
   skills: true,
   lsps: true,
+  widgets: true,
 }
 
 export function parseSettingsView(

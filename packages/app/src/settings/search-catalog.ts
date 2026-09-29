@@ -11,7 +11,7 @@ type Entry<Tab> = {
   keywords?: string
   description?: Label
   section?: Label
-  subtab?: "mcps" | "plugins" | "skills" | "lsps"
+  subtab?: "mcps" | "plugins" | "skills" | "lsps" | "widgets"
   available?: "desktop" | "browser" | "mobile"
 }
 

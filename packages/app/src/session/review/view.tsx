@@ -16,6 +16,7 @@ import type { ChangeMode, SessionReviewModel } from "./model"
 import type { createSessionBrowser } from "../browser/model"
 import type { SessionBtwModel } from "../btw/model"
 import { SessionBtwPanel } from "../btw/panel"
+import { SessionWidgetsPanel } from "../widgets/panel"
 
 const MobilePanelDrawer = lazy(async () => {
   const { MobilePanelDrawer } = await import("@/shell/mobile-panel-drawer")
@@ -157,6 +158,7 @@ export function SessionDesktopReview(props: {
         stacked={props.review.screen.side.layout().stacked}
         browser={props.browser}
         btwPanel={() => <SessionBtwPanel btw={props.btw} />}
+        widgetsPanel={() => <SessionWidgetsPanel />}
       />
     </Suspense>
   )

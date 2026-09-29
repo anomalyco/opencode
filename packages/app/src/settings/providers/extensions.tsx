@@ -5,6 +5,7 @@ import { Tabs } from "@opencode/ui/tabs"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
+import { useWidgetsQuery } from "@/runtime/server/widgets"
 import { useMcpToggle } from "@/providers/connect/mcp"
 import { pluginLabels } from "@/providers/catalog/plugin"
 import { ExternalLink } from "@/runtime/platform/external-link"
@@ -19,6 +20,52 @@ interface McpRowItem {
 
 interface PluginRowItem {
   name: string
+}
+
+// Widgets available to the whole server, discovered from the global config
+// widgets directory. Project-level widgets appear in the project settings view.
+const ServerWidgets: Component = () => {
+  const language = useLanguage()
+  const query = useWidgetsQuery({ key: "server-widgets" })
+  const widgets = () => (query.isPending || query.isError ? [] : (query.data?.data ?? []))
+
+  return (
+    <div class="settings-section">
+      <div class="flex items-center justify-between">
+        <span class="settings-extension-heading text-13-medium">
+          {language.t("settings.extensions.availableAll")}
+        </span>
+        <span class="text-13-regular text-v2-text-text-muted">
+          {language.t("settings.extensions.manageConfig")}
+        </span>
+      </div>
+      <SettingsList variant="catalog">
+        <For each={widgets()}>
+          {(widget) => (
+            <div class="settings-extension-row">
+              <div class="settings-extension-lead">
+                <Icon
+                  name="widget"
+                  class="text-v2-icon-icon-muted shrink-0"
+                  classList={{ "text-v2-state-fg-danger": widget.state.status === "failed" }}
+                />
+                <span class="settings-extension-name truncate">{widget.title}</span>
+              </div>
+              <span
+                class="text-11-regular"
+                classList={{
+                  "text-v2-text-text-muted": widget.state.status === "active",
+                  "text-v2-state-fg-danger": widget.state.status === "failed",
+                }}
+              >
+                {widget.state.status === "failed" ? widget.state.error : widget.source.path}
+              </span>
+            </div>
+          )}
+        </For>
+      </SettingsList>
+    </div>
+  )
 }
 
 export const SettingsExtensions: Component<{
@@ -75,7 +122,8 @@ export const SettingsExtensions: Component<{
           variant="pill"
           value={props.subtab ?? "mcps"}
           onChange={(value) => {
-            if (value === "mcps" || value === "plugins" || value === "skills") props.onSubtab(value)
+            if (value === "mcps" || value === "plugins" || value === "skills" || value === "widgets")
+              props.onSubtab(value)
           }}
           class="settings-extensions-tabs settings-subtabs"
         >
@@ -83,6 +131,7 @@ export const SettingsExtensions: Component<{
             <Tabs.Trigger value="mcps">{language.t("settings.extensions.tab.mcps")}</Tabs.Trigger>
             <Tabs.Trigger value="plugins">{language.t("status.popover.tab.plugins")}</Tabs.Trigger>
             <Tabs.Trigger value="skills">{language.t("settings.extensions.tab.skills")}</Tabs.Trigger>
+            <Tabs.Trigger value="widgets">{language.t("project.settings.extensions.tab.widgets")}</Tabs.Trigger>
           </Tabs.List>
 
           <Tabs.Content value="mcps">
@@ -161,6 +210,9 @@ export const SettingsExtensions: Component<{
                 </For>
               </SettingsList>
             </div>
+          </Tabs.Content>
+          <Tabs.Content value="widgets">
+            <ServerWidgets />
           </Tabs.Content>
         </Tabs>
       </div>

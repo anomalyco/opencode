@@ -335,6 +335,10 @@ export type SkillInfo = {
   content: string
 }
 
+export type WidgetSource = { type: "global"; path: string } | { type: "project"; path: string }
+
+export type WidgetState = { status: "active" } | { status: "failed"; error: string }
+
 export type RpcOutput = { output?: any }
 
 export type PermissionReply = "once" | "always" | "reject"
@@ -1044,6 +1048,15 @@ export type SkillUpdated = {
   data: {}
 }
 
+export type WidgetUpdated = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "widget.updated"
+  location?: LocationRef
+  data: {}
+}
+
 export type PtyExited = {
   id: string
   created: number
@@ -1551,6 +1564,8 @@ export type PermissionAsked = {
     message?: string
   }
 }
+
+export type WidgetInfo = { id: string; title: string; description?: string; source: WidgetSource; state: WidgetState }
 
 export type PermissionReplied = {
   id: string
@@ -2476,6 +2491,7 @@ export type V2Event =
   | CommandUpdated
   | ConfigUpdated
   | SkillUpdated
+  | WidgetUpdated
   | PtyCreated
   | PtyUpdated
   | PtyExited
@@ -6134,6 +6150,19 @@ export type SkillListInput = {
 }
 
 export type SkillListOutput = { location: LocationPublicRef; data: Array<SkillInfo> }
+
+export type WidgetListInput = {
+  readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]
+}
+
+export type WidgetListOutput = { location: LocationPublicRef; data: Array<WidgetInfo> }
+
+export type WidgetReadInput = {
+  readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]
+  readonly path: string
+}
+
+export type WidgetReadOutput = globalThis.Uint8Array
 
 export type RpcCallInput = {
   readonly rpcID: { readonly rpcID: string; readonly method: string }["rpcID"]

@@ -52,6 +52,7 @@ import { ReadToolFileSystem } from "./tool/read-filesystem.js"
 import { Tool } from "./tool.js"
 import { ToolOutput } from "./tool-output.js"
 import { Vcs } from "./vcs.js"
+import { Widget } from "./widget.js"
 
 export * as Instance from "./instance.js"
 export { Service, node, type Interface } from "./instance/service.js"
@@ -82,6 +83,7 @@ const nodes = [
   Pty.node,
   Shell.node,
   Skill.node,
+  Widget.node,
   InstructionBuiltIns.node,
   InstructionDiscovery.node,
   FileAccess.node,

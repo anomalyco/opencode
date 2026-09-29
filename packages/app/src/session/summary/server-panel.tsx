@@ -32,6 +32,7 @@ const services = [
   { type: "mcp", icon: "mcp", label: "session.summary.mcp" },
   { type: "plugins", icon: "cube", label: "session.summary.plugins" },
   { type: "skills", icon: "graduation-cap", label: "session.summary.skills" },
+  { type: "widgets", icon: "widget", label: "session.summary.widgets" },
   { type: "lsp", icon: "code-slash", label: "session.summary.lsp" },
 ] as const
 
@@ -301,6 +302,14 @@ function ServiceCatalog(props: ServiceMenuProps) {
             error: plugin.state.status === "failed" ? plugin.state.error : undefined,
           }))
       }
+      if (props.service.type === "widgets") {
+        const result = await sdk.api.widget.list({ location: { directory } })
+        return result.data.map((widget) => ({
+          name: widget.title,
+          status: widget.state.status,
+          error: widget.state.status === "failed" ? widget.state.error : undefined,
+        }))
+      }
       data.location.skill.invalidate({ directory })
       await data.location.skill.sync({ directory })
       return undefined
@@ -309,7 +318,7 @@ function ServiceCatalog(props: ServiceMenuProps) {
   const loaded = () => items.state === "ready" || items.state === "refreshing"
   const list = createMemo(() => {
     const entries =
-      props.service.type === "plugins"
+      props.service.type === "plugins" || props.service.type === "widgets"
         ? loaded()
           ? (items.latest ?? [])
           : []
@@ -321,18 +330,20 @@ function ServiceCatalog(props: ServiceMenuProps) {
     return entries.toSorted((a, b) => a.name.localeCompare(b.name))
   })
   createEffect(() => {
-    onCleanup(
-      sdk.event
-        .location(props.directory)
-        .on(props.service.type === "plugins" ? "plugin.updated" : "skill.updated", () => void refetch()),
-    )
+    const event =
+      props.service.type === "plugins"
+        ? "plugin.updated"
+        : props.service.type === "widgets"
+          ? "widget.updated"
+          : "skill.updated"
+    onCleanup(sdk.event.location(props.directory).on(event, () => void refetch()))
   })
   return (
     <ServicePopover
       {...props}
       loading={items.loading}
       ready={
-        props.service.type === "plugins"
+        props.service.type === "plugins" || props.service.type === "widgets"
           ? loaded()
           : data.location.skill.list({ directory: props.directory }) !== undefined
       }
@@ -345,7 +356,11 @@ function ServiceCatalog(props: ServiceMenuProps) {
         fallback={
           <ServiceEmpty
             title={language.t(
-              props.service.type === "plugins" ? "session.summary.plugins.empty" : "session.summary.skills.empty",
+              props.service.type === "plugins"
+                ? "session.summary.plugins.empty"
+                : props.service.type === "widgets"
+                  ? "session.summary.widgets.empty"
+                  : "session.summary.skills.empty",
             )}
             directory={props.directory}
             service={props.service.type}
@@ -356,7 +371,9 @@ function ServiceCatalog(props: ServiceMenuProps) {
           {language.t(
             props.service.type === "plugins"
               ? "session.summary.plugins.configured"
-              : "session.summary.skills.configured",
+              : props.service.type === "widgets"
+                ? "session.summary.widgets.configured"
+                : "session.summary.skills.configured",
           )}
         </h3>
         <For each={list()}>
@@ -372,9 +389,11 @@ function ServiceCatalog(props: ServiceMenuProps) {
             </div>
           )}
         </For>
-        <div class="session-service-footer">
-          <ServiceConfigLink directory={props.directory} service={props.service.type} />
-        </div>
+        <Show when={props.service.type !== "widgets"}>
+          <div class="session-service-footer">
+            <ServiceConfigLink directory={props.directory} service={props.service.type as Exclude<Service, "widgets">} />
+          </div>
+        </Show>
       </Show>
     </ServicePopover>
   )
@@ -447,7 +466,7 @@ function ServicePopover(
   )
 }
 
-function ServiceConfigLink(props: { directory: string; service: Service }) {
+function ServiceConfigLink(props: { directory: string; service: Exclude<Service, "widgets"> }) {
   const language = useLanguage()
   const platform = usePlatform()
   const server = useServer()
@@ -470,8 +489,7 @@ function ServiceConfigLink(props: { directory: string; service: Service }) {
         const documents = entries
           .filter((entry) => entry.type === "document")
           .filter((entry) => entry.path !== undefined && /\.jsonc?$/.test(entry.path))
-        const path =
-          documents.findLast((entry) => entry.info[props.service] !== undefined)?.path ?? documents.at(-1)?.path
+        const path = documents.findLast((entry) => entry.info[props.service] !== undefined)?.path ?? documents.at(-1)?.path
         if (!server.isLocal) {
           if (!path) throw new Error(language.t("session.summary.configFileMissing"))
           await (platform.writeClipboardText?.(path) ?? navigator.clipboard.writeText(path))
@@ -538,9 +556,14 @@ function ServiceEmpty(props: { title: string; directory: string; service: Servic
   return (
     <div class="session-service-empty">
       <strong>{props.title}</strong>
-      <div class="session-service-footer">
-        <ServiceConfigLink directory={props.directory} service={props.service} />
-      </div>
+      <Show when={props.service !== "widgets"}>
+        <div class="session-service-footer">
+          <ServiceConfigLink
+            directory={props.directory}
+            service={props.service as Exclude<Service, "widgets">}
+          />
+        </div>
+      </Show>
     </div>
   )
 }
