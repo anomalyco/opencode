@@ -39,6 +39,7 @@ const resolve = (policy: CachePolicy | undefined): CachePolicyObject => {
 // whole policy pass for these — emitting hints would be harmless but pointless.
 const RESPECTS_INLINE_HINTS = new Set([
   "anthropic-messages",
+  "anthropic-compatible-messages",
   "google-vertex-messages",
   "bedrock-converse",
   "openrouter",

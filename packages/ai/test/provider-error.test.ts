@@ -196,6 +196,10 @@ describe("provider error classification", () => {
         classifyProviderFailure({ message: messages.error.message, rawBody: JSON.stringify(messages) }),
       ].map((failure) => failure._tag),
     ).toEqual(["ContentPolicy", "ContentPolicy", "ContentPolicy"])
+    const stability = { id: "a1b2", name: "content_moderation", errors: ["Your request was flagged"] }
+    expect(
+      classifyProviderFailure({ message: "Forbidden", status: 403, rawBody: JSON.stringify(stability) })._tag,
+    ).toBe("ContentPolicy")
   })
 
   test("recovers policy codes that OpenCode Zen preserves only in its message label", () => {
@@ -349,6 +353,32 @@ describe("provider error rawBody classification", () => {
       expect(reason._tag).toBe("Authentication")
       expect(reason.body).toBe('{"message":"Request failed"}')
     }
+  })
+
+  test("classifies Google invalid API keys as authentication failures", () => {
+    const rawBody = JSON.stringify({
+      error: {
+        code: 400,
+        message: "API key not valid. Please pass a valid API key.",
+        status: "INVALID_ARGUMENT",
+        details: [
+          {
+            "@type": "type.googleapis.com/google.rpc.ErrorInfo",
+            reason: "API_KEY_INVALID",
+            domain: "googleapis.com",
+          },
+          {
+            "@type": "type.googleapis.com/google.rpc.LocalizedMessage",
+            locale: "en-US",
+            message: "API key not valid. Please pass a valid API key.",
+          },
+        ],
+      },
+    })
+    expect(
+      classifyProviderFailure({ message: "API key not valid. Please pass a valid API key.", status: 400, rawBody })
+        ._tag,
+    ).toBe("Authentication")
   })
 
   test("classifies overflow signals buried in the raw payload when the summary is vague", () => {

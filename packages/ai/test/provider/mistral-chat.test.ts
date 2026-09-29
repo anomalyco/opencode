@@ -59,7 +59,7 @@ describe("Mistral Chat", () => {
           ],
           tools: [
             ToolDefinition.make({ name: "lookup", description: "Look up a city", inputSchema: { type: "object" } }),
-            ToolDefinition.make({ name: "other", description: "Other operation", inputSchema: { type: "object" } }),
+            ToolDefinition.make({ name: "other", description: "Other operation", inputSchema: {} }),
           ],
           toolChoice: "lookup",
           promptCacheKey: "session-1",
@@ -84,7 +84,10 @@ describe("Mistral Chat", () => {
 
       expect(prepared.body).toMatchObject({
         model: "mistral-large-latest",
-        tools: [{ function: { name: "lookup", strict: false } }, { function: { name: "other", strict: false } }],
+        tools: [
+          { function: { name: "lookup", strict: false } },
+          { function: { name: "other", strict: false, parameters: { type: "object" } } },
+        ],
         tool_choice: { type: "function", function: { name: "lookup" } },
         stream: true,
         max_tokens: 64,

@@ -255,4 +255,20 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
 
 export const fetchLayer = layer.pipe(Layer.provide(FetchHttpClient.layer))
 
+/** Run `fn` on every request: it sees the raw response before status classification, inside middleware already on `executor`, and outside per-call middleware. */
+export const middleware = (fn: HttpMiddleware, executor: Layer.Layer<Service> = fetchLayer): Layer.Layer<Service> =>
+  Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const inner = yield* Service
+      return Service.of({
+        execute: (request, next) =>
+          inner.execute(
+            request,
+            next === undefined ? fn : (input, handler) => fn(input, (forwarded) => next(forwarded, handler)),
+          ),
+      })
+    }),
+  ).pipe(Layer.provide(executor))
+
 export * as RequestExecutor from "./executor.js"

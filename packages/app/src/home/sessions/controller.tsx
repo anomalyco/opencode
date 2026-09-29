@@ -26,7 +26,7 @@ import { sessionLabel, sessionTitle } from "@/session/title"
 import { showToast } from "@/shell/notifications/toast"
 import { archiveHomeSession } from "./archive"
 import type { HomeController } from "../model"
-import { buildHomeSessionRecords, homeProjectForSession, type HomeSessionRecord } from "./records"
+import { buildHomeSessionRecords, homeProjectForSession, homeSessionLocation, type HomeSessionRecord } from "./records"
 
 export type { HomeSessionRecord } from "./records"
 
@@ -86,11 +86,31 @@ export function createHomeSessionsController(home: HomeController) {
       sessions: indexedSessions,
       projectDirectories,
       projects: home.project.list,
+      resolveProject: (session) => home.server.focusedContext()?.projects.forSession(session),
     }),
   )
   const records = createMemo(() => allRecords().slice(0, HOME_SESSION_LIMIT))
   const groups = createMemo(() => groupSessions(records(), language))
   const prefetched = new Set<string>()
+
+  const location = (record: HomeSessionRecord) => {
+    const branch = home.server.focusedContext()?.data.location.vcs.info(record.session.location)?.branch.current
+    return homeSessionLocation(record.session.location.directory, branch)
+  }
+
+  const syncLocations = (record?: HomeSessionRecord) => {
+    if (platform.platform !== "desktop") return
+    const ctx = home.server.focusedContext()
+    if (!ctx) return
+    if (record) {
+      void ctx.data.location.vcs.sync(record.session.location).catch(() => undefined)
+      return
+    }
+    const locations = new Map(
+      records().map((record) => [pathKey(record.session.location.directory), record.session.location] as const),
+    )
+    void Promise.allSettled(Array.from(locations.values(), (location) => ctx.data.location.vcs.sync(location)))
+  }
 
   createEffect(() => {
     const ctx = home.server.focusedContext()
@@ -252,6 +272,13 @@ export function createHomeSessionsController(home: HomeController) {
       loading: () => sessionLoad.isPending,
       searchRecords: allRecords,
     },
+    platform: {
+      desktop: platform.platform === "desktop",
+    },
+    location: {
+      value: location,
+      sync: syncLocations,
+    },
     session: {
       showProjectName: () => !home.project.selected(),
       server: () => home.selection.value().server,
@@ -265,6 +292,7 @@ export function createHomeSessionsController(home: HomeController) {
           sessions: () => [result],
           projectDirectories,
           projects: home.project.list,
+          resolveProject: ctx.projects.forSession,
         })[0]
       },
       create: home.project.openNewSession,

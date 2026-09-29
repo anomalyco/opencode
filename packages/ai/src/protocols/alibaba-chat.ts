@@ -70,7 +70,11 @@ export const protocol = Protocol.make({
       return {
         ...(yield* OpenAIChat.protocol.body.from(req)),
         enable_thinking: opts.enableThinking,
-        thinking_budget: opts.thinkingBudget,
+        // Alibaba also rejects an explicit budget that is not below `max_completion_tokens`.
+        thinking_budget:
+          opts.thinkingBudget === undefined
+            ? undefined
+            : ProviderShared.fitThinkingBudget(opts.thinkingBudget, req.generation?.maxTokens),
         preserve_thinking: opts.preserveThinking,
         clear_thinking: opts.clearThinking,
         thinking: opts.thinking,

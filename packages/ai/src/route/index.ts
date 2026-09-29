@@ -7,7 +7,7 @@ export type {
   RouteDefaultsInput,
   AnyRoute,
   Interface as LLMClientShape,
-  Service as LLMClientService,
+  LLMClientService,
   StreamOptions,
   CompactMethod,
   CompactionOperations,

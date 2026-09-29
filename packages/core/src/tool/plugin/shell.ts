@@ -61,6 +61,7 @@ export const Input = Schema.Struct({
 
 const StructuredOutput = Schema.Struct({
   exit: Schema.optionalKey(Schema.Number),
+  signal: Schema.optionalKey(Schema.String),
   shellID: Schema.optionalKey(Schema.String),
   truncated: Schema.Boolean,
   timeout: Schema.optionalKey(Schema.Boolean),
@@ -206,6 +207,10 @@ export const Plugin = {
                 },
                 (invocation) =>
                   Effect.gen(function* () {
+                    invocation.env.AGENT = "1"
+                    invocation.env.OPENCODE = "1"
+                    invocation.env.AI_AGENT ||= "opencode"
+                    invocation.env.OPENCODE_SESSION_ID = context.sessionID
                     finalTimeout = yield* prepare(invocation, context)
                   }),
               )

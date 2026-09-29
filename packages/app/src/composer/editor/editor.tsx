@@ -1,11 +1,23 @@
-import { createEffect, createMemo, createResource, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  createResource,
+  createSignal,
+  For,
+  onCleanup,
+  onMount,
+  Show,
+  Suspense,
+  type JSX,
+} from "solid-js"
 import { createStore } from "solid-js/store"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
 import { resolveBlobUrl } from "@/runtime/persistence/drafts"
-import { ProviderIcon } from "@opencode/ui/provider-icon"
+import { ProviderModelIcon } from "@/providers/models/provider-group"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { Button } from "@opencode/ui/button"
 import { Keybind } from "@opencode/ui/keybind"
@@ -40,6 +52,12 @@ export type {
 } from "../types"
 
 export type ComposerMode = "normal" | "shell"
+const COMPOSER_SUGGESTION_MAX_HEIGHT = 320
+const COMPOSER_SUGGESTION_ROW_HEIGHT = 28
+const COMPOSER_SUGGESTION_ROW_PEEK = 18
+const COMPOSER_SUGGESTION_TOP_PADDING = 8
+const COMPOSER_SUGGESTION_SEARCH_HEIGHT = 28
+const COMPOSER_SUGGESTION_CONTEXT_RESERVE = 80
 
 export type ComposerEditorProps = {
   controller: ComposerEditorModel
@@ -53,6 +71,7 @@ export type ComposerEditorProps = {
   attachShortcut?: string
   alternateKeybind?: string[]
   exitShellKeybind?: string[]
+  suggestionBoundary?: () => HTMLElement | undefined
 }
 
 export function ComposerEditor(props: ComposerEditorProps) {
@@ -117,6 +136,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
         <ComposerEditorPopover
           emptyLabel={i18n.t("ui.promptInput.noMatchingItems")}
           items={props.controller.suggestions()}
+          boundary={props.suggestionBoundary}
           activeID={state.popover.type === "closed" ? undefined : state.popover.activeID}
           search={
             state.popover.type === "command-menu"
@@ -522,7 +542,7 @@ export function ComposerAttachments(props: {
                 <button
                   type="button"
                   onClick={() => props.onCommentRemove?.(comment)}
-                  class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
                   aria-label={props.removeLabel}
                 >
                   <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
@@ -551,12 +571,15 @@ export function ComposerAttachments(props: {
                       const [url] = createResource(() => image().blob, resolveBlobUrl)
                       return (
                         <>
-                          <img
-                            src={url() ?? ""}
-                            alt={attachment.filename}
-                            class="w-[58px] h-[46px] rounded-[6px] object-cover"
-                            onClick={() => props.onAttachmentClick?.(attachment)}
-                          />
+                          {/* Keep loading local; the route boundary would detach the screen and drop editor focus. */}
+                          <Suspense fallback={<div class="w-[58px] h-[46px]" />}>
+                            <img
+                              src={url() ?? ""}
+                              alt={attachment.filename}
+                              class="w-[58px] h-[46px] rounded-[6px] object-cover"
+                              onClick={() => props.onAttachmentClick?.(attachment)}
+                            />
+                          </Suspense>
                           <div class="absolute inset-0 rounded-[6px] shadow-[inset_0_0_0_0.5px_var(--v2-border-border-base)] pointer-events-none" />
                         </>
                       )
@@ -566,7 +589,7 @@ export function ComposerAttachments(props: {
                 <button
                   type="button"
                   onClick={() => props.onAttachmentRemove(attachment)}
-                  class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
                   aria-label={props.removeLabel}
                 >
                   <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
@@ -588,7 +611,7 @@ export function ComposerAttachments(props: {
                 <button
                   type="button"
                   onClick={() => props.onUploadCancel?.(upload)}
-                  class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                  class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
                   aria-label={i18n.t("ui.promptInput.cancelUpload")}
                 >
                   <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
@@ -688,7 +711,7 @@ function ComposerEditorConfiguredSelect(props: {
       current={current()}
       currentIcon={
         <Show when={props.model && providerID()}>
-          <ProviderIcon id={providerID()!} class="size-4 shrink-0 opacity-60" />
+          {(id) => <ProviderModelIcon provider={{ id: id(), name: id() }} class="shrink-0 opacity-60" />}
         </Show>
       }
       onSelect={props.control.onSelect}
@@ -761,18 +784,31 @@ export function ComposerEditorPopover(props: {
     onValueChange: (value: string) => void
     onKeyDown: (event: KeyboardEvent) => void
   }
+  boundary?: () => HTMLElement | undefined
   onActiveChange: (item: ComposerSuggestion) => void
   onSelect: (item: ComposerSuggestion) => void
 }) {
+  const [store, setStore] = createStore({ maxHeight: COMPOSER_SUGGESTION_MAX_HEIGHT })
+  const resize = (height: number) =>
+    setStore("maxHeight", composerSuggestionMaxHeight(height, props.search !== undefined))
+  // A detached boundary (e.g. the previous session's timeline while the next one loads) measures 0px.
+  const boundary = () => {
+    const element = props.boundary?.()
+    return element?.isConnected ? element : undefined
+  }
+  createEffect(() => resize(boundary()?.clientHeight ?? COMPOSER_SUGGESTION_MAX_HEIGHT * 2))
+  createResizeObserver(boundary, (rect) => resize(rect.height))
+
   return (
     <div
       data-component="composer-suggestions"
-      class="absolute inset-x-0 -top-2 z-40 flex max-h-80 -translate-y-full flex-col overflow-auto rounded-xl bg-v2-background-bg-base p-2 shadow-[var(--v2-elevation-raised)] no-scrollbar"
+      class="absolute inset-x-0 -top-2 z-40 flex -translate-y-full scroll-pb-[18px] flex-col overflow-auto rounded-xl bg-v2-background-bg-base p-2 shadow-[var(--v2-elevation-raised)] no-scrollbar"
+      style={{ "max-height": `${store.maxHeight}px` }}
       onMouseDown={(event) => event.preventDefault()}
     >
       <Show when={props.search}>
         {(search) => (
-          <div class="px-2 py-1">
+          <div class="shrink-0 px-2 py-1">
             <input
               ref={(element) => requestAnimationFrame(() => element.focus())}
               value={search().value}
@@ -796,7 +832,7 @@ export function ComposerEditorPopover(props: {
               type="button"
               data-suggestion-id={item.id}
               data-active={props.activeID === item.id ? "" : undefined}
-              class="flex w-full items-center gap-2 rounded-md px-2 py-1 text-start hover:bg-v2-overlay-simple-overlay-hover"
+              class="flex h-7 w-full shrink-0 items-center gap-2 rounded-md px-2 py-1 text-start hover:bg-v2-overlay-simple-overlay-hover"
               classList={{ "bg-v2-overlay-simple-overlay-hover": props.activeID === item.id }}
               onPointerMove={() => props.onActiveChange(item)}
               onClick={() => props.onSelect(item)}
@@ -818,6 +854,19 @@ export function ComposerEditorPopover(props: {
         </For>
       </Show>
     </div>
+  )
+}
+
+function composerSuggestionMaxHeight(boundaryHeight: number, search: boolean) {
+  const reserve = Math.min(COMPOSER_SUGGESTION_CONTEXT_RESERVE, boundaryHeight / 4)
+  const limit = Math.min(COMPOSER_SUGGESTION_MAX_HEIGHT, boundaryHeight - reserve)
+  const chrome = COMPOSER_SUGGESTION_TOP_PADDING + (search ? COMPOSER_SUGGESTION_SEARCH_HEIGHT : 0)
+  if (limit < chrome + COMPOSER_SUGGESTION_ROW_HEIGHT + COMPOSER_SUGGESTION_ROW_PEEK) return limit
+  return (
+    chrome +
+    Math.floor((limit - chrome - COMPOSER_SUGGESTION_ROW_PEEK) / COMPOSER_SUGGESTION_ROW_HEIGHT) *
+      COMPOSER_SUGGESTION_ROW_HEIGHT +
+    COMPOSER_SUGGESTION_ROW_PEEK
   )
 }
 

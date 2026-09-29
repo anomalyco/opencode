@@ -223,7 +223,7 @@ describe("ReadToolFileSystem", () => {
       )
 
       expect(error).toBeInstanceOf(ReadToolFileSystem.OffsetOutOfRangeError)
-      expect(error.message).toBe("Offset 2 is out of range")
+      expect(error.message).toBe("Offset 2 is out of range for this file (1 line)")
     }),
   )
 

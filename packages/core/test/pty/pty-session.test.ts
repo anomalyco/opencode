@@ -5,13 +5,12 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
 import { Location } from "@opencode/core/location"
 import { Pty } from "@opencode/core/pty"
-import { PtyID } from "@opencode/core/pty/schema"
 import { AbsolutePath } from "@opencode/core/schema"
 import { ShellSelect } from "@opencode/core/shell/select"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
 
-type PtyEvent = { type: "created" | "exited" | "deleted"; id: PtyID }
+type PtyEvent = { type: "created" | "exited" | "deleted"; id: Pty.ID }
 
 const locationLayer = Layer.succeed(
   Location.Service,
@@ -46,7 +45,7 @@ const createPty = Effect.fn("PtySessionTest.createPty")(function* (command: stri
   )
 })
 
-const waitForEvents = (events: Queue.Queue<PtyEvent>, id: PtyID, count: number) =>
+const waitForEvents = (events: Queue.Queue<PtyEvent>, id: Pty.ID, count: number) =>
   Effect.gen(function* () {
     const picked: Array<PtyEvent["type"]> = []
     while (picked.length < count) {
@@ -61,7 +60,7 @@ const waitForEvents = (events: Queue.Queue<PtyEvent>, id: PtyID, count: number) 
     }),
   )
 
-const attachCollecting = Effect.fn("PtySessionTest.attachCollecting")(function* (id: PtyID, cursor?: number) {
+const attachCollecting = Effect.fn("PtySessionTest.attachCollecting")(function* (id: Pty.ID, cursor?: number) {
   const pty = yield* Pty.Service
   const output = yield* Queue.unbounded<string>()
   const ended = yield* Deferred.make<{ exitCode?: number }>()
@@ -90,7 +89,7 @@ describe("pty", () => {
   it.live("returns typed not found errors for missing sessions", () =>
     Effect.gen(function* () {
       const pty = yield* Pty.Service
-      const id = PtyID.make("pty_missing")
+      const id = Pty.ID.make("pty_missing")
 
       for (const result of [
         yield* pty.get(id).pipe(Effect.asVoid, Effect.exit),

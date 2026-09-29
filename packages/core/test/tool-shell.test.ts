@@ -956,6 +956,59 @@ describe("ShellTool", () => {
     { timeout: 15_000 },
   )
 
+  productionIt.live(
+    "identifies agent shell commands without inheriting a stale session ID",
+    () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => {
+          reset()
+          return withSession(tmp.path, (registry) =>
+            Effect.gen(function* () {
+              const sessions = yield* Session.Service
+              yield* sessions.environment({
+                sessionID,
+                variables: { AGENT: "0", OPENCODE: "0", AI_AGENT: "", OPENCODE_SESSION_ID: "stale" },
+              })
+              const command = isWindows
+                ? '[Console]::Out.Write("$env:AGENT|$env:OPENCODE|$env:AI_AGENT|$env:OPENCODE_SESSION_ID")'
+                : 'printf %s "$AGENT|$OPENCODE|$AI_AGENT|$OPENCODE_SESSION_ID"'
+              const settled = yield* executeTool(registry, call({ command }))
+
+              expect(settled.status).toBe("completed")
+              expect(settled.content?.[0]).toEqual({ type: "text", text: `1|1|opencode|${sessionID}` })
+            }),
+          )
+        },
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+      ),
+    { timeout: 15_000 },
+  )
+
+  productionIt.live(
+    "preserves an outer AI_AGENT marker in agent shell commands",
+    () =>
+      Effect.acquireUseRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => {
+          reset()
+          return withSession(tmp.path, (registry) =>
+            Effect.gen(function* () {
+              const sessions = yield* Session.Service
+              yield* sessions.environment({ sessionID, variables: { AI_AGENT: "outer-agent" } })
+              const command = isWindows ? '[Console]::Out.Write($env:AI_AGENT)' : 'printf %s "$AI_AGENT"'
+              const settled = yield* executeTool(registry, call({ command }))
+
+              expect(settled.status).toBe("completed")
+              expect(settled.content?.[0]).toEqual({ type: "text", text: "outer-agent" })
+            }),
+          )
+        },
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]().then(() => undefined)),
+      ),
+    { timeout: 15_000 },
+  )
+
   it.live("resolves a relative workdir from the active Location", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
@@ -1555,7 +1608,7 @@ describe("ShellTool", () => {
               {
                 id: settled.metadata?.shellID,
                 status: "completed",
-                output: "Exited with code 7",
+                output: "(no output)\n\nExited with code 7",
               },
             ])
           }),
@@ -1679,7 +1732,7 @@ describe("ShellTool", () => {
               process.kill(-info.pid, "SIGTERM")
               const result = yield* shell.wait(id).pipe(Effect.timeoutOption(Duration.seconds(1)))
               expect(result._tag).toBe("Some")
-              if (result._tag === "Some") expect(result.value.status).toBe("exited")
+              if (result._tag === "Some") expect(result.value).toMatchObject({ status: "exited", signal: "SIGTERM" })
               expect((yield* shell.list()).map((item) => item.id)).not.toContain(id)
             }),
           )

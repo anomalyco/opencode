@@ -75,23 +75,17 @@ const layer = Layer.effect(
 
       const kept: string[] = []
       let bytes = 0
-      let hitBytes = false
       for (const line of lines.slice(0, limits.maxLines)) {
         const size = Buffer.byteLength(line, "utf-8") + (kept.length > 0 ? 1 : 0)
-        if (bytes + size > limits.maxBytes) {
-          hitBytes = true
-          break
-        }
+        if (bytes + size > limits.maxBytes) break
         kept.push(line)
         bytes += size
       }
-      if (!hitBytes && kept.length === lines.length && totalBytes > bytes) hitBytes = true
-      const removed = hitBytes ? totalBytes - bytes : lines.length - kept.length
-      const unit = hitBytes ? (removed === 1 ? "byte" : "bytes") : removed === 1 ? "line" : "lines"
       const file = path.join(directory, Identifier.ascending("tool"))
       yield* fs.ensureDir(directory).pipe(Effect.orDie)
       yield* fs.writeFileString(file, text).pipe(Effect.orDie)
-      const marker = `... ${removed} ${unit} truncated; full content saved to ${file} ...`
+      const shown = kept.length > 0 ? `lines 1-${kept.length}` : "0 lines"
+      const marker = `[showing ${shown} of ${lines.length}; full output saved to ${file}]`
       const bounded: Tool.Content[] = []
       let remaining = kept.join("\n").length
       let seenText = false

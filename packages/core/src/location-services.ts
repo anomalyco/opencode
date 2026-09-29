@@ -8,7 +8,6 @@ import { LocationServiceMap } from "./location-service-map.js"
 export { LocationServiceMap } from "./location-service-map.js"
 
 export type LocationServices = Instance.Services
-export type LocationError = Instance.Error
 
 export function buildLocationServiceMap(
   replacements: LayerNode.Replacements = [],

@@ -18,6 +18,8 @@ import { Composer } from "../../../src/routes/session/composer"
 import { DialogProvider } from "../../../src/ui/dialog"
 import { ToastProvider } from "../../../src/ui/toast"
 import { createSessionRows, type SessionRow } from "../../../src/routes/session/rows"
+import { groupRefs } from "../../../src/routes/session/grouping/session"
+import { unwrap } from "solid-js/store"
 import { createApi, createEventStream, createFetch, directory, json, worktree } from "../../fixture/tui-client"
 import { emptyThemeSource } from "../../fixture/fixture"
 import { TestTuiContexts } from "../../fixture/tui-environment"
@@ -1080,6 +1082,79 @@ test("classifies live tool rows independently of their call ID", async () => {
 
     await wait(() => rows.length > 0)
     expect(rows).toEqual([{ type: "part", ref: { messageID: "message-assistant", partID: "reasoning:0" } }])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("loads older pages until the oldest exploration group is complete before reporting sync", async () => {
+  const events = createEventStream()
+  const sessionID = "session-boundary"
+  const model = { id: "model", providerID: "provider" }
+  // One prompt, then 50 single-read steps: the 20-message first page cuts the group.
+  const history = [
+    { type: "user", id: "msg_000", text: "Explore", time: { created: 0 } },
+    ...Array.from({ length: 50 }, (_, index) => ({
+      type: "assistant",
+      id: `msg_${String(index + 1).padStart(3, "0")}`,
+      agent: "build",
+      model,
+      time: { created: index + 1, completed: index + 1 },
+      finish: "tool-calls",
+      content: [
+        {
+          type: "tool",
+          id: `read-${index}`,
+          name: "read",
+          time: { created: index + 1, completed: index + 1 },
+          state: { status: "completed", input: { path: `${index}.ts` }, content: [], metadata: {} },
+        },
+      ],
+    })),
+  ]
+  const pages: string[] = []
+  const calls = createFetch((url) => {
+    if (url.pathname !== `/api/session/${sessionID}/message`) return
+    const end = Number(url.searchParams.get("cursor") ?? history.length)
+    const start = Math.max(0, end - Number(url.searchParams.get("limit") ?? 20))
+    pages.push(`${start}-${end}`)
+    return json({ data: history.slice(start, end).toReversed(), cursor: start > 0 ? { next: String(start) } : {} })
+  }, events)
+  let rows!: ReturnType<typeof createSessionRows>
+  let client!: ReturnType<typeof useClient>
+  const synced: SessionRow[] = []
+
+  function Probe() {
+    client = useClient()
+    rows = createSessionRows(
+      () => sessionID,
+      () => synced.push(structuredClone(unwrap(rows[0]))),
+    )
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await wait(() => client.connection.status() === "connected")
+    await wait(() => synced.length > 0, 4000)
+    expect(pages).toEqual(["31-51", "11-31", "0-11"])
+    // Sync is reported only once the group's true first read is loaded.
+    expect(synced[0]).toEqual({ type: "message", messageID: "msg_000" })
+    const group = rows[1]
+    if (group?.type !== "group") throw new Error("Expected exploration group")
+    expect(group.size).toBe(50)
+    expect(groupRefs(group)[0]).toEqual({ messageID: "msg_001", partID: "read-0" })
   } finally {
     app.renderer.destroy()
   }

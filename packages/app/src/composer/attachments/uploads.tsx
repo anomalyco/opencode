@@ -27,7 +27,10 @@ export const uploads = {
     const controller = new AbortController()
     setState("items", (items) => [...items, { ...input, loaded: 0, cancel: () => controller.abort() }])
     try {
-      return await work((loaded) => setState("items", (item) => item.id === input.id, "loaded", loaded), controller.signal)
+      return await work(
+        (loaded) => setState("items", (item) => item.id === input.id, "loaded", loaded),
+        controller.signal,
+      )
     } catch (error) {
       if (controller.signal.aborted) return undefined
       throw error
@@ -101,7 +104,7 @@ function UploadToast(props: { toastId: number; language: ReturnType<typeof useLa
                 <button
                   type="button"
                   data-slot="upload-row-cancel"
-                  aria-label={props.language.t("prompt.toast.uploading.cancel")}
+                  aria-label={props.language.t("prompt.toast.uploading.cancelFile", { filename: item.filename })}
                   onClick={() => item.cancel()}
                 >
                   <Icon name="outline-xmark" />

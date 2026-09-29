@@ -472,6 +472,45 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("replays Gemini thought signatures as tool call extra content", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user("Weather in Paris and Tokyo?"),
+            Message.assistant([
+              ToolCallPart.make({
+                id: "call_1",
+                name: "lookup",
+                input: { city: "Paris" },
+                providerMetadata: { openai: { extraContent: { google: { thought_signature: "sig_1" } } } },
+              }),
+              ToolCallPart.make({ id: "call_2", name: "lookup", input: { city: "Tokyo" } }),
+            ]),
+            Message.tool({ id: "call_1", name: "lookup", result: "Sunny" }),
+            Message.tool({ id: "call_2", name: "lookup", result: "Rainy" }),
+          ],
+        }),
+      )
+
+      const assistant = prepared.body.messages[1]
+      expect(assistant?.role === "assistant" ? assistant.tool_calls : undefined).toEqual([
+        {
+          id: "call_1",
+          type: "function",
+          function: { name: "lookup", arguments: encodeJson({ city: "Paris" }) },
+          extra_content: { google: { thought_signature: "sig_1" } },
+        },
+        {
+          id: "call_2",
+          type: "function",
+          function: { name: "lookup", arguments: encodeJson({ city: "Tokyo" }) },
+        },
+      ])
+    }),
+  )
+
   it.effect("limits OpenAI and Azure Chat tool call IDs to 40 characters", () =>
     Effect.gen(function* () {
       const id = `call_${"a".repeat(48)}`
@@ -788,6 +827,89 @@ describe("OpenAI Chat route", () => {
         }),
       ).pipe(Effect.flip)
       expect(error.message).toContain("OpenAI Chat does not support media type audio/mpeg")
+    }),
+  )
+
+  it.effect("lowers inline PDFs as file parts", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user([
+              { type: "text", text: "Summarize these." },
+              { type: "media", media: Media.base64("JVBERi0=", "application/pdf"), filename: "report.pdf" },
+              { type: "media", media: Media.fromDataUrl("data:application/pdf;base64,JVBERi0=") },
+            ]),
+          ],
+        }),
+      )
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Summarize these." },
+            { type: "file", file: { filename: "report.pdf", file_data: "data:application/pdf;base64,JVBERi0=" } },
+            { type: "file", file: { filename: "document.pdf", file_data: "data:application/pdf;base64,JVBERi0=" } },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("moves PDFs from tool results into a follow-up user message", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user("Read the report."),
+            Message.assistant([ToolCallPart.make({ id: "call_pdf", name: "read", input: {} })]),
+            Message.tool({
+              id: "call_pdf",
+              name: "read",
+              resultType: "content",
+              result: [
+                { type: "text", text: "PDF read successfully" },
+                {
+                  type: "file",
+                  mime: "application/pdf",
+                  uri: "data:application/pdf;base64,JVBERi0=",
+                  name: "report.pdf",
+                },
+              ],
+            }),
+          ],
+        }),
+      )
+      expect(prepared.body.messages).toContainEqual({
+        role: "tool",
+        tool_call_id: "call_pdf",
+        content: "PDF read successfully",
+      })
+      expect(prepared.body.messages.at(-1)).toEqual({
+        role: "user",
+        content: [
+          { type: "file", file: { filename: "report.pdf", file_data: "data:application/pdf;base64,JVBERi0=" } },
+        ],
+      })
+    }),
+  )
+
+  it.effect("requires inline data for PDF files", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user({
+              type: "media",
+              media: Media.url("https://example.com/report.pdf", { mediaType: "application/pdf" }),
+            }),
+          ],
+        }),
+      ).pipe(Effect.flip)
+      expect(error.message).toContain("OpenAI Chat requires inline media")
     }),
   )
 
@@ -1718,6 +1840,78 @@ describe("OpenAI Chat route", () => {
           providerMetadata: undefined,
         },
         { type: "finish", reason: { normalized: "tool-calls", raw: "tool_calls" }, usage: undefined },
+      ])
+    }),
+  )
+
+  it.effect("preserves Gemini thought signatures on streamed parallel tool calls", () =>
+    Effect.gen(function* () {
+      // Gemini's OpenAI-compatible endpoint omits `index`, streams each call whole,
+      // and signs only the first call of a parallel batch.
+      const body = sseEvents(
+        deltaChunk({
+          role: "assistant",
+          tool_calls: [
+            {
+              extra_content: { google: { thought_signature: "sig_1" } },
+              id: "call_1",
+              type: "function",
+              function: { name: "lookup", arguments: '{"city":"Paris"}' },
+            },
+          ],
+        }),
+        deltaChunk({
+          role: "assistant",
+          tool_calls: [{ id: "call_2", type: "function", function: { name: "lookup", arguments: '{"city":"Tokyo"}' } }],
+        }),
+        deltaChunk({}, "stop"),
+      )
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.events.filter(LLMEvent.is.toolCall)).toEqual([
+        {
+          type: "tool-call",
+          id: "call_1",
+          name: "lookup",
+          input: { city: "Paris" },
+          providerExecuted: undefined,
+          providerMetadata: { openai: { extraContent: { google: { thought_signature: "sig_1" } } } },
+        },
+        {
+          type: "tool-call",
+          id: "call_2",
+          name: "lookup",
+          input: { city: "Tokyo" },
+          providerExecuted: undefined,
+          providerMetadata: undefined,
+        },
+      ])
+    }),
+  )
+
+  it.effect("keeps extra content that arrives before the tool identity", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        deltaChunk({
+          tool_calls: [
+            { index: 0, extra_content: { google: { thought_signature: "sig_1" } }, function: { arguments: "{" } },
+          ],
+        }),
+        deltaChunk({ tool_calls: [{ index: 0, id: "call_1", function: { name: "lookup", arguments: "}" } }] }),
+        deltaChunk({}, "tool_calls"),
+      )
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.events.filter(LLMEvent.is.toolCall).map((event) => event.providerMetadata)).toEqual([
+        { openai: { extraContent: { google: { thought_signature: "sig_1" } } } },
       ])
     }),
   )

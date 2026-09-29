@@ -28,6 +28,8 @@ const EFFORTS = ["low", "medium", "high"]
 const ENCRYPTED_REASONING = ["reasoning.encrypted_content"]
 const ADAPTIVE_THINKING = { type: "adaptive", display: "summarized" }
 const ANTHROPIC_OUTPUT_TOKEN_MAX = 32_000
+// Alibaba thinking budget variants stay under 64k instead of reaching the model's whole output limit.
+const ALIBABA_THINKING_BUDGET_MAX = 64_000
 
 const variant = (id: string, overlay: Overlay): Variants[number] => ({ id: Model.VariantID.make(id), ...overlay })
 
@@ -85,6 +87,11 @@ const openaiResponses: Protocol = (_, support) => {
 const responsesEffort = (effort: string): Overlay => ({
   settings: { reasoningEffort: effort, reasoningSummary: "auto", include: ENCRYPTED_REASONING },
 })
+
+const xaiResponses: Protocol = (_, support) => {
+  if (support.type !== "effort") return []
+  return efforts(support.values ?? EFFORTS, responsesEffort)
+}
 
 const cloudflareAIGateway: Protocol = (model, support) => {
   const id = modelID(model)
@@ -224,9 +231,12 @@ const alibabaChat: Protocol = (model, support) => {
     case "toggle":
       return toggle({ settings: { enableThinking: false } }, { settings: { enableThinking: true } })
     case "budget_tokens":
-      return budgets(model, support, (tokens) => ({
-        settings: { enableThinking: true, thinkingBudget: tokens },
-      }))
+      return budgets(
+        model,
+        support,
+        (tokens) => ({ settings: { enableThinking: true, thinkingBudget: tokens } }),
+        ALIBABA_THINKING_BUDGET_MAX,
+      )
   }
 }
 
@@ -310,9 +320,12 @@ const alibabaMessages: Protocol = (model, support) => {
     case "toggle":
       return toggle({ settings: { thinking: { type: "disabled" } } }, { settings: { thinking: { type: "enabled" } } })
     case "budget_tokens":
-      return budgets(model, support, (tokens) => ({
-        settings: { thinking: { type: "enabled", budgetTokens: tokens } },
-      }))
+      return budgets(
+        model,
+        support,
+        (tokens) => ({ settings: { thinking: { type: "enabled", budgetTokens: tokens } } }),
+        ALIBABA_THINKING_BUDGET_MAX,
+      )
   }
 }
 
@@ -378,7 +391,7 @@ const bedrockConverse: Protocol = (model, support) => {
             output_config: { effort },
           })
         if (id.includes("openai.gpt-oss")) return fields({ reasoning_effort: effort })
-        if (id.includes("openai.")) return fields({ reasoning: { effort } })
+        if (id.includes("openai.") || id.includes("xai.")) return fields({ reasoning: { effort } })
         return fields({ reasoningConfig: { type: "enabled", maxReasoningEffort: effort } })
       })
     case "toggle":
@@ -390,8 +403,9 @@ const bedrockConverse: Protocol = (model, support) => {
         model,
         support,
         (tokens) =>
+          // Claude's budget is a typed setting so the protocol can fit it under the output limit.
           claude
-            ? fields({ thinking: { type: "enabled", budget_tokens: tokens } })
+            ? { settings: { thinking: { type: "enabled", budgetTokens: tokens } } }
             : fields({ reasoningConfig: { type: "enabled", budgetTokens: tokens } }),
         claude ? ANTHROPIC_OUTPUT_TOKEN_MAX : model.limit.output,
       )
@@ -405,7 +419,12 @@ const alibabaAISDK: Protocol = (model, support) => {
     case "toggle":
       return toggle({ settings: { enableThinking: false } }, { settings: { enableThinking: true } })
     case "budget_tokens":
-      return budgets(model, support, (tokens) => ({ settings: { enableThinking: true, thinkingBudget: tokens } }))
+      return budgets(
+        model,
+        support,
+        (tokens) => ({ settings: { enableThinking: true, thinkingBudget: tokens } }),
+        ALIBABA_THINKING_BUDGET_MAX,
+      )
   }
 }
 
@@ -543,7 +562,7 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/mistral": openaiChat,
   "@opencode/ai/providers/moonshot/chat": moonshotChat,
   "@opencode/ai/providers/togetherai": openaiChat,
-  "@opencode/ai/providers/xai": openaiChat,
+  "@opencode/ai/providers/xai": xaiResponses,
   "@opencode/ai/providers/zai/chat": zaiChat,
   "@opencode/ai/providers/zai-coding-plan/chat": zaiChat,
 

@@ -225,6 +225,48 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("omits maxTokens only for Nova 2 at high reasoning effort", () =>
+    Effect.gen(function* () {
+      const inferenceConfig = (modelID: string, maxReasoningEffort: string) =>
+        compileRequest(
+          LLMRequest.update(baseRequest, {
+            model: AmazonBedrock.model(modelID, {
+              baseURL: "https://bedrock-runtime.test",
+              apiKey: "test-bearer",
+              body: { additionalModelRequestFields: { reasoningConfig: { type: "enabled", maxReasoningEffort } } },
+            }),
+          }),
+        ).pipe(Effect.map((prepared) => prepared.body.inferenceConfig))
+
+      expect(yield* inferenceConfig("us.amazon.nova-2-lite-v1:0", "high")).toEqual({ temperature: 0 })
+      expect(yield* inferenceConfig("us.amazon.nova-2-lite-v1:0", "low")).toEqual({ maxTokens: 64, temperature: 0 })
+      expect(yield* inferenceConfig("us.xai.grok-4.6", "high")).toEqual({ maxTokens: 64, temperature: 0 })
+    }),
+  )
+
+  it.effect("fits a Claude thinking budget below maxTokens", () =>
+    Effect.gen(function* () {
+      const fields = (maxTokens: number, budgetTokens: number, topK?: number) =>
+        compileRequest(
+          LLMRequest.update(baseRequest, {
+            model: AmazonBedrock.model("us.anthropic.claude-haiku-4-5-20251001-v1:0", {
+              baseURL: "https://bedrock-runtime.test",
+              apiKey: "test-bearer",
+              thinking: { type: "enabled", budgetTokens },
+            }),
+            generation: GenerationOptions.make({ maxTokens, topK }),
+          }),
+        ).pipe(Effect.map((prepared) => prepared.body.additionalModelRequestFields))
+
+      expect(yield* fields(64_000, 31_999)).toEqual({ thinking: { type: "enabled", budget_tokens: 31_999 } })
+      expect(yield* fields(20_000, 31_999, 40)).toEqual({
+        top_k: 40,
+        thinking: { type: "enabled", budget_tokens: 10_000 },
+      })
+      expect(yield* fields(1_500, 31_999)).toEqual({ thinking: { type: "enabled", budget_tokens: 1_024 } })
+    }),
+  )
+
   it.effect("omits additionalModelRequestFields when topK is unset", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(baseRequest)
@@ -1259,11 +1301,11 @@ describe("Bedrock Converse route", () => {
           ),
         ),
       )
-      expect(response.events.filter((event) => event.type === "reasoning-delta" && event.text === "").at(-1)).toEqual({
-        type: "reasoning-delta",
+      expect(response.events.filter((event) => event.type === "reasoning-delta")).toEqual([])
+      expect(response.events.find((event) => event.type === "reasoning-start")).toEqual({
+        type: "reasoning-start",
         id: "reasoning-0",
-        text: "",
-        providerMetadata: { bedrock: { redactedData } },
+        providerMetadata: undefined,
       })
       expect(response.events.find((event) => event.type === "reasoning-end")).toEqual({
         type: "reasoning-end",
@@ -1341,6 +1383,13 @@ describe("Bedrock Converse route", () => {
         ),
       )
 
+      expect(response.events.filter((event) => event.type === "reasoning-delta")).toEqual([])
+      expect(response.events.find((event) => event.type === "reasoning-end")).toEqual({
+        type: "reasoning-end",
+        id: "reasoning-0",
+        providerMetadata: { bedrock: { redactedData: "AQID" } },
+        text: undefined,
+      })
       expect(response.message.content).toEqual([
         { type: "reasoning", text: "", providerMetadata: { bedrock: { redactedData: "AQID" } } },
       ])

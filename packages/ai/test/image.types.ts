@@ -7,10 +7,9 @@ import {
   type ImageModelOptions,
   type ImageOptions,
   type ImageRequestFor,
-  type ImageRoute,
 } from "../src/index.js"
 import type { Service } from "../src/image-client.js"
-import { Anthropic, Google, OpenAI, XAI, ZAI } from "../src/providers.js"
+import { Anthropic, BlackForestLabs, Google, OpenAI, Stability, XAI, ZAI } from "../src/providers.js"
 
 type Requirements<T> = T extends Effect.Effect<infer _A, infer _E, infer R> ? R : never
 type Equal<A, B> = [A, B] extends [B, A] ? true : false
@@ -21,8 +20,7 @@ type GoogleLikeOptions = {
   readonly thinkingLevel?: "LOW" | "HIGH"
 } & Record<string, unknown>
 
-declare const route: ImageRoute<GoogleLikeOptions>
-const google = ImageModel.make<GoogleLikeOptions>({ id: "gemini-image", provider: "google", route })
+declare const google: ImageModel<GoogleLikeOptions>
 // @ts-expect-error Extracted model options retain known provider fields.
 const invalidGoogleOptions: ImageModelOptions<typeof google> = { imageSize: "8K" }
 void invalidGoogleOptions
@@ -95,6 +93,14 @@ Image.generate({ model: openai, prompt: "A lighthouse", providerOptions: { nativ
 Image.generate({ model: openai, prompt: "A lighthouse", providerOptions: { quality: 1 } })
 // @ts-expect-error Known OpenAI numeric options retain their value kind.
 Image.generate({ model: openai, prompt: "A lighthouse", providerOptions: { outputCompression: "80" } })
+// @ts-expect-error Partial image counts are numeric.
+Image.stream({ model: openai, prompt: "A lighthouse", providerOptions: { partialImages: "1" } })
+const bfl = BlackForestLabs.configure({ apiKey: "test" }).image("flux-2-pro")
+// @ts-expect-error Known BFL numeric options retain their value kind.
+Image.start({ model: bfl, prompt: "A lighthouse", providerOptions: { safety_tolerance: "2" } })
+const stability = Stability.configure({ apiKey: "test" })
+// @ts-expect-error Only the creative upscaler is queued, so the selector takes no model id.
+stability.upscale("fast")
 OpenAI.imageGeneration({ action: "future-action", quality: "future-quality", size: "2048x2048" })
 // @ts-expect-error Hosted image generation numeric options retain their value kind.
 OpenAI.imageGeneration({ partialImages: "2" })
@@ -144,6 +150,8 @@ Image.generate({ model: zai, prompt: "A lighthouse", providerOptions: { quality:
 Image.generate({ model: zai, prompt: "A lighthouse", providerOptions: { userID: 1 } })
 
 declare const generic: ImageModel<ImageOptions>
+const widenImage = <Options extends ImageOptions>(model: ImageModel<Options>): ImageModel => model
+void widenImage
 Image.generate({ model: generic, prompt: "A lighthouse", providerOptions: { arbitrary: true } })
 const explicitAsset: Media.Asset = Media.url("https://example.com/image.png")
 void explicitAsset
