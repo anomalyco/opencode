@@ -5,7 +5,7 @@ import { DialogChatGPTUsageLimit } from "./chatgpt-usage-limit"
 
 function UsageLimitStory() {
   const dialog = useDialog()
-  const open = () => dialog.show(() => <DialogChatGPTUsageLimit onGo={() => {}} />)
+  const open = () => dialog.show(() => <DialogChatGPTUsageLimit />)
   onMount(open)
 
   return (

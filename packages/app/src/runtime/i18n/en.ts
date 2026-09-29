@@ -221,7 +221,7 @@ export const dict = {
   "provider.connect.chatgptUsageLimit.title": "ChatGPT usage limit reached",
   "provider.connect.chatgptUsageLimit.description": "Review your usage settings in ChatGPT.",
   "provider.connect.chatgptUsageLimit.manage": "Manage usage",
-  "provider.connect.chatgptUsageLimit.go": "Try OpenCode Go instead",
+  "provider.connect.chatgptUsageLimit.close": "Close",
   "provider.connect.console.refreshFailed":
     "Your account is connected, but we couldn't load your models. Try again to refresh them.",
   "provider.connect.console.connected": "OpenCode connected",

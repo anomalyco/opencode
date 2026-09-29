@@ -77,17 +77,7 @@ export function useUsageExceededDialogs() {
       void import("@/providers/connect/chatgpt-usage-limit").then((usage) => {
         if (dialog.active) return
         setChatGPTUsageLimit("lastSeenAt", Date.now())
-        dialog.show(() => (
-          <usage.DialogChatGPTUsageLimit
-            onGo={() => {
-              void import("@/providers/connect/dialog").then((module) => {
-                const controller = module.useProviderConnectController()
-                controller.select("opencode-go")
-                void dialog.show(() => <module.DialogConnectProvider controller={controller} />)
-              })
-            }}
-          />
-        ))
+        dialog.show(() => <usage.DialogChatGPTUsageLimit />)
       })
     }),
   )

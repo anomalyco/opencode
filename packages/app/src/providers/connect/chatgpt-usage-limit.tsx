@@ -5,7 +5,7 @@ import { ProviderIcon } from "@opencode/ui/provider-icon"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 
-export function DialogChatGPTUsageLimit(props: { onGo: () => void }) {
+export function DialogChatGPTUsageLimit() {
   const dialog = useDialog()
   const language = useLanguage()
   const platform = usePlatform()
@@ -38,12 +38,9 @@ export function DialogChatGPTUsageLimit(props: { onGo: () => void }) {
           variant="ghost"
           size="large"
           class="mt-2 w-full"
-          onClick={() => {
-            dialog.close()
-            props.onGo()
-          }}
+          onClick={() => dialog.close()}
         >
-          {language.t("provider.connect.chatgptUsageLimit.go")}
+          {language.t("provider.connect.chatgptUsageLimit.close")}
         </Button>
       </div>
     </Dialog>
