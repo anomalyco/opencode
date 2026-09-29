@@ -1,0 +1,100 @@
+---
+title: Widgets
+description: Add your own panels to the OpenCode app with plain HTML.
+---
+
+Widgets are user-authored panels that appear inside the OpenCode app. A widget is
+just a folder with an `index.html`; OpenCode discovers it on disk and renders it
+in a sandboxed frame. No rebuild, no plugin bundle, and no server restart — drop
+the folder in and it shows up.
+
+---
+
+## Place files
+
+Create one folder per widget with an `index.html` inside it. OpenCode searches
+these locations:
+
+- Project config: `.opencode/widgets/<name>/index.html`
+- Global config: `~/.config/opencode/widgets/<name>/index.html`
+
+The folder name becomes the widget id. A widget in the global config directory
+takes precedence over a project widget with the same id.
+
+### Add a manifest
+
+An optional `widget.json` gives the widget a title and description. Without it,
+the title falls back to the folder name.
+
+```json
+{
+  "title": "Session Stats",
+  "description": "Shows a summary of the current session"
+}
+```
+
+---
+
+## Write a widget
+
+A widget is plain HTML. It can contain any CSS and JavaScript you like, so you
+can build it with the framework of your choice or no framework at all.
+
+```html
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        padding: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Hello from a widget</h1>
+    <script>
+      console.log("running inside OpenCode")
+    </script>
+  </body>
+</html>
+```
+
+Assets referenced by the widget are served relative to its folder:
+
+```html
+<link rel="stylesheet" href="./styles.css" />
+<script src="./app.js"></script>
+```
+
+Unknown paths fall back to `index.html`, so a single-page widget keeps working
+when it is reloaded on a nested route.
+
+---
+
+## Open a widget
+
+Widgets live in the session side panel.
+
+- Click the **Widgets** button in the composer, next to the context button. The
+  badge shows how many widgets are configured.
+- Pick a widget from the list to render it.
+- The same panel is available as a **Widgets** tab in the side panel.
+
+You can also find the list under **Settings → Extensions → Widgets** and in the
+session summary menu, next to MCP, Plugins, and Skills.
+
+---
+
+## Reload
+
+OpenCode watches the widgets directories. Add, edit, or remove a widget and the
+list refreshes on its own — there is nothing to restart.
+
+---
+
+## Safety
+
+Widgets run in a sandboxed frame with scripts enabled. Treat a widget from an
+untrusted source like any other downloaded file: read it before you use it.
