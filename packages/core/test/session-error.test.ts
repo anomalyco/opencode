@@ -136,6 +136,29 @@ describe("toSessionError", () => {
     })
   })
 
+  test("maps token-sharing failures while preserving HTTP and stream bodies", () => {
+    const cases = [
+      ["subscription_sharing_v2_user_not_eligible", "token sharing isn't available for this account"],
+      ["subscription_sharing_usage_limit_exceeded", "ChatGPT usage limit reached"],
+      ["subscription_sharing_usage_unavailable", "Try again later"],
+      ["subscription_sharing_unsupported_capability", "Remove the unsupported feature"],
+      ["subscription_sharing_v2_client_not_enabled", "Contact the app maintainer"],
+      ["subscription_sharing_v2_route_not_supported", "Check the configured endpoint"],
+      ["subscription_sharing_v2_invalid_user", "Reconnect to ChatGPT"],
+      ["subscription_sharing_v2_user_unavailable", "Try again later"],
+    ] as const
+    for (const [code, guidance] of cases) {
+      for (const body of [
+        JSON.stringify({ error: { code, message: "Request failed" } }),
+        JSON.stringify({ type: "response.failed", response: { error: { code, message: "Request failed" } } }),
+      ]) {
+        const error = toSessionError(llm(new UnknownProviderError({ message: "Request failed", body })))
+        expect(error.message).toContain(guidance)
+        expect(error.response).toEqual({ body })
+      }
+    }
+  })
+
   test("preserves unresolved provider endpoint errors", () => {
     const error = new ModelResolver.UnresolvedProviderVariablesError({
       providerID: Provider.ID.make("cloudflare-workers-ai"),
