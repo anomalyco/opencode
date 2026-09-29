@@ -2626,6 +2626,198 @@ it.instance("command on the caller's model rejects an unknown variant", () =>
   }),
 )
 
+// Two accepted prompts with the second one undone, so the session holds recoverable messages.
+const undoSecondPrompt = Effect.fn("test.undoSecondPrompt")(function* () {
+  const prompt = yield* SessionPrompt.Service
+  const sessions = yield* Session.Service
+  const revert = yield* SessionRevert.Service
+  const chat = yield* sessions.create({ title: "Pinned" })
+  const send = (text: string) =>
+    prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      model: ref,
+      variant: "high",
+      noReply: true,
+      parts: [{ type: "text", text }],
+    })
+  const first = yield* send("first")
+  const second = yield* send("second")
+  yield* revert.revert({ sessionID: chat.id, messageID: second.info.id })
+  expect((yield* sessions.get(chat.id)).revert?.messageID).toBe(second.info.id)
+  return { chat, first, second }
+})
+
+const texts = (messages: SessionV1.WithParts[]) =>
+  messages.map((msg) => msg.parts.flatMap((part) => (part.type === "text" ? [part.text] : [])).join(""))
+
+noLLMServer.instance(
+  "rejected variant keeps undone messages and the revert marker",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const revert = yield* SessionRevert.Service
+      const { chat, first, second } = yield* undoSecondPrompt()
+
+      const exit = yield* prompt
+        .prompt({
+          sessionID: chat.id,
+          agent: "build",
+          model: ref,
+          variant: "hihg",
+          noReply: true,
+          parts: [{ type: "text", text: "replacement" }],
+        })
+        .pipe(Effect.exit)
+
+      expectUnknownVariant(exit, "hihg")
+      const messages = yield* sessions.messages({ sessionID: chat.id })
+      expect(messages.map((msg) => msg.info.id)).toEqual([first.info.id, second.info.id])
+      expect(texts(messages)).toEqual(["first", "second"])
+      expect((yield* sessions.get(chat.id)).revert?.messageID).toBe(second.info.id)
+
+      // The undo is still recoverable.
+      const restored = yield* revert.unrevert({ sessionID: chat.id })
+      expect(restored.revert).toBeUndefined()
+      expect(texts(yield* sessions.messages({ sessionID: chat.id }))).toEqual(["first", "second"])
+    }),
+  { config: variantCfg("http://localhost:1/v1") },
+)
+
+noLLMServer.instance(
+  "accepted variant replaces undone messages",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const { chat, first } = yield* undoSecondPrompt()
+
+      const accepted = yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        model: ref,
+        variant: "xhigh",
+        noReply: true,
+        parts: [{ type: "text", text: "replacement" }],
+      })
+
+      const messages = yield* sessions.messages({ sessionID: chat.id })
+      expect(messages.map((msg) => msg.info.id)).toEqual([first.info.id, accepted.info.id])
+      expect(texts(messages)).toEqual(["first", "replacement"])
+      expect((yield* sessions.get(chat.id)).revert).toBeUndefined()
+      expect((yield* sessions.get(chat.id)).model?.variant).toBe("xhigh")
+    }),
+  { config: variantCfg("http://localhost:1/v1") },
+)
+
+const plain = { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("plain-model") }
+type ModelRef = typeof plain
+
+// A fork keeps the messages but not the session-level model, so its model comes from the message history.
+// The two prompts use different models and the second one is undone in the fork.
+const undoInFork = Effect.fn("test.undoInFork")(function* (firstModel: ModelRef, secondModel: ModelRef) {
+  const prompt = yield* SessionPrompt.Service
+  const sessions = yield* Session.Service
+  const revert = yield* SessionRevert.Service
+  const chat = yield* sessions.create({ title: "Pinned" })
+  const send = (text: string, model: ModelRef) =>
+    prompt.prompt({ sessionID: chat.id, agent: "build", model, noReply: true, parts: [{ type: "text", text }] })
+  yield* send("first", firstModel)
+  yield* send("second", secondModel)
+  const fork = yield* sessions.fork({ sessionID: chat.id })
+  expect(fork.model).toBeUndefined()
+  const [first, second] = yield* sessions.messages({ sessionID: fork.id })
+  if (!first || !second) throw new Error("expected forked messages")
+  expect(texts([first, second])).toEqual(["first", "second"])
+  yield* revert.revert({ sessionID: fork.id, messageID: second.info.id })
+  expect((yield* sessions.get(fork.id)).revert?.messageID).toBe(second.info.id)
+  return { fork, first, second }
+})
+
+noLLMServer.instance(
+  "rejected variant keeps undone messages in a session without its own model",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const revert = yield* SessionRevert.Service
+      // Only the undone message is on a model that declares "high".
+      const { fork, first, second } = yield* undoInFork(plain, ref)
+
+      const exit = yield* prompt
+        .prompt({
+          sessionID: fork.id,
+          agent: "build",
+          variant: "high",
+          noReply: true,
+          parts: [{ type: "text", text: "replacement" }],
+        })
+        .pipe(Effect.exit)
+
+      expect(expectUnknownVariant(exit, "high")).toContain("test/plain-model")
+      const messages = yield* sessions.messages({ sessionID: fork.id })
+      expect(messages.map((msg) => msg.info.id)).toEqual([first.info.id, second.info.id])
+      expect((yield* sessions.get(fork.id)).revert?.messageID).toBe(second.info.id)
+
+      const restored = yield* revert.unrevert({ sessionID: fork.id })
+      expect(restored.revert).toBeUndefined()
+      expect(texts(yield* sessions.messages({ sessionID: fork.id }))).toEqual(["first", "second"])
+    }),
+  { config: variantCfg("http://localhost:1/v1") },
+)
+
+noLLMServer.instance(
+  "prompt without its own model runs on the model left after undone messages",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      // Only the kept message is on a model that declares "high", so the variant is valid.
+      const { fork, first } = yield* undoInFork(ref, plain)
+
+      const accepted = yield* prompt.prompt({
+        sessionID: fork.id,
+        agent: "build",
+        variant: "high",
+        noReply: true,
+        parts: [{ type: "text", text: "replacement" }],
+      })
+
+      if (accepted.info.role !== "user") throw new Error("expected user message")
+      expect(accepted.info.model).toEqual({ ...ref, variant: "high" })
+      const messages = yield* sessions.messages({ sessionID: fork.id })
+      expect(messages.map((msg) => msg.info.id)).toEqual([first.info.id, accepted.info.id])
+      expect((yield* sessions.get(fork.id)).revert).toBeUndefined()
+    }),
+  { config: variantCfg("http://localhost:1/v1") },
+)
+
+noLLMServer.instance(
+  "prompt without a variant replaces undone messages in a session without its own model",
+  () =>
+    Effect.gen(function* () {
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const { fork, first } = yield* undoInFork(plain, ref)
+
+      const accepted = yield* prompt.prompt({
+        sessionID: fork.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "replacement" }],
+      })
+
+      if (accepted.info.role !== "user") throw new Error("expected user message")
+      expect(accepted.info.model).toEqual(plain)
+      const messages = yield* sessions.messages({ sessionID: fork.id })
+      expect(messages.map((msg) => msg.info.id)).toEqual([first.info.id, accepted.info.id])
+      expect(texts(messages)).toEqual(["first", "replacement"])
+      expect((yield* sessions.get(fork.id)).revert).toBeUndefined()
+    }),
+  { config: variantCfg("http://localhost:1/v1") },
+)
+
 backgroundNoLLMServer.instance(
   "background task result reaches a parent that switched away from its agent's pinned model",
   () =>

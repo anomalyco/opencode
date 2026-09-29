@@ -17,6 +17,12 @@ export const RevertInput = Schema.Struct({
 })
 export type RevertInput = Schema.Schema.Type<typeof RevertInput>
 
+// Index of the first message that cleanup drops for a pending revert; the messages before it are kept.
+export function cutoff(msgs: SessionV1.WithParts[], revert: { messageID: string; partID?: string }) {
+  const index = msgs.findIndex((msg) => msg.info.id === revert.messageID)
+  return index < 0 ? msgs.length : index + (revert.partID ? 1 : 0)
+}
+
 export interface Interface {
   readonly revert: (input: RevertInput) => Effect.Effect<Session.Info, Session.BusyError>
   readonly unrevert: (input: { sessionID: SessionID }) => Effect.Effect<Session.Info, Session.BusyError>
@@ -103,9 +109,8 @@ const layer = Layer.effect(
       const sessionID = session.id
       const msgs = yield* sessions.messages({ sessionID }).pipe(Effect.orDie)
       const messageID = session.revert.messageID
-      const index = msgs.findIndex((msg) => msg.info.id === messageID)
-      const target = index < 0 ? undefined : msgs[index]
-      const remove = index < 0 ? [] : msgs.slice(index + (session.revert.partID ? 1 : 0))
+      const target = msgs.find((msg) => msg.info.id === messageID)
+      const remove = msgs.slice(cutoff(msgs, session.revert))
       for (const msg of remove) {
         yield* sessions.removeMessage({ sessionID, messageID: msg.info.id })
       }

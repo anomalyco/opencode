@@ -632,7 +632,7 @@ const layer = Layer.effect(
 
     const currentModel = Effect.fnUntraced(function* (sessionID: SessionID) {
       const current = yield* db
-        .select({ model: SessionTable.model })
+        .select({ model: SessionTable.model, revert: SessionTable.revert })
         .from(SessionTable)
         .where(eq(SessionTable.id, sessionID))
         .get()
@@ -644,14 +644,27 @@ const layer = Layer.effect(
           ...(current.model.variant && current.model.variant !== "default" ? { variant: current.model.variant } : {}),
         }
       }
-      const match = yield* sessions
-        .findMessage(sessionID, (m) => m.info.role === "user" && !!m.info.model)
-        .pipe(Effect.orDie)
+      // Undone messages are dropped by the next prompt, so they must not decide the model it runs on.
+      const pending = current?.revert
+      const match = pending
+        ? yield* sessions.messages({ sessionID }).pipe(
+            Effect.orDie,
+            Effect.map((msgs) =>
+              Option.fromNullishOr(
+                msgs
+                  .slice(0, SessionRevert.cutoff(msgs, pending))
+                  .findLast((m) => m.info.role === "user" && !!m.info.model),
+              ),
+            ),
+          )
+        : yield* sessions.findMessage(sessionID, (m) => m.info.role === "user" && !!m.info.model).pipe(Effect.orDie)
       if (Option.isSome(match) && match.value.info.role === "user") return match.value.info.model
       return yield* provider.defaultModel().pipe(Effect.orDie)
     })
 
-    const createUserMessage = Effect.fn("SessionPrompt.createUserMessage")(function* (input: PromptInput) {
+    // Resolves the agent, model and variant a prompt is recorded with. It does not write to the session, so a
+    // prompt can be checked before anything destructive happens.
+    const resolveSelection = Effect.fn("SessionPrompt.resolveSelection")(function* (input: PromptInput) {
       const agentName = input.agent
       const ag = agentName ? yield* agents.get(agentName) : yield* agents.defaultInfo()
       if (!ag) {
@@ -688,6 +701,14 @@ const layer = Layer.effect(
       }
       const variant =
         input.variant ?? (ag.variant && Object.hasOwn(full?.variants ?? {}, ag.variant) ? ag.variant : undefined)
+      return { ag, model, variant }
+    })
+
+    const createUserMessage = Effect.fn("SessionPrompt.createUserMessage")(function* (
+      input: PromptInput,
+      selection: Effect.Success<ReturnType<typeof resolveSelection>>,
+    ) {
+      const { ag, model, variant } = selection
 
       const info: SessionV1.User = {
         id: input.messageID ?? MessageID.ascending(),
@@ -1089,8 +1110,11 @@ const layer = Layer.effect(
       "SessionPrompt.prompt",
     )(function* (input: PromptInput) {
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
+      // Cleanup permanently drops the undone messages, so a prompt that is rejected must fail before it. The
+      // selection is resolved once and recorded as is, so what was checked is what the message is created with.
+      const selection = yield* resolveSelection(input)
       yield* revert.cleanup(session)
-      const message = yield* createUserMessage(input)
+      const message = yield* createUserMessage(input, selection)
       yield* sessions.touch(input.sessionID)
 
       const permissions: PermissionV1.Rule[] = []
