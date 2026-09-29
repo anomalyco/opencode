@@ -805,18 +805,22 @@ const skills = await ctx.skill.list()
 ```
 
 Register a transform to inspect, add, update, or remove skills. `get(id)` returns the current editor entry, or `undefined`
-when the skill is absent.
+when the skill is absent. Use the re-exported schema constructors for branded values.
 
 ```ts
+import { Skill } from "@opencode/plugin"
+
 await ctx.skill.transform((editor) => {
   const skills = editor.list()
-  editor.add({
-    id: "review",
-    name: "Review",
-    description: "Review the current changes",
-    location: "/workspace/.opencode/skills/review.md",
-    content: "Review the current changes for correctness and missing tests.",
-  })
+  editor.add(
+    Skill.Info.make({
+      id: Skill.ID.make("review"),
+      name: Skill.Name.make("Review"),
+      description: "Review the current changes",
+      path: Skill.Info.fields.path.make("/workspace/.opencode/skills/review.md"),
+      content: "Review the current changes for correctness and missing tests.",
+    }),
+  )
   const review = editor.get("review")
   editor.update("review", (skill) => {
     skill.autoinvoke = true
