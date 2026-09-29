@@ -6,11 +6,18 @@ import { Deferred, Effect, Layer, Context } from "effect"
 import os from "os"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { Config } from "@/config/config"
+import { Hitl } from "@/permission/hitl"
 
 export const Event = PermissionV1.Event
 
+// Human-in-the-loop context carries the dimensions that only the call site
+// knows (tool name, agent, provider, workspace); operation, pattern, and
+// command come from the request itself.
+export type AskInput = PermissionV1.AskInput & { readonly hitl?: Hitl.Context }
+
 export interface Interface {
-  readonly ask: (input: PermissionV1.AskInput) => Effect.Effect<void, PermissionV1.Error>
+  readonly ask: (input: AskInput) => Effect.Effect<void, PermissionV1.Error>
   readonly reply: (input: PermissionV1.ReplyInput) => Effect.Effect<void, PermissionV1.NotFoundError>
   readonly list: () => Effect.Effect<ReadonlyArray<PermissionV1.Request>>
 }
@@ -43,6 +50,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const events = yield* EventV2Bridge.Service
+    const config = yield* Config.Service
     const state = yield* InstanceState.make<State>(
       Effect.fn("Permission.state")(function* (ctx) {
         void ctx
@@ -64,9 +72,13 @@ const layer = Layer.effect(
       }),
     )
 
-    const ask = Effect.fn("Permission.ask")(function* (input: PermissionV1.AskInput) {
+    const ask = Effect.fn("Permission.ask")(function* (input: AskInput) {
       const { approved, pending } = yield* InstanceState.get(state)
-      const { ruleset, ...request } = input
+      const { ruleset, hitl, ...request } = input
+      const cfg = yield* config.get()
+      // InstanceState.get already requires the instance context, so the
+      // session worktree is always available for the confirmation gate.
+      const instance = yield* InstanceState.context
       let needsAsk = false
 
       for (const pattern of request.patterns) {
@@ -77,7 +89,22 @@ const layer = Layer.effect(
             ruleset: ruleset.filter((rule) => Wildcard.match(request.permission, rule.permission)),
           })
         }
-        if (rule.action === "allow") continue
+        if (rule.action === "allow") {
+          // A session "always" approval already satisfied the human confirmation gate.
+          if (evaluate(request.permission, pattern, approved).action === "allow") continue
+          const command = request.metadata.command
+          const decision = Hitl.evaluate(cfg.human_in_the_loop, {
+            operation: request.permission,
+            pattern,
+            command: typeof command === "string" ? command : undefined,
+            tool: hitl?.tool,
+            agent: hitl?.agent,
+            provider: hitl?.provider,
+            workspace: hitl?.workspace ?? instance.worktree,
+          })
+          if (decision === "ask") needsAsk = true
+          continue
+        }
         needsAsk = true
       }
 
@@ -218,6 +245,6 @@ export function visibleTools<T>(tools: Record<string, T>, ruleset: PermissionV1.
   return Object.fromEntries(Object.entries(tools).filter(([name]) => !hidden.has(name)))
 }
 
-export const node = LayerNode.make({ service: Service, layer: layer, deps: [EventV2Bridge.node] })
+export const node = LayerNode.make({ service: Service, layer: layer, deps: [EventV2Bridge.node, Config.node] })
 
 export * as Permission from "."

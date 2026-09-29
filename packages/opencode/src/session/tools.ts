@@ -56,7 +56,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const truncate = yield* Truncate.Service
   const flags = yield* RuntimeFlags.Service
 
-  const context = (args: Record<string, unknown>, options: ToolExecutionOptions): Tool.Context => ({
+  const context = (args: Record<string, unknown>, options: ToolExecutionOptions, name: string): Tool.Context => ({
     sessionID: input.session.id,
     abort: options.abortSignal!,
     messageID: input.processor.message.id,
@@ -85,6 +85,11 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
           sessionID: input.session.id,
           tool: { messageID: input.processor.message.id, callID: options.toolCallId },
           ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
+          hitl: {
+            tool: name,
+            agent: input.agent.name,
+            provider: input.model.providerID,
+          },
         })
         .pipe(Effect.orDie),
   })
@@ -102,7 +107,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       execute(args, options) {
         return run.promise(
           Effect.gen(function* () {
-            const ctx = context(args, options)
+            const ctx = context(args, options, item.id)
             yield* plugin.trigger(
               "tool.execute.before",
               { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
@@ -156,7 +161,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         return run.promise(
           Effect.gen(function* () {
             const parsed = parseListMcpResourcesArgs(args)
-            const ctx = context(toRecord(args), opts)
+            const ctx = context(toRecord(args), opts, MCP_RESOURCE_TOOLS.list)
             const clients = yield* mcp.clients()
             const resourceServers = Object.entries(clients)
               .filter((entry) => !!entry[1].getServerCapabilities()?.resources)
@@ -239,7 +244,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         return run.promise(
           Effect.gen(function* () {
             const parsed = parseListMcpResourcesArgs(args)
-            const ctx = context(toRecord(args), opts)
+            const ctx = context(toRecord(args), opts, MCP_RESOURCE_TOOLS.listTemplates)
             const clients = yield* mcp.clients()
             const resourceServers = Object.entries(clients)
               .filter((entry) => !!entry[1].getServerCapabilities()?.resources)
@@ -326,7 +331,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
         return run.promise(
           Effect.gen(function* () {
             const parsed = parseReadMcpResourceArgs(args)
-            const ctx = context(toRecord(args), opts)
+            const ctx = context(toRecord(args), opts, MCP_RESOURCE_TOOLS.read)
             const clients = yield* mcp.clients()
             const client = clients[parsed.server]
             if (!client) {
@@ -398,7 +403,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     item.execute = (args, opts) =>
       run.promise(
         Effect.gen(function* () {
-          const ctx = context(args, opts)
+          const ctx = context(args, opts, key)
           yield* plugin.trigger(
             "tool.execute.before",
             { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId },

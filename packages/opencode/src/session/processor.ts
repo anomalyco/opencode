@@ -376,6 +376,7 @@ const layer = Layer.effect(
               metadata: { tool: value.name, input },
               always: [value.name],
               ruleset: agent.permission,
+              hitl: { tool: value.name, agent: agent.name },
             })
             return
           }

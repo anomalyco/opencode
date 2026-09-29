@@ -8,6 +8,7 @@ import { ConfigAgentV1 } from "./agent"
 import { ConfigAttachmentV1 } from "./attachment"
 import { ConfigCommandV1 } from "./command"
 import { ConfigFormatterV1 } from "./formatter"
+import { ConfigHitlV1 } from "./hitl"
 import { ConfigLayoutV1 } from "./layout"
 import { ConfigLSPV1 } from "./lsp"
 import { ConfigMCPV1 } from "./mcp"
@@ -126,6 +127,10 @@ export const Info = Schema.Struct({
   }),
   layout: Schema.optional(ConfigLayoutV1.Layout).annotate({ description: "@deprecated Always uses stretch layout." }),
   permission: Schema.optional(ConfigPermissionV1.Info),
+  human_in_the_loop: Schema.optional(ConfigHitlV1.Info).annotate({
+    description:
+      "Human-in-the-loop confirmation policy with configurable levels (AUTO, SAFE, BALANCED, STRICT, CUSTOM) and custom rules matched by tool, file, directory, command, agent, provider, workspace, operation, and risk.",
+  }),
   tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
   attachment: Schema.optional(ConfigAttachmentV1.Info).annotate({
     description: "Attachment processing configuration, including image size limits and resizing behavior",
