@@ -115,6 +115,17 @@ export const model: ProviderPackage.Definition<
     http: body === undefined ? undefined : { body: { ...body } },
     providerOptions,
   }).model(modelID)
+export const chatModel: ProviderPackage.Definition<Settings, XAIProviderOptionsInput>["model"] = (
+  modelID,
+  { apiKey, baseURL, body, headers, ...providerOptions },
+) =>
+  configure({
+    apiKey,
+    baseURL,
+    headers,
+    http: body === undefined ? undefined : { body: { ...body } },
+    providerOptions,
+  }).chat(modelID)
 export const responses = provider.responses
 export const chat = provider.chat
 export const image = provider.image

@@ -88,6 +88,11 @@ const responsesEffort = (effort: string): Overlay => ({
   settings: { reasoningEffort: effort, reasoningSummary: "auto", include: ENCRYPTED_REASONING },
 })
 
+const xaiResponses: Protocol = (_, support) => {
+  if (support.type !== "effort") return []
+  return efforts(support.values ?? EFFORTS, responsesEffort)
+}
+
 const cloudflareAIGateway: Protocol = (model, support) => {
   const id = modelID(model)
   if (id.startsWith("openai/")) return openaiResponses(model, support)
@@ -557,7 +562,8 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/mistral": openaiChat,
   "@opencode/ai/providers/moonshot/chat": moonshotChat,
   "@opencode/ai/providers/togetherai": openaiChat,
-  "@opencode/ai/providers/xai": openaiChat,
+  "@opencode/ai/providers/xai": xaiResponses,
+  "@opencode/ai/providers/xai/chat": openaiChat,
   "@opencode/ai/providers/zai/chat": zaiChat,
   "@opencode/ai/providers/zai-coding-plan/chat": zaiChat,
 
