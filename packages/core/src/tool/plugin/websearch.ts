@@ -4,7 +4,6 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { ToolFailure } from "@opencode/ai"
 import { Effect, Schema, Semaphore } from "effect"
-import { HttpClientError } from "effect/unstable/http"
 import { Form } from "../../form.js"
 import { Permission } from "../../permission.js"
 import { WebSearch } from "../../websearch.js"
@@ -12,10 +11,6 @@ import { WebSearch } from "../../websearch.js"
 export const name = "websearch"
 export const NO_RESULTS = "No search results found. Please try a different query."
 const providerSelectionLock = Semaphore.makeUnsafe(1)
-const httpErrors = new Map([
-  [429, "Web search rate limited (HTTP 429)"],
-  [401, "Web search authentication failed (HTTP 401)"],
-])
 
 export const description = `Search the web using the user's selected search integration. Use this for current information beyond knowledge cutoff.
 
@@ -164,17 +159,21 @@ export const Plugin = {
               return { output, content, metadata: { provider: output.provider } }
             }).pipe(
               Effect.mapError((error) => {
-                const fallback = `Unable to search the web for ${input.query}`
-                if (!Schema.is(WebSearch.RequestError)(error)) return new ToolFailure({ message: fallback, error })
-                const status = HttpClientError.isHttpClientError(error.cause) ? error.cause.response?.status : undefined
-                return new ToolFailure({
-                  message:
-                    status === undefined
-                      ? fallback
-                      : (httpErrors.get(status) ?? `Web search request failed (HTTP ${status})`),
-                  error,
-                  metadata: { provider: error.providerID },
-                })
+                const message = `Unable to search the web for ${input.query}`
+                // A cause becomes the model-visible error, so web search failures are described here instead;
+                // other causes, such as permission errors, keep their own session error.
+                if (error instanceof WebSearch.RequestError)
+                  return new ToolFailure({
+                    message: `${message} (${error.providerID}): ${error.message}`,
+                    metadata: { provider: error.providerID },
+                  })
+                if (
+                  error instanceof WebSearch.ProviderRequiredError ||
+                  error instanceof WebSearch.ProviderNotFoundError ||
+                  error instanceof WebSearch.DisabledError
+                )
+                  return new ToolFailure({ message: `${message}: ${error.message}` })
+                return new ToolFailure({ message, error })
               }),
             ),
         }),

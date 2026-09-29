@@ -86,6 +86,34 @@ describe("WebSearch", () => {
     }),
   )
 
+  it.effect("limits each result's content for every provider", () =>
+    Effect.gen(function* () {
+      const websearch = yield* WebSearch.Service
+      const providerID = WebSearch.ID.make("large")
+      const limit = WebSearch.MAX_RESULT_CONTENT_LENGTH
+      yield* websearch.transform((editor) => {
+        editor.add({
+          id: providerID,
+          name: "Large",
+          execute: () =>
+            Effect.succeed([
+              { url: "https://large.example.com", content: "b".repeat(limit + 1), time: {} },
+              { url: "https://emoji.example.com", content: `${"a".repeat(limit - 1)}😀 after the limit`, time: {} },
+              { url: "https://exact.example.com", content: "c".repeat(limit), time: {} },
+              { url: "https://empty.example.com", time: {} },
+            ]),
+        })
+      })
+
+      expect((yield* websearch.query({ query: "large", providerID })).results).toEqual([
+        { url: "https://large.example.com", content: `${"b".repeat(limit)}\n[truncated]`, time: {} },
+        { url: "https://emoji.example.com", content: `${"a".repeat(limit - 1)}\n[truncated]`, time: {} },
+        { url: "https://exact.example.com", content: "c".repeat(limit), time: {} },
+        { url: "https://empty.example.com", time: {} },
+      ])
+    }),
+  )
+
   it.effect("requires a provider when no default is set", () =>
     Effect.gen(function* () {
       yield* register("exa")

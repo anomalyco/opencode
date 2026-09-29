@@ -18,6 +18,7 @@ import { ModelResolver } from "@opencode/core/model-resolver"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { OpencodePlugin } from "@opencode/core/plugin/provider/opencode"
+import { WebSearchResponse } from "@opencode/core/plugin/websearch/response"
 import { Provider } from "@opencode/core/provider"
 import { WebSearch } from "@opencode/core/websearch"
 import { withEnv } from "../fixture/env"
@@ -911,7 +912,13 @@ describe("OpencodePlugin", () => {
           body?: unknown
         }> = []
         const gate = Promise.withResolvers<void>()
-        const state = { advertised: true, providerID: "opencode", waitForConfig: false }
+        const state = {
+          advertised: true,
+          providerID: "opencode",
+          waitForConfig: false,
+          unavailable: false,
+          oversized: false,
+        }
         const server = Bun.serve({
           port: 0,
           fetch: async (request) => {
@@ -938,6 +945,11 @@ describe("OpencodePlugin", () => {
               })
             }
             if (path === "/api/websearch" || path === "/other/api/websearch") {
+              if (state.unavailable)
+                return Response.json(
+                  { _tag: "ServiceUnavailableError", message: "Web search request failed: firecrawl" },
+                  { status: 503 },
+                )
               return Response.json({
                 providerID: state.providerID,
                 results: [
@@ -947,6 +959,16 @@ describe("OpencodePlugin", () => {
                     content: "Open source AI coding agent.",
                     time: { published: 1_700_000_000_000 },
                   },
+                  ...(state.oversized
+                    ? [
+                        {
+                          url: "https://huge.example.com",
+                          content: "x".repeat(2 * WebSearchResponse.MAX_BYTES),
+                          time: {},
+                        },
+                        { url: "https://after.example.com", content: "after", time: {} },
+                      ]
+                    : []),
                 ],
               })
             }
@@ -1032,6 +1054,18 @@ describe("OpencodePlugin", () => {
           yield* credentials.update(initial.id, {
             value: account("replacement"),
           })
+
+          state.oversized = true
+          expect((yield* websearch.query({ query: "oversized" })).results.map((result) => result.url)).toEqual([
+            "https://github.com/anomalyco/opencode",
+          ])
+          state.oversized = false
+
+          state.unavailable = true
+          expect((yield* websearch.query({ query: "unavailable" }).pipe(Effect.flip)).message).toBe(
+            "HTTP 503: Web search request failed: firecrawl",
+          )
+          state.unavailable = false
 
           state.providerID = "unexpected"
           expect((yield* websearch.query({ query: "wrong provider" }).pipe(Effect.flip))._tag).toBe("WebSearch.Request")

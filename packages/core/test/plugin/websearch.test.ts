@@ -5,6 +5,7 @@ import { WebSearch } from "@opencode/core/websearch"
 import { WebSearchExa } from "@opencode/core/plugin/websearch/exa"
 import { WebSearchFirecrawl } from "@opencode/core/plugin/websearch/firecrawl"
 import { WebSearchParallel } from "@opencode/core/plugin/websearch/parallel"
+import { WebSearchResponse } from "@opencode/core/plugin/websearch/response"
 import { WebSearchTavily } from "@opencode/core/plugin/websearch/tavily"
 import { WebSearchTinyFish } from "@opencode/core/plugin/websearch/tinyfish"
 import { host, integrationHost, webSearchHost } from "./host"
@@ -29,6 +30,8 @@ beforeEach(() => {
 })
 
 const it = webSearchIntegrationTest
+const sseMessage = (message: object) =>
+  `event: message\ndata: ${JSON.stringify({ jsonrpc: "2.0", id: 1, ...message })}\n\n`
 
 describe("built-in web search providers", () => {
   ;[
@@ -90,6 +93,198 @@ describe("built-in web search providers", () => {
         name: "Firecrawl",
         methods: [{ type: "key" }, { type: "env", names: ["FIRECRAWL_API_KEY"] }],
       })
+    }),
+  )
+
+  describe("responses larger than the size cap", () => {
+    const huge = "x".repeat(2 * WebSearchResponse.MAX_BYTES)
+    const mcpText = (text: string) => sseMessage({ result: { content: [{ type: "text", text }] } })
+    const exaBlock = (url: string, title: string, content: string) =>
+      `Title: ${title}\nURL: ${url}\nPublished: N/A\nAuthor: N/A\nHighlights:\n${content}`
+    const parallelSearch = {
+      search_id: "search_1",
+      results: [
+        { url: "https://effect.website", title: "Effect", publish_date: null, excerpts: ["Effect documentation"] },
+        { url: "https://huge.example.com", title: "Huge", publish_date: null, excerpts: [huge] },
+        { url: "https://after.example.com", title: "After", publish_date: null, excerpts: ["after"] },
+      ],
+      session_id: "ses_parallel",
+    }
+    ;[
+      {
+        plugin: WebSearchExa.Plugin,
+        providerID: WebSearch.ID.make("exa"),
+        body: mcpText(
+          [
+            exaBlock("https://effect.website", "Effect", "Effect documentation"),
+            exaBlock("https://huge.example.com", "Huge", huge),
+            exaBlock("https://after.example.com", "After", "after"),
+          ].join("\n\n---\n\n"),
+        ),
+      },
+      {
+        plugin: WebSearchFirecrawl.Plugin,
+        providerID: WebSearch.ID.make("firecrawl"),
+        body: mcpText(
+          JSON.stringify({
+            success: true,
+            data: {
+              web: [
+                { url: "https://effect.website", title: "Effect", description: "Effect documentation" },
+                { url: "https://huge.example.com", title: "Huge", description: huge },
+                { url: "https://after.example.com", title: "After", description: "after" },
+              ],
+            },
+          }),
+        ),
+      },
+      {
+        plugin: WebSearchParallel.Plugin,
+        providerID: WebSearch.ID.make("parallel"),
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          result: {
+            content: [{ type: "text", text: JSON.stringify(parallelSearch) }],
+            structuredContent: parallelSearch,
+          },
+        }),
+      },
+      {
+        plugin: WebSearchTavily.Plugin,
+        providerID: WebSearch.ID.make("tavily"),
+        body: JSON.stringify({
+          results: [
+            { title: "Effect", url: "https://effect.website", content: "Effect documentation" },
+            { title: "Huge", url: "https://huge.example.com", content: huge },
+            { title: "After", url: "https://after.example.com", content: "after" },
+          ],
+        }),
+      },
+      {
+        plugin: WebSearchTinyFish.Plugin,
+        providerID: WebSearch.ID.make("tinyfish"),
+        body: mcpText(
+          JSON.stringify({
+            results: [
+              { title: "Effect", url: "https://effect.website", snippet: "Effect documentation" },
+              { title: "Huge", url: "https://huge.example.com", snippet: huge },
+              { title: "After", url: "https://after.example.com", snippet: "after" },
+            ],
+          }),
+        ),
+      },
+    ].forEach((provider) => {
+      it.effect(`keeps the complete results from ${provider.plugin.id}`, () =>
+        Effect.gen(function* () {
+          resetWebSearchFixture(provider.body)
+          const integrations = yield* Integration.Service
+          const websearch = yield* WebSearch.Service
+          yield* provider.plugin.effect(
+            host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
+          )
+
+          expect(yield* websearch.query({ query: "effect", providerID: provider.providerID })).toEqual(
+            new WebSearch.Response({
+              providerID: provider.providerID,
+              results: [{ url: "https://effect.website", title: "Effect", content: "Effect documentation", time: {} }],
+            }),
+          )
+        }),
+      )
+    })
+  })
+
+  it.effect("reports MCP tool errors instead of returning no results", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      yield* WebSearchFirecrawl.Plugin.effect(
+        host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
+      )
+      const search = websearch.query({ query: "effect", providerID: WebSearch.ID.make("firecrawl") }).pipe(Effect.flip)
+
+      resetWebSearchFixture(
+        sseMessage({ result: { isError: true, content: [{ type: "text", text: "Rate limit exceeded" }] } }),
+      )
+      expect((yield* search).message).toBe("Rate limit exceeded")
+      resetWebSearchFixture(sseMessage({ error: { code: -32602, message: "Invalid arguments" } }))
+      expect((yield* search).message).toBe("Invalid arguments")
+    }),
+  )
+
+  it.effect("reports the provider's explanation for HTTP failures", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      yield* WebSearchTinyFish.Plugin.effect(
+        host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
+      )
+      yield* WebSearchTavily.Plugin.effect(
+        host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
+      )
+      const quota =
+        "Free daily Search quota used (50/50). Sign up for continued access: https://agent.tinyfish.ai/sign-up"
+
+      resetWebSearchFixture(JSON.stringify({ jsonrpc: "2.0", error: { code: -31001, message: quota }, id: 1 }), 401)
+      const tinyfish = yield* websearch
+        .query({ query: "effect", providerID: WebSearch.ID.make("tinyfish") })
+        .pipe(Effect.flip)
+      expect(tinyfish.message).toBe(`HTTP 401: ${quota}`)
+
+      resetWebSearchFixture(JSON.stringify({ detail: { error: "Unauthorized: missing or invalid API key." } }), 401)
+      const tavily = yield* websearch
+        .query({ query: "effect", providerID: WebSearch.ID.make("tavily") })
+        .pipe(Effect.flip)
+      expect(tavily.message).toBe("HTTP 401: Unauthorized: missing or invalid API key.")
+    }),
+  )
+
+  it.effect("limits oversized Firecrawl results instead of failing the search", () =>
+    Effect.gen(function* () {
+      const thread = "comment ".repeat(64 * 1024)
+      resetWebSearchFixture(
+        `event: message\ndata: ${JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          result: {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify({
+                  success: true,
+                  data: {
+                    web: [
+                      { url: "https://news.ycombinator.com/item?id=1", title: "Thread", description: thread },
+                      { url: "https://effect.website", title: "Effect", description: "Effect documentation" },
+                    ],
+                  },
+                }),
+              },
+            ],
+          },
+        })}\n\n`,
+      )
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      yield* WebSearchFirecrawl.Plugin.effect(
+        host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
+      )
+
+      expect(yield* websearch.query({ query: "opencode", providerID: WebSearch.ID.make("firecrawl") })).toEqual(
+        new WebSearch.Response({
+          providerID: WebSearch.ID.make("firecrawl"),
+          results: [
+            {
+              url: "https://news.ycombinator.com/item?id=1",
+              title: "Thread",
+              content: `${thread.slice(0, WebSearch.MAX_RESULT_CONTENT_LENGTH)}\n[truncated]`,
+              time: {},
+            },
+            { url: "https://effect.website", title: "Effect", content: "Effect documentation", time: {} },
+          ],
+        }),
+      )
     }),
   )
 

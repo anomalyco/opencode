@@ -5,6 +5,7 @@ import { Effect, Option, Schema, Scope } from "effect"
 import { HttpClient } from "effect/unstable/http"
 import { App } from "../../app.js"
 import { WebSearchMcp } from "./mcp.js"
+import { WebSearchResponse } from "./response.js"
 
 export const endpoint = "https://agent.tinyfish.ai/mcp"
 
@@ -16,18 +17,13 @@ const McpOutput = Schema.Struct({
   content: Schema.Array(Schema.Struct({ type: Schema.Literal("text"), text: Schema.String })),
 })
 
-const SearchResponse = Schema.fromJsonString(
-  Schema.Struct({
-    results: Schema.Array(
-      Schema.Struct({
-        url: Schema.String,
-        title: Schema.String,
-        snippet: Schema.String,
-      }),
-    ),
-  }),
-)
-const decodeSearchResponse = Schema.decodeUnknownOption(SearchResponse)
+const decodeSearchResponse = Schema.decodeUnknownOption(Schema.Struct({ results: Schema.Array(Schema.Unknown) }))
+
+const SearchResult = Schema.Struct({
+  url: Schema.String,
+  title: Schema.String,
+  snippet: Schema.String,
+})
 
 export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
   id: "opencode.websearch.tinyfish",
@@ -52,7 +48,7 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
           Effect.gen(function* () {
             const connection = yield* ctx.integration.connection.active("tinyfish")
             const credential = connection ? yield* ctx.integration.connection.resolve(connection) : undefined
-            const result = yield* WebSearchMcp.call(
+            const response = yield* WebSearchMcp.call(
               http,
               endpoint,
               "search",
@@ -65,16 +61,18 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
                   : { "X-TinyFish-Access-Mode": "keyless" }),
               },
             )
-            const content = result?.content.find((item) => item.text)
-            const response = content ? Option.getOrUndefined(decodeSearchResponse(content.text)) : undefined
-            return (
-              response?.results.map((item) => ({
-                url: item.url,
-                title: item.title,
-                ...(item.snippet ? { content: item.snippet } : {}),
-                time: {},
-              })) ?? []
-            )
+            const content = response.result?.content.find((item) => item.text)
+            const search = content
+              ? Option.getOrUndefined(
+                  WebSearchResponse.json(content.text, response.truncated).pipe(Option.flatMap(decodeSearchResponse)),
+                )
+              : undefined
+            return WebSearchResponse.items(SearchResult, search?.results ?? [], response.truncated).map((item) => ({
+              url: item.url,
+              title: item.title,
+              ...(item.snippet ? { content: item.snippet } : {}),
+              time: {},
+            }))
           }),
       })
     })

@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Context, Effect, Layer } from "effect"
-import type { HttpClientError } from "effect/unstable/http"
+import { HttpClientError, HttpClientRequest } from "effect/unstable/http"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Permission } from "@opencode/core/permission"
@@ -44,7 +44,7 @@ class Fixture {
   formResponse: Form.TerminalState = { status: "cancelled" }
   formResponses: Form.TerminalState[] = []
   formWait = Effect.void
-  error: HttpClientError.HttpClientError | undefined
+  error: HttpClientError.HttpClientError | Error | undefined
   results: readonly WebSearch.Result[] = [
     { url: "https://example.com", title: "Search results", content: "search results", time: {} },
   ]
@@ -62,7 +62,7 @@ const setup = Effect.gen(function* () {
         execute: () =>
           Effect.gen(function* () {
             fixture.events.push("query")
-            if (fixture.error) return yield* fixture.error
+            if (fixture.error) return yield* Effect.fail(fixture.error)
             return fixture.results
           }),
       }),
@@ -418,7 +418,7 @@ describe("WebSearchTool registration", () => {
             .pipe(Effect.flip)
           expect(toSessionError(error)).toEqual({
             type: "tool.execution",
-            message: "Web search rate limited (HTTP 429)",
+            message: `Unable to search the web for ${query} (${error.metadata?.provider}): Rate limited (HTTP 429)`,
           })
           expect(error.metadata).toMatchObject({ provider: expect.stringMatching(/^(exa|parallel)$/) })
         }),
@@ -437,9 +437,9 @@ describe("WebSearchTool registration", () => {
 
       yield* Effect.forEach(
         [
-          { status: 403, message: "Web search request failed (HTTP 403)" },
-          { status: 429, message: "Web search rate limited (HTTP 429)" },
-          { status: 401, message: "Web search authentication failed (HTTP 401)" },
+          { status: 403, message: "Unable to search the web for effect (exa): Request failed (HTTP 403)" },
+          { status: 429, message: "Unable to search the web for effect (exa): Rate limited (HTTP 429)" },
+          { status: 401, message: "Unable to search the web for effect (exa): Authentication failed (HTTP 401)" },
         ],
         ({ status, message }, index) =>
           Effect.gen(function* () {
@@ -467,6 +467,60 @@ describe("WebSearchTool registration", () => {
           }),
         { discard: true },
       )
+    }),
+  )
+
+  it.effect("reports the underlying reason for provider failures", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup
+      const tools = yield* fixture.registry.snapshot()
+      yield* fixture.websearch.select(WebSearch.ID.make("exa"))
+
+      yield* Effect.forEach(
+        [
+          {
+            error: new Error("web_search_exa request timed out"),
+            message: "Unable to search the web for effect (exa): web_search_exa request timed out",
+          },
+          {
+            error: new HttpClientError.HttpClientError({
+              reason: new HttpClientError.TransportError({
+                request: HttpClientRequest.post("https://mcp.exa.ai/mcp?exaApiKey=secret"),
+                cause: new TypeError("Unable to connect. Is the computer able to access the url?"),
+              }),
+            }),
+            message:
+              "Unable to search the web for effect (exa): Request failed: Unable to connect. Is the computer able to access the url?",
+          },
+        ],
+        (item, index) =>
+          Effect.gen(function* () {
+            fixture.error = item.error
+            const error = yield* tools
+              .execute({
+                sessionID,
+                ...toolIdentity,
+                call: { type: "tool-call", id: `call-reason-${index}`, name: "websearch", input: { query: "effect" } },
+              })
+              .pipe(Effect.flip)
+            expect(toSessionError(error)).toEqual({ type: "tool.execution", message: item.message })
+            expect(error.metadata).toEqual({ provider: "exa" })
+          }),
+        { discard: true },
+      )
+
+      yield* fixture.websearch.select(false)
+      const disabled = yield* tools
+        .execute({
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-disabled", name: "websearch", input: { query: "effect" } },
+        })
+        .pipe(Effect.flip)
+      expect(toSessionError(disabled)).toEqual({
+        type: "tool.execution",
+        message: "Unable to search the web for effect: Web search is disabled",
+      })
     }),
   )
 })

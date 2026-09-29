@@ -1,10 +1,11 @@
 export * as WebSearchParallel from "./parallel.js"
 
 import { define } from "@opencode/plugin/effect/plugin"
-import { Effect, Schema, Scope } from "effect"
+import { Effect, Option, Schema, Scope } from "effect"
 import { HttpClient } from "effect/unstable/http"
 import { App } from "../../app.js"
 import { WebSearchMcp } from "./mcp.js"
+import { WebSearchResponse } from "./response.js"
 
 export const endpoint = "https://search.parallel.ai/mcp"
 
@@ -14,38 +15,19 @@ const McpInput = Schema.Struct({
   model_name: Schema.String.check(Schema.isMaxLength(100)).pipe(Schema.optional),
 })
 
-const SearchResponse = Schema.Struct({
-  search_id: Schema.String,
-  results: Schema.Array(
-    Schema.Struct({
-      url: Schema.String,
-      title: Schema.NullOr(Schema.String).pipe(Schema.optional),
-      publish_date: Schema.NullOr(Schema.String).pipe(Schema.optional),
-      excerpts: Schema.Array(Schema.String),
-    }),
-  ),
-  warnings: Schema.NullOr(
-    Schema.Array(
-      Schema.Struct({
-        type: Schema.Literals(["spec_validation_warning", "input_validation_warning", "warning"]),
-        message: Schema.String,
-        detail: Schema.NullOr(Schema.Record(Schema.String, Schema.Json)).pipe(Schema.optional),
-      }),
-    ),
-  ).pipe(Schema.optional),
-  usage: Schema.NullOr(
-    Schema.Array(
-      Schema.Struct({
-        name: Schema.String,
-        count: Schema.Int,
-      }),
-    ),
-  ).pipe(Schema.optional),
-  session_id: Schema.String,
-})
 const McpOutput = Schema.Struct({
   content: Schema.Array(Schema.Struct({ type: Schema.Literal("text"), text: Schema.String })),
-  structuredContent: SearchResponse,
+  // Parallel sends this after a text copy of the same JSON, so a truncated response can lose it.
+  structuredContent: Schema.Unknown.pipe(Schema.optional),
+})
+
+const decodeSearchResponse = Schema.decodeUnknownOption(Schema.Struct({ results: Schema.Array(Schema.Unknown) }))
+
+const SearchResult = Schema.Struct({
+  url: Schema.String,
+  title: Schema.NullOr(Schema.String).pipe(Schema.optional),
+  publish_date: Schema.NullOr(Schema.String).pipe(Schema.optional),
+  excerpts: Schema.Array(Schema.String),
 })
 
 export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
@@ -71,7 +53,7 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
           Effect.gen(function* () {
             const connection = yield* ctx.integration.connection.active("parallel")
             const credential = connection ? yield* ctx.integration.connection.resolve(connection) : undefined
-            const result = yield* WebSearchMcp.call(
+            const response = yield* WebSearchMcp.call(
               http,
               endpoint,
               "web_search",
@@ -85,17 +67,24 @@ export const Plugin = define<HttpClient.HttpClient | Scope.Scope>({
                 ...(credential?.type === "key" ? { Authorization: `Bearer ${credential.key}` } : {}),
               },
             )
-            return (
-              result?.structuredContent.results.map((item) => {
-                const published = item.publish_date ? Date.parse(item.publish_date) : undefined
-                return {
-                  url: item.url,
-                  ...(item.title ? { title: item.title } : {}),
-                  ...(item.excerpts.length ? { content: item.excerpts.join("\n\n") } : {}),
-                  time: { ...(published !== undefined && Number.isFinite(published) ? { published } : {}) },
-                }
-              }) ?? []
+            const content = response.result?.content.find((item) => item.text)
+            const search = Option.getOrUndefined(
+              decodeSearchResponse(
+                response.result?.structuredContent ??
+                  (content
+                    ? Option.getOrUndefined(WebSearchResponse.json(content.text, response.truncated))
+                    : undefined),
+              ),
             )
+            return WebSearchResponse.items(SearchResult, search?.results ?? [], response.truncated).map((item) => {
+              const published = item.publish_date ? Date.parse(item.publish_date) : undefined
+              return {
+                url: item.url,
+                ...(item.title ? { title: item.title } : {}),
+                ...(item.excerpts.length ? { content: item.excerpts.join("\n\n") } : {}),
+                time: { ...(published !== undefined && Number.isFinite(published) ? { published } : {}) },
+              }
+            })
           }),
       })
     })
