@@ -80,7 +80,7 @@ async function mount(revision: number) {
   const offset = messages.length
   const start = performance.now()
   active = normalize({ ...input, additions: large ? 120 : 12, deletions: large ? 120 : 12 })
-  const pool = getWorkerPool(large ? "none" : "word-alt")!
+  const pool = getWorkerPool(large ? "none" : "word-line")!
   let firstReady = 0
   let rendered = 0
   let finish!: (value: Measurement) => void
@@ -128,7 +128,7 @@ async function mount(revision: number) {
 
 export const highlighting = {
   mount,
-  configure(options: Partial<WorkerRenderingOptions>) { return getWorkerPool(large ? "none" : "word-alt")!.setRenderOptions(options) },
+  configure(options: Partial<WorkerRenderingOptions>) { return getWorkerPool(large ? "none" : "word-line")!.setRenderOptions(options) },
   unmount() { dispose?.(); dispose = undefined; host.scrollTop = 0 },
   contents() { return active && { before: text(active, "deletions"), after: text(active, "additions") } },
   input: { before, after: inputs.map((input) => input.after) },
