@@ -8,6 +8,7 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { ServiceConfig } from "../src/services/service-config"
+import { ServerAddress } from "../src/services/server-address"
 import { ServiceRegistration } from "../src/services/service-registration"
 import { isolatedEnv } from "./fixture/environment"
 
@@ -520,6 +521,42 @@ test("service registration replaces a stale owner with the bound address", async
   } finally {
     await fs.rm(root, { recursive: true, force: true })
   }
+})
+
+test("service registration brackets an IPv6 bound address so the URL stays parseable", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-ipv6-"))
+  const registration = path.join(root, "state", "opencode", "service-local.json")
+  try {
+    const cleanup = await Effect.runPromise(
+      ServiceRegistration.register({
+        address: { _tag: "TcpAddress", hostname: "::1", port: 22014 },
+        password: "secret",
+        id: "owner",
+        file: registration,
+        shutdown: Effect.never,
+      }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer)),
+    )
+    const url = (await Bun.file(registration).json()).url
+    expect(url).toBe("http://[::1]:22014")
+    // The unbracketed form is what broke every reader of this file, so assert on the read itself.
+    expect(() => new URL(url)).not.toThrow()
+    expect(new URL(url).hostname).toBe("[::1]")
+    await Effect.runPromise(cleanup.pipe(Effect.provide(NodeFileSystem.layer)))
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
+test("ServerAddress leaves non-IPv6 addresses to effect's formatter", () => {
+  expect(ServerAddress.formatAddress({ _tag: "TcpAddress", hostname: "127.0.0.1", port: 4096 })).toBe(
+    "http://127.0.0.1:4096",
+  )
+  expect(ServerAddress.formatAddress({ _tag: "TcpAddress", hostname: "localhost", port: 4096 })).toBe(
+    "http://localhost:4096",
+  )
+  expect(ServerAddress.formatAddress({ _tag: "UnixAddress", path: "/tmp/opencode.sock" })).toBe(
+    "unix:///tmp/opencode.sock",
+  )
 })
 
 test("a failed service stays registered and owns the selected port until stopped", async () => {
