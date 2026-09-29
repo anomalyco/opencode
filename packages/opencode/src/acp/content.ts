@@ -1,9 +1,9 @@
 import type { ContentBlock, ContentChunk, ResourceLink, Role } from "@agentclientprotocol/sdk"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
-import { SessionV1 } from "@opencode-ai/core/v1/session"
+import type { FilePartInput, TextPartInput } from "@opencode-ai/sdk/v2"
 
-export type PromptPart = SessionV1.TextPartInput | SessionV1.FilePartInput
+export type PromptPart = TextPartInput | FilePartInput
 
 export type ReplayPart =
   | {
@@ -156,11 +156,7 @@ function resourceLinkToPart(link: ResourceLink): PromptPart {
   return { type: "text", text: parsed.text }
 }
 
-function uriToFilePart(
-  uri: string,
-  mime: string,
-  filename?: string,
-): SessionV1.FilePartInput | SessionV1.TextPartInput {
+function uriToFilePart(uri: string, mime: string, filename?: string): FilePartInput | TextPartInput {
   try {
     if (uri.startsWith("file://")) {
       return {

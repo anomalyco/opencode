@@ -11,6 +11,36 @@ import { createClient } from "@hey-api/openapi-ts"
 
 const opencode = path.resolve(dir, "../../opencode")
 
+const patchPartInputIDs = async (file: string) => {
+  const marker = "export type PartIDInput = `prt${string}`"
+  const names = ["TextPartInput", "FilePartInput", "AgentPartInput", "SubtaskPartInput"]
+  let content = await Bun.file(file).text()
+
+  if (!content.includes(marker)) {
+    const anchor = "export type TextPartInput = {\n"
+    if (!content.includes(anchor)) {
+      throw new Error(`Part input type anchor not found in ${file}`)
+    }
+    content = content.replace(anchor, `${marker}\n\n${anchor}`)
+  }
+
+  for (const name of names) {
+    content = content.replace(new RegExp(`(export type ${name} = \\{\\n\\s+)id\\?: string`), "$1id?: PartIDInput")
+  }
+
+  content = content.replace(
+    /(export type SessionCommandData = \{[\s\S]*?parts\?: Array<\{\n\s+)id\?: string/,
+    "$1id?: PartIDInput",
+  )
+
+  for (const name of names) {
+    if (!new RegExp(`export type ${name} = \\{\\n\\s+id\\?: PartIDInput`).test(content)) {
+      throw new Error(`Part input ID patch did not apply to ${name} in ${file}`)
+    }
+  }
+  await Bun.write(file, content)
+}
+
 await $`bun dev generate > ${dir}/openapi.json`.cwd(opencode)
 
 const document = (await Bun.file("./openapi.json").json()) as {
@@ -83,6 +113,8 @@ if (historyTypesPatched === generatedTypes) {
   throw new Error("Session history numeric query patch did not apply")
 }
 await Bun.write("./src/v2/gen/types.gen.ts", historyTypesPatched)
+await patchPartInputIDs("./src/v2/gen/types.gen.ts")
+await patchPartInputIDs("./src/gen/types.gen.ts")
 
 const generatedSdk = await Bun.file("./src/v2/gen/sdk.gen.ts").text()
 const historySdkPatched = generatedSdk.replace(
