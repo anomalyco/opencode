@@ -8,7 +8,7 @@ import {
   HttpClientResponse,
 } from "effect/unstable/http"
 import { HttpContext, HttpRateLimitDetails, AIError, TransportError } from "../schema/index.js"
-import { classifyProviderFailure } from "../provider-error.js"
+import { classifyProviderFailure, providerErrorMessage } from "../provider-error.js"
 import { Service, type HttpMiddleware, type Interface } from "./executor-service.js"
 
 export { Service } from "./executor-service.js"
@@ -84,23 +84,13 @@ export const responseHttp = (response: HttpClientResponse.HttpClientResponse) =>
     headers: headerDetails(response.headers),
   })
 
-const decodeProviderBody = Schema.decodeUnknownOption(
-  Schema.fromJsonString(
-    Schema.Struct({
-      message: Schema.optionalKey(Schema.String),
-      error: Schema.optionalKey(Schema.Struct({ message: Schema.optionalKey(Schema.String) })),
-    }),
-  ),
-)
-
 const MAX_BODY_CHARS = 2000
 
 // Without a recognized message, show the raw body so the provider's explanation is never dropped.
 const providerMessage = (status: number, body: string | void) => {
   const fallback = `Provider request failed with HTTP ${status}`
   const text = body?.trim() ?? ""
-  const decoded = Option.getOrUndefined(decodeProviderBody(text))
-  const message = [decoded?.error?.message, decoded?.message].find((message) => message?.trim())
+  const message = providerErrorMessage(text)
   if (message) return message
   // Gateway and proxy HTML error pages are markup, not an explanation.
   if (!text || /^<(?:!doctype|html)/i.test(text)) return fallback

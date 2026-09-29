@@ -282,7 +282,24 @@ describe("RequestExecutor", () => {
       const executor = yield* RequestExecutor.Service
       const error = yield* executor.execute(request).pipe(Effect.flip)
 
-      expect(error.message).toBe('Provider request failed with HTTP 401: {"detail":"Invalid API Key"}')
+      expect(error.message).toBe(
+        'Provider request failed with HTTP 422: {"object":"error","message":{"detail":[{"msg":"Input should be less than or equal to 1.5"}]}}',
+      )
+    }).pipe(
+      Effect.provide(
+        fixedResponse('{"object":"error","message":{"detail":[{"msg":"Input should be less than or equal to 1.5"}]}}', {
+          status: 422,
+        }),
+      ),
+    ),
+  )
+
+  it.effect("shows messages from common provider error layouts", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expect(error.message).toBe("Invalid API Key")
     }).pipe(Effect.provide(fixedResponse('{"detail":"Invalid API Key"}', { status: 401 }))),
   )
 
