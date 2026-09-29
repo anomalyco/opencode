@@ -42,6 +42,7 @@ import type { SessionMessage } from "./message.js"
 
 const IMAGE_BYTES_TRIGGER = 25 * 1024 * 1024 // 25 MiB
 const IMAGE_BYTES_TARGET = 15 * 1024 * 1024 // 15 MiB
+const IMAGE_BYTES_STEP = IMAGE_BYTES_TRIGGER - IMAGE_BYTES_TARGET
 const IMAGE_REMOVED =
   "[This image was removed to reduce the request size and is no longer visible. Do not make claims about its contents from memory. If needed, retrieve it again with an available tool or ask the user to attach it again.]"
 const GENERATION_KEYS = new Set(Object.keys(GenerationOptions.fields))
@@ -185,12 +186,14 @@ export const boundImages = (messages: LLMRequest["messages"]) => {
   )
   if (imageBytes <= IMAGE_BYTES_TRIGGER) return messages
 
+  // Remove whole steps so the replaced prefix only moves when the payload crosses a step, keeping prompt caches valid across turns.
+  const quota = Math.ceil((imageBytes - IMAGE_BYTES_TRIGGER) / IMAGE_BYTES_STEP) * IMAGE_BYTES_STEP
   let removed = 0
   return messages.map((message) =>
     Message.make({
       ...message,
       content: message.content.map((part) => {
-        if (part.type === "media" && isImage(part.media.mediaType) && imageBytes - removed > IMAGE_BYTES_TARGET) {
+        if (part.type === "media" && isImage(part.media.mediaType) && removed < quota) {
           removed += size(part.media)
           return Message.text(IMAGE_REMOVED)
         }
@@ -200,7 +203,7 @@ export const boundImages = (messages: LLMRequest["messages"]) => {
           result: {
             ...part.result,
             value: part.result.value.map((item: Content) => {
-              if (item.type !== "file" || !isImage(item.mime) || imageBytes - removed <= IMAGE_BYTES_TARGET) return item
+              if (item.type !== "file" || !isImage(item.mime) || removed >= quota) return item
               removed += Buffer.byteLength(item.uri)
               return { type: "text" as const, text: IMAGE_REMOVED }
             }),
