@@ -9,6 +9,7 @@ import { appendText, readText, writeText } from "../util/persistence"
 export type PromptInfo = {
   input: string
   mode?: "normal" | "shell"
+  sessionID?: string
   parts: (
     | Omit<FilePart, "id" | "messageID" | "sessionID">
     | Omit<AgentPart, "id" | "messageID" | "sessionID">
@@ -46,6 +47,33 @@ export function isDuplicateEntry(previous: PromptInfo | undefined, next: PromptI
   return JSON.stringify(previous) === JSON.stringify(next)
 }
 
+// Resolves one history-navigation step. `index` is an offset from the end of
+// the list (0 = the live input, -1 = the most recent entry). When `sessionID`
+// is given, only entries appended in that session are recalled; the offset is
+// also reset whenever it points at an entry from another session, so switching
+// sessions restarts navigation from the live input.
+export function moveHistoryEntry(
+  history: PromptInfo[],
+  index: number,
+  direction: 1 | -1,
+  input: string,
+  sessionID?: string,
+): { index: number; entry: PromptInfo } | undefined {
+  const scoped = sessionID ? history.filter((entry) => entry.sessionID === sessionID) : history
+  if (!scoped.length) return undefined
+  if (index !== 0) {
+    const pointed = scoped.at(index)
+    const foreign = sessionID !== undefined && history.at(index)?.sessionID !== sessionID
+    if (!pointed || foreign) index = 0
+  }
+  const current = scoped.at(index)
+  if (!current) return undefined
+  if (current.input !== input && input.length) return undefined
+  const next = index + direction
+  if (next > 0 || Math.abs(next) > scoped.length) return { index, entry: scoped.at(index) as PromptInfo }
+  return { index: next, entry: next === 0 ? { input: "", parts: [] } : (scoped.at(next) as PromptInfo) }
+}
+
 export const { use: usePromptHistory, provider: PromptHistoryProvider } = createSimpleContext({
   name: "PromptHistory",
   init: () => {
@@ -66,21 +94,11 @@ export const { use: usePromptHistory, provider: PromptHistoryProvider } = create
     })
 
     return {
-      move(direction: 1 | -1, input: string) {
-        if (!store.history.length) return undefined
-        const current = store.history.at(store.index)
-        if (!current) return undefined
-        if (current.input !== input && input.length) return
-        setStore(
-          produce((draft) => {
-            const next = store.index + direction
-            if (Math.abs(next) > store.history.length) return
-            if (next > 0) return
-            draft.index = next
-          }),
-        )
-        if (store.index === 0) return { input: "", parts: [] }
-        return store.history.at(store.index)
+      move(direction: 1 | -1, input: string, sessionID?: string) {
+        const result = moveHistoryEntry(store.history, store.index, direction, input, sessionID)
+        if (!result) return undefined
+        setStore("index", result.index)
+        return result.entry
       },
       append(item: PromptInfo) {
         const entry = structuredClone(unwrap(item))
