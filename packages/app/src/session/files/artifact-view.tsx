@@ -14,6 +14,7 @@ import {
   artifactKind,
   blobUrlFromContent,
   contentBytes,
+  fenceFrontmatter,
   parseDelimited,
   resolveArtifactPath,
   type ArtifactKind,
@@ -336,13 +337,14 @@ function ArtifactMarkdown(props: { path: string; text: string; cacheKey?: string
   const dir = createMemo(() => (props.path.includes("/") || props.path.includes("\\") ? getDirectory(props.path) : ""))
   // Absolute references bypass the file's directory; relative ones resolve against it.
   const resolve = (href: string) => (/^([a-z]:)?\//i.test(href) ? href : (resolveArtifactPath(dir(), href) ?? href))
+  const text = createMemo(() => fenceFrontmatter(props.text))
   return (
     <MarkdownProvider
       readImage={(src, signal) => parent?.readImage?.(resolve(src), signal) ?? Promise.resolve(undefined)}
       openLocalFile={(href) => artifacts.open(href, dir())}
     >
       <div class="mx-auto w-full max-w-3xl px-8 py-6">
-        <Markdown text={props.text} cacheKey={props.cacheKey} class="select-text" />
+        <Markdown text={text()} cacheKey={props.cacheKey} class="select-text" />
       </div>
     </MarkdownProvider>
   )
