@@ -4,9 +4,10 @@ import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
 import { ProjectAvatar } from "@opencode/ui/project-avatar"
 import { Tooltip } from "@opencode/ui/tooltip"
+import { getFilename } from "@opencode/util/path"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useNavigate } from "@solidjs/router"
-import { createMemo, For, Show, type ParentProps } from "solid-js"
+import { createEffect, createMemo, For, onCleanup, Show, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useServer } from "@/runtime/server/current"
 import { ServerConnection } from "@/runtime/server/registry"
@@ -17,7 +18,7 @@ import { getProjectAvatarVariant, useLayout, type LocalProject } from "@/shell/s
 import { tabKey, useTabs } from "@/shell/tabs/tabs"
 import { useSettingsSurface } from "@/settings/surface"
 import { pathKey } from "@/workspaces/path-key"
-import { isProjectDirectory, isWorkspaceDirectory } from "@/workspaces/paths"
+import { containsDirectory, isProjectDirectory, isWorkspaceDirectory } from "@/workspaces/paths"
 import { sessionHref } from "@/shell/routes/session"
 import { showToast } from "@/shell/notifications/toast"
 import { sessionTitle } from "./title"
@@ -50,8 +51,29 @@ export function SessionProjectMenu(props: {
     projectTruncated: false,
     pathTruncated: false,
     pathFocused: false,
+    workspaceCopied: false,
+    workspaceCopyDismissed: false,
   })
   const projectName = createMemo(() => displayName(props.project ?? { worktree: props.directory ?? "" }))
+  const workspaceDirectory = createMemo(() => {
+    const directory = props.directory
+    if (!directory) return ""
+    if (!props.workspace) return props.project?.worktree ?? directory
+    return props.project?.sandboxes?.find((item) => containsDirectory(item, directory)) ?? directory
+  })
+  const workspaceName = createMemo(() => {
+    if (!props.workspace) return language.t("session.new.workspace.local")
+    return getFilename(workspaceDirectory())
+  })
+  createEffect(() => {
+    if (!state.workspaceCopied) return
+    const dismiss = setTimeout(() => setState("workspaceCopyDismissed", true), 2000)
+    const reset = setTimeout(() => setState("workspaceCopied", false), 2100)
+    onCleanup(() => {
+      clearTimeout(dismiss)
+      clearTimeout(reset)
+    })
+  })
   const canOpenPath = () =>
     platform.platform === "desktop" && !!platform.openPath && server.isLocal && !!props.directory
   const openPath = () => {
@@ -71,6 +93,14 @@ export function SessionProjectMenu(props: {
       project: current.worktree,
     })
   }
+  const copyWorkspaceDirectory = () => {
+    const directory = workspaceDirectory()
+    if (!directory) return
+    void (platform.writeClipboardText?.(directory) ?? navigator.clipboard.writeText(directory)).then(
+      () => setState({ workspaceCopied: true, workspaceCopyDismissed: false }),
+      () => showToast({ title: language.t("common.requestFailed") }),
+    )
+  }
 
   return (
     <Menu
@@ -79,7 +109,11 @@ export function SessionProjectMenu(props: {
       shift={-10}
       modal={false}
       open={state.open}
-      onOpenChange={(open) => setState({ open, pathFocused: false })}
+      onOpenChange={(open) => {
+        setState({ open, pathFocused: false })
+        if (open) return
+        setState({ workspaceCopied: false, workspaceCopyDismissed: false })
+      }}
     >
       <Tooltip placement="bottom" value={<bdi>{projectName()}</bdi>} class="flex shrink-0">
         <Menu.Trigger
@@ -133,6 +167,49 @@ export function SessionProjectMenu(props: {
                 >
                   {projectName()}
                 </bdi>
+              </span>
+            </Menu.Item>
+          </Tooltip>
+          <Tooltip
+            placement="top"
+            gutter={2}
+            value={
+              state.workspaceCopied
+                ? language.t("common.copied")
+                : language.t(
+                    props.workspace ? "session.project.copyWorktreePath" : "session.project.copyRepositoryPath",
+                  )
+            }
+            forceOpen={state.workspaceCopyDismissed ? false : state.workspaceCopied ? true : undefined}
+            getAnchorRect={(anchor) =>
+              anchor?.querySelector('[data-slot="session-project-copy-icon"]')?.getBoundingClientRect()
+            }
+            class="min-w-0"
+          >
+            <Menu.Item
+              class="session-project-link min-w-0 w-full"
+              closeOnSelect={false}
+              onSelect={copyWorkspaceDirectory}
+              onPointerLeave={() => setState({ workspaceCopied: false, workspaceCopyDismissed: false })}
+            >
+              <span class="session-project-link-content">
+                <Icon
+                  name={props.workspace ? "outline-worktree" : "monitor"}
+                  class="shrink-0 text-v2-icon-icon-muted"
+                />
+                <bdi
+                  data-slot="session-project-workspace"
+                  class="min-w-0 truncate text-v2-text-text-muted"
+                >
+                  {workspaceName()}
+                </bdi>
+              </span>
+              <span
+                data-slot="session-project-copy-icon"
+                class="session-project-link-open"
+                aria-hidden="true"
+              >
+                <Icon name={state.workspaceCopied ? "check" : "outline-copy"} />
               </span>
             </Menu.Item>
           </Tooltip>
