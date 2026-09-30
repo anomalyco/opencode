@@ -306,17 +306,24 @@ export const flattenToolChoice = (
   tools: ReadonlyArray<ToolEntry>,
 ) => {
   if (toolChoice.type !== "tool" || toolChoice.name === undefined) return toolChoice
-  const names = new Map<string, string>()
+  const names = new Map<string, string | undefined>()
+  const winners = new Map<string, string>()
   const collect = (entries: ReadonlyArray<ToolEntry>, path: ReadonlyArray<string> = []) => {
     entries.forEach((tool) => {
       const current = [...path, tool.name]
-      if (tool.type === "namespace") collect(tool.tools, current)
-      else if (path.length > 0) names.set(current.join("."), current.join("_"))
+      if (tool.type === "namespace") return collect(tool.tools, current)
+      const qualified = current.join(".")
+      const flat = current.join("_")
+      // Dotted components can make distinct paths share a qualified name.
+      names.set(qualified, !names.has(qualified) || names.get(qualified) === flat ? flat : undefined)
+      // flattenTools keeps the last definition for each flattened name.
+      winners.set(flat, qualified)
     })
   }
   collect(tools)
   const name = names.get(toolChoice.name)
-  return name === undefined ? toolChoice : { ...toolChoice, name }
+  if (name === undefined || name === toolChoice.name || winners.get(name) !== toolChoice.name) return toolChoice
+  return { ...toolChoice, name }
 }
 
 export const flattenToolRequest = (request: LLMRequest) => {
@@ -333,9 +340,10 @@ export const flattenToolRequest = (request: LLMRequest) => {
   const toolChoice = request.toolChoice ? flattenToolChoice(request.toolChoice, request.tools) : undefined
   return {
     tools: flattenTools(request.tools),
-    request: messagesUnchanged && toolChoice === request.toolChoice
-      ? request
-      : LLMRequest.update(request, { messages, toolChoice }),
+    request:
+      messagesUnchanged && toolChoice === request.toolChoice
+        ? request
+        : LLMRequest.update(request, { messages, toolChoice }),
   }
 }
 

@@ -742,12 +742,12 @@ describe("Anthropic Messages route", () => {
               tools: [ToolDefinition.make({ name: "lookup", description: "Look up a customer", inputSchema: {} })],
             }),
           ],
-          toolChoice: ToolChoice.named("crm.lookup"),
+          toolChoice: ToolChoice.make({ type: "tool", name: "crm.lookup", disableParallelToolUse: true }),
         }),
       )
 
       expect(prepared.body.tools).toMatchObject([{ name: "crm_lookup" }])
-      expect(prepared.body.tool_choice).toEqual({ type: "tool", name: "crm_lookup" })
+      expect(prepared.body.tool_choice).toEqual({ type: "tool", name: "crm_lookup", disable_parallel_tool_use: true })
     }),
   )
 

@@ -56,6 +56,28 @@ it.effect("Meta Responses flattens a namespaced forced tool choice", () =>
   }),
 )
 
+it.effect("Meta Messages flattens a namespaced forced tool choice through Anthropic lowering", () =>
+  Effect.gen(function* () {
+    const model = Meta.configure({ apiKey: "fixture" }).messages("muse-spark-1.3")
+    const prepared = yield* compileRequest(
+      LLM.request({
+        model,
+        prompt: "Look up a customer.",
+        tools: [
+          ToolNamespace.make({
+            name: "crm",
+            tools: [ToolDefinition.make({ name: "lookup", description: "Look up a customer", inputSchema: {} })],
+          }),
+        ],
+        toolChoice: { type: "tool", name: "crm.lookup", disableParallelToolUse: true },
+      }),
+    )
+
+    expect(prepared.body.tools).toMatchObject([{ name: "crm_lookup" }])
+    expect(prepared.body.tool_choice).toEqual({ type: "tool", name: "crm_lookup", disable_parallel_tool_use: true })
+  }),
+)
+
 it.effect("Meta Responses stays on HTTP when a WebSocket executor is supplied", () =>
   Effect.gen(function* () {
     for (const baseURL of ["https://api.meta.ai/v1", "https://gateway.example/v1"]) {
