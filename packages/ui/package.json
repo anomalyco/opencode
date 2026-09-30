@@ -46,6 +46,7 @@
     "./field": "./src/forms/field/field.tsx",
     "./file-tree.css": "./src/styles/file-tree.css",
     "./icon": "./src/icons/icon/icon.tsx",
+    "./icons/shell": "./src/icons/icon/shell-icons.ts",
     "./icon-button": "./src/actions/icon-button/icon-button.tsx",
     "./inline-input": "./src/forms/inline-input/inline-input.tsx",
     "./keybind": "./src/data-display/keybind/keybind.tsx",

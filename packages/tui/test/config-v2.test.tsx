@@ -9,6 +9,17 @@ import { CommandMap, Definitions } from "../src/config/v1/keybind"
 
 const decodeInfo = Schema.decodeUnknownSync(Info)
 
+test("supports opting out of the default-on terminal tray companion", () => {
+  expect(decodeInfo({ tray: { enabled: false } })).toEqual({ tray: { enabled: false } })
+  expect(resolve({ tray: { enabled: false } }, { terminalSuspend: true }).tray?.enabled).toBe(false)
+  expect(settings.find((setting) => setting.path.join(".") === "tray.enabled")).toMatchObject({
+    category: "Terminal",
+    default: true,
+    values: [false, true],
+  })
+  expect(() => decodeInfo({ tray: { enabled: "off" } })).toThrow()
+})
+
 test("validates the explicit diff source defaults", () => {
   for (const source of ["branch", "committed", "working", "turn"] as const) {
     expect(decodeInfo({ diffs: { source } })).toEqual({ diffs: { source } })

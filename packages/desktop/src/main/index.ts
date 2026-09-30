@@ -20,7 +20,8 @@ if (acquireApplicationLock()) {
   void app.whenReady().then(async () => {
     marks.ready = Date.now()
     registerStorageSnapshotHandler()
-    createEarlyWindow()
+    // Tray-only launches (see native/tray.ts trayOnly) start without a window.
+    if (!process.argv.includes("--tray") && process.env.OPENCODE_DESKTOP_TRAY_ONLY !== "1") createEarlyWindow()
     marks.window = Date.now()
     startSidecarProbe()
     // The window's renderer is already loading. Its HTML and preloaded chunks are served from this

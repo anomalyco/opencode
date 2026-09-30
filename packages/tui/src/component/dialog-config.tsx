@@ -290,6 +290,15 @@ export const settings: Setting[] = [
     keywords: ["sound volume", "audio volume"],
   },
   {
+    title: "Menu bar / system tray",
+    category: "Terminal",
+    path: ["tray", "enabled"],
+    default: true,
+    values: [false, true],
+    labels: ["off", "on"],
+    keywords: ["tray", "companion", "menu bar"],
+  },
+  {
     title: "Window title",
     category: "Terminal",
     path: ["terminal", "title"],

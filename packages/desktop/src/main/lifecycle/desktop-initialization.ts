@@ -3,6 +3,7 @@ export * as DesktopInitialization from "./desktop-initialization"
 import { app } from "electron"
 import { Context, Effect, Layer } from "effect"
 import { DesktopLogging } from "../native/logging"
+import { initializeTray } from "../native/tray"
 import { getStore } from "../storage/store"
 import { marks } from "./marks"
 import {
@@ -30,6 +31,8 @@ export const layer = Layer.effect(
       prepareApplicationEnvironment.pipe(Effect.andThen(loadProxyEnvironment), Effect.andThen(logging.startNetwork)),
     )
     yield* Effect.promise(() => app.whenReady())
+    const stopTray = initializeTray()
+    yield* Effect.addFinalizer(() => Effect.sync(stopTray))
     yield* prepareDesktop
     marks.init = Date.now()
     return Service.of({

@@ -13,6 +13,7 @@ import { marks } from "./marks"
 import { initializeFirstLaunchOnboarding } from "./onboarding"
 import { Shutdown } from "./shutdown"
 import { consoleReturnWindow } from "./deep-link"
+import { hasTray } from "../native/tray"
 
 export interface Interface {
   readonly relaunch: () => void
@@ -20,6 +21,7 @@ export interface Interface {
   readonly consumeInitialDeepLinks: () => string[]
   readonly createWindow: () => BrowserWindow
   readonly restoreWindows: () => BrowserWindow[]
+  readonly showWindow: () => BrowserWindow
 }
 
 export class Service extends Context.Service<Service, Interface>()("opencode/desktop/ApplicationLifecycle") {}
@@ -32,6 +34,14 @@ const runtime = Layer.effect(
     const windows = yield* makeMainWindows()
     const createWindow = windows.create
     const restoreWindows = windows.restore
+    const showWindow = () => {
+      const existing = getLastFocusedWindow()
+      if (!existing) return restoreWindows()[0] ?? createWindow()
+      if (existing.isMinimized()) existing.restore()
+      existing.show()
+      existing.focus()
+      return existing
+    }
     const pendingDeepLinks: string[] = []
     let shutdownReady = false
     const prepareToRestart = shutdown.run.pipe(Effect.ensuring(Effect.sync(() => (shutdownReady = true))))
@@ -72,7 +82,8 @@ const runtime = Layer.effect(
         runFork(Effect.logInfo("deep link received via second-instance", { urls }))
         focusWindow(emitDeepLinks(urls) ?? null)
       }
-      if (!urls.length) focusWindow(getLastFocusedWindow())
+      if (urls.length || argv.includes("--tray")) return
+      showWindow()
     }
     const openUrl = (event: Event, url: string) => {
       event.preventDefault()
@@ -106,13 +117,12 @@ const runtime = Layer.effect(
       runFork(prepareToRestart.pipe(Effect.ensuring(Effect.sync(() => app.quit()))))
     }
     const windowAllClosed = () => {
-      if (process.platform !== "darwin") app.quit()
+      if (process.platform !== "darwin" && !hasTray()) app.quit()
     }
     const activate = () => {
       if (BrowserWindow.getAllWindows().length === 0) restoreWindows()
     }
     const resetRelaunchHandler = setRelaunchHandler(relaunch)
-    let windowsWired = false
 
     app.on("second-instance", secondInstance)
     app.on("open-url", openUrl)
@@ -120,6 +130,8 @@ const runtime = Layer.effect(
     app.on("will-quit", willQuit)
     app.on("child-process-gone", childProcessGone)
     app.on("render-process-gone", renderProcessGone)
+    app.on("window-all-closed", windowAllClosed)
+    app.on("activate", activate)
     process.on("SIGINT", signal)
     process.on("SIGTERM", signal)
     yield* Effect.addFinalizer(() =>
@@ -143,14 +155,8 @@ const runtime = Layer.effect(
       prepareToRestart,
       consumeInitialDeepLinks: () => pendingDeepLinks.splice(0),
       createWindow,
-      restoreWindows: () => {
-        if (!windowsWired) {
-          windowsWired = true
-          app.on("window-all-closed", windowAllClosed)
-          app.on("activate", activate)
-        }
-        return restoreWindows()
-      },
+      showWindow,
+      restoreWindows,
     })
   }),
 )

@@ -28,6 +28,13 @@ export const layer = Layer.effect(
 )
 
 const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial" | "reconnect") {
+  // Explicit development connections never elect or replace a managed server.
+  if (!app.isPackaged && process.env.OPENCODE_DESKTOP_SERVER_URL) {
+    return {
+      url: new URL(process.env.OPENCODE_DESKTOP_SERVER_URL).origin,
+      password: process.env.OPENCODE_DESKTOP_SERVER_PASSWORD ?? null,
+    }
+  }
   yield* Effect.logInfo("starting v2 background service")
   const path = yield* Path.Path
   const desktopCli = yield* DesktopCli.Service

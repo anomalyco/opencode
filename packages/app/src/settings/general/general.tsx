@@ -342,6 +342,15 @@ export const SettingsGeneral: Component = () => {
     void update.catch(() => setPinchZoom(!checked))
   }
 
+  const [tray, { mutate: setTray }] = createResource(
+    () => desktop() && platform.getTrayEnabled,
+    (get) => get(),
+  )
+  const onTrayChange = (checked: boolean) => {
+    setTray(checked)
+    void platform.setTrayEnabled?.(checked).catch(() => setTray(!checked))
+  }
+
   const GeneralSection = () => (
     <div class="settings-section">
       <h3 class="settings-section-title">{language.t("settings.general.section.general")}</h3>
@@ -376,6 +385,21 @@ export const SettingsGeneral: Component = () => {
               <Switch checked={pinchZoom.latest} onChange={onPinchZoomChange} />
             </div>
           </SettingsRow>
+          <Show when={platform.getTrayEnabled}>
+            <SettingsRow
+              title={language.t("settings.general.row.tray.title")}
+              description={language.t("settings.general.row.tray.description")}
+            >
+              <div data-action="settings-tray">
+                <Switch
+                  aria-label={language.t("settings.general.row.tray.title")}
+                  checked={tray.latest ?? true}
+                  disabled={tray.loading || !!tray.error}
+                  onChange={onTrayChange}
+                />
+              </div>
+            </SettingsRow>
+          </Show>
         </Show>
 
         <SettingsRow

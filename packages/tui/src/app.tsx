@@ -103,6 +103,7 @@ import { SessionTerminalsProvider } from "./context/session-terminals"
 import { PanelProvider, usePanel } from "./context/panel"
 import { SessionFrame } from "./component/session-frame"
 import { createTuiClipboard } from "./clipboard"
+import type { TerminalTray } from "@opencode/schema/terminal-tray"
 
 registerOpencodeSpinner()
 
@@ -199,6 +200,10 @@ export type TuiInput = {
     | undefined
   >
   log?: LogSink
+  tray?: {
+    update: (state: TerminalTray.State) => void
+    subscribe: (listener: (command: TerminalTray.Command) => void) => () => void
+  }
 }
 
 export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
@@ -403,7 +408,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                                                                 packages={input.packages}
                                                                                 directories={pluginDirectories}
                                                                               >
-                                                                                <App />
+                                                                                <App tray={input.tray} />
                                                                               </PluginProvider>
                                                                             </PanelProvider>
                                                                           </UpdateNotificationProvider>
@@ -456,7 +461,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   })
 })
 
-function App() {
+function App(props: { tray?: TuiInput["tray"] }) {
   const log = useLog({ component: "app" })
   const app = useTuiApp()
   const startup = useTuiStartup()
@@ -492,6 +497,36 @@ function App() {
   onCleanup(() => {
     renderer.off(CliRenderEvents.FRAME, afterFrame)
     if (paletteTimer) clearTimeout(paletteTimer)
+  })
+  createEffect(() => {
+    const current = sessionTabs.current()
+    props.tray?.update({
+      enabled: config.data.tray?.enabled !== false,
+      focused: sessionTabs.focused(),
+      sessions: sessionTabs.enabled()
+        ? sessionTabs
+            .tabs()
+            .map((tab) => tab.sessionID)
+            .filter((id) => id !== "dummy")
+        : current && current !== "dummy"
+          ? [current]
+          : [],
+      current,
+    })
+  })
+  onMount(() => {
+    if (!props.tray) return
+    onCleanup(
+      props.tray.subscribe((command) => {
+        if (command.type === "session") {
+          dialog.clear()
+          route.navigate({ type: "session", sessionID: command.sessionID })
+          return
+        }
+        if (command.type === "new") keymap.dispatch("session.new")
+        if (command.type === "settings") keymap.dispatch("opencode.settings")
+      }),
+    )
   })
   createEffect(() => {
     if (client.connection.status() !== "connected") return

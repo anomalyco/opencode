@@ -22,6 +22,8 @@ import { DesktopStorage } from "../storage"
 import { createPairing } from "../service/pairing"
 import { getLastFocusedWindow, setBackgroundColor } from "../windows"
 import { sender } from "./context"
+import { getTrayEnabled, setTrayEnabled, updateTray } from "../native/tray"
+import { trayTabs } from "../native/tray-tabs"
 
 export const appHandlers = AppRpcs.toLayer(
   Effect.gen(function* () {
@@ -37,6 +39,13 @@ export const appHandlers = AppRpcs.toLayer(
     const pairing = createPairing()
     const runFork = Effect.runForkWith(yield* Effect.context())
     return AppRpcs.of({
+      AppGetTrayEnabled: () => Effect.sync(getTrayEnabled),
+      AppSetTrayEnabled: ({ enabled }) => Effect.sync(() => setTrayEnabled(enabled)),
+      AppSetTrayTabs: ({ sessionIDs, avatars }, context) =>
+        Effect.sync(() => {
+          const win = BrowserWindow.fromWebContents(sender(handoff, context))
+          if (win && !win.isDestroyed()) trayTabs.set(win.id, sessionIDs, avatars)
+        }),
       AppAwaitInitialization: () => background.connection.pipe(Effect.map(SidecarCredentials.ready)),
       AppReconnectService: () => background.reconnect.pipe(Effect.map(SidecarCredentials.ready)),
       AppConsumeInitialDeepLinks: () => Effect.sync(lifecycle.consumeInitialDeepLinks),
@@ -62,6 +71,7 @@ export const appHandlers = AppRpcs.toLayer(
           const bundle = parseDesktopNativeBundle(value)
           if (!bundle) throw new Error("Invalid native translation bundle")
           if (!setNativeTranslations(bundle)) return
+          updateTray()
           createMenu({
             trigger: (id) => {
               const win = getLastFocusedWindow()

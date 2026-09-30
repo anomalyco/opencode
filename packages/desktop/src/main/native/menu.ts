@@ -12,6 +12,12 @@ import { emitIpcEvent } from "../ipc-events"
 import { CHANNEL, UPDATER_ENABLED } from "../constants"
 import { runDesktopMenuAction } from "./menu-actions"
 import { nativeT } from "./translations"
+import { createMenuQueue } from "./menu-queue"
+import type { MenuCommand } from "../../shared/menu-command"
+
+export const menuCommands = createMenuQueue<BrowserWindow, MenuCommand>((win, command) => {
+  emitIpcEvent(win.webContents, new MenuCommandTriggered({ command }))
+})
 
 type Deps = {
   trigger: (id: string) => void
@@ -39,7 +45,7 @@ export function createMenu(deps: Deps) {
 }
 
 export function sendMenuCommand(win: BrowserWindow, id: string) {
-  emitIpcEvent(win.webContents, new MenuCommandTriggered({ id }))
+  menuCommands.trigger(win, { type: "command", id })
 }
 
 function nativeItem(entry: DesktopMenuEntry, deps: Deps): MenuItemConstructorOptions {

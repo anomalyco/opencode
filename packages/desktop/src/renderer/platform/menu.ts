@@ -1,14 +1,15 @@
 import type { Platform } from "@opencode/app/desktop"
 import type { ElectronAPI } from "../api-types"
 import { resetZoom, zoomIn, zoomOut } from "../window/zoom"
+import type { MenuCommand } from "../../shared/menu-command"
 
-let trigger: ((id: string) => void) | null = null
+let trigger: ((command: MenuCommand) => void) | null = null
 
 export function startDesktopMenu(api: ElectronAPI) {
   api.onMenuCommand((id) => trigger?.(id))
 }
 
-export function bindDesktopMenu(next: (id: string) => void) {
+export function bindDesktopMenu(next: (command: MenuCommand) => void) {
   trigger = next
 }
 

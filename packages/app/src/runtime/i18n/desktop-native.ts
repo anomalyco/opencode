@@ -275,6 +275,36 @@ export const DESKTOP_NATIVE_ENGLISH = {
   "desktop.menu.reportBug": "Report a Bug",
   "desktop.menu.ariaLabel": "OpenCode menu",
 
+  "desktop.tray.open": "Open OpenCode",
+  "desktop.tray.newAgent": "New Agent…",
+  "desktop.tray.quit": "Quit",
+  "desktop.tray.docs": "Docs",
+  "desktop.tray.summary": "Working: {{working}} · Needs you: {{attention}}",
+  "desktop.tray.loading": "Loading sessions…",
+  "desktop.tray.starting": "Starting OpenCode…",
+  "desktop.tray.offline": "Unable to refresh sessions",
+  "desktop.tray.stale": "Showing the last available update",
+  "desktop.tray.empty": "No active sessions",
+  "desktop.tray.more": "View all sessions…",
+  "desktop.tray.untitled": "Untitled session",
+  "desktop.tray.group.attention": "Needs you",
+  "desktop.tray.group.working": "Working",
+  "desktop.tray.group.active": "Active sessions",
+  "desktop.tray.status.question": "Question waiting",
+  "desktop.tray.status.permission": "Permission needed",
+  "desktop.tray.status.working": "Working",
+  "desktop.tray.status.failed": "Failed",
+  "desktop.tray.status.interrupted": "Stopped",
+  "desktop.tray.status.idle": "Idle",
+  "desktop.tray.context.percent": "Context {{percent}}%",
+  "desktop.tray.context.tokens": "Context tokens {{tokens}}",
+  "desktop.tray.context.unknown": "No context",
+  "desktop.tray.session.detail": "{{project}} · {{context}} · {{cost}}",
+  "desktop.tray.tooltip.cost": "Cost {{cost}}",
+  "desktop.tray.tooltip.local": "Local",
+  "desktop.tray.tooltip.worktree": "Worktree · {{name}}",
+  "desktop.tray.tooltip.placementUnknown": "Location unavailable",
+
   "desktop.updater.dialog.checkFailed.message": "Update check failed.",
   "desktop.updater.dialog.checkFailed.title": "Update Error",
   "desktop.updater.dialog.upToDate.message": "You're up to date.",
@@ -374,4 +404,8 @@ export function formatDesktopNativeMessage(message: string, params?: Record<stri
     const value = params[key]
     return value === undefined ? match : String(value)
   })
+}
+
+export function formatDesktopNativeCost(locale: DesktopNativeLocale, value: number) {
+  return new Intl.NumberFormat(DESKTOP_NATIVE_LOCALE_TAGS[locale], { style: "currency", currency: "USD" }).format(value)
 }

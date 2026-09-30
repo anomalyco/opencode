@@ -99,6 +99,7 @@ test("bundles one Effect runtime and Drizzle while keeping native dependencies e
   expect(new Set(effect.map((id) => id.split("/node_modules/effect/")[0])).size).toBe(1)
   expect(new Set(effect).size).toBe(effect.length)
   expect(imports).toContain("electron")
+  expect(imports).toContain("@resvg/resvg-js")
   expect(imports).toContain("node:sqlite")
   expect(chunks.some((chunk) => chunk.dynamicImports.includes("@zip.js/zip.js"))).toBe(true)
   expect(imports).toContain(`@lydell/node-pty-${process.platform}-${process.arch}`)

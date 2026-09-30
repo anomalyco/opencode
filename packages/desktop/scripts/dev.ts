@@ -29,13 +29,15 @@ async function prepareDesktop() {
 
 function selectOptions(): DevOptions {
   const args = process.argv.slice(2)
+  const tray = args.indexOf("--tray")
+  if (tray >= 0) process.env.OPENCODE_DESKTOP_TRAY_ONLY = "1"
   const build = args.indexOf("--build-server")
   const download = args.indexOf("--download-server")
   if (build >= 0 && download >= 0) {
     throw new Error("--build-server and --download-server cannot be used together")
   }
   if (download >= 0 && !args[download + 1]) throw new Error("--download-server requires a version")
-  const consumed = new Set([build, download, download >= 0 ? download + 1 : -1])
+  const consumed = new Set([build, download, download >= 0 ? download + 1 : -1, tray])
   return {
     server: download >= 0 ? { type: "download", version: args[download + 1] } : { type: "build" },
     electron: args.filter((_, index) => !consumed.has(index)),

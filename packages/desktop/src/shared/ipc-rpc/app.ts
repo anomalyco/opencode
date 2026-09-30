@@ -1,5 +1,6 @@
 import { Schema } from "effect"
 import { Rpc, RpcGroup } from "effect/unstable/rpc"
+import { TrayAvatar } from "../tray-avatar"
 
 const ServerReadyData = Schema.Struct({
   url: Schema.String,
@@ -64,6 +65,14 @@ export const AppSetKeepScreenActive = Rpc.make("AppSetKeepScreenActive", {
   payload: { enabled: Schema.Boolean },
   error: Schema.String,
 })
+export const AppGetTrayEnabled = Rpc.make("AppGetTrayEnabled", { success: Schema.Boolean })
+export const AppSetTrayEnabled = Rpc.make("AppSetTrayEnabled", { payload: { enabled: Schema.Boolean } })
+export const AppSetTrayTabs = Rpc.make("AppSetTrayTabs", {
+  payload: {
+    sessionIDs: Schema.Array(Schema.String),
+    avatars: Schema.optionalKey(Schema.Record(Schema.String, TrayAvatar)),
+  },
+})
 export const AppRpcs = RpcGroup.make(
   AppAwaitInitialization,
   AppReconnectService,
@@ -84,4 +93,7 @@ export const AppRpcs = RpcGroup.make(
   AppPairCode,
   AppGetKeepScreenActive,
   AppSetKeepScreenActive,
+  AppGetTrayEnabled,
+  AppSetTrayEnabled,
+  AppSetTrayTabs,
 )

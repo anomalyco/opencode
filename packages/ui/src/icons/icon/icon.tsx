@@ -1,5 +1,6 @@
 import { onMount, type ComponentProps, splitProps } from "solid-js"
 import { additionalIcons, additionalIconViewBox } from "./additional-icons"
+import { shellIcons } from "./shell-icons"
 import "./icon.css"
 
 // Consumers center the SVG viewport, so each icon must center its artwork within its viewBox.
@@ -16,13 +17,10 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<path d="M12.5 6.5V2.5C12.5 1.94772 12.0523 1.5 11.5 1.5H2.5C1.94772 1.5 1.5 1.94772 1.5 2.5V11.5C1.5 12.0523 1.94772 12.5 2.5 12.5H6.5" stroke="currentColor" stroke-linecap="round"/><path d="M7.5 7.5L14.5 10.1L11.1 11.1L10.1 14.5L7.5 7.5Z" stroke="currentColor" stroke-linejoin="round"/>`,
   },
+  ...shellIcons,
   flask: {
     viewBox: "0 0 16 16",
     body: `<path d="M5.5 2H10.5M6 2V6L2.5 12C2 13 2.5 14 3.5 14H12.5C13.5 14 14 13 13.5 12L10 6V2M4.25 9H11.75" stroke="currentColor" stroke-linecap="square" stroke-linejoin="round"/>`,
-  },
-  edit: {
-    viewBox: "0 0 16 16",
-    body: `<path d="M13.5556 8.21529V13.5556H2.44446L2.44446 2.44445H7.78474M6.00002 8.16216V10H7.83786L14 3.83784L12.1622 2L6.00002 8.16216Z" stroke="currentColor"/>`,
   },
   "folder-add-left": {
     viewBox: "0 0 16 16",
@@ -39,10 +37,6 @@ const icons = {
   "branch-out": {
     viewBox: "0 0 16 16",
     body: `<path d="M10.4225 3.35355L12.9024 5.83344L10.4225 8.31333" stroke="currentColor"/><path d="M1 12.2852H4.23042C4.89912 12.2852 5.52359 11.951 5.89452 11.3946L9.00783 6.72462C8.37877 6.16823 10.0032 5.83402 10.6719 5.83402H12.9024" stroke="currentColor"/><path d="M8.5 12.2852H14" stroke="currentColor" stroke-linejoin="round"/>`,
-  },
-  "grid-plus": {
-    viewBox: "0 0 16 16",
-    body: `<path d="M13.9948 11.668H9.32812M11.6641 9.33203V13.9987M6.66667 9.33203V13.9987H2V9.33203H6.66667ZM6.66667 2V6.66667H2V2H6.66667ZM13.9948 2V6.66667H9.32812V2H13.9948Z" stroke="currentColor" stroke-miterlimit="10" stroke-linecap="square"/>`,
   },
   help: {
     viewBox: "0 0 16 16",
@@ -83,10 +77,6 @@ const icons = {
   plus: {
     viewBox: "0 0 16 16",
     body: `<path d="M8 2.88867V13.1109" stroke="currentColor" stroke-linejoin="round"/><path d="M2.88867 8H13.1109" stroke="currentColor" stroke-linejoin="round"/>`,
-  },
-  "settings-gear": {
-    viewBox: "0 0 16 16",
-    body: `<path d="M7.99998 1.3335L14 4.66683V11.3335L7.99998 14.6668L2 11.3335V4.66683L7.99998 1.3335Z" stroke="currentColor"/><path d="M9.99998 8.00016C9.99998 9.10476 9.10458 10.0002 7.99998 10.0002C6.89538 10.0002 5.99998 9.10476 5.99998 8.00016C5.99998 6.89556 6.89538 6.00016 7.99998 6.00016C9.10458 6.00016 9.99998 6.89556 9.99998 8.00016Z" stroke="currentColor"/>`,
   },
   "chevron-down": {
     viewBox: "0 0 16 16",

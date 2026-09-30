@@ -111,6 +111,9 @@ type PlatformBase = {
   /** Prevent the local display from sleeping while the desktop app is running. */
   getKeepScreenActive?(): Promise<boolean>
   setKeepScreenActive?(enabled: boolean): Promise<void>
+  /** Show the bundled menu bar/system tray companion (desktop only). */
+  getTrayEnabled?(): Promise<boolean>
+  setTrayEnabled?(enabled: boolean): Promise<void>
 
   /** Run a desktop-only menu action from the app chrome */
   runDesktopMenuAction?(action: DesktopMenuAction): Promise<void> | void

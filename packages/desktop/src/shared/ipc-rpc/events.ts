@@ -3,6 +3,7 @@ import { Rpc, RpcGroup } from "effect/unstable/rpc"
 import { BrowserPaneCaptureRpc, BrowserPaneEventSchema, BrowserPaneRpc } from "./browser"
 import { UpdaterStateSchema } from "./updater"
 import { WslServersEventSchema } from "./wsl"
+import { MenuCommand } from "../menu-command"
 import { SshState } from "@opencode/app/ssh"
 
 export class SshChanged extends Schema.TaggedClass<SshChanged>()("SshChanged", { state: SshState }) {}
@@ -17,7 +18,7 @@ export class DeepLinksOpened extends Schema.TaggedClass<DeepLinksOpened>()("Deep
 }) {}
 
 export class MenuCommandTriggered extends Schema.TaggedClass<MenuCommandTriggered>()("MenuCommandTriggered", {
-  id: Schema.String,
+  command: MenuCommand,
 }) {}
 
 export class UpdaterStateChanged extends Schema.TaggedClass<UpdaterStateChanged>()("UpdaterStateChanged", {

@@ -5,12 +5,18 @@ import {
   AppBaseProviders,
   AppInterface,
   currentRoute,
+  displayName,
+  getProjectAvatarVariant,
   PlatformProvider,
   preloadRoute,
+  projectForSession,
   ServerConnection,
+  sessionHref,
   useCommand,
   useCurrentRoute,
   useLanguage,
+  useServerCtx,
+  useServers,
   useTabs,
   useWslServers,
   useSsh,
@@ -19,12 +25,17 @@ import {
 } from "@opencode/app/desktop"
 import { useTheme } from "@opencode/ui/theme/context"
 import type { BaseRouterProps } from "@solidjs/router"
+import { useNavigate } from "@solidjs/router"
 import { createEffect, createMemo, createResource, lazy, Show, Suspense } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { ElectronAPI } from "./api-types"
+import type { MenuCommand } from "../shared/menu-command"
 import { DesktopFirstLaunchOnboarding } from "./onboarding"
 import { createDesktopPlatform } from "./platform"
 import { bindDesktopMenu } from "./platform/menu"
+import { traySessionIDs } from "./platform/tray-tabs"
+import { trayAvatar } from "./platform/tray-avatar"
+import { getProjectAvatarSource } from "@opencode/app/project-avatar-source"
 import { createSidecarResolver, initializationData, sidecarHttp } from "./startup/initialization"
 import { preloadStoredLocale } from "./startup/locale"
 import { LoadingSplash } from "./startup/splash"
@@ -132,7 +143,7 @@ export function DesktopApp(props: { api: ElectronAPI; updater: UpdaterPlatform; 
                 pending={firstLaunch() ?? false}
                 onReady={() => setStartup("onboardingReady", true)}
               />
-              <DesktopEffects api={props.api} />
+              <DesktopEffects api={props.api} ready={startup.onboardingReady} />
               <Suspense fallback={null}>
                 <Show when={initializationData(sidecar)} keyed>
                   {(server) => <MigrationStatus server={server} />}
@@ -195,11 +206,58 @@ function DesktopStartupReady(props: {
   return null
 }
 
-function DesktopEffects(props: { api: ElectronAPI }) {
-  const command = useCommand()
-  bindDesktopMenu((id) => command.trigger(id))
+function DesktopEffects(props: { api: ElectronAPI; ready: boolean }) {
+  const tabs = useTabs()
   const theme = useTheme()
-
+  const servers = useServers()
+  const server = useServerCtx(() => servers.list.find(ServerConnection.builtin))
+  createEffect(() => {
+    if (!tabs.ready()) return
+    theme.themeId()
+    theme.mode()
+    const ids = traySessionIDs(tabs.store)
+    const ctx = server()
+    const style = getComputedStyle(document.documentElement)
+    const avatars = Object.fromEntries(
+      ids.flatMap((id) => {
+        const session = ctx?.data.session.get(id)
+        if (!session) return []
+        const project = projectForSession(session, ctx?.projects.list() ?? [])
+        const avatar = trayAvatar(
+          {
+            name: displayName(project ?? { worktree: session.location.directory }),
+            source: getProjectAvatarSource(project?.id, project?.icon),
+            variant: getProjectAvatarVariant(project?.icon?.color),
+          },
+          style,
+        )
+        return avatar ? [[id, avatar] as const] : []
+      }),
+    )
+    void props.api.setTrayTabs(ids, avatars).catch(console.error)
+  })
+  const command = useCommand()
+  const navigate = useNavigate()
+  const dispatch = (action: MenuCommand) => {
+    if (action.type === "command") return command.trigger(action.id)
+    if (action.type === "home") return navigate("/")
+    navigate(sessionHref(ServerConnection.Key.make("sidecar"), action.sessionID))
+  }
+  bindDesktopMenu(dispatch)
+  const menu = { ready: false }
+  createEffect(() => {
+    if (
+      !props.ready ||
+      menu.ready ||
+      !["tab.new", "settings.open"].every((id) => command.options.some((entry) => entry.id === id))
+    )
+      return
+    menu.ready = true
+    void props.api
+      .menuReady()
+      .then((commands) => commands.forEach(dispatch))
+      .catch(console.error)
+  })
   createEffect(() => {
     theme.themeId()
     theme.mode()

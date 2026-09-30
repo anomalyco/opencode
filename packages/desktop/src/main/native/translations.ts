@@ -2,6 +2,7 @@ import {
   DESKTOP_NATIVE_ENGLISH,
   DESKTOP_NATIVE_KEYS,
   formatDesktopNativeMessage,
+  formatDesktopNativeCost,
   type DesktopNativeBundle,
   type DesktopNativeKey,
 } from "@opencode/app/i18n/desktop-native"
@@ -21,4 +22,8 @@ export function setNativeTranslations(next: DesktopNativeBundle) {
 
 export function nativeT(key: DesktopNativeKey, params?: Record<string, string | number>) {
   return formatDesktopNativeMessage(bundle.messages[key], params)
+}
+
+export function nativeCost(value: number) {
+  return formatDesktopNativeCost(bundle.locale, value)
 }

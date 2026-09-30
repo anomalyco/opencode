@@ -126,7 +126,11 @@ export const api: ElectronAPI = {
   getWindowID: () => window.electron.windowID,
   getWindowBootstrap: () => window.electron.bootstrap,
   themeReady: () => invoke("WindowThemeReady"),
-  onMenuCommand: (cb) => listen("MenuCommandTriggered", (event) => cb(event.id)),
+  onMenuCommand: (cb) => listen("MenuCommandTriggered", (event) => cb(event.command)),
+  menuReady: () => invoke("MenuReady").then(mutable),
+  getTrayEnabled: () => invoke("AppGetTrayEnabled"),
+  setTrayEnabled: (enabled) => invoke("AppSetTrayEnabled", { enabled }),
+  setTrayTabs: (sessionIDs, avatars) => invoke("AppSetTrayTabs", { sessionIDs, avatars }),
   onDeepLink: (cb) => listen("DeepLinksOpened", (event) => cb(mutable(event.urls))),
 
   openDirectoryPicker: (opts) => invoke("FilesOpenDirectoryPicker", { options: opts }).then(mutable),

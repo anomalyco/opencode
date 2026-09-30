@@ -351,6 +351,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
 
     return {
       enabled,
+      focused: () => focused() !== false,
       tabs() {
         return state().tabs
       },

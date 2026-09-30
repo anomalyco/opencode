@@ -7,6 +7,8 @@ import type { SshPlatform } from "@opencode/app/ssh"
 import type { Browser } from "@opencode/plugin-browser/rpc"
 import type { BrowserPaneRequest } from "../shared/ipc-rpc/browser"
 import type { WindowBootstrap } from "../shared/window-bootstrap"
+import type { MenuCommand } from "../shared/menu-command"
+import type { TrayAvatar } from "../shared/tray-avatar"
 import type {
   ClipboardImage,
   DirectoryPickerOptions,
@@ -59,7 +61,11 @@ export type ElectronAPI = {
   getWindowID(): string
   getWindowBootstrap(): WindowBootstrap
   themeReady(): Promise<void>
-  onMenuCommand(cb: (id: string) => void): () => void
+  onMenuCommand(cb: (command: MenuCommand) => void): () => void
+  menuReady(): Promise<MenuCommand[]>
+  getTrayEnabled(): Promise<boolean>
+  setTrayEnabled(enabled: boolean): Promise<void>
+  setTrayTabs(sessionIDs: string[], avatars?: Record<string, TrayAvatar>): Promise<void>
   onDeepLink(cb: (urls: string[]) => void): () => void
   openDirectoryPicker(opts?: DirectoryPickerOptions): Promise<string | string[] | null>
   openFilePicker(opts?: FilePickerOptions): Promise<PickedFiles | null>

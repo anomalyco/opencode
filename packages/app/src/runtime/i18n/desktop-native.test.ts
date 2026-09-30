@@ -9,10 +9,16 @@ import {
   detectDesktopNativeLocale,
   DESKTOP_NATIVE_MAX_PAYLOAD_BYTES,
   formatDesktopNativeMessage,
+  formatDesktopNativeCost,
   parseDesktopNativeBundle,
 } from "./desktop-native"
 
 describe("desktop native translations", () => {
+  test("formats session costs as USD using the active native locale", () => {
+    expect(formatDesktopNativeCost("en", 0)).toBe("$0.00")
+    expect(formatDesktopNativeCost("en", 12.34)).toBe("$12.34")
+    expect(formatDesktopNativeCost("de", 12.34)).toContain("12,34")
+  })
   test("uses native language names independent of the active locale", () => {
     expect(DESKTOP_NATIVE_LOCALES.map((locale) => DESKTOP_NATIVE_LABELS[locale])).toEqual([
       "English",

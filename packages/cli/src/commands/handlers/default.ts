@@ -9,7 +9,7 @@ import { ServerConnection } from "../../services/server-connection"
 import { Updater } from "../../services/updater"
 import { UpdatePreflight } from "../../services/update-preflight"
 import { Npm } from "@opencode/util/npm"
-import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_VERSION } from "../../version"
+import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_LOCAL, OPENCODE_VERSION } from "../../version"
 import { Env } from "../../env"
 import { Service } from "@opencode/client/effect/service"
 import { OpenCode } from "@opencode/client/promise"
@@ -56,7 +56,10 @@ export default Runtime.handler(Commands, (input) =>
       session !== undefined &&
       (yield* Effect.tryPromise({
         try: () =>
-          findSession(OpenCode.make({ baseUrl: server.endpoint.url, headers: Service.headers(server.endpoint) }), session),
+          findSession(
+            OpenCode.make({ baseUrl: server.endpoint.url, headers: Service.headers(server.endpoint) }),
+            session,
+          ),
         catch: (cause) => new Error(errorMessage(cause)),
       })) !== undefined
     const updater = yield* Updater.Service
@@ -77,6 +80,27 @@ export default Runtime.handler(Commands, (input) =>
     const runFork = Effect.runForkWith(context)
     const runPromise = Effect.runPromiseWith(context)
     const service = server.service
+    const global = yield* Global.Service
+    const { createTerminalTray, focusTerminal, hasDesktop, launchTerminalTray } = yield* Effect.promise(
+      () => import("../../services/terminal-tray"),
+    )
+    const tray = hasDesktop(process.env, process.platform, !!process.stdout.isTTY)
+      ? yield* Effect.tryPromise(() =>
+          createTerminalTray({
+            endpoint: server.endpoint,
+            directory: global.state + "/terminal-tray",
+            enabled: false,
+            launch: (file) => launchTerminalTray(file, OPENCODE_LOCAL, global.log),
+            focus: focusTerminal,
+            log: (message, error) => {
+              runFork(Effect.logWarning(message, { error }))
+            },
+          }),
+        ).pipe(
+          Effect.catch((error) => Effect.logWarning("Terminal tray unavailable", { error }).pipe(Effect.as(undefined))),
+        )
+      : undefined
+    if (tray) yield* Effect.addFinalizer(() => Effect.promise(() => tray.close()))
     yield* run({
       app: {
         name: process.env.OPENCODE_CLIENT ?? OPENCODE_ARTIFACT,
@@ -87,7 +111,11 @@ export default Runtime.handler(Commands, (input) =>
         endpoint: server.endpoint,
         service: service
           ? {
-              reconnect: (signal) => runServicePromise(service.reconnect(), { signal }),
+              reconnect: async (signal) => {
+                const endpoint = await runServicePromise(service.reconnect(), { signal })
+                tray?.endpoint(endpoint)
+                return endpoint
+              },
               restart: () => runServicePromise(service.restart()),
             }
           : undefined,
@@ -99,6 +127,7 @@ export default Runtime.handler(Commands, (input) =>
         prompt: Option.getOrUndefined(input.prompt),
         auto: input.auto || input.yolo || input.dangerouslySkipPermissions,
       },
+      tray,
       config: {
         path: config.path,
         get: () => runPromise(config.get()),

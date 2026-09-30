@@ -12,6 +12,8 @@
     "dev:vite": "bun run --cwd packages/cli --conditions=browser dev/vite.ts",
     "dev:vite:live": "sh -c 'OPENCODE_TUI_CHANNEL=dev OPENCODE_PASSWORD=\"$(opencode service get password)\" exec bun run dev:vite \"$@\" --server \"$(opencode service status)\"' --",
     "dev:desktop": "bun --cwd packages/desktop dev",
+    "dev:tray": "bun --cwd packages/desktop dev --tray",
+    "dev:tray:live": "bun --cwd packages/desktop ./scripts/dev-live.ts",
     "dev:web": "bun --cwd packages/app dev",
     "dev:console": "ulimit -n 10240 2>/dev/null; bun run --cwd packages/console/app dev",
     "dev:stats": "bun sst shell --stage=production -- bun run --cwd packages/stats/app dev",

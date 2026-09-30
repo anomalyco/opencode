@@ -96,6 +96,8 @@ export function createDesktopPlatform(
     webviewZoom,
     windowFullscreen,
     getPinchZoomEnabled: () => api.getPinchZoomEnabled(),
+    getTrayEnabled: () => api.getTrayEnabled(),
+    setTrayEnabled: (enabled) => api.setTrayEnabled(enabled),
     setPinchZoomEnabled,
     getKeepScreenActive: () => api.getKeepScreenActive(),
     setKeepScreenActive: (enabled) => api.setKeepScreenActive(enabled),

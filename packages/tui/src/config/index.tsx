@@ -67,6 +67,13 @@ export const Cursor = Schema.Struct({
 }).annotate({ description: "Terminal cursor settings" })
 
 export const Info = Schema.Struct({
+  tray: Schema.optional(
+    Schema.Struct({
+      enabled: Schema.optional(Schema.Boolean).annotate({
+        description: "Show the menu-bar/system-tray companion while the terminal app is open",
+      }),
+    }),
+  ).annotate({ description: "Native tray companion settings" }),
   theme: Schema.optional(
     Schema.Struct({
       name: Schema.optional(Schema.String).annotate({ description: "Theme name" }),
@@ -159,7 +166,8 @@ export const Info = Schema.Struct({
         description: "Group related transcript items automatically or render each item separately",
       }),
       verbosity: Schema.optional(Schema.Literals(["low", "medium", "high"])).annotate({
-        description: "Transcript detail level: low summarizes each run of tools and thoughts, high opens exploration and instruction groups",
+        description:
+          "Transcript detail level: low summarizes each run of tools and thoughts, high opens exploration and instruction groups",
       }),
       image_preview: Schema.optional(Schema.Boolean).annotate({
         description: "Show user attachment and tool-result images in the session transcript",
@@ -283,8 +291,7 @@ export function resolve(
   input: Info,
   options: { terminalSuspend: boolean; environment?: Readonly<Record<string, string | undefined>> },
 ): Resolved {
-  const tabsMode =
-    input.tabs?.mode ?? (input.tabs?.enabled === undefined ? "auto" : input.tabs.enabled ? "on" : "off")
+  const tabsMode = input.tabs?.mode ?? (input.tabs?.enabled === undefined ? "auto" : input.tabs.enabled ? "on" : "off")
   const keybinds: TuiKeybind.KeybindOverrides = { ...input.keybinds }
   if (!options.terminalSuspend) {
     keybinds["terminal.suspend"] = "none"
