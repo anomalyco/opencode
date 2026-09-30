@@ -45,8 +45,6 @@ export const ResourceTemplate = Mcp.ResourceTemplate
 export type ResourceTemplate = Mcp.ResourceTemplate
 export const ResourceCatalog = Mcp.ResourceCatalog
 export type ResourceCatalog = Mcp.ResourceCatalog
-export const ResourceContentPart = Mcp.ResourceContentPart
-export type ResourceContentPart = Mcp.ResourceContentPart
 export const ResourceContent = Mcp.ResourceContent
 export type ResourceContent = Mcp.ResourceContent
 

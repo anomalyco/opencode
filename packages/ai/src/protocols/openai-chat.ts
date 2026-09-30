@@ -20,7 +20,6 @@ import {
   type LLMRequest,
   type MediaPart,
   type ReasoningPart,
-  type TextPart,
   type ToolCallPart,
   type ToolDefinition,
 } from "../schema/index.js"
@@ -45,6 +44,7 @@ const OpenAIChatCacheControl = Schema.Struct({
   type: Schema.Literal("ephemeral"),
   ttl: Schema.optional(Schema.String),
 })
+type OpenAIChatCacheControl = Schema.Schema.Type<typeof OpenAIChatCacheControl>
 
 const OpenAIChatFunction = Schema.Struct({
   name: Schema.String,
@@ -64,6 +64,14 @@ const OpenAIChatTool = Schema.Struct({
 })
 type OpenAIChatTool = Schema.Schema.Type<typeof OpenAIChatTool>
 
+// Gemini's OpenAI-compatible surface carries thought signatures in tool call
+// `extra_content` and rejects replayed parallel calls without them:
+// https://ai.google.dev/gemini-api/docs/thinking#signatures
+const ExtraContent = Schema.Struct({
+  google: Schema.Struct({ thought_signature: Schema.String }),
+})
+const decodeExtraContent = (value: unknown) => Option.getOrUndefined(Schema.decodeUnknownOption(ExtraContent)(value))
+
 const OpenAIChatAssistantToolCall = Schema.Struct({
   id: Schema.String,
   type: Schema.tag("function"),
@@ -71,6 +79,7 @@ const OpenAIChatAssistantToolCall = Schema.Struct({
     name: Schema.String,
     arguments: Schema.String,
   }),
+  extra_content: Schema.optional(ExtraContent),
 })
 type OpenAIChatAssistantToolCall = Schema.Schema.Type<typeof OpenAIChatAssistantToolCall>
 
@@ -112,18 +121,15 @@ const decodeReasoningDetail = Schema.decodeUnknownOption(ReasoningDetail)
 const knownReasoningDetails = (details: ReadonlyArray<unknown>) =>
   details.flatMap((detail) => Option.toArray(decodeReasoningDetail(detail)))
 
-// Intentionally omit Gemini's provider-specific `extra_content.google.thought_signature`
-// extension until direct Google OpenAI-compatible routing is supported here:
-// https://github.com/vercel/ai/issues/11590
-// https://github.com/vercel/ai/pull/11745
-// https://ai.google.dev/gemini-api/docs/thought-signatures#openai
+const OpenAIChatTextContent = Schema.Struct({
+  type: Schema.Literal("text"),
+  text: Schema.String,
+  cache_control: Schema.optional(OpenAIChatCacheControl),
+})
+type OpenAIChatTextContent = Schema.Schema.Type<typeof OpenAIChatTextContent>
 
 const OpenAIChatUserContent = Schema.Union([
-  Schema.Struct({
-    type: Schema.Literal("text"),
-    text: Schema.String,
-    cache_control: Schema.optional(OpenAIChatCacheControl),
-  }),
+  OpenAIChatTextContent,
   Schema.Struct({
     type: Schema.Literal("image_url"),
     image_url: Schema.Struct({ url: Schema.String }),
@@ -133,6 +139,7 @@ const OpenAIChatUserContent = Schema.Union([
     file: Schema.Struct({ filename: Schema.String, file_data: Schema.String }),
   }),
 ])
+type OpenAIChatUserContent = Schema.Schema.Type<typeof OpenAIChatUserContent>
 
 const OpenAIChatMessage = Schema.Union([
   Schema.Struct({
@@ -146,21 +153,19 @@ const OpenAIChatMessage = Schema.Union([
   Schema.StructWithRest(
     Schema.Struct({
       role: Schema.Literal("assistant"),
-      content: Schema.NullOr(Schema.String),
+      content: Schema.NullOr(Schema.Union([Schema.String, Schema.Array(OpenAIChatTextContent)])),
       tool_calls: optionalArray(OpenAIChatAssistantToolCall),
       reasoning_content: Schema.optional(Schema.String),
       reasoning: Schema.optional(Schema.String),
       reasoning_text: Schema.optional(Schema.String),
       reasoning_details: Schema.optional(Schema.Unknown),
-      cache_control: Schema.optional(OpenAIChatCacheControl),
     }),
     [Schema.Record(Schema.String, Schema.Unknown)],
   ),
   Schema.Struct({
     role: Schema.Literal("tool"),
     tool_call_id: Schema.String,
-    content: Schema.String,
-    cache_control: Schema.optional(OpenAIChatCacheControl),
+    content: Schema.Union([Schema.String, Schema.Array(OpenAIChatTextContent)]),
   }),
 ]).pipe(Schema.toTaggedUnion("role"))
 type OpenAIChatMessage = Schema.Schema.Type<typeof OpenAIChatMessage>
@@ -242,6 +247,7 @@ const OpenAIChatToolCallDelta = Schema.Struct({
   index: optionalNull(Schema.Number),
   id: optionalNull(Schema.String),
   function: optionalNull(OpenAIChatToolCallDeltaFunction),
+  extra_content: optionalNull(Schema.Unknown),
 })
 type OpenAIChatToolCallDelta = Schema.Schema.Type<typeof OpenAIChatToolCallDelta>
 
@@ -294,6 +300,7 @@ interface PendingToolDelta {
   readonly id?: string
   readonly name?: string
   readonly input: string
+  readonly extraContent?: Schema.Schema.Type<typeof ExtraContent>
 }
 
 export interface ParserState {
@@ -322,9 +329,7 @@ export interface ParserState {
 // OpenAI Chat wire format. Keep provider quirks here instead of leaking native
 // fields into `LLMRequest`.
 interface LoweringOptions {
-  readonly cacheControl?: (
-    cache: CacheHint | undefined,
-  ) => Schema.Schema.Type<typeof OpenAIChatCacheControl> | undefined
+  readonly cacheControl?: (cache: CacheHint | undefined) => OpenAIChatCacheControl | undefined
   readonly toolCallID?: (id: string) => string
 }
 
@@ -347,13 +352,17 @@ const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
     tool: (name) => ({ type: "function" as const, function: { name } }),
   })
 
-const lowerToolCall = (part: ToolCallPart, options: LoweringOptions): OpenAIChatAssistantToolCall => ({
+const lowerToolCall = (
+  part: ToolCallPart,
+  options: LoweringOptions & { readonly providerMetadataKey: string },
+): OpenAIChatAssistantToolCall => ({
   id: options.toolCallID?.(part.id) ?? part.id,
   type: "function",
   function: {
     name: part.name,
     arguments: ProviderShared.encodeJson(part.input === undefined ? {} : part.input),
   },
+  extra_content: decodeExtraContent(part.providerMetadata?.[options.providerMetadataKey]?.extraContent),
 })
 
 const lowerMedia = Effect.fn("OpenAIChat.lowerMedia")(function* (part: MediaPart) {
@@ -406,7 +415,7 @@ const lowerUserMessage = Effect.fn("OpenAIChat.lowerUserMessage")(function* (
   message: OpenAIChatRequestMessage,
   options: LoweringOptions,
 ) {
-  const content: Array<Schema.Schema.Type<typeof OpenAIChatUserContent>> = []
+  const content: OpenAIChatUserContent[] = []
   for (const part of message.content) {
     if (part.type === "text") {
       content.push({ type: "text", text: part.text, cache_control: options.cacheControl?.(part.cache) })
@@ -432,14 +441,14 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
   requireReasoning: boolean,
   options: LoweringOptions & { readonly providerMetadataKey: string },
 ) {
-  const content: TextPart[] = []
+  const content: OpenAIChatTextContent[] = []
   const reasoning: ReasoningPart[] = []
   const toolCalls: OpenAIChatAssistantToolCall[] = []
   for (const part of message.content) {
     if (!ProviderShared.supportsContent(part, ["text", "reasoning", "tool-call"]))
       return yield* ProviderShared.unsupportedContent("OpenAI Chat", "assistant", ["text", "reasoning", "tool-call"])
     if (part.type === "text") {
-      content.push(part)
+      content.push({ type: "text", text: part.text, cache_control: options.cacheControl?.(part.cache) })
       continue
     }
     if (part.type === "reasoning") {
@@ -477,14 +486,15 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
     if (reasoning.length === 0) return nativeReasoning ?? (requireReasoning ? "" : undefined)
     return text
   })()
-  const cached = message.content.findLast((part) => "cache" in part && part.cache !== undefined)
-  const cacheControl = options.cacheControl?.(cached && "cache" in cached ? cached.cache : undefined)
   const result = {
     role: "assistant" as const,
-    content: content.length > 0 ? content.map((part) => part.text).join("") : toolCalls.length > 0 ? null : "",
+    content: (() => {
+      if (content.some((part) => part.cache_control !== undefined)) return content
+      if (content.length === 0 && toolCalls.length > 0) return null
+      return content.map((part) => part.text).join("")
+    })(),
     ...(toolCalls.length > 0 ? { tool_calls: toolCalls } : {}),
     ...(details !== undefined ? { reasoning_details: details } : {}),
-    ...(cacheControl !== undefined ? { cache_control: cacheControl } : {}),
   }
   if (field === undefined || reasoningText === undefined) return result
   return { ...result, [field]: reasoningText }
@@ -495,31 +505,36 @@ const lowerToolMessages = Effect.fn("OpenAIChat.lowerToolMessages")(function* (
   options: LoweringOptions,
 ) {
   const messages: OpenAIChatMessage[] = []
-  const attachments: Array<Schema.Schema.Type<typeof OpenAIChatUserContent>> = []
+  const attachments: OpenAIChatUserContent[] = []
   for (const part of message.content) {
     if (!ProviderShared.supportsContent(part, ["tool-result"]))
       return yield* ProviderShared.unsupportedContent("OpenAI Chat", "tool", ["tool-result"])
     if (part.result.type !== "content") {
-      messages.push({
-        role: "tool",
-        tool_call_id: options.toolCallID?.(part.id) ?? part.id,
-        content: ProviderShared.toolResultText(part),
-        cache_control: options.cacheControl?.(part.cache),
-      })
+      messages.push(
+        toolMessage(
+          options.toolCallID?.(part.id) ?? part.id,
+          ProviderShared.toolResultText(part),
+          options.cacheControl?.(part.cache),
+        ),
+      )
       continue
     }
     const content: ReadonlyArray<Tool.Content> = part.result.value
     const text = content.filter((item) => item.type === "text").map((item) => item.text)
-    messages.push({
-      role: "tool",
-      tool_call_id: options.toolCallID?.(part.id) ?? part.id,
-      content: text.join("\n"),
-      cache_control: options.cacheControl?.(part.cache),
-    })
+    messages.push(
+      toolMessage(options.toolCallID?.(part.id) ?? part.id, text.join("\n"), options.cacheControl?.(part.cache)),
+    )
     const files = content.filter((item) => item.type === "file")
     attachments.push(...(yield* Effect.forEach(files, (item) => lowerMedia(ProviderShared.toolFileMedia(item)))))
   }
   return { messages, attachments }
+})
+
+// Chat cache breakpoints belong on text content parts, not on the message itself.
+const toolMessage = (toolCallID: string, text: string, cacheControl: OpenAIChatCacheControl | undefined) => ({
+  role: "tool" as const,
+  tool_call_id: toolCallID,
+  content: cacheControl === undefined ? text : [{ type: "text" as const, text, cache_control: cacheControl }],
 })
 
 const lowerMessage = Effect.fn("OpenAIChat.lowerMessage")(function* (
@@ -580,7 +595,7 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
     if (requireAssistantAfterTool && messages.at(-1)?.role === "tool")
       messages.push({ role: "assistant", content: "Done." })
   }
-  const pendingAttachments: Array<Schema.Schema.Type<typeof OpenAIChatUserContent>> = []
+  const pendingAttachments: OpenAIChatUserContent[] = []
   const flushAttachments = () => {
     if (pendingAttachments.length === 0) return
     bridgeTools()
@@ -590,24 +605,25 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
     if (message.role === "user") bridgeTools()
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("OpenAI Chat", message)
+      const cacheControl = options.cacheControl?.(part.cache)
       if (pendingAttachments.length > 0) {
         messages.push({
           role: "user",
           content: [
             ...pendingAttachments.splice(0),
-            { type: "text", text: part.text, cache_control: options.cacheControl?.(part.cache) },
+            { type: "text", text: part.text, cache_control: cacheControl },
           ],
         })
         continue
       }
       const previous = messages.at(-1)
       if (previous?.role === "user" && typeof previous.content === "string")
-        messages[messages.length - 1] = options.cacheControl?.(part.cache)
+        messages[messages.length - 1] = cacheControl
           ? {
               role: "user",
               content: [
                 { type: "text", text: previous.content },
-                { type: "text", text: part.text, cache_control: options.cacheControl(part.cache) },
+                { type: "text", text: part.text, cache_control: cacheControl },
               ],
             }
           : { role: "user", content: `${previous.content}\n${part.text}` }
@@ -616,15 +632,15 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
           role: "user",
           content: [
             ...previous.content,
-            { type: "text", text: part.text, cache_control: options.cacheControl?.(part.cache) },
+            { type: "text", text: part.text, cache_control: cacheControl },
           ],
         }
       else
         messages.push(
-          options.cacheControl?.(part.cache)
+          cacheControl
             ? {
                 role: "user",
-                content: [{ type: "text", text: part.text, cache_control: options.cacheControl(part.cache) }],
+                content: [{ type: "text", text: part.text, cache_control: cacheControl }],
               }
             : { role: "user", content: part.text },
         )
@@ -721,7 +737,9 @@ const detectSupportsStore = (provider: string, baseURL: string | undefined): boo
     p === "vercel-ai-gateway" || url.includes("ai-gateway.vercel.sh") || url.includes("vercel.sh")
   const isAntLing = p === "ant-ling" || url.includes("api.ant-ling.com")
   const isOpencode = p === "opencode" || url.includes("opencode.ai")
+  const isGemini = url.includes("generativelanguage.googleapis.com")
   const isNonStandard =
+    isGemini ||
     isNvidia ||
     isCerebras ||
     isXai ||
@@ -1114,12 +1132,13 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
       const id = current?.id ?? pending?.id ?? (tool.id || undefined)
       const name = current?.name ?? pending?.name ?? (tool.function?.name || undefined)
       const text = `${pending?.input ?? ""}${tool.function?.arguments ?? ""}`
+      const extraContent = pending?.extraContent ?? decodeExtraContent(tool.extra_content)
       latestToolIndex = index
       nextToolIndex = Math.max(nextToolIndex, index + 1)
       if (!current && (!id || !name)) {
         pendingTools = {
           ...pendingTools,
-          [index]: { id: id || undefined, name: name || undefined, input: text },
+          [index]: { id: id || undefined, name: name || undefined, input: text, extraContent },
         }
         continue
       }
@@ -1131,7 +1150,12 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         ADAPTER,
         tools,
         index,
-        { id: id || undefined, name: name || undefined, text },
+        {
+          id: id || undefined,
+          name: name || undefined,
+          text,
+          providerMetadata: extraContent && { [state.providerMetadataKey]: { extraContent } },
+        },
         "OpenAI Chat tool call delta is missing id or name",
       )
       if (ToolStream.isError(result))

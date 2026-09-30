@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
-import { GoUpsellState } from "./usage-exceeded-dialogs"
+import { GoUpsellState, isChatGPTUsageLimit } from "./usage-exceeded-dialogs"
 import { Persistence } from "@/runtime/persistence/schema"
 
 const decode = Schema.decodeUnknownSync(
@@ -36,5 +36,33 @@ describe("usage exceeded preferences", () => {
       go_upsell_account_rate_limit_last_seen_at: null,
       go_upsell_account_rate_limit_dont_show: 456,
     })
+  })
+})
+
+describe("ChatGPT usage limit", () => {
+  const message =
+    "ChatGPT usage limit reached. Try again after your allowance resets; check ChatGPT Settings → Usage for details."
+
+  test("detects the mapped message regardless of failure type", () => {
+    expect(
+      isChatGPTUsageLimit({
+        type: "provider.rate-limit",
+        message,
+        status: 429,
+      }),
+    ).toBe(true)
+    expect(isChatGPTUsageLimit({ type: "provider.unknown", message })).toBe(true)
+  })
+
+  test("ignores other rate limits and similar messages", () => {
+    expect(isChatGPTUsageLimit({ type: "provider.rate-limit", message: "Rate limit exceeded", status: 429 })).toBe(
+      false,
+    )
+    expect(
+      isChatGPTUsageLimit({
+        type: "provider.rate-limit",
+        message: "ChatGPT usage limit reached",
+      }),
+    ).toBe(false)
   })
 })

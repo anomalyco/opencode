@@ -154,8 +154,8 @@ describe("public exports", () => {
     expect(XAI.model).toBeFunction()
     expect(XAI.provider.responses).toBe(XAI.responses)
     expect(XAI.provider.chat).toBe(XAI.chat)
-    expect(XAI.configure({ apiKey: "fixture" }).responses("grok-4.3").route.id).toBe("openai-responses")
-    expect(XAI.configure({ apiKey: "fixture" }).chat("grok-4.3").route.id).toBe("openai-compatible-chat")
+    expect(XAI.configure({ apiKey: "fixture" }).responses("grok-4.3").route.id).toBe("xai-responses")
+    expect(XAI.configure({ apiKey: "fixture" }).chat("grok-4.3").route.id).toBe("xai-chat")
     expect(OpenAI.configure({ apiKey: "fixture" }).image("gpt-image-2").route.id).toBe("openai-images")
     expect(OpenAI.provider.image).toBe(OpenAI.image)
     expect(Google.configure({ apiKey: "fixture" }).image("imagen-4.0-generate-001").route.id).toBe("google-images")
@@ -197,6 +197,11 @@ describe("public exports", () => {
     expect(Google.configure({ apiKey: "fixture" }).transcription("gemini-3.5-transcribe").route.kind).toBe("stream")
     expect(Deepgram.configure({ apiKey: "fixture" }).transcription("nova-3").route.kind).toBe("inline")
     expect(AssemblyAI.configure({ apiKey: "fixture" }).transcription("universal-3-5-pro").route.kind).toBe("queued")
+    expect(ElevenLabs.configure({ apiKey: "fixture" }).transcription("scribe_v2").route.id).toBe(
+      "elevenlabs-transcription",
+    )
+    expect(ElevenLabs.configure({ apiKey: "fixture" }).transcription("scribe_v2").route.kind).toBe("inline")
+    expect(ElevenLabs.provider.transcription).toBe(ElevenLabs.transcription)
   })
 
   test("protocol barrels expose supported low-level routes", () => {

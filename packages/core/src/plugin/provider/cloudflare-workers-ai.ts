@@ -50,7 +50,7 @@ export const CloudflareWorkersAIPlugin = define({
 })
 
 function resolveAccountId(options: Record<string, unknown>) {
-  return process.env.CLOUDFLARE_ACCOUNT_ID ?? stringOption(options, "accountId")
+  return stringOption(options, "accountId") ?? process.env.CLOUDFLARE_ACCOUNT_ID
 }
 
 function workersEndpoint(accountId: string) {

@@ -842,6 +842,30 @@ describe("Image", () => {
     ),
   )
 
+  const falDetail = { detail: [{ loc: ["body", "prompt"], msg: "Invalid input", type: "value_error" }] }
+  it.effect(
+    "fails a fal await whose COMPLETED status carries an error with the response_url body and HTTP context",
+    () =>
+      Effect.gen(function* () {
+        const generation = yield* Image.resume(Fal.configure({ apiKey: "test" }).image("fal-ai/flux/schnell"), falToken)
+        expect(generation.status).toBe("failed")
+        const error = yield* generation.await().pipe(Effect.flip)
+        expect(error.reason._tag).toBe("InvalidRequest")
+        expect(error.reason.body).toBe(JSON.stringify(falDetail))
+        expect(error.reason.http).toMatchObject({ url: falToken.responseURL, status: 422 })
+      }).pipe(
+        Effect.provide(
+          layer((input) =>
+            Effect.succeed(
+              input.request.url === falToken.statusURL
+                ? json(input, { status: "COMPLETED", error: "Invalid input", error_type: "ValidationError" })
+                : json(input, falDetail, { status: 422 }),
+            ),
+          ),
+        ),
+      ),
+  )
+
   const moderated = { id: "req_1", status: "Content Moderated" }
   const prediction = {
     id: "p_1",

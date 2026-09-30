@@ -31,6 +31,7 @@ import { Permission } from "../permission.js"
 import { PluginHooks } from "../plugin/hooks.js"
 import { QuestionTool } from "../tool/plugin/question.js"
 import { Tool } from "../tool.js"
+import { SessionAffinity } from "./affinity.js"
 import { SessionModelTransport } from "./model-transport.js"
 import { SessionProviderContext } from "./provider-context.js"
 import { SessionRunnerModel } from "./runner/model.js"
@@ -44,6 +45,16 @@ const IMAGE_BYTES_TARGET = 15 * 1024 * 1024 // 15 MiB
 const IMAGE_REMOVED =
   "[This image was removed to reduce the request size and is no longer visible. Do not make claims about its contents from memory. If needed, retrieve it again with an available tool or ask the user to attach it again.]"
 const GENERATION_KEYS = new Set(Object.keys(GenerationOptions.fields))
+// Used when the catalog has no output limit for the model.
+const OUTPUT_TOKEN_FALLBACK = 32_000
+// No reply needs more, however much the model allows.
+const OUTPUT_TOKEN_MAX = 256_000
+// A summary never needs more, and a request asking for more cannot be shrunk to fit a window the catalog overstates.
+const SUMMARY_OUTPUT_MAX = 32_000
+// Prompt text is estimated at about 4 characters per token, which can run low on dense text such as code.
+const ESTIMATE_ERROR = 0.15
+// Never ask for less; only reachable with automatic compaction off, since it keeps the window from filling this far.
+const OUTPUT_TOKEN_MIN = 1_024
 
 /** Tool errors, plus the user declining a permission or dismissing a question. */
 export type ExecuteError = Tool.Error | Permission.DeclinedError | QuestionTool.CancelledError
@@ -69,6 +80,21 @@ export interface Input {
   readonly toolChoice?: LLM.RequestInput["toolChoice"]
   /** Only the durable runner may use a stateful WebSocket. */
   readonly webSocket?: "session"
+  /** Prompt size, measured by the provider or estimated. The default output limit leaves room for it. */
+  readonly inputTokens?: { readonly measured: number; readonly estimated: number }
+}
+
+/** The default output limit: the catalog limit, fitted to the room the prompt leaves in the context window. */
+const outputLimit = (
+  limit: Model.Info["limit"],
+  kind: "primary" | "compaction",
+  inputTokens?: Input["inputTokens"],
+) => {
+  const model = Math.min(limit.output > 0 ? limit.output : OUTPUT_TOKEN_FALLBACK, OUTPUT_TOKEN_MAX)
+  const requested = kind === "compaction" ? Math.min(model, SUMMARY_OUTPUT_MAX) : model
+  if (inputTokens === undefined || limit.context <= 0) return requested
+  const room = limit.context - inputTokens.measured - Math.ceil(inputTokens.estimated * (1 + ESTIMATE_ERROR))
+  return Math.min(requested, Math.max(OUTPUT_TOKEN_MIN, room))
 }
 
 export const baseTranscript = (input: {
@@ -218,8 +244,19 @@ export const layer = Layer.effect(
       const given = new Map(
         tools.definitions.map((t) => [{ description: t.description, input: { ...t.inputSchema } }, t] as const),
       )
+      // Hooks see the default output limit and may change or remove it. Titles and generate keep the provider default,
+      // because their reasoning is hard to budget.
       const shaped = yield* shape(
-        { sessionID: session.id, model: model.ref, system: input.system, messages: input.messages, options: {} },
+        {
+          sessionID: session.id,
+          model: model.ref,
+          system: input.system,
+          messages: input.messages,
+          options:
+            kind === "primary" || kind === "compaction"
+              ? { maxTokens: outputLimit(model.limit, kind, input.inputTokens) }
+              : {},
+        },
         Object.fromEntries(Array.from(given, ([d, t]) => [t.name, d])),
       )
       // Match by identity first, then by key. Entries matching neither were invented by a
@@ -234,17 +271,17 @@ export const layer = Layer.effect(
       const entries = Object.entries(shaped.options)
       const generation = Object.fromEntries(entries.filter(([k]) => GENERATION_KEYS.has(k))) as GenerationOptionsFields
       const providerOptions = Object.fromEntries(entries.filter(([k]) => !GENERATION_KEYS.has(k)))
-      const affinity = session.parentID ?? session.fork?.sessionID ?? session.id
+      const affinity = SessionAffinity.get(session)
       const base = LLM.request({
         model: model.model,
         http: {
           headers: {
-            "x-session-affinity": session.id,
-            "X-Session-Id": session.id,
+            "x-session-affinity": affinity,
+            "X-Session-Id": affinity,
             ...(session.parentID ? { "x-parent-session-id": session.parentID } : {}),
             "User-Agent": App.useragent(app),
             "x-opencode-project": session.projectID,
-            "x-opencode-session": session.id,
+            "x-opencode-session": affinity,
             "x-opencode-client": app.name,
           },
         },

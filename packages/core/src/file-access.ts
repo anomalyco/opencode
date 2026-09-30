@@ -30,12 +30,6 @@ export interface ExternalDirectoryAuthorization {
   readonly save: string
 }
 
-export const externalDirectoryPermission = (input: ExternalDirectoryAuthorization) => ({
-  action: input.action,
-  resources: [input.resource],
-  save: [input.save],
-})
-
 export interface Target {
   readonly absolute: AbsolutePath
   /** Location-relative for internal paths, absolute for external paths. */

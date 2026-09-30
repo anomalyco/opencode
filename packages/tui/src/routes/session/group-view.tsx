@@ -211,7 +211,7 @@ function ActivityGroup(props: GroupProps) {
     <GroupAnchor groupID={disclosure.id()} active={summary().label !== ""}>
       <Show when={summary().label}>
         <InlineToolRow
-          icon={summary().failed ? "✗" : disclosure.expanded() ? "−" : "+"}
+          icon={disclosure.expanded() ? "−" : "+"}
           color={hover() ? theme.text.base : theme.text.muted}
           complete={true}
           pending={summary().label}

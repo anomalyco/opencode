@@ -345,6 +345,15 @@ export const make = Effect.fn("PluginHost.make")(function* (
           integration.connection.resolve(
             connection.type === "credential" ? { ...connection, id: Credential.ID.make(connection.id) } : connection,
           ),
+        status: (input) =>
+          integration.connection.status({
+            integrationID: Integration.ID.make(input.integrationID),
+            connection:
+              input.connection.type === "credential"
+                ? { ...input.connection, id: Credential.ID.make(input.connection.id) }
+                : input.connection,
+            status: input.status,
+          }),
       },
       transform: (callback) =>
         integration.transform((editor) => {

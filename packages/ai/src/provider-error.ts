@@ -1,4 +1,4 @@
-import { Option, Schema } from "effect"
+import { Option, Schema, SchemaGetter } from "effect"
 import {
   AuthenticationError,
   ContentPolicyError,
@@ -16,6 +16,8 @@ import {
 const patterns = [
   /prompt is too long/i,
   /input is too long for requested model/i,
+  // Cloudflare Workers AI reports this as HTTP 413.
+  /exceeded this model context window limit/i,
   /exceeds the context window/i,
   /exceeds (?:the )?(?:model'?s )?maximum context length(?: of [\d,]+ tokens?|\s*\([\d,]+\))/i,
   /input token count.*exceeds the maximum/i,
@@ -58,6 +60,47 @@ export const isContextOverflowFailure = (failure: unknown) =>
     ? failure.reason._tag === "InvalidRequest" && failure.reason.classification === "context-overflow"
     : Schema.is(ProviderErrorEvent)(failure) && failure.classification === "context-overflow"
 
+/**
+ * Whether a failed call may succeed when sent again: rate limits, provider-side failures, transport failures that did
+ * not deliver an accepted write, and unrecognized failures. Callers decide which calls are safe to repeat.
+ */
+export const isRetryable = (error: AIError) => {
+  const override = error.reason.http?.headers["x-should-retry"]
+  if (override === "true") return true
+  if (override === "false") return false
+  switch (error.reason._tag) {
+    case "RateLimit":
+    case "ProviderInternal":
+      return true
+    // A WebSocket acknowledgment marks delivery accepted before model output may exist.
+    // Read failures can still recover; the caller chooses retry versus continuation from durable output.
+    case "Transport":
+      return (
+        error.reason.delivery !== "rejected" &&
+        (error.reason.delivery !== "accepted" || error.reason.operation === "read")
+      )
+    case "InvalidProviderOutput":
+      return error.reason.classification === "incomplete-stream"
+    // Unrecognized failures retry: classification records affirmative
+    // deterministic evidence, and transient failures are exactly the ones
+    // that arrive in shapes no classifier anticipates.
+    case "UnknownProvider":
+      return true
+    case "Authentication":
+    case "QuotaExceeded":
+    case "ContentPolicy":
+    case "InvalidRequest":
+    case "UnsupportedOperation":
+    case "NoRoute":
+    case "Timeout":
+      return false
+    default: {
+      const exhaustive: never = error.reason
+      return exhaustive
+    }
+  }
+}
+
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 // OpenCode Zen reports account caps as typed 429/402 errors that are not throttles.
 const QUOTA_CODES = new Set([
@@ -68,7 +111,8 @@ const QUOTA_CODES = new Set([
   "freeusagelimiterror",
   "creditlimitexceeded",
 ])
-const AUTH_CODES = new Set(["authentication_error", "permission_error"])
+// Google reports an invalid API key as HTTP 400 INVALID_ARGUMENT with this `details[].reason`.
+const AUTH_CODES = new Set(["authentication_error", "permission_error", "api_key_invalid"])
 const SERVER_CODES = new Set([
   "api_error",
   "internal_error",
@@ -112,6 +156,41 @@ const CONTENT_POLICY_TEXT =
   /violating our usage policy|blocked by content filtering policy|content[-_\s]?policy|rejected as a result of our safety system/i
 const SERVER_ERROR_TEXT =
   /\b(?:try again|(?:please |you can )?retry (?:the |this |your )?request|try (?:the |this |your )?request again|(?:currently |temporarily )?at capacity|overloaded|temporarily unavailable|service[-_\s]?unavailable|(?:server|internal)[-_\s]?error|server (?:is )?busy|provider returned (?:an )?error|resource[-_\s]?exhausted|upstream (?:connect|connection|request)|request buffer limit while retrying upstream)\b/i
+
+const Message = Schema.String.check(Schema.isPattern(/\S/))
+
+const messageAt = <Fields extends Schema.Struct.Fields>(
+  fields: Fields,
+  message: (body: Schema.Struct<Fields>["Type"]) => string,
+) =>
+  Schema.Struct(fields).pipe(
+    Schema.decodeTo(Schema.String, {
+      decode: SchemaGetter.transform(message),
+      encode: SchemaGetter.forbidden(() => "Provider error messages are decode-only"),
+    }),
+  )
+
+// Common error body layouts that carry a human-readable message, in priority order.
+// Provider-specific layouts belong in their protocol.
+const decodeMessage = Schema.decodeUnknownOption(
+  Schema.fromJsonString(
+    Schema.Union([
+      messageAt({ error: Schema.Struct({ message: Message }) }, (body) => body.error.message),
+      messageAt({ error: Message }, (body) => body.error),
+      messageAt({ message: Message }, (body) => body.message),
+      // AWS services
+      messageAt({ Message: Message }, (body) => body.Message),
+      // RFC 9457 problem details
+      messageAt({ detail: Message }, (body) => body.detail),
+      messageAt(
+        { errors: Schema.NonEmptyArray(Schema.Struct({ message: Message })) },
+        (body) => body.errors[0].message,
+      ),
+    ]),
+  ),
+)
+
+export const providerErrorMessage = (body: string) => Option.getOrUndefined(decodeMessage(body))
 
 export interface ProviderFailure {
   readonly message: string
@@ -218,6 +297,10 @@ function providerCodes(value: unknown) {
     error?.type,
     error?.status,
     error?.error_type,
+    // Google `google.rpc.ErrorInfo` details carry the specific reason.
+    ...(Array.isArray(error?.details)
+      ? error.details.map((detail) => (isRecord(detail) ? detail.reason : undefined))
+      : []),
     inner?.code,
     metadata?.error_type,
     responseError?.code,

@@ -186,11 +186,17 @@ for (const scenario of scenarios) {
                 const toolTitle = element
                   .closest('[data-component="edit-tool"]')
                   ?.querySelector('[data-slot="collapsible-trigger"][data-locked]')
-                const top = viewport.getBoundingClientRect().top + (title?.getBoundingClientRect().height ?? 0)
+                // Grouped file headers stack below the stuck Used header.
+                const group = element
+                  .closest('[data-component="collapsed-tool-group"]')
+                  ?.querySelector(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
+                const sessionTop = viewport.getBoundingClientRect().top + (title?.getBoundingClientRect().height ?? 0)
+                const top = sessionTop + (group?.getBoundingClientRect().height ?? 0)
                 const rect = element.getBoundingClientRect()
                 const trigger = element.querySelector("button")!
                 return {
                   gap: Math.abs(rect.top - top - (toolTitle?.getBoundingClientRect().height ?? 0)),
+                  groupGap: group ? Math.abs(group.getBoundingClientRect().top - sessionTop) : 0,
                   titleGap: toolTitle ? Math.abs(toolTitle.getBoundingClientRect().top - top) : 0,
                   clickable: trigger.contains(
                     document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2),
@@ -198,7 +204,7 @@ for (const scenario of scenarios) {
                 }
               }),
             )
-            .toEqual({ gap: 0, titleGap: 0, clickable: true })
+            .toEqual({ gap: 0, groupGap: 0, titleGap: 0, clickable: true })
           await page.screenshot({ path: info.outputPath(`${file}.png`) })
         }
 

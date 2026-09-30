@@ -51,7 +51,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
     ),
     session: Flag.string("session").pipe(
       Flag.withAlias("s"),
-      Flag.withDescription("Session ID to continue"),
+      Flag.withDescription("Session ID to continue, or to create if it does not exist"),
       Flag.optional,
     ),
     prompt: Flag.string("prompt").pipe(Flag.withDescription("Prompt to use"), Flag.optional),
@@ -179,6 +179,26 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
             ),
             credential: Argument.string("credential").pipe(
               Argument.withDescription("Credential ID or label (opens an account picker when omitted)"),
+              Argument.optional,
+            ),
+          },
+        }),
+        Spec.make("export", {
+          description: "print stored credentials, including secrets, as JSON",
+          params: {
+            ...ServerParams,
+            target: Argument.string("target").pipe(
+              Argument.withDescription("Integration ID or name (exports every integration when omitted)"),
+              Argument.optional,
+            ),
+          },
+        }),
+        Spec.make("import", {
+          description: "import credentials exported by auth export",
+          params: {
+            ...ServerParams,
+            file: Argument.string("file").pipe(
+              Argument.withDescription("JSON file to import (reads stdin when omitted)"),
               Argument.optional,
             ),
           },
@@ -328,7 +348,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         ),
         session: Flag.string("session").pipe(
           Flag.withAlias("s"),
-          Flag.withDescription("Session ID to continue"),
+          Flag.withDescription("Session ID to continue, or to create if it does not exist"),
           Flag.optional,
         ),
         fork: Flag.boolean("fork").pipe(
@@ -368,7 +388,7 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         ),
         session: Flag.string("session").pipe(
           Flag.withAlias("s"),
-          Flag.withDescription("Session ID to continue"),
+          Flag.withDescription("Session ID to continue, or to create if it does not exist"),
           Flag.optional,
         ),
         fork: Flag.boolean("fork").pipe(
