@@ -8,7 +8,12 @@ import type {
 } from "@opencode/client/promise"
 import { Option, Schema } from "effect"
 import { createMemo, mapArray, type Accessor } from "solid-js"
-import { currentContentDefaultOpen, currentToolFailed, currentToolHasLoadedFiles } from "../message/current-tool-state"
+import {
+  currentContentDefaultOpen,
+  currentToolFailed,
+  currentToolGroupedRead,
+  currentToolHasLoadedFiles,
+} from "../message/current-tool-state"
 import { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap } from "./timeline-row"
 import { timelineCategory, timelineNoticeRequired, type TimelineDetail } from "./detail"
 
@@ -602,7 +607,7 @@ function groupContent(
   detail?: TimelineDetail,
 ): PartGroup[] {
   const groups: PartGroup[] = []
-  let adjacent: { type: "context" | "file"; refs: PartRef[]; tools: boolean } | undefined
+  let adjacent: { type: "context" | "file" | "read"; refs: PartRef[]; tools: boolean } | undefined
   const flush = () => {
     const current = adjacent
     const first = current?.refs[0]
@@ -615,7 +620,7 @@ function groupContent(
       return
     }
     groups.push({
-      type: current.type === "context" ? "context" : "file",
+      type: current.type,
       key:
         current.type !== "context"
           ? `part:${first.messageID}:${first.partID}`
@@ -669,6 +674,7 @@ function toolGroupType(
     if (content.name === "question" && !currentToolFailed(content)) return undefined
     const category = timelineCategory(content)!
     if (detail[category].placement === "grouped") return "context"
+    if (currentToolGroupedRead(content)) return "read"
     if (currentToolFailed(content)) return undefined
     if (content.name === "patch" || content.name === "edit" || content.name === "write") return "file"
     return undefined
