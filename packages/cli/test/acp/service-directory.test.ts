@@ -1,6 +1,14 @@
 import { describe, expect, test } from "bun:test"
 import type { McpServer, SessionConfigOption } from "@agentclientprotocol/sdk"
-import { makeACPFixture, makeSession, secondModel, testModel } from "./service-fixture"
+import {
+  buildAgent,
+  makeACPFixture,
+  makeSession,
+  planAgent,
+  reviewCommand,
+  secondModel,
+  testModel,
+} from "./service-fixture"
 import { flattenSelectOptions, requireSelectOption } from "./subprocess"
 
 describe("acp service directory behavior", () => {
@@ -27,12 +35,7 @@ describe("acp service directory behavior", () => {
     expect(currentValue(first[0], "model")).toBe("test/test-model")
     expect(currentValue(first[0], "mode")).toBe("build")
     expect(
-      [
-        "/api/model",
-        "/api/model/default",
-        "/api/agent",
-        "/api/command",
-      ].map((path) =>
+      ["/api/model", "/api/model/default", "/api/agent", "/api/command"].map((path) =>
         fixture.requests
           .filter((request) => request.path === path)
           .map((request) => request.query["location[directory]"]),
@@ -48,21 +51,9 @@ describe("acp service directory behavior", () => {
         .filter((request) => request.method === "POST" && request.path === "/api/session")
         .map((request) => request.body),
     ).toEqual([
-      {
-        agent: "build",
-        model: { providerID: "test", id: "test-model", variant: "default" },
-        location: { directory: "/workspace" },
-      },
-      {
-        agent: "build",
-        model: { providerID: "test", id: "test-model", variant: "default" },
-        location: { directory: "/workspace" },
-      },
-      {
-        agent: "build",
-        model: { providerID: "test", id: "test-model", variant: "default" },
-        location: { directory: "/other" },
-      },
+      { location: { directory: "/workspace" } },
+      { location: { directory: "/workspace" } },
+      { location: { directory: "/other" } },
     ])
     expect(
       fixture.updates.map((item) =>
@@ -70,11 +61,115 @@ describe("acp service directory behavior", () => {
           ? item.update.availableCommands.map((command) => command.name)
           : [],
       ),
-    ).toEqual([
-      ["review"],
-      ["review"],
-      ["review"],
-    ])
+    ).toEqual([["review"], ["review"], ["review"]])
+  })
+
+  test("follows server defaults and refreshes the catalog when location plugins finish activating", async () => {
+    const configured = { ...buildAgent, id: "copilot-build", name: "copilot-build" }
+    const catalog = { agents: [buildAgent, planAgent], commands: [reviewCommand] }
+    let created = 0
+    await using fixture = makeACPFixture({
+      fetch(request) {
+        const location = { directory: request.query["location[directory]"] ?? "/workspace" }
+        if (request.path === "/api/agent") return Response.json({ location, data: catalog.agents })
+        if (request.path === "/api/command") return Response.json({ location, data: catalog.commands })
+        if (request.method !== "POST" || request.path !== "/api/session") return undefined
+        created++
+        return Response.json({ data: { ...makeSession(`ses_${created}`), agent: undefined, model: undefined } })
+      },
+    })
+
+    const first = await fixture.service.newSession({ cwd: "/workspace", mcpServers: [] })
+    expect(currentValue(first, "mode")).toBe("build")
+    expect(currentValue(first, "model")).toBe("test/test-model")
+
+    const agentReads = () => fixture.requests.filter((request) => request.path === "/api/agent").length
+    const reads = agentReads()
+    fixture.send({ id: "evt_other", created: 1, type: "agent.updated", location: { directory: "/other" }, data: {} })
+    catalog.agents = [configured, buildAgent, planAgent]
+    catalog.commands = [reviewCommand, { name: "ship", description: "Ship it" }]
+    fixture.send({
+      id: "evt_agent",
+      created: 2,
+      type: "agent.updated",
+      location: { directory: "/workspace" },
+      data: {},
+    })
+
+    const update = await until(() =>
+      fixture.updates.find(
+        (item) => item.sessionId === first.sessionId && item.update.sessionUpdate === "config_option_update",
+      ),
+    )
+    expect(update.update.sessionUpdate === "config_option_update" && modeOption(update.update.configOptions)).toEqual({
+      currentValue: "copilot-build",
+      options: ["copilot-build", "build", "plan"],
+    })
+    const commands = await until(() =>
+      fixture.updates.findLast(
+        (item) =>
+          item.sessionId === first.sessionId &&
+          item.update.sessionUpdate === "available_commands_update" &&
+          item.update.availableCommands.length === 2,
+      ),
+    )
+    expect(
+      commands.update.sessionUpdate === "available_commands_update" &&
+        commands.update.availableCommands.map((command) => command.name),
+    ).toEqual(["review", "ship"])
+    expect(agentReads()).toBe(reads + 1)
+
+    const second = await fixture.service.newSession({ cwd: "/workspace", mcpServers: [] })
+    expect(currentValue(second, "mode")).toBe("copilot-build")
+    expect(
+      fixture.requests
+        .filter((request) => request.method === "POST" && request.path === "/api/session")
+        .map((request) => request.body),
+    ).toEqual([{ location: { directory: "/workspace" } }, { location: { directory: "/workspace" } }])
+  })
+
+  test("reloads the catalog before rejecting a model or mode it has not seen", async () => {
+    const configured = { ...planAgent, id: "copilot-build", name: "copilot-build" }
+    const catalog = { models: [testModel], agents: [buildAgent, planAgent] }
+    await using fixture = makeACPFixture({
+      defaultModel: testModel,
+      fetch(request) {
+        const location = { directory: request.query["location[directory]"] ?? "/workspace" }
+        if (request.path === "/api/model") return Response.json({ location, data: catalog.models })
+        if (request.path === "/api/agent") return Response.json({ location, data: catalog.agents })
+        if (request.method === "POST" && request.path === "/api/session") {
+          return Response.json({ data: makeSession("ses_reload") })
+        }
+        if (
+          request.method === "POST" &&
+          (request.path === "/api/session/ses_reload/model" || request.path === "/api/session/ses_reload/agent")
+        ) {
+          return new Response(null, { status: 204 })
+        }
+        return undefined
+      },
+    })
+    const session = await fixture.service.newSession({ cwd: "/workspace", mcpServers: [] })
+    catalog.models = [testModel, secondModel]
+    catalog.agents = [buildAgent, planAgent, configured]
+
+    const model = await fixture.service.setSessionConfigOption({
+      sessionId: session.sessionId,
+      configId: "model",
+      value: "test/second-model",
+    })
+    await fixture.service.setSessionMode({ sessionId: session.sessionId, modeId: "copilot-build" })
+    const missing = await fixture.service
+      .setSessionConfigOption({ sessionId: session.sessionId, configId: "mode", value: "missing" })
+      .catch((error: unknown) => error)
+
+    expect(currentValue(model, "model")).toBe("test/second-model")
+    expect(
+      fixture.requests
+        .filter((request) => request.path === "/api/session/ses_reload/agent")
+        .map((request) => request.body),
+    ).toEqual([{ agent: "copilot-build" }])
+    expect(missing).toMatchObject({ _tag: "ACPInvalidModeError" })
   })
 
   test.each(["empty", "missing the default"])(
@@ -299,6 +394,21 @@ describe("acp service directory behavior", () => {
     ])
   })
 })
+
+function modeOption(options: SessionConfigOption[]) {
+  const mode = requireSelectOption(options, "mode")
+  return { currentValue: mode.currentValue, options: flattenSelectOptions(mode).map((option) => option.value) }
+}
+
+async function until<Value>(read: () => Value | undefined) {
+  const deadline = Date.now() + 2_000
+  while (Date.now() < deadline) {
+    const value = read()
+    if (value !== undefined) return value
+    await Bun.sleep(5)
+  }
+  throw new Error("timed out waiting for ACP update")
+}
 
 function currentValue(
   result: { readonly configOptions?: readonly SessionConfigOption[] | null } | undefined,

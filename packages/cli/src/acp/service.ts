@@ -70,14 +70,25 @@ type Catalog = {
   readonly commands: CommandInfo[]
 }
 
+// Model and mode are unset while the session follows the server defaults.
 type Attached = {
   readonly id: string
   readonly cwd: string
   readonly abort: AbortController
   catalog: Catalog
-  model: ModelRef
-  modeID: string
+  model?: ModelRef
+  modeID?: string
 }
+
+// Location plugins fill the catalog after the first reads, so these events refresh it.
+const catalogEvents = new Set([
+  "provider.updated",
+  "model.updated",
+  "integration.updated",
+  "credential.switched",
+  "agent.updated",
+  "command.updated",
+])
 
 type PreparedPrompt = {
   readonly start: TurnStart
@@ -114,15 +125,103 @@ export function make(input: {
   const active = new Map<string, { readonly control: TurnControl; readonly turn: Promise<PromptResponse> }>()
   const capabilities = { writeTextFile: false, childSessionUpdates: false }
 
+  const refreshing = new Map<string, Promise<void>>()
+  const stale = new Set<string>()
+  let watching: Promise<void> | undefined
+
   const catalog = (cwd: string) => {
     const cached = catalogs.get(cwd)
     if (cached) return cached
-    const loaded = loadCatalog(input.client, cwd).catch((error) => {
-      catalogs.delete(cwd)
-      throw error
-    })
+    // Subscribe before the first read so no update between the read and the subscription is lost.
+    const loaded = watch()
+      .then(() => loadCatalog(input.client, cwd))
+      .catch((error) => {
+        catalogs.delete(cwd)
+        throw error
+      })
     catalogs.set(cwd, loaded)
     return loaded
+  }
+
+  const watch = () => {
+    if (watching) return watching
+    const ready = Promise.withResolvers<void>()
+    watching = ready.promise
+    void (async () => {
+      for await (const event of input.client.event.subscribe({ signal: input.connection.signal })) {
+        ready.resolve()
+        if (!catalogEvents.has(event.type)) continue
+        const directory = event.location?.directory
+        for (const cwd of catalogs.keys()) {
+          if (directory === undefined || FSUtil.resolve(directory) === FSUtil.resolve(cwd)) refresh(cwd)
+        }
+      }
+    })()
+      .catch(() => {})
+      .finally(() => {
+        // Catalogs still load without live updates; the next load subscribes again.
+        ready.resolve()
+        watching = undefined
+      })
+    return watching
+  }
+
+  // Coalesces bursts of updates into at most one reload in flight plus one queued per cwd.
+  const refresh = (cwd: string) => {
+    const running = refreshing.get(cwd)
+    if (running) {
+      stale.add(cwd)
+      return running
+    }
+    const run = (async () => {
+      do {
+        stale.delete(cwd)
+        const previous = await catalogs.get(cwd)?.catch(() => undefined)
+        if (!previous) return
+        const next = await loadCatalog(input.client, cwd).catch(() => undefined)
+        if (!next) return
+        catalogs.set(cwd, Promise.resolve(next))
+        await publish(cwd, next)
+      } while (stale.has(cwd))
+    })().finally(() => refreshing.delete(cwd))
+    refreshing.set(cwd, run)
+    return run
+  }
+
+  const publish = async (cwd: string, next: Catalog) => {
+    const attached = Array.from(sessions.values()).filter((state) => FSUtil.resolve(state.cwd) === FSUtil.resolve(cwd))
+    await Promise.all(
+      attached.map(async (state) => {
+        const options = stableStringify(configOptions(state))
+        const commands = stableStringify(state.catalog.commands)
+        state.catalog = next
+        if (stableStringify(configOptions(state)) !== options) {
+          await input.connection.sessionUpdate({
+            sessionId: state.id,
+            update: { sessionUpdate: "config_option_update", configOptions: configOptions(state) },
+          })
+        }
+        if (stableStringify(next.commands) !== commands) await sendCommands(state)
+      }),
+    ).catch(() => {})
+  }
+
+  const sendCommands = (state: Attached) =>
+    input.connection.sessionUpdate({
+      sessionId: state.id,
+      update: {
+        sessionUpdate: "available_commands_update",
+        availableCommands: state.catalog.commands.map((command) => ({
+          name: command.name,
+          description: command.description ?? "",
+        })),
+      },
+    })
+
+  // A client may pick a value from a newer catalog than this process has seen.
+  const refreshed = async (state: Attached, found: (catalog: Catalog) => boolean) => {
+    if (found(state.catalog)) return
+    await refresh(state.cwd)
   }
 
   const requireSession = async (sessionID: string) => {
@@ -154,20 +253,12 @@ export function make(input: {
       cwd,
       abort: new AbortController(),
       catalog: currentCatalog,
-      model: session.model ?? currentCatalog.defaultModel,
-      modeID: session.agent ?? currentCatalog.defaultModeID,
+      model: session.model,
+      modeID: session.agent,
     }
     sessions.set(session.id, state)
     await registerMcpServers(input.client, registeredMcp, state, mcpServers)
-    await input.connection.sessionUpdate({
-      sessionId: state.id,
-      update: {
-        sessionUpdate: "available_commands_update",
-        availableCommands: [
-          ...state.catalog.commands.map((command) => ({ name: command.name, description: command.description ?? "" })),
-        ],
-      },
-    })
+    await sendCommands(state)
     return state
   }
 
@@ -175,14 +266,16 @@ export function make(input: {
     await replayMessages(input.connection, state.id, state.cwd, await messages(input.client, state.id))
   }
 
-  const configOptions = (state: Attached) =>
-    buildConfigOptions({
+  const configOptions = (state: Attached) => {
+    const model = currentModel(state)
+    return buildConfigOptions({
       providers: state.catalog.providers,
-      currentModel: { providerID: state.model.providerID, modelID: state.model.id },
-      currentVariant: state.model.variant,
+      currentModel: { providerID: model.providerID, modelID: model.id },
+      currentVariant: model.variant,
       modes: state.catalog.modes,
-      currentModeId: state.modeID,
+      currentModeId: state.modeID ?? state.catalog.defaultModeID,
     })
+  }
 
   return {
     initialize: async (params) => {
@@ -216,12 +309,10 @@ export function make(input: {
       return {}
     },
     newSession: async (params) => {
-      const currentCatalog = await catalog(params.cwd)
-      const created = await input.client.session.create({
-        location: { directory: params.cwd },
-        agent: currentCatalog.defaultModeID,
-        model: currentCatalog.defaultModel,
-      })
+      await catalog(params.cwd)
+      // Leave agent and model unset so the server resolves its defaults after plugins activate,
+      // even when this catalog was read before configured agents and models appeared.
+      const created = await input.client.session.create({ location: { directory: params.cwd } })
       const state = await attach(created, params.cwd, params.mcpServers)
       return { sessionId: state.id, configOptions: configOptions(state) }
     },
@@ -282,34 +373,42 @@ export function make(input: {
       if (typeof params.value !== "string") throw new ACPError.InvalidConfigOptionError({ configId: params.configId })
       switch (params.configId) {
         case "model": {
-          const selected = requireModel(state.catalog, params.value, state.model)
+          const value = params.value
+          await refreshed(state, (catalog) => hasModel(catalog, value))
+          const selected = requireModel(state.catalog, value, currentModel(state))
           state.model = selected
           await input.client.session.switchModel({ sessionID: state.id, model: selected })
           break
         }
         case "effort": {
+          const current = currentModel(state)
           const model = state.catalog.models.find(
-            (item) => item.providerID === state.model.providerID && item.id === state.model.id,
+            (item) => item.providerID === current.providerID && item.id === current.id,
           )
           if (
             !model ||
             (params.value !== DEFAULT_VARIANT_VALUE && !model.variants.some((variant) => variant.id === params.value))
           )
             throw new ACPError.InvalidEffortError({ effort: params.value })
-          state.model = { ...state.model, variant: params.value }
+          state.model = { ...current, variant: params.value }
           await input.client.session.switchModel({ sessionID: state.id, model: state.model })
           break
         }
-        case "mode":
-          await selectMode(input.client, state, params.value)
+        case "mode": {
+          const value = params.value
+          await refreshed(state, (catalog) => hasMode(catalog, value))
+          await selectMode(input.client, state, value)
           break
+        }
         default:
           throw new ACPError.InvalidConfigOptionError({ configId: params.configId })
       }
       return { configOptions: configOptions(state) }
     },
     setSessionMode: async (params) => {
-      await selectMode(input.client, await requireSession(params.sessionId), params.modeId)
+      const state = await requireSession(params.sessionId)
+      await refreshed(state, (catalog) => hasMode(catalog, params.modeId))
+      await selectMode(input.client, state, params.modeId)
       return {}
     },
     prompt: async (params, signal) => {
@@ -480,8 +579,23 @@ function requireModel(catalog: Catalog, modelID: string, current: ModelRef): Mod
   return { providerID: model.providerID, id: model.id, variant }
 }
 
+function currentModel(state: Attached) {
+  return state.model ?? state.catalog.defaultModel
+}
+
+function hasModel(catalog: Catalog, value: string) {
+  const selected = parseModelSelection(value, catalog.providers)
+  return catalog.models.some(
+    (model) => model.providerID === selected.model.providerID && model.id === selected.model.modelID,
+  )
+}
+
+function hasMode(catalog: Catalog, modeID: string) {
+  return catalog.modes.some((mode) => mode.id === modeID)
+}
+
 async function selectMode(client: OpenCodeClient, state: Attached, modeID: string) {
-  if (!state.catalog.modes.some((mode) => mode.id === modeID)) throw new ACPError.InvalidModeError({ mode: modeID })
+  if (!hasMode(state.catalog, modeID)) throw new ACPError.InvalidModeError({ mode: modeID })
   state.modeID = modeID
   await client.session.switchAgent({ sessionID: state.id, agent: modeID })
 }
@@ -567,9 +681,8 @@ async function sendUsageUpdate(
   used?: number,
 ) {
   if (!used) return
-  const model = session.catalog.models.find(
-    (item) => item.providerID === session.model.providerID && item.id === session.model.id,
-  )
+  const current = currentModel(session)
+  const model = session.catalog.models.find((item) => item.providerID === current.providerID && item.id === current.id)
   if (!model?.limit.context) return
   const info = await client.session.get({ sessionID: session.id })
   await connection.sessionUpdate({

@@ -26,11 +26,7 @@ describe("acp service lifecycle", () => {
       method: "POST",
       path: "/api/session",
       query: {},
-      body: {
-        location: { directory: "/workspace" },
-        agent: "build",
-        model: { providerID: "test", id: "second-model" },
-      },
+      body: { location: { directory: "/workspace" } },
     })
     expect(currentValue(created, "effort")).toBe("default")
   })
