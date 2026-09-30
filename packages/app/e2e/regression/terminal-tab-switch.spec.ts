@@ -59,6 +59,49 @@ test("keeps terminal visibility per tab and the PTY alive across tab switches", 
   await expectSessionTitle(page, titleA)
   await expect(terminal).toBeVisible()
   await expect(terminalPanel).toHaveCSS("height", "300px")
+  await expect.poll(() => connections.length).toBe(2)
+  expect(new URL(connections[1]!).pathname).toBe(`/api/pty/${ptyID}/connect`)
+})
+
+test("reconnects the same terminal after a transient connection failure", async ({ page }) => {
+  await setup(page)
+  const creates: string[] = []
+  page.on("request", (request) => {
+    if (request.method() === "POST" && new URL(request.url()).pathname === "/api/pty") creates.push(request.url())
+  })
+  const connections: string[] = []
+  let disconnect: (() => void) | undefined
+  await page.routeWebSocket(new RegExp(`/api/pty/${ptyID}/connect`), (socket) => {
+    connections.push(socket.url())
+    disconnect ??= () => socket.close({ code: 1011, reason: "Temporary disconnection" })
+  })
+  let tickets = 0
+  await page.route(`**/api/pty/${ptyID}/connect-token*`, (route) => {
+    tickets += 1
+    if (tickets === 2) return route.fulfill({ status: 503, body: "Service Unavailable" })
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      headers: { "access-control-allow-origin": "*" },
+      body: JSON.stringify({ location: ptyLocation(), data: { ticket: "e2e-ticket", expires_in: 60 } }),
+    })
+  })
+
+  await page.goto(sessionHref(sessionA))
+  await expectSessionTitle(page, titleA)
+  await page.keyboard.press("Control+Backquote")
+
+  await expect(page.getByRole("tab", { name: "Terminal 1" })).toBeVisible()
+  const terminal = page.locator(`#terminal-wrapper-${ptyID} [data-component="terminal"]`)
+  await expect(terminal).toBeVisible()
+  await expect.poll(() => connections.length).toBe(1)
+  await terminal.evaluate((element) => element.setAttribute("data-connection-probe", "original"))
+
+  disconnect?.()
+  await expect.poll(() => tickets).toBe(3)
+  await expect.poll(() => connections.length).toBe(2)
+  await expect(terminal).toHaveAttribute("data-connection-probe", "original")
+  expect(creates).toHaveLength(1)
 })
 
 type Probed = HTMLElement & { __e2eProbe?: string }
