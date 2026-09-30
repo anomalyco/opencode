@@ -1,22 +1,10 @@
 import { sortBy, pipe } from "remeda"
+// The pattern matcher itself lives in @opencode-ai/core/util/wildcard (single
+// implementation with a compiled-regex cache); this module keeps the
+// rule-set helpers built on top of it.
+import { match } from "@opencode-ai/core/util/wildcard"
 
-export function match(str: string, pattern: string) {
-  if (str) str = str.replaceAll("\\", "/")
-  if (pattern) pattern = pattern.replaceAll("\\", "/")
-  let escaped = pattern
-    .replace(/[.+^${}()|[\]\\]/g, "\\$&") // escape special regex chars
-    .replace(/\*/g, ".*") // * becomes .*
-    .replace(/\?/g, ".") // ? becomes .
-
-  // If pattern ends with " *" (space + wildcard), make the trailing part optional
-  // This allows "ls *" to match both "ls" and "ls -la"
-  if (escaped.endsWith(" .*")) {
-    escaped = escaped.slice(0, -3) + "( .*)?"
-  }
-
-  const flags = process.platform === "win32" ? "si" : "s"
-  return new RegExp("^" + escaped + "$", flags).test(str)
-}
+export { match }
 
 export function all(input: string, patterns: Record<string, any>) {
   const sorted = pipe(patterns, Object.entries, sortBy([([key]) => key.length, "asc"], [([key]) => key, "asc"]))
