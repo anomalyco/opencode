@@ -202,11 +202,16 @@ export function detectDesktopNativeLocale(languages: readonly string[]): Desktop
     if (["no", "nb", "nn"].includes(source.language)) return "no"
     const match = DESKTOP_NATIVE_LOCALES.find((candidate) => {
       const target = locale(DESKTOP_NATIVE_LOCALE_TAGS[candidate])
-      return target?.language === source.language && target.script === source.script
+      return target?.language === source.language && script(target.script) === script(source.script)
     })
     if (match) return match
   }
   return "en"
+}
+
+// Aran (Nastaliq) is a style variant of Arab; ICU builds disagree on which one pa-PK expands to.
+function script(value: string | undefined) {
+  return value === "Aran" ? "Arab" : value
 }
 
 export function desktopNativePluralCategories(locale: DesktopNativeLocale) {
