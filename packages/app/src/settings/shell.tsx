@@ -1,5 +1,6 @@
 import { Tabs } from "@opencode/ui/tabs"
 import { useDialog } from "@opencode/ui/context/dialog"
+import { ScrollView } from "@opencode/ui/scroll-view"
 import { createEffect, createMemo, on, onCleanup, onMount, Show, Switch, Match, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -292,65 +293,89 @@ function RootSettings() {
       mobileAction={multiple() ? <AddServerMenu compact onAddServer={addServer} /> : undefined}
     >
       <Tabs.Content value="general" class="settings-panel">
-        <SettingsGeneral />
+        <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+          <SettingsGeneral />
+        </ScrollView>
       </Tabs.Content>
       <Tabs.Content value="appearance" class="settings-panel">
-        <SettingsAppearance />
+        <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+          <SettingsAppearance />
+        </ScrollView>
       </Tabs.Content>
       <Tabs.Content value="notifications" class="settings-panel">
-        <SettingsNotifications />
+        <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+          <SettingsNotifications />
+        </ScrollView>
       </Tabs.Content>
       <Tabs.Content value="shortcuts" class="settings-panel">
-        <SettingsKeybinds active={surface.view().tab === "shortcuts"} />
+        <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+          <SettingsKeybinds active={surface.view().tab === "shortcuts"} />
+        </ScrollView>
       </Tabs.Content>
       <Tabs.Content value="pairing" class="settings-panel">
-        <SettingsPairing />
+        <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+          <SettingsPairing />
+        </ScrollView>
       </Tabs.Content>
       <Tabs.Content value="experimental" class="settings-panel">
-        <SettingsExperimental />
+        <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+          <SettingsExperimental />
+        </ScrollView>
       </Tabs.Content>
       <Tabs.Content value="about" class="settings-panel settings-about">
-        <SettingsAbout active={surface.view().tab === "about"} />
+        <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+          <SettingsAbout active={surface.view().tab === "about"} />
+        </ScrollView>
       </Tabs.Content>
       <Show when={single()} keyed>
         {(server) => (
           <SettingsServerDataScope server={server}>
             <Tabs.Content value="projects" class="settings-panel">
-              <SettingsProjects
-                server={server}
-                active={surface.view().tab === "projects"}
-                onOpenProject={(project) =>
-                  surface.openProject({
-                    server: ServerConnection.key(server),
-                    project: project.worktree,
-                  })
-                }
-              />
+              <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+                <SettingsProjects
+                  server={server}
+                  active={surface.view().tab === "projects"}
+                  onOpenProject={(project) =>
+                    surface.openProject({
+                      server: ServerConnection.key(server),
+                      project: project.worktree,
+                    })
+                  }
+                />
+              </ScrollView>
             </Tabs.Content>
             <Tabs.Content value="workspaces" class="settings-panel">
-              <SettingsWorkspaces
-                activeDirectory={sourceServer() === server ? sourceDirectory() : undefined}
-                resetProjectFilter={() => state.worktreeFilterReset}
-              />
+              <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+                <SettingsWorkspaces
+                  activeDirectory={sourceServer() === server ? sourceDirectory() : undefined}
+                  resetProjectFilter={() => state.worktreeFilterReset}
+                />
+              </ScrollView>
             </Tabs.Content>
             <Tabs.Content value="providers" class="settings-panel">
-              <SettingsProviders
-                directory={undefined}
-                onSelectProvider={(providerID) => {
-                  setState("modelProvider", providerID)
-                  surface.select("models")
-                }}
-              />
+              <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+                <SettingsProviders
+                  directory={undefined}
+                  onSelectProvider={(providerID) => {
+                    setState("modelProvider", providerID)
+                    surface.select("models")
+                  }}
+                />
+              </ScrollView>
             </Tabs.Content>
             <Tabs.Content value="models" class="settings-panel">
-              <SettingsModels
-                active={surface.view().tab === "models"}
-                provider={state.modelProvider}
-                onReveal={() => setState("modelProvider", undefined)}
-              />
+              <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+                <SettingsModels
+                  active={surface.view().tab === "models"}
+                  provider={state.modelProvider}
+                  onReveal={() => setState("modelProvider", undefined)}
+                />
+              </ScrollView>
             </Tabs.Content>
             <Tabs.Content value="extensions" class="settings-panel">
-              <SettingsExtensions subtab={surface.view().subtab} onSubtab={(value) => surface.subtab(value)} />
+              <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+                <SettingsExtensions subtab={surface.view().subtab} onSubtab={(value) => surface.subtab(value)} />
+              </ScrollView>
             </Tabs.Content>
           </SettingsServerDataScope>
         )}
@@ -358,7 +383,9 @@ function RootSettings() {
       <Show when={singleEntry()}>
         {(entry) => (
           <Tabs.Content value="servers" class="settings-panel">
-            <SettingsServerGeneral entry={entry()} onAddServer={addServer} />
+            <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+              <SettingsServerGeneral entry={entry()} onAddServer={addServer} />
+            </ScrollView>
           </Tabs.Content>
         )}
       </Show>
@@ -402,51 +429,63 @@ function ServerSettings(props: { entry: SettingsServer }) {
       onChange={change}
     >
       <Tabs.Content value="general" class="settings-panel">
-        <SettingsServerGeneral
-          entry={props.entry}
-          nested
-          onServerChange={(server) => surface.replaceServer(ServerConnection.key(server))}
-        />
+        <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+          <SettingsServerGeneral
+            entry={props.entry}
+            nested
+            onServerChange={(server) => surface.replaceServer(ServerConnection.key(server))}
+          />
+        </ScrollView>
       </Tabs.Content>
       <Show when={props.entry.connection} keyed>
         {(server) => (
           <SettingsServerDataScope server={server}>
             <Tabs.Content value="projects" class="settings-panel">
-              <SettingsProjects
-                server={server}
-                active={surface.view().tab === "projects"}
-                onOpenProject={(project) =>
-                  surface.openProject({
-                    server: props.entry.key,
-                    project: project.worktree,
-                  })
-                }
-              />
+              <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+                <SettingsProjects
+                  server={server}
+                  active={surface.view().tab === "projects"}
+                  onOpenProject={(project) =>
+                    surface.openProject({
+                      server: props.entry.key,
+                      project: project.worktree,
+                    })
+                  }
+                />
+              </ScrollView>
             </Tabs.Content>
             <Tabs.Content value="workspaces" class="settings-panel">
-              <SettingsWorkspaces
-                activeDirectory={activeDirectory()}
-                resetProjectFilter={() => state.worktreeFilterReset}
-              />
+              <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+                <SettingsWorkspaces
+                  activeDirectory={activeDirectory()}
+                  resetProjectFilter={() => state.worktreeFilterReset}
+                />
+              </ScrollView>
             </Tabs.Content>
             <Tabs.Content value="providers" class="settings-panel">
-              <SettingsProviders
-                directory={undefined}
-                onSelectProvider={(providerID) => {
-                  setState("modelProvider", providerID)
-                  surface.select("models")
-                }}
-              />
+              <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+                <SettingsProviders
+                  directory={undefined}
+                  onSelectProvider={(providerID) => {
+                    setState("modelProvider", providerID)
+                    surface.select("models")
+                  }}
+                />
+              </ScrollView>
             </Tabs.Content>
             <Tabs.Content value="models" class="settings-panel">
-              <SettingsModels
-                active={surface.view().tab === "models"}
-                provider={state.modelProvider}
-                onReveal={() => setState("modelProvider", undefined)}
-              />
+              <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+                <SettingsModels
+                  active={surface.view().tab === "models"}
+                  provider={state.modelProvider}
+                  onReveal={() => setState("modelProvider", undefined)}
+                />
+              </ScrollView>
             </Tabs.Content>
             <Tabs.Content value="extensions" class="settings-panel">
-              <SettingsExtensions subtab={surface.view().subtab} onSubtab={(value) => surface.subtab(value)} />
+              <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+                <SettingsExtensions subtab={surface.view().subtab} onSubtab={(value) => surface.subtab(value)} />
+              </ScrollView>
             </Tabs.Content>
           </SettingsServerDataScope>
         )}
@@ -483,18 +522,24 @@ function ProjectSettings(props: { server: ServerConnection.Any; project: LocalPr
           onChange={(value) => surface.select(value)}
         >
           <Tabs.Content value="general" class="settings-panel">
-            <SettingsProjectGeneral
-              server={props.server}
-              project={props.project}
-              onOpenServer={() => surface.replaceServer(ServerConnection.key(props.server))}
-              onClose={() => surface.back()}
-            />
+            <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+              <SettingsProjectGeneral
+                server={props.server}
+                project={props.project}
+                onOpenServer={() => surface.replaceServer(ServerConnection.key(props.server))}
+                onClose={() => surface.back()}
+              />
+            </ScrollView>
           </Tabs.Content>
           <Tabs.Content value="workspaces" class="settings-panel">
-            <SettingsWorkspaces projectID={props.project.id} activeDirectory={activeDirectory()} />
+            <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+              <SettingsWorkspaces projectID={props.project.id} activeDirectory={activeDirectory()} />
+            </ScrollView>
           </Tabs.Content>
           <Tabs.Content value="extensions" class="settings-panel">
-            <ProjectSettingsExtensions subtab={surface.view().subtab} onSubtab={(value) => surface.subtab(value)} />
+            <ScrollView data-slot="settings-panel-scroll" class="flex-1 min-h-0 w-full">
+              <ProjectSettingsExtensions subtab={surface.view().subtab} onSubtab={(value) => surface.subtab(value)} />
+            </ScrollView>
           </Tabs.Content>
         </SettingsNavigation>
       </LocationProvider>

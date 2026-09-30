@@ -29,6 +29,7 @@ for (const viewport of [
 
     const settings = page.getByTestId("settings-screen")
     const panel = settings.getByRole("tabpanel")
+    const scroller = panel.locator('[data-slot="settings-panel-scroll"] > [data-scrollable]')
     const main = page.getByRole("main")
     const slider = settings.getByRole("slider", { name: "Timeline detail", exact: true })
     await expect(settings).toBeFocused()
@@ -41,7 +42,7 @@ for (const viewport of [
     await page.mouse.wheel(0, 10000)
     await panel.hover()
     await page.mouse.wheel(0, 10000)
-    await expect.poll(() => panel.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
+    await expect.poll(() => scroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(0)
     await expect(main).toHaveJSProperty("scrollTop", 0)
     await expect(settings.getByRole("heading", { name: "Preferences", exact: true })).toBeInViewport()
 
@@ -60,7 +61,7 @@ for (const viewport of [
     await panel.hover()
     await page.mouse.wheel(0, 10000)
     await expect
-      .poll(() => panel.evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop))
+      .poll(() => scroller.evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop))
       .toBeLessThanOrEqual(1)
     await expect(main).toHaveJSProperty("scrollTop", 0)
     await expect.poll(() => main.evaluate((el) => el.scrollHeight - el.clientHeight)).toBeLessThanOrEqual(1)

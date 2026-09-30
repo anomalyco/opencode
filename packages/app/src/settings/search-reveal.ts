@@ -23,7 +23,10 @@ export function revealSettingsSearch(root: HTMLElement, view: SettingsView) {
     if (!panel || !control || !control.getClientRects().length) return false
     const row =
       control.closest<HTMLElement>('[data-component="settings-row"], [data-component="settings-list"] > *') ?? control
-    if (!view.target) panel.scrollTop = 0
+    if (!view.target)
+      panel
+        .querySelector<HTMLElement>(':scope > [data-slot="settings-panel-scroll"] > [data-scrollable]')
+        ?.scrollTo({ top: 0 })
     if (view.target) row.scrollIntoView({ block: "center", inline: "nearest" })
     state.row = row
     state.tabIndex = row.getAttribute("tabindex")
