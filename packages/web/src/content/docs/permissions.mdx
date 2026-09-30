@@ -16,6 +16,14 @@ Each permission rule resolves to one of:
 - `"allow"` — run without approval
 - `"ask"` — prompt for approval
 - `"deny"` — block the action
+- `"sandbox"` — run shell commands inside a real OS sandbox (bubblewrap on Linux, `sandbox-exec` on macOS) when one is installed and passes its startup probe; otherwise prompt and mark the request as unenforced. Tools that do not spawn a process are never claimed to be sandboxed — they prompt instead.
+- `"read-only"` — run operations classified as read-only (`ls`, `git status`, `grep`, …) and prompt for anything else
+- `"isolated-workspace"` — run tool inputs that stay inside the working directory and prompt for paths outside it
+- `"restricted-network"` — deny web tools outright, keep local tools, and run shell commands with the network cut inside the OS sandbox when one is available (otherwise prompt, marked as unenforced)
+- `"trusted-domain"` — skip confirmations for the matched input (explicit opt-in trust)
+- `"trusted-command"` — skip confirmations and safety guards for the matched shell commands (explicit opt-in trust)
+
+The `"sandbox"` and `"restricted-network"` modes are honest about their environment: they only claim isolation when a mechanism exists. On Windows there is no supported unprivileged sandbox mechanism, so both fall back to a normal confirmation that records itself as unenforced rather than pretending isolation happened.
 
 ---
 
@@ -171,20 +179,51 @@ If you don’t specify anything, OpenCode starts from permissive defaults:
 
 - Most permissions default to `"allow"`.
 - `doom_loop` and `external_directory` default to `"ask"`.
-- `read` is `"allow"`, but `.env` files are denied by default:
+- `read` is `"allow"`, but `.env` files prompt by default:
 
 ```json title="opencode.json"
 {
   "permission": {
     "read": {
       "*": "allow",
-      "*.env": "deny",
-      "*.env.*": "deny",
+      "*.env": "ask",
+      "*.env.*": "ask",
       "*.env.example": "allow"
     }
   }
 }
 ```
+
+- `edit` is `"allow"`, but mutations to `.env` files and files under `.git/` prompt by default:
+
+```json title="opencode.json"
+{
+  "permission": {
+    "edit": {
+      "*": "allow",
+      "*.env": "ask",
+      "*.env.*": "ask",
+      "*.env.example": "allow",
+      "*.git/*": "ask"
+    }
+  }
+}
+```
+
+---
+
+## Always-on shell guards
+
+Some `bash` commands confirm regardless of your rules. The guard layer upgrades an `"allow"` to a prompt; it never downgrades an explicit `"deny"` or `"ask"`:
+
+- destructive or irreversible commands (`rm -rf`, `dd`, `mkfs`, force-push, fork bombs, `shutdown`, `sudo`)
+- piping into interpreters, running scripts from temporary directories, or download-and-execute (including PowerShell `iex`)
+- reading `.env` files or sensitive home paths (`~/.ssh`, `~/.aws`, credentials, shell history)
+- writing `.env` files or system account files (`/etc/passwd`, `/etc/shadow`, `/etc/sudoers`)
+- sending secrets over the network (a secret source combined with a network sink)
+- writing to `.git/` internals (hooks, refs, config)
+
+`"trusted-command"` rules and session-level [`always`](#what-ask-does) approvals bypass these guards because they were confirmed explicitly.
 
 ---
 

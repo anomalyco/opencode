@@ -13,7 +13,22 @@ export const ID = Schema.String.check(Schema.isStartsWith("per")).pipe(
 )
 export type ID = typeof ID.Type
 
-export const Action = Schema.Literals(["allow", "deny", "ask"]).annotate({ identifier: "PermissionAction" })
+// Conditional allow variants: sandbox and restricted-network execute shell
+// work inside a real OS sandbox when one is available (they fall back to an
+// explicit confirmation when it is not), read-only and isolated-workspace
+// confirm anything that would mutate or leave the workspace, and trusted-*
+// are explicit config-level trust that bypasses confirmation and guards.
+export const Action = Schema.Literals([
+  "allow",
+  "deny",
+  "ask",
+  "sandbox",
+  "read-only",
+  "isolated-workspace",
+  "restricted-network",
+  "trusted-domain",
+  "trusted-command",
+]).annotate({ identifier: "PermissionAction" })
 export type Action = typeof Action.Type
 
 export const Rule = Schema.Struct({ permission: Schema.String, pattern: Schema.String, action: Action }).annotate({

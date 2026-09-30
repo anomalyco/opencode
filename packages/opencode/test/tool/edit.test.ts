@@ -24,7 +24,7 @@ const ctx = {
   abort: AbortSignal.any([]),
   messages: [],
   metadata: () => Effect.void,
-  ask: () => Effect.void,
+  ask: () => Effect.succeed("allow" as const),
 }
 
 afterEach(async () => {
@@ -539,9 +539,11 @@ describe("tool.edit", () => {
           ask: () =>
             Effect.gen(function* () {
               asks++
-              if (asks !== 1) return
-              yield* Deferred.succeed(firstAsk, undefined)
-              yield* Effect.sleep("50 millis")
+              if (asks === 1) {
+                yield* Deferred.succeed(firstAsk, undefined)
+                yield* Effect.sleep("50 millis")
+              }
+              return "allow" as const
             }),
         }
 

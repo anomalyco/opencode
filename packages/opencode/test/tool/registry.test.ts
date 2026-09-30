@@ -452,7 +452,7 @@ describe("tool.registry", () => {
         abort: new AbortController().signal,
         messages: [],
         metadata: () => Effect.void,
-        ask: () => Effect.void,
+        ask: () => Effect.succeed("allow" as const),
       } satisfies Tool.Context)
 
       expect(result.output).toBe("here is an image")

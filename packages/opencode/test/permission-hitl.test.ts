@@ -257,8 +257,11 @@ describe("Permission.ask human-in-the-loop", () => {
           "ask should not wait",
           "30 seconds",
         )
+        // Destructive commands now confirm through the always-on guard even
+        // with no HITL configuration; see permission-actions.test.ts. A
+        // benign command still resolves without any confirmation here.
         yield* awaitWithTimeout(
-          permission.ask(request("bash", ["rm -rf dist"], { command: "rm -rf dist" })),
+          permission.ask(request("bash", ["bun run build"], { command: "bun run build" })),
           "ask should not wait",
           "30 seconds",
         )

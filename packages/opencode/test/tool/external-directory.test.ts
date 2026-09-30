@@ -34,6 +34,7 @@ function makeCtx() {
     ask: (req) =>
       Effect.sync(() => {
         requests.push(req)
+        return "allow" as const
       }),
   }
   return { requests, ctx }

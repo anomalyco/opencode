@@ -823,7 +823,7 @@ const layer = Layer.effect(
                     extra: { bypassCwdCheck: true, ...extra },
                     messages: [],
                     metadata: () => Effect.void,
-                    ask: () => Effect.void,
+                    ask: () => Effect.succeed("allow" as const),
                   })
                   .pipe(Effect.onInterrupt(() => Effect.sync(() => controller.abort())))
               }

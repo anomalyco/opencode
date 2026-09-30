@@ -20,7 +20,7 @@ const ctx: Tool.Context = {
   callID: "call_code_mode",
   messages: [],
   metadata: () => Effect.void,
-  ask: () => Effect.void,
+  ask: () => Effect.succeed("allow" as const),
 }
 
 function mcpTool(
@@ -360,7 +360,14 @@ describe("code mode execute", () => {
 
   test("asks permission before each child tool call", async () => {
     const asked: unknown[] = []
-    const permissionCtx: Tool.Context = { ...ctx, ask: (req) => Effect.sync(() => void asked.push(req)) }
+    const permissionCtx: Tool.Context = {
+      ...ctx,
+      ask: (req) =>
+        Effect.sync(() => {
+          asked.push(req)
+          return "allow" as const
+        }),
+    }
     const ok = () => ({ content: [{ type: "text", text: "ok" }] })
     const tool = await build({ a_tool: mcpTool("a", ok), b_tool: mcpTool("b", ok) })
 
@@ -707,7 +714,14 @@ describe("code mode permission visibility", () => {
 
   test("an ask-level tool remains callable and still prompts via ctx.ask", async () => {
     const asked: string[] = []
-    const askCtx: Tool.Context = { ...ctx, ask: (req) => Effect.sync(() => void asked.push(req.permission)) }
+    const askCtx: Tool.Context = {
+      ...ctx,
+      ask: (req) =>
+        Effect.sync(() => {
+          asked.push(req.permission)
+          return "allow" as const
+        }),
+    }
     const tool = await build(
       { github_list_issues: mcpTool("list_issues", ok) },
       ["github"],

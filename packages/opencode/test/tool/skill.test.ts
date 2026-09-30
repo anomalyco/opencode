@@ -76,6 +76,7 @@ Use this skill.
         ask: (req) =>
           Effect.sync(() => {
             requests.push(req)
+            return "allow" as const
           }),
       }
 
@@ -118,7 +119,7 @@ Use this skill.
           { name: "missing-skill" },
           {
             ...baseCtx,
-            ask: () => Effect.void,
+            ask: () => Effect.succeed("allow" as const),
           },
         )
         .pipe(Effect.exit)

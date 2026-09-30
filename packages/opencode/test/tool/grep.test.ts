@@ -38,7 +38,7 @@ const ctx = {
   abort: AbortSignal.any([]),
   messages: [],
   metadata: () => Effect.void,
-  ask: () => Effect.void,
+  ask: () => Effect.succeed("allow" as const),
 }
 
 const root = path.join(__dirname, "../..")
@@ -200,6 +200,7 @@ describe("tool.grep", () => {
               (pattern) => Permission.evaluate(req.permission, pattern, ruleset).action !== "allow",
             )
             if (needsAsk) requests.push(req)
+            return "allow" as const
           }),
       }
 

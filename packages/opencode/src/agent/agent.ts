@@ -134,6 +134,14 @@ const layer = Layer.effect(
             "*.env.*": "ask",
             "*.env.example": "allow",
           },
+          // Mutations to .env files and git internals confirm by default.
+          edit: {
+            "*": "allow",
+            "*.env": "ask",
+            "*.env.*": "ask",
+            "*.env.example": "allow",
+            "*.git/*": "ask",
+          },
         })
 
         const user = Permission.fromConfig(cfg.permission ?? {})

@@ -14,6 +14,7 @@ import { Config } from "@/config/config"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Shell } from "@opencode-ai/core/shell"
 import { ShellID } from "./shell/id"
+import { Sandbox } from "@/permission/sandbox"
 
 import * as Truncate from "./truncate"
 import { Plugin } from "@/plugin"
@@ -279,8 +280,8 @@ const ask = Effect.fn("ShellTool.ask")(function* (ctx: Tool.Context, scan: Scan,
     })
   }
 
-  if (scan.patterns.size === 0) return
-  yield* ctx.ask({
+  if (scan.patterns.size === 0) return "allow" as const
+  return yield* ctx.ask({
     permission: ShellID.ToolID,
     patterns: Array.from(scan.patterns),
     always: Array.from(scan.always),
@@ -432,6 +433,7 @@ export const ShellTool = Tool.define(
         cwd: string
         env: NodeJS.ProcessEnv
         timeout: number
+        sandbox: Sandbox.Spawn | undefined
       },
       ctx: Tool.Context,
     ) {
@@ -481,7 +483,16 @@ export const ShellTool = Tool.define(
       const code: number | null = yield* Effect.scoped(
         Effect.gen(function* () {
           yield* Effect.addFinalizer(closeSink)
-          const handle = yield* spawner.spawn(cmd(input.shell, input.command, input.cwd, input.env))
+          const handle = yield* spawner.spawn(
+            input.sandbox
+              ? ChildProcess.make(input.sandbox.command, input.sandbox.args, {
+                  cwd: input.cwd,
+                  env: input.env,
+                  stdin: "ignore",
+                  detached: process.platform !== "win32",
+                })
+              : cmd(input.shell, input.command, input.cwd, input.env),
+          )
 
           yield* Effect.forkScoped(
             Stream.runForEach(Stream.decodeText(handle.all), (chunk) => {
@@ -617,16 +628,30 @@ export const ShellTool = Tool.define(
               }
               const timeout = params.timeout ?? defaultTimeoutMs
               const ps = Shell.ps(shell)
-              yield* Effect.scoped(
+              const granted = yield* Effect.scoped(
                 Effect.gen(function* () {
                   const tree = yield* Effect.acquireRelease(parse(params.command, ps), (tree) =>
                     Effect.sync(() => tree.delete()),
                   )
                   const scan = yield* collect(tree.rootNode, cwd, ps, shell, instanceCtx)
                   if (!containsPath(cwd, instanceCtx)) scan.dirs.add(cwd)
-                  yield* ask(ctx, scan, params)
+                  return yield* ask(ctx, scan, params)
                 }),
               )
+
+              const sandbox =
+                granted === "sandbox" || granted === "restricted-network"
+                  ? Sandbox.wrap({
+                      shell,
+                      command: params.command,
+                      cwd,
+                      workspace: instanceCtx.directory,
+                      worktree: instanceCtx.worktree,
+                      // sandbox isolates the filesystem but keeps the network;
+                      // restricted-network additionally cuts it (--unshare-net).
+                      network: granted === "sandbox",
+                    })
+                  : undefined
 
               return yield* run(
                 {
@@ -635,6 +660,7 @@ export const ShellTool = Tool.define(
                   cwd,
                   env: yield* shellEnv(ctx, cwd),
                   timeout,
+                  sandbox,
                 },
                 ctx,
               )

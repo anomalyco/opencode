@@ -36,7 +36,7 @@ const ctx = {
   abort: AbortSignal.any([]),
   messages: [],
   metadata: () => Effect.void,
-  ask: () => Effect.void,
+  ask: () => Effect.succeed("allow" as const),
 }
 
 const asks = () => {
@@ -48,6 +48,7 @@ const asks = () => {
       ask: (req: Omit<PermissionV1.Request, "id" | "sessionID" | "tool">) =>
         Effect.sync(() => {
           items.push(req)
+          return "allow" as const
         }),
     } satisfies Tool.Context,
   }

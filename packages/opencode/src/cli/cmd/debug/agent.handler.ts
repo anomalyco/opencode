@@ -187,6 +187,7 @@ const createToolContext = Effect.fn("Cli.debug.agent.createToolContext")(functio
             throw new PermissionV1.DeniedError({ ruleset })
           }
         }
+        return "allow" as const
       })
     },
   }

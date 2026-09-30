@@ -157,7 +157,16 @@ export type SnapshotFileDiff = {
   status?: "added" | "deleted" | "modified"
 }
 
-export type PermissionAction = "allow" | "deny" | "ask"
+export type PermissionAction =
+  | "allow"
+  | "deny"
+  | "ask"
+  | "sandbox"
+  | "read-only"
+  | "isolated-workspace"
+  | "restricted-network"
+  | "trusted-domain"
+  | "trusted-command"
 
 export type PermissionRule = {
   permission: string
@@ -1654,7 +1663,16 @@ export type ServerConfig = {
   cors?: Array<string>
 }
 
-export type PermissionActionConfig = "ask" | "allow" | "deny"
+export type PermissionActionConfig =
+  | "ask"
+  | "allow"
+  | "deny"
+  | "sandbox"
+  | "read-only"
+  | "isolated-workspace"
+  | "restricted-network"
+  | "trusted-domain"
+  | "trusted-command"
 
 export type PermissionObjectConfig = {
   [key: string]: PermissionActionConfig
@@ -1875,6 +1893,30 @@ export type McpRemoteConfig = {
  */
 export type LayoutConfig = "auto" | "stretch"
 
+export type HumanInTheLoopLevel = "AUTO" | "SAFE" | "BALANCED" | "STRICT" | "CUSTOM"
+
+export type HumanInTheLoopRisk = "readonly" | "routine" | "moderate" | "destructive"
+
+export type HumanInTheLoopAction = "allow" | "ask"
+
+export type HumanInTheLoopRule = {
+  tool?: string
+  file?: string
+  directory?: string
+  command?: string
+  agent?: string
+  provider?: string
+  workspace?: string
+  operation?: string
+  risk?: HumanInTheLoopRisk
+  action: HumanInTheLoopAction
+}
+
+export type HumanInTheLoopConfig = {
+  level?: HumanInTheLoopLevel
+  policy?: Array<HumanInTheLoopRule>
+}
+
 export type ImageAttachmentConfig = {
   auto_resize?: boolean
   max_width?: number
@@ -2003,6 +2045,7 @@ export type Config = {
   instructions?: Array<string>
   layout?: LayoutConfig
   permission?: PermissionConfig
+  human_in_the_loop?: HumanInTheLoopConfig
   tools?: {
     [key: string]: boolean
   }
@@ -2787,6 +2830,12 @@ export type SessionMessagesResponse = {
 export type ProviderNotFoundError = {
   _tag: "ProviderNotFoundError"
   providerID: string
+  message: string
+}
+
+export type ArtifactNotFoundError = {
+  _tag: "ArtifactNotFoundError"
+  artifactID: string
   message: string
 }
 
@@ -5000,6 +5049,47 @@ export type PermissionSavedInfo = {
   projectID: string
   action: string
   resource: string
+}
+
+export type ArtifactType =
+  | "PLAN"
+  | "ARCHITECTURE"
+  | "CODE_DIFF"
+  | "TEST_RESULT"
+  | "BROWSER_RECORDING"
+  | "SCREENSHOT"
+  | "LOG"
+  | "SECURITY_REPORT"
+  | "PERFORMANCE_REPORT"
+  | "DATABASE_REPORT"
+  | "BUILD_REPORT"
+  | "DEPLOY_REPORT"
+  | "FINAL_WALKTHROUGH"
+
+export type ArtifactStatus = "draft" | "ready" | "approved" | "rejected" | "archived"
+
+export type ArtifactComment = {
+  id: string
+  author: string
+  body: string
+  timeCreated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+}
+
+export type ArtifactInfo = {
+  id: string
+  projectID: string
+  sessionID?: string
+  name: string
+  type: ArtifactType
+  status: ArtifactStatus
+  version: number
+  agent?: string
+  task?: string
+  content: string
+  diff?: string
+  timeCreated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  timeUpdated: number | "NaN" | "Infinity" | "-Infinity" | "Infinity" | "-Infinity" | "NaN"
+  comments: Array<ArtifactComment>
 }
 
 export type FileSystemEntry = {
@@ -12781,6 +12871,213 @@ export type V2SessionPermissionReplyResponses = {
 
 export type V2SessionPermissionReplyResponse =
   V2SessionPermissionReplyResponses[keyof V2SessionPermissionReplyResponses]
+
+export type V2ArtifactListData = {
+  body?: never
+  path?: never
+  query?: {
+    projectID?: string
+    type?: ArtifactType
+    status?: ArtifactStatus
+    agent?: string
+    task?: string
+    sessionID?: string
+  }
+  url: "/api/artifact"
+}
+
+export type V2ArtifactListErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+}
+
+export type V2ArtifactListError = V2ArtifactListErrors[keyof V2ArtifactListErrors]
+
+export type V2ArtifactListResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: Array<ArtifactInfo>
+  }
+}
+
+export type V2ArtifactListResponse = V2ArtifactListResponses[keyof V2ArtifactListResponses]
+
+export type V2ArtifactCreateData = {
+  body: {
+    projectID?: string
+    sessionID?: string
+    name: string
+    type: ArtifactType
+    status?: ArtifactStatus
+    agent?: string
+    task?: string
+    content: string
+    diff?: string
+  }
+  path?: never
+  query?: never
+  url: "/api/artifact"
+}
+
+export type V2ArtifactCreateErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * SessionNotFoundError
+   */
+  404: SessionNotFoundError
+}
+
+export type V2ArtifactCreateError = V2ArtifactCreateErrors[keyof V2ArtifactCreateErrors]
+
+export type V2ArtifactCreateResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: ArtifactInfo
+  }
+}
+
+export type V2ArtifactCreateResponse = V2ArtifactCreateResponses[keyof V2ArtifactCreateResponses]
+
+export type V2ArtifactGetData = {
+  body?: never
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/api/artifact/{id}"
+}
+
+export type V2ArtifactGetErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * ArtifactNotFoundError
+   */
+  404: ArtifactNotFoundError
+}
+
+export type V2ArtifactGetError = V2ArtifactGetErrors[keyof V2ArtifactGetErrors]
+
+export type V2ArtifactGetResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: ArtifactInfo
+  }
+}
+
+export type V2ArtifactGetResponse = V2ArtifactGetResponses[keyof V2ArtifactGetResponses]
+
+export type V2ArtifactUpdateData = {
+  body: {
+    name?: string
+    status?: ArtifactStatus
+    agent?: string
+    task?: string
+    content?: string
+    diff?: string
+  }
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/api/artifact/{id}"
+}
+
+export type V2ArtifactUpdateErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * ArtifactNotFoundError
+   */
+  404: ArtifactNotFoundError
+}
+
+export type V2ArtifactUpdateError = V2ArtifactUpdateErrors[keyof V2ArtifactUpdateErrors]
+
+export type V2ArtifactUpdateResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: ArtifactInfo
+  }
+}
+
+export type V2ArtifactUpdateResponse = V2ArtifactUpdateResponses[keyof V2ArtifactUpdateResponses]
+
+export type V2ArtifactCommentData = {
+  body: {
+    author: string
+    body: string
+  }
+  path: {
+    id: string
+  }
+  query?: never
+  url: "/api/artifact/{id}/comment"
+}
+
+export type V2ArtifactCommentErrors = {
+  /**
+   * InvalidRequestError
+   */
+  400: InvalidRequestError
+  /**
+   * UnauthorizedError
+   */
+  401: UnauthorizedError
+  /**
+   * ArtifactNotFoundError
+   */
+  404: ArtifactNotFoundError
+}
+
+export type V2ArtifactCommentError = V2ArtifactCommentErrors[keyof V2ArtifactCommentErrors]
+
+export type V2ArtifactCommentResponses = {
+  /**
+   * Success
+   */
+  200: {
+    data: {
+      comment: ArtifactComment
+      delivered: boolean
+    }
+  }
+}
+
+export type V2ArtifactCommentResponse = V2ArtifactCommentResponses[keyof V2ArtifactCommentResponses]
 
 export type V2FsReadData = {
   body?: never

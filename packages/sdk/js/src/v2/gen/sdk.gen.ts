@@ -10,6 +10,8 @@ import type {
   AppLogResponses,
   AppSkillsErrors,
   AppSkillsResponses,
+  ArtifactStatus,
+  ArtifactType,
   Auth as Auth3,
   AuthRemoveErrors,
   AuthRemoveResponses,
@@ -265,6 +267,16 @@ import type {
   TuiSubmitPromptResponses,
   V2AgentListErrors,
   V2AgentListResponses,
+  V2ArtifactCommentErrors,
+  V2ArtifactCommentResponses,
+  V2ArtifactCreateErrors,
+  V2ArtifactCreateResponses,
+  V2ArtifactGetErrors,
+  V2ArtifactGetResponses,
+  V2ArtifactListErrors,
+  V2ArtifactListResponses,
+  V2ArtifactUpdateErrors,
+  V2ArtifactUpdateResponses,
   V2CommandListErrors,
   V2CommandListResponses,
   V2CredentialRemoveErrors,
@@ -6404,6 +6416,196 @@ export class Permission3 extends HeyApiClient {
   }
 }
 
+export class Artifact extends HeyApiClient {
+  /**
+   * List artifacts
+   *
+   * Retrieve artifacts, optionally filtered by project, type, status, agent, task, or session.
+   */
+  public list<ThrowOnError extends boolean = false>(
+    parameters?: {
+      projectID?: string
+      type?: ArtifactType
+      status?: ArtifactStatus
+      agent?: string
+      task?: string
+      sessionID?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "projectID" },
+            { in: "query", key: "type" },
+            { in: "query", key: "status" },
+            { in: "query", key: "agent" },
+            { in: "query", key: "task" },
+            { in: "query", key: "sessionID" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<V2ArtifactListResponses, V2ArtifactListErrors, ThrowOnError>({
+      url: "/api/artifact",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Create artifact
+   *
+   * Create a first-class artifact. When sessionID links the artifact to a session, human comments are steered back to that session as actionable context.
+   */
+  public create<ThrowOnError extends boolean = false>(
+    parameters?: {
+      projectID?: string
+      sessionID?: string
+      name?: string
+      type?: ArtifactType
+      status?: ArtifactStatus
+      agent?: string
+      task?: string
+      content?: string
+      diff?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "body", key: "projectID" },
+            { in: "body", key: "sessionID" },
+            { in: "body", key: "name" },
+            { in: "body", key: "type" },
+            { in: "body", key: "status" },
+            { in: "body", key: "agent" },
+            { in: "body", key: "task" },
+            { in: "body", key: "content" },
+            { in: "body", key: "diff" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2ArtifactCreateResponses, V2ArtifactCreateErrors, ThrowOnError>({
+      url: "/api/artifact",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Get artifact
+   *
+   * Retrieve one artifact with its comments.
+   */
+  public get<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams([parameters], [{ args: [{ in: "path", key: "id" }] }])
+    return (options?.client ?? this.client).get<V2ArtifactGetResponses, V2ArtifactGetErrors, ThrowOnError>({
+      url: "/api/artifact/{id}",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Update artifact
+   *
+   * Update artifact fields; every update increments the artifact version.
+   */
+  public update<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      name?: string
+      status?: ArtifactStatus
+      agent?: string
+      task?: string
+      content?: string
+      diff?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "body", key: "name" },
+            { in: "body", key: "status" },
+            { in: "body", key: "agent" },
+            { in: "body", key: "task" },
+            { in: "body", key: "content" },
+            { in: "body", key: "diff" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).patch<V2ArtifactUpdateResponses, V2ArtifactUpdateErrors, ThrowOnError>({
+      url: "/api/artifact/{id}",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Comment on artifact
+   *
+   * Attach a human comment directly to an artifact. delivered reports whether the comment was admitted to the linked session as actionable context for the responsible agent.
+   */
+  public comment<ThrowOnError extends boolean = false>(
+    parameters: {
+      id: string
+      author?: string
+      body?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "id" },
+            { in: "body", key: "author" },
+            { in: "body", key: "body" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<V2ArtifactCommentResponses, V2ArtifactCommentErrors, ThrowOnError>({
+      url: "/api/artifact/{id}/comment",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+}
+
 export class Fs extends HeyApiClient {
   /**
    * Read file
@@ -7031,6 +7233,11 @@ export class V2 extends HeyApiClient {
   private _permission?: Permission3
   get permission(): Permission3 {
     return (this._permission ??= new Permission3({ client: this.client }))
+  }
+
+  private _artifact?: Artifact
+  get artifact(): Artifact {
+    return (this._artifact ??= new Artifact({ client: this.client }))
   }
 
   private _fs?: Fs

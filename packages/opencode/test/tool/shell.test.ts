@@ -79,7 +79,7 @@ const ctx = {
   abort: AbortSignal.any([]),
   messages: [],
   metadata: () => Effect.void,
-  ask: () => Effect.void,
+  ask: () => Effect.succeed("allow" as const),
 }
 
 Shell.acceptable.reset()
@@ -167,6 +167,7 @@ const capture = (requests: Array<Omit<PermissionV1.Request, "id" | "sessionID" |
     Effect.sync(() => {
       requests.push(req)
       if (stop) throw stop
+      return "allow" as const
     }),
 })
 

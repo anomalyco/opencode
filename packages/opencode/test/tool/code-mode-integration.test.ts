@@ -31,7 +31,7 @@ const ctx: Tool.Context = {
   callID: "call_code_mode_int",
   messages: [],
   metadata: () => Effect.void,
-  ask: () => Effect.void,
+  ask: () => Effect.succeed("allow" as const),
 }
 
 // Avoid the SDK Client here; other MCP tests mock it process-globally.
@@ -296,7 +296,14 @@ describe("code mode integration (real MCP server)", () => {
 
   test("asks permission for each MCP call, keyed by the flat catalog name", async () => {
     const asked: string[] = []
-    const permCtx: Tool.Context = { ...ctx, ask: (req: any) => Effect.sync(() => void asked.push(req.permission)) }
+    const permCtx: Tool.Context = {
+      ...ctx,
+      ask: (req: any) =>
+        Effect.sync(() => {
+          asked.push(req.permission)
+          return "allow" as const
+        }),
+    }
     await Effect.runPromise(
       tool.execute(
         {

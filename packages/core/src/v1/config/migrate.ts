@@ -6,6 +6,7 @@ import { ConfigMCPV1 } from "./mcp"
 import { ConfigPermissionV1 } from "./permission"
 import { ConfigProviderV1 } from "./provider"
 import { ConfigProviderOptionsV1 } from "./provider-options"
+import { Permission } from "@opencode-ai/schema/permission"
 
 const keys = new Set([
   "logLevel",
@@ -72,22 +73,30 @@ export function migrate(info: typeof ConfigV1.Info.Type) {
 }
 
 function permissions(info?: ConfigPermissionV1.Info, tools?: Readonly<Record<string, boolean>>) {
-  const rules: Array<{ action: string; resource: string; effect: ConfigPermissionV1.Action }> = Object.entries(
-    tools ?? {},
-  ).map(([action, enabled]) => ({
-    action: normalizeAction(action),
-    resource: "*",
-    effect: enabled ? ("allow" as const) : ("deny" as const),
-  }))
+  const rules: Array<{ action: string; resource: string; effect: Permission.Effect }> = Object.entries(tools ?? {}).map(
+    ([action, enabled]) => ({
+      action: normalizeAction(action),
+      resource: "*",
+      effect: enabled ? ("allow" as const) : ("deny" as const),
+    }),
+  )
   for (const [action, rule] of Object.entries(info ?? {})) {
     if (!rule) continue
     if (typeof rule === "string") {
-      rules.push({ action, resource: "*", effect: rule })
+      rules.push({ action, resource: "*", effect: effect(rule) })
       continue
     }
-    rules.push(...Object.entries(rule).map(([resource, effect]) => ({ action, resource, effect })))
+    rules.push(...Object.entries(rule).map(([resource, value]) => ({ action, resource, effect: effect(value) })))
   }
   return rules.length ? rules : undefined
+}
+
+// V2 effects only know allow/ask/deny. Conditional V1 actions (sandbox,
+// read-only, trusted-*) migrate conservatively as "ask" so the human keeps
+// deciding wherever the V2 surface cannot express the restriction.
+function effect(action: ConfigPermissionV1.Action): Permission.Effect {
+  if (action === "allow" || action === "deny") return action
+  return "ask"
 }
 
 function normalizeAction(action: string) {

@@ -22,7 +22,7 @@ function makeCtx(): Tool.Context {
       return Effect.void
     },
     ask() {
-      return Effect.void
+      return Effect.succeed("allow" as const)
     },
   }
 }

@@ -270,7 +270,7 @@ describe("tool.task", () => {
           extra: { promptOps },
           messages: [],
           metadata: () => Effect.void,
-          ask: () => Effect.void,
+          ask: () => Effect.succeed("allow" as const),
         },
       )
 
@@ -311,7 +311,7 @@ describe("tool.task", () => {
             },
             messages: [],
             metadata: () => Effect.void,
-            ask: () => Effect.void,
+            ask: () => Effect.succeed("allow" as const),
           },
         )
         .pipe(Effect.exit)
@@ -354,7 +354,7 @@ describe("tool.task", () => {
             },
             messages: [],
             metadata: () => Effect.void,
-            ask: () => Effect.void,
+            ask: () => Effect.succeed("allow" as const),
           },
         )
         .pipe(Effect.exit)
@@ -397,6 +397,7 @@ describe("tool.task", () => {
             ask: (input) =>
               Effect.sync(() => {
                 calls.push(input)
+                return "allow" as const
               }),
           },
         )
@@ -453,7 +454,7 @@ describe("tool.task", () => {
             extra: { promptOps },
             messages: [],
             metadata: () => Effect.void,
-            ask: () => Effect.void,
+            ask: () => Effect.succeed("allow" as const),
           },
         )
         .pipe(Effect.forkChild)
@@ -491,7 +492,7 @@ describe("tool.task", () => {
           extra: { promptOps },
           messages: [],
           metadata: () => Effect.void,
-          ask: () => Effect.void,
+          ask: () => Effect.succeed("allow" as const),
         },
       )
 
@@ -534,7 +535,11 @@ describe("tool.task", () => {
             extra: { promptOps: stubOps() },
             messages: [],
             metadata: () => Effect.void,
-            ask: () => Effect.sync(() => (asked = true)),
+            ask: () =>
+              Effect.sync(() => {
+                asked = true
+                return "allow" as const
+              }),
           },
         )
         .pipe(Effect.exit)
@@ -575,7 +580,7 @@ describe("tool.task", () => {
             extra: { promptOps: stubOps() },
             messages: [],
             metadata: () => Effect.void,
-            ask: () => Effect.void,
+            ask: () => Effect.succeed("allow" as const),
           },
         )
 
@@ -609,7 +614,7 @@ describe("tool.task", () => {
             extra: { promptOps },
             messages: [],
             metadata: () => Effect.void,
-            ask: () => Effect.void,
+            ask: () => Effect.succeed("allow" as const),
           },
         )
 
@@ -674,7 +679,7 @@ describe("tool.task", () => {
             extra: { promptOps: stubOps() },
             messages: [],
             metadata: () => Effect.void,
-            ask: () => Effect.void,
+            ask: () => Effect.succeed("allow" as const),
           },
         )
         .pipe(Effect.exit)
@@ -724,7 +729,7 @@ describe("tool.task", () => {
             extra: { promptOps },
             messages: [],
             metadata: () => Effect.void,
-            ask: () => Effect.void,
+            ask: () => Effect.succeed("allow" as const),
           },
         )
         .pipe(Effect.forkChild)
@@ -776,7 +781,7 @@ describe("tool.task", () => {
           },
           messages: [],
           metadata: () => Effect.void,
-          ask: () => Effect.void,
+          ask: () => Effect.succeed("allow" as const),
         },
       )
 
@@ -819,7 +824,7 @@ describe("tool.task", () => {
         extra: { promptOps },
         messages: [],
         metadata: () => Effect.void,
-        ask: () => Effect.void,
+        ask: () => Effect.succeed("allow" as const),
       }
 
       const started = yield* def.execute(
@@ -883,7 +888,7 @@ describe("tool.task", () => {
           extra: { promptOps: stubOps({ text: "background done" }) },
           messages: [],
           metadata: () => Effect.void,
-          ask: () => Effect.void,
+          ask: () => Effect.succeed("allow" as const),
         },
       )
 
@@ -922,7 +927,7 @@ describe("tool.task", () => {
           },
           messages: [],
           metadata: () => Effect.void,
-          ask: () => Effect.void,
+          ask: () => Effect.succeed("allow" as const),
         },
       )
 
@@ -960,7 +965,7 @@ describe("tool.task", () => {
           },
           messages: [],
           metadata: () => Effect.void,
-          ask: () => Effect.void,
+          ask: () => Effect.succeed("allow" as const),
         },
       )
 
@@ -999,7 +1004,7 @@ describe("tool.task", () => {
           },
           messages: [],
           metadata: () => Effect.void,
-          ask: () => Effect.void,
+          ask: () => Effect.succeed("allow" as const),
         },
       )
 
@@ -1038,7 +1043,7 @@ describe("tool.task", () => {
           },
           messages: [],
           metadata: () => Effect.void,
-          ask: () => Effect.void,
+          ask: () => Effect.succeed("allow" as const),
         },
       )
 

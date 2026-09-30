@@ -16,6 +16,10 @@ OpenCode is an AI-powered coding assistant that runs locally on your machine. It
 
 OpenCode does **not** sandbox the agent. The permission system exists as a UX feature to help users stay aware of what actions the agent is taking - it prompts for confirmation before executing commands, writing files, etc. However, it is not designed to provide security isolation.
 
+The optional `sandbox` permission action wraps **shell commands only** in a real OS sandbox (bubblewrap on Linux, `sandbox-exec` on macOS) when the mechanism is installed and passes a startup probe. On Windows there is no supported unprivileged mechanism, so a `sandbox` rule falls back to an explicit confirmation marked as unenforced instead of pretending isolation happened. File, web, and MCP tools run inside the OpenCode process and are never sandboxed. This is defense in depth, not a security boundary, and it is off unless you configure it.
+
+Always-on shell guards additionally upgrade risky `bash` commands to a confirmation even when a rule allows them: destructive or irreversible commands (including `sudo` and fork bombs), execution of downloaded or temporary scripts, reading `.env` files and sensitive home paths, writing `.env` files or system account files (`/etc/passwd`, `/etc/shadow`, `/etc/sudoers`), sending secrets over the network, and writes to `.git/` internals. `trusted-command` rules and session `always` approvals bypass them because they were confirmed explicitly.
+
 If you need true isolation, run OpenCode inside a Docker container or VM.
 
 ### Server Mode

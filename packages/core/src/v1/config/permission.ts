@@ -2,7 +2,17 @@ export * as ConfigPermissionV1 from "./permission"
 
 import { Schema, SchemaGetter } from "effect"
 
-export const Action = Schema.Literals(["ask", "allow", "deny"]).annotate({ identifier: "PermissionActionConfig" })
+export const Action = Schema.Literals([
+  "ask",
+  "allow",
+  "deny",
+  "sandbox",
+  "read-only",
+  "isolated-workspace",
+  "restricted-network",
+  "trusted-domain",
+  "trusted-command",
+]).annotate({ identifier: "PermissionActionConfig" })
 export type Action = Schema.Schema.Type<typeof Action>
 
 export const Object = Schema.Record(Schema.String, Action).annotate({ identifier: "PermissionObjectConfig" })
