@@ -22,6 +22,7 @@ import { SessionSchema } from "./session/schema.js"
 import { Config } from "./config.js"
 import { ToolOutput } from "./tool-output.js"
 import { ShellResult } from "./shell/result.js"
+import { KeyedMutex } from "./effect/keyed-mutex.js"
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Shell.NotFoundError", {
   id: Shell.ID,
@@ -132,6 +133,7 @@ const layer = () =>
       const runFork = Effect.runForkWith(context)
       const commands = new Map<Shell.ID, Active>()
       const exitOrder: Shell.ID[] = []
+      const lifecycle = KeyedMutex.makeUnsafe<Shell.ID>()
 
       const outputDir = path.join(global.data, DIRECTORY, location.project.id)
       const { mkdir, unlink } = yield* Effect.promise(() => import("fs/promises"))
@@ -156,18 +158,21 @@ const layer = () =>
         return command
       })
 
-      const removeCommand = Effect.fnUntraced(function* (id: Shell.ID) {
-        const command = commands.get(id)
-        const index = exitOrder.indexOf(id)
-        if (index !== -1) exitOrder.splice(index, 1)
-        if (!command) return
-        commands.delete(id)
-        if (command.timeoutFiber) yield* Fiber.interrupt(command.timeoutFiber)
-        // Unblock any wait still pending when the command is removed before it terminated.
-        yield* Deferred.fail(command.done, new NotFoundError({ id }))
-        yield* Effect.promise(() => unlink(command.file).catch(() => {}))
-        yield* bus.publish(Shell.Event.Deleted, { id })
-      })
+      const removeCommand = Effect.fnUntraced(
+        function* (id: Shell.ID) {
+          const command = commands.get(id)
+          const index = exitOrder.indexOf(id)
+          if (index !== -1) exitOrder.splice(index, 1)
+          if (!command) return
+          commands.delete(id)
+          if (command.timeoutFiber) yield* Fiber.interrupt(command.timeoutFiber)
+          // Unblock any wait still pending when the command is removed before it terminated.
+          yield* Deferred.fail(command.done, new NotFoundError({ id }))
+          yield* Effect.promise(() => unlink(command.file).catch(() => {}))
+          yield* bus.publish(Shell.Event.Deleted, { id })
+        },
+        (effect, id) => lifecycle.withLock(id)(effect),
+      )
 
       const remove = Effect.fn("Shell.remove")(function* (id: Shell.ID) {
         yield* require(id)
@@ -293,7 +298,7 @@ const layer = () =>
         // the managing fiber keeps its scope open until the command terminates (it awaits `done` at the
         // end). `create` returns once `ready` resolves with the registered command.
         const ready = Deferred.makeUnsafe<Active, AppProcess.AppProcessError>()
-        runFork(
+        const manager = runFork(
           Effect.scoped(
             Effect.gen(function* () {
               const handle = yield* environment.spawner
@@ -355,7 +360,7 @@ const layer = () =>
 
               const finish = (status: Info["status"], exit?: number, beforeWait = Effect.void, signal?: string) =>
                 Effect.gen(function* () {
-                  if (command.info.status !== "running") return
+                  if (commands.get(id) !== command || command.info.status !== "running") return
                   command.info = produce(command.info, (draft) => {
                     draft.status = status
                     if (exit !== undefined) draft.exit = exit
@@ -385,7 +390,7 @@ const layer = () =>
                   command.timeout = undefined
                   command.timeoutFiber = undefined
                   if (timeoutFiber) yield* Fiber.interrupt(timeoutFiber)
-                })
+                }).pipe(lifecycle.withLock(id))
 
               command.timeout = (duration) =>
                 Effect.gen(function* () {
@@ -430,8 +435,10 @@ const layer = () =>
           ).pipe(Effect.catchTag("AppProcessError", (error) => Deferred.fail(ready, error))),
         )
 
-        const command = yield* Deferred.await(ready)
-        return command.info
+        return yield* Deferred.await(ready).pipe(
+          Effect.map((command) => command.info),
+          Effect.onInterrupt(() => Fiber.interrupt(manager).pipe(Effect.andThen(removeCommand(id)))),
+        )
       })
 
       return Service.of({ create, list, get, wait, result, timeout, output, remove })
