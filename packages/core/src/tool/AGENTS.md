@@ -43,6 +43,8 @@ The service uses shared `State` to replay synchronous transforms in registration
 
 MCP owns one stable tool transform that reads its latest discovered tools. Tool-list changes update that source and reload the tool state instead of re-registering at the end of the transform order. MCP refresh therefore preserves the precedence of later plugin overrides.
 
+Session-scoped MCP servers never enter the registry. `McpTool.overlay(view)` turns a Session's `McpSession.View` into its owned tools plus the effective names of the Location MCP tools whose servers the view shadows, and `Tool.Service.snapshot(permissions, overlay)` layers them over the registry for that snapshot only. Registry transforms, including plugin overrides, do not apply to overlay tools.
+
 Type safety ends at registration. The registry validates model input and declared output at runtime and should not carry producer schema generics through storage or execution.
 
 `Tool.Service` is Location-scoped. Do not make the registry process-global or construct a separate application-tool service for each Location.
@@ -61,4 +63,4 @@ Producer capture remains local to producers. Shell stores combined process outpu
 
 ## Current Gaps
 
-- Future Session-scoped registrations still need an explicit canonical registration design.
+- Session-scoped registrations beyond MCP servers still need an explicit canonical registration design.

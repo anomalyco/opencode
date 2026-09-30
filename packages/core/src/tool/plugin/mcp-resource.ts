@@ -4,12 +4,13 @@ import { ToolFailure } from "@opencode/ai"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { Effect, Schema } from "effect"
 import { Mcp } from "../../mcp/index.js"
+import { McpSession } from "../../mcp/session.js"
 import { Permission } from "../../permission.js"
 
 export const Plugin = {
   id: "opencode.tools.mcp-resources",
   effect: Effect.fn("McpResourceTools.Plugin")(function* (ctx: Context) {
-    const mcp = yield* Mcp.Service
+    const mcp = yield* McpSession.Service
     const permission = yield* Permission.Service
 
     yield* ctx.tool
@@ -30,9 +31,9 @@ export const Plugin = {
           }),
           execute: (input, context) =>
             Effect.gen(function* () {
+              const view = yield* mcp.view(context.sessionID)
               // Listing every server checks each server name so per-server rules still apply.
-              const servers =
-                input.server === undefined ? (yield* mcp.servers()).map((server) => server.name) : [input.server]
+              const servers = input.server === undefined ? view.servers.map((server) => server.name) : [input.server]
               yield* permission.assert({
                 action: "opencode_list_mcp_resources",
                 resources: servers,
@@ -42,8 +43,8 @@ export const Plugin = {
                 agent: context.agent,
                 source: { type: "tool", messageID: context.messageID, id: context.id },
               })
-              if (input.server === undefined) return { output: yield* mcp.resourceCatalog() }
-              return { output: yield* mcp.resources({ server: input.server }) }
+              if (input.server === undefined) return { output: yield* view.resourceCatalog }
+              return { output: yield* view.resources(input.server) }
             }).pipe(Effect.mapError((error) => new ToolFailure({ message: error.message, error }))),
         })
         editor.add({
@@ -71,7 +72,8 @@ export const Plugin = {
                 agent: context.agent,
                 source: { type: "tool", messageID: context.messageID, id: context.id },
               })
-              const resource = yield* mcp.readResource(input)
+              const view = yield* mcp.view(context.sessionID)
+              const resource = yield* view.readResource(input)
               if (!resource)
                 return yield* new ToolFailure({
                   message: `MCP server "${input.server}" is not connected or does not expose resources`,

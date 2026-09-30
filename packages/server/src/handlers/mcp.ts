@@ -5,7 +5,7 @@ import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
 import { response } from "../location"
 
-const notFound = <A, R>(effect: Effect.Effect<A, Mcp.NotFoundError, R>) =>
+export const notFound = <A, R>(effect: Effect.Effect<A, Mcp.NotFoundError, R>) =>
   effect.pipe(Effect.mapError((error) => new McpServerNotFoundError({ server: error.server, message: error.message })))
 
 export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>

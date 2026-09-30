@@ -53,6 +53,7 @@ import { Location } from "../location.js"
 import { ManagedPolicy } from "../managed-policy.js"
 import { ModelsDev } from "../models-dev.js"
 import { Mcp } from "../mcp/index.js"
+import { McpSession } from "../mcp/session.js"
 import { Npm } from "@opencode/util/npm"
 import { Permission } from "../permission.js"
 import { Reference } from "../reference.js"
@@ -132,6 +133,7 @@ const services = [
   ManagedPolicy.Service,
   ModelsDev.Service,
   Mcp.Service,
+  McpSession.Service,
   Npm.Service,
   Permission.Service,
   Form.Service,
@@ -185,6 +187,7 @@ export const requirements = LayerNode.group([
   ManagedPolicy.node,
   ModelsDev.node,
   Mcp.node,
+  McpSession.node,
   Npm.node,
   Permission.node,
   Form.node,

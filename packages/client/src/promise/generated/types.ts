@@ -2618,6 +2618,14 @@ export const isInstructionEntryValueTooLargeError = (value: unknown): value is I
   "_tag" in value &&
   value["_tag"] === "InstructionEntryValueTooLargeError"
 
+export type McpServerNotFoundError = {
+  readonly _tag: "McpServerNotFoundError"
+  readonly server: string
+  readonly message: string
+}
+export const isMcpServerNotFoundError = (value: unknown): value is McpServerNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "McpServerNotFoundError"
+
 export type FormNotFoundError = { readonly _tag: "FormNotFoundError"; readonly id: string; readonly message: string }
 export const isFormNotFoundError = (value: unknown): value is FormNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "FormNotFoundError"
@@ -2671,14 +2679,6 @@ export type IntegrationMethodNotFoundError = {
 }
 export const isIntegrationMethodNotFoundError = (value: unknown): value is IntegrationMethodNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "IntegrationMethodNotFoundError"
-
-export type McpServerNotFoundError = {
-  readonly _tag: "McpServerNotFoundError"
-  readonly server: string
-  readonly message: string
-}
-export const isMcpServerNotFoundError = (value: unknown): value is McpServerNotFoundError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "McpServerNotFoundError"
 
 export type ProjectNotFoundError = {
   readonly _tag: "ProjectNotFoundError"
@@ -4555,6 +4555,52 @@ export type SessionInstructionsEntryRemoveInput = {
 }
 
 export type SessionInstructionsEntryRemoveOutput = void
+
+export type SessionMcpAddInput = {
+  readonly sessionID: { readonly sessionID: string; readonly server: string }["sessionID"]
+  readonly server: { readonly sessionID: string; readonly server: string }["server"]
+  readonly config: {
+    readonly config:
+      | {
+          readonly type: "local"
+          readonly command: ReadonlyArray<string>
+          readonly cwd?: string
+          readonly environment?: { readonly [x: string]: string }
+          readonly disabled?: boolean
+          readonly codemode?: boolean
+          readonly timeout?: { readonly startup?: number; readonly catalog?: number; readonly execution?: number }
+          readonly protocol?: "legacy" | "auto" | "2026-07-28"
+        }
+      | {
+          readonly type: "remote"
+          readonly url: string
+          readonly headers?: { readonly [x: string]: string }
+          readonly oauth?:
+            | {
+                readonly client_id?: string
+                readonly client_secret?: string
+                readonly scope?: string
+                readonly callback_port?: number
+                readonly redirect_uri?: string
+                readonly auth_server_metadata_url?: string
+              }
+            | false
+          readonly disabled?: boolean
+          readonly codemode?: boolean
+          readonly timeout?: { readonly startup?: number; readonly catalog?: number; readonly execution?: number }
+          readonly protocol?: "legacy" | "auto" | "2026-07-28"
+        }
+  }["config"]
+}
+
+export type SessionMcpAddOutput = void
+
+export type SessionMcpRemoveInput = {
+  readonly sessionID: { readonly sessionID: string; readonly server: string }["sessionID"]
+  readonly server: { readonly sessionID: string; readonly server: string }["server"]
+}
+
+export type SessionMcpRemoveOutput = void
 
 export type SessionGenerateInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]

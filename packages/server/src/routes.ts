@@ -21,6 +21,7 @@ import { SessionTransfer } from "@opencode/core/session/transfer"
 import { ShellSelect } from "@opencode/core/shell/select"
 import { Job } from "@opencode/core/job"
 import { Mcp } from "@opencode/core/mcp/index"
+import { McpSession } from "@opencode/core/mcp/session"
 import { Global } from "@opencode/util/global"
 import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
@@ -112,6 +113,7 @@ function makeRoutes<AuthError, AuthServices>(
   overrides: LayerNode.Replacements,
   instances?: InstanceNode,
 ) {
+  const clientInfo = { name: options.app?.name ?? "opencode", version: options.app?.version ?? "unknown" }
   const standard: LayerNode.Replacements = [
     Database.node.replace(Database.configured(options.database)),
     PersistentPty.node.replace(PersistentPty.configured(options.pty)),
@@ -130,14 +132,8 @@ function makeRoutes<AuthError, AuthServices>(
     ),
     InstructionDiscovery.node.replace(InstructionDiscovery.configured({ project: options.config?.project })),
     ShellSelect.node.replace(ShellSelect.configured({ gitbash: options.windows?.gitbash })),
-    Mcp.node.replace(
-      Mcp.configured({
-        clientInfo: {
-          name: options.app?.name ?? "opencode",
-          version: options.app?.version ?? "unknown",
-        },
-      }),
-    ),
+    Mcp.node.replace(Mcp.configured({ clientInfo })),
+    McpSession.node.replace(McpSession.configured({ clientInfo })),
   ]
   const build = (overrides: LayerNode.Replacements) => {
     const replacements: LayerNode.Replacements = [

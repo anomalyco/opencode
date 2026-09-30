@@ -295,6 +295,46 @@ describe("acp service lifecycle", () => {
       .catch((error: unknown) => error)
     expect(missing).toMatchObject({ _tag: "ACPSessionNotFoundError", sessionId: session.sessionId })
   })
+
+  test("releases session MCP servers on close and leaves deletion cleanup to the server", async () => {
+    let created = 0
+    await using fixture = makeACPFixture({
+      fetch(request) {
+        if (request.method === "POST" && request.path === "/api/session") {
+          created++
+          return Response.json({ data: makeSession(`ses_${created}`) })
+        }
+        if (request.method === "GET" && request.path === "/api/session/ses_1") {
+          return Response.json({ data: makeSession("ses_1") })
+        }
+        if (request.path.startsWith("/api/experimental/session/")) return new Response(null, { status: 204 })
+        if (request.method === "POST" && request.path.endsWith("/interrupt"))
+          return Response.json({ interrupted: false })
+        if (request.method === "DELETE" && request.path === "/api/session/ses_2") {
+          return new Response(null, { status: 204 })
+        }
+        return undefined
+      },
+    })
+    const server = { name: "ctx", command: "bun", args: ["ctx.ts"], env: [] }
+    const mcpRequests = () =>
+      fixture.requests
+        .filter((request) => request.path.startsWith("/api/experimental/session/"))
+        .map((request) => `${request.method} ${request.path}`)
+
+    const closed = await fixture.service.newSession({ cwd: "/workspace", mcpServers: [server] })
+    const deleted = await fixture.service.newSession({ cwd: "/workspace", mcpServers: [server] })
+    await fixture.service.closeSession({ sessionId: closed.sessionId })
+    await fixture.service.resumeSession({ cwd: "/workspace", sessionId: closed.sessionId, mcpServers: [server] })
+    await fixture.service.deleteSession({ sessionId: deleted.sessionId })
+
+    expect(mcpRequests()).toEqual([
+      "PUT /api/experimental/session/ses_1/mcp/ctx",
+      "PUT /api/experimental/session/ses_2/mcp/ctx",
+      "DELETE /api/experimental/session/ses_1/mcp/ctx",
+      "PUT /api/experimental/session/ses_1/mcp/ctx",
+    ])
+  })
 })
 
 function currentValue(result: { readonly configOptions?: readonly SessionConfigOption[] | null }, id: string) {

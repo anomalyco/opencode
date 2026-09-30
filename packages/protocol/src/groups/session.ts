@@ -4,6 +4,7 @@ import { PromptInput } from "@opencode/schema/prompt-input"
 import { Session } from "@opencode/schema/session"
 import { SessionStats } from "@opencode/schema/session-stats"
 import { InstructionEntry } from "@opencode/schema/instruction-entry"
+import { Mcp } from "@opencode/schema/mcp"
 import { Project } from "@opencode/schema/project"
 import {
   AbsolutePath,
@@ -25,6 +26,7 @@ import {
   FormNotFoundError,
   InvalidCursorError,
   InvalidRequestError,
+  McpServerNotFoundError,
   MessageNotFoundError,
   ServiceUnavailableError,
   SessionBusyError,
@@ -699,6 +701,38 @@ export const makeSessionGroup = <
             summary: "Remove instruction entry",
             description:
               "Remove one instruction entry; the removal is announced to the model at the next step boundary.",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.put("session.mcp.add", "/api/experimental/session/:sessionID/mcp/:server", {
+        params: { sessionID: Session.ID, server: Schema.String },
+        payload: Schema.Struct({ config: Mcp.ServerConfig }),
+        success: HttpApiSchema.NoContent,
+        error: SessionNotFoundError,
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "experimental.session.mcp.add",
+            summary: "Add session MCP server",
+            description:
+              "Add or replace an MCP server visible only to this session and its child sessions, connecting it immediately. It shadows a Location server of the same name for those sessions, is not persisted, and is released when removed or when the session is deleted or moved. Re-adding an identical config is a no-op.",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.delete("session.mcp.remove", "/api/experimental/session/:sessionID/mcp/:server", {
+        params: { sessionID: Session.ID, server: Schema.String },
+        success: HttpApiSchema.NoContent,
+        error: [SessionNotFoundError, McpServerNotFoundError],
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "experimental.session.mcp.remove",
+            summary: "Remove session MCP server",
+            description: "Stop an MCP server registered for this session and remove it.",
           }),
         ),
     )

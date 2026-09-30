@@ -19,13 +19,13 @@ import type { Skill } from "@opencode/schema/skill"
 import type { FileDiff } from "@opencode/schema/file-diff"
 import type { InstructionEntry } from "@opencode/schema/instruction-entry"
 import type { Schema } from "effect"
+import type { Mcp } from "@opencode/schema/mcp"
 import type { Event } from "@opencode/schema/event"
 import type { EventLog } from "@opencode/schema/event-log"
 import type { Shell } from "@opencode/schema/shell"
 import type { Provider } from "@opencode/schema/provider"
 import type { Form } from "@opencode/schema/form"
 import type { Integration } from "@opencode/schema/integration"
-import type { Mcp } from "@opencode/schema/mcp"
 import type { Credential } from "@opencode/schema/credential"
 import type { PermissionSaved } from "@opencode/schema/permission-saved"
 import type { FileSystem } from "@opencode/schema/filesystem"
@@ -410,6 +410,20 @@ export type SessionInstructionsEntryRemoveOutput = void
 export type SessionInstructionsEntryRemoveOperation<E = never> = (
   input: SessionInstructionsEntryRemoveInput,
 ) => Effect.Effect<SessionInstructionsEntryRemoveOutput, E>
+
+export type SessionMcpAddInput = {
+  readonly sessionID: Session.ID
+  readonly server: string
+  readonly config: Mcp.LocalConfig | Mcp.RemoteConfig
+}
+export type SessionMcpAddOutput = void
+export type SessionMcpAddOperation<E = never> = (input: SessionMcpAddInput) => Effect.Effect<SessionMcpAddOutput, E>
+
+export type SessionMcpRemoveInput = { readonly sessionID: Session.ID; readonly server: string }
+export type SessionMcpRemoveOutput = void
+export type SessionMcpRemoveOperation<E = never> = (
+  input: SessionMcpRemoveInput,
+) => Effect.Effect<SessionMcpRemoveOutput, E>
 
 export type SessionGenerateInput = { readonly sessionID: Session.ID; readonly prompt: string }
 export type SessionGenerateOutput = { readonly text: string }
@@ -1477,6 +1491,7 @@ export interface SessionApi<E = never> {
       readonly remove: SessionInstructionsEntryRemoveOperation<E>
     }
   }
+  readonly mcp: { readonly add: SessionMcpAddOperation<E>; readonly remove: SessionMcpRemoveOperation<E> }
   readonly generate: SessionGenerateOperation<E>
   readonly log: SessionLogOperation<E>
   readonly interrupt: SessionInterruptOperation<E>

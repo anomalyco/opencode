@@ -83,6 +83,10 @@ import type {
   SessionInstructionsEntryPutOutput,
   SessionInstructionsEntryRemoveInput,
   SessionInstructionsEntryRemoveOutput,
+  SessionMcpAddInput,
+  SessionMcpAddOutput,
+  SessionMcpRemoveInput,
+  SessionMcpRemoveOutput,
   SessionGenerateInput,
   SessionGenerateOutput,
   SessionLogInput,
@@ -657,6 +661,21 @@ const EndpointSessionInstructionsEntryRemove =
       ),
     )
 
+const EndpointSessionMcpAdd = (raw: RawClient["server.session"]) => (input: SessionMcpAddInput) =>
+  preserveEffect<SessionMcpAddOutput>()(
+    raw["session.mcp.add"]({
+      params: { sessionID: input["sessionID"], server: input["server"] },
+      payload: { config: input["config"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointSessionMcpRemove = (raw: RawClient["server.session"]) => (input: SessionMcpRemoveInput) =>
+  preserveEffect<SessionMcpRemoveOutput>()(
+    raw["session.mcp.remove"]({ params: { sessionID: input["sessionID"], server: input["server"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
 const EndpointSessionGenerate = (raw: RawClient["server.session"]) => (input: SessionGenerateInput) =>
   preserveEffect<SessionGenerateOutput>()(
     raw["session.generate"]({ params: { sessionID: input["sessionID"] }, payload: { prompt: input["prompt"] } }).pipe(
@@ -796,6 +815,7 @@ const adaptGroupSession = (raw: RawClient["server.session"]) => ({
       remove: EndpointSessionInstructionsEntryRemove(raw),
     },
   },
+  mcp: { add: EndpointSessionMcpAdd(raw), remove: EndpointSessionMcpRemove(raw) },
   generate: EndpointSessionGenerate(raw),
   log: EndpointSessionLog(raw),
   interrupt: EndpointSessionInterrupt(raw),

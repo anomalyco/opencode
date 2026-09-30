@@ -12,6 +12,7 @@ import { Instructions } from "../instructions/index.js"
 import { InstructionBuiltIns } from "../instructions/builtins.js"
 import { Location } from "../location.js"
 import { McpInstructions } from "../mcp/instructions.js"
+import { McpSession } from "../mcp/session.js"
 import { McpTool } from "../tool/mcp.js"
 import { ReferenceInstructions } from "../reference/instructions.js"
 import { SkillInstructions } from "../skill/instructions.js"
@@ -82,6 +83,7 @@ const layer = Layer.effect(
     const entries = yield* InstructionEntry.Service
     const location = yield* Location.Service
     const mcpInstructions = yield* McpInstructions.Service
+    const mcpSessions = yield* McpSession.Service
     const mcpTools = yield* McpTool.Service
     const models = yield* SessionRunnerModel.Service
     const request = yield* SessionModelRequest.Service
@@ -129,14 +131,15 @@ const layer = Layer.effect(
       if (!agent.info) return yield* new AgentNotFoundError({ sessionID: session.id, agent: session.agent ?? agent.id })
       // Session permissions narrow discovery the same way they narrow the tool snapshot.
       const permissions = Permission.merge(agent.info.permissions, session.permissions ?? [])
+      const mcp = yield* mcpSessions.view(sessionID)
       const loaded = yield* Effect.all(
         {
-          tools: registry.snapshot(permissions),
+          tools: mcpTools.overlay(mcp).pipe(Effect.flatMap((overlay) => registry.snapshot(permissions, overlay))),
           builtins: builtins.load(),
           discovery: discovery.load(),
           skills: skillInstructions.load(permissions),
           references: referenceInstructions.load(),
-          mcp: mcpInstructions.load(permissions),
+          mcp: mcpInstructions.load(permissions, mcp),
           entries: entries.load(sessionID),
         },
         { concurrency: "unbounded" },
@@ -197,6 +200,7 @@ export const node = makeLocationNode({
     InstructionEntry.node,
     Location.node,
     McpInstructions.node,
+    McpSession.node,
     McpTool.node,
     ReferenceInstructions.node,
     SessionRunnerModel.node,

@@ -4,6 +4,7 @@ import { SessionTitle } from "@opencode/core/session/title"
 import { SessionTransfer } from "@opencode/core/session/transfer"
 import { InstructionEntry } from "@opencode/core/session/instruction-entry"
 import { Form } from "@opencode/core/form"
+import { McpSession } from "@opencode/core/mcp/session"
 import { DateTime, Effect, Stream } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
@@ -24,6 +25,7 @@ import {
 } from "@opencode/protocol/errors"
 import { AbsolutePath } from "@opencode/core/schema"
 import { failedMessageDecode, failedSnapshot, missingMessage, missingSession } from "./session-error"
+import { notFound } from "./mcp"
 
 const DefaultSessionsLimit = 50
 
@@ -580,6 +582,22 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         Effect.fn(function* (ctx) {
           const instructions = yield* InstructionEntry.Service
           yield* instructions.remove({ sessionID: ctx.params.sessionID, key: ctx.params.key })
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
+        "session.mcp.add",
+        Effect.fn(function* (ctx) {
+          const mcp = yield* McpSession.Service
+          yield* mcp.add(ctx.params.sessionID, ctx.params.server, ctx.payload.config)
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
+        "session.mcp.remove",
+        Effect.fn(function* (ctx) {
+          const mcp = yield* McpSession.Service
+          yield* notFound(mcp.remove(ctx.params.sessionID, ctx.params.server))
           return HttpApiSchema.NoContent.make()
         }),
       )

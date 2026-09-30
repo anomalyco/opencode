@@ -77,6 +77,10 @@ import type {
   SessionInstructionsEntryPutOutput,
   SessionInstructionsEntryRemoveInput,
   SessionInstructionsEntryRemoveOutput,
+  SessionMcpAddInput,
+  SessionMcpAddOutput,
+  SessionMcpRemoveInput,
+  SessionMcpRemoveOutput,
   SessionGenerateInput,
   SessionGenerateOutput,
   SessionLogInput,
@@ -945,6 +949,31 @@ export function make(options: ClientOptions) {
               requestOptions,
             ),
         },
+      },
+      mcp: {
+        add: (input: SessionMcpAddInput, requestOptions?: RequestOptions) =>
+          request<SessionMcpAddOutput>(
+            {
+              method: "PUT",
+              path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/mcp/${encodeURIComponent(input.server)}`,
+              body: { config: input["config"] },
+              successStatus: 204,
+              declaredStatuses: [400, 401, 404],
+              empty: true,
+            },
+            requestOptions,
+          ),
+        remove: (input: SessionMcpRemoveInput, requestOptions?: RequestOptions) =>
+          request<SessionMcpRemoveOutput>(
+            {
+              method: "DELETE",
+              path: `/api/experimental/session/${encodeURIComponent(input.sessionID)}/mcp/${encodeURIComponent(input.server)}`,
+              successStatus: 204,
+              declaredStatuses: [400, 401, 404],
+              empty: true,
+            },
+            requestOptions,
+          ),
       },
       generate: (input: SessionGenerateInput, requestOptions?: RequestOptions) =>
         request<{ readonly data: SessionGenerateOutput }>(

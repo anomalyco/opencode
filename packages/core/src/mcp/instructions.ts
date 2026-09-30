@@ -4,7 +4,7 @@ import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Permission } from "../permission.js"
 import { McpTool } from "../tool/mcp.js"
-import { Mcp } from "./index.js"
+import type { McpSession } from "./session.js"
 import { Instructions } from "../instructions/index.js"
 
 const Summary = Schema.Struct({
@@ -55,57 +55,53 @@ const update = (previous: ReadonlyArray<Summary>, current: ReadonlyArray<Summary
 
 export interface Interface {
   /** Lists server instructions reachable under the given ruleset; callers pass the merged agent and Session permissions. */
-  readonly load: (permissions: Permission.Ruleset) => Effect.Effect<Instructions.List>
+  readonly load: (
+    permissions: Permission.Ruleset,
+    view: Pick<McpSession.View, "instructions" | "tools" | "owned">,
+  ) => Effect.Effect<Instructions.List>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/McpInstructions") {}
 
-export const layer = Layer.effect(
+export const layer = Layer.succeed(
   Service,
-  Effect.gen(function* () {
-    const mcp = yield* Mcp.Service
-
-    return Service.of({
-      load: Effect.fn("McpInstructions.load")(function* (permissions) {
-        const source = (value: ReadonlyArray<Summary> | Instructions.Removed) =>
-          Instructions.make<ReadonlyArray<Summary>>({
-            key: Instructions.Key.make("core/mcp-guidance"),
-            codec: Schema.toCodecJson(Schema.Array(Summary)),
-            read: Effect.succeed(value),
-            render: {
-              initial: render,
-              changed: update,
-              removed: () => "MCP server instructions are no longer available.",
-            },
-          })
-        const [instructions, tools] = yield* Effect.all([mcp.instructions(), mcp.tools()], {
-          concurrency: "unbounded",
+  Service.of({
+    load: Effect.fn("McpInstructions.load")(function* (permissions, view) {
+      const source = (value: ReadonlyArray<Summary> | Instructions.Removed) =>
+        Instructions.make<ReadonlyArray<Summary>>({
+          key: Instructions.Key.make("core/mcp-guidance"),
+          codec: Schema.toCodecJson(Schema.Array(Summary)),
+          read: Effect.succeed(value),
+          render: {
+            initial: render,
+            changed: update,
+            removed: () => "MCP server instructions are no longer available.",
+          },
         })
-        const canExecute = Permission.evaluate("execute", "*", permissions).effect !== "deny"
-        // Instructions are useful only when this Session can reach at least one server tool.
-        const visible = instructions
-          .flatMap((item) => {
-            const owned = tools.filter((tool) => tool.server === item.server)
-            const codemode = owned[0]?.codemode !== false
-            if (codemode && !canExecute) return []
-            if (
-              !owned.some(
-                (tool) =>
-                  Permission.evaluate(McpTool.name(tool.server, tool.name), "*", permissions).effect !== "deny",
-              )
+      const tools = [...view.tools, ...view.owned.map((owned) => owned.tool)]
+      const canExecute = Permission.evaluate("execute", "*", permissions).effect !== "deny"
+      // Instructions are useful only when this Session can reach at least one server tool.
+      const visible = view.instructions
+        .flatMap((item) => {
+          const owned = tools.filter((tool) => tool.server === item.server)
+          const codemode = owned[0]?.codemode !== false
+          if (codemode && !canExecute) return []
+          if (
+            !owned.some(
+              (tool) => Permission.evaluate(McpTool.name(tool.server, tool.name), "*", permissions).effect !== "deny",
             )
-              return []
-            return [
-              codemode
-                ? { server: item.server, instructions: item.instructions }
-                : { server: item.server, instructions: item.instructions, codemode: false as const },
-            ]
-          })
-          .toSorted((a, b) => a.server.localeCompare(b.server))
-        return source(visible.length === 0 ? Instructions.removed : visible)
-      }),
-    })
+          )
+            return []
+          return [
+            codemode
+              ? { server: item.server, instructions: item.instructions }
+              : { server: item.server, instructions: item.instructions, codemode: false as const },
+          ]
+        })
+        .toSorted((a, b) => a.server.localeCompare(b.server))
+      return source(visible.length === 0 ? Instructions.removed : visible)
+    }),
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Mcp.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [] })

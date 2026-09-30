@@ -1,6 +1,6 @@
 export * as Tool from "./tool.js"
 export { CallID, Content, Error, FileContent, TextContent } from "@opencode/schema/tool"
-export type { Context, Metadata, Namespace, Options, Result } from "@opencode/schema/tool"
+export type { Context, Info, Metadata, Namespace, Options, Result } from "@opencode/schema/tool"
 
 import { ToolDefinition, type ToolCall } from "@opencode/ai"
 import { Tool } from "@opencode/schema/tool"
@@ -38,9 +38,16 @@ type Data = {
   errors: { kind: "tool" | "namespace"; name: string; namespace?: string; error: RegistrationError }[]
 }
 
+/** Session-specific tools layered over the Location registry for one snapshot. */
+export interface Overlay {
+  readonly tools: ReadonlyArray<Tool.Info>
+  /** Effective names of registered tools the overlay hides. */
+  readonly hidden: ReadonlySet<string>
+}
+
 export interface Interface extends State.Transformable<Editor> {
   readonly list: () => Effect.Effect<ReadonlyArray<Tool.Info & { readonly id: string }>>
-  readonly snapshot: (permissions?: Permission.Ruleset) => Effect.Effect<Snapshot>
+  readonly snapshot: (permissions?: Permission.Ruleset, overlay?: Overlay) => Effect.Effect<Snapshot>
 }
 
 /** A local execution result after hooks and content normalization. */
@@ -155,7 +162,9 @@ const layer = Layer.effect(
       }
     })
 
-    let catalog: { data: Data; names: string; value: CodeModeCatalog.Inventory } | undefined
+    let catalog:
+      | { data: Data; names: string; overlay: ReadonlyArray<Tool.Info>; value: CodeModeCatalog.Inventory }
+      | undefined
     const state = State.create<Data, Editor>({
       name: "tool",
       initial: () => ({
@@ -222,12 +231,19 @@ const layer = Layer.effect(
       transform: state.transform,
       reload: state.reload,
       list: () => Effect.sync(() => Array.from(state.get().tools.values())),
-      snapshot: Effect.fn("Tool.snapshot")((permissions) =>
+      snapshot: Effect.fn("Tool.snapshot")((permissions, overlay) =>
         Effect.sync(() => {
           const data = state.get()
           const active = new Map<string, Tool.Info>()
           const rules = permissions ?? []
-          for (const [name, tool] of data.tools) {
+          const overlaid = overlay?.tools.filter((tool) => !registrationError(tool)) ?? []
+          const registered = overlay
+            ? [
+                ...Array.from(data.tools).filter(([name]) => !overlay.hidden.has(name)),
+                ...overlaid.map((tool) => [effectiveName(tool), tool] as const),
+              ]
+            : data.tools
+          for (const [name, tool] of registered) {
             if (whollyDisabled(tool.options?.permission ?? name, rules)) continue
             active.set(name, tool)
           }
@@ -248,10 +264,13 @@ const layer = Layer.effect(
           // definitions/executors fresh, but share the much larger rendered catalog across steps.
           const codeModeCatalog = !codeModeEnabled
             ? undefined
-            : catalog?.data === data && catalog.names === names
+            : catalog?.data === data &&
+                catalog.names === names &&
+                catalog.overlay.length === overlaid.length &&
+                catalog.overlay.every((tool, index) => tool === overlaid[index])
               ? catalog.value
               : CodeModeTool.catalog(codeModeInventory)
-          if (codeModeCatalog) catalog = { data, names, value: codeModeCatalog }
+          if (codeModeCatalog) catalog = { data, names, overlay: overlaid, value: codeModeCatalog }
           return {
             ...(codeModeCatalog === undefined ? {} : { codeModeCatalog }),
             definitions: [

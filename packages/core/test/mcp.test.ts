@@ -25,11 +25,13 @@ import { Environment } from "@opencode/core/environment/index"
 import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
 import { Location } from "@opencode/core/location"
 import { Mcp } from "@opencode/core/mcp/index"
+import { McpSession } from "@opencode/core/mcp/session"
 import { McpClient } from "@opencode/core/mcp/client"
 import { McpStdio } from "@opencode/core/mcp/stdio"
 import { Permission } from "@opencode/core/permission"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
+import { SessionStore } from "@opencode/core/session/store"
 import { State } from "@opencode/core/state"
 import { McpTool } from "@opencode/core/tool/mcp"
 import { McpResourceTools } from "@opencode/core/tool/plugin/mcp-resource"
@@ -283,6 +285,7 @@ function resourceMcpLayer(
       yield* ConfigMcpPlugin.register(bus.subscribe())
     }),
   ).pipe(
+    Layer.provideMerge(McpSession.layer(options)),
     Layer.provideMerge(Mcp.layer(options)),
     Layer.provideMerge(Form.layer),
     Layer.provide(
@@ -348,6 +351,7 @@ function resourceMcpLayer(
           },
         }),
         Layer.mock(Credential.Service, {}),
+        AppNodeBuilder.build(SessionStore.node),
         overrides?.environment ?? hostEnvironmentLayer,
       ),
     ),
