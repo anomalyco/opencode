@@ -14,6 +14,7 @@ import { Effect, Record } from "effect"
 import { jsonSchema, tool as aiTool, type ModelMessage, type Tool } from "ai"
 import type { Plugin } from "@/plugin"
 import { mergeDeep } from "remeda"
+import { createHash } from "crypto"
 
 const USER_AGENT = `opencode/${InstallationVersion}`
 
@@ -188,7 +189,7 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
       ...(input.model.providerID.startsWith("opencode")
         ? {
             ...(opencodeProjectID ? { "x-opencode-project": opencodeProjectID } : {}),
-            "x-opencode-session": input.sessionID,
+            "x-opencode-session": zenSessionID(input.sessionID),
             "x-opencode-request": input.user.id,
             "x-opencode-client": input.flags.client,
             "User-Agent": USER_AGENT,
@@ -204,6 +205,16 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
     },
   }
 })
+
+function zenSessionID(sessionID: string) {
+  if (/^ses_[0-9a-f]{12}[0-9A-Za-z]{14}$/.test(sessionID)) return sessionID
+
+  // The Zen gateway rejects session IDs that do not match its standard shape.
+  const digest = createHash("sha256").update(sessionID).digest()
+  const alphabet = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+  const suffix = [...digest.subarray(6, 20)].map((byte) => alphabet[byte % 62]).join("")
+  return `ses_${digest.subarray(0, 6).toString("hex")}${suffix}`
+}
 
 function resolveTools(input: Pick<PrepareInput, "tools" | "agent" | "permission" | "user">) {
   const disabled = Permission.disabled(
