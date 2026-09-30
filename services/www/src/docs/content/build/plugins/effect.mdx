@@ -821,6 +821,17 @@ effect: (ctx) =>
   }),
 ```
 
+Request compaction with `compact`. It returns the admitted inbox item, not a completed summary; compaction runs at
+the next step boundary by default. Pass `delivery: "queue"` to preserve queue order instead.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const created = yield* ctx.session.create({ title: "Review" }).pipe(Effect.orDie)
+    const compaction = yield* ctx.session.compact({ sessionID: created.id }).pipe(Effect.orDie)
+  }),
+```
+
 Schemas: [`Session.Info`](/api#schema-Session.Info), [`Model.Ref`](/api#schema-Model.Ref),
 [`Session.Inbox.User`](/api#schema-Session.Inbox.User),
 [`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic).
@@ -835,6 +846,7 @@ type SessionDomain = Pick<
   | "prompt"
   | "generate"
   | "command"
+  | "compact"
   | "synthetic"
   | "interrupt"
   | "rename"

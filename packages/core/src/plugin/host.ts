@@ -543,6 +543,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
       prompt: sessions.prompt,
       generate: (input) => sessions.generate(input).pipe(Effect.map((text) => ({ text }))),
       command: (input) => sessions.command({ ...input, command: input.name }),
+      compact: sessions.compact,
       update: Effect.fn(function* (input) {
         yield* sessions.get(input.sessionID)
         if (input.title !== undefined) yield* sessions.rename({ sessionID: input.sessionID, title: input.title })

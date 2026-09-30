@@ -159,6 +159,7 @@ export type SessionDomain = Pick<
   | "prompt"
   | "generate"
   | "command"
+  | "compact"
   | "synthetic"
   | "interrupt"
   | "update"

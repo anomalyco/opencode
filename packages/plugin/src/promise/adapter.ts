@@ -586,6 +586,7 @@ export function fromPromise(plugin: Plugin) {
             prompt: adaptApiMethod(SessionEndpoints["session.prompt"], host.session.prompt),
             generate: adaptApiMethod(SessionEndpoints["session.generate"], host.session.generate),
             command: adaptApiMethod(SessionEndpoints["session.command"], host.session.command),
+            compact: adaptApiMethod(SessionEndpoints["session.compact"], host.session.compact),
             synthetic: adaptApiMethod(SessionEndpoints["session.synthetic"], host.session.synthetic),
             interrupt: adaptApiMethod(SessionEndpoints["session.interrupt"], host.session.interrupt),
             update: adaptApiMethod(SessionEndpoints["session.update"], host.session.update),

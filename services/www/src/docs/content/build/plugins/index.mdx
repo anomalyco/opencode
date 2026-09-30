@@ -774,6 +774,13 @@ await ctx.session.interrupt({ sessionID, continue: false })
 await ctx.session.wait({ sessionID })
 ```
 
+Request compaction with `compact`. It returns the admitted inbox item, not a completed summary; compaction runs at
+the next step boundary by default. Pass `delivery: "queue"` to preserve queue order instead.
+
+```ts
+const compaction = await ctx.session.compact({ sessionID })
+```
+
 #### Reference
 
 Schemas: [`Session.Info`](/api#schema-Session.Info), [`Model.Ref`](/api#schema-Model.Ref),
@@ -789,6 +796,7 @@ interface SessionContext {
   prompt(input: SessionPromptInput, requestOptions?: RequestOptions): Promise<SessionInboxUser>
   generate(input: SessionGenerateInput, requestOptions?: RequestOptions): Promise<{ text: string }>
   command(input: SessionCommandInput, requestOptions?: RequestOptions): Promise<SessionInboxUser>
+  compact(input: SessionCompactInput, requestOptions?: RequestOptions): Promise<SessionInboxCompaction>
   synthetic(input: SessionSyntheticInput, requestOptions?: RequestOptions): Promise<SessionInboxSynthetic>
   interrupt(input: SessionInterruptInput, requestOptions?: RequestOptions): Promise<void>
   rename(input: SessionRenameInput, requestOptions?: RequestOptions): Promise<void>
