@@ -149,7 +149,14 @@ export type MockPtyInfo = {
   pid: number
 }
 
-export type MockPtySocket = { id: string; url: URL; input: string[]; closed: boolean; send(data: string): void }
+export type MockPtySocket = {
+  id: string
+  url: URL
+  input: string[]
+  closed: boolean
+  send(data: string): void
+  close(code: number, reason: string): Promise<void>
+}
 
 export type MockPty = {
   list: MockPtyInfo[]
@@ -447,6 +454,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
           input: [],
           closed: false,
           send: (data) => ws.send(data),
+          close: (code, reason) => ws.close({ code, reason }),
         }
 
         ws.onMessage((message) => socket.input.push(message.toString()))
