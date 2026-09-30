@@ -107,9 +107,50 @@ const layer = Layer.effect(
       return root ? ID.make(root) : undefined
     })
 
+    // A directory that is not a git repository may still be a plain workspace
+    // aggregating multiple independent checkouts (children with their own
+    // .git). Detect that shape so such workspaces are treated as git-based
+    // projects and their nested repositories can be aggregated. Plain child
+    // directories are descended into up to `scanDepth` levels; known
+    // dependency/build directories are skipped to keep the scan cheap.
+    const scanSkip = new Set([
+      "node_modules",
+      "target",
+      "dist",
+      "build",
+      ".gradle",
+      ".idea",
+      ".cache",
+      ".opencode",
+      ".git",
+    ])
+    const scanDepth = 3
+    const hasNestedRepo: (
+      dir: AbsolutePath,
+      depth?: number,
+    ) => Effect.Effect<boolean> = Effect.fnUntraced(function* (dir: AbsolutePath, depth = scanDepth) {
+      if (depth === 0) return false
+      const entries = yield* fs.readDirectoryEntries(dir).pipe(Effect.catch(() => Effect.succeed([])))
+      for (const entry of entries) {
+        if (entry.type !== "directory" || scanSkip.has(entry.name)) continue
+        const child = AbsolutePath.make(path.join(dir, entry.name))
+        if (yield* fs.existsSafe(path.join(child, ".git"))) return true
+        if (yield* hasNestedRepo(child, depth - 1)) return true
+      }
+      return false
+    })
+
     const resolve = Effect.fn("Project.resolve")(function* (input: AbsolutePath) {
       const repo = yield* git.repo.discover(input)
-      if (!repo) return { id: ID.global, directory: AbsolutePath.make(path.parse(input).root), vcs: undefined }
+      if (!repo) {
+        if (!(yield* hasNestedRepo(input)))
+          return { id: ID.global, directory: AbsolutePath.make(path.parse(input).root), vcs: undefined }
+        return {
+          id: ID.make(Hash.fast(`workspace:${input}`)),
+          directory: input,
+          vcs: { type: "git" as const, store: input },
+        }
+      }
 
       const previous = yield* cached(repo.commonDirectory)
       const id = (yield* remote(repo)) ?? previous ?? (yield* root(repo))

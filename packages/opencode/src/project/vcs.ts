@@ -2,6 +2,8 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer, Context, Schema, Scope } from "effect"
 import { formatPatch, structuredPatch } from "diff"
 import path from "node:path"
+import fs from "node:fs/promises"
+import type { Dirent } from "node:fs"
 import { InstanceState } from "@/effect/instance-state"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { Git } from "@/git"
@@ -241,14 +243,60 @@ const track = Effect.fnUntraced(function* (
 // the default status/diff. We detect both shapes and aggregate their changes
 // with paths relative to the project worktree so the review panel can show
 // nested repo changes.
+// Directories that never contain source repositories; skipped to keep the
+// downward scan cheap.
+const scanSkip = new Set([
+  "node_modules",
+  "target",
+  "dist",
+  "build",
+  ".gradle",
+  ".idea",
+  ".cache",
+  ".opencode",
+  ".git",
+])
+
+// Child directories that are git repositories on their own, found by scanning
+// downward through plain (non-repository) directories up to `depth` levels.
+// Used when the project root itself is not a repository (e.g. a plain
+// directory aggregating multiple checkouts), so their changes can still be
+// aggregated. Repositories are not descended into; nested repos inside a repo
+// are already covered by the root-repository path.
+const childRepos: (
+  git: Git.Interface,
+  dir: string,
+  depth?: number,
+) => Effect.Effect<string[]> = Effect.fnUntraced(function* (git: Git.Interface, dir: string, depth = 3) {
+  if (depth === 0) return []
+  const entries = yield* Effect.tryPromise({
+    try: () => fs.readdir(dir, { withFileTypes: true }),
+    catch: () => new Error("readdir failed"),
+  }).pipe(Effect.catch(() => Effect.succeed<Dirent[]>([])))
+  const out: string[] = []
+  for (const entry of entries) {
+    if (!entry.isDirectory() || scanSkip.has(entry.name)) continue
+    const child = path.join(dir, entry.name)
+    if (yield* git.isRepo(child)) out.push(child)
+    else out.push(...(yield* childRepos(git, child, depth - 1)))
+  }
+  return out
+})
+
 const nestedRepos = Effect.fnUntraced(function* (git: Git.Interface, cwd: string) {
   const [list, links] = yield* Effect.all([git.status(cwd), git.gitlinks(cwd)], { concurrency: 2 })
   const repos = new Set(links)
-  for (const item of list) {
-    if (item.code !== "??" || !item.file.endsWith("/")) continue
-    const target = path.resolve(cwd, item.file)
-    if (yield* git.isRepo(target)) repos.add(item.file.slice(0, -1))
+  if (yield* git.isRepo(cwd)) {
+    for (const item of list) {
+      if (item.code !== "??" || !item.file.endsWith("/")) continue
+      const target = path.resolve(cwd, item.file)
+      if (yield* git.isRepo(target)) repos.add(item.file.slice(0, -1))
+    }
+    return [...repos]
   }
+  // The root is not a git repository; fall back to child repos found by
+  // scanning downward through plain directories.
+  for (const repo of yield* childRepos(git, cwd)) repos.add(path.relative(cwd, repo))
   return [...repos]
 })
 
