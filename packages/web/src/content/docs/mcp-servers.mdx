@@ -125,6 +125,8 @@ Here are all the options for configuring a local MCP server.
 | `enabled`     | Boolean |          | Enable or disable the MCP server on startup.                                             |
 | `timeout`     | Number  |          | Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds).      |
 
+Local servers exchange newline-delimited JSON-RPC over stdio. A single message larger than 16 MiB is discarded: the call it belongs to fails with a `-32000` error, and the connection and the server's other tools stay available.
+
 ---
 
 ## Remote

@@ -1,7 +1,7 @@
 import path from "node:path"
 import fs from "node:fs/promises"
 import { describe, expect, test } from "bun:test"
-import { Client, InMemoryTransport, StreamableHTTPClientTransport } from "@modelcontextprotocol/client"
+import { Client, InMemoryTransport, StreamableHTTPClientTransport, type JSONRPCMessage } from "@modelcontextprotocol/client"
 import {
   createMcpHandler,
   inputRequired,
@@ -43,6 +43,7 @@ import {
   Fiber,
   Layer,
   PubSub,
+  Queue,
   Ref,
   Schedule,
   Schema,
@@ -871,6 +872,108 @@ test("closes a stdio process that finishes spawning after close", async () => {
   )
 
   expect(signals).toEqual(["SIGTERM"])
+})
+
+/** A stdio transport whose server stdout is a queue the test drives directly. */
+const stdioReader = Effect.fnUntraced(function* () {
+  const stdout = yield* Queue.unbounded<Uint8Array>()
+  const service = Environment.Service.of({
+    files: Environment.makeFiles(Environment.makeMemoryDriver()),
+    spawner: ChildProcessSpawner.make(() =>
+      Effect.succeed(
+        makeHandle({
+          pid: ProcessId(1),
+          exitCode: Effect.never,
+          isRunning: Effect.succeed(true),
+          kill: () => Effect.void,
+          stdin: Sink.drain,
+          stdout: Stream.fromQueue(stdout),
+          stderr: Stream.empty,
+          all: Stream.never,
+          getInputFd: () => Sink.drain,
+          getOutputFd: () => Stream.empty,
+          unref: Effect.succeed(Effect.void),
+        }),
+      ),
+    ),
+  })
+  const transport = yield* McpStdio.make({
+    server: "reader",
+    command: "unused",
+    args: [],
+    cwd: import.meta.dir,
+    environment: {},
+  }).pipe(Effect.provideService(Environment.Service, service))
+  const received: Array<JSONRPCMessage> = []
+  const closed: Array<void> = []
+  const errors: Array<Error> = []
+  transport.onmessage = (message) => received.push(message)
+  transport.onclose = () => closed.push(undefined)
+  transport.onerror = (error) => errors.push(error)
+  return { stdout, transport, received, closed, errors }
+})
+
+const oversizeFrame = (id: number, bytes: number) =>
+  Buffer.concat([
+    Buffer.from(`{"jsonrpc":"2.0","id":${id},"result":{"content":[{"type":"text","text":"`),
+    Buffer.alloc(bytes, 0x78),
+    Buffer.from('"}]}}\n'),
+  ])
+
+test("delivers a frame above the SDK's 10 MiB default buffer", async () => {
+  const reader = await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const reader = yield* stdioReader()
+        const done = yield* Deferred.make<void>()
+        reader.transport.onmessage = (message) => {
+          reader.received.push(message)
+          Deferred.doneUnsafe(done, Exit.void)
+        }
+        yield* Effect.promise(() => reader.transport.start())
+        yield* Queue.offer(reader.stdout, oversizeFrame(3, 11 * 1024 * 1024))
+        yield* Deferred.await(done).pipe(Effect.timeout("5 seconds"))
+        return reader
+      }),
+    ),
+  )
+
+  expect(reader.received).toHaveLength(1)
+  expect(reader.received[0]).toMatchObject({ jsonrpc: "2.0", id: 3, result: { content: [{ type: "text" }] } })
+  expect(reader.closed).toEqual([])
+  expect(reader.errors).toEqual([])
+})
+
+test("fails an oversized stdio frame without closing the transport", async () => {
+  const limit = 16 * 1024 * 1024
+  const { received, closed, errors } = await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const { stdout, transport, received, closed, errors } = yield* stdioReader()
+        const done = yield* Deferred.make<void>()
+        transport.onmessage = (message) => {
+          received.push(message)
+          if (received.length === 2) Deferred.doneUnsafe(done, Exit.void)
+        }
+        yield* Effect.promise(() => transport.start())
+        yield* Queue.offer(stdout, oversizeFrame(7, limit + 1024))
+        yield* Queue.offer(stdout, Buffer.from('{"jsonrpc":"2.0","id":8,"result":{}}\n'))
+        yield* Deferred.await(done).pipe(Effect.timeout("5 seconds"))
+        return { received, closed, errors }
+      }),
+    ),
+  )
+
+  expect(received).toHaveLength(2)
+  const failure = received[0]
+  expect(failure).toMatchObject({ jsonrpc: "2.0", id: 7 })
+  if (failure === undefined || !("error" in failure)) throw new Error("Expected an error response for the oversized frame")
+  expect(failure.error.code).toBe(-32000)
+  expect(failure.error.message).toContain(`exceeded the ${limit} byte limit`)
+  expect(received[1]).toMatchObject({ jsonrpc: "2.0", id: 8, result: {} })
+  // The connection survives so the server's other tools keep working.
+  expect(closed).toEqual([])
+  expect(errors).toEqual([])
 })
 
 test("applies the configured MCP catalog timeout", async () => {

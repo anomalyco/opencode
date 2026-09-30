@@ -1,6 +1,6 @@
 export * as McpStdio from "./stdio.js"
 
-import { ReadBuffer, serializeMessage, type JSONRPCMessage, type Transport } from "@modelcontextprotocol/client"
+import { deserializeMessage, serializeMessage, type JSONRPCMessage, type Transport } from "@modelcontextprotocol/client"
 import { Cause, Duration, Effect, Queue, Scope, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import type { ChildProcessHandle } from "effect/unstable/process/ChildProcessSpawner"
@@ -12,7 +12,12 @@ const CLOSE_GRACE = Duration.seconds(2)
 /** Mirrors StdioClientTransport: escalate SIGTERM to SIGKILL after this long. */
 const FORCE_KILL_AFTER = Duration.seconds(2)
 const OUTGOING_CAPACITY = 64
+/** Largest incoming JSON-RPC frame this transport buffers. A larger frame fails its call, not the connection. */
 const MAX_FRAME_BYTES = 16 * 1024 * 1024
+/** Enough of an oversized frame's head to recover the JSON-RPC id that should receive the failure. */
+const FRAME_HEAD_BYTES = 4096
+/** JSON-RPC server-error range; matches the code clients already surface for a broken transport. */
+const FRAME_LIMIT_ERROR_CODE = -32000
 
 export interface Options {
   /** Server name; only used to attribute logs. */
@@ -45,11 +50,13 @@ export const make = Effect.fnUntraced(function* (options: Options) {
   // Outgoing frames are queued rather than written to `handle.stdin` directly: the sink closes the
   // stream it is run with, and stdin must stay open across the whole session.
   const outgoing = yield* Queue.bounded<string, Cause.Done>(OUTGOING_CAPACITY)
-  const buffer = new ReadBuffer()
   const state: { phase: "ready" | "starting" | "open" | "closed"; handle?: ChildProcessHandle } = { phase: "ready" }
   let startup: Promise<void> | undefined
   let closing: Promise<void> | undefined
-  let trailingBytes = 0
+  /** Chunks of the frame being read; `discarding` drops the remainder of an oversized one until its newline. */
+  let pending: Buffer[] = []
+  let pendingBytes = 0
+  let discarding = false
 
   const stop = Effect.fnUntraced(function* (handle: ChildProcessHandle) {
     // Exit completion can precede descendant cleanup after the capture deadline.
@@ -68,7 +75,10 @@ export const make = Effect.fnUntraced(function* (options: Options) {
         if (!handle) return
         state.handle = undefined
         yield* stop(handle)
-      }).pipe(Effect.ensuring(Queue.shutdown(outgoing)), Effect.ensuring(Effect.sync(() => buffer.clear()))),
+      }).pipe(Effect.ensuring(Queue.shutdown(outgoing)), Effect.ensuring(Effect.sync(() => {
+        pending = []
+        pendingBytes = 0
+      }))),
     ))
 
   const transport: Transport = {
@@ -110,30 +120,67 @@ export const make = Effect.fnUntraced(function* (options: Options) {
     close,
   }
 
+  // A frame over the limit must fail only its own call: recover the id from the frame head and
+  // answer it with a JSON-RPC error, then keep reading so the connection and other tools survive.
+  const frameId = (frame: Buffer) => {
+    const match = /"id"\s*:\s*("(?:[^"\\]|\\.)*"|-?\d+)/.exec(
+      frame.subarray(0, FRAME_HEAD_BYTES).toString("utf8"),
+    )
+    if (match === null) return undefined
+    try {
+      return JSON.parse(match[1]) as string | number
+    } catch {
+      return undefined
+    }
+  }
+
+  const failOversizedFrame = (frame: Buffer, size: number) => {
+    const message = `MCP stdio message of ${size} bytes exceeded the ${MAX_FRAME_BYTES} byte limit and was discarded`
+    const id = frameId(frame)
+    if (id === undefined) {
+      transport.onerror?.(new Error(message))
+      return
+    }
+    transport.onmessage?.({ jsonrpc: "2.0", id, error: { code: FRAME_LIMIT_ERROR_CODE, message } })
+  }
+
+  const handleFrame = (line: string) => {
+    try {
+      transport.onmessage?.(deserializeMessage(line))
+    } catch (error) {
+      // A malformed line is skipped, matching the SDK's stdio buffer; anything else is a transport error.
+      if (error instanceof SyntaxError) return
+      transport.onerror?.(error instanceof Error ? error : new Error(String(error)))
+    }
+  }
+
   const deliver = (chunk: Uint8Array) =>
-    Effect.gen(function* () {
-      for (const byte of chunk) {
-        trailingBytes = byte === 10 ? 0 : trailingBytes + 1
-        if (trailingBytes > MAX_FRAME_BYTES) return yield* Effect.fail(new Error("MCP stdio frame exceeded 16 MiB"))
-      }
-      buffer.append(Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength))
-      while (true) {
-        // `undefined` means the frame failed to parse: the buffer has already advanced past it, so
-        // keep draining. `null` means the buffer holds no complete frame yet.
-        const message = yield* Effect.try({
-          try: () => buffer.readMessage(),
-          catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
-        }).pipe(
-          Effect.catch((error) =>
-            Effect.sync(() => {
-              transport.onerror?.(error)
-              return undefined
-            }),
-          ),
-        )
-        if (message === undefined) continue
-        if (message === null) return
-        transport.onmessage?.(message)
+    Effect.sync(() => {
+      const bytes = Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength)
+      let start = 0
+      while (start < bytes.length) {
+        const newline = bytes.indexOf(10, start)
+        const segment = bytes.subarray(start, newline === -1 ? bytes.length : newline)
+        if (!discarding && segment.byteLength > 0) {
+          // Copy so a retained partial frame never aliases a chunk the process stream may reuse.
+          pending.push(Buffer.from(segment))
+          pendingBytes += segment.byteLength
+          if (pendingBytes > MAX_FRAME_BYTES) {
+            failOversizedFrame(Buffer.concat(pending), pendingBytes)
+            pending = []
+            pendingBytes = 0
+            discarding = true
+          }
+        }
+        if (newline === -1) return
+        if (!discarding) {
+          const frame = pending.length === 1 ? pending[0] : Buffer.concat(pending)
+          pending = []
+          pendingBytes = 0
+          handleFrame(frame.toString("utf8").replace(/\r$/, ""))
+        }
+        discarding = false
+        start = newline + 1
       }
     })
 
