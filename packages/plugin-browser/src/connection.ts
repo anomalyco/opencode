@@ -9,15 +9,12 @@ import { Deferred, Effect, Schema, Stream } from "effect"
 import { Browser } from "./rpc.js"
 import { BrowserTunnel } from "./tunnel.js"
 
-// Browser tools are hidden when the last rule for the "browser" action is a `*` deny. Agents without
-// an explicit browser rule get that deny, and attach appends a session allow while a desktop is held.
+// Browser tools are hidden when the last rule for the "browser" action is a `*` deny. Every agent
+// gets that deny, and attach appends a session allow while a desktop is held.
 const deny: Permission.Rule = { action: "browser", resource: "*", effect: "deny" }
 const allow: Permission.Rule = { action: "browser", resource: "*", effect: "allow" }
 const same = (a: Permission.Rule, b: Permission.Rule) =>
   a.action === b.action && a.resource === b.resource && a.effect === b.effect
-// A catch-all `*` rule is not a browser rule, so a user's `* allow` does not reveal browser tools.
-const browserRule = (rule: Permission.Rule) =>
-  rule.action !== "*" && new RegExp(`^${rule.action.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".")}$`).test("browser")
 
 type Attachment = {
   connectionID: string
@@ -33,39 +30,29 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
   ctx: Pick<Context, "agent" | "rpc" | "session" | "location" | "event">,
 ) {
   const browsers = new Map<Session.ID, Attachment>()
-  // Agents whose own rules (config or plugins) deny the browser; attach never overrides them.
-  const denied = new Set<string>()
-  yield* ctx.agent.transform((editor) => {
-    denied.clear()
-    editor.list().forEach((agent) => {
-      const rule = agent.permissions.findLast(browserRule)
-      if (!rule) return agent.permissions.push(deny)
-      if (rule.effect === "deny") denied.add(agent.id)
-    })
-  })
-  const grant = (sessionID: Session.ID, agent: string) =>
+  // Appended after config, so every agent hides the browser until an attachment allows it.
+  yield* ctx.agent.transform((editor) => editor.list().forEach((agent) => agent.permissions.push(deny)))
+  // Each attachment adds and removes its own allow, so a replaced attachment keeps the new one's.
+  const grant = (sessionID: Session.ID) =>
     Effect.acquireRelease(
-      ctx.session.get({ sessionID }).pipe(
-        Effect.flatMap((session) => {
-          const permissions = session.permissions ?? []
-          // Each attachment owns one allow, so a replaced attachment removing its own keeps the new one.
-          if (denied.has(agent)) return Effect.succeed(false)
-          return ctx.session.update({ sessionID, permissions: [...permissions, allow] }).pipe(Effect.as(true))
-        }),
-        Effect.orDie,
-      ),
-      (granted) =>
-        granted
-          ? ctx.session.get({ sessionID }).pipe(
-              Effect.flatMap((session) => {
-                const permissions = session.permissions ?? []
-                const index = permissions.findIndex((rule) => same(rule, allow))
-                if (index === -1) return Effect.void
-                return ctx.session.update({ sessionID, permissions: permissions.toSpliced(index, 1) })
-              }),
-              Effect.ignore,
-            )
-          : Effect.void,
+      ctx.session
+        .get({ sessionID })
+        .pipe(
+          Effect.flatMap((session) =>
+            ctx.session.update({ sessionID, permissions: [...(session.permissions ?? []), allow] }),
+          ),
+          Effect.orDie,
+        ),
+      () =>
+        ctx.session.get({ sessionID }).pipe(
+          Effect.flatMap((session) => {
+            const permissions = session.permissions ?? []
+            const index = permissions.findIndex((rule) => same(rule, allow))
+            if (index === -1) return Effect.void
+            return ctx.session.update({ sessionID, permissions: permissions.toSpliced(index, 1) })
+          }),
+          Effect.ignore,
+        ),
     )
   let active = true
   const close = (sessionID: Session.ID, reason: "closed" | "replaced" = "closed") =>
@@ -114,8 +101,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
             }),
             (browser) => (browsers.get(input.sessionID) === browser ? close(input.sessionID) : Effect.void),
           )
-          // A session without an agent runs the default agent, normally build.
-          yield* grant(input.sessionID, session.agent ?? "build")
+          yield* grant(input.sessionID)
           yield* rpc.events
             .emit("control", { type: "attached", connectionID: input.connectionID, version: 4 })
             .pipe(Effect.orDie)
