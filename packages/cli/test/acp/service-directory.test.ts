@@ -170,6 +170,7 @@ describe("acp service directory behavior", () => {
         .map((request) => request.body),
     ).toEqual([{ agent: "copilot-build" }])
     expect(missing).toMatchObject({ _tag: "ACPInvalidModeError" })
+    expect(fixture.requests.filter((request) => request.path === "/api/agent")).toHaveLength(3)
   })
 
   test.each(["empty", "missing the default"])(

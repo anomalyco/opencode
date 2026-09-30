@@ -116,16 +116,13 @@ export function makeACPFixture(options: FixtureOptions = {}) {
   const requests: FixtureRequest[] = []
   const updates: SessionNotification[] = []
   const encoder = new TextEncoder()
-  // The service keeps one catalog stream open alongside each prompt's stream.
-  const eventControllers = new Set<ReadableStreamDefaultController<Uint8Array>>()
+  let eventController: ReadableStreamDefaultController<Uint8Array> | undefined
   const models = options.models ?? [testModel, secondModel]
   const context: FixtureContext = {
     requests,
     send(event) {
-      if (eventControllers.size === 0) throw new Error("ACP fixture has no active event stream")
-      for (const controller of eventControllers) {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
-      }
+      if (!eventController) throw new Error("ACP fixture has no active event stream")
+      eventController.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`))
     },
   }
   const server = Bun.serve({
@@ -150,15 +147,11 @@ export function makeACPFixture(options: FixtureOptions = {}) {
           new ReadableStream<Uint8Array>({
             start(value) {
               controller = value
-              value.enqueue(
-                encoder.encode(
-                  `data: ${JSON.stringify({ id: "evt_connected", type: "server.connected", data: {} })}\n\n`,
-                ),
-              )
-              eventControllers.add(value)
+              eventController = value
+              context.send({ id: "evt_connected", type: "server.connected", data: {} })
             },
             cancel() {
-              if (controller) eventControllers.delete(controller)
+              if (eventController === controller) eventController = undefined
             },
           }),
           { headers: { "content-type": "text/event-stream" } },
@@ -193,7 +186,7 @@ export function makeACPFixture(options: FixtureOptions = {}) {
     updates,
     send: context.send,
     async [Symbol.asyncDispose]() {
-      for (const controller of eventControllers) controller.close()
+      eventController?.close()
       await server.stop(true)
     },
   }
