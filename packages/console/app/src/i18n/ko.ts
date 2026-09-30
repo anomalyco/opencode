@@ -3,6 +3,11 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
+  "go.promo.spaceBunny": "새로운 익명 모델 Space Bunny Free를 한정된 기간 동안 사용할 수 있습니다",
+  "go.referral.ended.label": "경고",
+  "go.referral.ended":
+    "추천 프로그램이 종료되었습니다. 추천 링크로는 더 이상 본인이나 링크를 공유한 사람에게 크레딧이 지급되지 않습니다.",
+  "go.graph.bonus": "사용량 {{count}}배",
   "nav.github": "GitHub",
   "nav.docs": "문서",
   "nav.changelog": "변경 내역",
@@ -58,6 +63,7 @@ export const dict = {
   "common.cancel": "취소",
   "common.creating": "생성 중...",
   "common.create": "만들기",
+  "common.contactUs": "문의하기",
 
   "common.videoUnsupported": "브라우저가 비디오 태그를 지원하지 않습니다.",
   "common.figure": "그림 {{n}}.",
@@ -222,6 +228,9 @@ export const dict = {
   "zen.faq.q8": "다른 코딩 에이전트와 Zen을 사용할 수 있나요?",
   "zen.faq.a8":
     "Zen은 OpenCode와 훌륭하게 작동하지만, 어떤 에이전트와도 Zen을 사용할 수 있습니다. 선호하는 코딩 에이전트의 설정 지침을 따르세요.",
+  "zen.faq.q9": "환불받을 수 있나요?",
+  "zen.faq.a9":
+    "결제일로부터 14일 이내이며 해당 구매로 받은 크레딧을 전혀 사용하지 않은 경우 환불 대상이 될 수 있습니다. 환불을 요청하려면 {{contact}}를 선택해 주세요.",
 
   "zen.cta.start": "Zen 시작하기",
   "zen.pricing.title": "$20 선불 잔액 추가",
@@ -250,9 +259,9 @@ export const dict = {
   "zen.privacy.exceptionsLink": "다음 예외",
 
   "go.title": "OpenCode Go | 모두를 위한 저비용 코딩 모델",
-  "go.banner.text": "GLM-5.3-Flash 사용 한도가 한시적으로 2배 확대됩니다",
   "go.meta.description": "Go는 월 $10이며, 넉넉한 사용 한도와 주요 코딩 모델에 대한 안정적인 액세스를 제공합니다.",
   "go.hero.title": "모두를 위한 저비용 코딩 모델",
+  "go.hero.tagline": "어떤 에이전트와도 사용할 수 있습니다. 필요하면 크레딧을 충전하세요. 언제든지 취소할 수 있습니다.",
   "go.hero.body":
     "Go는 전 세계 프로그래머들에게 에이전트 코딩을 제공합니다. 가장 유능한 오픈 소스 모델에 대한 넉넉한 한도와 안정적인 액세스를 제공하므로, 비용이나 가용성 걱정 없이 강력한 에이전트로 빌드할 수 있습니다.",
 
@@ -260,12 +269,32 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Go 구독하기",
   "go.cta.price": "$10/월",
+  "go.plans.month": "/월",
+  "go.plans.plus.cta": "Go Plus 구독하기",
+  "go.plans.plus.description": "Go Plus는 월 $40로 더 높은 사용 한도를 제공합니다.",
+  "go.plans.go.feature1": "엄선된 합리적인 가격의 모델",
+  "go.plans.go.feature2": "에이전트 코딩에 최적화된 테스트",
+  "go.plans.go.feature3": "넉넉한 한도와 안정적인 접근",
+  "go.plans.plus.feature1": "Go의 모든 혜택 포함",
+  "go.plans.plus.feature2": "더 높은 한도로 장시간 코딩에 집중",
+  "go.plans.plus.feature3": "더 크고 복잡한 프로젝트에 적합",
+  "go.plans.limits": "사용 한도",
+  "go.plans.description": "모델별 5시간당 예상 요청 횟수 및 월간 사용 한도",
+  "go.plans.legend": "요금제",
   "go.pricing.body":
     "어떤 에이전트와도 사용할 수 있습니다. 월 $10. 필요하면 크레딧을 충전하세요. 언제든지 취소할 수 있습니다.",
   "go.graph.free": "무료",
   "go.graph.freePill": "Big Pickle 및 무료 모델",
   "go.graph.go": "Go",
   "go.graph.label": "5시간당 요청 수",
+  "go.graph.period": "사용량",
+  "go.graph.model": "모델",
+  "go.graph.requests": "예상 요청 횟수 / 5시간",
+  "go.graph.allowance": "월간 사용량",
+  "go.graph.new": "신규",
+  "go.graph.scale": "요청 수는 비선형 눈금으로 표시됩니다",
+  "go.graph.showAll": "전체 {{count}}개 모델 보기",
+  "go.graph.showLess": "접기",
   "go.graph.limitedRegions": "일부 지역에서만 제공",
   "go.graph.limitedTime": "한정된 기간",
   "go.graph.usageLimits": "사용 한도",
@@ -361,7 +390,10 @@ export const dict = {
 
   "go.faq.q9": "무료 모델과 Go의 차이점은 무엇인가요?",
   "go.faq.a9":
-    "무료 모델에는 Big Pickle과 당시 사용 가능한 프로모션 모델이 포함되며, 하루 200회 요청 할당량이 적용됩니다. Go는 엄선된 모델 라인업을 제공하며, 롤링 윈도우(5시간, 주간, 월간)에 걸쳐 더 높은 요청 할당량을 적용합니다. 기본 할당량은 대략 5시간당 $12, 주당 $30, 월 $60에 해당하며 모델별 할당량은 다를 수 있습니다(실제 요청 수는 모델 및 사용량에 따라 다름).",
+    "무료 모델에는 Big Pickle과 당시 사용 가능한 프로모션 모델이 포함되며, 하루 200회 요청 할당량이 적용됩니다. Go는 엄선된 모델 라인업을 제공하며, 이동 기간별 요청 한도는 5시간당 월간 한도의 20%, 주간 50%, 월간 100%입니다. 모델별 한도는 다를 수 있습니다(실제 요청 수는 모델 및 사용량에 따라 다름).",
+  "go.faq.q10": "환불받을 수 있나요?",
+  "go.faq.a10":
+    "결제일로부터 14일 이내이며 해당 결제 기간에 Go 사용 한도를 전혀 사용하지 않은 경우 환불 대상이 될 수 있습니다. 환불을 요청하려면 {{contact}}를 선택해 주세요.",
 
   "zen.api.error.rateLimitExceeded": "속도 제한을 초과했습니다. 나중에 다시 시도해 주세요.",
   "zen.api.error.modelNotSupported": "{{model}} 모델은 지원되지 않습니다",
@@ -625,7 +657,6 @@ export const dict = {
   "workspace.payments.type.subscription": "구독",
   "workspace.payments.view": "보기",
 
-  "workspace.black.loading": "로드 중...",
   "workspace.black.time.day": "일",
   "workspace.black.time.days": "일",
   "workspace.black.time.hour": "시간",
@@ -635,7 +666,8 @@ export const dict = {
   "workspace.black.time.fewSeconds": "몇 초",
   "workspace.black.subscription.title": "구독",
   "workspace.black.subscription.message": "현재 월 ${{plan}} OpenCode Black 플랜을 구독 중입니다.",
-  "workspace.black.subscription.manage": "구독 관리",
+  "workspace.black.subscription.ending":
+    "OpenCode Black은 현재 결제 기간이 끝나면 종료되며 갱신되지 않습니다. 새 콘솔로 옮겨 드리겠습니다.",
   "workspace.black.subscription.rollingUsage": "5시간 사용량",
   "workspace.black.subscription.weeklyUsage": "주간 사용량",
   "workspace.black.subscription.resetsIn": "초기화까지 남은 시간:",

@@ -3,6 +3,10 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
+  "go.promo.spaceBunny": "全新匿名模型 Space Bunny Free 限時上線",
+  "go.referral.ended.label": "警告",
+  "go.referral.ended": "推薦計畫已結束。推薦連結不再為你或分享連結的人提供額度。",
+  "go.graph.bonus": "{{count}} 倍用量",
   "nav.github": "GitHub",
   "nav.docs": "文件",
   "nav.changelog": "更新日誌",
@@ -59,6 +63,7 @@ export const dict = {
   "common.cancel": "取消",
   "common.creating": "正在建立...",
   "common.create": "建立",
+  "common.contactUs": "聯絡我們",
 
   "common.videoUnsupported": "你的瀏覽器不支援 video 標籤。",
   "common.figure": "圖 {{n}}.",
@@ -217,6 +222,8 @@ export const dict = {
   "zen.faq.q8": "我可以在其他編碼代理中使用 Zen 嗎？",
   "zen.faq.a8":
     "Zen 與 OpenCode 搭配得很好，但你也可以在任何代理中使用 Zen。請在你偏好的編碼代理中按照設定說明進行配置。",
+  "zen.faq.q9": "我可以退款嗎？",
+  "zen.faq.a9": "若扣款發生在過去 14 天內，且你尚未使用該次購買的任何額度，你可能符合退款資格。請{{contact}}申請退款。",
 
   "zen.cta.start": "開始使用 Zen",
   "zen.pricing.title": "儲值 $20 即用即付餘額",
@@ -244,9 +251,9 @@ export const dict = {
   "zen.privacy.exceptionsLink": "以下例外情況",
 
   "go.title": "OpenCode Go | 低成本全民編碼模型",
-  "go.banner.text": "GLM-5.3-Flash 限時享有 2 倍使用額度",
   "go.meta.description": "Go 每月 $10，提供充裕的使用限額，並可穩定存取領先的編碼模型。",
   "go.hero.title": "低成本全民編碼模型",
+  "go.hero.tagline": "可搭配任何代理使用。如有需要可儲值。隨時取消。",
   "go.hero.body":
     "Go 將代理編碼帶給全世界的程式設計師。提供寬裕的限額以及對最強大開源模型的穩定存取，讓你可以使用強大的代理進行構建，而無需擔心成本或可用性。",
 
@@ -254,11 +261,31 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "訂閱 Go",
   "go.cta.price": "$10/月",
+  "go.plans.month": "每月",
+  "go.plans.plus.cta": "訂閱 Go Plus",
+  "go.plans.plus.description": "Go Plus 每月 $40，提供更高的使用額度。",
+  "go.plans.go.feature1": "精選實惠的模型",
+  "go.plans.go.feature2": "專為代理程式編碼測試",
+  "go.plans.go.feature3": "充足額度與穩定存取",
+  "go.plans.plus.feature1": "包含 Go 的所有權益",
+  "go.plans.plus.feature2": "更高額度，支援更長時間的專注編碼",
+  "go.plans.plus.feature3": "適合更大型、更複雜的專案",
+  "go.plans.limits": "使用額度",
+  "go.plans.description": "各模型每 5 小時的預估請求次數及每月使用額度",
+  "go.plans.legend": "方案",
   "go.pricing.body": "可搭配任何代理使用。每月 $10。如有需要可儲值。隨時取消。",
   "go.graph.free": "免費",
   "go.graph.freePill": "Big Pickle 與免費模型",
   "go.graph.go": "Go",
   "go.graph.label": "每 5 小時請求數",
+  "go.graph.period": "使用額度",
+  "go.graph.model": "模型",
+  "go.graph.requests": "預估請求次數 / 5 小時",
+  "go.graph.allowance": "每月使用額度",
+  "go.graph.new": "新",
+  "go.graph.scale": "請求數採用非線性刻度",
+  "go.graph.showAll": "查看全部 {{count}} 個模型",
+  "go.graph.showLess": "收起模型",
   "go.graph.limitedRegions": "僅限部分地區",
   "go.graph.limitedTime": "限時",
   "go.graph.usageLimits": "使用限制",
@@ -348,7 +375,10 @@ export const dict = {
 
   "go.faq.q9": "免費模型與 Go 有什麼區別？",
   "go.faq.a9":
-    "免費模型包括 Big Pickle 以及當時可用的促銷模型，配額為 200 次請求/天。Go 提供精選模型陣容，並在滾動視窗（5 小時、每週和每月）內提供更高的請求配額，大約相當於每 5 小時 $12、每週 $30 和每月 $60 的基礎額度；具體額度可能因模型而異（實際請求數因模型和使用情況而異）。",
+    "免費模型包括 Big Pickle 以及當時可用的促銷模型，配額為每天 200 次請求。Go 提供精選模型陣容，並在滾動視窗內執行較高的請求配額：每 5 小時為每月額度的 20%、每週 50%、每月 100%。具體額度可能因模型而異（實際請求次數因模型和使用情況而異）。",
+  "go.faq.q10": "我可以退款嗎？",
+  "go.faq.a10":
+    "若扣款發生在過去 14 天內，且你在該計費期間尚未使用任何 Go 額度，你可能符合退款資格。請{{contact}}申請退款。",
 
   "zen.api.error.rateLimitExceeded": "超出頻率限制。請稍後再試。",
   "zen.api.error.modelNotSupported": "不支援模型 {{model}}",
@@ -606,7 +636,6 @@ export const dict = {
   "workspace.payments.type.subscription": "訂閱",
   "workspace.payments.view": "檢視",
 
-  "workspace.black.loading": "載入中...",
   "workspace.black.time.day": "天",
   "workspace.black.time.days": "天",
   "workspace.black.time.hour": "小時",
@@ -616,7 +645,8 @@ export const dict = {
   "workspace.black.time.fewSeconds": "幾秒鐘",
   "workspace.black.subscription.title": "訂閱",
   "workspace.black.subscription.message": "你已訂閱 OpenCode Black，費用為每月 ${{plan}}。",
-  "workspace.black.subscription.manage": "管理訂閱",
+  "workspace.black.subscription.ending":
+    "OpenCode Black 將於目前計費週期結束時終止，不會續訂。我們會將你遷移至新的控制台。",
   "workspace.black.subscription.rollingUsage": "5 小時使用量",
   "workspace.black.subscription.weeklyUsage": "每週使用量",
   "workspace.black.subscription.resetsIn": "重置於",

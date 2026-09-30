@@ -393,16 +393,20 @@ describe("ProviderTransform.options - minimax m3 thinking", () => {
 describe("ProviderTransform.options - google thinkingConfig gating", () => {
   const sessionID = "test-session-123"
 
-  const createGoogleModel = (reasoning: boolean, npm: "@ai-sdk/google" | "@ai-sdk/google-vertex") =>
+  const createGoogleModel = (
+    reasoning: boolean,
+    npm: "@ai-sdk/google" | "@ai-sdk/google-vertex",
+    apiId = "gemini-2.0-flash",
+  ) =>
     ({
-      id: `${npm === "@ai-sdk/google" ? "google" : "google-vertex"}/gemini-2.0-flash`,
+      id: `${npm === "@ai-sdk/google" ? "google" : "google-vertex"}/${apiId}`,
       providerID: npm === "@ai-sdk/google" ? "google" : "google-vertex",
       api: {
-        id: "gemini-2.0-flash",
+        id: apiId,
         url: npm === "@ai-sdk/google" ? "https://generativelanguage.googleapis.com" : "https://vertexai.googleapis.com",
         npm,
       },
-      name: "Gemini 2.0 Flash",
+      name: apiId,
       capabilities: {
         temperature: true,
         reasoning,
@@ -453,6 +457,73 @@ describe("ProviderTransform.options - google thinkingConfig gating", () => {
       providerOptions: {},
     })
     expect(result.thinkingConfig).toBeUndefined()
+  })
+
+  test.each(["gemini-1.5-pro", "gemini-2.0-flash", "gemini-2.5-pro", "gemini-2.5-flash"])(
+    "omits default thinkingLevel for legacy model %s",
+    (apiId) => {
+      for (const npm of ["@ai-sdk/google", "@ai-sdk/google-vertex"] as const) {
+        const result = ProviderTransform.options({
+          model: createGoogleModel(true, npm, apiId),
+          sessionID,
+          providerOptions: {},
+        })
+        expect(result.thinkingConfig).toEqual({
+          includeThoughts: true,
+        })
+      }
+
+      const openrouterResult = ProviderTransform.options({
+        model: {
+          ...createGoogleModel(true, "@ai-sdk/google", `google/${apiId}`),
+          providerID: "openrouter",
+          api: {
+            id: `google/${apiId}`,
+            url: "https://openrouter.ai/api/v1",
+            npm: "@openrouter/ai-sdk-provider",
+          },
+        },
+        sessionID,
+        providerOptions: {},
+      })
+      expect(openrouterResult.reasoning).toBeUndefined()
+    },
+  )
+
+  test.each([
+    "gemini-3-pro-preview",
+    "gemini-3-flash-preview",
+    "gemini-9-pro",
+    "gemini-9-flash",
+    "gemini-pro-latest",
+    "gemini-flash-latest",
+  ])("sets default thinkingLevel=high and OpenRouter reasoning effort=high for %s", (apiId) => {
+    for (const npm of ["@ai-sdk/google", "@ai-sdk/google-vertex"] as const) {
+      const result = ProviderTransform.options({
+        model: createGoogleModel(true, npm, apiId),
+        sessionID,
+        providerOptions: {},
+      })
+      expect(result.thinkingConfig).toEqual({
+        includeThoughts: true,
+        thinkingLevel: "high",
+      })
+    }
+
+    const openrouterResult = ProviderTransform.options({
+      model: {
+        ...createGoogleModel(true, "@ai-sdk/google", `google/${apiId}`),
+        providerID: "openrouter",
+        api: {
+          id: `google/${apiId}`,
+          url: "https://openrouter.ai/api/v1",
+          npm: "@openrouter/ai-sdk-provider",
+        },
+      },
+      sessionID,
+      providerOptions: {},
+    })
+    expect(openrouterResult.reasoning).toEqual({ effort: "high" })
   })
 })
 
@@ -3798,10 +3869,11 @@ describe("ProviderTransform sampling defaults - DeepSeek", () => {
 
 describe("ProviderTransform.reasoningVariants", () => {
   const model = (reasoning_options: ModelsDev.Model["reasoning_options"]) => ({ reasoning_options }) as ModelsDev.Model
-  const target = (npm: string, id = "test-model") =>
+  const target = (npm: string, id = "test-model", family = "") =>
     ({
       id,
       providerID: "test",
+      family,
       api: { id, npm, url: "" },
       capabilities: { reasoning: true },
       limit: { output: 64_000 },
@@ -3948,6 +4020,19 @@ describe("ProviderTransform.reasoningVariants", () => {
       low: { thinking: { type: "adaptive", display: "summarized" }, effort: "low" },
       high: { thinking: { type: "adaptive", display: "summarized" }, effort: "high" },
       max: { thinking: { type: "adaptive", display: "summarized" }, effort: "max" },
+    })
+  })
+
+  test("maps GitLab model efforts to provider-specific options", () => {
+    const options = model([{ type: "effort", values: ["max"] }])
+    const openai = target("gitlab-ai-provider", "duo-chat-gpt-5-6-sol", "gpt-sol")
+    const anthropic = target("gitlab-ai-provider", "duo-chat-opus-4-8", "claude-opus")
+
+    expect(ProviderTransform.reasoningVariants(options, openai)).toEqual({
+      max: { reasoningEffort: "max" },
+    })
+    expect(ProviderTransform.reasoningVariants(options, anthropic)).toEqual({
+      max: { thinking: { type: "adaptive", effort: "max" } },
     })
   })
 
@@ -4150,7 +4235,7 @@ describe("ProviderTransform.reasoningVariants", () => {
     expect(ProviderTransform.reasoningVariants(effort, target("@ai-sdk/github-copilot", "gemini-3-pro"))).toEqual({})
   })
 
-  test.each(["@ai-sdk/cohere", "@ai-sdk/perplexity", "@ai-sdk/vercel", "@ai-sdk/alibaba", "gitlab-ai-provider"])(
+  test.each(["@ai-sdk/cohere", "@ai-sdk/perplexity", "@ai-sdk/vercel", "@ai-sdk/alibaba"])(
     "does not invent effort controls for %s",
     (npm) => {
       expect(ProviderTransform.reasoningVariants(model([{ type: "effort", values: ["high"] }]), target(npm))).toEqual(
@@ -5638,6 +5723,16 @@ describe("ProviderTransform.variants", () => {
     describe(provider.name, () => {
       for (const testCase of [
         {
+          apiId: "gemini-1.5-pro",
+          efforts: ["low", "high"],
+          expectedHigh: { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } },
+        },
+        {
+          apiId: "gemini-2.0-flash",
+          efforts: ["low", "high"],
+          expectedHigh: { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } },
+        },
+        {
           apiId: "gemini-2.5-pro",
           efforts: ["high", "max"],
           expectedHigh: { thinkingConfig: { includeThoughts: true, thinkingBudget: 16_000 } },
@@ -5677,6 +5772,31 @@ describe("ProviderTransform.variants", () => {
         {
           apiId: "gemini-3-pro-image-preview",
           efforts: ["high"],
+          expectedHigh: { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } },
+        },
+        {
+          apiId: "gemini-9-pro",
+          efforts: ["low", "medium", "high"],
+          expectedHigh: { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } },
+        },
+        {
+          apiId: "gemini-9-flash",
+          efforts: ["minimal", "low", "medium", "high"],
+          expectedHigh: { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } },
+        },
+        {
+          apiId: "gemini-pro-latest",
+          efforts: ["low", "medium", "high"],
+          expectedHigh: { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } },
+        },
+        {
+          apiId: "gemini-flash-latest",
+          efforts: ["minimal", "low", "medium", "high"],
+          expectedHigh: { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } },
+        },
+        {
+          apiId: "gemma-4-31b-it",
+          efforts: ["minimal", "high"],
           expectedHigh: { thinkingConfig: { includeThoughts: true, thinkingLevel: "high" } },
         },
       ]) {

@@ -3,6 +3,10 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
+  "go.promo.spaceBunny": "Space Bunny Free โมเดลนิรนามใหม่ เปิดให้ใช้งานในช่วงเวลาจำกัด",
+  "go.referral.ended.label": "คำเตือน",
+  "go.referral.ended": "โปรแกรมแนะนำเพื่อนสิ้นสุดแล้ว ลิงก์แนะนำจะไม่ให้เครดิตแก่คุณหรือผู้ที่แชร์ลิงก์อีกต่อไป",
+  "go.graph.bonus": "ใช้งาน {{count}} เท่า",
   "nav.github": "GitHub",
   "nav.docs": "เอกสาร",
   "nav.changelog": "บันทึกการเปลี่ยนแปลง",
@@ -58,6 +62,7 @@ export const dict = {
   "common.cancel": "ยกเลิก",
   "common.creating": "กำลังสร้าง...",
   "common.create": "สร้าง",
+  "common.contactUs": "ติดต่อเรา",
 
   "common.videoUnsupported": "เบราว์เซอร์ของคุณไม่รองรับแท็ก video",
   "common.figure": "รูปที่ {{n}}",
@@ -225,6 +230,9 @@ export const dict = {
   "zen.faq.q8": "ฉันสามารถใช้ Zen กับเอเจนต์เขียนโค้ดอื่นได้หรือไม่?",
   "zen.faq.a8":
     "แม้ว่า Zen จะทำงานได้ดีเยี่ยมกับ OpenCode แต่คุณสามารถใช้ Zen กับเอเจนต์ใดก็ได้ เพียงทำตามคำแนะนำการตั้งค่าในเอเจนต์เขียนโค้ดที่คุณต้องการ",
+  "zen.faq.q9": "ฉันขอเงินคืนได้หรือไม่?",
+  "zen.faq.a9":
+    "หากมีการเรียกเก็บเงินภายใน 14 วันที่ผ่านมาและคุณยังไม่ได้ใช้เครดิตใดๆ จากการซื้อนั้น คุณอาจมีสิทธิ์ได้รับเงินคืน {{contact}}เพื่อขอเงินคืน",
 
   "zen.cta.start": "เริ่มต้นใช้งาน Zen",
   "zen.pricing.title": "เติมเงิน $20 แบบ Pay as you go",
@@ -253,10 +261,10 @@ export const dict = {
   "zen.privacy.exceptionsLink": "ข้อยกเว้นดังนี้",
 
   "go.title": "OpenCode Go | โมเดลเขียนโค้ดราคาประหยัดสำหรับทุกคน",
-  "go.banner.text": "GLM-5.3-Flash เพิ่มโควตาการใช้งานเป็น 2 เท่าในช่วงเวลาจำกัด",
   "go.meta.description":
     "Go มีราคา $10/เดือน พร้อมขีดจำกัดการใช้งานที่เอื้อเฟื้อและการเข้าถึงโมเดลเขียนโค้ดชั้นนำอย่างเชื่อถือได้",
   "go.hero.title": "โมเดลเขียนโค้ดราคาประหยัดสำหรับทุกคน",
+  "go.hero.tagline": "ใช้กับเอเจนต์ใดก็ได้ เติมเครดิตหากจำเป็น ยกเลิกได้ตลอดเวลา",
   "go.hero.body":
     "Go นำการเขียนโค้ดแบบเอเจนต์มาสู่นักเขียนโปรแกรมทั่วโลก เสนอขีดจำกัดที่กว้างขวางและการเข้าถึงโมเดลโอเพนซอร์สที่มีความสามารถสูงสุดได้อย่างน่าเชื่อถือ เพื่อให้คุณสามารถสร้างสรรค์ด้วยเอเจนต์ที่ทรงพลังโดยไม่ต้องกังวลเรื่องค่าใช้จ่ายหรือความพร้อมใช้งาน",
 
@@ -264,11 +272,31 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "สมัครสมาชิก Go",
   "go.cta.price": "$10/เดือน",
+  "go.plans.month": "ต่อเดือน",
+  "go.plans.plus.cta": "สมัคร Go Plus",
+  "go.plans.plus.description": "Go Plus ราคา $40/เดือน พร้อมขีดจำกัดการใช้งานที่สูงขึ้น",
+  "go.plans.go.feature1": "โมเดลคัดสรรในราคาคุ้มค่า",
+  "go.plans.go.feature2": "ทดสอบสำหรับการเขียนโค้ดด้วยเอเจนต์",
+  "go.plans.go.feature3": "ขีดจำกัดสูงและเข้าถึงได้อย่างเสถียร",
+  "go.plans.plus.feature1": "รวมทุกสิ่งที่มีใน Go",
+  "go.plans.plus.feature2": "ขีดจำกัดสูงขึ้น เพื่อเขียนโค้ดอย่างต่อเนื่องและมีสมาธิได้นานขึ้น",
+  "go.plans.plus.feature3": "เหมาะสำหรับโปรเจกต์ขนาดใหญ่ที่ซับซ้อน",
+  "go.plans.limits": "ขีดจำกัด",
+  "go.plans.description": "จำนวนคำขอโดยประมาณต่อ 5 ชั่วโมงและขีดจำกัดรายเดือนแยกตามโมเดล",
+  "go.plans.legend": "แพ็กเกจ",
   "go.pricing.body": "ใช้กับเอเจนต์ใดก็ได้ $10/เดือน เติมเครดิตหากจำเป็น ยกเลิกได้ตลอดเวลา",
   "go.graph.free": "ฟรี",
   "go.graph.freePill": "Big Pickle และโมเดลฟรี",
   "go.graph.go": "Go",
   "go.graph.label": "คำขอต่อ 5 ชั่วโมง",
+  "go.graph.period": "การใช้งาน",
+  "go.graph.model": "โมเดล",
+  "go.graph.requests": "requests โดยประมาณ / 5 ชม.",
+  "go.graph.allowance": "ปริมาณการใช้งานรายเดือน",
+  "go.graph.new": "ใหม่",
+  "go.graph.scale": "มาตราส่วนจำนวนคำขอแบบไม่เป็นเชิงเส้น",
+  "go.graph.showAll": "ดูโมเดลทั้งหมด {{count}} โมเดล",
+  "go.graph.showLess": "แสดงโมเดลน้อยลง",
   "go.graph.limitedRegions": "เฉพาะบางภูมิภาค",
   "go.graph.limitedTime": "ช่วงเวลาจำกัด",
   "go.graph.usageLimits": "ขีดจำกัดการใช้งาน",
@@ -366,7 +394,10 @@ export const dict = {
 
   "go.faq.q9": "ความแตกต่างระหว่างโมเดลฟรีและ Go คืออะไร?",
   "go.faq.a9":
-    "โมเดลฟรีประกอบด้วย Big Pickle และโมเดลโปรโมชันที่มีให้บริการในขณะนั้น โดยมีโควตา 200 คำขอ/วัน Go นำเสนอชุดโมเดลที่คัดสรร พร้อมโควตาคำขอที่สูงกว่าซึ่งบังคับใช้ตามกรอบเวลาแบบต่อเนื่อง (5 ชั่วโมง, รายสัปดาห์ และรายเดือน) เทียบเท่าโควตาพื้นฐานประมาณ $12 ต่อ 5 ชั่วโมง, $30 ต่อสัปดาห์ และ $60 ต่อเดือน โดยโควตาเฉพาะอาจแตกต่างกันไปตามโมเดล (จำนวนคำขอจริงแตกต่างกันไปตามโมเดลและการใช้งาน)",
+    "โมเดลฟรีประกอบด้วย Big Pickle และโมเดลโปรโมชันที่มีให้บริการในขณะนั้น โดยมีโควตา 200 คำขอ/วัน Go นำเสนอชุดโมเดลที่คัดสรร พร้อมโควตาคำขอที่สูงกว่าในกรอบเวลาแบบต่อเนื่อง ได้แก่ 20% ของโควตารายเดือนต่อ 5 ชั่วโมง 50% ต่อสัปดาห์ และ 100% ต่อเดือน โควตาเฉพาะอาจแตกต่างกันไปตามโมเดล (จำนวนคำขอจริงแตกต่างกันไปตามโมเดลและการใช้งาน)",
+  "go.faq.q10": "ฉันขอเงินคืนได้หรือไม่?",
+  "go.faq.a10":
+    "หากมีการเรียกเก็บเงินภายใน 14 วันที่ผ่านมาและคุณยังไม่ได้ใช้สิทธิ์การใช้งาน Go เลยในรอบการเรียกเก็บเงินนั้น คุณอาจมีสิทธิ์ได้รับเงินคืน {{contact}}เพื่อขอเงินคืน",
 
   "zen.api.error.rateLimitExceeded": "เกินขีดจำกัดอัตราการใช้งาน กรุณาลองใหม่ในภายหลัง",
   "zen.api.error.modelNotSupported": "ไม่รองรับโมเดล {{model}}",
@@ -630,7 +661,6 @@ export const dict = {
   "workspace.payments.type.subscription": "subscription",
   "workspace.payments.view": "ดู",
 
-  "workspace.black.loading": "กำลังโหลด...",
   "workspace.black.time.day": "วัน",
   "workspace.black.time.days": "วัน",
   "workspace.black.time.hour": "ชั่วโมง",
@@ -640,7 +670,8 @@ export const dict = {
   "workspace.black.time.fewSeconds": "ไม่กี่วินาที",
   "workspace.black.subscription.title": "การสมัครสมาชิก",
   "workspace.black.subscription.message": "คุณสมัครสมาชิก OpenCode Black ในราคา ${{plan}} ต่อเดือน",
-  "workspace.black.subscription.manage": "จัดการการสมัครสมาชิก",
+  "workspace.black.subscription.ending":
+    "OpenCode Black จะสิ้นสุดเมื่อครบรอบการเรียกเก็บเงินปัจจุบันและจะไม่ต่ออายุ เราจะย้ายคุณไปยังคอนโซลใหม่",
   "workspace.black.subscription.rollingUsage": "การใช้งาน 5 ชั่วโมง",
   "workspace.black.subscription.weeklyUsage": "การใช้งานรายสัปดาห์",
   "workspace.black.subscription.resetsIn": "รีเซ็ตใน",

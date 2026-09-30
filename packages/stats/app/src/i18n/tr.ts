@@ -61,6 +61,7 @@ export const dict = {
   "range.2W": "2 Hafta",
   "range.1M": "1 Ay",
   "range.2M": "2 Ay",
+  "chart.weekly": "Haftalık",
   "chart.daily": "Günlük",
   "chart.input": "Girdi",
   "chart.output": "Çıktı",
